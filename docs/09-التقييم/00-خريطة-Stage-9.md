@@ -1,6 +1,6 @@
 # خريطة Stage 9 — التقييم
 
-**الحالة:** **OPEN** — Evaluation Batch 1 وEvaluation Batch 2 مكتملتان توثيقياً.
+**الحالة:** **OPEN** — Evaluation Batch 1 وEvaluation Batch 2 وEvaluation Batch 3 مكتملة توثيقياً؛ Stage 9 تبقى مفتوحة.
 
 ## Batch 1
 - Decision Readiness assessment.
@@ -38,3 +38,15 @@
 - Stage 8 Test Reconciliation.
 
 **Stage 9 تبقى OPEN** لمتابعة المصالحة والتنفيذ اللاحق عندما يُفتح صراحةً.
+
+
+## Batch 3 — Documentation Reconciliation
+- baseline: `0793cd5bb1e64740913df375ab71bdd8873b61b7`.
+- الهدف: إزالة stale decision-state references وتسوية TC-001 دون تنفيذ برمجي.
+- الحكم: **DOCUMENTATION RECONCILED**.
+- 13/13 DEC = **DECIDED / RESOLVED**.
+- TC-001: **RESOLVED** باستخدام Decision-Dependency Register والسجل الرسمي كمصدرين حاكمين للتتبع الحالي؛ لا ambiguity متبقية.
+- DOC-001: **RESOLVED** في الوثائق التشغيلية الحالية؛ السجلات التاريخية لم تُعد كتابتها.
+- CG-001/CG-002: **UNCHANGED / OPEN** كفجوات توافق تنفيذية.
+- `src/agent_core/`, Architecture وData Model وTests وGAPs وDEC لم تتغير.
+- Stage 10: **NOT OPEN**.

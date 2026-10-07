@@ -32,7 +32,7 @@ Offline هي حالة تشغيلية قد تسمح بقراءة أو إنشاء 
 - Offline-safe: قراءة أو إعداد مسودة لا تتطلب حقيقة متغيرة لحظة الفعل.
 - Offline-possible-with-constraints: إنشاء عملية تبقى Pending.
 - Online/authority-dependent: حالات تحتاج تحققاً أو اعترافاً من Owner Domain قبل اعتبارها نهائية.
-- Decision-dependent: حالات تتأثر بـDEC-0011/DEC-0013 أو قواعد المجال المفتوحة.
+- Decision-dependent: حالات تتأثر بـDEC-0011/DEC-0013 أو قواعد المجال الDECIDED / RESOLVED.
 
 هذه تصنيفات دلالية وليست بروتوكول اتصال.
 
@@ -67,7 +67,7 @@ Pending health operation أو Device لا تملكها.
 **Offline ≠ Financial Finality.**
 Payment/Settlement أو أي عملية مالية معلقة لا تصبح Ledger Entry أو Financial Transaction نهائية لمجرد وجودها محلياً.
 Finance يبقى مالك Financial Transaction/Ledger Entry/Balance.
-لا تحسم هذه المواصفة سياسة offline المالية أو شروط التسوية النهائية؛ DEC-0011 مفتوح.
+لا تحسم هذه المواصفة سياسة offline المالية أو شروط التسوية النهائية؛ DEC-0011 DECIDED / RESOLVED.
 
 ## 10. Commerce / Inventory boundary
 Sale أو تحديث Inventory يمكن أن يبدأ offline حيث يسمح السياق، لكنه يبقى Pending إلى أن يعترف Owner Domain بالحالة النهائية.
@@ -133,8 +133,8 @@ Agent لا يوسّع الصلاحية بسبب offline.
 9. no Event Sourcing.
 10. no Replication/Sync Protocol.
 11. no financial offline policy is decided here.
-12. DEC-0011 مفتوح.
-13. DEC-0013 مفتوح.
+12. DEC-0011 DECIDED / RESOLVED.
+13. DEC-0013 DECIDED / RESOLVED.
 14. لا Concept أو Relationship جديد.
 
 ## 18. Acceptance Criteria
@@ -144,7 +144,7 @@ Agent لا يوسّع الصلاحية بسبب offline.
 - AC-04 health/finance/commerce finality is not inferred from offline work.
 - AC-05 lost-device state does not erase Domain History.
 - AC-06 no CRDT/OT/Event Sourcing/Replication/Sync Protocol is specified.
-- AC-07 DEC-0011/0013 remain open.
+- AC-07 DEC-0011/0013 are DECIDED / RESOLVED.
 - AC-08 REQ-0046/0056 covered with current ownership.
 
 ## 19. Traceability
@@ -153,8 +153,8 @@ REQ-NFR-0056 → Primary SPEC-0019، Supporting SPEC-0024.
 لا تعيد المواصفة توزيع الملكية.
 
 ## 20. Open Decisions
-DEC-0011 مفتوح.
-DEC-0013 مفتوح.
+DEC-0011 DECIDED / RESOLVED.
+DEC-0013 DECIDED / RESOLVED.
 Q-0007/Q-0020/Q-0022 تبقى ضمن نطاقها الأصلي.
 لا قرار جديد ولا إغلاق DEC.
 

@@ -51,6 +51,8 @@
 | Stage 8 Testing | **PASS AS HISTORICAL VERIFICATION** | الاختبارات تتحقق من الحدود السابقة ولا تدعي تطبيق القرارات الجديدة؛ لا test contradiction مثبت. |
 
 ### 3.1 Requirement contradiction check
+
+**Canonical traceability rule after Batch 3:** قوائم Requirements المتأثرة المستخدمة في التتبع الحالي يجب أن تطابق Decision-Dependency Register؛ السجل الرسمي للقرارات يحكم حالة القرار، ولا تُستنتج Requirements إضافية من التفسير.
 **لم يُكتشف Requirement يفرض صراحةً عكس قرار من القرارات الـ13 في السلوك الذي يمكن اعتباره قراراً نهائياً.**
 
 لكن توجد **TRACEABILITY CONFLICT TC-001**: اختلافات موضعية في قوائم REQ المتأثرة، خصوصاً DEC-0003 وDEC-0006، بين سجلات Stage 9 الأقدم وDecision-Dependency Register. هذا لا يغيّر القرار نفسه ولا يكفي لإعادة فتحه.
@@ -96,9 +98,12 @@ Instrument: B/D — لا canonical implementation. Available Nearby: B/D — ل�
 ### CONF-001 — لا يوجد Decision Conflict يستلزم إعادة فتح قرار
 لا توجد نتيجة تقول إن قراراً من DEC-0001..DEC-0013 يناقض قراراً آخر بشكل يستحيل حله ضمن الحدود المعتمدة.
 
-### TC-001 — Traceability Conflict
-اختلافات موضعية في قوائم REQ المتأثرة، خصوصاً DEC-0003 وDEC-0006، بين سجلات Stage 9 القديمة وDecision-Dependency Register.
-**الحالة:** OPEN — documentation reconciliation only. **لا يعاد فتح أي DEC.**
+### TC-001 — Traceability Reconciliation
+تمت مقارنة قوائم REQ في Batch 2 مع Decision-Dependency Register وسجل القرارات الرسمي. ظهر اختلاف تاريخي في بطاقة Batch 1، خصوصاً:
+- DEC-0003: بطاقة Batch 1 ذكرت REQ-0019 وREQ-0024 وREQ-0029، مع 0037 و0063 بشكل غير مباشر؛ المصدر الحالي الرسمي يثبت **REQ-0019, REQ-0020, REQ-0029, REQ-0037, REQ-0063**.
+- DEC-0006: بطاقة Batch 1 ذكرت **REQ-0042, REQ-0043, REQ-0045**؛ المصدر الحالي الرسمي يثبت **REQ-0042, REQ-0043, REQ-0044, REQ-0045**.
+
+**الحكم:** **RESOLVED** — لا تُضاف Requirements ولا تُحذف من السجل الرسمي؛ القوائم الحالية تُطابق Decision-Dependency Register، والسجل الرسمي هو المرجع الحاكم. اختلاف Batch 1 محفوظ كسجل تاريخي ولا توجد Traceability Ambiguity متبقية.
 
 ### DOC-001 — Stale Decision Status
 عدة وثائق Stage 4–7 وSPECs تحمل صياغة أن DEC-0001..DEC-0013 ما زالت OPEN، رغم أن سجل القرارات الحالي يثبت 13/13 DECIDED / RESOLVED.
@@ -134,10 +139,10 @@ Stage 8 tests لا تُعدّل في هذه الدفعة.
 ## 8. Final Reconciliation Status
 - **Decision semantics:** PASS.
 - **Cross-decision consistency:** PASS.
-- **Requirements:** PASS مع TC-001 traceability inconsistency.
-- **Architecture:** PASS، مع DOC-001 stale status.
-- **Data Model:** PASS، مع DOC-001 stale status.
-- **Specifications:** PASS مع stale decision-state references.
+- **Requirements:** PASS — TC-001 RESOLVED؛ لا Traceability Ambiguity متبقية.
+- **Architecture:** PASS — DOC-001 RESOLVED.
+- **Data Model:** PASS.
+- **Specifications:** PASS — stale decision-state references التشغيلية تمت تسويتها.
 - **Execution:** PASS WITH CG-001/CG-002.
 - **Tests:** PASS تاريخياً؛ لا implementation claims جديدة.
 - **GAPs:** 0 implemented / 6 still open.
