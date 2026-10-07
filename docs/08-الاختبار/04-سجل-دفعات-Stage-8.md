@@ -5,8 +5,8 @@
 | الدفعة | الغرض | الحالة عند الفتح |
 |---|---|---|
 | TEST-0001 | Core integration + domain regression + boundary/negative verification | منفذة — 26 اختباراً جديداً مضافاً؛ CI هو بوابة الحكم |
-| TEST-0002 | High-risk domain verification | منفذة — 23 اختباراً جديداً؛ CI هو بوابة الحكم |
-| TEST-0003 | Cross-domain integration verification | مخطط |
+| TEST-0002 | High-risk domain verification | منفذة — 23 اختباراً جديداً؛ CI SUCCESS |
+| TEST-0003 | End-to-end scenarios + lifecycle verification | منفذة — 20 اختباراً جديداً؛ CI هو بوابة الحكم |
 | TEST-0004 | Boundary / negative / exception verification | مخطط |
 | TEST-0005 | Offline / pending / device / conflict verification | مخطط |
 | TEST-0006 | Sensitive finance / health / authority verification | مخطط |
@@ -34,6 +34,13 @@
 
 ## TEST-0002 — النتائج المسجلة
 - نطاق التغطية: Finance, Health, Authorization/Delegation, Agent/Approval/Provenance/Audit, Offline/Pending/Conflict, Cross-domain boundaries.
-- الاختبارات الجديدة: **22**.
+- الاختبارات الجديدة: **23**.
 - GAP-0001 وGAP-0003 اختُبرا صراحة كسلوك حالي ولم تتم محاولة إخفائهما.
 - لا تعديل للاختبارات السابقة ولا Stage 3–7.
+
+
+## TEST-0003 — النتائج المسجلة
+- النطاق: End-to-End + lifecycle عبر Identity/Activity، Commerce/Inventory، Finance، Health، Family/Authorization، Agent/Audit، Offline، Communication، Education، وCross-domain correction/cancellation/reversal.
+- الاختبارات الجديدة: **20**.
+- الحكم النهائي: مرتبط بـCI على commit الدفعة نفسه.
+- Lifecycle limitations: GAP-0001..0004 بقيت دون implementation جديد.
