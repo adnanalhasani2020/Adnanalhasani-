@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
+from typing import Iterable, Optional
 from uuid import UUID
 from agent_core.shared import ValidationError, new_id
 
@@ -20,7 +20,11 @@ class Device:
     state: DeviceState=DeviceState.ACTIVE
     def __post_init__(self):
         if not isinstance(self.owner_ref, UUID): raise ValidationError("Device.owner_ref must reference an existing owner")
-    def mark_lost(self): self.state=DeviceState.LOST
+    def mark_lost(self, pending_operations: Iterable["PendingOperation"] = ()):
+        for operation in pending_operations:
+            if operation.device_id == self.id and operation.state in (PendingOperationState.PENDING, PendingOperationState.SUBMITTED):
+                operation.cancel()
+        self.state=DeviceState.LOST
     def revoke(self): self.state=DeviceState.REVOKED
 
 @dataclass

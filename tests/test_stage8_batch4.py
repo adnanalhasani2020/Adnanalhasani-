@@ -147,7 +147,7 @@ def test_activity_boundaries_reject_invalid_shapes_without_new_actor_concept():
 def test_sale_cannot_complete_before_confirmation():
     sale = Sale(uuid4(), uuid4())
     with pytest.raises(ValidationError):
-        sale.complete()
+        sale.complete(connected=True)
     assert sale.state == SaleState.INITIATED
 
 
@@ -261,8 +261,8 @@ def test_financial_jump_to_finality_is_visible_as_current_limitation_not_impleme
     payment = Payment(Decimal("20"))
     settlement = Settlement(payment.id)
 
-    payment.complete()
-    settlement.settle()
+    payment.complete(connected=True)
+    settlement.settle(connected=True)
     transaction = FinancialTransaction(account.id, Decimal("20"))
     entry = LedgerEntry(account.id, Decimal("20"), transaction.id)
 

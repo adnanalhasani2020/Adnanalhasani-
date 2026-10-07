@@ -150,7 +150,7 @@ def test_product_and_offering_boundary_values_are_enforced():
 def test_sale_requires_confirmation_before_completion():
     sale = Sale(uuid4(), uuid4())
     with pytest.raises(ValidationError):
-        sale.complete()
+        sale.complete(connected=True)
     assert sale.state == SaleState.INITIATED
 
 
@@ -271,7 +271,7 @@ def test_repeated_payment_cancellation_keeps_same_operation_identity():
 def test_repeated_settlement_reversal_preserves_reference_and_history():
     payment = Payment(Decimal("25"))
     settlement = Settlement(payment.id)
-    settlement.settle()
+    settlement.settle(connected=True)
     settlement.reverse()
     settlement.reverse()
     assert settlement.payment_id == payment.id
@@ -301,9 +301,9 @@ def test_finance_components_remain_distinct_after_a_long_valid_chain():
     obligation.mark_overdue()
     payment = Payment(Decimal("100"), obligation_id=obligation.id)
     payment.pending()
-    payment.complete()
+    payment.complete(connected=True)
     settlement = Settlement(payment.id)
-    settlement.settle()
+    settlement.settle(connected=True)
     tx = FinancialTransaction(account.id, Decimal("100"))
     entry = LedgerEntry(account.id, Decimal("100"), tx.id)
     balance = Balance.derive(account.id, [entry])
@@ -563,7 +563,7 @@ def test_long_operation_sequence_preserves_identity_references_and_source_of_tru
     payment = Payment(Decimal("10"))
     for _ in range(5):
         payment.pending()
-        payment.complete()
+        payment.complete(connected=True)
         payment.cancel()
     balance = Balance.derive(account.id, [entry])
     assert payment.state == PaymentState.CANCELLED
@@ -577,7 +577,7 @@ def test_failed_operation_does_not_partially_mutate_preexisting_domain_state():
     sale_id = sale.id
     original_state = sale.state
     with pytest.raises(ValidationError):
-        sale.complete()
+        sale.complete(connected=True)
     assert sale.id == sale_id
     assert sale.state == original_state
 

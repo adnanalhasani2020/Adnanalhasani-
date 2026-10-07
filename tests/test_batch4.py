@@ -70,3 +70,44 @@ def test_exception_boundaries():
     with pytest.raises(ValidationError): require_owner_domain_decision("Finance",None)
     assert preserve_history_on_cancellation() is True
     assert preserve_original_on_reversal() is True
+
+
+# DEC-0013 → CG-002 → REQ-0046/0048/0065 → SPEC-0019/0020/0023 → EXEC-0010
+def test_mark_lost_cancels_pending_operations_for_same_device():
+    device = Device(uuid4())
+    pending = PendingOperation(device.id, "Finance", "op-pending")
+    submitted = PendingOperation(device.id, "Health", "op-submitted")
+    submitted.submit()
+    unrelated = PendingOperation(uuid4(), "Finance", "op-unrelated")
+
+    device.mark_lost([pending, submitted, unrelated])
+
+    assert device.state.value == "lost"
+    assert pending.state.value == "cancelled"
+    assert submitted.state.value == "cancelled"
+    assert unrelated.state.value != "cancelled"
+
+
+def test_mark_lost_preserves_finalized_operation_and_history():
+    device = Device(uuid4())
+    accepted = PendingOperation(device.id, "Finance", "op-accepted")
+    accepted.accept()
+    rejected = PendingOperation(device.id, "Finance", "op-rejected")
+    rejected.reject()
+
+    device.mark_lost([accepted, rejected])
+
+    assert accepted.state.value == "accepted"
+    assert rejected.state.value == "rejected"
+    assert accepted.id != rejected.id
+
+
+def test_mark_lost_is_idempotent():
+    device = Device(uuid4())
+    pending = PendingOperation(device.id, "Finance", "op-pending")
+
+    device.mark_lost([pending])
+    device.mark_lost([pending])
+
+    assert device.state.value == "lost"
+    assert pending.state.value == "cancelled"

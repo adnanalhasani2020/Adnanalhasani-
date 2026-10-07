@@ -84,7 +84,7 @@ def test_product_offering_inventory_sale_invoice_integration_preserves_boundarie
     product.activate()
     offering.activate()
     sale.confirm()
-    sale.complete()
+    sale.complete(connected=True)
 
     assert offering.product_id == product.id
     assert inventory.offering_id == offering.id

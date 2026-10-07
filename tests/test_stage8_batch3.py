@@ -75,10 +75,10 @@ def test_product_offering_inventory_availability_sale_end_to_end():
     sale = Sale(offering.id, uuid4())
 
     with pytest.raises(ValidationError):
-        sale.complete()
+        sale.complete(connected=True)
 
     sale.confirm()
-    sale.complete()
+    sale.complete(connected=True)
     assert product.state.value == "active"
     assert offering.state.value == "active"
     assert inventory.offering_id == offering.id
@@ -114,9 +114,9 @@ def test_sale_invoice_finance_lifecycle_to_derived_balance():
     obligation = Obligation(account.id, Decimal("125"))
     obligation.open()
     payment = Payment(Decimal("125"), obligation_id=obligation.id, invoice_id=invoice.id)
-    payment.complete()
+    payment.complete(connected=True)
     settlement = Settlement(payment_id=payment.id)
-    settlement.settle()
+    settlement.settle(connected=True)
     transaction = FinancialTransaction(account.id, Decimal("125"))
     entry = LedgerEntry(account.id, Decimal("125"), transaction.id)
     balance = Balance.derive(account.id, [entry])

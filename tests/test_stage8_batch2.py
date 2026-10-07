@@ -89,8 +89,8 @@ def test_invoice_payment_settlement_and_ledger_remain_separate():
     transaction = FinancialTransaction(account.id, Decimal("100"), id=transaction_ref)
     entry = LedgerEntry(account.id, Decimal("100"), transaction.id)
 
-    payment.complete()
-    settlement.settle()
+    payment.complete(connected=True)
+    settlement.settle(connected=True)
 
     assert payment.invoice_id == invoice_ref
     assert settlement.payment_id == payment.id
