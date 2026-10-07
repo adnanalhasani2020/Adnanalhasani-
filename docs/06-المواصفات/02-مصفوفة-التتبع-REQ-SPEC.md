@@ -1,10 +1,5 @@
 # Traceability Matrix — REQ → SPEC → Data Model → Architecture → Source
 
-التغطية: 59/59 = 100%.
-هذه مصفوفة جرد، وليست إثباتاً أن السلوك التفصيلي قد كُتب أو اعتُمد.
-
-| REQ | SPEC | Data Model Concept(s) | Architecture Boundary | Source / Constraint / Decision |
-|---|---|---|---|---|
 ## قاعدة Primary / Supporting SPEC
 
 المصفوفة تسجل جميع SPECs المشاركة في تغطية كل REQ، ولا يعني ترتيبها النصي ملكية تلقائية. وفق قاعدة Stage 6:
@@ -16,6 +11,12 @@
 
 ويجب أن تكون هذه القاعدة هي أساس فصل Primary/Supporting عند الانتقال إلى كتابة المواصفات التفصيلية.
 
+
+التغطية: 59/59 = 100%.
+هذه مصفوفة جرد، وليست إثباتاً أن السلوك التفصيلي قد كُتب أو اعتُمد.
+
+| REQ | SPEC | Data Model Concept(s) | Architecture Boundary | Source / Constraint / Decision |
+|---|---|---|---|---|
 | REQ-0001 | SPEC-0001 | Person; Identifier; Access Account; Authenticator; Session | Identity / Access | DOM-0001/0002; RES-0025 |
 | REQ-0002 | SPEC-0001 / SPEC-0007 | Person; Access Account; Financial Account | Identity / Finance | COR-0001; DEC-0002 |
 | REQ-0003 | SPEC-0002 | Person; Activity; Membership | Activities | DOM-0001/0002/0007 |
