@@ -485,9 +485,9 @@
 
 ## 7. Decision Readiness Summary
 
-- **7/13 DEC**: DECIDED / RESOLVED (DEC-0001, DEC-0002, DEC-0003, DEC-0004, DEC-0006, DEC-0007, DEC-0010).
-- **6/13 DEC**: OPEN (DEC-0005, DEC-0008, DEC-0009, DEC-0011, DEC-0012, DEC-0013).
-- **7/13**: resolved.
+- **13/13 DEC**: **DECIDED / RESOLVED** (DEC-0001..DEC-0013).
+- **0/13 DEC**: OPEN.
+- **13/13**: resolved.
 - **0/13**: implemented.
 - **59/59 REQs**: ما زالت ضمن الجرد نفسه.
 - **39 REQs**: blocked by open decision/research.
