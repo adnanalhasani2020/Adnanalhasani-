@@ -1,11 +1,11 @@
 # سجل الدفعات المتوقع — Stage 8
 
-**الحالة:** TEST-0001 منفذة على Baseline `bcbf302ccd348c9660778679072f049924792584`؛ الحكم النهائي معلق على CI للـcommit الجديد.
+**الحالة:** TEST-0002 منفذة فوق `6b8ead9f8a4bbfdb278a284c5ee7dd9922788827`؛ الحكم النهائي معلق على CI للـcommit الجديد.
 
 | الدفعة | الغرض | الحالة عند الفتح |
 |---|---|---|
 | TEST-0001 | Core integration + domain regression + boundary/negative verification | منفذة — 26 اختباراً جديداً مضافاً؛ CI هو بوابة الحكم |
-| TEST-0002 | Domain behavior verification | مخطط |
+| TEST-0002 | High-risk domain verification | منفذة — 23 اختباراً جديداً؛ CI هو بوابة الحكم |
 | TEST-0003 | Cross-domain integration verification | مخطط |
 | TEST-0004 | Boundary / negative / exception verification | مخطط |
 | TEST-0005 | Offline / pending / device / conflict verification | مخطط |
@@ -30,3 +30,10 @@
 ## ملاحظة
 هذا السجل يحدد دفعات متوقعة فقط. لا يعني اختيار أدوات، ولا إنشاء اختبارات، ولا اعتماد ترتيب نهائي غير قابل للتغيير.
 كل دفعة لاحقة يجب أن تسجل نطاقها، التتبع، الأدلة، النتائج، وما بقي BLOCKED أو خارج النطاق.
+
+
+## TEST-0002 — النتائج المسجلة
+- نطاق التغطية: Finance, Health, Authorization/Delegation, Agent/Approval/Provenance/Audit, Offline/Pending/Conflict, Cross-domain boundaries.
+- الاختبارات الجديدة: **22**.
+- GAP-0001 وGAP-0003 اختُبرا صراحة كسلوك حالي ولم تتم محاولة إخفائهما.
+- لا تعديل للاختبارات السابقة ولا Stage 3–7.
