@@ -1,26 +1,40 @@
 # خريطة Stage 9 — التقييم
 
-**الحالة:** OPEN — Evaluation Batch 1 منفذة: Decision & Readiness Assessment.
+**الحالة:** **OPEN** — Evaluation Batch 1 وEvaluation Batch 2 مكتملتان توثيقياً.
 
-**Baseline:** `d6028443c0e167731bfbed1f958775f69e2a4c0e`
+## Batch 1
+- Decision Readiness assessment.
+- baseline: `d6028443c0e167731bfbed1f958775f69e2a4c0e`.
+- 13/13 decisions جرى جردها وتقييم جاهزيتها.
 
-## الهدف
-تحويل DEC-0001..DEC-0013 والـRequirements المتأثرة بها إلى حزمة قرارات واضحة قابلة للإجابة البشرية، دون حسم أي قرار أو تنفيذ أي قرار.
+## Batch 2 — Decision Impact & Reconciliation
+- baseline: `e766ba9202b967394025149d66e830e6c9904b1a`.
+- الهدف: تحليل أثر DEC-0001..DEC-0013 ومصالحتها مع REQ/Architecture/Data Model/SPEC/EXEC/TEST.
+- الحكم: **PASS WITH DOCUMENTATION CONFLICTS AND IMPLEMENTATION CONFORMANCE GAPS**.
+- 0 Decision Conflicts تستلزم إعادة فتح.
+- TC-001: traceability inconsistency توثيقية.
+- DOC-001: stale decision-state references في وثائق سابقة.
+- CG-001: connectivity enforcement غير موجود للعمليات المالية.
+- CG-002: lost-device pending cancellation غير مفروض.
+- 6 GAPs الأصلية ما زالت مفتوحة.
 
-## حدود Stage 9 في هذه الدفعة
-- لا كود ولا تعديل في `src/agent_core/`.
-- لا تغيير في Domain Concepts أو Architecture أو Data Model.
-- لا حل لـGAP-0001..0006.
-- لا تغيير في حالة DEC-0001..DEC-0013؛ جميعها تبقى OPEN.
-- لا فتح Stage 10 أو أي مرحلة أخرى.
+## حدود Stage 9 الحالية
+- لا كود ولا تعديل في src/agent_core/.
+- لا تنفيذ Requirements.
+- لا تعديل مباشر Architecture.
+- لا تعديل مباشر Data Model.
+- لا GAP implementation.
+- لا إعادة فتح Decision.
+- لا تحويل Recommendation إلى Decision.
+- لا فتح Stage 10.
 - لا Release Ready claim.
 
-## المخرج
-- سجل Decision Readiness كامل للقرارات الـ13.
-- ترتيب أولوية الحسم.
-- Dependency Matrix.
-- قائمة Requirements المتأثرة بكل Decision.
-- قائمة الـ39 Requirements المحجوبة بقرار/بحث.
-- تصنيف GAP-0001..0006 إلى قرار/بحث/تنفيذ لاحق.
+## المخرج الحالي
+- Decision Inventory Matrix.
+- Reconciliation Matrix.
+- Implementation Conformance Assessment.
+- Decision/Traceability Conflict Register.
+- GAP Reconciliation.
+- Stage 8 Test Reconciliation.
 
-**Batch 1:** مكتملة توثيقياً، وStage 9 تبقى OPEN لمتابعة حسم القرارات فقط بعد إجابات المستخدم والأدلة اللازمة.
+**Stage 9 تبقى OPEN** لمتابعة المصالحة والتنفيذ اللاحق عندما يُفتح صراحةً.
