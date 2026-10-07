@@ -1,9 +1,9 @@
-# مشروع Adnanalhasani-
+# Stage 7 execution foundation
 
-المستودع في **مرحلة التأسيس المعرفي وحوكمة المشروع**.
+Minimal execution foundation for EXEC-0001/0002/0003.
 
-ابدأ من:
+Boundaries: domain, application, infrastructure, config, shared, tests.
 
-`docs/00-التأسيس/02-فهرس-الوثائق.md`
+Implementation constraint: Python 3.11+ with no runtime dependencies. This is not an architectural lock-in.
 
-هذه المرحلة لا تحتوي على تطبيق أو قاعدة بيانات نهائية. بوابة التنفيذ مغلقة حتى اعتماد المراحل السابقة.
+Excluded: cloud/provider selection, payment provider, final API contract, final UI framework, SQL schema, ORM, sync algorithm, AI framework, Health implementation, Finance implementation, and DEC resolution.
