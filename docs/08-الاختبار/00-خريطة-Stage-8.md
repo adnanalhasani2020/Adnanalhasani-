@@ -1,6 +1,6 @@
 # خريطة Stage 8 — الاختبار والتحقق
 
-**الحالة:** مفتوحة رسمياً — تنفيذ دفعات اختبار Stage 8 جارٍ؛ Batch 5 منفذة، والحكم النهائي مرتبط بـCI على commit الدفعة نفسه.
+**الحالة:** مفتوحة رسمياً — Testing Batch 7 منفذة كـFinal Verification؛ الحكم النهائي مرتبط بـCI على final commit نفسه. Stage 8 لم تُغلق في هذه الدفعة.
 
 ## 1. الهدف
 إنشاء إطار تحقق مستقل بعد التنفيذ ينقل المشروع عبر:
@@ -49,3 +49,10 @@
 - Reverse Implementation → SPEC/REQ inventory checked.
 - GAP-0001..0006 and DEC-0001..0013 explicitly preserved.
 - Stage 7 CLOSED; Stage 8 OPEN; Stage 9 NOT OPEN.
+
+
+## 8. TEST-0007 — Final Verification & Closure Readiness
+- Baseline: `1e6edf05c1c90c670b31ec0f834becacf6f4f5ae`.
+- النطاق: full regression, governance consistency, final REQ/SPEC traceability, GAP review, domain/source-of-truth boundaries, Stage 3–7 integrity, scope-creep and test-quality review.
+- لا تغييرات في `src/agent_core/` ولا حل لأي GAP ولا DEC resolution ولا فتح Stage 9.
+- **الحكم:** READY FOR CLOSURE، بشرط اعتماد/إغلاق Stage 8 في Commit مستقل لاحق؛ هذه الدفعة لا تغلق Stage 8.

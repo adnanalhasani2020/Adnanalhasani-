@@ -79,3 +79,13 @@
 - Reverse Implementation → SPEC/REQ reviewed.
 - No implementation or architecture changes.
 - DEC-0001..DEC-0013 unchanged; Stage 7 CLOSED; Stage 8 OPEN; Stage 9 NOT OPEN.
+
+
+## TEST-0007 — Final Verification & Closure Readiness
+- **Baseline:** `1e6edf05c1c90c670b31ec0f834becacf6f4f5ae`.
+- **Regression target:** 221 tests (213 قبل Batch 6 + 8 في Batch 6؛ لا اختبارات Batch 7 آلية جديدة).
+- **Scope:** governance consistency، 59/59 REQs، 26/26 SPECs، reverse traceability، GAP-0001..0006، domain boundaries، Source of Truth/history، Stage 3–7 integrity، scope creep، test-claim quality.
+- **Stage 3–6:** CLOSED / unchanged. **Stage 7:** CLOSED. **Stage 8:** OPEN حتى قرار الإغلاق المستقل. **Stage 9:** NOT OPEN.
+- **DEC-0001..DEC-0013:** بقيت OPEN ولم تُحسم.
+- **GAPs:** بقيت limitations ولم تُنفذ؛ لا GAP أصبح implementation داخل Batch 7.
+- **Closure readiness:** **READY FOR CLOSURE** إذا كانت GitHub Actions على final commit SUCCESS؛ لا إغلاق تلقائي في هذا Batch.
