@@ -1,6 +1,6 @@
-# سجل الدفعات المتوقع — Stage 8
+# سجل دفعات Stage 8
 
-**الحالة:** TEST-0004 منفذة فوق `04fe8b8c5efc5cd9577a6666c0fbe6b1ed82c780`؛ الحكم النهائي معلق على CI للـcommit الجديد.
+**الحالة:** **CLOSED** — أُغلقت Stage 8 رسمياً بعد اكتمال TEST-0007 ونجاح CI على الـfinal commit.
 
 | الدفعة | الغرض | الحالة عند الفتح |
 |---|---|---|
@@ -8,9 +8,9 @@
 | TEST-0002 | High-risk domain verification | منفذة — 23 اختباراً جديداً؛ CI SUCCESS |
 | TEST-0003 | End-to-end scenarios + lifecycle verification | منفذة — 20 اختباراً جديداً؛ CI هو بوابة الحكم |
 | TEST-0004 | Security, boundaries, adversarial & invariant verification | منفذة — 43 اختباراً جديداً؛ 166 إجمالاً؛ CI بوابة الحكم |
-| TEST-0005 | Offline / pending / device / conflict verification | مخطط |
-| TEST-0006 | Sensitive finance / health / authority verification | مخطط |
-| TEST-0007 | Regression + release-readiness evaluation | مخطط |
+| TEST-0005 | Reliability, edge cases & state consistency | منفذة — 47 اختباراً جديداً |
+| TEST-0006 | Requirements traceability verification | منفذة — 59/59 REQs و26/26 SPECs |
+| TEST-0007 | Final verification + closure readiness | منفذة — 221/221 PASS؛ CI SUCCESS؛ Stage 8 أُغلقت في Commit مستقل |
 
 ## TEST-0001 — النتائج المسجلة
 - نطاق التغطية: Identity, Activities, Commerce, Inventory/Discovery, Finance, Health, Family/Delegation/Authorization, Communication, Agent/Audit/Provenance, Offline/Pending/Conflict, Education, Exceptions.
@@ -89,3 +89,25 @@
 - **DEC-0001..DEC-0013:** بقيت OPEN ولم تُحسم.
 - **GAPs:** بقيت limitations ولم تُنفذ؛ لا GAP أصبح implementation داخل Batch 7.
 - **Closure readiness:** **READY FOR CLOSURE** إذا كانت GitHub Actions على final commit SUCCESS؛ لا إغلاق تلقائي في هذا Batch.
+
+
+## Stage 8 — الإغلاق الرسمي
+- **Stage 8 status:** CLOSED.
+- **Baseline:** `0fe873f0adbd6ee971ccaedfbb598e3cdc91d8b4`.
+- **Final Verification:** TEST-0007.
+- **Final CI Run:** `37693100561` — **SUCCESS**.
+- **Regression:** PASS — **221/221**.
+- **Requirements Traceability:** PASS — **59/59**.
+- **SPEC Traceability:** PASS — **26/26**.
+- **Domain Boundary:** PASS.
+- **Source of Truth / History:** PASS.
+- **Governance Consistency:** PASS.
+- **Scope Creep Check:** PASS.
+- **Test Quality:** PASS.
+- **Closure Readiness:** PASS.
+- **GAP-0001..0006:** OPEN؛ لم تُنفذ.
+- **DEC-0001..DEC-0013:** OPEN؛ لم تُحسم.
+- **Stage 3–7:** unchanged / closed.
+- **Stage 9:** NOT OPEN.
+
+> إغلاق Stage 8 يعني اكتمال التحقق والاختبار ضمن النطاق المحدد، ولا يعني اكتمال النظام أو حل القرارات المفتوحة أو GAPs أو الجاهزية للإطلاق.

@@ -1,6 +1,6 @@
 # خريطة Stage 8 — الاختبار والتحقق
 
-**الحالة:** مفتوحة رسمياً — Testing Batch 7 منفذة كـFinal Verification؛ الحكم النهائي مرتبط بـCI على final commit نفسه. Stage 8 لم تُغلق في هذه الدفعة.
+**الحالة:** **CLOSED — مغلقة رسمياً** بعد Final Verification (TEST-0007) ونتيجة GitHub Actions SUCCESS. إغلاق Stage 8 يعني اكتمال التحقق والاختبار ضمن النطاق المحدد، ولا يعني اكتمال النظام أو حل القرارات المفتوحة أو GAPs أو الجاهزية للإطلاق.
 
 ## 1. الهدف
 إنشاء إطار تحقق مستقل بعد التنفيذ ينقل المشروع عبر:
@@ -25,10 +25,10 @@
 
 ## 4. الحالة
 - Stage 7: **CLOSED**.
-- Stage 8: **OPEN**.
+- Stage 8: **CLOSED**.
 - Stage 9: **لم تُفتح**.
 - DEC-0001..DEC-0013: **OPEN**.
-- لا تغييرات على Stage 3–7 ضمن فتح Stage 8.
+- Stage 3–7: **UNCHANGED / CLOSED**.
 
 ## 5. حدود الفتح
 هذا الفتح توثيقي وحوْكمي فقط؛ لا ينشئ اختبارات جديدة، ولا يختار framework اختبار نهائياً، ولا يعلن أي نتيجة Test/Evaluation جديدة.
@@ -55,4 +55,14 @@
 - Baseline: `1e6edf05c1c90c670b31ec0f834becacf6f4f5ae`.
 - النطاق: full regression, governance consistency, final REQ/SPEC traceability, GAP review, domain/source-of-truth boundaries, Stage 3–7 integrity, scope-creep and test-quality review.
 - لا تغييرات في `src/agent_core/` ولا حل لأي GAP ولا DEC resolution ولا فتح Stage 9.
-- **الحكم:** READY FOR CLOSURE، بشرط اعتماد/إغلاق Stage 8 في Commit مستقل لاحق؛ هذه الدفعة لا تغلق Stage 8.
+- **الحكم:** **CLOSED** — أُغلقت Stage 8 في Commit مستقل بعد نجاح Final Verification. Stage 9 بقيت غير مفتوحة.
+
+
+## 9. سجل الإغلاق
+- سجل الإغلاق: `docs/08-الاختبار/07-سجل-إغلاق-Stage-8.md`.
+- Achievement: `docs/19-الإنجازات/ACH-0027-إغلاق-Stage-8.md`.
+- Final Verification: **TEST-0007**؛ GitHub Actions Run **37693100561 = SUCCESS**؛ **221/221 PASS**.
+- Requirements: **59/59 accounted**؛ SPECs: **26/26**؛ **15 Fully Traced / 5 Intentionally Limited-GAP / 39 Blocked by Open Decision-Research**.
+- GAP-0001..0006: **OPEN** ولم تُنفذ.
+- DEC-0001..DEC-0013: **OPEN** ولم تُحسم.
+- Stage 9: **NOT OPEN**.
