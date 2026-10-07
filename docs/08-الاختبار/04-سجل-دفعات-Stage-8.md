@@ -1,13 +1,13 @@
 # سجل الدفعات المتوقع — Stage 8
 
-**الحالة:** TEST-0002 منفذة فوق `6b8ead9f8a4bbfdb278a284c5ee7dd9922788827`؛ الحكم النهائي معلق على CI للـcommit الجديد.
+**الحالة:** TEST-0004 منفذة فوق `04fe8b8c5efc5cd9577a6666c0fbe6b1ed82c780`؛ الحكم النهائي معلق على CI للـcommit الجديد.
 
 | الدفعة | الغرض | الحالة عند الفتح |
 |---|---|---|
 | TEST-0001 | Core integration + domain regression + boundary/negative verification | منفذة — 26 اختباراً جديداً مضافاً؛ CI هو بوابة الحكم |
 | TEST-0002 | High-risk domain verification | منفذة — 23 اختباراً جديداً؛ CI SUCCESS |
 | TEST-0003 | End-to-end scenarios + lifecycle verification | منفذة — 20 اختباراً جديداً؛ CI هو بوابة الحكم |
-| TEST-0004 | Boundary / negative / exception verification | مخطط |
+| TEST-0004 | Security, boundaries, adversarial & invariant verification | منفذة — 43 اختباراً جديداً؛ 166 إجمالاً؛ CI بوابة الحكم |
 | TEST-0005 | Offline / pending / device / conflict verification | مخطط |
 | TEST-0006 | Sensitive finance / health / authority verification | مخطط |
 | TEST-0007 | Regression + release-readiness evaluation | مخطط |
@@ -44,3 +44,15 @@
 - الاختبارات الجديدة: **20**.
 - الحكم النهائي: مرتبط بـCI على commit الدفعة نفسه.
 - Lifecycle limitations: GAP-0001..0004 بقيت دون implementation جديد.
+
+
+## TEST-0004 — النتائج المسجلة
+- Baseline: `04fe8b8c5efc5cd9577a6666c0fbe6b1ed82c780`.
+- الاختبارات الجديدة: **43**.
+- الإجمالي المتوقع: **166**.
+- النطاق: Security boundaries, adversarial cases, invariants, ownership isolation.
+- GAP-0001..0004 أُعيد اختبارها.
+- GAP-0005: replay/idempotency enforcement غير موجود.
+- GAP-0006: identity uniqueness enforcement غير موجود.
+- لا implementation changes لمعالجة GAPs.
+- لا DEC changes.
