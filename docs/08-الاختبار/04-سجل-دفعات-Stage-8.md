@@ -69,3 +69,13 @@
 - لا implementation changes لمعالجة GAPs.
 - لا DEC changes؛ Stage 3–6 unchanged؛ Stage 7 CLOSED؛ Stage 8 OPEN؛ Stage 9 NOT OPEN.
 - الحكم النهائي: GitHub Actions على commit الدفعة نفسه هو المرجع النهائي.
+
+
+## TEST-0006 — Requirements Traceability Verification
+- Baseline: `3b7f4ea1106c3a255105aa9236bf5ab24e808d3f`.
+- **59 requirements / 26 SPECs** reviewed.
+- **15 FULLY TRACED / 5 INTENTIONALLY LIMITED-GAP / 39 BLOCKED BY OPEN DECISION-RESEARCH / 0 NOT TRACED**.
+- 59/59 have Primary SPEC and test-evidence mapping.
+- Reverse Implementation → SPEC/REQ reviewed.
+- No implementation or architecture changes.
+- DEC-0001..DEC-0013 unchanged; Stage 7 CLOSED; Stage 8 OPEN; Stage 9 NOT OPEN.

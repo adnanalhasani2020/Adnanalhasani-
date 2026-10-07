@@ -33,3 +33,8 @@
 
 ### نتيجة Batch 5
 لا GAP تنفيذية جديدة تمس النموذج الحالي؛ GAP-0005 وGAP-0006 بقيتا limitations كما هما. لم تُضف أي بنية أو مفهوم Domain جديد، ولم تُحسم أي DEC.
+
+
+## TEST-0006 — Traceability impact
+
+All GAP-0001..GAP-0006 were rechecked against the 59-REQ chain. None is promoted to implementation. GAP-0001/0003 constrain Agent/Approval claims; GAP-0002 constrains semantic reference claims; GAP-0004 constrains financial orchestration/finality claims; GAP-0005 constrains replay/idempotency claims; GAP-0006 constrains identity uniqueness/deduplication claims. Requirements affected by these boundaries are marked GAP or blocked, not FULLY TRACED.
