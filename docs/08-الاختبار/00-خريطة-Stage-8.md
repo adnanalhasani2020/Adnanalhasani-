@@ -1,6 +1,6 @@
 # خريطة Stage 8 — الاختبار والتحقق
 
-**الحالة:** مفتوحة رسمياً — إطار الاختبار والتحقق فقط، دون بدء تنفيذ اختبارات جديدة.
+**الحالة:** مفتوحة رسمياً — تنفيذ دفعات اختبار Stage 8 جارٍ؛ Batch 5 منفذة، والحكم النهائي مرتبط بـCI على commit الدفعة نفسه.
 
 ## 1. الهدف
 إنشاء إطار تحقق مستقل بعد التنفيذ ينقل المشروع عبر:
@@ -32,3 +32,10 @@
 
 ## 5. حدود الفتح
 هذا الفتح توثيقي وحوْكمي فقط؛ لا ينشئ اختبارات جديدة، ولا يختار framework اختبار نهائياً، ولا يعلن أي نتيجة Test/Evaluation جديدة.
+
+## 6. TEST-0005 — Reliability, Edge Cases & State Consistency
+- Baseline: `a41a7e3480365bd729439073ba8deaf08bbfd03c`.
+- الاختبارات الجديدة: **45**؛ إجمالي suite المتوقع: **211**.
+- النطاق: القيم الفارغة/المفقودة/غير الصالحة، الحدود والقيم القصوى، lifecycle/state boundaries، duplicate/replay، correction/cancellation/reversal، التاريخ، Source of Truth، Pending/Conflict، والعزل العابر للمجالات.
+- GAP-0005 وGAP-0006 اختُبرا بصرامة كسلوك حالي؛ لا Idempotency Engine ولا Identity Registry.
+- لا تغييرات على Stage 3–7، ولا DEC changes، ولا Stage 9.

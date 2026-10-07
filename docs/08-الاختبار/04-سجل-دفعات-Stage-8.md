@@ -56,3 +56,16 @@
 - GAP-0006: identity uniqueness enforcement غير موجود.
 - لا implementation changes لمعالجة GAPs.
 - لا DEC changes.
+
+
+
+## TEST-0005 — النتائج المسجلة
+- Baseline: `a41a7e3480365bd729439073ba8deaf08bbfd03c`.
+- الاختبارات الجديدة: **45**.
+- الإجمالي المتوقع: **211** (166 سابقاً + 45 جديداً).
+- النطاق: Reliability, edge cases, state consistency، duplicate/replay، correction/cancellation/reversal، history preservation، Source of Truth، Balance derivation، Pending/Conflict، وcross-domain ownership boundaries.
+- GAP-0005: أُعيد اختباره بصرامة؛ لا توجد طبقة persistent replay/idempotency enforcement، ولا يجوز ادعاء منع التكرار الدائم.
+- GAP-0006: أُعيد اختباره بصرامة؛ يمكن إنشاء Persons مستقلة رغم التطابق الواقعي المحتمل، ولا توجد runtime identity uniqueness/deduplication enforcement.
+- لا implementation changes لمعالجة GAPs.
+- لا DEC changes؛ Stage 3–6 unchanged؛ Stage 7 CLOSED؛ Stage 8 OPEN؛ Stage 9 NOT OPEN.
+- الحكم النهائي: GitHub Actions على commit الدفعة نفسه هو المرجع النهائي.
