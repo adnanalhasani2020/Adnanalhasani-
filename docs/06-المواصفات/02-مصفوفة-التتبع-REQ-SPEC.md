@@ -16,7 +16,7 @@
 هذه مصفوفة جرد، وليست إثباتاً أن السلوك التفصيلي قد كُتب أو اعتُمد.
 
 | REQ | Primary SPEC | Supporting SPECs | Dependency/Constraint | Decision | Data Model Concept(s) | Architecture Boundary |
-|---|---|---|---|---|
+|---|---|---|---|---|---|---|
 | REQ-0001 | SPEC-0001 | — | — | — | Identity / Access | DOM-0001/0002; RES-0025 |
 | REQ-0002 | SPEC-0001 | SPEC-0007 | — | — | Identity / Finance | COR-0001; DEC-0002 |
 | REQ-0003 | SPEC-0002 | — | — | — | Activities | DOM-0001/0002/0007 |
