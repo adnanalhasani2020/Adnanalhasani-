@@ -39,3 +39,13 @@
 - النطاق: القيم الفارغة/المفقودة/غير الصالحة، الحدود والقيم القصوى، lifecycle/state boundaries، duplicate/replay، correction/cancellation/reversal، التاريخ، Source of Truth، Pending/Conflict، والعزل العابر للمجالات.
 - GAP-0005 وGAP-0006 اختُبرا بصرامة كسلوك حالي؛ لا Idempotency Engine ولا Identity Registry.
 - لا تغييرات على Stage 3–7، ولا DEC changes، ولا Stage 9.
+
+
+## 7. TEST-0006 — Requirements Traceability Verification
+- Baseline: `3b7f4ea1106c3a255105aa9236bf5ab24e808d3f`.
+- 59/59 REQs reviewed; 26/26 SPECs reviewed.
+- 15 FULLY TRACED; 5 INTENTIONALLY LIMITED / GAP; 39 BLOCKED BY OPEN DECISION / RESEARCH.
+- 0 NOT TRACED; 0 PARTIALLY TRACED as a final category.
+- Reverse Implementation → SPEC/REQ inventory checked.
+- GAP-0001..0006 and DEC-0001..0013 explicitly preserved.
+- Stage 7 CLOSED; Stage 8 OPEN; Stage 9 NOT OPEN.
