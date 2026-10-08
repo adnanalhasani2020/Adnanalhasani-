@@ -240,7 +240,10 @@ def test_agent_execution_provenance_and_audit_follow_action_without_becoming_tru
     action = AgentAction(agent.id, "review")
     approval = Approval(action.id)
     approval.approve()
-    action.execute(approval)
+    grant = AuthorizationGrant(agent.id, "review", "review-scope")
+    grant.activate()
+    action.bind_authorization_grant(grant)
+    action.execute(approval, grant)
     provenance = Provenance(str(action.id), "AgentAction")
     audit = record_agent_action(action.id, str(person.id), "executed")
 
