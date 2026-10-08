@@ -78,7 +78,7 @@ def test_authorization_and_approval_fail_closed(case):
         approval = Approval(other.id)
         approval.approve()
     with pytest.raises(ValidationError):
-        _orchestrator().recognize(
+        _orchestrator(str(tmp_path / "lifecycle.sqlite3")).recognize(
             workflow_id=uuid4(), payment=payment, settlement=settlement,
             obligation=obligation, account=account, action=action,
             approval=approval, grant=grant, connected=True,
@@ -121,7 +121,7 @@ def test_payment_settlement_obligation_matching_fails_closed(mismatch):
     assert account.state.value == "active"
 
 
-def test_invalid_lifecycle_and_offline_finality_are_rejected():
+def test_invalid_lifecycle_and_offline_finality_are_rejected(tmp_path):
     account, obligation, payment, settlement = _workflow()
     payment.state = type(payment.state).PENDING
     action, grant, approval = _authorized()
@@ -133,7 +133,7 @@ def test_invalid_lifecycle_and_offline_finality_are_rejected():
         )
     payment.complete(connected=True)
     with pytest.raises(ValidationError):
-        _orchestrator().recognize(
+        _orchestrator(str(tmp_path / "offline.sqlite3")).recognize(
             workflow_id=uuid4(), payment=payment, settlement=settlement,
             obligation=obligation, account=account, action=action,
             approval=approval, grant=grant, connected=False,
@@ -228,9 +228,10 @@ def test_concurrent_same_workflow_has_exactly_one_semantic_recognition(tmp_path)
     threads = [threading.Thread(target=run) for _ in range(2)]
     for thread in threads: thread.start()
     for thread in threads: thread.join()
-    assert len(results) == 1
-    assert len(errors) == 1
-    assert "replay" in errors[0] or "conflict" in errors[0]
+    assert len(results) == 2
+    assert not errors
+    assert results[0].ledger_entry_id == results[1].ledger_entry_id
+    assert results[0].transaction_id == results[1].transaction_id
     assert obligation.state.value == "satisfied"
 
 
@@ -307,3 +308,62 @@ def test_balance_is_derived_only():
     object.__setattr__(transaction_entry, "transaction_id", result.transaction_id)
     object.__setattr__(transaction_entry, "id", result.ledger_entry_id)
     assert Balance.derive(account.id, [transaction_entry]).amount == result.amount
+
+def test_reversal_replay_is_idempotent(tmp_path):
+    account, obligation, payment, settlement = _workflow()
+    orchestrator = _orchestrator(str(tmp_path / "reversal.sqlite3"))
+    action, grant, approval = _authorized()
+    original = orchestrator.recognize(
+        workflow_id=uuid4(), payment=payment, settlement=settlement,
+        obligation=obligation, account=account, action=action,
+        approval=approval, grant=grant, connected=True,
+    )
+    reversal_workflow = uuid4()
+    action2, grant2, approval2 = _authorized("financial.reverse")
+    first = orchestrator.reverse(
+        workflow_id=reversal_workflow, account=account, original=original,
+        action=action2, approval=approval2, grant=grant2, connected=True,
+    )
+    second = orchestrator.reverse(
+        workflow_id=reversal_workflow, account=account, original=original,
+        action=action2, approval=approval2, grant=grant2, connected=True,
+    )
+    assert second == first
+    assert second.state is WorkflowState.REVERSED
+
+
+def test_correction_replay_is_idempotent(tmp_path):
+    account, obligation, payment, settlement = _workflow()
+    orchestrator = _orchestrator(str(tmp_path / "correction.sqlite3"))
+    action, grant, approval = _authorized()
+    original = orchestrator.recognize(
+        workflow_id=uuid4(), payment=payment, settlement=settlement,
+        obligation=obligation, account=account, action=action,
+        approval=approval, grant=grant, connected=True,
+    )
+    correction_workflow = uuid4()
+    action2, grant2, approval2 = _authorized("financial.correct")
+    first = orchestrator.correct(
+        workflow_id=correction_workflow, account=account, original=original,
+        corrected_amount=Decimal("50"), action=action2,
+        approval=approval2, grant=grant2, connected=True,
+    )
+    second = orchestrator.correct(
+        workflow_id=correction_workflow, account=account, original=original,
+        corrected_amount=Decimal("50"), action=action2,
+        approval=approval2, grant=grant2, connected=True,
+    )
+    assert second == first
+    assert second.amount == Decimal("10")
+
+
+def test_invalid_workflow_id_is_rejected():
+    account, obligation, payment, settlement = _workflow()
+    action, grant, approval = _authorized()
+    with pytest.raises(ValidationError, match="WorkflowId"):
+        _orchestrator().recognize(
+            workflow_id="not-a-uuid", payment=payment, settlement=settlement,
+            obligation=obligation, account=account, action=action,
+            approval=approval, grant=grant, connected=True,
+        )
+    assert obligation.state.value != "satisfied"
