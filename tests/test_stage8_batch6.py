@@ -49,7 +49,7 @@ SPEC_TO_IMPL = {
     "SPEC-0023": "src/agent_core/domain_exceptions.py",
     "SPEC-0024": "NO MEASURABLE NFR IMPLEMENTATION",
     "SPEC-0025": "src/agent_core/domain_finance.py + src/agent_core/domain_health.py",
-    "SPEC-0026": "CROSS-CUTTING TRACEABILITY RULE; NO DOMAIN OWNER",
+    "SPEC-0026": "CROSS-CUTTING TRACEABILITY RULE; NO DOMAIN OWNER; src/agent_core/integrity.py (Stage 11 GAP-0002/GAP-0005)",
 }
 
 SPEC_TO_TESTS = {

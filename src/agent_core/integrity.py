@@ -95,11 +95,11 @@ class DurableOperationAuthority:
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.path, timeout=30, isolation_level=None)
         connection.execute("PRAGMA busy_timeout=30000")
-        connection.execute("PRAGMA journal_mode=WAL")
         return connection
 
     def _initialize(self) -> None:
         with self._connect() as db:
+            db.execute("PRAGMA journal_mode=DELETE")
             db.execute(
                 """
                 CREATE TABLE IF NOT EXISTS operation_records (
@@ -153,6 +153,7 @@ class DurableOperationAuthority:
         fingerprint = self.fingerprint(request)
         with self._lock:
             with self._connect() as db:
+                db.execute("BEGIN EXCLUSIVE")
                 cursor = db.execute(
                     "INSERT OR IGNORE INTO operation_records "
                     "(namespace, operation_id, operation_kind, request_fingerprint, status, outcome_json) "
@@ -161,6 +162,7 @@ class DurableOperationAuthority:
                 )
                 if cursor.rowcount == 0:
                     existing = self._read(db, namespace, operation_id)
+                    db.execute("ROLLBACK")
                     if existing is None:
                         raise ValidationError("Operation claim was lost")
                     if existing.operation_kind == operation_kind and existing.request_fingerprint == fingerprint:
@@ -168,23 +170,23 @@ class DurableOperationAuthority:
                             return existing.outcome
                         raise ValidationError("Operation replay is incomplete")
                     raise ValidationError("Operation identity conflict")
-        try:
-            outcome = effect()
-        except Exception as exc:
-            with self._connect() as db:
+                try:
+                    outcome = effect()
+                except Exception as exc:
+                    db.execute(
+                        "UPDATE operation_records SET status='rejected', outcome_json=? "
+                        "WHERE namespace=? AND operation_id=?",
+                        (self._encode_outcome({"error": str(exc)}), namespace, operation_id),
+                    )
+                    db.execute("COMMIT")
+                    raise
                 db.execute(
-                    "UPDATE operation_records SET status='rejected', outcome_json=? "
+                    "UPDATE operation_records SET status='completed', outcome_json=? "
                     "WHERE namespace=? AND operation_id=?",
-                    (self._encode_outcome({"error": str(exc)}), namespace, operation_id),
+                    (self._encode_outcome(outcome), namespace, operation_id),
                 )
-            raise
-        with self._connect() as db:
-            db.execute(
-                "UPDATE operation_records SET status='completed', outcome_json=? "
-                "WHERE namespace=? AND operation_id=?",
-                (self._encode_outcome(outcome), namespace, operation_id),
-            )
-        return outcome
+                db.execute("COMMIT")
+                return outcome
 
     def get(self, namespace: str, operation_id: str) -> OperationRecord | None:
         with self._connect() as db:
