@@ -281,7 +281,7 @@ def test_stage_12a_settlement_finance_truth_reversal_correction_and_derived_bala
         (str(uuid.uuid4()), original, account, 1, 100, "YER", "posted", NOW, NOW, NOW),
     )
     db.execute(
-        "INSERT INTO ledger_entries(ledger_entry_id,financial_transaction_id,financial_account_id,entry_sequence,amount_minor,currency_code,entry_type,state,posted_at,created_at)"
+        "INSERT INTO ledger_entries(ledger_entry_id,financial_transaction_id,financial_account_id,entry_sequence,amount_minor,currency_code,state,posted_at,created_at,updated_at)"
         " VALUES(?,?,?,?,?,?,?,?,?,?)",
         (str(uuid.uuid4()), reversal, account, 1, -100, "YER", "posted", NOW, NOW, NOW),
     )
