@@ -1,6 +1,7 @@
 import threading
 from decimal import Decimal
 from pathlib import Path
+import tempfile
 from uuid import uuid4
 
 import pytest
@@ -36,7 +37,9 @@ def _workflow(amount="40"):
     return account, obligation, payment, settlement
 
 
-def _orchestrator(path=":memory:"):
+def _orchestrator(path=None):
+    if path is None:
+        path = tempfile.mktemp(suffix=".sqlite3")
     return FinancialOrchestrator(DurableOperationAuthority(path))
 
 
@@ -78,7 +81,7 @@ def test_authorization_and_approval_fail_closed(case):
         approval = Approval(other.id)
         approval.approve()
     with pytest.raises(ValidationError):
-        _orchestrator(str(tmp_path / "lifecycle.sqlite3")).recognize(
+        _orchestrator().recognize(
             workflow_id=uuid4(), payment=payment, settlement=settlement,
             obligation=obligation, account=account, action=action,
             approval=approval, grant=grant, connected=True,
