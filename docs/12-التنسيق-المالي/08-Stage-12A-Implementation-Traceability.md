@@ -3,7 +3,9 @@
 **Decision:** DEC-ST12-0001 — APPROVED / DESIGN-READY
 **Implementation baseline:** 806292c7d59e6a949a38db3ec6031bd6e6fdeb37
 **Implementation branch:** stage12a-gap4-financial-orchestration
-**Status:** IMPLEMENTATION IN VERIFICATION
+**Status:** IMPLEMENTED / VERIFIED
+**Final implementation commit:** `59ba9602cd79359401631abe93ae30d394fa941a`
+**Full Suite CI:** Run `37804164161` — SUCCESS — `288 passed / 0 failed`
 
 ## Traceability matrix
 
@@ -69,6 +71,6 @@ Coverage includes:
 
 ## CI evidence
 
-Focused tests are intended to run before Full Suite verification. Full Suite CI must pass before PR merge consideration.
+Focused Stage 12A coverage was added before Full Suite verification. Full Suite CI Run `37804164161` passed with `288 passed / 0 failed` on final head `59ba9602cd79359401631abe93ae30d394fa941a`.
 
 No merge is authorized by this document.
