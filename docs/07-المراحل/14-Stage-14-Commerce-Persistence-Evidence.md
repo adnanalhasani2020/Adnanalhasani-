@@ -1,7 +1,7 @@
 # Stage 14 — Commerce Persistence Evidence Report
 
 **Baseline:** `bbc60451d20aade3f77177b7e6f52583adc47a34`  
-**Status:** Evidence collection in progress; no Requirement is declared ACCEPTED by this report.  
+**Status:** Stage 14 persistence-evidence work closed after merge and successful post-merge CI; no Requirement is declared ACCEPTED by this report.  
 **Scope:** Existing schema/migrations only. No schema expansion, domain concepts, API/UI, search/GIS/ranking, payment/settlement/financial transaction/ledger implementation, Stage 12B, tags, or releases.
 
 ## Requirement evidence matrix
@@ -34,3 +34,12 @@ SPEC-0005 uses `fulfilled`; current domain and relational constraint use `comple
 - No Payment, Settlement, Financial Transaction, or Ledger implementation added.
 - No Stage 12B work performed.
 - No tag or release changed.
+
+## Finalization record
+
+- **PR:** [#34](https://github.com/adnanalhasani2020/Adnanalhasani-/pull/34) — merged.
+- **Baseline:** `bbc60451d20aade3f77177b7e6f52583adc47a34`.
+- **Reviewed PR HEAD:** `5f7f8e43fddb4cb752873a48d9cbe9e4b59f6b6e`.
+- **Merge commit / main HEAD at verification:** `ea0f7162b75954c9dcd08065a5a2fb13632def15`.
+- **Post-merge CI:** [Run 37856308983](https://github.com/adnanalhasani2020/Adnanalhasani-/actions/runs/37856308983), tested commit `ea0f7162b75954c9dcd08065a5a2fb13632def15`, final conclusion `success`. The `Stage 7 pytest` job and its `Run Stage 7 tests` step completed successfully.
+- **Closure boundary:** this closes the authorized Stage 14 persistence-evidence work only. It does not imply acceptance of any Requirement. REQ-FUNC-0037 remains semantically blocked pending authoritative clarification of `fulfilled` versus `completed`; the functional evidence gaps recorded in the matrix remain open.
