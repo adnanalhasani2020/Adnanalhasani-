@@ -1,8 +1,8 @@
 # Stage 14 — Commerce Core Persistence & Acceptance Evidence — Scope / Entry Gate
 
-**Gate status:** NOT ENTRY-READY  
-**Baseline:** `main @ 26d0d2d465e9159122eb66c3412cae58d28c2bec`  
-**Governance reconciliation:** PR #32 is open and must be merged before Governance consistency can be considered satisfied.  
+**Gate status:** BLOCKED — NOT ENTRY-READY  
+**Current main baseline:** `4de0de74ca20c69adde4f4b8c2c2a7b60e09606c`  
+**Governance reconciliation:** COMPLETE — PR #32 is merged at the baseline above; Post-Merge CI run **37851720263 — SUCCESS** (314 passed, 0 failed). This proves governance reconciliation and CI status only; it is not SPEC or Stage 14 persistence-acceptance evidence.  
 **Implementation authorization:** NOT GRANTED.
 
 ## 1. Stage identity and scope freeze
@@ -84,7 +84,7 @@ If implementation requires any excluded capability, the Stage must stop and repo
 
 | Gate | Required condition | Current state |
 |---|---|---|
-| 1. Governance consistency | 59 total; 58 PROPOSED; 0 NEEDS DECISION; 1 DRAFT; 0 ACCEPTED; DEC-0001..0018 RESOLVED | **PENDING PR #32 merge** |
+| 1. Governance consistency | 59 total; 58 PROPOSED; 0 NEEDS DECISION; 1 DRAFT; 0 ACCEPTED; DEC-0001..0018 RESOLVED | **SATISFIED — PR #32 merged at `4de0de74ca20c69adde4f4b8c2c2a7b60e09606c`; Post-Merge CI 37851720263 SUCCESS** |
 | 2. Scope freeze | Nine requirements and mandatory exclusions frozen | **SATISFIED by this Gate** |
 | 3. SPEC-0005 readiness | Commerce specification identified; requirement evidence still required | **EVIDENCE PENDING** |
 | 4. SPEC-0006 readiness | Inventory/availability semantics identified; research/evidence gaps remain | **RESEARCH + EVIDENCE PENDING** |
@@ -109,7 +109,17 @@ If implementation requires any excluded capability, the Stage must stop and repo
 | REQ-FUNC-0037 | SPEC-0005, SPEC-0008, SPEC-0009 | Sale lifecycle initiated → confirmed → completed, with cancellation/return history | Persist Sale lifecycle/state/history without making Finance tables the Sale source of truth | Stage 13 lifecycle tests + persistence transition/history tests | Evidence of persisted Sale lifecycle and historical transitions | Finance implementation excluded; only boundary evidence is in scope |
 | REQ-FUNC-0038 | SPEC-0005, SPEC-0003, SPEC-0015 | Sale preserves Activity context and respects authorization/finance boundaries | Persist Sale with Activity reference; no authorization or ledger ownership is introduced | Activity-context and cross-domain boundary tests | Evidence that persisted Sale retains Activity context and does not cross Finance/Authorization ownership | No new research; specification evidence remains required |
 
-## 6. Current persistence compatibility evidence
+## 6. Evidence classification and stop rule
+
+Do not conflate these three categories:
+
+1. **Specified behavior that is ready to prove:** the frozen boundaries in Sections 1–3 and the requirement-level behavior statements in Section 5 provide testable assertions where their meaning is already explicit. Examples include Product ≠ Offering, Offering ≠ Inventory Position, Inventory Position as the inventory source of truth, Sale lifecycle/history boundaries, Activity context, and the separation of Sale from Finance-owned concepts. Existing Stage 13 domain tests are prior evidence only; they do not prove persistence round-trips or Stage 14 acceptance.
+2. **Persistence and acceptance evidence to collect during an authorized Stage 14 implementation:** database round-trips, independent record/FK integrity, persisted lifecycle/history, Activity-context preservation, temporal fields as already specified, and tests showing Availability/Discovery do not become alternate sources of truth. The PR #30 migration verification and PR #32 governance merge do not substitute for these Stage 14 results.
+3. **Research/specification gaps that remain unresolved:** SPEC-0005 still has requirement-level evidence pending; SPEC-0006 retains inventory-state and temporal/availability research/evidence gaps; SPEC-0014 retains discovery/proximity and temporal/freshness evidence gaps. No threshold, freshness window, proximity rule, new availability authority, or other policy may be inferred to fill these gaps.
+
+**Mandatory stop rule:** if a requirement in the frozen nine-item slice cannot be demonstrated without choosing an unresolved semantic rule, record the exact ambiguity, affected requirement/specification, missing evidence or decision, and the failing proof boundary. Stop that proof/implementation path and request specification clarification. Do not expand scope, silently choose a rule, or modify requirements/decisions as part of Stage 14.
+
+## 7. Current persistence compatibility evidence
 
 The current relational schema already defines the target tables:
 
@@ -123,7 +133,7 @@ Existing indexes cover Product/Offering, Offering/Activity, Inventory scope/obse
 
 Persistence migration/verification was previously exercised through PR #30, whose successful CI run was **37842724223** on commit `1a6d74c187aa9da0f160745ecdc20e77f4778945`. This establishes the existing persistence layer as a verified baseline; it does not constitute Stage 14 acceptance evidence.
 
-## 7. Stage 13 evidence baseline
+## 8. Stage 13 evidence baseline
 
 Stage 13 implemented and tested the nine requirements at domain-behavior level.
 
@@ -133,7 +143,7 @@ Stage 13 implemented and tested the nine requirements at domain-behavior level.
 
 Stage 14 must extend this evidence to persistence and acceptance; it must not re-open Stage 13 domain scope.
 
-## 8. Governance and decision boundary
+## 9. Governance and decision boundary
 
 Current authoritative governance target:
 
@@ -148,7 +158,7 @@ Relevant strategic priority: **DEC-0010 — Commerce + Daily Services priority**
 
 Relevant decision closures for governance consistency include DEC-0014/0015 for Agent autonomy/Human Approval and DEC-0016/0017/0018 for the former requirement-level blockers. Their closure does not promote any requirement to ACCEPTED.
 
-## 9. Finance boundary
+## 10. Finance boundary
 
 Stage 14 may reference Finance boundaries only to prove separation:
 
@@ -156,28 +166,27 @@ Stage 14 may reference Finance boundaries only to prove separation:
 
 No financial implementation is authorized here. Any requirement to create/update financial truth belongs to the existing Finance authority and is outside this Stage.
 
-## 10. Stage 12B boundary
+## 11. Stage 12B boundary
 
 Stage 12B remains **NOT AUTHORIZED / NOT STARTED**.
 
 Durable Financial Workflow remains deferred. Nothing in this Gate authorizes it indirectly.
 
-## 11. Entry decision
+## 12. Entry decision
 
 **Current decision: NOT ENTRY-READY.**
 
-The sole governance blocker is that the authoritative reconciliation is currently on open **PR #32** and has not been merged. In addition, SPEC-0005/0006/0014 still require requirement-level evidence, and SPEC-0006/0014 retain research-sensitive temporal/proximity details that must not be invented during implementation.
+Governance consistency is satisfied: PR #32 is merged and its Post-Merge CI is successful. The remaining blockers are evidence/readiness related, not a pending governance merge. SPEC-0005 still requires requirement-level evidence; SPEC-0006 retains inventory/availability research and evidence gaps; and SPEC-0014 retains discovery/proximity and temporal/freshness evidence gaps. These gaps do not permit inventing rules during implementation.
 
 Therefore this document does **not** authorize Stage 14 implementation.
 
 ### Conditions to become READY FOR IMPLEMENTATION
 
-1. PR #32 is reviewed and merged without semantic changes.
-2. Post-merge CI is successful.
-3. SPEC-0005, SPEC-0006, and SPEC-0014 are confirmed as implementation/evidence-ready for the frozen nine-requirement slice, with any research-sensitive details explicitly bounded.
-4. The requirement-level traceability matrix above is accepted as the Stage 14 acceptance-evidence plan.
-5. Persistence compatibility remains satisfied without schema expansion.
-6. Finance and Stage 12B boundaries remain unchanged.
-7. Explicit implementation authorization is granted.
+1. Governance reconciliation remains consistent with main at `4de0de74ca20c69adde4f4b8c2c2a7b60e09606c` and the successful Post-Merge CI evidence.
+2. SPEC-0005, SPEC-0006, and SPEC-0014 evidence/readiness gaps are resolved by authoritative evidence or explicit specification clarification—not by invented rules.
+3. The requirement-level traceability matrix remains the acceptance-evidence plan for the same frozen nine requirements.
+4. Persistence compatibility remains satisfied without schema expansion.
+5. Finance and Stage 12B boundaries remain unchanged.
+6. The human reviews the resulting evidence and grants explicit implementation authorization separately.
 
-Until all seven conditions are satisfied, Stage 14 remains a proposed/frozen Gate only.
+Until these conditions are met, Stage 14 remains NOT ENTRY-READY. This documentation PR does not authorize implementation.
