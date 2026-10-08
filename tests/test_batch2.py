@@ -8,7 +8,7 @@ from agent_core.domain_activities import Activity
 from agent_core.domain_communication import Conversation,Message,ChannelContext,ConversationState,MessageState
 
 def test_inventory_boundaries():
-    p=Product("P"); o=Offering(p.id, uuid4()); ip=InventoryPosition(o.id, uuid4(), scope_key="default"); av=Availability(o.id,AvailabilityState.COMPUTED)
+    p=Product("P"); o=Offering(p.id, uuid4()); ip=InventoryPosition(o.id, uuid4(), scope_key="default"); av=Availability(o.id,AvailabilityState.COMPUTED,datetime.now())
     assert p.id!=o.id and o.id!=ip.id and av.offering_id==o.id
     assert not hasattr(o,"inventory_state") and not hasattr(av,"inventory_position_id")
 def test_inventory_rejects_bad_refs_and_blank_product():
@@ -33,7 +33,7 @@ def test_sale_completion_requires_confirmation():
     p=Product("P"); o=Offering(p.id, uuid4()); s=Sale(o.id,Activity("A").id)
     with pytest.raises(ValidationError): s.complete()
 def test_invoice_is_not_payment_or_settlement():
-    i=Invoice(Sale(Offering(Product("P").id).id,Activity("A").id).id)
+    i=Invoice(Sale(Offering(Product("P").id,Activity("A").id).id,Activity("A").id).id)
     assert not hasattr(i,"payment_id") and not hasattr(i,"settlement_id")
 def test_communication_boundaries():
     c=Conversation(); m=Message(c.id,"hello"); ch=ChannelContext("channel")
