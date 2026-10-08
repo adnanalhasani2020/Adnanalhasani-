@@ -268,12 +268,12 @@ def test_stage_12a_settlement_finance_truth_reversal_correction_and_derived_bala
     db.execute(
         "INSERT INTO financial_transactions(financial_transaction_id,settlement_id,financial_account_id,amount_minor,currency_code,state,recognition_source_type,recognition_source_ref,recognized_at,created_at,updated_at)"
         " VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-        (reversal, None, account, -100, "YER", "reversed", "reversal", original, NOW, NOW, NOW),
+        (reversal, None, account, -100, "YER", "recognized", "reversal", original, NOW, NOW, NOW),
     )
     db.execute(
         "INSERT INTO financial_transactions(financial_transaction_id,settlement_id,financial_account_id,amount_minor,currency_code,state,recognition_source_type,recognition_source_ref,recognized_at,created_at,updated_at)"
         " VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-        (correction, None, account, 20, "YER", "corrected", "correction", original, NOW, NOW, NOW),
+        (correction, None, account, 20, "YER", "recognized", "correction", original, NOW, NOW, NOW),
     )
     db.execute(
         "INSERT INTO ledger_entries(ledger_entry_id,financial_transaction_id,financial_account_id,entry_sequence,amount_minor,currency_code,entry_type,state,posted_at,created_at)"
