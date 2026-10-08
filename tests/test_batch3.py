@@ -61,7 +61,7 @@ def test_authorization_lifecycle_and_policy_boundary():
 
 def test_agent_action_and_approval_are_separate():
     agent=Agent("health-agent"); action=AgentAction(agent.id,"review"); approval=Approval(action.id)
-    approval.approve(); action.execute()
+    approval.approve(); action.execute(approval)
     assert approval.agent_action_id==action.id and action.state.value=="executed" and approval.state.value=="approved"
     assert not hasattr(agent,"clinical_truth")
 

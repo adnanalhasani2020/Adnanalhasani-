@@ -19,5 +19,5 @@ class ApprovalEnforcementAuthority:
         if approval.agent_action_id != action.id:
             raise ValidationError("Approval does not match AgentAction")
         result = effect()
-        action.execute()
+        action.execute(approval)
         return result
