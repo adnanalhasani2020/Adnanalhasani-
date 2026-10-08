@@ -1,7 +1,7 @@
 # Stage 11 — GAP-0003 Decision Dependency
 
 **Decision Dependency ID:** DD-ST11-0003
-**Status:** DECISION REQUIRED — IMPLEMENTATION BLOCKED
+**Status:** RESOLVED — OPTION A APPROVED FOR IMPLEMENTATION
 **Baseline:** `8969fd2eb806b535e7f3e8bcf8bb200e6a6b4fe7`
 **Related Decision:** DEC-ST11-0001
 **Requirement:** R11-003
@@ -76,20 +76,14 @@ Neither option is implemented by this record.
 
 ## 6. Required decision
 
-A governance-authorized decision must explicitly select one of:
+Human approval explicitly selected:
 
-**A — Explicit Grant → AgentAction binding**, with its domain/data-model semantics defined before implementation;
-
-or
-
-**B — Scope/class authorization**, with R11-003 and GAP-0003 acceptance criteria explicitly revised to state that no individual Grant identity binding is required.
-
-Until that decision is recorded, GAP-0003 implementation remains blocked.
+**A — Explicit Grant → AgentAction binding**, with the minimum semantics recorded in DEC-ST11-0003. Option B remains unapproved.
 
 ## 7. Hard boundaries
 
-- No src/ changes.
-- No tests changed.
+- Implementation is authorized only for the approved Option A binding.
+- No unrelated src/tests changes.
 - No GAP-0004.
 - No new Stage.
 - No release.
