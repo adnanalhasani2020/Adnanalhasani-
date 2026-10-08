@@ -1,3 +1,4 @@
+from datetime import datetime
 """Stage 8 TEST-0004 — Security, boundaries, adversarial cases and invariants.
 
 Traceability:
@@ -153,9 +154,9 @@ def test_sale_cannot_complete_before_confirmation():
 
 def test_sale_does_not_treat_inventory_or_availability_as_sale_truth():
     product = Product("product")
-    offering = Offering(product.id)
-    inventory = InventoryPosition(offering.id)
-    availability = Availability(offering.id, AvailabilityState.UNAVAILABLE)
+    offering = Offering(product.id, uuid4())
+    inventory = InventoryPosition(offering.id, uuid4(), scope_key="default")
+    availability = Availability(offering.id, AvailabilityState.INVALID, datetime.utcnow())
     sale = Sale(offering.id, uuid4())
 
     assert sale.offering_id == offering.id
@@ -168,7 +169,7 @@ def test_sale_does_not_treat_inventory_or_availability_as_sale_truth():
 
 def test_commerce_cancellation_and_correction_preserve_identity_and_history():
     product = Product("product")
-    offering = Offering(product.id)
+    offering = Offering(product.id, uuid4())
     sale = Sale(offering.id, uuid4())
     invoice = Invoice(sale.id)
     sale_id, invoice_id = sale.id, invoice.id
@@ -195,11 +196,11 @@ def test_commerce_adversarial_reference_shapes_are_rejected():
     with pytest.raises(ValidationError):
         Product("")
     with pytest.raises(ValidationError):
-        Offering("not-a-product")
+        Offering("not-a-product", uuid4())
     with pytest.raises(ValidationError):
-        InventoryPosition("not-an-offering")
+        InventoryPosition("not-an-offering", uuid4(), scope_key="default")
     with pytest.raises(ValidationError):
-        Availability("not-an-offering", AvailabilityState.AVAILABLE)
+        Availability("not-an-offering", AvailabilityState.COMPUTED, datetime.utcnow())
     with pytest.raises(ValidationError):
         Sale("not-an-offering", uuid4())
     with pytest.raises(ValidationError):
