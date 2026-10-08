@@ -6,7 +6,7 @@ REQ-FUNC-0015/0016 -> Inventory Position and derived Availability boundaries.
 REQ-FUNC-0033/0034/0035 -> Discovery boundary without search/GIS/ranking semantics.
 REQ-FUNC-0037/0038 -> Sale lifecycle, Activity context, authorization/finance boundaries.
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from dataclasses import FrozenInstanceError
 from uuid import uuid4
 import pytest
@@ -40,7 +40,7 @@ def test_req_data_0014_offering_does_not_imply_inventory():
 
 def test_req_func_0015_inventory_position_carries_schema_context_without_becoming_availability():
     activity_id, offering_id, product_id = uuid4(), uuid4(), uuid4()
-    observed = datetime.utcnow()
+    observed = datetime.now(timezone.utc)
     position = InventoryPosition(
         offering_id=offering_id,
         activity_id=activity_id,
@@ -62,8 +62,8 @@ def test_req_func_0016_availability_is_derived_temporal_read_result():
     availability = Availability(
         offering_id=uuid4(),
         state=AvailabilityState.COMPUTED,
-        valid_at=datetime.utcnow(),
-        freshness_at=datetime.utcnow(),
+        valid_at=datetime.now(timezone.utc),
+        freshness_at=datetime.now(timezone.utc),
         location_ref="site-A",
     )
     assert availability.state == AvailabilityState.COMPUTED
@@ -76,13 +76,13 @@ def test_req_func_0016_availability_is_derived_temporal_read_result():
 def test_req_func_0033_discovery_boundary_returns_existing_offering_context_only():
     product = Product("product")
     offering = Offering(product.id, uuid4())
-    availability = Availability(offering.id, AvailabilityState.COMPUTED, datetime.utcnow())
+    availability = Availability(offering.id, AvailabilityState.COMPUTED, datetime.now(timezone.utc))
     assert discovery_result_is_positive(availability) is True
     assert offering.activity_id is not None
 
 
 def test_req_func_0034_proximity_is_not_availability_and_no_proximity_threshold_exists():
-    availability = Availability(uuid4(), AvailabilityState.COMPUTED, datetime.utcnow(), location_ref="site-A")
+    availability = Availability(uuid4(), AvailabilityState.COMPUTED, datetime.now(timezone.utc), location_ref="site-A")
     assert discovery_result_is_positive(availability) is True
     assert not hasattr(availability, "proximity")
     assert not hasattr(availability, "distance")
@@ -91,7 +91,7 @@ def test_req_func_0034_proximity_is_not_availability_and_no_proximity_threshold_
 
 def test_req_func_0035_time_changes_availability_state_without_inventing_freshness_threshold():
     offering_id = uuid4()
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     current = Availability(offering_id, AvailabilityState.COMPUTED, now, freshness_at=now)
     stale = Availability(offering_id, AvailabilityState.STALE, now-timedelta(hours=1), freshness_at=now-timedelta(hours=1))
     assert current.state == AvailabilityState.COMPUTED
