@@ -1,11 +1,14 @@
 # Stage 11 — GAP-0003 Implementation Traceability
 
-**Status:** IMPLEMENTED / VERIFIED  
+**Status:** CLOSED / VERIFIED  
 **Decision:** DEC-ST11-0003  
 **Decision commit:** 6e8037053ddfd00285057b96e49b027c376b6e29  
 **Approved implementation branch:** stage11-gap3-option-a-implementation  
 **Baseline:** 8969fd2eb806b535e7f3e8bcf8bb200e6a6b4fe7
 **Full Suite CI:** Run 37799154941 — SUCCESS — 264 passed / 0 failed
+**Merge PR:** #20 — MERGED
+**Merge SHA:** 6b1efe83541658eacef7853d3e61e40f967975fe
+**Post-merge CI:** Run 37799687718 — SUCCESS
 
 ## Scope
 
@@ -69,4 +72,5 @@ Focused tests are in tests/test_stage11_gap3.py and cover:
 - No new Stage.
 - GAP-0001 semantics remain intact.
 - No unrelated GAP changes.
-- PR remains OPEN / NOT MERGED.
+- PR #20 is MERGED using MERGE COMMIT.
+- GAP-0003 is CLOSED.
