@@ -1,7 +1,7 @@
 # Stage 11 — Closure Evidence
 
 **Status:** CLOSED / VERIFIED  
-**Closure commit:** pending — this document is the closure evidence recorded after verified GAP-0003 merge  
+**Closure evidence commit:** `5b2938a1d8feb4ec8468d8912f0f198d1f27f8c8`  
 **Main baseline at closure:** `6b1efe83541658eacef7853d3e61e40f967975fe`  
 **GAP-0003 PR:** #20 — MERGED using MERGE COMMIT  
 **GAP-0003 merge SHA:** `6b1efe83541658eacef7853d3e61e40f967975fe`  
