@@ -467,8 +467,11 @@ def test_agent_action_replay_is_permitted_but_has_no_domain_truth_ownership():
     action = AgentAction(agent.id, "review")
     approval = Approval(action.id)
     approval.approve()
-    action.execute(approval)
-    action.execute(approval)
+    grant = AuthorizationGrant(agent.id, "review", "review-scope")
+    grant.activate()
+    action.bind_authorization_grant(grant)
+    action.execute(approval, grant)
+    action.execute(approval, grant)
     assert action.state.value == "executed"
     assert "financial_account_id" not in _field_names(action)
     assert "clinical_record_id" not in _field_names(action)
