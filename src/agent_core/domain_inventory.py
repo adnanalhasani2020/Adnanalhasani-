@@ -58,6 +58,7 @@ class Offering:
     def activate(self): self.state=OfferingState.ACTIVE
     def end(self): self.state=OfferingState.ENDED
     def withdraw(self): self.state=OfferingState.WITHDRAWN
+    def retire(self): self.withdraw()
 
 @dataclass
 class InventoryPosition:
@@ -84,6 +85,8 @@ class InventoryPosition:
             raise ValidationError("Inventory Position.effective_to cannot precede effective_from")
     def make_effective(self): self.state=InventoryPositionState.EFFECTIVE
     def close(self): self.state=InventoryPositionState.CLOSED
+    def make_unavailable(self): self.close()
+    def retire(self): self.close()
 
 @dataclass(frozen=True)
 class Availability:
