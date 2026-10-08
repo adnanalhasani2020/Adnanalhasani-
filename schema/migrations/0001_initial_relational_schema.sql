@@ -186,7 +186,7 @@ CREATE TABLE sales (
 CREATE TABLE invoices (
     invoice_id TEXT PRIMARY KEY,
     sale_id TEXT NOT NULL REFERENCES sales(sale_id),
-    obligation_id TEXT NULL,
+    obligation_id TEXT NULL REFERENCES obligations(obligation_id),
     state TEXT NOT NULL CHECK (state IN ('issued','void','settled')),
     issuer_ref TEXT NOT NULL,
     invoice_number TEXT NOT NULL,
@@ -370,7 +370,7 @@ CREATE TABLE delegations (
 CREATE TABLE authorization_grants (
     authorization_grant_id TEXT PRIMARY KEY,
     subject_person_id TEXT NULL REFERENCES persons(person_id),
-    agent_id TEXT NULL,
+    agent_id TEXT NULL REFERENCES agents(agent_id),
     action_code TEXT NOT NULL,
     scope_ref TEXT NOT NULL,
     context_ref TEXT NOT NULL,
