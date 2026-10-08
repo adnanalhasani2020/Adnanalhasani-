@@ -153,22 +153,21 @@ class DurableOperationAuthority:
         fingerprint = self.fingerprint(request)
         with self._lock:
             with self._connect() as db:
-                db.execute("BEGIN IMMEDIATE")
-                existing = self._read(db, namespace, operation_id)
-                if existing is not None:
-                    db.execute("ROLLBACK")
+                cursor = db.execute(
+                    "INSERT OR IGNORE INTO operation_records "
+                    "(namespace, operation_id, operation_kind, request_fingerprint, status, outcome_json) "
+                    "VALUES (?, ?, ?, ?, 'reserved', 'null')",
+                    (namespace, operation_id, operation_kind, fingerprint),
+                )
+                if cursor.rowcount == 0:
+                    existing = self._read(db, namespace, operation_id)
+                    if existing is None:
+                        raise ValidationError("Operation claim was lost")
                     if existing.operation_kind == operation_kind and existing.request_fingerprint == fingerprint:
                         if existing.status == "completed":
                             return existing.outcome
                         raise ValidationError("Operation replay is incomplete")
                     raise ValidationError("Operation identity conflict")
-                db.execute(
-                    "INSERT INTO operation_records "
-                    "(namespace, operation_id, operation_kind, request_fingerprint, status, outcome_json) "
-                    "VALUES (?, ?, ?, ?, 'reserved', 'null')",
-                    (namespace, operation_id, operation_kind, fingerprint),
-                )
-                db.execute("COMMIT")
         try:
             outcome = effect()
         except Exception as exc:
