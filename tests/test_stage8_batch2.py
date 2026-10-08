@@ -276,13 +276,16 @@ def test_gap_0001_is_observable_without_adding_enforcement():
     agent = Agent("assistant")
     action = AgentAction(agent.id, "restricted-operation")
 
-    # GAP-0001: execution now requires an approved, matching Approval.
+    # GAP-0001 remains an approval gate; GAP-0003 now requires an explicit Grant binding.
+    grant = AuthorizationGrant(agent.id, "restricted-operation", "restricted-scope")
+    grant.activate()
+    action.bind_authorization_grant(grant)
     with pytest.raises(ValidationError):
         action.execute()
 
     approval = Approval(action.id)
     approval.approve()
-    action.execute(approval)
+    action.execute(approval, grant)
     assert action.state == AgentActionState.EXECUTED
 
 
@@ -296,10 +299,10 @@ def test_gap_0003_is_observable_without_binding_authorization_to_action():
     with pytest.raises(ValidationError):
         action.execute()
 
-    # GAP-0003 remains: AuthorizationGrant is not bound to AgentAction.
+    # GAP-0003: the active Grant is not applicable until explicitly bound to this action.
     assert grant.state == AuthorizationGrantState.ACTIVE
     assert action.state == AgentActionState.PREPARED
-    assert not hasattr(action, "authorization_grant_id")
+    assert action.authorization_grant_id is None
 
 
 def test_provenance_audit_and_domain_truth_remain_separate():
