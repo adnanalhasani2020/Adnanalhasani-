@@ -87,7 +87,7 @@ def test_invoice_payment_settlement_and_ledger_remain_separate():
     payment = Payment(Decimal("100"), invoice_id=invoice_ref)
     settlement = Settlement(payment_id=payment.id)
     transaction = FinancialTransaction(account.id, Decimal("100"), id=transaction_ref)
-    entry = LedgerEntry(account.id, Decimal("100"), transaction.id)
+    entry = LedgerEntry._from_finance(account.id, Decimal("100"), transaction.id)
 
     payment.complete(connected=True)
     settlement.settle(connected=True)
@@ -106,8 +106,8 @@ def test_invoice_payment_settlement_and_ledger_remain_separate():
 
 def test_balance_is_derived_and_does_not_become_independent_truth():
     account = FinancialAccount(Person().id)
-    own = LedgerEntry(account.id, Decimal("75"), uuid4())
-    other = LedgerEntry(uuid4(), Decimal("900"), uuid4())
+    own = LedgerEntry._from_finance(account.id, Decimal("75"), uuid4())
+    other = LedgerEntry._from_finance(uuid4(), Decimal("900"), uuid4())
 
     balance = Balance.derive(account.id, [own, other])
 
