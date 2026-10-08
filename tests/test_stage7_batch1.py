@@ -10,6 +10,26 @@ from agent_core.runtime import ApplicationRuntime
 def test_identity_objects_are_distinct():
     p=Person(); i=Identifier(p.id,"id-1"); a=AccessAccount(p.id); s=Session(a.id)
     assert p is not i and p is not a and a is not s and i.person_id==p.id and a.person_id==p.id
+
+def test_authenticator_direct_evidence_preserves_identity_access_boundaries():
+    from agent_core.domain_identity import Authenticator
+    from agent_core.shared import AuthenticatorState
+
+    app = IdentityApplication()
+    person = app.create_person()
+    account = app.create_access_account(person)
+    authenticator = app.enroll_authenticator(account)
+    session = app.start_session(account)
+
+    assert authenticator.access_account_id == account.id
+    assert authenticator.state == AuthenticatorState.ENROLLED
+    assert len({person.id, account.id, authenticator.id, session.id}) == 4
+    assert not hasattr(person, "access_account_id")
+    assert not hasattr(person, "authenticator_id")
+    assert not hasattr(account, "authenticator_id")
+    assert not hasattr(session, "authenticator_id")
+    assert authenticator.id != account.id
+    assert authenticator.id != session.id
 def test_identifier_rejects_blank():
     with pytest.raises(ValidationError): Identifier(Person().id," ")
 def test_session_rejects_inactive_access_account():
