@@ -1,6 +1,6 @@
 # Execution Readiness Assessment — Commerce + Daily Services
 
-**Baseline:** `main @ 20dd1671fe4db53dc75d5b4508645fc4924eee2d`
+**Baseline:** `main @ ba17d22acf28313478b5b81fcb364cfe31a7e993`
 
 ## Verdict
 
@@ -26,13 +26,13 @@ No implementation stage should be opened from this assessment.
 
 - REQ-DATA-0013 / REQ-DATA-0014: Product/Offering and Offering/Inventory boundaries remain PROPOSED; acceptance evidence is absent.
 - REQ-FUNC-0015: inventory state remains PROPOSED with research/detail work outstanding.
-- REQ-FUNC-0033: local offer discovery is now PROPOSED; DEC-0009 resolves the decision question, but acceptance evidence is absent.
+- REQ-FUNC-0033: local offer discovery is now PROPOSED; DEC-0001 resolves the reference-market ambiguity and DEC-0009 resolves the “available nearby” decision question, but acceptance evidence is absent.
 - REQ-FUNC-0034 / 0035: proximity/availability and temporal freshness remain PROPOSED; evidence is absent.
 - REQ-FUNC-0036 / 0038: channel and Activity-context rules are PROPOSED; DEC-0008 resolves the channel decision, but requirement acceptance evidence is absent.
 - REQ-FUNC-0037: sale lifecycle remains PROPOSED; cross-spec exception/refund/repetition semantics still require evidence.
 - REQ-FUNC-0039: instrument definition is now PROPOSED after DEC-0005; acceptance evidence is absent.
 - REQ-FUNC-0043 / 0045: agent autonomy and human-approval action set remain NEEDS DECISION and affect agent-enabled Commerce flows.
-- REQ-FUNC-0061..0064: exception/duplicate/cancel-conflict requirements remain PROPOSED, with research/specification dependencies.
+- REQ-FUNC-0061..0065: exception/duplicate/cancel-conflict/lost-device requirements remain PROPOSED; REQ-FUNC-0065 is PROPOSED after DEC-0013, with implementation details deferred and acceptance evidence absent.
 
 ## What is not ready
 
