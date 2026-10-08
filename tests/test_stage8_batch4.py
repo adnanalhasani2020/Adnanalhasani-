@@ -625,7 +625,7 @@ def test_cross_domain_ownership_directions_remain_explicit():
 def test_forbidden_concepts_are_not_introduced_by_domain_objects():
     objects = [
         Person(), AccessAccount(uuid4()), FinancialAccount(uuid4()),
-        Activity("a"), Organization("o"), Product("p"), Offering(uuid4()),
+        Activity("a"), Organization("o"), Product("p"), Offering(uuid4(), uuid4()),
         Sale(uuid4(), uuid4()), PatientContext(uuid4()), Agent("a"), Device(uuid4()),
     ]
     forbidden = {
