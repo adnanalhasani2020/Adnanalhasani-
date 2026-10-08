@@ -153,8 +153,8 @@ def test_stage_12a_settlement_one_obligation_and_one_final_recognition():
     )
     db.execute(
         "INSERT INTO payments(payment_id,obligation_id,payer_person_id,payee_person_id,amount_minor,"
-        "currency_code,state,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)",
-        (payment,obligation,p2,p1,100,"YER","completed",now,now),
+        "currency_code,state,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
+        (payment,obligation,p2,p1,100,"YER","completed",now,now,now),
     )
     db.execute(
         "INSERT INTO settlements(settlement_id,payment_id,obligation_id,state,created_at,updated_at)"
