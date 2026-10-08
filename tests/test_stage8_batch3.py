@@ -204,15 +204,16 @@ def test_family_delegation_authorization_action_lifecycle_without_extra_enforcem
     grant.activate()
     approval.approve()
 
-    # GAP-0001 is enforced by the explicit approval; GAP-0003 remains unbound.
+    # GAP-0001 approval alone cannot bypass the now-authoritative GAP-0003 Grant binding.
     assert approval.state == ApprovalState.APPROVED
     assert action.state == AgentActionState.PREPARED
     assert family.person_a_id == delegator.id
     assert delegation.delegatee_id == delegatee.id
     assert grant.subject_id == delegatee.id
 
-    action.execute(approval)
-    assert action.state == AgentActionState.EXECUTED
+    with pytest.raises(ValidationError):
+        action.execute(approval)
+    assert action.state == AgentActionState.PREPARED
 
 
 def test_authorization_cancellation_does_not_rewrite_family_or_history():
@@ -240,7 +241,10 @@ def test_agent_execution_provenance_and_audit_follow_action_without_becoming_tru
     action = AgentAction(agent.id, "review")
     approval = Approval(action.id)
     approval.approve()
-    action.execute(approval)
+    grant = AuthorizationGrant(agent.id, "review", "review-scope")
+    grant.activate()
+    action.bind_authorization_grant(grant)
+    action.execute(approval, grant)
     provenance = Provenance(str(action.id), "AgentAction")
     audit = record_agent_action(action.id, str(person.id), "executed")
 

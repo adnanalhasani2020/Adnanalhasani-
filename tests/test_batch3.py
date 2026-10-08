@@ -60,8 +60,10 @@ def test_authorization_lifecycle_and_policy_boundary():
     assert grant.state.value=="revoked" and policy.state.value=="inactive"
 
 def test_agent_action_and_approval_are_separate():
-    agent=Agent("health-agent"); action=AgentAction(agent.id,"review"); approval=Approval(action.id)
-    approval.approve(); action.execute(approval)
+    agent=Agent("health-agent"); action=AgentAction(agent.id,"review")
+    grant=AuthorizationGrant(agent.id,"review","health")
+    grant.activate(); action.bind_authorization_grant(grant)
+    approval=Approval(action.id); approval.approve(); action.execute(approval, grant)
     assert approval.agent_action_id==action.id and action.state.value=="executed" and approval.state.value=="approved"
     assert not hasattr(agent,"clinical_truth")
 

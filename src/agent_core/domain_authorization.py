@@ -60,12 +60,35 @@ class Agent:
 @dataclass
 class AgentAction:
     agent_id: UUID; action: str; id: UUID=field(default_factory=new_id); state: AgentActionState=AgentActionState.PREPARED
+    authorization_grant_id: UUID | None = None
     def __post_init__(self):
         if not isinstance(self.agent_id,UUID): raise ValidationError("AgentAction must reference Agent")
         if not isinstance(self.action,str) or not self.action.strip(): raise ValidationError("AgentAction.action is required")
     def approve(self): self.state=AgentActionState.APPROVED
     def reject(self): self.state=AgentActionState.REJECTED
-    def execute(self, approval: "Approval | None" = None):
+
+    def bind_authorization_grant(self, grant: "AuthorizationGrant") -> None:
+        if not isinstance(grant, AuthorizationGrant):
+            raise ValidationError("AuthorizationGrant is required")
+        if self.authorization_grant_id is not None:
+            raise ValidationError("AgentAction already has an authoritative AuthorizationGrant")
+        if grant.subject_id != self.agent_id:
+            raise ValidationError("AuthorizationGrant subject does not match AgentAction")
+        if grant.action != self.action:
+            raise ValidationError("AuthorizationGrant action does not match AgentAction")
+        self.authorization_grant_id = grant.id
+
+    def execute(
+        self,
+        approval: "Approval | None" = None,
+        authorization_grant: "AuthorizationGrant | None" = None,
+    ):
+        if authorization_grant is None:
+            raise ValidationError("AgentAction execution requires authoritative AuthorizationGrant binding")
+        if authorization_grant.state != AuthorizationGrantState.ACTIVE:
+            raise ValidationError("AuthorizationGrant must be ACTIVE")
+        if self.authorization_grant_id != authorization_grant.id:
+            raise ValidationError("AuthorizationGrant does not match AgentAction")
         if approval is None or approval.state != ApprovalState.APPROVED:
             raise ValidationError("AgentAction execution requires valid approval")
         if approval.agent_action_id != self.id:

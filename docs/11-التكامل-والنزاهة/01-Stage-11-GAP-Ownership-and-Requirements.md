@@ -59,11 +59,25 @@
 ### GAP-0003 — AuthorizationGrant → AgentAction Binding
 **Requirement R11-003:** An AgentAction must not derive executable authority merely from the existence of an AuthorizationGrant; the grant must be explicitly bound and applicable to the action.
 
+**Approved Option A semantics:**
+- The authoritative binding identity is (authorization_grant_id, agent_action_id).
+- One AuthorizationGrant may bind to many AgentActions.
+- An executable AgentAction has at most one authoritative Grant binding at a time.
+- The binding is represented by the AgentAction's immutable authorization_grant_id; no inferred binding from subject/action is permitted.
+- A Grant may bind only when its subject and action match the governed AgentAction.
+- A duplicate binding or attempt to bind a second authoritative Grant to the same AgentAction is rejected.
+- The binding identity is retained for historical reference and is not rewritten by Grant lifecycle changes.
+- Runtime execution requires the exact binding, an ACTIVE Grant, matching Grant applicability, and the GAP-0001 approved Approval for that AgentAction.
+
 **Acceptance:**
-- An unrelated grant cannot authorize an AgentAction.
-- Scope/resource/action mismatch is rejected.
-- A valid grant bound to the governed action permits execution only within its scope.
-- Tests cover absent, unrelated, mismatched, and valid bindings.
+- A correct Grant bound to the governed AgentAction permits execution only with valid GAP-0001 Approval.
+- An unrelated/wrong Grant cannot authorize an AgentAction.
+- Missing binding is rejected.
+- Duplicate binding and a second authoritative Grant for the same AgentAction are rejected.
+- SUSPENDED, REVOKED, and EXPIRED Grants are rejected before execution.
+- Subject/action mismatch cannot create a binding.
+- Rejected paths produce no execution effect.
+- Historical binding identity remains unchanged after Grant lifecycle transitions.
 - The binding is enforced at runtime, not only represented structurally.
 
 ## Cross-Cutting Requirement
