@@ -102,9 +102,9 @@ def test_activity_and_role_required_values_are_rejected():
 
 def test_invalid_cross_domain_reference_shapes_are_rejected():
     with pytest.raises(ValidationError):
-        Offering("not-a-product")
+        Offering("not-a-product", uuid4())
     with pytest.raises(ValidationError):
-        InventoryPosition("not-an-offering")
+        InventoryPosition("not-an-offering", uuid4(), scope_key="default")
     with pytest.raises(ValidationError):
         Sale("not-an-offering", uuid4())
     with pytest.raises(ValidationError):
@@ -141,9 +141,9 @@ def test_product_and_offering_boundary_values_are_enforced():
     with pytest.raises(ValidationError):
         Product("   ")
     with pytest.raises(ValidationError):
-        Offering("not-a-product")
+        Offering("not-a-product", uuid4())
     product = Product("minimum-valid-name")
-    offering = Offering(product.id)
+    offering = Offering(product.id, uuid4())
     assert offering.product_id == product.id
 
 
@@ -173,7 +173,7 @@ def test_repeated_cancellation_preserves_sale_identity_and_state():
 
 def test_commerce_correction_and_cancellation_preserve_history_references():
     product = Product("product")
-    offering = Offering(product.id)
+    offering = Offering(product.id, uuid4())
     sale = Sale(offering.id, uuid4())
     invoice = Invoice(sale.id)
     sale_id, invoice_id = sale.id, invoice.id
@@ -189,9 +189,9 @@ def test_commerce_correction_and_cancellation_preserve_history_references():
 
 def test_inventory_and_availability_do_not_become_sale_truth():
     product = Product("product")
-    offering = Offering(product.id)
-    inventory = InventoryPosition(offering.id)
-    availability = Availability(offering.id, AvailabilityState.UNAVAILABLE)
+    offering = Offering(product.id, uuid4())
+    inventory = InventoryPosition(offering.id, uuid4(), scope_key="default")
+    availability = Availability(offering.id, AvailabilityState.INVALID, datetime.utcnow())
     sale = Sale(offering.id, uuid4())
     assert inventory.offering_id == offering.id
     assert availability.offering_id == offering.id
@@ -203,10 +203,10 @@ def test_inventory_and_availability_do_not_become_sale_truth():
 def test_repeated_inventory_retirement_keeps_same_identity():
     inventory = InventoryPosition(uuid4())
     inventory_id = inventory.id
-    inventory.retire()
-    inventory.retire()
+    inventory.close()
+    inventory.close()
     assert inventory.id == inventory_id
-    assert inventory.state.value == "retired"
+    assert inventory.state.value == "closed"
 
 
 def test_financial_minimum_positive_and_large_values_remain_distinct():
@@ -515,9 +515,9 @@ def test_cross_domain_identity_authorization_boundaries_do_not_collapse_person_a
 
 def test_cross_domain_commerce_boundaries_do_not_mix_product_offering_inventory_availability_sale():
     product = Product("product")
-    offering = Offering(product.id)
-    inventory = InventoryPosition(offering.id)
-    availability = Availability(offering.id, AvailabilityState.AVAILABLE)
+    offering = Offering(product.id, uuid4())
+    inventory = InventoryPosition(offering.id, uuid4(), scope_key="default")
+    availability = Availability(offering.id, AvailabilityState.COMPUTED, datetime.utcnow())
     sale = Sale(offering.id, Activity("sale").id)
     assert offering.product_id == product.id
     assert inventory.offering_id == offering.id
