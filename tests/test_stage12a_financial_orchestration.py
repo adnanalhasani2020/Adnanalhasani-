@@ -148,7 +148,8 @@ def test_workflow_id_conflict_has_zero_effect():
     account, obligation, payment, settlement = _workflow()
     action, grant, approval = _authorized()
     workflow_id = uuid4()
-    first = _orchestrator().recognize(
+    orchestrator = _orchestrator()
+    first = orchestrator.recognize(
         workflow_id=workflow_id, payment=payment, settlement=settlement,
         obligation=obligation, account=account, action=action,
         approval=approval, grant=grant, connected=True,
@@ -156,7 +157,7 @@ def test_workflow_id_conflict_has_zero_effect():
     other_account, other_obligation, other_payment, other_settlement = _workflow("20")
     action2, grant2, approval2 = _authorized()
     with pytest.raises(ValidationError, match="conflict"):
-        _orchestrator().recognize(
+        orchestrator.recognize(
             workflow_id=workflow_id, payment=other_payment,
             settlement=other_settlement, obligation=other_obligation,
             account=other_account, action=action2, approval=approval2,
