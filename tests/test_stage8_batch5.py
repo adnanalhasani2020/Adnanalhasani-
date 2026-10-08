@@ -10,6 +10,7 @@ TEST-0005 -> existing Stage 5 concepts / Stage 6 specifications -> Stage 7 imple
 """
 from dataclasses import FrozenInstanceError, fields
 from decimal import Decimal
+from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
@@ -191,7 +192,7 @@ def test_inventory_and_availability_do_not_become_sale_truth():
     product = Product("product")
     offering = Offering(product.id, uuid4())
     inventory = InventoryPosition(offering.id, uuid4(), scope_key="default")
-    availability = Availability(offering.id, AvailabilityState.INVALID, datetime.utcnow())
+    availability = Availability(offering.id, AvailabilityState.INVALID, datetime.now(timezone.utc))
     sale = Sale(offering.id, uuid4())
     assert inventory.offering_id == offering.id
     assert availability.offering_id == offering.id
@@ -201,7 +202,7 @@ def test_inventory_and_availability_do_not_become_sale_truth():
 
 
 def test_repeated_inventory_retirement_keeps_same_identity():
-    inventory = InventoryPosition(uuid4())
+    inventory = InventoryPosition(uuid4(), uuid4(), scope_key="default")
     inventory_id = inventory.id
     inventory.close()
     inventory.close()
@@ -517,7 +518,7 @@ def test_cross_domain_commerce_boundaries_do_not_mix_product_offering_inventory_
     product = Product("product")
     offering = Offering(product.id, uuid4())
     inventory = InventoryPosition(offering.id, uuid4(), scope_key="default")
-    availability = Availability(offering.id, AvailabilityState.COMPUTED, datetime.utcnow())
+    availability = Availability(offering.id, AvailabilityState.COMPUTED, datetime.now(timezone.utc))
     sale = Sale(offering.id, Activity("sale").id)
     assert offering.product_id == product.id
     assert inventory.offering_id == offering.id
