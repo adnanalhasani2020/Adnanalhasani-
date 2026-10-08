@@ -49,7 +49,7 @@ SPEC_TO_IMPL = {
     "SPEC-0023": "src/agent_core/domain_exceptions.py",
     "SPEC-0024": "NO MEASURABLE NFR IMPLEMENTATION",
     "SPEC-0025": "src/agent_core/domain_finance.py + src/agent_core/domain_health.py",
-    "SPEC-0026": "CROSS-CUTTING TRACEABILITY RULE; NO DOMAIN OWNER",
+    "SPEC-0026": "CROSS-CUTTING TRACEABILITY RULE; NO DOMAIN OWNER; src/agent_core/integrity.py (Stage 11 GAP-0002/GAP-0005)",
 }
 
 SPEC_TO_TESTS = {
@@ -182,7 +182,7 @@ def test_reverse_implementation_inventory_has_traceability_owner():
         "__init__.py","application.py","config.py","domain_activities.py","domain_audit.py",
         "domain_authorization.py","domain_commerce.py","domain_communication.py","domain_education.py",
         "domain_exceptions.py","domain_finance.py","domain_health.py","domain_identity.py",
-        "domain_inventory.py","domain_offline.py","infrastructure.py","runtime.py","shared.py",
+        "domain_inventory.py","domain_offline.py","infrastructure.py","integrity.py","runtime.py","shared.py",
     }
     assert expected == mapped
     impl_text = " ".join(SPEC_TO_IMPL.values())
