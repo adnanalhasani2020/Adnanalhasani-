@@ -1,45 +1,103 @@
 # Stage 12 — Decision Record
 
 **Decision ID:** DEC-ST12-0001  
-**Status:** DECISION PACKAGE — HUMAN APPROVAL REQUIRED  
+**Status:** APPROVED / DESIGN-READY  
 **Baseline:** `806292c7d59e6a949a38db3ec6031bd6e6fdeb37`
 
 ## Decision
-Open Stage 12 as a Scope + Architecture Decision Gate for GAP-0004 only.
+Stage 12 is approved and closed as the **Scope + Architecture Decision Gate for GAP-0004**.
 
-## Approved by existing human authorization
-- Stage 12 governance/design work is authorized.
-- No src/persistence/schema/provider implementation is authorized.
-- No release/v1.0.0 change is authorized.
-- No Production Readiness claim is authorized.
+The human approval explicitly resolves DD-ST12-0001 through DD-ST12-0004.
 
-## Proposed contract
-Canonical recognition path:
-**Payment → Settlement → Financial Transaction → Ledger Entry → Balance(derived)**
+## Human-approved decisions
 
-Recommended:
-- Finance-scoped Financial Orchestrator.
-- WorkflowId distinct from GAP-0005 operation identity, with GAP-0005 reused for durable replay/idempotency.
-- Settlement explicitly references one Obligation for 12A.
-- Finance recognition boundary is the sole final Ledger creation authority.
-- Offline cannot produce financial finality.
-- AuthorizationGrant → exact AgentAction binding → GAP-0001 Approval → orchestration.
+### DD-ST12-0001 — Orchestrator Ownership
+**APPROVED**
 
-## Human decisions required
-1. **DD-ST12-0001:** dedicated Finance-scoped orchestrator vs application coordinator.
-   **Recommendation: Finance-scoped orchestrator.**
-2. **DD-ST12-0002:** workflow identity / durable boundary.
-   **Recommendation: distinct WorkflowId mapped to GAP-0005 durable operation identity.**
-3. **DD-ST12-0003:** Settlement→Obligation cardinality.
-   **Recommendation: one Settlement → one Obligation for 12A.**
-4. **DD-ST12-0004:** Ledger creation authority.
-   **Recommendation: Finance recognition command invoked by orchestrator.**
+Finance-scoped **Financial Orchestrator** is the authoritative owner of financial orchestration.
 
-## Stage 12 determination
-The design can be made internally coherent without adding a new financial concept, but it is **not yet DESIGN-READY** because these four authority/cardinality/persistence decisions have executable architectural consequences.
+Boundaries:
+- coordinates workflows across existing sources of truth;
+- does not replace Domain Owners;
+- does not create authorization;
+- does not own the Ledger;
+- financial recognition remains under Finance authority.
 
-## Explicit non-decisions
-No provider, schema, migration, persistence implementation, API, UI, sync algorithm, legal/regulatory model, or new authorization concept is decided here.
+### DD-ST12-0002 — Workflow Identity / Durable Boundary
+**APPROVED**
 
-## Outcome
-**Stage 12 remains OPEN pending human resolution of DD-ST12-0001..0004.**
+Use an independent **WorkflowId** for business workflow identity.
+
+GAP-0005 remains the durable operation identity / idempotency / replay-integrity layer.
+
+Business workflow identity and durable operation/replay identity are separate concerns. Stage 12A must not redefine GAP-0005 semantics.
+
+No durable workflow schema or persistence implementation is authorized by this decision.
+
+### DD-ST12-0003 — Settlement Cardinality
+**APPROVED**
+
+For Stage 12A:
+**ONE Settlement → ONE Obligation.**
+
+Multi-obligation allocation is outside scope and requires a separate future decision.
+
+### DD-ST12-0004 — Ledger Creation Authority
+**APPROVED**
+
+**Finance Recognition Command** is the only approved path capable of creating a financially final Ledger Entry.
+
+There is no Settlement → Ledger direct path and no generic automatic event → Ledger finality path.
+
+## Approved GAP-0004 contract
+
+Canonical path:
+
+**Payment → Settlement → Financial Transaction → Ledger Entry → Balance (derived)**
+
+Required controls:
+- exact Payment/Settlement/Obligation matching;
+- Finance recognition boundary;
+- WorkflowId;
+- GAP-0005 idempotency/replay integration without semantic redefinition;
+- AuthorizationGrant → exact AgentAction binding → GAP-0001 Approval;
+- failure/cancel/reversal/correction semantics;
+- offline finality rejection;
+- historical/provenance preservation;
+- Balance remains derived.
+
+## Stage 12A implementation authority
+The four design decisions authorize **design closure and preparation of the implementation entry package only**.
+
+They do **not** authorize:
+- `src/` implementation;
+- persistence/schema implementation;
+- migration;
+- provider integration;
+- API/UI;
+- Stage 12B;
+- release/tag;
+- v1.0.0 changes;
+- Production Readiness;
+- autonomous financial authority;
+- new financial or authorization concepts.
+
+A separate explicit implementation authorization is required before code or persistence changes begin.
+
+## Stage 12 status
+**DESIGN-READY.**
+
+All Stage 12 decision dependencies are resolved. The implementation boundary is frozen at Stage 12A as documented in the entry package.
+
+## Closure evidence
+- Decision dependencies: `03-GAP-0004-Architecture-Data-Model-Decision-Dependencies.md`
+- Exit conditions: `05-Dependency-Graph-and-Stage-12-Exit-Conditions.md`
+- Contract: `01-Financial-Orchestration-Contract.md`
+- Source of Truth: `02-Source-of-Truth-Matrix.md`
+- Acceptance / threat matrix: `04-GAP-0004-Acceptance-Criteria-and-Threat-Failure-Matrix.md`
+- Implementation entry package: `07-Stage-12A-Implementation-Entry-Package.md`
+
+## Final outcome
+**Stage 12 = DESIGN-READY.**
+
+No implementation was started in this cycle. Main is unchanged. PR #21 remains a separate governance PR and is not merged by this decision record.
