@@ -11,7 +11,7 @@ No implementation stage should be opened from this assessment.
 ## Evidence
 
 1. DEC-0010 establishes Commerce + Daily Services as the strategic first priority.
-2. The repository currently contains 59 independent requirements, but requirement-level status is now 52 PROPOSED, 6 NEEDS DECISION, 1 DRAFT, and 0 ACCEPTED after reconciling DEC closure against requirement-level meaning.
+2. The repository currently contains 59 independent requirements, but requirement-level status is now 53 PROPOSED, 5 NEEDS DECISION, 1 DRAFT, and 0 ACCEPTED after reconciling DEC closure against requirement-level meaning.
 3. Stage 6 provides 26 specifications and 59/59 REQ→SPEC traceability, but specification readiness has been re-evaluated against the now-resolved DEC-0001..DEC-0013. Remaining blockers are requirement-level evidence, independently unresolved requirements (notably REQ-0043/0045), and explicit research dependencies.
 4. Stage 12A is already CLOSED / SATISFIED; Durable Financial Workflow is deferred and Stage 12B is not authorized.
 5. Existing implementation coverage is evidence of current capability, not evidence that all Commerce/Daily Services requirements are accepted.
@@ -33,11 +33,13 @@ No implementation stage should be opened from this assessment.
 - REQ-FUNC-0039: instrument definition is now PROPOSED after DEC-0005; acceptance evidence is absent.
 - REQ-FUNC-0043 / 0045: agent autonomy and human-approval action set remain NEEDS DECISION and affect agent-enabled Commerce flows.
 - REQ-FUNC-0061..0065: exception/duplicate/cancel-conflict/lost-device requirements remain PROPOSED; REQ-FUNC-0065 is PROPOSED after DEC-0013, with implementation details deferred and acceptance evidence absent.
+- REQ-FUNC-0019: user-to-user financial relationships are PROPOSED after DEC-0003 establishes the system role and responsibility boundary; acceptance evidence remains absent.
+- REQ-FUNC-0006 / 0010 / 0028 / 0043 / 0045 remain NEEDS DECISION because the existing decisions explicitly leave child eligibility, activity-owner access to individual data, education eligibility, agent autonomy levels, and the human-approval action set unresolved.
 
 ## What is not ready
 
 - Requirement acceptance for the Commerce + Daily Services slice.
-- Final disposition of the six NEEDS DECISION requirements.
+- Final disposition of the four remaining NEEDS DECISION requirements.
 - Completion of requirement-level evidence and the remaining research/decision work after DEC closure.
 - A justified implementation-stage scope derived from accepted requirements.
 
