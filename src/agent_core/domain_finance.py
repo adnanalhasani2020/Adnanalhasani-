@@ -6,6 +6,10 @@ from typing import Iterable, Optional
 from uuid import UUID
 from agent_core.shared import ValidationError, new_id
 
+def _require_financial_connectivity(connected: bool):
+    if not isinstance(connected, bool) or not connected:
+        raise ValidationError("Financial finality requires connectivity")
+
 class FinancialAccountState(str, Enum):
     ACTIVE="active"; CLOSED="closed"
 class ObligationState(str, Enum):
@@ -69,7 +73,9 @@ class Payment:
         if self.obligation_id is not None and not isinstance(self.obligation_id,UUID): raise ValidationError("Payment.obligation_id must be UUID")
         if self.invoice_id is not None and not isinstance(self.invoice_id,UUID): raise ValidationError("Payment.invoice_id must be UUID")
     def pending(self): self.state=PaymentState.PENDING
-    def complete(self): self.state=PaymentState.COMPLETED
+    def complete(self, *, connected: bool):
+        _require_financial_connectivity(connected)
+        self.state=PaymentState.COMPLETED
     def fail(self): self.state=PaymentState.FAILED
     def cancel(self): self.state=PaymentState.CANCELLED
 
@@ -81,7 +87,9 @@ class Settlement:
         if self.payment_id is None and self.obligation_id is None: raise ValidationError("Settlement requires Payment or Obligation reference")
         if self.payment_id is not None and not isinstance(self.payment_id,UUID): raise ValidationError("Settlement.payment_id must be UUID")
         if self.obligation_id is not None and not isinstance(self.obligation_id,UUID): raise ValidationError("Settlement.obligation_id must be UUID")
-    def settle(self): self.state=SettlementState.SETTLED
+    def settle(self, *, connected: bool):
+        _require_financial_connectivity(connected)
+        self.state=SettlementState.SETTLED
     def fail(self): self.state=SettlementState.FAILED
     def reverse(self): self.state=SettlementState.REVERSED
 

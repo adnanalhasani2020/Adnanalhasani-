@@ -2,7 +2,7 @@ import pytest
 from uuid import uuid4
 from decimal import Decimal
 from agent_core.shared import ValidationError
-from agent_core.domain_finance import FinancialAccount,Obligation,Debt,Loan,Payment,Settlement,FinancialTransaction,LedgerEntry,Balance
+from agent_core.domain_finance import FinancialAccount,Obligation,Debt,Loan,Payment,Settlement,FinancialTransaction,LedgerEntry,Balance,PaymentState
 from agent_core.domain_health import PatientContext,Encounter,ClinicalRecord,ResultReport,Prescription
 from agent_core.domain_authorization import FamilyRelationship,Delegation,AuthorizationGrant,AuthorityPolicy,Agent,AgentAction,Approval
 from agent_core.domain_activities import RoleAssignment
@@ -16,7 +16,7 @@ def test_financial_boundaries_and_derived_balance():
 
 def test_financial_lifecycle_and_separation():
     account=FinancialAccount(uuid4()); obligation=Obligation(account.id,50); obligation.open(); obligation.mark_due(); obligation.mark_overdue()
-    payment=Payment(20,obligation_id=obligation.id); payment.complete(); settlement=Settlement(payment.id,obligation.id); settlement.settle()
+    payment=Payment(20,obligation_id=obligation.id); payment.complete(connected=True); settlement=Settlement(payment.id,obligation.id); settlement.settle(connected=True)
     assert payment.state.value=="completed" and settlement.state.value=="settled" and obligation.state.value=="overdue"
     assert not hasattr(payment,"ledger_entry_id")
 
@@ -69,3 +69,32 @@ def test_agent_cannot_self_authorize_via_family_or_delegation():
     person=uuid4()
     with pytest.raises(ValidationError): FamilyRelationship(person,person,"family")
     with pytest.raises(ValidationError): Delegation(person,person,"scope")
+
+
+# DEC-0011 → CG-001 → REQ-0022/0046/0056/0063 → SPEC-0008/0019/0023/0024 → EXEC-0005/0010
+def test_financial_finality_requires_connectivity():
+    payment = Payment(Decimal("25"))
+    with pytest.raises(ValidationError):
+        payment.complete(connected=False)
+    assert payment.state == PaymentState.PENDING or payment.state == PaymentState.INITIATED
+
+    settlement = Settlement(payment.id)
+    with pytest.raises(ValidationError):
+        settlement.settle(connected=False)
+    assert settlement.state.value == "pending"
+
+    payment.complete(connected=True)
+    settlement.settle(connected=True)
+    assert payment.state.value == "completed"
+    assert settlement.state.value == "settled"
+
+
+def test_financial_preparation_remains_non_final_until_online():
+    payment = Payment(Decimal("25"))
+    payment.pending()
+    assert payment.state.value == "pending"
+    with pytest.raises(ValidationError):
+        payment.complete(connected=False)
+    assert payment.state.value == "pending"
+    payment.complete(connected=True)
+    assert payment.state.value == "completed"
