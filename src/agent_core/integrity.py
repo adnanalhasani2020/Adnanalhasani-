@@ -222,3 +222,101 @@ class RuntimeIntegrityGate:
             request=request,
             effect=effect,
         )
+
+
+@dataclass(frozen=True)
+class IdentityCandidate:
+    identity_id: UUID
+    identity_type: str
+    unique_value: str
+
+
+class IdentityResolutionAuthority:
+    """Runtime authority for explicit identity uniqueness and controlled merge."""
+
+    MERGE_POLICY = "canonical-smallest-uuid"
+
+    def __init__(self) -> None:
+        self._candidates: dict[UUID, IdentityCandidate] = {}
+        self._by_key: dict[tuple[str, str], set[UUID]] = {}
+        self._redirects: dict[UUID, UUID] = {}
+        self._lock = RLock()
+
+    @staticmethod
+    def _key(identity_type: str, unique_value: str) -> tuple[str, str]:
+        if not isinstance(identity_type, str) or not identity_type.strip():
+            raise ValidationError("Identity type is required")
+        if not isinstance(unique_value, str) or not unique_value.strip():
+            raise ValidationError("Identity unique value is required")
+        return identity_type.strip().casefold(), " ".join(unique_value.split()).casefold()
+
+    def register_candidate(self, identity_id: UUID, identity_type: str, unique_value: str) -> None:
+        if not isinstance(identity_id, UUID):
+            raise ValidationError("Identity id must be UUID")
+        key = self._key(identity_type, unique_value)
+        with self._lock:
+            if identity_id in self._candidates:
+                raise ValidationError("Identity candidate already registered")
+            candidate = IdentityCandidate(identity_id, key[0], key[1])
+            self._candidates[identity_id] = candidate
+            self._by_key.setdefault(key, set()).add(identity_id)
+
+    def duplicate_candidates(self, identity_type: str, unique_value: str) -> tuple[UUID, ...]:
+        key = self._key(identity_type, unique_value)
+        with self._lock:
+            active = [self._resolve_locked(identity_id) for identity_id in self._by_key.get(key, set())]
+            return tuple(sorted(set(active), key=str))
+
+    def deduplicate(self, identity_type: str, unique_value: str) -> UUID:
+        candidates = self.duplicate_candidates(identity_type, unique_value)
+        if not candidates:
+            raise ValidationError("No identity candidates found")
+        canonical = min(candidates, key=str)
+        for identity_id in candidates:
+            if identity_id != canonical:
+                self.merge(identity_id, canonical, policy=self.MERGE_POLICY)
+        return canonical
+
+    def merge(self, source_id: UUID, target_id: UUID, *, policy: str | None = None) -> UUID:
+        with self._lock:
+            if policy != self.MERGE_POLICY:
+                raise ValidationError("Identity merge requires the explicit approved policy")
+            if source_id == target_id:
+                raise ValidationError("Identity merge cannot target the same identity")
+            source = self._candidates.get(source_id)
+            target = self._candidates.get(target_id)
+            if source is None or target is None:
+                raise ValidationError("Identity merge requires known identities")
+            if source.identity_type != target.identity_type or source.unique_value != target.unique_value:
+                raise ValidationError("Identity merge candidates are ambiguous")
+            if self._resolve_locked(target_id) != target_id:
+                raise ValidationError("Identity merge target must be canonical")
+            canonical = min(source_id, target_id, key=str)
+            if target_id != canonical:
+                raise ValidationError("Identity merge target violates deterministic canonical policy")
+            if self._resolve_locked(source_id) != source_id:
+                raise ValidationError("Identity merge source is already merged")
+            self._redirects[source_id] = target_id
+            return target_id
+
+    def resolve(self, identity_id: UUID) -> UUID:
+        if not isinstance(identity_id, UUID):
+            raise ValidationError("Identity id must be UUID")
+        with self._lock:
+            if identity_id not in self._candidates:
+                raise ValidationError("Unknown identity")
+            return self._resolve_locked(identity_id)
+
+    def _resolve_locked(self, identity_id: UUID) -> UUID:
+        seen: set[UUID] = set()
+        current = identity_id
+        while current in self._redirects:
+            if current in seen:
+                raise ValidationError("Identity merge cycle detected")
+            seen.add(current)
+            current = self._redirects[current]
+        return current
+
+    def historical_reference(self, identity_id: UUID) -> UUID:
+        """Resolve an old identity reference without deleting or rewriting its original id."""
+        return self.resolve(identity_id)
