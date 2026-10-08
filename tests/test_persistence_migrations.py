@@ -87,7 +87,7 @@ def test_gap_0005_operation_identity_is_unique():
         "INSERT INTO durable_operation_records("
         "durable_operation_record_id,namespace,operation_id,operation_kind,actor_context_ref,"
         "request_fingerprint,state,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
-        (str(uuid.uuid4()), *op[:5], op[5], op[6], op[6]),
+        (str(uuid.uuid4()), op[0], op[1], op[2], 'actor', op[3], op[4], op[6], op[6]),
     )
     with pytest.raises(sqlite3.IntegrityError):
         db.execute(
