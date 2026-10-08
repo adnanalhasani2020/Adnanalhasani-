@@ -2,8 +2,8 @@
 
 **Decision ID:** DEC-ST11-0003  
 **Decision Dependency:** DD-ST11-0003  
-**Status:** PROPOSED — HUMAN APPROVAL REQUIRED  
-**Recommendation:** OPTION A — Explicit authoritative Grant → AgentAction binding  
+**Status:** DECIDED / APPROVED — HUMAN APPROVAL RECEIVED  
+**Decision:** OPTION A — Explicit authoritative Grant → AgentAction binding  
 **Baseline:** `8969fd2eb806b535e7f3e8bcf8bb200e6a6b4fe7`  
 **Decision-dependency evidence:** `f31135e66a987e54b5f64327c744531ff3a6f9bc`  
 **Related scope decision:** DEC-ST11-0001  
@@ -16,7 +16,7 @@ Recommend **OPTION A**: introduce an explicit authoritative relationship from an
 
 This is the minimum semantic change that preserves the currently approved R11-003 requirement that authorization must be explicitly bound and applicable to the governed action.
 
-**This record does not authorize implementation.** Under DEC-ST11-0001, Architecture/Data Model authority is explicitly absent. The relationship therefore requires explicit human approval before any source, test, schema, persistence, or migration change is made.
+**Human approval:** Explicitly granted in the Stage 11 execution instruction. This approval authorizes only the minimum Data Model change and implementation scope defined in this record.
 
 ## 2. Why Option A
 
@@ -125,9 +125,7 @@ The minimum Data Model change is therefore:
 - preserve historical binding identity;
 - make runtime execution resolve authorization through this relation.
 
-The exact storage representation (foreign-key fields, join entity, constraints, migration strategy, and repository/API shape) is intentionally **not selected by this record**. Those implementation details require the approved Data Model decision and must not be invented during GAP implementation.
-
-No schema/database/migration change is authorized by this record.
+The selected persistence representation for the current repository is the minimum domain-level relation: `AgentAction.authorization_grant_id`, referencing the authoritative `AuthorizationGrant.id`. The repository has no separate persistence/repository layer for these domain objects, so no join table, database schema, or migration is introduced. The binding field is immutable once set, preserving historical identity.
 
 ## 5. Compatibility with GAP-0001
 
@@ -166,21 +164,21 @@ DEC-ST11-0001 explicitly states:
 - Architecture/Data Model authority is **NO**;
 - any required Architecture/Data Model change is a separate Decision Dependency.
 
-DD-ST11-0003 therefore remains blocked until this proposed decision receives the required human approval.
+DD-ST11-0003 is resolved for implementation within the explicitly approved Option A scope.
 
 ## 8. Exact human decision required
 
 **Approve the minimum Data Model semantic change defined here: an authoritative Grant→AgentAction relation with one authoritative Grant per AgentAction, Grant-to-many-AgentActions cardinality, identity by (authorization_grant_id, agent_action_id), preserved historical binding, and runtime enforcement of that exact binding.**
 
-## 9. Execution gate after approval
+## 9. Execution record
 
-Only after explicit approval may the implementation proceed to:
+Following explicit human approval, implementation proceeds only within this scope:
 
-1. finalize the approved persistence representation;
+1. use the minimum domain-level persistence representation already present in the repository model;
 2. update R11-003/GAP-0003 acceptance text only as necessary to encode the approved semantics;
 3. implement the authoritative relation and runtime enforcement;
 4. add focused lifecycle/security/compatibility tests;
 5. run the Full Suite;
 6. open an OPEN / NOT MERGED PR from the approved baseline.
 
-No merge, release, tag, GAP-0004 work, or v1.0.0 modification is authorized by this record.
+No merge, release, tag, GAP-0004 work, or v1.0.0 modification is authorized by this record. The GAP-0003 implementation remains OPEN/NOT MERGED until reviewed.
