@@ -1,5 +1,5 @@
 from dataclasses import dataclass,field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
 from uuid import UUID
@@ -68,7 +68,7 @@ class InventoryPosition:
     location_ref:Optional[str]=None
     scope_key:str=""
     quantity_minor:Optional[int]=None
-    observed_at:datetime=field(default_factory=datetime.utcnow)
+    observed_at:datetime=field(default_factory=lambda: datetime.now(timezone.utc))
     effective_from:Optional[datetime]=None
     effective_to:Optional[datetime]=None
     id:UUID=field(default_factory=new_id)
