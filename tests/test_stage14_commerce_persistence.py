@@ -49,8 +49,8 @@ def _offering(db, product_id, activity_id):
     return offering_id
 
 
-def test_product_offering_and_inventory_position_round_trip_independently():
-    db = connect_database()
+def test_product_offering_and_inventory_position_round_trip_independently(tmp_path):
+    db = connect_database(tmp_path / "commerce-roundtrip.sqlite")
     activity_id = _activity(db)
     product_id = _product(db)
     offering_id = _offering(db, product_id, activity_id)
@@ -63,6 +63,8 @@ def test_product_offering_and_inventory_position_round_trip_independently():
          "2026-10-08T12:30:00Z", "2026-10-08T12:00:00Z", None, NOW, NOW),
     )
     db.commit()
+    db.close()
+    db = connect_database(tmp_path / "commerce-roundtrip.sqlite")
 
     product = db.execute("SELECT product_id,state FROM products WHERE product_id=?", (product_id,)).fetchone()
     offering = db.execute(
@@ -104,8 +106,8 @@ def test_inventory_position_does_not_require_availability_or_discovery_record():
     db.close()
 
 
-def test_sale_round_trip_preserves_activity_offering_and_current_state_without_finance_aliases():
-    db = connect_database()
+def test_sale_round_trip_preserves_activity_offering_and_current_state_without_finance_aliases(tmp_path):
+    db = connect_database(tmp_path / "sale-roundtrip.sqlite")
     activity_id = _activity(db)
     product_id = _product(db)
     offering_id = _offering(db, product_id, activity_id)
@@ -116,6 +118,8 @@ def test_sale_round_trip_preserves_activity_offering_and_current_state_without_f
         (sale_id, offering_id, activity_id, "confirmed", "2026-10-08T12:00:00Z", NOW, NOW),
     )
     db.commit()
+    db.close()
+    db = connect_database(tmp_path / "sale-roundtrip.sqlite")
     sale = db.execute(
         "SELECT sale_id,offering_id,activity_id,state,occurred_at,created_at,updated_at "
         "FROM sales WHERE sale_id=?",
