@@ -182,7 +182,7 @@ def test_reverse_implementation_inventory_has_traceability_owner():
         "__init__.py","application.py","config.py","domain_activities.py","domain_audit.py",
         "domain_authorization.py","domain_commerce.py","domain_communication.py","domain_education.py",
         "domain_exceptions.py","domain_finance.py","domain_health.py","domain_identity.py",
-        "domain_inventory.py","domain_offline.py","infrastructure.py","integrity.py","runtime.py","shared.py",
+        "domain_inventory.py","domain_offline.py","infrastructure.py","integrity.py","approval_enforcement.py","runtime.py","shared.py",
     }
     assert expected == mapped
     impl_text = " ".join(SPEC_TO_IMPL.values())
@@ -191,6 +191,7 @@ def test_reverse_implementation_inventory_has_traceability_owner():
         "config.py": "runtime configuration boundary",
         "application.py": "application composition over domain SPECs",
         "infrastructure.py": "audit infrastructure supporting SPEC-0021",
+        "approval_enforcement.py": "Stage 11 GAP-0001 runtime approval enforcement boundary",
         "approval_enforcement.py": "Stage 11 GAP-0001 runtime approval enforcement boundary",
         "runtime.py": "runtime composition over mapped domain boundaries",
         "shared.py": "shared validation/state support for domain SPECs",

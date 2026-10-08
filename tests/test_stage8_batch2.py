@@ -283,11 +283,12 @@ def test_gap_0003_is_observable_without_binding_authorization_to_action():
     action = AgentAction(agent.id, "financial-operation")
 
     grant.activate()
-    action.execute()
+    with pytest.raises(ValidationError):
+        action.execute()
 
-    # GAP-0003: active AuthorizationGrant is not automatically enforced by AgentAction.
+    # GAP-0003 remains: AuthorizationGrant is not bound to AgentAction.
     assert grant.state == AuthorizationGrantState.ACTIVE
-    assert action.state == AgentActionState.EXECUTED
+    assert action.state == AgentActionState.PREPARED
     assert not hasattr(action, "authorization_grant_id")
 
 
