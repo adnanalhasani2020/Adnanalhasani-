@@ -38,7 +38,7 @@ class RecognitionResult:
 
 class FinancialOrchestrator:
     """Finance-scoped orchestration boundary; Finance remains Ledger authority."""
-    NAMESPACE="finance.gap4.recognition"; OPERATION_KIND="recognize"
+    NAMESPACE="finance.gap4.recognition"; OPERATION_KIND="recognize"; REVERSAL_NAMESPACE="finance.gap4.reversal"; CORRECTION_NAMESPACE="finance.gap4.correction"
     def __init__(self, operations: DurableOperationAuthority, recognition: FinanceRecognitionCommand|None=None):
         self.operations=operations; self.recognition=recognition or FinanceRecognitionCommand()
         self._lock=RLock(); self._workflows={}
@@ -105,9 +105,18 @@ class FinancialOrchestrator:
         if original.state!=WorkflowState.RECOGNIZED: raise ValidationError("Only recognized workflow can be reversed")
         def effect():
             if not connected: raise ValidationError("Financial finality requires connectivity")
-            _,entry=self.recognition.recognize(financial_account_id=account.id,amount=-original.amount)
-            return RecognitionResult(workflow_id,original.transaction_id,entry.id,-original.amount,WorkflowState.REVERSED,original.history+(WorkflowEvent(workflow_id,WorkflowState.REVERSED,"workflow_reversed",detail=str(entry.id)).as_dict(),))
-        return ApprovalEnforcementAuthority.execute(action,approval,effect,grant)
+            tx,entry=self.recognition.recognize(financial_account_id=account.id,amount=-original.amount)
+            return {"workflow_id":str(workflow_id),"transaction_id":str(tx.id),"ledger_entry_id":str(entry.id),"amount":str(-original.amount),"state":WorkflowState.REVERSED.value,"history":list(original.history+(WorkflowEvent(workflow_id,WorkflowState.REVERSED,"workflow_reversed",detail=str(entry.id)).as_dict(),))}
+        payload=ApprovalEnforcementAuthority.execute(
+            action,approval,
+            lambda:self.operations.execute(
+                namespace=self.REVERSAL_NAMESPACE,operation_id=str(workflow_id),operation_kind="reverse",
+                request={"workflow_id":str(workflow_id),"original_workflow_id":str(original.workflow_id),"amount":str(original.amount)},
+                effect=effect,
+            ),
+            grant,
+        )
+        return self._result_from_payload(payload)
 
     def correct(self, *, workflow_id, account, original, corrected_amount, action, approval, grant, connected):
         self._require_uuid(workflow_id,"WorkflowId")
@@ -117,9 +126,18 @@ class FinancialOrchestrator:
         if corrected_amount<=0 or corrected_amount==original.amount: raise ValidationError("Correction must change the recognized amount")
         delta=corrected_amount-original.amount
         def effect():
-            _,entry=self.recognition.recognize(financial_account_id=account.id,amount=delta)
-            return RecognitionResult(workflow_id,original.transaction_id,entry.id,delta,WorkflowState.RECOGNIZED,original.history+(WorkflowEvent(workflow_id,WorkflowState.RECOGNIZED,"workflow_corrected",detail=str(entry.id)).as_dict(),))
-        return ApprovalEnforcementAuthority.execute(action,approval,effect,grant)
+            tx,entry=self.recognition.recognize(financial_account_id=account.id,amount=delta)
+            return {"workflow_id":str(workflow_id),"transaction_id":str(tx.id),"ledger_entry_id":str(entry.id),"amount":str(delta),"state":WorkflowState.RECOGNIZED.value,"history":list(original.history+(WorkflowEvent(workflow_id,WorkflowState.RECOGNIZED,"workflow_corrected",detail=str(entry.id)).as_dict(),))}
+        payload=ApprovalEnforcementAuthority.execute(
+            action,approval,
+            lambda:self.operations.execute(
+                namespace=self.CORRECTION_NAMESPACE,operation_id=str(workflow_id),operation_kind="correct",
+                request={"workflow_id":str(workflow_id),"original_workflow_id":str(original.workflow_id),"corrected_amount":str(corrected_amount)},
+                effect=effect,
+            ),
+            grant,
+        )
+        return self._result_from_payload(payload)
 
     @staticmethod
     def derive_balance(account,entries):
