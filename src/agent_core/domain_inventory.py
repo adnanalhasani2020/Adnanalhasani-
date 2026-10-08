@@ -1,12 +1,25 @@
 from dataclasses import dataclass,field
+from datetime import datetime
 from enum import Enum
+from typing import Optional
 from uuid import UUID
 from agent_core.shared import ValidationError,new_id
-class ProductState(str,Enum): DRAFT="draft"; ACTIVE="active"; INACTIVE="inactive"; RETIRED="retired"
-class OfferingState(str,Enum): DRAFT="draft"; ACTIVE="active"; INACTIVE="inactive"; RETIRED="retired"
-class InventoryPositionState(str,Enum): AVAILABLE="available"; UNAVAILABLE="unavailable"; RETIRED="retired"
-class AvailabilityState(str,Enum): AVAILABLE="available"; UNAVAILABLE="unavailable"
-class ServiceState(str,Enum): DEFINED="defined"; ACTIVE="active"; INACTIVE="inactive"
+
+class ProductState(str,Enum):
+    DRAFT="draft"; ACTIVE="active"; RETIRED="retired"
+
+class ServiceState(str,Enum):
+    DEFINED="defined"; ACTIVE="active"; INACTIVE="inactive"; RETIRED="retired"
+
+class OfferingState(str,Enum):
+    DRAFT="draft"; ACTIVE="active"; ENDED="ended"; WITHDRAWN="withdrawn"
+
+class InventoryPositionState(str,Enum):
+    OBSERVED="observed"; EFFECTIVE="effective"; CLOSED="closed"
+
+class AvailabilityState(str,Enum):
+    COMPUTED="computed"; STALE="stale"; INVALID="invalid"
+
 @dataclass
 class Product:
     name:str; id:UUID=field(default_factory=new_id); state:ProductState=ProductState.DRAFT
@@ -15,6 +28,7 @@ class Product:
         self.name=self.name.strip()
     def activate(self): self.state=ProductState.ACTIVE
     def retire(self): self.state=ProductState.RETIRED
+
 @dataclass
 class Service:
     name:str; id:UUID=field(default_factory=new_id); state:ServiceState=ServiceState.DEFINED
@@ -22,22 +36,69 @@ class Service:
         if not isinstance(self.name,str) or not self.name.strip(): raise ValidationError("Service.name is required")
         self.name=self.name.strip()
     def activate(self): self.state=ServiceState.ACTIVE
+    def retire(self): self.state=ServiceState.RETIRED
+
 @dataclass
 class Offering:
-    product_id:UUID; id:UUID=field(default_factory=new_id); state:OfferingState=OfferingState.DRAFT
+    product_id:UUID
+    activity_id:UUID
+    service_id:Optional[UUID]=None
+    id:UUID=field(default_factory=new_id)
+    state:OfferingState=OfferingState.DRAFT
+    effective_from:Optional[datetime]=None
+    effective_to:Optional[datetime]=None
     def __post_init__(self):
         if not isinstance(self.product_id,UUID): raise ValidationError("Offering must reference Product")
+        if not isinstance(self.activity_id,UUID): raise ValidationError("Offering must reference Activity")
+        if self.service_id is not None and not isinstance(self.service_id,UUID): raise ValidationError("Offering.service_id must be a UUID")
+        if self.effective_from is not None and not isinstance(self.effective_from,datetime): raise ValidationError("Offering.effective_from must be datetime")
+        if self.effective_to is not None and not isinstance(self.effective_to,datetime): raise ValidationError("Offering.effective_to must be datetime")
+        if self.effective_from is not None and self.effective_to is not None and self.effective_to < self.effective_from:
+            raise ValidationError("Offering.effective_to cannot precede effective_from")
     def activate(self): self.state=OfferingState.ACTIVE
-    def retire(self): self.state=OfferingState.RETIRED
+    def end(self): self.state=OfferingState.ENDED
+    def withdraw(self): self.state=OfferingState.WITHDRAWN
+
 @dataclass
 class InventoryPosition:
-    offering_id:UUID; id:UUID=field(default_factory=new_id); state:InventoryPositionState=InventoryPositionState.AVAILABLE
+    offering_id:Optional[UUID]
+    activity_id:UUID
+    product_id:Optional[UUID]=None
+    location_ref:Optional[str]=None
+    scope_key:str=""
+    quantity_minor:Optional[int]=None
+    observed_at:datetime=field(default_factory=datetime.utcnow)
+    effective_from:Optional[datetime]=None
+    effective_to:Optional[datetime]=None
+    id:UUID=field(default_factory=new_id)
+    state:InventoryPositionState=InventoryPositionState.OBSERVED
     def __post_init__(self):
-        if not isinstance(self.offering_id,UUID): raise ValidationError("Inventory Position must reference Offering")
-    def make_unavailable(self): self.state=InventoryPositionState.UNAVAILABLE
-    def retire(self): self.state=InventoryPositionState.RETIRED
+        if self.offering_id is not None and not isinstance(self.offering_id,UUID): raise ValidationError("Inventory Position offering_id must be a UUID")
+        if not isinstance(self.activity_id,UUID): raise ValidationError("Inventory Position must reference Activity")
+        if self.product_id is not None and not isinstance(self.product_id,UUID): raise ValidationError("Inventory Position product_id must be a UUID")
+        if not isinstance(self.scope_key,str) or not self.scope_key.strip(): raise ValidationError("Inventory Position.scope_key is required")
+        if not isinstance(self.observed_at,datetime): raise ValidationError("Inventory Position.observed_at must be datetime")
+        if self.effective_from is not None and not isinstance(self.effective_from,datetime): raise ValidationError("Inventory Position.effective_from must be datetime")
+        if self.effective_to is not None and not isinstance(self.effective_to,datetime): raise ValidationError("Inventory Position.effective_to must be datetime")
+        if self.effective_from is not None and self.effective_to is not None and self.effective_to < self.effective_from:
+            raise ValidationError("Inventory Position.effective_to cannot precede effective_from")
+    def make_effective(self): self.state=InventoryPositionState.EFFECTIVE
+    def close(self): self.state=InventoryPositionState.CLOSED
+
 @dataclass(frozen=True)
 class Availability:
-    offering_id:UUID; state:AvailabilityState
+    offering_id:UUID
+    state:AvailabilityState
+    valid_at:datetime
+    freshness_at:Optional[datetime]=None
+    location_ref:Optional[str]=None
+    provenance_ref:Optional[str]=None
     def __post_init__(self):
         if not isinstance(self.offering_id,UUID): raise ValidationError("Availability must reference Offering")
+        if not isinstance(self.valid_at,datetime): raise ValidationError("Availability.valid_at must be datetime")
+        if self.freshness_at is not None and not isinstance(self.freshness_at,datetime): raise ValidationError("Availability.freshness_at must be datetime")
+
+def discovery_result_is_positive(availability:Availability)->bool:
+    """Discovery boundary only: consumes a derived Availability result; no proximity/search/ranking calculation."""
+    if not isinstance(availability,Availability): raise ValidationError("Discovery requires Availability")
+    return availability.state is AvailabilityState.COMPUTED
