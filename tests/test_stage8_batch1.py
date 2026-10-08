@@ -1,3 +1,4 @@
+from datetime import datetime
 """Stage 8 TEST-0001 — Core integration, regression and boundary verification.
 
 Traceability:
@@ -74,9 +75,9 @@ def test_activity_membership_role_chain_does_not_become_authorization():
 # TEST-0001-03 — Commerce + Inventory
 def test_product_offering_inventory_sale_invoice_integration_preserves_boundaries():
     product = Product("serviceable product")
-    offering = Offering(product.id)
-    inventory = InventoryPosition(offering.id)
-    availability = Availability(offering.id, AvailabilityState.AVAILABLE)
+    offering = Offering(product.id, uuid4())
+    inventory = InventoryPosition(offering.id, uuid4(), scope_key="default")
+    availability = Availability(offering.id, AvailabilityState.COMPUTED, datetime.utcnow())
     activity = Activity("sale context")
     sale = Sale(offering.id, activity.id)
     invoice = Invoice(sale.id)
@@ -251,9 +252,9 @@ def test_invalid_identity_to_finance_reference_is_rejected():
 
 def test_invalid_commerce_to_inventory_reference_is_rejected():
     with pytest.raises(ValidationError):
-        Offering("not-a-product")
+        Offering("not-a-product", uuid4())
     with pytest.raises(ValidationError):
-        InventoryPosition("not-an-offering")
+        InventoryPosition("not-an-offering", uuid4(), scope_key="default")
 
 
 def test_invalid_health_to_finance_reference_is_rejected():
@@ -306,7 +307,7 @@ def test_authorization_is_not_membership():
 
 def test_invoice_payment_settlement_ledger_are_distinct():
     product = Product("P")
-    offering = Offering(product.id)
+    offering = Offering(product.id, uuid4())
     sale = Sale(offering.id, Activity("A").id)
     invoice = Invoice(sale.id)
     payment = Payment(10, invoice_id=invoice.id)

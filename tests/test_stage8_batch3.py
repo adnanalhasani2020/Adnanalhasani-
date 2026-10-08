@@ -1,3 +1,4 @@
+from datetime import datetime
 """Stage 8 TEST-0003 — End-to-end scenarios and lifecycle verification.
 
 Traceability:
@@ -66,12 +67,12 @@ def test_identity_to_activity_to_membership_role_lifecycle():
 
 def test_product_offering_inventory_availability_sale_end_to_end():
     product = Product("product")
-    offering = Offering(product.id)
-    inventory = InventoryPosition(offering.id)
+    offering = Offering(product.id, uuid4())
+    inventory = InventoryPosition(offering.id, uuid4(), scope_key="default")
 
     product.activate()
     offering.activate()
-    availability = Availability(offering.id, AvailabilityState.AVAILABLE)
+    availability = Availability(offering.id, AvailabilityState.COMPUTED, datetime.utcnow())
     sale = Sale(offering.id, uuid4())
 
     with pytest.raises(ValidationError):
@@ -88,7 +89,7 @@ def test_product_offering_inventory_availability_sale_end_to_end():
 
 def test_commerce_duplicate_boundary_and_cancellation_preserve_history():
     product = Product("product")
-    offering = Offering(product.id)
+    offering = Offering(product.id, uuid4())
     sale = Sale(offering.id, uuid4())
     invoice = Invoice(sale.id)
 
@@ -107,7 +108,7 @@ def test_sale_invoice_finance_lifecycle_to_derived_balance():
     person = Person()
     account = FinancialAccount(person.id)
     product = Product("product")
-    offering = Offering(product.id)
+    offering = Offering(product.id, uuid4())
     sale = Sale(offering.id, uuid4())
     sale.confirm()
     invoice = Invoice(sale.id)
@@ -399,7 +400,7 @@ def test_end_to_end_missing_required_relationships_are_rejected_at_structural_bo
     with pytest.raises(ValidationError):
         Product("")
     with pytest.raises(ValidationError):
-        Offering("not-a-product")
+        Offering("not-a-product", uuid4())
     with pytest.raises(ValidationError):
         Sale("not-an-offering", uuid4())
     with pytest.raises(ValidationError):
