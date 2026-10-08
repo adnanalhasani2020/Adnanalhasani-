@@ -1,7 +1,7 @@
 # Stage 11 — GAP-0003 Decision Dependency
 
 **Decision Dependency ID:** DD-ST11-0003
-**Status:** RESOLVED — OPTION A APPROVED FOR IMPLEMENTATION
+**Status:** RESOLVED / IMPLEMENTED / CLOSED — OPTION A
 **Baseline:** `8969fd2eb806b535e7f3e8bcf8bb200e6a6b4fe7`
 **Related Decision:** DEC-ST11-0001
 **Requirement:** R11-003
@@ -91,3 +91,11 @@ Human approval explicitly selected:
 - GAP-0001/0002/0005/0006 semantics unchanged.
 - No new authorization authority.
 - No merge of GAP-0003.
+
+
+## 8. Closure Evidence
+
+- Option A implementation merged by PR #20 using MERGE COMMIT.
+- Merge SHA: `6b1efe83541658eacef7853d3e61e40f967975fe`
+- Post-merge CI: Run `37799687718` — SUCCESS — exact merge SHA.
+- GAP-0003 closure evidence: `docs/11-التكامل-والنزاهة/13-Stage-11-Closure-Evidence.md`.
