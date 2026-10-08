@@ -1,6 +1,6 @@
 # Stage 11 — GAP-0001 Implementation Traceability
 
-**Status:** IMPLEMENTED / VERIFICATION PENDING  
+**Status:** CLOSED / VERIFIED  
 **Baseline:** `faa0690a50fcf987fca0f5e0edef86a61c75e418`  
 **Branch:** `stage11-gap1-approval-enforcement`  
 **Decision:** DEC-ST11-0001  
@@ -40,4 +40,4 @@ Revoked/expired Approval states are not added because the current Approval model
 
 ## Boundaries
 
-GAP-0003 and GAP-0004 are not implemented. v1.0.0 is unchanged. PR #18 is not to be auto-merged.
+GAP-0004 remains DEFERRED. GAP-0003 is closed by PR #20 merge and post-merge CI. v1.0.0 is unchanged. No release is authorized.
