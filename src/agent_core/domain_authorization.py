@@ -65,7 +65,12 @@ class AgentAction:
         if not isinstance(self.action,str) or not self.action.strip(): raise ValidationError("AgentAction.action is required")
     def approve(self): self.state=AgentActionState.APPROVED
     def reject(self): self.state=AgentActionState.REJECTED
-    def execute(self): self.state=AgentActionState.EXECUTED
+    def execute(self, approval: "Approval | None" = None):
+        if approval is None or approval.state != ApprovalState.APPROVED:
+            raise ValidationError("AgentAction execution requires valid approval")
+        if approval.agent_action_id != self.id:
+            raise ValidationError("Approval does not match AgentAction")
+        self.state=AgentActionState.EXECUTED
     def fail(self): self.state=AgentActionState.FAILED
 
 @dataclass

@@ -191,6 +191,7 @@ def test_reverse_implementation_inventory_has_traceability_owner():
         "config.py": "runtime configuration boundary",
         "application.py": "application composition over domain SPECs",
         "infrastructure.py": "audit infrastructure supporting SPEC-0021",
+        "approval_enforcement.py": "Stage 11 GAP-0001 runtime approval enforcement boundary",
         "runtime.py": "runtime composition over mapped domain boundaries",
         "shared.py": "shared validation/state support for domain SPECs",
     }
