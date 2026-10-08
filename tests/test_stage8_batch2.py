@@ -183,7 +183,9 @@ def test_agent_cannot_become_clinical_truth_by_reference():
     patient = PatientContext(Person().id)
     record = ClinicalRecord(patient.id, "clinical fact")
 
-    action.execute()
+    approval = Approval(action.id)
+    approval.approve()
+    action.execute(approval)
 
     assert action.state == AgentActionState.EXECUTED
     assert record.content == "clinical fact"
@@ -246,10 +248,11 @@ def test_agent_does_not_gain_authority_from_delegation_alone():
     action = AgentAction(agent.id, "financial-operation")
 
     delegation.activate()
-    action.execute()
+    with pytest.raises(ValidationError):
+        action.execute()
 
     assert delegation.state == DelegationState.ACTIVE
-    assert action.state == AgentActionState.EXECUTED
+    assert action.state == AgentActionState.PREPARED
     assert not hasattr(action, "authorization_grant_id")
     assert not hasattr(agent, "authorization_grant_id")
 
@@ -270,9 +273,13 @@ def test_gap_0001_is_observable_without_adding_enforcement():
     agent = Agent("assistant")
     action = AgentAction(agent.id, "restricted-operation")
 
-    # GAP-0001: current implementation permits execution without an Approval.
-    action.execute()
+    # GAP-0001: execution now requires an approved, matching Approval.
+    with pytest.raises(ValidationError):
+        action.execute()
 
+    approval = Approval(action.id)
+    approval.approve()
+    action.execute(approval)
     assert action.state == AgentActionState.EXECUTED
 
 
@@ -283,11 +290,12 @@ def test_gap_0003_is_observable_without_binding_authorization_to_action():
     action = AgentAction(agent.id, "financial-operation")
 
     grant.activate()
-    action.execute()
+    with pytest.raises(ValidationError):
+        action.execute()
 
-    # GAP-0003: active AuthorizationGrant is not automatically enforced by AgentAction.
+    # GAP-0003 remains: AuthorizationGrant is not bound to AgentAction.
     assert grant.state == AuthorizationGrantState.ACTIVE
-    assert action.state == AgentActionState.EXECUTED
+    assert action.state == AgentActionState.PREPARED
     assert not hasattr(action, "authorization_grant_id")
 
 

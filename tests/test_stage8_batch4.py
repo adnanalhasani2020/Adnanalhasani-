@@ -475,7 +475,13 @@ def test_gap_0001_approval_enforcement_is_explicitly_observed():
     action = AgentAction(agent.id, "sensitive")
     assert action.state == AgentActionState.PREPARED
 
-    action.execute()
+    with pytest.raises(ValidationError):
+        action.execute()
+    assert action.state == AgentActionState.PREPARED
+
+    approval = Approval(action.id)
+    approval.approve()
+    action.execute(approval)
     assert action.state == AgentActionState.EXECUTED
 
 

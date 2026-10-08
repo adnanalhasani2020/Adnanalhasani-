@@ -204,14 +204,14 @@ def test_family_delegation_authorization_action_lifecycle_without_extra_enforcem
     grant.activate()
     approval.approve()
 
-    # Known GAP-0001/0003: Approval/Authorization do not automatically execute/bind the action.
+    # GAP-0001 is enforced by the explicit approval; GAP-0003 remains unbound.
     assert approval.state == ApprovalState.APPROVED
     assert action.state == AgentActionState.PREPARED
     assert family.person_a_id == delegator.id
     assert delegation.delegatee_id == delegatee.id
     assert grant.subject_id == delegatee.id
 
-    action.execute()
+    action.execute(approval)
     assert action.state == AgentActionState.EXECUTED
 
 
@@ -240,7 +240,7 @@ def test_agent_execution_provenance_and_audit_follow_action_without_becoming_tru
     action = AgentAction(agent.id, "review")
     approval = Approval(action.id)
     approval.approve()
-    action.execute()
+    action.execute(approval)
     provenance = Provenance(str(action.id), "AgentAction")
     audit = record_agent_action(action.id, str(person.id), "executed")
 

@@ -465,8 +465,10 @@ def test_agent_required_values_are_rejected():
 def test_agent_action_replay_is_permitted_but_has_no_domain_truth_ownership():
     agent = Agent("assistant")
     action = AgentAction(agent.id, "review")
-    action.execute()
-    action.execute()
+    approval = Approval(action.id)
+    approval.approve()
+    action.execute(approval)
+    action.execute(approval)
     assert action.state.value == "executed"
     assert "financial_account_id" not in _field_names(action)
     assert "clinical_record_id" not in _field_names(action)
