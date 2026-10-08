@@ -233,13 +233,13 @@ def test_financial_zero_and_negative_values_are_rejected():
     with pytest.raises(ValidationError):
         FinancialTransaction(account.id, Decimal("0"))
     with pytest.raises(ValidationError):
-        LedgerEntry(account.id, Decimal("0"), uuid4())
+        LedgerEntry._from_finance(account.id, Decimal("0"), uuid4())
 
 
 def test_balance_is_derived_from_ledger_entries_and_not_stored_as_authority():
     account = FinancialAccount(Person().id)
     transaction = FinancialTransaction(account.id, Decimal("40"))
-    entry = LedgerEntry(account.id, Decimal("40"), transaction.id)
+    entry = LedgerEntry._from_finance(account.id, Decimal("40"), transaction.id)
     balance = Balance.derive(account.id, [entry])
     assert balance.amount == Decimal("40")
     assert "ledger_entries" not in _field_names(balance)
@@ -253,8 +253,8 @@ def test_balance_excludes_entries_owned_by_other_financial_accounts():
     other = FinancialAccount(Person().id)
     tx_a = FinancialTransaction(account.id, Decimal("40"))
     tx_b = FinancialTransaction(other.id, Decimal("90"))
-    entry_a = LedgerEntry(account.id, Decimal("40"), tx_a.id)
-    entry_b = LedgerEntry(other.id, Decimal("90"), tx_b.id)
+    entry_a = LedgerEntry._from_finance(account.id, Decimal("40"), tx_a.id)
+    entry_b = LedgerEntry._from_finance(other.id, Decimal("90"), tx_b.id)
     balance = Balance.derive(account.id, [entry_a, entry_b])
     assert balance.amount == Decimal("40")
 
@@ -283,7 +283,7 @@ def test_replay_of_same_operation_does_not_mutate_ledger_truth():
     key = "operation-replay-1"
     account = FinancialAccount(Person().id)
     tx = FinancialTransaction(account.id, Decimal("50"))
-    entry = LedgerEntry(account.id, Decimal("50"), tx.id)
+    entry = LedgerEntry._from_finance(account.id, Decimal("50"), tx.id)
     before = Balance.derive(account.id, [entry])
     assert is_duplicate(key, [key]) is True
     pending = PendingOperation(Device(Person().id).id, "Finance", key)
@@ -305,7 +305,7 @@ def test_finance_components_remain_distinct_after_a_long_valid_chain():
     settlement = Settlement(payment.id)
     settlement.settle(connected=True)
     tx = FinancialTransaction(account.id, Decimal("100"))
-    entry = LedgerEntry(account.id, Decimal("100"), tx.id)
+    entry = LedgerEntry._from_finance(account.id, Decimal("100"), tx.id)
     balance = Balance.derive(account.id, [entry])
     assert obligation.financial_account_id == account.id
     assert payment.obligation_id == obligation.id
@@ -535,7 +535,7 @@ def test_cross_domain_finance_boundaries_do_not_mix_invoice_obligation_payment_s
     payment = Payment(Decimal("10"), obligation_id=obligation.id, invoice_id=invoice.id)
     settlement = Settlement(payment.id)
     tx = FinancialTransaction(account.id, Decimal("10"))
-    entry = LedgerEntry(account.id, Decimal("10"), tx.id)
+    entry = LedgerEntry._from_finance(account.id, Decimal("10"), tx.id)
     assert payment.invoice_id == invoice.id
     assert payment.obligation_id == obligation.id
     assert settlement.payment_id == payment.id
@@ -564,7 +564,7 @@ def test_long_operation_sequence_preserves_identity_references_and_source_of_tru
     person = Person()
     account = FinancialAccount(person.id)
     tx = FinancialTransaction(account.id, Decimal("10"))
-    entry = LedgerEntry(account.id, Decimal("10"), tx.id)
+    entry = LedgerEntry._from_finance(account.id, Decimal("10"), tx.id)
     payment = Payment(Decimal("10"))
     for _ in range(5):
         payment.pending()
@@ -588,7 +588,7 @@ def test_failed_operation_does_not_partially_mutate_preexisting_domain_state():
 
     account = FinancialAccount(Person().id)
     tx = FinancialTransaction(account.id, Decimal("20"))
-    entry = LedgerEntry(account.id, Decimal("20"), tx.id)
+    entry = LedgerEntry._from_finance(account.id, Decimal("20"), tx.id)
     before = Balance.derive(account.id, [entry])
     with pytest.raises(ValidationError):
         Payment(Decimal("-20"))
@@ -599,7 +599,7 @@ def test_failed_operation_does_not_partially_mutate_preexisting_domain_state():
 def test_historical_frozen_records_cannot_be_mutated_in_place():
     account = FinancialAccount(Person().id)
     tx = FinancialTransaction(account.id, Decimal("20"))
-    entry = LedgerEntry(account.id, Decimal("20"), tx.id)
+    entry = LedgerEntry._from_finance(account.id, Decimal("20"), tx.id)
     provenance = Provenance(str(tx.id), "Finance")
     audit = AuditRecord("observed", str(tx.id))
     with pytest.raises(FrozenInstanceError):

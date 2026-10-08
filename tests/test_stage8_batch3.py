@@ -118,7 +118,7 @@ def test_sale_invoice_finance_lifecycle_to_derived_balance():
     settlement = Settlement(payment_id=payment.id)
     settlement.settle(connected=True)
     transaction = FinancialTransaction(account.id, Decimal("125"))
-    entry = LedgerEntry(account.id, Decimal("125"), transaction.id)
+    entry = LedgerEntry._from_finance(account.id, Decimal("125"), transaction.id)
     balance = Balance.derive(account.id, [entry])
 
     assert invoice.sale_id == sale.id
@@ -379,7 +379,7 @@ def test_cross_domain_cancellation_reversal_do_not_erase_source_references():
 def test_balance_source_of_truth_remains_ledger_entries_after_lifecycle_changes():
     account = FinancialAccount(Person().id)
     transaction = FinancialTransaction(account.id, Decimal("100"))
-    entry = LedgerEntry(account.id, Decimal("100"), transaction.id)
+    entry = LedgerEntry._from_finance(account.id, Decimal("100"), transaction.id)
     balance_before = Balance.derive(account.id, [entry])
 
     payment = Payment(Decimal("100"))

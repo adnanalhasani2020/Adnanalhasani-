@@ -9,7 +9,7 @@ from agent_core.domain_activities import RoleAssignment
 
 def test_financial_boundaries_and_derived_balance():
     person=uuid4(); account=FinancialAccount(person); obligation=Obligation(account.id,100); debt=Debt(obligation.id)
-    tx=FinancialTransaction(account.id,100); entry=LedgerEntry(account.id,100,tx.id)
+    tx=FinancialTransaction(account.id,100); entry=LedgerEntry._from_finance(account.id,100,tx.id)
     assert account.id!=person and obligation.id!=account.id and debt.obligation_id==obligation.id
     assert Balance.derive(account.id,[entry]).amount==Decimal("100")
     assert not hasattr(account,"access_account_id")

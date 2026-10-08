@@ -102,13 +102,34 @@ class FinancialTransaction:
         object.__setattr__(self,"amount",Decimal(str(self.amount)))
         if self.amount==0: raise ValidationError("FinancialTransaction.amount cannot be zero")
 
-@dataclass(frozen=True)
+_LEDGER_CREATION_TOKEN = object()
+
+@dataclass(frozen=True, init=False)
 class LedgerEntry:
-    financial_account_id: UUID; amount: Decimal; transaction_id: UUID; id: UUID=field(default_factory=new_id)
-    def __post_init__(self):
-        if not isinstance(self.financial_account_id,UUID) or not isinstance(self.transaction_id,UUID): raise ValidationError("LedgerEntry references are required")
-        object.__setattr__(self,"amount",Decimal(str(self.amount)))
-        if self.amount==0: raise ValidationError("LedgerEntry.amount cannot be zero")
+    financial_account_id: UUID; amount: Decimal; transaction_id: UUID; id: UUID
+    def __init__(self, financial_account_id: UUID, amount: Decimal, transaction_id: UUID, id: UUID|None=None, *, _creation_token=None):
+        if _creation_token is not _LEDGER_CREATION_TOKEN:
+            raise ValidationError("LedgerEntry must be created by Finance Recognition Command")
+        if not isinstance(financial_account_id,UUID) or not isinstance(transaction_id,UUID):
+            raise ValidationError("LedgerEntry references are required")
+        amount=Decimal(str(amount))
+        if amount==0: raise ValidationError("LedgerEntry.amount cannot be zero")
+        object.__setattr__(self,"financial_account_id",financial_account_id)
+        object.__setattr__(self,"amount",amount)
+        object.__setattr__(self,"transaction_id",transaction_id)
+        object.__setattr__(self,"id",id or new_id())
+    @classmethod
+    def _from_finance(cls, financial_account_id, amount, transaction_id, id=None):
+        return cls(financial_account_id,amount,transaction_id,id,_creation_token=_LEDGER_CREATION_TOKEN)
+
+
+class FinanceRecognitionCommand:
+    """The sole Finance authority for final FinancialTransaction/LedgerEntry creation."""
+
+    def recognize(self, *, financial_account_id: UUID, amount: Decimal):
+        transaction=FinancialTransaction(financial_account_id,amount)
+        entry=LedgerEntry._from_finance(financial_account_id,amount,transaction.id)
+        return transaction,entry
 
 @dataclass(frozen=True)
 class Balance:

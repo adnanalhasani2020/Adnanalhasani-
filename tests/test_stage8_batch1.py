@@ -102,7 +102,7 @@ def test_finance_chain_keeps_payment_settlement_transaction_ledger_distinct():
     person = Person()
     account = FinancialAccount(person.id)
     transaction = FinancialTransaction(account.id, Decimal("100"))
-    entry = LedgerEntry(account.id, Decimal("100"), transaction.id)
+    entry = LedgerEntry._from_finance(account.id, Decimal("100"), transaction.id)
     payment = Payment(25)
     settlement = Settlement(payment.id, account.id)
 
@@ -311,7 +311,7 @@ def test_invoice_payment_settlement_ledger_are_distinct():
     invoice = Invoice(sale.id)
     payment = Payment(10, invoice_id=invoice.id)
     settlement = Settlement(payment.id)
-    entry = LedgerEntry(uuid4(), 10, uuid4())
+    entry = LedgerEntry._from_finance(uuid4(), 10, uuid4())
 
     assert invoice.sale_id == sale.id
     assert payment.invoice_id == invoice.id
@@ -360,8 +360,8 @@ def test_provenance_is_not_domain_truth():
 
 def test_financial_balance_is_derived_from_ledger_entries_only():
     account = FinancialAccount(uuid4())
-    first = LedgerEntry(account.id, 20, uuid4())
-    other = LedgerEntry(uuid4(), 100, uuid4())
+    first = LedgerEntry._from_finance(account.id, 20, uuid4())
+    other = LedgerEntry._from_finance(uuid4(), 100, uuid4())
     balance = Balance.derive(account.id, [first, other])
     assert balance.amount == Decimal("20")
     assert balance.financial_account_id == account.id

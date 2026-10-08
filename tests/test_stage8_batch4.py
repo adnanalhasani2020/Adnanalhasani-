@@ -216,7 +216,7 @@ def test_financial_path_preserves_each_semantic_boundary():
     payment = Payment(Decimal("100"), obligation.id, invoice.id)
     settlement = Settlement(payment.id)
     transaction = FinancialTransaction(account.id, Decimal("100"))
-    entry = LedgerEntry(account.id, Decimal("100"), transaction.id)
+    entry = LedgerEntry._from_finance(account.id, Decimal("100"), transaction.id)
     balance = Balance.derive(account.id, [entry])
 
     assert obligation.financial_account_id == account.id
@@ -235,7 +235,7 @@ def test_financial_path_preserves_each_semantic_boundary():
 def test_balance_is_derived_and_immutable():
     account = FinancialAccount(Person().id)
     transaction = FinancialTransaction(account.id, Decimal("30"))
-    entry = LedgerEntry(account.id, Decimal("30"), transaction.id)
+    entry = LedgerEntry._from_finance(account.id, Decimal("30"), transaction.id)
     balance = Balance.derive(account.id, [entry])
 
     assert balance.amount == Decimal("30")
@@ -264,7 +264,7 @@ def test_financial_jump_to_finality_is_visible_as_current_limitation_not_impleme
     payment.complete(connected=True)
     settlement.settle(connected=True)
     transaction = FinancialTransaction(account.id, Decimal("20"))
-    entry = LedgerEntry(account.id, Decimal("20"), transaction.id)
+    entry = LedgerEntry._from_finance(account.id, Decimal("20"), transaction.id)
 
     assert payment.state == PaymentState.COMPLETED
     assert settlement.state == SettlementState.SETTLED
@@ -286,13 +286,13 @@ def test_financial_adversarial_amounts_are_rejected():
     with pytest.raises(ValidationError):
         FinancialTransaction(account.id, Decimal("0"))
     with pytest.raises(ValidationError):
-        LedgerEntry(account.id, Decimal("0"), uuid4())
+        LedgerEntry._from_finance(account.id, Decimal("0"), uuid4())
 
 
 def test_financial_replay_correction_does_not_mutate_ledger_truth():
     account = FinancialAccount(Person().id)
     tx = FinancialTransaction(account.id, Decimal("50"))
-    entry = LedgerEntry(account.id, Decimal("50"), tx.id)
+    entry = LedgerEntry._from_finance(account.id, Decimal("50"), tx.id)
     balance_before = Balance.derive(account.id, [entry])
 
     payment = Payment(Decimal("50"))
@@ -571,7 +571,7 @@ def test_offline_replay_and_duplicate_detection_do_not_mutate_domain_truth():
 
     account = FinancialAccount(Person().id)
     transaction = FinancialTransaction(account.id, Decimal("10"))
-    entry = LedgerEntry(account.id, Decimal("10"), transaction.id)
+    entry = LedgerEntry._from_finance(account.id, Decimal("10"), transaction.id)
     before = Balance.derive(account.id, [entry])
 
     pending = PendingOperation(Device(Person().id).id, "Finance", key)
