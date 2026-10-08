@@ -1,76 +1,46 @@
 # Stage 11 — GAP-0002 / GAP-0005 Decision Dependency
 
-**Status:** BLOCKED PENDING EXPLICIT DECISION  
-**Stage 11 Gate:** `d3be7907e34dd75b13de7aa14676d328ab45203e`  
-**Implementation baseline:** `b1ea7e30b9a0c7409bb2543b212308e6df4bc946`
+**Status:** RESOLVED BY DEC-ST11-0002 + DEC-ST11-0003
+**Stage 11 Gate:** d3be7907e34dd75b13de7aa14676d328ab45203e
+**Prior dependency commit:** e354ddf71c2408e374a144bb4d926e43684b44f3
 
-## 1. Finding
+## 1. Resolution
 
-فحص التنفيذ الحالي يثبت أن النموذج الحالي **structural/in-memory only**:
+The implementation blockers identified in the prior dependency record are now resolved at the design-contract level only.
 
-- domain entities validate UUID/type shape but do not resolve references against a runtime Source of Truth.
-- لا توجد repository/store/runtime registry تسمح بإثبات semantic existence أو ownership عند عبور boundary.
-- Provenance موجودة ككيان منفصل مع validation للحقول، لكنها ليست مرتبطة بحدود runtime operation بحيث يمكن فرض provenance validity عند الحاجة.
-- لا توجد طبقة persistent operation store أو durable operation identity mechanism.
-- `domain_exceptions.is_duplicate()` يكتشف duplicate فقط داخل iterable يمرره المستدعي؛ لا يوفر persistent replay/idempotency semantics عبر runtime restart.
+### GAP-0002
+Resolved by DEC-ST11-0002 — GAP-0002 Semantic Integrity Contract:
+- authoritative semantic source = owning domain's Source of Truth;
+- semantic reference resolution occurs through a runtime Semantic Authority contract;
+- missing entities are deterministically rejected;
+- owner mismatch is deterministically rejected;
+- provenance is enforced only where the governed operation specification requires it;
+- enforcement occurs before semantic effect at a single application runtime boundary;
+- UUID/type validity is not semantic truth.
 
-## 2. GAP-0002 Dependency
+### GAP-0005
+Resolved by DEC-ST11-0003 — GAP-0005 Durable Operation Integrity Contract:
+- durable operation state is authoritative for operation identity/replay/conflict;
+- operation key = namespace + operation_id;
+- request fingerprint distinguishes same-identity replay from conflicting reuse;
+- durable state survives process/runtime restart;
+- exact repeats are idempotent and return the stored deterministic outcome;
+- conflicting reuse is rejected and cannot overwrite the original record;
+- enforcement occurs before semantic effect at a single application runtime boundary.
 
-لتحقيق Acceptance Criteria المعتمدة لـGAP-0002 يلزم على الأقل وجود **runtime authority for semantic references** يمكنه:
+## 2. Remaining Architecture / Data Model boundaries
 
-1. إثبات أن الكيان المشار إليه موجود فعلاً.
-2. إثبات أن الكيان ضمن ownership/domain boundary المسموح بها.
-3. تطبيق provenance rule عند العمليات التي تتطلب provenance.
+These are not implementation approvals and remain bounded:
 
-هذا يتطلب تعريف/اختيار runtime Source of Truth أو repository/registry contract وربطه بنقاط التنفيذ. إدخاله الآن سيغير abstraction المعماري الحالي من pure structural objects إلى runtime semantic resolution.
+1. A future implementation must define the concrete repository/storage interface for Semantic Authority without creating a second domain Source of Truth.
+2. If provenance-required operations need a new durable relation not represented by current domain concepts, that relation requires a separate Architecture/Data Model decision before implementation.
+3. GAP-0005 requires a first-class durable operation-integrity record and a uniqueness/atomicity rule. The decision approves the semantic concept, not a schema, database, migration, or transaction technology.
+4. No storage technology is selected by these decisions.
+5. Any change to domain ownership, cross-domain truth authority, or existing Architecture principles requires a new Decision Dependency.
 
-**Decision Dependency:** اعتماد architecture/runtime contract لمصدر الحقيقة وآلية semantic reference resolution قبل تنفيذ GAP-0002.
+## 3. Status
 
-## 3. GAP-0005 Dependency
+**GAP-0002: READY FOR IMPLEMENTATION**
+**GAP-0005: READY FOR IMPLEMENTATION**
 
-لتحقيق Acceptance Criteria المعتمدة لـGAP-0005 يلزم:
-
-1. persistent operation identity.
-2. durable storage/state authoritative for operation identities.
-3. replay detection after runtime/process restart.
-4. deterministic idempotency behavior.
-5. explicit handling of conflicting reuse of an operation identity.
-
-هذا غير ممكن من خلال الحالة الحالية وحدها؛ `is_duplicate()` لا يحقق persistence أو replay detection عبر restart.
-
-**Decision Dependency:** اعتماد persistence boundary + operation identity model + durability semantics قبل تنفيذ GAP-0005.
-
-## 4. Data Model Impact
-
-إذا تم اعتماد أي من الآتي، فهو تغيير دلالي يجب أن يمر عبر Decision مستقل قبل التنفيذ:
-
-- operation identity as a first-class durable concept;
-- persisted operation/replay record;
-- semantic reference/ownership registry relation;
-- provenance relation/constraint required for runtime enforcement.
-
-لا يتم إدخال أي من هذه التغييرات ضمن هذا التنفيذ دون قرار مستقل.
-
-## 5. Implementation Status
-
-**GAP-0002:** BLOCKED — no implementation started.  
-**GAP-0005:** BLOCKED — no implementation started.
-
-No `src/` or `tests/` changes are authorized by this dependency record.
-
-## 6. Required Decision Before Resume
-
-يجب حسم الحد الأدنى التالي:
-
-- ما هو runtime Source of Truth للـsemantic existence/ownership؟
-- أين تقع نقطة enforcement؟
-- ما هو provenance rule المحدد لكل governed operation؟
-- ما هو persistent boundary للـoperation identity؟
-- ما هو operation key/conflict rule؟
-- ما هو durable replay/idempotency state؟
-- هل هذه التغييرات تُعتمد كـArchitecture/Data Model decision مستقل؟
-
-بعد اعتماد القرار، يمكن استئناف الترتيب:
-**Decision → Requirement → Specification → Implementation Target → Test Case → Evidence**
-
-ولا ينتقل التنفيذ إلى GAP-0006 قبل إغلاق/تحديد حالة GAP-0002 وGAP-0005 وفق Evidence.
+This resolution does not start implementation, does not change src/, tests/, main, v1.0.0, or release state, and does not authorize GAP-0006.
