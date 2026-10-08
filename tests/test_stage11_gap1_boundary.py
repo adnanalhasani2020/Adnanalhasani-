@@ -6,7 +6,7 @@ from agent_core.shared import ValidationError
 
 def test_gap1_direct_agent_action_execution_requires_approval():
     action = AgentAction(Agent("agent").id, "review")
-    with pytest.raises(ValidationError, match="valid approval"):
+    with pytest.raises(ValidationError, match="authoritative AuthorizationGrant binding"):
         action.execute()
     assert action.state.value == "prepared"
 
