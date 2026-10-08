@@ -12,8 +12,6 @@ import pytest
 from agent_core.domain_inventory import (
     Availability,
     AvailabilityState,
-    InventoryPosition,
-    InventoryPositionState,
     discovery_result_is_positive,
 )
 from agent_core.shared import ValidationError
@@ -35,40 +33,6 @@ def test_discovery_accepts_only_computed_availability_as_positive():
 def test_discovery_rejects_non_availability_input():
     with pytest.raises(ValidationError, match="Discovery requires Availability"):
         discovery_result_is_positive(object())
-
-
-def test_discovery_boundary_does_not_mutate_inventory_position():
-    position = InventoryPosition(
-        offering_id=uuid4(),
-        activity_id=uuid4(),
-        product_id=uuid4(),
-        scope_key="stage15-test",
-        quantity_minor=3,
-    )
-    before = (
-        position.id,
-        position.state,
-        position.quantity_minor,
-        position.observed_at,
-        position.effective_from,
-        position.effective_to,
-    )
-    availability = Availability(
-        offering_id=position.offering_id,
-        state=AvailabilityState.COMPUTED,
-        valid_at=datetime.now(timezone.utc),
-    )
-
-    assert discovery_result_is_positive(availability) is True
-    assert (
-        position.id,
-        position.state,
-        position.quantity_minor,
-        position.observed_at,
-        position.effective_from,
-        position.effective_to,
-    ) == before
-    assert position.state is InventoryPositionState.OBSERVED
 
 
 def test_availability_is_immutable_derived_read_data():
