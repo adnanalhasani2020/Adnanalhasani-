@@ -481,7 +481,10 @@ def test_gap_0001_approval_enforcement_is_explicitly_observed():
 
     approval = Approval(action.id)
     approval.approve()
-    action.execute(approval)
+    grant = AuthorizationGrant(agent.id, "sensitive", "sensitive-scope")
+    grant.activate()
+    action.bind_authorization_grant(grant)
+    action.execute(approval, grant)
     assert action.state == AgentActionState.EXECUTED
 
 
@@ -494,7 +497,7 @@ def test_gap_0003_authorization_grant_does_not_bind_agent_action():
     grant.activate()
     assert grant.state.value == "active"
     assert action.state == AgentActionState.PREPARED
-    assert not hasattr(action, "authorization_grant_id")
+    assert action.authorization_grant_id is None
 
 
 def test_agent_is_not_user_or_domain_owner():
