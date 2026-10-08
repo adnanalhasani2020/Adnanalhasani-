@@ -20,7 +20,7 @@
 
 ## Execution record
 
-The tests above are added for execution by repository CI. No local test result is claimed here. The PR's latest GitHub Actions run must be checked against the final PR HEAD before review readiness is stated.
+The Stage 14 tests exercise actual database writes and reads. The Sale lifecycle test now reads every persisted history row and verifies the ordered prior/current version-reference chain. Existing Stage 13 domain tests are cited where they provide narrow behavior-boundary evidence. These checks do not establish unimplemented search behavior, freshness/proximity policies, or full architectural separation. CI must be checked against the final PR HEAD before review readiness is stated.
 
 ## Explicit semantic blocker
 
@@ -30,7 +30,7 @@ SPEC-0005 uses `fulfilled`; current domain and relational constraint use `comple
 
 - No migration or schema file changed.
 - No domain implementation changed.
-- No Availability, Search, GIS, Ranking, proximity threshold, or freshness threshold added.
+- No Availability behavior, Search, GIS, Ranking, proximity threshold, or freshness threshold implementation added; the cited domain tests only characterize existing behavior.
 - No Payment, Settlement, Financial Transaction, or Ledger implementation added.
 - No Stage 12B work performed.
 - No tag or release changed.
