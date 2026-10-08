@@ -37,7 +37,7 @@
 - GAP Reconciliation.
 - Stage 8 Test Reconciliation.
 
-**Stage 9 تبقى OPEN** لمتابعة المصالحة والتنفيذ اللاحق عندما يُفتح صراحةً.
+**Stage 9 كانت OPEN في هذه الدفعة؛ أُغلقَت لاحقاً في Closure Assessment.** لمتابعة المصالحة والتنفيذ اللاحق عندما يُفتح صراحةً.
 
 
 ## Batch 3 — Documentation Reconciliation
