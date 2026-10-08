@@ -183,9 +183,12 @@ def test_agent_cannot_become_clinical_truth_by_reference():
     patient = PatientContext(Person().id)
     record = ClinicalRecord(patient.id, "clinical fact")
 
+    grant = AuthorizationGrant(agent.id, "review-clinical-record", "clinical")
+    grant.activate()
+    action.bind_authorization_grant(grant)
     approval = Approval(action.id)
     approval.approve()
-    action.execute(approval)
+    action.execute(approval, grant)
 
     assert action.state == AgentActionState.EXECUTED
     assert record.content == "clinical fact"
@@ -253,7 +256,7 @@ def test_agent_does_not_gain_authority_from_delegation_alone():
 
     assert delegation.state == DelegationState.ACTIVE
     assert action.state == AgentActionState.PREPARED
-    assert not hasattr(action, "authorization_grant_id")
+    assert action.authorization_grant_id is None
     assert not hasattr(agent, "authorization_grant_id")
 
 
