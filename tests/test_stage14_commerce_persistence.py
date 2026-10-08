@@ -178,27 +178,44 @@ def test_sale_lifecycle_state_and_history_can_be_persisted_without_semantic_equi
         "VALUES(?,?,?,?,?,?,?)",
         (sale_id, offering_id, activity_id, "initiated", NOW, NOW, NOW),
     )
-    states = ("initiated", "confirmed", "completed", "returned")
-    prior = None
-    for index, state in enumerate(states):
+    transitions = (
+        ("initiated", None, "sale-state:initiated:v1"),
+        ("confirmed", "sale-state:initiated:v1", "sale-state:confirmed:v2"),
+        ("completed", "sale-state:confirmed:v2", "sale-state:completed:v3"),
+        ("returned", "sale-state:completed:v3", "sale-state:returned:v4"),
+    )
+    expected_history = []
+    for state, prior_ref, current_ref in transitions:
         db.execute("UPDATE sales SET state=?,updated_at=? WHERE sale_id=?", (state, NOW, sale_id))
         history_id = _id()
         db.execute(
             "INSERT INTO domain_history(domain_history_id,owner_domain,target_ref,change_type,historical_at,"
             "actor_context_ref,prior_version_ref,current_version_ref,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
             (history_id, "commerce", sale_id, "sale_state_transition", NOW, activity_id,
-             prior, f"state:{state}:{index}", NOW),
+             prior_ref, current_ref, NOW),
         )
-        prior = f"state:{state}:{index}"
+        expected_history.append(
+            (history_id, sale_id, "commerce", "sale_state_transition", NOW, activity_id,
+             prior_ref, current_ref, NOW)
+        )
     db.commit()
-    assert db.execute("SELECT state FROM sales WHERE sale_id=?", (sale_id,)).fetchone()[0] == "returned"
+
+    persisted_state = db.execute(
+        "SELECT state FROM sales WHERE sale_id=?", (sale_id,)
+    ).fetchone()[0]
+    assert persisted_state == transitions[-1][0]
+
     rows = db.execute(
-        "SELECT target_ref,owner_domain,change_type,actor_context_ref FROM domain_history "
+        "SELECT domain_history_id,target_ref,owner_domain,change_type,historical_at,actor_context_ref,"
+        "prior_version_ref,current_version_ref,created_at FROM domain_history "
         "WHERE target_ref=? ORDER BY rowid",
         (sale_id,),
     ).fetchall()
-    assert rows == [(sale_id, "commerce", "sale_state_transition", activity_id)] * 4
-    # Persistence records the implementation's "completed" label; this test does
-    # not claim that it is semantically equivalent to SPEC-0005's "fulfilled".
-    assert [state for state in states] == ["initiated", "confirmed", "completed", "returned"]
+    assert rows == expected_history
+    # Verify the persisted version-reference chain rather than comparing an
+    # in-memory state list with constants. This describes storage only and does
+    # not equate "completed" with SPEC-0005's "fulfilled".
+    assert rows[0][6] is None
+    assert all(rows[i][7] == rows[i + 1][6] for i in range(len(rows) - 1))
+    assert rows[-1][7] == "sale-state:returned:v4"
     db.close()
