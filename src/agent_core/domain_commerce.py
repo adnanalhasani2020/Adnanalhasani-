@@ -22,6 +22,7 @@ class Sale:
         if not isinstance(self.activity_id,UUID): raise ValidationError("Sale must reference Activity context")
         if not self.history or self.history[-1] != self.state: raise ValidationError("Sale history must end at current state")
     def _transition(self,state:SaleState,allowed:Tuple[SaleState,...]):
+        if self.state is state: return
         if self.state not in allowed: raise ValidationError(f"invalid Sale transition from {self.state.value} to {state.value}")
         self.state=state
         self.history=self.history+(state,)
