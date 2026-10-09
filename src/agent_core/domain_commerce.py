@@ -10,10 +10,17 @@ class SaleState(str, Enum):
     INITIATED = "initiated"
     CONFIRMED = "confirmed"
     FULFILLED = "fulfilled"
-    # Compatibility value for historical records serialized before Stage 16.
-    COMPLETED = "completed"
+    # Source-compatible alias: COMPLETED is not a separate domain state.
+    COMPLETED = "fulfilled"
     CANCELLED = "cancelled"
     RETURNED = "returned"
+
+    @classmethod
+    def _missing_(cls, value):
+        # Historical persisted vocabulary resolves to the canonical domain state.
+        if value == "completed":
+            return cls.FULFILLED
+        return None
 
 
 class InvoiceState(str, Enum):
@@ -48,7 +55,6 @@ class Sale:
             SaleState.INITIATED: (SaleState.CONFIRMED, SaleState.CANCELLED),
             SaleState.CONFIRMED: (SaleState.FULFILLED, SaleState.COMPLETED, SaleState.CANCELLED),
             SaleState.FULFILLED: (SaleState.RETURNED,),
-            SaleState.COMPLETED: (SaleState.RETURNED,),
             SaleState.CANCELLED: (),
             SaleState.RETURNED: (),
         }
