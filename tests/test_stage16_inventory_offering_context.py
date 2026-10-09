@@ -142,4 +142,5 @@ def test_inventory_position_guards_do_not_change_quantity_or_rewrite_existing_ro
         "SELECT quantity_minor,scope_key,observed_at,state FROM inventory_positions "
         "WHERE inventory_position_id=?", (position,)
     ).fetchone() == (None, "site-A:offering", NOW, "effective")
+    assert db.execute("PRAGMA foreign_key_check").fetchall() == []
     db.close()
