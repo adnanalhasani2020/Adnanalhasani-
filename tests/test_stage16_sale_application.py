@@ -6,7 +6,6 @@ import uuid
 import pytest
 
 from agent_core.application import SaleApplication
-from agent_core.domain_authorization import AuthorizationGrant
 from agent_core.domain_commerce import SaleState
 from agent_core.persistence import connect_database
 from agent_core.shared import ValidationError
@@ -190,7 +189,7 @@ def test_rejections_leave_no_partial_sale_or_history():
     db = connect_database()
     actor_id, activity_id, _product_id, offering_id = _fixture(db)
     app = SaleApplication()
-    grant = _grant(actor_id, offering_id)
+    grant = _grant(db, actor_id, activity_id, offering_id)
 
     with pytest.raises(ValidationError, match="must match Offering Activity"):
         _create(app, db, actor_id, _id(), offering_id, grant)
