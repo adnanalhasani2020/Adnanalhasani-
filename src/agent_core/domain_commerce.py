@@ -20,7 +20,27 @@ class Sale:
     def __post_init__(self):
         if not isinstance(self.offering_id,UUID): raise ValidationError("Sale must reference Offering")
         if not isinstance(self.activity_id,UUID): raise ValidationError("Sale must reference Activity context")
-        if not self.history or self.history[-1] != self.state: raise ValidationError("Sale history must end at current state")
+        if not isinstance(self.state,SaleState): raise ValidationError("Sale state must be a SaleState")
+        if not isinstance(self.history,tuple) or not self.history:
+            raise ValidationError("Sale history must be a non-empty tuple")
+        if any(not isinstance(item,SaleState) for item in self.history):
+            raise ValidationError("Sale history entries must be SaleState values")
+        if self.history[0] is not SaleState.INITIATED:
+            raise ValidationError("Sale history must start at initiated")
+        allowed_next = {
+            SaleState.INITIATED: (SaleState.CONFIRMED, SaleState.CANCELLED),
+            SaleState.CONFIRMED: (SaleState.COMPLETED, SaleState.CANCELLED),
+            SaleState.COMPLETED: (SaleState.RETURNED,),
+            SaleState.CANCELLED: (),
+            SaleState.RETURNED: (),
+        }
+        for previous, current in zip(self.history, self.history[1:]):
+            if current not in allowed_next[previous]:
+                raise ValidationError(
+                    f"invalid Sale history transition from {previous.value} to {current.value}"
+                )
+        if self.history[-1] != self.state:
+            raise ValidationError("Sale history must end at current state")
     def _transition(self,state:SaleState,allowed:Tuple[SaleState,...]):
         if self.state is state: return
         if self.state not in allowed: raise ValidationError(f"invalid Sale transition from {self.state.value} to {state.value}")
