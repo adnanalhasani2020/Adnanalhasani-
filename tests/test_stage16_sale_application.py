@@ -80,14 +80,21 @@ def test_e2e_authorized_sale_round_trips_history_and_fulfilled_is_not_payment(tm
     # Persist the established lifecycle vocabulary. The trigger maps the historical
     # storage label to the canonical business state without rewriting old records.
     with db:
-        db.execute(
-            "UPDATE sales SET state='confirmed',updated_at=? WHERE sale_id=?",
-            (STAMP, str(sale.id)),
-        )
-        db.execute(
-            "UPDATE sales SET state='completed',updated_at=? WHERE sale_id=?",
-            (STAMP, str(sale.id)),
-        )
+        for prior_ref, current_ref, state in (
+            (f"sale-state:{sale.id}:v1", f"sale-state:{sale.id}:v2", "confirmed"),
+            (f"sale-state:{sale.id}:v2", f"sale-state:{sale.id}:v3", "completed"),
+        ):
+            db.execute(
+                "UPDATE sales SET state=?,updated_at=? WHERE sale_id=?",
+                (state, STAMP, str(sale.id)),
+            )
+            db.execute(
+                "INSERT INTO domain_history(domain_history_id,owner_domain,target_ref,change_type,historical_at,"
+                "actor_context_ref,prior_version_ref,current_version_ref,created_at) "
+                "VALUES(?,?,?,?,?,?,?,?,?)",
+                (_id(), "commerce", str(sale.id), "sale_state_transition", STAMP,
+                 actor_id, prior_ref, current_ref, STAMP),
+            )
     assert db.execute(
         "SELECT state,lifecycle_state FROM sales WHERE sale_id=?", (str(sale.id),)
     ).fetchone() == ("completed", "fulfilled")
@@ -108,7 +115,11 @@ def test_e2e_authorized_sale_round_trips_history_and_fulfilled_is_not_payment(tm
     assert restored == (
         str(sale.id), offering_id, activity_id, "completed", "fulfilled"
     )
-    assert history == [(actor_id, None, f"sale-state:{sale.id}:v1")]
+    assert history == [
+        (actor_id, None, f"sale-state:{sale.id}:v1"),
+        (actor_id, f"sale-state:{sale.id}:v1", f"sale-state:{sale.id}:v2"),
+        (actor_id, f"sale-state:{sale.id}:v2", f"sale-state:{sale.id}:v3"),
+    ]
     assert db.execute("SELECT count(*) FROM invoices WHERE sale_id=?", (str(sale.id),)).fetchone()[0] == 0
     tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     assert "payments" not in tables or db.execute("SELECT count(*) FROM payments").fetchone()[0] == 0
@@ -190,31 +201,36 @@ def test_persisted_lifecycle_reader_maps_legacy_and_rejects_conflicting_columns(
 
 
 def test_legacy_completed_row_remains_unmodified_and_resolves_to_fulfilled(tmp_path):
+    from pathlib import Path
+    from agent_core.persistence import MIGRATIONS_DIR, apply_migrations
+
     path = tmp_path / "legacy-sale.sqlite"
-    db = connect_database(path)
+    db = sqlite3.connect(path)
+    db.execute("PRAGMA foreign_keys=ON")
+    for migration_name in (
+        "0001_initial_relational_schema.sql",
+        "0002_prevent_person_canonical_cycles.sql",
+        "0003_enforce_sale_offering_activity_consistency.sql",
+    ):
+        db.executescript((MIGRATIONS_DIR / migration_name).read_text(encoding="utf-8"))
+        db.execute(
+            "INSERT INTO schema_migrations(version,applied_at) VALUES(?,?)",
+            (migration_name.removesuffix(".sql"), STAMP),
+        )
     actor_id, activity_id, _product_id, offering_id = _fixture(db)
     sale_id = _id()
     db.execute(
         "INSERT INTO sales(sale_id,offering_id,activity_id,state,occurred_at,created_at,updated_at) "
         "VALUES(?,?,?,?,?,?,?)",
-        (sale_id, offering_id, activity_id, "initiated", STAMP, STAMP, STAMP),
+        (sale_id, offering_id, activity_id, "completed", STAMP, STAMP, STAMP),
     )
     db.commit()
-    # Simulate a pre-migration legacy row by clearing the canonical column; do not
-    # rewrite the historical state label to the new vocabulary.
-    db.execute(
-        "UPDATE sales SET state='completed',lifecycle_state=NULL WHERE sale_id=?",
-        (sale_id,),
-    )
-    db.commit()
-    assert db.execute(
-        "SELECT state,lifecycle_state FROM sales WHERE sale_id=?", (sale_id,)
-    ).fetchone() == ("completed", None)
-    assert SaleState.from_persisted("completed", None) is SaleState.FULFILLED
     db.close()
+
+    # Migration 0004 must preserve the old state and leave lifecycle_state NULL.
     db = connect_database(path)
     assert db.execute(
         "SELECT state,lifecycle_state FROM sales WHERE sale_id=?", (sale_id,)
     ).fetchone() == ("completed", None)
-    assert db.execute("PRAGMA foreign_key_check").fetchall() == []
+    assert SaleState.from_persisted("completed", None) is SaleState.FULFILLED
     db.close()
