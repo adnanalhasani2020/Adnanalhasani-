@@ -164,6 +164,8 @@ def _make_legacy_populated_database(path):
     product_id = _product(db)
     offering_id = _offering(db, product_id, offering_activity)
     sale_id = _sale(db, offering_id, historical_sale_activity)
+    # Legacy completed rows must survive the additive lifecycle migration unchanged.
+    db.execute("UPDATE sales SET state='completed' WHERE sale_id=?", (sale_id,))
     invoice_id = _invoice(db, sale_id)
     db.commit()
     db.close()
@@ -181,7 +183,7 @@ def test_existing_database_migration_preserves_sales_invoices_and_history_on_reo
         invoice_id,
     ) = _make_legacy_populated_database(path)
 
-    # connect_database applies only migration 0003 to this pre-existing database.
+    # connect_database applies the additive lifecycle migration to this pre-existing database.
     db = connect_database(path)
     assert db.execute(
         "SELECT version FROM schema_migrations ORDER BY version"
@@ -194,7 +196,11 @@ def test_existing_database_migration_preserves_sales_invoices_and_history_on_reo
     assert db.execute(
         "SELECT sale_id,offering_id,activity_id,state FROM sales WHERE sale_id=?",
         (sale_id,),
-    ).fetchone() == (sale_id, offering_id, historical_sale_activity, "confirmed")
+    ).fetchone() == (sale_id, offering_id, historical_sale_activity, "completed")
+    # No historical row is rewritten: the canonical column stays NULL for legacy records.
+    assert db.execute(
+        "SELECT lifecycle_state FROM sales WHERE sale_id=?", (sale_id,)
+    ).fetchone() == (None,)
     assert db.execute(
         "SELECT invoice_id,sale_id,state,invoice_number FROM invoices WHERE invoice_id=?",
         (invoice_id,),
