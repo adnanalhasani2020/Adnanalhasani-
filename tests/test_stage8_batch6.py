@@ -190,6 +190,7 @@ def test_reverse_implementation_inventory_has_traceability_owner():
         "__init__.py": "package boundary",
         "config.py": "runtime configuration boundary",
         "application.py": "application composition over domain SPECs",
+        "inventory_read.py": "fail-closed Inventory Position quantity read interface owned by SPEC-0006",
         "infrastructure.py": "audit infrastructure supporting SPEC-0021",
         "approval_enforcement.py": "Stage 11 GAP-0001 runtime approval enforcement boundary",
         "persistence.py": "Stage 12A persistence/migration boundary; GAP-0005 durable operation identity and Stage 12A financial recognition/ledger persistence",
