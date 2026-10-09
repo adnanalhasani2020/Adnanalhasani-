@@ -156,3 +156,38 @@ def test_retiring_product_preserves_existing_offering_and_sale_history():
     assert sale.offering_id == offering.id
     assert sale.history == prior_sale_history == (SaleState.INITIATED, SaleState.CONFIRMED)
     assert sale.state == SaleState.CONFIRMED
+
+
+@pytest.mark.parametrize(
+    "history,state",
+    [
+        ((SaleState.CONFIRMED,), SaleState.CONFIRMED),
+        ((SaleState.INITIATED, SaleState.COMPLETED), SaleState.COMPLETED),
+        ((SaleState.INITIATED, SaleState.CANCELLED, SaleState.CONFIRMED), SaleState.CONFIRMED),
+        ((SaleState.INITIATED, SaleState.CONFIRMED, SaleState.COMPLETED, SaleState.RETURNED, SaleState.COMPLETED), SaleState.COMPLETED),
+        ((SaleState.INITIATED, SaleState.CONFIRMED), SaleState.COMPLETED),
+    ],
+)
+def test_req_func_0037_sale_rejects_invalid_or_inconsistent_history(history, state):
+    with pytest.raises(ValidationError):
+        Sale(uuid4(), uuid4(), state=state, history=history)
+
+
+def test_req_func_0037_sale_accepts_valid_history_for_each_terminal_path():
+    cancelled = Sale(
+        uuid4(), uuid4(),
+        state=SaleState.CANCELLED,
+        history=(SaleState.INITIATED, SaleState.CANCELLED),
+    )
+    returned = Sale(
+        uuid4(), uuid4(),
+        state=SaleState.RETURNED,
+        history=(
+            SaleState.INITIATED,
+            SaleState.CONFIRMED,
+            SaleState.COMPLETED,
+            SaleState.RETURNED,
+        ),
+    )
+    assert cancelled.state is SaleState.CANCELLED
+    assert returned.state is SaleState.RETURNED
