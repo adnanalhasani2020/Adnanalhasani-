@@ -109,7 +109,7 @@ def test_e2e_authorized_sale_round_trips_history_and_fulfilled_is_not_payment(tm
     ).fetchone()
     history = db.execute(
         "SELECT actor_context_ref,prior_version_ref,current_version_ref FROM domain_history "
-        "WHERE target_ref=?",
+        "WHERE target_ref=? ORDER BY rowid",
         (str(sale.id),),
     ).fetchall()
     assert restored == (
@@ -201,8 +201,7 @@ def test_persisted_lifecycle_reader_maps_legacy_and_rejects_conflicting_columns(
 
 
 def test_legacy_completed_row_remains_unmodified_and_resolves_to_fulfilled(tmp_path):
-    from pathlib import Path
-    from agent_core.persistence import MIGRATIONS_DIR, apply_migrations
+    from agent_core.persistence import MIGRATIONS_DIR
 
     path = tmp_path / "legacy-sale.sqlite"
     db = sqlite3.connect(path)
@@ -233,4 +232,23 @@ def test_legacy_completed_row_remains_unmodified_and_resolves_to_fulfilled(tmp_p
         "SELECT state,lifecycle_state FROM sales WHERE sale_id=?", (sale_id,)
     ).fetchone() == ("completed", None)
     assert SaleState.from_persisted("completed", None) is SaleState.FULFILLED
+    db.close()
+
+
+
+def test_history_write_failure_rolls_back_sale_insert():
+    db = connect_database()
+    actor_id, activity_id, _product_id, offering_id = _fixture(db)
+    db.execute(
+        "CREATE TRIGGER reject_sale_history BEFORE INSERT ON domain_history "
+        "WHEN NEW.change_type='sale_state_transition' "
+        "BEGIN SELECT RAISE(ABORT, 'forced history failure'); END"
+    )
+    grant = _grant(actor_id, offering_id)
+
+    with pytest.raises(sqlite3.IntegrityError, match="forced history failure"):
+        _create(SaleApplication(), db, actor_id, activity_id, offering_id, grant)
+
+    assert db.execute("SELECT count(*) FROM sales").fetchone()[0] == 0
+    assert db.execute("SELECT count(*) FROM domain_history").fetchone()[0] == 0
     db.close()
