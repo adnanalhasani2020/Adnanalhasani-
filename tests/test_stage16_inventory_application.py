@@ -152,3 +152,24 @@ def test_unknown_offering_is_rejected():
             db, _id(), "warehouse-A", as_of=AS_OF
         )
     db.close()
+
+def test_latest_unknown_quantity_does_not_fall_back_to_older_known_quantity():
+    db = connect_database()
+    activity_a, _activity_b, _product, offering_a, _offering_b = _context(db)
+    _position(
+        db, activity_a, offering=offering_a, quantity=5,
+        observed="2026-10-09T10:00:00Z",
+    )
+    latest_position = _position(
+        db, activity_a, offering=offering_a, quantity=None,
+        observed="2026-10-09T11:30:00Z",
+    )
+
+    result = InventoryApplication().read_offering_quantity(
+        db, offering_a, "warehouse-A", as_of=AS_OF
+    )
+
+    assert result.status is Status.UNKNOWN_QUANTITY
+    assert result.quantity_minor is None
+    assert result.inventory_position_id == latest_position
+    db.close()
