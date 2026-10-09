@@ -22,6 +22,19 @@ class SaleState(str, Enum):
             return cls.FULFILLED
         return None
 
+    @classmethod
+    def from_persisted(cls, state, lifecycle_state=None):
+        """Resolve legacy and canonical database columns without hiding conflicts."""
+        legacy = cls(state)
+        if lifecycle_state is None:
+            return legacy
+        canonical = cls(lifecycle_state)
+        if legacy is not canonical:
+            raise ValidationError(
+                "Sale state and lifecycle_state disagree; explicit reconciliation is required"
+            )
+        return canonical
+
 
 class InvoiceState(str, Enum):
     ISSUED = "issued"
