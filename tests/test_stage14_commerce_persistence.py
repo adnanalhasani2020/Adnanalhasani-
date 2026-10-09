@@ -1,7 +1,7 @@
 """Stage 14 — relational persistence evidence for the existing Commerce Core schema.
 
-This suite proves database round-trips and relational boundaries only. It deliberately
-does not equate SaleState.COMPLETED with SPEC-0005's "fulfilled" terminology.
+Legacy sales.state="completed" is preserved; sales.lifecycle_state is the canonical
+commercial vocabulary and maps the legacy value to "fulfilled" on new writes.
 """
 import sqlite3
 import uuid
@@ -136,17 +136,21 @@ def test_sale_round_trip_preserves_activity_offering_and_current_state_without_f
     db.close()
 
 
-def test_sale_state_constraint_rejects_unapproved_fulfilled_vocabulary():
+def test_legacy_completed_storage_maps_to_canonical_fulfilled_state():
     db = connect_database()
     activity_id = _activity(db)
     product_id = _product(db)
     offering_id = _offering(db, product_id, activity_id)
-    with pytest.raises(sqlite3.IntegrityError):
-        db.execute(
-            "INSERT INTO sales(sale_id,offering_id,activity_id,state,occurred_at,created_at,updated_at) "
-            "VALUES(?,?,?,?,?,?,?)",
-            (_id(), offering_id, activity_id, "fulfilled", NOW, NOW, NOW),
-        )
+    sale_id = _id()
+    db.execute(
+        "INSERT INTO sales(sale_id,offering_id,activity_id,state,occurred_at,created_at,updated_at) "
+        "VALUES(?,?,?,?,?,?,?)",
+        (sale_id, offering_id, activity_id, "completed", NOW, NOW, NOW),
+    )
+    canonical = db.execute(
+        "SELECT state,lifecycle_state FROM sales WHERE sale_id=?", (sale_id,)
+    ).fetchone()
+    assert canonical == ("completed", "fulfilled")
     db.close()
 
 
