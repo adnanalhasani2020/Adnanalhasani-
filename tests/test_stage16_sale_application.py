@@ -268,3 +268,22 @@ def test_missing_create_grant_fails_closed_and_leaves_no_partial_records():
     assert db.execute("SELECT count(*) FROM sales").fetchone()[0] == 0
     assert db.execute("SELECT count(*) FROM domain_history").fetchone()[0] == 0
     db.close()
+
+
+def test_grant_scoped_to_one_sale_cannot_authorize_another_sale():
+    db = connect_database()
+    app, actor, activity, offering, first_sale, _ = _sale_and_create_grant(db)
+    second_create_grant = _grant(db, actor, activity, offering)
+    second_sale = _create(app, db, actor, activity, offering, second_create_grant)
+    first_sale_confirm_grant = _transition_grant(db, actor, activity, first_sale, "confirm")
+
+    with pytest.raises(ValidationError, match="scope does not match Sale"):
+        app.confirm_sale(db, second_sale.id, actor, first_sale_confirm_grant, now=NOW)
+
+    assert db.execute(
+        "SELECT state,version_no FROM sales WHERE sale_id=?", (str(second_sale.id),)
+    ).fetchone() == ("initiated", 1)
+    assert db.execute(
+        "SELECT count(*) FROM domain_history WHERE target_ref=?", (str(second_sale.id),)
+    ).fetchone()[0] == 1
+    db.close()
