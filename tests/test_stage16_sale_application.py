@@ -41,18 +41,29 @@ def _fixture(db):
     return actor_id, activity_id, product_id, offering_id
 
 
-def _grant(actor_id, offering_id, *, action="create_sale", scope=None, active=True):
-    grant = AuthorizationGrant(
-        uuid.UUID(actor_id), action, scope if scope is not None else offering_id
+def _grant(db, actor_id, activity_id, offering_id, *, action="create_sale",
+           scope=None, context=None, state="active", subject_id=None):
+    subject = subject_id or actor_id
+    if db.execute("SELECT 1 FROM persons WHERE person_id=?", (subject,)).fetchone() is None:
+        db.execute(
+            "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,?,?,?)",
+            (subject, "active", STAMP, STAMP),
+        )
+    grant_id = _id()
+    db.execute(
+        "INSERT INTO authorization_grants(authorization_grant_id,subject_person_id,agent_id,action_code,"
+        "scope_ref,context_ref,delegation_id,state,effective_from,effective_to,created_at,updated_at) "
+        "VALUES(?,?,NULL,?,?,?,?,?,?,NULL,?,?)",
+        (grant_id, subject, action, scope if scope is not None else offering_id,
+         context if context is not None else activity_id, None, state,
+         "2026-10-01T00:00:00Z", STAMP, STAMP),
     )
-    if active:
-        grant.activate()
-    return grant
+    return grant_id
 
 
-def _create(app, db, actor_id, activity_id, offering_id, grant):
+def _create(app, db, actor_id, activity_id, offering_id, grant_id):
     return app.create_sale(
-        db, offering_id, activity_id, actor_id, grant, now=NOW
+        db, offering_id, activity_id, actor_id, grant_id, now=NOW
     )
 
 
@@ -60,7 +71,7 @@ def test_e2e_authorized_sale_round_trips_history_and_fulfilled_is_not_payment(tm
     path = tmp_path / "stage16-sale-e2e.sqlite"
     db = connect_database(path)
     actor_id, activity_id, _product_id, offering_id = _fixture(db)
-    grant = _grant(actor_id, offering_id)
+    grant = _grant(db, actor_id, activity_id, offering_id)
 
     sale = _create(SaleApplication(), db, actor_id, activity_id, offering_id, grant)
     assert sale.state is SaleState.INITIATED
@@ -132,10 +143,10 @@ def test_authorization_requires_active_exact_actor_action_and_offering_scope():
     actor_id, activity_id, _product_id, offering_id = _fixture(db)
     app = SaleApplication()
 
-    wrong_actor = _grant(_id(), offering_id)
-    wrong_action = _grant(actor_id, offering_id, action="read")
-    wrong_scope = _grant(actor_id, _id())
-    inactive = _grant(actor_id, offering_id, active=False)
+    wrong_actor = _grant(db, actor_id, activity_id, offering_id, subject_id=_id())
+    wrong_action = _grant(db, actor_id, activity_id, offering_id, action="read")
+    wrong_scope = _grant(db, actor_id, activity_id, offering_id, scope=_id())
+    inactive = _grant(db, actor_id, activity_id, offering_id, state="suspended")
     for grant in (wrong_actor, wrong_action, wrong_scope, inactive):
         with pytest.raises(ValidationError):
             _create(app, db, actor_id, activity_id, offering_id, grant)
@@ -161,7 +172,7 @@ def test_authorization_does_not_transfer_between_activities_or_offerings():
         "VALUES(?,?,?,?,?,?,?,?)",
         (other_offering, other_product, activity_id, "active", "2026-10-01T00:00:00Z", None, STAMP, STAMP),
     )
-    grant = _grant(actor_id, offering_id)
+    grant = _grant(db, actor_id, activity_id, offering_id)
     app = SaleApplication()
 
     # Activity context cannot be substituted, even if the actor has a grant for the original offering.
