@@ -273,3 +273,58 @@ def test_product_retirement_preserves_offering_sale_and_sale_history_after_reope
     )
     assert db.execute("PRAGMA foreign_key_check").fetchall() == []
     db.close()
+
+
+def test_product_persistence_does_not_create_offering_sale_or_inventory_implicitly(tmp_path):
+    db = connect_database(tmp_path / "product-isolation.sqlite")
+    product_id = _product(db)
+    db.commit()
+
+    assert db.execute(
+        "SELECT product_id,state FROM products WHERE product_id=?", (product_id,)
+    ).fetchone() == (product_id, "active")
+    assert db.execute("SELECT COUNT(*) FROM offerings").fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM sales").fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM inventory_positions").fetchone()[0] == 0
+    db.close()
+
+
+def test_cancelled_sale_and_its_history_survive_database_reopen(tmp_path):
+    path = tmp_path / "cancelled-sale-history.sqlite"
+    db = connect_database(path)
+    activity_id = _activity(db)
+    product_id = _product(db)
+    offering_id = _offering(db, product_id, activity_id)
+    sale_id = _id()
+    db.execute(
+        "INSERT INTO sales(sale_id,offering_id,activity_id,state,occurred_at,created_at,updated_at) "
+        "VALUES(?,?,?,?,?,?,?)",
+        (sale_id, offering_id, activity_id, "cancelled", NOW, NOW, NOW),
+    )
+    history_id = _id()
+    db.execute(
+        "INSERT INTO domain_history(domain_history_id,owner_domain,target_ref,change_type,historical_at,"
+        "actor_context_ref,prior_version_ref,current_version_ref,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
+        (history_id, "commerce", sale_id, "sale_state_transition", NOW, activity_id,
+         "sale-state:initiated:v1", "sale-state:cancelled:v2", NOW),
+    )
+    db.commit()
+    db.close()
+
+    db = connect_database(path)
+    sale = db.execute(
+        "SELECT sale_id,offering_id,activity_id,state FROM sales WHERE sale_id=?", (sale_id,)
+    ).fetchone()
+    history = db.execute(
+        "SELECT domain_history_id,target_ref,owner_domain,change_type,actor_context_ref,"
+        "prior_version_ref,current_version_ref FROM domain_history WHERE domain_history_id=?",
+        (history_id,),
+    ).fetchone()
+
+    assert sale == (sale_id, offering_id, activity_id, "cancelled")
+    assert history == (
+        history_id, sale_id, "commerce", "sale_state_transition", activity_id,
+        "sale-state:initiated:v1", "sale-state:cancelled:v2",
+    )
+    assert db.execute("PRAGMA foreign_key_check").fetchall() == []
+    db.close()
