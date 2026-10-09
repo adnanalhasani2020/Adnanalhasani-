@@ -92,7 +92,7 @@ def test_product_offering_inventory_sale_invoice_integration_preserves_boundarie
     assert availability.offering_id == offering.id
     assert sale.offering_id == offering.id
     assert invoice.sale_id == sale.id
-    assert sale.state == SaleState.COMPLETED
+    assert sale.state == SaleState.FULFILLED
     assert not hasattr(offering, "inventory_state")
     assert not hasattr(sale, "payment_id")
     assert not hasattr(invoice, "ledger_entry_id")
