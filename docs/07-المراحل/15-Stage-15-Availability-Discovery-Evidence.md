@@ -1,7 +1,7 @@
 # Stage 15 — Availability / Discovery Post-Merge Evidence Record
 
 **Baseline:** `f90c5a28af7d6cafa3ea8fbbed14e172eca34334`  
-**Evidence status:** Post-merge test and CI evidence recorded. This document does not declare any Requirement ACCEPTED and does not close Stage 15.  
+**Evidence status:** Stage 15 characterization-test batch **CLOSED** by explicit owner decision, limited strictly to the scope below. No Requirement is declared ACCEPTED.  
 **Scope:** Documentation-only record of PR #35 and its post-merge CI. No source code or tests are changed by this record.
 
 ## Test scope and result
@@ -35,8 +35,32 @@ The recorded CI result establishes that this workflow completed successfully for
 - **Semantic correctness:** CI success does not establish complete semantic correctness, policy completeness, or correctness beyond the tested assertions.
 - **Unresolved policies:** freshness, temporal validity, proximity, and ranking policies are not resolved by these tests.
 - **Requirement acceptance:** no Requirement is declared `ACCEPTED` by this record. No requirement statuses were changed as part of this documentation work.
-- **Stage closure:** Stage 15 is **not declared CLOSED** by this record. Formal closure remains subject to the applicable Stage 15 closure gate and its required governance evidence.
+- **Stage closure:** The owner selected Option A: close only the Availability & Discovery characterization-test batch. This does not declare full SPEC-0014 conformance, accept any Requirement, or imply an independent APPROVE review.
+
+## Formal closure decision — Owner Option A
+
+**Decision:** The owner explicitly authorized closure of the Availability & Discovery characterization-test batch only.
+
+### Closure gate assessment
+
+- **Frozen scope:** satisfied — existing boundary tests from PR #35, this evidence record merged by PR #36, and the successful post-merge CI evidence are the entire closure scope.
+- **Merged test/evidence changes:** satisfied — PR #35 and PR #36 are merged.
+- **Post-merge CI:** satisfied — Run [37864278506](https://github.com/adnanalhasani2020/Adnanalhasani-/actions/runs/37864278506) completed with `success` on exact `main` SHA `9395f6a4e75c853189a64cd6011d97f884010378`.
+- **Owner authorization:** satisfied — explicit Option A decision provided for this closure.
+- **Requirement acceptance / independent review:** not prerequisites asserted by this bounded closure; neither is claimed here.
+
+### Closure boundary
+
+**Stage 15 characterization-test batch: CLOSED.** This is a scoped work-item closure, not a declaration that all of Stage 15 or SPEC-0014 is complete.
+
+Explicitly not accepted or proven:
+- No Requirement is changed to `ACCEPTED`.
+- `REQ-FUNC-0033` remains `PROPOSED` per the requirements reconciliation record.
+- No independent `APPROVE` review is claimed for PR #35.
+- No full conformance to SPEC-0014 is claimed.
+- Freshness thresholds, temporal-validity policy, proximity rules, search/GIS behavior, and ranking remain outside this closure and unresolved by these tests.
+- No source code, tests, schemas, migrations, requirement statuses, repository settings, or branch protection are changed by this closure record.
 
 ## Change scope
 
-This record documents already-verified merge and CI evidence only. It does not modify source code, tests, schemas, migrations, requirement statuses, repository settings, or branch protection. It does not authorize or perform a merge of this documentation change.
+This closure updates the existing Stage 15 evidence record only. No new PR is created solely for documentation, and no requirement status or implementation behavior is changed.
