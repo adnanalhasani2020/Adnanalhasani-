@@ -36,7 +36,10 @@ WHEN EXISTS (
      WHERE ip.offering_id = OLD.offering_id
        AND (
             ip.activity_id <> NEW.activity_id
-            OR (ip.product_id IS NOT NULL AND ip.product_id <> NEW.product_id)
+            OR (
+                ip.product_id IS NOT NULL
+                AND (NEW.product_id IS NULL OR ip.product_id <> NEW.product_id)
+            )
        )
 )
 BEGIN
