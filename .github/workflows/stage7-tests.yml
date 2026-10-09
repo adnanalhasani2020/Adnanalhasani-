@@ -9,6 +9,7 @@ on:
       - main
       - 'stage/**'
       - 'stage*'
+  workflow_dispatch:
 
 permissions:
   contents: read
