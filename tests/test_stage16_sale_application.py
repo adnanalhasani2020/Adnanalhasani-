@@ -213,7 +213,7 @@ def test_legacy_completed_row_remains_unmodified_and_resolves_to_fulfilled(tmp_p
     ):
         db.executescript((MIGRATIONS_DIR / migration_name).read_text(encoding="utf-8"))
         db.execute(
-            "INSERT INTO schema_migrations(version,applied_at) VALUES(?,?)",
+            "INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(?,?)",
             (migration_name.removesuffix(".sql"), STAMP),
         )
     actor_id, activity_id, _product_id, offering_id = _fixture(db)
