@@ -119,6 +119,10 @@ def test_offering_update_cannot_break_existing_inventory_position_context():
         db.execute("UPDATE offerings SET activity_id=? WHERE offering_id=?", (activity_b, offering))
     with pytest.raises(sqlite3.IntegrityError, match="would break inventory position context"):
         db.execute("UPDATE offerings SET product_id=? WHERE offering_id=?", (product_b, offering))
+    # SQLite NULL comparisons must not let a populated inventory product lose
+    # its Offering product context.
+    with pytest.raises(sqlite3.IntegrityError, match="would break inventory position context"):
+        db.execute("UPDATE offerings SET product_id=NULL WHERE offering_id=?", (offering,))
 
     assert db.execute(
         "SELECT activity_id,product_id FROM offerings WHERE offering_id=?", (offering,)
