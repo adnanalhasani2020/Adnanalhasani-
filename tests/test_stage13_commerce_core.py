@@ -122,7 +122,7 @@ def test_req_func_0037_sale_lifecycle_and_return_history_are_explicit():
     assert sale.history == (
         SaleState.INITIATED,
         SaleState.CONFIRMED,
-        SaleState.COMPLETED,
+        SaleState.FULFILLED,
         SaleState.RETURNED,
     )
     cancelled = Sale(uuid4(), uuid4())
