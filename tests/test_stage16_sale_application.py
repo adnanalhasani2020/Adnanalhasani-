@@ -152,7 +152,7 @@ def test_transition_grant_must_match_actor_sale_activity_and_effective_period():
     wrong_context = _transition_grant(db, actor, activity, sale, "confirm", context_id=_id())
     expired = _transition_grant(
         db, actor, activity, sale, "confirm",
-        starts="2026-10-10T00:00:00Z", ends="2026-10-11T00:00:00Z"
+        starts="2026-10-01T00:00:00Z", ends="2026-10-08T00:00:00Z"
     )
     for grant in (wrong_actor, wrong_scope, wrong_context, expired):
         with pytest.raises(ValidationError):
@@ -256,6 +256,7 @@ def test_legacy_completed_row_is_not_rewritten_by_migration(tmp_path):
     db = connect_database(path)
     assert db.execute("SELECT state,lifecycle_state FROM sales WHERE sale_id=?", (sale_id,)).fetchone() == ("completed", None)
     assert SaleState.from_persisted("completed", None) is SaleState.FULFILLED
+    assert SaleApplication().get_sale_state(db, sale_id) is SaleState.FULFILLED
     db.close()
 
 
