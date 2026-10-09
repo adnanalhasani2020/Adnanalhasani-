@@ -140,3 +140,19 @@ def test_req_func_0038_sale_preserves_activity_and_does_not_cross_authorization_
     assert not hasattr(sale, "role_assignment_id")
     assert not hasattr(sale, "financial_transaction_id")
     assert not hasattr(sale, "ledger_entry_id")
+
+def test_retiring_product_preserves_existing_offering_and_sale_history():
+    product = Product("retired product")
+    offering = Offering(product.id, uuid4())
+    sale = Sale(offering.id, offering.activity_id)
+    sale.confirm()
+    prior_sale_history = sale.history
+
+    product.retire()
+
+    assert product.state == ProductState.RETIRED
+    assert offering.product_id == product.id
+    assert offering.state == OfferingState.DRAFT
+    assert sale.offering_id == offering.id
+    assert sale.history == prior_sale_history == (SaleState.INITIATED, SaleState.CONFIRMED)
+    assert sale.state == SaleState.CONFIRMED
