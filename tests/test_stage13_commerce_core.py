@@ -31,6 +31,20 @@ def test_req_data_0013_product_and_offering_are_distinct_and_offering_is_activit
     assert not hasattr(product, "activity_id")
 
 
+def test_req_data_0013_one_product_can_have_offerings_in_multiple_activity_contexts():
+    product = Product("shared product")
+    first_activity_id, second_activity_id = uuid4(), uuid4()
+
+    first_offering = Offering(product.id, first_activity_id)
+    second_offering = Offering(product.id, second_activity_id)
+
+    assert first_offering.product_id == second_offering.product_id == product.id
+    assert first_offering.id != second_offering.id
+    assert first_offering.activity_id == first_activity_id
+    assert second_offering.activity_id == second_activity_id
+    assert first_activity_id != second_activity_id
+
+
 def test_req_data_0014_offering_does_not_imply_inventory():
     product = Product("product")
     offering = Offering(product.id, uuid4())
