@@ -55,16 +55,26 @@ class InventoryQuantityReader:
     not zero, and never falls back to an older quantity.
     """
 
-    def read_quantity(self, connection, scope_key: str, *, as_of: datetime | str | None = None):
+    def read_quantity(
+        self, connection, scope_key: str, *, as_of: datetime | str | None = None,
+        offering_id: str | None = None, activity_id: str | None = None,
+    ):
         if not isinstance(scope_key, str) or not scope_key.strip():
             raise ValidationError("Inventory scope_key is required")
         instant = _instant(as_of or datetime.now(timezone.utc), "Inventory as_of")
 
-        rows = connection.execute(
+        query = (
             "SELECT inventory_position_id, quantity_minor, observed_at, effective_from, effective_to "
-            "FROM inventory_positions WHERE scope_key=? AND state='effective'",
-            (scope_key,),
-        ).fetchall()
+            "FROM inventory_positions WHERE scope_key=? AND state='effective'"
+        )
+        parameters = [scope_key]
+        if offering_id is not None:
+            query += " AND offering_id=?"
+            parameters.append(str(offering_id))
+        if activity_id is not None:
+            query += " AND activity_id=?"
+            parameters.append(str(activity_id))
+        rows = connection.execute(query, parameters).fetchall()
 
         eligible = []
         for position_id, quantity, observed_raw, starts_raw, ends_raw in rows:
