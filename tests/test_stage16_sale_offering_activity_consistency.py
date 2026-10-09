@@ -155,7 +155,7 @@ def _make_legacy_populated_database(path):
         db.executescript((MIGRATIONS_DIR / migration_name).read_text(encoding="utf-8"))
         version = migration_name.removesuffix(".sql")
         db.execute(
-            "INSERT INTO schema_migrations(version,applied_at) VALUES(?,?)",
+            "INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(?,?)",
             (version, NOW),
         )
 
