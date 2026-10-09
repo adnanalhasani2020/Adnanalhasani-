@@ -78,7 +78,11 @@ def test_clean_install_has_exactly_47_domain_tables_plus_migration_bookkeeping()
     assert db.execute("PRAGMA foreign_keys").fetchone()[0] == 1
     assert db.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
     versions = [r[0] for r in db.execute("SELECT version FROM schema_migrations ORDER BY version")]
-    assert versions == [\n        "0001_initial_relational_schema",\n        "0002_prevent_person_canonical_cycles",\n        "0003_enforce_sale_offering_activity_consistency",\n    ]
+    assert versions == [
+        "0001_initial_relational_schema",
+        "0002_prevent_person_canonical_cycles",
+        "0003_enforce_sale_offering_activity_consistency",
+    ]
 
 
 def test_existing_db_migration_preserves_data_and_is_idempotent(tmp_path):
