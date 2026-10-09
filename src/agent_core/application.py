@@ -3,7 +3,6 @@ from uuid import UUID, uuid4
 
 from agent_core.domain_identity import *
 from agent_core.domain_activities import *
-from agent_core.domain_authorization import AuthorizationGrant, AuthorizationGrantState
 from agent_core.domain_commerce import Sale, SaleState
 from agent_core.shared import ValidationError
 
@@ -26,11 +25,11 @@ class ActivityApplication:
 
 
 class SaleApplication:
-    """Create a Sale using the repository's existing explicit AuthorizationGrant model.
+    """Create a Sale only from a persisted, active Authorization Grant for this context.
 
-    Authorization is fail-closed and scoped to the exact actor, create_sale action,
-    and Activity. The Offering must independently belong to that Activity. No role,
-    membership, family relationship, payment, settlement, or inventory policy is inferred.
+    The authorization_grants table is the authority source; callers cannot authorize
+    themselves by constructing an in-memory grant. This entry point accepts Person
+    subjects. Agent execution requires its separate AgentAction/Approval enforcement path.
     """
 
     def create_sale(
@@ -39,7 +38,7 @@ class SaleApplication:
         offering_id: UUID | str,
         activity_id: UUID | str,
         actor_context_ref: str,
-        authorization: AuthorizationGrant,
+        authorization_grant_id: UUID | str,
         *,
         now: datetime | None = None,
         sale_id: UUID | None = None,
@@ -48,29 +47,45 @@ class SaleApplication:
             offering_uuid = UUID(str(offering_id))
             activity_uuid = UUID(str(activity_id))
             actor_uuid = UUID(str(actor_context_ref))
+            grant_uuid = UUID(str(authorization_grant_id))
         except (ValueError, TypeError, AttributeError) as exc:
             raise ValidationError(
-                "Sale creation requires UUID Offering, Activity, and actor context references"
+                "Sale creation requires valid Offering, Activity, actor, and AuthorizationGrant identifiers"
             ) from exc
-        offering_key, activity_key, actor_key = (
-            str(offering_uuid), str(activity_uuid), str(actor_uuid)
+        offering_key, activity_key, actor_key, grant_key = (
+            str(offering_uuid), str(activity_uuid), str(actor_uuid), str(grant_uuid)
         )
-
-        if not isinstance(authorization, AuthorizationGrant):
-            raise ValidationError("Sale creation requires an authoritative AuthorizationGrant")
-        if authorization.state is not AuthorizationGrantState.ACTIVE:
-            raise ValidationError("Sale creation AuthorizationGrant must be ACTIVE")
-        if authorization.subject_id != actor_uuid:
-            raise ValidationError("AuthorizationGrant subject does not match actor")
-        if authorization.action != "create_sale":
-            raise ValidationError("AuthorizationGrant action does not permit Sale creation")
-        if authorization.scope != offering_key:
-            raise ValidationError("AuthorizationGrant scope does not match requested Offering")
 
         instant = now or datetime.now(timezone.utc)
         if instant.tzinfo is None or instant.utcoffset() is None:
             raise ValidationError("Sale creation timestamp must be timezone-aware")
         timestamp = instant.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+        # The persisted grant is authoritative. Person membership, role, or family
+        # relationship alone is never treated as authorization.
+        grant = connection.execute(
+            "SELECT subject_person_id, agent_id, action_code, scope_ref, context_ref, "
+            "state, effective_from, effective_to "
+            "FROM authorization_grants WHERE authorization_grant_id=?",
+            (grant_key,),
+        ).fetchone()
+        if grant is None:
+            raise ValidationError("Sale creation requires an existing persisted AuthorizationGrant")
+        subject_person, grant_agent, action_code, scope_ref, context_ref, grant_state, effective_from_grant, effective_to_grant = grant
+        if grant_state != "active":
+            raise ValidationError("AuthorizationGrant must be ACTIVE")
+        if subject_person != actor_key or grant_agent is not None:
+            raise ValidationError("AuthorizationGrant must belong to the requested Person actor")
+        if action_code != "create_sale":
+            raise ValidationError("AuthorizationGrant action does not permit Sale creation")
+        if scope_ref != offering_key:
+            raise ValidationError("AuthorizationGrant scope does not match requested Offering")
+        if context_ref != activity_key:
+            raise ValidationError("AuthorizationGrant context does not match requested Activity")
+        if effective_from_grant > timestamp or (
+            effective_to_grant is not None and timestamp >= effective_to_grant
+        ):
+            raise ValidationError("AuthorizationGrant is outside its effective period")
 
         offering = connection.execute(
             "SELECT o.activity_id, o.state, o.effective_from, o.effective_to, p.state, a.state "
