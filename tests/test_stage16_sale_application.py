@@ -191,7 +191,7 @@ def test_rejections_leave_no_partial_sale_or_history():
     app = SaleApplication()
     grant = _grant(db, actor_id, activity_id, offering_id)
 
-    with pytest.raises(ValidationError, match="must match Offering Activity"):
+    with pytest.raises(ValidationError, match="AuthorizationGrant context does not match requested Activity"):
         _create(app, db, actor_id, _id(), offering_id, grant)
     db.execute("UPDATE offerings SET state='withdrawn' WHERE offering_id=?", (offering_id,))
     with pytest.raises(ValidationError, match="active Offering"):
@@ -254,7 +254,7 @@ def test_history_write_failure_rolls_back_sale_insert():
         "WHEN NEW.change_type='sale_state_transition' "
         "BEGIN SELECT RAISE(ABORT, 'forced history failure'); END"
     )
-    grant = _grant(actor_id, offering_id)
+    grant = _grant(db, actor_id, activity_id, offering_id)
 
     with pytest.raises(sqlite3.IntegrityError, match="forced history failure"):
         _create(SaleApplication(), db, actor_id, activity_id, offering_id, grant)
