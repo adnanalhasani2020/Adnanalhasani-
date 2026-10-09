@@ -192,6 +192,7 @@ def test_existing_database_migration_preserves_sales_invoices_and_history_on_reo
         ("0002_prevent_person_canonical_cycles",),
         ("0003_enforce_sale_offering_activity_consistency",),
         ("0004_sale_fulfilled_compatibility",),
+        ("0005_inventory_position_offering_context",),
     ]
     assert db.execute(
         "SELECT sale_id,offering_id,activity_id,state FROM sales WHERE sale_id=?",
