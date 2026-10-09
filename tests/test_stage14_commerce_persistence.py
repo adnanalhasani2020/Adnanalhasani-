@@ -219,3 +219,57 @@ def test_sale_lifecycle_state_and_history_can_be_persisted_without_semantic_equi
     assert all(rows[i][7] == rows[i + 1][6] for i in range(len(rows) - 1))
     assert rows[-1][7] == "sale-state:returned:v4"
     db.close()
+
+
+
+def test_product_retirement_preserves_offering_sale_and_sale_history_after_reopen(tmp_path):
+    path = tmp_path / "product-retirement-history.sqlite"
+    db = connect_database(path)
+    activity_id = _activity(db)
+    product_id = _product(db)
+    offering_id = _offering(db, product_id, activity_id)
+    sale_id = _id()
+    db.execute(
+        "INSERT INTO sales(sale_id,offering_id,activity_id,state,occurred_at,created_at,updated_at) "
+        "VALUES(?,?,?,?,?,?,?)",
+        (sale_id, offering_id, activity_id, "confirmed", "2026-10-08T12:00:00Z", NOW, NOW),
+    )
+    history_id = _id()
+    db.execute(
+        "INSERT INTO domain_history(domain_history_id,owner_domain,target_ref,change_type,historical_at,"
+        "actor_context_ref,prior_version_ref,current_version_ref,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
+        (history_id, "commerce", sale_id, "sale_state_transition", NOW, activity_id,
+         "sale-state:initiated:v1", "sale-state:confirmed:v2", NOW),
+    )
+
+    # Persist the lifecycle change using the existing schema; no domain/schema changes.
+    db.execute("UPDATE products SET state=?,updated_at=? WHERE product_id=?", ("retired", NOW, product_id))
+    db.commit()
+    db.close()
+
+    db = connect_database(path)
+    product = db.execute(
+        "SELECT product_id,state FROM products WHERE product_id=?", (product_id,)
+    ).fetchone()
+    offering = db.execute(
+        "SELECT offering_id,product_id,activity_id,state FROM offerings WHERE offering_id=?",
+        (offering_id,),
+    ).fetchone()
+    sale = db.execute(
+        "SELECT sale_id,offering_id,activity_id,state FROM sales WHERE sale_id=?", (sale_id,)
+    ).fetchone()
+    history = db.execute(
+        "SELECT domain_history_id,target_ref,owner_domain,change_type,actor_context_ref,"
+        "prior_version_ref,current_version_ref FROM domain_history WHERE domain_history_id=?",
+        (history_id,),
+    ).fetchone()
+
+    assert product == (product_id, "retired")
+    assert offering == (offering_id, product_id, activity_id, "active")
+    assert sale == (sale_id, offering_id, activity_id, "confirmed")
+    assert history == (
+        history_id, sale_id, "commerce", "sale_state_transition", activity_id,
+        "sale-state:initiated:v1", "sale-state:confirmed:v2",
+    )
+    assert db.execute("PRAGMA foreign_key_check").fetchall() == []
+    db.close()
