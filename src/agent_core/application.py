@@ -4,6 +4,7 @@ from uuid import UUID, uuid4
 from agent_core.domain_identity import *
 from agent_core.domain_activities import *
 from agent_core.domain_commerce import Sale, SaleState
+from agent_core.inventory_read import InventoryQuantityReader, InventoryQuantityResult
 from agent_core.shared import ValidationError
 
 
@@ -22,6 +23,39 @@ class ActivityApplication:
     def create_organization(self,name): return Organization(name)
     def add_membership(self,p,a): return Membership(p.id,a.id)
     def assign_role(self,m,role_name): return RoleAssignment(m.id,role_name)
+
+
+class InventoryApplication:
+    """Read persisted inventory quantity in the exact Offering and Activity context.
+
+    This is read-only: it does not reserve, deduct, or mutate inventory or Sale.
+    """
+
+    def __init__(self, quantity_reader=None):
+        self._quantity_reader = quantity_reader or InventoryQuantityReader()
+
+    def read_offering_quantity(
+        self, connection, offering_id, scope_key: str, *,
+        as_of: datetime | str | None = None,
+    ) -> InventoryQuantityResult:
+        try:
+            offering_key = str(UUID(str(offering_id)))
+        except (ValueError, TypeError, AttributeError) as exc:
+            raise ValidationError("Offering identifier must be a valid UUID") from exc
+
+        offering = connection.execute(
+            "SELECT activity_id FROM offerings WHERE offering_id=?",
+            (offering_key,),
+        ).fetchone()
+        if offering is None:
+            raise ValidationError("Inventory quantity read requires an existing Offering")
+
+        # Filter in SQL before resolving latest observation: records from another
+        # Offering or Activity cannot create a false quantity or ambiguity.
+        return self._quantity_reader.read_quantity(
+            connection, scope_key, as_of=as_of,
+            offering_id=offering_key, activity_id=offering[0],
+        )
 
 
 class SaleApplication:
