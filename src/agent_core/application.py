@@ -64,8 +64,8 @@ class SaleApplication:
             raise ValidationError("AuthorizationGrant subject does not match actor")
         if authorization.action != "create_sale":
             raise ValidationError("AuthorizationGrant action does not permit Sale creation")
-        if authorization.scope != activity_key:
-            raise ValidationError("AuthorizationGrant scope does not match requested Activity")
+        if authorization.scope != offering_key:
+            raise ValidationError("AuthorizationGrant scope does not match requested Offering")
 
         instant = now or datetime.now(timezone.utc)
         if instant.tzinfo is None or instant.utcoffset() is None:
