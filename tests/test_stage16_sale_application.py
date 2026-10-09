@@ -145,8 +145,9 @@ def test_authorization_requires_active_exact_actor_action_and_offering_scope():
     wrong_actor = _grant(db, actor_id, activity_id, offering_id, subject_id=_id())
     wrong_action = _grant(db, actor_id, activity_id, offering_id, action="read")
     wrong_scope = _grant(db, actor_id, activity_id, offering_id, scope=_id())
+    wrong_context = _grant(db, actor_id, activity_id, offering_id, context=_id())
     inactive = _grant(db, actor_id, activity_id, offering_id, state="suspended")
-    for grant in (wrong_actor, wrong_action, wrong_scope, inactive):
+    for grant in (wrong_actor, wrong_action, wrong_scope, wrong_context, inactive):
         with pytest.raises(ValidationError):
             _create(app, db, actor_id, activity_id, offering_id, grant)
     assert db.execute("SELECT count(*) FROM sales").fetchone()[0] == 0
@@ -258,6 +259,19 @@ def test_history_write_failure_rolls_back_sale_insert():
 
     with pytest.raises(sqlite3.IntegrityError, match="forced history failure"):
         _create(SaleApplication(), db, actor_id, activity_id, offering_id, grant)
+
+    assert db.execute("SELECT count(*) FROM sales").fetchone()[0] == 0
+    assert db.execute("SELECT count(*) FROM domain_history").fetchone()[0] == 0
+    db.close()
+
+
+
+def test_missing_persisted_grant_fails_closed():
+    db = connect_database()
+    actor_id, activity_id, _product_id, offering_id = _fixture(db)
+
+    with pytest.raises(ValidationError, match="existing persisted AuthorizationGrant"):
+        _create(SaleApplication(), db, actor_id, activity_id, offering_id, _id())
 
     assert db.execute("SELECT count(*) FROM sales").fetchone()[0] == 0
     assert db.execute("SELECT count(*) FROM domain_history").fetchone()[0] == 0
