@@ -224,7 +224,19 @@ class SaleApplication:
     def return_sale(self, connection, sale_id, actor_context_ref, authorization_grant_id, *, now=None):
         return self.transition_sale(connection, sale_id, actor_context_ref, authorization_grant_id, "return", now=now)
 
+    def get_sale_state(self, connection, sale_id) -> SaleState:
+        """Read current canonical state, including legacy completed rows with NULL lifecycle_state."""
+        sale_uuid = self._uuid(sale_id, "Sale identifier")
+        row = connection.execute(
+            "SELECT state, lifecycle_state FROM sales WHERE sale_id=?",
+            (str(sale_uuid),),
+        ).fetchone()
+        if row is None:
+            raise ValidationError("Sale does not exist")
+        return SaleState.from_persisted(row[0], row[1])
+
     def get_sale(self, connection, sale_id) -> Sale:
+        """Restore a fully verifiable Sale history; fail closed on unprovable legacy chains."""
         sale_uuid = self._uuid(sale_id, "Sale identifier")
         sale, _offering_id, _version, _ref = self._load_sale(connection, sale_uuid)
         return sale
