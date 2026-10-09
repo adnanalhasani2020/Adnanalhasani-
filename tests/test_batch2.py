@@ -28,7 +28,7 @@ def test_sale_boundaries_and_activity_context():
     assert o.id!=s.id and s.id!=inv.id and not hasattr(s,"payment_id") and not hasattr(s,"financial_transaction_id")
 def test_sale_lifecycle():
     p=Product("P"); o=Offering(p.id, uuid4()); s=Sale(o.id,Activity("A").id); s.confirm(); s.complete()
-    assert s.state==SaleState.COMPLETED
+    assert s.state==SaleState.FULFILLED
 def test_sale_completion_requires_confirmation():
     p=Product("P"); o=Offering(p.id, uuid4()); s=Sale(o.id,Activity("A").id)
     with pytest.raises(ValidationError): s.complete()
