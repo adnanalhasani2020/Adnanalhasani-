@@ -750,3 +750,46 @@ def test_sale_authorization_rejects_linked_delegation_for_other_activity():
         "SELECT state,version_no FROM sales WHERE sale_id=?", (str(sale.id),)
     ).fetchone() == ("initiated", 1)
     db.close()
+
+
+def test_create_sale_rejects_inactive_persisted_actor_without_writes():
+    db = connect_database()
+    actor, activity, _product, offering = _fixture(db)
+    app = SaleApplication()
+    grant = _grant(db, actor, activity, offering)
+    db.execute("UPDATE persons SET state='suspended' WHERE person_id=?", (actor,))
+
+    with pytest.raises(ValidationError, match="active persisted Person"):
+        _create(app, db, actor, activity, offering, grant)
+
+    assert db.execute("SELECT count(*) FROM sales").fetchone()[0] == 0
+    assert db.execute(
+        "SELECT count(*) FROM domain_history WHERE owner_domain='commerce' AND change_type='sale_state_transition'"
+    ).fetchone()[0] == 0
+    db.close()
+
+
+def test_sale_transition_rechecks_persisted_actor_is_active():
+    db = connect_database()
+    app, actor, activity, _offering, sale, _create_grant = _sale_and_create_grant(db)
+    grant = _transition_grant(db, actor, activity, sale, "confirm")
+    before_sale = db.execute(
+        "SELECT state,version_no FROM sales WHERE sale_id=?", (str(sale.id),)
+    ).fetchone()
+    before_history = db.execute(
+        "SELECT current_version_ref,change_payload_ref FROM domain_history WHERE target_ref=? ORDER BY rowid",
+        (str(sale.id),),
+    ).fetchall()
+    db.execute("UPDATE persons SET state='suspended' WHERE person_id=?", (actor,))
+
+    with pytest.raises(ValidationError, match="active persisted Person"):
+        app.confirm_sale(db, sale.id, actor, grant, now=NOW)
+
+    assert db.execute(
+        "SELECT state,version_no FROM sales WHERE sale_id=?", (str(sale.id),)
+    ).fetchone() == before_sale
+    assert db.execute(
+        "SELECT current_version_ref,change_payload_ref FROM domain_history WHERE target_ref=? ORDER BY rowid",
+        (str(sale.id),),
+    ).fetchall() == before_history
+    db.close()
