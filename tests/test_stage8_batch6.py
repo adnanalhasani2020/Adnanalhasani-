@@ -203,6 +203,7 @@ def test_reverse_implementation_inventory_has_traceability_owner():
         "financial_balance_read.py": "read-only derived Balance from recognized posted Ledger Entries, scoped by Financial Account, currency, and as-of instant under SPEC-0009",
         "financial_account_application.py": "persisted Financial Account active/closed lifecycle under SPEC-0009, with authorization and atomic Domain History under SPEC-0017 and SPEC-0021",
         "instrument_application.py": "internal-only SPEC-0016 persistence primitive; not registered in runtime because instrument-specific authorization action/scope contract is unspecified",
+        "durable_operation_application.py": "internal-only durable operation identity and duplicate request registry under SPEC-0019 and SPEC-0023; does not execute or finalize domain effects",
         "persistence.py": "Stage 12A persistence/migration boundary; GAP-0005 durable operation identity and Stage 12A financial recognition/ledger persistence",
         "runtime.py": "runtime composition over mapped domain boundaries",
         "shared.py": "shared validation/state support for domain SPECs",
