@@ -19,7 +19,7 @@ def seed_device(db, state="active", version=1):
     db.execute(
         "INSERT INTO devices(device_id,device_fingerprint_ref,state,created_at,updated_at,version_no) "
         "VALUES(?,?,?,?,?,?)",
-        (device_id, "fingerprint:test-device", state, STAMP, STAMP, version),
+        (device_id, f"fingerprint:{device_id}", state, STAMP, STAMP, version),
     )
     db.commit()
     return device_id
