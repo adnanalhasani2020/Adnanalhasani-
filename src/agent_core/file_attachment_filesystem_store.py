@@ -85,7 +85,15 @@ class LocalFilesystemContentStore:
                     pass
                 raise
 
-            os.replace(temporary_name, final_name, src_dir_fd=root_fd, dst_dir_fd=root_fd)
+            try:
+                os.replace(temporary_name, final_name, src_dir_fd=root_fd, dst_dir_fd=root_fd)
+            except BaseException:
+                # A failed publication leaves no completed object under its reference.
+                try:
+                    os.unlink(temporary_name, dir_fd=root_fd)
+                except FileNotFoundError:
+                    pass
+                raise
             self._sync_directory(root_fd)
             return storage_ref
         finally:
