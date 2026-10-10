@@ -1,7 +1,7 @@
 """Persisted Commerce Offering lifecycle using the existing domain and schema."""
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from agent_core.domain_inventory import Offering, OfferingState
 from agent_core.shared import ValidationError
@@ -95,20 +95,20 @@ class OfferingApplication:
         offering = Offering(
             product_id=UUID(product_key), activity_id=UUID(activity_key),
             service_id=UUID(service_key) if service_key is not None else None,
-            id=UUID(key) if key is not None else __import__("uuid").uuid4(),
+            id=UUID(key) if key is not None else uuid4(),
             state=OfferingState.DRAFT,
             effective_from=self._domain_instant(starts, "effective_from"),
             effective_to=self._domain_instant(ends, "effective_to", optional=True),
         )
         with connection:
-            for table, column, ref in (
-                ("products", "product_id", product_key),
-                ("activities", "activity_id", activity_key),
+            for table, column, ref, label in (
+                ("products", "product_id", product_key, "Product"),
+                ("activities", "activity_id", activity_key, "Activity"),
             ):
                 if connection.execute(
                     f"SELECT 1 FROM {table} WHERE {column}=?", (ref,)
                 ).fetchone() is None:
-                    raise ValidationError(f"Offering requires an existing {table[:-1].capitalize()}")
+                    raise ValidationError(f"Offering requires an existing {label}")
             if service_key is not None and connection.execute(
                 "SELECT 1 FROM services WHERE service_id=?", (service_key,)
             ).fetchone() is None:
