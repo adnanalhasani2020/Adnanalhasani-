@@ -650,3 +650,103 @@ def test_sale_transition_compare_and_swap_miss_rolls_back_without_history():
     ).fetchall() == before_history
     assert app.get_sale(db, sale.id).history == (SaleState.INITIATED,)
     db.close()
+
+
+def _delegated_transition_grant(db, actor, activity, sale, *, delegation_state="active",
+                                delegation_starts="2026-10-01T00:00:00Z",
+                                delegation_ends=None, delegation_context=None):
+    delegator = _id()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,?,?,?)",
+        (delegator, "active", STAMP, STAMP),
+    )
+    delegation_id = _id()
+    db.execute(
+        "INSERT INTO delegations(delegation_id,delegator_person_id,subject_person_id,context_ref,state,"
+        "effective_from,effective_to,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
+        (delegation_id, delegator, actor, delegation_context or activity, delegation_state,
+         delegation_starts, delegation_ends, STAMP, STAMP),
+    )
+    grant_id = _id()
+    db.execute(
+        "INSERT INTO authorization_grants(authorization_grant_id,subject_person_id,agent_id,action_code,"
+        "scope_ref,context_ref,delegation_id,state,effective_from,effective_to,created_at,updated_at) "
+        "VALUES(?,?,NULL,'confirm_sale',?,?,?,'active','2026-10-01T00:00:00Z',NULL,?,?)",
+        (grant_id, actor, str(sale.id), activity, delegation_id, STAMP, STAMP),
+    )
+    return grant_id
+
+
+@pytest.mark.parametrize("delegation_state", ["revoked", "suspended", "expired"])
+def test_sale_authorization_rejects_inactive_linked_delegation(delegation_state):
+    db = connect_database()
+    app, actor, activity, _offering, sale, _create_grant = _sale_and_create_grant(db)
+    grant = _delegated_transition_grant(
+        db, actor, activity, sale, delegation_state=delegation_state
+    )
+
+    with pytest.raises(ValidationError, match="delegation must be ACTIVE"):
+        app.confirm_sale(db, sale.id, actor, grant, now=NOW)
+
+    assert db.execute(
+        "SELECT state,version_no FROM sales WHERE sale_id=?", (str(sale.id),)
+    ).fetchone() == ("initiated", 1)
+    assert db.execute(
+        "SELECT count(*) FROM domain_history WHERE target_ref=?", (str(sale.id),)
+    ).fetchone()[0] == 1
+    db.close()
+
+
+def test_sale_authorization_rejects_expired_linked_delegation():
+    db = connect_database()
+    app, actor, activity, _offering, sale, _create_grant = _sale_and_create_grant(db)
+    grant = _delegated_transition_grant(
+        db, actor, activity, sale,
+        delegation_starts="2026-10-01T00:00:00Z",
+        delegation_ends="2026-10-09T12:00:00Z",
+    )
+
+    with pytest.raises(ValidationError, match="Delegation is outside its effective period"):
+        app.confirm_sale(db, sale.id, actor, grant, now=NOW)
+
+    assert db.execute(
+        "SELECT state,version_no FROM sales WHERE sale_id=?", (str(sale.id),)
+    ).fetchone() == ("initiated", 1)
+    assert db.execute(
+        "SELECT count(*) FROM domain_history WHERE target_ref=?", (str(sale.id),)
+    ).fetchone()[0] == 1
+    db.close()
+
+
+def test_sale_authorization_accepts_active_effective_context_matched_delegation():
+    db = connect_database()
+    app, actor, activity, _offering, sale, _create_grant = _sale_and_create_grant(db)
+    grant = _delegated_transition_grant(
+        db, actor, activity, sale,
+        delegation_starts="2026-10-09T13:00:00+02:00",
+        delegation_ends="2026-10-09T15:00:00+02:00",
+    )
+
+    result = app.confirm_sale(db, sale.id, actor, grant, now=NOW)
+
+    assert result.state is SaleState.CONFIRMED
+    assert db.execute(
+        "SELECT state,version_no FROM sales WHERE sale_id=?", (str(sale.id),)
+    ).fetchone() == ("confirmed", 2)
+    db.close()
+
+
+def test_sale_authorization_rejects_linked_delegation_for_other_activity():
+    db = connect_database()
+    app, actor, activity, _offering, sale, _create_grant = _sale_and_create_grant(db)
+    grant = _delegated_transition_grant(
+        db, actor, activity, sale, delegation_context=_id()
+    )
+
+    with pytest.raises(ValidationError, match="delegation does not match actor and Activity"):
+        app.confirm_sale(db, sale.id, actor, grant, now=NOW)
+
+    assert db.execute(
+        "SELECT state,version_no FROM sales WHERE sale_id=?", (str(sale.id),)
+    ).fetchone() == ("initiated", 1)
+    db.close()
