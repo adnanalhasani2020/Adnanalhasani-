@@ -191,6 +191,36 @@ def test_fulfill_requires_confirmed_and_return_requires_fulfilled():
     db.close()
 
 
+@pytest.mark.parametrize(
+    ("column", "value", "message"),
+    [
+        ("actor_context_ref", "", "lacks actor context"),
+        ("current_version_ref", "foreign-sale:v1", "history chain is inconsistent"),
+    ],
+)
+def test_transition_rejects_incomplete_or_foreign_history_before_mutating_sale(column, value, message):
+    db = connect_database()
+    app, actor, activity, _offering, sale, _create_grant = _sale_and_create_grant(db)
+    grant = _transition_grant(db, actor, activity, sale, "confirm")
+    db.execute(
+        f"UPDATE domain_history SET {column}=? WHERE target_ref=?",
+        (value, str(sale.id)),
+    )
+    db.commit()
+
+    with pytest.raises(ValidationError, match=message):
+        app.confirm_sale(db, sale.id, actor, grant, now=NOW)
+
+    assert db.execute(
+        "SELECT state,lifecycle_state,version_no FROM sales WHERE sale_id=?",
+        (str(sale.id),),
+    ).fetchone() == ("initiated", "initiated", 1)
+    assert db.execute(
+        "SELECT count(*) FROM domain_history WHERE target_ref=?", (str(sale.id),)
+    ).fetchone()[0] == 1
+    db.close()
+
+
 def test_history_failure_rolls_back_state_version_and_history():
     db = connect_database()
     app, actor, activity, _offering, sale, _create_grant = _sale_and_create_grant(db)
