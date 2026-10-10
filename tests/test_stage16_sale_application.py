@@ -490,3 +490,83 @@ def test_integrated_sale_period_boundary_and_offering_inventory_context():
         (str(sale.id),),
     ).fetchone() == ("initiated", 1)
     db.close()
+
+
+
+def test_create_sale_history_write_failure_rolls_back_sale_and_history():
+    db = connect_database()
+    actor, activity, _product, offering = _fixture(db)
+    grant = _grant(db, actor, activity, offering)
+    db.commit()
+    db.execute(
+        "CREATE TRIGGER reject_initial_sale_history BEFORE INSERT ON domain_history "
+        "WHEN NEW.owner_domain='commerce' AND NEW.change_payload_ref='state:initiated' "
+        "BEGIN SELECT RAISE(ABORT, 'forced initial history failure'); END"
+    )
+    with pytest.raises(sqlite3.IntegrityError, match="forced initial history failure"):
+        _create(SaleApplication(), db, actor, activity, offering, grant)
+    assert db.execute("SELECT count(*) FROM sales").fetchone()[0] == 0
+    assert db.execute(
+        "SELECT count(*) FROM domain_history WHERE owner_domain='commerce'"
+    ).fetchone()[0] == 0
+    db.close()
+
+
+def test_rejected_repeated_sale_transition_preserves_state_version_and_history():
+    db = connect_database()
+    app, actor, activity, _offering, sale, _create_grant = _sale_and_create_grant(db)
+    cancel_grant = _transition_grant(db, actor, activity, sale, "cancel")
+    app.cancel_sale(db, sale.id, actor, cancel_grant, now=NOW)
+    before_sale = db.execute(
+        "SELECT state, lifecycle_state, version_no FROM sales WHERE sale_id=?",
+        (str(sale.id),),
+    ).fetchone()
+    before_history = db.execute(
+        "SELECT domain_history_id, prior_version_ref, current_version_ref, change_payload_ref "
+        "FROM domain_history WHERE target_ref=? ORDER BY rowid",
+        (str(sale.id),),
+    ).fetchall()
+    with pytest.raises(ValidationError, match="Invalid Sale transition"):
+        app.cancel_sale(db, sale.id, actor, cancel_grant, now=NOW)
+    assert db.execute(
+        "SELECT state, lifecycle_state, version_no FROM sales WHERE sale_id=?",
+        (str(sale.id),),
+    ).fetchone() == before_sale
+    assert db.execute(
+        "SELECT domain_history_id, prior_version_ref, current_version_ref, change_payload_ref "
+        "FROM domain_history WHERE target_ref=? ORDER BY rowid",
+        (str(sale.id),),
+    ).fetchall() == before_history
+    db.close()
+
+
+def test_inventory_read_with_only_wrong_offering_activity_context_is_read_only():
+    db = connect_database()
+    _actor, activity, _product, offering = _fixture(db)
+    _other_actor, other_activity, _other_product, other_offering = _fixture(db)
+    stamp = STAMP
+    db.execute(
+        "INSERT INTO inventory_positions(inventory_position_id,activity_id,offering_id,"
+        "scope_key,state,quantity_minor,observed_at,effective_from,created_at,updated_at) "
+        "VALUES(?,?,?,?,?,?,?,?,?,?)",
+        (_id(), other_activity, other_offering, "warehouse-A", "effective", 123,
+         "2026-10-09T11:00:00Z", "2026-10-09T00:00:00Z", stamp, stamp),
+    )
+    before_positions = db.execute(
+        "SELECT inventory_position_id, activity_id, offering_id, scope_key, state, quantity_minor, "
+        "observed_at, effective_from, effective_to, version_no FROM inventory_positions ORDER BY rowid"
+    ).fetchall()
+    before_sales = db.execute("SELECT count(*) FROM sales").fetchone()[0]
+    before_history = db.execute("SELECT count(*) FROM domain_history").fetchone()[0]
+    result = InventoryApplication().read_offering_quantity(
+        db, offering, "warehouse-A", as_of=NOW
+    )
+    assert result.status.value == "no_record"
+    assert result.quantity_minor is None
+    assert db.execute(
+        "SELECT inventory_position_id, activity_id, offering_id, scope_key, state, quantity_minor, "
+        "observed_at, effective_from, effective_to, version_no FROM inventory_positions ORDER BY rowid"
+    ).fetchall() == before_positions
+    assert db.execute("SELECT count(*) FROM sales").fetchone()[0] == before_sales
+    assert db.execute("SELECT count(*) FROM domain_history").fetchone()[0] == before_history
+    db.close()
