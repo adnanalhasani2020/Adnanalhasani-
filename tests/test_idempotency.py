@@ -87,3 +87,23 @@ def test_concurrent_same_request_commits_one_effect(tmp_path):
     assert verify.execute("SELECT count(*) FROM effects").fetchone()[0] == 1
     assert verify.execute("SELECT count(*) FROM idempotency_receipts").fetchone()[0] == 1
     verify.close()
+def test_non_json_result_rolls_back_operation_effect_and_receipt():
+    db = connection()
+    def operation(c):
+        c.execute("INSERT INTO effects VALUES (?)", ("should-rollback",))
+        return object()
+    with pytest.raises(ValueError, match="result must be valid JSON data"):
+        execute_idempotently(db, "op", "key", {"v": 1}, operation)
+    assert db.execute("SELECT count(*) FROM effects").fetchone()[0] == 0
+    assert db.execute("SELECT count(*) FROM idempotency_receipts").fetchone()[0] == 0
+    db.close()
+
+
+def test_operation_callback_cannot_reuse_connection_with_open_transaction():
+    db = connection()
+    db.execute("INSERT INTO effects VALUES (?)", ("caller-transaction",))
+    with pytest.raises(Exception, match="no open transaction"):
+        execute_idempotently(db, "op", "key", {"v": 1}, lambda c: {"ok": True})
+    db.rollback()
+    assert db.execute("SELECT count(*) FROM effects").fetchone()[0] == 0
+    db.close()
