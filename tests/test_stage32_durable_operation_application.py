@@ -133,3 +133,40 @@ def test_concurrent_reservations_share_one_database_identity(tmp_path):
         ("commerce.sale", "concurrent-001"),
     ).fetchone()[0] == 1
     db.close()
+
+
+
+@pytest.mark.parametrize(
+    ("changed", "message"),
+    [
+        ({"operation_kind": "payment.request"}, "different operation kind"),
+        ({"actor_context_ref": "other-context"}, "different actor context"),
+    ],
+)
+def test_same_durable_key_and_fingerprint_rejects_kind_or_actor_context_rebinding(changed, message):
+    db = connect_database()
+    app = DurableOperationApplication()
+    app.reserve(
+        db, namespace="payments", operation_id="stable-key",
+        operation_kind="payment.create", actor_context_ref="context-a",
+        request_fingerprint="sha256:stable-payload", now=STAMP,
+    )
+    request = {
+        "namespace": "payments",
+        "operation_id": "stable-key",
+        "operation_kind": "payment.create",
+        "actor_context_ref": "context-a",
+        "request_fingerprint": "sha256:stable-payload",
+        "now": STAMP,
+    }
+    request.update(changed)
+    with pytest.raises(ValidationError, match=message):
+        app.reserve(db, **request)
+    stored = app.get(db, namespace="payments", operation_id="stable-key")
+    assert stored.operation_kind == "payment.create"
+    assert stored.actor_context_ref == "context-a"
+    assert stored.request_fingerprint == "sha256:stable-payload"
+    assert db.execute(
+        "SELECT COUNT(*) FROM durable_operation_records WHERE namespace='payments' AND operation_id='stable-key'"
+    ).fetchone()[0] == 1
+    db.close()

@@ -88,6 +88,14 @@ class DurableOperationApplication:
                         raise ValidationError(
                             "Durable operation key already exists with a different request fingerprint"
                         )
+                    if current.operation_kind != operation_kind:
+                        raise ValidationError(
+                            "Durable operation key already exists with a different operation kind"
+                        )
+                    if current.actor_context_ref != actor_context_ref:
+                        raise ValidationError(
+                            "Durable operation key already exists with a different actor context"
+                        )
                     return current
                 record_id = str(uuid4())
                 connection.execute(
@@ -100,7 +108,12 @@ class DurableOperationApplication:
         except sqlite3.IntegrityError as exc:
             # A concurrent reservation may win the UNIQUE(namespace, operation_id) race.
             current = self._find(connection, namespace, operation_id)
-            if current is None or current.request_fingerprint != request_fingerprint:
+            if (
+                current is None
+                or current.request_fingerprint != request_fingerprint
+                or current.operation_kind != operation_kind
+                or current.actor_context_ref != actor_context_ref
+            ):
                 raise ValidationError("Durable operation reservation collided with a different request") from exc
             return current
         return self._find(connection, namespace, operation_id)
