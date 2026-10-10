@@ -16,7 +16,7 @@ from agent_core.file_attachment_content_application import ContentStore
 
 
 _REFERENCE_PREFIX = "localfs://"
-_REFERENCE_PATTERN = re.compile(r"localfs://([0-9a-f]{32})\\Z")
+_REFERENCE_PATTERN = re.compile(r"localfs://([0-9a-f]{32})")
 
 
 class LocalFilesystemContentStore:
