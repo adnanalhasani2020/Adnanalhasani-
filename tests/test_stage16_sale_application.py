@@ -368,3 +368,36 @@ def test_malformed_or_timezone_naive_grant_bounds_fail_closed_without_mutation(s
         "SELECT count(*) FROM domain_history WHERE target_ref=?", (str(sale.id),)
     ).fetchone()[0] == 1
     db.close()
+
+
+def test_offering_effective_period_compares_instants_across_timezone_offsets():
+    db = connect_database()
+    actor, activity, _product, offering = _fixture(db)
+    # 13:00 +02:00 is 11:00 UTC; 15:00 +02:00 is 13:00 UTC.
+    db.execute(
+        "UPDATE offerings SET effective_from=?, effective_to=? WHERE offering_id=?",
+        ("2026-10-09T13:00:00+02:00", "2026-10-09T15:00:00+02:00", offering),
+    )
+    grant = _grant(db, actor, activity, offering)
+    sale = _create(SaleApplication(), db, actor, activity, offering, grant)
+    assert sale.state is SaleState.INITIATED
+    assert db.execute(
+        "SELECT count(*) FROM sales WHERE sale_id=?", (str(sale.id),)
+    ).fetchone()[0] == 1
+    db.close()
+
+
+def test_offering_effective_period_rejects_expiry_at_same_instant_with_offset():
+    db = connect_database()
+    actor, activity, _product, offering = _fixture(db)
+    # 14:00 +02:00 is exactly 12:00 UTC, the operation instant; expiry is exclusive.
+    db.execute(
+        "UPDATE offerings SET effective_from=?, effective_to=? WHERE offering_id=?",
+        ("2026-10-09T10:00:00+02:00", "2026-10-09T14:00:00+02:00", offering),
+    )
+    grant = _grant(db, actor, activity, offering)
+    with pytest.raises(ValidationError, match="Offering is outside its effective period"):
+        _create(SaleApplication(), db, actor, activity, offering, grant)
+    assert db.execute("SELECT count(*) FROM sales").fetchone()[0] == 0
+    assert db.execute("SELECT count(*) FROM domain_history").fetchone()[0] == 0
+    db.close()
