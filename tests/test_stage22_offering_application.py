@@ -45,7 +45,7 @@ def test_offering_create_restore_and_lifecycle_survive_reopen(tmp_path):
     app = OfferingApplication()
     created = app.create_offering(
         db, product_id=product_id, activity_id=activity_id, service_id=service_id,
-        effective_from=NOW, effective_to="2026-10-20T12:00:00+00:00",
+        effective_from=NOW, actor_context_ref="internal-test-context", effective_to="2026-10-20T12:00:00+00:00",
         now=datetime(2026, 10, 10, 12, tzinfo=timezone.utc),
     )
     assert created.offering.state is OfferingState.DRAFT
@@ -62,15 +62,28 @@ def test_offering_create_restore_and_lifecycle_survive_reopen(tmp_path):
     assert restored.offering.effective_to == datetime(2026, 10, 20, 12, tzinfo=timezone.utc)
     assert restored.version_no == 1
 
-    active = app.transition_offering(db, offering_id, "activate", expected_version=1, now=NOW)
+    active = app.transition_offering(db, offering_id, "activate", expected_version=1, actor_context_ref="internal-test-context", now=NOW)
     assert active.offering.state is OfferingState.ACTIVE
     assert active.version_no == 2
     ended = app.transition_offering(
-        db, offering_id, "end", expected_version=2, now="2026-10-20T12:00:00Z"
+        db, offering_id, "end", expected_version=2, actor_context_ref="internal-test-context", now="2026-10-20T12:00:00Z"
     )
     assert ended.offering.state is OfferingState.ENDED
     assert ended.version_no == 3
     assert app.get_offering(db, offering_id).offering.state is OfferingState.ENDED
+    history = db.execute(
+        "SELECT prior_version_ref,current_version_ref,change_payload_ref,actor_context_ref "
+        "FROM domain_history WHERE owner_domain='commerce' AND target_ref=? "
+        "ORDER BY current_version_ref",
+        (offering_id,),
+    ).fetchall()
+    assert history == [
+        (None, f"offering:{offering_id}:v1", "state:draft", "internal-test-context"),
+        (f"offering:{offering_id}:v1", f"offering:{offering_id}:v2",
+         "action:activate;state:active", "internal-test-context"),
+        (f"offering:{offering_id}:v2", f"offering:{offering_id}:v3",
+         "action:end;state:ended", "internal-test-context"),
+    ]
     db.close()
 
 
@@ -78,8 +91,9 @@ def test_offering_requires_existing_references_and_does_not_write_on_failure():
     db = connect_database()
     app = OfferingApplication()
     with pytest.raises(ValidationError, match="existing Product"):
-        app.create_offering(db, product_id=uid(), activity_id=uid(), effective_from=NOW, now=NOW)
+        app.create_offering(db, product_id=uid(), activity_id=uid(), effective_from=NOW, actor_context_ref="internal-test-context", now=NOW)
     assert db.execute("SELECT COUNT(*) FROM offerings").fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM domain_history WHERE owner_domain='commerce'").fetchone()[0] == 0
     db.close()
 
 
@@ -90,12 +104,12 @@ def test_offering_rejects_invalid_time_and_reversed_period():
     with pytest.raises(ValidationError, match="timezone-aware"):
         app.create_offering(
             db, product_id=product_id, activity_id=activity_id,
-            effective_from="2026-10-10T12:00:00", now=NOW,
+            effective_from="2026-10-10T12:00:00", actor_context_ref="internal-test-context", now=NOW,
         )
     with pytest.raises(ValidationError, match="cannot precede"):
         app.create_offering(
             db, product_id=product_id, activity_id=activity_id,
-            effective_from="2026-10-20T12:00:00Z",
+            effective_from="2026-10-20T12:00:00Z", actor_context_ref="internal-test-context",
             effective_to="2026-10-10T12:00:00Z", now=NOW,
         )
     assert db.execute("SELECT COUNT(*) FROM offerings").fetchone()[0] == 0
@@ -107,14 +121,14 @@ def test_offering_rejects_invalid_transition_and_stale_version_without_mutation(
     activity_id, product_id, _ = setup_refs(db)
     app = OfferingApplication()
     created = app.create_offering(
-        db, product_id=product_id, activity_id=activity_id, effective_from=NOW, now=NOW
+        db, product_id=product_id, activity_id=activity_id, effective_from=NOW, actor_context_ref="internal-test-context", now=NOW
     )
     offering_id = str(created.offering.id)
     with pytest.raises(ValidationError, match="Invalid Offering transition"):
-        app.transition_offering(db, offering_id, "end", expected_version=1, now=NOW)
-    active = app.transition_offering(db, offering_id, "activate", expected_version=1, now=NOW)
+        app.transition_offering(db, offering_id, "end", expected_version=1, actor_context_ref="internal-test-context", now=NOW)
+    active = app.transition_offering(db, offering_id, "activate", expected_version=1, actor_context_ref="internal-test-context", now=NOW)
     with pytest.raises(ValidationError, match="version conflict"):
-        app.transition_offering(db, offering_id, "withdraw", expected_version=1, now=NOW)
+        app.transition_offering(db, offering_id, "withdraw", expected_version=1, actor_context_ref="internal-test-context", now=NOW)
     current = app.get_offering(db, offering_id)
     assert current.offering.state is OfferingState.ACTIVE
     assert current.version_no == 2
@@ -125,10 +139,65 @@ def test_offering_does_not_create_inventory_or_availability():
     db = connect_database()
     activity_id, product_id, _ = setup_refs(db)
     OfferingApplication().create_offering(
-        db, product_id=product_id, activity_id=activity_id, effective_from=NOW, now=NOW
+        db, product_id=product_id, activity_id=activity_id, effective_from=NOW, actor_context_ref="internal-test-context", now=NOW
     )
     assert db.execute("SELECT COUNT(*) FROM offerings").fetchone()[0] == 1
     assert db.execute("SELECT COUNT(*) FROM inventory_positions").fetchone()[0] == 0
     tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     assert "availability" not in tables
+    db.close()
+
+
+
+def test_offering_history_failure_rolls_back_create_and_transition():
+    import sqlite3
+
+    db = connect_database()
+    activity_id, product_id, _ = setup_refs(db)
+    app = OfferingApplication()
+    db.execute(
+        "CREATE TRIGGER reject_offering_history BEFORE INSERT ON domain_history "
+        "WHEN NEW.owner_domain='commerce' AND NEW.change_type='offering_lifecycle' "
+        "BEGIN SELECT RAISE(ABORT, 'offering history unavailable'); END"
+    )
+    db.commit()
+    with pytest.raises(sqlite3.IntegrityError, match="offering history unavailable"):
+        app.create_offering(
+            db, product_id=product_id, activity_id=activity_id, effective_from=NOW,
+            actor_context_ref="internal-test-context", now=NOW,
+        )
+    assert db.execute("SELECT COUNT(*) FROM offerings").fetchone()[0] == 0
+
+    db.execute("DROP TRIGGER reject_offering_history")
+    created = app.create_offering(
+        db, product_id=product_id, activity_id=activity_id, effective_from=NOW,
+        actor_context_ref="internal-test-context", now=NOW,
+    )
+    db.execute(
+        "CREATE TRIGGER reject_offering_history BEFORE INSERT ON domain_history "
+        "WHEN NEW.owner_domain='commerce' AND NEW.change_type='offering_lifecycle' "
+        "BEGIN SELECT RAISE(ABORT, 'offering history unavailable'); END"
+    )
+    db.commit()
+    with pytest.raises(sqlite3.IntegrityError, match="offering history unavailable"):
+        app.transition_offering(
+            db, created.offering.id, "activate", expected_version=1,
+            actor_context_ref="internal-test-context", now=NOW,
+        )
+    current = app.get_offering(db, created.offering.id)
+    assert current.offering.state is OfferingState.DRAFT
+    assert current.version_no == 1
+    db.close()
+
+
+def test_offering_history_requires_non_empty_actor_context():
+    db = connect_database()
+    activity_id, product_id, _ = setup_refs(db)
+    app = OfferingApplication()
+    with pytest.raises(ValidationError, match="actor_context_ref"):
+        app.create_offering(
+            db, product_id=product_id, activity_id=activity_id, effective_from=NOW,
+            actor_context_ref=" ", now=NOW,
+        )
+    assert db.execute("SELECT COUNT(*) FROM offerings").fetchone()[0] == 0
     db.close()
