@@ -105,13 +105,16 @@ class SaleApplication:
         grant_key = str(self._uuid(grant_id, "AuthorizationGrant identifier"))
         row = connection.execute(
             "SELECT subject_person_id, agent_id, action_code, scope_ref, context_ref, "
-            "state, effective_from, effective_to FROM authorization_grants "
+            "delegation_id, state, effective_from, effective_to FROM authorization_grants "
             "WHERE authorization_grant_id=?",
             (grant_key,),
         ).fetchone()
         if row is None:
             raise ValidationError("A persisted AuthorizationGrant is required")
-        subject, agent_id, action_code, scope_ref, context_ref, state, starts, ends = row
+        (
+            subject, agent_id, action_code, scope_ref, context_ref,
+            delegation_id, state, starts, ends,
+        ) = row
         if state != "active":
             raise ValidationError("AuthorizationGrant must be ACTIVE")
         if subject != str(actor_id) or agent_id is not None:
@@ -129,6 +132,30 @@ class SaleApplication:
             ends_instant is not None and operation_instant >= ends_instant
         ):
             raise ValidationError("AuthorizationGrant is outside its effective period")
+        if delegation_id is not None:
+            delegation = connection.execute(
+                "SELECT subject_person_id, context_ref, state, effective_from, effective_to "
+                "FROM delegations WHERE delegation_id=?",
+                (delegation_id,),
+            ).fetchone()
+            if delegation is None:
+                raise ValidationError("AuthorizationGrant delegation does not exist")
+            delegated_subject, delegation_context, delegation_state, delegation_starts, delegation_ends = delegation
+            if delegated_subject != str(actor_id) or delegation_context != str(activity_id):
+                raise ValidationError("AuthorizationGrant delegation does not match actor and Activity")
+            if delegation_state != "active":
+                raise ValidationError("AuthorizationGrant delegation must be ACTIVE")
+            delegation_start_instant = self._grant_instant(
+                delegation_starts, "effective_from", owner="Delegation"
+            )
+            delegation_end_instant = (
+                self._grant_instant(delegation_ends, "effective_to", owner="Delegation")
+                if delegation_ends is not None else None
+            )
+            if delegation_start_instant > operation_instant or (
+                delegation_end_instant is not None and operation_instant >= delegation_end_instant
+            ):
+                raise ValidationError("Delegation is outside its effective period")
 
     def _load_sale(self, connection, sale_id):
         row = connection.execute(
