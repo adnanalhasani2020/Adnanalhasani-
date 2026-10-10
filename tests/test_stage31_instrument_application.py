@@ -46,8 +46,52 @@ def test_instrument_lifecycle_persists_versions_and_redemption_history_after_reo
         "SELECT COUNT(*) FROM domain_history WHERE owner_domain='instrument' AND target_ref=?",
         (instrument_id,),
     ).fetchone()[0] == 3
+    usages = app.list_instrument_usages(db, instrument_id)
+    assert len(usages) == 1
+    assert usages[0].instrument_id == instrument.instrument_id
+    assert usages[0].action_ref == "opaque-operation-ref"
+    assert usages[0].context_ref == "opaque-context-ref"
+    assert usages[0].state == "recorded"
+    assert usages[0].occurred_at == STAMP
     db.close()
 
+
+
+def test_instrument_usage_reader_is_scoped_and_rejects_unknown_instrument():
+    db = connect_database()
+    app = InstrumentApplication()
+    first = app.create_instrument(
+        db, instrument_id=uid(), instrument_type="unspecified",
+        issuer_ref="issuer-ref", canonical_identifier="instrument-reader-001",
+        actor_context_ref="internal-context", now=STAMP,
+    )
+    second = app.create_instrument(
+        db, instrument_id=uid(), instrument_type="unspecified",
+        issuer_ref="issuer-ref", canonical_identifier="instrument-reader-002",
+        actor_context_ref="internal-context", now=STAMP,
+    )
+    empty = app.create_instrument(
+        db, instrument_id=uid(), instrument_type="unspecified",
+        issuer_ref="issuer-ref", canonical_identifier="instrument-reader-empty",
+        actor_context_ref="internal-context", now=STAMP,
+    )
+    for instrument, action_ref in ((first, "first-op"), (second, "second-op")):
+        app.transition_instrument(
+            db, instrument.instrument_id, "activate", expected_version=1,
+            actor_context_ref="internal-context", now=STAMP,
+        )
+        app.transition_instrument(
+            db, instrument.instrument_id, "redeem", expected_version=2,
+            actor_context_ref="internal-context", action_ref=action_ref,
+            now=STAMP,
+        )
+
+    assert [item.action_ref for item in app.list_instrument_usages(db, first.instrument_id)] == ["first-op"]
+    assert [item.action_ref for item in app.list_instrument_usages(db, second.instrument_id)] == ["second-op"]
+    assert app.list_instrument_usages(db, empty.instrument_id) == ()
+    with pytest.raises(ValidationError, match="does not exist"):
+        app.list_instrument_usages(db, uid())
+    db.close()
 
 def test_instrument_rejects_stale_versions_invalid_transitions_and_offline_writes():
     db = connect_database()

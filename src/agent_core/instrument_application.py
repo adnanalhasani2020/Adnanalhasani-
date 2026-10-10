@@ -24,8 +24,20 @@ class InstrumentRecord:
     version_no: int
 
 
+@dataclass(frozen=True)
+class InstrumentUsageRecord:
+    instrument_usage_id: UUID
+    instrument_id: UUID
+    action_ref: str
+    context_ref: str | None
+    state: str
+    occurred_at: str
+    created_at: str
+    updated_at: str
+
+
 class InstrumentApplication:
-    """Persist Instrument state and usage history without inventing value rules."""
+    """Persist Instrument state and expose its recorded usage history."""
 
     _TRANSITIONS = {
         "activate": (("issued",), "active"),
@@ -98,6 +110,38 @@ class InstrumentApplication:
 
     def get_instrument(self, connection, instrument_id):
         return self._load(connection, instrument_id)
+
+    def list_instrument_usages(self, connection, instrument_id) -> tuple[InstrumentUsageRecord, ...]:
+        """Return persisted usage records for one existing Instrument, oldest first.
+
+        The method is read-only and deliberately returns only Communication-neutral
+        operation/context references already stored by the Instrument owner. It does
+        not interpret those references or infer any Sale, Payment, or financial effect.
+        """
+        key = str(self._uuid(instrument_id, "Instrument identifier"))
+        self._load(connection, key)
+        rows = connection.execute(
+            "SELECT instrument_usage_id,instrument_id,action_ref,context_ref,state,"
+            "occurred_at,created_at,updated_at FROM instrument_usages "
+            "WHERE instrument_id=? ORDER BY occurred_at,created_at,instrument_usage_id",
+            (key,),
+        ).fetchall()
+        return tuple(
+            InstrumentUsageRecord(
+                instrument_usage_id=UUID(usage_id),
+                instrument_id=UUID(usage_instrument_id),
+                action_ref=action_ref,
+                context_ref=context_ref,
+                state=state,
+                occurred_at=occurred_at,
+                created_at=created_at,
+                updated_at=updated_at,
+            )
+            for (
+                usage_id, usage_instrument_id, action_ref, context_ref, state,
+                occurred_at, created_at, updated_at,
+            ) in rows
+        )
 
     def transition_instrument(
         self, connection, instrument_id, action, *, expected_version,
