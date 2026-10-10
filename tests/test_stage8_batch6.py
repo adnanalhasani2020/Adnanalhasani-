@@ -182,7 +182,7 @@ def test_reverse_implementation_inventory_has_traceability_owner():
         "__init__.py","application.py","config.py","domain_activities.py","domain_audit.py",
         "domain_authorization.py","domain_commerce.py","domain_communication.py","domain_education.py",
         "domain_exceptions.py","domain_finance.py","domain_health.py","domain_identity.py",
-        "domain_inventory.py","inventory_read.py","offering_application.py","commerce_inventory_read.py","product_legacy_audit.py","sale_history_audit.py","sale_operational_read.py","domain_offline.py","financial_orchestration.py","infrastructure.py","integrity.py","approval_enforcement.py","invoice_application.py","payment_application.py","obligation_application.py","loan_application.py","financial_balance_read.py","financial_account_application.py","instrument_application.py","durable_operation_application.py","persistence.py","runtime.py","shared.py",
+        "domain_inventory.py","inventory_read.py","offering_application.py","commerce_inventory_read.py","product_legacy_audit.py","sale_history_audit.py","sale_operational_read.py","domain_offline.py","financial_orchestration.py","infrastructure.py","integrity.py","approval_enforcement.py","invoice_application.py","payment_application.py","obligation_application.py","loan_application.py","financial_balance_read.py","financial_account_application.py","instrument_application.py","durable_operation_application.py","message_application.py","persistence.py","runtime.py","shared.py",
     }
     assert expected == mapped
     impl_text = " ".join(SPEC_TO_IMPL.values())
@@ -204,6 +204,7 @@ def test_reverse_implementation_inventory_has_traceability_owner():
         "financial_account_application.py": "persisted Financial Account active/closed lifecycle under SPEC-0009, with authorization and atomic Domain History under SPEC-0017 and SPEC-0021",
         "instrument_application.py": "internal-only SPEC-0016 persistence primitive; not registered in runtime because instrument-specific authorization action/scope contract is unspecified",
         "durable_operation_application.py": "internal-only durable operation identity and duplicate request registry under SPEC-0019 and SPEC-0023; does not execute or finalize domain effects",
+        "message_application.py": "persisted communication message entry/read path under SPEC-0013; no delivery, notifications, read receipts, membership, or participant authorization",
         "persistence.py": "Stage 12A persistence/migration boundary; GAP-0005 durable operation identity and Stage 12A financial recognition/ledger persistence",
         "runtime.py": "runtime composition over mapped domain boundaries",
         "shared.py": "shared validation/state support for domain SPECs",
