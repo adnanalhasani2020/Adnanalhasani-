@@ -228,6 +228,10 @@ class PaymentApplication:
             record = self._load(connection, key)
             if record.version_no != expected_version:
                 raise ValidationError("Payment version conflict; reload before retrying")
+            if self._instant(timestamp, "Payment transition timestamp") < self._instant(
+                record.updated_at, "Persisted Payment update timestamp"
+            ):
+                raise ValidationError("Payment transition timestamp cannot precede the current update timestamp")
             if target_state not in _PAYMENT_TRANSITIONS.get(record.state, set()):
                 raise ValidationError(f"Payment cannot transition from {record.state} to {target_state}")
             next_version = record.version_no + 1
