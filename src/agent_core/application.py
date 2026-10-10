@@ -534,27 +534,40 @@ class ProductApplication:
             version,
         )
 
-    def create_product(self, connection, name, *, product_id=None, now=None):
+    def create_product(self, connection, name, *, product_id=None, actor_context_ref=None, now=None):
         product = Product(name=name, id=self._uuid(product_id, "Product identifier")
                           if product_id is not None else uuid4())
         timestamp = self._instant(now or datetime.now(timezone.utc), "Product timestamp")
+        if not isinstance(actor_context_ref, str) or not actor_context_ref.strip():
+            raise ValidationError("Product actor_context_ref is required")
+        actor_context_ref = actor_context_ref.strip()
         with connection:
             connection.execute(
                 "INSERT INTO products(product_id, name, state, created_at, updated_at, version_no) "
                 "VALUES(?,?,?,?,?,1)",
                 (str(product.id), product.name, product.state.value, timestamp, timestamp),
             )
+            connection.execute(
+                "INSERT INTO domain_history(domain_history_id,owner_domain,target_ref,change_type,"
+                "historical_at,actor_context_ref,prior_version_ref,current_version_ref,change_payload_ref,created_at) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?)",
+                (str(uuid4()), "commerce", str(product.id), "product_lifecycle", timestamp,
+                 actor_context_ref, None, f"product:{product.id}:v1", "state:draft", timestamp),
+            )
         return ProductRecord(product, 1)
 
     def get_product(self, connection, product_id):
         return self._load_product(connection, product_id)
 
-    def transition_product(self, connection, product_id, action, *, expected_version, now=None):
+    def transition_product(self, connection, product_id, action, *, expected_version, actor_context_ref, now=None):
         if action not in {"activate", "retire"}:
             raise ValidationError(f"Unsupported Product action: {action}")
         if type(expected_version) is not int or expected_version < 1:
             raise ValidationError("Product expected_version must be a positive integer")
         timestamp = self._instant(now or datetime.now(timezone.utc), "Product transition timestamp")
+        if not isinstance(actor_context_ref, str) or not actor_context_ref.strip():
+            raise ValidationError("Product actor_context_ref is required")
+        actor_context_ref = actor_context_ref.strip()
         with connection:
             record = self._load_product(connection, product_id)
             product = record.product
@@ -579,4 +592,14 @@ class ProductApplication:
             )
             if cursor.rowcount != 1:
                 raise ValidationError("Product version conflict; reload before retrying")
+            next_version = expected_version + 1
+            connection.execute(
+                "INSERT INTO domain_history(domain_history_id,owner_domain,target_ref,change_type,"
+                "historical_at,actor_context_ref,prior_version_ref,current_version_ref,change_payload_ref,created_at) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?)",
+                (str(uuid4()), "commerce", str(product.id), "product_lifecycle", timestamp,
+                 actor_context_ref, f"product:{product.id}:v{expected_version}",
+                 f"product:{product.id}:v{next_version}",
+                 f"action:{action};state:{product.state.value}", timestamp),
+            )
         return ProductRecord(product, expected_version + 1)
