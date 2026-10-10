@@ -570,3 +570,83 @@ def test_inventory_read_with_only_wrong_offering_activity_context_is_read_only()
     assert db.execute("SELECT count(*) FROM sales").fetchone()[0] == before_sales
     assert db.execute("SELECT count(*) FROM domain_history").fetchone()[0] == before_history
     db.close()
+
+
+def test_sale_transition_rejects_stale_loaded_version_without_state_or_history_write(monkeypatch):
+    """Exercise the optimistic UPDATE guard when the loaded version is stale.
+
+    This injects a stale application snapshot deterministically; it is not a
+    substitute for a scheduler-driven, simultaneous multi-connection race.
+    """
+    db = connect_database()
+    app, actor, activity, _offering, sale, _create_grant = _sale_and_create_grant(db)
+    confirm_grant = _transition_grant(db, actor, activity, sale, "confirm")
+    before_sale = db.execute(
+        "SELECT state, lifecycle_state, version_no FROM sales WHERE sale_id=?",
+        (str(sale.id),),
+    ).fetchone()
+    before_history = db.execute(
+        "SELECT domain_history_id, actor_context_ref, prior_version_ref, current_version_ref, "
+        "change_payload_ref FROM domain_history WHERE target_ref=? ORDER BY rowid",
+        (str(sale.id),),
+    ).fetchall()
+
+    load_sale = app._load_sale
+
+    def load_stale_snapshot(connection, sale_id):
+        loaded_sale, offering_id, version_no, previous_ref = load_sale(connection, sale_id)
+        assert version_no == 1
+        return loaded_sale, offering_id, version_no - 1, previous_ref
+
+    monkeypatch.setattr(app, "_load_sale", load_stale_snapshot)
+    with pytest.raises(ValidationError, match="Concurrent Sale update detected"):
+        app.confirm_sale(db, sale.id, actor, confirm_grant, now=NOW)
+
+    assert db.execute(
+        "SELECT state, lifecycle_state, version_no FROM sales WHERE sale_id=?",
+        (str(sale.id),),
+    ).fetchone() == before_sale
+    assert db.execute(
+        "SELECT domain_history_id, actor_context_ref, prior_version_ref, current_version_ref, "
+        "change_payload_ref FROM domain_history WHERE target_ref=? ORDER BY rowid",
+        (str(sale.id),),
+    ).fetchall() == before_history
+    assert app.get_sale(db, sale.id).history == (SaleState.INITIATED,)
+    db.close()
+
+
+def test_sale_transition_compare_and_swap_miss_rolls_back_without_history():
+    """A deterministic SQL-level CAS miss must not append a transition record."""
+    db = connect_database()
+    app, actor, activity, _offering, sale, _create_grant = _sale_and_create_grant(db)
+    confirm_grant = _transition_grant(db, actor, activity, sale, "confirm")
+    before_sale = db.execute(
+        "SELECT state, lifecycle_state, version_no FROM sales WHERE sale_id=?",
+        (str(sale.id),),
+    ).fetchone()
+    before_history = db.execute(
+        "SELECT domain_history_id, prior_version_ref, current_version_ref, change_payload_ref "
+        "FROM domain_history WHERE target_ref=? ORDER BY rowid",
+        (str(sale.id),),
+    ).fetchall()
+    db.execute(
+        "CREATE TRIGGER simulate_sale_compare_and_swap_miss "
+        "BEFORE UPDATE OF version_no ON sales "
+        "WHEN OLD.sale_id='" + str(sale.id) + "' "
+        "BEGIN SELECT RAISE(IGNORE); END"
+    )
+
+    with pytest.raises(ValidationError, match="Concurrent Sale update detected"):
+        app.confirm_sale(db, sale.id, actor, confirm_grant, now=NOW)
+
+    assert db.execute(
+        "SELECT state, lifecycle_state, version_no FROM sales WHERE sale_id=?",
+        (str(sale.id),),
+    ).fetchone() == before_sale
+    assert db.execute(
+        "SELECT domain_history_id, prior_version_ref, current_version_ref, change_payload_ref "
+        "FROM domain_history WHERE target_ref=? ORDER BY rowid",
+        (str(sale.id),),
+    ).fetchall() == before_history
+    assert app.get_sale(db, sale.id).history == (SaleState.INITIATED,)
+    db.close()
