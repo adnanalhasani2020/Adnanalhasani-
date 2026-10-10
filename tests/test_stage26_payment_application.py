@@ -318,3 +318,39 @@ def test_payment_rejects_invoice_obligation_reference_mismatch():
         (payment_id,),
     ).fetchone()[0] == 0
     db.close()
+
+
+def test_payment_transition_rejects_timestamp_older_than_current_update_without_writes():
+    db = connect_database()
+    parties = seed(db)
+    app = PaymentApplication()
+    payment, parties = create_payment(db, app, parties)
+    _, _, approver, agent, context, _ = parties
+    grant, action = authorize(
+        db, agent=agent, context=context, payment_id=str(payment.payment_id),
+        action_code="payment.transition.pending", approver=approver,
+    )
+    before_history = db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=? AND change_type='payment_state_transition'",
+        (str(payment.payment_id),),
+    ).fetchone()[0]
+
+    with pytest.raises(ValidationError, match="cannot precede the current update timestamp"):
+        app.transition_payment(
+            db, payment.payment_id, "pending", expected_version=1, context_ref=context,
+            authorization_grant_id=grant, agent_action_id=action,
+            now="2026-10-10T11:59:59Z",
+        )
+
+    persisted = app.get_payment(db, payment.payment_id)
+    assert persisted.state == "initiated"
+    assert persisted.version_no == 1
+    assert persisted.updated_at == STAMP
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=? AND change_type='payment_state_transition'",
+        (str(payment.payment_id),),
+    ).fetchone()[0] == before_history
+    assert db.execute("SELECT COUNT(*) FROM settlements").fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM financial_transactions").fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM ledger_entries").fetchone()[0] == 0
+    db.close()
