@@ -57,8 +57,8 @@ SPEC_TO_TESTS = {
     "SPEC-0002": ["test_stage7_batch1.py","test_stage8_batch1.py","test_stage8_batch5.py"],
     "SPEC-0003": ["test_batch3.py","test_stage8_batch2.py","test_stage8_batch4.py"],
     "SPEC-0004": ["test_batch3.py","test_stage8_batch4.py"],
-    "SPEC-0005": ["test_batch2.py","test_stage8_batch1.py","test_stage8_batch3.py","test_stage8_batch4.py","test_stage8_batch5.py"],
-    "SPEC-0006": ["test_batch2.py","test_stage8_batch4.py","test_stage8_batch5.py"],
+    "SPEC-0005": ["test_batch2.py","test_stage8_batch1.py","test_stage8_batch3.py","test_stage8_batch4.py","test_stage8_batch5.py","test_stage24_sale_operational_context.py"],
+    "SPEC-0006": ["test_batch2.py","test_stage8_batch4.py","test_stage8_batch5.py","test_stage24_sale_operational_context.py"],
     "SPEC-0007": ["test_batch3.py","test_stage8_batch2.py","test_stage8_batch4.py","test_stage8_batch5.py"],
     "SPEC-0008": ["test_batch3.py","test_stage8_batch2.py","test_stage8_batch3.py","test_stage8_batch4.py","test_stage8_batch5.py"],
     "SPEC-0009": ["test_batch3.py","test_stage8_batch1.py","test_stage8_batch2.py","test_stage8_batch3.py","test_stage8_batch4.py","test_stage8_batch5.py"],
@@ -182,7 +182,7 @@ def test_reverse_implementation_inventory_has_traceability_owner():
         "__init__.py","application.py","config.py","domain_activities.py","domain_audit.py",
         "domain_authorization.py","domain_commerce.py","domain_communication.py","domain_education.py",
         "domain_exceptions.py","domain_finance.py","domain_health.py","domain_identity.py",
-        "domain_inventory.py","inventory_read.py","offering_application.py","commerce_inventory_read.py","product_legacy_audit.py","domain_offline.py","financial_orchestration.py","infrastructure.py","integrity.py","approval_enforcement.py","persistence.py","runtime.py","shared.py",
+        "domain_inventory.py","inventory_read.py","offering_application.py","commerce_inventory_read.py","product_legacy_audit.py","sale_operational_read.py","domain_offline.py","financial_orchestration.py","infrastructure.py","integrity.py","approval_enforcement.py","persistence.py","runtime.py","shared.py",
     }
     assert expected == mapped
     impl_text = " ".join(SPEC_TO_IMPL.values())
