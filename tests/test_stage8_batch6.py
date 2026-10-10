@@ -208,6 +208,7 @@ def test_reverse_implementation_inventory_has_traceability_owner():
         "persistence.py": "Stage 12A persistence/migration boundary; GAP-0005 durable operation identity and Stage 12A financial recognition/ledger persistence",
         "runtime.py": "runtime composition over mapped domain boundaries",
         "shared.py": "shared validation/state support for domain SPECs",
+        "domain_workflow_read.py": "read-only queries over existing workflows and workflow_events schema; no lifecycle transitions or inferred policy",
         "domain_provenance.py": "explicit persisted Provenance records under existing provenance_records schema; no inferred lineage or automatic attachment",
     }
     for module in expected:
