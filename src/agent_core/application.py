@@ -189,18 +189,25 @@ class SaleApplication:
             offering_key, activity_key, timestamp,
         )
         offering = connection.execute(
-            "SELECT o.activity_id, o.state, o.effective_from, o.effective_to, p.state, a.state "
+            "SELECT o.activity_id, o.state, o.effective_from, o.effective_to, p.state, a.state, "
+            "o.service_id, s.state "
             "FROM offerings AS o JOIN products AS p ON p.product_id=o.product_id "
-            "JOIN activities AS a ON a.activity_id=o.activity_id WHERE o.offering_id=?",
+            "JOIN activities AS a ON a.activity_id=o.activity_id "
+            "LEFT JOIN services AS s ON s.service_id=o.service_id WHERE o.offering_id=?",
             (offering_key,),
         ).fetchone()
         if offering is None:
             raise ValidationError("Sale requires an existing Offering")
-        offering_activity, offering_state, effective_from, effective_to, product_state, activity_state = offering
+        (
+            offering_activity, offering_state, effective_from, effective_to,
+            product_state, activity_state, service_id, service_state,
+        ) = offering
         if offering_activity != activity_key:
             raise ValidationError("Sale Activity must match Offering Activity")
         if offering_state != "active" or product_state != "active" or activity_state != "active":
             raise ValidationError("Sale requires an active Offering, Product, and Activity")
+        if service_id is not None and service_state != "active":
+            raise ValidationError("Sale requires an active Service for a service-backed Offering")
         operation_instant = self._grant_instant(timestamp, "operation timestamp", owner="Offering")
         starts_instant = self._grant_instant(effective_from, "effective_from", owner="Offering")
         ends_instant = (
