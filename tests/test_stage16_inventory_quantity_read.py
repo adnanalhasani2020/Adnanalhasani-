@@ -156,3 +156,19 @@ def test_scope_and_as_of_must_be_valid():
     with pytest.raises(ValidationError, match="valid ISO-8601 timestamp"):
         reader.read_quantity(db, "warehouse-A", as_of="not-a-timestamp")
     db.close()
+
+
+
+def test_reader_fails_closed_on_legacy_non_integer_quantity_without_fallback():
+    db, activity = _database()
+    _position(db, activity, quantity=5, observed="2026-10-09T09:00:00Z")
+    # Simulate a row written before the integer-quantity guards were installed.
+    db.execute("DROP TRIGGER inventory_position_quantity_integer_on_insert")
+    invalid_position = _position(db, activity, quantity=2.5, observed="2026-10-09T11:00:00Z")
+
+    result = InventoryQuantityReader().read_quantity(db, "warehouse-A", as_of=AS_OF)
+
+    assert result.status is Status.INVALID_QUANTITY
+    assert result.quantity_minor is None
+    assert result.inventory_position_id == invalid_position
+    db.close()
