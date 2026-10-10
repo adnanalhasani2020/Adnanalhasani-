@@ -22,8 +22,8 @@ def create_activity(db, activity_id=None):
     key = str(activity_id or uuid4())
     now = "2026-01-01T00:00:00Z"
     db.execute(
-        "INSERT INTO activities(activity_id,state,created_at,updated_at) VALUES(?, 'active', ?, ?)",
-        (key, now, now),
+        "INSERT INTO activities(activity_id,owner_person_id,state,created_at,updated_at) VALUES(?, ?, 'active', ?, ?)",
+        (key, str(db.execute("SELECT person_id FROM persons ORDER BY person_id LIMIT 1").fetchone()[0]), now, now),
     )
     return key
 
