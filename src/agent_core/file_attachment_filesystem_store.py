@@ -12,7 +12,10 @@ import stat
 from pathlib import Path
 from uuid import uuid4
 
-from agent_core.file_attachment_content_application import ContentStore
+from agent_core.file_attachment_content_application import (
+    ContentPublishedDurabilityError,
+    ContentStore,
+)
 
 
 _REFERENCE_PREFIX = "localfs://"
@@ -23,9 +26,11 @@ class LocalFilesystemContentStore:
     """Store opaque content objects under a configured local directory.
 
     Writes use a same-directory temporary file followed by atomic replacement.
-    The configured directory must be on a filesystem that supports atomic rename
-    for the desired publication guarantee. This adapter does not provide backups,
-    replication, retention, or cross-host sharing.
+    A directory-sync error after replacement raises ContentPublishedDurabilityError
+    carrying the published reference; callers must not treat it as an unpublished
+    write. The configured directory must be on a filesystem that supports atomic
+    rename for the desired publication guarantee. This adapter does not provide
+    backups, replication, retention, or cross-host sharing.
     """
 
     def __init__(self, root: str | os.PathLike[str] = ".agent_core/attachments"):
@@ -94,7 +99,13 @@ class LocalFilesystemContentStore:
                 except FileNotFoundError:
                     pass
                 raise
-            self._sync_directory(root_fd)
+
+            try:
+                self._sync_directory(root_fd)
+            except OSError as exc:
+                # The final object already exists. Preserve its reference in the error;
+                # never delete published content as compensation.
+                raise ContentPublishedDurabilityError(storage_ref) from exc
             return storage_ref
         finally:
             os.close(root_fd)
