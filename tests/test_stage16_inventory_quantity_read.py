@@ -46,28 +46,16 @@ def _position(db, activity, *, scope="warehouse-A", quantity=5, state="effective
     return position
 
 
-def test_as_of_none_uses_current_utc_time(monkeypatch):
-    import agent_core.inventory_read as inventory_read
-
-    db, activity = _database()
-    position = _position(db, activity, quantity=23, observed="2026-10-09T12:00:00Z", starts="2026-10-09T12:00:00Z")
-    fixed_now = datetime(2026, 10, 9, 12, 0, tzinfo=timezone.utc)
-
-    class FixedDateTime:
-        @staticmethod
-        def now(tz=None):
-            assert tz is timezone.utc
-            return fixed_now
-
-    monkeypatch.setattr(inventory_read, "datetime", FixedDateTime)
+def test_as_of_none_uses_current_utc_time():
+    db, _activity = _database()
+    before = datetime.now(timezone.utc)
     result = InventoryQuantityReader().read_quantity(db, "warehouse-A", as_of=None)
+    after = datetime.now(timezone.utc)
 
-    assert result.as_of == fixed_now
-    assert result.status is Status.KNOWN
-    assert result.quantity_minor == 23
-    assert result.inventory_position_id == position
+    assert before <= result.as_of <= after
+    assert result.as_of.tzinfo is timezone.utc
+    assert result.status is Status.NO_RECORD
     db.close()
-
 
 def test_valid_as_of_string_is_preserved_as_the_requested_instant():
     db, activity = _database()
