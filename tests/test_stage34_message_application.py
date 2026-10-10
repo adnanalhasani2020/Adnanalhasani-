@@ -71,7 +71,7 @@ def test_message_creation_rejects_missing_sender_or_inactive_person():
             db, conversation_id=conversation, message_type="text",
             content_ref="content://message/1", now=STAMP,
         )
-    db.execute("UPDATE persons SET state='inactive' WHERE person_id=?", (sender,))
+    db.execute("UPDATE persons SET state='deactivated' WHERE person_id=?", (sender,))
     db.commit()
     with pytest.raises(ValidationError, match="must be active and persisted"):
         app.create_message(
