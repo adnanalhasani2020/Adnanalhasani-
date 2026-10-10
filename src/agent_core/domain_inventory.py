@@ -16,7 +16,7 @@ def _validate_aware_local_datetime(value: datetime, field_name: str) -> None:
     if value.tzinfo is None or value.utcoffset() is None:
         return
     round_trip = value.astimezone(timezone.utc).astimezone(value.tzinfo)
-    if round_trip.replace(tzinfo=None) != value.replace(tzinfo=None) or round_trip.fold != value.fold:
+    if round_trip.replace(tzinfo=None) != value.replace(tzinfo=None):
         raise ValidationError(f"{field_name} must represent a valid local time")
 
 class ProductState(str,Enum):
