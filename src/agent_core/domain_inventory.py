@@ -53,8 +53,14 @@ class Offering:
         if self.service_id is not None and not isinstance(self.service_id,UUID): raise ValidationError("Offering.service_id must be a UUID")
         if self.effective_from is not None and not isinstance(self.effective_from,datetime): raise ValidationError("Offering.effective_from must be datetime")
         if self.effective_to is not None and not isinstance(self.effective_to,datetime): raise ValidationError("Offering.effective_to must be datetime")
-        if self.effective_from is not None and self.effective_to is not None and self.effective_to < self.effective_from:
-            raise ValidationError("Offering.effective_to cannot precede effective_from")
+        if self.effective_from is not None and self.effective_to is not None:
+            starts = self.effective_from
+            ends = self.effective_to
+            if starts.tzinfo is not None and starts.utcoffset() is not None and ends.tzinfo is not None and ends.utcoffset() is not None:
+                starts = starts.astimezone(timezone.utc)
+                ends = ends.astimezone(timezone.utc)
+            if ends < starts:
+                raise ValidationError("Offering.effective_to cannot precede effective_from")
     def activate(self): self.state=OfferingState.ACTIVE
     def end(self): self.state=OfferingState.ENDED
     def withdraw(self): self.state=OfferingState.WITHDRAWN
@@ -87,8 +93,11 @@ class InventoryPosition:
         if self.effective_to is not None and not isinstance(self.effective_to,datetime): raise ValidationError("Inventory Position.effective_to must be datetime")
         if self.effective_to is not None and (self.effective_to.tzinfo is None or self.effective_to.utcoffset() is None):
             raise ValidationError("Inventory Position.effective_to must be timezone-aware")
-        if self.effective_from is not None and self.effective_to is not None and self.effective_to < self.effective_from:
-            raise ValidationError("Inventory Position.effective_to cannot precede effective_from")
+        if self.effective_from is not None and self.effective_to is not None:
+            starts = self.effective_from.astimezone(timezone.utc)
+            ends = self.effective_to.astimezone(timezone.utc)
+            if ends < starts:
+                raise ValidationError("Inventory Position.effective_to cannot precede effective_from")
     def make_effective(self):
         if self.state is not InventoryPositionState.OBSERVED:
             raise ValidationError("Only an observed Inventory Position can become effective")
