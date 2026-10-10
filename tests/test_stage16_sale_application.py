@@ -793,3 +793,87 @@ def test_sale_transition_rechecks_persisted_actor_is_active():
         (str(sale.id),),
     ).fetchall() == before_history
     db.close()
+
+
+
+def _delegated_create_grant(
+    db, actor, activity, offering, *,
+    delegation_state="active",
+    delegation_starts="2026-10-01T00:00:00Z",
+    delegation_ends=None,
+    delegation_context=None,
+):
+    delegator = _id()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,?,?,?)",
+        (delegator, "active", STAMP, STAMP),
+    )
+    delegation_id = _id()
+    db.execute(
+        "INSERT INTO delegations(delegation_id,delegator_person_id,subject_person_id,context_ref,state,"
+        "effective_from,effective_to,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
+        (delegation_id, delegator, actor, delegation_context or activity,
+         delegation_state, delegation_starts, delegation_ends, STAMP, STAMP),
+    )
+    grant_id = _id()
+    db.execute(
+        "INSERT INTO authorization_grants(authorization_grant_id,subject_person_id,agent_id,action_code,"
+        "scope_ref,context_ref,delegation_id,state,effective_from,effective_to,created_at,updated_at) "
+        "VALUES(?,?,NULL,'create_sale',?,?,?,'active','2026-10-01T00:00:00Z',NULL,?,?)",
+        (grant_id, actor, offering, activity, delegation_id, STAMP, STAMP),
+    )
+    return grant_id
+
+
+def test_create_sale_accepts_active_effective_context_matched_delegation():
+    db = connect_database()
+    actor, activity, _product, offering = _fixture(db)
+    grant = _delegated_create_grant(db, actor, activity, offering)
+
+    sale = _create(SaleApplication(), db, actor, activity, offering, grant)
+
+    assert sale.state is SaleState.INITIATED
+    assert db.execute(
+        "SELECT state,version_no FROM sales WHERE sale_id=?", (str(sale.id),)
+    ).fetchone() == ("initiated", 1)
+    assert db.execute(
+        "SELECT change_payload_ref FROM domain_history WHERE target_ref=?", (str(sale.id),)
+    ).fetchall() == [("state:initiated",)]
+    db.close()
+
+
+@pytest.mark.parametrize("delegation_state", ["revoked", "suspended", "expired"])
+def test_create_sale_rejects_inactive_linked_delegation_without_partial_writes(delegation_state):
+    db = connect_database()
+    actor, activity, _product, offering = _fixture(db)
+    grant = _delegated_create_grant(
+        db, actor, activity, offering, delegation_state=delegation_state
+    )
+
+    with pytest.raises(ValidationError, match="delegation must be ACTIVE"):
+        _create(SaleApplication(), db, actor, activity, offering, grant)
+
+    assert db.execute("SELECT count(*) FROM sales").fetchone()[0] == 0
+    assert db.execute(
+        "SELECT count(*) FROM domain_history WHERE owner_domain='commerce' "
+        "AND change_type='sale_state_transition'"
+    ).fetchone()[0] == 0
+    db.close()
+
+
+def test_create_sale_rejects_linked_delegation_for_other_activity_without_partial_writes():
+    db = connect_database()
+    actor, activity, _product, offering = _fixture(db)
+    grant = _delegated_create_grant(
+        db, actor, activity, offering, delegation_context=_id()
+    )
+
+    with pytest.raises(ValidationError, match="delegation does not match actor and Activity"):
+        _create(SaleApplication(), db, actor, activity, offering, grant)
+
+    assert db.execute("SELECT count(*) FROM sales").fetchone()[0] == 0
+    assert db.execute(
+        "SELECT count(*) FROM domain_history WHERE owner_domain='commerce' "
+        "AND change_type='sale_state_transition'"
+    ).fetchone()[0] == 0
+    db.close()

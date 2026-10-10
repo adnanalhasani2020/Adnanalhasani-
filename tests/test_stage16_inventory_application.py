@@ -173,3 +173,29 @@ def test_latest_unknown_quantity_does_not_fall_back_to_older_known_quantity():
     assert result.quantity_minor is None
     assert result.inventory_position_id == latest_position
     db.close()
+
+
+
+def test_application_surfaces_invalid_legacy_quantity_without_fallback():
+    db = connect_database()
+    activity_a, _activity_b, _product, offering_a, _offering_b = _context(db)
+    older = _position(
+        db, activity_a, offering=offering_a, quantity=5,
+        observed="2026-10-09T10:00:00Z",
+    )
+    # Reproduce a legacy row from before migration 0006 installed write guards.
+    db.execute("DROP TRIGGER inventory_position_quantity_integer_on_insert")
+    invalid = _position(
+        db, activity_a, offering=offering_a, quantity=2.5,
+        observed="2026-10-09T11:30:00Z",
+    )
+
+    result = InventoryApplication().read_offering_quantity(
+        db, offering_a, "warehouse-A", as_of=AS_OF
+    )
+
+    assert result.status is Status.INVALID_QUANTITY
+    assert result.quantity_minor is None
+    assert result.inventory_position_id == invalid
+    assert result.inventory_position_id != older
+    db.close()
