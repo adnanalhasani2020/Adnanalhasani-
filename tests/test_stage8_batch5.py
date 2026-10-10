@@ -201,11 +201,19 @@ def test_inventory_and_availability_do_not_become_sale_truth():
     assert "availability_id" not in _field_names(sale)
 
 
-def test_repeated_inventory_retirement_keeps_same_identity():
+def test_inventory_close_requires_effective_state_and_preserves_identity():
     inventory = InventoryPosition(uuid4(), uuid4(), scope_key="default")
     inventory_id = inventory.id
+    with pytest.raises(ValidationError):
+        inventory.close()
+    assert inventory.id == inventory_id
+    assert inventory.state.value == "observed"
+    inventory.make_effective()
     inventory.close()
-    inventory.close()
+    assert inventory.id == inventory_id
+    assert inventory.state.value == "closed"
+    with pytest.raises(ValidationError):
+        inventory.close()
     assert inventory.id == inventory_id
     assert inventory.state.value == "closed"
 

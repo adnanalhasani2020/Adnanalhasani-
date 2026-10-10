@@ -16,7 +16,7 @@ def test_inventory_rejects_bad_refs_and_blank_product():
     with pytest.raises(ValidationError): Offering("bad", uuid4())
     with pytest.raises(ValidationError): InventoryPosition("bad", uuid4(), scope_key="default")
 def test_inventory_lifecycle():
-    p=Product("P"); p.activate(); o=Offering(p.id, uuid4()); o.activate(); ip=InventoryPosition(o.id, uuid4(), scope_key="default"); ip.make_unavailable()
+    p=Product("P"); p.activate(); o=Offering(p.id, uuid4()); o.activate(); ip=InventoryPosition(o.id, uuid4(), scope_key="default"); ip.make_effective(); ip.make_unavailable()
     assert ip.state.value=="closed"
 def test_discovery_result_is_not_inventory_truth():
     p=Product("P"); o=Offering(p.id, uuid4()); av=Availability(o.id,AvailabilityState.COMPUTED,datetime.now())

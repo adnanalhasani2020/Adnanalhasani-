@@ -83,8 +83,14 @@ class InventoryPosition:
         if self.effective_to is not None and not isinstance(self.effective_to,datetime): raise ValidationError("Inventory Position.effective_to must be datetime")
         if self.effective_from is not None and self.effective_to is not None and self.effective_to < self.effective_from:
             raise ValidationError("Inventory Position.effective_to cannot precede effective_from")
-    def make_effective(self): self.state=InventoryPositionState.EFFECTIVE
-    def close(self): self.state=InventoryPositionState.CLOSED
+    def make_effective(self):
+        if self.state is not InventoryPositionState.OBSERVED:
+            raise ValidationError("Only an observed Inventory Position can become effective")
+        self.state=InventoryPositionState.EFFECTIVE
+    def close(self):
+        if self.state is not InventoryPositionState.EFFECTIVE:
+            raise ValidationError("Only an effective Inventory Position can be closed")
+        self.state=InventoryPositionState.CLOSED
     def make_unavailable(self): self.close()
     def retire(self): self.close()
 
