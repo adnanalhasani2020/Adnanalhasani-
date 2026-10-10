@@ -116,3 +116,22 @@ class ActivityInvitationApplication:
             (key,),
         ).fetchall()
         return tuple(self._record(row) for row in rows)
+
+
+    def list_for_inviter(self, connection, inviter_person_id) -> tuple[ActivityInvitation, ...]:
+        """List invitations explicitly issued by one existing Person.
+
+        This is a read-only query. It does not infer invitation status or
+        introduce acceptance, membership, notification, or authorization effects.
+        """
+        key = str(self._uuid(inviter_person_id, "Inviter Person identifier"))
+        if connection.execute(
+            "SELECT 1 FROM persons WHERE person_id=?", (key,)
+        ).fetchone() is None:
+            raise ValidationError("Inviter Person does not exist")
+        rows = connection.execute(
+            "SELECT invitation_id,activity_id,inviter_person_id,invitee_person_id,created_at "
+            "FROM activity_invitations WHERE inviter_person_id=? ORDER BY created_at,invitation_id",
+            (key,),
+        ).fetchall()
+        return tuple(self._record(row) for row in rows)

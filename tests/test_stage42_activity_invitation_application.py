@@ -87,6 +87,10 @@ def test_missing_invitation_and_invalid_list_references_fail():
         app.list_for_activity(db, "bad")
     with pytest.raises(ValidationError, match="valid UUID"):
         app.list_for_invitee(db, "bad")
+    with pytest.raises(ValidationError, match="valid UUID"):
+        app.list_for_inviter(db, "bad")
+    with pytest.raises(ValidationError, match="Inviter Person does not exist"):
+        app.list_for_inviter(db, str(uuid4()))
     db.close()
 
 
@@ -104,3 +108,35 @@ def test_database_enforces_invitation_foreign_keys():
         )
     assert db.execute("PRAGMA foreign_keys").fetchone()[0] == 1
     db.close()
+
+
+def test_inviter_listing_is_scoped_deterministic_and_survives_reopen(tmp_path):
+    path = tmp_path / "outgoing-invitations.sqlite"
+    db = connect_database(path)
+    inviter, other_inviter = create_person(db), create_person(db)
+    invitee_one, invitee_two = create_person(db), create_person(db)
+    activity = create_activity(db)
+    app = ActivityInvitationApplication()
+
+    later = app.create_invitation(
+        db, activity_id=activity, inviter_person_id=inviter,
+        invitee_person_id=invitee_two,
+        created_at=datetime(2026, 2, 3, tzinfo=timezone.utc),
+    )
+    earlier = app.create_invitation(
+        db, activity_id=activity, inviter_person_id=inviter,
+        invitee_person_id=invitee_one,
+        created_at=datetime(2026, 2, 2, tzinfo=timezone.utc),
+    )
+    app.create_invitation(
+        db, activity_id=activity, inviter_person_id=other_inviter,
+        invitee_person_id=invitee_one,
+        created_at=datetime(2026, 2, 1, tzinfo=timezone.utc),
+    )
+    assert app.list_for_inviter(db, inviter) == (earlier, later)
+    assert app.list_for_inviter(db, invitee_two) == ()
+    db.close()
+
+    reopened = connect_database(path)
+    assert app.list_for_inviter(reopened, inviter) == (earlier, later)
+    reopened.close()
