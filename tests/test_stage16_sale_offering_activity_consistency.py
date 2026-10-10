@@ -195,6 +195,7 @@ def test_existing_database_migration_preserves_sales_invoices_and_history_on_reo
         ("0005_inventory_position_offering_context",),
         ("0006_inventory_quantity_integer",),
         ("0007_product_name",),
+        ("9998_activity_invitations",),
     ]
     assert db.execute(
         "SELECT sale_id,offering_id,activity_id,state FROM sales WHERE sale_id=?",
