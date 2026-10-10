@@ -182,7 +182,7 @@ def test_reverse_implementation_inventory_has_traceability_owner():
         "__init__.py","application.py","config.py","domain_activities.py","domain_audit.py",
         "domain_authorization.py","domain_commerce.py","domain_communication.py","domain_education.py",
         "domain_exceptions.py","domain_finance.py","domain_health.py","domain_identity.py",
-        "domain_inventory.py","domain_provenance.py","domain_workflow_read.py","conversation_application.py","activity_invitation_application.py","role_assignment_application.py","membership_application.py","access_account_read.py","inventory_read.py","offering_application.py","commerce_inventory_read.py","product_legacy_audit.py","sale_history_audit.py","sale_operational_read.py","domain_offline.py","financial_orchestration.py","infrastructure.py","integrity.py","approval_enforcement.py","invoice_application.py","payment_application.py","obligation_application.py","loan_application.py","financial_balance_read.py","financial_account_application.py","instrument_application.py","durable_operation_application.py","message_application.py","persistence.py","runtime.py","shared.py",
+        "domain_inventory.py","domain_provenance.py","domain_workflow_read.py","conversation_application.py","activity_invitation_application.py","role_assignment_application.py","membership_application.py","access_account_read.py","person_registration_application.py","inventory_read.py","offering_application.py","commerce_inventory_read.py","product_legacy_audit.py","sale_history_audit.py","sale_operational_read.py","domain_offline.py","financial_orchestration.py","infrastructure.py","integrity.py","approval_enforcement.py","invoice_application.py","payment_application.py","obligation_application.py","loan_application.py","financial_balance_read.py","financial_account_application.py","instrument_application.py","durable_operation_application.py","message_application.py","persistence.py","runtime.py","shared.py",
     }
     assert expected == mapped
     impl_text = " ".join(SPEC_TO_IMPL.values())
@@ -214,6 +214,7 @@ def test_reverse_implementation_inventory_has_traceability_owner():
         "role_assignment_application.py": "explicit persisted Role Assignment create/read/Membership-scoped listing over existing schema; no inferred permission or lifecycle transition",
         "membership_application.py": "explicit persisted Membership create/read/Person- and Activity-scoped listing over existing schema; no invitation acceptance, authorization, or automatic Role Assignment",
         "access_account_read.py": "read-only persisted Access Account restoration and Person-scoped listing; no authentication, session behavior, or authorization",
+        "person_registration_application.py": "explicit persisted Person registration over the existing schema; no identity deduplication, merge, identifier issuance, authentication, or authorization",
         "domain_provenance.py": "explicit persisted Provenance records under existing provenance_records schema; no inferred lineage or automatic attachment",
     }
     for module in expected:
