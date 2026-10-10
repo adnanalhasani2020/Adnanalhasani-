@@ -211,6 +211,7 @@ def test_reverse_implementation_inventory_has_traceability_owner():
         "domain_workflow_read.py": "read-only queries over existing workflows and workflow_events schema; no lifecycle transitions or inferred policy",
         "conversation_application.py": "persisted Conversation create/read/context listing/close/archive over existing communication schema; no membership or authorization",
         "file_attachment_application.py": "persisted file metadata registry over file_attachments; no blob storage, authorization, or inferred attachment ownership",
+        "file_attachment_content_application.py": "provider-neutral attachment byte storage and size/SHA-256 verification; no provider lock-in, compensation deletion, retry, or retention policy",
         "activity_invitation_application.py": "persisted Activity Invitation creation, restoration, and scoped listing; no acceptance lifecycle, Membership creation, or authorization",
         "role_assignment_application.py": "explicit persisted Role Assignment create/read/Membership-scoped listing over existing schema; no inferred permission or lifecycle transition",
         "membership_application.py": "explicit persisted Membership create/read/Person- and Activity-scoped listing over existing schema; no invitation acceptance, authorization, or automatic Role Assignment",
