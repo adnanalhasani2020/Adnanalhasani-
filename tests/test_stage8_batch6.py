@@ -194,6 +194,7 @@ def test_reverse_implementation_inventory_has_traceability_owner():
         "offering_application.py": "persisted Commerce Offering lifecycle owned by SPEC-0005",
         "commerce_inventory_read.py": "read-only Commerce/Inventory context projection owned across SPEC-0005 and SPEC-0006",
         "product_legacy_audit.py": "read-only legacy Product name gap report preserving Commerce history",
+        "sale_history_audit.py": "read-only Sale Domain History chain audit owned by SPEC-0021",
         "infrastructure.py": "audit infrastructure supporting SPEC-0021",
         "approval_enforcement.py": "Stage 11 GAP-0001 runtime approval enforcement boundary",
         "persistence.py": "Stage 12A persistence/migration boundary; GAP-0005 durable operation identity and Stage 12A financial recognition/ledger persistence",
