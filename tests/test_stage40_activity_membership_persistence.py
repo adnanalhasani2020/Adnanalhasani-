@@ -107,7 +107,7 @@ def test_unknown_and_invalid_identifiers_fail_closed():
     db = connect_database()
     app = ActivityMembershipApplication()
     with pytest.raises(ValidationError, match="Membership does not exist"):
-        app.get_membership(uid())
+        app.get_membership(db, uid())
     with pytest.raises(ValidationError, match="valid UUID"):
         app.get_activity("bad-id")
     with pytest.raises(ValidationError, match="Activity does not exist"):
