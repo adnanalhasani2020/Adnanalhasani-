@@ -347,3 +347,146 @@ class SaleApplication:
         sale_uuid = self._uuid(sale_id, "Sale identifier")
         sale, _offering_id, _version, _ref = self._load_sale(connection, sale_uuid)
         return sale
+
+
+class EncounterApplication:
+    """Persist and expose the lifecycle of a Health Encounter.
+
+    This service implements the existing SPEC-0010 encounter lifecycle only. It
+    does not create clinical content, infer authorization, or create financial
+    effects. Existing patient context and optional Service references are required.
+    """
+
+    _DB_TO_DOMAIN = {
+        "planned": "planned",
+        "active": "in-progress",
+        "completed": "completed",
+        "cancelled": "cancelled",
+    }
+    _DOMAIN_TO_DB = {
+        "planned": "planned",
+        "in-progress": "active",
+        "completed": "completed",
+        "cancelled": "cancelled",
+    }
+    _ALLOWED = {
+        "planned": ("in-progress", "cancelled"),
+        "in-progress": ("completed", "cancelled"),
+        "completed": (),
+        "cancelled": (),
+    }
+
+    def _instant(self, now=None):
+        instant = now or datetime.now(timezone.utc)
+        if instant.tzinfo is None or instant.utcoffset() is None:
+            raise ValidationError("Encounter timestamp must be timezone-aware")
+        return instant.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+    def _uuid(self, value, label):
+        try:
+            return str(UUID(str(value)))
+        except (ValueError, TypeError, AttributeError) as exc:
+            raise ValidationError(f"{label} must be a valid UUID") from exc
+
+    def _restore(self, row):
+        from agent_core.domain_health import Encounter, EncounterState
+
+        encounter_id, context_id, encounter_type, service_id, state = row[:5]
+        domain_state = self._DB_TO_DOMAIN.get(state)
+        if domain_state is None:
+            raise ValidationError("Encounter has an unsupported persisted state")
+        return Encounter(
+            patient_context_id=UUID(context_id),
+            service_id=UUID(service_id) if service_id else None,
+            id=UUID(encounter_id),
+            state=EncounterState(domain_state),
+        )
+
+    def create_encounter(
+        self, connection, patient_context_id, encounter_type, *,
+        service_id=None, now=None, encounter_id=None,
+    ):
+        """Create a planned Encounter for an existing active PatientContext."""
+        from agent_core.domain_health import Encounter
+
+        context_key = self._uuid(patient_context_id, "PatientContext identifier")
+        if not isinstance(encounter_type, str) or not encounter_type.strip():
+            raise ValidationError("Encounter type is required")
+        kind = encounter_type.strip()
+        service_key = self._uuid(service_id, "Service identifier") if service_id is not None else None
+        timestamp = self._instant(now)
+        with connection:
+            context = connection.execute(
+                "SELECT state FROM patient_contexts WHERE patient_context_id=?",
+                (context_key,),
+            ).fetchone()
+            if context is None:
+                raise ValidationError("Encounter requires an existing PatientContext")
+            if context[0] != "active":
+                raise ValidationError("Encounter requires an active PatientContext")
+            if service_key is not None:
+                service = connection.execute(
+                    "SELECT state FROM services WHERE service_id=?", (service_key,)
+                ).fetchone()
+                if service is None or service[0] != "active":
+                    raise ValidationError("Encounter requires an existing active Service")
+            identifier = str(encounter_id or uuid4())
+            # Validate the returned domain object before committing the row.
+            result = Encounter(
+                patient_context_id=UUID(context_key),
+                service_id=UUID(service_key) if service_key else None,
+                id=UUID(identifier),
+            )
+            connection.execute(
+                "INSERT INTO encounters(encounter_id,patient_context_id,encounter_type,service_id,"
+                "state,started_at,ended_at,created_at,updated_at,provenance_id,version_no) "
+                "VALUES(?,?,?,?, 'planned', ?, NULL, ?, ?, NULL, 1)",
+                (identifier, context_key, kind, service_key, timestamp, timestamp, timestamp),
+            )
+        return result
+
+    def get_encounter(self, connection, encounter_id):
+        key = self._uuid(encounter_id, "Encounter identifier")
+        row = connection.execute(
+            "SELECT encounter_id,patient_context_id,encounter_type,service_id,state,version_no "
+            "FROM encounters WHERE encounter_id=?", (key,)
+        ).fetchone()
+        if row is None:
+            raise ValidationError("Encounter does not exist")
+        return self._restore(row)
+
+    def transition_encounter(self, connection, encounter_id, action, *, now=None):
+        """Apply a documented Encounter transition with optimistic concurrency."""
+        from agent_core.domain_health import EncounterState
+
+        key = self._uuid(encounter_id, "Encounter identifier")
+        timestamp = self._instant(now)
+        targets = {"start": "in-progress", "complete": "completed", "cancel": "cancelled"}
+        if action not in targets:
+            raise ValidationError("Unsupported Encounter lifecycle action")
+        target = targets[action]
+        with connection:
+            row = connection.execute(
+                "SELECT encounter_id,patient_context_id,encounter_type,service_id,state,version_no "
+                "FROM encounters WHERE encounter_id=?", (key,)
+            ).fetchone()
+            if row is None:
+                raise ValidationError("Encounter does not exist")
+            current = self._DB_TO_DOMAIN.get(row[4])
+            if current is None:
+                raise ValidationError("Encounter has an unsupported persisted state")
+            if target not in self._ALLOWED[current]:
+                raise ValidationError(f"Invalid Encounter transition from {current} via {action}")
+            next_version = row[5] + 1
+            ended_at = timestamp if target in ("completed", "cancelled") else None
+            cursor = connection.execute(
+                "UPDATE encounters SET state=?, updated_at=?, ended_at=?, version_no=? "
+                "WHERE encounter_id=? AND version_no=?",
+                (self._DOMAIN_TO_DB[target], timestamp, ended_at, next_version, key, row[5]),
+            )
+            if cursor.rowcount != 1:
+                raise ValidationError("Concurrent Encounter update detected")
+            updated = (row[0], row[1], row[2], row[3], self._DOMAIN_TO_DB[target], next_version)
+        result = self._restore(updated)
+        result.state = EncounterState(target)
+        return result
