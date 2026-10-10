@@ -114,3 +114,39 @@ def test_inventory_position_accepts_both_valid_folds_of_repeated_local_hour():
             observed_at=stamp,
         )
     assert first.astimezone(timezone.utc) != second.astimezone(timezone.utc)
+
+
+@pytest.mark.parametrize("field", ["effective_from", "effective_to"])
+def test_offering_rejects_nonexistent_local_time_during_spring_forward(field):
+    from zoneinfo import ZoneInfo
+
+    from agent_core.domain_inventory import Offering
+
+    nonexistent = datetime(2026, 3, 8, 2, 30, tzinfo=ZoneInfo("America/New_York"))
+    values = {
+        "product_id": uuid4(),
+        "activity_id": uuid4(),
+        field: nonexistent,
+    }
+    with pytest.raises(ValidationError, match="must represent a valid local time"):
+        Offering(**values)
+
+
+def test_offering_accepts_valid_local_time_and_both_folds_of_repeated_hour():
+    from zoneinfo import ZoneInfo
+
+    from agent_core.domain_inventory import Offering
+
+    eastern = ZoneInfo("America/New_York")
+    ordinary = datetime(2026, 3, 8, 3, 30, tzinfo=eastern)
+    first = datetime(2026, 11, 1, 1, 30, tzinfo=eastern, fold=0)
+    second = datetime(2026, 11, 1, 1, 30, tzinfo=eastern, fold=1)
+
+    for stamp in (ordinary, first, second):
+        Offering(
+            product_id=uuid4(),
+            activity_id=uuid4(),
+            effective_from=stamp,
+        )
+
+    assert first.astimezone(timezone.utc) != second.astimezone(timezone.utc)
