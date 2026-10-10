@@ -79,8 +79,14 @@ class InventoryPosition:
         if self.product_id is not None and not isinstance(self.product_id,UUID): raise ValidationError("Inventory Position product_id must be a UUID")
         if not isinstance(self.scope_key,str) or not self.scope_key.strip(): raise ValidationError("Inventory Position.scope_key is required")
         if not isinstance(self.observed_at,datetime): raise ValidationError("Inventory Position.observed_at must be datetime")
+        if self.observed_at.tzinfo is None or self.observed_at.utcoffset() is None:
+            raise ValidationError("Inventory Position.observed_at must be timezone-aware")
         if self.effective_from is not None and not isinstance(self.effective_from,datetime): raise ValidationError("Inventory Position.effective_from must be datetime")
+        if self.effective_from is not None and (self.effective_from.tzinfo is None or self.effective_from.utcoffset() is None):
+            raise ValidationError("Inventory Position.effective_from must be timezone-aware")
         if self.effective_to is not None and not isinstance(self.effective_to,datetime): raise ValidationError("Inventory Position.effective_to must be datetime")
+        if self.effective_to is not None and (self.effective_to.tzinfo is None or self.effective_to.utcoffset() is None):
+            raise ValidationError("Inventory Position.effective_to must be timezone-aware")
         if self.effective_from is not None and self.effective_to is not None and self.effective_to < self.effective_from:
             raise ValidationError("Inventory Position.effective_to cannot precede effective_from")
     def make_effective(self):
