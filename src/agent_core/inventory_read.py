@@ -61,7 +61,10 @@ class InventoryQuantityReader:
     ):
         if not isinstance(scope_key, str) or not scope_key.strip():
             raise ValidationError("Inventory scope_key is required")
-        instant = _instant(as_of or datetime.now(timezone.utc), "Inventory as_of")
+        instant = _instant(
+            datetime.now(timezone.utc) if as_of is None else as_of,
+            "Inventory as_of",
+        )
 
         query = (
             "SELECT inventory_position_id, quantity_minor, observed_at, effective_from, effective_to "
