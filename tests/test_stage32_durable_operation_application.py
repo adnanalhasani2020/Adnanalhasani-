@@ -1,5 +1,7 @@
 """Integration tests for SPEC-0023 durable operation identity and duplicate handling."""
 import uuid
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 
 import pytest
 
@@ -97,4 +99,37 @@ def test_rejects_offline_writes_and_invalid_outcome_state():
             db, namespace=record.namespace, operation_id=record.operation_id,
             state="conflicted", outcome_ref="conflict-ref", now=STAMP,
         )
+    db.close()
+
+    
+def test_concurrent_reservations_share_one_database_identity(tmp_path):
+    path = tmp_path / "concurrent-operations.sqlite"
+    # Initialize the schema before independent connections race on the same key.
+    db = connect_database(path)
+    db.close()
+    app = DurableOperationApplication()
+    start = Barrier(2)
+
+    def reserve():
+        connection = connect_database(path)
+        try:
+            start.wait(timeout=5)
+            return app.reserve(
+                connection, namespace="commerce.sale", operation_id="concurrent-001",
+                operation_kind="sale.create", actor_context_ref="context-concurrent",
+                request_fingerprint="sha256:same-request", now=STAMP,
+            )
+        finally:
+            connection.close()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first, second = list(pool.map(lambda _: reserve(), range(2)))
+
+    assert first.record_id == second.record_id
+    db = connect_database(path)
+    assert db.execute(
+        "SELECT COUNT(*) FROM durable_operation_records "
+        "WHERE namespace=? AND operation_id=?",
+        ("commerce.sale", "concurrent-001"),
+    ).fetchone()[0] == 1
     db.close()
