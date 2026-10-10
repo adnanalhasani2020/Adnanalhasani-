@@ -5,6 +5,20 @@ from typing import Optional
 from uuid import UUID
 from agent_core.shared import ValidationError,new_id
 
+
+
+def _validate_aware_local_datetime(value: datetime, field_name: str) -> None:
+    """Reject aware local wall times that ZoneInfo cannot map to a real instant.
+
+    A UTC round-trip preserves valid wall time (including either explicit fold),
+    but changes a nonexistent wall time inside a spring-forward gap.
+    """
+    if value.tzinfo is None or value.utcoffset() is None:
+        return
+    round_trip = value.astimezone(timezone.utc).astimezone(value.tzinfo)
+    if round_trip.replace(tzinfo=None) != value.replace(tzinfo=None):
+        raise ValidationError(f"{field_name} must represent a valid local time")
+
 class ProductState(str,Enum):
     DRAFT="draft"; ACTIVE="active"; RETIRED="retired"
 
@@ -53,6 +67,8 @@ class Offering:
         if self.service_id is not None and not isinstance(self.service_id,UUID): raise ValidationError("Offering.service_id must be a UUID")
         if self.effective_from is not None and not isinstance(self.effective_from,datetime): raise ValidationError("Offering.effective_from must be datetime")
         if self.effective_to is not None and not isinstance(self.effective_to,datetime): raise ValidationError("Offering.effective_to must be datetime")
+        if self.effective_from is not None: _validate_aware_local_datetime(self.effective_from, "Offering.effective_from")
+        if self.effective_to is not None: _validate_aware_local_datetime(self.effective_to, "Offering.effective_to")
         if self.effective_from is not None and self.effective_to is not None:
             starts = self.effective_from
             ends = self.effective_to
@@ -87,12 +103,15 @@ class InventoryPosition:
         if not isinstance(self.observed_at,datetime): raise ValidationError("Inventory Position.observed_at must be datetime")
         if self.observed_at.tzinfo is None or self.observed_at.utcoffset() is None:
             raise ValidationError("Inventory Position.observed_at must be timezone-aware")
+        _validate_aware_local_datetime(self.observed_at, "Inventory Position.observed_at")
         if self.effective_from is not None and not isinstance(self.effective_from,datetime): raise ValidationError("Inventory Position.effective_from must be datetime")
         if self.effective_from is not None and (self.effective_from.tzinfo is None or self.effective_from.utcoffset() is None):
             raise ValidationError("Inventory Position.effective_from must be timezone-aware")
+        if self.effective_from is not None: _validate_aware_local_datetime(self.effective_from, "Inventory Position.effective_from")
         if self.effective_to is not None and not isinstance(self.effective_to,datetime): raise ValidationError("Inventory Position.effective_to must be datetime")
         if self.effective_to is not None and (self.effective_to.tzinfo is None or self.effective_to.utcoffset() is None):
             raise ValidationError("Inventory Position.effective_to must be timezone-aware")
+        if self.effective_to is not None: _validate_aware_local_datetime(self.effective_to, "Inventory Position.effective_to")
         if self.effective_from is not None and self.effective_to is not None:
             starts = self.effective_from.astimezone(timezone.utc)
             ends = self.effective_to.astimezone(timezone.utc)

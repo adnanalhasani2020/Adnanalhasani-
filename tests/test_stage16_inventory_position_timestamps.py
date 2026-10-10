@@ -83,3 +83,34 @@ def test_inventory_position_rejects_reversed_instants_in_repeated_local_hour():
             effective_from=datetime(2026, 11, 1, 1, 30, tzinfo=eastern, fold=1),
             effective_to=datetime(2026, 11, 1, 1, 45, tzinfo=eastern, fold=0),
         )
+
+
+@pytest.mark.parametrize("field", ["observed_at", "effective_from", "effective_to"])
+def test_inventory_position_rejects_nonexistent_local_time_during_spring_forward(field):
+    from zoneinfo import ZoneInfo
+
+    # New York jumps from 01:59:59 to 03:00:00 on this date; 02:30 never occurs.
+    nonexistent = datetime(2026, 3, 8, 2, 30, tzinfo=ZoneInfo("America/New_York"))
+    with pytest.raises(ValidationError, match="must represent a valid local time"):
+        InventoryPosition(
+            offering_id=uuid4(),
+            activity_id=uuid4(),
+            scope_key="warehouse-A",
+            **{field: nonexistent},
+        )
+
+
+def test_inventory_position_accepts_both_valid_folds_of_repeated_local_hour():
+    from zoneinfo import ZoneInfo
+
+    eastern = ZoneInfo("America/New_York")
+    first = datetime(2026, 11, 1, 1, 30, tzinfo=eastern, fold=0)
+    second = datetime(2026, 11, 1, 1, 30, tzinfo=eastern, fold=1)
+    for stamp in (first, second):
+        InventoryPosition(
+            offering_id=uuid4(),
+            activity_id=uuid4(),
+            scope_key="warehouse-A",
+            observed_at=stamp,
+        )
+    assert first.astimezone(timezone.utc) != second.astimezone(timezone.utc)
