@@ -326,3 +326,45 @@ def test_grant_effective_period_rejects_expiry_at_same_instant_with_offset():
         "SELECT count(*) FROM domain_history WHERE target_ref=?", (str(sale.id),)
     ).fetchone()[0] == 1
     db.close()
+
+
+def test_grant_effective_from_is_inclusive_at_exact_instant():
+    db = connect_database()
+    app, actor, activity, _offering, sale, _create_grant = _sale_and_create_grant(db)
+    grant = _transition_grant(
+        db, actor, activity, sale, "confirm",
+        starts="2026-10-09T14:00:00+02:00",
+        ends="2026-10-09T16:00:00+02:00",
+    )
+    result = app.confirm_sale(db, sale.id, actor, grant, now=NOW)
+    assert result.state is SaleState.CONFIRMED
+    assert db.execute(
+        "SELECT state,version_no FROM sales WHERE sale_id=?", (str(sale.id),)
+    ).fetchone() == ("confirmed", 2)
+    db.close()
+
+
+@pytest.mark.parametrize(
+    ("starts", "ends"),
+    [
+        ("not-a-timestamp", None),
+        ("2026-10-09T10:00:00", None),
+        ("2026-10-09T10:00:00Z", "not-a-timestamp"),
+        ("2026-10-09T10:00:00Z", "2026-10-09T14:00:00"),
+    ],
+)
+def test_malformed_or_timezone_naive_grant_bounds_fail_closed_without_mutation(starts, ends):
+    db = connect_database()
+    app, actor, activity, _offering, sale, _create_grant = _sale_and_create_grant(db)
+    grant = _transition_grant(
+        db, actor, activity, sale, "confirm", starts=starts, ends=ends
+    )
+    with pytest.raises(ValidationError, match="valid timezone-aware timestamp"):
+        app.confirm_sale(db, sale.id, actor, grant, now=NOW)
+    assert db.execute(
+        "SELECT state,version_no FROM sales WHERE sale_id=?", (str(sale.id),)
+    ).fetchone() == ("initiated", 1)
+    assert db.execute(
+        "SELECT count(*) FROM domain_history WHERE target_ref=?", (str(sale.id),)
+    ).fetchone()[0] == 1
+    db.close()
