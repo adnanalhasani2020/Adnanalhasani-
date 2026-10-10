@@ -262,3 +262,27 @@ def test_loan_rejects_stale_version_and_unsupported_transition_without_mutation(
     assert current.state == "active"
     assert current.version_no == 2
     db.close()
+
+
+def test_proposed_loan_can_be_cancelled_without_creating_an_obligation():
+    db = connect_database()
+    parties = seed(db)
+    app = LoanApplication()
+    loan, parties = create_loan(db, app, parties)
+    _, _, approver, agent, context = parties
+    grant, action = authorize(
+        db, agent=agent, context=context, loan_id=str(loan.loan_id),
+        action_code="loan.transition.cancelled", approver=approver,
+    )
+    cancelled = app.transition_loan(
+        db, loan.loan_id, "cancelled", expected_version=1, context_ref=context,
+        authorization_grant_id=grant, agent_action_id=action, now=STAMP,
+    )
+    assert cancelled.state == "cancelled"
+    assert cancelled.version_no == 2
+    assert db.execute("SELECT COUNT(*) FROM obligations WHERE loan_id=?", (str(loan.loan_id),)).fetchone()[0] == 0
+    assert db.execute(
+        "SELECT change_payload_ref FROM domain_history WHERE target_ref=? AND change_type='loan_state_transition' ORDER BY rowid",
+        (str(loan.loan_id),),
+    ).fetchall()[-1] == ("state:cancelled",)
+    db.close()
