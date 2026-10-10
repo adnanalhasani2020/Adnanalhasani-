@@ -160,12 +160,12 @@ class PaymentApplication:
             raise ValidationError("Payment currency_code is required")
         currency_code = currency_code.strip()
         timestamp = self._timestamp(now or datetime.now(timezone.utc), "Payment creation timestamp")
-        actor = self._authorize(
-            connection, payment_id=key, context_ref=context_ref, action_code="payment.create",
-            authorization_grant_id=authorization_grant_id, agent_action_id=agent_action_id,
-            now=timestamp,
-        )
         with connection:
+            actor = self._authorize(
+                connection, payment_id=key, context_ref=context_ref, action_code="payment.create",
+                authorization_grant_id=authorization_grant_id, agent_action_id=agent_action_id,
+                now=timestamp,
+            )
             for person_id, label in ((payer, "Payer"), (payee, "Payee")):
                 if connection.execute(
                     "SELECT 1 FROM persons WHERE person_id=? AND state='active'", (person_id,)
@@ -211,12 +211,12 @@ class PaymentApplication:
             raise ValidationError("Unsupported persisted Payment target state")
         timestamp = self._timestamp(now or datetime.now(timezone.utc), "Payment transition timestamp")
         action_code = f"payment.transition.{target_state}"
-        actor = self._authorize(
-            connection, payment_id=key, context_ref=context_ref, action_code=action_code,
-            authorization_grant_id=authorization_grant_id, agent_action_id=agent_action_id,
-            now=timestamp,
-        )
         with connection:
+            actor = self._authorize(
+                connection, payment_id=key, context_ref=context_ref, action_code=action_code,
+                authorization_grant_id=authorization_grant_id, agent_action_id=agent_action_id,
+                now=timestamp,
+            )
             record = self._load(connection, key)
             if record.version_no != expected_version:
                 raise ValidationError("Payment version conflict; reload before retrying")
