@@ -119,6 +119,12 @@ class SaleApplication:
             raise ValidationError("AuthorizationGrant must be ACTIVE")
         if subject != str(actor_id) or agent_id is not None:
             raise ValidationError("AuthorizationGrant actor does not match the requested Person")
+        person = connection.execute(
+            "SELECT state FROM persons WHERE person_id=?",
+            (str(actor_id),),
+        ).fetchone()
+        if person is None or person[0] != "active":
+            raise ValidationError("Sale action requires an active persisted Person")
         if action_code != action:
             raise ValidationError(f"AuthorizationGrant does not permit action {action}")
         if scope_ref != str(sale_id):
