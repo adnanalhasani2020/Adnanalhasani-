@@ -11,6 +11,7 @@ class InventoryQuantityStatus(str, Enum):
     UNKNOWN_QUANTITY = "unknown_quantity"
     NO_RECORD = "no_record"
     AMBIGUOUS = "ambiguous"
+    INVALID_QUANTITY = "invalid_quantity"
 
 
 @dataclass(frozen=True)
@@ -116,6 +117,11 @@ class InventoryQuantityReader:
         if quantity is None:
             return InventoryQuantityResult(
                 InventoryQuantityStatus.UNKNOWN_QUANTITY, scope_key, instant,
+                inventory_position_id=position_id, observed_at=observed,
+            )
+        if type(quantity) is not int:
+            return InventoryQuantityResult(
+                InventoryQuantityStatus.INVALID_QUANTITY, scope_key, instant,
                 inventory_position_id=position_id, observed_at=observed,
             )
         return InventoryQuantityResult(

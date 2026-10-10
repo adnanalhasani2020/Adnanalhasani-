@@ -100,6 +100,7 @@ class InventoryPosition:
         if not isinstance(self.activity_id,UUID): raise ValidationError("Inventory Position must reference Activity")
         if self.product_id is not None and not isinstance(self.product_id,UUID): raise ValidationError("Inventory Position product_id must be a UUID")
         if not isinstance(self.scope_key,str) or not self.scope_key.strip(): raise ValidationError("Inventory Position.scope_key is required")
+        if self.quantity_minor is not None and type(self.quantity_minor) is not int: raise ValidationError("Inventory Position.quantity_minor must be an integer or None")
         if not isinstance(self.observed_at,datetime): raise ValidationError("Inventory Position.observed_at must be datetime")
         if self.observed_at.tzinfo is None or self.observed_at.utcoffset() is None:
             raise ValidationError("Inventory Position.observed_at must be timezone-aware")
