@@ -95,7 +95,10 @@ class AuditRecordApplication:
         operation_ref = self._optional(operation_ref, "operation_ref")
         correlation_ref = self._optional(correlation_ref, "correlation_ref")
         provenance_id = self._optional(provenance_id, "provenance_id")
-        record_id = UUID(str(audit_record_id)) if audit_record_id is not None else new_id()
+        try:
+            record_id = UUID(str(audit_record_id)) if audit_record_id is not None else new_id()
+        except (ValueError, TypeError, AttributeError) as exc:
+            raise ValidationError("audit_record_id must be a valid UUID") from exc
         occurred = self._timestamp(occurred_at or now or datetime.now(timezone.utc), "occurred_at")
         created = self._timestamp(now or datetime.now(timezone.utc), "created_at")
         with connection:
