@@ -23,7 +23,7 @@ class ProductState(str,Enum):
     DRAFT="draft"; ACTIVE="active"; RETIRED="retired"
 
 class ServiceState(str,Enum):
-    DEFINED="defined"; ACTIVE="active"; INACTIVE="inactive"; RETIRED="retired"
+    DRAFT="draft"; ACTIVE="active"; RETIRED="retired"
 
 class OfferingState(str,Enum):
     DRAFT="draft"; ACTIVE="active"; ENDED="ended"; WITHDRAWN="withdrawn"
@@ -45,7 +45,7 @@ class Product:
 
 @dataclass
 class Service:
-    name:str; id:UUID=field(default_factory=new_id); state:ServiceState=ServiceState.DEFINED
+    name:str; id:UUID=field(default_factory=new_id); state:ServiceState=ServiceState.DRAFT
     def __post_init__(self):
         if not isinstance(self.name,str) or not self.name.strip(): raise ValidationError("Service.name is required")
         self.name=self.name.strip()
