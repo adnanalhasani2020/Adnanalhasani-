@@ -287,3 +287,42 @@ def test_grant_scoped_to_one_sale_cannot_authorize_another_sale():
         "SELECT count(*) FROM domain_history WHERE target_ref=?", (str(second_sale.id),)
     ).fetchone()[0] == 1
     db.close()
+
+
+def test_grant_effective_period_compares_instants_across_timezone_offsets():
+    db = connect_database()
+    app, actor, activity, _offering, sale, _create_grant = _sale_and_create_grant(db)
+
+    # 13:00 +02:00 is 11:00 UTC, before the operation at 12:00 UTC.
+    # 15:00 +02:00 is 13:00 UTC, after the operation.
+    offset_grant = _transition_grant(
+        db, actor, activity, sale, "confirm",
+        starts="2026-10-09T13:00:00+02:00",
+        ends="2026-10-09T15:00:00+02:00",
+    )
+    result = app.confirm_sale(db, sale.id, actor, offset_grant, now=NOW)
+    assert result.state is SaleState.CONFIRMED
+    assert db.execute(
+        "SELECT state,version_no FROM sales WHERE sale_id=?", (str(sale.id),)
+    ).fetchone() == ("confirmed", 2)
+    db.close()
+
+
+def test_grant_effective_period_rejects_expiry_at_same_instant_with_offset():
+    db = connect_database()
+    app, actor, activity, _offering, sale, _create_grant = _sale_and_create_grant(db)
+    # 14:00 +02:00 is exactly 12:00 UTC; effective_to is exclusive.
+    expired_grant = _transition_grant(
+        db, actor, activity, sale, "confirm",
+        starts="2026-10-09T10:00:00+02:00",
+        ends="2026-10-09T14:00:00+02:00",
+    )
+    with pytest.raises(ValidationError, match="outside its effective period"):
+        app.confirm_sale(db, sale.id, actor, expired_grant, now=NOW)
+    assert db.execute(
+        "SELECT state,version_no FROM sales WHERE sale_id=?", (str(sale.id),)
+    ).fetchone() == ("initiated", 1)
+    assert db.execute(
+        "SELECT count(*) FROM domain_history WHERE target_ref=?", (str(sale.id),)
+    ).fetchone()[0] == 1
+    db.close()
