@@ -34,5 +34,12 @@ jobs:
           python -m pip install .
           python -m pip install pytest
 
-      - name: Run Stage 7 tests
+      - name: Run focused attachment tests
+        run: >-
+          python -m pytest -q
+          tests/test_stage41_file_attachment_application.py
+          tests/test_stage47_file_attachment_content.py
+          tests/test_stage49_file_attachment_filesystem_store.py
+
+      - name: Run full test suite
         run: python -m pytest -q
