@@ -21,5 +21,11 @@ class Message:
         if not isinstance(self.conversation_id,UUID): raise ValidationError("Message must reference Conversation")
         if not isinstance(self.content,str) or not self.content.strip(): raise ValidationError("Message.content is required")
         self.content=self.content.strip()
-    def send(self): self.state=MessageState.SENT
-    def revoke(self): self.state=MessageState.REVOKED
+    def send(self):
+        if self.state is not MessageState.DRAFT:
+            raise ValidationError("Only a draft Message can be sent")
+        self.state=MessageState.SENT
+    def revoke(self):
+        if self.state is not MessageState.SENT:
+            raise ValidationError("Only a sent Message can be revoked")
+        self.state=MessageState.REVOKED
