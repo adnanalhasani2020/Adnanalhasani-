@@ -5,7 +5,7 @@ import uuid
 
 import pytest
 
-from agent_core.application import SaleApplication
+from agent_core.application import InventoryApplication, SaleApplication
 from agent_core.domain_commerce import SaleState
 from agent_core.persistence import MIGRATIONS_DIR, connect_database
 from agent_core.shared import ValidationError
@@ -423,4 +423,70 @@ def test_sale_transition_fails_closed_when_persisted_version_exceeds_history_cou
     assert db.execute(
         "SELECT count(*) FROM domain_history WHERE target_ref=?", (str(sale.id),)
     ).fetchone()[0] == 1
+    db.close()
+
+
+
+def test_integrated_sale_period_boundary_and_offering_inventory_context():
+    db = connect_database()
+    actor, activity, product, offering = _fixture(db)
+    db.execute(
+        "UPDATE offerings SET effective_from=?, effective_to=? WHERE offering_id=?",
+        ("2026-10-09T10:00:00Z", "2026-10-09T12:00:00Z", offering),
+    )
+    grant = _grant(db, actor, activity, offering)
+    app = SaleApplication()
+    sale = app.create_sale(
+        db, offering, activity, actor, grant,
+        now=datetime(2026, 10, 9, 11, 59, tzinfo=timezone.utc),
+    )
+    assert sale.state is SaleState.INITIATED
+    assert db.execute(
+        "SELECT offering_id, activity_id, state FROM sales WHERE sale_id=?",
+        (str(sale.id),),
+    ).fetchone() == (offering, activity, "initiated")
+
+    stamp = "2026-10-09T12:00:00Z"
+    _other_actor, other_activity, other_product, other_offering = _fixture(db)
+    db.execute(
+        "INSERT INTO inventory_positions(inventory_position_id,activity_id,product_id,offering_id,"
+        "scope_key,state,quantity_minor,observed_at,effective_from,effective_to,created_at,updated_at) "
+        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+        (_id(), activity, product, offering, "warehouse-A", "effective", 7,
+         "2026-10-09T11:00:00Z", "2026-10-09T10:00:00Z", "2026-10-09T12:00:00Z",
+         stamp, stamp),
+    )
+    db.execute(
+        "INSERT INTO inventory_positions(inventory_position_id,activity_id,product_id,offering_id,"
+        "scope_key,state,quantity_minor,observed_at,effective_from,effective_to,created_at,updated_at) "
+        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+        (_id(), other_activity, other_product, other_offering, "warehouse-A", "effective", 999,
+         "2026-10-09T11:30:00Z", "2026-10-09T10:00:00Z", "2026-10-09T12:00:00Z",
+         stamp, stamp),
+    )
+    quantity = InventoryApplication().read_offering_quantity(
+        db, offering, "warehouse-A",
+        as_of=datetime(2026, 10, 9, 11, 45, tzinfo=timezone.utc),
+    )
+    assert quantity.status.value == "known"
+    assert quantity.quantity_minor == 7
+    assert quantity.scope_key == "warehouse-A"
+
+    sales_before = db.execute("SELECT count(*) FROM sales").fetchone()[0]
+    history_before = db.execute(
+        "SELECT count(*) FROM domain_history WHERE owner_domain='commerce'"
+    ).fetchone()[0]
+    with pytest.raises(ValidationError, match="Offering is outside its effective period"):
+        app.create_sale(
+            db, offering, activity, actor, grant,
+            now=datetime(2026, 10, 9, 12, 0, tzinfo=timezone.utc),
+        )
+    assert db.execute("SELECT count(*) FROM sales").fetchone()[0] == sales_before
+    assert db.execute(
+        "SELECT count(*) FROM domain_history WHERE owner_domain='commerce'"
+    ).fetchone()[0] == history_before
+    assert db.execute(
+        "SELECT state, version_no FROM sales WHERE sale_id=?",
+        (str(sale.id),),
+    ).fetchone() == ("initiated", 1)
     db.close()
