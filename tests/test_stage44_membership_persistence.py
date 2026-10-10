@@ -31,7 +31,7 @@ def test_membership_persists_and_restores_after_reopen(tmp_path):
     person_id, activity_id = seed_person_activity(db)
     app = MembershipApplication()
     membership = app.create_membership(
-        db, person_id=person_id, activity_id=activity_id, state="proposed",
+        db, person_id=person_id, activity_id=activity_id, state="active",
         effective_from=datetime(2026, 10, 1, tzinfo=timezone.utc),
     )
     db.close()
