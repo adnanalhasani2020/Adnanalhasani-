@@ -264,3 +264,57 @@ def test_payment_transition_history_failure_rolls_back_state_and_version():
         (str(payment.payment_id),),
     ).fetchone()[0] == 0
     db.close()
+
+
+def test_payment_rejects_invoice_obligation_reference_mismatch():
+    db = connect_database()
+    payer, payee, approver, agent, context, obligation = seed(db)
+    other_obligation = uid()
+    db.execute(
+        "INSERT INTO obligations(obligation_id,creditor_person_id,debtor_person_id,amount_minor,"
+        "currency_code,state,created_at,updated_at,version_no) VALUES(?,?,?,?,?,'open',?,?,1)",
+        (other_obligation, payee, payer, 5000, "YER", STAMP, STAMP),
+    )
+    activity, product, offering, sale, invoice = [uid() for _ in range(5)]
+    db.execute(
+        "INSERT INTO activities(activity_id,owner_person_id,state,created_at,updated_at) "
+        "VALUES(?,?,'active',?,?)", (activity, approver, STAMP, STAMP),
+    )
+    db.execute(
+        "INSERT INTO products(product_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (product, STAMP, STAMP),
+    )
+    db.execute(
+        "INSERT INTO offerings(offering_id,product_id,activity_id,state,effective_from,created_at,updated_at) "
+        "VALUES(?,?,?,'active',?,?,?)",
+        (offering, product, activity, STAMP, STAMP, STAMP),
+    )
+    db.execute(
+        "INSERT INTO sales(sale_id,offering_id,activity_id,state,occurred_at,created_at,updated_at,version_no) "
+        "VALUES(?,?,?,'initiated',?,?,?,1)",
+        (sale, offering, activity, STAMP, STAMP, STAMP),
+    )
+    db.execute(
+        "INSERT INTO invoices(invoice_id,sale_id,obligation_id,state,issuer_ref,invoice_number,issue_at,"
+        "created_at,updated_at,version_no) VALUES(?,?,?,'issued',?,?,?, ?,?,1)",
+        (invoice, sale, obligation, str(approver), "INV-MISMATCH", STAMP, STAMP, STAMP),
+    )
+    db.commit()
+    payment_id = uid()
+    grant, action = authorize(
+        db, agent=agent, context=context, payment_id=payment_id,
+        action_code="payment.create", approver=approver,
+    )
+    with pytest.raises(ValidationError, match="references do not match"):
+        PaymentApplication().create_payment(
+            db, payment_id=payment_id, payer_person_id=payer, payee_person_id=payee,
+            obligation_id=other_obligation, invoice_id=invoice, amount_minor=1000,
+            currency_code="YER", context_ref=context, authorization_grant_id=grant,
+            agent_action_id=action, now=STAMP,
+        )
+    assert db.execute("SELECT COUNT(*) FROM payments").fetchone()[0] == 0
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=? AND change_type='payment_state_transition'",
+        (payment_id,),
+    ).fetchone()[0] == 0
+    db.close()
