@@ -179,6 +179,14 @@ class PaymentApplication:
                 "SELECT 1 FROM invoices WHERE invoice_id=?", (invoice,)
             ).fetchone() is None:
                 raise ValidationError("Payment references a missing Invoice")
+            if invoice is not None and obligation is not None:
+                invoice_obligation = connection.execute(
+                    "SELECT obligation_id FROM invoices WHERE invoice_id=?", (invoice,)
+                ).fetchone()[0]
+                if invoice_obligation is not None and invoice_obligation != obligation:
+                    raise ValidationError(
+                        "Payment Invoice and Obligation references do not match"
+                    )
             connection.execute(
                 "INSERT INTO payments(payment_id,obligation_id,invoice_id,payer_person_id,payee_person_id,"
                 "amount_minor,currency_code,state,provider_ref,external_payment_ref,created_at,updated_at,"
