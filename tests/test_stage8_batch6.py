@@ -218,6 +218,7 @@ def test_reverse_implementation_inventory_has_traceability_owner():
         "access_account_registration_application.py": "explicit persisted Access Account registration under the existing schema; no authentication, Authenticator, Session, authorization, or lifecycle transitions",
         "person_registration_application.py": "explicit persisted Person registration over the existing schema; no identity deduplication, merge, identifier issuance, authentication, or authorization",
         "domain_provenance.py": "explicit persisted Provenance records under existing provenance_records schema; no inferred lineage or automatic attachment",
+        "device_read_application.py": "read-only persisted Device restoration and Person-/Access Account-scoped listing; no device mutation, authorization, or pending-operation effects",
     }
     for module in expected:
         if module in cross_cutting:
