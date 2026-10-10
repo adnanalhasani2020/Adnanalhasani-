@@ -182,7 +182,7 @@ def test_reverse_implementation_inventory_has_traceability_owner():
         "__init__.py","application.py","config.py","domain_activities.py","domain_audit.py",
         "domain_authorization.py","domain_commerce.py","domain_communication.py","domain_education.py",
         "domain_exceptions.py","domain_finance.py","domain_health.py","domain_identity.py",
-        "domain_inventory.py","inventory_read.py","offering_application.py","domain_offline.py","financial_orchestration.py","infrastructure.py","integrity.py","approval_enforcement.py","persistence.py","runtime.py","shared.py",
+        "domain_inventory.py","inventory_read.py","offering_application.py","product_legacy_audit.py","domain_offline.py","financial_orchestration.py","infrastructure.py","integrity.py","approval_enforcement.py","persistence.py","runtime.py","shared.py",
     }
     assert expected == mapped
     impl_text = " ".join(SPEC_TO_IMPL.values())
@@ -192,6 +192,7 @@ def test_reverse_implementation_inventory_has_traceability_owner():
         "application.py": "application composition over domain SPECs",
         "inventory_read.py": "fail-closed Inventory Position quantity read interface owned by SPEC-0006",
         "offering_application.py": "persisted Commerce Offering lifecycle owned by SPEC-0005",
+        "product_legacy_audit.py": "read-only legacy Product name gap report preserving Commerce history",
         "infrastructure.py": "audit infrastructure supporting SPEC-0021",
         "approval_enforcement.py": "Stage 11 GAP-0001 runtime approval enforcement boundary",
         "persistence.py": "Stage 12A persistence/migration boundary; GAP-0005 durable operation identity and Stage 12A financial recognition/ledger persistence",
