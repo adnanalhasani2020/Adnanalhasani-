@@ -28,7 +28,7 @@ SPEC_TO_IMPL = {
     "SPEC-0002": "src/agent_core/domain_activities.py",
     "SPEC-0003": "src/agent_core/domain_authorization.py",
     "SPEC-0004": "src/agent_core/domain_authorization.py",
-    "SPEC-0005": "src/agent_core/domain_commerce.py",
+    "SPEC-0005": "src/agent_core/domain_commerce.py + src/agent_core/invoice_application.py",
     "SPEC-0006": "src/agent_core/domain_inventory.py",
     "SPEC-0007": "src/agent_core/domain_finance.py",
     "SPEC-0008": "src/agent_core/domain_finance.py",
@@ -182,7 +182,7 @@ def test_reverse_implementation_inventory_has_traceability_owner():
         "__init__.py","application.py","config.py","domain_activities.py","domain_audit.py",
         "domain_authorization.py","domain_commerce.py","domain_communication.py","domain_education.py",
         "domain_exceptions.py","domain_finance.py","domain_health.py","domain_identity.py",
-        "domain_inventory.py","inventory_read.py","offering_application.py","commerce_inventory_read.py","product_legacy_audit.py","sale_history_audit.py","sale_operational_read.py","domain_offline.py","financial_orchestration.py","infrastructure.py","integrity.py","approval_enforcement.py","persistence.py","runtime.py","shared.py",
+        "domain_inventory.py","inventory_read.py","offering_application.py","commerce_inventory_read.py","product_legacy_audit.py","sale_history_audit.py","sale_operational_read.py","domain_offline.py","financial_orchestration.py","infrastructure.py","integrity.py","approval_enforcement.py","invoice_application.py","persistence.py","runtime.py","shared.py",
     }
     assert expected == mapped
     impl_text = " ".join(SPEC_TO_IMPL.values())
