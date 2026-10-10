@@ -51,6 +51,22 @@ class SaleApplication:
         except (ValueError, TypeError, AttributeError) as exc:
             raise ValidationError(f"{label} must be a valid UUID") from exc
 
+    def _grant_instant(self, value, label):
+        """Parse persisted grant bounds as instants, not lexicographically ordered strings."""
+        if not isinstance(value, str):
+            raise ValidationError(f"AuthorizationGrant {label} must be a valid timezone-aware timestamp")
+        try:
+            instant = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValidationError(
+                f"AuthorizationGrant {label} must be a valid timezone-aware timestamp"
+            ) from exc
+        if instant.tzinfo is None or instant.utcoffset() is None:
+            raise ValidationError(
+                f"AuthorizationGrant {label} must be a valid timezone-aware timestamp"
+            )
+        return instant.astimezone(timezone.utc)
+
     def _authorize(self, connection, grant_id, actor_id, action, sale_id, activity_id, timestamp):
         grant_key = str(self._uuid(grant_id, "AuthorizationGrant identifier"))
         row = connection.execute(
@@ -72,7 +88,12 @@ class SaleApplication:
             raise ValidationError("AuthorizationGrant scope does not match Sale")
         if context_ref != str(activity_id):
             raise ValidationError("AuthorizationGrant context does not match Activity")
-        if starts > timestamp or (ends is not None and timestamp >= ends):
+        operation_instant = self._grant_instant(timestamp, "operation timestamp")
+        starts_instant = self._grant_instant(starts, "effective_from")
+        ends_instant = self._grant_instant(ends, "effective_to") if ends is not None else None
+        if starts_instant > operation_instant or (
+            ends_instant is not None and operation_instant >= ends_instant
+        ):
             raise ValidationError("AuthorizationGrant is outside its effective period")
 
     def _load_sale(self, connection, sale_id):
