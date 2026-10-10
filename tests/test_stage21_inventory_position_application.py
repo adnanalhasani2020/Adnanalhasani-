@@ -110,8 +110,8 @@ def test_inventory_position_rejects_fractional_quantity_and_invalid_transition()
         db, activity_id=activity_id, offering_id=offering_id, product_id=product_id,
         scope_key="warehouse-A", quantity_minor=None, now=NOW,
     )
-    with pytest.raises(ValidationError, match="Only an observed"):
-        app.transition_position(db, str(position.id), "make_effective", now=NOW)
+    with pytest.raises(ValidationError, match="Only an effective"):
+        app.transition_position(db, str(position.id), "close", now=NOW)
     assert app.get_position(db, str(position.id)).state is InventoryPositionState.OBSERVED
     db.close()
 
