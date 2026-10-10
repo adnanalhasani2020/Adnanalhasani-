@@ -69,3 +69,18 @@ def test_audit_append_rejects_naive_timestamps():
         )
     assert db.execute("SELECT COUNT(*) FROM audit_records").fetchone()[0] == 0
     db.close()
+
+
+@pytest.mark.parametrize("record_id", ["not-a-uuid", "", None])
+def test_audit_append_rejects_invalid_explicit_record_identifier(record_id):
+    if record_id is None:
+        pytest.skip("None requests generated identifier rather than an explicit identifier")
+    db = connect_database()
+    with pytest.raises(ValidationError, match="audit_record_id must be a valid UUID"):
+        AuditRecordApplication().append(
+            db, event_type="domain.changed", actor_context_ref="actor-context:1",
+            target_ref="subject:1", result_status="success",
+            audit_record_id=record_id, now=STAMP,
+        )
+    assert db.execute("SELECT COUNT(*) FROM audit_records").fetchone()[0] == 0
+    db.close()
