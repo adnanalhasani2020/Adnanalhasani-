@@ -21,9 +21,11 @@ def create_person(db, person_id=None):
 def create_activity(db, activity_id=None):
     key = str(activity_id or uuid4())
     now = "2026-01-01T00:00:00Z"
+    owner = db.execute("SELECT person_id FROM persons ORDER BY person_id LIMIT 1").fetchone()
+    assert owner is not None
     db.execute(
         "INSERT INTO activities(activity_id,owner_person_id,state,created_at,updated_at) VALUES(?, ?, 'active', ?, ?)",
-        (key, str(db.execute("SELECT person_id FROM persons ORDER BY person_id LIMIT 1").fetchone()[0]), now, now),
+        (key, owner[0], now, now),
     )
     return key
 
@@ -50,6 +52,7 @@ def test_invitation_requires_existing_activity_and_people():
     db = connect_database()
     app = ActivityInvitationApplication()
     inviter, invitee = create_person(db), create_person(db)
+    db.commit()  # Isolate the intentionally failing operation from fixture setup.
     with pytest.raises(ValidationError, match="existing Activity"):
         app.create_invitation(
             db, activity_id=str(uuid4()), inviter_person_id=inviter, invitee_person_id=invitee,
@@ -84,4 +87,20 @@ def test_missing_invitation_and_invalid_list_references_fail():
         app.list_for_activity(db, "bad")
     with pytest.raises(ValidationError, match="valid UUID"):
         app.list_for_invitee(db, "bad")
+    db.close()
+
+
+def test_database_enforces_invitation_foreign_keys():
+    import sqlite3
+
+    db = connect_database()
+    person = create_person(db)
+    activity = create_activity(db)
+    with pytest.raises(sqlite3.IntegrityError):
+        db.execute(
+            "INSERT INTO activity_invitations(invitation_id,activity_id,inviter_person_id,invitee_person_id,created_at) "
+            "VALUES(?,?,?,?,?)",
+            (str(uuid4()), activity, person, str(uuid4()), "2026-02-03T00:00:00Z"),
+        )
+    assert db.execute("PRAGMA foreign_keys").fetchone()[0] == 1
     db.close()
