@@ -148,3 +148,40 @@ def test_inventory_position_guards_do_not_change_quantity_or_rewrite_existing_ro
     ).fetchone() == (None, "site-A:offering", NOW, "effective")
     assert db.execute("PRAGMA foreign_key_check").fetchall() == []
     db.close()
+
+
+
+def test_req_data_0013_persisted_product_can_have_offerings_in_distinct_activity_contexts():
+    db = connect_database()
+    activity_a, activity_b = _activity(db), _activity(db)
+    product = _product(db)
+    offering_a = _offering(db, product, activity_a)
+    offering_b = _offering(db, product, activity_b)
+
+    rows = db.execute(
+        "SELECT offering_id, product_id, activity_id FROM offerings "
+        "WHERE offering_id IN (?, ?) ORDER BY activity_id",
+        (offering_a, offering_b),
+    ).fetchall()
+
+    assert len(rows) == 2
+    assert {row[0] for row in rows} == {offering_a, offering_b}
+    assert {row[1] for row in rows} == {product}
+    assert {row[2] for row in rows} == {activity_a, activity_b}
+    assert db.execute("SELECT COUNT(*) FROM products WHERE product_id=?", (product,)).fetchone() == (1,)
+    db.close()
+
+
+def test_req_data_0014_persisted_offering_does_not_create_inventory_position():
+    db = connect_database()
+    activity = _activity(db)
+    product = _product(db)
+    offering = _offering(db, product, activity)
+
+    assert db.execute(
+        "SELECT COUNT(*) FROM offerings WHERE offering_id=?", (offering,)
+    ).fetchone() == (1,)
+    assert db.execute(
+        "SELECT COUNT(*) FROM inventory_positions WHERE offering_id=?", (offering,)
+    ).fetchone() == (0,)
+    db.close()
