@@ -401,3 +401,26 @@ def test_offering_effective_period_rejects_expiry_at_same_instant_with_offset():
     assert db.execute("SELECT count(*) FROM sales").fetchone()[0] == 0
     assert db.execute("SELECT count(*) FROM domain_history").fetchone()[0] == 0
     db.close()
+
+
+def test_sale_transition_fails_closed_when_persisted_version_exceeds_history_count():
+    db = connect_database()
+    app, actor, activity, _offering, sale, _create_grant = _sale_and_create_grant(db)
+    confirm_grant = _transition_grant(db, actor, activity, sale, "confirm")
+
+    # Corrupt metadata: the Sale claims version 2 but has only its v1 history record.
+    db.execute("UPDATE sales SET version_no=2 WHERE sale_id=?", (str(sale.id),))
+
+    with pytest.raises(
+        ValidationError,
+        match="history entry count does not match the persisted Sale version",
+    ):
+        app.confirm_sale(db, sale.id, actor, confirm_grant, now=NOW)
+
+    assert db.execute(
+        "SELECT state,version_no FROM sales WHERE sale_id=?", (str(sale.id),)
+    ).fetchone() == ("initiated", 1)
+    assert db.execute(
+        "SELECT count(*) FROM domain_history WHERE target_ref=?", (str(sale.id),)
+    ).fetchone()[0] == 1
+    db.close()

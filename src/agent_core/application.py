@@ -148,6 +148,10 @@ class SaleApplication:
         ).fetchall()
         if not history_rows:
             raise ValidationError("Sale history is missing; refusing an unaudited transition")
+        if len(history_rows) != version_no:
+            raise ValidationError(
+                "Sale history entry count does not match the persisted Sale version"
+            )
         states = []
         previous_ref = None
         for index, (_, prior_ref, current_ref, payload_ref) in enumerate(history_rows, start=1):
