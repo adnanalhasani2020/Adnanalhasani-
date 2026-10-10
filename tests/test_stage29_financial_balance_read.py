@@ -33,7 +33,7 @@ def ledger(db, account_id, amount, currency, posted_at, *, tx_state="recognized"
     db.execute(
         "INSERT INTO financial_transactions(financial_transaction_id,settlement_id,financial_account_id,"
         "amount_minor,currency_code,state,recognition_source_type,recognition_source_ref,recognized_at,"
-        "created_at,updated_at) VALUES(?,NULL,?,?,?,?, 'correction',?,?,?,?,?)",
+        "created_at,updated_at) VALUES(?,NULL,?,?,?,?, 'correction',?,?,?,?)",
         (transaction_id, account_id, amount, currency, tx_state, uid(), posted_at, posted_at, posted_at),
     )
     db.execute(
@@ -95,7 +95,7 @@ def test_balance_zero_when_no_recognized_posted_entries_and_does_not_write():
         (str(uuid4()), "YER", datetime(2026, 10, 10), "timezone-aware"),
     ],
 )
-def test_balance_rejects_invalid_request(db=None, account_id=None, currency=None, as_of=None, message=None):
+def test_balance_rejects_invalid_request(account_id, currency, as_of, message):
     connection = connect_database()
     known_account = account(connection)
     if message == "timezone-aware":
