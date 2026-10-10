@@ -1,9 +1,11 @@
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 from agent_core.domain_identity import *
 from agent_core.domain_activities import *
 from agent_core.domain_commerce import Sale, SaleState
+from agent_core.domain_inventory import Product, ProductState
 from agent_core.inventory_read import InventoryQuantityReader, InventoryQuantityResult
 from agent_core.shared import ValidationError
 
@@ -476,3 +478,100 @@ class InventoryPositionApplication:
                 raise ValidationError("Concurrent Inventory Position update detected")
             updated = (*row[:10], target, row[11] + 1)
         return self._restore_position(updated)
+
+
+
+@dataclass(frozen=True)
+class ProductRecord:
+    product: Product
+    version_no: int
+
+
+class ProductApplication:
+    """Persist the existing Product lifecycle without implicit Commerce side effects.
+
+    The domain model requires a non-empty name, while the original relational
+    schema did not store one. Migration 0007 adds a nullable column so existing
+    rows are not assigned fabricated names; legacy unnamed rows fail closed on read.
+    """
+
+    def _uuid(self, value, label):
+        try:
+            return UUID(str(value))
+        except (ValueError, TypeError, AttributeError) as exc:
+            raise ValidationError(f"{label} must be a valid UUID") from exc
+
+    def _instant(self, value, label):
+        if isinstance(value, str):
+            try:
+                value = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError as exc:
+                raise ValidationError(f"{label} must be a valid ISO-8601 timestamp") from exc
+        if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
+            raise ValidationError(f"{label} must be timezone-aware")
+        return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+    def _load_product(self, connection, product_id):
+        key = str(self._uuid(product_id, "Product identifier"))
+        row = connection.execute(
+            "SELECT product_id, name, state, version_no FROM products WHERE product_id=?",
+            (key,),
+        ).fetchone()
+        if row is None:
+            raise ValidationError("Product does not exist")
+        persisted_id, name, state, version = row
+        if not isinstance(name, str) or not name.strip():
+            raise ValidationError(
+                "Product name is missing; explicit legacy reconciliation is required"
+            )
+        return ProductRecord(
+            Product(name=name, id=UUID(persisted_id), state=ProductState(state)),
+            version,
+        )
+
+    def create_product(self, connection, name, *, product_id=None, now=None):
+        product = Product(name=name, id=self._uuid(product_id, "Product identifier")
+                          if product_id is not None else uuid4())
+        timestamp = self._instant(now or datetime.now(timezone.utc), "Product timestamp")
+        with connection:
+            connection.execute(
+                "INSERT INTO products(product_id, name, state, created_at, updated_at, version_no) "
+                "VALUES(?,?,?,?,?,1)",
+                (str(product.id), product.name, product.state.value, timestamp, timestamp),
+            )
+        return ProductRecord(product, 1)
+
+    def get_product(self, connection, product_id):
+        return self._load_product(connection, product_id)
+
+    def transition_product(self, connection, product_id, action, *, expected_version, now=None):
+        if action not in {"activate", "retire"}:
+            raise ValidationError(f"Unsupported Product action: {action}")
+        if type(expected_version) is not int or expected_version < 1:
+            raise ValidationError("Product expected_version must be a positive integer")
+        timestamp = self._instant(now or datetime.now(timezone.utc), "Product transition timestamp")
+        with connection:
+            record = self._load_product(connection, product_id)
+            product = record.product
+            if record.version_no != expected_version:
+                raise ValidationError("Product version conflict; reload before retrying")
+            if action == "activate":
+                if product.state is not ProductState.DRAFT:
+                    raise ValidationError(
+                        f"Invalid Product transition from {product.state.value} to active"
+                    )
+                product.activate()
+            else:
+                if product.state not in {ProductState.DRAFT, ProductState.ACTIVE}:
+                    raise ValidationError(
+                        f"Invalid Product transition from {product.state.value} to retired"
+                    )
+                product.retire()
+            cursor = connection.execute(
+                "UPDATE products SET state=?, updated_at=?, version_no=version_no+1 "
+                "WHERE product_id=? AND version_no=?",
+                (product.state.value, timestamp, str(product.id), expected_version),
+            )
+            if cursor.rowcount != 1:
+                raise ValidationError("Product version conflict; reload before retrying")
+        return ProductRecord(product, expected_version + 1)
