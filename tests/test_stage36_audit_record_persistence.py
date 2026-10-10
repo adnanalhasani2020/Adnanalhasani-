@@ -71,10 +71,8 @@ def test_audit_append_rejects_naive_timestamps():
     db.close()
 
 
-@pytest.mark.parametrize("record_id", ["not-a-uuid", "", None])
+@pytest.mark.parametrize("record_id", ["not-a-uuid", ""])
 def test_audit_append_rejects_invalid_explicit_record_identifier(record_id):
-    if record_id is None:
-        pytest.skip("None requests generated identifier rather than an explicit identifier")
     db = connect_database()
     with pytest.raises(ValidationError, match="audit_record_id must be a valid UUID"):
         AuditRecordApplication().append(
