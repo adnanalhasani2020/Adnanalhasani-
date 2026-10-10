@@ -28,8 +28,16 @@ class ContentStoreError(RuntimeError):
     """The content storage operation failed."""
 
 
+class ContentPublishedDurabilityError(ContentStoreError):
+    """Content was published, but syncing its directory failed."""
+
+    def __init__(self, storage_ref: str, message: str = "Content published but directory sync failed"):
+        super().__init__(f"{message}; storage_ref={storage_ref}")
+        self.storage_ref = storage_ref
+
+
 class ContentStorageFailure(ContentStoreError):
-    """The write failed before metadata registration was attempted."""
+    """Content storage failed before metadata registration; a reference may exist."""
 
     storage_ref: str | None = None
 
@@ -109,6 +117,12 @@ class FileAttachmentContentApplication:
             if not isinstance(storage_ref, str) or not storage_ref.strip():
                 raise ValueError("content store returned an invalid storage reference")
             storage_ref = storage_ref.strip()
+        except ContentPublishedDurabilityError as exc:
+            # Publication happened; preserve its reference without claiming durable success.
+            raise ContentStorageFailure(
+                "Attachment content was published, but directory durability could not be confirmed",
+                storage_ref=exc.storage_ref,
+            ) from exc
         except Exception as exc:
             raise ContentStorageFailure("Failed to store attachment content") from exc
 
