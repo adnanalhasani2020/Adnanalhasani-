@@ -182,7 +182,7 @@ def test_reverse_implementation_inventory_has_traceability_owner():
         "__init__.py","application.py","config.py","domain_activities.py","domain_audit.py",
         "domain_authorization.py","domain_commerce.py","domain_communication.py","domain_education.py",
         "domain_exceptions.py","domain_finance.py","domain_health.py","domain_identity.py",
-        "domain_inventory.py","domain_provenance.py","domain_workflow_read.py","inventory_read.py","offering_application.py","commerce_inventory_read.py","product_legacy_audit.py","sale_history_audit.py","sale_operational_read.py","domain_offline.py","financial_orchestration.py","infrastructure.py","integrity.py","approval_enforcement.py","invoice_application.py","payment_application.py","obligation_application.py","loan_application.py","financial_balance_read.py","financial_account_application.py","instrument_application.py","durable_operation_application.py","message_application.py","persistence.py","runtime.py","shared.py",
+        "domain_inventory.py","domain_provenance.py","domain_workflow_read.py","inventory_read.py","offering_application.py","commerce_inventory_read.py","product_legacy_audit.py","sale_history_audit.py","sale_operational_read.py","domain_offline.py","financial_orchestration.py","infrastructure.py","integrity.py","approval_enforcement.py","invoice_application.py","payment_application.py","obligation_application.py","loan_application.py","financial_balance_read.py","financial_account_application.py","instrument_application.py","durable_operation_application.py","idempotency.py","message_application.py","persistence.py","runtime.py","shared.py",
     }
     assert expected == mapped
     impl_text = " ".join(SPEC_TO_IMPL.values())
