@@ -28,7 +28,7 @@ SPEC_TO_IMPL = {
     "SPEC-0002": "src/agent_core/domain_activities.py",
     "SPEC-0003": "src/agent_core/domain_authorization.py",
     "SPEC-0004": "src/agent_core/domain_authorization.py",
-    "SPEC-0005": "src/agent_core/domain_commerce.py",
+    "SPEC-0005": "src/agent_core/domain_commerce.py + src/agent_core/invoice_application.py",
     "SPEC-0006": "src/agent_core/domain_inventory.py",
     "SPEC-0007": "src/agent_core/domain_finance.py",
     "SPEC-0008": "src/agent_core/domain_finance.py",
