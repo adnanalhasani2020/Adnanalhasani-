@@ -189,9 +189,14 @@ class SaleApplication:
             )
         states = []
         previous_ref = None
-        for index, (_, prior_ref, current_ref, payload_ref) in enumerate(history_rows, start=1):
+        for index, (actor_context_ref, prior_ref, current_ref, payload_ref) in enumerate(history_rows, start=1):
             expected_prior = None if index == 1 else history_rows[index - 2][2]
-            if prior_ref != expected_prior or current_ref is None:
+            expected_current = f"sale-state:{persisted_id}:v{index}"
+            if not actor_context_ref or not str(actor_context_ref).strip():
+                raise ValidationError(
+                    "Sale history lacks actor context; explicit legacy reconciliation is required"
+                )
+            if prior_ref != expected_prior or current_ref != expected_current:
                 raise ValidationError("Sale history chain is inconsistent")
             if index > 1 and prior_ref != previous_ref:
                 raise ValidationError("Sale history chain is inconsistent")
