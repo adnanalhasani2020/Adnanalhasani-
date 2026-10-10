@@ -1,4 +1,5 @@
 import base64
+import errno
 import hashlib
 import os
 from pathlib import Path
@@ -11,6 +12,7 @@ from agent_core.config import Settings
 from agent_core.file_attachment_application import FileAttachmentApplication
 from agent_core.file_attachment_content_application import (
     ContentIntegrityError,
+    ContentPublishedDurabilityError,
     ContentRetrievalError,
     ContentStorageFailure,
     FileAttachmentContentApplication,
@@ -101,8 +103,82 @@ def test_failed_write_does_not_register_metadata(tmp_path, monkeypatch):
 
     monkeypatch.setattr(store, "_open_root", fail_open)
     app = FileAttachmentContentApplication(store)
-    with pytest.raises(ContentStorageFailure):
+    with pytest.raises(ContentStorageFailure) as error:
         create(app, db)
+    assert error.value.storage_ref is None
+    assert FileAttachmentApplication().list_attachments(db) == ()
+    db.close()
+
+
+def test_directory_sync_failure_after_replace_preserves_published_reference(tmp_path, monkeypatch):
+    root = tmp_path / "objects"
+    content = b"published but directory sync failed"
+    store = LocalFilesystemContentStore(root)
+
+    def fail_sync(root_fd):
+        raise OSError(errno.EIO, "simulated directory sync failure")
+
+    monkeypatch.setattr(store, "_sync_directory", fail_sync)
+    with pytest.raises(ContentPublishedDurabilityError) as error:
+        store.put(content)
+
+    storage_ref = error.value.storage_ref
+    assert storage_ref.startswith("localfs://")
+    assert storage_ref in str(error.value)
+    # os.replace already published the object; the error must not imply otherwise.
+    assert (root / storage_ref.removeprefix("localfs://")).is_file()
+    assert LocalFilesystemContentStore(root).get(storage_ref) == content
+
+
+def test_application_surfaces_published_reference_when_directory_sync_fails(tmp_path, monkeypatch):
+    root = tmp_path / "objects"
+    db = connect_database()
+    store = LocalFilesystemContentStore(root)
+
+    def fail_sync(root_fd):
+        raise OSError(errno.EIO, "simulated directory sync failure")
+
+    monkeypatch.setattr(store, "_sync_directory", fail_sync)
+    app = FileAttachmentContentApplication(store)
+    with pytest.raises(ContentStorageFailure, match="published.*durability") as error:
+        create(app, db, b"published content")
+
+    storage_ref = error.value.storage_ref
+    assert storage_ref is not None and storage_ref.startswith("localfs://")
+    assert LocalFilesystemContentStore(root).get(storage_ref) == b"published content"
+    assert FileAttachmentApplication().list_attachments(db) == ()
+    db.close()
+
+
+def test_metadata_failure_remains_partial_failure_with_reference_and_no_compensation(tmp_path):
+    import sqlite3
+
+    class FailingMetadataConnection:
+        def __init__(self, connection):
+            self.connection = connection
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return self.connection.__exit__(exc_type, exc, traceback)
+
+        def execute(self, sql, values=()):
+            if "INSERT INTO file_attachments" in sql:
+                raise sqlite3.OperationalError("simulated metadata write failure")
+            return self.connection.execute(sql, values)
+
+    root = tmp_path / "objects"
+    db = connect_database()
+    store = LocalFilesystemContentStore(root)
+    app = FileAttachmentContentApplication(store)
+
+    with pytest.raises(PartialAttachmentCreationError) as error:
+        create(app, FailingMetadataConnection(db), b"content before metadata failure")
+
+    storage_ref = error.value.storage_ref
+    assert storage_ref.startswith("localfs://")
+    assert store.get(storage_ref) == b"content before metadata failure"
     assert FileAttachmentApplication().list_attachments(db) == ()
     db.close()
 
