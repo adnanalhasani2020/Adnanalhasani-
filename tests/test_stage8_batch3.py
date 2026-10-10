@@ -84,7 +84,7 @@ def test_product_offering_inventory_availability_sale_end_to_end():
     assert offering.state.value == "active"
     assert inventory.offering_id == offering.id
     assert availability.offering_id == offering.id
-    assert sale.state == SaleState.COMPLETED
+    assert sale.state == SaleState.FULFILLED
 
 
 def test_commerce_duplicate_boundary_and_cancellation_preserve_history():

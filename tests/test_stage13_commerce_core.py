@@ -122,7 +122,7 @@ def test_req_func_0037_sale_lifecycle_and_return_history_are_explicit():
     assert sale.history == (
         SaleState.INITIATED,
         SaleState.CONFIRMED,
-        SaleState.COMPLETED,
+        SaleState.FULFILLED,
         SaleState.RETURNED,
     )
     cancelled = Sale(uuid4(), uuid4())
@@ -156,3 +156,17 @@ def test_retiring_product_preserves_existing_offering_and_sale_history():
     assert sale.offering_id == offering.id
     assert sale.history == prior_sale_history == (SaleState.INITIATED, SaleState.CONFIRMED)
     assert sale.state == SaleState.CONFIRMED
+
+
+
+def test_req_func_0037_legacy_completed_label_resolves_to_canonical_fulfilled_state():
+    assert SaleState.COMPLETED is SaleState.FULFILLED
+    assert SaleState("completed") is SaleState.FULFILLED
+    sale = Sale(
+        uuid4(), uuid4(),
+        state=SaleState("completed"),
+        history=(SaleState.INITIATED, SaleState.CONFIRMED, SaleState("completed")),
+    )
+    assert sale.state is SaleState.FULFILLED
+    sale.return_sale()
+    assert sale.state is SaleState.RETURNED
