@@ -88,6 +88,14 @@ class DurableOperationApplication:
                         raise ValidationError(
                             "Durable operation key already exists with a different request fingerprint"
                         )
+                    if current.operation_kind != operation_kind:
+                        raise ValidationError(
+                            "Durable operation key already exists with a different operation kind"
+                        )
+                    if current.actor_context_ref != actor_context_ref:
+                        raise ValidationError(
+                            "Durable operation key already exists with a different actor context"
+                        )
                     return current
                 record_id = str(uuid4())
                 connection.execute(
