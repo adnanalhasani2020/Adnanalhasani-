@@ -83,6 +83,7 @@ def test_encounter_rejects_non_active_patient_context_without_writing(context_st
 def test_encounter_rejects_missing_context_and_invalid_service_without_writing():
     db = connect_database()
     _context, inactive_service = fixture(db, service_state="retired")
+    db.commit()
     app = EncounterApplication()
     with pytest.raises(ValidationError, match="existing PatientContext"):
         app.create_encounter(db, uid(), "consultation", now=NOW)
