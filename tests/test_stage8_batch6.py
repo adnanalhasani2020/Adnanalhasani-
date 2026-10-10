@@ -73,7 +73,7 @@ SPEC_TO_TESTS = {
     "SPEC-0018": ["test_batch4.py","test_stage8_batch2.py","test_stage8_batch4.py","test_stage8_batch5.py"],
     "SPEC-0019": ["test_stage8_batch1.py","test_stage8_batch2.py","test_stage8_batch4.py","test_stage8_batch5.py"],
     "SPEC-0020": ["test_stage8_batch1.py","test_stage8_batch2.py","test_stage8_batch4.py","test_stage8_batch5.py"],
-    "SPEC-0021": ["test_batch4.py","test_stage8_batch3.py","test_stage8_batch4.py","test_stage8_batch5.py"],
+    "SPEC-0021": ["test_batch4.py","test_stage8_batch3.py","test_stage8_batch4.py","test_stage8_batch5.py","test_stage24_sale_history_audit.py"],
     "SPEC-0022": ["test_batch3.py","test_batch4.py"],
     "SPEC-0023": ["test_batch4.py","test_stage8_batch3.py","test_stage8_batch4.py","test_stage8_batch5.py"],
     "SPEC-0024": ["test_stage7_ci_coverage.py"],
@@ -182,7 +182,7 @@ def test_reverse_implementation_inventory_has_traceability_owner():
         "__init__.py","application.py","config.py","domain_activities.py","domain_audit.py",
         "domain_authorization.py","domain_commerce.py","domain_communication.py","domain_education.py",
         "domain_exceptions.py","domain_finance.py","domain_health.py","domain_identity.py",
-        "domain_inventory.py","inventory_read.py","offering_application.py","commerce_inventory_read.py","product_legacy_audit.py","domain_offline.py","financial_orchestration.py","infrastructure.py","integrity.py","approval_enforcement.py","persistence.py","runtime.py","shared.py",
+        "domain_inventory.py","inventory_read.py","offering_application.py","commerce_inventory_read.py","product_legacy_audit.py","sale_history_audit.py","domain_offline.py","financial_orchestration.py","infrastructure.py","integrity.py","approval_enforcement.py","persistence.py","runtime.py","shared.py",
     }
     assert expected == mapped
     impl_text = " ".join(SPEC_TO_IMPL.values())
