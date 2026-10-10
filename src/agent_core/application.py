@@ -347,3 +347,132 @@ class SaleApplication:
         sale_uuid = self._uuid(sale_id, "Sale identifier")
         sale, _offering_id, _version, _ref = self._load_sale(connection, sale_uuid)
         return sale
+
+
+class InventoryPositionApplication:
+    """Persist InventoryPosition lifecycle without turning observations into stock movements."""
+
+    _TRANSITIONS = {
+        "make_effective": ("observed", "effective"),
+        "close": ("effective", "closed"),
+    }
+
+    def _instant(self, value, label):
+        if isinstance(value, str):
+            try:
+                value = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError as exc:
+                raise ValidationError(f"{label} must be a valid ISO-8601 timestamp") from exc
+        if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
+            raise ValidationError(f"{label} must be timezone-aware")
+        return value.astimezone(timezone.utc)
+
+    def _restore_position(self, row):
+        from agent_core.domain_inventory import InventoryPosition, InventoryPositionState
+
+        (position_id, activity_id, product_id, offering_id, location_ref, scope_key,
+         quantity_minor, observed_at, effective_from, effective_to, state) = row[:11]
+        def parse(value):
+            return datetime.fromisoformat(value.replace("Z", "+00:00")) if value else None
+        return InventoryPosition(
+            id=UUID(position_id),
+            activity_id=UUID(activity_id),
+            product_id=UUID(product_id) if product_id else None,
+            offering_id=UUID(offering_id) if offering_id else None,
+            location_ref=location_ref,
+            scope_key=scope_key,
+            quantity_minor=quantity_minor,
+            observed_at=parse(observed_at),
+            effective_from=parse(effective_from),
+            effective_to=parse(effective_to),
+            state=InventoryPositionState(state),
+        )
+
+    def create_position(
+        self, connection, *, activity_id, scope_key, offering_id=None, product_id=None,
+        location_ref=None, quantity_minor=None, observed_at=None, effective_from=None,
+        effective_to=None, now=None, position_id=None,
+    ):
+        from agent_core.domain_inventory import InventoryPosition
+
+        def uuid_key(value, label, optional=False):
+            if value is None and optional:
+                return None
+            try:
+                return str(UUID(str(value)))
+            except (ValueError, TypeError, AttributeError) as exc:
+                raise ValidationError(f"{label} must be a valid UUID") from exc
+
+        activity_key = uuid_key(activity_id, "Activity identifier")
+        product_key = uuid_key(product_id, "Product identifier", optional=True)
+        offering_key = uuid_key(offering_id, "Offering identifier", optional=True)
+        identifier = uuid_key(position_id or uuid4(), "Inventory Position identifier")
+        timestamp = self._instant(now or datetime.now(timezone.utc), "Inventory Position created_at")
+        observed = self._instant(observed_at or timestamp, "Inventory Position observed_at")
+        starts = self._instant(effective_from, "Inventory Position effective_from") if effective_from is not None else None
+        ends = self._instant(effective_to, "Inventory Position effective_to") if effective_to is not None else None
+        # Domain validation is deliberately performed before persistence.
+        result = InventoryPosition(
+            id=UUID(identifier), activity_id=UUID(activity_key),
+            product_id=UUID(product_key) if product_key else None,
+            offering_id=UUID(offering_key) if offering_key else None,
+            location_ref=location_ref, scope_key=scope_key, quantity_minor=quantity_minor,
+            observed_at=observed, effective_from=starts, effective_to=ends,
+        )
+        with connection:
+            connection.execute(
+                "INSERT INTO inventory_positions(inventory_position_id,activity_id,product_id,offering_id,"
+                "location_ref,scope_key,state,quantity_minor,observed_at,effective_from,effective_to,"
+                "created_at,updated_at,provenance_id,version_no) "
+                "VALUES(?,?,?,?,?,?,'observed',?,?,?,?,?,?,NULL,1)",
+                (identifier, activity_key, product_key, offering_key, location_ref, scope_key,
+                 quantity_minor, observed.isoformat().replace("+00:00", "Z"),
+                 starts.isoformat().replace("+00:00", "Z") if starts else None,
+                 ends.isoformat().replace("+00:00", "Z") if ends else None,
+                 timestamp.isoformat().replace("+00:00", "Z"),
+                 timestamp.isoformat().replace("+00:00", "Z")),
+            )
+        return result
+
+    def get_position(self, connection, position_id):
+        try:
+            key = str(UUID(str(position_id)))
+        except (ValueError, TypeError, AttributeError) as exc:
+            raise ValidationError("Inventory Position identifier must be a valid UUID") from exc
+        row = connection.execute(
+            "SELECT inventory_position_id,activity_id,product_id,offering_id,location_ref,scope_key,"
+            "quantity_minor,observed_at,effective_from,effective_to,state,version_no "
+            "FROM inventory_positions WHERE inventory_position_id=?", (key,)
+        ).fetchone()
+        if row is None:
+            raise ValidationError("Inventory Position does not exist")
+        return self._restore_position(row)
+
+    def transition_position(self, connection, position_id, action, *, now=None):
+        try:
+            key = str(UUID(str(position_id)))
+        except (ValueError, TypeError, AttributeError) as exc:
+            raise ValidationError("Inventory Position identifier must be a valid UUID") from exc
+        timestamp = self._instant(now or datetime.now(timezone.utc), "Inventory Position transition timestamp")
+        if action not in self._TRANSITIONS:
+            raise ValidationError("Unsupported Inventory Position lifecycle action")
+        expected, target = self._TRANSITIONS[action]
+        with connection:
+            row = connection.execute(
+                "SELECT inventory_position_id,activity_id,product_id,offering_id,location_ref,scope_key,"
+                "quantity_minor,observed_at,effective_from,effective_to,state,version_no "
+                "FROM inventory_positions WHERE inventory_position_id=?", (key,)
+            ).fetchone()
+            if row is None:
+                raise ValidationError("Inventory Position does not exist")
+            if row[10] != expected:
+                raise ValidationError(f"Invalid Inventory Position transition from {row[10]} via {action}")
+            cursor = connection.execute(
+                "UPDATE inventory_positions SET state=?,updated_at=?,version_no=? "
+                "WHERE inventory_position_id=? AND version_no=?",
+                (target, timestamp.isoformat().replace("+00:00", "Z"), row[11] + 1, key, row[11]),
+            )
+            if cursor.rowcount != 1:
+                raise ValidationError("Concurrent Inventory Position update detected")
+            updated = (*row[:10], target, row[11] + 1)
+        return self._restore_position(updated)
