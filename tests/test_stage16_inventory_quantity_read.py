@@ -129,4 +129,8 @@ def test_scope_and_as_of_must_be_valid():
         reader.read_quantity(db, "  ", as_of=AS_OF)
     with pytest.raises(ValidationError, match="timezone-aware"):
         reader.read_quantity(db, "warehouse-A", as_of=datetime(2026, 10, 9, 12, 0))
+    with pytest.raises(ValidationError, match="valid ISO-8601 timestamp"):
+        reader.read_quantity(db, "warehouse-A", as_of="")
+    with pytest.raises(ValidationError, match="valid ISO-8601 timestamp"):
+        reader.read_quantity(db, "warehouse-A", as_of="not-a-timestamp")
     db.close()
