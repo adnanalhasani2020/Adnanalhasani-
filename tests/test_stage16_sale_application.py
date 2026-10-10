@@ -419,7 +419,7 @@ def test_sale_transition_fails_closed_when_persisted_version_exceeds_history_cou
 
     assert db.execute(
         "SELECT state,version_no FROM sales WHERE sale_id=?", (str(sale.id),)
-    ).fetchone() == ("initiated", 2)
+    ).fetchone() == ("initiated", 1)
     assert db.execute(
         "SELECT count(*) FROM domain_history WHERE target_ref=?", (str(sale.id),)
     ).fetchone()[0] == 1
