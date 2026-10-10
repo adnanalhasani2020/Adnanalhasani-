@@ -25,7 +25,7 @@ class PersistedMembership:
 
 
 class MembershipApplication:
-    _STATES = {"proposed", "active", "suspended", "ended"}
+    _STATES = {"active", "suspended", "ended"}
 
     @staticmethod
     def _uuid(value, label):
