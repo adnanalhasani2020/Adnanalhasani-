@@ -150,3 +150,14 @@ def test_offering_accepts_valid_local_time_and_both_folds_of_repeated_hour():
         )
 
     assert first.astimezone(timezone.utc) != second.astimezone(timezone.utc)
+
+
+@pytest.mark.parametrize("quantity", [1.5, "7", True])
+def test_inventory_position_rejects_non_integer_quantity_minor(quantity):
+    with pytest.raises(ValidationError, match="quantity_minor must be an integer or None"):
+        InventoryPosition(
+            offering_id=uuid4(),
+            activity_id=uuid4(),
+            scope_key="warehouse-A",
+            quantity_minor=quantity,
+        )
