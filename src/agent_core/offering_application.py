@@ -81,7 +81,7 @@ class OfferingApplication:
 
     def create_offering(
         self, connection, *, product_id, activity_id, effective_from,
-        service_id=None, effective_to=None, offering_id=None, now=None,
+        service_id=None, effective_to=None, offering_id=None, actor_context_ref=None, now=None,
     ) -> OfferingRecord:
         product_key = str(self._uuid(product_id, "Product identifier"))
         activity_key = str(self._uuid(activity_id, "Activity identifier"))
@@ -89,6 +89,9 @@ class OfferingApplication:
         starts = self._instant(effective_from, "Offering.effective_from")
         ends = self._instant(effective_to, "Offering.effective_to", optional=True)
         created = self._instant(now or datetime.now(timezone.utc), "Offering creation timestamp")
+        if not isinstance(actor_context_ref, str) or not actor_context_ref.strip():
+            raise ValidationError("Offering actor_context_ref is required")
+        actor_context_ref = actor_context_ref.strip()
         key = str(self._uuid(offering_id, "Offering identifier")) if offering_id is not None else None
 
         # Reuse domain validation before writing anything.
@@ -120,19 +123,29 @@ class OfferingApplication:
                 (str(offering.id), product_key, service_key, activity_key, offering.state.value,
                  starts, ends, created, created),
             )
+            connection.execute(
+                "INSERT INTO domain_history(domain_history_id,owner_domain,target_ref,change_type,"
+                "historical_at,actor_context_ref,prior_version_ref,current_version_ref,change_payload_ref,created_at) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?)",
+                (str(uuid4()), "commerce", str(offering.id), "offering_lifecycle", created,
+                 actor_context_ref, None, f"offering:{offering.id}:v1", "state:draft", created),
+            )
         return OfferingRecord(offering, 1)
 
     def get_offering(self, connection, offering_id) -> OfferingRecord:
         return self._load(connection, offering_id)
 
     def transition_offering(
-        self, connection, offering_id, action, *, expected_version, now=None,
+        self, connection, offering_id, action, *, expected_version, actor_context_ref, now=None,
     ) -> OfferingRecord:
         if action not in self._ACTIONS:
             raise ValidationError(f"Unsupported Offering action: {action}")
         if type(expected_version) is not int or expected_version < 1:
             raise ValidationError("Offering expected_version must be a positive integer")
         instant = self._instant(now or datetime.now(timezone.utc), "Offering transition timestamp")
+        if not isinstance(actor_context_ref, str) or not actor_context_ref.strip():
+            raise ValidationError("Offering actor_context_ref is required")
+        actor_context_ref = actor_context_ref.strip()
         with connection:
             record = self._load(connection, offering_id)
             offering = record.offering
@@ -156,4 +169,14 @@ class OfferingApplication:
             )
             if cursor.rowcount != 1:
                 raise ValidationError("Offering version conflict; reload before retrying")
+            next_version = expected_version + 1
+            connection.execute(
+                "INSERT INTO domain_history(domain_history_id,owner_domain,target_ref,change_type,"
+                "historical_at,actor_context_ref,prior_version_ref,current_version_ref,change_payload_ref,created_at) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?)",
+                (str(uuid4()), "commerce", str(offering.id), "offering_lifecycle", instant,
+                 actor_context_ref, f"offering:{offering.id}:v{expected_version}",
+                 f"offering:{offering.id}:v{next_version}",
+                 f"action:{action};state:{offering.state.value}", instant),
+            )
         return OfferingRecord(offering, expected_version + 1)
