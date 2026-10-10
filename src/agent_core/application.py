@@ -398,7 +398,7 @@ class InventoryPositionApplication:
     def create_position(
         self, connection, *, activity_id, scope_key, offering_id=None, product_id=None,
         location_ref=None, quantity_minor=None, observed_at=None, effective_from=None,
-        effective_to=None, now=None, position_id=None,
+        effective_to=None, now=None, position_id=None, actor_context_ref=None,
     ):
         from agent_core.domain_inventory import InventoryPosition
 
@@ -414,6 +414,9 @@ class InventoryPositionApplication:
         product_key = uuid_key(product_id, "Product identifier", optional=True)
         offering_key = uuid_key(offering_id, "Offering identifier", optional=True)
         identifier = uuid_key(position_id or uuid4(), "Inventory Position identifier")
+        if not isinstance(actor_context_ref, str) or not actor_context_ref.strip():
+            raise ValidationError("Inventory Position actor_context_ref is required")
+        actor_context_ref = actor_context_ref.strip()
         timestamp = self._instant(now or datetime.now(timezone.utc), "Inventory Position created_at")
         observed = self._instant(observed_at or timestamp, "Inventory Position observed_at")
         starts = self._instant(effective_from, "Inventory Position effective_from") if effective_from is not None else None
@@ -439,6 +442,15 @@ class InventoryPositionApplication:
                  timestamp.isoformat().replace("+00:00", "Z"),
                  timestamp.isoformat().replace("+00:00", "Z")),
             )
+            connection.execute(
+                "INSERT INTO domain_history(domain_history_id,owner_domain,target_ref,change_type,"
+                "historical_at,actor_context_ref,prior_version_ref,current_version_ref,change_payload_ref,created_at) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?)",
+                (str(uuid4()), "inventory", identifier, "inventory_position_lifecycle",
+                 timestamp.isoformat().replace("+00:00", "Z"), actor_context_ref, None,
+                 f"inventory_position:{identifier}:v1", "action:create;state:observed",
+                 timestamp.isoformat().replace("+00:00", "Z")),
+            )
         return result
 
     def get_position(self, connection, position_id):
@@ -455,11 +467,16 @@ class InventoryPositionApplication:
             raise ValidationError("Inventory Position does not exist")
         return self._restore_position(row)
 
-    def transition_position(self, connection, position_id, action, *, now=None):
+    def transition_position(
+        self, connection, position_id, action, *, actor_context_ref=None, now=None
+    ):
         try:
             key = str(UUID(str(position_id)))
         except (ValueError, TypeError, AttributeError) as exc:
             raise ValidationError("Inventory Position identifier must be a valid UUID") from exc
+        if not isinstance(actor_context_ref, str) or not actor_context_ref.strip():
+            raise ValidationError("Inventory Position actor_context_ref is required")
+        actor_context_ref = actor_context_ref.strip()
         timestamp = self._instant(now or datetime.now(timezone.utc), "Inventory Position transition timestamp")
         if action not in self._TRANSITIONS:
             raise ValidationError("Unsupported Inventory Position lifecycle action")
@@ -481,7 +498,19 @@ class InventoryPositionApplication:
             )
             if cursor.rowcount != 1:
                 raise ValidationError("Concurrent Inventory Position update detected")
-            updated = (*row[:10], target, row[11] + 1)
+            next_version = row[11] + 1
+            connection.execute(
+                "INSERT INTO domain_history(domain_history_id,owner_domain,target_ref,change_type,"
+                "historical_at,actor_context_ref,prior_version_ref,current_version_ref,change_payload_ref,created_at) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?)",
+                (str(uuid4()), "inventory", key, "inventory_position_lifecycle",
+                 timestamp.isoformat().replace("+00:00", "Z"), actor_context_ref,
+                 f"inventory_position:{key}:v{row[11]}",
+                 f"inventory_position:{key}:v{next_version}",
+                 f"action:{action};state:{target}",
+                 timestamp.isoformat().replace("+00:00", "Z")),
+            )
+            updated = (*row[:10], target, next_version)
         return self._restore_position(updated)
 
 
