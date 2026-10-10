@@ -85,19 +85,19 @@ class SaleApplication:
         except (ValueError, TypeError, AttributeError) as exc:
             raise ValidationError(f"{label} must be a valid UUID") from exc
 
-    def _grant_instant(self, value, label):
-        """Parse persisted grant bounds as instants, not lexicographically ordered strings."""
+    def _grant_instant(self, value, label, owner="AuthorizationGrant"):
+        """Parse persisted effective bounds as instants, not lexicographically ordered strings."""
         if not isinstance(value, str):
-            raise ValidationError(f"AuthorizationGrant {label} must be a valid timezone-aware timestamp")
+            raise ValidationError(f"{owner} {label} must be a valid timezone-aware timestamp")
         try:
             instant = datetime.fromisoformat(value.replace("Z", "+00:00"))
         except ValueError as exc:
             raise ValidationError(
-                f"AuthorizationGrant {label} must be a valid timezone-aware timestamp"
+                f"{owner} {label} must be a valid timezone-aware timestamp"
             ) from exc
         if instant.tzinfo is None or instant.utcoffset() is None:
             raise ValidationError(
-                f"AuthorizationGrant {label} must be a valid timezone-aware timestamp"
+                f"{owner} {label} must be a valid timezone-aware timestamp"
             )
         return instant.astimezone(timezone.utc)
 
@@ -197,7 +197,15 @@ class SaleApplication:
             raise ValidationError("Sale Activity must match Offering Activity")
         if offering_state != "active" or product_state != "active" or activity_state != "active":
             raise ValidationError("Sale requires an active Offering, Product, and Activity")
-        if effective_from > timestamp or (effective_to is not None and timestamp >= effective_to):
+        operation_instant = self._grant_instant(timestamp, "operation timestamp", owner="Offering")
+        starts_instant = self._grant_instant(effective_from, "effective_from", owner="Offering")
+        ends_instant = (
+            self._grant_instant(effective_to, "effective_to", owner="Offering")
+            if effective_to is not None else None
+        )
+        if starts_instant > operation_instant or (
+            ends_instant is not None and operation_instant >= ends_instant
+        ):
             raise ValidationError("Offering is outside its effective period")
 
         identifier = sale_id or uuid4()
