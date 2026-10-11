@@ -113,3 +113,28 @@ def test_attachment_listing_offset_beyond_end_returns_empty_tuple():
     )
     assert app.list_attachments(db, offset=1) == ()
     db.close()
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        {"measurement": float("nan")},
+        {"measurement": float("inf")},
+        {"nested": {"measurement": float("-inf")}},
+    ],
+)
+def test_rejects_non_finite_metadata_without_creating_attachment(metadata):
+    db = connect_database()
+    with pytest.raises(ValidationError, match="JSON-compatible"):
+        FileAttachmentApplication().create_attachment(
+            db,
+            storage_ref="object://metadata/non-finite",
+            file_name="metadata.json",
+            media_type="application/json",
+            size_bytes=1,
+            checksum_sha256=hashlib.sha256(b"x").hexdigest(),
+            metadata=metadata,
+        )
+
+    assert FileAttachmentApplication().list_attachments(db) == ()
+    db.close()
