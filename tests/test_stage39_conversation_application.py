@@ -70,7 +70,7 @@ def test_conversation_reads_and_lifecycle_reject_unknown_or_invalid_ids():
 def test_conversation_rejects_explicitly_empty_timestamps_without_mutation():
     db = connect_database()
     app = ConversationApplication()
-    with pytest.raises(ValidationError, match="timezone-aware"):
+    with pytest.raises(ValidationError, match="valid ISO-8601"):
         app.create(db, context_ref="case:empty", conversation_type="general", now="")
     assert db.execute("SELECT COUNT(*) FROM conversations").fetchone()[0] == 0
 
