@@ -118,7 +118,7 @@ def test_duplicate_account_id_is_rejected_without_overwriting_original():
 def test_access_account_registration_rejects_explicitly_empty_timestamps(timestamp_field):
     db = connect_database()
     person_id = seed_person(db)
-    with pytest.raises(ValidationError, match="timezone-aware"):
+    with pytest.raises(ValidationError, match="valid ISO-8601"):
         AccessAccountRegistrationApplication().create_access_account(
             db, person_id=person_id, state="active", **{timestamp_field: ""}
         )
