@@ -190,6 +190,7 @@ def test_reverse_implementation_inventory_has_traceability_owner():
         "__init__.py": "package boundary",
         "config.py": "runtime configuration boundary",
         "application.py": "application composition over domain SPECs",
+        "identity_read.py": "read-only persisted Person and Person-scoped identifier projection under SPEC-0001",
         "inventory_read.py": "fail-closed Inventory Position quantity read interface owned by SPEC-0006",
         "offering_application.py": "persisted Commerce Offering lifecycle owned by SPEC-0005",
         "commerce_inventory_read.py": "read-only Commerce/Inventory context projection owned across SPEC-0005 and SPEC-0006",
