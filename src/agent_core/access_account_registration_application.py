@@ -48,7 +48,7 @@ class AccessAccountRegistrationApplication:
         )
         if not isinstance(state, str) or state not in self._STATES:
             raise ValidationError("Access Account state must match the persisted schema contract")
-        created = self._timestamp(created_at or datetime.now(timezone.utc), "Access Account created_at")
+        created = self._timestamp(datetime.now(timezone.utc) if created_at is None else created_at, "Access Account created_at")
         updated = self._timestamp(updated_at or created, "Access Account updated_at")
 
         try:
