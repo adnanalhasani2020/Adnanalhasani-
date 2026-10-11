@@ -149,6 +149,46 @@ def test_offering_does_not_create_inventory_or_availability():
 
 
 
+@pytest.mark.parametrize("action", [[], {}])
+def test_offering_rejects_unhashable_action_without_mutation(action):
+    db = connect_database()
+    activity_id, product_id, _ = setup_refs(db)
+    app = OfferingApplication()
+    created = app.create_offering(
+        db,
+        product_id=product_id,
+        activity_id=activity_id,
+        effective_from=NOW,
+        actor_context_ref="internal-test-context",
+        now=NOW,
+    )
+    before_history = db.execute(
+        "SELECT current_version_ref, change_payload_ref FROM domain_history "
+        "WHERE target_ref=? ORDER BY rowid",
+        (str(created.offering.id),),
+    ).fetchall()
+
+    with pytest.raises(ValidationError, match="Unsupported Offering action"):
+        app.transition_offering(
+            db,
+            created.offering.id,
+            action,
+            expected_version=1,
+            actor_context_ref="internal-test-context",
+            now=NOW,
+        )
+
+    current = app.get_offering(db, created.offering.id)
+    assert current.offering.state is OfferingState.DRAFT
+    assert current.version_no == 1
+    assert db.execute(
+        "SELECT current_version_ref, change_payload_ref FROM domain_history "
+        "WHERE target_ref=? ORDER BY rowid",
+        (str(created.offering.id),),
+    ).fetchall() == before_history
+    db.close()
+
+
 def test_offering_history_failure_rolls_back_create_and_transition():
     import sqlite3
 
