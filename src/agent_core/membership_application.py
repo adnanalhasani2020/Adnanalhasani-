@@ -64,7 +64,7 @@ class MembershipApplication:
         key = str(self._uuid(membership_id, "Membership identifier")) if membership_id is not None else str(uuid4())
         person_key = str(self._uuid(person_id, "Person identifier"))
         activity_key = str(self._uuid(activity_id, "Activity identifier"))
-        if state not in self._STATES:
+        if not isinstance(state, str) or state not in self._STATES:
             raise ValidationError("Membership state must match the persisted schema")
         starts = self._timestamp(effective_from, "Membership effective_from")
         ends = self._timestamp(effective_to, "Membership effective_to") if effective_to is not None else None
