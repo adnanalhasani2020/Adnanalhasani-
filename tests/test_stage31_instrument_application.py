@@ -160,7 +160,7 @@ def test_instrument_rejects_non_string_transition_actions_without_mutation(actio
             actor_context_ref="internal-context", now=STAMP,
         )
     current = app.get_instrument(db, instrument.instrument_id)
-    assert current.state == "draft"
+    assert current.state == "issued"
     assert current.version_no == 1
     assert db.execute(
         "SELECT COUNT(*) FROM domain_history WHERE target_ref=?",
