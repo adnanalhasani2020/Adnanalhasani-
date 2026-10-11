@@ -113,11 +113,13 @@ class FileAttachmentApplication:
             raise ValidationError("Attachment does not exist")
         return self._record(row)
 
-    def list_attachments(self, connection, *, limit=100) -> tuple[FileAttachment, ...]:
+    def list_attachments(self, connection, *, limit=100, offset=0) -> tuple[FileAttachment, ...]:
         if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 1000:
             raise ValidationError("limit must be an integer between 1 and 1000")
+        if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
+            raise ValidationError("offset must be a non-negative integer")
         rows = connection.execute(
             "SELECT attachment_id,storage_ref,file_name,media_type,size_bytes,checksum_sha256,metadata_json,created_at "
-            "FROM file_attachments ORDER BY created_at,attachment_id LIMIT ?", (limit,),
+            "FROM file_attachments ORDER BY created_at,attachment_id LIMIT ? OFFSET ?", (limit, offset),
         ).fetchall()
         return tuple(self._record(row) for row in rows)
