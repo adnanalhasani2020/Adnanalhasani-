@@ -113,3 +113,43 @@ def test_attachment_listing_offset_beyond_end_returns_empty_tuple():
     )
     assert app.list_attachments(db, offset=1) == ()
     db.close()
+
+
+def test_attachment_created_at_offset_is_normalized_to_utc():
+    db = connect_database()
+    item = FileAttachmentApplication().create_attachment(
+        db,
+        storage_ref="object://timestamp/offset",
+        file_name="offset.txt",
+        media_type="text/plain",
+        size_bytes=1,
+        checksum_sha256=hashlib.sha256(b"x").hexdigest(),
+        created_at="2026-01-02T03:04:05+03:00",
+    )
+
+    assert item.created_at == "2026-01-02T00:04:05Z"
+    db.close()
+
+
+@pytest.mark.parametrize(
+    "created_at",
+    [
+        "2026-01-02T03:04:05",
+        datetime(2026, 1, 2, 3, 4, 5),
+    ],
+)
+def test_attachment_created_at_rejects_timezone_naive_values(created_at):
+    db = connect_database()
+    with pytest.raises(ValidationError, match="created_at must be timezone-aware"):
+        FileAttachmentApplication().create_attachment(
+            db,
+            storage_ref="object://timestamp/naive",
+            file_name="naive.txt",
+            media_type="text/plain",
+            size_bytes=1,
+            checksum_sha256=hashlib.sha256(b"x").hexdigest(),
+            created_at=created_at,
+        )
+
+    assert FileAttachmentApplication().list_attachments(db) == ()
+    db.close()
