@@ -186,7 +186,7 @@ class LoanApplication:
         key = str(self._uuid(loan_id, "Loan identifier"))
         if type(expected_version) is not int or expected_version < 1:
             raise ValidationError("Loan expected_version must be a positive integer")
-        if target_state not in {"active", "closed", "cancelled"}:
+        if not isinstance(target_state, str) or target_state not in {"active", "closed", "cancelled"}:
             raise ValidationError("Unsupported persisted Loan target state")
         timestamp = self._timestamp(now or datetime.now(timezone.utc), "Loan transition timestamp")
         action_code = f"loan.transition.{target_state}"
