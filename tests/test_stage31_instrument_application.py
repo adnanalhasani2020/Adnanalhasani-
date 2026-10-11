@@ -144,3 +144,26 @@ def test_redeem_requires_operation_reference_and_does_not_invent_financial_effec
     assert db.execute("SELECT COUNT(*) FROM payments").fetchone()[0] == 0
     assert db.execute("SELECT COUNT(*) FROM ledger_entries").fetchone()[0] == 0
     db.close()
+
+@pytest.mark.parametrize("action", [[], {}])
+def test_instrument_rejects_non_string_transition_actions_without_mutation(action):
+    db = connect_database()
+    app = InstrumentApplication()
+    instrument = app.create_instrument(
+        db, instrument_id=uid(), instrument_type="unspecified",
+        issuer_ref="issuer-ref", canonical_identifier="instrument-nonstring-action",
+        actor_context_ref="internal-context", now=STAMP,
+    )
+    with pytest.raises(ValidationError, match="Unsupported Instrument transition"):
+        app.transition_instrument(
+            db, instrument.instrument_id, action, expected_version=1,
+            actor_context_ref="internal-context", now=STAMP,
+        )
+    current = app.get_instrument(db, instrument.instrument_id)
+    assert current.state == "draft"
+    assert current.version_no == 1
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=?",
+        (str(instrument.instrument_id),),
+    ).fetchone()[0] == 1
+    db.close()
