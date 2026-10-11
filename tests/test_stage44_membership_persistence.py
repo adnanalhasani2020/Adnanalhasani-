@@ -73,6 +73,24 @@ def test_membership_rejects_invalid_contract_inputs(kwargs):
     db.close()
 
 
+@pytest.mark.parametrize("state", [[], {}])
+def test_membership_rejects_unhashable_state_without_creating_record(state):
+    db = connect_database()
+    person_id, activity_id = seed_person_activity(db)
+
+    with pytest.raises(ValidationError, match="state"):
+        MembershipApplication().create_membership(
+            db,
+            person_id=person_id,
+            activity_id=activity_id,
+            state=state,
+            effective_from=STAMP,
+        )
+
+    assert db.execute("SELECT COUNT(*) FROM memberships").fetchone()[0] == 0
+    db.close()
+
+
 def test_membership_requires_existing_person_and_activity():
     db = connect_database()
     app = MembershipApplication()
