@@ -138,7 +138,7 @@ class OfferingApplication:
     def transition_offering(
         self, connection, offering_id, action, *, expected_version, actor_context_ref, now=None,
     ) -> OfferingRecord:
-        if action not in self._ACTIONS:
+        if not isinstance(action, str) or action not in self._ACTIONS:
             raise ValidationError(f"Unsupported Offering action: {action}")
         if type(expected_version) is not int or expected_version < 1:
             raise ValidationError("Offering expected_version must be a positive integer")

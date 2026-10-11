@@ -68,7 +68,7 @@ class RoleAssignmentApplication:
         membership_key = str(self._uuid(membership_id, "Membership identifier"))
         if not isinstance(role_code, str) or not role_code.strip():
             raise ValidationError("Role Assignment role_code is required")
-        if state not in self._STATES:
+        if not isinstance(state, str) or state not in self._STATES:
             raise ValidationError("Role Assignment state must match the persisted schema")
         starts = self._timestamp(effective_from, "Role Assignment effective_from")
         ends = self._timestamp(effective_to, "Role Assignment effective_to") if effective_to is not None else None
