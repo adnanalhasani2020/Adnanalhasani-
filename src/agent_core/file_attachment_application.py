@@ -83,7 +83,7 @@ class FileAttachmentApplication:
             raise ValidationError("metadata must contain JSON-compatible values") from exc
 
         key = str(self._uuid(attachment_id, "Attachment identifier")) if attachment_id is not None else str(uuid4())
-        timestamp = self._timestamp(created_at or datetime.now(timezone.utc))
+        timestamp = self._timestamp(datetime.now(timezone.utc) if created_at is None else created_at)
         values = (
             key, storage_ref.strip(), file_name.strip(), media_type.strip().lower(),
             size_bytes, checksum_sha256, metadata_json, timestamp,

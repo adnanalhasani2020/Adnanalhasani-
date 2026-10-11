@@ -113,3 +113,18 @@ def test_attachment_listing_offset_beyond_end_returns_empty_tuple():
     )
     assert app.list_attachments(db, offset=1) == ()
     db.close()
+
+def test_attachment_rejects_explicitly_empty_created_at_without_persisting():
+    db = connect_database()
+    with pytest.raises(ValidationError, match="valid ISO-8601"):
+        FileAttachmentApplication().create_attachment(
+            db,
+            storage_ref="object://timestamp/empty",
+            file_name="empty.txt",
+            media_type="text/plain",
+            size_bytes=1,
+            checksum_sha256=hashlib.sha256(b"x").hexdigest(),
+            created_at="",
+        )
+    assert db.execute("SELECT COUNT(*) FROM file_attachments").fetchone()[0] == 0
+    db.close()
