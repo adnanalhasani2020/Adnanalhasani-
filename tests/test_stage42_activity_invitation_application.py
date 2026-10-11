@@ -146,7 +146,7 @@ def test_invitation_rejects_explicitly_empty_created_at_without_persisting():
     inviter, invitee = create_person(db), create_person(db)
     activity = create_activity(db)
     db.commit()
-    with pytest.raises(ValidationError, match="timezone-aware"):
+    with pytest.raises(ValidationError, match="valid ISO-8601"):
         ActivityInvitationApplication().create_invitation(
             db, activity_id=activity, inviter_person_id=inviter,
             invitee_person_id=invitee, created_at="",
