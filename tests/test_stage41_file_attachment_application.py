@@ -116,7 +116,7 @@ def test_attachment_listing_offset_beyond_end_returns_empty_tuple():
 
 def test_attachment_rejects_explicitly_empty_created_at_without_persisting():
     db = connect_database()
-    with pytest.raises(ValidationError, match="timezone-aware"):
+    with pytest.raises(ValidationError, match="valid ISO-8601"):
         FileAttachmentApplication().create_attachment(
             db,
             storage_ref="object://timestamp/empty",
