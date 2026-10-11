@@ -187,7 +187,7 @@ def test_durable_operation_rejects_explicitly_empty_timestamps_without_mutation(
         operation_kind="payment.request", actor_context_ref="context",
         request_fingerprint="sha256:empty-outcome-time", now=STAMP,
     )
-    with pytest.raises(ValidationError, match="timezone-aware"):
+    with pytest.raises(ValidationError, match="valid ISO-8601"):
         app.record_outcome(
             db, namespace=record.namespace, operation_id=record.operation_id,
             state="completed", outcome_ref="payment:result", now="",
