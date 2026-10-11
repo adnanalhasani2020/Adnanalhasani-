@@ -66,3 +66,50 @@ def test_missing_attachment_and_invalid_limit_are_rejected():
         with pytest.raises(ValidationError):
             app.list_attachments(db, limit=limit)
     db.close()
+
+
+def test_attachment_listing_pages_are_stable_and_non_overlapping():
+    db = connect_database()
+    app = FileAttachmentApplication()
+    digest = hashlib.sha256(b"x").hexdigest()
+    for index in range(5):
+        app.create_attachment(
+            db,
+            storage_ref=f"object://page/{index}",
+            file_name=f"{index}.txt",
+            media_type="text/plain",
+            size_bytes=1,
+            checksum_sha256=digest,
+            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+
+    first = app.list_attachments(db, limit=2)
+    second = app.list_attachments(db, limit=2, offset=2)
+    third = app.list_attachments(db, limit=2, offset=4)
+
+    assert len(first) == 2
+    assert len(second) == 2
+    assert len(third) == 1
+    assert len({item.attachment_id for item in first + second + third}) == 5
+    assert first + second + third == app.list_attachments(db, limit=5)
+    db.close()
+
+
+@pytest.mark.parametrize("offset", [-1, True, False, 1.5, "2", None])
+def test_attachment_listing_rejects_invalid_offsets(offset):
+    db = connect_database()
+    with pytest.raises(ValidationError, match="offset"):
+        FileAttachmentApplication().list_attachments(db, offset=offset)
+    db.close()
+
+
+def test_attachment_listing_offset_beyond_end_returns_empty_tuple():
+    db = connect_database()
+    app = FileAttachmentApplication()
+    digest = hashlib.sha256(b"x").hexdigest()
+    app.create_attachment(
+        db, storage_ref="object://page/only", file_name="only.txt",
+        media_type="text/plain", size_bytes=1, checksum_sha256=digest,
+    )
+    assert app.list_attachments(db, offset=1) == ()
+    db.close()
