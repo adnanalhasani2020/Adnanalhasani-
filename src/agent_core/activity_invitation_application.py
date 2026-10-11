@@ -56,7 +56,7 @@ class ActivityInvitationApplication:
         activity_key = str(self._uuid(activity_id, "Activity identifier"))
         inviter_key = str(self._uuid(inviter_person_id, "Inviter Person identifier"))
         invitee_key = str(self._uuid(invitee_person_id, "Invitee Person identifier"))
-        timestamp = self._timestamp(created_at or datetime.now(timezone.utc))
+        timestamp = self._timestamp(datetime.now(timezone.utc) if created_at is None else created_at)
         try:
             with connection:
                 # Check existence explicitly so missing references fail with a stable
