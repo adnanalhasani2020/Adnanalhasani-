@@ -286,3 +286,21 @@ def test_proposed_loan_can_be_cancelled_without_creating_an_obligation():
         (str(loan.loan_id),),
     ).fetchall()[-1] == ("state:cancelled",)
     db.close()
+
+@pytest.mark.parametrize("target_state", [[], {}])
+def test_loan_transition_rejects_non_string_target_states_without_mutation(target_state):
+    db = connect_database()
+    parties = seed(db)
+    app = LoanApplication()
+    loan, parties = create_loan(db, app, parties)
+    _, _, _, _, context = parties
+    with pytest.raises(ValidationError, match="Unsupported persisted Loan target state"):
+        app.transition_loan(
+            db, loan.loan_id, target_state, expected_version=1,
+            context_ref=context, authorization_grant_id="unused",
+            agent_action_id="unused", now=STAMP,
+        )
+    current = app.get_loan(db, loan.loan_id)
+    assert current.state == "proposed"
+    assert current.version_no == 1
+    db.close()
