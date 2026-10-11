@@ -387,3 +387,21 @@ def test_payment_transition_accepts_equivalent_timestamp_with_different_timezone
         "state:pending",
     )
     db.close()
+
+@pytest.mark.parametrize("target_state", [[], {}])
+def test_payment_transition_rejects_non_string_target_states_without_mutation(target_state):
+    db = connect_database()
+    parties = seed(db)
+    app = PaymentApplication()
+    payment, parties = create_payment(db, app, parties)
+    _, _, _, _, context, _ = parties
+    with pytest.raises(ValidationError, match="Unsupported persisted Payment target state"):
+        app.transition_payment(
+            db, payment.payment_id, target_state, expected_version=1,
+            context_ref=context, authorization_grant_id="unused",
+            agent_action_id="unused", now=STAMP,
+        )
+    current = app.get_payment(db, payment.payment_id)
+    assert current.state == "initiated"
+    assert current.version_no == 1
+    db.close()
