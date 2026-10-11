@@ -244,9 +244,6 @@ def test_settings_reads_independent_attachment_store_path(monkeypatch):
     settings = Settings.from_environment()
     assert settings.attachment_content_store_path == "/var/lib/agent/attachments"
 
-
-
-
 def test_failed_atomic_publish_removes_temporary_file(tmp_path, monkeypatch):
     root = tmp_path / "objects"
     store = LocalFilesystemContentStore(root)
