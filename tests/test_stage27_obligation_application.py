@@ -216,3 +216,21 @@ def test_obligation_history_failure_rolls_back_creation():
         )
     assert db.execute("SELECT COUNT(*) FROM obligations").fetchone()[0] == 0
     db.close()
+
+@pytest.mark.parametrize("target_state", [[], {}])
+def test_obligation_transition_rejects_non_string_target_states_without_mutation(target_state):
+    db = connect_database()
+    parties = seed(db)
+    app = ObligationApplication()
+    obligation, parties = create_obligation(db, app, parties)
+    _, _, _, _, context = parties
+    with pytest.raises(ValidationError, match="Unsupported persisted Obligation target state"):
+        app.transition_obligation(
+            db, obligation.obligation_id, target_state, expected_version=1,
+            context_ref=context, authorization_grant_id="unused",
+            agent_action_id="unused", now=STAMP,
+        )
+    current = app.get_obligation(db, obligation.obligation_id)
+    assert current.state == "proposed"
+    assert current.version_no == 1
+    db.close()
