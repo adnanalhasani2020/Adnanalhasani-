@@ -154,7 +154,7 @@ class InstrumentApplication:
             raise ValidationError("Instrument expected_version must be a positive integer")
         if not isinstance(actor_context_ref, str) or not actor_context_ref.strip():
             raise ValidationError("Instrument actor_context_ref is required")
-        if action not in self._TRANSITIONS:
+        if not isinstance(action, str) or action not in self._TRANSITIONS:
             raise ValidationError("Unsupported Instrument transition")
         allowed, next_state = self._TRANSITIONS[action]
         timestamp = self._timestamp(now or datetime.now(timezone.utc), "Instrument transition timestamp")
