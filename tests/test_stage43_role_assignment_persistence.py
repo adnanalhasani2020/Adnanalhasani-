@@ -68,6 +68,24 @@ def test_role_assignment_lists_deterministically_within_membership():
     db.close()
 
 
+@pytest.mark.parametrize("state", [[], {}])
+def test_role_assignment_rejects_unhashable_state_without_creating_record(state):
+    db = connect_database()
+    membership_id = seed_membership(db)
+
+    with pytest.raises(ValidationError, match="state"):
+        RoleAssignmentApplication().create_role_assignment(
+            db,
+            membership_id=membership_id,
+            role_code="organizer",
+            state=state,
+            effective_from=STAMP,
+        )
+
+    assert db.execute("SELECT COUNT(*) FROM role_assignments").fetchone()[0] == 0
+    db.close()
+
+
 def test_role_assignment_rejects_missing_membership_and_unknown_assignment():
     db = connect_database()
     app = RoleAssignmentApplication()
