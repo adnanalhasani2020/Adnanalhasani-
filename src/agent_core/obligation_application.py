@@ -198,7 +198,7 @@ class ObligationApplication:
         key = str(self._uuid(obligation_id, "Obligation identifier"))
         if type(expected_version) is not int or expected_version < 1:
             raise ValidationError("Obligation expected_version must be a positive integer")
-        if target_state not in {"open", "due", "overdue", "satisfied", "cancelled"}:
+        if not isinstance(target_state, str) or target_state not in {"open", "due", "overdue", "satisfied", "cancelled"}:
             raise ValidationError("Unsupported persisted Obligation target state")
         timestamp = self._timestamp(now or datetime.now(timezone.utc), "Obligation transition timestamp")
         action_code = f"obligation.transition.{target_state}"
