@@ -151,7 +151,6 @@ def test_invalid_or_empty_content_is_rejected_before_storage():
     db.close()
 
 
-
 def test_non_bytes_content_store_response_is_rejected_without_metadata_mutation():
     db = connect_database()
     store = InMemoryContentStore()
@@ -165,7 +164,6 @@ def test_non_bytes_content_store_response_is_rejected_without_metadata_mutation(
     assert FileAttachmentApplication().get_attachment(db, attachment.attachment_id) == attachment
     assert FileAttachmentApplication().list_attachments(db) == (attachment,)
     db.close()
-
 
 
 def test_metadata_registry_existing_contract_remains_compatible():
