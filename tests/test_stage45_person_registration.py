@@ -88,7 +88,7 @@ def test_person_registration_rejects_duplicate_person_id_without_overwriting():
 @pytest.mark.parametrize("timestamp_field", ["created_at", "updated_at"])
 def test_person_registration_rejects_explicitly_empty_timestamps_without_persisting(timestamp_field):
     db = connect_database()
-    with pytest.raises(ValidationError, match="timezone-aware"):
+    with pytest.raises(ValidationError, match="valid ISO-8601"):
         PersonRegistrationApplication().create_person(
             db, state="active", **{timestamp_field: ""}
         )
