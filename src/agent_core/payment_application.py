@@ -215,7 +215,7 @@ class PaymentApplication:
         key = str(self._uuid(payment_id, "Payment identifier"))
         if type(expected_version) is not int or expected_version < 1:
             raise ValidationError("Payment expected_version must be a positive integer")
-        if target_state not in {"pending", "completed", "failed", "cancelled"}:
+        if not isinstance(target_state, str) or target_state not in {"pending", "completed", "failed", "cancelled"}:
             raise ValidationError("Unsupported persisted Payment target state")
         timestamp = self._timestamp(now or datetime.now(timezone.utc), "Payment transition timestamp")
         action_code = f"payment.transition.{target_state}"
