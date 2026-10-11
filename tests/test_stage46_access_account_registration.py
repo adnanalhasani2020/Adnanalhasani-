@@ -113,3 +113,14 @@ def test_duplicate_account_id_is_rejected_without_overwriting_original():
     assert restored == original
     assert db.execute("SELECT COUNT(*) FROM access_accounts").fetchone()[0] == 1
     db.close()
+
+@pytest.mark.parametrize("timestamp_field", ["created_at", "updated_at"])
+def test_access_account_registration_rejects_explicitly_empty_timestamps(timestamp_field):
+    db = connect_database()
+    person_id = seed_person(db)
+    with pytest.raises(ValidationError, match="timezone-aware"):
+        AccessAccountRegistrationApplication().create_access_account(
+            db, person_id=person_id, state="active", **{timestamp_field: ""}
+        )
+    assert db.execute("SELECT COUNT(*) FROM access_accounts").fetchone()[0] == 0
+    db.close()
