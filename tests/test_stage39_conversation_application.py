@@ -77,7 +77,7 @@ def test_conversation_rejects_explicitly_empty_timestamps_without_mutation():
     conversation = app.create(
         db, context_ref="case:empty", conversation_type="general", now=STAMP
     )
-    with pytest.raises(ValidationError, match="timezone-aware"):
+    with pytest.raises(ValidationError, match="valid ISO-8601"):
         app.close(db, conversation.conversation_id, now="")
     assert app.get(db, conversation.conversation_id).state == "active"
     db.close()
