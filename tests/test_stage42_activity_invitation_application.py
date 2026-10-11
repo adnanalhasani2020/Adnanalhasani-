@@ -110,6 +110,48 @@ def test_database_enforces_invitation_foreign_keys():
     db.close()
 
 
+def test_invitation_created_at_offset_is_normalized_to_utc():
+    db = connect_database()
+    inviter, invitee = create_person(db), create_person(db)
+    activity = create_activity(db)
+
+    invitation = ActivityInvitationApplication().create_invitation(
+        db,
+        activity_id=activity,
+        inviter_person_id=inviter,
+        invitee_person_id=invitee,
+        created_at="2026-02-03T03:04:05+03:00",
+    )
+
+    assert invitation.created_at == "2026-02-03T00:04:05Z"
+    db.close()
+
+
+@pytest.mark.parametrize(
+    "created_at",
+    [
+        "2026-02-03T03:04:05",
+        datetime(2026, 2, 3, 3, 4, 5),
+    ],
+)
+def test_invitation_rejects_timezone_naive_timestamp_without_creating_record(created_at):
+    db = connect_database()
+    inviter, invitee = create_person(db), create_person(db)
+    activity = create_activity(db)
+
+    with pytest.raises(ValidationError, match="timezone-aware"):
+        ActivityInvitationApplication().create_invitation(
+            db,
+            activity_id=activity,
+            inviter_person_id=inviter,
+            invitee_person_id=invitee,
+            created_at=created_at,
+        )
+
+    assert ActivityInvitationApplication().list_for_activity(db, activity) == ()
+    db.close()
+
+
 def test_inviter_listing_is_scoped_deterministic_and_survives_reopen(tmp_path):
     path = tmp_path / "outgoing-invitations.sqlite"
     db = connect_database(path)
