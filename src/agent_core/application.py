@@ -76,7 +76,12 @@ class SaleApplication:
     }
 
     def _timestamp(self, now):
-        instant = now or datetime.now(timezone.utc)
+        if now is None:
+            instant = datetime.now(timezone.utc)
+        elif isinstance(now, datetime):
+            instant = now
+        else:
+            raise ValidationError("Sale operation timestamp must be a timezone-aware datetime")
         if instant.tzinfo is None or instant.utcoffset() is None:
             raise ValidationError("Sale operation timestamp must be timezone-aware")
         return instant.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
