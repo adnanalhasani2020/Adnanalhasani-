@@ -13,6 +13,11 @@ class MigrationError(RuntimeError):
 
 def apply_migrations(connection: sqlite3.Connection) -> list[str]:
     """Apply repository migrations in lexical order, atomically per migration."""
+    if connection.in_transaction:
+        raise MigrationError(
+            "cannot apply migrations while the connection has a caller-owned transaction"
+        )
+
     connection.execute("PRAGMA foreign_keys = ON")
     connection.execute(
         """
@@ -35,17 +40,26 @@ def apply_migrations(connection: sqlite3.Connection) -> list[str]:
         if version in applied:
             continue
         sql = path.read_text(encoding="utf-8")
+        # sqlite3.Connection.executescript() commits any open transaction before
+        # executing its script. Put the migration and its ledger entry inside
+        # one explicit transaction instead of relying on the connection context
+        # manager, which cannot make executescript atomic.
+        quoted_version = version.replace("'", "''")
+        script = (
+            "BEGIN IMMEDIATE;\n"
+            + sql
+            + "\nINSERT OR IGNORE INTO schema_migrations(version, applied_at) "
+            + f"VALUES ('{quoted_version}', strftime('%Y-%m-%dT%H:%M:%fZ','now'));\n"
+            + "COMMIT;"
+        )
         try:
-            with connection:
-                connection.executescript(sql)
-                connection.execute(
-                    "INSERT OR IGNORE INTO schema_migrations(version, applied_at) "
-                    "VALUES (?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))",
-                    (version,),
-                )
+            connection.executescript(script)
         except sqlite3.DatabaseError as exc:
+            if connection.in_transaction:
+                connection.rollback()
             raise MigrationError(f"migration {version} failed: {exc}") from exc
         applied_now.append(version)
+        applied.add(version)
     return applied_now
 
 
