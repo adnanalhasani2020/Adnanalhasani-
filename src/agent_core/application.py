@@ -316,7 +316,17 @@ class SaleApplication:
         sale_uuid = self._uuid(sale_id, "Sale identifier")
         actor_uuid = self._uuid(actor_context_ref, "Actor identifier")
         timestamp = self._timestamp(now)
-        with connection:
+
+        # Keep failures local to this transition when a caller owns an outer
+        # transaction; sqlite3's connection context manager is not a savepoint.
+        owns_transaction = not connection.in_transaction
+        savepoint = "sale_transition_operation"
+        if owns_transaction:
+            connection.execute("BEGIN IMMEDIATE")
+        savepoint_started = False
+        try:
+            connection.execute(f"SAVEPOINT {savepoint}")
+            savepoint_started = True
             sale, offering_uuid, version_no, previous_ref = self._load_sale(connection, sale_uuid)
             grant_action, target_state, allowed_from = self._TRANSITIONS[action]
             self._authorize(
@@ -352,6 +362,17 @@ class SaleApplication:
                 (str(uuid4()), "commerce", str(sale.id), "sale_state_transition", timestamp,
                  str(actor_uuid), previous_ref, current_ref, f"state:{target_state.value}", timestamp),
             )
+            connection.execute(f"RELEASE SAVEPOINT {savepoint}")
+            savepoint_started = False
+            if owns_transaction:
+                connection.commit()
+        except Exception:
+            if savepoint_started and connection.in_transaction:
+                connection.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+                connection.execute(f"RELEASE SAVEPOINT {savepoint}")
+            if owns_transaction and connection.in_transaction:
+                connection.rollback()
+            raise
         return sale
 
     def confirm_sale(self, connection, sale_id, actor_context_ref, authorization_grant_id, *, now=None):
