@@ -92,14 +92,17 @@ def test_e2e_sale_lifecycle_uses_application_authorization_and_round_trips(tmp_p
         app.confirm_sale(db, sale.id, actor, create_grant, now=NOW)
 
     confirm_grant = _transition_grant(db, actor, activity, sale, "confirm")
+    db.commit()
     sale = app.confirm_sale(db, sale.id, actor, confirm_grant, now=NOW)
     assert sale.state is SaleState.CONFIRMED
 
     fulfill_grant = _transition_grant(db, actor, activity, sale, "fulfill")
+    db.commit()
     sale = app.fulfill_sale(db, sale.id, actor, fulfill_grant, now=NOW)
     assert sale.state is SaleState.FULFILLED
 
     return_grant = _transition_grant(db, actor, activity, sale, "return")
+    db.commit()
     sale = app.return_sale(db, sale.id, actor, return_grant, now=NOW)
     assert sale.state is SaleState.RETURNED
 
