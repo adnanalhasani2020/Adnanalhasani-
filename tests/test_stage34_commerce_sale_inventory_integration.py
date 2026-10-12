@@ -124,17 +124,13 @@ def test_product_offering_inventory_and_authorized_sale_round_trip_without_stock
 
     # A grant scoped to A cannot create a sale for B; failure must leave no partial Sale/history.
     before_sales = db.execute("SELECT COUNT(*) FROM sales").fetchone()[0]
-    before_history_b = db.execute(
-        "SELECT COUNT(*) FROM domain_history WHERE target_ref=?", (offering_b_id,)
-    ).fetchone()[0]
+    before_history = db.execute("SELECT COUNT(*) FROM domain_history").fetchone()[0]
     with pytest.raises(ValidationError, match="scope does not match Sale"):
         sales.create_sale(
             db, offering_b_id, activity_b, actor_id, create_grant_a, now=NOW
         )
     assert db.execute("SELECT COUNT(*) FROM sales").fetchone()[0] == before_sales
-    assert db.execute(
-        "SELECT COUNT(*) FROM domain_history WHERE target_ref=?", (offering_b_id,)
-    ).fetchone()[0] == before_history_b
+    assert db.execute("SELECT COUNT(*) FROM domain_history").fetchone()[0] == before_history
 
     confirm_grant = _grant(db, actor_id, str(sale.id), activity_a, "confirm_sale")
     db.execute(
