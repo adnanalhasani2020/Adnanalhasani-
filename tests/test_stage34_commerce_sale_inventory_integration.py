@@ -117,6 +117,17 @@ def test_product_offering_inventory_and_authorized_sale_round_trip_without_stock
 
     sales = SaleApplication()
     create_grant_a = _grant(db, actor_id, offering_a_id, activity_a, "create_sale")
+
+    # An explicitly empty timestamp is invalid, not an instruction to use wall-clock time.
+    before_invalid_sales = db.execute("SELECT COUNT(*) FROM sales").fetchone()[0]
+    before_invalid_history = db.execute("SELECT COUNT(*) FROM domain_history").fetchone()[0]
+    with pytest.raises(ValidationError, match="Sale operation timestamp"):
+        sales.create_sale(
+            db, offering_a_id, activity_a, actor_id, create_grant_a, now=""
+        )
+    assert db.execute("SELECT COUNT(*) FROM sales").fetchone()[0] == before_invalid_sales
+    assert db.execute("SELECT COUNT(*) FROM domain_history").fetchone()[0] == before_invalid_history
+
     sale = sales.create_sale(
         db, offering_a_id, activity_a, actor_id, create_grant_a, now=NOW
     )
