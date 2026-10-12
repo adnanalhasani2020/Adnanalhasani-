@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
@@ -534,6 +535,31 @@ class ProductApplication:
     rows are not assigned fabricated names; legacy unnamed rows fail closed on read.
     """
 
+    @staticmethod
+    @contextmanager
+    def _atomic(connection):
+        """Keep operation writes atomic without taking ownership of caller transactions."""
+        if connection.in_transaction:
+            savepoint = "product_" + uuid4().hex
+            connection.execute(f"SAVEPOINT {savepoint}")
+            try:
+                yield
+            except BaseException:
+                connection.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+                connection.execute(f"RELEASE SAVEPOINT {savepoint}")
+                raise
+            else:
+                connection.execute(f"RELEASE SAVEPOINT {savepoint}")
+            return
+
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            yield
+        except BaseException:
+            connection.rollback()
+            raise
+        else:
+            connection.commit()
     def _uuid(self, value, label):
         try:
             return UUID(str(value))
@@ -575,7 +601,7 @@ class ProductApplication:
         if not isinstance(actor_context_ref, str) or not actor_context_ref.strip():
             raise ValidationError("Product actor_context_ref is required")
         actor_context_ref = actor_context_ref.strip()
-        with connection:
+        with self._atomic(connection):
             connection.execute(
                 "INSERT INTO products(product_id, name, state, created_at, updated_at, version_no) "
                 "VALUES(?,?,?,?,?,1)",
@@ -602,7 +628,7 @@ class ProductApplication:
         if not isinstance(actor_context_ref, str) or not actor_context_ref.strip():
             raise ValidationError("Product actor_context_ref is required")
         actor_context_ref = actor_context_ref.strip()
-        with connection:
+        with self._atomic(connection):
             record = self._load_product(connection, product_id)
             product = record.product
             if record.version_no != expected_version:

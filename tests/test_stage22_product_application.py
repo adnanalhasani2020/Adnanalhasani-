@@ -153,3 +153,88 @@ def test_product_history_requires_non_empty_actor_context():
         ProductApplication().create_product(db, "Widget", actor_context_ref=" ", now=NOW)
     assert db.execute("SELECT COUNT(*) FROM products").fetchone()[0] == 0
     db.close()
+
+
+def test_product_create_preserves_caller_transaction_on_success():
+    db = connect_database()
+    app = ProductApplication()
+    caller_person = uid()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (caller_person, NOW, NOW),
+    )
+    created = app.create_product(db, "Caller-owned", actor_context_ref="internal-test-context", now=NOW)
+    assert db.in_transaction
+    assert db.execute("SELECT COUNT(*) FROM products WHERE product_id=?",
+                      (str(created.product.id),)).fetchone()[0] == 1
+    db.rollback()
+    assert db.execute("SELECT COUNT(*) FROM products WHERE product_id=?",
+                      (str(created.product.id),)).fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM persons WHERE person_id=?",
+                      (caller_person,)).fetchone()[0] == 0
+    db.close()
+
+
+def test_product_history_failure_preserves_caller_transaction_and_rolls_back_partial_write():
+    import sqlite3
+
+    db = connect_database()
+    app = ProductApplication()
+    caller_person = uid()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (caller_person, NOW, NOW),
+    )
+    db.execute(
+        "CREATE TRIGGER reject_product_history BEFORE INSERT ON domain_history "
+        "WHEN NEW.owner_domain='commerce' AND NEW.change_type='product_lifecycle' "
+        "BEGIN SELECT RAISE(ABORT, 'product history unavailable'); END"
+    )
+    with pytest.raises(sqlite3.IntegrityError, match="product history unavailable"):
+        app.create_product(db, "Partial", actor_context_ref="internal-test-context", now=NOW)
+    assert db.in_transaction
+    assert db.execute("SELECT COUNT(*) FROM products").fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM persons WHERE person_id=?",
+                      (caller_person,)).fetchone()[0] == 1
+    db.rollback()
+    assert db.execute("SELECT COUNT(*) FROM persons WHERE person_id=?",
+                      (caller_person,)).fetchone()[0] == 0
+    db.close()
+
+
+def test_product_transition_history_failure_preserves_caller_transaction():
+    import sqlite3
+
+    db = connect_database()
+    app = ProductApplication()
+    created = app.create_product(db, "Stable", actor_context_ref="internal-test-context", now=NOW)
+    db.commit()
+    caller_person = uid()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (caller_person, NOW, NOW),
+    )
+    db.execute(
+        "CREATE TRIGGER reject_product_history BEFORE INSERT ON domain_history "
+        "WHEN NEW.owner_domain='commerce' AND NEW.change_type='product_lifecycle' "
+        "BEGIN SELECT RAISE(ABORT, 'product history unavailable'); END"
+    )
+    with pytest.raises(sqlite3.IntegrityError, match="product history unavailable"):
+        app.transition_product(
+            db, created.product.id, "activate", expected_version=1,
+            actor_context_ref="internal-test-context", now=NOW,
+        )
+    current = app.get_product(db, created.product.id)
+    assert db.in_transaction
+    assert current.product.state is ProductState.DRAFT
+    assert current.version_no == 1
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=? AND change_type='product_lifecycle'",
+        (str(created.product.id),),
+    ).fetchone()[0] == 1
+    assert db.execute("SELECT COUNT(*) FROM persons WHERE person_id=?",
+                      (caller_person,)).fetchone()[0] == 1
+    db.rollback()
+    assert db.execute("SELECT COUNT(*) FROM persons WHERE person_id=?",
+                      (caller_person,)).fetchone()[0] == 0
+    db.close()
