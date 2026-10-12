@@ -284,6 +284,34 @@ def _sale_setup(db):
     return actor_id, activity_id, offering_id, grant_id
 
 
+def test_sale_creation_without_caller_transaction_rolls_back_sale_when_history_fails(tmp_path):
+    db = connect_database(tmp_path / "sale-owned-transaction.sqlite")
+    actor_id, activity_id, offering_id, grant_id = _sale_setup(db)
+    sales_before = db.execute("SELECT COUNT(*) FROM sales").fetchone()[0]
+    history_before = db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE owner_domain='commerce'"
+    ).fetchone()[0]
+    db.execute(
+        "CREATE TRIGGER reject_initial_sale_history BEFORE INSERT ON domain_history "
+        "WHEN NEW.change_type='sale_state_transition' AND NEW.target_ref IN "
+        "(SELECT sale_id FROM sales) "
+        "BEGIN SELECT RAISE(ABORT, 'forced initial history failure'); END"
+    )
+    db.commit()
+
+    with pytest.raises(sqlite3.IntegrityError, match="forced initial history failure"):
+        SaleApplication().create_sale(
+            db, offering_id, activity_id, actor_id, grant_id, now=NOW
+        )
+
+    assert not db.in_transaction
+    assert db.execute("SELECT COUNT(*) FROM sales").fetchone()[0] == sales_before
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE owner_domain='commerce'"
+    ).fetchone()[0] == history_before
+    db.close()
+
+
 def test_sale_creation_inside_caller_transaction_does_not_commit_and_can_be_rolled_back(tmp_path):
     db = connect_database(tmp_path / "sale-caller-transaction.sqlite")
     actor_id, activity_id, offering_id, grant_id = _sale_setup(db)
