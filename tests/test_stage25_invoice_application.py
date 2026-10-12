@@ -137,6 +137,36 @@ def test_invoice_storage_failure_rolls_back_invoice_and_history():
     db.close()
 
 
+def test_invoice_issue_preserves_caller_owned_transaction():
+    db = connect_database()
+    actor, activity, sale, grant = fixture(db)
+    caller_person = uid()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (caller_person, STAMP, STAMP),
+    )
+    assert db.in_transaction
+
+    InvoiceApplication().create_invoice(
+        db, sale_id=sale, actor_context_ref=actor, authorization_grant_id=grant,
+        issuer_ref=actor, invoice_number="INV-CALLER-TX", now=STAMP,
+    )
+
+    # The application releases only its savepoint; it must not commit caller work.
+    assert db.in_transaction
+    db.rollback()
+    assert db.execute(
+        "SELECT COUNT(*) FROM persons WHERE person_id=?", (caller_person,)
+    ).fetchone()[0] == 0
+    assert db.execute(
+        "SELECT COUNT(*) FROM invoices WHERE invoice_number='INV-CALLER-TX'"
+    ).fetchone()[0] == 0
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE change_type='invoice_state_transition'"
+    ).fetchone()[0] == 0
+    db.close()
+
+
 def test_invoice_void_rejects_stale_version_without_mutation():
     db = connect_database()
     actor, activity, sale, grant = fixture(db)
