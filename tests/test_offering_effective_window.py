@@ -13,7 +13,7 @@ def test_offering_rejects_empty_effective_window_by_instant():
     starts = datetime.fromisoformat("2026-10-12T12:00:00+00:00")
     ends = datetime.fromisoformat("2026-10-12T14:00:00+02:00")
 
-    with pytest.raises(ValidationError, match="effective_to must be later"):
+    with pytest.raises(ValidationError, match="cannot precede or equal"):
         Offering(
             product_id=uuid4(),
             activity_id=uuid4(),
