@@ -234,3 +234,69 @@ def test_obligation_transition_rejects_non_string_target_states_without_mutation
     assert current.state == "proposed"
     assert current.version_no == 1
     db.close()
+
+
+def test_obligation_rejects_invoice_already_linked_to_another_obligation_atomically():
+    db = connect_database()
+    parties = seed(db)
+    app = ObligationApplication()
+    original, parties = create_obligation(db, app, parties)
+    creditor, debtor, approver, _agent, _context = parties
+
+    actor, activity, product, offering, sale = [uid() for _ in range(5)]
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (actor, STAMP, STAMP),
+    )
+    db.execute(
+        "INSERT INTO activities(activity_id,owner_person_id,state,created_at,updated_at) VALUES(?,?, 'active',?,?)",
+        (activity, actor, STAMP, STAMP),
+    )
+    db.execute(
+        "INSERT INTO products(product_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (product, STAMP, STAMP),
+    )
+    db.execute(
+        "INSERT INTO offerings(offering_id,product_id,activity_id,state,effective_from,created_at,updated_at) "
+        "VALUES(?,?,?,'active',?,?,?)",
+        (offering, product, activity, STAMP, STAMP, STAMP),
+    )
+    db.execute(
+        "INSERT INTO sales(sale_id,offering_id,activity_id,state,occurred_at,created_at,updated_at) "
+        "VALUES(?,?,?,'initiated',?,?,?)",
+        (sale, offering, activity, STAMP, STAMP, STAMP),
+    )
+    invoice = uid()
+    db.execute(
+        "INSERT INTO invoices(invoice_id,sale_id,obligation_id,state,issuer_ref,invoice_number,issue_at,created_at,updated_at) "
+        "VALUES(?,?,?,'issued',?,?, ?,?,?)",
+        (invoice, sale, str(original.obligation_id), actor, f"INV-{invoice}", STAMP, STAMP, STAMP),
+    )
+    db.commit()
+
+    second_id = uid()
+    grant, action = authorize(
+        db, agent=parties[3], context=parties[4], obligation_id=second_id,
+        action_code="obligation.create", approver=approver,
+    )
+    with pytest.raises(
+        ValidationError, match="conflicts with the Invoice's linked Obligation"
+    ):
+        app.create_obligation(
+            db, obligation_id=second_id, creditor_person_id=creditor, debtor_person_id=debtor,
+            amount_minor=5000, currency_code="YER", context_ref=parties[4],
+            authorization_grant_id=grant, agent_action_id=action,
+            source_invoice_id=invoice, now=STAMP,
+        )
+
+    assert db.execute(
+        "SELECT obligation_id FROM invoices WHERE invoice_id=?", (invoice,)
+    ).fetchone()[0] == str(original.obligation_id)
+    assert db.execute(
+        "SELECT COUNT(*) FROM obligations WHERE obligation_id=?", (second_id,)
+    ).fetchone()[0] == 0
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=? AND change_type='obligation_state_transition'",
+        (second_id,),
+    ).fetchone()[0] == 0
+    db.close()
