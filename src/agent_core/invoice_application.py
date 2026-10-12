@@ -1,4 +1,5 @@
 """Persisted Commerce Invoice lifecycle, separate from payment and financial recognition."""
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
@@ -27,6 +28,32 @@ class InvoiceApplication:
     Invoice actions require an exact persisted AuthorizationGrant scoped to the parent
     Sale and its Activity, using the existing application authorization contract.
     """
+
+    @staticmethod
+    @contextmanager
+    def _atomic(connection):
+        """Own a transaction only when the caller has not already opened one."""
+        if connection.in_transaction:
+            savepoint = "operation_" + uuid4().hex
+            connection.execute(f"SAVEPOINT {savepoint}")
+            try:
+                yield
+            except BaseException:
+                connection.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+                connection.execute(f"RELEASE SAVEPOINT {savepoint}")
+                raise
+            else:
+                connection.execute(f"RELEASE SAVEPOINT {savepoint}")
+            return
+
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            yield
+        except BaseException:
+            connection.rollback()
+            raise
+        else:
+            connection.commit()
 
     @staticmethod
     def _uuid(value, label):
@@ -93,7 +120,7 @@ class InvoiceApplication:
             connection, grant_key, actor_key, "issue_invoice",
             sale_key, activity_key, timestamp,
         )
-        with connection:
+        with self._atomic(connection):
             if connection.execute(
                 "SELECT 1 FROM persons WHERE person_id=? AND state='active'", (issuer_key,)
             ).fetchone() is None:
@@ -125,7 +152,7 @@ class InvoiceApplication:
         if type(expected_version) is not int or expected_version < 1:
             raise ValidationError("Invoice expected_version must be a positive integer")
         timestamp = self._timestamp(now or datetime.now(timezone.utc), "Invoice void timestamp")
-        with connection:
+        with self._atomic(connection):
             record = self._load(connection, key)
             SaleApplication()._authorize(
                 connection, authorization_grant_id, actor_key, "void_invoice",
