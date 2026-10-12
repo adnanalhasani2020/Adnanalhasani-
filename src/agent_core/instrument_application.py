@@ -63,26 +63,6 @@ class InstrumentApplication:
             raise
         else:
             connection.commit()
-    def _atomic(connection):
-        """Keep this operation atomic without committing caller-owned work."""
-        savepoint = "instrument_application_" + uuid4().hex
-        connection.execute(f"SAVEPOINT {savepoint}")
-        try:
-            yield
-        except BaseException:
-            connection.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
-            connection.execute(f"RELEASE SAVEPOINT {savepoint}")
-            raise
-        else:
-            connection.execute(f"RELEASE SAVEPOINT {savepoint}")
-    """Persist Instrument state and expose its recorded usage history."""
-
-    _TRANSITIONS = {
-        "activate": (("issued",), "active"),
-        "redeem": (("active",), "redeemed"),
-        "expire": (("issued", "active"), "expired"),
-        "revoke": (("issued", "active"), "revoked"),
-    }
 
     @staticmethod
     def _uuid(value, label):
