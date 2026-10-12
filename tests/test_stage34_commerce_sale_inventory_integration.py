@@ -128,6 +128,16 @@ def test_product_offering_inventory_and_authorized_sale_round_trip_without_stock
     assert db.execute("SELECT COUNT(*) FROM sales").fetchone()[0] == before_invalid_sales
     assert db.execute("SELECT COUNT(*) FROM domain_history").fetchone()[0] == before_invalid_history
 
+    # An explicitly supplied empty Sale identifier must be rejected, not treated as omitted.
+    before_empty_id_sales = db.execute("SELECT COUNT(*) FROM sales").fetchone()[0]
+    before_empty_id_history = db.execute("SELECT COUNT(*) FROM domain_history").fetchone()[0]
+    with pytest.raises(ValidationError, match="Sale identifier must be a valid UUID"):
+        sales.create_sale(
+            db, offering_a_id, activity_a, actor_id, create_grant_a, now=NOW, sale_id=""
+        )
+    assert db.execute("SELECT COUNT(*) FROM sales").fetchone()[0] == before_empty_id_sales
+    assert db.execute("SELECT COUNT(*) FROM domain_history").fetchone()[0] == before_empty_id_history
+
     sale = sales.create_sale(
         db, offering_a_id, activity_a, actor_id, create_grant_a, now=NOW
     )
