@@ -287,8 +287,6 @@ def test_proposed_loan_can_be_cancelled_without_creating_an_obligation():
     ).fetchall()[-1] == ("state:cancelled",)
     db.close()
 
-@pytest.mark.parametrize("target_state", [[], {}])
-
 def test_loan_create_preserves_caller_transaction_on_success():
     db = connect_database()
     parties = seed(db)
@@ -349,6 +347,7 @@ def test_loan_create_failure_preserves_caller_transaction():
     db.close()
 
 
+@pytest.mark.parametrize("target_state", [[], {}])
 def test_loan_transition_rejects_non_string_target_states_without_mutation(target_state):
     db = connect_database()
     parties = seed(db)
