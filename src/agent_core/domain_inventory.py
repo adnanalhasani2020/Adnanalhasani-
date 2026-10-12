@@ -75,8 +75,10 @@ class Offering:
             if starts.tzinfo is not None and starts.utcoffset() is not None and ends.tzinfo is not None and ends.utcoffset() is not None:
                 starts = starts.astimezone(timezone.utc)
                 ends = ends.astimezone(timezone.utc)
-            if ends < starts:
-                raise ValidationError("Offering.effective_to cannot precede effective_from")
+            # Offering validity uses a half-open [effective_from, effective_to) interval.
+            # Equal instants describe an empty window and can never be effective.
+            if ends <= starts:
+                raise ValidationError("Offering.effective_to must be later than effective_from")
     def activate(self): self.state=OfferingState.ACTIVE
     def end(self): self.state=OfferingState.ENDED
     def withdraw(self): self.state=OfferingState.WITHDRAWN
