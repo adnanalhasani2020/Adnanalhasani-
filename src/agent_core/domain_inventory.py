@@ -78,7 +78,7 @@ class Offering:
             # Offering validity uses a half-open [effective_from, effective_to) interval.
             # Equal instants describe an empty window and can never be effective.
             if ends <= starts:
-                raise ValidationError("Offering.effective_to must be later than effective_from")
+                raise ValidationError("Offering.effective_to cannot precede or equal effective_from")
     def activate(self): self.state=OfferingState.ACTIVE
     def end(self): self.state=OfferingState.ENDED
     def withdraw(self): self.state=OfferingState.WITHDRAWN
