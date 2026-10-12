@@ -563,6 +563,50 @@ class ProductApplication:
             raise ValidationError(
                 "Product name is missing; explicit legacy reconciliation is required"
             )
+
+        history = connection.execute(
+            "SELECT actor_context_ref, prior_version_ref, current_version_ref, change_payload_ref "
+            "FROM domain_history WHERE owner_domain='commerce' AND target_ref=? "
+            "AND change_type='product_lifecycle' ORDER BY rowid",
+            (key,),
+        ).fetchall()
+        # A version-1 row without history can be a legacy record. Once it has
+        # advanced, its persisted version must be fully supported by history.
+        if not history and version == 1:
+            return ProductRecord(
+                Product(name=name, id=UUID(persisted_id), state=ProductState(state)),
+                version,
+            )
+        if len(history) != version or not history:
+            raise ValidationError("Product history does not match persisted version")
+
+        states = []
+        previous_ref = None
+        for index, (actor_ref, prior_ref, current_ref, payload_ref) in enumerate(history, start=1):
+            expected_prior = None if index == 1 else history[index - 2][2]
+            expected_current = f"product:{key}:v{index}"
+            if (
+                not isinstance(actor_ref, str) or not actor_ref.strip()
+                or prior_ref != expected_prior
+                or current_ref != expected_current
+                or (index > 1 and prior_ref != previous_ref)
+                or not isinstance(payload_ref, str)
+            ):
+                raise ValidationError("Product history chain is inconsistent")
+            previous_ref = current_ref
+            if index == 1:
+                if payload_ref != "state:draft":
+                    raise ValidationError("Product history has an invalid initial state")
+                state_value = "draft"
+            else:
+                if not payload_ref.startswith("action:") or ";state:" not in payload_ref:
+                    raise ValidationError("Product history lacks transition-state evidence")
+                state_value = payload_ref.rsplit(";state:", 1)[1]
+            if state_value not in {"draft", "active", "retired"}:
+                raise ValidationError("Product history has an invalid state")
+            states.append(state_value)
+        if states[0] != "draft" or states[-1] != state:
+            raise ValidationError("Product history does not agree with persisted state")
         return ProductRecord(
             Product(name=name, id=UUID(persisted_id), state=ProductState(state)),
             version,
@@ -604,6 +648,16 @@ class ProductApplication:
         actor_context_ref = actor_context_ref.strip()
         with connection:
             record = self._load_product(connection, product_id)
+            if record.version_no == 1:
+                has_history = connection.execute(
+                    "SELECT 1 FROM domain_history WHERE owner_domain='commerce' AND target_ref=? "
+                    "AND change_type='product_lifecycle' LIMIT 1",
+                    (str(record.product.id),),
+                ).fetchone()
+                if has_history is None:
+                    raise ValidationError(
+                        "Product history is missing; explicit legacy reconciliation is required before transition"
+                    )
             product = record.product
             if record.version_no != expected_version:
                 raise ValidationError("Product version conflict; reload before retrying")
