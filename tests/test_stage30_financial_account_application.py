@@ -232,7 +232,7 @@ def test_financial_account_create_failure_preserves_caller_transaction():
     )
     db.execute(
         "CREATE TRIGGER fail_account_history BEFORE INSERT ON domain_history "
-        "WHEN NEW.change_type='financial_account_state_transition' "
+        "WHEN NEW.change_type='financial_account_lifecycle' "
         "BEGIN SELECT RAISE(ABORT, 'history unavailable'); END"
     )
     caller_person = uid()
