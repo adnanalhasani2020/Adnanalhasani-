@@ -601,7 +601,11 @@ class ProductApplication:
             else:
                 if not payload_ref.startswith("action:") or ";state:" not in payload_ref:
                     raise ValidationError("Product history lacks transition-state evidence")
-                state_value = payload_ref.rsplit(";state:", 1)[1]
+                action_value, state_value = payload_ref.split(";state:", 1)
+                action_value = action_value.removeprefix("action:")
+                expected_state = {"activate": "active", "retire": "retired"}.get(action_value)
+                if expected_state is None or state_value != expected_state:
+                    raise ValidationError("Product history action and state are inconsistent")
             if state_value not in {"draft", "active", "retired"}:
                 raise ValidationError("Product history has an invalid state")
             states.append(state_value)
