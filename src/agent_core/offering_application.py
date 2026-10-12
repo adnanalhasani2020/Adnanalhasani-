@@ -15,6 +15,19 @@ class OfferingRecord:
 
 
 class OfferingApplication:
+    """Create, restore, and transition Offerings without inventing Availability.
+
+    The persisted schema supports draft/active/ended/withdrawn. This service
+    deliberately does not calculate inventory, availability, proximity, or rank.
+    """
+
+    _ACTIONS = {
+        "activate": (OfferingState.ACTIVE, (OfferingState.DRAFT,)),
+        "end": (OfferingState.ENDED, (OfferingState.ACTIVE,)),
+        "withdraw": (OfferingState.WITHDRAWN, (OfferingState.DRAFT, OfferingState.ACTIVE)),
+    }
+
+
     @staticmethod
     @contextmanager
     def _atomic(connection):
