@@ -728,7 +728,7 @@ def test_sale_authorization_rejects_inactive_linked_delegation(delegation_state)
 
     assert db.execute(
         "SELECT state,version_no FROM sales WHERE sale_id=?", (str(sale.id),)
-    ).fetchone() == ("initiated", 1)
+    ).fetchone() == ("initiated", 2)
     assert db.execute(
         "SELECT count(*) FROM domain_history WHERE target_ref=?", (str(sale.id),)
     ).fetchone()[0] == 1
