@@ -9,6 +9,8 @@ import uuid
 import pytest
 
 from agent_core.persistence import MIGRATIONS_DIR, connect_database
+from agent_core.application import SaleApplication
+from agent_core.shared import ValidationError
 
 
 NOW = "2026-10-09T00:00:00Z"
@@ -266,4 +268,47 @@ def test_preexisting_mismatch_can_be_explicitly_reconciled_without_losing_invoic
         "SELECT sale_id FROM invoices WHERE invoice_id=?", (invoice_id,)
     ).fetchone()[0] == sale_id
     assert db.execute("PRAGMA foreign_key_check").fetchall() == []
+    db.close()
+
+
+def test_sale_restore_rejects_preserved_legacy_offering_activity_mismatch(tmp_path):
+    path = tmp_path / "legacy-mismatch-sale-restore.sqlite"
+    db = connect_database(path)
+    activity_a, activity_b = _activity(db), _activity(db)
+    offering_id = _offering(db, _product(db), activity_a)
+    sale_id = _sale(db, offering_id, activity_a)
+    db.execute(
+        "INSERT INTO domain_history(domain_history_id,owner_domain,target_ref,change_type,"
+        "historical_at,actor_context_ref,prior_version_ref,current_version_ref,change_payload_ref,created_at) "
+        "VALUES(?,?,?,?,?,?,?,?,?,?)",
+        (_id(), "commerce", sale_id, "sale_state_transition", NOW, "legacy-test-actor",
+         None, f"sale-state:{sale_id}:v1", "state:initiated", NOW),
+    )
+    db.commit()
+
+    # Simulate a pre-enforcement/legacy database that retained a cross-Activity row.
+    # Current-schema triggers prevent this mismatch during normal writes.
+    triggers = db.execute(
+        "SELECT name FROM sqlite_master WHERE type='trigger'"
+    ).fetchall()
+    for (trigger_name,) in triggers:
+        quoted = trigger_name.replace('"', '""')
+        db.execute(f'DROP TRIGGER "{quoted}"')
+    db.execute(
+        "UPDATE sales SET activity_id=? WHERE sale_id=?",
+        (activity_b, sale_id),
+    )
+    db.commit()
+    db.close()
+
+    db = connect_database(path)
+    assert db.execute(
+        "SELECT activity_id FROM sales WHERE sale_id=?", (sale_id,)
+    ).fetchone()[0] == activity_b
+    with pytest.raises(ValidationError, match="does not match its persisted Offering Activity"):
+        SaleApplication().get_sale(db, sale_id)
+    # Reading fails closed; no silent repair or deletion occurs.
+    assert db.execute(
+        "SELECT activity_id FROM sales WHERE sale_id=?", (sale_id,)
+    ).fetchone()[0] == activity_b
     db.close()
