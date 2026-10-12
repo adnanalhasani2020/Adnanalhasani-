@@ -179,6 +179,19 @@ class SaleApplication:
         if row is None:
             raise ValidationError("Sale does not exist")
         persisted_id, offering_id, activity_id, legacy_state, lifecycle_state, version_no = row
+        # Legacy databases can preserve Sale/Offering context mismatches during migration.
+        # Never silently repair them or permit lifecycle operations on a cross-context Sale.
+        offering = connection.execute(
+            "SELECT activity_id FROM offerings WHERE offering_id=?",
+            (offering_id,),
+        ).fetchone()
+        if offering is None:
+            raise ValidationError("Sale references a missing Offering; explicit reconciliation is required")
+        if offering[0] != activity_id:
+            raise ValidationError(
+                "Sale Activity does not match its persisted Offering Activity; "
+                "explicit reconciliation is required"
+            )
         state = SaleState.from_persisted(legacy_state, lifecycle_state)
         history_rows = connection.execute(
             "SELECT actor_context_ref, prior_version_ref, current_version_ref, change_payload_ref "
