@@ -299,4 +299,20 @@ def test_obligation_rejects_invoice_already_linked_to_another_obligation_atomica
         "SELECT COUNT(*) FROM domain_history WHERE target_ref=? AND change_type='obligation_state_transition'",
         (second_id,),
     ).fetchone()[0] == 0
+
+    # Simulate a legacy/corrupted persisted row that bypassed the application guard.
+    db.execute(
+        "INSERT INTO obligations(obligation_id,creditor_person_id,debtor_person_id,source_invoice_id,"
+        "amount_minor,currency_code,state,created_at,updated_at,version_no) "
+        "VALUES(?,?,?,?,?,'YER','proposed',?,?,1)",
+        (second_id, creditor, debtor, invoice, 5000, STAMP, STAMP),
+    )
+    db.commit()
+    with pytest.raises(
+        ValidationError, match="Persisted Obligation Invoice reference conflicts"
+    ):
+        app.get_obligation(db, second_id)
+    assert db.execute(
+        "SELECT source_invoice_id FROM obligations WHERE obligation_id=?", (second_id,)
+    ).fetchone()[0] == invoice
     db.close()
