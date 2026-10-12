@@ -46,3 +46,10 @@ No implementation stage should be opened from this assessment.
 ## Explicit non-actions
 
 No src/tests/schema/persistence changes. No Stage 12B. No Durable Financial Workflow. No providers/banks/wallets/FX/API/UI. No release/tag/v1.0.0 changes. No Production Readiness claim.
+
+
+## Update note — 2026-10-12 (evidence preparation only)
+
+A separate evidence plan has been prepared at `docs/03-المتطلبات-النهائية/25-حزمة-أدلة-قبول-التجارة-والخدمات-اليومية.md`. It does not change this assessment's verdict or accept requirements.
+
+**Governance reconciliation required before opening any implementation stage:** this assessment's baseline and requirement counts/statuses conflict with the later text in `docs/03-المتطلبات-النهائية/22-سجل-تسوية-المتطلبات.md` and `23-سجل-القرارات-المفتوحة.md` regarding whether requirement-level NEEDS DECISION blockers remain after DEC-0018. Do not choose either snapshot silently. Establish one current authoritative baseline, reconcile the status counts, then continue evidence review. Until then, this assessment's no-new-stage gate remains in force.
