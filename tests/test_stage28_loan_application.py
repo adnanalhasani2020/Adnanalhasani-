@@ -287,6 +287,66 @@ def test_proposed_loan_can_be_cancelled_without_creating_an_obligation():
     ).fetchall()[-1] == ("state:cancelled",)
     db.close()
 
+def test_loan_create_preserves_caller_transaction_on_success():
+    db = connect_database()
+    parties = seed(db)
+    lender, borrower, approver, agent, context = parties
+    app = LoanApplication()
+    loan_id = uid()
+    grant, action = authorize(
+        db, agent=agent, context=context, loan_id=loan_id,
+        action_code="loan.create", approver=approver,
+    )
+    caller_person = uid()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (caller_person, STAMP, STAMP),
+    )
+    app.create_loan(
+        db, loan_id=loan_id, lender_person_id=lender, borrower_person_id=borrower,
+        principal_minor=25000, currency_code="YER", maturity_at=None,
+        context_ref=context, authorization_grant_id=grant, agent_action_id=action, now=STAMP,
+    )
+    assert db.in_transaction
+    db.rollback()
+    assert db.execute("SELECT COUNT(*) FROM loans WHERE loan_id=?", (loan_id,)).fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM persons WHERE person_id=?", (caller_person,)).fetchone()[0] == 0
+    db.close()
+
+
+def test_loan_create_failure_preserves_caller_transaction():
+    db = connect_database()
+    parties = seed(db)
+    lender, borrower, approver, agent, context = parties
+    app = LoanApplication()
+    loan_id = uid()
+    grant, action = authorize(
+        db, agent=agent, context=context, loan_id=loan_id,
+        action_code="loan.create", approver=approver,
+    )
+    db.execute(
+        "CREATE TRIGGER fail_loan_history BEFORE INSERT ON domain_history "
+        "WHEN NEW.change_type='loan_state_transition' BEGIN SELECT RAISE(ABORT, 'history unavailable'); END"
+    )
+    caller_person = uid()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (caller_person, STAMP, STAMP),
+    )
+    with pytest.raises(sqlite3.IntegrityError, match="history unavailable"):
+        app.create_loan(
+            db, loan_id=loan_id, lender_person_id=lender, borrower_person_id=borrower,
+            principal_minor=25000, currency_code="YER", maturity_at=None,
+            context_ref=context, authorization_grant_id=grant, agent_action_id=action, now=STAMP,
+        )
+    assert db.in_transaction
+    assert db.execute("SELECT COUNT(*) FROM loans WHERE loan_id=?", (loan_id,)).fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM persons WHERE person_id=?", (caller_person,)).fetchone()[0] == 1
+    db.rollback()
+    assert db.execute("SELECT COUNT(*) FROM persons WHERE person_id=?", (caller_person,)).fetchone()[0] == 0
+    db.close()
+
+
 @pytest.mark.parametrize("target_state", [[], {}])
 def test_loan_transition_rejects_non_string_target_states_without_mutation(target_state):
     db = connect_database()

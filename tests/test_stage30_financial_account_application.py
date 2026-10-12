@@ -191,6 +191,70 @@ def test_financial_account_close_rejects_stale_version_and_history_failure_rolls
     db.close()
 
 
+
+def test_financial_account_create_preserves_caller_transaction_on_success():
+    db = connect_database()
+    actors = seed(db)
+    owner, approver, agent, context = actors
+    app = FinancialAccountApplication()
+    account_id = uid()
+    grant, action = authorize(
+        db, agent=agent, context=context, account_id=account_id,
+        action_code="financial_account.create", approver=approver,
+    )
+    caller_person = uid()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (caller_person, STAMP, STAMP),
+    )
+    app.create_account(
+        db, financial_account_id=account_id, person_id=owner, account_type="general",
+        context_ref=context, authorization_grant_id=grant, agent_action_id=action, now=STAMP,
+    )
+    assert db.in_transaction
+    db.rollback()
+    assert db.execute(
+        "SELECT COUNT(*) FROM financial_accounts WHERE financial_account_id=?", (account_id,)
+    ).fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM persons WHERE person_id=?", (caller_person,)).fetchone()[0] == 0
+    db.close()
+
+
+def test_financial_account_create_failure_preserves_caller_transaction():
+    db = connect_database()
+    actors = seed(db)
+    owner, approver, agent, context = actors
+    app = FinancialAccountApplication()
+    account_id = uid()
+    grant, action = authorize(
+        db, agent=agent, context=context, account_id=account_id,
+        action_code="financial_account.create", approver=approver,
+    )
+    db.execute(
+        "CREATE TRIGGER fail_account_history BEFORE INSERT ON domain_history "
+        "WHEN NEW.change_type='financial_account_lifecycle' "
+        "BEGIN SELECT RAISE(ABORT, 'history unavailable'); END"
+    )
+    caller_person = uid()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (caller_person, STAMP, STAMP),
+    )
+    with pytest.raises(sqlite3.IntegrityError, match="history unavailable"):
+        app.create_account(
+            db, financial_account_id=account_id, person_id=owner, account_type="general",
+            context_ref=context, authorization_grant_id=grant, agent_action_id=action, now=STAMP,
+        )
+    assert db.in_transaction
+    assert db.execute(
+        "SELECT COUNT(*) FROM financial_accounts WHERE financial_account_id=?", (account_id,)
+    ).fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM persons WHERE person_id=?", (caller_person,)).fetchone()[0] == 1
+    db.rollback()
+    assert db.execute("SELECT COUNT(*) FROM persons WHERE person_id=?", (caller_person,)).fetchone()[0] == 0
+    db.close()
+
+
 def test_closed_financial_account_cannot_be_closed_again():
     db = connect_database()
     actors = seed(db)
