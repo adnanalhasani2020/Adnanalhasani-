@@ -51,8 +51,8 @@ class PersonRegistrationApplication:
         if not isinstance(state, str) or not state.strip():
             raise ValidationError("Person state is required and must be non-empty")
         key = self._uuid(person_id, "Person identifier") if person_id is not None else uuid4()
-        created = self._timestamp(created_at or datetime.now(timezone.utc), "Person created_at")
-        updated = self._timestamp(updated_at or created, "Person updated_at")
+        created = self._timestamp(datetime.now(timezone.utc) if created_at is None else created_at, "Person created_at")
+        updated = self._timestamp(created if updated_at is None else updated_at, "Person updated_at")
         try:
             with connection:
                 connection.execute(

@@ -84,3 +84,13 @@ def test_person_registration_rejects_duplicate_person_id_without_overwriting():
     assert row == ("active",)
     assert original.state == "active"
     db.close()
+
+@pytest.mark.parametrize("timestamp_field", ["created_at", "updated_at"])
+def test_person_registration_rejects_explicitly_empty_timestamps_without_persisting(timestamp_field):
+    db = connect_database()
+    with pytest.raises(ValidationError, match="valid ISO-8601"):
+        PersonRegistrationApplication().create_person(
+            db, state="active", **{timestamp_field: ""}
+        )
+    assert db.execute("SELECT COUNT(*) FROM persons").fetchone()[0] == 0
+    db.close()
