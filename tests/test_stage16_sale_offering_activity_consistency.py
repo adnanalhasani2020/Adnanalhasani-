@@ -9,6 +9,8 @@ import uuid
 import pytest
 
 from agent_core.persistence import MIGRATIONS_DIR, connect_database
+from agent_core.application import SaleApplication
+from agent_core.shared import ValidationError
 
 
 NOW = "2026-10-09T00:00:00Z"
