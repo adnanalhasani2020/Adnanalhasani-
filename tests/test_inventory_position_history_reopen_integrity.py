@@ -65,3 +65,33 @@ def test_inventory_position_reopen_rejects_history_state_that_disagrees_with_ent
     with pytest.raises(ValidationError, match="Inventory Position history"):
         app.get_position(db, position_id)
     db.close()
+
+def test_legacy_version_one_inventory_position_without_history_remains_readable(tmp_path):
+    path = tmp_path / "legacy-inventory-position.sqlite"
+    db = connect_database(path)
+    actor_id = _id()
+    activity_id = _id()
+    position_id = _id()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,?,?,?)",
+        (actor_id, "active", STAMP, STAMP),
+    )
+    db.execute(
+        "INSERT INTO activities(activity_id,owner_person_id,state,created_at,updated_at) "
+        "VALUES(?,?,?,?,?)",
+        (activity_id, actor_id, "active", STAMP, STAMP),
+    )
+    db.execute(
+        "INSERT INTO inventory_positions(inventory_position_id,activity_id,scope_key,state,"
+        "quantity_minor,observed_at,effective_from,created_at,updated_at,version_no) "
+        "VALUES(?,?,?,'observed',?,?,?, ?, ?,1)",
+        (position_id, activity_id, "legacy-store", 3, STAMP, STAMP, STAMP, STAMP),
+    )
+    db.commit()
+    db.close()
+
+    db = connect_database(path)
+    restored = InventoryPositionApplication().get_position(db, position_id)
+    assert str(restored.id) == position_id
+    assert restored.state.value == "observed"
+    db.close()
