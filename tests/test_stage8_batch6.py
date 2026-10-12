@@ -182,7 +182,7 @@ def test_reverse_implementation_inventory_has_traceability_owner():
         "__init__.py","application.py","config.py","domain_activities.py","domain_audit.py",
         "domain_authorization.py","domain_commerce.py","domain_communication.py","domain_education.py",
         "domain_exceptions.py","domain_finance.py","domain_health.py","domain_identity.py",
-        "domain_inventory.py","domain_provenance.py","domain_workflow_read.py","identity_read.py","conversation_application.py","file_attachment_application.py","file_attachment_content_application.py","file_attachment_filesystem_store.py","activity_invitation_application.py","role_assignment_application.py","membership_application.py","access_account_read.py","person_registration_application.py","access_account_registration_application.py","inventory_read.py","offering_application.py","commerce_inventory_read.py","product_legacy_audit.py","sale_history_audit.py","sale_operational_read.py","domain_offline.py","financial_orchestration.py","infrastructure.py","integrity.py","approval_enforcement.py","invoice_application.py","payment_application.py","obligation_application.py","loan_application.py","financial_balance_read.py","financial_account_application.py","instrument_application.py","durable_operation_application.py","message_application.py","participant_application.py","device_read_application.py","persistence.py","runtime.py","shared.py",
+        "domain_inventory.py","domain_provenance.py","domain_workflow_read.py","identity_read.py","activity_membership_application.py","conversation_application.py","file_attachment_application.py","file_attachment_content_application.py","file_attachment_filesystem_store.py","activity_invitation_application.py","role_assignment_application.py","membership_application.py","access_account_read.py","person_registration_application.py","access_account_registration_application.py","inventory_read.py","offering_application.py","commerce_inventory_read.py","product_legacy_audit.py","sale_history_audit.py","sale_operational_read.py","domain_offline.py","financial_orchestration.py","infrastructure.py","integrity.py","approval_enforcement.py","invoice_application.py","payment_application.py","obligation_application.py","loan_application.py","financial_balance_read.py","financial_account_application.py","instrument_application.py","durable_operation_application.py","message_application.py","participant_application.py","device_read_application.py","persistence.py","runtime.py","shared.py",
     }
     assert expected == mapped
     impl_text = " ".join(SPEC_TO_IMPL.values())
@@ -190,6 +190,7 @@ def test_reverse_implementation_inventory_has_traceability_owner():
         "__init__.py": "package boundary",
         "config.py": "runtime configuration boundary",
         "application.py": "application composition over domain SPECs",
+        "activity_membership_application.py": "persisted Activity and Membership creation/read/scoped listing; no authorization inference or lifecycle transitions",
         "identity_read.py": "read-only persisted Person and Person-scoped identifier projection under SPEC-0001",
         "inventory_read.py": "fail-closed Inventory Position quantity read interface owned by SPEC-0006",
         "offering_application.py": "persisted Commerce Offering lifecycle owned by SPEC-0005",
