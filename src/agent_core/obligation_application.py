@@ -126,6 +126,14 @@ class ObligationApplication:
             raise ValidationError("Obligation does not exist")
         (oid, creditor, debtor, invoice, loan, amount, currency, state, due_at,
          created, updated, version) = row
+        if invoice is not None:
+            invoice_link = connection.execute(
+                "SELECT obligation_id FROM invoices WHERE invoice_id=?", (invoice,),
+            ).fetchone()
+            if invoice_link is not None and invoice_link[0] is not None and invoice_link[0] != oid:
+                raise ValidationError(
+                    "Persisted Obligation Invoice reference conflicts with the Invoice's linked Obligation"
+                )
         return ObligationRecord(
             UUID(oid), UUID(creditor), UUID(debtor), UUID(invoice) if invoice else None,
             UUID(loan) if loan else None, amount, currency, state, due_at, created, updated, version,
