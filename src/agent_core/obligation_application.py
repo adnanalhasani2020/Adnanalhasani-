@@ -162,10 +162,17 @@ class ObligationApplication:
                     "SELECT 1 FROM persons WHERE person_id=? AND state='active'", (person_id,),
                 ).fetchone() is None:
                     raise ValidationError(f"{label} must be an active persisted Person")
-            if invoice is not None and connection.execute(
-                "SELECT 1 FROM invoices WHERE invoice_id=?", (invoice,),
-            ).fetchone() is None:
-                raise ValidationError("Obligation references a missing Invoice")
+            if invoice is not None:
+                invoice_row = connection.execute(
+                    "SELECT obligation_id FROM invoices WHERE invoice_id=?", (invoice,),
+                ).fetchone()
+                if invoice_row is None:
+                    raise ValidationError("Obligation references a missing Invoice")
+                linked_obligation = invoice_row[0]
+                if linked_obligation is not None and linked_obligation != key:
+                    raise ValidationError(
+                        "Obligation Invoice reference conflicts with the Invoice's linked Obligation"
+                    )
             if loan is not None and connection.execute(
                 "SELECT 1 FROM loans WHERE loan_id=?", (loan,),
             ).fetchone() is None:
