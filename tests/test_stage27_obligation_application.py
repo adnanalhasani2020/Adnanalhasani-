@@ -217,6 +217,67 @@ def test_obligation_history_failure_rolls_back_creation():
     assert db.execute("SELECT COUNT(*) FROM obligations").fetchone()[0] == 0
     db.close()
 
+
+def test_obligation_create_preserves_caller_transaction_on_success_and_failure():
+    db = connect_database()
+    parties = seed(db)
+    creditor, debtor, approver, agent, context = parties
+    app = ObligationApplication()
+    obligation_id = uid()
+    grant, action = authorize(
+        db, agent=agent, context=context, obligation_id=obligation_id,
+        action_code="obligation.create", approver=approver,
+    )
+    caller_person = uid()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (caller_person, STAMP, STAMP),
+    )
+    app.create_obligation(
+        db, obligation_id=obligation_id, creditor_person_id=creditor, debtor_person_id=debtor,
+        amount_minor=10000, currency_code="YER", context_ref=context,
+        authorization_grant_id=grant, agent_action_id=action, now=STAMP,
+    )
+    assert db.in_transaction
+    db.rollback()
+    assert db.execute("SELECT COUNT(*) FROM obligations WHERE obligation_id=?", (obligation_id,)).fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM persons WHERE person_id=?", (caller_person,)).fetchone()[0] == 0
+    db.close()
+
+
+def test_obligation_create_failure_preserves_caller_transaction():
+    db = connect_database()
+    parties = seed(db)
+    creditor, debtor, approver, agent, context = parties
+    app = ObligationApplication()
+    obligation_id = uid()
+    grant, action = authorize(
+        db, agent=agent, context=context, obligation_id=obligation_id,
+        action_code="obligation.create", approver=approver,
+    )
+    db.execute(
+        "CREATE TRIGGER fail_obligation_history BEFORE INSERT ON domain_history "
+        "WHEN NEW.change_type='obligation_state_transition' BEGIN SELECT RAISE(ABORT, 'history unavailable'); END"
+    )
+    caller_person = uid()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (caller_person, STAMP, STAMP),
+    )
+    with pytest.raises(sqlite3.IntegrityError, match="history unavailable"):
+        app.create_obligation(
+            db, obligation_id=obligation_id, creditor_person_id=creditor, debtor_person_id=debtor,
+            amount_minor=10000, currency_code="YER", context_ref=context,
+            authorization_grant_id=grant, agent_action_id=action, now=STAMP,
+        )
+    assert db.in_transaction
+    assert db.execute("SELECT COUNT(*) FROM obligations WHERE obligation_id=?", (obligation_id,)).fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM persons WHERE person_id=?", (caller_person,)).fetchone()[0] == 1
+    db.rollback()
+    assert db.execute("SELECT COUNT(*) FROM persons WHERE person_id=?", (caller_person,)).fetchone()[0] == 0
+    db.close()
+
+
 @pytest.mark.parametrize("target_state", [[], {}])
 def test_obligation_transition_rejects_non_string_target_states_without_mutation(target_state):
     db = connect_database()
