@@ -53,19 +53,6 @@ class DurableOperationApplication:
             raise
         else:
             connection.commit()
-    def _atomic(connection):
-        """Keep this operation atomic without committing caller-owned work."""
-        savepoint = "durable_operation_application_" + uuid4().hex
-        connection.execute(f"SAVEPOINT {savepoint}")
-        try:
-            yield
-        except BaseException:
-            connection.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
-            connection.execute(f"RELEASE SAVEPOINT {savepoint}")
-            raise
-        else:
-            connection.execute(f"RELEASE SAVEPOINT {savepoint}")
-    """Reserve a durable operation key and record its outcome idempotently."""
 
     @staticmethod
     def _required(value, label):
