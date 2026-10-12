@@ -170,3 +170,27 @@ def test_same_durable_key_and_fingerprint_rejects_kind_or_actor_context_rebindin
         "SELECT COUNT(*) FROM durable_operation_records WHERE namespace='payments' AND operation_id='stable-key'"
     ).fetchone()[0] == 1
     db.close()
+
+def test_durable_operation_rejects_explicitly_empty_timestamps_without_mutation():
+    db = connect_database()
+    app = DurableOperationApplication()
+    with pytest.raises(ValidationError, match="valid ISO-8601"):
+        app.reserve(
+            db, namespace="payments", operation_id="empty-time",
+            operation_kind="payment.request", actor_context_ref="context",
+            request_fingerprint="sha256:empty-time", now="",
+        )
+    assert db.execute("SELECT COUNT(*) FROM durable_operation_records").fetchone()[0] == 0
+
+    record = app.reserve(
+        db, namespace="payments", operation_id="empty-outcome-time",
+        operation_kind="payment.request", actor_context_ref="context",
+        request_fingerprint="sha256:empty-outcome-time", now=STAMP,
+    )
+    with pytest.raises(ValidationError, match="valid ISO-8601"):
+        app.record_outcome(
+            db, namespace=record.namespace, operation_id=record.operation_id,
+            state="completed", outcome_ref="payment:result", now="",
+        )
+    assert app.get(db, namespace=record.namespace, operation_id=record.operation_id).state == "reserved"
+    db.close()

@@ -78,7 +78,7 @@ class DurableOperationApplication:
         operation_kind = self._required(operation_kind, "operation_kind")
         actor_context_ref = self._required(actor_context_ref, "actor_context_ref")
         request_fingerprint = self._required(request_fingerprint, "request_fingerprint")
-        timestamp = self._timestamp(now or datetime.now(timezone.utc), "operation timestamp")
+        timestamp = self._timestamp(datetime.now(timezone.utc) if now is None else now, "operation timestamp")
 
         try:
             with connection:
@@ -137,7 +137,7 @@ class DurableOperationApplication:
         if state not in ("completed", "rejected"):
             raise ValidationError("Only completed or rejected outcomes can be recorded here")
         outcome_ref = self._required(outcome_ref, "outcome_ref")
-        timestamp = self._timestamp(now or datetime.now(timezone.utc), "operation outcome timestamp")
+        timestamp = self._timestamp(datetime.now(timezone.utc) if now is None else now, "operation outcome timestamp")
         with connection:
             current = self._find(connection, namespace, operation_id)
             if current is None:
