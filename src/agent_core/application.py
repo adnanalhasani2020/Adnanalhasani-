@@ -478,6 +478,11 @@ class InventoryPositionApplication:
             (key,),
         ).fetchall()
         version_no = row[11]
+        # Preserve compatibility with pre-history/legacy rows at their initial
+        # version. Once an entity advances beyond v1, missing history is a
+        # persistence inconsistency and must fail closed.
+        if not history and version_no == 1:
+            return self._restore_position(row)
         if len(history) != version_no or not history:
             raise ValidationError("Inventory Position history does not match persisted version")
         states = []
