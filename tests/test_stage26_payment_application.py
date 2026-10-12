@@ -388,6 +388,67 @@ def test_payment_transition_accepts_equivalent_timestamp_with_different_timezone
     )
     db.close()
 
+
+def test_payment_create_preserves_caller_transaction_on_success_and_failure():
+    db = connect_database()
+    parties = seed(db)
+    payer, payee, approver, agent, context, obligation = parties
+    app = PaymentApplication()
+    payment_id = uid()
+    grant, action = authorize(
+        db, agent=agent, context=context, payment_id=payment_id,
+        action_code="payment.create", approver=approver,
+    )
+    caller_person = uid()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (caller_person, STAMP, STAMP),
+    )
+    app.create_payment(
+        db, payment_id=payment_id, payer_person_id=payer, payee_person_id=payee,
+        obligation_id=obligation, amount_minor=4000, currency_code="YER",
+        context_ref=context, authorization_grant_id=grant, agent_action_id=action, now=STAMP,
+    )
+    assert db.in_transaction
+    db.rollback()
+    assert db.execute("SELECT COUNT(*) FROM payments WHERE payment_id=?", (payment_id,)).fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM persons WHERE person_id=?", (caller_person,)).fetchone()[0] == 0
+    db.close()
+
+
+def test_payment_create_failure_preserves_caller_transaction():
+    db = connect_database()
+    parties = seed(db)
+    payer, payee, approver, agent, context, obligation = parties
+    app = PaymentApplication()
+    payment_id = uid()
+    grant, action = authorize(
+        db, agent=agent, context=context, payment_id=payment_id,
+        action_code="payment.create", approver=approver,
+    )
+    db.execute(
+        "CREATE TRIGGER fail_payment_history BEFORE INSERT ON domain_history "
+        "WHEN NEW.change_type='payment_state_transition' BEGIN SELECT RAISE(ABORT, 'history unavailable'); END"
+    )
+    caller_person = uid()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (caller_person, STAMP, STAMP),
+    )
+    with pytest.raises(sqlite3.IntegrityError, match="history unavailable"):
+        app.create_payment(
+            db, payment_id=payment_id, payer_person_id=payer, payee_person_id=payee,
+            obligation_id=obligation, amount_minor=4000, currency_code="YER",
+            context_ref=context, authorization_grant_id=grant, agent_action_id=action, now=STAMP,
+        )
+    assert db.in_transaction
+    assert db.execute("SELECT COUNT(*) FROM payments WHERE payment_id=?", (payment_id,)).fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM persons WHERE person_id=?", (caller_person,)).fetchone()[0] == 1
+    db.rollback()
+    assert db.execute("SELECT COUNT(*) FROM persons WHERE person_id=?", (caller_person,)).fetchone()[0] == 0
+    db.close()
+
+
 @pytest.mark.parametrize("target_state", [[], {}])
 def test_payment_transition_rejects_non_string_target_states_without_mutation(target_state):
     db = connect_database()
