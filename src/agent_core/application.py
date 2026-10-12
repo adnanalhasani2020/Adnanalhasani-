@@ -487,6 +487,7 @@ class InventoryPositionApplication:
             raise ValidationError("Inventory Position history does not match persisted version")
         states = []
         previous_ref = None
+        action_states = {"make_effective": "effective", "close": "closed"}
         for index, (actor_ref, prior_ref, current_ref, payload_ref) in enumerate(history, start=1):
             expected_prior = None if index == 1 else history[index - 2][2]
             expected_current = f"inventory_position:{key}:v{index}"
@@ -496,11 +497,20 @@ class InventoryPositionApplication:
                 or current_ref != expected_current
                 or prior_ref != previous_ref
                 or not isinstance(payload_ref, str)
-                or ";state:" not in payload_ref
             ):
                 raise ValidationError("Inventory Position history chain is inconsistent")
             previous_ref = current_ref
-            state_value = payload_ref.rsplit(";state:", 1)[1]
+            if index == 1:
+                if payload_ref != "action:create;state:observed":
+                    raise ValidationError("Inventory Position history has an invalid initial event")
+                state_value = "observed"
+            else:
+                if not payload_ref.startswith("action:") or ";state:" not in payload_ref:
+                    raise ValidationError("Inventory Position history lacks transition-state evidence")
+                action_value, state_value = payload_ref.split(";state:", 1)
+                action_value = action_value.removeprefix("action:")
+                if action_states.get(action_value) != state_value:
+                    raise ValidationError("Inventory Position history action and state are inconsistent")
             if state_value not in {"observed", "effective", "closed"}:
                 raise ValidationError("Inventory Position history has an invalid state")
             states.append(state_value)
