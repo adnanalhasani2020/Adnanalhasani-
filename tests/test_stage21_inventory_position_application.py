@@ -251,7 +251,8 @@ def test_inventory_position_preserves_caller_transaction_on_success_and_history_
             db, str(position.id), "make_effective", actor_context_ref="test-context", now=NOW,
         )
     current = app.get_position(db, str(position.id))
-    assert (current.state, current.version_no) == (InventoryPositionState.OBSERVED, 1)
+    persisted = db.execute("SELECT state,version_no FROM inventory_positions WHERE inventory_position_id=?", (str(position.id),)).fetchone()
+    assert persisted == ("observed", 1)
     assert db.execute("SELECT COUNT(*) FROM persons WHERE person_id=?", (caller_person,)).fetchone()[0] == 1
     assert db.in_transaction
     db.rollback()
