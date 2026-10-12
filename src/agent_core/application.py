@@ -230,13 +230,18 @@ class SaleApplication:
         timestamp = self._timestamp(now)
         offering_key, activity_key, actor_key = map(str, (offering_uuid, activity_uuid, actor_uuid))
 
-        # Authorization and Offering validity must be checked under the same SQLite
-        # write lock as Sale/history insertion; otherwise another connection can
-        # revoke the grant or change the Offering after the checks but before INSERT.
+        # Transaction ownership is explicit: create our own write transaction only
+        # when needed; otherwise isolate this operation with a SAVEPOINT. A sqlite3
+        # connection context manager is not a nested transaction and may commit or
+        # roll back work owned by the caller.
         owns_transaction = not connection.in_transaction
+        savepoint = "sale_create_operation"
         if owns_transaction:
             connection.execute("BEGIN IMMEDIATE")
+        savepoint_started = False
         try:
+            connection.execute(f"SAVEPOINT {savepoint}")
+            savepoint_started = True
             self._authorize(
                 connection, authorization_grant_id, actor_key, "create_sale",
                 offering_key, activity_key, timestamp,
@@ -275,23 +280,27 @@ class SaleApplication:
             identifier = self._uuid(sale_id, "Sale identifier") if sale_id is not None else uuid4()
             sale = Sale(offering_uuid, activity_uuid, id=identifier)
             history_ref = f"sale-state:{sale.id}:v1"
-            with connection:
-                connection.execute(
-                    "INSERT INTO sales(sale_id,offering_id,activity_id,state,occurred_at,created_at,updated_at,version_no) "
-                    "VALUES(?,?,?,?,?,?,?,1)",
-                    (str(sale.id), offering_key, activity_key, SaleState.INITIATED.value,
-                     timestamp, timestamp, timestamp),
-                )
-                connection.execute(
-                    "INSERT INTO domain_history(domain_history_id,owner_domain,target_ref,change_type,historical_at,"
-                    "actor_context_ref,prior_version_ref,current_version_ref,change_payload_ref,created_at) "
-                    "VALUES(?,?,?,?,?,?,?,?,?,?)",
-                    (str(uuid4()), "commerce", str(sale.id), "sale_state_transition", timestamp,
-                     actor_key, None, history_ref, "state:initiated", timestamp),
-                )
+            connection.execute(
+                "INSERT INTO sales(sale_id,offering_id,activity_id,state,occurred_at,created_at,updated_at,version_no) "
+                "VALUES(?,?,?,?,?,?,?,1)",
+                (str(sale.id), offering_key, activity_key, SaleState.INITIATED.value,
+                 timestamp, timestamp, timestamp),
+            )
+            connection.execute(
+                "INSERT INTO domain_history(domain_history_id,owner_domain,target_ref,change_type,historical_at,"
+                "actor_context_ref,prior_version_ref,current_version_ref,change_payload_ref,created_at) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?)",
+                (str(uuid4()), "commerce", str(sale.id), "sale_state_transition", timestamp,
+                 actor_key, None, history_ref, "state:initiated", timestamp),
+            )
+            connection.execute(f"RELEASE SAVEPOINT {savepoint}")
+            savepoint_started = False
+            if owns_transaction:
+                connection.commit()
         except Exception:
-            # Validation can fail before the inner connection context is entered.
-            # Release a transaction started here; never roll back a caller-owned one.
+            if savepoint_started and connection.in_transaction:
+                connection.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+                connection.execute(f"RELEASE SAVEPOINT {savepoint}")
             if owns_transaction and connection.in_transaction:
                 connection.rollback()
             raise
