@@ -38,6 +38,16 @@ class InstrumentUsageRecord:
 
 
 class InstrumentApplication:
+    """Persist Instrument state and expose its recorded usage history."""
+
+    _TRANSITIONS = {
+        "activate": (("issued",), "active"),
+        "redeem": (("active",), "redeemed"),
+        "expire": (("issued", "active"), "expired"),
+        "revoke": (("issued", "active"), "revoked"),
+    }
+
+
     @staticmethod
     @contextmanager
     def _atomic(connection):
