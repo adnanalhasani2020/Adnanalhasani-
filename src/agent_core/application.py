@@ -46,17 +46,32 @@ class InventoryApplication:
             raise ValidationError("Offering identifier must be a valid UUID") from exc
 
         offering = connection.execute(
-            "SELECT activity_id FROM offerings WHERE offering_id=?",
+            "SELECT product_id, activity_id FROM offerings WHERE offering_id=?",
             (offering_key,),
         ).fetchone()
         if offering is None:
             raise ValidationError("Inventory quantity read requires an existing Offering")
+        product_id, activity_id = offering
+
+        # Migrations preserve legacy rows rather than rewriting their context.
+        # Do not let a mismatched persisted position supply a quantity after reopen.
+        mismatch = connection.execute(
+            "SELECT inventory_position_id FROM inventory_positions "
+            "WHERE offering_id=? AND (activity_id<>? OR "
+            "(product_id IS NOT NULL AND product_id<>?)) LIMIT 1",
+            (offering_key, activity_id, product_id),
+        ).fetchone()
+        if mismatch is not None:
+            raise ValidationError(
+                "Inventory quantity read found a position inconsistent with its Offering context; "
+                "explicit reconciliation is required"
+            )
 
         # Filter in SQL before resolving latest observation: records from another
         # Offering or Activity cannot create a false quantity or ambiguity.
         return self._quantity_reader.read_quantity(
             connection, scope_key, as_of=as_of,
-            offering_id=offering_key, activity_id=offering[0],
+            offering_id=offering_key, activity_id=activity_id,
         )
 
 
