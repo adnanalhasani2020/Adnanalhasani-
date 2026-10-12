@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 """Durable operation identity for SPEC-0023 duplicate-operation boundaries.
 
 This registry records operational identity only. It never executes domain effects,
@@ -27,6 +28,20 @@ class DurableOperationRecord:
 
 
 class DurableOperationApplication:
+    @staticmethod
+    @contextmanager
+    def _atomic(connection):
+        """Keep this operation atomic without committing caller-owned work."""
+        savepoint = "durable_operation_application_" + uuid4().hex
+        connection.execute(f"SAVEPOINT {savepoint}")
+        try:
+            yield
+        except BaseException:
+            connection.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+            connection.execute(f"RELEASE SAVEPOINT {savepoint}")
+            raise
+        else:
+            connection.execute(f"RELEASE SAVEPOINT {savepoint}")
     """Reserve a durable operation key and record its outcome idempotently."""
 
     @staticmethod
@@ -81,7 +96,7 @@ class DurableOperationApplication:
         timestamp = self._timestamp(datetime.now(timezone.utc) if now is None else now, "operation timestamp")
 
         try:
-            with connection:
+            with self._atomic(connection):
                 current = self._find(connection, namespace, operation_id)
                 if current is not None:
                     if current.request_fingerprint != request_fingerprint:
@@ -138,7 +153,7 @@ class DurableOperationApplication:
             raise ValidationError("Only completed or rejected outcomes can be recorded here")
         outcome_ref = self._required(outcome_ref, "outcome_ref")
         timestamp = self._timestamp(datetime.now(timezone.utc) if now is None else now, "operation outcome timestamp")
-        with connection:
+        with self._atomic(connection):
             current = self._find(connection, namespace, operation_id)
             if current is None:
                 raise ValidationError("Durable operation does not exist")
