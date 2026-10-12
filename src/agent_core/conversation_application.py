@@ -49,7 +49,7 @@ class ConversationApplication:
         context = self._required(context_ref, "context_ref")
         kind = self._required(conversation_type, "conversation_type")
         key = self._uuid(conversation_id) if conversation_id is not None else uuid4()
-        timestamp = self._timestamp(now or datetime.now(timezone.utc), "Conversation timestamp")
+        timestamp = self._timestamp(datetime.now(timezone.utc) if now is None else now, "Conversation timestamp")
         with connection:
             connection.execute(
                 "INSERT INTO conversations(conversation_id,context_ref,conversation_type,state,created_at,updated_at) "
@@ -78,7 +78,7 @@ class ConversationApplication:
 
     def _set_state(self, connection, conversation_id, state, now=None):
         key = str(self._uuid(conversation_id))
-        timestamp = self._timestamp(now or datetime.now(timezone.utc), "Conversation timestamp")
+        timestamp = self._timestamp(datetime.now(timezone.utc) if now is None else now, "Conversation timestamp")
         with connection:
             cursor = connection.execute(
                 "UPDATE conversations SET state=?,updated_at=? WHERE conversation_id=?",

@@ -66,3 +66,18 @@ def test_conversation_reads_and_lifecycle_reject_unknown_or_invalid_ids():
     with pytest.raises(ValidationError, match="valid UUID"):
         app.get(db, "not-a-uuid")
     db.close()
+
+def test_conversation_rejects_explicitly_empty_timestamps_without_mutation():
+    db = connect_database()
+    app = ConversationApplication()
+    with pytest.raises(ValidationError, match="valid ISO-8601"):
+        app.create(db, context_ref="case:empty", conversation_type="general", now="")
+    assert db.execute("SELECT COUNT(*) FROM conversations").fetchone()[0] == 0
+
+    conversation = app.create(
+        db, context_ref="case:empty", conversation_type="general", now=STAMP
+    )
+    with pytest.raises(ValidationError, match="valid ISO-8601"):
+        app.close(db, conversation.conversation_id, now="")
+    assert app.get(db, conversation.conversation_id).state == "active"
+    db.close()
