@@ -152,6 +152,11 @@ class DurableOperationAuthority:
             raise ValidationError("Operation namespace, identity, and kind are required")
         fingerprint = self.fingerprint(request)
         with self._lock:
+            # Commit the identity reservation before invoking an effect that may
+            # cross this SQLite resource boundary. Otherwise a crash or failure
+            # while recording the outcome can roll back the reservation after
+            # the semantic effect has already happened, allowing a replay to run
+            # that effect a second time.
             with self._connect() as db:
                 db.execute("BEGIN EXCLUSIVE")
                 cursor = db.execute(
@@ -170,23 +175,45 @@ class DurableOperationAuthority:
                             return existing.outcome
                         raise ValidationError("Operation replay is incomplete")
                     raise ValidationError("Operation identity conflict")
+                db.execute("COMMIT")
+
+            try:
+                outcome = effect()
+            except Exception as exc:
+                # Keep the durable reservation even if rejection recording fails:
+                # replay must never infer that the semantic effect did not happen.
+                with self._connect() as db:
+                    db.execute("BEGIN IMMEDIATE")
+                    try:
+                        db.execute(
+                            "UPDATE operation_records SET status='rejected', outcome_json=? "
+                            "WHERE namespace=? AND operation_id=? AND status='reserved'",
+                            (self._encode_outcome({"error": str(exc)}), namespace, operation_id),
+                        )
+                        db.execute("COMMIT")
+                    except BaseException:
+                        if db.in_transaction:
+                            db.execute("ROLLBACK")
+                        raise
+                raise
+
+            with self._connect() as db:
+                db.execute("BEGIN IMMEDIATE")
                 try:
-                    outcome = effect()
-                except Exception as exc:
                     db.execute(
-                        "UPDATE operation_records SET status='rejected', outcome_json=? "
-                        "WHERE namespace=? AND operation_id=?",
-                        (self._encode_outcome({"error": str(exc)}), namespace, operation_id),
+                        "UPDATE operation_records SET status='completed', outcome_json=? "
+                        "WHERE namespace=? AND operation_id=? AND status='reserved'",
+                        (self._encode_outcome(outcome), namespace, operation_id),
                     )
                     db.execute("COMMIT")
+                except BaseException:
+                    # Leave the already-committed reservation in place. A later
+                    # attempt will fail closed as incomplete rather than repeat
+                    # an effect whose outcome could not be durably recorded.
+                    if db.in_transaction:
+                        db.execute("ROLLBACK")
                     raise
-                db.execute(
-                    "UPDATE operation_records SET status='completed', outcome_json=? "
-                    "WHERE namespace=? AND operation_id=?",
-                    (self._encode_outcome(outcome), namespace, operation_id),
-                )
-                db.execute("COMMIT")
-                return outcome
+            return outcome
 
     def get(self, namespace: str, operation_id: str) -> OperationRecord | None:
         with self._connect() as db:
