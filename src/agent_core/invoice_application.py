@@ -32,17 +32,28 @@ class InvoiceApplication:
     @staticmethod
     @contextmanager
     def _atomic(connection):
-        """Make this operation atomic without committing a caller-owned transaction."""
-        savepoint = f"invoice_application_{uuid4().hex}"
-        connection.execute(f"SAVEPOINT {savepoint}")
+        """Own a transaction only when the caller has not already opened one."""
+        if connection.in_transaction:
+            savepoint = "operation_" + uuid4().hex
+            connection.execute(f"SAVEPOINT {savepoint}")
+            try:
+                yield
+            except BaseException:
+                connection.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+                connection.execute(f"RELEASE SAVEPOINT {savepoint}")
+                raise
+            else:
+                connection.execute(f"RELEASE SAVEPOINT {savepoint}")
+            return
+
+        connection.execute("BEGIN IMMEDIATE")
         try:
             yield
         except BaseException:
-            connection.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
-            connection.execute(f"RELEASE SAVEPOINT {savepoint}")
+            connection.rollback()
             raise
         else:
-            connection.execute(f"RELEASE SAVEPOINT {savepoint}")
+            connection.commit()
 
     @staticmethod
     def _uuid(value, label):
