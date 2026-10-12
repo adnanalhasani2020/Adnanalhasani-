@@ -151,6 +151,21 @@ def test_invalid_or_empty_content_is_rejected_before_storage():
     db.close()
 
 
+def test_non_bytes_content_store_response_is_rejected_without_metadata_mutation():
+    db = connect_database()
+    store = InMemoryContentStore()
+    app = FileAttachmentContentApplication(store)
+    attachment = create(app, db, b"valid stored content")
+    store._objects[attachment.storage_ref] = "not bytes"
+
+    with pytest.raises(ContentRetrievalError, match="non-bytes value"):
+        app.get_attachment_content(db, attachment.attachment_id)
+
+    assert FileAttachmentApplication().get_attachment(db, attachment.attachment_id) == attachment
+    assert FileAttachmentApplication().list_attachments(db) == (attachment,)
+    db.close()
+
+
 def test_metadata_registry_existing_contract_remains_compatible():
     db = connect_database()
     metadata_app = FileAttachmentApplication()
