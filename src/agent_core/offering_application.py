@@ -77,6 +77,51 @@ class OfferingApplication:
             effective_from=self._domain_instant(starts, "effective_from"),
             effective_to=self._domain_instant(ends, "effective_to", optional=True),
         )
+
+        history = connection.execute(
+            "SELECT actor_context_ref, prior_version_ref, current_version_ref, change_payload_ref "
+            "FROM domain_history WHERE owner_domain='commerce' AND target_ref=? "
+            "AND change_type='offering_lifecycle' ORDER BY rowid",
+            (key,),
+        ).fetchall()
+        # Older version-1 Offerings may predate durable lifecycle history. Keep
+        # them readable, but never extend an unaudited chain.
+        if not history and version == 1:
+            return OfferingRecord(offering, version)
+        if not history or len(history) != version:
+            raise ValidationError("Offering history does not match persisted version")
+
+        states = []
+        previous_ref = None
+        action_states = {"activate": "active", "end": "ended", "withdraw": "withdrawn"}
+        for index, (actor_ref, prior_ref, current_ref, payload_ref) in enumerate(history, start=1):
+            expected_prior = None if index == 1 else history[index - 2][2]
+            expected_current = f"offering:{key}:v{index}"
+            if (
+                not isinstance(actor_ref, str) or not actor_ref.strip()
+                or prior_ref != expected_prior
+                or current_ref != expected_current
+                or (index > 1 and prior_ref != previous_ref)
+                or not isinstance(payload_ref, str)
+            ):
+                raise ValidationError("Offering history chain is inconsistent")
+            previous_ref = current_ref
+            if index == 1:
+                if payload_ref != "state:draft":
+                    raise ValidationError("Offering history has an invalid initial state")
+                state_value = "draft"
+            else:
+                if not payload_ref.startswith("action:") or ";state:" not in payload_ref:
+                    raise ValidationError("Offering history lacks transition-state evidence")
+                action_value, state_value = payload_ref.split(";state:", 1)
+                action_value = action_value.removeprefix("action:")
+                if action_states.get(action_value) != state_value:
+                    raise ValidationError("Offering history action and state are inconsistent")
+            if state_value not in {"draft", "active", "ended", "withdrawn"}:
+                raise ValidationError("Offering history has an invalid state")
+            states.append(state_value)
+        if states[0] != "draft" or states[-1] != state:
+            raise ValidationError("Offering history does not agree with persisted state")
         return OfferingRecord(offering, version)
 
     def create_offering(
@@ -148,6 +193,16 @@ class OfferingApplication:
         actor_context_ref = actor_context_ref.strip()
         with connection:
             record = self._load(connection, offering_id)
+            if record.version_no == 1:
+                has_history = connection.execute(
+                    "SELECT 1 FROM domain_history WHERE owner_domain='commerce' AND target_ref=? "
+                    "AND change_type='offering_lifecycle' LIMIT 1",
+                    (str(record.offering.id),),
+                ).fetchone()
+                if has_history is None:
+                    raise ValidationError(
+                        "Offering history is missing; explicit legacy reconciliation is required before transition"
+                    )
             offering = record.offering
             target, allowed = self._ACTIONS[action]
             if offering.state not in allowed:
