@@ -40,29 +40,6 @@ class OfferingApplication:
             raise
         else:
             connection.commit()
-    def _atomic(connection):
-        """Keep this operation atomic without committing caller-owned work."""
-        savepoint = "offering_application_" + uuid4().hex
-        connection.execute(f"SAVEPOINT {savepoint}")
-        try:
-            yield
-        except BaseException:
-            connection.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
-            connection.execute(f"RELEASE SAVEPOINT {savepoint}")
-            raise
-        else:
-            connection.execute(f"RELEASE SAVEPOINT {savepoint}")
-    """Create, restore, and transition Offerings without inventing Availability.
-
-    The persisted schema supports draft/active/ended/withdrawn. This service
-    deliberately does not calculate inventory, availability, proximity, or rank.
-    """
-
-    _ACTIONS = {
-        "activate": (OfferingState.ACTIVE, (OfferingState.DRAFT,)),
-        "end": (OfferingState.ENDED, (OfferingState.ACTIVE,)),
-        "withdraw": (OfferingState.WITHDRAWN, (OfferingState.DRAFT, OfferingState.ACTIVE)),
-    }
 
     @staticmethod
     def _uuid(value, label):
