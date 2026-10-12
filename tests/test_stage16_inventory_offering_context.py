@@ -5,6 +5,8 @@ import uuid
 import pytest
 
 from agent_core.persistence import connect_database
+from agent_core.application import InventoryApplication
+from agent_core.shared import ValidationError
 
 NOW = "2026-10-09T00:00:00Z"
 
@@ -184,4 +186,46 @@ def test_req_data_0014_persisted_offering_does_not_create_inventory_position():
     assert db.execute(
         "SELECT COUNT(*) FROM inventory_positions WHERE offering_id=?", (offering,)
     ).fetchone() == (0,)
+    db.close()
+
+
+
+def test_inventory_quantity_read_rejects_legacy_position_product_mismatch_after_reopen(tmp_path):
+    path = tmp_path / "legacy-inventory-product-mismatch.sqlite"
+    db = connect_database(path)
+    activity = _activity(db)
+    product_a, product_b = _product(db), _product(db)
+    offering = _offering(db, product_a, activity)
+    position = _position(
+        db, activity_id=activity, product_id=product_a, offering_id=offering, quantity=12
+    )
+
+    # Simulate a pre-guard/corrupted persisted row. Migration policy preserves legacy data.
+    triggers = db.execute(
+        "SELECT name FROM sqlite_master WHERE type='trigger'"
+    ).fetchall()
+    for (trigger_name,) in triggers:
+        quoted = trigger_name.replace('"', '""')
+        db.execute(f'DROP TRIGGER "{quoted}"')
+    db.execute(
+        "UPDATE inventory_positions SET product_id=? WHERE inventory_position_id=?",
+        (product_b, position),
+    )
+    db.commit()
+    db.close()
+
+    db = connect_database(path)
+    assert db.execute(
+        "SELECT product_id,quantity_minor FROM inventory_positions WHERE inventory_position_id=?",
+        (position,),
+    ).fetchone() == (product_b, 12)
+    with pytest.raises(ValidationError, match="inconsistent with its Offering context"):
+        InventoryApplication().read_offering_quantity(
+            db, offering, "site-A:offering", as_of=NOW
+        )
+    # Fail-closed read must not rewrite the historical row.
+    assert db.execute(
+        "SELECT product_id,quantity_minor FROM inventory_positions WHERE inventory_position_id=?",
+        (position,),
+    ).fetchone() == (product_b, 12)
     db.close()
