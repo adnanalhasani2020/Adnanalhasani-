@@ -264,7 +264,7 @@ class SaleApplication:
         ):
             raise ValidationError("Offering is outside its effective period")
 
-        identifier = sale_id or uuid4()
+        identifier = self._uuid(sale_id, "Sale identifier") if sale_id is not None else uuid4()
         sale = Sale(offering_uuid, activity_uuid, id=identifier)
         history_ref = f"sale-state:{sale.id}:v1"
         with connection:
