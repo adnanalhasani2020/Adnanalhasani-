@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 """Persisted Commerce Offering lifecycle using the existing domain and schema."""
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -25,6 +26,33 @@ class OfferingApplication:
         "end": (OfferingState.ENDED, (OfferingState.ACTIVE,)),
         "withdraw": (OfferingState.WITHDRAWN, (OfferingState.DRAFT, OfferingState.ACTIVE)),
     }
+
+
+    @staticmethod
+    @contextmanager
+    def _atomic(connection):
+        """Own a transaction only when the caller has not already opened one."""
+        if connection.in_transaction:
+            savepoint = "operation_" + uuid4().hex
+            connection.execute(f"SAVEPOINT {savepoint}")
+            try:
+                yield
+            except BaseException:
+                connection.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+                connection.execute(f"RELEASE SAVEPOINT {savepoint}")
+                raise
+            else:
+                connection.execute(f"RELEASE SAVEPOINT {savepoint}")
+            return
+
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            yield
+        except BaseException:
+            connection.rollback()
+            raise
+        else:
+            connection.commit()
 
     @staticmethod
     def _uuid(value, label):
@@ -148,7 +176,7 @@ class OfferingApplication:
             effective_from=self._domain_instant(starts, "effective_from"),
             effective_to=self._domain_instant(ends, "effective_to", optional=True),
         )
-        with connection:
+        with self._atomic(connection):
             for table, column, ref, label in (
                 ("products", "product_id", product_key, "Product"),
                 ("activities", "activity_id", activity_key, "Activity"),
@@ -191,7 +219,7 @@ class OfferingApplication:
         if not isinstance(actor_context_ref, str) or not actor_context_ref.strip():
             raise ValidationError("Offering actor_context_ref is required")
         actor_context_ref = actor_context_ref.strip()
-        with connection:
+        with self._atomic(connection):
             record = self._load(connection, offering_id)
             if record.version_no == 1:
                 has_history = connection.execute(

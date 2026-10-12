@@ -153,3 +153,39 @@ def test_product_history_requires_non_empty_actor_context():
         ProductApplication().create_product(db, "Widget", actor_context_ref=" ", now=NOW)
     assert db.execute("SELECT COUNT(*) FROM products").fetchone()[0] == 0
     db.close()
+
+
+import sqlite3
+
+
+def test_product_preserves_caller_transaction_on_success_and_history_failure():
+    db = connect_database()
+    app = ProductApplication()
+    caller_person = uid()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (caller_person, NOW, NOW),
+    )
+    created = app.create_product(db, "Caller-owned", actor_context_ref="internal-test-context", now=NOW)
+    assert db.in_transaction
+    db.rollback()
+    assert db.execute("SELECT COUNT(*) FROM products WHERE product_id=?", (str(created.product.id),)).fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM persons WHERE person_id=?", (caller_person,)).fetchone()[0] == 0
+
+    db.execute(
+        "CREATE TRIGGER fail_product_caller_history BEFORE INSERT ON domain_history "
+        "WHEN NEW.owner_domain='commerce' AND NEW.change_type='product_lifecycle' "
+        "BEGIN SELECT RAISE(ABORT, 'history unavailable'); END"
+    )
+    caller_person = uid()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (caller_person, NOW, NOW),
+    )
+    with pytest.raises(sqlite3.IntegrityError, match="history unavailable"):
+        app.create_product(db, "Failure-case", actor_context_ref="internal-test-context", now=NOW)
+    assert db.in_transaction
+    assert db.execute("SELECT COUNT(*) FROM products WHERE name='Failure-case'").fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM persons WHERE person_id=?", (caller_person,)).fetchone()[0] == 1
+    db.rollback()
+    db.close()

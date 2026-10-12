@@ -241,3 +241,84 @@ def test_offering_history_requires_non_empty_actor_context():
         )
     assert db.execute("SELECT COUNT(*) FROM offerings").fetchone()[0] == 0
     db.close()
+
+
+import sqlite3
+
+
+def test_offering_create_preserves_caller_transaction_on_success_and_history_failure():
+    db = connect_database()
+    activity_id, product_id, _ = setup_refs(db)
+    app = OfferingApplication()
+    caller_person = uid()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (caller_person, NOW, NOW),
+    )
+    offering_id = uid()
+    app.create_offering(
+        db, offering_id=offering_id, product_id=product_id, activity_id=activity_id,
+        effective_from=NOW, actor_context_ref="internal-test-context", now=NOW,
+    )
+    assert db.in_transaction
+    db.rollback()
+    assert db.execute("SELECT COUNT(*) FROM offerings WHERE offering_id=?", (offering_id,)).fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM persons WHERE person_id=?", (caller_person,)).fetchone()[0] == 0
+
+    caller_person = uid()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (caller_person, NOW, NOW),
+    )
+    db.execute(
+        "CREATE TRIGGER fail_offering_history_caller BEFORE INSERT ON domain_history "
+        "WHEN NEW.owner_domain='commerce' AND NEW.change_type='offering_lifecycle' "
+        "BEGIN SELECT RAISE(ABORT, 'history unavailable'); END"
+    )
+    offering_id = uid()
+    with pytest.raises(sqlite3.IntegrityError, match="history unavailable"):
+        app.create_offering(
+            db, offering_id=offering_id, product_id=product_id, activity_id=activity_id,
+            effective_from=NOW, actor_context_ref="internal-test-context", now=NOW,
+        )
+    assert db.in_transaction
+    assert db.execute("SELECT COUNT(*) FROM offerings WHERE offering_id=?", (offering_id,)).fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM persons WHERE person_id=?", (caller_person,)).fetchone()[0] == 1
+    db.rollback()
+    db.close()
+
+
+def test_offering_transition_history_failure_preserves_caller_transaction():
+    import sqlite3
+
+    db = connect_database()
+    activity_id, product_id, _ = setup_refs(db)
+    app = OfferingApplication()
+    created = app.create_offering(
+        db, product_id=product_id, activity_id=activity_id, effective_from=NOW,
+        actor_context_ref="internal-test-context", now=NOW,
+    )
+    db.commit()
+    db.execute(
+        "CREATE TRIGGER fail_offering_transition_history BEFORE INSERT ON domain_history "
+        "WHEN NEW.owner_domain='commerce' AND NEW.change_type='offering_lifecycle' "
+        "AND NEW.change_payload_ref='action:activate;state:active' "
+        "BEGIN SELECT RAISE(ABORT, 'history unavailable'); END"
+    )
+    caller_person = uid()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (caller_person, NOW, NOW),
+    )
+    with pytest.raises(sqlite3.IntegrityError, match="history unavailable"):
+        app.transition_offering(
+            db, created.offering.id, "activate", expected_version=1,
+            actor_context_ref="internal-test-context", now=NOW,
+        )
+    current = app.get_offering(db, created.offering.id)
+    assert current.offering.state is OfferingState.DRAFT
+    assert current.version_no == 1
+    assert db.execute("SELECT COUNT(*) FROM persons WHERE person_id=?", (caller_person,)).fetchone()[0] == 1
+    assert db.in_transaction
+    db.rollback()
+    db.close()

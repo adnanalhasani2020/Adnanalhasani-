@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
@@ -8,6 +9,32 @@ from agent_core.domain_commerce import Sale, SaleState
 from agent_core.domain_inventory import Product, ProductState
 from agent_core.inventory_read import InventoryQuantityReader, InventoryQuantityResult
 from agent_core.shared import ValidationError
+
+
+@contextmanager
+def _atomic(connection):
+    """Own a transaction only when the caller has not already opened one."""
+    if connection.in_transaction:
+        savepoint = "application_" + uuid4().hex
+        connection.execute(f"SAVEPOINT {savepoint}")
+        try:
+            yield
+        except BaseException:
+            connection.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+            connection.execute(f"RELEASE SAVEPOINT {savepoint}")
+            raise
+        else:
+            connection.execute(f"RELEASE SAVEPOINT {savepoint}")
+        return
+
+    connection.execute("BEGIN IMMEDIATE")
+    try:
+        yield
+    except BaseException:
+        connection.rollback()
+        raise
+    else:
+        connection.commit()
 
 
 class IdentityApplication:
@@ -499,7 +526,7 @@ class InventoryPositionApplication:
             location_ref=location_ref, scope_key=scope_key, quantity_minor=quantity_minor,
             observed_at=observed, effective_from=starts, effective_to=ends,
         )
-        with connection:
+        with _atomic(connection):
             connection.execute(
                 "INSERT INTO inventory_positions(inventory_position_id,activity_id,product_id,offering_id,"
                 "location_ref,scope_key,state,quantity_minor,observed_at,effective_from,effective_to,"
@@ -551,7 +578,7 @@ class InventoryPositionApplication:
         if action not in self._TRANSITIONS:
             raise ValidationError("Unsupported Inventory Position lifecycle action")
         expected, target = self._TRANSITIONS[action]
-        with connection:
+        with _atomic(connection):
             row = connection.execute(
                 "SELECT inventory_position_id,activity_id,product_id,offering_id,location_ref,scope_key,"
                 "quantity_minor,observed_at,effective_from,effective_to,state,version_no "
@@ -688,7 +715,7 @@ class ProductApplication:
         if not isinstance(actor_context_ref, str) or not actor_context_ref.strip():
             raise ValidationError("Product actor_context_ref is required")
         actor_context_ref = actor_context_ref.strip()
-        with connection:
+        with _atomic(connection):
             connection.execute(
                 "INSERT INTO products(product_id, name, state, created_at, updated_at, version_no) "
                 "VALUES(?,?,?,?,?,1)",
@@ -715,7 +742,7 @@ class ProductApplication:
         if not isinstance(actor_context_ref, str) or not actor_context_ref.strip():
             raise ValidationError("Product actor_context_ref is required")
         actor_context_ref = actor_context_ref.strip()
-        with connection:
+        with _atomic(connection):
             record = self._load_product(connection, product_id)
             if record.version_no == 1:
                 has_history = connection.execute(

@@ -1,6 +1,7 @@
 """Integration tests for persisted Inventory Position application lifecycle."""
 from datetime import datetime, timezone
 import uuid
+import sqlite3
 
 import pytest
 
@@ -204,4 +205,55 @@ def test_inventory_position_requires_explicit_actor_context_for_writes():
     with pytest.raises(ValidationError, match="actor_context_ref is required"):
         app.transition_position(db, str(position.id), "make_effective", now=NOW)
     assert app.get_position(db, str(position.id)).state is InventoryPositionState.OBSERVED
+    db.close()
+
+
+import sqlite3
+
+
+def test_inventory_position_preserves_caller_transaction_on_success_and_history_failure():
+    db = connect_database()
+    activity_id, product_id, offering_id = setup_refs(db)
+    app = InventoryPositionApplication()
+    caller_person = uid()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (caller_person, NOW, NOW),
+    )
+    position = app.create_position(
+        db, actor_context_ref="test-context", activity_id=activity_id,
+        product_id=product_id, offering_id=offering_id, scope_key="caller-success", now=NOW,
+    )
+    assert db.in_transaction
+    db.rollback()
+    assert db.execute(
+        "SELECT COUNT(*) FROM inventory_positions WHERE inventory_position_id=?",
+        (str(position.id),),
+    ).fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM persons WHERE person_id=?", (caller_person,)).fetchone()[0] == 0
+
+    position = app.create_position(
+        db, actor_context_ref="test-context", activity_id=activity_id,
+        product_id=product_id, offering_id=offering_id, scope_key="caller-failure", now=NOW,
+    )
+    db.commit()
+    db.execute(
+        "CREATE TRIGGER fail_inventory_caller_history BEFORE INSERT ON domain_history "
+        "WHEN NEW.owner_domain='inventory' BEGIN SELECT RAISE(ABORT, 'history unavailable'); END"
+    )
+    caller_person = uid()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (caller_person, NOW, NOW),
+    )
+    with pytest.raises(sqlite3.IntegrityError, match="history unavailable"):
+        app.transition_position(
+            db, str(position.id), "make_effective", actor_context_ref="test-context", now=NOW,
+        )
+    current = app.get_position(db, str(position.id))
+    persisted = db.execute("SELECT state,version_no FROM inventory_positions WHERE inventory_position_id=?", (str(position.id),)).fetchone()
+    assert persisted == ("observed", 1)
+    assert db.execute("SELECT COUNT(*) FROM persons WHERE person_id=?", (caller_person,)).fetchone()[0] == 1
+    assert db.in_transaction
+    db.rollback()
     db.close()
