@@ -71,8 +71,11 @@ class MessageApplication:
         if not isinstance(content_ref, str) or not content_ref.strip():
             raise ValidationError("Message content_ref is required")
         key = str(self._uuid(message_id, "Message identifier")) if message_id is not None else str(uuid4())
-        timestamp = self._timestamp(now or datetime.now(timezone.utc), "Message timestamp")
-        occurred = self._timestamp(occurred_at or now or datetime.now(timezone.utc), "Message occurred_at")
+        timestamp = self._timestamp(now if now is not None else datetime.now(timezone.utc), "Message timestamp")
+        occurred = self._timestamp(
+            occurred_at if occurred_at is not None else (now if now is not None else datetime.now(timezone.utc)),
+            "Message occurred_at",
+        )
 
         with connection:
             conversation = connection.execute(

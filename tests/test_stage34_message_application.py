@@ -98,3 +98,24 @@ def test_message_creation_requires_existing_conversation_and_content_reference()
         )
     assert db.execute("SELECT COUNT(*) FROM messages").fetchone()[0] == 0
     db.close()
+
+
+@pytest.mark.parametrize(("field", "value"), [("now", ""), ("occurred_at", "")])
+def test_message_creation_rejects_explicit_empty_timestamps_without_writes(field, value):
+    db = connect_database()
+    sender, conversation = seed(db)
+    timestamp_args = {"now": STAMP, "occurred_at": STAMP}
+    timestamp_args[field] = value
+
+    with pytest.raises(ValidationError, match="Message (timestamp|occurred_at)"):
+        MessageApplication().create_message(
+            db,
+            conversation_id=conversation,
+            sender_person_id=sender,
+            message_type="text",
+            content_ref="content://message/invalid-time",
+            **timestamp_args,
+        )
+
+    assert db.execute("SELECT COUNT(*) FROM messages").fetchone()[0] == 0
+    db.close()
