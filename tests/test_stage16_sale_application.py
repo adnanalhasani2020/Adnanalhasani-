@@ -357,9 +357,7 @@ def test_grant_effective_period_rejects_expiry_at_same_instant_with_offset():
         app.confirm_sale(db, sale.id, actor, expired_grant, now=NOW)
     assert db.execute(
         "SELECT state,version_no FROM sales WHERE sale_id=?", (str(sale.id),)
-    ).fetchone() == ("initiated", 2)
-    # The invalid transition rolls back only its SAVEPOINT; it must not undo
-    # the caller's pre-existing corrupt metadata or append a history row.
+    ).fetchone() == ("initiated", 1)
     assert db.execute(
         "SELECT count(*) FROM domain_history WHERE target_ref=?", (str(sale.id),)
     ).fetchone()[0] == 1
@@ -455,9 +453,11 @@ def test_sale_transition_fails_closed_when_persisted_version_exceeds_history_cou
     ):
         app.confirm_sale(db, sale.id, actor, confirm_grant, now=NOW)
 
+    # The failed transition preserves caller-owned corrupt metadata, but adds
+    # neither a state change nor a history record.
     assert db.execute(
         "SELECT state,version_no FROM sales WHERE sale_id=?", (str(sale.id),)
-    ).fetchone() == ("initiated", 1)
+    ).fetchone() == ("initiated", 2)
     assert db.execute(
         "SELECT count(*) FROM domain_history WHERE target_ref=?", (str(sale.id),)
     ).fetchone()[0] == 1
