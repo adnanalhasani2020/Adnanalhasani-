@@ -470,6 +470,37 @@ class InventoryPositionApplication:
         ).fetchone()
         if row is None:
             raise ValidationError("Inventory Position does not exist")
+
+        history = connection.execute(
+            "SELECT actor_context_ref,prior_version_ref,current_version_ref,change_payload_ref "
+            "FROM domain_history WHERE owner_domain='inventory' AND target_ref=? "
+            "AND change_type='inventory_position_lifecycle' ORDER BY rowid",
+            (key,),
+        ).fetchall()
+        version_no = row[11]
+        if len(history) != version_no or not history:
+            raise ValidationError("Inventory Position history does not match persisted version")
+        states = []
+        previous_ref = None
+        for index, (actor_ref, prior_ref, current_ref, payload_ref) in enumerate(history, start=1):
+            expected_prior = None if index == 1 else history[index - 2][2]
+            expected_current = f"inventory_position:{key}:v{index}"
+            if (
+                not isinstance(actor_ref, str) or not actor_ref.strip()
+                or prior_ref != expected_prior
+                or current_ref != expected_current
+                or prior_ref != previous_ref
+                or not isinstance(payload_ref, str)
+                or ";state:" not in payload_ref
+            ):
+                raise ValidationError("Inventory Position history chain is inconsistent")
+            previous_ref = current_ref
+            state_value = payload_ref.rsplit(";state:", 1)[1]
+            if state_value not in {"observed", "effective", "closed"}:
+                raise ValidationError("Inventory Position history has an invalid state")
+            states.append(state_value)
+        if states[0] != "observed" or states[-1] != row[10]:
+            raise ValidationError("Inventory Position history does not agree with persisted state")
         return self._restore_position(row)
 
     def transition_position(
