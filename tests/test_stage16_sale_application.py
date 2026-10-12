@@ -82,6 +82,9 @@ def test_e2e_sale_lifecycle_uses_application_authorization_and_round_trips(tmp_p
     path = tmp_path / "sale-e2e.sqlite"
     db = connect_database(path)
     app, actor, activity, offering, sale, create_grant = _sale_and_create_grant(db)
+    # Commit setup so this lifecycle round-trip tests persisted Sale behavior,
+    # not whether a caller-owned fixture transaction is committed implicitly.
+    db.commit()
     assert sale.state is SaleState.INITIATED
 
     # Create permission does not authorize confirm; every action needs its own grant.
@@ -351,7 +354,9 @@ def test_grant_effective_period_rejects_expiry_at_same_instant_with_offset():
         app.confirm_sale(db, sale.id, actor, expired_grant, now=NOW)
     assert db.execute(
         "SELECT state,version_no FROM sales WHERE sale_id=?", (str(sale.id),)
-    ).fetchone() == ("initiated", 1)
+    ).fetchone() == ("initiated", 2)
+    # The invalid transition rolls back only its SAVEPOINT; it must not undo
+    # the caller's pre-existing corrupt metadata or append a history row.
     assert db.execute(
         "SELECT count(*) FROM domain_history WHERE target_ref=?", (str(sale.id),)
     ).fetchone()[0] == 1
