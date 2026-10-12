@@ -229,58 +229,72 @@ class SaleApplication:
         actor_uuid = self._uuid(actor_context_ref, "Actor identifier")
         timestamp = self._timestamp(now)
         offering_key, activity_key, actor_key = map(str, (offering_uuid, activity_uuid, actor_uuid))
-        self._authorize(
-            connection, authorization_grant_id, actor_key, "create_sale",
-            offering_key, activity_key, timestamp,
-        )
-        offering = connection.execute(
-            "SELECT o.activity_id, o.state, o.effective_from, o.effective_to, p.state, a.state, "
-            "o.service_id, s.state "
-            "FROM offerings AS o JOIN products AS p ON p.product_id=o.product_id "
-            "JOIN activities AS a ON a.activity_id=o.activity_id "
-            "LEFT JOIN services AS s ON s.service_id=o.service_id WHERE o.offering_id=?",
-            (offering_key,),
-        ).fetchone()
-        if offering is None:
-            raise ValidationError("Sale requires an existing Offering")
-        (
-            offering_activity, offering_state, effective_from, effective_to,
-            product_state, activity_state, service_id, service_state,
-        ) = offering
-        if offering_activity != activity_key:
-            raise ValidationError("Sale Activity must match Offering Activity")
-        if offering_state != "active" or product_state != "active" or activity_state != "active":
-            raise ValidationError("Sale requires an active Offering, Product, and Activity")
-        if service_id is not None and service_state != "active":
-            raise ValidationError("Sale requires an active Service for a service-backed Offering")
-        operation_instant = self._grant_instant(timestamp, "operation timestamp", owner="Offering")
-        starts_instant = self._grant_instant(effective_from, "effective_from", owner="Offering")
-        ends_instant = (
-            self._grant_instant(effective_to, "effective_to", owner="Offering")
-            if effective_to is not None else None
-        )
-        if starts_instant > operation_instant or (
-            ends_instant is not None and operation_instant >= ends_instant
-        ):
-            raise ValidationError("Offering is outside its effective period")
 
-        identifier = self._uuid(sale_id, "Sale identifier") if sale_id is not None else uuid4()
-        sale = Sale(offering_uuid, activity_uuid, id=identifier)
-        history_ref = f"sale-state:{sale.id}:v1"
-        with connection:
-            connection.execute(
-                "INSERT INTO sales(sale_id,offering_id,activity_id,state,occurred_at,created_at,updated_at,version_no) "
-                "VALUES(?,?,?,?,?,?,?,1)",
-                (str(sale.id), offering_key, activity_key, SaleState.INITIATED.value,
-                 timestamp, timestamp, timestamp),
+        # Authorization and Offering validity must be checked under the same SQLite
+        # write lock as Sale/history insertion; otherwise another connection can
+        # revoke the grant or change the Offering after the checks but before INSERT.
+        owns_transaction = not connection.in_transaction
+        if owns_transaction:
+            connection.execute("BEGIN IMMEDIATE")
+        try:
+            self._authorize(
+                connection, authorization_grant_id, actor_key, "create_sale",
+                offering_key, activity_key, timestamp,
             )
-            connection.execute(
-                "INSERT INTO domain_history(domain_history_id,owner_domain,target_ref,change_type,historical_at,"
-                "actor_context_ref,prior_version_ref,current_version_ref,change_payload_ref,created_at) "
-                "VALUES(?,?,?,?,?,?,?,?,?,?)",
-                (str(uuid4()), "commerce", str(sale.id), "sale_state_transition", timestamp,
-                 actor_key, None, history_ref, "state:initiated", timestamp),
+            offering = connection.execute(
+                "SELECT o.activity_id, o.state, o.effective_from, o.effective_to, p.state, a.state, "
+                "o.service_id, s.state "
+                "FROM offerings AS o JOIN products AS p ON p.product_id=o.product_id "
+                "JOIN activities AS a ON a.activity_id=o.activity_id "
+                "LEFT JOIN services AS s ON s.service_id=o.service_id WHERE o.offering_id=?",
+                (offering_key,),
+            ).fetchone()
+            if offering is None:
+                raise ValidationError("Sale requires an existing Offering")
+            (
+                offering_activity, offering_state, effective_from, effective_to,
+                product_state, activity_state, service_id, service_state,
+            ) = offering
+            if offering_activity != activity_key:
+                raise ValidationError("Sale Activity must match Offering Activity")
+            if offering_state != "active" or product_state != "active" or activity_state != "active":
+                raise ValidationError("Sale requires an active Offering, Product, and Activity")
+            if service_id is not None and service_state != "active":
+                raise ValidationError("Sale requires an active Service for a service-backed Offering")
+            operation_instant = self._grant_instant(timestamp, "operation timestamp", owner="Offering")
+            starts_instant = self._grant_instant(effective_from, "effective_from", owner="Offering")
+            ends_instant = (
+                self._grant_instant(effective_to, "effective_to", owner="Offering")
+                if effective_to is not None else None
             )
+            if starts_instant > operation_instant or (
+                ends_instant is not None and operation_instant >= ends_instant
+            ):
+                raise ValidationError("Offering is outside its effective period")
+
+            identifier = self._uuid(sale_id, "Sale identifier") if sale_id is not None else uuid4()
+            sale = Sale(offering_uuid, activity_uuid, id=identifier)
+            history_ref = f"sale-state:{sale.id}:v1"
+            with connection:
+                connection.execute(
+                    "INSERT INTO sales(sale_id,offering_id,activity_id,state,occurred_at,created_at,updated_at,version_no) "
+                    "VALUES(?,?,?,?,?,?,?,1)",
+                    (str(sale.id), offering_key, activity_key, SaleState.INITIATED.value,
+                     timestamp, timestamp, timestamp),
+                )
+                connection.execute(
+                    "INSERT INTO domain_history(domain_history_id,owner_domain,target_ref,change_type,historical_at,"
+                    "actor_context_ref,prior_version_ref,current_version_ref,change_payload_ref,created_at) "
+                    "VALUES(?,?,?,?,?,?,?,?,?,?)",
+                    (str(uuid4()), "commerce", str(sale.id), "sale_state_transition", timestamp,
+                     actor_key, None, history_ref, "state:initiated", timestamp),
+                )
+        except Exception:
+            # Validation can fail before the inner connection context is entered.
+            # Release a transaction started here; never roll back a caller-owned one.
+            if owns_transaction and connection.in_transaction:
+                connection.rollback()
+            raise
         return sale
 
     def transition_sale(
