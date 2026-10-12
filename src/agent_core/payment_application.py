@@ -1,4 +1,5 @@
 """Persisted Payments lifecycle, kept separate from Settlement and Finance recognition."""
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
@@ -36,6 +37,21 @@ class PaymentApplication:
     operation-specific AuthorizationGrant. This module does not create Settlement,
     FinancialTransaction, LedgerEntry, or Balance effects.
     """
+
+    @staticmethod
+    @contextmanager
+    def _atomic(connection):
+        """Keep this operation atomic without committing caller-owned work."""
+        savepoint = f"payment_application_{uuid4().hex}"
+        connection.execute(f"SAVEPOINT {savepoint}")
+        try:
+            yield
+        except BaseException:
+            connection.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+            connection.execute(f"RELEASE SAVEPOINT {savepoint}")
+            raise
+        else:
+            connection.execute(f"RELEASE SAVEPOINT {savepoint}")
 
     @staticmethod
     def _uuid(value, label):
@@ -160,7 +176,7 @@ class PaymentApplication:
             raise ValidationError("Payment currency_code is required")
         currency_code = currency_code.strip()
         timestamp = self._timestamp(now or datetime.now(timezone.utc), "Payment creation timestamp")
-        with connection:
+        with self._atomic(connection):
             actor = self._authorize(
                 connection, payment_id=key, context_ref=context_ref, action_code="payment.create",
                 authorization_grant_id=authorization_grant_id, agent_action_id=agent_action_id,
@@ -219,7 +235,7 @@ class PaymentApplication:
             raise ValidationError("Unsupported persisted Payment target state")
         timestamp = self._timestamp(now or datetime.now(timezone.utc), "Payment transition timestamp")
         action_code = f"payment.transition.{target_state}"
-        with connection:
+        with self._atomic(connection):
             actor = self._authorize(
                 connection, payment_id=key, context_ref=context_ref, action_code=action_code,
                 authorization_grant_id=authorization_grant_id, agent_action_id=agent_action_id,
