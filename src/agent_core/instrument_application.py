@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 """Internal persistence for the SPEC-0016 Instrument lifecycle.
 
 This is an internal domain persistence primitive, not a user-facing endpoint:
@@ -37,6 +38,20 @@ class InstrumentUsageRecord:
 
 
 class InstrumentApplication:
+    @staticmethod
+    @contextmanager
+    def _atomic(connection):
+        """Keep this operation atomic without committing caller-owned work."""
+        savepoint = "instrument_application_" + uuid4().hex
+        connection.execute(f"SAVEPOINT {savepoint}")
+        try:
+            yield
+        except BaseException:
+            connection.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+            connection.execute(f"RELEASE SAVEPOINT {savepoint}")
+            raise
+        else:
+            connection.execute(f"RELEASE SAVEPOINT {savepoint}")
     """Persist Instrument state and expose its recorded usage history."""
 
     _TRANSITIONS = {
@@ -93,7 +108,7 @@ class InstrumentApplication:
             raise ValidationError("Instrument actor_context_ref is required")
         timestamp = self._timestamp(now or datetime.now(timezone.utc), "Instrument creation timestamp")
         kind, issuer, canonical = instrument_type.strip(), issuer_ref.strip(), canonical_identifier.strip()
-        with connection:
+        with self._atomic(connection):
             connection.execute(
                 "INSERT INTO instruments(instrument_id,instrument_type,issuer_ref,canonical_identifier,"
                 "state,created_at,updated_at,version_no) VALUES(?,?,?,?, 'issued',?,?,1)",
@@ -163,7 +178,7 @@ class InstrumentApplication:
                 raise ValidationError("Instrument redemption requires an action_ref")
             if context_ref is not None and (not isinstance(context_ref, str) or not context_ref.strip()):
                 raise ValidationError("Instrument context_ref must be non-empty when supplied")
-        with connection:
+        with self._atomic(connection):
             current = self._load(connection, key)
             if current.version_no != expected_version:
                 raise ValidationError("Instrument version conflict; reload before retrying")
