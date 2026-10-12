@@ -1,4 +1,5 @@
 """Persisted Financial Account lifecycle; owns only the Finance account record."""
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
@@ -25,6 +26,21 @@ class FinancialAccountApplication:
     This service does not recognize transactions or create ledger entries/balances.
     Closing an account is not a reversal, deletion, or mutation of financial history.
     """
+
+    @staticmethod
+    @contextmanager
+    def _atomic(connection):
+        """Keep this operation atomic without committing caller-owned work."""
+        savepoint = f"financial_account_application_{uuid4().hex}"
+        connection.execute(f"SAVEPOINT {savepoint}")
+        try:
+            yield
+        except BaseException:
+            connection.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+            connection.execute(f"RELEASE SAVEPOINT {savepoint}")
+            raise
+        else:
+            connection.execute(f"RELEASE SAVEPOINT {savepoint}")
 
     @staticmethod
     def _uuid(value, label):
@@ -128,7 +144,7 @@ class FinancialAccountApplication:
             raise ValidationError("Financial Account account_type is required")
         kind = account_type.strip()
         timestamp = self._timestamp(now or datetime.now(timezone.utc), "Financial Account creation timestamp")
-        with connection:
+        with self._atomic(connection):
             actor = self._authorize(
                 connection, account_id=key, context_ref=context_ref, action_code="financial_account.create",
                 authorization_grant_id=authorization_grant_id, agent_action_id=agent_action_id, now=timestamp,
@@ -164,7 +180,7 @@ class FinancialAccountApplication:
         if type(expected_version) is not int or expected_version < 1:
             raise ValidationError("Financial Account expected_version must be a positive integer")
         timestamp = self._timestamp(now or datetime.now(timezone.utc), "Financial Account close timestamp")
-        with connection:
+        with self._atomic(connection):
             actor = self._authorize(
                 connection, account_id=key, context_ref=context_ref, action_code="financial_account.close",
                 authorization_grant_id=authorization_grant_id, agent_action_id=agent_action_id, now=timestamp,
