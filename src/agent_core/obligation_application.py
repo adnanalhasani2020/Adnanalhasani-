@@ -1,4 +1,5 @@
 """Persisted Obligation lifecycle; deliberately independent of Payment and Settlement."""
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
@@ -38,6 +39,32 @@ class ObligationApplication:
     and its Domain History; it never creates Payment, Settlement, or Finance
     recognition records and never infers satisfaction from a Payment.
     """
+
+    @staticmethod
+    @contextmanager
+    def _atomic(connection):
+        """Own a transaction only when the caller has not already opened one."""
+        if connection.in_transaction:
+            savepoint = "operation_" + uuid4().hex
+            connection.execute(f"SAVEPOINT {savepoint}")
+            try:
+                yield
+            except BaseException:
+                connection.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+                connection.execute(f"RELEASE SAVEPOINT {savepoint}")
+                raise
+            else:
+                connection.execute(f"RELEASE SAVEPOINT {savepoint}")
+            return
+
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            yield
+        except BaseException:
+            connection.rollback()
+            raise
+        else:
+            connection.commit()
 
     @staticmethod
     def _uuid(value, label):
@@ -160,7 +187,7 @@ class ObligationApplication:
         currency_code = currency_code.strip()
         timestamp = self._timestamp(now or datetime.now(timezone.utc), "Obligation creation timestamp")
         due_timestamp = self._timestamp(due_at, "Obligation due_at") if due_at is not None else None
-        with connection:
+        with self._atomic(connection):
             actor = self._authorize(
                 connection, obligation_id=key, context_ref=context_ref, action_code="obligation.create",
                 authorization_grant_id=authorization_grant_id, agent_action_id=agent_action_id, now=timestamp,
@@ -217,7 +244,7 @@ class ObligationApplication:
             raise ValidationError("Unsupported persisted Obligation target state")
         timestamp = self._timestamp(now or datetime.now(timezone.utc), "Obligation transition timestamp")
         action_code = f"obligation.transition.{target_state}"
-        with connection:
+        with self._atomic(connection):
             actor = self._authorize(
                 connection, obligation_id=key, context_ref=context_ref, action_code=action_code,
                 authorization_grant_id=authorization_grant_id, agent_action_id=agent_action_id, now=timestamp,
