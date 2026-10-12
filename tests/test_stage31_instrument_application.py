@@ -1,5 +1,6 @@
 """Integration tests for the internal SPEC-0016 Instrument persistence primitive."""
 import uuid
+import sqlite3
 
 import pytest
 
@@ -166,4 +167,86 @@ def test_instrument_rejects_non_string_transition_actions_without_mutation(actio
         "SELECT COUNT(*) FROM domain_history WHERE target_ref=?",
         (str(instrument.instrument_id),),
     ).fetchone()[0] == 1
+    db.close()
+
+
+import sqlite3
+
+
+def test_instrument_create_preserves_caller_transaction_on_success_and_history_failure():
+    db = connect_database()
+    app = InstrumentApplication()
+    caller_person = uid()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (caller_person, STAMP, STAMP),
+    )
+    instrument_id = uid()
+    app.create_instrument(
+        db, instrument_id=instrument_id, instrument_type="unspecified",
+        issuer_ref="issuer", canonical_identifier="caller-transaction-success",
+        actor_context_ref="internal-context", now=STAMP,
+    )
+    assert db.in_transaction
+    db.rollback()
+    assert db.execute("SELECT COUNT(*) FROM instruments WHERE instrument_id=?", (instrument_id,)).fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM persons WHERE person_id=?", (caller_person,)).fetchone()[0] == 0
+
+    caller_person = uid()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (caller_person, STAMP, STAMP),
+    )
+    db.execute(
+        "CREATE TRIGGER fail_instrument_history BEFORE INSERT ON domain_history "
+        "WHEN NEW.owner_domain='instrument' BEGIN SELECT RAISE(ABORT, 'history unavailable'); END"
+    )
+    instrument_id = uid()
+    with pytest.raises(sqlite3.IntegrityError, match="history unavailable"):
+        app.create_instrument(
+            db, instrument_id=instrument_id, instrument_type="unspecified",
+            issuer_ref="issuer", canonical_identifier="caller-transaction-failure",
+            actor_context_ref="internal-context", now=STAMP,
+        )
+    assert db.in_transaction
+    assert db.execute("SELECT COUNT(*) FROM instruments WHERE instrument_id=?", (instrument_id,)).fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM persons WHERE person_id=?", (caller_person,)).fetchone()[0] == 1
+    db.rollback()
+    db.close()
+
+
+def test_instrument_redemption_failure_preserves_caller_work_and_usage_atomicity():
+    db = connect_database()
+    app = InstrumentApplication()
+    instrument = app.create_instrument(
+        db, instrument_id=uid(), instrument_type="unspecified",
+        issuer_ref="issuer", canonical_identifier="redeem-atomicity",
+        actor_context_ref="internal-context", now=STAMP,
+    )
+    key = str(instrument.instrument_id)
+    app.transition_instrument(
+        db, key, "activate", expected_version=1,
+        actor_context_ref="internal-context", now=STAMP,
+    )
+    db.execute(
+        "CREATE TRIGGER fail_instrument_redemption_history BEFORE INSERT ON domain_history "
+        "WHEN NEW.owner_domain='instrument' AND NEW.change_payload_ref='action:redeem;state:redeemed' "
+        "BEGIN SELECT RAISE(ABORT, 'history unavailable'); END"
+    )
+    caller_person = uid()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (caller_person, STAMP, STAMP),
+    )
+    with pytest.raises(sqlite3.IntegrityError, match="history unavailable"):
+        app.transition_instrument(
+            db, key, "redeem", expected_version=2, actor_context_ref="internal-context",
+            action_ref="opaque-operation", now=STAMP,
+        )
+    current = app.get_instrument(db, key)
+    assert (current.state, current.version_no) == ("active", 2)
+    assert db.execute("SELECT COUNT(*) FROM instrument_usages WHERE instrument_id=?", (key,)).fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM persons WHERE person_id=?", (caller_person,)).fetchone()[0] == 1
+    assert db.in_transaction
+    db.rollback()
     db.close()
