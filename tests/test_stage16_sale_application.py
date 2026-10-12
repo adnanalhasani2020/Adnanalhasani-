@@ -82,6 +82,9 @@ def test_e2e_sale_lifecycle_uses_application_authorization_and_round_trips(tmp_p
     path = tmp_path / "sale-e2e.sqlite"
     db = connect_database(path)
     app, actor, activity, offering, sale, create_grant = _sale_and_create_grant(db)
+    # Commit setup so this lifecycle round-trip tests persisted Sale behavior,
+    # not whether a caller-owned fixture transaction is committed implicitly.
+    db.commit()
     assert sale.state is SaleState.INITIATED
 
     # Create permission does not authorize confirm; every action needs its own grant.
@@ -89,14 +92,17 @@ def test_e2e_sale_lifecycle_uses_application_authorization_and_round_trips(tmp_p
         app.confirm_sale(db, sale.id, actor, create_grant, now=NOW)
 
     confirm_grant = _transition_grant(db, actor, activity, sale, "confirm")
+    db.commit()
     sale = app.confirm_sale(db, sale.id, actor, confirm_grant, now=NOW)
     assert sale.state is SaleState.CONFIRMED
 
     fulfill_grant = _transition_grant(db, actor, activity, sale, "fulfill")
+    db.commit()
     sale = app.fulfill_sale(db, sale.id, actor, fulfill_grant, now=NOW)
     assert sale.state is SaleState.FULFILLED
 
     return_grant = _transition_grant(db, actor, activity, sale, "return")
+    db.commit()
     sale = app.return_sale(db, sale.id, actor, return_grant, now=NOW)
     assert sale.state is SaleState.RETURNED
 
@@ -447,9 +453,11 @@ def test_sale_transition_fails_closed_when_persisted_version_exceeds_history_cou
     ):
         app.confirm_sale(db, sale.id, actor, confirm_grant, now=NOW)
 
+    # The failed transition preserves caller-owned corrupt metadata, but adds
+    # neither a state change nor a history record.
     assert db.execute(
         "SELECT state,version_no FROM sales WHERE sale_id=?", (str(sale.id),)
-    ).fetchone() == ("initiated", 1)
+    ).fetchone() == ("initiated", 2)
     assert db.execute(
         "SELECT count(*) FROM domain_history WHERE target_ref=?", (str(sale.id),)
     ).fetchone()[0] == 1

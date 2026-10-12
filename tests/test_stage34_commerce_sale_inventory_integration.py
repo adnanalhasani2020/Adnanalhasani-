@@ -253,3 +253,200 @@ def test_product_transition_rejects_malformed_actions_without_mutation(tmp_path)
         ).fetchone()[0] == before_history
 
     db.close()
+
+def _sale_setup(db):
+    actor_id = _id()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,?,?,?)",
+        (actor_id, "active", STAMP, STAMP),
+    )
+    activity_id = _activity(db, actor_id)
+    product = ProductApplication().create_product(
+        db, "Transaction ownership product",
+        actor_context_ref="transaction-ownership-test", now=STAMP,
+    )
+    product_id = str(product.product.id)
+    ProductApplication().transition_product(
+        db, product_id, "activate", expected_version=1,
+        actor_context_ref="transaction-ownership-test", now=STAMP,
+    )
+    offering = OfferingApplication().create_offering(
+        db, product_id=product_id, activity_id=activity_id,
+        effective_from=STAMP, actor_context_ref="transaction-ownership-test", now=STAMP,
+    )
+    OfferingApplication().transition_offering(
+        db, offering.offering.id, "activate", expected_version=1,
+        actor_context_ref="transaction-ownership-test", now=STAMP,
+    )
+    offering_id = str(offering.offering.id)
+    grant_id = _grant(db, actor_id, offering_id, activity_id, "create_sale")
+    db.commit()
+    return actor_id, activity_id, offering_id, grant_id
+
+
+def test_sale_creation_without_caller_transaction_rolls_back_sale_when_history_fails(tmp_path):
+    db = connect_database(tmp_path / "sale-owned-transaction.sqlite")
+    actor_id, activity_id, offering_id, grant_id = _sale_setup(db)
+    sales_before = db.execute("SELECT COUNT(*) FROM sales").fetchone()[0]
+    history_before = db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE owner_domain='commerce'"
+    ).fetchone()[0]
+    db.execute(
+        "CREATE TRIGGER reject_initial_sale_history BEFORE INSERT ON domain_history "
+        "WHEN NEW.change_type='sale_state_transition' AND NEW.target_ref IN "
+        "(SELECT sale_id FROM sales) "
+        "BEGIN SELECT RAISE(ABORT, 'forced initial history failure'); END"
+    )
+    db.commit()
+
+    with pytest.raises(sqlite3.IntegrityError, match="forced initial history failure"):
+        SaleApplication().create_sale(
+            db, offering_id, activity_id, actor_id, grant_id, now=NOW
+        )
+
+    assert not db.in_transaction
+    assert db.execute("SELECT COUNT(*) FROM sales").fetchone()[0] == sales_before
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE owner_domain='commerce'"
+    ).fetchone()[0] == history_before
+    db.close()
+
+
+def test_sale_creation_inside_caller_transaction_does_not_commit_and_can_be_rolled_back(tmp_path):
+    db = connect_database(tmp_path / "sale-caller-transaction.sqlite")
+    actor_id, activity_id, offering_id, grant_id = _sale_setup(db)
+    sales_before = db.execute("SELECT COUNT(*) FROM sales").fetchone()[0]
+    history_before = db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE owner_domain='commerce'"
+    ).fetchone()[0]
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,?,?,?)",
+        (_id(), "active", STAMP, STAMP),
+    )
+    assert db.in_transaction
+
+    sale = SaleApplication().create_sale(
+        db, offering_id, activity_id, actor_id, grant_id, now=NOW
+    )
+    assert db.in_transaction
+    assert db.execute("SELECT COUNT(*) FROM sales").fetchone()[0] == sales_before + 1
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE owner_domain='commerce'"
+    ).fetchone()[0] == history_before + 1
+
+    db.rollback()
+    assert not db.in_transaction
+    assert db.execute("SELECT COUNT(*) FROM sales").fetchone()[0] == sales_before
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE owner_domain='commerce'"
+    ).fetchone()[0] == history_before
+    assert db.execute(
+        "SELECT COUNT(*) FROM persons WHERE state='active'"
+    ).fetchone()[0] == 1
+    db.close()
+
+
+def test_sale_creation_failure_preserves_caller_work_without_partial_sale_or_history(tmp_path):
+    db = connect_database(tmp_path / "sale-caller-rollback.sqlite")
+    actor_id, activity_id, offering_id, grant_id = _sale_setup(db)
+    sales_before = db.execute("SELECT COUNT(*) FROM sales").fetchone()[0]
+    history_before = db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE owner_domain='commerce'"
+    ).fetchone()[0]
+    pending_person_id = _id()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,?,?,?)",
+        (pending_person_id, "active", STAMP, STAMP),
+    )
+    db.execute(
+        "CREATE TRIGGER reject_initial_sale_history BEFORE INSERT ON domain_history "
+        "WHEN NEW.change_type='sale_state_transition' AND NEW.target_ref IN "
+        "(SELECT sale_id FROM sales) "
+        "BEGIN SELECT RAISE(ABORT, 'forced initial history failure'); END"
+    )
+    with pytest.raises(sqlite3.IntegrityError, match="forced initial history failure"):
+        SaleApplication().create_sale(
+            db, offering_id, activity_id, actor_id, grant_id, now=NOW
+        )
+
+    assert db.in_transaction
+    assert db.execute(
+        "SELECT COUNT(*) FROM persons WHERE person_id=?", (pending_person_id,)
+    ).fetchone()[0] == 1
+    assert db.execute("SELECT COUNT(*) FROM sales").fetchone()[0] == sales_before
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE owner_domain='commerce'"
+    ).fetchone()[0] == history_before
+    db.rollback()
+    db.close()
+
+
+def test_sale_creation_keeps_authorization_validity_atomic_with_persistence(tmp_path, monkeypatch):
+    import threading
+
+    db_path = tmp_path / "sale-authorization-race.sqlite"
+    db = connect_database(db_path)
+    actor_id, activity_id, offering_id, grant_id = _sale_setup(db)
+    sales = SaleApplication()
+    authorization_checked = threading.Event()
+    revocation_attempting = threading.Event()
+    revocation_finished = threading.Event()
+    errors = []
+
+    original_authorize = sales._authorize
+
+    def coordinated_authorize(*args, **kwargs):
+        original_authorize(*args, **kwargs)
+        authorization_checked.set()
+        assert revocation_attempting.wait(timeout=3), "revocation thread did not reach lock attempt"
+
+    monkeypatch.setattr(sales, "_authorize", coordinated_authorize)
+
+    def revoke():
+        concurrent_db = None
+        try:
+            assert authorization_checked.wait(timeout=3), "authorization check did not begin"
+            concurrent_db = connect_database(db_path)
+            concurrent_db.set_trace_callback(
+                lambda statement: revocation_attempting.set()
+                if statement.lstrip().upper().startswith("UPDATE AUTHORIZATION_GRANTS")
+                else None
+            )
+            concurrent_db.execute(
+                "UPDATE authorization_grants SET state='revoked' "
+                "WHERE authorization_grant_id=?", (grant_id,),
+            )
+            concurrent_db.commit()
+        except BaseException as exc:
+            errors.append(exc)
+        finally:
+            if concurrent_db is not None:
+                concurrent_db.close()
+            revocation_finished.set()
+
+    worker = threading.Thread(target=revoke, daemon=True)
+    worker.start()
+    sales_before = db.execute("SELECT COUNT(*) FROM sales").fetchone()[0]
+    history_before = db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE owner_domain='commerce'"
+    ).fetchone()[0]
+    sale = sales.create_sale(db, offering_id, activity_id, actor_id, grant_id, now=NOW)
+    assert revocation_finished.wait(timeout=5), "revocation did not finish after Sale transaction"
+    worker.join(timeout=1)
+    assert not worker.is_alive()
+    assert errors == []
+    # The Sale's BEGIN IMMEDIATE lock wins first: the grant was active at the
+    # authorization linearization point. Revocation then commits after Sale.
+    assert db.execute(
+        "SELECT state FROM authorization_grants WHERE authorization_grant_id=?",
+        (grant_id,),
+    ).fetchone()[0] == "revoked"
+    assert db.execute("SELECT COUNT(*) FROM sales").fetchone()[0] == sales_before + 1
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE owner_domain='commerce'"
+    ).fetchone()[0] == history_before + 1
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=?", (str(sale.id),)
+    ).fetchone()[0] == 1
+    assert db.execute("PRAGMA foreign_key_check").fetchall() == []
+    db.close()
