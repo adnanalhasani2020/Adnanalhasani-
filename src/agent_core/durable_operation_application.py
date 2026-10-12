@@ -31,6 +31,29 @@ class DurableOperationApplication:
     @staticmethod
     @contextmanager
     def _atomic(connection):
+        """Own a transaction only when the caller has not already opened one."""
+        if connection.in_transaction:
+            savepoint = "operation_" + uuid4().hex
+            connection.execute(f"SAVEPOINT {savepoint}")
+            try:
+                yield
+            except BaseException:
+                connection.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+                connection.execute(f"RELEASE SAVEPOINT {savepoint}")
+                raise
+            else:
+                connection.execute(f"RELEASE SAVEPOINT {savepoint}")
+            return
+
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            yield
+        except BaseException:
+            connection.rollback()
+            raise
+        else:
+            connection.commit()
+    def _atomic(connection):
         """Keep this operation atomic without committing caller-owned work."""
         savepoint = "durable_operation_application_" + uuid4().hex
         connection.execute(f"SAVEPOINT {savepoint}")
