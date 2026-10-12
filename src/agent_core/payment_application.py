@@ -133,6 +133,14 @@ class PaymentApplication:
             raise ValidationError("Payment does not exist")
         (pid, obligation, invoice, payer, payee, amount, currency, state, provider, external,
          created, updated, version) = row
+        if obligation is not None and invoice is not None:
+            invoice_link = connection.execute(
+                "SELECT obligation_id FROM invoices WHERE invoice_id=?", (invoice,),
+            ).fetchone()
+            if invoice_link is not None and invoice_link[0] is not None and invoice_link[0] != obligation:
+                raise ValidationError(
+                    "Persisted Payment Invoice and Obligation references do not match"
+                )
         return PaymentRecord(
             UUID(pid), UUID(obligation) if obligation else None, UUID(invoice) if invoice else None,
             UUID(payer), UUID(payee), amount, currency, state, provider, external,
