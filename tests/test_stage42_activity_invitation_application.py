@@ -140,3 +140,16 @@ def test_inviter_listing_is_scoped_deterministic_and_survives_reopen(tmp_path):
     reopened = connect_database(path)
     assert app.list_for_inviter(reopened, inviter) == (earlier, later)
     reopened.close()
+
+def test_invitation_rejects_explicitly_empty_created_at_without_persisting():
+    db = connect_database()
+    inviter, invitee = create_person(db), create_person(db)
+    activity = create_activity(db)
+    db.commit()
+    with pytest.raises(ValidationError, match="valid ISO-8601"):
+        ActivityInvitationApplication().create_invitation(
+            db, activity_id=activity, inviter_person_id=inviter,
+            invitee_person_id=invitee, created_at="",
+        )
+    assert db.execute("SELECT COUNT(*) FROM activity_invitations").fetchone()[0] == 0
+    db.close()
