@@ -86,6 +86,7 @@ def test_clean_install_has_exactly_49_domain_tables_plus_migration_bookkeeping()
         "0005_inventory_position_offering_context",
         "0006_inventory_quantity_integer",
         "0007_product_name",
+        "0008_authorization_grant_purpose",
         "9998_activity_invitations",
         "9999_file_attachments",
     ]
