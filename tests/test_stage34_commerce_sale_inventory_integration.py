@@ -133,6 +133,26 @@ def test_product_offering_inventory_and_authorized_sale_round_trip_without_stock
     )
     assert sale.state is SaleState.INITIATED
 
+    # Malformed action containers must fail through the domain validation contract,
+    # without touching the persisted Sale or appending history.
+    before_invalid_action = db.execute(
+        "SELECT state, version_no FROM sales WHERE sale_id=?", (str(sale.id),)
+    ).fetchone()
+    before_invalid_action_history = db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=?", (str(sale.id),)
+    ).fetchone()[0]
+    for invalid_action in ([], {}):
+        with pytest.raises(ValidationError, match="Unsupported Sale lifecycle action"):
+            sales.transition_sale(
+                db, sale.id, actor_id, create_grant_a, invalid_action, now=NOW
+            )
+        assert db.execute(
+            "SELECT state, version_no FROM sales WHERE sale_id=?", (str(sale.id),)
+        ).fetchone() == before_invalid_action
+        assert db.execute(
+            "SELECT COUNT(*) FROM domain_history WHERE target_ref=?", (str(sale.id),)
+        ).fetchone()[0] == before_invalid_action_history
+
     # A grant scoped to A cannot create a sale for B; failure must leave no partial Sale/history.
     before_sales = db.execute("SELECT COUNT(*) FROM sales").fetchone()[0]
     before_history = db.execute("SELECT COUNT(*) FROM domain_history").fetchone()[0]

@@ -288,7 +288,7 @@ class SaleApplication:
         authorization_grant_id: UUID | str, action: str, *,
         now: datetime | None = None,
     ) -> Sale:
-        if action not in self._TRANSITIONS:
+        if not isinstance(action, str) or action not in self._TRANSITIONS:
             raise ValidationError("Unsupported Sale lifecycle action")
         sale_uuid = self._uuid(sale_id, "Sale identifier")
         actor_uuid = self._uuid(actor_context_ref, "Actor identifier")
