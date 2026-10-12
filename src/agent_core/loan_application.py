@@ -1,4 +1,5 @@
 """Persisted Loan lifecycle, independent of Obligations and financial recognition."""
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
@@ -35,6 +36,21 @@ class LoanApplication:
     This service never creates Obligations, Payments, Settlements,
     FinancialTransactions, or LedgerEntries as side effects.
     """
+
+    @staticmethod
+    @contextmanager
+    def _atomic(connection):
+        """Keep this operation atomic without committing caller-owned work."""
+        savepoint = f"loan_application_{uuid4().hex}"
+        connection.execute(f"SAVEPOINT {savepoint}")
+        try:
+            yield
+        except BaseException:
+            connection.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+            connection.execute(f"RELEASE SAVEPOINT {savepoint}")
+            raise
+        else:
+            connection.execute(f"RELEASE SAVEPOINT {savepoint}")
 
     @staticmethod
     def _uuid(value, label):
@@ -148,7 +164,7 @@ class LoanApplication:
         currency_code = currency_code.strip()
         timestamp = self._timestamp(now or datetime.now(timezone.utc), "Loan creation timestamp")
         maturity = self._timestamp(maturity_at, "Loan maturity_at") if maturity_at is not None else None
-        with connection:
+        with self._atomic(connection):
             actor = self._authorize(
                 connection, loan_id=key, context_ref=context_ref, action_code="loan.create",
                 authorization_grant_id=authorization_grant_id, agent_action_id=agent_action_id, now=timestamp,
@@ -190,7 +206,7 @@ class LoanApplication:
             raise ValidationError("Unsupported persisted Loan target state")
         timestamp = self._timestamp(now or datetime.now(timezone.utc), "Loan transition timestamp")
         action_code = f"loan.transition.{target_state}"
-        with connection:
+        with self._atomic(connection):
             actor = self._authorize(
                 connection, loan_id=key, context_ref=context_ref, action_code=action_code,
                 authorization_grant_id=authorization_grant_id, agent_action_id=agent_action_id, now=timestamp,
