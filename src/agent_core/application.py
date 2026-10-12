@@ -594,7 +594,7 @@ class ProductApplication:
         return self._load_product(connection, product_id)
 
     def transition_product(self, connection, product_id, action, *, expected_version, actor_context_ref, now=None):
-        if action not in {"activate", "retire"}:
+        if not isinstance(action, str) or action not in {"activate", "retire"}:
             raise ValidationError(f"Unsupported Product action: {action}")
         if type(expected_version) is not int or expected_version < 1:
             raise ValidationError("Product expected_version must be a positive integer")

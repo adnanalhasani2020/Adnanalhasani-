@@ -212,3 +212,34 @@ def test_product_offering_inventory_and_authorized_sale_round_trip_without_stock
     ]
     assert db.execute("PRAGMA foreign_key_check").fetchall() == []
     db.close()
+
+
+def test_product_transition_rejects_malformed_actions_without_mutation(tmp_path):
+    db = connect_database(tmp_path / "product-action-validation.sqlite")
+    products = ProductApplication()
+    record = products.create_product(
+        db, "Action validation product",
+        actor_context_ref="product-action-test", now=STAMP,
+    )
+    product_id = str(record.product.id)
+    before = db.execute(
+        "SELECT state, version_no FROM products WHERE product_id=?", (product_id,)
+    ).fetchone()
+    before_history = db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=?", (product_id,)
+    ).fetchone()[0]
+
+    for invalid_action in ([], {}):
+        with pytest.raises(ValidationError, match="Unsupported Product action"):
+            products.transition_product(
+                db, product_id, invalid_action, expected_version=1,
+                actor_context_ref="product-action-test", now=NOW,
+            )
+        assert db.execute(
+            "SELECT state, version_no FROM products WHERE product_id=?", (product_id,)
+        ).fetchone() == before
+        assert db.execute(
+            "SELECT COUNT(*) FROM domain_history WHERE target_ref=?", (product_id,)
+        ).fetchone()[0] == before_history
+
+    db.close()
