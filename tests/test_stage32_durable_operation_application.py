@@ -1,5 +1,6 @@
 """Integration tests for SPEC-0023 durable operation identity and duplicate handling."""
 import uuid
+import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
 
@@ -193,4 +194,81 @@ def test_durable_operation_rejects_explicitly_empty_timestamps_without_mutation(
             state="completed", outcome_ref="payment:result", now="",
         )
     assert app.get(db, namespace=record.namespace, operation_id=record.operation_id).state == "reserved"
+    db.close()
+
+
+import sqlite3
+
+
+def test_durable_reservation_preserves_caller_transaction_on_success_and_failure():
+    db = connect_database()
+    app = DurableOperationApplication()
+    caller_person = str(uuid.uuid4())
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (caller_person, STAMP, STAMP),
+    )
+    app.reserve(
+        db, namespace="commerce", operation_id="caller-success",
+        operation_kind="sale.create", actor_context_ref="context",
+        request_fingerprint="sha256:success", now=STAMP,
+    )
+    assert db.in_transaction
+    db.rollback()
+    assert db.execute(
+        "SELECT COUNT(*) FROM durable_operation_records WHERE operation_id='caller-success'"
+    ).fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM persons WHERE person_id=?", (caller_person,)).fetchone()[0] == 0
+
+    app.reserve(
+        db, namespace="commerce", operation_id="caller-failure",
+        operation_kind="sale.create", actor_context_ref="context",
+        request_fingerprint="sha256:original", now=STAMP,
+    )
+    db.commit()
+    caller_person = str(uuid.uuid4())
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (caller_person, STAMP, STAMP),
+    )
+    with pytest.raises(ValidationError, match="different request fingerprint"):
+        app.reserve(
+            db, namespace="commerce", operation_id="caller-failure",
+            operation_kind="sale.create", actor_context_ref="context",
+            request_fingerprint="sha256:different", now=STAMP,
+        )
+    assert db.in_transaction
+    assert db.execute("SELECT COUNT(*) FROM persons WHERE person_id=?", (caller_person,)).fetchone()[0] == 1
+    assert app.get(db, namespace="commerce", operation_id="caller-failure").request_fingerprint == "sha256:original"
+    db.rollback()
+    db.close()
+
+
+def test_durable_outcome_failure_preserves_caller_transaction():
+    db = connect_database()
+    app = DurableOperationApplication()
+    record = app.reserve(
+        db, namespace="commerce", operation_id="outcome-caller",
+        operation_kind="sale.create", actor_context_ref="context",
+        request_fingerprint="sha256:request", now=STAMP,
+    )
+    app.record_outcome(
+        db, namespace=record.namespace, operation_id=record.operation_id,
+        state="completed", outcome_ref="sale:result", now=STAMP,
+    )
+    db.commit()
+    caller_person = str(uuid.uuid4())
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (caller_person, STAMP, STAMP),
+    )
+    with pytest.raises(ValidationError, match="already final"):
+        app.record_outcome(
+            db, namespace=record.namespace, operation_id=record.operation_id,
+            state="rejected", outcome_ref="sale:rejected", now=STAMP,
+        )
+    assert db.in_transaction
+    assert db.execute("SELECT COUNT(*) FROM persons WHERE person_id=?", (caller_person,)).fetchone()[0] == 1
+    assert app.get(db, namespace=record.namespace, operation_id=record.operation_id).state == "completed"
+    db.rollback()
     db.close()
