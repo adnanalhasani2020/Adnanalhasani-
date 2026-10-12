@@ -359,7 +359,6 @@ def test_sale_creation_keeps_authorization_validity_atomic_with_persistence(tmp_
     db_path = tmp_path / "sale-authorization-race.sqlite"
     db = connect_database(db_path)
     actor_id, activity_id, offering_id, grant_id = _sale_setup(db)
-    concurrent_db = connect_database(db_path)
     sales = SaleApplication()
     authorization_checked = threading.Event()
     revocation_attempting = threading.Event()
@@ -376,9 +375,15 @@ def test_sale_creation_keeps_authorization_validity_atomic_with_persistence(tmp_
     monkeypatch.setattr(sales, "_authorize", coordinated_authorize)
 
     def revoke():
+        concurrent_db = None
         try:
             assert authorization_checked.wait(timeout=3), "authorization check did not begin"
-            revocation_attempting.set()
+            concurrent_db = connect_database(db_path)
+            concurrent_db.set_trace_callback(
+                lambda statement: revocation_attempting.set()
+                if statement.lstrip().upper().startswith("UPDATE AUTHORIZATION_GRANTS")
+                else None
+            )
             concurrent_db.execute(
                 "UPDATE authorization_grants SET state='revoked' "
                 "WHERE authorization_grant_id=?", (grant_id,),
@@ -387,6 +392,8 @@ def test_sale_creation_keeps_authorization_validity_atomic_with_persistence(tmp_
         except BaseException as exc:
             errors.append(exc)
         finally:
+            if concurrent_db is not None:
+                concurrent_db.close()
             revocation_finished.set()
 
     worker = threading.Thread(target=revoke, daemon=True)
@@ -402,7 +409,7 @@ def test_sale_creation_keeps_authorization_validity_atomic_with_persistence(tmp_
     assert errors == []
     # The Sale's BEGIN IMMEDIATE lock wins first: the grant was active at the
     # authorization linearization point. Revocation then commits after Sale.
-    assert concurrent_db.execute(
+    assert db.execute(
         "SELECT state FROM authorization_grants WHERE authorization_grant_id=?",
         (grant_id,),
     ).fetchone()[0] == "revoked"
@@ -414,5 +421,4 @@ def test_sale_creation_keeps_authorization_validity_atomic_with_persistence(tmp_
         "SELECT COUNT(*) FROM domain_history WHERE target_ref=?", (str(sale.id),)
     ).fetchone()[0] == 1
     assert db.execute("PRAGMA foreign_key_check").fetchall() == []
-    concurrent_db.close()
     db.close()
