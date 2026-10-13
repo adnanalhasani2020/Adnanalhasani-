@@ -32,18 +32,21 @@ CREATE TABLE purchase_lines (
         CHECK (received_quantity_units >= 0 AND received_quantity_units <= quantity_units),
     created_at TEXT NOT NULL,
     CHECK ((unit_cost_minor IS NULL AND currency_code IS NULL)
-        OR (unit_cost_minor IS NOT NULL AND currency_code IS NOT NULL))
+        OR (unit_cost_minor IS NOT NULL AND currency_code IS NOT NULL)),
+    UNIQUE (purchase_line_id, purchase_id)
 );
 
 CREATE TABLE purchase_receipts (
     receipt_id TEXT PRIMARY KEY,
     purchase_id TEXT NOT NULL REFERENCES purchases(purchase_id),
-    purchase_line_id TEXT NOT NULL REFERENCES purchase_lines(purchase_line_id),
+    purchase_line_id TEXT NOT NULL,
     quantity_units INTEGER NOT NULL CHECK (quantity_units > 0),
     received_at TEXT NOT NULL,
     actor_context_ref TEXT NOT NULL,
     idempotency_key TEXT NOT NULL UNIQUE,
-    request_fingerprint TEXT NOT NULL
+    request_fingerprint TEXT NOT NULL,
+    FOREIGN KEY (purchase_line_id, purchase_id)
+        REFERENCES purchase_lines(purchase_line_id, purchase_id)
 );
 
 CREATE INDEX idx_purchases_activity_state_time ON purchases(activity_id, state, created_at);
