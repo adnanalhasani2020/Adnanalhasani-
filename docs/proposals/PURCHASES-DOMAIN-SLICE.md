@@ -16,7 +16,7 @@ This change adds a canonical buyer-side Purchase aggregate and line/receipt valu
 - Optimistic version checks, transaction/savepoint boundaries, and domain-history entries are written atomically with changes.
 - Loading validates history version chains and receipt totals instead of silently repairing inconsistent persisted data.
 - Supplier invoices have a separate persistence model and application. Each invoice is tied to its purchase and supplier, uses integer minor-unit amounts, unique supplier invoice numbers and idempotency keys, and cannot invoice more units than have been received and remain uninvoiced.
-- Supplier invoice capture validates exact persisted authorization, currency compatibility where the purchase line has a known currency, arithmetic bounds, duplicate lines, and atomic history writes. Price differences are retained as facts for review rather than silently normalized.
+- Supplier invoice capture validates exact persisted authorization, currency compatibility where the purchase line has a known currency, arithmetic bounds, duplicate lines, and atomic history writes. Restoration revalidates each persisted line's quantity × unit price arithmetic as well as invoice totals and receipt bounds. A read-only price-variance report exposes signed unit and extended differences against a known purchase-line baseline; it never approves the variance or posts financial effects.
 - Focused domain and application tests were added for lifecycle, authorization failure, persistence restoration, partial/full receipts, over-receipt rollback, and ensuring receipt does not mutate inventory.
 
 ## Explicit boundaries and remaining work
