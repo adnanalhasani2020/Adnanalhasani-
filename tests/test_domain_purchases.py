@@ -34,7 +34,7 @@ def test_purchase_partial_receipt_state_requires_some_but_not_all_quantities():
             activity_id=purchase.activity_id,
             lines=(line,),
             state=PurchaseState.PARTIALLY_RECEIVED,
-            history=(PurchaseState.DRAFT, PurchaseState.ORDERED, PurchaseState.PARTIALLY_RECEIVED),
+            history=(PurchaseState.DRAFT, PurchaseState.SUBMITTED, PurchaseState.APPROVED, PurchaseState.ORDERED, PurchaseState.PARTIALLY_RECEIVED),
         )
 
     fully_received_line = PurchaseLine(
@@ -47,7 +47,7 @@ def test_purchase_partial_receipt_state_requires_some_but_not_all_quantities():
             activity_id=purchase.activity_id,
             lines=(fully_received_line,),
             state=PurchaseState.PARTIALLY_RECEIVED,
-            history=(PurchaseState.DRAFT, PurchaseState.ORDERED, PurchaseState.PARTIALLY_RECEIVED),
+            history=(PurchaseState.DRAFT, PurchaseState.SUBMITTED, PurchaseState.APPROVED, PurchaseState.ORDERED, PurchaseState.PARTIALLY_RECEIVED),
             receipts=(ReceiptEvent(line_id=fully_received_line.id, quantity_units=5),),
         )
 
