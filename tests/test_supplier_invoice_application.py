@@ -134,6 +134,21 @@ def test_supplier_invoice_requires_exact_authorization_and_supplier_number_is_un
 
 
 
+def test_supplier_invoice_restore_rejects_unsupported_persisted_state():
+    db, actor, activity, purchase_id, line = fixture()
+    invoice = record_invoice(db, actor, activity, purchase_id, line)
+    db.execute("PRAGMA ignore_check_constraints=ON")
+    db.execute(
+        "UPDATE supplier_invoices SET state='void' WHERE supplier_invoice_id=?",
+        (str(invoice.id),),
+    )
+    db.execute("PRAGMA ignore_check_constraints=OFF")
+
+    with pytest.raises(ValidationError, match="unsupported state"):
+        SupplierInvoiceApplication().get_supplier_invoice(db, invoice.id)
+    db.close()
+
+
 def test_supplier_invoice_cannot_be_voided_until_void_workflow_exists():
     db, actor, activity, purchase_id, line = fixture()
     invoice = record_invoice(db, actor, activity, purchase_id, line)
