@@ -129,3 +129,39 @@ def test_purchase_history_requires_one_receipt_event_per_receiving_version():
             receipts=(ReceiptEvent(line_id=received_line.id, quantity_units=1),),
             # The persisted history claims two receipt versions, but only one receipt exists.
         )
+
+
+
+def test_purchase_rejects_duplicate_receipt_event_identifiers():
+    from dataclasses import replace
+    from uuid import uuid4
+
+    from agent_core.domain_purchases import Purchase, PurchaseLine, PurchaseState, ReceiptEvent
+    from agent_core.shared import ValidationError
+
+    product_id = uuid4()
+    line_id = uuid4()
+    receipt_id = uuid4()
+    line = PurchaseLine(
+        product_id=product_id, quantity_units=2, unit_label="piece",
+        id=line_id, received_quantity_units=2,
+    )
+    receipt = ReceiptEvent(line_id=line_id, quantity_units=1, id=receipt_id)
+    duplicate = ReceiptEvent(line_id=line_id, quantity_units=1, id=receipt_id)
+
+    with pytest.raises(ValidationError, match="receipt event identifiers must be unique"):
+        Purchase(
+            supplier_ref="supplier:duplicate-receipt",
+            activity_id=uuid4(),
+            lines=(line,),
+            state=PurchaseState.RECEIVED,
+            history=(
+                PurchaseState.DRAFT,
+                PurchaseState.SUBMITTED,
+                PurchaseState.APPROVED,
+                PurchaseState.ORDERED,
+                PurchaseState.PARTIALLY_RECEIVED,
+                PurchaseState.RECEIVED,
+            ),
+            receipts=(receipt, duplicate),
+        )
