@@ -141,6 +141,12 @@ class SupplierInvoiceApplication:
         persisted_invoice_id = self._uuid(iid, "Persisted supplier invoice identifier")
         persisted_purchase_id = self._uuid(purchase_id, "Persisted supplier invoice Purchase identifier")
         persisted_actor_id = self._uuid(actor, "Persisted supplier invoice actor identifier")
+        if not isinstance(recorded_at, str):
+            raise ValidationError("Persisted supplier invoice timestamp is invalid")
+        try:
+            self._timestamp(recorded_at)
+        except ValidationError as exc:
+            raise ValidationError("Persisted supplier invoice timestamp is invalid") from exc
         if state != "recorded":
             raise ValidationError("Persisted supplier invoice has an unsupported state")
         if not isinstance(number, str) or not number.strip():
