@@ -131,3 +131,25 @@ def test_supplier_invoice_requires_exact_authorization_and_supplier_number_is_un
         record_invoice(db, actor, activity, purchase_id, line, key="invoice-two", number="SUP-INV-1", qty=1)
     assert db.execute("SELECT COUNT(*) FROM supplier_invoices").fetchone()[0] == 1
     db.close()
+
+
+
+def test_supplier_invoice_restore_rejects_persisted_overbilling():
+    db, actor, activity, purchase_id, line = fixture()
+    invoice = record_invoice(db, actor, activity, purchase_id, line)
+    db.execute(
+        "UPDATE supplier_invoice_lines SET quantity_units=3,line_total_minor=3750 "
+        "WHERE supplier_invoice_id=?", (str(invoice.id),),
+    )
+    db.execute(
+        "UPDATE supplier_invoices SET subtotal_minor=3750,total_minor=3900 "
+        "WHERE supplier_invoice_id=?", (str(invoice.id),),
+    )
+    db.execute(
+        "UPDATE domain_history SET change_payload_ref=? WHERE target_ref=? "
+        "AND change_type='supplier_invoice_recorded'",
+        (f"purchase:{purchase_id};total_minor:3900;currency:YER", str(invoice.id)),
+    )
+    with pytest.raises(ValidationError, match="exceed received Purchase quantity"):
+        SupplierInvoiceApplication().get_supplier_invoice(db, invoice.id)
+    db.close()
