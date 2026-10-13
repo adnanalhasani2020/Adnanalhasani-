@@ -164,6 +164,7 @@ class PurchaseApplication:
         if len(history_rows) != version or not history_rows:
             raise ValidationError("Purchase history does not match persisted version")
         history = []
+        receipt_history_ids = []
         for index, (actor, prior, current, payload) in enumerate(history_rows, start=1):
             if not isinstance(actor, str) or not actor.strip():
                 raise ValidationError("Purchase history actor is missing")
@@ -174,10 +175,21 @@ class PurchaseApplication:
             if not isinstance(payload, str) or not payload.startswith("state:"):
                 raise ValidationError("Purchase history state evidence is missing")
             try:
-                state_value = payload.removeprefix("state:").split(";", 1)[0]
-                history.append(PurchaseState(state_value))
+                parts = payload.split(";")
+                state_value = parts[0].removeprefix("state:")
+                historical_state = PurchaseState(state_value)
+                if len(parts) == 2 and parts[1].startswith("receipt:"):
+                    receipt_id = str(UUID(parts[1].removeprefix("receipt:")))
+                    receipt_history_ids.append(receipt_id)
+                elif len(parts) != 1:
+                    raise ValidationError("Purchase history contains malformed receipt evidence")
+                if (historical_state in {PurchaseState.PARTIALLY_RECEIVED, PurchaseState.RECEIVED}) != (len(parts) == 2):
+                    raise ValidationError("Purchase history receipt evidence does not match its state")
+                history.append(historical_state)
             except ValueError as exc:
-                raise ValidationError("Purchase history contains an unknown state") from exc
+                raise ValidationError("Purchase history contains an unknown or invalid identifier") from exc
+        if receipt_history_ids != [str(event.id) for event in receipts]:
+            raise ValidationError("Purchase history receipt identifiers disagree with persisted receipt events")
         if history[0] is not PurchaseState.DRAFT or history[-1].value != state:
             raise ValidationError("Purchase history does not match current state")
         purchase = Purchase(
