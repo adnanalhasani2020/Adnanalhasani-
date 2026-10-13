@@ -273,3 +273,21 @@ def test_purchase_restore_rejects_unsupported_persisted_state():
     connection.execute("PRAGMA ignore_check_constraints=OFF")
     with pytest.raises(ValidationError, match="unsupported persisted state"):
         app.get_purchase(connection, record.purchase.id)
+
+
+
+def test_purchase_restore_rejects_malformed_persisted_line_identifier():
+    connection, person, activity, product = database()
+    app = PurchaseApplication()
+    line = PurchaseLine(product_id=__import__("uuid").UUID(product), quantity_units=2, unit_label="piece")
+    record = app.create_purchase(
+        connection, "supplier:corrupt-line-id", activity, (line,), person,
+        grant(connection, person, "create_purchase", activity, activity),
+        idempotency_key="corrupt-line-id-create",
+    )
+    connection.execute(
+        "UPDATE purchase_lines SET purchase_line_id='not-a-uuid' WHERE purchase_id=?",
+        (str(record.purchase.id),),
+    )
+    with pytest.raises(ValidationError, match="Persisted Purchase line identifier must be a valid UUID"):
+        app.get_purchase(connection, record.purchase.id)
