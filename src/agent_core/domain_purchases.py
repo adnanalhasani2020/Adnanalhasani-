@@ -89,6 +89,8 @@ class Purchase:
         }
         for previous, current in zip(self.history, self.history[1:]):
             if current is previous:
+                if current is not PurchaseState.PARTIALLY_RECEIVED:
+                    raise ValidationError(f"duplicate Purchase history state: {current.value}")
                 continue
             if current not in allowed[previous]:
                 raise ValidationError(f"invalid Purchase transition from {previous.value} to {current.value}")
@@ -102,6 +104,12 @@ class Purchase:
             totals[event.line_id] += event.quantity_units
         if any(totals[line.id] != line.received_quantity_units for line in self.lines):
             raise ValidationError("receipt history disagrees with line received quantities")
+        receiving_history_events = sum(
+            state in {PurchaseState.PARTIALLY_RECEIVED, PurchaseState.RECEIVED}
+            for state in self.history[1:]
+        )
+        if receiving_history_events != len(self.receipts):
+            raise ValidationError("receipt history event count disagrees with Purchase history")
         received_quantities = [line.received_quantity_units for line in self.lines]
         if any(received_quantities) and self.state not in {PurchaseState.PARTIALLY_RECEIVED, PurchaseState.RECEIVED}:
             raise ValidationError("received quantities require a receiving state")
