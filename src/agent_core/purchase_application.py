@@ -208,7 +208,7 @@ class PurchaseApplication:
             "activity_id": str(activity),
             "actor": str(actor),
             "lines": [{
-                "id": str(line.id), "product_id": str(line.product_id),
+                "product_id": str(line.product_id),
                 "quantity_units": line.quantity_units, "unit_label": line.unit_label,
                 "unit_cost_minor": line.unit_cost_minor, "currency_code": line.currency_code,
             } for line in purchase.lines],
