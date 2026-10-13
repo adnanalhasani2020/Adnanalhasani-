@@ -3,6 +3,8 @@ from enum import Enum
 from uuid import UUID
 from agent_core.shared import ValidationError, new_id
 
+_MAX_SQLITE_INTEGER = 2**63 - 1
+
 class PurchaseState(str, Enum):
     DRAFT = "draft"
     SUBMITTED = "submitted"
@@ -25,13 +27,13 @@ class PurchaseLine:
     def __post_init__(self):
         if not isinstance(self.product_id, UUID) or not isinstance(self.id, UUID):
             raise ValidationError("Purchase line identifiers must be UUIDs")
-        if type(self.quantity_units) is not int or self.quantity_units <= 0:
-            raise ValidationError("quantity_units must be a positive integer")
+        if type(self.quantity_units) is not int or not 0 < self.quantity_units <= _MAX_SQLITE_INTEGER:
+            raise ValidationError("quantity_units must be a positive integer within SQLite integer limits")
         if not isinstance(self.unit_label, str) or not self.unit_label.strip():
             raise ValidationError("unit_label is required")
         object.__setattr__(self, "unit_label", self.unit_label.strip())
-        if self.unit_cost_minor is not None and (type(self.unit_cost_minor) is not int or self.unit_cost_minor < 0):
-            raise ValidationError("unit_cost_minor must be a non-negative integer")
+        if self.unit_cost_minor is not None and (type(self.unit_cost_minor) is not int or not 0 <= self.unit_cost_minor <= _MAX_SQLITE_INTEGER):
+            raise ValidationError("unit_cost_minor must be a non-negative integer within SQLite integer limits")
         if self.unit_cost_minor is None:
             if self.currency_code is not None:
                 raise ValidationError("currency_code requires unit_cost_minor")
@@ -49,8 +51,8 @@ class ReceiptEvent:
     def __post_init__(self):
         if not isinstance(self.line_id, UUID) or not isinstance(self.id, UUID):
             raise ValidationError("Receipt event identifiers must be UUIDs")
-        if type(self.quantity_units) is not int or self.quantity_units <= 0:
-            raise ValidationError("receipt quantity must be a positive integer")
+        if type(self.quantity_units) is not int or not 0 < self.quantity_units <= _MAX_SQLITE_INTEGER:
+            raise ValidationError("receipt quantity must be a positive integer within SQLite integer limits")
 
 @dataclass(frozen=True)
 class Purchase:

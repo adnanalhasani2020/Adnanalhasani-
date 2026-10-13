@@ -159,3 +159,16 @@ def test_purchase_rejects_duplicate_receipt_event_identifiers():
             ),
             receipts=(receipt, duplicate),
         )
+
+
+def test_purchase_values_must_fit_sqlite_integer_range():
+    too_large = 2**63
+    with pytest.raises(ValidationError, match="SQLite integer limits"):
+        PurchaseLine(product_id=uuid4(), quantity_units=too_large, unit_label="piece")
+    with pytest.raises(ValidationError, match="SQLite integer limits"):
+        PurchaseLine(
+            product_id=uuid4(), quantity_units=1, unit_label="piece",
+            unit_cost_minor=too_large, currency_code="YER",
+        )
+    with pytest.raises(ValidationError, match="SQLite integer limits"):
+        ReceiptEvent(line_id=uuid4(), quantity_units=too_large)
