@@ -72,7 +72,7 @@ def _financial_fixture(db):
     return account, obligation, payment, settlement
 
 
-def test_clean_install_has_exactly_49_domain_tables_plus_migration_bookkeeping():
+def test_clean_install_has_exactly_52_domain_tables_plus_migration_bookkeeping():
     db = connect_database()
     assert _tables(db) == EXPECTED_DOMAIN_TABLES | {"schema_migrations"}
     assert len(EXPECTED_DOMAIN_TABLES) == 52
