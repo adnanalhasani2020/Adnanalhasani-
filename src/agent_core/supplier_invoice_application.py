@@ -134,10 +134,42 @@ class SupplierInvoiceApplication:
         lines = tuple(SupplierInvoiceLineRecord(
             UUID(line_id), quantity, unit_price, line_total
         ) for line_id, quantity, unit_price, line_total in line_rows)
+        if not lines:
+            raise ValidationError("Persisted supplier invoice must contain at least one line")
         if sum(line.line_total_minor for line in lines) != subtotal:
             raise ValidationError("Supplier invoice line totals disagree with persisted subtotal")
         if total != subtotal + tax + freight:
             raise ValidationError("Supplier invoice total disagrees with persisted components")
+
+        purchase = connection.execute(
+            "SELECT supplier_ref FROM purchases WHERE purchase_id=?", (purchase_id,)
+        ).fetchone()
+        if purchase is None or purchase[0] != supplier:
+            raise ValidationError("Supplier invoice supplier does not match its Purchase")
+        history = connection.execute(
+            "SELECT actor_context_ref,current_version_ref,change_payload_ref FROM domain_history "
+            "WHERE owner_domain='procurement' AND target_ref=? AND change_type='supplier_invoice_recorded'",
+            (key,),
+        ).fetchall()
+        expected_payload = f"purchase:{purchase_id};total_minor:{total};currency:{currency}"
+        if len(history) != 1 or history[0] != (
+            actor, f"supplier-invoice:{key}:v{version}", expected_payload
+        ):
+            raise ValidationError("Supplier invoice history disagrees with persisted invoice facts")
+
+        if state == "recorded":
+            for line in lines:
+                totals = connection.execute(
+                    "SELECT COALESCE(SUM(sil.quantity_units),0),pl.received_quantity_units "
+                    "FROM supplier_invoice_lines sil "
+                    "JOIN supplier_invoices si ON si.supplier_invoice_id=sil.supplier_invoice_id "
+                    "JOIN purchase_lines pl ON pl.purchase_line_id=sil.purchase_line_id "
+                    "WHERE sil.purchase_line_id=? AND sil.purchase_id=? AND si.state='recorded' "
+                    "GROUP BY pl.received_quantity_units",
+                    (str(line.purchase_line_id), purchase_id),
+                ).fetchone()
+                if totals is None or totals[0] > totals[1]:
+                    raise ValidationError("Persisted supplier invoices exceed received Purchase quantity")
         return SupplierInvoiceRecord(
             UUID(iid), UUID(purchase_id), supplier, number, currency, subtotal, tax, freight,
             total, state, recorded_at, UUID(actor), version, lines,
