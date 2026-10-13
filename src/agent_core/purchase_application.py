@@ -1,5 +1,7 @@
 """Persisted procurement lifecycle; receipts do not change inventory or finance."""
 from contextlib import contextmanager
+import hashlib
+import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
@@ -65,6 +67,17 @@ class PurchaseApplication:
         if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
             raise ValidationError(f"{label} must be timezone-aware")
         return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+    @staticmethod
+    def _idempotency_key(value):
+        if not isinstance(value, str) or not value.strip() or len(value.strip()) > 200:
+            raise ValidationError("idempotency_key must be a non-empty string of at most 200 characters")
+        return value.strip()
+
+    @staticmethod
+    def _fingerprint(payload):
+        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
     @staticmethod
     def _grant_instant(value, label):
@@ -175,20 +188,42 @@ class PurchaseApplication:
 
     def create_purchase(
         self, connection, supplier_ref, activity_id, lines, actor_context_ref,
-        authorization_grant_id, *, purchase_id=None, now=None,
+        authorization_grant_id, *, idempotency_key, purchase_id=None, now=None,
     ):
         timestamp = self._timestamp(now, "Purchase timestamp")
         actor = self._uuid(actor_context_ref, "Actor identifier")
         activity = self._uuid(activity_id, "Activity identifier")
-        identifier = self._uuid(purchase_id, "Purchase identifier") if purchase_id is not None else uuid4()
+        requested_identifier = self._uuid(purchase_id, "Purchase identifier") if purchase_id is not None else None
+        identifier = requested_identifier or uuid4()
+        idempotency_key = self._idempotency_key(idempotency_key)
         if not isinstance(lines, (tuple, list)) or not lines or any(not isinstance(x, PurchaseLine) for x in lines):
             raise ValidationError("Purchase requires one or more PurchaseLine values")
         if any(line.received_quantity_units != 0 for line in lines):
             raise ValidationError("New Purchase lines cannot already contain received quantities")
         purchase = Purchase(supplier_ref=supplier_ref, activity_id=activity, lines=tuple(lines), id=identifier)
+        fingerprint = self._fingerprint({
+            "operation": "create_purchase",
+            "requested_purchase_id": str(requested_identifier) if requested_identifier else None,
+            "supplier_ref": purchase.supplier_ref,
+            "activity_id": str(activity),
+            "actor": str(actor),
+            "lines": [{
+                "id": str(line.id), "product_id": str(line.product_id),
+                "quantity_units": line.quantity_units, "unit_label": line.unit_label,
+                "unit_cost_minor": line.unit_cost_minor, "currency_code": line.currency_code,
+            } for line in purchase.lines],
+        })
         with self._atomic(connection):
             self._authorize(connection, authorization_grant_id, actor, "create_purchase",
                             activity, activity, timestamp)
+            existing = connection.execute(
+                "SELECT purchase_id, create_request_fingerprint FROM purchases WHERE create_idempotency_key=?",
+                (idempotency_key,),
+            ).fetchone()
+            if existing is not None:
+                if existing[1] != fingerprint:
+                    raise ValidationError("idempotency_key was already used with a different create request")
+                return self._load(connection, existing[0])
             activity_row = connection.execute("SELECT state FROM activities WHERE activity_id=?",
                                               (str(activity),)).fetchone()
             if activity_row is None or activity_row[0] != "active":
@@ -199,10 +234,11 @@ class PurchaseApplication:
                 if product is None or product[0] != "active":
                     raise ValidationError("Purchase lines require existing active Products")
             connection.execute(
-                "INSERT INTO purchases(purchase_id,supplier_ref,activity_id,state,created_at,updated_at,created_by_ref,version_no) "
-                "VALUES(?,?,?,?,?,?,?,1)",
+                "INSERT INTO purchases(purchase_id,supplier_ref,activity_id,state,created_at,updated_at,created_by_ref,"
+                "create_idempotency_key,create_request_fingerprint,version_no) "
+                "VALUES(?,?,?,?,?,?,?,?,?,1)",
                 (str(identifier), purchase.supplier_ref, str(activity), purchase.state.value,
-                 timestamp, timestamp, str(actor)),
+                 timestamp, timestamp, str(actor), idempotency_key, fingerprint),
             )
             for line in purchase.lines:
                 connection.execute(
@@ -260,15 +296,28 @@ class PurchaseApplication:
         )
 
     def receive_purchase(self, connection, purchase_id, line_id, quantity_units,
-                         actor_context_ref, authorization_grant_id, *, now=None):
+                         actor_context_ref, authorization_grant_id, *, idempotency_key, now=None):
         timestamp = self._timestamp(now, "Purchase receipt timestamp")
         actor = self._uuid(actor_context_ref, "Actor identifier")
         key = self._uuid(purchase_id, "Purchase identifier")
         line_key = self._uuid(line_id, "Purchase line identifier")
+        idempotency_key = self._idempotency_key(idempotency_key)
+        fingerprint = self._fingerprint({
+            "operation": "receive_purchase", "purchase_id": str(key),
+            "line_id": str(line_key), "quantity_units": quantity_units, "actor": str(actor),
+        })
         with self._atomic(connection):
             record = self._load(connection, key)
             self._authorize(connection, authorization_grant_id, actor, "receive_purchase",
                             key, record.purchase.activity_id, timestamp)
+            existing = connection.execute(
+                "SELECT purchase_id, purchase_line_id, quantity_units, actor_context_ref, request_fingerprint "
+                "FROM purchase_receipts WHERE idempotency_key=?", (idempotency_key,),
+            ).fetchone()
+            if existing is not None:
+                if existing[4] != fingerprint:
+                    raise ValidationError("idempotency_key was already used with a different receipt request")
+                return self._load(connection, existing[0])
             updated = record.purchase.receive(line_key, quantity_units)
             next_version = record.version_no + 1
             cursor = connection.execute(
@@ -284,9 +333,10 @@ class PurchaseApplication:
             )
             event = updated.receipts[-1]
             connection.execute(
-                "INSERT INTO purchase_receipts(receipt_id,purchase_id,purchase_line_id,quantity_units,received_at,actor_context_ref) "
-                "VALUES(?,?,?,?,?,?)",
-                (str(event.id), str(key), str(line_key), quantity_units, timestamp, str(actor)),
+                "INSERT INTO purchase_receipts(receipt_id,purchase_id,purchase_line_id,quantity_units,received_at,actor_context_ref,"
+                "idempotency_key,request_fingerprint) VALUES(?,?,?,?,?,?,?,?)",
+                (str(event.id), str(key), str(line_key), quantity_units, timestamp, str(actor),
+                 idempotency_key, fingerprint),
             )
             connection.execute(
                 "INSERT INTO domain_history(domain_history_id,owner_domain,target_ref,change_type,historical_at,"
