@@ -102,8 +102,14 @@ class Purchase:
             totals[event.line_id] += event.quantity_units
         if any(totals[line.id] != line.received_quantity_units for line in self.lines):
             raise ValidationError("receipt history disagrees with line received quantities")
-        if any(line.received_quantity_units for line in self.lines) and self.state not in {PurchaseState.PARTIALLY_RECEIVED, PurchaseState.RECEIVED}:
+        received_quantities = [line.received_quantity_units for line in self.lines]
+        if any(received_quantities) and self.state not in {PurchaseState.PARTIALLY_RECEIVED, PurchaseState.RECEIVED}:
             raise ValidationError("received quantities require a receiving state")
+        if self.state is PurchaseState.PARTIALLY_RECEIVED:
+            if not any(received_quantities):
+                raise ValidationError("partially received Purchase must have received quantities")
+            if all(line.received_quantity_units == line.quantity_units for line in self.lines):
+                raise ValidationError("fully received quantities require the received state")
         if self.state is PurchaseState.RECEIVED and any(line.received_quantity_units != line.quantity_units for line in self.lines):
             raise ValidationError("received Purchase must have all quantities received")
 
