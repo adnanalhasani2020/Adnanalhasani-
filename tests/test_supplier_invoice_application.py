@@ -134,6 +134,23 @@ def test_supplier_invoice_requires_exact_authorization_and_supplier_number_is_un
 
 
 
+def test_supplier_invoice_restore_rejects_line_price_arithmetic_corruption():
+    db, actor, activity, purchase_id, line = fixture()
+    invoice = record_invoice(db, actor, activity, purchase_id, line)
+
+    # Simulate damaged persisted data even though normal SQLite writes enforce CHECKs.
+    db.execute("PRAGMA ignore_check_constraints=ON")
+    db.execute(
+        "UPDATE supplier_invoice_lines SET unit_price_minor=9999 WHERE supplier_invoice_id=?",
+        (str(invoice.id),),
+    )
+    db.execute("PRAGMA ignore_check_constraints=OFF")
+
+    with pytest.raises(ValidationError, match="line total disagrees with quantity and unit price"):
+        SupplierInvoiceApplication().get_supplier_invoice(db, invoice.id)
+    db.close()
+
+
 def test_supplier_invoice_restore_rejects_persisted_overbilling():
     db, actor, activity, purchase_id, line = fixture()
     invoice = record_invoice(db, actor, activity, purchase_id, line)
