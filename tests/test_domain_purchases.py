@@ -26,6 +26,31 @@ def test_purchase_lifecycle_and_partial_receipt():
     assert [event.quantity_units for event in purchase.receipts] == [2, 3]
 
 
+def test_purchase_partial_receipt_state_requires_some_but_not_all_quantities():
+    purchase, line = make_purchase(quantity=5)
+    with pytest.raises(ValidationError):
+        Purchase(
+            supplier_ref=purchase.supplier_ref,
+            activity_id=purchase.activity_id,
+            lines=(line,),
+            state=PurchaseState.PARTIALLY_RECEIVED,
+            history=(PurchaseState.DRAFT, PurchaseState.ORDERED, PurchaseState.PARTIALLY_RECEIVED),
+        )
+
+    fully_received_line = PurchaseLine(
+        product_id=line.product_id, quantity_units=5, unit_label="box",
+        received_quantity_units=5,
+    )
+    with pytest.raises(ValidationError):
+        Purchase(
+            supplier_ref=purchase.supplier_ref,
+            activity_id=purchase.activity_id,
+            lines=(fully_received_line,),
+            state=PurchaseState.PARTIALLY_RECEIVED,
+            history=(PurchaseState.DRAFT, PurchaseState.ORDERED, PurchaseState.PARTIALLY_RECEIVED),
+        )
+
+
 def test_purchase_rejects_receipt_before_ordering():
     purchase, line = make_purchase()
     with pytest.raises(ValidationError):
