@@ -29,6 +29,17 @@ class SupplierInvoiceLineRecord:
 
 
 @dataclass(frozen=True)
+class SupplierInvoicePriceVariance:
+    purchase_line_id: UUID
+    quantity_units: int
+    expected_unit_price_minor: int
+    invoiced_unit_price_minor: int
+    unit_variance_minor: int
+    total_variance_minor: int
+    currency_code: str
+
+
+@dataclass(frozen=True)
 class SupplierInvoiceRecord:
     id: UUID
     purchase_id: UUID
@@ -185,6 +196,42 @@ class SupplierInvoiceApplication:
             UUID(iid), UUID(purchase_id), supplier, number, currency, subtotal, tax, freight,
             total, state, recorded_at, UUID(actor), version, lines,
         )
+
+    def get_supplier_invoice_price_variances(self, connection, supplier_invoice_id):
+        """Return explicit price differences where the purchase line has a comparable baseline.
+
+        Positive variance means the invoice price is higher than the recorded purchase price;
+        negative means lower. Lines without a recorded purchase price are omitted because no
+        reliable baseline exists. This is a read-only report and never approves or posts finance.
+        """
+        invoice = self._load(connection, supplier_invoice_id)
+        variances = []
+        for line in invoice.lines:
+            row = connection.execute(
+                "SELECT unit_cost_minor,currency_code FROM purchase_lines "
+                "WHERE purchase_line_id=? AND purchase_id=?",
+                (str(line.purchase_line_id), str(invoice.purchase_id)),
+            ).fetchone()
+            if row is None:
+                raise ValidationError("Supplier invoice line references a missing Purchase line")
+            expected_price, expected_currency = row
+            if expected_price is None:
+                continue
+            if expected_currency != invoice.currency_code:
+                raise ValidationError("Cannot compare supplier invoice price across currencies")
+            unit_delta = line.unit_price_minor - expected_price
+            if unit_delta and line.quantity_units > _MAX_INTEGER // abs(unit_delta):
+                raise ValidationError("Supplier invoice price variance exceeds SQLite integer limits")
+            variances.append(SupplierInvoicePriceVariance(
+                purchase_line_id=line.purchase_line_id,
+                quantity_units=line.quantity_units,
+                expected_unit_price_minor=expected_price,
+                invoiced_unit_price_minor=line.unit_price_minor,
+                unit_variance_minor=unit_delta,
+                total_variance_minor=unit_delta * line.quantity_units,
+                currency_code=invoice.currency_code,
+            ))
+        return tuple(variances)
 
     def get_supplier_invoice(self, connection, supplier_invoice_id):
         return self._load(connection, supplier_invoice_id)
