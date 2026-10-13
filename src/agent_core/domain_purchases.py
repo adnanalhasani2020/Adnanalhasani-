@@ -88,6 +88,8 @@ class Purchase:
             PurchaseState.RECEIVED: set(), PurchaseState.CANCELLED: set(),
         }
         for previous, current in zip(self.history, self.history[1:]):
+            if current is previous:
+                continue
             if current not in allowed[previous]:
                 raise ValidationError(f"invalid Purchase transition from {previous.value} to {current.value}")
         if any(not isinstance(event, ReceiptEvent) for event in self.receipts):
@@ -144,5 +146,6 @@ class Purchase:
         event = ReceiptEvent(line_id=line_id, quantity_units=quantity_units)
         complete = all(line.received_quantity_units == line.quantity_units for line in updated)
         target = PurchaseState.RECEIVED if complete else PurchaseState.PARTIALLY_RECEIVED
-        history = self.history if target is self.state else self.history + (target,)
+        # Each receipt is a versioned domain change, even when the state remains partial.
+        history = self.history + (target,)
         return replace(self, lines=tuple(updated), state=target, history=history, receipts=self.receipts + (event,))
