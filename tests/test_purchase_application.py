@@ -83,6 +83,33 @@ def test_persisted_purchase_lifecycle_and_receipts_are_atomic():
     assert connection.execute("SELECT COUNT(*) FROM inventory_positions").fetchone()[0] == 0
 
 
+def test_receipt_foreign_key_rejects_line_from_another_purchase():
+    connection, person, activity, product = database()
+    app = PurchaseApplication()
+    create_grant = grant(connection, person, "create_purchase", activity, activity)
+
+    first_line = PurchaseLine(product_id=__import__("uuid").UUID(product), quantity_units=2, unit_label="piece")
+    first = app.create_purchase(
+        connection, "supplier:1", activity, (first_line,), person, create_grant,
+        idempotency_key="owner-check-1",
+    )
+    second_line = PurchaseLine(product_id=__import__("uuid").UUID(product), quantity_units=2, unit_label="piece")
+    second = app.create_purchase(
+        connection, "supplier:2", activity, (second_line,), person, create_grant,
+        idempotency_key="owner-check-2",
+    )
+
+    with pytest.raises(sqlite3.IntegrityError):
+        connection.execute(
+            "INSERT INTO purchase_receipts(receipt_id,purchase_id,purchase_line_id,quantity_units,"
+            "received_at,actor_context_ref,idempotency_key,request_fingerprint) "
+            "VALUES(?,?,?,?,?,?,?,?)",
+            (str(uuid4()), str(first.purchase.id), str(second_line.id), 1,
+             "2026-10-13T12:00:00Z", person, "bad-owner-receipt", "fingerprint"),
+        )
+    assert connection.execute("SELECT COUNT(*) FROM purchase_receipts").fetchone()[0] == 0
+
+
 def test_purchase_rejects_missing_or_wrong_authorization_without_partial_writes():
     connection, person, activity, product = database()
     app = PurchaseApplication()
