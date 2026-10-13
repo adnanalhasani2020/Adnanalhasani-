@@ -257,3 +257,19 @@ def test_purchase_history_rejects_receipt_id_mismatch():
     )
     with pytest.raises(ValidationError, match="receipt identifiers disagree"):
         app.get_purchase(connection, purchase_id)
+
+
+def test_purchase_restore_rejects_unsupported_persisted_state():
+    connection, person, activity, product = database()
+    app = PurchaseApplication()
+    line = PurchaseLine(product_id=__import__("uuid").UUID(product), quantity_units=2, unit_label="piece")
+    record = app.create_purchase(
+        connection, "supplier:corrupt-state", activity, (line,), person,
+        grant(connection, person, "create_purchase", activity, activity),
+        idempotency_key="corrupt-state-create",
+    )
+    connection.execute("PRAGMA ignore_check_constraints=ON")
+    connection.execute("UPDATE purchases SET state='void' WHERE purchase_id=?", (str(record.purchase.id),))
+    connection.execute("PRAGMA ignore_check_constraints=OFF")
+    with pytest.raises(ValidationError, match="unsupported persisted state"):
+        app.get_purchase(connection, record.purchase.id)

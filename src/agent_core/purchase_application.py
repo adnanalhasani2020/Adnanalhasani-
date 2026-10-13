@@ -144,6 +144,12 @@ class PurchaseApplication:
             "currency_code, received_quantity_units FROM purchase_lines "
             "WHERE purchase_id=? ORDER BY rowid", (key,),
         ).fetchall()
+        try:
+            persisted_state = PurchaseState(state)
+        except ValueError as exc:
+            raise ValidationError("Purchase has an unsupported persisted state") from exc
+        if type(version) is not int or version <= 0:
+            raise ValidationError("Purchase has an invalid persisted version")
         lines = tuple(PurchaseLine(
             id=UUID(line_id), product_id=UUID(product_id), quantity_units=quantity,
             unit_label=unit_label, unit_cost_minor=cost, currency_code=currency,
@@ -194,7 +200,7 @@ class PurchaseApplication:
             raise ValidationError("Purchase history does not match current state")
         purchase = Purchase(
             id=UUID(persisted_id), supplier_ref=supplier_ref, activity_id=UUID(activity_id),
-            lines=lines, state=PurchaseState(state), history=tuple(history), receipts=receipts,
+            lines=lines, state=persisted_state, history=tuple(history), receipts=receipts,
         )
         return PurchaseRecord(purchase, version)
 
