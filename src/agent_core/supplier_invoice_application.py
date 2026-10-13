@@ -155,7 +155,7 @@ class SupplierInvoiceApplication:
             "FROM supplier_invoice_lines WHERE supplier_invoice_id=? ORDER BY rowid", (key,),
         ).fetchall()
         lines = tuple(SupplierInvoiceLineRecord(
-            UUID(line_id), quantity, unit_price, line_total
+            self._uuid(line_id, "Persisted supplier invoice Purchase line identifier"), quantity, unit_price, line_total
         ) for line_id, quantity, unit_price, line_total in line_rows)
         if not lines:
             raise ValidationError("Persisted supplier invoice must contain at least one line")
@@ -205,8 +205,10 @@ class SupplierInvoiceApplication:
                 if totals is None or totals[0] > totals[1]:
                     raise ValidationError("Persisted supplier invoices exceed received Purchase quantity")
         return SupplierInvoiceRecord(
-            UUID(iid), UUID(purchase_id), supplier, number, currency, subtotal, tax, freight,
-            total, state, recorded_at, UUID(actor), version, lines,
+            self._uuid(iid, "Persisted supplier invoice identifier"),
+            self._uuid(purchase_id, "Persisted supplier invoice Purchase identifier"),
+            supplier, number, currency, subtotal, tax, freight, total, state, recorded_at,
+            self._uuid(actor, "Persisted supplier invoice actor identifier"), version, lines,
         )
 
     def get_supplier_invoice_price_variances(self, connection, supplier_invoice_id):
