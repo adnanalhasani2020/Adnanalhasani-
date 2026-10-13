@@ -1,25 +1,29 @@
 # Procurement domain slice — implementation boundary
 
-**Status:** Domain-only first slice; not yet a persisted or production-ready purchases feature.
+**Status:** Initial persisted slice implemented on an isolated branch; not yet merged or production-ready.
 
-This change adds a canonical buyer-side Purchase aggregate and line/receipt value objects. It intentionally does not reuse Sale, Offering, Invoice, Payment, Obligation, Settlement, InventoryPosition, or Ledger records.
+This change adds a canonical buyer-side Purchase aggregate and line/receipt value objects, a dedicated persistence application, and additive SQL tables. It intentionally does not reuse Sale, Offering, Invoice, Payment, Obligation, Settlement, InventoryPosition, or Ledger records.
 
-## Implemented in this slice
+## Implemented
 
-- Draft → submitted → approved → ordered → partially received → received lifecycle.
-- Cancellation only before ordering; no cancellation after order placement.
-- Positive integer ordered/received quantities and explicit per-line unit labels.
-- Optional unit cost represented as integer minor units with an explicit three-letter uppercase currency code when cost is present.
-- Partial receipts and over-receipt protection; immutable return values and receipt events.
-- Supplier reference remains an opaque non-empty reference because the repository's canonical supplier identity policy is not yet established.
+- Lifecycle: draft → submitted → approved → ordered → partially received → received.
+- Cancellation is allowed only before ordering.
+- Purchase lines require an existing active Product when persisted; purchases require an existing active Activity.
+- Ordered and received quantities are positive integers with explicit per-line unit labels.
+- Optional unit cost is stored as integer minor units and requires a three-letter uppercase currency code.
+- Partial receipts and over-receipt protection; receipt facts are persisted separately from order lines.
+- Exact persisted AuthorizationGrant checks for create, submit, approve, order, cancel, and receive operations, including actor, action, scope, Activity context, effective period, and active delegation checks.
+- Optimistic version checks, transaction/savepoint boundaries, and domain-history entries are written atomically with changes.
+- Loading validates history version chains and receipt totals instead of silently repairing inconsistent persisted data.
+- Focused domain and application tests were added for lifecycle, authorization failure, persistence restoration, partial/full receipts, over-receipt rollback, and ensuring receipt does not mutate inventory.
 
-## Deliberately not implemented
+## Explicit boundaries and remaining work
 
-- Persistence and SQL migration.
-- Authorization/grant checks, approval thresholds, actor attribution, and domain-history writes.
-- Inventory quantity updates or receipt-to-inventory integration.
-- Invoice, obligation, payment, settlement, financial transaction, or ledger effects.
-- Idempotency across persisted requests, concurrency/version handling, UI/API endpoints.
-- Tax, discounts, freight, multiple units/conversions, and supplier foreign-key semantics.
+- Supplier identity is an opaque non-empty reference until a canonical supplier identity policy is approved. It is not silently treated as a Person or Organization foreign key.
+- Receipt records evidence only. Inventory Position, quantity, reservation, and availability are not changed.
+- No invoice, obligation, payment, settlement, financial transaction, or ledger effects are produced.
+- No idempotency key is currently persisted for retried create/receive requests. A retry-safe request contract and uniqueness policy remain required before claiming duplicate request protection.
+- No tax, discounts, freight, multiple units/conversions, approval thresholds, UI/API endpoints, or external supplier integrations are included.
+- CI has not yet been confirmed for the current PR head; do not merge until focused and full suites pass.
 
-Those omissions are explicit boundaries, not implied capabilities. The next safe step is to add persistence and authorization only after matching the existing application/history/grant contracts and then run the focused plus full CI suites.
+The implementation is a meaningful backend slice, not a claim that the complete procurement workflow is finished.
