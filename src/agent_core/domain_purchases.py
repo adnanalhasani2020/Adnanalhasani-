@@ -96,6 +96,9 @@ class Purchase:
                 raise ValidationError(f"invalid Purchase transition from {previous.value} to {current.value}")
         if any(not isinstance(event, ReceiptEvent) for event in self.receipts):
             raise ValidationError("receipts must contain ReceiptEvent values")
+        receipt_ids = [event.id for event in self.receipts]
+        if len(receipt_ids) != len(set(receipt_ids)):
+            raise ValidationError("receipt event identifiers must be unique")
         line_ids = set(ids)
         if any(event.line_id not in line_ids for event in self.receipts):
             raise ValidationError("receipt event references an unknown line")
