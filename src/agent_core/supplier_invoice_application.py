@@ -136,6 +136,17 @@ class SupplierInvoiceApplication:
         ) for line_id, quantity, unit_price, line_total in line_rows)
         if not lines:
             raise ValidationError("Persisted supplier invoice must contain at least one line")
+        for line in lines:
+            if (type(line.quantity_units) is not int or line.quantity_units <= 0
+                    or type(line.unit_price_minor) is not int
+                    or not 0 <= line.unit_price_minor <= _MAX_INTEGER
+                    or type(line.line_total_minor) is not int
+                    or not 0 <= line.line_total_minor <= _MAX_INTEGER):
+                raise ValidationError("Persisted supplier invoice line contains invalid numeric facts")
+            if (line.quantity_units > _MAX_INTEGER
+                    or (line.unit_price_minor and line.quantity_units > _MAX_INTEGER // line.unit_price_minor)
+                    or line.line_total_minor != line.quantity_units * line.unit_price_minor):
+                raise ValidationError("Supplier invoice line total disagrees with quantity and unit price")
         if sum(line.line_total_minor for line in lines) != subtotal:
             raise ValidationError("Supplier invoice line totals disagree with persisted subtotal")
         if total != subtotal + tax + freight:
