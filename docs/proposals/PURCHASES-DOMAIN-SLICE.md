@@ -22,8 +22,8 @@ This change adds a canonical buyer-side Purchase aggregate and line/receipt valu
 - Supplier identity is an opaque non-empty reference until a canonical supplier identity policy is approved. It is not silently treated as a Person or Organization foreign key.
 - Receipt records evidence only. Inventory Position, quantity, reservation, and availability are not changed.
 - No invoice, obligation, payment, settlement, financial transaction, or ledger effects are produced.
-- No idempotency key is currently persisted for retried create/receive requests. A retry-safe request contract and uniqueness policy remain required before claiming duplicate request protection.
+- Purchase creation and receipt writes require idempotency keys. A repeated key with the same canonical request returns the existing purchase state without repeating the write; reusing a key with a different payload is rejected. Keys are unique within their operation table.
 - No tax, discounts, freight, multiple units/conversions, approval thresholds, UI/API endpoints, or external supplier integrations are included.
-- CI has not yet been confirmed for the current PR head; do not merge until focused and full suites pass.
+- CI must pass on the latest PR head before merge; each subsequent code change invalidates results from an earlier head.
 
 The implementation is a meaningful backend slice, not a claim that the complete procurement workflow is finished.
