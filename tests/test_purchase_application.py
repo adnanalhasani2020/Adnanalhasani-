@@ -154,6 +154,31 @@ def test_create_and_receipt_retries_do_not_duplicate_records():
     assert replay.purchase.lines[0].received_quantity_units == 1
 
 
+def test_create_retry_ignores_regenerated_internal_line_ids():
+    connection, person, activity, product = database()
+    app = PurchaseApplication()
+    create_grant = grant(connection, person, "create_purchase", activity, activity)
+    first_line = PurchaseLine(product_id=__import__("uuid").UUID(product), quantity_units=4, unit_label="box")
+    first = app.create_purchase(
+        connection, "supplier:1", activity, (first_line,), person, create_grant,
+        idempotency_key="create-recreated-payload",
+    )
+
+    # A client retry may reconstruct the same business payload and receive new
+    # in-memory UUIDs for line objects. Idempotency must return the original
+    # persisted purchase rather than reject it or create duplicate lines.
+    retried_line = PurchaseLine(product_id=__import__("uuid").UUID(product), quantity_units=4, unit_label="box")
+    assert retried_line.id != first_line.id
+    replay = app.create_purchase(
+        connection, "supplier:1", activity, (retried_line,), person, create_grant,
+        idempotency_key="create-recreated-payload",
+    )
+    assert replay.purchase.id == first.purchase.id
+    assert replay.purchase.lines[0].id == first_line.id
+    assert connection.execute("SELECT COUNT(*) FROM purchases").fetchone()[0] == 1
+    assert connection.execute("SELECT COUNT(*) FROM purchase_lines").fetchone()[0] == 1
+
+
 def test_idempotency_key_reuse_with_different_payload_is_rejected():
     connection, person, activity, product = database()
     app = PurchaseApplication()
