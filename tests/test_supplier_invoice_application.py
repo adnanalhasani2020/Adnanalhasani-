@@ -134,6 +134,41 @@ def test_supplier_invoice_requires_exact_authorization_and_supplier_number_is_un
 
 
 
+def test_supplier_invoice_price_variance_is_explicit_read_only_and_signed():
+    db, actor, activity, purchase_id, line = fixture()
+    invoice = record_invoice(db, actor, activity, purchase_id, line, qty=2)
+    app = SupplierInvoiceApplication()
+
+    variances = app.get_supplier_invoice_price_variances(db, invoice.id)
+    assert len(variances) == 1
+    assert variances[0].expected_unit_price_minor == 1000
+    assert variances[0].invoiced_unit_price_minor == 1250
+    assert variances[0].unit_variance_minor == 250
+    assert variances[0].total_variance_minor == 500
+    assert variances[0].currency_code == "YER"
+    assert db.execute("SELECT COUNT(*) FROM obligations").fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM financial_transactions").fetchone()[0] == 0
+
+    # A lower supplier price must be reported as a negative variance, not normalized away.
+    db.execute(
+        "UPDATE supplier_invoice_lines SET unit_price_minor=750,line_total_minor=1500 "
+        "WHERE supplier_invoice_id=?", (str(invoice.id),),
+    )
+    db.execute(
+        "UPDATE supplier_invoices SET subtotal_minor=1500,total_minor=1650 "
+        "WHERE supplier_invoice_id=?", (str(invoice.id),),
+    )
+    db.execute(
+        "UPDATE domain_history SET change_payload_ref=? WHERE target_ref=? "
+        "AND change_type='supplier_invoice_recorded'",
+        (f"purchase:{purchase_id};total_minor:1650;currency:YER", str(invoice.id)),
+    )
+    lower = app.get_supplier_invoice_price_variances(db, invoice.id)
+    assert lower[0].unit_variance_minor == -250
+    assert lower[0].total_variance_minor == -500
+    db.close()
+
+
 def test_supplier_invoice_restore_rejects_line_price_arithmetic_corruption():
     db, actor, activity, purchase_id, line = fixture()
     invoice = record_invoice(db, actor, activity, purchase_id, line)
