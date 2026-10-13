@@ -12,7 +12,7 @@ CREATE TABLE supplier_invoices (
     tax_minor INTEGER NOT NULL DEFAULT 0 CHECK (tax_minor >= 0),
     freight_minor INTEGER NOT NULL DEFAULT 0 CHECK (freight_minor >= 0),
     total_minor INTEGER NOT NULL CHECK (total_minor >= 0 AND total_minor = subtotal_minor + tax_minor + freight_minor),
-    state TEXT NOT NULL CHECK (state IN ('recorded','void')),
+    state TEXT NOT NULL CHECK (state = 'recorded'),
     recorded_at TEXT NOT NULL,
     recorded_by_ref TEXT NOT NULL,
     idempotency_key TEXT NOT NULL UNIQUE,
