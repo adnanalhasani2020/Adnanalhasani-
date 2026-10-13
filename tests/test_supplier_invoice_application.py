@@ -245,3 +245,16 @@ def test_supplier_invoice_restore_rejects_malformed_persisted_actor_identifier()
     with pytest.raises(ValidationError, match="Persisted supplier invoice actor identifier must be a valid UUID"):
         SupplierInvoiceApplication().get_supplier_invoice(db, invoice.id)
     db.close()
+
+
+
+def test_supplier_invoice_restore_rejects_malformed_persisted_timestamp():
+    db, actor, activity, purchase_id, line = fixture()
+    invoice = record_invoice(db, actor, activity, purchase_id, line)
+    db.execute(
+        "UPDATE supplier_invoices SET recorded_at='not-a-timestamp' WHERE supplier_invoice_id=?",
+        (str(invoice.id),),
+    )
+    with pytest.raises(ValidationError, match="Persisted supplier invoice timestamp is invalid"):
+        SupplierInvoiceApplication().get_supplier_invoice(db, invoice.id)
+    db.close()
