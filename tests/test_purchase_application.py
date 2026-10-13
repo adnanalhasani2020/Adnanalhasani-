@@ -53,6 +53,7 @@ def test_persisted_purchase_lifecycle_and_receipts_are_atomic():
     line = PurchaseLine(product_id=__import__("uuid").UUID(product), quantity_units=5, unit_label="box")
     record = app.create_purchase(
         connection, "organization:supplier-1", activity, (line,), person, create_grant,
+        idempotency_key="create-1",
     )
     purchase_id = str(record.purchase.id)
 
@@ -65,12 +66,12 @@ def test_persisted_purchase_lifecycle_and_receipts_are_atomic():
         record = app.transition_purchase(connection, purchase_id, person, auth, action)
 
     auth = grant(connection, person, "receive_purchase", purchase_id, activity)
-    record = app.receive_purchase(connection, purchase_id, str(line.id), 2, person, auth)
+    record = app.receive_purchase(connection, purchase_id, str(line.id), 2, person, auth, idempotency_key="receipt-1")
     assert record.purchase.state is PurchaseState.PARTIALLY_RECEIVED
     assert record.version_no == 5
 
     auth = grant(connection, person, "receive_purchase", purchase_id, activity)
-    record = app.receive_purchase(connection, purchase_id, str(line.id), 3, person, auth)
+    record = app.receive_purchase(connection, purchase_id, str(line.id), 3, person, auth, idempotency_key="receipt-2")
     assert record.purchase.state is PurchaseState.RECEIVED
     assert record.version_no == 6
 
@@ -87,7 +88,7 @@ def test_purchase_rejects_missing_or_wrong_authorization_without_partial_writes(
     app = PurchaseApplication()
     line = PurchaseLine(product_id=__import__("uuid").UUID(product), quantity_units=2, unit_label="piece")
     with pytest.raises(ValidationError):
-        app.create_purchase(connection, "supplier:1", activity, (line,), person, str(uuid4()))
+        app.create_purchase(connection, "supplier:1", activity, (line,), person, str(uuid4()), idempotency_key="create-failed")
     assert connection.execute("SELECT COUNT(*) FROM purchases").fetchone()[0] == 0
     assert connection.execute("SELECT COUNT(*) FROM purchase_lines").fetchone()[0] == 0
 
@@ -98,7 +99,7 @@ def test_purchase_receipt_overage_rolls_back_every_write():
     line = PurchaseLine(product_id=__import__("uuid").UUID(product), quantity_units=2, unit_label="piece")
     record = app.create_purchase(
         connection, "supplier:1", activity, (line,), person,
-        grant(connection, person, "create_purchase", activity, activity),
+        grant(connection, person, "create_purchase", activity, activity), idempotency_key="create-3",
     )
     purchase_id = str(record.purchase.id)
     for action, action_code in [("submit", "submit_purchase"), ("approve", "approve_purchase"), ("order", "order_purchase")]:
@@ -109,8 +110,63 @@ def test_purchase_receipt_overage_rolls_back_every_write():
     with pytest.raises(ValidationError):
         app.receive_purchase(
             connection, purchase_id, str(line.id), 3, person,
-            grant(connection, person, "receive_purchase", purchase_id, activity),
+            grant(connection, person, "receive_purchase", purchase_id, activity), idempotency_key="over-receipt",
         )
     after = connection.execute("SELECT version_no FROM purchases WHERE purchase_id=?", (purchase_id,)).fetchone()[0]
     assert after == before
     assert connection.execute("SELECT COUNT(*) FROM purchase_receipts WHERE purchase_id=?", (purchase_id,)).fetchone()[0] == 0
+
+
+
+def test_create_and_receipt_retries_do_not_duplicate_records():
+    connection, person, activity, product = database()
+    app = PurchaseApplication()
+    line = PurchaseLine(product_id=__import__("uuid").UUID(product), quantity_units=3, unit_label="piece")
+    create_grant = grant(connection, person, "create_purchase", activity, activity)
+    first = app.create_purchase(
+        connection, "supplier:1", activity, (line,), person, create_grant,
+        idempotency_key="create-retry",
+    )
+    second = app.create_purchase(
+        connection, "supplier:1", activity, (line,), person, create_grant,
+        idempotency_key="create-retry",
+    )
+    assert second.purchase.id == first.purchase.id
+    assert connection.execute("SELECT COUNT(*) FROM purchases").fetchone()[0] == 1
+    assert connection.execute("SELECT COUNT(*) FROM purchase_lines").fetchone()[0] == 1
+
+    purchase_id = str(first.purchase.id)
+    for action, action_code in [("submit", "submit_purchase"), ("approve", "approve_purchase"), ("order", "order_purchase")]:
+        app.transition_purchase(
+            connection, purchase_id, person, grant(connection, person, action_code, purchase_id, activity), action,
+        )
+    receipt_grant = grant(connection, person, "receive_purchase", purchase_id, activity)
+    first_receipt = app.receive_purchase(
+        connection, purchase_id, str(line.id), 1, person, receipt_grant,
+        idempotency_key="receipt-retry",
+    )
+    replay = app.receive_purchase(
+        connection, purchase_id, str(line.id), 1, person, receipt_grant,
+        idempotency_key="receipt-retry",
+    )
+    assert replay.purchase == first_receipt.purchase
+    assert connection.execute("SELECT COUNT(*) FROM purchase_receipts").fetchone()[0] == 1
+    assert replay.purchase.lines[0].received_quantity_units == 1
+
+
+def test_idempotency_key_reuse_with_different_payload_is_rejected():
+    connection, person, activity, product = database()
+    app = PurchaseApplication()
+    create_grant = grant(connection, person, "create_purchase", activity, activity)
+    line = PurchaseLine(product_id=__import__("uuid").UUID(product), quantity_units=2, unit_label="piece")
+    app.create_purchase(
+        connection, "supplier:1", activity, (line,), person, create_grant,
+        idempotency_key="create-conflict",
+    )
+    other_line = PurchaseLine(product_id=__import__("uuid").UUID(product), quantity_units=3, unit_label="piece")
+    with pytest.raises(ValidationError):
+        app.create_purchase(
+            connection, "supplier:1", activity, (other_line,), person, create_grant,
+            idempotency_key="create-conflict",
+        )
+    assert connection.execute("SELECT COUNT(*) FROM purchases").fetchone()[0] == 1
