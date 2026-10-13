@@ -222,3 +222,38 @@ def test_idempotency_key_reuse_with_different_payload_is_rejected():
             idempotency_key="create-conflict",
         )
     assert connection.execute("SELECT COUNT(*) FROM purchases").fetchone()[0] == 1
+
+
+def test_purchase_history_rejects_receipt_id_mismatch():
+    connection, person, activity, product = database()
+    app = PurchaseApplication()
+    line = PurchaseLine(product_id=__import__("uuid").UUID(product), quantity_units=2, unit_label="piece")
+    record = app.create_purchase(
+        connection, "supplier:history-check", activity, (line,), person,
+        grant(connection, person, "create_purchase", activity, activity),
+        idempotency_key="history-check-create",
+    )
+    purchase_id = str(record.purchase.id)
+    for action, action_code in [
+        ("submit", "submit_purchase"),
+        ("approve", "approve_purchase"),
+        ("order", "order_purchase"),
+    ]:
+        app.transition_purchase(
+            connection, purchase_id, person,
+            grant(connection, person, action_code, purchase_id, activity), action,
+        )
+    app.receive_purchase(
+        connection, purchase_id, str(line.id), 1, person,
+        grant(connection, person, "receive_purchase", purchase_id, activity),
+        idempotency_key="history-check-receipt",
+    )
+
+    connection.execute(
+        "UPDATE domain_history SET change_payload_ref=? "
+        "WHERE target_ref=? AND change_type='purchase_state_transition' "
+        "AND change_payload_ref LIKE 'state:partially_received;receipt:%'",
+        (f"state:partially_received;receipt:{uuid4()}", purchase_id),
+    )
+    with pytest.raises(ValidationError, match="receipt identifiers disagree"):
+        app.get_purchase(connection, purchase_id)
