@@ -138,6 +138,18 @@ class SupplierInvoiceApplication:
             raise ValidationError("Supplier invoice does not exist")
         (iid, purchase_id, supplier, number, currency, subtotal, tax, freight, total,
          state, recorded_at, actor, version) = row
+        if state != "recorded":
+            raise ValidationError("Persisted supplier invoice has an unsupported state")
+        if not isinstance(number, str) or not number.strip():
+            raise ValidationError("Persisted supplier invoice number is invalid")
+        self._currency(currency)
+        for amount, label in (
+            (subtotal, "persisted subtotal_minor"), (tax, "persisted tax_minor"),
+            (freight, "persisted freight_minor"), (total, "persisted total_minor"),
+        ):
+            self._amount(amount, label)
+        if type(version) is not int or version <= 0:
+            raise ValidationError("Persisted supplier invoice version is invalid")
         line_rows = connection.execute(
             "SELECT purchase_line_id,quantity_units,unit_price_minor,line_total_minor "
             "FROM supplier_invoice_lines WHERE supplier_invoice_id=? ORDER BY rowid", (key,),
