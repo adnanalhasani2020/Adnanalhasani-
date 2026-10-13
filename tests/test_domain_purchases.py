@@ -133,12 +133,6 @@ def test_purchase_history_requires_one_receipt_event_per_receiving_version():
 
 
 def test_purchase_rejects_duplicate_receipt_event_identifiers():
-    from dataclasses import replace
-    from uuid import uuid4
-
-    from agent_core.domain_purchases import Purchase, PurchaseLine, PurchaseState, ReceiptEvent
-    from agent_core.shared import ValidationError
-
     product_id = uuid4()
     line_id = uuid4()
     receipt_id = uuid4()
