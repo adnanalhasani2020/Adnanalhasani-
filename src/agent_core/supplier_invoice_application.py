@@ -138,6 +138,9 @@ class SupplierInvoiceApplication:
             raise ValidationError("Supplier invoice does not exist")
         (iid, purchase_id, supplier, number, currency, subtotal, tax, freight, total,
          state, recorded_at, actor, version) = row
+        persisted_invoice_id = self._uuid(iid, "Persisted supplier invoice identifier")
+        persisted_purchase_id = self._uuid(purchase_id, "Persisted supplier invoice Purchase identifier")
+        persisted_actor_id = self._uuid(actor, "Persisted supplier invoice actor identifier")
         if state != "recorded":
             raise ValidationError("Persisted supplier invoice has an unsupported state")
         if not isinstance(number, str) or not number.strip():
@@ -205,10 +208,8 @@ class SupplierInvoiceApplication:
                 if totals is None or totals[0] > totals[1]:
                     raise ValidationError("Persisted supplier invoices exceed received Purchase quantity")
         return SupplierInvoiceRecord(
-            self._uuid(iid, "Persisted supplier invoice identifier"),
-            self._uuid(purchase_id, "Persisted supplier invoice Purchase identifier"),
-            supplier, number, currency, subtotal, tax, freight, total, state, recorded_at,
-            self._uuid(actor, "Persisted supplier invoice actor identifier"), version, lines,
+            persisted_invoice_id, persisted_purchase_id, supplier, number, currency,
+            subtotal, tax, freight, total, state, recorded_at, persisted_actor_id, version, lines,
         )
 
     def get_supplier_invoice_price_variances(self, connection, supplier_invoice_id):
