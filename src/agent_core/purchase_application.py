@@ -161,7 +161,8 @@ class PurchaseApplication:
             if not isinstance(payload, str) or not payload.startswith("state:"):
                 raise ValidationError("Purchase history state evidence is missing")
             try:
-                history.append(PurchaseState(payload.removeprefix("state:")))
+                state_value = payload.removeprefix("state:").split(";", 1)[0]
+                history.append(PurchaseState(state_value))
             except ValueError as exc:
                 raise ValidationError("Purchase history contains an unknown state") from exc
         if history[0] is not PurchaseState.DRAFT or history[-1].value != state:
@@ -182,6 +183,8 @@ class PurchaseApplication:
         identifier = self._uuid(purchase_id, "Purchase identifier") if purchase_id is not None else uuid4()
         if not isinstance(lines, (tuple, list)) or not lines or any(not isinstance(x, PurchaseLine) for x in lines):
             raise ValidationError("Purchase requires one or more PurchaseLine values")
+        if any(line.received_quantity_units != 0 for line in lines):
+            raise ValidationError("New Purchase lines cannot already contain received quantities")
         purchase = Purchase(supplier_ref=supplier_ref, activity_id=activity, lines=tuple(lines), id=identifier)
         with self._atomic(connection):
             self._authorize(connection, authorization_grant_id, actor, "create_purchase",
