@@ -146,12 +146,13 @@ class PurchaseApplication:
         ).fetchall()
         try:
             persisted_state = PurchaseState(state)
-        except ValueError as exc:
+        except (ValueError, TypeError) as exc:
             raise ValidationError("Purchase has an unsupported persisted state") from exc
         if type(version) is not int or version <= 0:
             raise ValidationError("Purchase has an invalid persisted version")
         lines = tuple(PurchaseLine(
-            id=UUID(line_id), product_id=UUID(product_id), quantity_units=quantity,
+            id=self._uuid(line_id, "Persisted Purchase line identifier"),
+            product_id=self._uuid(product_id, "Persisted Product identifier"), quantity_units=quantity,
             unit_label=unit_label, unit_cost_minor=cost, currency_code=currency,
             received_quantity_units=received,
         ) for line_id, product_id, quantity, unit_label, cost, currency, received in line_rows)
@@ -160,7 +161,8 @@ class PurchaseApplication:
             "WHERE purchase_id=? ORDER BY rowid", (key,),
         ).fetchall()
         receipts = tuple(ReceiptEvent(
-            id=UUID(receipt_id), line_id=UUID(line_id), quantity_units=quantity,
+            id=self._uuid(receipt_id, "Persisted receipt identifier"),
+            line_id=self._uuid(line_id, "Persisted receipt Purchase line identifier"), quantity_units=quantity,
         ) for receipt_id, line_id, quantity in receipt_rows)
         history_rows = connection.execute(
             "SELECT actor_context_ref, prior_version_ref, current_version_ref, change_payload_ref "
@@ -199,7 +201,8 @@ class PurchaseApplication:
         if history[0] is not PurchaseState.DRAFT or history[-1].value != state:
             raise ValidationError("Purchase history does not match current state")
         purchase = Purchase(
-            id=UUID(persisted_id), supplier_ref=supplier_ref, activity_id=UUID(activity_id),
+            id=self._uuid(persisted_id, "Persisted Purchase identifier"), supplier_ref=supplier_ref,
+            activity_id=self._uuid(activity_id, "Persisted Activity identifier"),
             lines=lines, state=persisted_state, history=tuple(history), receipts=receipts,
         )
         return PurchaseRecord(purchase, version)
