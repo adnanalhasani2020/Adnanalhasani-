@@ -96,8 +96,8 @@ class Purchase:
                 continue
             if current not in allowed[previous]:
                 raise ValidationError(f"invalid Purchase transition from {previous.value} to {current.value}")
-        if any(not isinstance(event, ReceiptEvent) for event in self.receipts):
-            raise ValidationError("receipts must contain ReceiptEvent values")
+        if not isinstance(self.receipts, tuple) or any(not isinstance(event, ReceiptEvent) for event in self.receipts):
+            raise ValidationError("receipts must be a tuple of ReceiptEvent values")
         receipt_ids = [event.id for event in self.receipts]
         if len(receipt_ids) != len(set(receipt_ids)):
             raise ValidationError("receipt event identifiers must be unique")

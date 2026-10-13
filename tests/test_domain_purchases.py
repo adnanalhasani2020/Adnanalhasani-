@@ -172,3 +172,22 @@ def test_purchase_values_must_fit_sqlite_integer_range():
         )
     with pytest.raises(ValidationError, match="SQLite integer limits"):
         ReceiptEvent(line_id=uuid4(), quantity_units=too_large)
+
+
+def test_purchase_receipts_must_be_immutable_tuple():
+    purchase, line = make_purchase()
+    with pytest.raises(ValidationError, match="tuple of ReceiptEvent"):
+        Purchase(
+            supplier_ref=purchase.supplier_ref,
+            activity_id=purchase.activity_id,
+            lines=(line,),
+            receipts=[ReceiptEvent(line_id=line.id, quantity_units=1)],
+            state=PurchaseState.PARTIALLY_RECEIVED,
+            history=(
+                PurchaseState.DRAFT,
+                PurchaseState.SUBMITTED,
+                PurchaseState.APPROVED,
+                PurchaseState.ORDERED,
+                PurchaseState.PARTIALLY_RECEIVED,
+            ),
+        )
