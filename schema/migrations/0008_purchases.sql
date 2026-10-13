@@ -9,6 +9,8 @@ CREATE TABLE purchases (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     created_by_ref TEXT NOT NULL,
+    create_idempotency_key TEXT NOT NULL UNIQUE,
+    create_request_fingerprint TEXT NOT NULL,
     version_no INTEGER NOT NULL DEFAULT 1 CHECK (version_no > 0)
 );
 
@@ -39,7 +41,9 @@ CREATE TABLE purchase_receipts (
     purchase_line_id TEXT NOT NULL REFERENCES purchase_lines(purchase_line_id),
     quantity_units INTEGER NOT NULL CHECK (quantity_units > 0),
     received_at TEXT NOT NULL,
-    actor_context_ref TEXT NOT NULL
+    actor_context_ref TEXT NOT NULL,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    request_fingerprint TEXT NOT NULL
 );
 
 CREATE INDEX idx_purchases_activity_state_time ON purchases(activity_id, state, created_at);
