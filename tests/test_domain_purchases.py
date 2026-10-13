@@ -108,11 +108,15 @@ def test_purchase_history_rejects_duplicate_non_receiving_states():
 
 def test_purchase_history_requires_one_receipt_event_per_receiving_version():
     purchase, line = make_purchase()
+    received_line = PurchaseLine(
+        product_id=line.product_id, quantity_units=5, unit_label="box",
+        received_quantity_units=1,
+    )
     with pytest.raises(ValidationError):
         Purchase(
             supplier_ref=purchase.supplier_ref,
             activity_id=purchase.activity_id,
-            lines=(line,),
+            lines=(received_line,),
             state=PurchaseState.PARTIALLY_RECEIVED,
             history=(
                 PurchaseState.DRAFT,
@@ -122,6 +126,6 @@ def test_purchase_history_requires_one_receipt_event_per_receiving_version():
                 PurchaseState.PARTIALLY_RECEIVED,
                 PurchaseState.PARTIALLY_RECEIVED,
             ),
-            receipts=(ReceiptEvent(line_id=line.id, quantity_units=1),),
+            receipts=(ReceiptEvent(line_id=received_line.id, quantity_units=1),),
             # The persisted history claims two receipt versions, but only one receipt exists.
         )
