@@ -2,7 +2,7 @@ from uuid import uuid4
 
 import pytest
 
-from agent_core.domain_purchases import Purchase, PurchaseLine, PurchaseState
+from agent_core.domain_purchases import Purchase, PurchaseLine, PurchaseState, ReceiptEvent
 from agent_core.shared import ValidationError
 
 
@@ -48,6 +48,7 @@ def test_purchase_partial_receipt_state_requires_some_but_not_all_quantities():
             lines=(fully_received_line,),
             state=PurchaseState.PARTIALLY_RECEIVED,
             history=(PurchaseState.DRAFT, PurchaseState.ORDERED, PurchaseState.PARTIALLY_RECEIVED),
+            receipts=(ReceiptEvent(line_id=fully_received_line.id, quantity_units=5),),
         )
 
 
