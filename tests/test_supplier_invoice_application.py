@@ -134,6 +134,18 @@ def test_supplier_invoice_requires_exact_authorization_and_supplier_number_is_un
 
 
 
+def test_supplier_invoice_cannot_be_voided_until_void_workflow_exists():
+    db, actor, activity, purchase_id, line = fixture()
+    invoice = record_invoice(db, actor, activity, purchase_id, line)
+    with pytest.raises(sqlite3.IntegrityError):
+        db.execute(
+            "UPDATE supplier_invoices SET state='void' WHERE supplier_invoice_id=?",
+            (str(invoice.id),),
+        )
+    assert SupplierInvoiceApplication().get_supplier_invoice(db, invoice.id).state == "recorded"
+    db.close()
+
+
 def test_supplier_invoice_price_variance_is_explicit_read_only_and_signed():
     db, actor, activity, purchase_id, line = fixture()
     invoice = record_invoice(db, actor, activity, purchase_id, line, qty=2)
