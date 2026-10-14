@@ -189,6 +189,17 @@ class SupplierInvoiceApplication:
         ).fetchone()
         if purchase is None or purchase[0] != supplier:
             raise ValidationError("Supplier invoice supplier does not match its Purchase")
+        for line in lines:
+            baseline = connection.execute(
+                "SELECT unit_cost_minor,currency_code FROM purchase_lines "
+                "WHERE purchase_line_id=? AND purchase_id=?",
+                (str(line.purchase_line_id), purchase_id),
+            ).fetchone()
+            if baseline is None:
+                raise ValidationError("Supplier invoice line references a missing Purchase line")
+            expected_price, expected_currency = baseline
+            if expected_price is not None and expected_currency != currency:
+                raise ValidationError("Persisted supplier invoice currency differs from Purchase line currency")
         history = connection.execute(
             "SELECT actor_context_ref,current_version_ref,change_payload_ref FROM domain_history "
             "WHERE owner_domain='procurement' AND target_ref=? AND change_type='supplier_invoice_recorded'",
