@@ -108,3 +108,47 @@ def test_inventory_position_can_still_be_unlinked_from_an_offering():
 
     assert position.product_id is not None
     assert position.offering_id is None
+
+
+def test_inventory_position_transition_rejects_legacy_offering_context_mismatch():
+    db = connect_database()
+    activity_a, actor_id = _activity(db)
+    activity_b, _ = _activity(db)
+    product_id = _product(db, "Product A")
+    offering_id = _offering(db, product_id, activity_a)
+    app = InventoryPositionApplication()
+    position = app.create_position(
+        db,
+        activity_id=activity_a,
+        product_id=product_id,
+        offering_id=offering_id,
+        scope_key="store-A",
+        actor_context_ref=actor_id,
+        now=STAMP,
+    )
+
+    # Simulate a legacy/corrupt row created before context validation existed.
+    db.execute(
+        "UPDATE inventory_positions SET activity_id=? WHERE inventory_position_id=?",
+        (activity_b, str(position.id)),
+    )
+    db.commit()
+
+    with pytest.raises(ValidationError, match="context must match its offering"):
+        app.transition_position(
+            db,
+            str(position.id),
+            "make_effective",
+            actor_context_ref=actor_id,
+            now=STAMP,
+        )
+
+    persisted = db.execute(
+        "SELECT state, version_no FROM inventory_positions WHERE inventory_position_id=?",
+        (str(position.id),),
+    ).fetchone()
+    assert persisted == ("observed", 1)
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE owner_domain='inventory' AND target_ref=?",
+        (str(position.id),),
+    ).fetchone()[0] == 1
