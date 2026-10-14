@@ -127,7 +127,14 @@ def test_inventory_position_transition_rejects_legacy_offering_context_mismatch(
         now=STAMP,
     )
 
-    # Simulate a legacy/corrupt row created before context validation existed.
+    # Simulate a legacy database that predates the inventory context triggers.
+    # This in-memory connection is isolated to this test; production schema is untouched.
+    triggers = db.execute(
+        "SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name='inventory_positions'"
+    ).fetchall()
+    for (trigger_name,) in triggers:
+        safe_name = trigger_name.replace('"', '""')
+        db.execute(f'DROP TRIGGER "{safe_name}"')
     db.execute(
         "UPDATE inventory_positions SET activity_id=? WHERE inventory_position_id=?",
         (activity_b, str(position.id)),
