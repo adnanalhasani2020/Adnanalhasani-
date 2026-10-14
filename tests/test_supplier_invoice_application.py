@@ -278,3 +278,19 @@ def test_supplier_invoice_restore_rejects_currency_mismatch_with_purchase_baseli
     ):
         SupplierInvoiceApplication().get_supplier_invoice(db, invoice.id)
     db.close()
+
+
+def test_supplier_invoice_restore_rejects_request_fingerprint_corruption():
+    db, actor, activity, purchase_id, line = fixture()
+    invoice = record_invoice(db, actor, activity, purchase_id, line)
+    db.execute(
+        "UPDATE supplier_invoices SET request_fingerprint='corrupted-fingerprint' WHERE supplier_invoice_id=?",
+        (str(invoice.id),),
+    )
+
+    with pytest.raises(
+        ValidationError,
+        match="Supplier invoice request fingerprint disagrees with persisted invoice facts",
+    ):
+        SupplierInvoiceApplication().get_supplier_invoice(db, invoice.id)
+    db.close()
