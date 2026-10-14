@@ -118,8 +118,8 @@ class InventoryPosition:
         if self.effective_from is not None and self.effective_to is not None:
             starts = self.effective_from.astimezone(timezone.utc)
             ends = self.effective_to.astimezone(timezone.utc)
-            if ends < starts:
-                raise ValidationError("Inventory Position.effective_to cannot precede effective_from")
+            if ends <= starts:
+                raise ValidationError("Inventory Position.effective_to cannot precede or equal effective_from")
     def make_effective(self):
         if self.state is not InventoryPositionState.OBSERVED:
             raise ValidationError("Only an observed Inventory Position can become effective")
@@ -142,7 +142,14 @@ class Availability:
     def __post_init__(self):
         if not isinstance(self.offering_id,UUID): raise ValidationError("Availability must reference Offering")
         if not isinstance(self.valid_at,datetime): raise ValidationError("Availability.valid_at must be datetime")
+        if self.valid_at.tzinfo is None or self.valid_at.utcoffset() is None:
+            raise ValidationError("Availability.valid_at must be timezone-aware")
+        _validate_aware_local_datetime(self.valid_at, "Availability.valid_at")
         if self.freshness_at is not None and not isinstance(self.freshness_at,datetime): raise ValidationError("Availability.freshness_at must be datetime")
+        if self.freshness_at is not None:
+            if self.freshness_at.tzinfo is None or self.freshness_at.utcoffset() is None:
+                raise ValidationError("Availability.freshness_at must be timezone-aware")
+            _validate_aware_local_datetime(self.freshness_at, "Availability.freshness_at")
 
 def discovery_result_is_positive(availability:Availability)->bool:
     """Discovery boundary only: consumes a derived Availability result; no proximity/search/ranking calculation."""
