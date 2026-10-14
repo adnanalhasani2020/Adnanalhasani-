@@ -131,13 +131,13 @@ class SupplierInvoiceApplication:
         key = str(self._uuid(invoice_id, "Supplier invoice identifier"))
         row = connection.execute(
             "SELECT supplier_invoice_id,purchase_id,supplier_ref,invoice_number,currency_code,"
-            "subtotal_minor,tax_minor,freight_minor,total_minor,state,recorded_at,recorded_by_ref,version_no "
+            "subtotal_minor,tax_minor,freight_minor,total_minor,state,recorded_at,recorded_by_ref,request_fingerprint,version_no "
             "FROM supplier_invoices WHERE supplier_invoice_id=?", (key,),
         ).fetchone()
         if row is None:
             raise ValidationError("Supplier invoice does not exist")
         (iid, purchase_id, supplier, number, currency, subtotal, tax, freight, total,
-         state, recorded_at, actor, version) = row
+         state, recorded_at, actor, request_fingerprint, version) = row
         persisted_invoice_id = self._uuid(iid, "Persisted supplier invoice identifier")
         persisted_purchase_id = self._uuid(purchase_id, "Persisted supplier invoice Purchase identifier")
         persisted_actor_id = self._uuid(actor, "Persisted supplier invoice actor identifier")
@@ -168,6 +168,25 @@ class SupplierInvoiceApplication:
         ) for line_id, quantity, unit_price, line_total in line_rows)
         if not lines:
             raise ValidationError("Persisted supplier invoice must contain at least one line")
+        expected_fingerprint_payload = {
+            "operation": "record_supplier_invoice",
+            "purchase_id": str(persisted_purchase_id),
+            "actor": str(persisted_actor_id),
+            "invoice_number": number.strip() if isinstance(number, str) else number,
+            "currency_code": currency,
+            "tax_minor": tax,
+            "freight_minor": freight,
+            "lines": [{
+                "purchase_line_id": str(line.purchase_line_id),
+                "quantity_units": line.quantity_units,
+                "unit_price_minor": line.unit_price_minor,
+            } for line in lines],
+        }
+        expected_fingerprint = hashlib.sha256(json.dumps(
+            expected_fingerprint_payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+        ).encode("utf-8")).hexdigest()
+        if not isinstance(request_fingerprint, str) or request_fingerprint != expected_fingerprint:
+            raise ValidationError("Supplier invoice request fingerprint disagrees with persisted invoice facts")
         for line in lines:
             if (type(line.quantity_units) is not int or line.quantity_units <= 0
                     or type(line.unit_price_minor) is not int
