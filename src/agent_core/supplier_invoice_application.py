@@ -168,25 +168,6 @@ class SupplierInvoiceApplication:
         ) for line_id, quantity, unit_price, line_total in line_rows)
         if not lines:
             raise ValidationError("Persisted supplier invoice must contain at least one line")
-        expected_fingerprint_payload = {
-            "operation": "record_supplier_invoice",
-            "purchase_id": str(persisted_purchase_id),
-            "actor": str(persisted_actor_id),
-            "invoice_number": number.strip() if isinstance(number, str) else number,
-            "currency_code": currency,
-            "tax_minor": tax,
-            "freight_minor": freight,
-            "lines": [{
-                "purchase_line_id": str(line.purchase_line_id),
-                "quantity_units": line.quantity_units,
-                "unit_price_minor": line.unit_price_minor,
-            } for line in lines],
-        }
-        expected_fingerprint = hashlib.sha256(json.dumps(
-            expected_fingerprint_payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True
-        ).encode("utf-8")).hexdigest()
-        if not isinstance(request_fingerprint, str) or request_fingerprint != expected_fingerprint:
-            raise ValidationError("Supplier invoice request fingerprint disagrees with persisted invoice facts")
         for line in lines:
             if (type(line.quantity_units) is not int or line.quantity_units <= 0
                     or type(line.unit_price_minor) is not int
@@ -243,6 +224,25 @@ class SupplierInvoiceApplication:
                 ).fetchone()
                 if totals is None or totals[0] > totals[1]:
                     raise ValidationError("Persisted supplier invoices exceed received Purchase quantity")
+        expected_fingerprint_payload = {
+            "operation": "record_supplier_invoice",
+            "purchase_id": str(persisted_purchase_id),
+            "actor": str(persisted_actor_id),
+            "invoice_number": number,
+            "currency_code": currency,
+            "tax_minor": tax,
+            "freight_minor": freight,
+            "lines": [{
+                "purchase_line_id": str(line.purchase_line_id),
+                "quantity_units": line.quantity_units,
+                "unit_price_minor": line.unit_price_minor,
+            } for line in lines],
+        }
+        expected_fingerprint = hashlib.sha256(json.dumps(
+            expected_fingerprint_payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+        ).encode("utf-8")).hexdigest()
+        if not isinstance(request_fingerprint, str) or request_fingerprint != expected_fingerprint:
+            raise ValidationError("Supplier invoice request fingerprint disagrees with persisted invoice facts")
         return SupplierInvoiceRecord(
             persisted_invoice_id, persisted_purchase_id, supplier, number, currency,
             subtotal, tax, freight, total, state, recorded_at, persisted_actor_id, version, lines,
