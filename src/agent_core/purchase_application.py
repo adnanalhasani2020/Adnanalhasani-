@@ -133,12 +133,13 @@ class PurchaseApplication:
     def _load(self, connection, purchase_id):
         key = str(self._uuid(purchase_id, "Purchase identifier"))
         row = connection.execute(
-            "SELECT purchase_id, supplier_ref, activity_id, state, version_no "
+            "SELECT purchase_id, supplier_ref, activity_id, state, version_no, created_by_ref "
             "FROM purchases WHERE purchase_id=?", (key,),
         ).fetchone()
         if row is None:
             raise ValidationError("Purchase does not exist")
-        persisted_id, supplier_ref, activity_id, state, version = row
+        persisted_id, supplier_ref, activity_id, state, version, created_by_ref = row
+        persisted_creator = self._uuid(created_by_ref, "Persisted Purchase creator identifier")
         line_rows = connection.execute(
             "SELECT purchase_line_id, product_id, quantity_units, unit_label, unit_cost_minor, "
             "currency_code, received_quantity_units FROM purchase_lines "
@@ -174,8 +175,9 @@ class PurchaseApplication:
         history = []
         receipt_history_ids = []
         for index, (actor, prior, current, payload) in enumerate(history_rows, start=1):
-            if not isinstance(actor, str) or not actor.strip():
-                raise ValidationError("Purchase history actor is missing")
+            persisted_actor = self._uuid(actor, "Persisted Purchase history actor identifier")
+            if index == 1 and persisted_actor != persisted_creator:
+                raise ValidationError("Purchase creator does not match initial history actor")
             if prior != (None if index == 1 else history_rows[index - 2][2]):
                 raise ValidationError("Purchase history prior-version chain is inconsistent")
             if current != f"purchase:{key}:v{index}":
