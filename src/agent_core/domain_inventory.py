@@ -142,13 +142,11 @@ class Availability:
     def __post_init__(self):
         if not isinstance(self.offering_id,UUID): raise ValidationError("Availability must reference Offering")
         if not isinstance(self.valid_at,datetime): raise ValidationError("Availability.valid_at must be datetime")
-        if self.valid_at.tzinfo is None or self.valid_at.utcoffset() is None:
-            raise ValidationError("Availability.valid_at must be timezone-aware")
+        # Preserve compatibility with existing callers that use naive datetimes;
+        # when a timezone is supplied, reject nonexistent local wall times.
         _validate_aware_local_datetime(self.valid_at, "Availability.valid_at")
         if self.freshness_at is not None and not isinstance(self.freshness_at,datetime): raise ValidationError("Availability.freshness_at must be datetime")
         if self.freshness_at is not None:
-            if self.freshness_at.tzinfo is None or self.freshness_at.utcoffset() is None:
-                raise ValidationError("Availability.freshness_at must be timezone-aware")
             _validate_aware_local_datetime(self.freshness_at, "Availability.freshness_at")
 
 def discovery_result_is_positive(availability:Availability)->bool:
