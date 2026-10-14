@@ -1,3 +1,5 @@
+import hashlib
+import json
 import sqlite3
 from uuid import UUID, uuid4
 
@@ -189,6 +191,38 @@ def test_supplier_invoice_price_variance_is_explicit_read_only_and_signed():
         "UPDATE domain_history SET change_payload_ref=? WHERE target_ref=? "
         "AND change_type='supplier_invoice_recorded'",
         (f"purchase:{purchase_id};total_minor:1650;currency:YER", str(invoice.id)),
+    )
+    # Keep the synthetic record internally coherent: this test is about signed
+    # variance reporting, not persistence-fingerprint corruption.
+    header = db.execute(
+        "SELECT purchase_id,recorded_by_ref,invoice_number,currency_code,tax_minor,freight_minor "
+        "FROM supplier_invoices WHERE supplier_invoice_id=?",
+        (str(invoice.id),),
+    ).fetchone()
+    stored_lines = db.execute(
+        "SELECT purchase_line_id,quantity_units,unit_price_minor FROM supplier_invoice_lines "
+        "WHERE supplier_invoice_id=? ORDER BY rowid",
+        (str(invoice.id),),
+    ).fetchall()
+    fingerprint_payload = {
+        "operation": "record_supplier_invoice",
+        "purchase_id": header[0],
+        "actor": header[1],
+        "invoice_number": header[2],
+        "currency_code": header[3],
+        "tax_minor": header[4],
+        "freight_minor": header[5],
+        "lines": [
+            {"purchase_line_id": line_id, "quantity_units": quantity, "unit_price_minor": price}
+            for line_id, quantity, price in stored_lines
+        ],
+    }
+    fingerprint = hashlib.sha256(json.dumps(
+        fingerprint_payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    ).encode("utf-8")).hexdigest()
+    db.execute(
+        "UPDATE supplier_invoices SET request_fingerprint=? WHERE supplier_invoice_id=?",
+        (fingerprint, str(invoice.id)),
     )
     lower = app.get_supplier_invoice_price_variances(db, invoice.id)
     assert lower[0].unit_variance_minor == -250
