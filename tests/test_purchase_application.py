@@ -291,3 +291,57 @@ def test_purchase_restore_rejects_malformed_persisted_line_identifier():
     )
     with pytest.raises(ValidationError, match="Persisted Purchase line identifier must be a valid UUID"):
         app.get_purchase(connection, record.purchase.id)
+
+
+def test_purchase_restore_rejects_malformed_persisted_history_actor():
+    connection, person, activity, product = database()
+    app = PurchaseApplication()
+    line = PurchaseLine(
+        product_id=__import__("uuid").UUID(product), quantity_units=2, unit_label="piece"
+    )
+    record = app.create_purchase(
+        connection, "supplier:history-actor", activity, (line,), person,
+        grant(connection, person, "create_purchase", activity, activity),
+        idempotency_key="history-actor-create",
+    )
+    connection.execute(
+        "UPDATE domain_history SET actor_context_ref='not-a-uuid' "
+        "WHERE target_ref=? AND owner_domain='procurement' "
+        "AND change_type='purchase_state_transition' AND current_version_ref=?",
+        (str(record.purchase.id), f"purchase:{record.purchase.id}:v1"),
+    )
+    with pytest.raises(
+        ValidationError,
+        match="Persisted Purchase history actor identifier must be a valid UUID",
+    ):
+        app.get_purchase(connection, record.purchase.id)
+    connection.close()
+
+
+def test_purchase_restore_rejects_creator_mismatch_with_initial_history_actor():
+    connection, person, activity, product = database()
+    app = PurchaseApplication()
+    line = PurchaseLine(
+        product_id=__import__("uuid").UUID(product), quantity_units=2, unit_label="piece"
+    )
+    record = app.create_purchase(
+        connection, "supplier:history-creator", activity, (line,), person,
+        grant(connection, person, "create_purchase", activity, activity),
+        idempotency_key="history-creator-create",
+    )
+    other_person = str(uuid4())
+    connection.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,?,?,?)",
+        (other_person, "active", "2026-10-13T12:00:00Z", "2026-10-13T12:00:00Z"),
+    )
+    connection.execute(
+        "UPDATE domain_history SET actor_context_ref=? "
+        "WHERE target_ref=? AND owner_domain='procurement' "
+        "AND change_type='purchase_state_transition' AND current_version_ref=?",
+        (other_person, str(record.purchase.id), f"purchase:{record.purchase.id}:v1"),
+    )
+    with pytest.raises(
+        ValidationError, match="Purchase creator does not match initial history actor"
+    ):
+        app.get_purchase(connection, record.purchase.id)
+    connection.close()
