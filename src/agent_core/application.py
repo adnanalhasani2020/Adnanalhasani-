@@ -562,6 +562,52 @@ class InventoryPositionApplication:
         ).fetchone()
         if row is None:
             raise ValidationError("Inventory Position does not exist")
+
+        history = connection.execute(
+            "SELECT actor_context_ref,prior_version_ref,current_version_ref,change_payload_ref "
+            "FROM domain_history WHERE owner_domain='inventory' AND target_ref=? "
+            "AND change_type='inventory_position_lifecycle' ORDER BY rowid",
+            (key,),
+        ).fetchall()
+        version_no = row[11]
+        # Preserve compatibility with pre-history/legacy rows at their initial
+        # version. Once an entity advances beyond v1, missing history is a
+        # persistence inconsistency and must fail closed.
+        if not history and version_no == 1:
+            return self._restore_position(row)
+        if len(history) != version_no or not history:
+            raise ValidationError("Inventory Position history does not match persisted version")
+        states = []
+        previous_ref = None
+        action_states = {"make_effective": "effective", "close": "closed"}
+        for index, (actor_ref, prior_ref, current_ref, payload_ref) in enumerate(history, start=1):
+            expected_prior = None if index == 1 else history[index - 2][2]
+            expected_current = f"inventory_position:{key}:v{index}"
+            if (
+                not isinstance(actor_ref, str) or not actor_ref.strip()
+                or prior_ref != expected_prior
+                or current_ref != expected_current
+                or prior_ref != previous_ref
+                or not isinstance(payload_ref, str)
+            ):
+                raise ValidationError("Inventory Position history chain is inconsistent")
+            previous_ref = current_ref
+            if index == 1:
+                if payload_ref != "action:create;state:observed":
+                    raise ValidationError("Inventory Position history has an invalid initial event")
+                state_value = "observed"
+            else:
+                if not payload_ref.startswith("action:") or ";state:" not in payload_ref:
+                    raise ValidationError("Inventory Position history lacks transition-state evidence")
+                action_value, state_value = payload_ref.split(";state:", 1)
+                action_value = action_value.removeprefix("action:")
+                if action_states.get(action_value) != state_value:
+                    raise ValidationError("Inventory Position history action and state are inconsistent")
+            if state_value not in {"observed", "effective", "closed"}:
+                raise ValidationError("Inventory Position history has an invalid state")
+            states.append(state_value)
+        if states[0] != "observed" or states[-1] != row[10]:
+            raise ValidationError("Inventory Position history does not agree with persisted state")
         return self._restore_position(row)
 
     def transition_position(
