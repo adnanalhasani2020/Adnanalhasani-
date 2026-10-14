@@ -527,6 +527,22 @@ class InventoryPositionApplication:
             observed_at=observed, effective_from=starts, effective_to=ends,
         )
         with _atomic(connection):
+            if offering_key is not None:
+                offering_context = connection.execute(
+                    "SELECT product_id, activity_id FROM offerings WHERE offering_id=?",
+                    (offering_key,),
+                ).fetchone()
+                if offering_context is None:
+                    raise ValidationError("Inventory Position requires an existing Offering")
+                offering_product_key, offering_activity_key = offering_context
+                if offering_activity_key != activity_key:
+                    raise ValidationError(
+                        "Inventory Position Activity must match its Offering Activity"
+                    )
+                if product_key is not None and offering_product_key != product_key:
+                    raise ValidationError(
+                        "Inventory Position Product must match its Offering Product"
+                    )
             connection.execute(
                 "INSERT INTO inventory_positions(inventory_position_id,activity_id,product_id,offering_id,"
                 "location_ref,scope_key,state,quantity_minor,observed_at,effective_from,effective_to,"
