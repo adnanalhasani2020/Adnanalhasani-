@@ -51,7 +51,7 @@ def test_inventory_position_rejects_activity_mismatching_offering():
     product_id = _product(db, "Product A")
     offering_id = _offering(db, product_id, activity_a)
 
-    with pytest.raises(ValidationError, match="Activity must match its Offering"):
+    with pytest.raises(ValidationError, match="context must match its Offering"):
         InventoryPositionApplication().create_position(
             db,
             activity_id=activity_b,
