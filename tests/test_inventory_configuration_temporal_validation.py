@@ -8,6 +8,7 @@ from agent_core.domain_inventory import (
     Availability,
     AvailabilityState,
     InventoryPosition,
+    Offering,
 )
 from agent_core.shared import ValidationError
 
@@ -62,3 +63,13 @@ def test_availability_accepts_aware_utc_timestamps():
 
     assert result.valid_at == instant
     assert result.freshness_at == instant
+
+
+def test_offering_rejects_mixed_naive_and_aware_effective_bounds():
+    with pytest.raises(ValidationError, match="both be timezone-aware or both be naive"):
+        Offering(
+            product_id=uuid4(),
+            activity_id=uuid4(),
+            effective_from=datetime(2026, 10, 14, 12),
+            effective_to=datetime(2026, 10, 14, 13, tzinfo=timezone.utc),
+        )
