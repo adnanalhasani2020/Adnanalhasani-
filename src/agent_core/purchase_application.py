@@ -158,13 +158,14 @@ class PurchaseApplication:
             received_quantity_units=received,
         ) for line_id, product_id, quantity, unit_label, cost, currency, received in line_rows)
         receipt_rows = connection.execute(
-            "SELECT receipt_id, purchase_line_id, quantity_units FROM purchase_receipts "
+            "SELECT receipt_id, purchase_line_id, quantity_units, actor_context_ref, received_at, "
+            "idempotency_key, request_fingerprint FROM purchase_receipts "
             "WHERE purchase_id=? ORDER BY rowid", (key,),
         ).fetchall()
         receipts = tuple(ReceiptEvent(
             id=self._uuid(receipt_id, "Persisted receipt identifier"),
             line_id=self._uuid(line_id, "Persisted receipt Purchase line identifier"), quantity_units=quantity,
-        ) for receipt_id, line_id, quantity in receipt_rows)
+        ) for receipt_id, line_id, quantity, _actor, _received_at, _key, _fingerprint in receipt_rows)
         history_rows = connection.execute(
             "SELECT actor_context_ref, prior_version_ref, current_version_ref, change_payload_ref "
             "FROM domain_history WHERE owner_domain='procurement' AND target_ref=? "
@@ -174,6 +175,7 @@ class PurchaseApplication:
             raise ValidationError("Purchase history does not match persisted version")
         history = []
         receipt_history_ids = []
+        receipt_history_actors = {}
         for index, (actor, prior, current, payload) in enumerate(history_rows, start=1):
             persisted_actor = self._uuid(actor, "Persisted Purchase history actor identifier")
             if index == 1 and persisted_actor != persisted_creator:
@@ -191,6 +193,7 @@ class PurchaseApplication:
                 if len(parts) == 2 and parts[1].startswith("receipt:"):
                     receipt_id = str(UUID(parts[1].removeprefix("receipt:")))
                     receipt_history_ids.append(receipt_id)
+                    receipt_history_actors[receipt_id] = persisted_actor
                 elif len(parts) != 1:
                     raise ValidationError("Purchase history contains malformed receipt evidence")
                 if (historical_state in {PurchaseState.PARTIALLY_RECEIVED, PurchaseState.RECEIVED}) != (len(parts) == 2):
@@ -200,6 +203,21 @@ class PurchaseApplication:
                 raise ValidationError("Purchase history contains an unknown or invalid identifier") from exc
         if receipt_history_ids != [str(event.id) for event in receipts]:
             raise ValidationError("Purchase history receipt identifiers disagree with persisted receipt events")
+        for receipt_id, line_id, quantity, actor_ref, received_at, receipt_key, fingerprint in receipt_rows:
+            receipt_actor = self._uuid(actor_ref, "Persisted receipt actor identifier")
+            if receipt_history_actors.get(receipt_id) != receipt_actor:
+                raise ValidationError("Purchase receipt actor disagrees with its history actor")
+            if not isinstance(received_at, str):
+                raise ValidationError("Persisted Purchase receipt timestamp is invalid")
+            self._timestamp(received_at, "Persisted Purchase receipt timestamp")
+            if not isinstance(receipt_key, str) or not receipt_key.strip():
+                raise ValidationError("Persisted Purchase receipt idempotency key is invalid")
+            expected_fingerprint = self._fingerprint({
+                "operation": "receive_purchase", "purchase_id": key,
+                "line_id": line_id, "quantity_units": quantity, "actor": str(receipt_actor),
+            })
+            if fingerprint != expected_fingerprint:
+                raise ValidationError("Purchase receipt request fingerprint disagrees with persisted receipt facts")
         if history[0] is not PurchaseState.DRAFT or history[-1].value != state:
             raise ValidationError("Purchase history does not match current state")
         purchase = Purchase(
