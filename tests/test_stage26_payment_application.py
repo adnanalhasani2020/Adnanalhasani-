@@ -516,3 +516,36 @@ def test_payment_restore_rejects_persisted_invoice_obligation_mismatch():
         "SELECT obligation_id,invoice_id FROM payments WHERE payment_id=?", (payment_id,)
     ).fetchone() == (other_obligation, invoice)
     db.close()
+
+
+@pytest.mark.parametrize(
+    ("amount", "currency", "message"),
+    [
+        (10001, "YER", "exceeds the linked Obligation amount"),
+        (4000, "USD", "currency does not match the linked Obligation currency"),
+    ],
+)
+def test_payment_rejects_amount_or_currency_mismatch_with_linked_obligation(amount, currency, message):
+    db = connect_database()
+    parties = seed(db)
+    payer, payee, approver, agent, context, obligation = parties
+    app = PaymentApplication()
+    payment_id = uid()
+    grant, action = authorize(
+        db, agent=agent, context=context, payment_id=payment_id,
+        action_code="payment.create", approver=approver,
+    )
+    with pytest.raises(ValidationError, match=message):
+        app.create_payment(
+            db, payment_id=payment_id, payer_person_id=payer, payee_person_id=payee,
+            obligation_id=obligation, amount_minor=amount, currency_code=currency,
+            context_ref=context, authorization_grant_id=grant, agent_action_id=action, now=STAMP,
+        )
+    assert db.execute(
+        "SELECT COUNT(*) FROM payments WHERE payment_id=?", (payment_id,)
+    ).fetchone()[0] == 0
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=? AND change_type='payment_state_transition'",
+        (payment_id,),
+    ).fetchone()[0] == 0
+    db.close()
