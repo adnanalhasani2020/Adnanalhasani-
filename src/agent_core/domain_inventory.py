@@ -72,7 +72,13 @@ class Offering:
         if self.effective_from is not None and self.effective_to is not None:
             starts = self.effective_from
             ends = self.effective_to
-            if starts.tzinfo is not None and starts.utcoffset() is not None and ends.tzinfo is not None and ends.utcoffset() is not None:
+            starts_aware = starts.tzinfo is not None and starts.utcoffset() is not None
+            ends_aware = ends.tzinfo is not None and ends.utcoffset() is not None
+            if starts_aware != ends_aware:
+                raise ValidationError(
+                    "Offering effective_from and effective_to must both be timezone-aware or both be naive"
+                )
+            if starts_aware:
                 starts = starts.astimezone(timezone.utc)
                 ends = ends.astimezone(timezone.utc)
             # Offering validity uses a half-open [effective_from, effective_to) interval.
