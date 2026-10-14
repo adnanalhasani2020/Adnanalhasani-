@@ -258,3 +258,23 @@ def test_supplier_invoice_restore_rejects_malformed_persisted_timestamp():
     with pytest.raises(ValidationError, match="Persisted supplier invoice timestamp is invalid"):
         SupplierInvoiceApplication().get_supplier_invoice(db, invoice.id)
     db.close()
+
+
+def test_supplier_invoice_restore_rejects_currency_mismatch_with_purchase_baseline():
+    db, actor, activity, purchase_id, line = fixture()
+    invoice = record_invoice(db, actor, activity, purchase_id, line)
+    db.execute(
+        "UPDATE supplier_invoices SET currency_code='USD' WHERE supplier_invoice_id=?",
+        (str(invoice.id),),
+    )
+    db.execute(
+        "UPDATE domain_history SET change_payload_ref=? WHERE target_ref=? "
+        "AND change_type='supplier_invoice_recorded'",
+        (f"purchase:{purchase_id};total_minor:{invoice.total_minor};currency:USD", str(invoice.id)),
+    )
+    with pytest.raises(
+        ValidationError,
+        match="Persisted supplier invoice currency differs from Purchase line currency",
+    ):
+        SupplierInvoiceApplication().get_supplier_invoice(db, invoice.id)
+    db.close()
