@@ -25,23 +25,18 @@ def test_inventory_position_rejects_empty_effective_window():
         )
 
 
-def test_availability_rejects_naive_valid_at():
-    with pytest.raises(ValidationError, match="valid_at must be timezone-aware"):
-        Availability(
-            offering_id=uuid4(),
-            state=AvailabilityState.COMPUTED,
-            valid_at=datetime(2026, 10, 14, 12),
-        )
+def test_availability_preserves_legacy_naive_timestamp_compatibility():
+    valid_at = datetime(2026, 10, 14, 12)
+    freshness_at = datetime(2026, 10, 14, 12, 30)
+    result = Availability(
+        offering_id=uuid4(),
+        state=AvailabilityState.COMPUTED,
+        valid_at=valid_at,
+        freshness_at=freshness_at,
+    )
 
-
-def test_availability_rejects_naive_freshness_at():
-    with pytest.raises(ValidationError, match="freshness_at must be timezone-aware"):
-        Availability(
-            offering_id=uuid4(),
-            state=AvailabilityState.COMPUTED,
-            valid_at=datetime(2026, 10, 14, 12, tzinfo=timezone.utc),
-            freshness_at=datetime(2026, 10, 14, 12),
-        )
+    assert result.valid_at == valid_at
+    assert result.freshness_at == freshness_at
 
 
 def test_availability_rejects_nonexistent_local_valid_at():
