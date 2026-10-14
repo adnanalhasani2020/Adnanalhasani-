@@ -537,7 +537,7 @@ class InventoryPositionApplication:
                 offering_product_key, offering_activity_key = offering_context
                 if offering_activity_key != activity_key:
                     raise ValidationError(
-                        "Inventory Position context must match its Offering"
+                        "Inventory Position context must match its offering"
                     )
                 if product_key is not None and offering_product_key != product_key:
                     raise ValidationError(
