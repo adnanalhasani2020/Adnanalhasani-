@@ -206,10 +206,19 @@ class PaymentApplication:
                     "SELECT 1 FROM persons WHERE person_id=? AND state='active'", (person_id,)
                 ).fetchone() is None:
                     raise ValidationError(f"{label} must be an active persisted Person")
-            if obligation is not None and connection.execute(
-                "SELECT 1 FROM obligations WHERE obligation_id=?", (obligation,)
-            ).fetchone() is None:
-                raise ValidationError("Payment references a missing Obligation")
+            obligation_record = None
+            if obligation is not None:
+                obligation_record = connection.execute(
+                    "SELECT amount_minor,currency_code FROM obligations WHERE obligation_id=?",
+                    (obligation,),
+                ).fetchone()
+                if obligation_record is None:
+                    raise ValidationError("Payment references a missing Obligation")
+                obligation_amount, obligation_currency = obligation_record
+                if amount_minor > obligation_amount:
+                    raise ValidationError("Payment amount exceeds the linked Obligation amount")
+                if currency_code != obligation_currency:
+                    raise ValidationError("Payment currency does not match the linked Obligation currency")
             if invoice is not None and connection.execute(
                 "SELECT 1 FROM invoices WHERE invoice_id=?", (invoice,)
             ).fetchone() is None:
