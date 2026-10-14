@@ -345,3 +345,56 @@ def test_purchase_restore_rejects_creator_mismatch_with_initial_history_actor():
     ):
         app.get_purchase(connection, record.purchase.id)
     connection.close()
+
+
+def _purchase_with_one_receipt():
+    connection, person, activity, product = database()
+    app = PurchaseApplication()
+    line = PurchaseLine(
+        product_id=__import__("uuid").UUID(product), quantity_units=2, unit_label="piece"
+    )
+    record = app.create_purchase(
+        connection, "supplier:receipt-integrity", activity, (line,), person,
+        grant(connection, person, "create_purchase", activity, activity),
+        idempotency_key="receipt-integrity-create",
+    )
+    purchase_id = str(record.purchase.id)
+    for action, action_code in (
+        ("submit", "submit_purchase"), ("approve", "approve_purchase"), ("order", "order_purchase")
+    ):
+        record = app.transition_purchase(
+            connection, purchase_id, person,
+            grant(connection, person, action_code, purchase_id, activity), action,
+        )
+    record = app.receive_purchase(
+        connection, purchase_id, str(line.id), 1, person,
+        grant(connection, person, "receive_purchase", purchase_id, activity),
+        idempotency_key="receipt-integrity-receive",
+    )
+    return connection, app, record
+
+
+def test_purchase_restore_rejects_receipt_actor_that_disagrees_with_history():
+    connection, app, record = _purchase_with_one_receipt()
+    connection.execute(
+        "UPDATE purchase_receipts SET actor_context_ref='not-a-uuid' WHERE purchase_id=?",
+        (str(record.purchase.id),),
+    )
+    with pytest.raises(
+        ValidationError, match="Persisted receipt actor identifier must be a valid UUID"
+    ):
+        app.get_purchase(connection, record.purchase.id)
+    connection.close()
+
+
+def test_purchase_restore_rejects_receipt_idempotency_fingerprint_corruption():
+    connection, app, record = _purchase_with_one_receipt()
+    connection.execute(
+        "UPDATE purchase_receipts SET request_fingerprint='corrupted' WHERE purchase_id=?",
+        (str(record.purchase.id),),
+    )
+    with pytest.raises(
+        ValidationError, match="Purchase receipt request fingerprint disagrees with persisted receipt facts"
+    ):
+        app.get_purchase(connection, record.purchase.id)
+    connection.close()
