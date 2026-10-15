@@ -84,6 +84,49 @@ class ProductUnitApplication:
                           f"code:{code};dimension:{dimension};state:active")
         return self.get_unit(db, key)
 
+    def update_unit(self, db, unit_id, *, actor_context_ref, expected_version=1,
+                    code=None, name=None, now=None):
+        key, stamp = _uuid(unit_id, "unit_id"), _now(now)
+        actor = actor_context_ref.strip() if isinstance(actor_context_ref, str) else ""
+        if not actor:
+            raise ValidationError("actor_context_ref is required")
+        if code is None and name is None:
+            raise ValidationError("at least one of code or name must be provided")
+        if code is not None:
+            code = code.strip().upper() if isinstance(code, str) else ""
+            if not code or len(code) > 32 or any(ch.isspace() for ch in code):
+                raise ValidationError("unit code must be at most 32 characters and contain no whitespace")
+        if name is not None:
+            name = name.strip() if isinstance(name, str) else ""
+            if not name:
+                raise ValidationError("unit name must be non-empty")
+        if not isinstance(expected_version, int) or isinstance(expected_version, bool) or expected_version < 1:
+            raise ValidationError("expected_version must be a positive integer")
+        with _atomic(db):
+            row = db.execute(
+                "SELECT code,name,state,version_no FROM measurement_units WHERE unit_id=?", (key,)
+            ).fetchone()
+            if row is None:
+                raise ValidationError("measurement unit does not exist")
+            if row[3] != expected_version:
+                raise ValidationError("measurement unit version conflict")
+            if row[2] != "active":
+                raise ValidationError("retired measurement units cannot be edited")
+            new_code, new_name = code if code is not None else row[0], name if name is not None else row[1]
+            try:
+                db.execute(
+                    "UPDATE measurement_units SET code=?,name=?,updated_at=?,version_no=version_no+1 "
+                    "WHERE unit_id=? AND version_no=?",
+                    (new_code,new_name,stamp,key,expected_version),
+                )
+            except Exception as exc:
+                if "UNIQUE constraint failed" in str(exc):
+                    raise ValidationError("unit code already exists") from exc
+                raise
+            self._history(db, "measurement_unit", key, expected_version + 1, expected_version,
+                          "update", actor, stamp, f"code:{new_code};name:{new_name}")
+        return self.get_unit(db, key)
+
     def get_unit(self, db, unit_id):
         key = _uuid(unit_id, "unit_id")
         row = db.execute(
@@ -193,6 +236,85 @@ class ProductUnitApplication:
                 raise
             self._history(db, "product_unit_setting", setting_id, 1, None, "configure", actor, stamp,
                           f"product:{product};unit:{unit};role:{role.value};ratio:{conversion_numerator}/{conversion_denominator}")
+        return self.get_product_unit(db, product, unit)
+
+    def update_product_unit_conversion(self, db, product_id, unit_id, *,
+                                       conversion_numerator, conversion_denominator,
+                                       actor_context_ref, expected_version=1, now=None):
+        product, unit, stamp = _uuid(product_id, "product_id"), _uuid(unit_id, "unit_id"), _now(now)
+        actor = actor_context_ref.strip() if isinstance(actor_context_ref, str) else ""
+        if not actor:
+            raise ValidationError("actor_context_ref is required")
+        if (not isinstance(conversion_numerator, int) or isinstance(conversion_numerator, bool)
+                or not isinstance(conversion_denominator, int) or isinstance(conversion_denominator, bool)
+                or conversion_numerator <= 0 or conversion_denominator <= 0):
+            raise ValidationError("conversion ratio must use positive integer numerator and denominator")
+        if not isinstance(expected_version, int) or isinstance(expected_version, bool) or expected_version < 1:
+            raise ValidationError("expected_version must be a positive integer")
+        with _atomic(db):
+            row = db.execute(
+                "SELECT role,state,version_no FROM product_unit_settings WHERE product_id=? AND unit_id=?",
+                (product,unit),
+            ).fetchone()
+            if row is None:
+                raise ValidationError("product unit setting does not exist")
+            if row[2] != expected_version:
+                raise ValidationError("product unit setting version conflict")
+            if row[1] != "active":
+                raise ValidationError("retired product unit settings cannot be edited")
+            if row[0] == "base":
+                if (conversion_numerator, conversion_denominator) != (1, 1):
+                    raise ValidationError("base unit conversion ratio must be 1/1")
+                raise ValidationError("base unit conversion ratio is fixed")
+            db.execute(
+                "UPDATE product_unit_settings SET conversion_numerator=?,conversion_denominator=?,"
+                "updated_at=?,version_no=version_no+1 WHERE product_id=? AND unit_id=? AND version_no=?",
+                (conversion_numerator,conversion_denominator,stamp,product,unit,expected_version),
+            )
+            setting_id = db.execute(
+                "SELECT product_unit_setting_id FROM product_unit_settings WHERE product_id=? AND unit_id=?",
+                (product,unit),
+            ).fetchone()[0]
+            self._history(
+                db, "product_unit_setting", setting_id, expected_version + 1, expected_version,
+                "update_conversion", actor, stamp,
+                f"product:{product};unit:{unit};ratio:{conversion_numerator}/{conversion_denominator}",
+            )
+        return self.get_product_unit(db, product, unit)
+
+    def retire_product_unit(self, db, product_id, unit_id, *,
+                            actor_context_ref, expected_version=1, now=None):
+        product, unit, stamp = _uuid(product_id, "product_id"), _uuid(unit_id, "unit_id"), _now(now)
+        actor = actor_context_ref.strip() if isinstance(actor_context_ref, str) else ""
+        if not actor:
+            raise ValidationError("actor_context_ref is required")
+        if not isinstance(expected_version, int) or isinstance(expected_version, bool) or expected_version < 1:
+            raise ValidationError("expected_version must be a positive integer")
+        with _atomic(db):
+            row = db.execute(
+                "SELECT product_unit_setting_id,role,state,version_no FROM product_unit_settings "
+                "WHERE product_id=? AND unit_id=?", (product,unit)
+            ).fetchone()
+            if row is None:
+                raise ValidationError("product unit setting does not exist")
+            if row[3] != expected_version:
+                raise ValidationError("product unit setting version conflict")
+            if row[2] == "retired":
+                return self.get_product_unit(db, product, unit)
+            if row[1] == "base" and db.execute(
+                "SELECT 1 FROM product_unit_settings WHERE product_id=? AND state='active' "
+                "AND role='allowed' LIMIT 1", (product,)
+            ).fetchone():
+                raise ValidationError("retire active allowed units before retiring the base unit")
+            db.execute(
+                "UPDATE product_unit_settings SET state='retired',updated_at=?,version_no=version_no+1 "
+                "WHERE product_id=? AND unit_id=? AND version_no=?",
+                (stamp,product,unit,expected_version),
+            )
+            self._history(
+                db, "product_unit_setting", row[0], expected_version + 1, expected_version,
+                "retire", actor, stamp, f"product:{product};unit:{unit};state:retired",
+            )
         return self.get_product_unit(db, product, unit)
 
     def get_product_unit(self, db, product_id, unit_id):
