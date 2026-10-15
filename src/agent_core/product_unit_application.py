@@ -216,8 +216,7 @@ class ProductUnitApplication:
         params = [product]
         if not include_retired:
             sql += " AND s.state='active'"
-        sql += " ORDER BY CASE s.role WHEN 'base' THEN 0 ELSE 1 END,u_placeholder"
-        sql = sql.replace(",u_placeholder", "")
+        sql += " ORDER BY CASE s.role WHEN 'base' THEN 0 ELSE 1 END, s.unit_id"
         return [ProductUnitSetting(UUID(r[0]),UUID(r[1]),ProductUnitRole(r[2]),r[3],r[4],
                                    UnitState(r[5]),r[6])
                 for r in db.execute(sql,params).fetchall()]
@@ -225,6 +224,15 @@ class ProductUnitApplication:
     def convert(self, db, product_id, quantity, source_unit_id, target_unit_id):
         source = self.get_product_unit(db, product_id, source_unit_id)
         target = self.get_product_unit(db, product_id, target_unit_id)
+        dimensions = db.execute(
+            "SELECT unit_id,dimension FROM measurement_units WHERE unit_id IN (?,?)",
+            (str(source.unit_id), str(target.unit_id)),
+        ).fetchall()
+        dimensions_by_unit = {row[0]: row[1] for row in dimensions}
+        if (dimensions_by_unit.get(str(source.unit_id)) is None
+                or dimensions_by_unit.get(str(target.unit_id)) is None
+                or dimensions_by_unit[str(source.unit_id)] != dimensions_by_unit[str(target.unit_id)]):
+            raise ValidationError("unit dimensions must match for conversion")
         return convert_quantity(quantity, source, target)
 
     @staticmethod
