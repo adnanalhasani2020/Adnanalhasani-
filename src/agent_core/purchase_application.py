@@ -130,6 +130,59 @@ class PurchaseApplication:
             ):
                 raise ValidationError("Delegation is outside its effective period")
 
+    @staticmethod
+    def _unit_snapshot_facts(line):
+        return {
+            "product_unit_setting_id": str(line.product_unit_setting_id) if line.product_unit_setting_id else None,
+            "measurement_unit_id": str(line.measurement_unit_id) if line.measurement_unit_id else None,
+            "unit_code_snapshot": line.unit_code_snapshot,
+            "unit_name_snapshot": line.unit_name_snapshot,
+            "unit_dimension_snapshot": line.unit_dimension_snapshot,
+            "conversion_numerator": line.conversion_numerator,
+            "conversion_denominator": line.conversion_denominator,
+            "product_unit_setting_version": line.product_unit_setting_version,
+            "measurement_unit_version": line.measurement_unit_version,
+        }
+
+    def _validate_unit_snapshot(self, connection, line):
+        if line.product_unit_setting_id is None:
+            return
+        catalog_tables = connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name IN "
+            "('product_unit_settings','measurement_units')"
+        ).fetchall()
+        if {row[0] for row in catalog_tables} != {"product_unit_settings", "measurement_units"}:
+            raise ValidationError("Product unit catalog is required to create a purchase line with a unit snapshot")
+        row = connection.execute(
+            "SELECT setting.product_id, setting.unit_id, setting.role, setting.state, "
+            "setting.conversion_numerator, setting.conversion_denominator, setting.version_no, "
+            "unit.code, unit.name, unit.dimension, unit.state, unit.version_no "
+            "FROM product_unit_settings setting JOIN measurement_units unit ON unit.unit_id=setting.unit_id "
+            "WHERE setting.product_unit_setting_id=?",
+            (str(line.product_unit_setting_id),),
+        ).fetchone()
+        if row is None:
+            raise ValidationError("Purchase unit snapshot references an unknown product unit setting")
+        (product_id, unit_id, role, setting_state, numerator, denominator, setting_version,
+         code, name, dimension, unit_state, unit_version) = row
+        if str(product_id) != str(line.product_id):
+            raise ValidationError("Purchase unit setting belongs to a different Product")
+        if setting_state != "active" or unit_state != "active":
+            raise ValidationError("Purchase line requires an active configured measurement unit")
+        if (
+            str(unit_id) != str(line.measurement_unit_id)
+            or numerator != line.conversion_numerator
+            or denominator != line.conversion_denominator
+            or setting_version != line.product_unit_setting_version
+            or unit_version != line.measurement_unit_version
+            or code != line.unit_code_snapshot
+            or name != line.unit_name_snapshot
+            or dimension != line.unit_dimension_snapshot
+        ):
+            raise ValidationError("Purchase unit snapshot does not match the current configured unit")
+        if role not in {"base", "allowed"}:
+            raise ValidationError("Purchase unit setting has an unsupported role")
+
     def _load(self, connection, purchase_id):
         key = str(self._uuid(purchase_id, "Purchase identifier"))
         row = connection.execute(
@@ -145,7 +198,9 @@ class PurchaseApplication:
             raise ValidationError("Persisted Purchase supplier reference is invalid")
         line_rows = connection.execute(
             "SELECT purchase_line_id, product_id, quantity_units, unit_label, unit_cost_minor, "
-            "currency_code, received_quantity_units FROM purchase_lines "
+            "currency_code, received_quantity_units, product_unit_setting_id, measurement_unit_id, "
+            "unit_code_snapshot, unit_name_snapshot, unit_dimension_snapshot, conversion_numerator, "
+            "conversion_denominator, product_unit_setting_version, measurement_unit_version FROM purchase_lines "
             "WHERE purchase_id=? ORDER BY rowid", (key,),
         ).fetchall()
         try:
@@ -159,7 +214,13 @@ class PurchaseApplication:
             product_id=self._uuid(product_id, "Persisted Product identifier"), quantity_units=quantity,
             unit_label=unit_label, unit_cost_minor=cost, currency_code=currency,
             received_quantity_units=received,
-        ) for line_id, product_id, quantity, unit_label, cost, currency, received in line_rows)
+            product_unit_setting_id=self._uuid(setting_id, "Persisted Product unit setting identifier") if setting_id else None,
+            measurement_unit_id=self._uuid(unit_id, "Persisted measurement unit identifier") if unit_id else None,
+            unit_code_snapshot=unit_code, unit_name_snapshot=unit_name, unit_dimension_snapshot=unit_dimension,
+            conversion_numerator=numerator, conversion_denominator=denominator,
+            product_unit_setting_version=setting_version, measurement_unit_version=unit_version,
+        ) for (line_id, product_id, quantity, unit_label, cost, currency, received, setting_id, unit_id,
+               unit_code, unit_name, unit_dimension, numerator, denominator, setting_version, unit_version) in line_rows)
         fingerprint_payload = {
             "operation": "create_purchase",
             "supplier_ref": supplier_ref,
@@ -171,6 +232,7 @@ class PurchaseApplication:
                 "unit_label": line.unit_label,
                 "unit_cost_minor": line.unit_cost_minor,
                 "currency_code": line.currency_code,
+                "unit_snapshot": self._unit_snapshot_facts(line),
             } for line in lines],
         }
         valid_fingerprints = {
@@ -296,6 +358,7 @@ class PurchaseApplication:
                                               (str(line.product_id),)).fetchone()
                 if product is None or product[0] != "active":
                     raise ValidationError("Purchase lines require existing active Products")
+                self._validate_unit_snapshot(connection, line)
             connection.execute(
                 "INSERT INTO purchases(purchase_id,supplier_ref,activity_id,state,created_at,updated_at,created_by_ref,"
                 "create_idempotency_key,create_request_fingerprint,version_no) "
@@ -306,9 +369,17 @@ class PurchaseApplication:
             for line in purchase.lines:
                 connection.execute(
                     "INSERT INTO purchase_lines(purchase_line_id,purchase_id,product_id,quantity_units,unit_label,"
-                    "unit_cost_minor,currency_code,received_quantity_units,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
+                    "unit_cost_minor,currency_code,received_quantity_units,created_at,product_unit_setting_id,"
+                    "measurement_unit_id,unit_code_snapshot,unit_name_snapshot,unit_dimension_snapshot,"
+                    "conversion_numerator,conversion_denominator,product_unit_setting_version,measurement_unit_version) "
+                    "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (str(line.id), str(identifier), str(line.product_id), line.quantity_units, line.unit_label,
-                     line.unit_cost_minor, line.currency_code, 0, timestamp),
+                     line.unit_cost_minor, line.currency_code, 0, timestamp,
+                     str(line.product_unit_setting_id) if line.product_unit_setting_id else None,
+                     str(line.measurement_unit_id) if line.measurement_unit_id else None,
+                     line.unit_code_snapshot, line.unit_name_snapshot, line.unit_dimension_snapshot,
+                     line.conversion_numerator, line.conversion_denominator,
+                     line.product_unit_setting_version, line.measurement_unit_version),
                 )
             connection.execute(
                 "INSERT INTO domain_history(domain_history_id,owner_domain,target_ref,change_type,historical_at,"
