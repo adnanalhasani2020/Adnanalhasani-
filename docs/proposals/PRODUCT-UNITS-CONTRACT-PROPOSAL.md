@@ -1,8 +1,21 @@
 # Product Units and Conversion — Contract Proposal (Not Approved)
 
-**Status:** Preparation proposal only. This document does not approve business policy or authorize runtime behavior.  
+**Status:** Baseline unit-configuration decisions approved for implementation; transaction and inventory integration decisions remain open.  
 **Audit baseline:** `main @ 44d37ff770892404d5c0ba54e67a3171857b68c5` (2026-10-14).  
 **Purpose:** Define the domain contract needed to implement product units, unit settings, and safe links to commerce and inventory without duplicating existing concepts or guessing conversions.
+
+## Decisions confirmed for the first implementation slice
+
+The user explicitly approved the following baseline for the product-unit configuration slice:
+
+- Use a shared measurement-unit catalog and explicit per-Product configuration; do not create duplicate Products to represent packaging.
+- A configured Product must have one active base unit before additional allowed units can be configured. Products with no unit metadata remain valid and unknown; legacy units are never inferred or backfilled.
+- Each unit has an explicit dimension. Conversions across different dimensions are rejected.
+- Conversion factors are positive exact rational values (numerator/denominator), expressed as base units per one configured unit. Binary floating-point quantities and factors are rejected; persisted factors must fit SQLite's signed 64-bit integer range.
+- Unit-setting edits use optimistic versions and atomic Domain History. Referenced units are retired rather than deleted; base units cannot be retired while allowed units remain active.
+- This slice provides catalog/configuration and exact conversion only. It does not post inventory, record receipt effects, change purchase quantities, or create financial effects.
+
+These decisions supersede the corresponding open questions in Section 3 only to the extent explicitly stated above. They do **not** approve assumptions about packaging contents, fractional quantity persistence, rounding, price-per-unit semantics, historical transaction snapshots, inventory posting, authorization policy, or user-interface/API integration. Those require a separate explicit contract before integration.
 
 ## 1. Main-first repository audit
 
