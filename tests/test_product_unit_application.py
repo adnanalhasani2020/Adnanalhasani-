@@ -162,6 +162,15 @@ def test_database_guards_reject_dimension_drift_and_active_unit_retirement():
                          actor_context_ref="test", now=NOW)
     litre = app.create_unit(db, code="L", name="Litre", dimension="volume",
                             actor_context_ref="test", now=NOW)
+    with pytest.raises(Exception, match="base unit before adding allowed"):
+        db.execute(
+            "INSERT INTO product_unit_settings(product_unit_setting_id,product_id,unit_id,role,"
+            "conversion_numerator,conversion_denominator,state,created_at,updated_at,configured_by_ref) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?)",
+            (str(uuid.uuid4()), product, str(litre.id), "allowed", 1, 1,
+             "active", NOW, NOW, "test"),
+        )
+    db.rollback()
     app.configure_product_unit(db, product, kg.id, role="base",
                                actor_context_ref="test", now=NOW)
 
