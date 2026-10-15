@@ -235,9 +235,25 @@ class PurchaseApplication:
                 "unit_snapshot": self._unit_snapshot_facts(line),
             } for line in lines],
         }
+        fingerprint_candidates = [fingerprint_payload]
+        if all(line.product_unit_setting_id is None for line in lines):
+            # Backward compatibility for purchases created before unit snapshots existed.
+            legacy_payload = dict(fingerprint_payload)
+            legacy_payload["lines"] = [{
+                "product_id": str(line.product_id),
+                "quantity_units": line.quantity_units,
+                "unit_label": line.unit_label,
+                "unit_cost_minor": line.unit_cost_minor,
+                "currency_code": line.currency_code,
+            } for line in lines]
+            fingerprint_candidates.append(legacy_payload)
         valid_fingerprints = {
-            self._fingerprint({**fingerprint_payload, "requested_purchase_id": None}),
-            self._fingerprint({**fingerprint_payload, "requested_purchase_id": str(self._uuid(persisted_id, "Persisted Purchase identifier"))}),
+            self._fingerprint({**candidate, "requested_purchase_id": requested_id})
+            for candidate in fingerprint_candidates
+            for requested_id in (
+                None,
+                str(self._uuid(persisted_id, "Persisted Purchase identifier")),
+            )
         }
         if not isinstance(create_fingerprint, str) or create_fingerprint not in valid_fingerprints:
             raise ValidationError("Purchase create fingerprint disagrees with persisted Purchase facts")
@@ -336,6 +352,7 @@ class PurchaseApplication:
                 "product_id": str(line.product_id),
                 "quantity_units": line.quantity_units, "unit_label": line.unit_label,
                 "unit_cost_minor": line.unit_cost_minor, "currency_code": line.currency_code,
+                "unit_snapshot": self._unit_snapshot_facts(line),
             } for line in purchase.lines],
         })
         with self._atomic(connection):
@@ -346,7 +363,24 @@ class PurchaseApplication:
                 (idempotency_key,),
             ).fetchone()
             if existing is not None:
-                if existing[1] != fingerprint:
+                accepted_fingerprints = {fingerprint}
+                if all(line.product_unit_setting_id is None for line in purchase.lines):
+                    legacy_payload = {
+                        "operation": "create_purchase",
+                        "requested_purchase_id": str(requested_identifier) if requested_identifier else None,
+                        "supplier_ref": purchase.supplier_ref,
+                        "activity_id": str(activity),
+                        "actor": str(actor),
+                        "lines": [{
+                            "product_id": str(line.product_id),
+                            "quantity_units": line.quantity_units,
+                            "unit_label": line.unit_label,
+                            "unit_cost_minor": line.unit_cost_minor,
+                            "currency_code": line.currency_code,
+                        } for line in purchase.lines],
+                    }
+                    accepted_fingerprints.add(self._fingerprint(legacy_payload))
+                if existing[1] not in accepted_fingerprints:
                     raise ValidationError("idempotency_key was already used with a different create request")
                 return self._load(connection, existing[0])
             activity_row = connection.execute("SELECT state FROM activities WHERE activity_id=?",
