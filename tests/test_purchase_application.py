@@ -6,6 +6,7 @@ import pytest
 
 from agent_core.domain_purchases import PurchaseLine, PurchaseState
 from agent_core.purchase_application import PurchaseApplication
+from agent_core.product_unit_application import ProductUnitApplication
 from agent_core.shared import ValidationError
 
 
@@ -18,6 +19,7 @@ def database():
     connection.executescript((ROOT / "schema/migrations/0001_initial_relational_schema.sql").read_text())
     connection.executescript((ROOT / "schema/migrations/0007_product_name.sql").read_text())
     connection.executescript((ROOT / "schema/migrations/0008_purchases.sql").read_text())
+    connection.executescript((ROOT / "schema/migrations/0010_product_units.sql").read_text())
     connection.executescript((ROOT / "schema/migrations/0011_purchase_line_unit_snapshot.sql").read_text())
     now = "2026-10-13T12:00:00Z"
     person, activity, product = str(uuid4()), str(uuid4()), str(uuid4())
@@ -512,3 +514,55 @@ def test_purchase_line_snapshot_database_guard_rejects_partial_snapshot():
             "received_quantity_units,created_at,product_unit_setting_id) VALUES(?,?,?,?,?,?,?,?)",
             (str(uuid4()), str(uuid4()), product, 1, "case", 0, "2026-10-13T12:00:00Z", str(uuid4())),
         )
+
+def test_purchase_creation_captures_explicit_unit_configuration_and_preserves_history():
+    from fractions import Fraction
+
+    connection, person, activity, product = database()
+    units = ProductUnitApplication()
+    unit_app = PurchaseApplication()
+    base = units.create_unit(
+        connection, code="pc", name="Piece", dimension="count",
+        actor_context_ref=person, now="2026-10-13T12:00:00Z",
+    )
+    case = units.create_unit(
+        connection, code="case", name="Case", dimension="count",
+        actor_context_ref=person, now="2026-10-13T12:00:00Z",
+    )
+    units.configure_product_unit(
+        connection, product, base.id, role="base",
+        actor_context_ref=person, now="2026-10-13T12:00:00Z",
+    )
+    units.configure_product_unit(
+        connection, product, case.id, role="allowed",
+        conversion_numerator=12, conversion_denominator=1,
+        actor_context_ref=person, now="2026-10-13T12:00:00Z",
+    )
+
+    line = PurchaseLine(
+        product_id=__import__("uuid").UUID(product), quantity_units=3, unit_label="case",
+    )
+    snapshot_line = unit_app.capture_unit_snapshot(connection, line, case.id)
+    assert snapshot_line.base_quantity_units == Fraction(36, 1)
+    record = unit_app.create_purchase(
+        connection, "supplier:unit-snapshot", activity, (snapshot_line,), person,
+        grant(connection, person, "create_purchase", activity, activity),
+        idempotency_key="purchase-unit-snapshot",
+    )
+    restored = unit_app.get_purchase(connection, str(record.purchase.id)).purchase.lines[0]
+    assert restored.product_unit_setting_id == snapshot_line.product_unit_setting_id
+    assert restored.measurement_unit_id == case.id
+    assert restored.conversion_numerator == 12
+    assert restored.conversion_denominator == 1
+    assert restored.base_quantity_units == Fraction(36, 1)
+
+    # A later ratio update must not change the historical purchase line's conversion.
+    current_setting = units.get_product_unit(connection, product, case.id)
+    units.update_conversion_ratio(
+        connection, product, case.id, conversion_numerator=24, conversion_denominator=1,
+        expected_version_no=current_setting.version_no,
+        actor_context_ref=person, now="2026-10-14T12:00:00Z",
+    )
+    historical = unit_app.get_purchase(connection, str(record.purchase.id)).purchase.lines[0]
+    assert historical.conversion_numerator == 12
+    assert historical.base_quantity_units == Fraction(36, 1)
