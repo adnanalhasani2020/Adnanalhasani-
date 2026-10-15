@@ -2,6 +2,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
+from urllib.parse import quote, unquote
 
 from agent_core.domain_identity import *
 from agent_core.domain_activities import *
@@ -720,6 +721,7 @@ class ProductApplication:
 
         states = []
         previous_ref = None
+        latest_recorded_name = None
         for index, (actor_ref, prior_ref, current_ref, payload_ref) in enumerate(history, start=1):
             expected_prior = None if index == 1 else history[index - 2][2]
             expected_current = f"product:{key}:v{index}"
@@ -739,16 +741,31 @@ class ProductApplication:
             else:
                 if not payload_ref.startswith("action:") or ";state:" not in payload_ref:
                     raise ValidationError("Product history lacks transition-state evidence")
-                action_value, state_value = payload_ref.split(";state:", 1)
+                action_value, state_part = payload_ref.split(";state:", 1)
                 action_value = action_value.removeprefix("action:")
-                expected_state = {"activate": "active", "retire": "retired"}.get(action_value)
-                if expected_state is None or state_value != expected_state:
-                    raise ValidationError("Product history action and state are inconsistent")
+                if action_value == "rename":
+                    state_value, separator, encoded_name = state_part.partition(";name:")
+                    if not separator or not encoded_name:
+                        raise ValidationError("Product rename history lacks its recorded name")
+                    try:
+                        decoded_name = unquote(encoded_name, errors="strict")
+                    except (UnicodeDecodeError, ValueError) as exc:
+                        raise ValidationError("Product rename history has an invalid encoded name") from exc
+                    if not decoded_name.strip() or quote(decoded_name, safe="") != encoded_name:
+                        raise ValidationError("Product rename history has a non-canonical name")
+                    latest_recorded_name = decoded_name
+                else:
+                    state_value = state_part
+                    expected_state = {"activate": "active", "retire": "retired"}.get(action_value)
+                    if expected_state is None or state_value != expected_state:
+                        raise ValidationError("Product history action and state are inconsistent")
             if state_value not in {"draft", "active", "retired"}:
                 raise ValidationError("Product history has an invalid state")
             states.append(state_value)
         if states[0] != "draft" or states[-1] != state:
             raise ValidationError("Product history does not agree with persisted state")
+        if latest_recorded_name is not None and latest_recorded_name != name:
+            raise ValidationError("Product name does not agree with persisted rename history")
         return ProductRecord(
             Product(name=name, id=UUID(persisted_id), state=ProductState(state)),
             version,
@@ -778,6 +795,48 @@ class ProductApplication:
 
     def get_product(self, connection, product_id):
         return self._load_product(connection, product_id)
+
+    def update_product_name(
+        self, connection, product_id, name, *, expected_version, actor_context_ref, now=None
+    ):
+        """Rename a persisted Product atomically and record the new name in domain history."""
+        # Reuse domain validation/normalization without changing the persisted lifecycle state.
+        candidate = Product(name=name, id=self._uuid(product_id, "Product identifier"))
+        if type(expected_version) is not int or expected_version < 1:
+            raise ValidationError("Product expected_version must be a positive integer")
+        timestamp = self._instant(now or datetime.now(timezone.utc), "Product rename timestamp")
+        if not isinstance(actor_context_ref, str) or not actor_context_ref.strip():
+            raise ValidationError("Product actor_context_ref is required")
+        actor_context_ref = actor_context_ref.strip()
+        key = str(candidate.id)
+        with _atomic(connection):
+            record = self._load_product(connection, key)
+            if record.version_no != expected_version:
+                raise ValidationError("Product version conflict; reload before retrying")
+            if candidate.name == record.product.name:
+                raise ValidationError("Product name is unchanged")
+            cursor = connection.execute(
+                "UPDATE products SET name=?, updated_at=?, version_no=version_no+1 "
+                "WHERE product_id=? AND version_no=?",
+                (candidate.name, timestamp, key, expected_version),
+            )
+            if cursor.rowcount != 1:
+                raise ValidationError("Product version conflict; reload before retrying")
+            next_version = expected_version + 1
+            payload = (
+                f"action:rename;state:{record.product.state.value};"
+                f"name:{quote(candidate.name, safe='')}"
+            )
+            connection.execute(
+                "INSERT INTO domain_history(domain_history_id,owner_domain,target_ref,change_type,"
+                "historical_at,actor_context_ref,prior_version_ref,current_version_ref,change_payload_ref,created_at) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?)",
+                (str(uuid4()), "commerce", key, "product_lifecycle", timestamp,
+                 actor_context_ref, f"product:{key}:v{expected_version}",
+                 f"product:{key}:v{next_version}", payload, timestamp),
+            )
+        candidate.state = record.product.state
+        return ProductRecord(candidate, next_version)
 
     def transition_product(self, connection, product_id, action, *, expected_version, actor_context_ref, now=None):
         if not isinstance(action, str) or action not in {"activate", "retire"}:
