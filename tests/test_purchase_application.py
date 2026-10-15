@@ -512,3 +512,11 @@ def test_purchase_line_snapshot_database_guard_rejects_partial_snapshot():
             "received_quantity_units,created_at,product_unit_setting_id) VALUES(?,?,?,?,?,?,?,?)",
             (str(uuid4()), str(uuid4()), product, 1, "case", 0, "2026-10-13T12:00:00Z", str(uuid4())),
         )
+
+def test_purchase_unit_snapshot_capture_fails_closed_without_unit_catalog():
+    connection, person, activity, product = database()
+    line = PurchaseLine(
+        product_id=__import__("uuid").UUID(product), quantity_units=1, unit_label="case",
+    )
+    with pytest.raises(ValidationError, match="Product unit catalog is required"):
+        PurchaseApplication().capture_unit_snapshot(connection, line, str(uuid4()))
