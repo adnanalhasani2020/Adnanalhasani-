@@ -761,6 +761,18 @@ class ProductApplication:
                         raise ValidationError("Product history action and state are inconsistent")
             if state_value not in {"draft", "active", "retired"}:
                 raise ValidationError("Product history has an invalid state")
+            if states:
+                prior_state_value = states[-1]
+                if action_value == "rename" and state_value != prior_state_value:
+                    raise ValidationError("Product rename history changes lifecycle state")
+                if action_value == "activate" and (
+                    prior_state_value != "draft" or state_value != "active"
+                ):
+                    raise ValidationError("Product history contains an invalid activation transition")
+                if action_value == "retire" and (
+                    prior_state_value not in {"draft", "active"} or state_value != "retired"
+                ):
+                    raise ValidationError("Product history contains an invalid retirement transition")
             states.append(state_value)
         if states[0] != "draft" or states[-1] != state:
             raise ValidationError("Product history does not agree with persisted state")
