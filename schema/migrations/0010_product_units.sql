@@ -8,7 +8,7 @@ CREATE TABLE measurement_units (
     state TEXT NOT NULL CHECK (state IN ('active','retired')),
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    version_no INTEGER NOT NULL DEFAULT 1 CHECK (version_no > 0),
+    version_no INTEGER NOT NULL DEFAULT 1 CHECK (typeof(version_no) = 'integer' AND version_no > 0),
     CHECK (length(trim(code)) > 0),
     CHECK (length(trim(name)) > 0),
     CHECK (length(trim(dimension)) > 0)
@@ -19,8 +19,8 @@ CREATE TABLE product_unit_settings (
     product_id TEXT NOT NULL REFERENCES products(product_id),
     unit_id TEXT NOT NULL REFERENCES measurement_units(unit_id),
     role TEXT NOT NULL CHECK (role IN ('base','allowed')),
-    conversion_numerator INTEGER NOT NULL CHECK (conversion_numerator > 0),
-    conversion_denominator INTEGER NOT NULL CHECK (conversion_denominator > 0),
+    conversion_numerator INTEGER NOT NULL CHECK (typeof(conversion_numerator) = 'integer' AND conversion_numerator > 0),
+    conversion_denominator INTEGER NOT NULL CHECK (typeof(conversion_denominator) = 'integer' AND conversion_denominator > 0),
     state TEXT NOT NULL CHECK (state IN ('active','retired')),
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
@@ -137,7 +137,7 @@ BEFORE UPDATE OF dimension ON measurement_units
 WHEN NEW.dimension <> OLD.dimension
  AND EXISTS (
     SELECT 1 FROM product_unit_settings
-    WHERE unit_id = OLD.unit_id AND state = 'active'
+    WHERE unit_id = OLD.unit_id
  )
 BEGIN
     SELECT RAISE(ABORT, 'cannot change dimension while unit is configured for a product');
