@@ -95,3 +95,22 @@ def test_product_rename_history_failure_rolls_back_name_and_version():
     assert current.product.name == "Before"
     assert current.version_no == 1
     db.close()
+
+def test_product_restore_rejects_rename_history_that_disagrees_with_persisted_name():
+    db = connect_database()
+    app = ProductApplication()
+    created = app.create_product(db, "Original", actor_context_ref="catalog-admin", now=NOW)
+    renamed = app.update_product_name(
+        db, created.product.id, "Canonical Name", expected_version=1,
+        actor_context_ref="catalog-admin", now=NOW,
+    )
+    db.execute(
+        "UPDATE domain_history SET change_payload_ref=? "
+        "WHERE owner_domain='commerce' AND target_ref=? "
+        "AND change_type='product_lifecycle' AND change_payload_ref LIKE 'action:rename;%'",
+        ("action:rename;state:draft;name:Forged%20Name", str(created.product.id)),
+    )
+    db.commit()
+    with pytest.raises(ValidationError, match="does not agree with persisted rename history"):
+        app.get_product(db, created.product.id)
+    db.close()
