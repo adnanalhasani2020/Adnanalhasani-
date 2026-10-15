@@ -130,14 +130,14 @@ class ProductUnitApplication:
     def get_unit(self, db, unit_id):
         key = _uuid(unit_id, "unit_id")
         row = db.execute(
-            "SELECT unit_id,code,name,dimension,state FROM measurement_units WHERE unit_id=?", (key,)
+            "SELECT unit_id,code,name,dimension,state,version_no FROM measurement_units WHERE unit_id=?", (key,)
         ).fetchone()
         if row is None:
             raise ValidationError("measurement unit does not exist")
-        return MeasurementUnit(row[1], row[2], row[3], UUID(row[0]), UnitState(row[4]))
+        return MeasurementUnit(row[1], row[2], row[3], UUID(row[0]), UnitState(row[4]), row[5])
 
     def list_units(self, db, *, dimension=None, include_retired=False):
-        sql = "SELECT unit_id,code,name,dimension,state FROM measurement_units WHERE 1=1"
+        sql = "SELECT unit_id,code,name,dimension,state,version_no FROM measurement_units WHERE 1=1"
         params = []
         if dimension is not None:
             if not isinstance(dimension, str) or not dimension.strip():
@@ -147,7 +147,7 @@ class ProductUnitApplication:
         if not include_retired:
             sql += " AND state='active'"
         sql += " ORDER BY dimension,code,unit_id"
-        return [MeasurementUnit(r[1], r[2], r[3], UUID(r[0]), UnitState(r[4]))
+        return [MeasurementUnit(r[1], r[2], r[3], UUID(r[0]), UnitState(r[4]), r[5])
                 for r in db.execute(sql, params).fetchall()]
 
     def retire_unit(self, db, unit_id, *, expected_version=1, actor_context_ref, now=None):
