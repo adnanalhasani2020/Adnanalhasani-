@@ -62,3 +62,23 @@ def test_list_products_fails_closed_on_legacy_product_name_gap():
     with pytest.raises(ValidationError, match="explicit legacy reconciliation"):
         ProductApplication().list_products(db)
     db.close()
+
+
+def test_list_products_fails_closed_when_rename_history_is_corrupted():
+    db = connect_database()
+    app = ProductApplication()
+    created = app.create_product(db, "Original", actor_context_ref="catalog-admin", now=NOW)
+    app.update_product_name(
+        db, created.product.id, "Recorded Name", expected_version=1,
+        actor_context_ref="catalog-admin", now=NOW,
+    )
+    db.execute(
+        "UPDATE domain_history SET change_payload_ref=? "
+        "WHERE owner_domain='commerce' AND target_ref=? "
+        "AND change_type='product_lifecycle' AND change_payload_ref LIKE 'action:rename;%'",
+        ("action:rename;state:draft;name:Altered%20Name", str(created.product.id)),
+    )
+    db.commit()
+    with pytest.raises(ValidationError, match="does not agree with persisted rename history"):
+        app.list_products(db)
+    db.close()
