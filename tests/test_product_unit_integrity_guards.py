@@ -110,3 +110,34 @@ def test_direct_update_cannot_activate_retired_measurement_unit():
         assert app.get_product_unit(db, product, gram.id).state.value == "retired"
     finally:
         db.close()
+
+def test_retired_unit_dimension_is_immutable_when_history_references_it():
+    db, app, product, kg, gram, litre = _configured_units()
+    try:
+        app.retire_product_unit(
+            db, product, gram.id, actor_context_ref="integrity-test", now=NOW,
+        )
+        with pytest.raises(Exception, match="cannot change dimension"):
+            db.execute(
+                "UPDATE measurement_units SET dimension='volume' WHERE unit_id=?",
+                (str(gram.id),),
+            )
+        db.rollback()
+        assert app.get_unit(db, gram.id).dimension == "mass"
+    finally:
+        db.close()
+
+
+def test_database_rejects_non_integer_conversion_ratio_storage():
+    db, app, product, kg, gram, litre = _configured_units()
+    try:
+        with pytest.raises(Exception, match="CHECK constraint failed"):
+            db.execute(
+                "UPDATE product_unit_settings SET conversion_numerator=9223372036854775808 "
+                "WHERE product_id=? AND unit_id=?",
+                (product, str(gram.id)),
+            )
+        db.rollback()
+        assert app.get_product_unit(db, product, gram.id).conversion_numerator == 1
+    finally:
+        db.close()
