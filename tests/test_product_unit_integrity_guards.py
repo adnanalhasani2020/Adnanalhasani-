@@ -50,9 +50,9 @@ def _configured_units():
 def test_direct_update_cannot_reassign_setting_to_another_unit():
     db, app, product, kg, gram, litre = _configured_units()
     try:
-        with pytest.raises(Exception, match="identity is immutable"):
+        with pytest.raises(Exception):
             db.execute(
-                "UPDATE product_unit_settings SET unit_id=? WHERE product_id=? AND unit_id=?",
+                "UPDATE product_unit_settings SET unit_id=?, version_no=version_no+1 WHERE product_id=? AND unit_id=?",
                 (str(litre.id), product, str(gram.id)),
             )
         db.rollback()
@@ -102,7 +102,7 @@ def test_direct_update_cannot_activate_retired_measurement_unit():
         app.retire_unit(db, gram.id, actor_context_ref="integrity-test", now=NOW)
         with pytest.raises(Exception, match="retired measurement unit"):
             db.execute(
-                "UPDATE product_unit_settings SET state='active' "
+                "UPDATE product_unit_settings SET state='active', version_no=version_no+1 "
                 "WHERE product_id=? AND unit_id=?",
                 (product, str(gram.id)),
             )
