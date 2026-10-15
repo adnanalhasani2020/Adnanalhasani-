@@ -47,10 +47,10 @@ def _configured_units():
     return db, app, product, kg, gram, litre
 
 
-def test_direct_update_cannot_change_active_setting_to_another_dimension():
+def test_direct_update_cannot_reassign_setting_to_another_unit():
     db, app, product, kg, gram, litre = _configured_units()
     try:
-        with pytest.raises(Exception, match="dimension must match"):
+        with pytest.raises(Exception, match="identity is immutable"):
             db.execute(
                 "UPDATE product_unit_settings SET unit_id=? WHERE product_id=? AND unit_id=?",
                 (str(litre.id), product, str(gram.id)),
@@ -133,7 +133,36 @@ def test_database_rejects_non_integer_conversion_ratio_storage():
     try:
         with pytest.raises(Exception, match="CHECK constraint failed"):
             db.execute(
-                "UPDATE product_unit_settings SET conversion_numerator=9223372036854775808 "
+                "UPDATE product_unit_settings SET conversion_numerator=9223372036854775808, "
+                "version_no=version_no+1 WHERE product_id=? AND unit_id=?",
+                (product, str(gram.id)),
+            )
+        db.rollback()
+        assert app.get_product_unit(db, product, gram.id).conversion_numerator == 1
+    finally:
+        db.close()
+
+def test_database_rejects_retiring_base_while_allowed_units_are_active():
+    db, app, product, kg, gram, litre = _configured_units()
+    try:
+        with pytest.raises(Exception, match="retire active allowed units"):
+            db.execute(
+                "UPDATE product_unit_settings SET state='retired', version_no=version_no+1 "
+                "WHERE product_id=? AND unit_id=?",
+                (product, str(kg.id)),
+            )
+        db.rollback()
+        assert app.get_product_unit(db, product, kg.id).state.value == "active"
+    finally:
+        db.close()
+
+
+def test_database_rejects_setting_mutation_without_version_increment():
+    db, app, product, kg, gram, litre = _configured_units()
+    try:
+        with pytest.raises(Exception, match="version must increment"):
+            db.execute(
+                "UPDATE product_unit_settings SET conversion_numerator=2 "
                 "WHERE product_id=? AND unit_id=?",
                 (product, str(gram.id)),
             )
