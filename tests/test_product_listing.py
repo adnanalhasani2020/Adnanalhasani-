@@ -55,7 +55,7 @@ def test_list_products_fails_closed_on_legacy_product_name_gap():
     db = connect_database()
     db.execute(
         "INSERT INTO products(product_id,name,state,created_at,updated_at,version_no) "
-        "VALUES('legacy-product',NULL,'draft',?,?,1)",
+        "VALUES('00000000-0000-4000-8000-000000000001',NULL,'draft',?,?,1)",
         (NOW, NOW),
     )
     db.commit()
