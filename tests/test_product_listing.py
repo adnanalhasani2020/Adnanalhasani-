@@ -20,11 +20,10 @@ def test_list_products_filters_paginates_and_uses_stable_order():
     )
 
     all_products = app.list_products(db)
-    assert [item.product.id for item in all_products] == [
-        first.product.id, second.product.id, third.product.id,
-    ]
+    stable_ids = sorted([first.product.id, second.product.id, third.product.id], key=str)
+    assert [item.product.id for item in all_products] == stable_ids
     assert [item.product.id for item in app.list_products(db, limit=1, offset=1)] == [
-        second.product.id,
+        stable_ids[1],
     ]
     assert [item.product.id for item in app.list_products(db, state="active")] == [
         second.product.id,
@@ -37,6 +36,7 @@ def test_list_products_filters_paginates_and_uses_stable_order():
     "kwargs",
     [
         {"state": "deleted"},
+        {"state": []},
         {"limit": 0},
         {"limit": 501},
         {"limit": True},
