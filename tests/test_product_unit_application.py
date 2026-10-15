@@ -103,6 +103,11 @@ def test_unit_and_conversion_edits_are_versioned_and_audited():
     renamed = app.update_unit(db, kg.id, name="Kilogramme", expected_version=1,
                               actor_context_ref="test", now=NOW)
     assert renamed.name == "Kilogramme"
+    assert renamed.version_no == 2
+    renamed_again = app.update_unit(db, kg.id, code="KGM", expected_version=renamed.version_no,
+                                    actor_context_ref="test", now=NOW)
+    assert renamed_again.code == "KGM"
+    assert renamed_again.version_no == 3
     with pytest.raises(ValidationError, match="version conflict"):
         app.update_unit(db, kg.id, name="Stale Name", expected_version=1,
                         actor_context_ref="test", now=NOW)
@@ -120,7 +125,7 @@ def test_unit_and_conversion_edits_are_versioned_and_audited():
         )
     assert db.execute(
         "SELECT COUNT(*) FROM domain_history WHERE change_type LIKE 'product_unit_%'"
-    ).fetchone()[0] == 6
+    ).fetchone()[0] == 7
     db.close()
 
 
