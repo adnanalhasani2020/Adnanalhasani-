@@ -254,7 +254,9 @@ class ProductUnitApplication:
             raise ValidationError("actor_context_ref is required")
         if (not isinstance(conversion_numerator, int) or isinstance(conversion_numerator, bool)
                 or not isinstance(conversion_denominator, int) or isinstance(conversion_denominator, bool)
-                or conversion_numerator <= 0 or conversion_denominator <= 0):
+                or conversion_numerator <= 0 or conversion_denominator <= 0
+                or conversion_numerator > _MAX_SQLITE_INTEGER
+                or conversion_denominator > _MAX_SQLITE_INTEGER):
             raise ValidationError("conversion ratio must use positive integer numerator and denominator")
         if not isinstance(expected_version, int) or isinstance(expected_version, bool) or expected_version < 1:
             raise ValidationError("expected_version must be a positive integer")
