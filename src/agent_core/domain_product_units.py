@@ -25,6 +25,15 @@ class MeasurementUnit:
     id: UUID
     state: UnitState = UnitState.ACTIVE
 
+    def __post_init__(self):
+        if not all(isinstance(value, str) and value.strip() for value in
+                   (self.code, self.name, self.dimension)):
+            raise ValidationError("unit code, name, and dimension are required")
+        if not isinstance(self.id, UUID):
+            raise ValidationError("unit id must be a UUID")
+        if not isinstance(self.state, UnitState):
+            raise ValidationError("unit state must be a UnitState")
+
 
 @dataclass(frozen=True)
 class ProductUnitSetting:
@@ -37,8 +46,20 @@ class ProductUnitSetting:
     version_no: int
 
     def __post_init__(self):
-        if self.conversion_numerator <= 0 or self.conversion_denominator <= 0:
-            raise ValidationError("conversion ratio must be a positive rational")
+        if not isinstance(self.product_id, UUID) or not isinstance(self.unit_id, UUID):
+            raise ValidationError("product_id and unit_id must be UUIDs")
+        if not isinstance(self.role, ProductUnitRole):
+            raise ValidationError("role must be a ProductUnitRole")
+        if not isinstance(self.state, UnitState):
+            raise ValidationError("state must be a UnitState")
+        if (not isinstance(self.conversion_numerator, int)
+                or isinstance(self.conversion_numerator, bool)
+                or not isinstance(self.conversion_denominator, int)
+                or isinstance(self.conversion_denominator, bool)
+                or self.conversion_numerator <= 0 or self.conversion_denominator <= 0):
+            raise ValidationError("conversion ratio must be a positive integer rational")
+        if not isinstance(self.version_no, int) or isinstance(self.version_no, bool) or self.version_no < 1:
+            raise ValidationError("version_no must be a positive integer")
         if self.role is ProductUnitRole.BASE and (
             self.conversion_numerator != 1 or self.conversion_denominator != 1
         ):
