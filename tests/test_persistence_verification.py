@@ -20,6 +20,7 @@ EXPECTED_DOMAIN_TABLES = {
     "results_reports","prescriptions","pending_operations","conflicts",
     "durable_operation_records","audit_records","provenance_records","domain_history",
     "workflows","workflow_events","activity_invitations","file_attachments",
+    "measurement_units","product_unit_settings",
 }
 NOW = "2026-10-08T00:00:00Z"
 
@@ -86,6 +87,7 @@ def test_clean_install_has_exactly_49_domain_tables_plus_migration_bookkeeping()
         "0005_inventory_position_offering_context",
         "0006_inventory_quantity_integer",
         "0007_product_name",
+        "0010_product_units",
         "9998_activity_invitations",
         "9999_file_attachments",
     ]
@@ -103,7 +105,7 @@ def test_existing_db_migration_preserves_data_and_is_idempotent(tmp_path):
     before = reopened.execute("SELECT COUNT(*) FROM persons").fetchone()[0]
     assert apply_migrations(reopened) == []
     assert reopened.execute("SELECT COUNT(*) FROM persons").fetchone()[0] == before
-    assert reopened.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0] == 9
+    assert reopened.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0] == 10
 
 
 def test_constraints_are_enforced_at_runtime():
