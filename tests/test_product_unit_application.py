@@ -193,7 +193,7 @@ def test_database_guards_reject_dimension_drift_and_active_unit_retirement():
     db.rollback()
 
     with pytest.raises(Exception, match="configured for a product"):
-        db.execute("UPDATE measurement_units SET state='retired' WHERE unit_id=?", (str(kg.id),))
+        db.execute("UPDATE measurement_units SET state='retired', version_no=version_no+1 WHERE unit_id=?", (str(kg.id),))
     db.rollback()
     assert app.get_unit(db, kg.id).state.value == "active"
     db.close()
