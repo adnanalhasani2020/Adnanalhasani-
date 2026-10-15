@@ -156,3 +156,36 @@ BEFORE DELETE ON product_unit_settings
 BEGIN
     SELECT RAISE(ABORT, 'product unit settings cannot be deleted; retire them instead');
 END;
+
+-- Setting identity is immutable. A changed product/unit/role is a new
+-- configuration, so retire the old setting and create a new one.
+CREATE TRIGGER trg_product_unit_setting_identity_immutable
+BEFORE UPDATE OF product_id, unit_id, role ON product_unit_settings
+WHEN NEW.product_id <> OLD.product_id
+  OR NEW.unit_id <> OLD.unit_id
+  OR NEW.role <> OLD.role
+BEGIN
+    SELECT RAISE(ABORT, 'product unit setting identity is immutable; retire and configure a new setting');
+END;
+
+CREATE TRIGGER trg_product_unit_base_retire_requires_allowed_retired
+BEFORE UPDATE OF state ON product_unit_settings
+WHEN OLD.role = 'base'
+ AND OLD.state = 'active'
+ AND NEW.state = 'retired'
+ AND EXISTS (
+    SELECT 1 FROM product_unit_settings
+    WHERE product_id = OLD.product_id
+      AND role = 'allowed'
+      AND state = 'active'
+ )
+BEGIN
+    SELECT RAISE(ABORT, 'retire active allowed units before retiring the base unit');
+END;
+
+CREATE TRIGGER trg_product_unit_settings_version_increment
+BEFORE UPDATE ON product_unit_settings
+WHEN NEW.version_no <> OLD.version_no + 1
+BEGIN
+    SELECT RAISE(ABORT, 'product unit setting version must increment by one');
+END;
