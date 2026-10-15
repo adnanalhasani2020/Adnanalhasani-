@@ -558,9 +558,9 @@ def test_purchase_creation_captures_explicit_unit_configuration_and_preserves_hi
 
     # A later ratio update must not change the historical purchase line's conversion.
     current_setting = units.get_product_unit(connection, product, case.id)
-    units.update_conversion_ratio(
+    units.update_product_unit_conversion(
         connection, product, case.id, conversion_numerator=24, conversion_denominator=1,
-        expected_version_no=current_setting.version_no,
+        expected_version=current_setting.version_no,
         actor_context_ref=person, now="2026-10-14T12:00:00Z",
     )
     historical = unit_app.get_purchase(connection, str(record.purchase.id)).purchase.lines[0]
