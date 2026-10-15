@@ -189,3 +189,10 @@ WHEN NEW.version_no <> OLD.version_no + 1
 BEGIN
     SELECT RAISE(ABORT, 'product unit setting version must increment by one');
 END;
+
+CREATE TRIGGER trg_measurement_units_version_increment
+BEFORE UPDATE ON measurement_units
+WHEN NEW.version_no <> OLD.version_no + 1
+BEGIN
+    SELECT RAISE(ABORT, 'measurement unit version must increment by one');
+END;
