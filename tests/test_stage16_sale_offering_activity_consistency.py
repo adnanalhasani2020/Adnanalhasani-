@@ -201,6 +201,7 @@ def test_existing_database_migration_preserves_sales_invoices_and_history_on_reo
         ("0009_supplier_invoices",),
         ("0010_product_units",),
         ("0011_purchase_line_unit_snapshot",),
+        ("0012_purchase_unit_snapshot_catalog_guards",),
         ("9998_activity_invitations",),
         ("9999_file_attachments",),
     ]
