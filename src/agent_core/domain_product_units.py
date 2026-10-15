@@ -7,6 +7,9 @@ from uuid import UUID
 from agent_core.shared import ValidationError
 
 
+_MAX_SQLITE_INTEGER = 2**63 - 1
+
+
 class UnitState(str, Enum):
     ACTIVE = "active"
     RETIRED = "retired"
@@ -59,7 +62,9 @@ class ProductUnitSetting:
                 or isinstance(self.conversion_numerator, bool)
                 or not isinstance(self.conversion_denominator, int)
                 or isinstance(self.conversion_denominator, bool)
-                or self.conversion_numerator <= 0 or self.conversion_denominator <= 0):
+                or self.conversion_numerator <= 0 or self.conversion_denominator <= 0
+                or self.conversion_numerator > _MAX_SQLITE_INTEGER
+                or self.conversion_denominator > _MAX_SQLITE_INTEGER):
             raise ValidationError("conversion ratio must be a positive integer rational")
         if not isinstance(self.version_no, int) or isinstance(self.version_no, bool) or self.version_no < 1:
             raise ValidationError("version_no must be a positive integer")
