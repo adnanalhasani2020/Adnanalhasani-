@@ -51,6 +51,9 @@ def test_rejects_cross_dimension_and_duplicate_base_and_bad_ratio():
         app.configure_product_unit(db,product,kg.id,role="base",actor_context_ref="test",now=NOW)
     with pytest.raises(ValidationError,match="positive integer"):
         app.configure_product_unit(db,product,kg.id,conversion_numerator=0,actor_context_ref="test",now=NOW)
+    with pytest.raises(ValidationError,match="positive integer"):
+        app.configure_product_unit(db,product,kg.id,conversion_numerator=2**63,
+                                   actor_context_ref="test",now=NOW)
     db.close()
 
 
@@ -118,6 +121,11 @@ def test_unit_and_conversion_edits_are_versioned_and_audited():
     )
     assert updated.version_no == 2
     assert app.convert(db, product, 500, gram.id, kg.id) == Fraction(1, 1)
+    with pytest.raises(ValidationError, match="positive integer"):
+        app.update_product_unit_conversion(
+            db, product, gram.id, conversion_numerator=2**63, conversion_denominator=1,
+            expected_version=2, actor_context_ref="test", now=NOW
+        )
     with pytest.raises(ValidationError, match="base unit conversion ratio must be 1/1"):
         app.update_product_unit_conversion(
             db, product, kg.id, conversion_numerator=2, conversion_denominator=1,
