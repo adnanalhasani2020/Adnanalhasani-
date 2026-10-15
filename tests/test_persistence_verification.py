@@ -72,10 +72,10 @@ def _financial_fixture(db):
     return account, obligation, payment, settlement
 
 
-def test_clean_install_has_exactly_49_domain_tables_plus_migration_bookkeeping():
+def test_clean_install_has_exactly_51_domain_tables_plus_migration_bookkeeping():
     db = connect_database()
     assert _tables(db) == EXPECTED_DOMAIN_TABLES | {"schema_migrations"}
-    assert len(EXPECTED_DOMAIN_TABLES) == 49
+    assert len(EXPECTED_DOMAIN_TABLES) == 51
     assert db.execute("PRAGMA foreign_keys").fetchone()[0] == 1
     assert db.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
     versions = [r[0] for r in db.execute("SELECT version FROM schema_migrations ORDER BY version")]
