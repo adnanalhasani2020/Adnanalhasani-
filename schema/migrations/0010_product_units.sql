@@ -26,7 +26,8 @@ CREATE TABLE product_unit_settings (
     updated_at TEXT NOT NULL,
     configured_by_ref TEXT NOT NULL,
     version_no INTEGER NOT NULL DEFAULT 1 CHECK (version_no > 0),
-    UNIQUE (product_id, unit_id)
+    UNIQUE (product_id, unit_id),
+    CHECK (role <> 'base' OR (conversion_numerator = 1 AND conversion_denominator = 1))
 );
 
 CREATE UNIQUE INDEX idx_product_unit_one_active_base
@@ -35,6 +36,16 @@ WHERE role = 'base' AND state = 'active';
 
 CREATE INDEX idx_product_unit_settings_product_state
 ON product_unit_settings(product_id, state, role);
+
+CREATE TRIGGER trg_product_unit_allowed_requires_base
+BEFORE INSERT ON product_unit_settings
+WHEN NEW.role = 'allowed' AND NOT EXISTS (
+    SELECT 1 FROM product_unit_settings
+    WHERE product_id = NEW.product_id AND role = 'base' AND state = 'active'
+)
+BEGIN
+    SELECT RAISE(ABORT, 'configure a base unit before adding allowed units');
+END;
 
 CREATE TRIGGER trg_product_unit_settings_dimension_insert
 BEFORE INSERT ON product_unit_settings
