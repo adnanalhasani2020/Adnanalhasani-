@@ -21,6 +21,7 @@ def database():
     connection.executescript((ROOT / "schema/migrations/0008_purchases.sql").read_text())
     connection.executescript((ROOT / "schema/migrations/0010_product_units.sql").read_text())
     connection.executescript((ROOT / "schema/migrations/0011_purchase_line_unit_snapshot.sql").read_text())
+    connection.executescript((ROOT / "schema/migrations/0012_purchase_unit_snapshot_catalog_guards.sql").read_text())
     now = "2026-10-13T12:00:00Z"
     person, activity, product = str(uuid4()), str(uuid4()), str(uuid4())
     connection.execute(
@@ -576,3 +577,32 @@ def test_purchase_creation_captures_explicit_unit_configuration_and_preserves_hi
     historical = unit_app.get_purchase(connection, str(record.purchase.id)).purchase.lines[0]
     assert historical.conversion_numerator == 12
     assert historical.base_quantity_units == Fraction(36, 1)
+
+def test_database_rejects_snapshot_that_does_not_match_active_product_unit():
+    connection, person, activity, product = database()
+    units = ProductUnitApplication()
+    unit = units.create_unit(
+        connection, code="pc", name="Piece", dimension="count",
+        actor_context_ref=person, now="2026-10-13T12:00:00Z",
+    )
+    units.configure_product_unit(
+        connection, product, unit.id, role="base",
+        actor_context_ref=person, now="2026-10-13T12:00:00Z",
+    )
+    line = PurchaseLine(
+        product_id=__import__("uuid").UUID(product), quantity_units=1, unit_label="pc",
+    )
+    record = PurchaseApplication().create_purchase(
+        connection, "supplier:invalid-snapshot", activity, (line,), person,
+        grant(connection, person, "create_purchase", activity, activity),
+        idempotency_key="invalid-snapshot-owner",
+    )
+    with pytest.raises(sqlite3.IntegrityError, match="does not match active product unit configuration"):
+        connection.execute(
+            "INSERT INTO purchase_lines(purchase_line_id,purchase_id,product_id,quantity_units,unit_label,"
+            "received_quantity_units,created_at,product_unit_setting_id,measurement_unit_id,unit_code_snapshot,"
+            "unit_name_snapshot,unit_dimension_snapshot,conversion_numerator,conversion_denominator,"
+            "product_unit_setting_version,measurement_unit_version) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (str(uuid4()), str(record.purchase.id), product, 1, "pc", 0, "2026-10-13T12:00:00Z",
+             str(uuid4()), str(unit.id), "pc", "Piece", "count", 1, 1, 1, 1),
+        )
