@@ -49,6 +49,21 @@ BEGIN
     END;
 END;
 
+CREATE TRIGGER trg_product_unit_settings_dimension_guard
+BEFORE INSERT ON product_unit_settings
+WHEN EXISTS (
+    SELECT 1
+    FROM product_unit_settings existing
+    JOIN measurement_units existing_unit ON existing_unit.unit_id = existing.unit_id
+    JOIN measurement_units new_unit ON new_unit.unit_id = NEW.unit_id
+    WHERE existing.product_id = NEW.product_id
+      AND existing.state = 'active'
+      AND existing_unit.dimension <> new_unit.dimension
+)
+BEGIN
+    SELECT RAISE(ABORT, 'product unit dimension must match existing active product units');
+END;
+
 CREATE TRIGGER trg_measurement_unit_retire_referenced_guard
 BEFORE UPDATE OF state ON measurement_units
 WHEN NEW.state = 'retired' AND OLD.state <> 'retired'
