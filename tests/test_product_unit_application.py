@@ -1,0 +1,85 @@
+import uuid
+from fractions import Fraction
+
+import pytest
+
+from agent_core.product_unit_application import ProductUnitApplication
+from agent_core.persistence import connect_database
+from agent_core.shared import ValidationError
+
+
+NOW = "2026-10-15T12:00:00Z"
+
+
+def _product(db):
+    pid = str(uuid.uuid4())
+    now = NOW
+    db.execute("INSERT INTO products(product_id,state,created_at,updated_at) VALUES(?,?,?,?)",
+               (pid,"active",now,now))
+    db.commit()
+    return pid
+
+
+def test_unit_catalog_product_configuration_and_exact_conversion():
+    db = connect_database()
+    app = ProductUnitApplication()
+    product = _product(db)
+    kg = app.create_unit(db,code="kg",name="Kilogram",dimension="mass",
+                         actor_context_ref="test",now=NOW)
+    gram = app.create_unit(db,code="g",name="Gram",dimension="mass",
+                            actor_context_ref="test",now=NOW)
+    app.configure_product_unit(db,product,kg.id,role="base",actor_context_ref="test",now=NOW)
+    app.configure_product_unit(db,product,gram.id,role="allowed",conversion_numerator=1,
+                                conversion_denominator=1000,actor_context_ref="test",now=NOW)
+    assert app.convert(db,product,1000,gram.id,kg.id) == Fraction(1,1)
+    assert app.convert(db,product,Fraction(3,2),kg.id,gram.id) == Fraction(1500,1)
+    assert len(app.list_product_units(db,product)) == 2
+    assert len(db.execute("SELECT * FROM domain_history WHERE change_type LIKE 'product_unit_%'").fetchall()) == 4
+    db.close()
+
+
+def test_rejects_cross_dimension_and_duplicate_base_and_bad_ratio():
+    db = connect_database()
+    app = ProductUnitApplication()
+    product = _product(db)
+    kg = app.create_unit(db,code="kg",name="Kilogram",dimension="mass",actor_context_ref="test",now=NOW)
+    litre = app.create_unit(db,code="L",name="Litre",dimension="volume",actor_context_ref="test",now=NOW)
+    app.configure_product_unit(db,product,kg.id,role="base",actor_context_ref="test",now=NOW)
+    with pytest.raises(ValidationError,match="dimension"):
+        app.configure_product_unit(db,product,litre.id,actor_context_ref="test",now=NOW)
+    with pytest.raises(ValidationError,match="already has an active base"):
+        app.configure_product_unit(db,product,kg.id,role="base",actor_context_ref="test",now=NOW)
+    with pytest.raises(ValidationError,match="positive integer"):
+        app.configure_product_unit(db,product,kg.id,conversion_numerator=0,actor_context_ref="test",now=NOW)
+    db.close()
+
+
+def test_requires_base_first_and_rejects_float_quantity():
+    db = connect_database()
+    app = ProductUnitApplication()
+    product = _product(db)
+    kg = app.create_unit(db,code="kg",name="Kilogram",dimension="mass",actor_context_ref="test",now=NOW)
+    with pytest.raises(ValidationError,match="base unit"):
+        app.configure_product_unit(db,product,kg.id,actor_context_ref="test",now=NOW)
+    base = app.configure_product_unit(db,product,kg.id,role="base",actor_context_ref="test",now=NOW)
+    with pytest.raises(ValidationError,match="float"):
+        app.convert(db,product,0.1,kg.id,kg.id)
+    db.close()
+
+
+def test_legacy_products_remain_without_assumed_units():
+    db = connect_database()
+    product = _product(db)
+    assert db.execute("SELECT COUNT(*) FROM product_unit_settings WHERE product_id=?",(product,)).fetchone()[0] == 0
+    db.close()
+
+
+def test_unit_retirement_is_blocked_while_product_uses_it():
+    db = connect_database()
+    app = ProductUnitApplication()
+    product = _product(db)
+    kg = app.create_unit(db,code="kg",name="Kilogram",dimension="mass",actor_context_ref="test",now=NOW)
+    app.configure_product_unit(db,product,kg.id,role="base",actor_context_ref="test",now=NOW)
+    with pytest.raises(ValidationError,match="configured for a product"):
+        app.retire_unit(db,kg.id,actor_context_ref="test",now=NOW)
+    db.close()
