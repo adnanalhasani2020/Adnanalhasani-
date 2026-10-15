@@ -146,3 +146,47 @@ def test_product_unit_retirement_preserves_base_invariant():
                                            expected_version=1, actor_context_ref="test", now=NOW)
     assert retired_base.state.value == "retired"
     db.close()
+
+
+
+def test_database_guards_reject_dimension_drift_and_active_unit_retirement():
+    db = connect_database()
+    app = ProductUnitApplication()
+    product = _product(db)
+    kg = app.create_unit(db, code="kg", name="Kilogram", dimension="mass",
+                         actor_context_ref="test", now=NOW)
+    litre = app.create_unit(db, code="L", name="Litre", dimension="volume",
+                            actor_context_ref="test", now=NOW)
+    app.configure_product_unit(db, product, kg.id, role="base",
+                               actor_context_ref="test", now=NOW)
+
+    with pytest.raises(Exception, match="dimension must match"):
+        db.execute(
+            "INSERT INTO product_unit_settings(product_unit_setting_id,product_id,unit_id,role,"
+            "conversion_numerator,conversion_denominator,state,created_at,updated_at,configured_by_ref) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?)",
+            (str(uuid.uuid4()), product, str(litre.id), "allowed", 1, 1,
+             "active", NOW, NOW, "test"),
+        )
+    db.rollback()
+
+    with pytest.raises(Exception, match="configured for a product"):
+        db.execute("UPDATE measurement_units SET state='retired' WHERE unit_id=?", (str(kg.id),))
+    db.rollback()
+    assert app.get_unit(db, kg.id).state.value == "active"
+    db.close()
+
+
+def test_unit_code_uniqueness_is_case_insensitive_and_retire_version_is_validated():
+    db = connect_database()
+    app = ProductUnitApplication()
+    unit = app.create_unit(db, code="kg", name="Kilogram", dimension="mass",
+                            actor_context_ref="test", now=NOW)
+    with pytest.raises(ValidationError, match="already exists"):
+        app.create_unit(db, code="KG", name="Duplicate Kilogram", dimension="mass",
+                        actor_context_ref="test", now=NOW)
+    with pytest.raises(ValidationError, match="positive integer"):
+        app.retire_unit(db, unit.id, expected_version=True,
+                        actor_context_ref="test", now=NOW)
+    assert app.get_unit(db, unit.id).state.value == "active"
+    db.close()
