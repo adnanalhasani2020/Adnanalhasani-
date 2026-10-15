@@ -25,7 +25,7 @@ CREATE TABLE product_unit_settings (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     configured_by_ref TEXT NOT NULL,
-    version_no INTEGER NOT NULL DEFAULT 1 CHECK (version_no > 0),
+    version_no INTEGER NOT NULL DEFAULT 1 CHECK (typeof(version_no) = 'integer' AND version_no > 0),
     UNIQUE (product_id, unit_id),
     CHECK (role <> 'base' OR (conversion_numerator = 1 AND conversion_denominator = 1))
 );
