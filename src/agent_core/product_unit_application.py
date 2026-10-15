@@ -155,6 +155,8 @@ class ProductUnitApplication:
         actor = actor_context_ref.strip() if isinstance(actor_context_ref, str) else ""
         if not actor:
             raise ValidationError("actor_context_ref is required")
+        if not isinstance(expected_version, int) or isinstance(expected_version, bool) or expected_version < 1:
+            raise ValidationError("expected_version must be a positive integer")
         with _atomic(db):
             row = db.execute(
                 "SELECT state,version_no FROM measurement_units WHERE unit_id=?", (key,)
