@@ -136,3 +136,31 @@ def test_product_name_update_supports_multiple_renames_across_lifecycle_transiti
     assert restored.product.state is ProductState.ACTIVE
     assert restored.version_no == active.version_no == 4
     db.close()
+
+
+def test_product_restore_rejects_rename_history_that_changes_lifecycle_state():
+    db = connect_database()
+    app = ProductApplication()
+    created = app.create_product(db, "Original", actor_context_ref="catalog-admin", now=NOW)
+    active = app.transition_product(
+        db, created.product.id, "activate", expected_version=1,
+        actor_context_ref="catalog-admin", now=NOW,
+    )
+    renamed = app.update_product_name(
+        db, created.product.id, "Renamed", expected_version=active.version_no,
+        actor_context_ref="catalog-admin", now=NOW,
+    )
+    app.transition_product(
+        db, created.product.id, "retire", expected_version=renamed.version_no,
+        actor_context_ref="catalog-admin", now=NOW,
+    )
+    db.execute(
+        "UPDATE domain_history SET change_payload_ref=? "
+        "WHERE owner_domain='commerce' AND target_ref=? "
+        "AND change_type='product_lifecycle' AND change_payload_ref LIKE 'action:rename;%'",
+        ("action:rename;state:draft;name:Renamed", str(created.product.id)),
+    )
+    db.commit()
+    with pytest.raises(ValidationError, match="rename history changes lifecycle state"):
+        app.get_product(db, created.product.id)
+    db.close()
