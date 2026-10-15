@@ -18,6 +18,7 @@ def database():
     connection.executescript((ROOT / "schema/migrations/0001_initial_relational_schema.sql").read_text())
     connection.executescript((ROOT / "schema/migrations/0007_product_name.sql").read_text())
     connection.executescript((ROOT / "schema/migrations/0008_purchases.sql").read_text())
+    connection.executescript((ROOT / "schema/migrations/0011_purchase_line_unit_snapshot.sql").read_text())
     now = "2026-10-13T12:00:00Z"
     person, activity, product = str(uuid4()), str(uuid4()), str(uuid4())
     connection.execute(
@@ -452,3 +453,62 @@ def test_purchase_restore_rejects_line_facts_that_disagree_with_create_fingerpri
     ):
         app.get_purchase(connection, record.purchase.id)
     connection.close()
+
+def test_purchase_line_unit_snapshot_uses_exact_rational_quantity():
+    from fractions import Fraction
+    from uuid import UUID
+
+    line = PurchaseLine(
+        product_id=UUID("00000000-0000-0000-0000-000000000001"),
+        quantity_units=3,
+        unit_label="case",
+        product_unit_setting_id=UUID("00000000-0000-0000-0000-000000000002"),
+        measurement_unit_id=UUID("00000000-0000-0000-0000-000000000003"),
+        unit_code_snapshot="case",
+        unit_name_snapshot="Case",
+        unit_dimension_snapshot="count",
+        conversion_numerator=12,
+        conversion_denominator=1,
+        product_unit_setting_version=2,
+        measurement_unit_version=4,
+    )
+    assert line.base_quantity_units == Fraction(36, 1)
+
+
+def test_purchase_line_rejects_incomplete_unit_snapshot():
+    from uuid import UUID
+
+    with pytest.raises(ValidationError, match="unit snapshot requires both"):
+        PurchaseLine(
+            product_id=UUID("00000000-0000-0000-0000-000000000001"),
+            quantity_units=1,
+            unit_label="case",
+            product_unit_setting_id=UUID("00000000-0000-0000-0000-000000000002"),
+        )
+
+
+def test_purchase_line_snapshot_is_immutable_in_database():
+    connection, person, activity, product = database()
+    app = PurchaseApplication()
+    line = PurchaseLine(product_id=__import__("uuid").UUID(product), quantity_units=2, unit_label="case")
+    record = app.create_purchase(
+        connection, "supplier:snapshot", activity, (line,), person,
+        grant(connection, person, "create_purchase", activity, activity),
+        idempotency_key="snapshot-immutable",
+    )
+    with pytest.raises(sqlite3.IntegrityError, match="purchase unit snapshot is immutable"):
+        connection.execute(
+            "UPDATE purchase_lines SET unit_code_snapshot='changed' WHERE purchase_line_id=?",
+            (str(line.id),),
+        )
+    assert app.get_purchase(connection, str(record.purchase.id)).purchase.lines[0].unit_code_snapshot is None
+
+
+def test_purchase_line_snapshot_database_guard_rejects_partial_snapshot():
+    connection, person, activity, product = database()
+    with pytest.raises(sqlite3.IntegrityError, match="snapshot must be complete"):
+        connection.execute(
+            "INSERT INTO purchase_lines(purchase_line_id,purchase_id,product_id,quantity_units,unit_label,"
+            "received_quantity_units,created_at,product_unit_setting_id) VALUES(?,?,?,?,?,?,?,?)",
+            (str(uuid4()), str(uuid4()), product, 1, "case", 0, "2026-10-13T12:00:00Z", str(uuid4())),
+        )
