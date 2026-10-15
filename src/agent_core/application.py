@@ -796,6 +796,31 @@ class ProductApplication:
     def get_product(self, connection, product_id):
         return self._load_product(connection, product_id)
 
+    def list_products(self, connection, *, state=None, limit=100, offset=0):
+        """List persisted Products in stable order, validating each record's history."""
+        allowed_states = {item.value for item in ProductState}
+        if state is not None and state not in allowed_states:
+            raise ValidationError("Product state filter must be draft, active, or retired")
+        if type(limit) is not int or not 1 <= limit <= 500:
+            raise ValidationError("Product list limit must be an integer between 1 and 500")
+        if type(offset) is not int or offset < 0:
+            raise ValidationError("Product list offset must be a non-negative integer")
+        if state is None:
+            rows = connection.execute(
+                "SELECT product_id FROM products ORDER BY created_at, product_id LIMIT ? OFFSET ?",
+                (limit, offset),
+            ).fetchall()
+        else:
+            rows = connection.execute(
+                "SELECT product_id FROM products WHERE state=? "
+                "ORDER BY created_at, product_id LIMIT ? OFFSET ?",
+                (state, limit, offset),
+            ).fetchall()
+        # Restore through the same integrity checks used by get_product; do not
+        # let list views hide legacy gaps or corrupted history.
+        return tuple(self._load_product(connection, row[0]) for row in rows)
+
+
     def update_product_name(
         self, connection, product_id, name, *, expected_version, actor_context_ref, now=None
     ):
