@@ -133,13 +133,16 @@ class PurchaseApplication:
     def _load(self, connection, purchase_id):
         key = str(self._uuid(purchase_id, "Purchase identifier"))
         row = connection.execute(
-            "SELECT purchase_id, supplier_ref, activity_id, state, version_no, created_by_ref "
-            "FROM purchases WHERE purchase_id=?", (key,),
+            "SELECT purchase_id, supplier_ref, activity_id, state, version_no, created_by_ref, "
+            "create_idempotency_key, create_request_fingerprint FROM purchases WHERE purchase_id=?", (key,),
         ).fetchone()
         if row is None:
             raise ValidationError("Purchase does not exist")
-        persisted_id, supplier_ref, activity_id, state, version, created_by_ref = row
+        persisted_id, supplier_ref, activity_id, state, version, created_by_ref, create_key, create_fingerprint = row
         persisted_creator = self._uuid(created_by_ref, "Persisted Purchase creator identifier")
+        self._idempotency_key(create_key)
+        if not isinstance(supplier_ref, str) or not supplier_ref.strip():
+            raise ValidationError("Persisted Purchase supplier reference is invalid")
         line_rows = connection.execute(
             "SELECT purchase_line_id, product_id, quantity_units, unit_label, unit_cost_minor, "
             "currency_code, received_quantity_units FROM purchase_lines "
@@ -157,6 +160,25 @@ class PurchaseApplication:
             unit_label=unit_label, unit_cost_minor=cost, currency_code=currency,
             received_quantity_units=received,
         ) for line_id, product_id, quantity, unit_label, cost, currency, received in line_rows)
+        fingerprint_payload = {
+            "operation": "create_purchase",
+            "supplier_ref": supplier_ref,
+            "activity_id": str(self._uuid(activity_id, "Persisted Activity identifier")),
+            "actor": str(persisted_creator),
+            "lines": [{
+                "product_id": str(line.product_id),
+                "quantity_units": line.quantity_units,
+                "unit_label": line.unit_label,
+                "unit_cost_minor": line.unit_cost_minor,
+                "currency_code": line.currency_code,
+            } for line in lines],
+        }
+        valid_fingerprints = {
+            self._fingerprint({**fingerprint_payload, "requested_purchase_id": None}),
+            self._fingerprint({**fingerprint_payload, "requested_purchase_id": str(self._uuid(persisted_id, "Persisted Purchase identifier"))}),
+        }
+        if not isinstance(create_fingerprint, str) or create_fingerprint not in valid_fingerprints:
+            raise ValidationError("Purchase create fingerprint disagrees with persisted Purchase facts")
         receipt_rows = connection.execute(
             "SELECT receipt_id, purchase_line_id, quantity_units, actor_context_ref, received_at, "
             "idempotency_key, request_fingerprint FROM purchase_receipts "
