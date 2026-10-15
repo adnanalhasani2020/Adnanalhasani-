@@ -24,6 +24,7 @@ class MeasurementUnit:
     dimension: str
     id: UUID
     state: UnitState = UnitState.ACTIVE
+    version_no: int = 1
 
     def __post_init__(self):
         if not all(isinstance(value, str) and value.strip() for value in
@@ -33,6 +34,8 @@ class MeasurementUnit:
             raise ValidationError("unit id must be a UUID")
         if not isinstance(self.state, UnitState):
             raise ValidationError("unit state must be a UnitState")
+        if not isinstance(self.version_no, int) or isinstance(self.version_no, bool) or self.version_no < 1:
+            raise ValidationError("unit version_no must be a positive integer")
 
 
 @dataclass(frozen=True)
