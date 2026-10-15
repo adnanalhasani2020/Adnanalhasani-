@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field, replace
 from enum import Enum
+from fractions import Fraction
 from uuid import UUID
 from agent_core.shared import ValidationError, new_id
 
@@ -23,6 +24,15 @@ class PurchaseLine:
     unit_cost_minor: int | None = None
     currency_code: str | None = None
     received_quantity_units: int = 0
+    product_unit_setting_id: UUID | None = None
+    measurement_unit_id: UUID | None = None
+    unit_code_snapshot: str | None = None
+    unit_name_snapshot: str | None = None
+    unit_dimension_snapshot: str | None = None
+    conversion_numerator: int | None = None
+    conversion_denominator: int | None = None
+    product_unit_setting_version: int | None = None
+    measurement_unit_version: int | None = None
 
     def __post_init__(self):
         if not isinstance(self.product_id, UUID) or not isinstance(self.id, UUID):
@@ -41,6 +51,40 @@ class PurchaseLine:
             raise ValidationError("currency_code must be a 3-letter uppercase code")
         if type(self.received_quantity_units) is not int or not 0 <= self.received_quantity_units <= self.quantity_units:
             raise ValidationError("received quantity must be within the ordered quantity")
+        snapshot_values = (
+            self.product_unit_setting_id, self.measurement_unit_id, self.unit_code_snapshot,
+            self.unit_name_snapshot, self.unit_dimension_snapshot, self.conversion_numerator,
+            self.conversion_denominator, self.product_unit_setting_version, self.measurement_unit_version,
+        )
+        if all(value is None for value in snapshot_values):
+            return
+        if self.product_unit_setting_id is None or self.measurement_unit_id is None:
+            raise ValidationError("unit snapshot requires both product unit setting and measurement unit identifiers")
+        if not isinstance(self.product_unit_setting_id, UUID) or not isinstance(self.measurement_unit_id, UUID):
+            raise ValidationError("unit snapshot identifiers must be UUIDs")
+        for label, value in (
+            ("unit_code_snapshot", self.unit_code_snapshot),
+            ("unit_name_snapshot", self.unit_name_snapshot),
+            ("unit_dimension_snapshot", self.unit_dimension_snapshot),
+        ):
+            if not isinstance(value, str) or not value.strip():
+                raise ValidationError(f"{label} is required when a unit snapshot is supplied")
+            object.__setattr__(self, label, value.strip())
+        for label, value in (
+            ("conversion_numerator", self.conversion_numerator),
+            ("conversion_denominator", self.conversion_denominator),
+            ("product_unit_setting_version", self.product_unit_setting_version),
+            ("measurement_unit_version", self.measurement_unit_version),
+        ):
+            if type(value) is not int or value <= 0 or value > _MAX_SQLITE_INTEGER:
+                raise ValidationError(f"{label} must be a positive integer within SQLite limits")
+    
+    @property
+    def base_quantity_units(self) -> Fraction | None:
+        """Exact base-unit quantity at purchase time; None for legacy unsnapshotted lines."""
+        if self.conversion_numerator is None or self.conversion_denominator is None:
+            return None
+        return Fraction(self.quantity_units * self.conversion_numerator, self.conversion_denominator)
 
 @dataclass(frozen=True)
 class ReceiptEvent:
