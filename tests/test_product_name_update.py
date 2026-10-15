@@ -164,3 +164,37 @@ def test_product_restore_rejects_rename_history_that_changes_lifecycle_state():
     with pytest.raises(ValidationError, match="rename history changes lifecycle state"):
         app.get_product(db, created.product.id)
     db.close()
+
+
+def test_product_restore_rejects_impossible_lifecycle_transition_sequence():
+    db = connect_database()
+    app = ProductApplication()
+    created = app.create_product(db, "Lamp", actor_context_ref="catalog-admin", now=NOW)
+    active = app.transition_product(
+        db, created.product.id, "activate", expected_version=1,
+        actor_context_ref="catalog-admin", now=NOW,
+    )
+    app.transition_product(
+        db, created.product.id, "retire", expected_version=active.version_no,
+        actor_context_ref="catalog-admin", now=NOW,
+    )
+    db.execute(
+        "UPDATE domain_history SET change_payload_ref=? "
+        "WHERE owner_domain='commerce' AND target_ref=? "
+        "AND change_type='product_lifecycle' AND current_version_ref=?",
+        ("action:retire;state:retired", str(created.product.id), f"product:{created.product.id}:v2"),
+    )
+    db.execute(
+        "UPDATE domain_history SET change_payload_ref=? "
+        "WHERE owner_domain='commerce' AND target_ref=? "
+        "AND change_type='product_lifecycle' AND current_version_ref=?",
+        ("action:activate;state:active", str(created.product.id), f"product:{created.product.id}:v3"),
+    )
+    db.execute(
+        "UPDATE products SET state='active' WHERE product_id=?",
+        (str(created.product.id),),
+    )
+    db.commit()
+    with pytest.raises(ValidationError, match="invalid activation transition"):
+        app.get_product(db, created.product.id)
+    db.close()
