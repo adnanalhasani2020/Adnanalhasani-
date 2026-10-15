@@ -21,6 +21,7 @@ EXPECTED_DOMAIN_TABLES = {
     "durable_operation_records","audit_records","provenance_records","domain_history",
     "workflows","workflow_events","activity_invitations","file_attachments",
     "purchases","purchase_lines","purchase_receipts","supplier_invoices","supplier_invoice_lines",
+    "measurement_units","product_unit_settings",
 }
 NOW = "2026-10-08T00:00:00Z"
 
@@ -72,10 +73,10 @@ def _financial_fixture(db):
     return account, obligation, payment, settlement
 
 
-def test_clean_install_has_exactly_54_domain_tables_plus_migration_bookkeeping():
+def test_clean_install_has_exactly_56_domain_tables_plus_migration_bookkeeping():
     db = connect_database()
     assert _tables(db) == EXPECTED_DOMAIN_TABLES | {"schema_migrations"}
-    assert len(EXPECTED_DOMAIN_TABLES) == 54
+    assert len(EXPECTED_DOMAIN_TABLES) == 56
     assert db.execute("PRAGMA foreign_keys").fetchone()[0] == 1
     assert db.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
     versions = [r[0] for r in db.execute("SELECT version FROM schema_migrations ORDER BY version")]
@@ -89,6 +90,7 @@ def test_clean_install_has_exactly_54_domain_tables_plus_migration_bookkeeping()
         "0007_product_name",
         "0008_purchases",
         "0009_supplier_invoices",
+        "0010_product_units",
         "0011_purchase_line_unit_snapshot",
         "9998_activity_invitations",
         "9999_file_attachments",
@@ -107,7 +109,7 @@ def test_existing_db_migration_preserves_data_and_is_idempotent(tmp_path):
     before = reopened.execute("SELECT COUNT(*) FROM persons").fetchone()[0]
     assert apply_migrations(reopened) == []
     assert reopened.execute("SELECT COUNT(*) FROM persons").fetchone()[0] == before
-    assert reopened.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0] == 12
+    assert reopened.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0] == 13
 
 
 def test_constraints_are_enforced_at_runtime():
