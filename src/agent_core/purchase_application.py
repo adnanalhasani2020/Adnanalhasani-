@@ -2,7 +2,7 @@
 from contextlib import contextmanager
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
@@ -143,6 +143,52 @@ class PurchaseApplication:
             "product_unit_setting_version": line.product_unit_setting_version,
             "measurement_unit_version": line.measurement_unit_version,
         }
+
+    def capture_unit_snapshot(self, connection, line, measurement_unit_id):
+        """Return a PurchaseLine with an explicit, current unit conversion snapshot.
+
+        The caller must choose the measurement-unit ID; this method never guesses
+        from a display label. The snapshot is then immutable for the purchase line.
+        """
+        if not isinstance(line, PurchaseLine):
+            raise ValidationError("line must be a PurchaseLine")
+        unit_key = str(self._uuid(measurement_unit_id, "Measurement unit identifier"))
+        catalog_tables = connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name IN "
+            "('product_unit_settings','measurement_units')"
+        ).fetchall()
+        if {row[0] for row in catalog_tables} != {"product_unit_settings", "measurement_units"}:
+            raise ValidationError("Product unit catalog is required to capture a purchase unit snapshot")
+        row = connection.execute(
+            "SELECT setting.product_unit_setting_id, setting.product_id, setting.unit_id, "
+            "setting.state, setting.conversion_numerator, setting.conversion_denominator, "
+            "setting.version_no, unit.code, unit.name, unit.dimension, unit.state, unit.version_no "
+            "FROM product_unit_settings setting JOIN measurement_units unit ON unit.unit_id=setting.unit_id "
+            "WHERE setting.product_id=? AND setting.unit_id=?",
+            (str(line.product_id), unit_key),
+        ).fetchone()
+        if row is None:
+            raise ValidationError("Measurement unit is not configured for this Product")
+        (setting_id, product_id, persisted_unit_id, setting_state, numerator, denominator,
+         setting_version, code, name, dimension, unit_state, unit_version) = row
+        if setting_state != "active" or unit_state != "active":
+            raise ValidationError("Purchase line requires an active configured measurement unit")
+        if str(product_id) != str(line.product_id) or str(persisted_unit_id) != unit_key:
+            raise ValidationError("Configured measurement unit does not match the requested Product and unit")
+        snapshotted = replace(
+            line,
+            product_unit_setting_id=self._uuid(setting_id, "Product unit setting identifier"),
+            measurement_unit_id=self._uuid(persisted_unit_id, "Measurement unit identifier"),
+            unit_code_snapshot=code,
+            unit_name_snapshot=name,
+            unit_dimension_snapshot=dimension,
+            conversion_numerator=numerator,
+            conversion_denominator=denominator,
+            product_unit_setting_version=setting_version,
+            measurement_unit_version=unit_version,
+        )
+        self._validate_unit_snapshot(connection, snapshotted)
+        return snapshotted
 
     def _validate_unit_snapshot(self, connection, line):
         if line.product_unit_setting_id is None:
