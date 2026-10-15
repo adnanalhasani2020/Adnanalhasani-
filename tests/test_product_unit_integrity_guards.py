@@ -119,7 +119,7 @@ def test_retired_unit_dimension_is_immutable_when_history_references_it():
         )
         with pytest.raises(Exception, match="cannot change dimension"):
             db.execute(
-                "UPDATE measurement_units SET dimension='volume' WHERE unit_id=?",
+                "UPDATE measurement_units SET dimension='volume', version_no=version_no+1 WHERE unit_id=?",
                 (str(gram.id),),
             )
         db.rollback()
