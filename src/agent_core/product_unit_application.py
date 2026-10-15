@@ -14,6 +14,9 @@ from agent_core.domain_product_units import (
 from agent_core.shared import ValidationError
 
 
+_MAX_SQLITE_INTEGER = 2**63 - 1
+
+
 def _now(value=None):
     if value is None:
         value = datetime.now(timezone.utc)
@@ -190,7 +193,9 @@ class ProductUnitApplication:
             raise ValidationError("actor_context_ref is required")
         if (not isinstance(conversion_numerator, int) or isinstance(conversion_numerator, bool)
                 or not isinstance(conversion_denominator, int) or isinstance(conversion_denominator, bool)
-                or conversion_numerator <= 0 or conversion_denominator <= 0):
+                or conversion_numerator <= 0 or conversion_denominator <= 0
+                or conversion_numerator > _MAX_SQLITE_INTEGER
+                or conversion_denominator > _MAX_SQLITE_INTEGER):
             raise ValidationError("conversion ratio must use positive integer numerator and denominator")
         if role is ProductUnitRole.BASE and (conversion_numerator, conversion_denominator) != (1,1):
             raise ValidationError("base unit conversion ratio must be 1/1")
