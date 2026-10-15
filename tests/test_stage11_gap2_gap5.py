@@ -210,7 +210,13 @@ def test_gap5_atomic_uniqueness_behavior(tmp_path):
     t1.join()
     t2.join()
 
-    assert outcomes.count({"ok": True}) == 2
-    assert len(effects) == 1
+    # The durable reservation is committed before the semantic effect. A
+    # concurrent retry may therefore observe the in-flight reservation and
+    # fail closed as incomplete; it must never execute the effect a second time.
     assert len(outcomes) == 2
-    assert any("replay is incomplete" in str(item) or item == {"ok": True} for item in outcomes)
+    assert outcomes.count({"ok": True}) in {1, 2}
+    assert all(
+        item == {"ok": True} or item == "Operation replay is incomplete"
+        for item in outcomes
+    )
+    assert len(effects) == 1
