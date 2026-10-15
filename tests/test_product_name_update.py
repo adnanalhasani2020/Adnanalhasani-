@@ -14,7 +14,7 @@ def test_product_name_update_persists_history_and_restores_after_reopen(tmp_path
     db = connect_database(path)
     app = ProductApplication()
     created = app.create_product(db, "Bottle", actor_context_ref="catalog-admin", now=NOW)
-    active = app.transition_product(
+    app.transition_product(
         db, created.product.id, "activate", expected_version=1,
         actor_context_ref="catalog-admin", now=NOW,
     )
@@ -100,7 +100,7 @@ def test_product_restore_rejects_rename_history_that_disagrees_with_persisted_na
     db = connect_database()
     app = ProductApplication()
     created = app.create_product(db, "Original", actor_context_ref="catalog-admin", now=NOW)
-    renamed = app.update_product_name(
+    app.update_product_name(
         db, created.product.id, "Canonical Name", expected_version=1,
         actor_context_ref="catalog-admin", now=NOW,
     )
@@ -113,4 +113,26 @@ def test_product_restore_rejects_rename_history_that_disagrees_with_persisted_na
     db.commit()
     with pytest.raises(ValidationError, match="does not agree with persisted rename history"):
         app.get_product(db, created.product.id)
+    db.close()
+
+def test_product_name_update_supports_multiple_renames_across_lifecycle_transitions():
+    db = connect_database()
+    app = ProductApplication()
+    created = app.create_product(db, "Initial", actor_context_ref="catalog-admin", now=NOW)
+    first = app.update_product_name(
+        db, created.product.id, "Second Name", expected_version=1,
+        actor_context_ref="catalog-admin", now=NOW,
+    )
+    second = app.update_product_name(
+        db, created.product.id, "Third / Final", expected_version=first.version_no,
+        actor_context_ref="catalog-admin", now=NOW,
+    )
+    active = app.transition_product(
+        db, created.product.id, "activate", expected_version=second.version_no,
+        actor_context_ref="catalog-admin", now=NOW,
+    )
+    restored = app.get_product(db, created.product.id)
+    assert restored.product.name == "Third / Final"
+    assert restored.product.state is ProductState.ACTIVE
+    assert restored.version_no == active.version_no == 4
     db.close()
