@@ -83,3 +83,66 @@ def test_unit_retirement_is_blocked_while_product_uses_it():
     with pytest.raises(ValidationError,match="configured for a product"):
         app.retire_unit(db,kg.id,actor_context_ref="test",now=NOW)
     db.close()
+
+
+
+def test_unit_and_conversion_edits_are_versioned_and_audited():
+    db = connect_database()
+    app = ProductUnitApplication()
+    product = _product(db)
+    kg = app.create_unit(db, code="kg", name="Kilogram", dimension="mass",
+                         actor_context_ref="test", now=NOW)
+    gram = app.create_unit(db, code="g", name="Gram", dimension="mass",
+                           actor_context_ref="test", now=NOW)
+    app.configure_product_unit(db, product, kg.id, role="base",
+                               actor_context_ref="test", now=NOW)
+    app.configure_product_unit(db, product, gram.id, role="allowed",
+                               conversion_numerator=1, conversion_denominator=1000,
+                               actor_context_ref="test", now=NOW)
+
+    renamed = app.update_unit(db, kg.id, name="Kilogramme", expected_version=1,
+                              actor_context_ref="test", now=NOW)
+    assert renamed.name == "Kilogramme"
+    with pytest.raises(ValidationError, match="version conflict"):
+        app.update_unit(db, kg.id, name="Stale Name", expected_version=1,
+                        actor_context_ref="test", now=NOW)
+
+    updated = app.update_product_unit_conversion(
+        db, product, gram.id, conversion_numerator=1, conversion_denominator=500,
+        expected_version=1, actor_context_ref="test", now=NOW
+    )
+    assert updated.version_no == 2
+    assert app.convert(db, product, 500, gram.id, kg.id) == Fraction(1, 1)
+    with pytest.raises(ValidationError, match="base unit conversion ratio is fixed"):
+        app.update_product_unit_conversion(
+            db, product, kg.id, conversion_numerator=2, conversion_denominator=1,
+            expected_version=1, actor_context_ref="test", now=NOW
+        )
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE change_type LIKE 'product_unit_%'"
+    ).fetchone()[0] == 6
+    db.close()
+
+
+def test_product_unit_retirement_preserves_base_invariant():
+    db = connect_database()
+    app = ProductUnitApplication()
+    product = _product(db)
+    kg = app.create_unit(db, code="kg", name="Kilogram", dimension="mass",
+                         actor_context_ref="test", now=NOW)
+    gram = app.create_unit(db, code="g", name="Gram", dimension="mass",
+                           actor_context_ref="test", now=NOW)
+    app.configure_product_unit(db, product, kg.id, role="base",
+                               actor_context_ref="test", now=NOW)
+    app.configure_product_unit(db, product, gram.id, role="allowed",
+                               conversion_numerator=1, conversion_denominator=1000,
+                               actor_context_ref="test", now=NOW)
+    with pytest.raises(ValidationError, match="retire active allowed units"):
+        app.retire_product_unit(db, product, kg.id, actor_context_ref="test", now=NOW)
+    retired = app.retire_product_unit(db, product, gram.id,
+                                      expected_version=1, actor_context_ref="test", now=NOW)
+    assert retired.state.value == "retired"
+    retired_base = app.retire_product_unit(db, product, kg.id,
+                                           expected_version=1, actor_context_ref="test", now=NOW)
+    assert retired_base.state.value == "retired"
+    db.close()
