@@ -514,6 +514,16 @@ def test_purchase_line_snapshot_database_guard_rejects_partial_snapshot():
             "received_quantity_units,created_at,product_unit_setting_id) VALUES(?,?,?,?,?,?,?,?)",
             (str(uuid4()), str(uuid4()), product, 1, "case", 0, "2026-10-13T12:00:00Z", str(uuid4())),
         )
+    # IDs and ratios without labels are still incomplete; NULL must not bypass the trigger.
+    with pytest.raises(sqlite3.IntegrityError, match="snapshot must be complete"):
+        connection.execute(
+            "INSERT INTO purchase_lines(purchase_line_id,purchase_id,product_id,quantity_units,unit_label,"
+            "received_quantity_units,created_at,product_unit_setting_id,measurement_unit_id,"
+            "conversion_numerator,conversion_denominator,product_unit_setting_version,measurement_unit_version) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (str(uuid4()), str(uuid4()), product, 1, "case", 0, "2026-10-13T12:00:00Z",
+             str(uuid4()), str(uuid4()), 12, 1, 1, 1),
+        )
 
 def test_purchase_creation_captures_explicit_unit_configuration_and_preserves_history():
     from fractions import Fraction
