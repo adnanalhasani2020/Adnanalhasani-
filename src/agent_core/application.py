@@ -799,7 +799,7 @@ class ProductApplication:
     def list_products(self, connection, *, state=None, limit=100, offset=0):
         """List persisted Products in stable order, validating each record's history."""
         allowed_states = {item.value for item in ProductState}
-        if state is not None and state not in allowed_states:
+        if state is not None and (not isinstance(state, str) or state not in allowed_states):
             raise ValidationError("Product state filter must be draft, active, or retired")
         if type(limit) is not int or not 1 <= limit <= 500:
             raise ValidationError("Product list limit must be an integer between 1 and 500")
