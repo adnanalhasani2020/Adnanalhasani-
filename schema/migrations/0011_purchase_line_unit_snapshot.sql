@@ -30,8 +30,11 @@ WHEN NOT (
 ) AND NOT (
     NEW.product_unit_setting_id IS NOT NULL
     AND NEW.measurement_unit_id IS NOT NULL
+    AND NEW.unit_code_snapshot IS NOT NULL
     AND length(trim(NEW.unit_code_snapshot)) > 0
+    AND NEW.unit_name_snapshot IS NOT NULL
     AND length(trim(NEW.unit_name_snapshot)) > 0
+    AND NEW.unit_dimension_snapshot IS NOT NULL
     AND length(trim(NEW.unit_dimension_snapshot)) > 0
     AND NEW.conversion_numerator IS NOT NULL
     AND NEW.conversion_denominator IS NOT NULL
