@@ -398,3 +398,30 @@ def test_purchase_restore_rejects_receipt_idempotency_fingerprint_corruption():
     ):
         app.get_purchase(connection, record.purchase.id)
     connection.close()
+
+
+def test_purchase_restore_rejects_create_fingerprint_corruption():
+    connection, person, activity, product = database()
+    app = PurchaseApplication()
+    line = PurchaseLine(
+        product_id=__import__("uuid").UUID(product),
+        quantity_units=2,
+        unit_label="piece",
+        unit_cost_minor=500,
+        currency_code="YER",
+    )
+    record = app.create_purchase(
+        connection, "supplier:fingerprint-integrity", activity, (line,), person,
+        grant(connection, person, "create_purchase", activity, activity),
+        idempotency_key="create-fingerprint-integrity",
+    )
+    connection.execute(
+        "UPDATE purchases SET create_request_fingerprint='corrupted' WHERE purchase_id=?",
+        (str(record.purchase.id),),
+    )
+    with pytest.raises(
+        ValidationError,
+        match="Purchase create fingerprint disagrees with persisted Purchase facts",
+    ):
+        app.get_purchase(connection, record.purchase.id)
+    connection.close()
