@@ -30,3 +30,13 @@ This change adds a canonical buyer-side Purchase aggregate and line/receipt valu
 - CI must pass on the latest PR head before merge; each subsequent code change invalidates results from an earlier head.
 
 The implementation is a meaningful backend slice, not a claim that the complete procurement workflow is finished.
+
+## Historical unit snapshot groundwork
+
+- Purchase lines now have nullable, immutable snapshot fields for the configured product-unit setting, measurement unit, code/name/dimension labels, exact positive conversion numerator/denominator, and both setting/catalog versions.
+- Legacy purchase lines remain valid with no snapshot; the migration does not infer or backfill units.
+- The snapshot represents the exact conversion contract used when the line was created. Its base quantity can be derived with rational arithmetic; no float rounding is introduced.
+- Snapshot fields must be complete or entirely absent and cannot be rewritten after line creation.
+- When the product-unit catalog is present, creating a snapshotted line validates the product, active setting/unit, ratio, labels, and versions against the current catalog. Restoring a historical line does not require its current setting to remain active or unchanged.
+- Receipt quantities continue to use the purchase line's entered unit. This migration does not post inventory or convert quantities implicitly.
+- The unit catalog migration and purchase snapshot migration must be tested together on an integration branch before merging; the purchase branch remains independently testable for legacy lines without a catalog.
