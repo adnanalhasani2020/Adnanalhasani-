@@ -44,3 +44,36 @@ def test_get_settings_returns_safe_defaults_without_writes():
     with pytest.raises(ValidationError, match="does not exist"):
         FinancialPolicySettingsApplication().get_settings(db, activity_id=str(uuid4()))
     db.close()
+
+
+def test_authorized_settings_update_is_versioned_and_audited():
+    db = connect_database()
+    stamp = "2026-10-16T12:00:00Z"
+    person, activity, agent, grant, action = (str(uuid4()) for _ in range(5))
+    db.execute("INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+               (person, stamp, stamp))
+    db.execute("INSERT INTO activities(activity_id,owner_person_id,state,created_at,updated_at) "
+               "VALUES(?,?,'active',?,?)", (activity, person, stamp, stamp))
+    db.execute("INSERT INTO agents(agent_id,owner_person_id,configured_identity_ref,context_ref,state,created_at,updated_at) "
+               "VALUES(?,?,?,?, 'active',?,?)", (agent, person, "policy-test-agent", activity, stamp, stamp))
+    code = FinancialPolicySettingsApplication.ACTION_CODE
+    db.execute("INSERT INTO authorization_grants(authorization_grant_id,agent_id,action_code,scope_ref,context_ref,"
+               "state,effective_from,created_at,updated_at) VALUES(?,?,?,?,?,'active',?,?,?)",
+               (grant, agent, code, activity, activity, stamp, stamp, stamp))
+    db.execute("INSERT INTO agent_actions(agent_action_id,agent_id,action_code,target_ref,context_ref,"
+               "authorization_grant_id,state,created_at,updated_at) VALUES(?,?,?,?,?,?,'approved',?,?)",
+               (action, agent, code, activity, activity, grant, stamp, stamp))
+    db.execute("INSERT INTO approvals(approval_id,agent_action_id,state,approver_person_id,decision_at,created_at,updated_at) "
+               "VALUES(?,?,'APPROVED',?,?,?,?)", (str(uuid4()), action, person, stamp, stamp, stamp))
+    db.commit()
+    app = FinancialPolicySettingsApplication()
+    result = app.update_settings(db, activity_id=activity, enabled_currencies=("YER", "USD"),
+                                 default_currency="USD", display_decimal_places=3,
+                                 authorization_grant_id=grant, agent_action_id=action, now=stamp)
+    assert result.default_currency == "USD"
+    assert result.display_decimal_places == 3
+    assert result.version_no == 1
+    history = db.execute("SELECT change_type,current_version_ref FROM domain_history "
+                         "WHERE owner_domain='FinancePolicySettings'").fetchall()
+    assert history == [("created", "1")]
+    db.close()
