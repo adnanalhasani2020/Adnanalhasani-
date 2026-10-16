@@ -134,3 +134,29 @@ def test_balance_cutoff_normalizes_non_utc_offset_to_the_same_instant():
     assert result.entry_count == 1
     assert result.as_of == datetime(2026, 10, 1, 10, 0, tzinfo=timezone.utc)
     db.close()
+
+
+def test_balance_fails_closed_on_ledger_transaction_account_mismatch():
+    db = connect_database()
+    account_id = account(db)
+    other_account_id = account(db)
+    transaction_id, _ = ledger(db, account_id, 250, "YER", "2026-10-01T10:00:00Z")
+
+    # Simulate legacy/corrupt data that predates the account/currency consistency guard.
+    db.execute("DROP TRIGGER financial_transaction_currency_matches_ledger_update")
+    db.execute(
+        "UPDATE financial_transactions SET financial_account_id=? WHERE financial_transaction_id=?",
+        (other_account_id, transaction_id),
+    )
+    db.commit()
+
+    with pytest.raises(ValidationError, match="does not match its recognized Financial Transaction"):
+        FinancialBalanceReader().read(db, account_id, "YER", as_of="2026-10-10T00:00:00Z")
+
+    # Reading reports the corruption but does not repair persisted financial facts.
+    assert db.execute(
+        "SELECT financial_account_id FROM financial_transactions WHERE financial_transaction_id=?",
+        (transaction_id,),
+    ).fetchone()[0] == other_account_id
+    assert db.execute("SELECT COUNT(*) FROM ledger_entries").fetchone()[0] == 1
+    db.close()
