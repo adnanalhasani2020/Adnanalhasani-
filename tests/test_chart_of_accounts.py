@@ -153,3 +153,33 @@ def test_duplicate_suggestion_validates_threshold_and_limit():
         find_duplicate_candidates("cash", [], scope_id="org-1", threshold=1.5)
     with pytest.raises(ValueError, match="limit"):
         find_duplicate_candidates("cash", [], scope_id="org-1", limit=0)
+
+def test_duplicate_suggestions_skip_malformed_account_fields():
+    rows = [
+        account("valid", "1001", "النقدية"),
+        ChartAccount(
+            account_id="bad-name",
+            scope_id="org-1",
+            code="1002",
+            name=None,
+            english_name=[],
+            account_class="asset",
+        ),
+        ChartAccount(
+            account_id="bad-code",
+            scope_id="org-1",
+            code=[],
+            name="النقدية",
+            account_class="asset",
+        ),
+        ChartAccount(
+            account_id="bad-scope",
+            scope_id=[],
+            code="1003",
+            name="النقدية",
+            account_class="asset",
+        ),
+    ]
+    matches = find_duplicate_candidates("النقدية", rows, scope_id="org-1")
+    assert [match.account_id for match in matches] == ["valid"]
+
