@@ -86,66 +86,87 @@ class FinancialLedgerActivityReportReader:
         ).fetchone() is None:
             raise ValidationError("Financial Account does not exist")
 
-        # Validate the whole history needed for the opening balance, not just
-        # visible activity lines. Otherwise old corruption could yield a plausible
-        # but incorrect opening balance.
-        orphan = connection.execute(
-            "SELECT 1 FROM ledger_entries le "
+        # Compare instants as datetimes, not ISO timestamp strings. Lexical
+        # ordering is unsafe when persisted timestamps have different fractional
+        # precision or UTC offsets (for example, "...00Z" vs "...00.500Z").
+        # Validate the full relevant history because it contributes to opening
+        # balance or may reveal corruption that would otherwise be silently skipped.
+        orphan_rows = connection.execute(
+            "SELECT le.posted_at FROM ledger_entries le "
             "WHERE le.financial_account_id=? AND le.currency_code=? "
-            "AND le.state='posted' AND le.posted_at<? "
-            "AND NOT EXISTS (SELECT 1 FROM financial_transactions ft "
-            "WHERE ft.financial_transaction_id=le.financial_transaction_id) LIMIT 1",
-            (str(account_id), currency, end_text),
-        ).fetchone()
-        if orphan is not None:
-            raise ValidationError("Posted Ledger Entry references a missing Financial Transaction")
+            "AND le.state='posted' AND NOT EXISTS (SELECT 1 FROM financial_transactions ft "
+            "WHERE ft.financial_transaction_id=le.financial_transaction_id)",
+            (str(account_id), currency),
+        ).fetchall()
+        for row in orphan_rows:
+            posted = self._instant(row[0], "Ledger Entry posted_at")
+            if posted < end:
+                raise ValidationError(
+                    "Posted Ledger Entry references a missing Financial Transaction"
+                )
 
-        invalid = connection.execute(
-            "SELECT 1 FROM ledger_entries le "
-            "JOIN financial_transactions ft "
+        invalid_rows = connection.execute(
+            "SELECT le.financial_account_id, le.currency_code, le.posted_at, "
+            "ft.financial_account_id, ft.currency_code, ft.state "
+            "FROM ledger_entries le JOIN financial_transactions ft "
             "ON ft.financial_transaction_id=le.financial_transaction_id "
-            "WHERE le.state='posted' AND le.posted_at<? "
+            "WHERE le.state='posted' "
             "AND (le.financial_account_id=? OR ft.financial_account_id=?) "
-            "AND (le.currency_code=? OR ft.currency_code=?) "
-            "AND (ft.state<>'recognized' "
-            "OR le.financial_account_id<>ft.financial_account_id "
-            "OR le.currency_code<>ft.currency_code) LIMIT 1",
-            (end_text, str(account_id), str(account_id), currency, currency),
-        ).fetchone()
-        if invalid is not None:
-            raise ValidationError(
-                "Ledger Entry does not match a recognized Financial Transaction "
-                "for the requested account and currency"
-            )
+            "AND (le.currency_code=? OR ft.currency_code=?)",
+            (str(account_id), str(account_id), currency, currency),
+        ).fetchall()
+        for row in invalid_rows:
+            posted = self._instant(row[2], "Ledger Entry posted_at")
+            if posted < end and (
+                row[0] != row[3]
+                or row[1] != row[4]
+                or row[5] != "recognized"
+            ):
+                raise ValidationError(
+                    "Ledger Entry does not match a recognized Financial Transaction "
+                    "for the requested account and currency"
+                )
 
         rows = connection.execute(
             "SELECT le.ledger_entry_id, le.financial_transaction_id, le.posted_at, "
             "le.amount_minor, ft.recognized_at, ft.recognition_source_type, "
-            "ft.recognition_source_ref "
-            "FROM ledger_entries le "
-            "JOIN financial_transactions ft "
+            "ft.recognition_source_ref, le.entry_sequence "
+            "FROM ledger_entries le JOIN financial_transactions ft "
             "ON ft.financial_transaction_id=le.financial_transaction_id "
             "WHERE le.financial_account_id=? AND ft.financial_account_id=? "
             "AND le.currency_code=? AND ft.currency_code=? "
-            "AND le.state='posted' AND ft.state='recognized' AND le.posted_at<? "
-            "ORDER BY le.posted_at ASC, le.entry_sequence ASC, le.ledger_entry_id ASC",
-            (str(account_id), str(account_id), currency, currency, end_text),
+            "AND le.state='posted' AND ft.state='recognized'",
+            (str(account_id), str(account_id), currency, currency),
         ).fetchall()
 
-        opening = sum(int(row[3]) for row in rows if row[2] < start_text)
-        lines = tuple(
-            FinancialLedgerActivityLine(
-                ledger_entry_id=UUID(row[0]),
-                financial_transaction_id=UUID(row[1]),
-                posted_at=self._instant(row[2], "Ledger Entry posted_at"),
-                recognized_at=self._instant(row[4], "Financial Transaction recognized_at"),
-                amount_minor=int(row[3]),
-                recognition_source_type=row[5],
-                recognition_source_ref=row[6],
-            )
-            for row in rows
-            if start_text <= row[2] < end_text
-        )
+        eligible = []
+        for row in rows:
+            posted = self._instant(row[2], "Ledger Entry posted_at")
+            if posted < end:
+                eligible.append((posted, row))
+        eligible.sort(key=lambda item: (item[0], item[1][7], item[1][0]))
+
+        opening = 0
+        lines_list = []
+        for posted, row in eligible:
+            amount = int(row[3])
+            if posted < start:
+                opening += amount
+            else:
+                lines_list.append(
+                    FinancialLedgerActivityLine(
+                        ledger_entry_id=UUID(row[0]),
+                        financial_transaction_id=UUID(row[1]),
+                        posted_at=posted,
+                        recognized_at=self._instant(
+                            row[4], "Financial Transaction recognized_at"
+                        ),
+                        amount_minor=amount,
+                        recognition_source_type=row[5],
+                        recognition_source_ref=row[6],
+                    )
+                )
+        lines = tuple(lines_list)
         activity = sum(line.amount_minor for line in lines)
         return FinancialLedgerActivityReport(
             financial_account_id=account_id,
