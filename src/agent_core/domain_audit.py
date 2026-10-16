@@ -99,8 +99,15 @@ class AuditRecordApplication:
             record_id = UUID(str(audit_record_id)) if audit_record_id is not None else new_id()
         except (ValueError, TypeError, AttributeError) as exc:
             raise ValidationError("audit_record_id must be a valid UUID") from exc
-        occurred = self._timestamp(occurred_at or now or datetime.now(timezone.utc), "occurred_at")
-        created = self._timestamp(now or datetime.now(timezone.utc), "created_at")
+        occurred = self._timestamp(
+            occurred_at if occurred_at is not None else (
+                now if now is not None else datetime.now(timezone.utc)
+            ),
+            "occurred_at",
+        )
+        created = self._timestamp(
+            now if now is not None else datetime.now(timezone.utc), "created_at"
+        )
         with connection:
             connection.execute(
                 "INSERT INTO audit_records(audit_record_id,event_type,actor_context_ref,target_ref,"
