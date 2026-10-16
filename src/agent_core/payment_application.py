@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from agent_core.shared import ValidationError, normalize_currency_code
+from agent_core.shared import ValidationError, normalize_currency_code, require_canonical_currency_code
 
 
 _PAYMENT_TRANSITIONS = {
@@ -169,6 +169,9 @@ class PaymentApplication:
             raise ValidationError("Payment does not exist")
         (pid, obligation, invoice, payer, payee, amount, currency, state, provider, external,
          created, updated, version) = row
+        currency = require_canonical_currency_code(
+            currency, label="Persisted Payment currency_code"
+        )
         if obligation is not None and invoice is not None:
             invoice_link = connection.execute(
                 "SELECT obligation_id FROM invoices WHERE invoice_id=?", (invoice,),
