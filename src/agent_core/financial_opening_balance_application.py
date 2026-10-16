@@ -139,6 +139,9 @@ class FinancialOpeningBalanceApplication:
         if len(source_ref) > 200:
             raise ValidationError("Opening balance source_ref must not exceed 200 characters")
         timestamp = self._timestamp(now or datetime.now(timezone.utc), "Opening balance timestamp")
+        # Stable source identity is unique per account/currency; the external
+        # evidence reference is retained in domain history and may be shared by a batch.
+        source_key = f"opening-balance:{account_id}:{currency_code}"
 
         with self._atomic(connection):
             actor = self._authorize(
@@ -165,7 +168,7 @@ class FinancialOpeningBalanceApplication:
                 "INSERT INTO financial_transactions(financial_transaction_id,settlement_id,financial_account_id,"
                 "amount_minor,currency_code,state,recognition_source_type,recognition_source_ref,recognized_at,"
                 "created_at,updated_at) VALUES(?,NULL,?,?,?,'recognized','opening_balance',?,?,?,?)",
-                (transaction_id, account_id, amount_minor, currency_code, source_ref,
+                (transaction_id, account_id, amount_minor, currency_code, source_key,
                  timestamp, timestamp, timestamp),
             )
             connection.execute(
@@ -186,5 +189,5 @@ class FinancialOpeningBalanceApplication:
 
         return OpeningBalanceRecord(
             UUID(transaction_id), UUID(entry_id), UUID(account_id), amount_minor,
-            currency_code, source_ref, timestamp,
+            currency_code, source_key, timestamp,
         )
