@@ -100,7 +100,7 @@ def test_direct_update_cannot_activate_retired_measurement_unit():
             db, product, gram.id, actor_context_ref="integrity-test", now=NOW,
         )
         app.retire_unit(db, gram.id, actor_context_ref="integrity-test", now=NOW)
-        with pytest.raises(Exception, match="retired measurement unit"):
+        with pytest.raises(Exception, match="cannot be reactivated"):
             db.execute(
                 "UPDATE product_unit_settings SET state='active', version_no=version_no+1 "
                 "WHERE product_id=? AND unit_id=?",
