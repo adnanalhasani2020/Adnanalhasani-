@@ -74,5 +74,3 @@ CREATE UNIQUE INDEX uq_financial_transactions_opening_balance_account_currency
 CREATE INDEX idx_ledger_account_time
     ON ledger_entries(financial_account_id, posted_at, entry_sequence);
 CREATE INDEX idx_ledger_transaction ON ledger_entries(financial_transaction_id);
-
-PRAGMA foreign_key_check;
