@@ -51,6 +51,26 @@ def test_database_rejects_payment_amount_above_linked_obligation():
             "FROM payments WHERE payment_id=?",
             (uid(), STAMP, STAMP, payment_id),
         )
+
+    # Re-linking an existing Payment must enforce the same amount rule against
+    # the new Obligation, not only against its original link.
+    smaller_obligation_id = uid()
+    db.execute(
+        "INSERT INTO obligations(obligation_id,creditor_person_id,debtor_person_id,amount_minor,"
+        "currency_code,state,created_at,updated_at) "
+        "SELECT ?,creditor_person_id,debtor_person_id,50,'YER','open',?,? "
+        "FROM obligations WHERE obligation_id=?",
+        (smaller_obligation_id, STAMP, STAMP, obligation_id),
+    )
+    with pytest.raises(sqlite3.IntegrityError, match="payment amount_minor must not exceed"):
+        db.execute(
+            "UPDATE payments SET obligation_id=? WHERE payment_id=?",
+            (smaller_obligation_id, payment_id),
+        )
+    assert db.execute(
+        "SELECT obligation_id FROM payments WHERE payment_id=?", (payment_id,)
+    ).fetchone()[0] == obligation_id
+
     with pytest.raises(sqlite3.IntegrityError, match="obligation amount_minor must cover"):
         db.execute("UPDATE obligations SET amount_minor=99 WHERE obligation_id=?", (obligation_id,))
     assert db.execute("SELECT amount_minor FROM payments WHERE payment_id=?", (payment_id,)).fetchone()[0] == 100
