@@ -2,10 +2,9 @@
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
-import re
 from uuid import UUID, uuid4
 
-from agent_core.shared import ValidationError
+from agent_core.shared import ValidationError, require_canonical_currency_code
 
 
 @dataclass(frozen=True)
@@ -136,8 +135,9 @@ class FinancialOpeningBalanceApplication:
             raise ValidationError("Opening balance amount_minor must be an integer in minor units")
         if amount_minor == 0:
             raise ValidationError("A zero opening balance needs no ledger transaction")
-        if not isinstance(currency_code, str) or not re.fullmatch(r"[A-Z]{3}", currency_code):
-            raise ValidationError("Opening balance currency_code must be a 3-letter uppercase code")
+        currency_code = require_canonical_currency_code(
+            currency_code, label="Opening balance currency_code"
+        )
         if not isinstance(source_ref, str) or not source_ref.strip():
             raise ValidationError("Opening balance source_ref is required")
         source_ref = source_ref.strip()
