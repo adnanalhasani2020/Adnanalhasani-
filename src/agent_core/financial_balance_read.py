@@ -54,6 +54,23 @@ class FinancialBalanceReader:
         ).fetchone() is None:
             raise ValidationError("Financial Account does not exist")
 
+        # A posted entry with no transaction cannot contribute to a trustworthy
+        # balance. This can occur in legacy/corrupt databases where FK enforcement
+        # was disabled on the writing connection, so detect it rather than silently
+        # dropping the entry through the inner join below.
+        orphan = connection.execute(
+            "SELECT 1 FROM ledger_entries le "
+            "WHERE le.financial_account_id=? AND le.currency_code=? "
+            "AND le.state='posted' AND le.posted_at<=? "
+            "AND NOT EXISTS ("
+            "SELECT 1 FROM financial_transactions ft "
+            "WHERE ft.financial_transaction_id=le.financial_transaction_id"
+            ") LIMIT 1",
+            (str(account_id), currency, cutoff),
+        ).fetchone()
+        if orphan is not None:
+            raise ValidationError("Posted Ledger Entry references a missing Financial Transaction")
+
         # A mismatched Ledger Entry / Financial Transaction is persisted corruption;
         # fail closed rather than silently misstate the derived balance.
         mismatch = connection.execute(
