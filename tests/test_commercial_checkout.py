@@ -231,3 +231,70 @@ def test_price_change_closes_open_window_and_records_actor_history(tmp_path):
     assert db.execute(
         "SELECT COUNT(*) FROM domain_history WHERE change_type IN ('offering_price_set','offering_price_window_closed')"
     ).fetchone()[0] == 2
+
+
+
+def test_concurrent_checkouts_cannot_sell_the_last_unit_twice(tmp_path):
+    import threading
+    from datetime import timedelta
+
+    db, base_request = setup_checkout(tmp_path, quantity=1)
+    database_path = tmp_path / "checkout.sqlite"
+    db.close()
+    barrier = threading.Barrier(2)
+    outcomes = []
+    outcome_lock = threading.Lock()
+
+    def worker(index):
+        connection = connect_database(database_path)
+        request = dict(
+            base_request,
+            idempotency_key=f"checkout-concurrent-{index}",
+            sale_id=uid(),
+        )
+        # Each distinct Sale needs its own confirm/fulfill scopes; all grants
+        # are persisted before the competing checkout transactions begin.
+        grants = []
+        for action, scope in (
+            ("create_sale", request["offering_id"]),
+            ("confirm_sale", request["sale_id"]),
+            ("fulfill_sale", request["sale_id"]),
+        ):
+            grant_id = uid()
+            connection.execute(
+                """INSERT INTO authorization_grants(
+                       authorization_grant_id,subject_person_id,agent_id,action_code,scope_ref,
+                       context_ref,delegation_id,state,effective_from,effective_to,created_at,updated_at
+                   ) VALUES(?,?,NULL,?,?,?,NULL,'active',?,NULL,?,?)""",
+                (grant_id, request["actor_person_id"], action, scope, request["activity_id"],
+                 "2026-01-01T00:00:00Z", BEFORE, BEFORE),
+            )
+            grants.append(grant_id)
+        request["create_sale_grant_id"], request["confirm_sale_grant_id"], request["fulfill_sale_grant_id"] = grants
+        connection.commit()
+        barrier.wait()
+        try:
+            CommercialCheckoutApplication().checkout(
+                connection, **request, now=NOW + timedelta(seconds=index + 1)
+            )
+            outcome = "success"
+        except ValidationError:
+            outcome = "rejected"
+        finally:
+            connection.close()
+        with outcome_lock:
+            outcomes.append(outcome)
+
+    threads = [threading.Thread(target=worker, args=(i,)) for i in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10)
+
+    assert all(not thread.is_alive() for thread in threads), "checkout concurrency test timed out"
+    assert sorted(outcomes) == ["rejected", "success"]
+    verify = connect_database(database_path)
+    assert verify.execute("SELECT COUNT(*) FROM sales").fetchone()[0] == 1
+    assert verify.execute("SELECT SUM(quantity_delta) FROM inventory_movements").fetchone()[0] == -1
+    assert verify.execute("SELECT COUNT(*) FROM commercial_checkout_receipts").fetchone()[0] == 1
+    verify.close()
