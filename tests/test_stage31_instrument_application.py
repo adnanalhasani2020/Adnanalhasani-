@@ -250,3 +250,141 @@ def test_instrument_redemption_failure_preserves_caller_work_and_usage_atomicity
     assert db.in_transaction
     db.rollback()
     db.close()
+
+
+
+@pytest.mark.parametrize(
+    ("transition_at", "expected_message"),
+    [
+        ("2026-10-10T11:59:59Z", "cannot predate creation"),
+        ("2026-10-10T12:04:59Z", "cannot predate current updated_at"),
+    ],
+)
+def test_instrument_rejects_backdated_transitions_without_mutation(transition_at, expected_message):
+    db = connect_database()
+    app = InstrumentApplication()
+    instrument = app.create_instrument(
+        db, instrument_id=uid(), instrument_type="unspecified",
+        issuer_ref="issuer-ref", canonical_identifier=f"backdated-{transition_at}",
+        actor_context_ref="internal-context", now=STAMP,
+    )
+    active = app.transition_instrument(
+        db, instrument.instrument_id, "activate", expected_version=1,
+        actor_context_ref="internal-context", now="2026-10-10T12:05:00Z",
+    )
+
+    with pytest.raises(ValidationError, match=expected_message):
+        app.transition_instrument(
+            db, instrument.instrument_id, "expire", expected_version=2,
+            actor_context_ref="internal-context", now=transition_at,
+        )
+
+    current = app.get_instrument(db, instrument.instrument_id)
+    assert (current.state, current.version_no, current.updated_at) == (
+        active.state, active.version_no, active.updated_at
+    )
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=?",
+        (str(instrument.instrument_id),),
+    ).fetchone()[0] == 2
+    db.close()
+
+
+def test_instrument_transition_fails_closed_on_malformed_persisted_timestamp():
+    db = connect_database()
+    app = InstrumentApplication()
+    instrument = app.create_instrument(
+        db, instrument_id=uid(), instrument_type="unspecified",
+        issuer_ref="issuer-ref", canonical_identifier="malformed-persisted-time",
+        actor_context_ref="internal-context", now=STAMP,
+    )
+    db.execute(
+        "UPDATE instruments SET updated_at=? WHERE instrument_id=?",
+        ("not-a-timestamp", str(instrument.instrument_id)),
+    )
+    db.commit()
+
+    with pytest.raises(ValidationError, match="Persisted Instrument updated_at"):
+        app.transition_instrument(
+            db, instrument.instrument_id, "activate", expected_version=1,
+            actor_context_ref="internal-context", now="2026-10-10T12:01:00Z",
+        )
+
+    current = app.get_instrument(db, instrument.instrument_id)
+    assert (current.state, current.version_no, current.updated_at) == (
+        "issued", 1, "not-a-timestamp"
+    )
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=?",
+        (str(instrument.instrument_id),),
+    ).fetchone()[0] == 1
+    db.close()
+
+
+
+@pytest.mark.parametrize("invalid_timestamp", ["", 0, False])
+def test_instrument_creation_rejects_explicit_falsey_timestamps(invalid_timestamp):
+    db = connect_database()
+    app = InstrumentApplication()
+    with pytest.raises(ValidationError, match="creation timestamp"):
+        app.create_instrument(
+            db, instrument_id=uid(), instrument_type="unspecified",
+            issuer_ref="issuer-ref", canonical_identifier=f"invalid-create-time-{type(invalid_timestamp).__name__}",
+            actor_context_ref="internal-context", now=invalid_timestamp,
+        )
+    assert db.execute("SELECT COUNT(*) FROM instruments").fetchone()[0] == 0
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE owner_domain='instrument'"
+    ).fetchone()[0] == 0
+    db.close()
+
+
+@pytest.mark.parametrize("invalid_timestamp", ["", 0, False])
+def test_instrument_transition_rejects_explicit_falsey_timestamps_without_mutation(invalid_timestamp):
+    db = connect_database()
+    app = InstrumentApplication()
+    instrument = app.create_instrument(
+        db, instrument_id=uid(), instrument_type="unspecified",
+        issuer_ref="issuer-ref", canonical_identifier=f"invalid-transition-time-{type(invalid_timestamp).__name__}",
+        actor_context_ref="internal-context", now=STAMP,
+    )
+    with pytest.raises(ValidationError, match="transition timestamp"):
+        app.transition_instrument(
+            db, instrument.instrument_id, "activate", expected_version=1,
+            actor_context_ref="internal-context", now=invalid_timestamp,
+        )
+    current = app.get_instrument(db, instrument.instrument_id)
+    assert (current.state, current.version_no) == ("issued", 1)
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=?",
+        (str(instrument.instrument_id),),
+    ).fetchone()[0] == 1
+    db.close()
+
+
+def test_instrument_does_not_infer_voucher_cancellation_from_generic_lifecycle():
+    db = connect_database()
+    app = InstrumentApplication()
+    instrument = app.create_instrument(
+        db, instrument_id=uid(), instrument_type="unspecified",
+        issuer_ref="issuer-ref", canonical_identifier="voucher-cancel-not-defined",
+        actor_context_ref="internal-context", now=STAMP,
+    )
+    key = str(instrument.instrument_id)
+
+    with pytest.raises(ValidationError, match="Unsupported Instrument transition"):
+        app.transition_instrument(
+            db, key, "cancel", expected_version=1,
+            actor_context_ref="internal-context", now=STAMP,
+        )
+
+    current = app.get_instrument(db, key)
+    assert (current.state, current.version_no) == ("issued", 1)
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE owner_domain='instrument' AND target_ref=?",
+        (key,),
+    ).fetchone()[0] == 1
+    assert db.execute("SELECT COUNT(*) FROM instrument_usages WHERE instrument_id=?", (key,)).fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM payments").fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM ledger_entries").fetchone()[0] == 0
+    db.close()
