@@ -54,9 +54,12 @@ class OfferingPriceApplication:
         ends = _stamp(end) if end is not None else None
         actor = actor_context_ref.strip()
 
-        if connection.in_transaction:
-            raise ValidationError("Offering price changes require an unowned transaction")
-        connection.execute("BEGIN IMMEDIATE")
+        owns_transaction = not connection.in_transaction
+        savepoint = "offering_price_" + uuid4().hex
+        if owns_transaction:
+            connection.execute("BEGIN IMMEDIATE")
+        else:
+            connection.execute(f"SAVEPOINT {savepoint}")
         try:
             if connection.execute("SELECT 1 FROM offerings WHERE offering_id=?", (offering,)).fetchone() is None:
                 raise ValidationError("Offering does not exist")
@@ -117,7 +120,10 @@ class OfferingPriceApplication:
                  f"offering:{offering};amount_minor:{unit_price_minor};currency:{currency_code};from:{starts};to:{ends or 'open'}",
                  recorded),
             )
-            connection.commit()
+            if owns_transaction:
+                connection.commit()
+            else:
+                connection.execute(f"RELEASE SAVEPOINT {savepoint}")
             return {
                 "offering_price_id": price_id, "offering_id": offering,
                 "unit_price_minor": unit_price_minor, "currency_code": currency_code,
@@ -125,5 +131,9 @@ class OfferingPriceApplication:
             }
         except BaseException:
             if connection.in_transaction:
-                connection.rollback()
+                if owns_transaction:
+                    connection.rollback()
+                else:
+                    connection.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+                    connection.execute(f"RELEASE SAVEPOINT {savepoint}")
             raise
