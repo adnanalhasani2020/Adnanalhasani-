@@ -53,7 +53,8 @@ def test_valid_complete_workflow_and_derived_balance():
     )
     assert result.state is WorkflowState.RECOGNIZED
     assert result.amount == Decimal("40")
-    assert obligation.state.value == "satisfied"
+    # A partial payment is not sufficient to discharge the full obligation.
+    assert obligation.state.value == "open"
     entry = LedgerEntry.__new__(LedgerEntry)
     object.__setattr__(entry, "financial_account_id", account.id)
     object.__setattr__(entry, "amount", Decimal("40"))
@@ -238,6 +239,37 @@ def test_concurrent_same_workflow_has_exactly_one_semantic_recognition(tmp_path)
     assert results[0].transaction_id == results[1].transaction_id
     assert obligation.state.value == "satisfied"
 
+
+
+def test_full_payment_discharges_obligation():
+    account = FinancialAccount(uuid4())
+    obligation = Obligation(account.id, Decimal("40"))
+    obligation.open()
+    payment = Payment(Decimal("40"), obligation_id=obligation.id)
+    payment.complete(connected=True)
+    settlement = Settlement(payment.id, obligation.id)
+    settlement.settle(connected=True)
+    action, grant, approval = _authorized()
+    result = _orchestrator().recognize(
+        workflow_id=uuid4(), payment=payment, settlement=settlement,
+        obligation=obligation, account=account, action=action,
+        approval=approval, grant=grant, connected=True,
+    )
+    assert result.state is WorkflowState.RECOGNIZED
+    assert obligation.state.value == "satisfied"
+
+
+def test_recognition_rejects_financial_account_mismatch():
+    account, obligation, payment, settlement = _workflow()
+    wrong_account = FinancialAccount(uuid4())
+    action, grant, approval = _authorized()
+    with pytest.raises(ValidationError, match="FinancialAccount does not match Obligation"):
+        _orchestrator().recognize(
+            workflow_id=uuid4(), payment=payment, settlement=settlement,
+            obligation=obligation, account=wrong_account, action=action,
+            approval=approval, grant=grant, connected=True,
+        )
+    assert obligation.state.value == "open"
 
 def test_direct_ledger_creation_is_rejected():
     with pytest.raises(ValidationError, match="Finance Recognition Command"):
