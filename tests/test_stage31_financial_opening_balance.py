@@ -263,3 +263,81 @@ def test_opening_balance_rejects_invalid_or_expired_grant_timestamps(
     assert db.execute("SELECT COUNT(*) FROM financial_transactions").fetchone()[0] == 0
     assert db.execute("SELECT COUNT(*) FROM ledger_entries").fetchone()[0] == 0
     db.close()
+
+
+
+def test_finance_acceptance_survives_reopen_and_duplicate_retry_is_side_effect_free(tmp_path):
+    """Exercise opening recognition, persisted ledger truth, derived balance, and retry safety."""
+    database_path = tmp_path / "finance-acceptance.sqlite"
+    db = connect_database(database_path)
+    _, approver, agent, context, account_id = seed(db)
+    grant, action = authorize(
+        db, agent=agent, approver=approver, context=context, account_id=account_id
+    )
+
+    first = FinancialOpeningBalanceApplication().record_opening_balance(
+        db,
+        financial_account_id=account_id,
+        amount_minor=2750,
+        currency_code="YER",
+        source_ref="acceptance-opening-source",
+        context_ref=context,
+        authorization_grant_id=grant,
+        agent_action_id=action,
+        now=STAMP,
+    )
+    assert FinancialBalanceReader().read(db, account_id, "YER", as_of=STAMP).amount_minor == 2750
+    db.close()
+
+    # A fresh connection must derive the same result from persisted Finance facts.
+    reopened = connect_database(database_path)
+    balance = FinancialBalanceReader().read(reopened, account_id, "YER", as_of=STAMP)
+    assert balance.amount_minor == 2750
+    assert balance.entry_count == 1
+    assert reopened.execute(
+        "SELECT state,amount_minor,currency_code FROM financial_transactions "
+        "WHERE financial_transaction_id=?",
+        (str(first.financial_transaction_id),),
+    ).fetchone() == ("recognized", 2750, "YER")
+    assert reopened.execute(
+        "SELECT state,amount_minor,currency_code FROM ledger_entries WHERE ledger_entry_id=?",
+        (str(first.ledger_entry_id),),
+    ).fetchone() == ("posted", 2750, "YER")
+
+    before = {
+        "transactions": reopened.execute("SELECT COUNT(*) FROM financial_transactions").fetchone()[0],
+        "entries": reopened.execute("SELECT COUNT(*) FROM ledger_entries").fetchone()[0],
+        "history": reopened.execute(
+            "SELECT COUNT(*) FROM domain_history WHERE target_ref=? AND change_type='financial_opening_balance'",
+            (account_id,),
+        ).fetchone()[0],
+    }
+    retry_grant, retry_action = authorize(
+        reopened, agent=agent, approver=approver, context=context, account_id=account_id
+    )
+    with pytest.raises(ValidationError, match="already exists"):
+        FinancialOpeningBalanceApplication().record_opening_balance(
+            reopened,
+            financial_account_id=account_id,
+            amount_minor=2750,
+            currency_code="YER",
+            source_ref="acceptance-opening-source",
+            context_ref=context,
+            authorization_grant_id=retry_grant,
+            agent_action_id=retry_action,
+            now=STAMP,
+        )
+
+    after = {
+        "transactions": reopened.execute("SELECT COUNT(*) FROM financial_transactions").fetchone()[0],
+        "entries": reopened.execute("SELECT COUNT(*) FROM ledger_entries").fetchone()[0],
+        "history": reopened.execute(
+            "SELECT COUNT(*) FROM domain_history WHERE target_ref=? AND change_type='financial_opening_balance'",
+            (account_id,),
+        ).fetchone()[0],
+    }
+    assert after == before
+    assert FinancialBalanceReader().read(reopened, account_id, "YER", as_of=STAMP).amount_minor == 2750
+    assert reopened.execute("PRAGMA foreign_key_check").fetchall() == []
+    assert reopened.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    reopened.close()
