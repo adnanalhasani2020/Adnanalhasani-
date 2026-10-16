@@ -55,6 +55,18 @@ def test_partial_settlement_is_rejected_until_remaining_amount_is_tracked():
     assert obligation.state.value == "open"
 
 
+def test_overpayment_is_rejected_without_financial_effect():
+    account, obligation, payment, settlement = _workflow("120")
+    action, grant, approval = _authorized()
+    with pytest.raises(ValidationError, match="Payment exceeds Obligation"):
+        _orchestrator().recognize(
+            workflow_id=uuid4(), payment=payment, settlement=settlement,
+            obligation=obligation, account=account, action=action,
+            approval=approval, grant=grant, connected=True,
+        )
+    assert obligation.state.value == "open"
+
+
 def test_valid_complete_workflow_and_derived_balance():
     account, obligation, payment, settlement = _workflow()
     action, grant, approval = _authorized()
