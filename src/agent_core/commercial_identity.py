@@ -200,8 +200,28 @@ class CommercialIdentityApplication:
             return False
         stamp = _stamp(_now(now))
         token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
-        connection.execute(
-            "UPDATE commercial_sessions SET revoked_at=? WHERE token_hash=? AND revoked_at IS NULL",
-            (stamp, token_hash),
-        )
-        return connection.execute("SELECT changes()").fetchone()[0] == 1
+        owns_transaction = not connection.in_transaction
+        savepoint = "commercial_logout_" + str(uuid4()).replace("-", "")
+        if owns_transaction:
+            connection.execute("BEGIN IMMEDIATE")
+        else:
+            connection.execute(f"SAVEPOINT {savepoint}")
+        try:
+            connection.execute(
+                "UPDATE commercial_sessions SET revoked_at=? WHERE token_hash=? AND revoked_at IS NULL",
+                (stamp, token_hash),
+            )
+            changed = connection.execute("SELECT changes()").fetchone()[0] == 1
+            if owns_transaction:
+                connection.commit()
+            else:
+                connection.execute(f"RELEASE SAVEPOINT {savepoint}")
+            return changed
+        except BaseException:
+            if connection.in_transaction:
+                if owns_transaction:
+                    connection.rollback()
+                else:
+                    connection.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+                    connection.execute(f"RELEASE SAVEPOINT {savepoint}")
+            raise
