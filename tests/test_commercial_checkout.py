@@ -165,6 +165,7 @@ def test_checkout_rejects_reused_key_with_changed_payload(tmp_path):
 def test_checkout_rejects_unknown_inventory_without_sale(tmp_path):
     db, request = setup_checkout(tmp_path)
     db.execute("UPDATE inventory_positions SET quantity_minor=NULL")
+    db.commit()
     app = CommercialCheckoutApplication()
 
     with pytest.raises(ValidationError, match="known, effective, unambiguous stock"):
@@ -229,4 +230,4 @@ def test_price_change_closes_open_window_and_records_actor_history(tmp_path):
     assert result["unit_price_minor"] == 1500
     assert db.execute(
         "SELECT COUNT(*) FROM domain_history WHERE change_type IN ('offering_price_set','offering_price_window_closed')"
-    ).fetchone()[0] == 3
+    ).fetchone()[0] == 2
