@@ -199,6 +199,7 @@ def test_reverse_implementation_inventory_has_traceability_owner():
         "offering_application.py": "persisted Commerce Offering lifecycle owned by SPEC-0005",
         "commerce_inventory_read.py": "read-only Commerce/Inventory context projection owned across SPEC-0005 and SPEC-0006",
         "commerce_checkout.py": "MVP-only stock-gated Sale checkout with atomic sale line, append-only stock movement, persisted price snapshot, and actor-scoped retry receipt; does not redefine the general Sale API",
+        "commercial_demo_seed.py": "guarded opt-in local-only demo catalog bootstrap using existing domain applications; refuses non-empty business databases",
         "commercial_identity.py": "local commercial MVP username/password authentication with scrypt hashes and revocable hashed sessions; no external identity provider",
         "commercial_web.py": "dependency-free Arabic storefront/API over the commercial MVP; no payment gateway or production TLS termination",
         "offering_price_application.py": "audited effective Offering price windows with actor context and Domain History; no inferred/default price",
