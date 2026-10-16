@@ -330,6 +330,34 @@ def test_correction_preserves_original_history():
     assert any(event["event"] == "workflow_corrected" for event in corrected.history)
 
 
+@pytest.mark.parametrize("amount", ["NaN", "Infinity", "-Infinity"])
+def test_payment_and_obligation_reject_non_finite_amounts(amount):
+    account = FinancialAccount(uuid4())
+    with pytest.raises(ValidationError, match="finite"):
+        Obligation(account.id, Decimal(amount))
+    with pytest.raises(ValidationError, match="finite"):
+        Payment(Decimal(amount))
+
+
+@pytest.mark.parametrize("corrected_amount", ["NaN", "Infinity", "-Infinity", "not-a-number", None])
+def test_correction_rejects_invalid_or_non_finite_amounts(corrected_amount, tmp_path):
+    account, obligation, payment, settlement = _workflow()
+    orchestrator = _orchestrator(str(tmp_path / "invalid-correction.sqlite3"))
+    action, grant, approval = _authorized()
+    original = orchestrator.recognize(
+        workflow_id=uuid4(), payment=payment, settlement=settlement,
+        obligation=obligation, account=account, action=action,
+        approval=approval, grant=grant, connected=True,
+    )
+    correction_action, correction_grant, correction_approval = _authorized("financial.correct")
+    with pytest.raises(ValidationError, match="Correction amount"):
+        orchestrator.correct(
+            workflow_id=uuid4(), account=account, original=original,
+            corrected_amount=corrected_amount, action=correction_action,
+            approval=correction_approval, grant=correction_grant, connected=True,
+        )
+
+
 def test_balance_is_derived_only():
     account, obligation, payment, settlement = _workflow()
     action, grant, approval = _authorized()
