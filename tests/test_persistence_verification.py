@@ -13,6 +13,7 @@ EXPECTED_DOMAIN_TABLES = {
     "persons","identifiers","access_accounts","authenticators","devices","sessions",
     "activities","memberships","role_assignments","products","services","offerings",
     "inventory_positions","inventory_opening_stock","sales","invoices","financial_accounts","loans","obligations",
+    "measurement_units","product_unit_settings",
     "payments","settlements","financial_transactions","ledger_entries","instruments",
     "instrument_usages","family_relationships","delegations","authorization_grants",
     "agents","authority_policies","agent_actions","approvals","conversations",
@@ -71,10 +72,10 @@ def _financial_fixture(db):
     return account, obligation, payment, settlement
 
 
-def test_clean_install_has_exactly_50_domain_tables_plus_migration_bookkeeping():
+def test_clean_install_has_exactly_52_domain_tables_plus_migration_bookkeeping():
     db = connect_database()
     assert _tables(db) == EXPECTED_DOMAIN_TABLES | {"schema_migrations"}
-    assert len(EXPECTED_DOMAIN_TABLES) == 50
+    assert len(EXPECTED_DOMAIN_TABLES) == 52
     assert db.execute("PRAGMA foreign_keys").fetchone()[0] == 1
     assert db.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
     versions = [r[0] for r in db.execute("SELECT version FROM schema_migrations ORDER BY version")]
@@ -88,6 +89,7 @@ def test_clean_install_has_exactly_50_domain_tables_plus_migration_bookkeeping()
         "0007_product_name",
         "0008_financial_opening_balance",
         "0013_inventory_opening_stock",
+        "0014_product_units",
         "9998_activity_invitations",
         "9999_file_attachments",
     ]
@@ -105,7 +107,7 @@ def test_existing_db_migration_preserves_data_and_is_idempotent(tmp_path):
     before = reopened.execute("SELECT COUNT(*) FROM persons").fetchone()[0]
     assert apply_migrations(reopened) == []
     assert reopened.execute("SELECT COUNT(*) FROM persons").fetchone()[0] == before
-    assert reopened.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0] == 11
+    assert reopened.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0] == 12
 
 
 def test_constraints_are_enforced_at_runtime():
