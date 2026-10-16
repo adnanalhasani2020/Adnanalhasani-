@@ -198,7 +198,6 @@ class CommercialCheckoutApplication:
             "create_sale_grant_id": _uuid(create_sale_grant_id, "Create Sale grant"),
             "confirm_sale_grant_id": _uuid(confirm_sale_grant_id, "Confirm Sale grant"),
             "fulfill_sale_grant_id": _uuid(fulfill_sale_grant_id, "Fulfill Sale grant"),
-            "occurred_at": stamp,
         }
         fingerprint = _hash_request(request)
         key = idempotency_key.strip()
