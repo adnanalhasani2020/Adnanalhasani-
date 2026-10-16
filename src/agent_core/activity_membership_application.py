@@ -103,7 +103,7 @@ class ActivityMembershipApplication:
         owner = self._uuid(owner_person_id, "Activity owner Person identifier")
         activity_state = self._required_state(state, self.ACTIVITY_STATES, "Activity state")
         key = self._uuid(activity_id, "Activity identifier") if activity_id is not None else uuid4()
-        timestamp = self._timestamp(now or datetime.now(timezone.utc), "Activity timestamp")
+        timestamp = self._timestamp(now if now is not None else datetime.now(timezone.utc), "Activity timestamp")
         with _atomic(connection):
             if connection.execute(
                 "SELECT 1 FROM persons WHERE person_id=?", (str(owner),)
@@ -138,7 +138,7 @@ class ActivityMembershipApplication:
         if end is not None and datetime.fromisoformat(end.replace("Z", "+00:00")) < datetime.fromisoformat(start.replace("Z", "+00:00")):
             raise ValidationError("Membership effective_to cannot precede effective_from")
         key = self._uuid(membership_id, "Membership identifier") if membership_id is not None else uuid4()
-        timestamp = self._timestamp(now or datetime.now(timezone.utc), "Membership timestamp")
+        timestamp = self._timestamp(now if now is not None else datetime.now(timezone.utc), "Membership timestamp")
         with _atomic(connection):
             if connection.execute(
                 "SELECT 1 FROM persons WHERE person_id=?", (str(person),)

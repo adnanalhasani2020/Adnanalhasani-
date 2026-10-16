@@ -103,6 +103,33 @@ def test_activity_membership_validate_references_states_and_dates():
     db.close()
 
 
+@pytest.mark.parametrize("invalid_timestamp", ["", 0, False])
+def test_activity_creation_rejects_explicit_falsey_timestamp_without_writes(invalid_timestamp):
+    db = connect_database()
+    person = seed_person(db)
+    with pytest.raises(ValidationError, match="ISO-8601|timezone-aware"):
+        ActivityMembershipApplication().create_activity(
+            db, owner_person_id=person, state="active", now=invalid_timestamp
+        )
+    assert db.execute("SELECT COUNT(*) FROM activities").fetchone()[0] == 0
+    db.close()
+
+
+@pytest.mark.parametrize("invalid_timestamp", ["", 0, False])
+def test_membership_creation_rejects_explicit_falsey_timestamp_without_writes(invalid_timestamp):
+    db = connect_database()
+    person = seed_person(db)
+    app = ActivityMembershipApplication()
+    activity = app.create_activity(db, owner_person_id=person, state="active", now=STAMP)
+    with pytest.raises(ValidationError, match="ISO-8601|timezone-aware"):
+        app.create_membership(
+            db, person_id=person, activity_id=activity.activity_id, state="active",
+            effective_from=STAMP, now=invalid_timestamp,
+        )
+    assert db.execute("SELECT COUNT(*) FROM memberships").fetchone()[0] == 0
+    db.close()
+
+
 def test_unknown_and_invalid_identifiers_fail_closed():
     db = connect_database()
     app = ActivityMembershipApplication()

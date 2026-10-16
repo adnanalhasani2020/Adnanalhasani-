@@ -149,7 +149,7 @@ class PendingOperationApplication:
         operation_id = self._required(operation_id, "operation_id")
         operation_kind = self._required(operation_kind, "operation_kind")
         request_fingerprint = self._required(request_fingerprint, "request_fingerprint")
-        timestamp = self._timestamp(now or datetime.now(timezone.utc), "pending operation timestamp")
+        timestamp = self._timestamp(now if now is not None else datetime.now(timezone.utc), "pending operation timestamp")
         try:
             with connection:
                 existing = self._find(connection, namespace, operation_id)
@@ -224,7 +224,7 @@ class PendingOperationApplication:
     def _transition(self, connection, *, namespace, operation_id, allowed, target, now=None):
         namespace = self._required(namespace, "namespace")
         operation_id = self._required(operation_id, "operation_id")
-        timestamp = self._timestamp(now or datetime.now(timezone.utc), "pending operation transition timestamp")
+        timestamp = self._timestamp(now if now is not None else datetime.now(timezone.utc), "pending operation transition timestamp")
         with connection:
             current = self._find(connection, namespace, operation_id)
             if current is None:
@@ -248,7 +248,7 @@ class PendingOperationApplication:
         device_key = str(self._uuid(device_id, "Device identifier"))
         if isinstance(expected_version, bool) or not isinstance(expected_version, int) or expected_version < 1:
             raise ValidationError("expected_version must be a positive integer")
-        timestamp = self._timestamp(now or datetime.now(timezone.utc), "Device transition timestamp")
+        timestamp = self._timestamp(now if now is not None else datetime.now(timezone.utc), "Device transition timestamp")
         with connection:
             cursor = connection.execute(
                 "UPDATE devices SET state='lost',updated_at=?,version_no=version_no+1 "

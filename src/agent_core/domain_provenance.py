@@ -68,7 +68,7 @@ class ProvenanceRecordApplication:
         except (ValueError, TypeError, AttributeError) as exc:
             raise ValidationError("provenance_id must be a valid UUID") from exc
         as_of = self._timestamp(as_of_at, "as_of_at", optional=True)
-        created = self._timestamp(now or datetime.now(timezone.utc), "created_at")
+        created = self._timestamp(now if now is not None else datetime.now(timezone.utc), "created_at")
         with connection:
             connection.execute(
                 "INSERT INTO provenance_records(provenance_id,source_type,source_ref,"

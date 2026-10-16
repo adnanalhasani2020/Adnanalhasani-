@@ -77,6 +77,45 @@ def test_queue_requires_existing_active_device():
     db.close()
 
 
+@pytest.mark.parametrize("invalid_timestamp", ["", 0, False])
+def test_pending_queue_rejects_explicit_falsey_timestamp_without_writes(invalid_timestamp):
+    db = connect_database()
+    device = seed_device(db)
+    with pytest.raises(ValidationError, match="ISO-8601|timezone-aware"):
+        queue(PendingOperationApplication(), db, device, now=invalid_timestamp)
+    assert db.execute("SELECT COUNT(*) FROM pending_operations").fetchone()[0] == 0
+    db.close()
+
+
+@pytest.mark.parametrize("invalid_timestamp", ["", 0, False])
+def test_pending_transition_rejects_explicit_falsey_timestamp_without_mutation(invalid_timestamp):
+    db = connect_database()
+    device = seed_device(db)
+    app = PendingOperationApplication()
+    queued = queue(app, db, device)
+    with pytest.raises(ValidationError, match="ISO-8601|timezone-aware"):
+        app.submit(db, namespace="offline.test", operation_id="request-1", now=invalid_timestamp)
+    restored = app.get(db, namespace="offline.test", operation_id="request-1")
+    assert restored == queued
+    assert restored.state == "queued"
+    db.close()
+
+
+@pytest.mark.parametrize("invalid_timestamp", ["", 0, False])
+def test_device_loss_rejects_explicit_falsey_timestamp_without_mutation(invalid_timestamp):
+    db = connect_database()
+    device = seed_device(db)
+    app = PendingOperationApplication()
+    queued = queue(app, db, device)
+    with pytest.raises(ValidationError, match="ISO-8601|timezone-aware"):
+        app.mark_device_lost(db, device_id=device, expected_version=1, now=invalid_timestamp)
+    assert db.execute(
+        "SELECT state,version_no,updated_at FROM devices WHERE device_id=?", (device,)
+    ).fetchone() == ("active", 1, STAMP)
+    assert app.get(db, namespace="offline.test", operation_id="request-1") == queued
+    db.close()
+
+
 def test_submit_and_cancel_are_persisted_idempotent_and_non_final():
     db = connect_database()
     device = seed_device(db)
