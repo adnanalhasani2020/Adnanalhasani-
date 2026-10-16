@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from agent_core.shared import ValidationError, normalize_currency_code
+from agent_core.shared import ValidationError, normalize_currency_code, require_canonical_currency_code
 
 
 _TRANSITIONS = {
