@@ -101,3 +101,46 @@ def test_settlement_must_match_payment_and_obligation_currencies():
     with pytest.raises(sqlite3.IntegrityError, match="payment currency_code"):
         db.execute("UPDATE payments SET currency_code='USD' WHERE payment_id=?", (valid_payment_id,))
     db.close()
+
+
+def test_recognized_settlement_transaction_must_match_payment_currency():
+    db = connect_database()
+    creditor, debtor, owner = person(db), person(db), person(db)
+    account_id = uid()
+    db.execute(
+        "INSERT INTO financial_accounts(financial_account_id,person_id,account_type,state,created_at,updated_at) "
+        "VALUES(?,?,?,'active',?,?)",
+        (account_id, owner, "personal", STAMP, STAMP),
+    )
+    obligation_id = obligation(db, creditor, debtor, "YER")
+    payment_id = payment(db, debtor, creditor, "YER", obligation_id)
+    settlement_id = uid()
+    db.execute(
+        "INSERT INTO settlements(settlement_id,payment_id,obligation_id,state,created_at,updated_at) "
+        "VALUES(?,?,?,'settled',?,?)",
+        (settlement_id, payment_id, obligation_id, STAMP, STAMP),
+    )
+
+    def insert_transaction(currency, transaction_id=None):
+        transaction_id = transaction_id or uid()
+        db.execute(
+            "INSERT INTO financial_transactions(financial_transaction_id,settlement_id,financial_account_id,"
+            "amount_minor,currency_code,state,recognition_source_type,recognition_source_ref,recognized_at,"
+            "created_at,updated_at) VALUES(?,?,?,?,?,'recognized','settlement',?,?,?,?)",
+            (transaction_id, settlement_id, account_id, 100, currency, settlement_id, STAMP, STAMP, STAMP),
+        )
+        return transaction_id
+
+    with pytest.raises(sqlite3.IntegrityError, match="financial transaction currency_code"):
+        insert_transaction("USD")
+    transaction_id = insert_transaction("YER")
+    with pytest.raises(sqlite3.IntegrityError, match="financial transaction currency_code"):
+        db.execute(
+            "UPDATE financial_transactions SET currency_code='USD' WHERE financial_transaction_id=?",
+            (transaction_id,),
+        )
+    assert db.execute(
+        "SELECT currency_code FROM financial_transactions WHERE financial_transaction_id=?",
+        (transaction_id,),
+    ).fetchone()[0] == "YER"
+    db.close()
