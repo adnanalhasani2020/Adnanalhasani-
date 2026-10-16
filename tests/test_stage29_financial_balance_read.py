@@ -110,7 +110,8 @@ def test_balance_fails_closed_on_ledger_transaction_currency_mismatch():
     db = connect_database()
     account_id = account(db)
     ledger(db, account_id, 100, "YER", "2026-10-01T10:00:00Z")
-    # Corrupt persisted data: entry currency differs from the recognized transaction.
+    # Simulate legacy/corrupt data predating the database-level consistency guard.
+    db.execute("DROP TRIGGER ledger_entry_currency_matches_transaction_update")
     db.execute("UPDATE ledger_entries SET currency_code='USD'")
     db.commit()
     with pytest.raises(ValidationError, match="does not match"):
