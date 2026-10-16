@@ -172,6 +172,30 @@ class PaymentApplication:
         currency = require_canonical_currency_code(
             currency, label="Persisted Payment currency_code"
         )
+        if obligation is not None:
+            obligation_row = connection.execute(
+                "SELECT currency_code FROM obligations WHERE obligation_id=?", (obligation,),
+            ).fetchone()
+            if obligation_row is None:
+                raise ValidationError("Persisted Payment references a missing Obligation")
+            obligation_currency = require_canonical_currency_code(
+                obligation_row[0], label="Persisted linked Obligation currency_code"
+            )
+            if currency != obligation_currency:
+                raise ValidationError(
+                    "Persisted Payment currency does not match its linked Obligation currency"
+                )
+        for (obligation_currency,) in connection.execute(
+            "SELECT o.currency_code FROM settlements s "
+            "JOIN obligations o ON o.obligation_id=s.obligation_id WHERE s.payment_id=?", (pid,),
+        ).fetchall():
+            obligation_currency = require_canonical_currency_code(
+                obligation_currency, label="Persisted settled Obligation currency_code"
+            )
+            if currency != obligation_currency:
+                raise ValidationError(
+                    "Persisted Payment currency does not match its settled Obligation currency"
+                )
         if obligation is not None and invoice is not None:
             invoice_link = connection.execute(
                 "SELECT obligation_id FROM invoices WHERE invoice_id=?", (invoice,),
