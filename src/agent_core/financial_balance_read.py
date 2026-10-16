@@ -6,10 +6,9 @@ and Payment/Settlement state are not treated as financial truth.
 """
 from dataclasses import dataclass
 from datetime import datetime, timezone
-import re
 from uuid import UUID
 
-from agent_core.shared import ValidationError
+from agent_core.shared import ValidationError, require_canonical_currency_code
 
 
 @dataclass(frozen=True)
@@ -44,9 +43,9 @@ class FinancialBalanceReader:
 
     def read(self, connection, financial_account_id, currency_code, *, as_of=None) -> FinancialBalance:
         account_id = self._uuid(financial_account_id, "Financial Account identifier")
-        if not isinstance(currency_code, str) or not re.fullmatch(r"[A-Z]{3}", currency_code):
-            raise ValidationError("Balance currency_code must be a 3-letter uppercase code")
-        currency = currency_code
+        currency = require_canonical_currency_code(
+            currency_code, label="Balance currency_code"
+        )
         instant = self._instant(datetime.now(timezone.utc) if as_of is None else as_of)
         cutoff = instant.isoformat().replace("+00:00", "Z")
 
