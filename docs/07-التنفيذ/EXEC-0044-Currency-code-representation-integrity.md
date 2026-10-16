@@ -41,3 +41,8 @@ Database migration `0024_linked_financial_currency_consistency.sql` requires lin
 ## Follow-up — EXEC-0047
 
 Migration `0025_settlement_recognition_currency_consistency.sql` ensures a recognized Financial Transaction linked to a Settlement uses the Payment's currency. This closes the final currency link from the source payment through settlement recognition. The regression test rejects a mismatched currency and confirms the persisted transaction remains unchanged. Latest-head CI verification is pending.
+
+
+## Follow-up — EXEC-0048
+
+The application read paths now fail closed when persisted currency codes disagree across linked Loans/Obligations, Obligations/Payments, or Settlements and their linked financial records. This detects inconsistent legacy or externally corrupted data even if older database rows predate the new write guards. Reads do not silently repair or mutate the inconsistent records. Regression tests simulate legacy mismatches and assert the stored values remain unchanged.
