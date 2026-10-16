@@ -149,6 +149,11 @@ def test_web_session_can_buy_sellable_product_and_receive_result(tmp_path):
     assert checkout["body"]["total_minor"] == 1980
     assert checkout["body"]["quantity_remaining"] == 3
 
+    # Read the catalog again through the public user flow and prove stock changed.
+    refreshed_catalog = request(app, "/api/catalog", cookie=session_cookie)
+    assert refreshed_catalog["status"] == "200 OK"
+    assert refreshed_catalog["body"]["items"][0]["available_quantity"] == 3
+
     db = connect_database(db_path)
     assert db.execute("SELECT COUNT(*) FROM sales").fetchone()[0] == 1
     assert db.execute("SELECT quantity_delta FROM inventory_movements").fetchone()[0] == -2
