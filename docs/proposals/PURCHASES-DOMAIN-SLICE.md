@@ -1,6 +1,6 @@
 # Procurement domain slice — implementation boundary
 
-**Status:** Initial persisted backend slice is merged into `main` via PR #205. SQLite supplier-invoice guards are merged via PR #207. Immutable receipt-event database guards are proposed in PR #208. This is not the complete procurement workflow.
+**Status:** Initial persisted backend slice is merged into `main` via PR #205. SQLite supplier-invoice guards are merged via PR #207. Immutable receipt-event database guards are merged via PR #208. This is not the complete procurement workflow.
 
 This change adds a canonical buyer-side Purchase aggregate and line/receipt value objects, a dedicated persistence application, and additive SQL tables. It intentionally does not reuse Sale, Offering, Invoice, Payment, Obligation, Settlement, InventoryPosition, or Ledger records.
 
@@ -39,4 +39,4 @@ The implementation is a meaningful backend slice, not a claim that the complete 
 - Snapshot fields must be complete or entirely absent and cannot be rewritten after line creation. Migration 0012 adds a database trigger that rejects snapshots inconsistent with the active product-unit setting, ratio, labels, or versions. The combined integration branch exposes `PurchaseApplication.capture_unit_snapshot(connection, line, measurement_unit_id)` so callers select a unit explicitly rather than relying on a display-label guess.
 - When the product-unit catalog is present, creating a snapshotted line validates the product, active setting/unit, ratio, labels, and versions against the current catalog. Restoring a historical line does not require its current setting to remain active or unchanged.
 - Receipt quantities continue to use the purchase line's entered unit. This migration does not post inventory or convert quantities implicitly.
-- The unit catalog and purchase snapshot migrations were integrated and merged together through PR #205. Migrations `0015`–`0018` are now part of `main`; migration `0019` adds database-level supplier-invoice guards; migration `0020` adds immutable receipt evidence and received-quantity consistency guards. Legacy lines without snapshots remain supported.
+- The unit catalog and purchase snapshot migrations were integrated and merged together through PR #205. Migrations `0015`–`0018` are now part of `main`; migration `0019` adds database-level supplier-invoice guards; migration `0020` adds immutable receipt evidence and received-quantity consistency guards; both are now part of `main`. Legacy lines without snapshots remain supported.
