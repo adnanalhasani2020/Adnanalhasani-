@@ -194,7 +194,7 @@ class PaymentApplication:
         if not isinstance(currency_code, str) or not currency_code.strip():
             raise ValidationError("Payment currency_code is required")
         currency_code = currency_code.strip()
-        timestamp = self._timestamp(now or datetime.now(timezone.utc), "Payment creation timestamp")
+        timestamp = self._timestamp(now if now is not None else datetime.now(timezone.utc), "Payment creation timestamp")
         with self._atomic(connection):
             actor = self._authorize(
                 connection, payment_id=key, context_ref=context_ref, action_code="payment.create",
@@ -261,7 +261,7 @@ class PaymentApplication:
             raise ValidationError("Payment expected_version must be a positive integer")
         if not isinstance(target_state, str) or target_state not in {"pending", "completed", "failed", "cancelled"}:
             raise ValidationError("Unsupported persisted Payment target state")
-        timestamp = self._timestamp(now or datetime.now(timezone.utc), "Payment transition timestamp")
+        timestamp = self._timestamp(now if now is not None else datetime.now(timezone.utc), "Payment transition timestamp")
         action_code = f"payment.transition.{target_state}"
         with self._atomic(connection):
             actor = self._authorize(
