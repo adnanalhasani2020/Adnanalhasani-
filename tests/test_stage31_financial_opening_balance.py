@@ -186,7 +186,7 @@ def test_opening_balance_migration_preserves_existing_transactions_and_entries()
         sql = path.read_text(encoding="utf-8")
         db.executescript(
             "BEGIN IMMEDIATE;\n" + sql
-            + "\nINSERT INTO schema_migrations(version, applied_at) "
+            + "\nINSERT OR IGNORE INTO schema_migrations(version, applied_at) "
             + f"VALUES ('{version}', '{STAMP}');\nCOMMIT;"
         )
 
@@ -218,7 +218,7 @@ def test_opening_balance_migration_preserves_existing_transactions_and_entries()
     path = MIGRATIONS_DIR / "0008_financial_opening_balance.sql"
     db.executescript(
         "BEGIN IMMEDIATE;\n" + path.read_text(encoding="utf-8")
-        + "\nINSERT INTO schema_migrations(version, applied_at) "
+        + "\nINSERT OR IGNORE INTO schema_migrations(version, applied_at) "
         + f"VALUES ('0008_financial_opening_balance', '{STAMP}');\nCOMMIT;"
     )
     apply_migrations(db)
