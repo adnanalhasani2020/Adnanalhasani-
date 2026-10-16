@@ -153,3 +153,29 @@ def test_web_session_can_buy_sellable_product_and_receive_result(tmp_path):
     assert db.execute("SELECT COUNT(*) FROM sales").fetchone()[0] == 1
     assert db.execute("SELECT quantity_delta FROM inventory_movements").fetchone()[0] == -2
     db.close()
+
+    # A page refresh can recover the committed result from the authenticated history.
+    history = request(app, "/api/receipts", cookie=session_cookie)
+    assert history["status"] == "200 OK"
+    assert len(history["body"]["items"]) == 1
+    assert history["body"]["items"][0]["sale_id"] == checkout["body"]["sale_id"]
+    assert history["body"]["items"][0]["quantity_remaining"] == 3
+
+    receipt = request(
+        app, "/api/receipts/web-checkout-001", cookie=session_cookie,
+    )
+    assert receipt["status"] == "200 OK"
+    assert receipt["body"]["sale_id"] == checkout["body"]["sale_id"]
+
+    other = request(
+        app, "/api/register", method="POST",
+        body={"username": "customer_03", "password": "correct horse battery staple"},
+    )
+    other_cookie = SimpleCookie()
+    other_cookie.load(dict(other["headers"])["Set-Cookie"])
+    other_history = request(
+        app, "/api/receipts",
+        cookie="commercial_session=" + other_cookie["commercial_session"].value,
+    )
+    assert other_history["status"] == "200 OK"
+    assert other_history["body"]["items"] == []
