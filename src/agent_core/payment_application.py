@@ -174,12 +174,17 @@ class PaymentApplication:
         )
         if obligation is not None:
             obligation_row = connection.execute(
-                "SELECT currency_code FROM obligations WHERE obligation_id=?", (obligation,),
+                "SELECT amount_minor,currency_code FROM obligations WHERE obligation_id=?", (obligation,),
             ).fetchone()
             if obligation_row is None:
                 raise ValidationError("Persisted Payment references a missing Obligation")
+            obligation_amount, obligation_currency = obligation_row
+            if amount > obligation_amount:
+                raise ValidationError(
+                    "Persisted Payment amount exceeds its linked Obligation amount"
+                )
             obligation_currency = require_canonical_currency_code(
-                obligation_row[0], label="Persisted linked Obligation currency_code"
+                obligation_currency, label="Persisted linked Obligation currency_code"
             )
             if currency != obligation_currency:
                 raise ValidationError(

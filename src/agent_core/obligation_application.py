@@ -169,9 +169,13 @@ class ObligationApplication:
                 raise ValidationError(
                     "Persisted Obligation currency does not match its linked Loan currency"
                 )
-        for (payment_currency,) in connection.execute(
-            "SELECT currency_code FROM payments WHERE obligation_id=?", (oid,),
+        for (payment_amount, payment_currency) in connection.execute(
+            "SELECT amount_minor,currency_code FROM payments WHERE obligation_id=?", (oid,),
         ).fetchall():
+            if payment_amount > amount:
+                raise ValidationError(
+                    "Persisted linked Payment amount exceeds Obligation amount"
+                )
             payment_currency = require_canonical_currency_code(
                 payment_currency, label="Persisted linked Payment currency_code"
             )
