@@ -78,6 +78,8 @@ class FinancialOrchestrator:
             try:
                 history.append(WorkflowEvent(workflow_id,WorkflowState.IN_PROGRESS,"integrity_checks"))
                 self._validate_matching(payment,settlement,obligation)
+                if obligation.financial_account_id != account.id:
+                    raise ValidationError("Obligation does not belong to the Financial Account")
                 if not connected: raise ValidationError("Financial finality requires connectivity")
                 transaction,ledger=self.recognition.recognize(financial_account_id=account.id,amount=payment.amount)
                 obligation.satisfy()
