@@ -454,3 +454,89 @@ def test_invalid_workflow_id_is_rejected():
             approval=approval, grant=grant, connected=True,
         )
     assert obligation.state.value != "satisfied"
+
+
+def test_original_workflow_cannot_be_both_reversed_and_corrected(tmp_path):
+    orchestrator = _orchestrator(str(tmp_path / "single-adjustment-a.sqlite3"))
+    account, obligation, payment, settlement = _workflow()
+    action, grant, approval = _authorized()
+    original = orchestrator.recognize(
+        workflow_id=uuid4(), payment=payment, settlement=settlement,
+        obligation=obligation, account=account, action=action,
+        approval=approval, grant=grant, connected=True,
+    )
+    reverse_action, reverse_grant, reverse_approval = _authorized("financial.reverse")
+    orchestrator.reverse(
+        workflow_id=uuid4(), account=account, original=original,
+        action=reverse_action, approval=reverse_approval,
+        grant=reverse_grant, connected=True,
+    )
+    correction_action, correction_grant, correction_approval = _authorized("financial.correct")
+    with pytest.raises(ValidationError, match="conflict"):
+        orchestrator.correct(
+            workflow_id=uuid4(), account=account, original=original,
+            corrected_amount=Decimal("110"), action=correction_action,
+            approval=correction_approval, grant=correction_grant, connected=True,
+        )
+
+
+def test_original_workflow_cannot_be_both_corrected_and_reversed(tmp_path):
+    orchestrator = _orchestrator(str(tmp_path / "single-adjustment-b.sqlite3"))
+    account, obligation, payment, settlement = _workflow()
+    action, grant, approval = _authorized()
+    original = orchestrator.recognize(
+        workflow_id=uuid4(), payment=payment, settlement=settlement,
+        obligation=obligation, account=account, action=action,
+        approval=approval, grant=grant, connected=True,
+    )
+    correction_action, correction_grant, correction_approval = _authorized("financial.correct")
+    orchestrator.correct(
+        workflow_id=uuid4(), account=account, original=original,
+        corrected_amount=Decimal("110"), action=correction_action,
+        approval=correction_approval, grant=correction_grant, connected=True,
+    )
+    reverse_action, reverse_grant, reverse_approval = _authorized("financial.reverse")
+    with pytest.raises(ValidationError, match="conflict"):
+        orchestrator.reverse(
+            workflow_id=uuid4(), account=account, original=original,
+            action=reverse_action, approval=reverse_approval,
+            grant=reverse_grant, connected=True,
+        )
+
+
+def test_reversal_cannot_post_to_another_financial_account(tmp_path):
+    orchestrator = _orchestrator(str(tmp_path / "reversal-account-bound.sqlite3"))
+    account, obligation, payment, settlement = _workflow()
+    action, grant, approval = _authorized()
+    original = orchestrator.recognize(
+        workflow_id=uuid4(), payment=payment, settlement=settlement,
+        obligation=obligation, account=account, action=action,
+        approval=approval, grant=grant, connected=True,
+    )
+    other_account = FinancialAccount(uuid4())
+    reverse_action, reverse_grant, reverse_approval = _authorized("financial.reverse")
+    with pytest.raises(ValidationError, match="does not belong to the Financial Account"):
+        orchestrator.reverse(
+            workflow_id=uuid4(), account=other_account, original=original,
+            action=reverse_action, approval=reverse_approval,
+            grant=reverse_grant, connected=True,
+        )
+
+
+def test_correction_cannot_post_to_another_financial_account(tmp_path):
+    orchestrator = _orchestrator(str(tmp_path / "correction-account-bound.sqlite3"))
+    account, obligation, payment, settlement = _workflow()
+    action, grant, approval = _authorized()
+    original = orchestrator.recognize(
+        workflow_id=uuid4(), payment=payment, settlement=settlement,
+        obligation=obligation, account=account, action=action,
+        approval=approval, grant=grant, connected=True,
+    )
+    other_account = FinancialAccount(uuid4())
+    correction_action, correction_grant, correction_approval = _authorized("financial.correct")
+    with pytest.raises(ValidationError, match="does not belong to the Financial Account"):
+        orchestrator.correct(
+            workflow_id=uuid4(), account=other_account, original=original,
+            corrected_amount=Decimal("110"), action=correction_action,
+            approval=correction_approval, grant=correction_grant, connected=True,
+        )

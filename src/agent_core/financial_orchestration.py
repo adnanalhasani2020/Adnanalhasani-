@@ -35,10 +35,11 @@ class RecognitionResult:
     amount: Decimal
     state: WorkflowState
     history: tuple[dict,...]
+    financial_account_id: UUID | None = None
 
 class FinancialOrchestrator:
     """Finance-scoped orchestration boundary; Finance remains Ledger authority."""
-    NAMESPACE="finance.gap4.recognition"; OPERATION_KIND="recognize"; REVERSAL_NAMESPACE="finance.gap4.reversal"; CORRECTION_NAMESPACE="finance.gap4.correction"
+    NAMESPACE="finance.gap4.recognition"; OPERATION_KIND="recognize"; REVERSAL_NAMESPACE="finance.gap4.adjustment"; CORRECTION_NAMESPACE="finance.gap4.adjustment"
     def __init__(self, operations: DurableOperationAuthority, recognition: FinanceRecognitionCommand|None=None):
         self.operations=operations; self.recognition=recognition or FinanceRecognitionCommand()
         self._lock=RLock(); self._workflows={}
@@ -67,7 +68,7 @@ class FinancialOrchestrator:
 
     @staticmethod
     def _result_from_payload(payload):
-        return RecognitionResult(UUID(payload["workflow_id"]),UUID(payload["transaction_id"]),UUID(payload["ledger_entry_id"]),Decimal(payload["amount"]),WorkflowState(payload["state"]),tuple(payload["history"]))
+        return RecognitionResult(UUID(payload["workflow_id"]),UUID(payload["transaction_id"]),UUID(payload["ledger_entry_id"]),Decimal(payload["amount"]),WorkflowState(payload["state"]),tuple(payload["history"]),UUID(payload["financial_account_id"]) if payload.get("financial_account_id") else None)
 
     def recognize(self, *, workflow_id, payment, settlement, obligation, account, action, approval, grant, connected):
         self._require_uuid(workflow_id,"WorkflowId")
@@ -86,9 +87,9 @@ class FinancialOrchestrator:
                 transaction,ledger=self.recognition.recognize(financial_account_id=account.id,amount=payment.amount)
                 obligation.satisfy()
                 history.append(WorkflowEvent(workflow_id,WorkflowState.RECOGNIZED,"financial_recognition",detail=str(ledger.id)))
-                result=RecognitionResult(workflow_id,transaction.id,ledger.id,payment.amount,WorkflowState.RECOGNIZED,tuple(e.as_dict() for e in history))
+                result=RecognitionResult(workflow_id,transaction.id,ledger.id,payment.amount,WorkflowState.RECOGNIZED,tuple(e.as_dict() for e in history),account.id)
                 with self._lock: self._workflows[workflow_id]=result
-                return {"workflow_id":str(result.workflow_id),"transaction_id":str(result.transaction_id),"ledger_entry_id":str(result.ledger_entry_id),"amount":str(result.amount),"state":result.state.value,"history":list(result.history)}
+                return {"workflow_id":str(result.workflow_id),"transaction_id":str(result.transaction_id),"ledger_entry_id":str(result.ledger_entry_id),"amount":str(result.amount),"state":result.state.value,"history":list(result.history),"financial_account_id":str(result.financial_account_id)}
             except Exception:
                 with self._lock: self._workflows.pop(workflow_id,None)
                 raise
@@ -109,11 +110,15 @@ class FinancialOrchestrator:
 
     def reverse(self, *, workflow_id, account, original, action, approval, grant, connected):
         self._require_uuid(workflow_id,"WorkflowId")
+        if not isinstance(account, FinancialAccount): raise ValidationError("FinancialAccount is required")
+        if original.financial_account_id is None or account.id != original.financial_account_id:
+            raise ValidationError("Original workflow does not belong to the Financial Account")
+        if account.state.value != "active": raise ValidationError("FinancialAccount must be ACTIVE")
         if original.state!=WorkflowState.RECOGNIZED: raise ValidationError("Only recognized workflow can be reversed")
         def effect():
             if not connected: raise ValidationError("Financial finality requires connectivity")
             tx,entry=self.recognition.recognize(financial_account_id=account.id,amount=-original.amount)
-            return {"workflow_id":str(workflow_id),"transaction_id":str(tx.id),"ledger_entry_id":str(entry.id),"amount":str(-original.amount),"state":WorkflowState.REVERSED.value,"history":list(original.history+(WorkflowEvent(workflow_id,WorkflowState.REVERSED,"workflow_reversed",detail=str(entry.id)).as_dict(),))}
+            return {"workflow_id":str(workflow_id),"transaction_id":str(tx.id),"ledger_entry_id":str(entry.id),"amount":str(-original.amount),"state":WorkflowState.REVERSED.value,"history":list(original.history+(WorkflowEvent(workflow_id,WorkflowState.REVERSED,"workflow_reversed",detail=str(entry.id)).as_dict(),)),"financial_account_id":str(account.id)}
         payload=ApprovalEnforcementAuthority.execute(
             action,approval,
             lambda:self.operations.execute(
@@ -127,6 +132,10 @@ class FinancialOrchestrator:
 
     def correct(self, *, workflow_id, account, original, corrected_amount, action, approval, grant, connected):
         self._require_uuid(workflow_id,"WorkflowId")
+        if not isinstance(account, FinancialAccount): raise ValidationError("FinancialAccount is required")
+        if original.financial_account_id is None or account.id != original.financial_account_id:
+            raise ValidationError("Original workflow does not belong to the Financial Account")
+        if account.state.value != "active": raise ValidationError("FinancialAccount must be ACTIVE")
         if original.state!=WorkflowState.RECOGNIZED: raise ValidationError("Only recognized workflow can be corrected")
         if not connected: raise ValidationError("Financial finality requires connectivity")
         corrected_amount=Decimal(str(corrected_amount))
@@ -134,7 +143,7 @@ class FinancialOrchestrator:
         delta=corrected_amount-original.amount
         def effect():
             tx,entry=self.recognition.recognize(financial_account_id=account.id,amount=delta)
-            return {"workflow_id":str(workflow_id),"transaction_id":str(tx.id),"ledger_entry_id":str(entry.id),"amount":str(delta),"state":WorkflowState.RECOGNIZED.value,"history":list(original.history+(WorkflowEvent(workflow_id,WorkflowState.RECOGNIZED,"workflow_corrected",detail=str(entry.id)).as_dict(),))}
+            return {"workflow_id":str(workflow_id),"transaction_id":str(tx.id),"ledger_entry_id":str(entry.id),"amount":str(delta),"state":WorkflowState.RECOGNIZED.value,"history":list(original.history+(WorkflowEvent(workflow_id,WorkflowState.RECOGNIZED,"workflow_corrected",detail=str(entry.id)).as_dict(),)),"financial_account_id":str(account.id)}
         payload=ApprovalEnforcementAuthority.execute(
             action,approval,
             lambda:self.operations.execute(
