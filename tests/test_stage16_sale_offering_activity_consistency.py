@@ -218,7 +218,7 @@ def test_existing_database_migration_preserves_sales_invoices_and_history_on_reo
         ("0034_settlement_payment_obligation_amount_consistency",),
         ("0035_financial_policy_settings",),
         ("0036_financial_policy_currency_guards",),
-        ("9998_activity_invitations",)
+        ("9998_activity_invitations",),
         ("9999_file_attachments",),
     ]
     assert db.execute(
