@@ -93,7 +93,8 @@ class FinancialBalanceReader:
             "JOIN financial_transactions ft ON ft.financial_transaction_id=le.financial_transaction_id "
             "WHERE le.financial_account_id=? AND le.state='posted' AND le.posted_at<=? "
             "AND ft.state='recognized' AND "
-            "(le.financial_account_id<>ft.financial_account_id OR le.currency_code<>ft.currency_code) "
+            "(le.financial_account_id<>ft.financial_account_id OR le.currency_code<>ft.currency_code "
+            "OR le.amount_minor<>ft.amount_minor) "
             "AND (le.currency_code=? OR ft.currency_code=?) LIMIT 1",
             (str(account_id), cutoff, currency, currency),
         ).fetchone()

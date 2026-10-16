@@ -160,3 +160,25 @@ def test_balance_fails_closed_on_ledger_transaction_account_mismatch():
     ).fetchone()[0] == other_account_id
     assert db.execute("SELECT COUNT(*) FROM ledger_entries").fetchone()[0] == 1
     db.close()
+
+
+def test_balance_fails_closed_on_ledger_transaction_amount_mismatch():
+    db = connect_database()
+    account_id = account(db)
+    transaction_id, entry_id = ledger(db, account_id, 250, "YER", "2026-10-01T10:00:00Z")
+
+    # Simulate legacy/corrupt data predating an amount-consistency guard.
+    db.execute("UPDATE ledger_entries SET amount_minor=200 WHERE ledger_entry_id=?", (entry_id,))
+    db.commit()
+
+    with pytest.raises(ValidationError, match="does not match its recognized Financial Transaction"):
+        FinancialBalanceReader().read(db, account_id, "YER", as_of="2026-10-10T00:00:00Z")
+
+    assert db.execute(
+        "SELECT amount_minor FROM financial_transactions WHERE financial_transaction_id=?",
+        (transaction_id,),
+    ).fetchone()[0] == 250
+    assert db.execute(
+        "SELECT amount_minor FROM ledger_entries WHERE ledger_entry_id=?", (entry_id,)
+    ).fetchone()[0] == 200
+    db.close()
