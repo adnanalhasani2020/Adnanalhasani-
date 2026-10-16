@@ -126,6 +126,28 @@ def test_duplicate_suggestions_are_scoped_ranked_and_never_mutate_accounts():
     assert rows == before
 
 
+
+def test_malformed_runtime_field_types_are_reported_instead_of_crashing():
+    rows = [
+        ChartAccount(
+            account_id="a",
+            scope_id=[],
+            code="001",
+            name="Cash",
+            account_class=[],
+            parent_id=[],
+            posting_policy={},
+            state=[],
+        )
+    ]
+    codes = issue_codes(rows)
+    assert "scope_required" in codes
+    assert "invalid_account_class" in codes
+    assert "invalid_parent_reference" in codes
+    assert "invalid_posting_policy" in codes
+    assert "invalid_account_state" in codes
+
+
 def test_duplicate_suggestion_validates_threshold_and_limit():
     with pytest.raises(ValueError, match="threshold"):
         find_duplicate_candidates("cash", [], scope_id="org-1", threshold=1.5)
