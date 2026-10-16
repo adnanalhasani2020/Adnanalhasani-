@@ -26,3 +26,8 @@ These checks validate representation only. They do not prove that a code is offi
 ## Verification
 
 GitHub Actions and local test execution have not yet been run for this branch. Do not merge until tests pass on the exact PR head.
+
+
+## Follow-up — EXEC-0045
+
+The database also enforces that Ledger Entry account/currency matches its parent Financial Transaction. This prevents incorrect currency balances from being persisted through direct SQL writes or later transaction edits. Regression tests cover mismatched insert/update paths. Verification is pending for this follow-up.
