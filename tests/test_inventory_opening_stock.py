@@ -109,6 +109,18 @@ def test_opening_stock_rejects_second_opening_for_same_product_scope():
     db.close()
 
 
+@pytest.mark.parametrize("invalid_timestamp", ["", 0, False])
+def test_opening_stock_rejects_explicit_falsey_recorded_timestamp_without_writes(invalid_timestamp):
+    db = connect_database()
+    activity_id, product_id = seed(db)
+    with pytest.raises(ValidationError, match="timestamp"):
+        create_opening(db, activity_id, product_id, now=invalid_timestamp)
+    assert db.execute("SELECT COUNT(*) FROM inventory_positions").fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM inventory_opening_stock").fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM domain_history").fetchone()[0] == 0
+    db.close()
+
+
 @pytest.mark.parametrize(
     ("quantity", "message"),
     [(-1, "non-negative integer"), (1.5, "non-negative integer"), (True, "non-negative integer")],
