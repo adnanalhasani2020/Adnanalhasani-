@@ -250,6 +250,9 @@ def test_supplier_invoice_restore_rejects_line_price_arithmetic_corruption():
 def test_supplier_invoice_restore_rejects_persisted_overbilling():
     db, actor, activity, purchase_id, line = fixture()
     invoice = record_invoice(db, actor, activity, purchase_id, line)
+    # Disable the database guard only for this deliberate corruption test;
+    # ordinary writes are covered by the guard-specific tests below.
+    db.execute("DROP TRIGGER trg_supplier_invoice_line_received_quantity_guard_update")
     db.execute(
         "UPDATE supplier_invoice_lines SET quantity_units=3,line_total_minor=3750 "
         "WHERE supplier_invoice_id=?", (str(invoice.id),),
@@ -327,4 +330,55 @@ def test_supplier_invoice_restore_rejects_request_fingerprint_corruption():
         match="Supplier invoice request fingerprint disagrees with persisted invoice facts",
     ):
         SupplierInvoiceApplication().get_supplier_invoice(db, invoice.id)
+    db.close()
+
+
+def test_database_guard_rejects_supplier_invoice_for_different_supplier():
+    db, actor, activity, purchase_id, line = fixture()
+    invoice = record_invoice(db, actor, activity, purchase_id, line)
+    with pytest.raises(sqlite3.IntegrityError, match="supplier must match its Purchase"):
+        db.execute(
+            "UPDATE supplier_invoices SET supplier_ref='supplier:forged' WHERE supplier_invoice_id=?",
+            (str(invoice.id),),
+        )
+    assert SupplierInvoiceApplication().get_supplier_invoice(db, invoice.id).supplier_ref == "supplier:alpha"
+    db.close()
+
+
+def test_database_guard_rejects_invoice_quantity_beyond_received_total():
+    db, actor, activity, purchase_id, line = fixture()
+    record_invoice(db, actor, activity, purchase_id, line, qty=2)
+    second_invoice_id = str(uuid4())
+    db.execute(
+        "INSERT INTO supplier_invoices(supplier_invoice_id,purchase_id,supplier_ref,invoice_number,currency_code,"
+        "subtotal_minor,tax_minor,freight_minor,total_minor,state,recorded_at,recorded_by_ref,idempotency_key,"
+        "request_fingerprint,version_no) VALUES(?,?,?,?,?,?,?,?,?,'recorded',?,?,?,?,1)",
+        (second_invoice_id, purchase_id, "supplier:alpha", "SUP-INV-DB-GUARD", "YER",
+         1, 0, 0, 1, NOW, actor, "db-guard-key", "placeholder"),
+    )
+    with pytest.raises(sqlite3.IntegrityError, match="exceeds uninvoiced received quantity"):
+        db.execute(
+            "INSERT INTO supplier_invoice_lines(supplier_invoice_line_id,supplier_invoice_id,purchase_id,"
+            "purchase_line_id,quantity_units,unit_price_minor,line_total_minor) VALUES(?,?,?,?,?,?,?)",
+            (str(uuid4()), second_invoice_id, purchase_id, str(line.id), 1, 1, 1),
+        )
+    db.close()
+
+
+def test_database_guard_rejects_invoice_currency_different_from_purchase_baseline():
+    db, actor, activity, purchase_id, line = fixture()
+    invoice_id = str(uuid4())
+    db.execute(
+        "INSERT INTO supplier_invoices(supplier_invoice_id,purchase_id,supplier_ref,invoice_number,currency_code,"
+        "subtotal_minor,tax_minor,freight_minor,total_minor,state,recorded_at,recorded_by_ref,idempotency_key,"
+        "request_fingerprint,version_no) VALUES(?,?,?,?,?,?,?,?,?,'recorded',?,?,?,?,1)",
+        (invoice_id, purchase_id, "supplier:alpha", "SUP-INV-WRONG-CURRENCY", "USD",
+         1, 0, 0, 1, NOW, actor, "wrong-currency-db-key", "placeholder"),
+    )
+    with pytest.raises(sqlite3.IntegrityError, match="currency must match its Purchase line currency"):
+        db.execute(
+            "INSERT INTO supplier_invoice_lines(supplier_invoice_line_id,supplier_invoice_id,purchase_id,"
+            "purchase_line_id,quantity_units,unit_price_minor,line_total_minor) VALUES(?,?,?,?,?,?,?)",
+            (str(uuid4()), invoice_id, purchase_id, str(line.id), 1, 1, 1),
+        )
     db.close()
