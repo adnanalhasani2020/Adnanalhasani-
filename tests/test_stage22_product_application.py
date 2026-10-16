@@ -52,6 +52,60 @@ def test_product_create_restore_lifecycle_and_version_after_reopen(tmp_path):
     db.close()
 
 
+@pytest.mark.parametrize("invalid_timestamp", ["", 0, False])
+def test_product_rejects_explicit_falsey_creation_timestamp_without_writes(invalid_timestamp):
+    db = connect_database()
+    with pytest.raises(ValidationError, match="timestamp"):
+        ProductApplication().create_product(
+            db, "Lamp", actor_context_ref="internal-test-context", now=invalid_timestamp
+        )
+    assert db.execute("SELECT COUNT(*) FROM products").fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM domain_history WHERE owner_domain='commerce'").fetchone()[0] == 0
+    db.close()
+
+
+@pytest.mark.parametrize("invalid_timestamp", ["", 0, False])
+def test_product_rejects_explicit_falsey_rename_timestamp_without_mutation(invalid_timestamp):
+    db = connect_database()
+    app = ProductApplication()
+    created = app.create_product(db, "Lamp", actor_context_ref="internal-test-context", now=NOW)
+    product_id = str(created.product.id)
+    with pytest.raises(ValidationError, match="timestamp"):
+        app.update_product_name(
+            db, product_id, "Desk Lamp", expected_version=1,
+            actor_context_ref="internal-test-context", now=invalid_timestamp,
+        )
+    restored = app.get_product(db, product_id)
+    assert restored.product.name == "Lamp"
+    assert restored.version_no == 1
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE owner_domain='commerce' AND target_ref=?",
+        (product_id,),
+    ).fetchone()[0] == 1
+    db.close()
+
+
+@pytest.mark.parametrize("invalid_timestamp", ["", 0, False])
+def test_product_rejects_explicit_falsey_transition_timestamp_without_mutation(invalid_timestamp):
+    db = connect_database()
+    app = ProductApplication()
+    created = app.create_product(db, "Lamp", actor_context_ref="internal-test-context", now=NOW)
+    product_id = str(created.product.id)
+    with pytest.raises(ValidationError, match="timestamp"):
+        app.transition_product(
+            db, product_id, "activate", expected_version=1,
+            actor_context_ref="internal-test-context", now=invalid_timestamp,
+        )
+    restored = app.get_product(db, product_id)
+    assert restored.product.state is ProductState.DRAFT
+    assert restored.version_no == 1
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE owner_domain='commerce' AND target_ref=?",
+        (product_id,),
+    ).fetchone()[0] == 1
+    db.close()
+
+
 def test_product_rejects_blank_name_unknown_action_and_stale_version():
     db = connect_database()
     app = ProductApplication()

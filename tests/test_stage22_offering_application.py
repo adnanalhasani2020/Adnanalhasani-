@@ -87,6 +87,48 @@ def test_offering_create_restore_and_lifecycle_survive_reopen(tmp_path):
     db.close()
 
 
+@pytest.mark.parametrize("invalid_timestamp", ["", 0, False])
+def test_offering_rejects_explicit_falsey_creation_timestamp_without_writes(invalid_timestamp):
+    db = connect_database()
+    activity_id, product_id, service_id = setup_refs(db)
+    with pytest.raises(ValidationError, match="timestamp"):
+        OfferingApplication().create_offering(
+            db, product_id=product_id, activity_id=activity_id, service_id=service_id,
+            effective_from=NOW, actor_context_ref="internal-test-context",
+            now=invalid_timestamp,
+        )
+    assert db.execute("SELECT COUNT(*) FROM offerings").fetchone()[0] == 0
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE owner_domain='commerce'"
+    ).fetchone()[0] == 0
+    db.close()
+
+
+@pytest.mark.parametrize("invalid_timestamp", ["", 0, False])
+def test_offering_rejects_explicit_falsey_transition_timestamp_without_mutation(invalid_timestamp):
+    db = connect_database()
+    activity_id, product_id, service_id = setup_refs(db)
+    app = OfferingApplication()
+    created = app.create_offering(
+        db, product_id=product_id, activity_id=activity_id, service_id=service_id,
+        effective_from=NOW, actor_context_ref="internal-test-context", now=NOW,
+    )
+    offering_id = str(created.offering.id)
+    with pytest.raises(ValidationError, match="timestamp"):
+        app.transition_offering(
+            db, offering_id, "activate", expected_version=1,
+            actor_context_ref="internal-test-context", now=invalid_timestamp,
+        )
+    restored = app.get_offering(db, offering_id)
+    assert restored.offering.state is OfferingState.DRAFT
+    assert restored.version_no == 1
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE owner_domain='commerce' AND target_ref=?",
+        (offering_id,),
+    ).fetchone()[0] == 1
+    db.close()
+
+
 def test_offering_requires_existing_references_and_does_not_write_on_failure():
     db = connect_database()
     app = OfferingApplication()
