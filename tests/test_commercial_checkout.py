@@ -10,6 +10,7 @@ from agent_core.persistence import connect_database
 from agent_core.shared import ValidationError
 from agent_core.application import ProductApplication
 from agent_core.offering_application import OfferingApplication
+from agent_core.offering_price_application import OfferingPriceApplication
 
 NOW = datetime(2026, 10, 17, 12, 0, tzinfo=timezone.utc)
 STAMP = "2026-10-17T12:00:00Z"
@@ -202,3 +203,29 @@ def test_checkout_rejects_known_zero_stock(tmp_path):
 
     assert db.execute("SELECT COUNT(*) FROM sales").fetchone()[0] == 0
     assert db.execute("SELECT COUNT(*) FROM inventory_movements").fetchone()[0] == 0
+
+
+
+def test_price_change_closes_open_window_and_records_actor_history(tmp_path):
+    db, request = setup_checkout(tmp_path)
+    app = OfferingPriceApplication()
+
+    result = app.set_price(
+        db, offering_id=request["offering_id"], unit_price_minor=1500,
+        currency_code="SAR", actor_context_ref=request["actor_person_id"],
+        effective_from=NOW, now=NOW,
+    )
+
+    rows = db.execute(
+        """SELECT unit_price_minor,effective_from,effective_to,actor_context_ref
+           FROM offering_prices WHERE offering_id=? ORDER BY effective_from""",
+        (request["offering_id"],),
+    ).fetchall()
+    assert len(rows) == 2
+    assert rows[0][0] == 1250 and rows[0][2] == NOW.isoformat(timespec="microseconds").replace("+00:00", "Z")
+    assert rows[1][0] == 1500 and rows[1][2] is None
+    assert rows[1][3] == request["actor_person_id"]
+    assert result["unit_price_minor"] == 1500
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE change_type IN ('offering_price_set','offering_price_window_closed')"
+    ).fetchone()[0] == 3
