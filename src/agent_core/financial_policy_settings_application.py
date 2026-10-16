@@ -77,7 +77,8 @@ class FinancialPolicySettingsApplication:
         if isinstance(enabled_currencies, (str, bytes)):
             raise ValidationError("enabled_currencies must be a collection of currency codes")
         try:
-            enabled = tuple(sorted({normalize_supported_currency(c) for c in enabled_currencies}))
+            requested = {normalize_supported_currency(c) for c in enabled_currencies}
+            enabled = tuple(code for code in ("SAR", "YER", "USD") if code in requested)
         except TypeError as exc:
             raise ValidationError("enabled_currencies must be an iterable of currency codes") from exc
         if not enabled:
