@@ -293,3 +293,30 @@ def test_concurrent_checkouts_cannot_sell_the_last_unit_twice(tmp_path):
     assert verify.execute("SELECT SUM(quantity_delta) FROM inventory_movements").fetchone()[0] == -1
     assert verify.execute("SELECT COUNT(*) FROM commercial_checkout_receipts").fetchone()[0] == 1
     verify.close()
+
+def test_checkout_uses_current_effective_price_not_stale_catalog_price(tmp_path):
+    from datetime import timedelta
+
+    db, request = setup_checkout(tmp_path)
+    app = CommercialCheckoutApplication()
+    prices = OfferingPriceApplication()
+    changed_at = NOW + timedelta(minutes=1)
+    prices.set_price(
+        db,
+        offering_id=request["offering_id"],
+        unit_price_minor=1500,
+        currency_code="SAR",
+        actor_context_ref=request["actor_person_id"],
+        effective_from=changed_at,
+        now=changed_at,
+    )
+
+    # The caller may have rendered the earlier 1,250-minor-unit catalog price;
+    # checkout must price from the effective server-side record at commit time.
+    result = app.checkout(db, **request, now=NOW + timedelta(minutes=2))
+
+    assert result["unit_price_minor"] == 1500
+    assert result["total_minor"] == 3000
+    assert result["quantity"] == 2
+    assert db.execute("SELECT COUNT(*) FROM sales").fetchone()[0] == 1
+    assert db.execute("SELECT COUNT(*) FROM inventory_movements").fetchone()[0] == 1
