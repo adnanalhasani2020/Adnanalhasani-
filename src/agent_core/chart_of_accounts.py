@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from difflib import SequenceMatcher
 import re
 import unicodedata
-from typing import Iterable, Mapping, Sequence
+from typing import Iterable, Sequence
 
 
 ACCOUNT_CLASSES = frozenset({"asset", "liability", "equity", "revenue", "expense"})
@@ -241,17 +241,27 @@ def find_duplicate_candidates(
 
     candidates: list[DuplicateCandidate] = []
     for account in accounts:
-        if account.scope_id != scope_id:
+        # Search is a read-only helper over caller-supplied rows; malformed legacy
+        # records should not make otherwise valid duplicate suggestions fail.
+        if not isinstance(account.scope_id, str) or account.scope_id != scope_id:
+            continue
+        if not all(isinstance(value, str) and value.strip() for value in (
+            account.account_id, account.code, account.name
+        )):
             continue
         variants = [account.name]
-        if account.english_name:
+        if isinstance(account.english_name, str) and account.english_name.strip():
             variants.append(account.english_name)
+        normalized_variants = [
+            normalize_account_name(candidate) for candidate in variants
+        ]
+        normalized_variants = [candidate for candidate in normalized_variants if candidate]
         scores = [
-            SequenceMatcher(None, normalized, normalize_account_name(candidate)).ratio()
-            for candidate in variants
+            SequenceMatcher(None, normalized, candidate).ratio()
+            for candidate in normalized_variants
         ]
         score = max(scores, default=0.0)
-        exact = any(normalized == normalize_account_name(candidate) for candidate in variants)
+        exact = normalized in normalized_variants
         if exact or score >= threshold:
             candidates.append(DuplicateCandidate(
                 account_id=account.account_id,
