@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from agent_core.shared import ValidationError
+from agent_core.shared import ValidationError, normalize_currency_code
 
 
 _TRANSITIONS = {
@@ -182,9 +182,7 @@ class ObligationApplication:
             raise ValidationError("Obligation parties must differ")
         if type(amount_minor) is not int or amount_minor <= 0:
             raise ValidationError("Obligation amount_minor must be a positive integer")
-        if not isinstance(currency_code, str) or not currency_code.strip():
-            raise ValidationError("Obligation currency_code is required")
-        currency_code = currency_code.strip()
+        currency_code = normalize_currency_code(currency_code, label="Obligation currency_code")
         timestamp = self._timestamp(now or datetime.now(timezone.utc), "Obligation creation timestamp")
         due_timestamp = self._timestamp(due_at, "Obligation due_at") if due_at is not None else None
         with self._atomic(connection):
