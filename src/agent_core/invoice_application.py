@@ -102,8 +102,8 @@ class InvoiceApplication:
         issuer_key = str(self._uuid(issuer_ref, "Invoice issuer identifier"))
         obligation_key = str(self._uuid(obligation_id, "Obligation identifier")) if obligation_id is not None else None
         key = str(self._uuid(invoice_id, "Invoice identifier")) if invoice_id is not None else str(uuid4())
-        timestamp = self._timestamp(now or datetime.now(timezone.utc), "Invoice creation timestamp")
-        issued = self._timestamp(issue_at or now or datetime.now(timezone.utc), "Invoice issue timestamp")
+        timestamp = self._timestamp(now if now is not None else datetime.now(timezone.utc), "Invoice creation timestamp")
+        issued = self._timestamp(issue_at if issue_at is not None else (now if now is not None else datetime.now(timezone.utc)), "Invoice issue timestamp")
         due = self._timestamp(due_at, "Invoice due timestamp", optional=True)
         if not isinstance(invoice_number, str) or not invoice_number.strip():
             raise ValidationError("Invoice number must be a non-empty string")
@@ -151,7 +151,7 @@ class InvoiceApplication:
         actor_key = str(self._uuid(actor_context_ref, "Actor identifier"))
         if type(expected_version) is not int or expected_version < 1:
             raise ValidationError("Invoice expected_version must be a positive integer")
-        timestamp = self._timestamp(now or datetime.now(timezone.utc), "Invoice void timestamp")
+        timestamp = self._timestamp(now if now is not None else datetime.now(timezone.utc), "Invoice void timestamp")
         with self._atomic(connection):
             record = self._load(connection, key)
             SaleApplication()._authorize(
