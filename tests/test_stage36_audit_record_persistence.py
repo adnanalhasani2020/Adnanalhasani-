@@ -71,6 +71,32 @@ def test_audit_append_rejects_naive_timestamps():
     db.close()
 
 
+@pytest.mark.parametrize("invalid_timestamp", ["", 0, False])
+def test_audit_append_rejects_explicit_falsey_occurred_at_without_writes(invalid_timestamp):
+    db = connect_database()
+    with pytest.raises(ValidationError, match="ISO-8601|timezone-aware"):
+        AuditRecordApplication().append(
+            db, event_type="domain.changed", actor_context_ref="actor-context:1",
+            target_ref="subject:1", result_status="success",
+            occurred_at=invalid_timestamp, now=STAMP,
+        )
+    assert db.execute("SELECT COUNT(*) FROM audit_records").fetchone()[0] == 0
+    db.close()
+
+
+@pytest.mark.parametrize("invalid_timestamp", ["", 0, False])
+def test_audit_append_rejects_explicit_falsey_created_at_without_writes(invalid_timestamp):
+    db = connect_database()
+    with pytest.raises(ValidationError, match="ISO-8601|timezone-aware"):
+        AuditRecordApplication().append(
+            db, event_type="domain.changed", actor_context_ref="actor-context:1",
+            target_ref="subject:1", result_status="success",
+            occurred_at=STAMP, now=invalid_timestamp,
+        )
+    assert db.execute("SELECT COUNT(*) FROM audit_records").fetchone()[0] == 0
+    db.close()
+
+
 @pytest.mark.parametrize("record_id", ["not-a-uuid", ""])
 def test_audit_append_rejects_invalid_explicit_record_identifier(record_id):
     db = connect_database()
