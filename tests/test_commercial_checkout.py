@@ -239,6 +239,7 @@ def test_concurrent_checkouts_cannot_sell_the_last_unit_twice(tmp_path):
     from datetime import timedelta
 
     db, base_request = setup_checkout(tmp_path, quantity=1)
+    base_request["quantity"] = 1
     database_path = tmp_path / "checkout.sqlite"
     db.close()
     barrier = threading.Barrier(2)
