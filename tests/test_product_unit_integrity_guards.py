@@ -236,6 +236,13 @@ def test_database_rejects_noncanonical_unit_codes_on_insert_and_update():
                 (str(kg.id),),
             )
         db.rollback()
+        db.rollback()
+        with pytest.raises(Exception, match="unit code must be uppercase"):
+            db.execute(
+                "UPDATE measurement_units SET code='K\u00a0G', version_no=version_no+1 WHERE unit_id=?",
+                (str(kg.id),),
+            )
+        db.rollback()
         with pytest.raises(Exception, match="unit code must be uppercase"):
             db.execute(
                 "INSERT INTO measurement_units(unit_id,code,name,dimension,state,created_at,updated_at) "
