@@ -185,6 +185,14 @@ def test_web_session_can_buy_sellable_product_and_receive_result(tmp_path):
     assert other_history["status"] == "200 OK"
     assert other_history["body"]["items"] == []
 
+    # Direct receipt lookup must enforce the same account ownership boundary.
+    other_receipt = request(
+        app, "/api/receipts/web-checkout-001",
+        cookie="commercial_session=" + other_cookie["commercial_session"].value,
+    )
+    assert other_receipt["status"] == "404 Not Found"
+    assert "sale_id" not in other_receipt["body"]
+
 
 def test_storefront_displays_preconfirmation_total_preview(tmp_path):
     app = CommercialWebApplication(tmp_path / "commercial-preview.sqlite")
