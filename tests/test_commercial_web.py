@@ -113,8 +113,8 @@ def test_web_session_can_buy_sellable_product_and_receive_result(tmp_path):
     db.execute(
         """INSERT INTO offering_prices(
                offering_price_id,offering_id,unit_price_minor,currency_code,
-               effective_from,effective_to,created_at
-           ) VALUES(?,?,990,'SAR',?,NULL,?)""",
+               effective_from,effective_to,actor_context_ref,created_at
+           ) VALUES(?,?,990,'SAR',?,NULL,'web-test',?)""",
         (uid(), str(offering.offering.id), before, before),
     )
     db.close()
