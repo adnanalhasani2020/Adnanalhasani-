@@ -1,4 +1,3 @@
-from contextlib import contextmanager
 """Internal persistence for the SPEC-0016 Instrument lifecycle.
 
 This is an internal domain persistence primitive, not a user-facing endpoint:
@@ -6,6 +5,7 @@ SPEC-0016 does not enumerate Instrument-specific authorization action codes.
 It does not apply financial effects or mutate Sale, Invoice, Payment, Settlement,
 Financial Account, or Ledger records.
 """
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
