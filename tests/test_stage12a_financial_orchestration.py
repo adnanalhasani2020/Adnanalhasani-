@@ -237,7 +237,8 @@ def test_concurrent_same_workflow_has_exactly_one_semantic_recognition(tmp_path)
     assert not errors
     assert results[0].ledger_entry_id == results[1].ledger_entry_id
     assert results[0].transaction_id == results[1].transaction_id
-    assert obligation.state.value == "satisfied"
+    # The test fixture is a partial payment against a larger obligation.
+    assert obligation.state.value == "open"
 
 
 
