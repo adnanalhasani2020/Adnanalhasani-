@@ -115,7 +115,7 @@ class FinancialOrchestrator:
         payload=ApprovalEnforcementAuthority.execute(
             action,approval,
             lambda:self.operations.execute(
-                namespace=self.REVERSAL_NAMESPACE,operation_id=str(workflow_id),operation_kind="reverse",
+                namespace=self.REVERSAL_NAMESPACE,operation_id=str(original.workflow_id),operation_kind="reverse",
                 request={"workflow_id":str(workflow_id),"original_workflow_id":str(original.workflow_id),"amount":str(original.amount)},
                 effect=effect,
             ),
@@ -136,7 +136,7 @@ class FinancialOrchestrator:
         payload=ApprovalEnforcementAuthority.execute(
             action,approval,
             lambda:self.operations.execute(
-                namespace=self.CORRECTION_NAMESPACE,operation_id=str(workflow_id),operation_kind="correct",
+                namespace=self.CORRECTION_NAMESPACE,operation_id=str(original.workflow_id),operation_kind="correct",
                 request={"workflow_id":str(workflow_id),"original_workflow_id":str(original.workflow_id),"corrected_amount":str(corrected_amount)},
                 effect=effect,
             ),
