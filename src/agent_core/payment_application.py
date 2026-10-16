@@ -72,6 +72,20 @@ class PaymentApplication:
             raise ValidationError(f"{label} must be a valid UUID") from exc
 
     @staticmethod
+    def _currency_code(value):
+        """Return a canonical three-letter ASCII currency code.
+
+        This validates representation only; it does not claim that a code is
+        currently issued, supported in a market, or enabled for an account.
+        """
+        if not isinstance(value, str):
+            raise ValidationError("Payment currency_code must be a three-letter ASCII code")
+        code = value.strip()
+        if len(code) != 3 or not code.isascii() or not code.isalpha():
+            raise ValidationError("Payment currency_code must be a three-letter ASCII code")
+        return code.upper()
+
+    @staticmethod
     def _instant(value, label):
         if isinstance(value, str):
             try:
@@ -217,7 +231,7 @@ class PaymentApplication:
                 obligation_amount, obligation_currency = obligation_record
                 if amount_minor > obligation_amount:
                     raise ValidationError("Payment amount exceeds the linked Obligation amount")
-                if currency_code != obligation_currency:
+                if currency_code != self._currency_code(obligation_currency):
                     raise ValidationError("Payment currency does not match the linked Obligation currency")
             if invoice is not None and connection.execute(
                 "SELECT 1 FROM invoices WHERE invoice_id=?", (invoice,)
