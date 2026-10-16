@@ -265,3 +265,27 @@ def test_opening_stock_rolls_back_position_and_history_if_audit_write_fails():
     assert db.execute("SELECT COUNT(*) FROM inventory_positions").fetchone()[0] == 0
     assert db.execute("SELECT COUNT(*) FROM inventory_opening_stock").fetchone()[0] == 0
     db.close()
+
+
+def test_opening_stock_rejects_timestamp_outside_offering_validity_window():
+    db = connect_database()
+    activity_id, product_id = seed(db)
+    offering_id = uid()
+    db.execute(
+        "INSERT INTO offerings(offering_id,product_id,activity_id,state,effective_from,created_at,updated_at) "
+        "VALUES(?,?,?,'active',?,?,?)",
+        (offering_id, product_id, activity_id, "2026-10-11T00:00:00Z", STAMP, STAMP),
+    )
+    db.commit()
+
+    with pytest.raises(ValidationError, match="before its Offering validity window"):
+        create_opening(
+            db, activity_id, product_id,
+            offering_id=offering_id,
+            opening_at=STAMP,
+            idempotency_key="opening-before-offering-start",
+        )
+
+    assert db.execute("SELECT COUNT(*) FROM inventory_positions").fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM inventory_opening_stock").fetchone()[0] == 0
+    db.close()
