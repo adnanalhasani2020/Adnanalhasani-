@@ -28,4 +28,4 @@ BEGIN
 END;
 
 INSERT INTO schema_migrations(version, applied_at)
-VALUES ('0012_purchase_unit_snapshot_catalog_guards', strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+VALUES ('0018_purchase_unit_snapshot_catalog_guards', strftime('%Y-%m-%dT%H:%M:%fZ','now'));
