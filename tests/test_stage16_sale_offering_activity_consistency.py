@@ -214,6 +214,7 @@ def test_existing_database_migration_preserves_sales_invoices_and_history_on_reo
         ("0030_linked_financial_currency_consistency",),
         ("0031_settlement_recognition_currency_consistency",),
         ("0032_payment_obligation_settlement_link_guard",),
+        ("0033_payment_obligation_amount_consistency",),
         ("9998_activity_invitations",),
         ("9999_file_attachments",),
     ]
