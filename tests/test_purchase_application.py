@@ -22,6 +22,7 @@ def database():
     connection.executescript((ROOT / "schema/migrations/0014_product_units.sql").read_text())
     connection.executescript((ROOT / "schema/migrations/0017_purchase_line_unit_snapshot.sql").read_text())
     connection.executescript((ROOT / "schema/migrations/0018_purchase_unit_snapshot_catalog_guards.sql").read_text())
+    connection.executescript((ROOT / "schema/migrations/0020_purchase_receipt_database_guards.sql").read_text())
     now = "2026-10-13T12:00:00Z"
     person, activity, product = str(uuid4()), str(uuid4()), str(uuid4())
     connection.execute(
