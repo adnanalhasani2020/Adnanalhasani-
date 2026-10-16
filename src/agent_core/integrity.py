@@ -1,6 +1,7 @@
 import hashlib
 import json
 import sqlite3
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from threading import RLock
@@ -170,11 +171,33 @@ class DurableOperationAuthority:
                     db.execute("ROLLBACK")
                     if existing is None:
                         raise ValidationError("Operation claim was lost")
-                    if existing.operation_kind == operation_kind and existing.request_fingerprint == fingerprint:
-                        if existing.status == "completed":
-                            return existing.outcome
+                    if existing.operation_kind != operation_kind or existing.request_fingerprint != fingerprint:
+                        raise ValidationError("Operation identity conflict")
+                    if existing.status == "completed":
+                        return existing.outcome
+                    if existing.status != "reserved":
                         raise ValidationError("Operation replay is incomplete")
-                    raise ValidationError("Operation identity conflict")
+
+                    # A concurrent caller may observe the durable reservation while
+                    # the first caller is still applying the effect. Wait for its
+                    # terminal outcome instead of incorrectly treating an ordinary
+                    # in-flight duplicate as a failed replay. If the owner disappears,
+                    # the reservation remains fail-closed after the bounded wait.
+                    deadline = time.monotonic() + 30
+                    while time.monotonic() < deadline:
+                        time.sleep(0.05)
+                        with self._connect() as waiting_db:
+                            latest = self._read(waiting_db, namespace, operation_id)
+                        if latest is None:
+                            raise ValidationError("Operation claim was lost")
+                        if (latest.operation_kind != operation_kind
+                                or latest.request_fingerprint != fingerprint):
+                            raise ValidationError("Operation identity conflict")
+                        if latest.status == "completed":
+                            return latest.outcome
+                        if latest.status != "reserved":
+                            raise ValidationError("Operation replay is incomplete")
+                    raise ValidationError("Operation replay is incomplete")
                 db.execute("COMMIT")
 
             try:
