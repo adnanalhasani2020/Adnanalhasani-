@@ -90,11 +90,12 @@ def validate_chart(accounts: Iterable[ChartAccount]) -> list[ChartIssue]:
             continue
         by_id[account.account_id] = account
 
-        if not isinstance(account.scope_id, str) or not account.scope_id.strip():
+        valid_scope = isinstance(account.scope_id, str) and bool(account.scope_id.strip())
+        if not valid_scope:
             issues.append(ChartIssue("scope_required", account.account_id, "Chart scope is required"))
         if not isinstance(account.code, str) or not account.code.strip():
             issues.append(ChartIssue("code_required", account.account_id, "Account code is required"))
-        else:
+        elif valid_scope:
             key = (account.scope_id, normalize_account_code(account.code))
             if key in seen_codes:
                 issues.append(ChartIssue(
@@ -105,17 +106,17 @@ def validate_chart(accounts: Iterable[ChartAccount]) -> list[ChartIssue]:
                 seen_codes[key] = account.account_id
         if not isinstance(account.name, str) or not account.name.strip():
             issues.append(ChartIssue("name_required", account.account_id, "Account name is required"))
-        if account.account_class not in ACCOUNT_CLASSES:
+        if not isinstance(account.account_class, str) or account.account_class not in ACCOUNT_CLASSES:
             issues.append(ChartIssue(
                 "invalid_account_class", account.account_id,
                 f"Unsupported account class: {account.account_class!r}",
             ))
-        if account.posting_policy not in POSTING_POLICIES:
+        if not isinstance(account.posting_policy, str) or account.posting_policy not in POSTING_POLICIES:
             issues.append(ChartIssue(
                 "invalid_posting_policy", account.account_id,
                 f"Unsupported posting policy: {account.posting_policy!r}",
             ))
-        if account.state not in ACCOUNT_STATES:
+        if not isinstance(account.state, str) or account.state not in ACCOUNT_STATES:
             issues.append(ChartIssue(
                 "invalid_account_state", account.account_id,
                 f"Unsupported account state: {account.state!r}",
@@ -124,6 +125,12 @@ def validate_chart(accounts: Iterable[ChartAccount]) -> list[ChartIssue]:
     # Validate references only after indexing all IDs, so input order does not matter.
     for account in by_id.values():
         if account.parent_id is None:
+            continue
+        if not isinstance(account.parent_id, str) or not account.parent_id.strip():
+            issues.append(ChartIssue(
+                "invalid_parent_reference", account.account_id,
+                "Parent account reference must be a non-empty account ID string",
+            ))
             continue
         parent = by_id.get(account.parent_id)
         if parent is None:
@@ -176,7 +183,7 @@ def validate_chart(accounts: Iterable[ChartAccount]) -> list[ChartIssue]:
             return
         colors[account_id] = 1
         parent_id = by_id[account_id].parent_id
-        if parent_id in by_id:
+        if isinstance(parent_id, str) and parent_id in by_id:
             visit(parent_id, [*trail, account_id])
         colors[account_id] = 2
 
