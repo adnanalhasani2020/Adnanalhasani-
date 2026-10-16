@@ -224,3 +224,22 @@ def test_report_compares_instants_not_timestamp_strings_with_fractional_seconds(
     assert report.closing_balance_minor == 1500
     assert report.entry_count == 1
     db.close()
+
+
+def test_report_fails_closed_when_posted_entry_amount_differs_from_transaction():
+    db = connect_database()
+    account_id = account(db)
+    _, entry_id = ledger(db, account_id, 1200, "YER", "2026-10-03T10:00:00Z")
+    db.execute(
+        "UPDATE ledger_entries SET amount_minor=1100 WHERE ledger_entry_id=?",
+        (entry_id,),
+    )
+    db.commit()
+
+    with pytest.raises(ValidationError, match="amount"):
+        FinancialLedgerActivityReportReader().read(
+            db, account_id, "YER",
+            start_at="2026-10-03T00:00:00Z",
+            end_at="2026-10-04T00:00:00Z",
+        )
+    db.close()
