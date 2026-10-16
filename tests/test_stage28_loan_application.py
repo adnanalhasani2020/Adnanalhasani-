@@ -369,14 +369,18 @@ def test_loan_transition_rejects_non_string_target_states_without_mutation(targe
 def test_loan_rejects_explicit_falsey_creation_timestamp_without_writes(bad_now):
     db = connect_database()
     parties = seed(db)
-    lender, borrower, _approver, _agent, context = parties
+    lender, borrower, approver, agent, context = parties
     app = LoanApplication()
     loan_id = uid()
+    grant, action = authorize(
+        db, agent=agent, context=context, loan_id=loan_id,
+        action_code="loan.create", approver=approver,
+    )
     with pytest.raises(ValidationError, match="Loan creation timestamp"):
         app.create_loan(
             db, loan_id=loan_id, lender_person_id=lender, borrower_person_id=borrower,
             principal_minor=25000, currency_code="YER", context_ref=context,
-            authorization_grant_id=uid(), agent_action_id=uid(), now=bad_now,
+            authorization_grant_id=grant, agent_action_id=action, now=bad_now,
         )
     assert db.execute("SELECT COUNT(*) FROM loans WHERE loan_id=?", (loan_id,)).fetchone()[0] == 0
     assert db.execute("SELECT COUNT(*) FROM domain_history WHERE target_ref=?", (loan_id,)).fetchone()[0] == 0
