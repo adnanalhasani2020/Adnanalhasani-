@@ -362,3 +362,91 @@ def test_finance_acceptance_survives_reopen_and_duplicate_retry_is_side_effect_f
     assert reopened.execute("PRAGMA foreign_key_check").fetchall() == []
     assert reopened.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
     reopened.close()
+
+
+
+def test_opening_balance_preserves_caller_transaction_on_success(tmp_path):
+    db = connect_database(tmp_path / "opening-balance-savepoint-success.sqlite")
+    _, approver, agent, context, account_id = seed(db)
+    grant, action = authorize(
+        db, agent=agent, approver=approver, context=context, account_id=account_id
+    )
+    caller_person = uid()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (caller_person, STAMP, STAMP),
+    )
+    assert db.in_transaction
+
+    result = FinancialOpeningBalanceApplication().record_opening_balance(
+        db, financial_account_id=account_id, amount_minor=450, currency_code="YER",
+        source_ref="caller-transaction-success", context_ref=context,
+        authorization_grant_id=grant, agent_action_id=action, now=STAMP,
+    )
+
+    assert db.in_transaction
+    assert db.execute(
+        "SELECT COUNT(*) FROM persons WHERE person_id=?", (caller_person,)
+    ).fetchone()[0] == 1
+    assert db.execute(
+        "SELECT COUNT(*) FROM financial_transactions WHERE financial_transaction_id=?",
+        (str(result.financial_transaction_id),),
+    ).fetchone()[0] == 1
+
+    # The application must not commit work owned by its caller.
+    db.rollback()
+    assert db.execute(
+        "SELECT COUNT(*) FROM persons WHERE person_id=?", (caller_person,)
+    ).fetchone()[0] == 0
+    assert db.execute(
+        "SELECT COUNT(*) FROM financial_transactions WHERE financial_transaction_id=?",
+        (str(result.financial_transaction_id),),
+    ).fetchone()[0] == 0
+    assert db.execute(
+        "SELECT COUNT(*) FROM ledger_entries WHERE ledger_entry_id=?",
+        (str(result.ledger_entry_id),),
+    ).fetchone()[0] == 0
+    db.close()
+
+
+def test_opening_balance_failure_preserves_caller_transaction(tmp_path):
+    db = connect_database(tmp_path / "opening-balance-savepoint-failure.sqlite")
+    _, approver, agent, context, account_id = seed(db)
+    grant, action = authorize(
+        db, agent=agent, approver=approver, context=context, account_id=account_id
+    )
+    db.execute(
+        "CREATE TRIGGER fail_opening_history BEFORE INSERT ON domain_history "
+        "WHEN NEW.change_type='financial_opening_balance' "
+        "BEGIN SELECT RAISE(ABORT, 'history unavailable'); END"
+    )
+    caller_person = uid()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (caller_person, STAMP, STAMP),
+    )
+    assert db.in_transaction
+
+    with pytest.raises(sqlite3.IntegrityError, match="history unavailable"):
+        FinancialOpeningBalanceApplication().record_opening_balance(
+            db, financial_account_id=account_id, amount_minor=450, currency_code="YER",
+            source_ref="caller-transaction-failure", context_ref=context,
+            authorization_grant_id=grant, agent_action_id=action, now=STAMP,
+        )
+
+    # Failed work rolls back to the operation savepoint, not the caller's transaction.
+    assert db.in_transaction
+    assert db.execute(
+        "SELECT COUNT(*) FROM persons WHERE person_id=?", (caller_person,)
+    ).fetchone()[0] == 1
+    assert db.execute("SELECT COUNT(*) FROM financial_transactions").fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM ledger_entries").fetchone()[0] == 0
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE change_type='financial_opening_balance'"
+    ).fetchone()[0] == 0
+
+    db.rollback()
+    assert db.execute(
+        "SELECT COUNT(*) FROM persons WHERE person_id=?", (caller_person,)
+    ).fetchone()[0] == 0
+    db.close()
