@@ -117,6 +117,7 @@ def test_web_session_can_buy_sellable_product_and_receive_result(tmp_path):
            ) VALUES(?,?,990,'SAR',?,NULL,'web-test',?)""",
         (uid(), str(offering.offering.id), before, before),
     )
+    db.commit()
     db.close()
 
     app = CommercialWebApplication(db_path)
