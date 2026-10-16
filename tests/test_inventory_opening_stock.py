@@ -206,6 +206,30 @@ def test_opening_stock_audit_row_cannot_be_changed_or_deleted():
     db.close()
 
 
+def test_opening_position_quantity_cannot_be_silently_rewritten_after_opening():
+    db = connect_database()
+    activity_id, product_id = seed(db)
+    position = create_opening(db, activity_id, product_id)
+    with pytest.raises(Exception, match="opening Inventory Position snapshot is immutable"):
+        db.execute(
+            "UPDATE inventory_positions SET quantity_minor=99 WHERE inventory_position_id=?",
+            (str(position.id),),
+        )
+    assert db.execute(
+        "SELECT quantity_minor FROM inventory_positions WHERE inventory_position_id=?",
+        (str(position.id),),
+    ).fetchone()[0] == 17
+    # A lifecycle transition is still permitted; it does not rewrite the opening fact.
+    closed = InventoryPositionApplication().transition_position(
+        db, str(position.id), "close", actor_context_ref="person:close", now=STAMP,
+    )
+    assert closed.state.value == "closed"
+    assert db.execute(
+        "SELECT quantity_minor FROM inventory_opening_stock"
+    ).fetchone()[0] == 17
+    db.close()
+
+
 def test_opening_stock_database_guard_rejects_mismatched_position_quantity():
     db = connect_database()
     activity_id, product_id = seed(db)
