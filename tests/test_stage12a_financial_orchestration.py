@@ -136,6 +136,19 @@ def test_payment_settlement_obligation_matching_fails_closed(mismatch):
     assert account.state.value == "active"
 
 
+def test_obligation_from_another_financial_account_is_rejected():
+    account, obligation, payment, settlement = _workflow()
+    other_account = FinancialAccount(uuid4())
+    action, grant, approval = _authorized()
+    with pytest.raises(ValidationError, match="does not belong to the Financial Account"):
+        _orchestrator().recognize(
+            workflow_id=uuid4(), payment=payment, settlement=settlement,
+            obligation=obligation, account=other_account, action=action,
+            approval=approval, grant=grant, connected=True,
+        )
+    assert obligation.state.value == "open"
+
+
 def test_invalid_lifecycle_and_offline_finality_are_rejected(tmp_path):
     account, obligation, payment, settlement = _workflow()
     payment.state = type(payment.state).PENDING
