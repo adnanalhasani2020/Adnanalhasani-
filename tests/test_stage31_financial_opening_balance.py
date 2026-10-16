@@ -231,3 +231,35 @@ def test_opening_balance_migration_preserves_existing_transactions_and_entries()
     ).fetchall() == [(entry_id, transaction_id, 275)]
     assert db.execute("PRAGMA foreign_key_check").fetchall() == []
     db.close()
+
+
+
+@pytest.mark.parametrize(
+    ("effective_from", "effective_to", "message"),
+    [
+        ("not-a-timestamp", None, "effective_from must be a valid ISO-8601 timestamp"),
+        ("2026-10-10T12:00:00", None, "effective_from must be a valid timezone-aware timestamp"),
+        ("2026-10-01T00:00:00Z", "not-a-timestamp", "effective_to must be a valid ISO-8601 timestamp"),
+        ("2026-10-01T00:00:00Z", "2026-10-10T12:00:00Z", "outside its effective period"),
+    ],
+)
+def test_opening_balance_rejects_invalid_or_expired_grant_timestamps(
+    effective_from, effective_to, message
+):
+    db = connect_database()
+    _, approver, agent, context, account_id = seed(db)
+    grant, action = authorize(db, agent=agent, approver=approver, context=context, account_id=account_id)
+    db.execute(
+        "UPDATE authorization_grants SET effective_from=?, effective_to=? WHERE authorization_grant_id=?",
+        (effective_from, effective_to, grant),
+    )
+    db.commit()
+    with pytest.raises(ValidationError, match=message):
+        FinancialOpeningBalanceApplication().record_opening_balance(
+            db, financial_account_id=account_id, amount_minor=100, currency_code="YER",
+            source_ref="source", context_ref=context, authorization_grant_id=grant,
+            agent_action_id=action, now=STAMP,
+        )
+    assert db.execute("SELECT COUNT(*) FROM financial_transactions").fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM ledger_entries").fetchone()[0] == 0
+    db.close()
