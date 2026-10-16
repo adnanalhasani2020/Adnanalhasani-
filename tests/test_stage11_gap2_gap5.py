@@ -210,7 +210,15 @@ def test_gap5_atomic_uniqueness_behavior(tmp_path):
     t1.join()
     t2.join()
 
-    assert outcomes.count({"ok": True}) == 2
+    # Depending on scheduling, the second caller either observes the
+    # completed outcome (successful replay) or sees the durable reservation
+    # before the first caller records its outcome and fails closed as incomplete.
+    # Both are valid; repeating the semantic effect is never valid.
+    successful = outcomes.count({"ok": True})
+    assert successful in (1, 2)
     assert len(effects) == 1
     assert len(outcomes) == 2
-    assert any("replay is incomplete" in str(item) or item == {"ok": True} for item in outcomes)
+    if successful == 1:
+        assert sum("replay is incomplete" in str(item) for item in outcomes) == 1
+    else:
+        assert outcomes.count({"ok": True}) == 2
