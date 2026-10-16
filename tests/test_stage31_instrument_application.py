@@ -360,3 +360,31 @@ def test_instrument_transition_rejects_explicit_falsey_timestamps_without_mutati
         (str(instrument.instrument_id),),
     ).fetchone()[0] == 1
     db.close()
+
+
+def test_instrument_does_not_infer_voucher_cancellation_from_generic_lifecycle():
+    db = connect_database()
+    app = InstrumentApplication()
+    instrument = app.create_instrument(
+        db, instrument_id=uid(), instrument_type="unspecified",
+        issuer_ref="issuer-ref", canonical_identifier="voucher-cancel-not-defined",
+        actor_context_ref="internal-context", now=STAMP,
+    )
+    key = str(instrument.instrument_id)
+
+    with pytest.raises(ValidationError, match="Unsupported Instrument transition"):
+        app.transition_instrument(
+            db, key, "cancel", expected_version=1,
+            actor_context_ref="internal-context", now=STAMP,
+        )
+
+    current = app.get_instrument(db, key)
+    assert (current.state, current.version_no) == ("issued", 1)
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE owner_domain='instrument' AND target_ref=?",
+        (key,),
+    ).fetchone()[0] == 1
+    assert db.execute("SELECT COUNT(*) FROM instrument_usages WHERE instrument_id=?", (key,)).fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM payments").fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM ledger_entries").fetchone()[0] == 0
+    db.close()
