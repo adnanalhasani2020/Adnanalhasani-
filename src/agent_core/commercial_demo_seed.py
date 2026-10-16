@@ -6,6 +6,7 @@ business database and requires an explicit command-line opt-in.
 from __future__ import annotations
 
 import argparse
+import fcntl
 import secrets
 import sqlite3
 from datetime import datetime, timedelta, timezone
@@ -19,13 +20,10 @@ from agent_core.offering_price_application import OfferingPriceApplication
 from agent_core.persistence import connect_database
 
 
-def seed_demo(database_path: str | Path) -> dict:
+def _seed_demo_locked(database_path: str | Path) -> dict:
     """Seed one demo buyer, one active offering, an effective price, and opening stock."""
     db = connect_database(database_path)
     try:
-        # Serialize seed attempts before checking emptiness; otherwise two concurrent
-        # invocations can both observe an empty database and race to create demo data.
-        db.execute("BEGIN IMMEDIATE")
         for table in ("persons", "commercial_credentials", "activities", "products", "offerings"):
             if db.execute(f"SELECT 1 FROM {table} LIMIT 1").fetchone() is not None:
                 raise ValueError(
@@ -96,6 +94,24 @@ def seed_demo(database_path: str | Path) -> dict:
         }
     finally:
         db.close()
+
+
+
+def seed_demo(database_path: str | Path) -> dict:
+    """Serialize seed attempts across processes before opening/migrating the database.
+
+    SQLite's migration runner must finish before the seed operation begins, and the
+    identity registration contract requires an unowned transaction. A separate OS
+    file lock provides mutual exclusion without violating either database contract.
+    """
+    database_path = Path(database_path)
+    lock_path = Path(f"{database_path}.seed.lock")
+    with lock_path.open("a", encoding="utf-8") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        try:
+            return _seed_demo_locked(database_path)
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
 def main() -> None:
