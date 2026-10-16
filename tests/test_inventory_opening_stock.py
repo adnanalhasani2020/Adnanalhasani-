@@ -143,6 +143,21 @@ def test_opening_stock_rejects_inactive_product_and_future_opening_date():
     db.close()
 
 
+def test_opening_stock_rejects_existing_position_in_same_scope():
+    db = connect_database()
+    activity_id, product_id = seed(db)
+    InventoryPositionApplication().create_position(
+        db, activity_id=activity_id, product_id=product_id,
+        scope_key="warehouse-A", quantity_minor=12,
+        actor_context_ref="person:existing-position", now=STAMP,
+    )
+    with pytest.raises(ValidationError, match="already exists for this Product scope"):
+        create_opening(db, activity_id, product_id)
+    assert db.execute("SELECT COUNT(*) FROM inventory_positions").fetchone()[0] == 1
+    assert db.execute("SELECT COUNT(*) FROM inventory_opening_stock").fetchone()[0] == 0
+    db.close()
+
+
 def test_opening_stock_rolls_back_position_and_history_if_audit_write_fails():
     db = connect_database()
     activity_id, product_id = seed(db)
