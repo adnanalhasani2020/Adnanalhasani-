@@ -79,6 +79,9 @@ def seed_demo(database_path: str | Path) -> dict:
             idempotency_key="local-commercial-demo-opening-stock-v1",
             opening_at=opening_at, now=now,
         )
+        # Domain applications use savepoints when a caller owns the transaction.
+        # Commit the complete seeded catalog only after every fact was written.
+        db.commit()
         return {
             "database_path": str(database_path),
             "username": username,
