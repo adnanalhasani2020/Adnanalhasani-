@@ -706,7 +706,8 @@ class InventoryPositionApplication:
                 raise ValidationError("Opening stock requires an existing active Product")
             if offering_key is not None:
                 offering = connection.execute(
-                    "SELECT product_id, activity_id, state FROM offerings WHERE offering_id=?",
+                    "SELECT product_id, activity_id, state, effective_from, effective_to "
+                    "FROM offerings WHERE offering_id=?",
                     (offering_key,),
                 ).fetchone()
                 if offering is None:
@@ -715,6 +716,33 @@ class InventoryPositionApplication:
                     raise ValidationError("Opening stock Product and Activity must match its Offering")
                 if offering[2] != "active":
                     raise ValidationError("Opening stock requires an active Offering")
+                # An active state alone is insufficient: the offering's configured
+                # validity window must include the historical opening timestamp.
+                for boundary, label in (
+                    (offering[3], "effective_from"),
+                    (offering[4], "effective_to"),
+                ):
+                    if boundary is not None:
+                        try:
+                            parsed_boundary = datetime.fromisoformat(
+                                boundary.replace("Z", "+00:00")
+                            )
+                        except (TypeError, ValueError) as exc:
+                            raise ValidationError(
+                                f"Opening stock Offering {label} must be a valid timestamp"
+                            ) from exc
+                        if parsed_boundary.tzinfo is None or parsed_boundary.utcoffset() is None:
+                            raise ValidationError(
+                                f"Opening stock Offering {label} must be timezone-aware"
+                            )
+                        if label == "effective_from" and opened < parsed_boundary.astimezone(timezone.utc):
+                            raise ValidationError(
+                                "Opening stock timestamp falls before its Offering validity window"
+                            )
+                        if label == "effective_to" and opened >= parsed_boundary.astimezone(timezone.utc):
+                            raise ValidationError(
+                                "Opening stock timestamp falls outside its Offering validity window"
+                            )
 
             position = self.create_position(
                 connection, activity_id=activity_key, product_id=product_key,
