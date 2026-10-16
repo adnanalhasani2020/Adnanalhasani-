@@ -28,16 +28,28 @@ The following branch comparisons were performed against `main`. Ahead/behind cou
 ## Current main boundaries confirmed from source
 
 - `FinancialAccountApplication` owns the Financial Account lifecycle; it does not recognize transactions or create ledger entries.
-- `FinancialBalanceReader` derives balance from recognized Financial Transactions and posted Ledger Entries and fails closed on relevant account/currency mismatches.
+- `FinancialBalanceReader` derives balances from recognized Financial Transactions and posted Ledger Entries and fails closed on relevant account/currency mismatches.
 - `FinancialOpeningBalanceApplication` records an authorized opening balance as a recognized transaction and posted ledger entry, with a unique opening balance per account/currency.
 - `InstrumentApplication` owns instrument lifecycle/usage persistence only and does not mutate the ledger.
 - Main's current migration sequence includes `0008_financial_opening_balance.sql` and later procurement migrations through `0021_supplier_invoice_header_line_consistency.sql`.
 
+## Currency branch review — first-pass findings
+
+The currency branch's migration runner applies SQL migrations in lexical filename order and records each filename-derived version atomically, so the proposed 0022–0025 sequence follows the current 0021 baseline without requiring inline `schema_migrations` inserts in each migration file.
+
+The reviewed changes separate four concerns: canonical three-letter uppercase ASCII representation; ledger-entry account/currency matching against its financial transaction; currency matching across loan/obligation/payment/settlement relationships; and settlement-recognition transaction currency matching. The branch also adds application-level fail-closed checks for legacy mismatches. This is a coherent defense-in-depth direction, but not yet merge approval.
+
+**Follow-up gap to test before merge:** migration 0024 checks the payment's obligation relationship when a settlement is inserted or updated, but the reviewed trigger set does not visibly prevent changing an already-settled payment's `obligation_id` afterward. If the payment and both obligations share a currency, the currency-only checks may not catch this identity mismatch. Add a database regression test and a trigger guard (or document and prove an equivalent invariant) before approving the currency branch. Also confirm that migration tests cover upgrade from an already-populated database, not only fresh in-memory creation.
+
+## Voucher cancellation contract review
+
+The voucher branch is appropriately marked as gap analysis, not an implementation. The generic Instrument lifecycle must not be treated as accounting voucher cancellation without an approved domain decision. Keep the open question Q-0031 open until receipt/payment voucher meaning, reversal ownership, authorization, idempotency, and historical correction rules are explicitly decided.
+
 ## Recommended reconciliation order
 
-1. Review `fix/currency-code-integrity-20261016` commit-by-commit because it contains the broadest and most relevant financial integrity work and introduces migration numbers 0022–0025.
-2. Check whether the two one-commit payment currency branches are already contained in that branch; select one canonical implementation and avoid duplicate or contradictory validation.
-3. Run the full suite and migration tests on the selected currency-integrity candidate before proposing a merge.
+1. Address and test the settled-payment obligation-link mutation gap in the currency branch.
+2. Review the currency branch's unique commits against the single-commit payment currency branches; select one canonical implementation and avoid duplicate guards.
+3. Run the full suite and migration-upgrade tests on the selected currency-integrity candidate before proposing a merge.
 4. Review the voucher cancellation contract branch against the actual voucher/instrument runtime contract. Keep documentation claims separate from implemented behavior.
 5. Use stale lifecycle/opening-balance branches only as references for specific missing tests, not as merge candidates.
 6. Only after this reconciliation should the chart-of-accounts persistence contract be designed against the canonical financial model.
@@ -48,4 +60,4 @@ The following branch comparisons were performed against `main`. Ahead/behind cou
 - Do not assume branch contents have been merged merely because similar functionality exists on main.
 - Do not add a second ledger, rewrite financial history, or activate Stage 12B as part of this audit.
 - Do not renumber migrations 0022–0025 without checking the current main migration registry and every dependent branch.
-- This is a source/history audit, not a test pass or a production-readiness claim.
+- This is a source/history audit, not a production-readiness claim.
