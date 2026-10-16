@@ -69,3 +69,55 @@ def test_financial_source_tables_accept_canonical_currency_codes():
     assert db.execute("SELECT COUNT(*) FROM obligations").fetchone()[0] == 1
     assert db.execute("SELECT COUNT(*) FROM payments").fetchone()[0] == 1
     db.close()
+
+
+def test_currency_code_update_guards_reject_noncanonical_values():
+    db = connect_database()
+    creditor = _person(db)
+    debtor = _person(db)
+    obligation_id = str(uuid.uuid4())
+    db.execute(
+        "INSERT INTO obligations(obligation_id,creditor_person_id,debtor_person_id,amount_minor,"
+        "currency_code,state,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)",
+        (obligation_id, creditor, debtor, 100, "YER", "proposed", STAMP, STAMP),
+    )
+    with pytest.raises(sqlite3.IntegrityError, match="currency_code"):
+        db.execute("UPDATE obligations SET currency_code='yer' WHERE obligation_id=?", (obligation_id,))
+    assert db.execute(
+        "SELECT currency_code FROM obligations WHERE obligation_id=?", (obligation_id,)
+    ).fetchone()[0] == "YER"
+    db.close()
+
+
+def test_financial_transaction_and_ledger_currency_guards():
+    db = connect_database()
+    owner = _person(db)
+    account_id = str(uuid.uuid4())
+    now = STAMP
+    db.execute(
+        "INSERT INTO financial_accounts(financial_account_id,person_id,account_type,state,created_at,updated_at) "
+        "VALUES(?,?,?,'active',?,?)",
+        (account_id, owner, "personal", now, now),
+    )
+    with pytest.raises(sqlite3.IntegrityError, match="currency_code"):
+        db.execute(
+            "INSERT INTO financial_transactions(financial_transaction_id,settlement_id,financial_account_id,"
+            "amount_minor,currency_code,state,recognition_source_type,recognition_source_ref,recognized_at,"
+            "created_at,updated_at) VALUES(?,NULL,?,100,'yer','recognized','opening_balance',?,?,?,?)",
+            (str(uuid.uuid4()), account_id, "opening-balance:invalid", now, now, now),
+        )
+    tx_id = str(uuid.uuid4())
+    db.execute(
+        "INSERT INTO financial_transactions(financial_transaction_id,settlement_id,financial_account_id,"
+        "amount_minor,currency_code,state,recognition_source_type,recognition_source_ref,recognized_at,"
+        "created_at,updated_at) VALUES(?,NULL,?,100,'YER','recognized','opening_balance',?,?,?,?)",
+        (tx_id, account_id, "opening-balance:valid", now, now, now),
+    )
+    with pytest.raises(sqlite3.IntegrityError, match="currency_code"):
+        db.execute(
+            "INSERT INTO ledger_entries(ledger_entry_id,financial_account_id,financial_transaction_id,"
+            "amount_minor,currency_code,entry_sequence,state,posted_at,created_at,updated_at) "
+            "VALUES(?,?,?,?,?,1,'posted',?,?,?)",
+            (str(uuid.uuid4()), account_id, tx_id, 100, "yer", now, now, now),
+        )
+    db.close()
