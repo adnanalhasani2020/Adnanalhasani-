@@ -210,6 +210,7 @@ def test_existing_database_migration_preserves_sales_invoices_and_history_on_reo
         ("0022_currency_code_representation_guards",),
         ("0023_ledger_currency_consistency_guards",),
         ("0024_linked_financial_currency_consistency",),
+        ("0025_settlement_recognition_currency_consistency",),
         ("9998_activity_invitations",),
         ("9999_file_attachments",),
     ]
