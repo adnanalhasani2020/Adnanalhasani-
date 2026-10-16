@@ -300,6 +300,7 @@ def test_supplier_invoice_restore_rejects_malformed_persisted_timestamp():
 def test_supplier_invoice_restore_rejects_currency_mismatch_with_purchase_baseline():
     db, actor, activity, purchase_id, line = fixture()
     invoice = record_invoice(db, actor, activity, purchase_id, line)
+    db.execute("DROP TRIGGER trg_supplier_invoice_currency_matches_existing_lines_update")
     db.execute(
         "UPDATE supplier_invoices SET currency_code='USD' WHERE supplier_invoice_id=?",
         (str(invoice.id),),
@@ -381,4 +382,62 @@ def test_database_guard_rejects_invoice_currency_different_from_purchase_baselin
             "purchase_line_id,quantity_units,unit_price_minor,line_total_minor) VALUES(?,?,?,?,?,?,?)",
             (str(uuid4()), invoice_id, purchase_id, str(line.id), 1, 1, 1),
         )
+    db.close()
+
+
+
+def _create_second_purchase(db, actor, activity):
+    product = str(uuid4())
+    db.execute(
+        "INSERT INTO products(product_id,state,created_at,updated_at,name) "
+        "VALUES(?, 'active', ?, ?, 'Second Widget')", (product, NOW, NOW),
+    )
+    line = PurchaseLine(
+        product_id=UUID(product), quantity_units=1, unit_label="piece",
+        unit_cost_minor=1000, currency_code="YER",
+    )
+    app = PurchaseApplication()
+    record = app.create_purchase(
+        db, "supplier:alpha", activity, (line,), actor,
+        grant(db, actor, "create_purchase", activity, activity),
+        idempotency_key="purchase-create-second-" + str(uuid4()), now=NOW,
+    )
+    return str(record.purchase.id), line
+
+
+def test_database_guard_rejects_invoice_line_from_another_purchase():
+    db, actor, activity, purchase_id, line = fixture()
+    invoice = record_invoice(db, actor, activity, purchase_id, line, qty=1)
+    other_purchase_id, other_line = _create_second_purchase(db, actor, activity)
+    with pytest.raises(sqlite3.IntegrityError, match="line Purchase must match its invoice header"):
+        db.execute(
+            "INSERT INTO supplier_invoice_lines(supplier_invoice_line_id,supplier_invoice_id,purchase_id,"
+            "purchase_line_id,quantity_units,unit_price_minor,line_total_minor) VALUES(?,?,?,?,?,?,?)",
+            (str(uuid4()), str(invoice.id), other_purchase_id, str(other_line.id), 1, 1000, 1000),
+        )
+    db.close()
+
+
+def test_database_guard_rejects_changing_invoice_purchase_away_from_existing_lines():
+    db, actor, activity, purchase_id, line = fixture()
+    invoice = record_invoice(db, actor, activity, purchase_id, line, qty=1)
+    other_purchase_id, _ = _create_second_purchase(db, actor, activity)
+    with pytest.raises(sqlite3.IntegrityError, match="Purchase cannot diverge from its lines"):
+        db.execute(
+            "UPDATE supplier_invoices SET purchase_id=? WHERE supplier_invoice_id=?",
+            (other_purchase_id, str(invoice.id)),
+        )
+    assert str(SupplierInvoiceApplication().get_supplier_invoice(db, invoice.id).purchase_id) == purchase_id
+    db.close()
+
+
+def test_database_guard_rejects_changing_invoice_currency_with_existing_lines():
+    db, actor, activity, purchase_id, line = fixture()
+    invoice = record_invoice(db, actor, activity, purchase_id, line, qty=1)
+    with pytest.raises(sqlite3.IntegrityError, match="currency must match its Purchase line currency"):
+        db.execute(
+            "UPDATE supplier_invoices SET currency_code='USD' WHERE supplier_invoice_id=?",
+            (str(invoice.id),),
+        )
+    assert SupplierInvoiceApplication().get_supplier_invoice(db, invoice.id).currency_code == "YER"
     db.close()
