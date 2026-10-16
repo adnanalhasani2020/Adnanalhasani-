@@ -6,7 +6,7 @@ import pytest
 
 from agent_core.financial_balance_read import FinancialBalanceReader
 from agent_core.financial_opening_balance_application import FinancialOpeningBalanceApplication
-from agent_core.persistence import connect_database
+from agent_core.persistence import MIGRATIONS_DIR, apply_migrations, connect_database
 from agent_core.shared import ValidationError
 
 STAMP = "2026-10-10T12:00:00Z"
@@ -171,4 +171,63 @@ def test_opening_balance_rolls_back_transaction_and_history_together_on_failure(
         )
     assert db.execute("SELECT COUNT(*) FROM financial_transactions").fetchone()[0] == 0
     assert db.execute("SELECT COUNT(*) FROM ledger_entries").fetchone()[0] == 0
+    db.close()
+
+
+
+def test_opening_balance_migration_preserves_existing_transactions_and_entries():
+    db = sqlite3.connect(":memory:")
+    db.execute("PRAGMA foreign_keys = ON")
+    db.execute("CREATE TABLE schema_migrations (version TEXT PRIMARY KEY, applied_at TEXT NOT NULL)")
+    for path in sorted(MIGRATIONS_DIR.glob("*.sql")):
+        if path.name >= "0008_financial_opening_balance.sql":
+            continue
+        version = path.stem
+        sql = path.read_text(encoding="utf-8")
+        db.executescript(
+            "BEGIN IMMEDIATE;\n" + sql
+            + "\nINSERT INTO schema_migrations(version, applied_at) "
+            + f"VALUES ('{version}', '{STAMP}');\nCOMMIT;"
+        )
+
+    owner, account_id = uid(), uid()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (owner, STAMP, STAMP),
+    )
+    db.execute(
+        "INSERT INTO financial_accounts(financial_account_id,person_id,account_type,state,created_at,updated_at) "
+        "VALUES(?,?,?,'active',?,?)",
+        (account_id, owner, "general", STAMP, STAMP),
+    )
+    transaction_id, entry_id = uid(), uid()
+    db.execute(
+        "INSERT INTO financial_transactions(financial_transaction_id,settlement_id,financial_account_id,"
+        "amount_minor,currency_code,state,recognition_source_type,recognition_source_ref,recognized_at,"
+        "created_at,updated_at) VALUES(?,NULL,?,?,?,'recognized','correction',?,?,?,?)",
+        (transaction_id, account_id, 275, "YER", "legacy-correction", STAMP, STAMP, STAMP),
+    )
+    db.execute(
+        "INSERT INTO ledger_entries(ledger_entry_id,financial_account_id,financial_transaction_id,amount_minor,"
+        "currency_code,entry_sequence,state,posted_at,created_at,updated_at) "
+        "VALUES(?,?,?,?,?,1,'posted',?,?,?)",
+        (entry_id, account_id, transaction_id, 275, "YER", STAMP, STAMP, STAMP),
+    )
+    db.commit()
+
+    path = MIGRATIONS_DIR / "0008_financial_opening_balance.sql"
+    db.executescript(
+        "BEGIN IMMEDIATE;\n" + path.read_text(encoding="utf-8")
+        + "\nINSERT INTO schema_migrations(version, applied_at) "
+        + f"VALUES ('0008_financial_opening_balance', '{STAMP}');\nCOMMIT;"
+    )
+    apply_migrations(db)
+
+    assert db.execute(
+        "SELECT financial_transaction_id,recognition_source_type,amount_minor FROM financial_transactions"
+    ).fetchall() == [(transaction_id, "correction", 275)]
+    assert db.execute(
+        "SELECT ledger_entry_id,financial_transaction_id,amount_minor FROM ledger_entries"
+    ).fetchall() == [(entry_id, transaction_id, 275)]
+    assert db.execute("PRAGMA foreign_key_check").fetchall() == []
     db.close()
