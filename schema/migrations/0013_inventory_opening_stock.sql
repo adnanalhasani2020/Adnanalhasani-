@@ -31,3 +31,36 @@ CREATE UNIQUE INDEX uq_inventory_opening_stock_scope
         COALESCE(location_ref, ''),
         scope_key
     );
+
+-- The opening snapshot must describe the exact effective position it references.
+CREATE TRIGGER trg_inventory_opening_stock_position_consistency
+BEFORE INSERT ON inventory_opening_stock
+WHEN NOT EXISTS (
+    SELECT 1
+    FROM inventory_positions AS p
+    WHERE p.inventory_position_id = NEW.inventory_position_id
+      AND p.activity_id = NEW.activity_id
+      AND p.product_id = NEW.product_id
+      AND p.offering_id IS NEW.offering_id
+      AND p.location_ref IS NEW.location_ref
+      AND p.scope_key = NEW.scope_key
+      AND p.quantity_minor = NEW.quantity_minor
+      AND p.state = 'effective'
+)
+BEGIN
+    SELECT RAISE(ABORT, 'opening stock must match its effective Inventory Position');
+END;
+
+-- Opening stock is an immutable audit fact. Corrections must be explicit,
+-- separately recorded actions rather than silent edits or deletion.
+CREATE TRIGGER trg_inventory_opening_stock_immutable_update
+BEFORE UPDATE ON inventory_opening_stock
+BEGIN
+    SELECT RAISE(ABORT, 'opening stock records are immutable');
+END;
+
+CREATE TRIGGER trg_inventory_opening_stock_immutable_delete
+BEFORE DELETE ON inventory_opening_stock
+BEGIN
+    SELECT RAISE(ABORT, 'opening stock records are immutable');
+END;
