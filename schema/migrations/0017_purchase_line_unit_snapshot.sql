@@ -64,4 +64,4 @@ BEGIN
 END;
 
 INSERT INTO schema_migrations(version, applied_at)
-VALUES ('0011_purchase_line_unit_snapshot', strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+VALUES ('0017_purchase_line_unit_snapshot', strftime('%Y-%m-%dT%H:%M:%fZ','now'));
