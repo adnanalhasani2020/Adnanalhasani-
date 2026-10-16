@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from agent_core.shared import ValidationError, normalize_currency_code
+from agent_core.shared import ValidationError, normalize_currency_code, require_canonical_currency_code
 
 
 _TRANSITIONS = {
@@ -153,6 +153,9 @@ class ObligationApplication:
             raise ValidationError("Obligation does not exist")
         (oid, creditor, debtor, invoice, loan, amount, currency, state, due_at,
          created, updated, version) = row
+        currency = require_canonical_currency_code(
+            currency, label="Persisted Obligation currency_code"
+        )
         if invoice is not None:
             invoice_link = connection.execute(
                 "SELECT obligation_id FROM invoices WHERE invoice_id=?", (invoice,),
