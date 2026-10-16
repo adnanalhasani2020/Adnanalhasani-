@@ -38,7 +38,7 @@ class RecognitionResult:
 
 class FinancialOrchestrator:
     """Finance-scoped orchestration boundary; Finance remains Ledger authority."""
-    NAMESPACE="finance.gap4.recognition"; OPERATION_KIND="recognize"; REVERSAL_NAMESPACE="finance.gap4.reversal"; CORRECTION_NAMESPACE="finance.gap4.correction"
+    NAMESPACE="finance.gap4.recognition"; OPERATION_KIND="recognize"; REVERSAL_NAMESPACE="finance.gap4.adjustment"; CORRECTION_NAMESPACE="finance.gap4.adjustment"
     def __init__(self, operations: DurableOperationAuthority, recognition: FinanceRecognitionCommand|None=None):
         self.operations=operations; self.recognition=recognition or FinanceRecognitionCommand()
         self._lock=RLock(); self._workflows={}
