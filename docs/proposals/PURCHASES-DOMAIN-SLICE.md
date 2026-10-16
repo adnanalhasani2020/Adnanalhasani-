@@ -1,6 +1,6 @@
 # Procurement domain slice — implementation boundary
 
-**Status:** Initial persisted slice implemented on an isolated branch; not yet merged or production-ready.
+**Status:** Initial persisted backend slice is merged into `main` via PR #205. SQLite defense-in-depth guards for supplier invoices are proposed in PR #207. This is not the complete procurement workflow.
 
 This change adds a canonical buyer-side Purchase aggregate and line/receipt value objects, a dedicated persistence application, and additive SQL tables. It intentionally does not reuse Sale, Offering, Invoice, Payment, Obligation, Settlement, InventoryPosition, or Ledger records.
 
@@ -24,9 +24,9 @@ This change adds a canonical buyer-side Purchase aggregate and line/receipt valu
 - Supplier identity is an opaque non-empty reference until a canonical supplier identity policy is approved. It is not silently treated as a Person or Organization foreign key.
 - Receipt records evidence only. Inventory Position, quantity, reservation, and availability are not changed.
 - Supplier invoice capture does not create an Obligation, Payment, Settlement, financial transaction, or ledger entry. It also does not change inventory.
-- Supplier invoice voiding/credit notes, tax jurisdiction rules, freight allocation, multi-currency conversion, automated price variance approval, UI/API endpoints, and external supplier integrations remain out of scope.
+- Supplier invoice voiding/credit notes, tax jurisdiction rules, freight allocation, multi-currency conversion, automated price variance approval, UI/API endpoints, and external supplier integrations remain out of scope. Invoice tax and freight are stored as explicit amounts, but no jurisdiction calculation or allocation is performed.
 - Purchase creation and receipt writes require idempotency keys. A repeated key with the same canonical request returns the existing purchase state without repeating the write; reusing a key with a different payload is rejected. Keys are unique within their operation table.
-- No tax, discounts, freight, multiple units/conversions, approval thresholds, UI/API endpoints, or external supplier integrations are included.
+- Purchase-order discounts, purchase-order tax/freight calculation, approval thresholds, UI/API endpoints, and external supplier integrations are not included. Supplier-invoice tax/freight amounts can be recorded explicitly, without jurisdiction rules or freight allocation.
 - CI must pass on the latest PR head before merge; each subsequent code change invalidates results from an earlier head.
 
 The implementation is a meaningful backend slice, not a claim that the complete procurement workflow is finished.
@@ -39,4 +39,4 @@ The implementation is a meaningful backend slice, not a claim that the complete 
 - Snapshot fields must be complete or entirely absent and cannot be rewritten after line creation. Migration 0012 adds a database trigger that rejects snapshots inconsistent with the active product-unit setting, ratio, labels, or versions. The combined integration branch exposes `PurchaseApplication.capture_unit_snapshot(connection, line, measurement_unit_id)` so callers select a unit explicitly rather than relying on a display-label guess.
 - When the product-unit catalog is present, creating a snapshotted line validates the product, active setting/unit, ratio, labels, and versions against the current catalog. Restoring a historical line does not require its current setting to remain active or unchanged.
 - Receipt quantities continue to use the purchase line's entered unit. This migration does not post inventory or convert quantities implicitly.
-- The unit catalog migration and purchase snapshot migration must be tested together on an integration branch before merging; the purchase branch remains independently testable for legacy lines without a catalog.
+- The unit catalog and purchase snapshot migrations were integrated and merged together through PR #205. Migrations `0015`–`0018` are now part of `main`; migration `0019` is proposed separately for database-level supplier-invoice guards. Legacy lines without snapshots remain supported.
