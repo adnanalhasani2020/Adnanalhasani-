@@ -23,8 +23,10 @@ def test_balance_fails_closed_on_posted_entry_with_missing_transaction():
     )
     db.commit()
 
-    # Reproduce a legacy database written through a connection with FK checks off.
+    # Reproduce a legacy database written with FK enforcement and the matching
+    # insert guard absent. Current schema correctly prevents creating this row.
     db.execute("PRAGMA foreign_keys = OFF")
+    db.execute("DROP TRIGGER ledger_entry_currency_matches_transaction_insert")
     db.execute(
         "INSERT INTO ledger_entries(ledger_entry_id,financial_account_id,financial_transaction_id,"
         "amount_minor,currency_code,entry_sequence,state,posted_at,created_at,updated_at) "
