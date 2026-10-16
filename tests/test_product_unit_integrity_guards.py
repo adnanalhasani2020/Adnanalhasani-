@@ -100,7 +100,7 @@ def test_direct_update_cannot_activate_retired_measurement_unit():
             db, product, gram.id, actor_context_ref="integrity-test", now=NOW,
         )
         app.retire_unit(db, gram.id, actor_context_ref="integrity-test", now=NOW)
-        with pytest.raises(Exception, match="retired measurement unit"):
+        with pytest.raises(Exception, match="cannot be reactivated"):
             db.execute(
                 "UPDATE product_unit_settings SET state='active', version_no=version_no+1 "
                 "WHERE product_id=? AND unit_id=?",
@@ -181,5 +181,75 @@ def test_database_rejects_catalog_edits_without_version_increment():
             )
         db.rollback()
         assert app.get_unit(db, litre.id).name == "Litre"
+    finally:
+        db.close()
+
+
+def test_database_rejects_reactivation_of_retired_measurement_unit():
+    db, app, product, kg, gram, litre = _configured_units()
+    try:
+        app.retire_product_unit(
+            db, product, gram.id, actor_context_ref="integrity-test", now=NOW,
+        )
+        app.retire_unit(db, gram.id, actor_context_ref="integrity-test", now=NOW)
+        with pytest.raises(Exception, match="cannot be reactivated"):
+            db.execute(
+                "UPDATE measurement_units SET state='active', version_no=version_no+1 WHERE unit_id=?",
+                (str(gram.id),),
+            )
+        db.rollback()
+        assert app.get_unit(db, gram.id).state.value == "retired"
+    finally:
+        db.close()
+
+
+def test_database_rejects_reactivation_of_retired_product_unit_setting():
+    db, app, product, kg, gram, litre = _configured_units()
+    try:
+        app.retire_product_unit(
+            db, product, gram.id, actor_context_ref="integrity-test", now=NOW,
+        )
+        with pytest.raises(Exception, match="cannot be reactivated"):
+            db.execute(
+                "UPDATE product_unit_settings SET state='active', version_no=version_no+1 "
+                "WHERE product_id=? AND unit_id=?",
+                (product, str(gram.id)),
+            )
+        db.rollback()
+        assert app.get_product_unit(db, product, gram.id).state.value == "retired"
+    finally:
+        db.close()
+
+
+def test_database_rejects_noncanonical_unit_codes_on_insert_and_update():
+    db, app, product, kg, gram, litre = _configured_units()
+    try:
+        with pytest.raises(Exception, match="unit code must be uppercase"):
+            db.execute(
+                "UPDATE measurement_units SET code='k g', version_no=version_no+1 WHERE unit_id=?",
+                (str(kg.id),),
+            )
+        db.rollback()
+        with pytest.raises(Exception, match="unit code must be uppercase"):
+            db.execute(
+                "UPDATE measurement_units SET code=' kg ', version_no=version_no+1 WHERE unit_id=?",
+                (str(kg.id),),
+            )
+        db.rollback()
+        db.rollback()
+        with pytest.raises(Exception, match="unit code must be uppercase"):
+            db.execute(
+                "UPDATE measurement_units SET code='K\u00a0G', version_no=version_no+1 WHERE unit_id=?",
+                (str(kg.id),),
+            )
+        db.rollback()
+        with pytest.raises(Exception, match="unit code must be uppercase"):
+            db.execute(
+                "INSERT INTO measurement_units(unit_id,code,name,dimension,state,created_at,updated_at) "
+                "VALUES(?,?,?,?,?,?,?)",
+                (str(uuid.uuid4()), "new unit", "New unit", "count", "active", NOW, NOW),
+            )
+        db.rollback()
+        assert app.get_unit(db, kg.id).code == "KG"
     finally:
         db.close()

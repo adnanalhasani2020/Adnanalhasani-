@@ -207,6 +207,8 @@ def test_existing_database_migration_preserves_sales_invoices_and_history_on_reo
         ("0019_supplier_invoice_database_guards",),
         ("0020_purchase_receipt_database_guards",),
         ("0021_supplier_invoice_header_line_consistency",),
+        ("0026_unit_retirement_is_irreversible",),
+        ("0027_unit_code_format_guards",),
         ("9998_activity_invitations",),
         ("9999_file_attachments",),
     ]
