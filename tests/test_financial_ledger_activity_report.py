@@ -243,3 +243,37 @@ def test_report_fails_closed_when_posted_entry_amount_differs_from_transaction()
             end_at="2026-10-04T00:00:00Z",
         )
     db.close()
+
+
+def test_report_fails_closed_when_ledger_currency_differs_from_transaction():
+    db = connect_database()
+    account_id = account(db)
+    tx_id, entry_id = ledger(
+        db, account_id, 1200, "YER", "2026-10-03T10:00:00Z"
+    )
+    # Simulate persisted corruption that normal database guards correctly
+    # prevent, so the read-side integrity boundary is independently tested.
+    db.execute("DROP TRIGGER financial_transaction_currency_matches_ledger_update")
+    db.execute(
+        "UPDATE financial_transactions SET currency_code='USD' "
+        "WHERE financial_transaction_id=?",
+        (tx_id,),
+    )
+    db.commit()
+
+    with pytest.raises(ValidationError, match="currency"):
+        FinancialLedgerActivityReportReader().read(
+            db, account_id, "YER",
+            start_at="2026-10-03T00:00:00Z",
+            end_at="2026-10-04T00:00:00Z",
+        )
+
+    assert db.execute(
+        "SELECT currency_code FROM ledger_entries WHERE ledger_entry_id=?",
+        (entry_id,),
+    ).fetchone()[0] == "YER"
+    assert db.execute(
+        "SELECT currency_code FROM financial_transactions WHERE financial_transaction_id=?",
+        (tx_id,),
+    ).fetchone()[0] == "USD"
+    db.close()
