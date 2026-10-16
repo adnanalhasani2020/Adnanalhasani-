@@ -1,4 +1,3 @@
-from contextlib import contextmanager
 """Internal persistence for the SPEC-0016 Instrument lifecycle.
 
 This is an internal domain persistence primitive, not a user-facing endpoint:
@@ -6,6 +5,7 @@ SPEC-0016 does not enumerate Instrument-specific authorization action codes.
 It does not apply financial effects or mutate Sale, Invoice, Payment, Settlement,
 Financial Account, or Ledger records.
 """
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
@@ -92,6 +92,29 @@ class InstrumentApplication:
             raise ValidationError(f"{label} must be timezone-aware")
         return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
+    @staticmethod
+    def _aware_datetime(value, label):
+        """Parse a persisted timestamp without accepting naive local time."""
+        if isinstance(value, str):
+            try:
+                value = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError as exc:
+                raise ValidationError(f"{label} must be a valid ISO-8601 timestamp") from exc
+        if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
+            raise ValidationError(f"{label} must be timezone-aware")
+        return value.astimezone(timezone.utc)
+
+    @classmethod
+    def _validate_transition_chronology(cls, timestamp, current):
+        """Reject backdated transitions and fail closed on corrupt persisted dates."""
+        occurred_at = cls._aware_datetime(timestamp, "Instrument transition timestamp")
+        created_at = cls._aware_datetime(current.created_at, "Persisted Instrument created_at")
+        updated_at = cls._aware_datetime(current.updated_at, "Persisted Instrument updated_at")
+        if occurred_at < created_at:
+            raise ValidationError("Instrument transition timestamp cannot predate creation")
+        if occurred_at < updated_at:
+            raise ValidationError("Instrument transition timestamp cannot predate current updated_at")
+
     def _load(self, connection, instrument_id):
         key = str(self._uuid(instrument_id, "Instrument identifier"))
         row = connection.execute(
@@ -119,7 +142,7 @@ class InstrumentApplication:
             raise ValidationError("Instrument canonical_identifier is required")
         if not isinstance(actor_context_ref, str) or not actor_context_ref.strip():
             raise ValidationError("Instrument actor_context_ref is required")
-        timestamp = self._timestamp(now or datetime.now(timezone.utc), "Instrument creation timestamp")
+        timestamp = self._timestamp(now if now is not None else datetime.now(timezone.utc), "Instrument creation timestamp")
         kind, issuer, canonical = instrument_type.strip(), issuer_ref.strip(), canonical_identifier.strip()
         with self._atomic(connection):
             connection.execute(
@@ -185,7 +208,7 @@ class InstrumentApplication:
         if not isinstance(action, str) or action not in self._TRANSITIONS:
             raise ValidationError("Unsupported Instrument transition")
         allowed, next_state = self._TRANSITIONS[action]
-        timestamp = self._timestamp(now or datetime.now(timezone.utc), "Instrument transition timestamp")
+        timestamp = self._timestamp(now if now is not None else datetime.now(timezone.utc), "Instrument transition timestamp")
         if action == "redeem":
             if not isinstance(action_ref, str) or not action_ref.strip():
                 raise ValidationError("Instrument redemption requires an action_ref")
@@ -195,6 +218,7 @@ class InstrumentApplication:
             current = self._load(connection, key)
             if current.version_no != expected_version:
                 raise ValidationError("Instrument version conflict; reload before retrying")
+            self._validate_transition_chronology(timestamp, current)
             if current.state not in allowed:
                 raise ValidationError(f"Invalid Instrument transition from {current.state} via {action}")
             next_version = current.version_no + 1
