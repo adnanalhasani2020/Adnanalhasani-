@@ -7,7 +7,7 @@ import json
 from uuid import UUID, uuid4
 
 from agent_core.purchase_application import PurchaseApplication
-from agent_core.shared import ValidationError
+from agent_core.shared import ValidationError, require_canonical_currency_code
 
 
 _MAX_INTEGER = 2**63 - 1
@@ -92,10 +92,7 @@ class SupplierInvoiceApplication:
 
     @staticmethod
     def _currency(value):
-        if (not isinstance(value, str) or len(value) != 3 or not value.isascii()
-                or not value.isalpha() or value != value.upper()):
-            raise ValidationError("currency_code must be a 3-letter uppercase code")
-        return value
+        return require_canonical_currency_code(value)
 
     @staticmethod
     def _amount(value, label):
