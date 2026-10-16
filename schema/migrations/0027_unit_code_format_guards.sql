@@ -9,6 +9,29 @@ WHEN NEW.code <> upper(trim(NEW.code))
   OR instr(NEW.code, char(11)) > 0
   OR instr(NEW.code, char(12)) > 0
   OR instr(NEW.code, char(13)) > 0
+  OR instr(NEW.code, char(28)) > 0
+  OR instr(NEW.code, char(29)) > 0
+  OR instr(NEW.code, char(30)) > 0
+  OR instr(NEW.code, char(31)) > 0
+  OR instr(NEW.code, char(133)) > 0
+  OR instr(NEW.code, char(160)) > 0
+  OR instr(NEW.code, char(5760)) > 0
+  OR instr(NEW.code, char(8192)) > 0
+  OR instr(NEW.code, char(8193)) > 0
+  OR instr(NEW.code, char(8194)) > 0
+  OR instr(NEW.code, char(8195)) > 0
+  OR instr(NEW.code, char(8196)) > 0
+  OR instr(NEW.code, char(8197)) > 0
+  OR instr(NEW.code, char(8198)) > 0
+  OR instr(NEW.code, char(8199)) > 0
+  OR instr(NEW.code, char(8200)) > 0
+  OR instr(NEW.code, char(8201)) > 0
+  OR instr(NEW.code, char(8202)) > 0
+  OR instr(NEW.code, char(8232)) > 0
+  OR instr(NEW.code, char(8233)) > 0
+  OR instr(NEW.code, char(8239)) > 0
+  OR instr(NEW.code, char(8287)) > 0
+  OR instr(NEW.code, char(12288)) > 0
 BEGIN
     SELECT RAISE(ABORT, 'unit code must be uppercase, trimmed, and contain no whitespace');
 END;
@@ -22,6 +45,29 @@ WHEN NEW.code <> upper(trim(NEW.code))
   OR instr(NEW.code, char(11)) > 0
   OR instr(NEW.code, char(12)) > 0
   OR instr(NEW.code, char(13)) > 0
+  OR instr(NEW.code, char(28)) > 0
+  OR instr(NEW.code, char(29)) > 0
+  OR instr(NEW.code, char(30)) > 0
+  OR instr(NEW.code, char(31)) > 0
+  OR instr(NEW.code, char(133)) > 0
+  OR instr(NEW.code, char(160)) > 0
+  OR instr(NEW.code, char(5760)) > 0
+  OR instr(NEW.code, char(8192)) > 0
+  OR instr(NEW.code, char(8193)) > 0
+  OR instr(NEW.code, char(8194)) > 0
+  OR instr(NEW.code, char(8195)) > 0
+  OR instr(NEW.code, char(8196)) > 0
+  OR instr(NEW.code, char(8197)) > 0
+  OR instr(NEW.code, char(8198)) > 0
+  OR instr(NEW.code, char(8199)) > 0
+  OR instr(NEW.code, char(8200)) > 0
+  OR instr(NEW.code, char(8201)) > 0
+  OR instr(NEW.code, char(8202)) > 0
+  OR instr(NEW.code, char(8232)) > 0
+  OR instr(NEW.code, char(8233)) > 0
+  OR instr(NEW.code, char(8239)) > 0
+  OR instr(NEW.code, char(8287)) > 0
+  OR instr(NEW.code, char(12288)) > 0
 BEGIN
     SELECT RAISE(ABORT, 'unit code must be uppercase, trimmed, and contain no whitespace');
 END;
