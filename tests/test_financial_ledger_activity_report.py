@@ -203,3 +203,24 @@ def test_report_fails_closed_on_posted_entry_with_void_transaction():
         "SELECT state FROM financial_transactions WHERE financial_transaction_id=?", (tx_id,)
     ).fetchone()[0] == "void"
     db.close()
+
+
+def test_report_compares_instants_not_timestamp_strings_with_fractional_seconds():
+    db = connect_database()
+    account_id = account(db)
+    # This entry is earlier than the period start, despite the lexical ordering
+    # of "...00Z" and "...00.500Z" strings.
+    ledger(db, account_id, 1200, "YER", "2026-10-03T00:00:00Z")
+    ledger(db, account_id, 300, "YER", "2026-10-03T00:00:00.750Z")
+
+    report = FinancialLedgerActivityReportReader().read(
+        db, account_id, "YER",
+        start_at="2026-10-03T00:00:00.500Z",
+        end_at="2026-10-04T00:00:00Z",
+    )
+
+    assert report.opening_balance_minor == 1200
+    assert report.activity_total_minor == 300
+    assert report.closing_balance_minor == 1500
+    assert report.entry_count == 1
+    db.close()
