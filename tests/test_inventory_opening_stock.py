@@ -158,6 +158,75 @@ def test_opening_stock_rejects_existing_position_in_same_scope():
     db.close()
 
 
+def test_product_quantity_reader_isolates_locations_with_same_scope_key():
+    db = connect_database()
+    activity_id, product_id = seed(db)
+    create_opening(
+        db, activity_id, product_id, location_ref="location-east",
+        idempotency_key="opening-east", source_ref="count-east",
+    )
+    create_opening(
+        db, activity_id, product_id, location_ref="location-west",
+        idempotency_key="opening-west", source_ref="count-west", quantity_minor=29,
+    )
+
+    reader = InventoryApplication()
+    east = reader.read_product_quantity(
+        db, product_id, activity_id, "warehouse-A",
+        location_ref="location-east", as_of=STAMP,
+    )
+    west = reader.read_product_quantity(
+        db, product_id, activity_id, "warehouse-A",
+        location_ref="location-west", as_of=STAMP,
+    )
+    default_location = reader.read_product_quantity(
+        db, product_id, activity_id, "warehouse-A", as_of=STAMP,
+    )
+    assert east.status is InventoryQuantityStatus.KNOWN
+    assert east.quantity_minor == 17
+    assert west.status is InventoryQuantityStatus.KNOWN
+    assert west.quantity_minor == 29
+    assert default_location.status is InventoryQuantityStatus.NO_RECORD
+    db.close()
+
+
+def test_opening_stock_audit_row_cannot_be_changed_or_deleted():
+    db = connect_database()
+    activity_id, product_id = seed(db)
+    create_opening(db, activity_id, product_id)
+    with pytest.raises(Exception, match="immutable"):
+        db.execute(
+            "UPDATE inventory_opening_stock SET quantity_minor=99"
+        )
+    with pytest.raises(Exception, match="immutable"):
+        db.execute("DELETE FROM inventory_opening_stock")
+    assert db.execute(
+        "SELECT quantity_minor FROM inventory_opening_stock"
+    ).fetchone()[0] == 17
+    db.close()
+
+
+def test_opening_stock_database_guard_rejects_mismatched_position_quantity():
+    db = connect_database()
+    activity_id, product_id = seed(db)
+    position = create_opening(db, activity_id, product_id)
+    with pytest.raises(Exception, match="must match its effective Inventory Position"):
+        db.execute(
+            "INSERT INTO inventory_opening_stock("
+            "opening_stock_id,inventory_position_id,activity_id,product_id,offering_id,"
+            "location_ref,scope_key,quantity_minor,source_ref,idempotency_key,"
+            "actor_context_ref,opening_at,recorded_at) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                uid(), str(position.id), activity_id, product_id, None, None,
+                "warehouse-A", 999, "direct-write", "direct-write-key",
+                "person:direct-write", STAMP, STAMP,
+            ),
+        )
+    assert db.execute("SELECT COUNT(*) FROM inventory_opening_stock").fetchone()[0] == 1
+    db.close()
+
+
 def test_opening_stock_rolls_back_position_and_history_if_audit_write_fails():
     db = connect_database()
     activity_id, product_id = seed(db)
