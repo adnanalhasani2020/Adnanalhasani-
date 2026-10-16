@@ -23,7 +23,7 @@ EXPECTED_DOMAIN_TABLES = {
     "participants","messages","patient_contexts","encounters","clinical_records",
     "results_reports","prescriptions","pending_operations","conflicts",
     "durable_operation_records","audit_records","provenance_records","domain_history",
-    "workflows","workflow_events","activity_invitations","file_attachments",
+    "workflows","workflow_events","activity_invitations","file_attachments","financial_policy_settings",
 }
 NOW = "2026-10-08T00:00:00Z"
 
@@ -75,10 +75,10 @@ def _financial_fixture(db):
     return account, obligation, payment, settlement
 
 
-def test_clean_install_has_exactly_57_domain_tables_plus_migration_bookkeeping():
+def test_clean_install_has_exactly_58_domain_tables_plus_migration_bookkeeping():
     db = connect_database()
     assert _tables(db) == EXPECTED_DOMAIN_TABLES | {"schema_migrations"}
-    assert len(EXPECTED_DOMAIN_TABLES) == 57
+    assert len(EXPECTED_DOMAIN_TABLES) == 58
     assert db.execute("PRAGMA foreign_keys").fetchone()[0] == 1
     assert db.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
     versions = [r[0] for r in db.execute("SELECT version FROM schema_migrations ORDER BY version")]
@@ -109,6 +109,7 @@ def test_clean_install_has_exactly_57_domain_tables_plus_migration_bookkeeping()
         "0032_payment_obligation_settlement_link_guard",
         "0033_payment_obligation_amount_consistency",
         "0034_settlement_payment_obligation_amount_consistency",
+        "0035_financial_policy_settings",
         "9998_activity_invitations",
         "9999_file_attachments",
     ]
@@ -126,7 +127,7 @@ def test_existing_db_migration_preserves_data_and_is_idempotent(tmp_path):
     before = reopened.execute("SELECT COUNT(*) FROM persons").fetchone()[0]
     assert apply_migrations(reopened) == []
     assert reopened.execute("SELECT COUNT(*) FROM persons").fetchone()[0] == before
-    assert reopened.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0] == 28
+    assert reopened.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0] == 29
 
 
 def test_constraints_are_enforced_at_runtime():
