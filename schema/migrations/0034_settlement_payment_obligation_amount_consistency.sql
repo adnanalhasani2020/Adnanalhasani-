@@ -62,7 +62,7 @@ WHEN EXISTS (
       AND p.amount_minor > NEW.amount_minor
 )
 BEGIN
-    SELECT RAISE(ABORT, 'obligation amount_minor must cover settled payment amount_minor');
+    SELECT RAISE(ABORT, 'obligation amount_minor must cover linked payment amount_minor');
 END;
 
 INSERT INTO schema_migrations(version, applied_at)
