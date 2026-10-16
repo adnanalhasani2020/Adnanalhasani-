@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from enum import Enum
 from typing import Iterable, Optional
 from uuid import UUID
@@ -9,6 +9,15 @@ from agent_core.shared import ValidationError, new_id
 def _require_financial_connectivity(connected: bool):
     if not isinstance(connected, bool) or not connected:
         raise ValidationError("Financial finality requires connectivity")
+
+def _finite_decimal(value, label: str) -> Decimal:
+    try:
+        amount = Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError) as exc:
+        raise ValidationError(f"{label} must be a valid decimal amount") from exc
+    if not amount.is_finite():
+        raise ValidationError(f"{label} must be finite")
+    return amount
 
 class FinancialAccountState(str, Enum):
     ACTIVE="active"; CLOSED="closed"
@@ -38,8 +47,8 @@ class Obligation:
     state: ObligationState=ObligationState.PROPOSED; due_at: Optional[datetime]=None
     def __post_init__(self):
         if not isinstance(self.financial_account_id, UUID): raise ValidationError("Obligation must reference Financial Account")
-        self.amount=Decimal(str(self.amount))
-        if self.amount<=0: raise ValidationError("Obligation.amount must be positive")
+        self.amount = _finite_decimal(self.amount, "Obligation.amount")
+        if self.amount <= 0: raise ValidationError("Obligation.amount must be positive")
     def open(self): self.state=ObligationState.OPEN
     def mark_due(self): self.state=ObligationState.DUE
     def mark_overdue(self): self.state=ObligationState.OVERDUE
@@ -68,8 +77,8 @@ class Payment:
     amount: Decimal; obligation_id: Optional[UUID]=None; invoice_id: Optional[UUID]=None
     id: UUID=field(default_factory=new_id); state: PaymentState=PaymentState.INITIATED
     def __post_init__(self):
-        self.amount=Decimal(str(self.amount))
-        if self.amount<=0: raise ValidationError("Payment.amount must be positive")
+        self.amount = _finite_decimal(self.amount, "Payment.amount")
+        if self.amount <= 0: raise ValidationError("Payment.amount must be positive")
         if self.obligation_id is not None and not isinstance(self.obligation_id,UUID): raise ValidationError("Payment.obligation_id must be UUID")
         if self.invoice_id is not None and not isinstance(self.invoice_id,UUID): raise ValidationError("Payment.invoice_id must be UUID")
     def pending(self): self.state=PaymentState.PENDING
@@ -99,8 +108,9 @@ class FinancialTransaction:
     state: FinancialTransactionState=FinancialTransactionState.RECOGNIZED
     def __post_init__(self):
         if not isinstance(self.financial_account_id,UUID): raise ValidationError("FinancialTransaction must reference Financial Account")
-        object.__setattr__(self,"amount",Decimal(str(self.amount)))
-        if self.amount==0: raise ValidationError("FinancialTransaction.amount cannot be zero")
+        amount = _finite_decimal(self.amount, "FinancialTransaction.amount")
+        object.__setattr__(self, "amount", amount)
+        if amount == 0: raise ValidationError("FinancialTransaction.amount cannot be zero")
 
 _LEDGER_CREATION_TOKEN = object()
 
@@ -112,8 +122,8 @@ class LedgerEntry:
             raise ValidationError("LedgerEntry must be created by Finance Recognition Command")
         if not isinstance(financial_account_id,UUID) or not isinstance(transaction_id,UUID):
             raise ValidationError("LedgerEntry references are required")
-        amount=Decimal(str(amount))
-        if amount==0: raise ValidationError("LedgerEntry.amount cannot be zero")
+        amount = _finite_decimal(amount, "LedgerEntry.amount")
+        if amount == 0: raise ValidationError("LedgerEntry.amount cannot be zero")
         object.__setattr__(self,"financial_account_id",financial_account_id)
         object.__setattr__(self,"amount",amount)
         object.__setattr__(self,"transaction_id",transaction_id)
