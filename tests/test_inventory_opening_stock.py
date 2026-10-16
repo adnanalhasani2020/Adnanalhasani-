@@ -113,7 +113,7 @@ def test_opening_stock_rejects_second_opening_for_same_product_scope():
 def test_opening_stock_rejects_explicit_falsey_recorded_timestamp_without_writes(invalid_timestamp):
     db = connect_database()
     activity_id, product_id = seed(db)
-    with pytest.raises(ValidationError, match="timestamp"):
+    with pytest.raises(ValidationError, match="ISO-8601|timezone-aware"):
         create_opening(db, activity_id, product_id, now=invalid_timestamp)
     assert db.execute("SELECT COUNT(*) FROM inventory_positions").fetchone()[0] == 0
     assert db.execute("SELECT COUNT(*) FROM inventory_opening_stock").fetchone()[0] == 0
