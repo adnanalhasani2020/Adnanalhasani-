@@ -85,6 +85,7 @@ def setup_checkout(tmp_path, quantity=5):
         "confirm": grant("confirm_sale", sale_id),
         "fulfill": grant("fulfill_sale", sale_id),
     }
+    db.commit()
     return db, {
         "actor_person_id": actor, "activity_id": activity, "offering_id": offering_id,
         "quantity": 2, "scope_key": "store-A", "location_ref": "front",
