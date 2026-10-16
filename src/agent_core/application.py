@@ -104,9 +104,9 @@ class InventoryApplication:
 
     def read_product_quantity(
         self, connection, product_id, activity_id, scope_key: str, *,
-        offering_id=None, as_of: datetime | str | None = None,
+        offering_id=None, location_ref=None, as_of: datetime | str | None = None,
     ) -> InventoryQuantityResult:
-        """Read a product's own stock scope, excluding offering-specific positions unless requested."""
+        """Read a product's own stock scope, excluding unrelated offerings and locations."""
         try:
             product_key = str(UUID(str(product_id)))
         except (ValueError, TypeError, AttributeError) as exc:
@@ -140,10 +140,17 @@ class InventoryApplication:
             if offering != (product_key, activity_key):
                 raise ValidationError("Inventory quantity read Product/Activity must match Offering")
 
+        if location_ref is not None and (
+            not isinstance(location_ref, str) or not location_ref.strip()
+        ):
+            raise ValidationError("Inventory location_ref must be a non-empty string when supplied")
+        normalized_location = location_ref.strip() if location_ref is not None else None
         return self._quantity_reader.read_quantity(
             connection, scope_key, as_of=as_of, product_id=product_key,
             activity_id=activity_key, offering_id=offering_key,
             require_no_offering=offering_key is None,
+            location_ref=normalized_location,
+            require_no_location=normalized_location is None,
         )
 
 
