@@ -107,6 +107,7 @@ def test_clean_install_has_exactly_57_domain_tables_plus_migration_bookkeeping()
         "0030_linked_financial_currency_consistency",
         "0031_settlement_recognition_currency_consistency",
         "0032_payment_obligation_settlement_link_guard",
+        "0033_payment_obligation_amount_consistency",
         "9998_activity_invitations",
         "9999_file_attachments",
     ]
@@ -124,7 +125,7 @@ def test_existing_db_migration_preserves_data_and_is_idempotent(tmp_path):
     before = reopened.execute("SELECT COUNT(*) FROM persons").fetchone()[0]
     assert apply_migrations(reopened) == []
     assert reopened.execute("SELECT COUNT(*) FROM persons").fetchone()[0] == before
-    assert reopened.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0] == 26
+    assert reopened.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0] == 27
 
 
 def test_constraints_are_enforced_at_runtime():
@@ -398,6 +399,10 @@ def test_currency_migrations_upgrade_populated_financial_database(tmp_path, monk
         "SELECT version FROM schema_migrations WHERE version=?",
         ("0032_payment_obligation_settlement_link_guard",),
     ).fetchone() is not None
+    assert upgraded.execute(
+        "SELECT version FROM schema_migrations WHERE version=?",
+        ("0033_payment_obligation_amount_consistency",),
+    ).fetchone() is not None
 
     # The new guards must apply to existing rows after upgrade, not only clean installs.
     with pytest.raises(sqlite3.IntegrityError, match="payment currency_code must match settled obligation currency_code"):
@@ -415,4 +420,15 @@ def test_currency_migrations_upgrade_populated_financial_database(tmp_path, monk
     assert upgraded.execute(
         "SELECT COUNT(*) FROM financial_accounts WHERE financial_account_id=?", (account_id,)
     ).fetchone()[0] == 1
+
+    with pytest.raises(sqlite3.IntegrityError, match="payment amount_minor must not exceed linked obligation amount_minor"):
+        upgraded.execute("UPDATE payments SET amount_minor=101 WHERE payment_id=?", (payment_id,))
+    with pytest.raises(sqlite3.IntegrityError, match="obligation amount_minor must cover linked payment amount_minor"):
+        upgraded.execute("UPDATE obligations SET amount_minor=99 WHERE obligation_id=?", (obligation_id,))
+    assert upgraded.execute(
+        "SELECT amount_minor FROM payments WHERE payment_id=?", (payment_id,)
+    ).fetchone()[0] == 100
+    assert upgraded.execute(
+        "SELECT amount_minor FROM obligations WHERE obligation_id=?", (obligation_id,)
+    ).fetchone()[0] == 100
     upgraded.close()
