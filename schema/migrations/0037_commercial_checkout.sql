@@ -38,7 +38,7 @@ CREATE TABLE inventory_movements (
     location_ref TEXT NULL,
     scope_key TEXT NOT NULL CHECK (length(trim(scope_key)) > 0),
     quantity_delta INTEGER NOT NULL CHECK (typeof(quantity_delta) = 'integer' AND quantity_delta <> 0),
-    source_type TEXT NOT NULL CHECK (source_type IN ('sale','return','receipt','adjustment')),
+    source_type TEXT NOT NULL CHECK (source_type IN ('sale')),
     source_ref TEXT NOT NULL CHECK (length(trim(source_ref)) > 0),
     actor_context_ref TEXT NOT NULL CHECK (length(trim(actor_context_ref)) > 0),
     occurred_at TEXT NOT NULL,
