@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from agent_core.shared import ValidationError
+from agent_core.shared import ValidationError, normalize_currency_code
 
 
 _TRANSITIONS = {
@@ -170,9 +170,7 @@ class LoanApplication:
             raise ValidationError("Loan parties must differ")
         if type(principal_minor) is not int or principal_minor <= 0:
             raise ValidationError("Loan principal_minor must be a positive integer")
-        if not isinstance(currency_code, str) or not currency_code.strip():
-            raise ValidationError("Loan currency_code is required")
-        currency_code = currency_code.strip()
+        currency_code = normalize_currency_code(currency_code, label="Loan currency_code")
         timestamp = self._timestamp(now or datetime.now(timezone.utc), "Loan creation timestamp")
         maturity = self._timestamp(maturity_at, "Loan maturity_at") if maturity_at is not None else None
         with self._atomic(connection):
