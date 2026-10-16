@@ -101,7 +101,7 @@ def test_inventory_position_create_persist_restore_and_transition_after_reopen(t
 def test_inventory_position_rejects_explicit_falsey_creation_timestamp_without_writes(invalid_timestamp):
     db = connect_database()
     activity_id, product_id, offering_id = setup_refs(db)
-    with pytest.raises(ValidationError, match="timestamp"):
+    with pytest.raises(ValidationError, match="ISO-8601|timezone-aware"):
         InventoryPositionApplication().create_position(
             db, actor_context_ref="test-context", activity_id=activity_id,
             offering_id=offering_id, product_id=product_id, scope_key="warehouse-A",
@@ -116,7 +116,7 @@ def test_inventory_position_rejects_explicit_falsey_creation_timestamp_without_w
 def test_inventory_position_rejects_explicit_falsey_observed_at_without_writes(invalid_timestamp):
     db = connect_database()
     activity_id, product_id, offering_id = setup_refs(db)
-    with pytest.raises(ValidationError, match="timestamp"):
+    with pytest.raises(ValidationError, match="ISO-8601|timezone-aware"):
         InventoryPositionApplication().create_position(
             db, actor_context_ref="test-context", activity_id=activity_id,
             offering_id=offering_id, product_id=product_id, scope_key="warehouse-A",
@@ -137,7 +137,7 @@ def test_inventory_position_rejects_explicit_falsey_transition_timestamp_without
         offering_id=offering_id, product_id=product_id, scope_key="warehouse-A",
         quantity_minor=17, observed_at=NOW, now=NOW,
     )
-    with pytest.raises(ValidationError, match="timestamp"):
+    with pytest.raises(ValidationError, match="ISO-8601|timezone-aware"):
         app.transition_position(
             db, position.id, "make_effective", actor_context_ref="test-context",
             now=invalid_timestamp,
