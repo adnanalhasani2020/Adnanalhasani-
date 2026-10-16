@@ -57,4 +57,4 @@ CREATE INDEX idx_purchase_receipts_purchase_time ON purchase_receipts(purchase_i
 CREATE INDEX idx_purchase_receipts_line ON purchase_receipts(purchase_line_id);
 
 INSERT INTO schema_migrations(version, applied_at)
-VALUES ('0008_purchases', strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+VALUES ('0014_purchases', strftime('%Y-%m-%dT%H:%M:%fZ','now'));
