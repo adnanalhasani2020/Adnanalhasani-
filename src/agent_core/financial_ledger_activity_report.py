@@ -125,7 +125,7 @@ class FinancialLedgerActivityReportReader:
                 or int(row[6]) != int(row[7])
             ):
                 raise ValidationError(
-                    "Ledger Entry does not match its recognized Financial Transaction "
+                    "Ledger Entry does not match a recognized Financial Transaction "
                     "for the requested account, currency, and amount"
                 )
 
