@@ -100,11 +100,13 @@ def test_clean_install_has_exactly_57_domain_tables_plus_migration_bookkeeping()
         "0019_supplier_invoice_database_guards",
         "0020_purchase_receipt_database_guards",
         "0021_supplier_invoice_header_line_consistency",
-        "0022_currency_code_representation_guards",
-        "0023_ledger_currency_consistency_guards",
-        "0024_linked_financial_currency_consistency",
-        "0025_settlement_recognition_currency_consistency",
-        "0026_payment_obligation_settlement_link_guard",
+        "0026_unit_retirement_is_irreversible",
+        "0027_unit_code_format_guards",
+        "0028_currency_code_representation_guards",
+        "0029_ledger_currency_consistency_guards",
+        "0030_linked_financial_currency_consistency",
+        "0031_settlement_recognition_currency_consistency",
+        "0032_payment_obligation_settlement_link_guard",
         "9998_activity_invitations",
         "9999_file_attachments",
     ]
@@ -372,7 +374,7 @@ def test_currency_migrations_upgrade_populated_financial_database(tmp_path, monk
     # Build the database using the same migration set as a release before 0022.
     for migration in current_migrations.glob("*.sql"):
         version = migration.stem
-        if version < "0022_currency_code_representation_guards" or version >= "9998_activity_invitations":
+        if version < "0028_currency_code_representation_guards" or version >= "9998_activity_invitations":
             shutil.copy2(migration, legacy_dir / migration.name)
 
     database_path = tmp_path / "populated-before-currency-guards.sqlite"
@@ -394,7 +396,7 @@ def test_currency_migrations_upgrade_populated_financial_database(tmp_path, monk
     ).fetchone()[0] == payment_id
     assert upgraded.execute(
         "SELECT version FROM schema_migrations WHERE version=?",
-        ("0026_payment_obligation_settlement_link_guard",),
+        ("0032_payment_obligation_settlement_link_guard",),
     ).fetchone() is not None
 
     # The new guards must apply to existing rows after upgrade, not only clean installs.
