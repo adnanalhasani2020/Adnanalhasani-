@@ -58,7 +58,9 @@ class FinancialOrchestrator:
         if settlement.state!=SettlementState.SETTLED: raise ValidationError("Settlement must be SETTLED")
         if obligation.state not in (ObligationState.OPEN,ObligationState.DUE,ObligationState.OVERDUE):
             raise ValidationError("Obligation is not settlement-eligible")
-        if payment.amount != obligation.amount:
+        if payment.amount > obligation.amount:
+            raise ValidationError("Payment exceeds Obligation")
+        if payment.amount < obligation.amount:
             raise ValidationError(
                 "Partial settlement is not supported until remaining obligation amounts are tracked"
             )
