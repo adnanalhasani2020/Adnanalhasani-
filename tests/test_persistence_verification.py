@@ -108,6 +108,7 @@ def test_clean_install_has_exactly_57_domain_tables_plus_migration_bookkeeping()
         "0031_settlement_recognition_currency_consistency",
         "0032_payment_obligation_settlement_link_guard",
         "0033_payment_obligation_amount_consistency",
+        "0034_settlement_payment_obligation_amount_consistency",
         "9998_activity_invitations",
         "9999_file_attachments",
     ]
@@ -125,7 +126,7 @@ def test_existing_db_migration_preserves_data_and_is_idempotent(tmp_path):
     before = reopened.execute("SELECT COUNT(*) FROM persons").fetchone()[0]
     assert apply_migrations(reopened) == []
     assert reopened.execute("SELECT COUNT(*) FROM persons").fetchone()[0] == before
-    assert reopened.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0] == 27
+    assert reopened.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0] == 28
 
 
 def test_constraints_are_enforced_at_runtime():
@@ -402,6 +403,10 @@ def test_currency_migrations_upgrade_populated_financial_database(tmp_path, monk
     assert upgraded.execute(
         "SELECT version FROM schema_migrations WHERE version=?",
         ("0033_payment_obligation_amount_consistency",),
+    ).fetchone() is not None
+    assert upgraded.execute(
+        "SELECT version FROM schema_migrations WHERE version=?",
+        ("0034_settlement_payment_obligation_amount_consistency",),
     ).fetchone() is not None
 
     # The new guards must apply to existing rows after upgrade, not only clean installs.

@@ -94,3 +94,45 @@ def test_payment_and_obligation_readers_fail_closed_on_legacy_amount_mismatch():
     assert db.execute("SELECT amount_minor FROM payments WHERE payment_id=?", (payment_id,)).fetchone()[0] == 101
     assert db.execute("SELECT amount_minor FROM obligations WHERE obligation_id=?", (obligation_id,)).fetchone()[0] == 100
     db.close()
+
+
+
+def test_database_rejects_settlement_payment_above_indirect_obligation_amount():
+    db, obligation_id, payment_id = seed()
+    # This valid relationship is indirect: Payment has no direct obligation_id,
+    # while Settlement supplies the obligation identity.
+    db.execute("UPDATE payments SET obligation_id=NULL, amount_minor=101 WHERE payment_id=?", (payment_id,))
+    with pytest.raises(
+        sqlite3.IntegrityError,
+        match="settled payment amount_minor must not exceed linked obligation amount_minor",
+    ):
+        db.execute(
+            "INSERT INTO settlements(settlement_id,payment_id,obligation_id,state,created_at,updated_at) "
+            "VALUES(?,?,?,'settled',?,?)",
+            (uid(), payment_id, obligation_id, STAMP, STAMP),
+        )
+    assert db.execute("SELECT COUNT(*) FROM settlements WHERE payment_id=?", (payment_id,)).fetchone()[0] == 0
+    db.close()
+
+
+def test_payment_and_obligation_readers_fail_closed_on_legacy_settled_amount_mismatch():
+    db, obligation_id, payment_id = seed()
+    db.execute("UPDATE payments SET obligation_id=NULL, amount_minor=101 WHERE payment_id=?", (payment_id,))
+    # Simulate a legacy/corrupt database created before the new settlement guard.
+    db.execute("DROP TRIGGER settlement_payment_amount_within_obligation_insert")
+    db.execute(
+        "INSERT INTO settlements(settlement_id,payment_id,obligation_id,state,created_at,updated_at) "
+        "VALUES(?,?,?,'settled',?,?)",
+        (uid(), payment_id, obligation_id, STAMP, STAMP),
+    )
+    db.commit()
+
+    with pytest.raises(ValidationError, match="amount exceeds its settled Obligation amount"):
+        PaymentApplication().get_payment(db, payment_id)
+    with pytest.raises(ValidationError, match="settled Payment amount exceeds its Obligation amount"):
+        ObligationApplication().get_obligation(db, obligation_id)
+
+    # Reads report corruption and never silently change the persisted amount.
+    assert db.execute("SELECT amount_minor FROM payments WHERE payment_id=?", (payment_id,)).fetchone()[0] == 101
+    assert db.execute("SELECT amount_minor FROM obligations WHERE obligation_id=?", (obligation_id,)).fetchone()[0] == 100
+    db.close()
