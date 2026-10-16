@@ -72,6 +72,20 @@ class PaymentApplication:
             raise ValidationError(f"{label} must be a valid UUID") from exc
 
     @staticmethod
+    def _currency_code(value):
+        """Validate and canonicalize a currency code's representation.
+
+        This does not establish that the code is officially assigned or enabled
+        for a market/account; that requires the project's currency policy.
+        """
+        if not isinstance(value, str):
+            raise ValidationError("Payment currency_code must be a three-letter ASCII code")
+        code = value.strip()
+        if len(code) != 3 or not code.isascii() or not code.isalpha():
+            raise ValidationError("Payment currency_code must be a three-letter ASCII code")
+        return code.upper()
+
+    @staticmethod
     def _instant(value, label):
         if isinstance(value, str):
             try:
@@ -191,9 +205,7 @@ class PaymentApplication:
             raise ValidationError("Payment parties must differ")
         if type(amount_minor) is not int or amount_minor <= 0:
             raise ValidationError("Payment amount_minor must be a positive integer")
-        if not isinstance(currency_code, str) or not currency_code.strip():
-            raise ValidationError("Payment currency_code is required")
-        currency_code = currency_code.strip()
+        currency_code = self._currency_code(currency_code)
         timestamp = self._timestamp(now or datetime.now(timezone.utc), "Payment creation timestamp")
         with self._atomic(connection):
             actor = self._authorize(
@@ -217,7 +229,7 @@ class PaymentApplication:
                 obligation_amount, obligation_currency = obligation_record
                 if amount_minor > obligation_amount:
                     raise ValidationError("Payment amount exceeds the linked Obligation amount")
-                if currency_code != obligation_currency:
+                if currency_code != self._currency_code(obligation_currency):
                     raise ValidationError("Payment currency does not match the linked Obligation currency")
             if invoice is not None and connection.execute(
                 "SELECT 1 FROM invoices WHERE invoice_id=?", (invoice,)
