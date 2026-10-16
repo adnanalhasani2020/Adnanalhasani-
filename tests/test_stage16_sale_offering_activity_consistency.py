@@ -209,6 +209,11 @@ def test_existing_database_migration_preserves_sales_invoices_and_history_on_reo
         ("0021_supplier_invoice_header_line_consistency",),
         ("0026_unit_retirement_is_irreversible",),
         ("0027_unit_code_format_guards",),
+        ("0028_currency_code_representation_guards",),
+        ("0029_ledger_currency_consistency_guards",),
+        ("0030_linked_financial_currency_consistency",),
+        ("0031_settlement_recognition_currency_consistency",),
+        ("0032_payment_obligation_settlement_link_guard",),
         ("9998_activity_invitations",),
         ("9999_file_attachments",),
     ]

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from agent_core.shared import ValidationError
+from agent_core.shared import ValidationError, normalize_currency_code, require_canonical_currency_code
 
 
 _PAYMENT_TRANSITIONS = {
@@ -70,6 +70,15 @@ class PaymentApplication:
             return UUID(str(value))
         except (ValueError, TypeError, AttributeError) as exc:
             raise ValidationError(f"{label} must be a valid UUID") from exc
+
+    @staticmethod
+    def _currency_code(value):
+        """Validate and canonicalize a currency code's representation.
+
+        This does not establish that the code is officially assigned or enabled
+        for a market/account; that requires the project's currency policy.
+        """
+        return normalize_currency_code(value, label="Payment currency_code")
 
     @staticmethod
     def _instant(value, label):
@@ -160,6 +169,33 @@ class PaymentApplication:
             raise ValidationError("Payment does not exist")
         (pid, obligation, invoice, payer, payee, amount, currency, state, provider, external,
          created, updated, version) = row
+        currency = require_canonical_currency_code(
+            currency, label="Persisted Payment currency_code"
+        )
+        if obligation is not None:
+            obligation_row = connection.execute(
+                "SELECT currency_code FROM obligations WHERE obligation_id=?", (obligation,),
+            ).fetchone()
+            if obligation_row is None:
+                raise ValidationError("Persisted Payment references a missing Obligation")
+            obligation_currency = require_canonical_currency_code(
+                obligation_row[0], label="Persisted linked Obligation currency_code"
+            )
+            if currency != obligation_currency:
+                raise ValidationError(
+                    "Persisted Payment currency does not match its linked Obligation currency"
+                )
+        for (obligation_currency,) in connection.execute(
+            "SELECT o.currency_code FROM settlements s "
+            "JOIN obligations o ON o.obligation_id=s.obligation_id WHERE s.payment_id=?", (pid,),
+        ).fetchall():
+            obligation_currency = require_canonical_currency_code(
+                obligation_currency, label="Persisted settled Obligation currency_code"
+            )
+            if currency != obligation_currency:
+                raise ValidationError(
+                    "Persisted Payment currency does not match its settled Obligation currency"
+                )
         if obligation is not None and invoice is not None:
             invoice_link = connection.execute(
                 "SELECT obligation_id FROM invoices WHERE invoice_id=?", (invoice,),
@@ -191,9 +227,7 @@ class PaymentApplication:
             raise ValidationError("Payment parties must differ")
         if type(amount_minor) is not int or amount_minor <= 0:
             raise ValidationError("Payment amount_minor must be a positive integer")
-        if not isinstance(currency_code, str) or not currency_code.strip():
-            raise ValidationError("Payment currency_code is required")
-        currency_code = currency_code.strip()
+        currency_code = self._currency_code(currency_code)
         timestamp = self._timestamp(now if now is not None else datetime.now(timezone.utc), "Payment creation timestamp")
         with self._atomic(connection):
             actor = self._authorize(
@@ -217,7 +251,7 @@ class PaymentApplication:
                 obligation_amount, obligation_currency = obligation_record
                 if amount_minor > obligation_amount:
                     raise ValidationError("Payment amount exceeds the linked Obligation amount")
-                if currency_code != obligation_currency:
+                if currency_code != self._currency_code(obligation_currency):
                     raise ValidationError("Payment currency does not match the linked Obligation currency")
             if invoice is not None and connection.execute(
                 "SELECT 1 FROM invoices WHERE invoice_id=?", (invoice,)

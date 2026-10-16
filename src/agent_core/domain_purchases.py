@@ -2,7 +2,7 @@ from dataclasses import dataclass, field, replace
 from enum import Enum
 from fractions import Fraction
 from uuid import UUID
-from agent_core.shared import ValidationError, new_id
+from agent_core.shared import ValidationError, new_id, require_canonical_currency_code
 
 _MAX_SQLITE_INTEGER = 2**63 - 1
 
@@ -47,8 +47,8 @@ class PurchaseLine:
         if self.unit_cost_minor is None:
             if self.currency_code is not None:
                 raise ValidationError("currency_code requires unit_cost_minor")
-        elif not isinstance(self.currency_code, str) or len(self.currency_code) != 3 or not self.currency_code.isascii() or not self.currency_code.isalpha() or self.currency_code != self.currency_code.upper():
-            raise ValidationError("currency_code must be a 3-letter uppercase code")
+        else:
+            require_canonical_currency_code(self.currency_code)
         if type(self.received_quantity_units) is not int or not 0 <= self.received_quantity_units <= self.quantity_units:
             raise ValidationError("received quantity must be within the ordered quantity")
         snapshot_values = (

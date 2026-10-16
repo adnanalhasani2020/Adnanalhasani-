@@ -1,11 +1,13 @@
 import sqlite3
 import tempfile
 import uuid
+import shutil
 from pathlib import Path
 
 import pytest
 
 from agent_core.integrity import DurableOperationAuthority, IdentityResolutionAuthority
+import agent_core.persistence as persistence
 from agent_core.persistence import apply_migrations, connect_database
 
 
@@ -100,6 +102,11 @@ def test_clean_install_has_exactly_57_domain_tables_plus_migration_bookkeeping()
         "0021_supplier_invoice_header_line_consistency",
         "0026_unit_retirement_is_irreversible",
         "0027_unit_code_format_guards",
+        "0028_currency_code_representation_guards",
+        "0029_ledger_currency_consistency_guards",
+        "0030_linked_financial_currency_consistency",
+        "0031_settlement_recognition_currency_consistency",
+        "0032_payment_obligation_settlement_link_guard",
         "9998_activity_invitations",
         "9999_file_attachments",
     ]
@@ -117,7 +124,7 @@ def test_existing_db_migration_preserves_data_and_is_idempotent(tmp_path):
     before = reopened.execute("SELECT COUNT(*) FROM persons").fetchone()[0]
     assert apply_migrations(reopened) == []
     assert reopened.execute("SELECT COUNT(*) FROM persons").fetchone()[0] == before
-    assert reopened.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0] == 21
+    assert reopened.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0] == 26
 
 
 def test_constraints_are_enforced_at_runtime():
@@ -355,3 +362,57 @@ def test_no_destructive_cascade_on_protected_domains():
         assert "ON DELETE CASCADE" not in sql.upper()
     foreign_keys = db.execute("PRAGMA foreign_key_list(financial_transactions)").fetchall()
     assert all((row[6] or "").upper() != "CASCADE" for row in foreign_keys)
+
+
+
+def test_currency_migrations_upgrade_populated_financial_database(tmp_path, monkeypatch):
+    """Apply currency guards to an existing database without losing valid finance rows."""
+    legacy_dir = tmp_path / "legacy_migrations"
+    legacy_dir.mkdir()
+    current_migrations = persistence.MIGRATIONS_DIR
+
+    # Build the database using the same migration set as a release before 0022.
+    for migration in current_migrations.glob("*.sql"):
+        version = migration.stem
+        if version < "0028_currency_code_representation_guards" or version >= "9998_activity_invitations":
+            shutil.copy2(migration, legacy_dir / migration.name)
+
+    database_path = tmp_path / "populated-before-currency-guards.sqlite"
+    monkeypatch.setattr(persistence, "MIGRATIONS_DIR", legacy_dir)
+    old_db = connect_database(database_path)
+    account_id, obligation_id, payment_id, settlement_id = _financial_fixture(old_db)
+    old_db.commit()
+    old_db.close()
+
+    # Upgrade the exact same file using the current migration directory.
+    monkeypatch.setattr(persistence, "MIGRATIONS_DIR", current_migrations)
+    upgraded = connect_database(database_path)
+
+    assert upgraded.execute(
+        "SELECT obligation_id FROM payments WHERE payment_id=?", (payment_id,)
+    ).fetchone()[0] == obligation_id
+    assert upgraded.execute(
+        "SELECT payment_id FROM settlements WHERE settlement_id=?", (settlement_id,)
+    ).fetchone()[0] == payment_id
+    assert upgraded.execute(
+        "SELECT version FROM schema_migrations WHERE version=?",
+        ("0032_payment_obligation_settlement_link_guard",),
+    ).fetchone() is not None
+
+    # The new guards must apply to existing rows after upgrade, not only clean installs.
+    with pytest.raises(sqlite3.IntegrityError, match="payment currency_code must match settled obligation currency_code"):
+        upgraded.execute(
+            "UPDATE payments SET currency_code='USD' WHERE payment_id=?", (payment_id,)
+        )
+    with pytest.raises(sqlite3.IntegrityError, match="payment obligation must match existing settlements"):
+        upgraded.execute(
+            "UPDATE payments SET obligation_id=NULL WHERE payment_id=?", (payment_id,)
+        )
+
+    assert upgraded.execute(
+        "SELECT currency_code FROM payments WHERE payment_id=?", (payment_id,)
+    ).fetchone()[0] == "YER"
+    assert upgraded.execute(
+        "SELECT COUNT(*) FROM financial_accounts WHERE financial_account_id=?", (account_id,)
+    ).fetchone()[0] == 1
+    upgraded.close()
