@@ -183,10 +183,14 @@ class ObligationApplication:
                 raise ValidationError(
                     "Persisted Obligation currency does not match a linked Payment currency"
                 )
-        for (payment_currency,) in connection.execute(
-            "SELECT p.currency_code FROM settlements s "
+        for (payment_amount, payment_currency) in connection.execute(
+            "SELECT p.amount_minor,p.currency_code FROM settlements s "
             "JOIN payments p ON p.payment_id=s.payment_id WHERE s.obligation_id=?", (oid,),
         ).fetchall():
+            if payment_amount > amount:
+                raise ValidationError(
+                    "Persisted settled Payment amount exceeds its Obligation amount"
+                )
             payment_currency = require_canonical_currency_code(
                 payment_currency, label="Persisted settled Payment currency_code"
             )
