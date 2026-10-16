@@ -56,15 +56,19 @@ class FinancialOpeningBalanceApplication:
             raise ValidationError(f"{label} must be a valid UUID") from exc
 
     @staticmethod
-    def _timestamp(value, label):
+    def _instant(value, label):
         if isinstance(value, str):
             try:
                 value = datetime.fromisoformat(value.replace("Z", "+00:00"))
             except ValueError as exc:
                 raise ValidationError(f"{label} must be a valid ISO-8601 timestamp") from exc
         if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
-            raise ValidationError(f"{label} must be timezone-aware")
-        return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+            raise ValidationError(f"{label} must be a valid timezone-aware timestamp")
+        return value.astimezone(timezone.utc)
+
+    @classmethod
+    def _timestamp(cls, value, label):
+        return cls._instant(value, label).isoformat().replace("+00:00", "Z")
 
     def _authorize(self, connection, *, account_id, context_ref, authorization_grant_id,
                    agent_action_id, now):
@@ -84,10 +88,11 @@ class FinancialOpeningBalanceApplication:
             raise ValidationError(f"AuthorizationGrant does not permit action {self.ACTION_CODE}")
         if scope_ref != account_id or grant_context != context:
             raise ValidationError("AuthorizationGrant scope/context does not match opening balance")
-        instant = datetime.fromisoformat(now.replace("Z", "+00:00"))
-        if datetime.fromisoformat(starts.replace("Z", "+00:00")) > instant:
+        instant = self._instant(now, "Opening balance operation timestamp")
+        starts_at = self._instant(starts, "AuthorizationGrant effective_from")
+        if starts_at > instant:
             raise ValidationError("AuthorizationGrant is outside its effective period")
-        if ends is not None and instant >= datetime.fromisoformat(ends.replace("Z", "+00:00")):
+        if ends is not None and instant >= self._instant(ends, "AuthorizationGrant effective_to"):
             raise ValidationError("AuthorizationGrant is outside its effective period")
 
         action = connection.execute(

@@ -91,7 +91,8 @@ def test_balance_zero_when_no_recognized_posted_entries_and_does_not_write():
     [
         ("not-a-uuid", "YER", "2026-10-10T00:00:00Z", "valid UUID"),
         (str(uuid4()), "YER", "2026-10-10T00:00:00Z", "does not exist"),
-        (str(uuid4()), "", "2026-10-10T00:00:00Z", "currency_code is required"),
+        (str(uuid4()), "", "2026-10-10T00:00:00Z", "3-letter uppercase"),
+        (str(uuid4()), "yer", "2026-10-10T00:00:00Z", "3-letter uppercase"),
         (str(uuid4()), "YER", datetime(2026, 10, 10), "timezone-aware"),
     ],
 )
