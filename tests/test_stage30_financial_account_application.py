@@ -280,3 +280,24 @@ def test_closed_financial_account_cannot_be_closed_again():
             authorization_grant_id=grant, agent_action_id=action, now=STAMP,
         )
     db.close()
+
+@pytest.mark.parametrize("bad_now", ["", 0, False])
+def test_financial_account_rejects_explicit_falsey_creation_timestamp_without_writes(bad_now):
+    db = connect_database()
+    owner, _approver, _agent, context = seed(db)
+    app = FinancialAccountApplication()
+    account_id = uid()
+    with pytest.raises(ValidationError, match="Financial Account creation timestamp"):
+        app.create_account(
+            db, financial_account_id=account_id, person_id=owner,
+            account_type="personal", context_ref=context,
+            authorization_grant_id=uid(), agent_action_id=uid(), now=bad_now,
+        )
+    assert db.execute(
+        "SELECT COUNT(*) FROM financial_accounts WHERE financial_account_id=?", (account_id,)
+    ).fetchone()[0] == 0
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=?", (account_id,)
+    ).fetchone()[0] == 0
+    db.close()
+

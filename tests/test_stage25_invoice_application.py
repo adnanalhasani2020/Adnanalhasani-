@@ -226,3 +226,42 @@ def test_invoice_void_rejects_stale_version_without_mutation():
     assert app.get_invoice(db, issued.invoice.id).invoice.state.value == "issued"
     assert app.get_invoice(db, issued.invoice.id).version_no == 1
     db.close()
+
+@pytest.mark.parametrize("bad_now", ["", 0, False])
+def test_invoice_rejects_explicit_falsey_creation_timestamp_without_writes(bad_now):
+    db = connect_database()
+    actor, _activity, sale, grant = fixture(db)
+    app = InvoiceApplication()
+    invoice_id = uid()
+    with pytest.raises(ValidationError, match="Invoice creation timestamp"):
+        app.create_invoice(
+            db, sale_id=sale, actor_context_ref=actor,
+            authorization_grant_id=grant, issuer_ref=actor,
+            invoice_number="INV-BAD-TIME", invoice_id=invoice_id, now=bad_now,
+        )
+    assert db.execute("SELECT COUNT(*) FROM invoices WHERE invoice_id=?", (invoice_id,)).fetchone()[0] == 0
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=?", (invoice_id,)
+    ).fetchone()[0] == 0
+    db.close()
+
+
+@pytest.mark.parametrize("bad_issue_at", ["", 0, False])
+def test_invoice_rejects_explicit_falsey_issue_timestamp_without_writes(bad_issue_at):
+    db = connect_database()
+    actor, _activity, sale, grant = fixture(db)
+    app = InvoiceApplication()
+    invoice_id = uid()
+    with pytest.raises(ValidationError, match="Invoice issue timestamp"):
+        app.create_invoice(
+            db, sale_id=sale, actor_context_ref=actor,
+            authorization_grant_id=grant, issuer_ref=actor,
+            invoice_number="INV-BAD-ISSUE-TIME", invoice_id=invoice_id,
+            issue_at=bad_issue_at, now=STAMP,
+        )
+    assert db.execute("SELECT COUNT(*) FROM invoices WHERE invoice_id=?", (invoice_id,)).fetchone()[0] == 0
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=?", (invoice_id,)
+    ).fetchone()[0] == 0
+    db.close()
+

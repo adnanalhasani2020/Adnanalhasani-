@@ -173,7 +173,7 @@ class LoanApplication:
         if not isinstance(currency_code, str) or not currency_code.strip():
             raise ValidationError("Loan currency_code is required")
         currency_code = currency_code.strip()
-        timestamp = self._timestamp(now or datetime.now(timezone.utc), "Loan creation timestamp")
+        timestamp = self._timestamp(now if now is not None else datetime.now(timezone.utc), "Loan creation timestamp")
         maturity = self._timestamp(maturity_at, "Loan maturity_at") if maturity_at is not None else None
         with self._atomic(connection):
             actor = self._authorize(
@@ -215,7 +215,7 @@ class LoanApplication:
             raise ValidationError("Loan expected_version must be a positive integer")
         if not isinstance(target_state, str) or target_state not in {"active", "closed", "cancelled"}:
             raise ValidationError("Unsupported persisted Loan target state")
-        timestamp = self._timestamp(now or datetime.now(timezone.utc), "Loan transition timestamp")
+        timestamp = self._timestamp(now if now is not None else datetime.now(timezone.utc), "Loan transition timestamp")
         action_code = f"loan.transition.{target_state}"
         with self._atomic(connection):
             actor = self._authorize(

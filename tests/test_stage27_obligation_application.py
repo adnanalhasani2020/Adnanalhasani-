@@ -377,3 +377,22 @@ def test_obligation_rejects_invoice_already_linked_to_another_obligation_atomica
         "SELECT source_invoice_id FROM obligations WHERE obligation_id=?", (second_id,)
     ).fetchone()[0] == invoice
     db.close()
+
+@pytest.mark.parametrize("bad_now", ["", 0, False])
+def test_obligation_rejects_explicit_falsey_creation_timestamp_without_writes(bad_now):
+    db = connect_database()
+    parties = seed(db)
+    creditor, debtor, _approver, _agent, context = parties
+    app = ObligationApplication()
+    obligation_id = uid()
+    with pytest.raises(ValidationError, match="Obligation creation timestamp"):
+        app.create_obligation(
+            db, obligation_id=obligation_id, creditor_person_id=creditor,
+            debtor_person_id=debtor, amount_minor=10000, currency_code="YER",
+            context_ref=context, authorization_grant_id=uid(), agent_action_id=uid(),
+            now=bad_now,
+        )
+    assert db.execute("SELECT COUNT(*) FROM obligations WHERE obligation_id=?", (obligation_id,)).fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM domain_history WHERE target_ref=?", (obligation_id,)).fetchone()[0] == 0
+    db.close()
+

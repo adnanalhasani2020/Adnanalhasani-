@@ -185,7 +185,7 @@ class ObligationApplication:
         if not isinstance(currency_code, str) or not currency_code.strip():
             raise ValidationError("Obligation currency_code is required")
         currency_code = currency_code.strip()
-        timestamp = self._timestamp(now or datetime.now(timezone.utc), "Obligation creation timestamp")
+        timestamp = self._timestamp(now if now is not None else datetime.now(timezone.utc), "Obligation creation timestamp")
         due_timestamp = self._timestamp(due_at, "Obligation due_at") if due_at is not None else None
         with self._atomic(connection):
             actor = self._authorize(
@@ -242,7 +242,7 @@ class ObligationApplication:
             raise ValidationError("Obligation expected_version must be a positive integer")
         if not isinstance(target_state, str) or target_state not in {"open", "due", "overdue", "satisfied", "cancelled"}:
             raise ValidationError("Unsupported persisted Obligation target state")
-        timestamp = self._timestamp(now or datetime.now(timezone.utc), "Obligation transition timestamp")
+        timestamp = self._timestamp(now if now is not None else datetime.now(timezone.utc), "Obligation transition timestamp")
         action_code = f"obligation.transition.{target_state}"
         with self._atomic(connection):
             actor = self._authorize(

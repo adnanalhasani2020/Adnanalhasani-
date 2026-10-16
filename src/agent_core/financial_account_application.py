@@ -154,7 +154,7 @@ class FinancialAccountApplication:
         if not isinstance(account_type, str) or not account_type.strip():
             raise ValidationError("Financial Account account_type is required")
         kind = account_type.strip()
-        timestamp = self._timestamp(now or datetime.now(timezone.utc), "Financial Account creation timestamp")
+        timestamp = self._timestamp(now if now is not None else datetime.now(timezone.utc), "Financial Account creation timestamp")
         with self._atomic(connection):
             actor = self._authorize(
                 connection, account_id=key, context_ref=context_ref, action_code="financial_account.create",
@@ -190,7 +190,7 @@ class FinancialAccountApplication:
         key = str(self._uuid(financial_account_id, "Financial Account identifier"))
         if type(expected_version) is not int or expected_version < 1:
             raise ValidationError("Financial Account expected_version must be a positive integer")
-        timestamp = self._timestamp(now or datetime.now(timezone.utc), "Financial Account close timestamp")
+        timestamp = self._timestamp(now if now is not None else datetime.now(timezone.utc), "Financial Account close timestamp")
         with self._atomic(connection):
             actor = self._authorize(
                 connection, account_id=key, context_ref=context_ref, action_code="financial_account.close",
