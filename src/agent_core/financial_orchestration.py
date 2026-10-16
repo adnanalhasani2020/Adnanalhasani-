@@ -48,12 +48,16 @@ class FinancialOrchestrator:
         if not isinstance(value,UUID): raise ValidationError(f"{name} must be UUID")
 
     @staticmethod
-    def _validate_matching(payment,settlement,obligation):
+    def _validate_matching(payment,settlement,obligation,account):
         if not isinstance(payment,Payment) or not isinstance(settlement,Settlement) or not isinstance(obligation,Obligation):
             raise ValidationError("Payment, Settlement, and Obligation are required")
+        if not isinstance(account,FinancialAccount):
+            raise ValidationError("FinancialAccount is required")
         if settlement.payment_id!=payment.id: raise ValidationError("Settlement does not match Payment")
         if settlement.obligation_id!=obligation.id: raise ValidationError("Settlement does not match Obligation")
         if payment.obligation_id is not None and payment.obligation_id!=obligation.id: raise ValidationError("Payment does not match Obligation")
+        if obligation.financial_account_id!=account.id:
+            raise ValidationError("FinancialAccount does not match Obligation")
         if payment.state!=PaymentState.COMPLETED: raise ValidationError("Payment must be COMPLETED")
         if settlement.state!=SettlementState.SETTLED: raise ValidationError("Settlement must be SETTLED")
         if obligation.state not in (ObligationState.OPEN,ObligationState.DUE,ObligationState.OVERDUE):
@@ -68,16 +72,18 @@ class FinancialOrchestrator:
         self._require_uuid(workflow_id,"WorkflowId")
         if not isinstance(account,FinancialAccount): raise ValidationError("FinancialAccount is required")
         if account.state.value!="active": raise ValidationError("FinancialAccount must be ACTIVE")
-        request={"workflow_id":str(workflow_id),"payment_id":str(payment.id),"settlement_id":str(settlement.id),"obligation_id":str(obligation.id),"amount":str(payment.amount)}
+        request={"workflow_id":str(workflow_id),"payment_id":str(payment.id),"settlement_id":str(settlement.id),"obligation_id":str(obligation.id),"financial_account_id":str(account.id),"amount":str(payment.amount)}
 
         def recognition_effect():
             history=[WorkflowEvent(workflow_id,WorkflowState.CREATED,"workflow_created")]
             try:
                 history.append(WorkflowEvent(workflow_id,WorkflowState.IN_PROGRESS,"integrity_checks"))
-                self._validate_matching(payment,settlement,obligation)
+                self._validate_matching(payment,settlement,obligation,account)
                 if not connected: raise ValidationError("Financial finality requires connectivity")
                 transaction,ledger=self.recognition.recognize(financial_account_id=account.id,amount=payment.amount)
-                obligation.satisfy()
+                # A partial payment is recognized financially but cannot discharge the full obligation.
+                if payment.amount == obligation.amount:
+                    obligation.satisfy()
                 history.append(WorkflowEvent(workflow_id,WorkflowState.RECOGNIZED,"financial_recognition",detail=str(ledger.id)))
                 result=RecognitionResult(workflow_id,transaction.id,ledger.id,payment.amount,WorkflowState.RECOGNIZED,tuple(e.as_dict() for e in history))
                 with self._lock: self._workflows[workflow_id]=result
