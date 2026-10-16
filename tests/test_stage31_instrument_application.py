@@ -319,3 +319,44 @@ def test_instrument_transition_fails_closed_on_malformed_persisted_timestamp():
         (str(instrument.instrument_id),),
     ).fetchone()[0] == 1
     db.close()
+
+
+
+@pytest.mark.parametrize("invalid_timestamp", ["", 0, False])
+def test_instrument_creation_rejects_explicit_falsey_timestamps(invalid_timestamp):
+    db = connect_database()
+    app = InstrumentApplication()
+    with pytest.raises(ValidationError, match="creation timestamp"):
+        app.create_instrument(
+            db, instrument_id=uid(), instrument_type="unspecified",
+            issuer_ref="issuer-ref", canonical_identifier=f"invalid-create-time-{type(invalid_timestamp).__name__}",
+            actor_context_ref="internal-context", now=invalid_timestamp,
+        )
+    assert db.execute("SELECT COUNT(*) FROM instruments").fetchone()[0] == 0
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE owner_domain='instrument'"
+    ).fetchone()[0] == 0
+    db.close()
+
+
+@pytest.mark.parametrize("invalid_timestamp", ["", 0, False])
+def test_instrument_transition_rejects_explicit_falsey_timestamps_without_mutation(invalid_timestamp):
+    db = connect_database()
+    app = InstrumentApplication()
+    instrument = app.create_instrument(
+        db, instrument_id=uid(), instrument_type="unspecified",
+        issuer_ref="issuer-ref", canonical_identifier=f"invalid-transition-time-{type(invalid_timestamp).__name__}",
+        actor_context_ref="internal-context", now=STAMP,
+    )
+    with pytest.raises(ValidationError, match="transition timestamp"):
+        app.transition_instrument(
+            db, instrument.instrument_id, "activate", expected_version=1,
+            actor_context_ref="internal-context", now=invalid_timestamp,
+        )
+    current = app.get_instrument(db, instrument.instrument_id)
+    assert (current.state, current.version_no) == ("issued", 1)
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=?",
+        (str(instrument.instrument_id),),
+    ).fetchone()[0] == 1
+    db.close()
