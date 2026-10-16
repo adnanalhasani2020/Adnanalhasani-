@@ -4,7 +4,10 @@ import uuid
 
 import pytest
 
+from agent_core.obligation_application import ObligationApplication
+from agent_core.payment_application import PaymentApplication
 from agent_core.persistence import connect_database
+from agent_core.shared import ValidationError
 
 STAMP = "2026-10-16T00:00:00Z"
 
@@ -143,4 +146,34 @@ def test_recognized_settlement_transaction_must_match_payment_currency():
         "SELECT currency_code FROM financial_transactions WHERE financial_transaction_id=?",
         (transaction_id,),
     ).fetchone()[0] == "YER"
+    db.close()
+
+
+def test_obligation_read_fails_closed_on_legacy_loan_currency_mismatch():
+    db = connect_database()
+    lender, borrower = person(db), person(db)
+    loan_id = loan(db, lender, borrower, "YER")
+    obligation_id = obligation(db, lender, borrower, "YER", loan_id)
+    db.execute("DROP TRIGGER loan_currency_matches_existing_obligations_update")
+    db.execute("UPDATE loans SET currency_code='USD' WHERE loan_id=?", (loan_id,))
+    with pytest.raises(ValidationError, match="does not match its linked Loan currency"):
+        ObligationApplication().get_obligation(db, obligation_id)
+    assert db.execute(
+        "SELECT currency_code FROM obligations WHERE obligation_id=?", (obligation_id,)
+    ).fetchone()[0] == "YER"
+    db.close()
+
+
+def test_payment_read_fails_closed_on_legacy_obligation_currency_mismatch():
+    db = connect_database()
+    creditor, debtor = person(db), person(db)
+    obligation_id = obligation(db, creditor, debtor, "YER")
+    payment_id = payment(db, debtor, creditor, "YER", obligation_id)
+    db.execute("DROP TRIGGER payment_obligation_currency_matches_update")
+    db.execute("UPDATE payments SET currency_code='USD' WHERE payment_id=?", (payment_id,))
+    with pytest.raises(ValidationError, match="does not match its linked Obligation currency"):
+        PaymentApplication().get_payment(db, payment_id)
+    assert db.execute(
+        "SELECT currency_code FROM payments WHERE payment_id=?", (payment_id,)
+    ).fetchone()[0] == "USD"
     db.close()
