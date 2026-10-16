@@ -33,7 +33,7 @@ def seed():
     db.execute(
         "INSERT INTO payments(payment_id,obligation_id,payer_person_id,payee_person_id,amount_minor,"
         "currency_code,state,created_at,updated_at) VALUES(?,?,?,?,100,'YER','initiated',?,?)",
-        (payment_id, debtor, creditor, obligation_id, STAMP, STAMP),
+        (payment_id, obligation_id, debtor, creditor, STAMP, STAMP),
     )
     db.commit()
     return db, obligation_id, payment_id
