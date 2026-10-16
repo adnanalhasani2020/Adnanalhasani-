@@ -133,6 +133,27 @@ def test_opening_balance_rejects_invalid_values_without_writes(amount, currency,
     db.close()
 
 
+@pytest.mark.parametrize("invalid_timestamp", ["", 0, False])
+def test_opening_balance_rejects_explicit_falsey_timestamps_without_financial_writes(invalid_timestamp):
+    db = connect_database()
+    _, approver, agent, context, account_id = seed(db)
+    grant, action = authorize(db, agent=agent, approver=approver, context=context, account_id=account_id)
+
+    with pytest.raises(ValidationError, match="timestamp"):
+        FinancialOpeningBalanceApplication().record_opening_balance(
+            db, financial_account_id=account_id, amount_minor=100, currency_code="YER",
+            source_ref="source", context_ref=context, authorization_grant_id=grant,
+            agent_action_id=action, now=invalid_timestamp,
+        )
+
+    assert db.execute("SELECT COUNT(*) FROM financial_transactions").fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM ledger_entries").fetchone()[0] == 0
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE change_type='financial_opening_balance'"
+    ).fetchone()[0] == 0
+    db.close()
+
+
 @pytest.mark.parametrize("bad", ["unapproved", "missing_approval"])
 def test_opening_balance_rejects_invalid_authority_without_financial_writes(bad):
     db = connect_database()
