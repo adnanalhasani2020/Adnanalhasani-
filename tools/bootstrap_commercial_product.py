@@ -81,6 +81,7 @@ def main():
             unit_price_minor=args.unit_price_minor, currency_code=args.currency_code,
             actor_context_ref=args.actor_context_ref, effective_from=stamp, now=stamp,
         )
+        db.commit()
         print(json.dumps({
             "activity_id": activity_id,
             "product_id": str(product.product.id),
