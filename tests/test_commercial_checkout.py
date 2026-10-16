@@ -345,3 +345,21 @@ def test_checkout_idempotency_survives_database_reopen(tmp_path):
     assert reopened.execute("SELECT COUNT(*) FROM commercial_checkout_receipts").fetchone()[0] == 1
     assert reopened.execute("SELECT SUM(quantity_delta) FROM inventory_movements").fetchone()[0] == -2
     reopened.close()
+
+
+def test_checkout_receipt_does_not_imply_financial_recognition_or_ledger_posting(tmp_path):
+    db, request = setup_checkout(tmp_path)
+    app = CommercialCheckoutApplication()
+
+    # A commercial sale/receipt is not, by itself, evidence that money moved
+    # or that an approved accounting-recognition event occurred.
+    assert db.execute("SELECT COUNT(*) FROM financial_transactions").fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM ledger_entries").fetchone()[0] == 0
+
+    result = app.checkout(db, **request, now=NOW)
+
+    assert result["state"] == "fulfilled"
+    assert db.execute("SELECT COUNT(*) FROM commercial_checkout_receipts").fetchone()[0] == 1
+    assert db.execute("SELECT COUNT(*) FROM sales").fetchone()[0] == 1
+    assert db.execute("SELECT COUNT(*) FROM financial_transactions").fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM ledger_entries").fetchone()[0] == 0
