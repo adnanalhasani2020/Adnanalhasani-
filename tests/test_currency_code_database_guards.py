@@ -150,14 +150,14 @@ def test_ledger_entry_must_match_parent_transaction_currency_and_account():
             (entry_id or str(uuid.uuid4()), account_id, tx_id, 100, currency, STAMP, STAMP, STAMP),
         )
 
-    with pytest.raises(sqlite3.IntegrityError, match="ledger entry account/currency"):
+    with pytest.raises(sqlite3.IntegrityError, match="ledger entry account/currency_code"):
         insert_entry(account_id=account_ids[0], currency="USD")
-    with pytest.raises(sqlite3.IntegrityError, match="ledger entry account/currency"):
+    with pytest.raises(sqlite3.IntegrityError, match="ledger entry account/currency_code"):
         insert_entry(account_id=account_ids[1], currency="YER")
 
     entry_id = str(uuid.uuid4())
     insert_entry(account_id=account_ids[0], currency="YER", entry_id=entry_id)
-    with pytest.raises(sqlite3.IntegrityError, match="ledger entry account/currency"):
+    with pytest.raises(sqlite3.IntegrityError, match="ledger entry account/currency_code"):
         db.execute("UPDATE ledger_entries SET currency_code='USD' WHERE ledger_entry_id=?", (entry_id,))
     with pytest.raises(sqlite3.IntegrityError, match="financial transaction account/currency"):
         db.execute("UPDATE financial_transactions SET currency_code='USD' WHERE financial_transaction_id=?", (tx_id,))
