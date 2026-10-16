@@ -42,8 +42,7 @@ CREATE TABLE inventory_movements (
     actor_context_ref TEXT NOT NULL CHECK (length(trim(actor_context_ref)) > 0),
     occurred_at TEXT NOT NULL,
     created_at TEXT NOT NULL,
-    UNIQUE (source_type, source_ref),
-    FOREIGN KEY (inventory_position_id) REFERENCES inventory_positions(inventory_position_id)
+    UNIQUE (source_type, source_ref)
 );
 
 CREATE INDEX ix_inventory_movements_scope_time
