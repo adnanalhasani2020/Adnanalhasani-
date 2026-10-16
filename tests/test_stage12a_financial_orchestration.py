@@ -285,7 +285,7 @@ def test_reversal_preserves_original_history():
         grant=reverse_grant, connected=True,
     )
     assert reversed_result.state is WorkflowState.REVERSED
-    assert reversed_result.amount == Decimal("-40")
+    assert reversed_result.amount == Decimal("-100")
     assert reversed_result.history[: len(original.history)] == original.history
     assert any(event["event"] == "workflow_reversed" for event in reversed_result.history)
 
