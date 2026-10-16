@@ -22,6 +22,7 @@ def database():
     connection.executescript((ROOT / "schema/migrations/0014_product_units.sql").read_text())
     connection.executescript((ROOT / "schema/migrations/0017_purchase_line_unit_snapshot.sql").read_text())
     connection.executescript((ROOT / "schema/migrations/0018_purchase_unit_snapshot_catalog_guards.sql").read_text())
+    connection.executescript((ROOT / "schema/migrations/0020_purchase_receipt_database_guards.sql").read_text())
     now = "2026-10-13T12:00:00Z"
     person, activity, product = str(uuid4()), str(uuid4()), str(uuid4())
     connection.execute(
@@ -380,6 +381,7 @@ def _purchase_with_one_receipt():
 
 def test_purchase_restore_rejects_receipt_actor_that_disagrees_with_history():
     connection, app, record = _purchase_with_one_receipt()
+    connection.execute("DROP TRIGGER trg_purchase_receipt_immutable_update")
     connection.execute(
         "UPDATE purchase_receipts SET actor_context_ref='not-a-uuid' WHERE purchase_id=?",
         (str(record.purchase.id),),
@@ -393,6 +395,7 @@ def test_purchase_restore_rejects_receipt_actor_that_disagrees_with_history():
 
 def test_purchase_restore_rejects_receipt_idempotency_fingerprint_corruption():
     connection, app, record = _purchase_with_one_receipt()
+    connection.execute("DROP TRIGGER trg_purchase_receipt_immutable_update")
     connection.execute(
         "UPDATE purchase_receipts SET request_fingerprint='corrupted' WHERE purchase_id=?",
         (str(record.purchase.id),),
@@ -606,3 +609,36 @@ def test_database_rejects_snapshot_that_does_not_match_active_product_unit():
             (str(uuid4()), str(record.purchase.id), product, 1, "pc", 0, "2026-10-13T12:00:00Z",
              str(uuid4()), str(unit.id), "pc", "Piece", "count", 1, 1, 1, 1),
         )
+
+
+def test_purchase_receipt_evidence_cannot_be_updated_or_deleted_in_database():
+    connection, app, record = _purchase_with_one_receipt()
+    with pytest.raises(sqlite3.IntegrityError, match="purchase receipt evidence is immutable"):
+        connection.execute(
+            "UPDATE purchase_receipts SET actor_context_ref=? WHERE purchase_id=?",
+            (str(uuid4()), str(record.purchase.id)),
+        )
+    with pytest.raises(sqlite3.IntegrityError, match="purchase receipt evidence is immutable"):
+        connection.execute(
+            "DELETE FROM purchase_receipts WHERE purchase_id=?",
+            (str(record.purchase.id),),
+        )
+    assert len(app.get_purchase(connection, record.purchase.id).purchase.receipts) == 1
+    connection.close()
+
+
+def test_database_guard_rejects_receipt_event_not_reflected_in_received_quantity():
+    connection, app, record = _purchase_with_one_receipt()
+    receipt = record.purchase.receipts[0]
+    with pytest.raises(
+        sqlite3.IntegrityError,
+        match="purchase receipt event must agree with persisted received quantity",
+    ):
+        connection.execute(
+            "INSERT INTO purchase_receipts(receipt_id,purchase_id,purchase_line_id,quantity_units,"
+            "received_at,actor_context_ref,idempotency_key,request_fingerprint) VALUES(?,?,?,?,?,?,?,?)",
+            (str(uuid4()), str(record.purchase.id), str(receipt.line_id), 1,
+             "2026-10-16T12:00:00Z", str(uuid4()), "unexpected-direct-receipt", "placeholder"),
+        )
+    assert len(app.get_purchase(connection, record.purchase.id).purchase.receipts) == 1
+    connection.close()
