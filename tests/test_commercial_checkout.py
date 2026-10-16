@@ -320,3 +320,28 @@ def test_checkout_uses_current_effective_price_not_stale_catalog_price(tmp_path)
     assert result["quantity"] == 2
     assert db.execute("SELECT COUNT(*) FROM sales").fetchone()[0] == 1
     assert db.execute("SELECT COUNT(*) FROM inventory_movements").fetchone()[0] == 1
+
+def test_checkout_idempotency_survives_database_reopen(tmp_path):
+    from datetime import timedelta
+
+    db, request = setup_checkout(tmp_path)
+    app = CommercialCheckoutApplication()
+    first = app.checkout(db, **request, now=NOW)
+    db.close()
+
+    # Simulate a process restart after commit but before the client receives
+    # the response. A retry must recover the original receipt, not sell again.
+    reopened = connect_database(tmp_path / "checkout.sqlite")
+    replay = app.checkout(
+        reopened,
+        **request,
+        now=NOW + timedelta(minutes=10),
+    )
+
+    assert replay == first
+    assert reopened.execute("SELECT COUNT(*) FROM sales").fetchone()[0] == 1
+    assert reopened.execute("SELECT COUNT(*) FROM sale_lines").fetchone()[0] == 1
+    assert reopened.execute("SELECT COUNT(*) FROM inventory_movements").fetchone()[0] == 1
+    assert reopened.execute("SELECT COUNT(*) FROM commercial_checkout_receipts").fetchone()[0] == 1
+    assert reopened.execute("SELECT SUM(quantity_delta) FROM inventory_movements").fetchone()[0] == -2
+    reopened.close()
