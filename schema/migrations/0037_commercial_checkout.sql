@@ -23,7 +23,7 @@ CREATE TABLE sale_lines (
     quantity INTEGER NOT NULL CHECK (typeof(quantity) = 'integer' AND quantity > 0),
     unit_price_minor INTEGER NOT NULL CHECK (typeof(unit_price_minor) = 'integer' AND unit_price_minor >= 0),
     currency_code TEXT NOT NULL CHECK (currency_code IN ('SAR','YER','USD')),
-    line_total_minor INTEGER NOT NULL CHECK (typeof(line_total_minor) = 'integer' AND line_total_minor >= 0),
+    line_total_minor INTEGER NOT NULL CHECK (typeof(line_total_minor) = 'integer' AND line_total_minor >= 0 AND line_total_minor = quantity * unit_price_minor),
     created_at TEXT NOT NULL,
     UNIQUE (sale_id, offering_id)
 );
@@ -79,4 +79,46 @@ CREATE TRIGGER sale_line_immutable_delete
 BEFORE DELETE ON sale_lines
 BEGIN
     SELECT RAISE(ABORT, 'sale lines are immutable');
+END;
+
+CREATE TRIGGER sale_line_context_guard
+BEFORE INSERT ON sale_lines
+WHEN NOT EXISTS (
+    SELECT 1 FROM sales s
+    JOIN offerings o ON o.offering_id=s.offering_id
+    WHERE s.sale_id=NEW.sale_id
+      AND s.offering_id=NEW.offering_id
+      AND o.product_id=NEW.product_id
+      AND s.activity_id=o.activity_id
+)
+BEGIN
+    SELECT RAISE(ABORT, 'sale line context must match its Sale and Offering');
+END;
+
+CREATE TRIGGER inventory_movement_context_guard
+BEFORE INSERT ON inventory_movements
+WHEN NOT EXISTS (
+    SELECT 1 FROM inventory_positions p
+    WHERE p.inventory_position_id=NEW.inventory_position_id
+      AND p.activity_id=NEW.activity_id
+      AND p.product_id=NEW.product_id
+      AND p.offering_id=NEW.offering_id
+      AND p.location_ref IS NEW.location_ref
+      AND p.scope_key=NEW.scope_key
+      AND p.state='effective'
+)
+OR (NEW.source_type='sale' AND (
+    NEW.quantity_delta >= 0
+    OR NOT EXISTS (
+        SELECT 1 FROM sales s
+        JOIN sale_lines l ON l.sale_id=s.sale_id
+        WHERE s.sale_id=NEW.source_ref
+          AND s.offering_id=NEW.offering_id
+          AND s.activity_id=NEW.activity_id
+          AND l.product_id=NEW.product_id
+          AND l.quantity=-NEW.quantity_delta
+    )
+))
+BEGIN
+    SELECT RAISE(ABORT, 'inventory movement must match effective position and source transaction');
 END;
