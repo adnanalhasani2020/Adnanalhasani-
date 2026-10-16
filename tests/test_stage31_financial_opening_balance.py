@@ -362,3 +362,39 @@ def test_finance_acceptance_survives_reopen_and_duplicate_retry_is_side_effect_f
     assert reopened.execute("PRAGMA foreign_key_check").fetchall() == []
     assert reopened.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
     reopened.close()
+
+
+def test_opening_balance_survives_database_reopen(tmp_path):
+    path = tmp_path / "opening-balance-reopen.sqlite"
+    db = connect_database(path)
+    _, approver, agent, context, account_id = seed(db)
+    grant, action = authorize(
+        db, agent=agent, approver=approver, context=context, account_id=account_id
+    )
+    result = FinancialOpeningBalanceApplication().record_opening_balance(
+        db, financial_account_id=account_id, amount_minor=1875, currency_code="YER",
+        source_ref="reopen-persistence-evidence", context_ref=context,
+        authorization_grant_id=grant, agent_action_id=action, now=STAMP,
+    )
+    transaction_id = str(result.financial_transaction_id)
+    entry_id = str(result.ledger_entry_id)
+    db.close()
+
+    reopened = connect_database(path)
+    balance = FinancialBalanceReader().read(reopened, account_id, "YER", as_of=STAMP)
+    assert balance.amount_minor == 1875
+    assert balance.entry_count == 1
+    assert reopened.execute(
+        "SELECT state, recognition_source_type, amount_minor FROM financial_transactions "
+        "WHERE financial_transaction_id=?", (transaction_id,)
+    ).fetchone() == ("recognized", "opening_balance", 1875)
+    assert reopened.execute(
+        "SELECT state, amount_minor FROM ledger_entries WHERE ledger_entry_id=?", (entry_id,)
+    ).fetchone() == ("posted", 1875)
+    assert reopened.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=? "
+        "AND change_type='financial_opening_balance'", (account_id,)
+    ).fetchone()[0] == 1
+    assert reopened.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    assert reopened.execute("PRAGMA foreign_key_check").fetchall() == []
+    reopened.close()
