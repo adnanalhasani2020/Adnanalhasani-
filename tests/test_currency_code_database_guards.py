@@ -29,10 +29,10 @@ def test_financial_source_tables_reject_noncanonical_currency_codes(table, curre
 
     if table == "loans":
         sql = (
-            "INSERT INTO loans(loan_id,lender_person_id,borrower_person_id,currency_code,state,"
-            "created_at,updated_at) VALUES(?,?,?,?,?,?,?)"
+            "INSERT INTO loans(loan_id,lender_person_id,borrower_person_id,principal_minor,currency_code,state,"
+            "created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)"
         )
-        values = (row_id, creditor, debtor, currency, "proposed", STAMP, STAMP)
+        values = (row_id, creditor, debtor, 100, currency, "proposed", STAMP, STAMP)
     elif table == "obligations":
         sql = (
             "INSERT INTO obligations(obligation_id,creditor_person_id,debtor_person_id,amount_minor,"
