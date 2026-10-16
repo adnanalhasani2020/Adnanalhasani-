@@ -179,3 +179,11 @@ def test_web_session_can_buy_sellable_product_and_receive_result(tmp_path):
     )
     assert other_history["status"] == "200 OK"
     assert other_history["body"]["items"] == []
+
+
+def test_storefront_displays_preconfirmation_total_preview(tmp_path):
+    app = CommercialWebApplication(tmp_path / "commercial-preview.sqlite")
+    page = request(app, "/", method="GET")
+    assert page["status"] == "200 OK"
+    assert "الإجمالي قبل التأكيد:" in page["body"].decode("utf-8")
+    assert "Number.isSafeInteger(amount)" in page["body"].decode("utf-8")
