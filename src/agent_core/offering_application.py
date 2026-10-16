@@ -161,7 +161,7 @@ class OfferingApplication:
         service_key = str(self._uuid(service_id, "Service identifier")) if service_id is not None else None
         starts = self._instant(effective_from, "Offering.effective_from")
         ends = self._instant(effective_to, "Offering.effective_to", optional=True)
-        created = self._instant(now or datetime.now(timezone.utc), "Offering creation timestamp")
+        created = self._instant(now if now is not None else datetime.now(timezone.utc), "Offering creation timestamp")
         if not isinstance(actor_context_ref, str) or not actor_context_ref.strip():
             raise ValidationError("Offering actor_context_ref is required")
         actor_context_ref = actor_context_ref.strip()
@@ -215,7 +215,7 @@ class OfferingApplication:
             raise ValidationError(f"Unsupported Offering action: {action}")
         if type(expected_version) is not int or expected_version < 1:
             raise ValidationError("Offering expected_version must be a positive integer")
-        instant = self._instant(now or datetime.now(timezone.utc), "Offering transition timestamp")
+        instant = self._instant(now if now is not None else datetime.now(timezone.utc), "Offering transition timestamp")
         if not isinstance(actor_context_ref, str) or not actor_context_ref.strip():
             raise ValidationError("Offering actor_context_ref is required")
         actor_context_ref = actor_context_ref.strip()
