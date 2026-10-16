@@ -199,6 +199,11 @@ def test_existing_database_migration_preserves_sales_invoices_and_history_on_reo
         ("0007_product_name",),
         ("0008_financial_opening_balance",),
         ("0013_inventory_opening_stock",),
+        ("0014_purchases",),
+        ("0015_supplier_invoices",),
+        ("0016_product_units",),
+        ("0017_purchase_line_unit_snapshot",),
+        ("0018_purchase_unit_snapshot_catalog_guards",),
         ("9998_activity_invitations",),
         ("9999_file_attachments",),
     ]
