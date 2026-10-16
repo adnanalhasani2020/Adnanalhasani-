@@ -398,7 +398,7 @@ def test_currency_migrations_upgrade_populated_financial_database(tmp_path, monk
     ).fetchone() is not None
 
     # The new guards must apply to existing rows after upgrade, not only clean installs.
-    with pytest.raises(sqlite3.IntegrityError, match="payment obligation currency_code"):
+    with pytest.raises(sqlite3.IntegrityError, match="payment currency_code must match linked obligation currency_code"):
         upgraded.execute(
             "UPDATE payments SET currency_code='USD' WHERE payment_id=?", (payment_id,)
         )
