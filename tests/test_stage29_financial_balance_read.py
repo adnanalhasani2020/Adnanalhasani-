@@ -51,7 +51,7 @@ def test_balance_derives_only_recognized_posted_entries_for_requested_currency_a
     ledger(db, account_id, 1250, "YER", "2026-10-01T10:00:00Z")
     ledger(db, account_id, -200, "YER", "2026-10-05T10:00:00Z")
     ledger(db, account_id, 900, "YER", "2026-10-08T10:00:00Z", entry_state="void")
-    ledger(db, account_id, 400, "YER", "2026-10-09T10:00:00Z", tx_state="void")
+    ledger(db, account_id, 400, "YER", "2026-10-09T10:00:00Z", tx_state="void", entry_state="void")
     ledger(db, account_id, 700, "USD", "2026-10-09T10:00:00Z")
 
     before = FinancialBalanceReader().read(
