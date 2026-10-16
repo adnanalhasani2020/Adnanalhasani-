@@ -74,10 +74,9 @@ class OfferingPriceApplication:
                     continue
                 if old_start < instant and old_end is None:
                     to_close.append(old_id)
-                elif old_start < instant and old_end is not None and old_end > instant:
-                    # Closing an explicitly bounded price early is an auditable change.
-                    to_close.append(old_id)
                 else:
+                    # Existing bounded windows are immutable; schedule the new price
+                    # at their boundary rather than rewriting a prior decision.
                     raise ValidationError("Offering price window overlaps an existing price window")
 
             for old_id in to_close:
@@ -85,8 +84,8 @@ class OfferingPriceApplication:
                     "SELECT effective_from FROM offering_prices WHERE offering_price_id=?", (old_id,)
                 ).fetchone()[0]
                 connection.execute(
-                    "UPDATE offering_prices SET effective_to=? WHERE offering_price_id=? AND effective_to IS NULL OR offering_price_id=?",
-                    (starts, old_id, old_id),
+                    "UPDATE offering_prices SET effective_to=? WHERE offering_price_id=? AND effective_to IS NULL",
+                    (starts, old_id),
                 )
                 if connection.execute("SELECT changes()").fetchone()[0] != 1:
                     raise ValidationError("Existing price changed concurrently")
