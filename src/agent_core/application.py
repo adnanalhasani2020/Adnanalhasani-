@@ -550,6 +550,173 @@ class InventoryPositionApplication:
             )
         return result
 
+
+    def read_product_quantity(
+        self, connection, product_id, activity_id, scope_key: str, *,
+        offering_id=None, as_of: datetime | str | None = None,
+    ) -> InventoryQuantityResult:
+        """Read a product's own stock scope, excluding offering-specific positions unless requested."""
+        try:
+            product_key = str(UUID(str(product_id)))
+        except (ValueError, TypeError, AttributeError) as exc:
+            raise ValidationError("Product identifier must be a valid UUID") from exc
+        try:
+            activity_key = str(UUID(str(activity_id)))
+        except (ValueError, TypeError, AttributeError) as exc:
+            raise ValidationError("Activity identifier must be a valid UUID") from exc
+
+        if connection.execute(
+            "SELECT 1 FROM products WHERE product_id=?", (product_key,)
+        ).fetchone() is None:
+            raise ValidationError("Inventory quantity read requires an existing Product")
+        if connection.execute(
+            "SELECT 1 FROM activities WHERE activity_id=?", (activity_key,)
+        ).fetchone() is None:
+            raise ValidationError("Inventory quantity read requires an existing Activity")
+
+        offering_key = None
+        if offering_id is not None:
+            try:
+                offering_key = str(UUID(str(offering_id)))
+            except (ValueError, TypeError, AttributeError) as exc:
+                raise ValidationError("Offering identifier must be a valid UUID") from exc
+            offering = connection.execute(
+                "SELECT product_id, activity_id FROM offerings WHERE offering_id=?",
+                (offering_key,),
+            ).fetchone()
+            if offering is None:
+                raise ValidationError("Inventory quantity read requires an existing Offering")
+            if offering != (product_key, activity_key):
+                raise ValidationError("Inventory quantity read Product/Activity must match Offering")
+
+        return self._quantity_reader.read_quantity(
+            connection, scope_key, as_of=as_of, product_id=product_key,
+            activity_id=activity_key, offering_id=offering_key,
+            require_no_offering=offering_key is None,
+        )
+
+
+    def create_opening_stock(
+        self, connection, *, activity_id, product_id, scope_key, quantity_minor,
+        actor_context_ref, source_ref, idempotency_key, opening_at,
+        offering_id=None, location_ref=None, now=None,
+    ):
+        """Record one auditable opening stock snapshot for a product/location scope.
+
+        This creates an effective Inventory Position so the existing inventory
+        reader sees the opening quantity. It is a snapshot, not a stock movement.
+        """
+        def uuid_key(value, label, optional=False):
+            if value is None and optional:
+                return None
+            try:
+                return str(UUID(str(value)))
+            except (ValueError, TypeError, AttributeError) as exc:
+                raise ValidationError(f"{label} must be a valid UUID") from exc
+
+        activity_key = uuid_key(activity_id, "Activity identifier")
+        product_key = uuid_key(product_id, "Product identifier")
+        offering_key = uuid_key(offering_id, "Offering identifier", optional=True)
+        if type(quantity_minor) is not int or quantity_minor < 0:
+            raise ValidationError("Opening stock quantity must be a non-negative integer")
+        if not isinstance(scope_key, str) or not scope_key.strip():
+            raise ValidationError("Opening stock scope_key is required")
+        scope_key = scope_key.strip()
+        if location_ref is not None:
+            if not isinstance(location_ref, str) or not location_ref.strip():
+                raise ValidationError("Opening stock location_ref must be a non-empty string when supplied")
+            location_ref = location_ref.strip()
+        if not isinstance(actor_context_ref, str) or not actor_context_ref.strip():
+            raise ValidationError("Opening stock actor_context_ref is required")
+        actor_context_ref = actor_context_ref.strip()
+        for value, label in ((source_ref, "source_ref"), (idempotency_key, "idempotency_key")):
+            if not isinstance(value, str) or not value.strip():
+                raise ValidationError(f"Opening stock {label} is required")
+            if len(value.strip()) > 200:
+                raise ValidationError(f"Opening stock {label} must not exceed 200 characters")
+        source_ref = source_ref.strip()
+        idempotency_key = idempotency_key.strip()
+        recorded = self._instant(now or datetime.now(timezone.utc), "Opening stock recorded_at")
+        opened = self._instant(opening_at, "Opening stock opening_at")
+        if opened > recorded:
+            raise ValidationError("Opening stock opening_at cannot be in the future")
+        opened_text = opened.isoformat().replace("+00:00", "Z")
+        recorded_text = recorded.isoformat().replace("+00:00", "Z")
+
+        with _atomic(connection):
+            replay = connection.execute(
+                "SELECT inventory_position_id, activity_id, product_id, offering_id, location_ref, "
+                "scope_key, quantity_minor, source_ref, actor_context_ref, opening_at "
+                "FROM inventory_opening_stock WHERE idempotency_key=?",
+                (idempotency_key,),
+            ).fetchone()
+            requested = (
+                activity_key, product_key, offering_key, location_ref, scope_key,
+                quantity_minor, source_ref, actor_context_ref, opened_text,
+            )
+            if replay is not None:
+                persisted = (
+                    replay[1], replay[2], replay[3], replay[4], replay[5],
+                    replay[6], replay[7], replay[8], replay[9],
+                )
+                if persisted != requested:
+                    raise ValidationError("Opening stock idempotency_key was reused with different data")
+                return self.get_position(connection, replay[0])
+
+            duplicate = connection.execute(
+                "SELECT opening_stock_id FROM inventory_opening_stock "
+                "WHERE activity_id=? AND product_id=? AND COALESCE(offering_id,'')=COALESCE(?,'') "
+                "AND COALESCE(location_ref,'')=COALESCE(?,'') AND scope_key=? LIMIT 1",
+                (activity_key, product_key, offering_key, location_ref, scope_key),
+            ).fetchone()
+            if duplicate is not None:
+                raise ValidationError(
+                    "Opening stock already exists for this Product, Activity, location, and scope"
+                )
+
+            activity = connection.execute(
+                "SELECT state FROM activities WHERE activity_id=?", (activity_key,)
+            ).fetchone()
+            if activity is None or activity[0] != "active":
+                raise ValidationError("Opening stock requires an existing active Activity")
+            product = connection.execute(
+                "SELECT state FROM products WHERE product_id=?", (product_key,)
+            ).fetchone()
+            if product is None or product[0] != "active":
+                raise ValidationError("Opening stock requires an existing active Product")
+            if offering_key is not None:
+                offering = connection.execute(
+                    "SELECT product_id, activity_id, state FROM offerings WHERE offering_id=?",
+                    (offering_key,),
+                ).fetchone()
+                if offering is None:
+                    raise ValidationError("Opening stock Offering does not exist")
+                if offering[0] != product_key or offering[1] != activity_key:
+                    raise ValidationError("Opening stock Product and Activity must match its Offering")
+                if offering[2] != "active":
+                    raise ValidationError("Opening stock requires an active Offering")
+
+            position = self.create_position(
+                connection, activity_id=activity_key, product_id=product_key,
+                offering_id=offering_key, location_ref=location_ref, scope_key=scope_key,
+                quantity_minor=quantity_minor, observed_at=opened, effective_from=opened,
+                now=recorded, actor_context_ref=actor_context_ref,
+            )
+            effective = self.transition_position(
+                connection, str(position.id), "make_effective",
+                actor_context_ref=actor_context_ref, now=recorded,
+            )
+            connection.execute(
+                "INSERT INTO inventory_opening_stock("
+                "opening_stock_id, inventory_position_id, activity_id, product_id, offering_id, "
+                "location_ref, scope_key, quantity_minor, source_ref, idempotency_key, "
+                "actor_context_ref, opening_at, recorded_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (str(uuid4()), str(effective.id), activity_key, product_key, offering_key,
+                 location_ref, scope_key, quantity_minor, source_ref, idempotency_key,
+                 actor_context_ref, opened_text, recorded_text),
+            )
+            return effective
+
     def get_position(self, connection, position_id):
         try:
             key = str(UUID(str(position_id)))
