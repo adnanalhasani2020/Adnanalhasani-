@@ -1,5 +1,8 @@
 """Cross-domain currency-code normalization regressions."""
+import pytest
+
 from agent_core.loan_application import LoanApplication
+from agent_core.shared import ValidationError
 from agent_core.obligation_application import ObligationApplication
 from agent_core.persistence import connect_database
 
@@ -46,3 +49,24 @@ def test_loan_creation_normalizes_currency_code():
         "SELECT currency_code FROM loans WHERE loan_id=?", (loan_id,)
     ).fetchone()[0] == "YER"
     db.close()
+
+def test_loan_restore_rejects_noncanonical_persisted_currency_code():
+    db = connect_database()
+    lender, borrower, approver, agent, context = seed_loan(db)
+    loan_id = loan_uid()
+    grant, action = authorize_loan(
+        db, agent=agent, context=context, loan_id=loan_id,
+        action_code="loan.create", approver=approver,
+    )
+    LoanApplication().create_loan(
+        db, loan_id=loan_id, lender_person_id=lender, borrower_person_id=borrower,
+        principal_minor=100, currency_code="YER", context_ref=context,
+        authorization_grant_id=grant, agent_action_id=action, now=LOAN_STAMP,
+    )
+    # Simulate legacy/corrupt data that predates the database guard.
+    db.execute("DROP TRIGGER currency_code_guard_loans_update")
+    db.execute("UPDATE loans SET currency_code='yer' WHERE loan_id=?", (loan_id,))
+    with pytest.raises(ValidationError, match="Persisted Loan currency_code"):
+        LoanApplication().get_loan(db, loan_id)
+    db.close()
+
