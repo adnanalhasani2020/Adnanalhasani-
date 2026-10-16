@@ -13,7 +13,8 @@ The repository has no currency master-data or exchange-rate domain. It stores cu
 ## Changes
 
 - Added shared helpers for normalized input codes and strict canonical-code validation.
-- Payment and Obligation creation now trim surrounding whitespace, require exactly three ASCII letters, and persist uppercase codes.
+- Payment, Obligation, and Loan creation now trim surrounding whitespace, require exactly three ASCII letters, and persist uppercase codes.
+- Payment, Obligation, and Loan restore/read paths fail closed if persisted currency codes are malformed or noncanonical.
 - Linked Payment/Obligation currency comparison uses canonical representations.
 - Added migration `0022_currency_code_representation_guards.sql` with insert/update triggers on existing currency-bearing financial tables to reject noncanonical direct SQL writes.
 - Added regression coverage for malformed codes and normalization.
