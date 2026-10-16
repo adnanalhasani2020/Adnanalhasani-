@@ -15,7 +15,7 @@ from urllib.parse import parse_qs
 from wsgiref.simple_server import WSGIServer, make_server, WSGIRequestHandler
 from socketserver import ThreadingMixIn
 
-from agent_core.commercial_checkout import CommercialCheckoutApplication
+from agent_core.commerce_checkout import CommercialCheckoutApplication
 from agent_core.commercial_identity import CommercialIdentityApplication
 from agent_core.persistence import connect_database
 from agent_core.shared import ValidationError
