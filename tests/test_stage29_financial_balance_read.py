@@ -117,3 +117,20 @@ def test_balance_fails_closed_on_ledger_transaction_currency_mismatch():
     with pytest.raises(ValidationError, match="does not match"):
         FinancialBalanceReader().read(db, account_id, "YER", as_of="2026-10-10T00:00:00Z")
     db.close()
+
+
+
+def test_balance_cutoff_normalizes_non_utc_offset_to_the_same_instant():
+    db = connect_database()
+    account_id = account(db)
+    ledger(db, account_id, 300, "YER", "2026-10-01T10:00:00Z")
+    ledger(db, account_id, 700, "YER", "2026-10-01T10:00:01Z")
+
+    result = FinancialBalanceReader().read(
+        db, account_id, "YER", as_of="2026-10-01T12:00:00+02:00"
+    )
+
+    assert result.amount_minor == 300
+    assert result.entry_count == 1
+    assert result.as_of == datetime(2026, 10, 1, 10, 0, tzinfo=timezone.utc)
+    db.close()
