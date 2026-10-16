@@ -143,7 +143,10 @@ class FinancialOpeningBalanceApplication:
         source_ref = source_ref.strip()
         if len(source_ref) > 200:
             raise ValidationError("Opening balance source_ref must not exceed 200 characters")
-        timestamp = self._timestamp(now or datetime.now(timezone.utc), "Opening balance timestamp")
+        timestamp = self._timestamp(
+            now if now is not None else datetime.now(timezone.utc),
+            "Opening balance timestamp",
+        )
         # Stable source identity is unique per account/currency; the external
         # evidence reference is retained in domain history and may be shared by a batch.
         source_key = f"opening-balance:{account_id}:{currency_code}"
