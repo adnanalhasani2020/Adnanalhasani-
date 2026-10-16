@@ -58,7 +58,12 @@ class FinancialOrchestrator:
         if settlement.state!=SettlementState.SETTLED: raise ValidationError("Settlement must be SETTLED")
         if obligation.state not in (ObligationState.OPEN,ObligationState.DUE,ObligationState.OVERDUE):
             raise ValidationError("Obligation is not settlement-eligible")
-        if payment.amount>obligation.amount: raise ValidationError("Payment exceeds Obligation")
+        if payment.amount > obligation.amount:
+            raise ValidationError("Payment exceeds Obligation")
+        if payment.amount < obligation.amount:
+            raise ValidationError(
+                "Partial settlement is not supported until remaining obligation amounts are tracked"
+            )
 
     @staticmethod
     def _result_from_payload(payload):
@@ -75,6 +80,8 @@ class FinancialOrchestrator:
             try:
                 history.append(WorkflowEvent(workflow_id,WorkflowState.IN_PROGRESS,"integrity_checks"))
                 self._validate_matching(payment,settlement,obligation)
+                if obligation.financial_account_id != account.id:
+                    raise ValidationError("Obligation does not belong to the Financial Account")
                 if not connected: raise ValidationError("Financial finality requires connectivity")
                 transaction,ledger=self.recognition.recognize(financial_account_id=account.id,amount=payment.amount)
                 obligation.satisfy()
@@ -110,7 +117,7 @@ class FinancialOrchestrator:
         payload=ApprovalEnforcementAuthority.execute(
             action,approval,
             lambda:self.operations.execute(
-                namespace=self.REVERSAL_NAMESPACE,operation_id=str(workflow_id),operation_kind="reverse",
+                namespace=self.REVERSAL_NAMESPACE,operation_id=str(original.workflow_id),operation_kind="reverse",
                 request={"workflow_id":str(workflow_id),"original_workflow_id":str(original.workflow_id),"amount":str(original.amount)},
                 effect=effect,
             ),
@@ -131,7 +138,7 @@ class FinancialOrchestrator:
         payload=ApprovalEnforcementAuthority.execute(
             action,approval,
             lambda:self.operations.execute(
-                namespace=self.CORRECTION_NAMESPACE,operation_id=str(workflow_id),operation_kind="correct",
+                namespace=self.CORRECTION_NAMESPACE,operation_id=str(original.workflow_id),operation_kind="correct",
                 request={"workflow_id":str(workflow_id),"original_workflow_id":str(original.workflow_id),"corrected_amount":str(corrected_amount)},
                 effect=effect,
             ),

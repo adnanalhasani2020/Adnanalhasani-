@@ -26,7 +26,7 @@ def _authorized(action_name="financial.recognize"):
     return action, grant, approval
 
 
-def _workflow(amount="40"):
+def _workflow(amount="100"):
     account = FinancialAccount(uuid4())
     obligation = Obligation(account.id, Decimal("100"))
     obligation.open()
@@ -43,6 +43,30 @@ def _orchestrator(path=None):
     return FinancialOrchestrator(DurableOperationAuthority(path))
 
 
+def test_partial_settlement_is_rejected_until_remaining_amount_is_tracked():
+    account, obligation, payment, settlement = _workflow("40")
+    action, grant, approval = _authorized()
+    with pytest.raises(ValidationError, match="Partial settlement is not supported"):
+        _orchestrator().recognize(
+            workflow_id=uuid4(), payment=payment, settlement=settlement,
+            obligation=obligation, account=account, action=action,
+            approval=approval, grant=grant, connected=True,
+        )
+    assert obligation.state.value == "open"
+
+
+def test_overpayment_is_rejected_without_financial_effect():
+    account, obligation, payment, settlement = _workflow("120")
+    action, grant, approval = _authorized()
+    with pytest.raises(ValidationError, match="Payment exceeds Obligation"):
+        _orchestrator().recognize(
+            workflow_id=uuid4(), payment=payment, settlement=settlement,
+            obligation=obligation, account=account, action=action,
+            approval=approval, grant=grant, connected=True,
+        )
+    assert obligation.state.value == "open"
+
+
 def test_valid_complete_workflow_and_derived_balance():
     account, obligation, payment, settlement = _workflow()
     action, grant, approval = _authorized()
@@ -52,15 +76,15 @@ def test_valid_complete_workflow_and_derived_balance():
         approval=approval, grant=grant, connected=True,
     )
     assert result.state is WorkflowState.RECOGNIZED
-    assert result.amount == Decimal("40")
+    assert result.amount == Decimal("100")
     assert obligation.state.value == "satisfied"
     entry = LedgerEntry.__new__(LedgerEntry)
     object.__setattr__(entry, "financial_account_id", account.id)
-    object.__setattr__(entry, "amount", Decimal("40"))
+    object.__setattr__(entry, "amount", Decimal("100"))
     object.__setattr__(entry, "transaction_id", result.transaction_id)
     object.__setattr__(entry, "id", result.ledger_entry_id)
     balance = Balance.derive(account.id, [entry])
-    assert balance.amount == Decimal("40")
+    assert balance.amount == Decimal("100")
 
 
 @pytest.mark.parametrize("case", ["missing_grant", "wrong_grant", "missing_approval", "wrong_approval"])
@@ -124,6 +148,19 @@ def test_payment_settlement_obligation_matching_fails_closed(mismatch):
     assert account.state.value == "active"
 
 
+def test_obligation_from_another_financial_account_is_rejected():
+    account, obligation, payment, settlement = _workflow()
+    other_account = FinancialAccount(uuid4())
+    action, grant, approval = _authorized()
+    with pytest.raises(ValidationError, match="does not belong to the Financial Account"):
+        _orchestrator().recognize(
+            workflow_id=uuid4(), payment=payment, settlement=settlement,
+            obligation=obligation, account=other_account, action=action,
+            approval=approval, grant=grant, connected=True,
+        )
+    assert obligation.state.value == "open"
+
+
 def test_invalid_lifecycle_and_offline_finality_are_rejected(tmp_path):
     account, obligation, payment, settlement = _workflow()
     payment.state = type(payment.state).PENDING
@@ -163,7 +200,7 @@ def test_workflow_id_conflict_has_zero_effect():
             account=other_account, action=action2, approval=approval2,
             grant=grant2, connected=True,
         )
-    assert first.amount == Decimal("40")
+    assert first.amount == Decimal("100")
     assert other_obligation.state.value != "satisfied"
 
 
@@ -253,7 +290,7 @@ def test_duplicate_ledger_attempt_cannot_bypass_finance_command():
         approval=approval, grant=grant, connected=True,
     )
     with pytest.raises(ValidationError):
-        LedgerEntry(account.id, Decimal("40"), result.transaction_id)
+        LedgerEntry(account.id, Decimal("100"), result.transaction_id)
     assert result.state is WorkflowState.RECOGNIZED
 
 
@@ -273,7 +310,7 @@ def test_reversal_preserves_original_history():
         grant=reverse_grant, connected=True,
     )
     assert reversed_result.state is WorkflowState.REVERSED
-    assert reversed_result.amount == Decimal("-40")
+    assert reversed_result.amount == Decimal("-100")
     assert reversed_result.history[: len(original.history)] == original.history
     assert any(event["event"] == "workflow_reversed" for event in reversed_result.history)
 
@@ -290,7 +327,7 @@ def test_correction_preserves_original_history():
     correction_action, correction_grant, correction_approval = _authorized("financial.correct")
     corrected = orchestrator.correct(
         workflow_id=uuid4(), account=account, original=original,
-        corrected_amount=Decimal("50"), action=correction_action,
+        corrected_amount=Decimal("110"), action=correction_action,
         approval=correction_approval, grant=correction_grant, connected=True,
     )
     assert corrected.amount == Decimal("10")
@@ -349,16 +386,62 @@ def test_correction_replay_is_idempotent(tmp_path):
     action2, grant2, approval2 = _authorized("financial.correct")
     first = orchestrator.correct(
         workflow_id=correction_workflow, account=account, original=original,
-        corrected_amount=Decimal("50"), action=action2,
+        corrected_amount=Decimal("110"), action=action2,
         approval=approval2, grant=grant2, connected=True,
     )
     second = orchestrator.correct(
         workflow_id=correction_workflow, account=account, original=original,
-        corrected_amount=Decimal("50"), action=action2,
+        corrected_amount=Decimal("110"), action=action2,
         approval=approval2, grant=grant2, connected=True,
     )
     assert second == first
     assert second.amount == Decimal("10")
+
+
+def test_original_workflow_cannot_be_reversed_twice_with_different_ids(tmp_path):
+    orchestrator = _orchestrator(str(tmp_path / "single-reversal.sqlite3"))
+    account, obligation, payment, settlement = _workflow()
+    action, grant, approval = _authorized()
+    original = orchestrator.recognize(
+        workflow_id=uuid4(), payment=payment, settlement=settlement,
+        obligation=obligation, account=account, action=action,
+        approval=approval, grant=grant, connected=True,
+    )
+    reverse_action, reverse_grant, reverse_approval = _authorized("financial.reverse")
+    orchestrator.reverse(
+        workflow_id=uuid4(), account=account, original=original,
+        action=reverse_action, approval=reverse_approval,
+        grant=reverse_grant, connected=True,
+    )
+    with pytest.raises(ValidationError, match="conflict"):
+        orchestrator.reverse(
+            workflow_id=uuid4(), account=account, original=original,
+            action=reverse_action, approval=reverse_approval,
+            grant=reverse_grant, connected=True,
+        )
+
+
+def test_original_workflow_cannot_be_corrected_twice_with_different_ids(tmp_path):
+    orchestrator = _orchestrator(str(tmp_path / "single-correction.sqlite3"))
+    account, obligation, payment, settlement = _workflow()
+    action, grant, approval = _authorized()
+    original = orchestrator.recognize(
+        workflow_id=uuid4(), payment=payment, settlement=settlement,
+        obligation=obligation, account=account, action=action,
+        approval=approval, grant=grant, connected=True,
+    )
+    correction_action, correction_grant, correction_approval = _authorized("financial.correct")
+    orchestrator.correct(
+        workflow_id=uuid4(), account=account, original=original,
+        corrected_amount=Decimal("110"), action=correction_action,
+        approval=correction_approval, grant=correction_grant, connected=True,
+    )
+    with pytest.raises(ValidationError, match="conflict"):
+        orchestrator.correct(
+            workflow_id=uuid4(), account=account, original=original,
+            corrected_amount=Decimal("120"), action=correction_action,
+            approval=correction_approval, grant=correction_grant, connected=True,
+        )
 
 
 def test_invalid_workflow_id_is_rejected():
