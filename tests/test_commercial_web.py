@@ -154,17 +154,32 @@ def test_web_session_can_buy_sellable_product_and_receive_result(tmp_path):
     assert refreshed_catalog["status"] == "200 OK"
     assert refreshed_catalog["body"]["items"][0]["available_quantity"] == 3
 
+    # Sell the remaining stock; a depleted offering must disappear from the catalog.
+    final_checkout = request(
+        app, "/api/checkout", method="POST", cookie=session_cookie,
+        body={
+            "offering_id": item["offering_id"], "activity_id": activity,
+            "quantity": 3, "scope_key": "store-A", "location_ref": "front",
+            "idempotency_key": "web-checkout-002", "sale_id": uid(),
+        },
+    )
+    assert final_checkout["status"] == "200 OK"
+    assert final_checkout["body"]["quantity_remaining"] == 0
+    sold_out_catalog = request(app, "/api/catalog", cookie=session_cookie)
+    assert sold_out_catalog["status"] == "200 OK"
+    assert sold_out_catalog["body"]["items"] == []
+
     db = connect_database(db_path)
-    assert db.execute("SELECT COUNT(*) FROM sales").fetchone()[0] == 1
-    assert db.execute("SELECT quantity_delta FROM inventory_movements").fetchone()[0] == -2
+    assert db.execute("SELECT COUNT(*) FROM sales").fetchone()[0] == 2
+    assert db.execute("SELECT SUM(quantity_delta) FROM inventory_movements").fetchone()[0] == -5
     db.close()
 
-    # A page refresh can recover the committed result from the authenticated history.
+    # A page refresh can recover committed results from authenticated history.
     history = request(app, "/api/receipts", cookie=session_cookie)
     assert history["status"] == "200 OK"
-    assert len(history["body"]["items"]) == 1
-    assert history["body"]["items"][0]["sale_id"] == checkout["body"]["sale_id"]
-    assert history["body"]["items"][0]["quantity_remaining"] == 3
+    assert len(history["body"]["items"]) == 2
+    first_receipt = next(item for item in history["body"]["items"] if item["sale_id"] == checkout["body"]["sale_id"])
+    assert first_receipt["quantity_remaining"] == 3
 
     receipt = request(
         app, "/api/receipts/web-checkout-001", cookie=session_cookie,
