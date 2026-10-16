@@ -105,7 +105,7 @@ def test_next_code_suggestion_rejects_invalid_width_and_exhaustion():
     with pytest.raises(ValueError, match="positive integer"):
         suggest_next_account_code([], prefix="1", suffix_width=0)
     with pytest.raises(ValueError, match="No account codes remain"):
-        suggest_next_account_code(["A01", "A02"], prefix="A", suffix_width=2)
+        suggest_next_account_code([f"A{i:02d}" for i in range(1, 100)], prefix="A", suffix_width=2)
 
 
 def test_arabic_normalization_handles_alef_variants_diacritics_and_spacing():
