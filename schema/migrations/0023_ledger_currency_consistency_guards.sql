@@ -11,7 +11,7 @@ WHEN NOT EXISTS (
       AND ft.currency_code = NEW.currency_code
 )
 BEGIN
-    SELECT RAISE(ABORT, 'ledger entry account/currency must match financial transaction');
+    SELECT RAISE(ABORT, 'ledger entry account/currency_code must match financial transaction');
 END;
 
 CREATE TRIGGER ledger_entry_currency_matches_transaction_update
@@ -24,7 +24,7 @@ WHEN NOT EXISTS (
       AND ft.currency_code = NEW.currency_code
 )
 BEGIN
-    SELECT RAISE(ABORT, 'ledger entry account/currency must match financial transaction');
+    SELECT RAISE(ABORT, 'ledger entry account/currency_code must match financial transaction');
 END;
 
 CREATE TRIGGER financial_transaction_currency_matches_ledger_update
