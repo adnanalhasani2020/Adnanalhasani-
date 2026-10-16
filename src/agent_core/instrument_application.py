@@ -142,7 +142,7 @@ class InstrumentApplication:
             raise ValidationError("Instrument canonical_identifier is required")
         if not isinstance(actor_context_ref, str) or not actor_context_ref.strip():
             raise ValidationError("Instrument actor_context_ref is required")
-        timestamp = self._timestamp(now or datetime.now(timezone.utc), "Instrument creation timestamp")
+        timestamp = self._timestamp(now if now is not None else datetime.now(timezone.utc), "Instrument creation timestamp")
         kind, issuer, canonical = instrument_type.strip(), issuer_ref.strip(), canonical_identifier.strip()
         with self._atomic(connection):
             connection.execute(
@@ -208,7 +208,7 @@ class InstrumentApplication:
         if not isinstance(action, str) or action not in self._TRANSITIONS:
             raise ValidationError("Unsupported Instrument transition")
         allowed, next_state = self._TRANSITIONS[action]
-        timestamp = self._timestamp(now or datetime.now(timezone.utc), "Instrument transition timestamp")
+        timestamp = self._timestamp(now if now is not None else datetime.now(timezone.utc), "Instrument transition timestamp")
         if action == "redeem":
             if not isinstance(action_ref, str) or not action_ref.strip():
                 raise ValidationError("Instrument redemption requires an action_ref")
