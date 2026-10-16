@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from agent_core.shared import ValidationError
+from agent_core.shared import ValidationError, normalize_currency_code
 
 
 _PAYMENT_TRANSITIONS = {
@@ -78,12 +78,7 @@ class PaymentApplication:
         This does not establish that the code is officially assigned or enabled
         for a market/account; that requires the project's currency policy.
         """
-        if not isinstance(value, str):
-            raise ValidationError("Payment currency_code must be a three-letter ASCII code")
-        code = value.strip()
-        if len(code) != 3 or not code.isascii() or not code.isalpha():
-            raise ValidationError("Payment currency_code must be a three-letter ASCII code")
-        return code.upper()
+        return normalize_currency_code(value, label="Payment currency_code")
 
     @staticmethod
     def _instant(value, label):
