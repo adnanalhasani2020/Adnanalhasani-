@@ -27,9 +27,20 @@ Before implementation, compare the current `main` with these existing branches a
 
 Do not cherry-pick or merge by branch name alone. Establish each branch's base, current status, changed files, tests, and whether its change is already represented on `main`.
 
-## Gate 0 — establish authoritative ownership (read-only)
+## Gate 0 — source findings confirmed on main
 
-Produce a short inventory from the actual `main` source and migrations:
+Initial read-only inspection has confirmed these boundaries:
+
+- `src/agent_core/financial_account_application.py` owns a Financial Account record lifecycle (create/restore/close) and explicitly does not recognize transactions or create ledger entries/balances. It uses existing authorization checks, optimistic versioning, history, and caller-aware transaction/savepoint handling.
+- `src/agent_core/financial_balance_read.py` derives balances from recognized financial transactions and posted ledger entries; it does not persist balance snapshots. It validates account existence, currency format, timestamps, and fails closed on ledger/transaction account or currency mismatches.
+- `src/agent_core/financial_opening_balance_application.py` recognizes opening balances as financial transactions and ledger entries, with authorization, approval, provenance/history, and a unique opening balance per financial account and currency.
+- `src/agent_core/instrument_application.py` is internal persistence for instrument lifecycle/usage and explicitly does not mutate financial accounts or ledger records.
+- `schema/migrations/0001_initial_relational_schema.sql` is the initial relational schema; `schema/migrations/0008_financial_opening_balance.sql` rebuilds finance transaction/ledger tables and adds a unique index for opening-balance account/currency.
+- Relevant existing regression suites include `tests/test_stage29_financial_balance_read.py`, `tests/test_stage30_financial_account_application.py`, `tests/test_stage31_financial_opening_balance.py`, and `tests/test_stage31_instrument_application.py`.
+
+**Important conclusion:** Financial Account is not automatically a chart-of-accounts node. The inspected interfaces do not establish an existing chart hierarchy/code model. The new primitives are intentionally pure and non-persistent; they do not modify financial transactions, ledger entries, account balances, or migrations.
+
+Continue the inventory from the actual `main` source and migrations:
 
 1. Canonical Financial Account model, repository, lifecycle application service, and identifier.
 2. Ledger/recognized-entry schema and how balance reads are calculated.
@@ -112,4 +123,6 @@ Do not call the feature production-ready based only on unit tests.
 
 ## Immediate next action
 
-Perform Gate 0 by reading the actual source, migrations, and tests from `main`, then compare them against the branches listed above. Only after this evidence is available should implementation files or migrations be changed.
+The first implementation slice now exists on the feature branch as `src/agent_core/chart_of_accounts.py` with focused tests in `tests/test_chart_of_accounts.py`. It provides deterministic in-memory hierarchy validation, scoped code duplicate detection, leading-zero-safe code suggestions, Arabic/English name normalization, and duplicate candidates that never mutate accounts.
+
+Next, execute the new focused tests and the full existing suite in CI, inspect any failures, then reconcile the listed finance branches. Do not add persistent chart tables or wire chart accounts into the ledger until that evidence and an explicit account-to-ledger mapping contract are reviewed.
