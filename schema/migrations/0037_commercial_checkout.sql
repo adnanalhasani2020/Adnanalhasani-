@@ -8,6 +8,7 @@ CREATE TABLE offering_prices (
     currency_code TEXT NOT NULL CHECK (currency_code IN ('SAR','YER','USD')),
     effective_from TEXT NOT NULL,
     effective_to TEXT NULL,
+    actor_context_ref TEXT NOT NULL CHECK (length(trim(actor_context_ref)) > 0),
     created_at TEXT NOT NULL,
     CHECK (effective_to IS NULL OR effective_to > effective_from)
 );
@@ -121,4 +122,26 @@ OR (NEW.source_type='sale' AND (
 ))
 BEGIN
     SELECT RAISE(ABORT, 'inventory movement must match effective position and source transaction');
+END;
+
+CREATE TRIGGER offering_price_update_guard
+BEFORE UPDATE ON offering_prices
+WHEN NEW.offering_price_id <> OLD.offering_price_id
+  OR NEW.offering_id <> OLD.offering_id
+  OR NEW.unit_price_minor <> OLD.unit_price_minor
+  OR NEW.currency_code <> OLD.currency_code
+  OR NEW.effective_from <> OLD.effective_from
+  OR NEW.actor_context_ref <> OLD.actor_context_ref
+  OR NEW.created_at <> OLD.created_at
+  OR OLD.effective_to IS NOT NULL
+  OR NEW.effective_to IS NULL
+  OR NEW.effective_to <= OLD.effective_from
+BEGIN
+    SELECT RAISE(ABORT, 'offering price facts are immutable; only an open price window may be closed');
+END;
+
+CREATE TRIGGER offering_price_immutable_delete
+BEFORE DELETE ON offering_prices
+BEGIN
+    SELECT RAISE(ABORT, 'offering price records are immutable');
 END;
