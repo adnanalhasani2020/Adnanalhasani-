@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from enum import Enum
 from threading import RLock
 from uuid import UUID
@@ -128,8 +128,14 @@ class FinancialOrchestrator:
         self._require_uuid(workflow_id,"WorkflowId")
         if original.state!=WorkflowState.RECOGNIZED: raise ValidationError("Only recognized workflow can be corrected")
         if not connected: raise ValidationError("Financial finality requires connectivity")
-        corrected_amount=Decimal(str(corrected_amount))
-        if corrected_amount<=0 or corrected_amount==original.amount: raise ValidationError("Correction must change the recognized amount")
+        try:
+            corrected_amount = Decimal(str(corrected_amount))
+        except (InvalidOperation, TypeError, ValueError) as exc:
+            raise ValidationError("Correction amount must be a valid decimal") from exc
+        if not corrected_amount.is_finite():
+            raise ValidationError("Correction amount must be finite")
+        if corrected_amount <= 0 or corrected_amount == original.amount:
+            raise ValidationError("Correction must change the recognized amount")
         delta=corrected_amount-original.amount
         def effect():
             tx,entry=self.recognition.recognize(financial_account_id=account.id,amount=delta)
