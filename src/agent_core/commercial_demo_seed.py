@@ -23,6 +23,9 @@ def seed_demo(database_path: str | Path) -> dict:
     """Seed one demo buyer, one active offering, an effective price, and opening stock."""
     db = connect_database(database_path)
     try:
+        # Serialize seed attempts before checking emptiness; otherwise two concurrent
+        # invocations can both observe an empty database and race to create demo data.
+        db.execute("BEGIN IMMEDIATE")
         for table in ("persons", "commercial_credentials", "activities", "products", "offerings"):
             if db.execute(f"SELECT 1 FROM {table} LIMIT 1").fetchone() is not None:
                 raise ValueError(
