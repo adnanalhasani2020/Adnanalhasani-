@@ -18,8 +18,8 @@ def database():
     connection.execute("PRAGMA foreign_keys = ON")
     connection.executescript((ROOT / "schema/migrations/0001_initial_relational_schema.sql").read_text())
     connection.executescript((ROOT / "schema/migrations/0007_product_name.sql").read_text())
-    connection.executescript((ROOT / "schema/migrations/0014_purchases.sql").read_text())
-    connection.executescript((ROOT / "schema/migrations/0016_product_units.sql").read_text())
+    connection.executescript((ROOT / "schema/migrations/0015_purchases.sql").read_text())
+    connection.executescript((ROOT / "schema/migrations/0014_product_units.sql").read_text())
     connection.executescript((ROOT / "schema/migrations/0017_purchase_line_unit_snapshot.sql").read_text())
     connection.executescript((ROOT / "schema/migrations/0018_purchase_unit_snapshot_catalog_guards.sql").read_text())
     now = "2026-10-13T12:00:00Z"
