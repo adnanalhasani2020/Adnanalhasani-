@@ -386,6 +386,52 @@ def test_correction_replay_is_idempotent(tmp_path):
     assert second.amount == Decimal("10")
 
 
+def test_original_workflow_cannot_be_reversed_twice_with_different_ids(tmp_path):
+    orchestrator = _orchestrator(str(tmp_path / "single-reversal.sqlite3"))
+    account, obligation, payment, settlement = _workflow()
+    action, grant, approval = _authorized()
+    original = orchestrator.recognize(
+        workflow_id=uuid4(), payment=payment, settlement=settlement,
+        obligation=obligation, account=account, action=action,
+        approval=approval, grant=grant, connected=True,
+    )
+    reverse_action, reverse_grant, reverse_approval = _authorized("financial.reverse")
+    orchestrator.reverse(
+        workflow_id=uuid4(), account=account, original=original,
+        action=reverse_action, approval=reverse_approval,
+        grant=reverse_grant, connected=True,
+    )
+    with pytest.raises(ValidationError, match="conflict"):
+        orchestrator.reverse(
+            workflow_id=uuid4(), account=account, original=original,
+            action=reverse_action, approval=reverse_approval,
+            grant=reverse_grant, connected=True,
+        )
+
+
+def test_original_workflow_cannot_be_corrected_twice_with_different_ids(tmp_path):
+    orchestrator = _orchestrator(str(tmp_path / "single-correction.sqlite3"))
+    account, obligation, payment, settlement = _workflow()
+    action, grant, approval = _authorized()
+    original = orchestrator.recognize(
+        workflow_id=uuid4(), payment=payment, settlement=settlement,
+        obligation=obligation, account=account, action=action,
+        approval=approval, grant=grant, connected=True,
+    )
+    correction_action, correction_grant, correction_approval = _authorized("financial.correct")
+    orchestrator.correct(
+        workflow_id=uuid4(), account=account, original=original,
+        corrected_amount=Decimal("110"), action=correction_action,
+        approval=correction_approval, grant=correction_grant, connected=True,
+    )
+    with pytest.raises(ValidationError, match="conflict"):
+        orchestrator.correct(
+            workflow_id=uuid4(), account=account, original=original,
+            corrected_amount=Decimal("120"), action=correction_action,
+            approval=correction_approval, grant=correction_grant, connected=True,
+        )
+
+
 def test_invalid_workflow_id_is_rejected():
     account, obligation, payment, settlement = _workflow()
     action, grant, approval = _authorized()
