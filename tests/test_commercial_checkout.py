@@ -62,8 +62,8 @@ def setup_checkout(tmp_path, quantity=5):
     db.execute(
         """INSERT INTO offering_prices(
                offering_price_id,offering_id,unit_price_minor,currency_code,
-               effective_from,effective_to,created_at
-           ) VALUES(?,?,1250,'SAR',?,NULL,?)""",
+               effective_from,effective_to,actor_context_ref,created_at
+           ) VALUES(?,?,1250,'SAR',?,NULL,'checkout-test',?)""",
         (uid(), offering_id, BEFORE, BEFORE),
     )
     sale_id = uid()
