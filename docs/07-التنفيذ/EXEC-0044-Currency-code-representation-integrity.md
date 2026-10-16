@@ -31,3 +31,8 @@ GitHub Actions and local test execution have not yet been run for this branch. D
 ## Follow-up — EXEC-0045
 
 The database also enforces that Ledger Entry account/currency matches its parent Financial Transaction. This prevents incorrect currency balances from being persisted through direct SQL writes or later transaction edits. Regression tests cover mismatched insert/update paths. Verification is pending for this follow-up.
+
+
+## Follow-up — EXEC-0046
+
+Database migration `0024_linked_financial_currency_consistency.sql` requires linked Loans/Obligations, Payments/Obligations, and Payments/Settlements to use the same currency. Updates that would invalidate linked records are rejected. This is intentionally a no-conversion contract while exchange-rate behavior remains unapproved. Tests and latest-head CI are pending.
