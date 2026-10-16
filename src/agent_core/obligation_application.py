@@ -156,6 +156,40 @@ class ObligationApplication:
         currency = require_canonical_currency_code(
             currency, label="Persisted Obligation currency_code"
         )
+        if loan is not None:
+            loan_row = connection.execute(
+                "SELECT currency_code FROM loans WHERE loan_id=?", (loan,),
+            ).fetchone()
+            if loan_row is None:
+                raise ValidationError("Persisted Obligation references a missing Loan")
+            loan_currency = require_canonical_currency_code(
+                loan_row[0], label="Persisted linked Loan currency_code"
+            )
+            if loan_currency != currency:
+                raise ValidationError(
+                    "Persisted Obligation currency does not match its linked Loan currency"
+                )
+        for (payment_currency,) in connection.execute(
+            "SELECT currency_code FROM payments WHERE obligation_id=?", (oid,),
+        ).fetchall():
+            payment_currency = require_canonical_currency_code(
+                payment_currency, label="Persisted linked Payment currency_code"
+            )
+            if payment_currency != currency:
+                raise ValidationError(
+                    "Persisted Obligation currency does not match a linked Payment currency"
+                )
+        for (payment_currency,) in connection.execute(
+            "SELECT p.currency_code FROM settlements s "
+            "JOIN payments p ON p.payment_id=s.payment_id WHERE s.obligation_id=?", (oid,),
+        ).fetchall():
+            payment_currency = require_canonical_currency_code(
+                payment_currency, label="Persisted settled Payment currency_code"
+            )
+            if payment_currency != currency:
+                raise ValidationError(
+                    "Persisted Obligation currency does not match its settled Payment currency"
+                )
         if invoice is not None:
             invoice_link = connection.execute(
                 "SELECT obligation_id FROM invoices WHERE invoice_id=?", (invoice,),
