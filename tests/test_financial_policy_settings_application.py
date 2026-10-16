@@ -1,4 +1,5 @@
 from uuid import uuid4
+import sqlite3
 import pytest
 from agent_core.financial_policy_settings_application import FinancialPolicySettingsApplication
 from agent_core.persistence import connect_database
@@ -76,4 +77,30 @@ def test_authorized_settings_update_is_versioned_and_audited():
     history = db.execute("SELECT change_type,current_version_ref FROM domain_history "
                          "WHERE owner_domain='FinancePolicySettings'").fetchall()
     assert history == [("created", "1")]
+    db.close()
+
+
+def test_database_rejects_unsupported_or_noncanonical_currency_policy():
+    db = connect_database()
+    person, activity = str(uuid4()), str(uuid4())
+    stamp = "2026-10-16T12:00:00Z"
+    db.execute("INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+               (person, stamp, stamp))
+    db.execute("INSERT INTO activities(activity_id,owner_person_id,state,created_at,updated_at) VALUES(?,?,'active',?,?)",
+               (activity, person, stamp, stamp))
+    with pytest.raises(sqlite3.IntegrityError, match="enabled currencies"):
+        db.execute(
+            "INSERT INTO financial_policy_settings(activity_id,enabled_currencies,default_currency,updated_at,updated_by_person_id) "
+            "VALUES(?, 'EUR,YER', 'YER', ?, ?)", (activity, stamp, person)
+        )
+    with pytest.raises(sqlite3.IntegrityError, match="enabled currencies"):
+        db.execute(
+            "INSERT INTO financial_policy_settings(activity_id,enabled_currencies,default_currency,updated_at,updated_by_person_id) "
+            "VALUES(?, 'YER,SAR', 'YER', ?, ?)", (activity, stamp, person)
+        )
+    with pytest.raises(sqlite3.IntegrityError, match="default currency"):
+        db.execute(
+            "INSERT INTO financial_policy_settings(activity_id,enabled_currencies,default_currency,updated_at,updated_by_person_id) "
+            "VALUES(?, 'SAR,YER,USD', 'EUR', ?, ?)", (activity, stamp, person)
+        )
     db.close()
