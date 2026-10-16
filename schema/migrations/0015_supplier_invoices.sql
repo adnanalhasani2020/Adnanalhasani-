@@ -41,4 +41,4 @@ CREATE INDEX idx_supplier_invoices_purchase_state ON supplier_invoices(purchase_
 CREATE INDEX idx_supplier_invoice_lines_purchase_line ON supplier_invoice_lines(purchase_line_id, purchase_id);
 
 INSERT INTO schema_migrations(version, applied_at)
-VALUES ('0009_supplier_invoices', strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+VALUES ('0015_supplier_invoices', strftime('%Y-%m-%dT%H:%M:%fZ','now'));
