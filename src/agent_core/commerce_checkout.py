@@ -166,8 +166,8 @@ class CommercialCheckoutApplication:
     def checkout(
         self, connection, *, actor_person_id, activity_id, offering_id, quantity,
         scope_key, location_ref, idempotency_key, sale_id,
-        create_sale_grant_id, confirm_sale_grant_id, fulfill_sale_grant_id,
-        now=None,
+        create_sale_grant_id=None, confirm_sale_grant_id=None, fulfill_sale_grant_id=None,
+        session_token=None, now=None,
     ) -> dict:
         """Atomically fulfill a sale, snapshot its price, and record its stock movement.
 
@@ -195,14 +195,43 @@ class CommercialCheckoutApplication:
             "quantity": quantity, "scope_key": scope_key.strip(),
             "location_ref": location_ref.strip() if location_ref is not None else None,
             "sale_id": sale_key,
-            "create_sale_grant_id": _uuid(create_sale_grant_id, "Create Sale grant"),
-            "confirm_sale_grant_id": _uuid(confirm_sale_grant_id, "Confirm Sale grant"),
-            "fulfill_sale_grant_id": _uuid(fulfill_sale_grant_id, "Fulfill Sale grant"),
+            "create_sale_grant_id": _uuid(create_sale_grant_id, "Create Sale grant") if create_sale_grant_id is not None else None,
+            "confirm_sale_grant_id": _uuid(confirm_sale_grant_id, "Confirm Sale grant") if confirm_sale_grant_id is not None else None,
+            "fulfill_sale_grant_id": _uuid(fulfill_sale_grant_id, "Fulfill Sale grant") if fulfill_sale_grant_id is not None else None,
         }
         fingerprint = _hash_request(request)
         key = idempotency_key.strip()
         try:
             connection.execute("BEGIN IMMEDIATE")
+            grant_values = (
+                request["create_sale_grant_id"], request["confirm_sale_grant_id"],
+                request["fulfill_sale_grant_id"],
+            )
+            if all(value is None for value in grant_values):
+                if not isinstance(session_token, str) or not session_token:
+                    raise ValidationError("Authenticated checkout session is required")
+                token_hash = hashlib.sha256(session_token.encode("utf-8")).hexdigest()
+                session_rows = connection.execute(
+                    """SELECT s.person_id, s.expires_at, p.state, a.state
+                       FROM commercial_sessions s
+                       JOIN persons p ON p.person_id=s.person_id
+                       JOIN access_accounts a ON a.person_id=s.person_id
+                       WHERE s.token_hash=? AND s.revoked_at IS NULL""",
+                    (token_hash,),
+                ).fetchall()
+                if len(session_rows) != 1:
+                    raise ValidationError("Checkout session is invalid or revoked")
+                session_person, expiry_raw, person_state, account_state = session_rows[0]
+                if session_person != actor or person_state != "active" or account_state != "active":
+                    raise ValidationError("Checkout session actor is not active or does not match")
+                if _instant(expiry_raw, "Session expires_at") <= instant:
+                    raise ValidationError("Checkout session has expired")
+                session_mode = True
+            elif any(value is None for value in grant_values):
+                raise ValidationError("Either all three Sale grants or an authenticated session is required")
+            else:
+                session_mode = False
+
             prior = connection.execute(
                 """SELECT request_hash, response_json FROM commercial_checkout_receipts
                    WHERE actor_person_id=? AND idempotency_key=?""",
@@ -247,15 +276,34 @@ class CommercialCheckoutApplication:
             if stock["available_quantity"] < quantity:
                 raise ValidationError("Requested quantity exceeds available stock")
 
+            create_grant = request["create_sale_grant_id"]
+            confirm_grant = request["confirm_sale_grant_id"]
+            fulfill_grant = request["fulfill_sale_grant_id"]
+            if session_mode:
+                expiry = _stamp(instant.replace(microsecond=0) + __import__("datetime").timedelta(minutes=5))
+                create_grant, confirm_grant, fulfill_grant = str(uuid4()), str(uuid4()), str(uuid4())
+                for grant_id, action, scope in (
+                    (create_grant, "create_sale", offering),
+                    (confirm_grant, "confirm_sale", sale_key),
+                    (fulfill_grant, "fulfill_sale", sale_key),
+                ):
+                    connection.execute(
+                        """INSERT INTO authorization_grants(
+                               authorization_grant_id, subject_person_id, agent_id, action_code,
+                               scope_ref, context_ref, delegation_id, state, effective_from,
+                               effective_to, created_at, updated_at
+                           ) VALUES(?,?,NULL,?,?,?,NULL,'active',?,?,?,?)""",
+                        (grant_id, actor, action, scope, activity, stamp, expiry, stamp, stamp),
+                    )
             sale = self._sales.create_sale(
-                connection, offering, activity, actor, request["create_sale_grant_id"],
+                connection, offering, activity, actor, create_grant,
                 now=instant, sale_id=sale_key,
             )
             self._sales.confirm_sale(
-                connection, sale.id, actor, request["confirm_sale_grant_id"], now=instant,
+                connection, sale.id, actor, confirm_grant, now=instant,
             )
             self._sales.fulfill_sale(
-                connection, sale.id, actor, request["fulfill_sale_grant_id"], now=instant,
+                connection, sale.id, actor, fulfill_grant, now=instant,
             )
 
             line_total = quantity * price["unit_price_minor"]
