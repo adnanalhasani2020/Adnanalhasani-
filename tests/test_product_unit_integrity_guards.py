@@ -219,3 +219,30 @@ def test_database_rejects_reactivation_of_retired_product_unit_setting():
         assert app.get_product_unit(db, product, gram.id).state.value == "retired"
     finally:
         db.close()
+
+
+def test_database_rejects_noncanonical_unit_codes_on_insert_and_update():
+    db, app, product, kg, gram, litre = _configured_units()
+    try:
+        with pytest.raises(Exception, match="unit code must be uppercase"):
+            db.execute(
+                "UPDATE measurement_units SET code='k g', version_no=version_no+1 WHERE unit_id=?",
+                (str(kg.id),),
+            )
+        db.rollback()
+        with pytest.raises(Exception, match="unit code must be uppercase"):
+            db.execute(
+                "UPDATE measurement_units SET code=' kg ', version_no=version_no+1 WHERE unit_id=?",
+                (str(kg.id),),
+            )
+        db.rollback()
+        with pytest.raises(Exception, match="unit code must be uppercase"):
+            db.execute(
+                "INSERT INTO measurement_units(unit_id,code,name,dimension,state,created_at,updated_at) "
+                "VALUES(?,?,?,?,?,?,?)",
+                (str(uuid.uuid4()), "new unit", "New unit", "count", "active", NOW, NOW),
+            )
+        db.rollback()
+        assert app.get_unit(db, kg.id).code == "KG"
+    finally:
+        db.close()
