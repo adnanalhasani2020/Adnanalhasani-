@@ -183,3 +183,39 @@ def test_database_rejects_catalog_edits_without_version_increment():
         assert app.get_unit(db, litre.id).name == "Litre"
     finally:
         db.close()
+
+
+def test_database_rejects_reactivation_of_retired_measurement_unit():
+    db, app, product, kg, gram, litre = _configured_units()
+    try:
+        app.retire_product_unit(
+            db, product, gram.id, actor_context_ref="integrity-test", now=NOW,
+        )
+        app.retire_unit(db, gram.id, actor_context_ref="integrity-test", now=NOW)
+        with pytest.raises(Exception, match="cannot be reactivated"):
+            db.execute(
+                "UPDATE measurement_units SET state='active', version_no=version_no+1 WHERE unit_id=?",
+                (str(gram.id),),
+            )
+        db.rollback()
+        assert app.get_unit(db, gram.id).state.value == "retired"
+    finally:
+        db.close()
+
+
+def test_database_rejects_reactivation_of_retired_product_unit_setting():
+    db, app, product, kg, gram, litre = _configured_units()
+    try:
+        app.retire_product_unit(
+            db, product, gram.id, actor_context_ref="integrity-test", now=NOW,
+        )
+        with pytest.raises(Exception, match="cannot be reactivated"):
+            db.execute(
+                "UPDATE product_unit_settings SET state='active', version_no=version_no+1 "
+                "WHERE product_id=? AND unit_id=?",
+                (product, str(gram.id)),
+            )
+        db.rollback()
+        assert app.get_product_unit(db, product, gram.id).state.value == "retired"
+    finally:
+        db.close()
