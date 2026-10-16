@@ -169,3 +169,36 @@ def test_checkout_rejects_unknown_inventory_without_sale(tmp_path):
         app.checkout(db, **request, now=NOW)
 
     assert db.execute("SELECT COUNT(*) FROM sales").fetchone()[0] == 0
+
+
+
+def test_checkout_rolls_back_sale_and_history_if_stock_movement_write_fails(tmp_path):
+    db, request = setup_checkout(tmp_path)
+    db.execute(
+        """CREATE TRIGGER force_movement_failure
+           BEFORE INSERT ON inventory_movements
+           BEGIN SELECT RAISE(ABORT, 'forced movement failure'); END"""
+    )
+    app = CommercialCheckoutApplication()
+
+    with pytest.raises(Exception, match="forced movement failure"):
+        app.checkout(db, **request, now=NOW)
+
+    assert db.execute("SELECT COUNT(*) FROM sales").fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM sale_lines").fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM inventory_movements").fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM commercial_checkout_receipts").fetchone()[0] == 0
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=?", (request["sale_id"],)
+    ).fetchone()[0] == 0
+
+
+def test_checkout_rejects_known_zero_stock(tmp_path):
+    db, request = setup_checkout(tmp_path, quantity=0)
+    app = CommercialCheckoutApplication()
+
+    with pytest.raises(ValidationError, match="exceeds available stock"):
+        app.checkout(db, **request, now=NOW)
+
+    assert db.execute("SELECT COUNT(*) FROM sales").fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM inventory_movements").fetchone()[0] == 0
