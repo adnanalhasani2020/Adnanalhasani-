@@ -71,6 +71,21 @@ class FinancialBalanceReader:
         if orphan is not None:
             raise ValidationError("Posted Ledger Entry references a missing Financial Transaction")
 
+        # A posted entry tied to a pending/void transaction is equally unsafe:
+        # the balance projection must not silently discard it via the recognized-only
+        # join below and return a plausible but incomplete balance.
+        unrecognized = connection.execute(
+            "SELECT 1 FROM ledger_entries le "
+            "JOIN financial_transactions ft ON ft.financial_transaction_id=le.financial_transaction_id "
+            "WHERE le.financial_account_id=? AND le.state='posted' AND le.posted_at<=? "
+            "AND ft.state<>'recognized' AND (le.currency_code=? OR ft.currency_code=?) LIMIT 1",
+            (str(account_id), cutoff, currency, currency),
+        ).fetchone()
+        if unrecognized is not None:
+            raise ValidationError(
+                "Posted Ledger Entry references a Financial Transaction that is not recognized"
+            )
+
         # A mismatched Ledger Entry / Financial Transaction is persisted corruption;
         # fail closed rather than silently misstate the derived balance.
         mismatch = connection.execute(
