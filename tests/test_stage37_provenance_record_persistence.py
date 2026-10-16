@@ -77,6 +77,18 @@ def test_provenance_append_rejects_invalid_explicit_identifier_without_writing()
     db.close()
 
 
+@pytest.mark.parametrize("invalid_timestamp", ["", 0, False])
+def test_provenance_append_rejects_explicit_falsey_created_timestamp_without_writes(invalid_timestamp):
+    db = connect_database()
+    with pytest.raises(ValidationError, match="ISO-8601|timezone-aware"):
+        ProvenanceRecordApplication().append(
+            db, source_type="external_document", source_ref="document:abc",
+            derivation_type="imported", now=invalid_timestamp,
+        )
+    assert db.execute("SELECT COUNT(*) FROM provenance_records").fetchone()[0] == 0
+    db.close()
+
+
 def test_provenance_get_rejects_unknown_record():
     db = connect_database()
     with pytest.raises(ValidationError, match="does not exist"):
