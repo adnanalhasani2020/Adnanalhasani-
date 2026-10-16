@@ -130,7 +130,7 @@ class CommercialCheckoutApplication:
 
     def _read_stock(
         self, connection, offering_id, product_id, activity_id, scope_key,
-        location_ref, instant,
+        location_ref, instant, *, reject_future_movements=False,
     ):
         result = self._quantities.read_quantity(
             connection, scope_key, as_of=instant, offering_id=offering_id,
@@ -152,6 +152,13 @@ class CommercialCheckoutApplication:
         delta = 0
         for change, occurred_raw in movements:
             occurred = _instant(occurred_raw, "Inventory movement occurred_at")
+            # A committed movement after this request's timestamp means the
+            # request is stale relative to serialized inventory writes. Never
+            # ignore that movement and permit an oversell; require a fresh retry.
+            if reject_future_movements and occurred > instant:
+                raise ValidationError(
+                    "Checkout timestamp predates a committed inventory movement; retry with a fresh timestamp"
+                )
             if result.observed_at < occurred <= instant:
                 delta += change
         available = result.quantity_minor + delta
@@ -272,6 +279,7 @@ class CommercialCheckoutApplication:
             stock = self._read_stock(
                 connection, offering, product, activity, scope_key.strip(),
                 location_ref.strip() if location_ref is not None else None, instant,
+                reject_future_movements=True,
             )
             if stock is None:
                 raise ValidationError("Checkout requires known, effective, unambiguous stock")
