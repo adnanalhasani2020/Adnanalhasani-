@@ -208,6 +208,7 @@ def test_existing_database_migration_preserves_sales_invoices_and_history_on_reo
         ("0020_purchase_receipt_database_guards",),
         ("0021_supplier_invoice_header_line_consistency",),
         ("0022_currency_code_representation_guards",),
+        ("0023_ledger_currency_consistency_guards",),
         ("9998_activity_invitations",),
         ("9999_file_attachments",),
     ]
