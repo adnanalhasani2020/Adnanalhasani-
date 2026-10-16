@@ -583,8 +583,8 @@ class InventoryPositionApplication:
         if not isinstance(actor_context_ref, str) or not actor_context_ref.strip():
             raise ValidationError("Inventory Position actor_context_ref is required")
         actor_context_ref = actor_context_ref.strip()
-        timestamp = self._instant(now or datetime.now(timezone.utc), "Inventory Position created_at")
-        observed = self._instant(observed_at or timestamp, "Inventory Position observed_at")
+        timestamp = self._instant(now if now is not None else datetime.now(timezone.utc), "Inventory Position created_at")
+        observed = self._instant(observed_at if observed_at is not None else timestamp, "Inventory Position observed_at")
         starts = self._instant(effective_from, "Inventory Position effective_from") if effective_from is not None else None
         ends = self._instant(effective_to, "Inventory Position effective_to") if effective_to is not None else None
         # Domain validation is deliberately performed before persistence.
@@ -661,7 +661,7 @@ class InventoryPositionApplication:
                 raise ValidationError(f"Opening stock {label} must not exceed 200 characters")
         source_ref = source_ref.strip()
         idempotency_key = idempotency_key.strip()
-        recorded = self._instant(now or datetime.now(timezone.utc), "Opening stock recorded_at")
+        recorded = self._instant(now if now is not None else datetime.now(timezone.utc), "Opening stock recorded_at")
         opened = self._instant(opening_at, "Opening stock opening_at")
         if opened > recorded:
             raise ValidationError("Opening stock opening_at cannot be in the future")
@@ -852,7 +852,7 @@ class InventoryPositionApplication:
         if not isinstance(actor_context_ref, str) or not actor_context_ref.strip():
             raise ValidationError("Inventory Position actor_context_ref is required")
         actor_context_ref = actor_context_ref.strip()
-        timestamp = self._instant(now or datetime.now(timezone.utc), "Inventory Position transition timestamp")
+        timestamp = self._instant(now if now is not None else datetime.now(timezone.utc), "Inventory Position transition timestamp")
         if action not in self._TRANSITIONS:
             raise ValidationError("Unsupported Inventory Position lifecycle action")
         expected, target = self._TRANSITIONS[action]
@@ -1018,7 +1018,7 @@ class ProductApplication:
     def create_product(self, connection, name, *, product_id=None, actor_context_ref=None, now=None):
         product = Product(name=name, id=self._uuid(product_id, "Product identifier")
                           if product_id is not None else uuid4())
-        timestamp = self._instant(now or datetime.now(timezone.utc), "Product timestamp")
+        timestamp = self._instant(now if now is not None else datetime.now(timezone.utc), "Product timestamp")
         if not isinstance(actor_context_ref, str) or not actor_context_ref.strip():
             raise ValidationError("Product actor_context_ref is required")
         actor_context_ref = actor_context_ref.strip()
@@ -1073,7 +1073,7 @@ class ProductApplication:
         candidate = Product(name=name, id=self._uuid(product_id, "Product identifier"))
         if type(expected_version) is not int or expected_version < 1:
             raise ValidationError("Product expected_version must be a positive integer")
-        timestamp = self._instant(now or datetime.now(timezone.utc), "Product rename timestamp")
+        timestamp = self._instant(now if now is not None else datetime.now(timezone.utc), "Product rename timestamp")
         if not isinstance(actor_context_ref, str) or not actor_context_ref.strip():
             raise ValidationError("Product actor_context_ref is required")
         actor_context_ref = actor_context_ref.strip()
@@ -1112,7 +1112,7 @@ class ProductApplication:
             raise ValidationError(f"Unsupported Product action: {action}")
         if type(expected_version) is not int or expected_version < 1:
             raise ValidationError("Product expected_version must be a positive integer")
-        timestamp = self._instant(now or datetime.now(timezone.utc), "Product transition timestamp")
+        timestamp = self._instant(now if now is not None else datetime.now(timezone.utc), "Product transition timestamp")
         if not isinstance(actor_context_ref, str) or not actor_context_ref.strip():
             raise ValidationError("Product actor_context_ref is required")
         actor_context_ref = actor_context_ref.strip()
