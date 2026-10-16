@@ -5,12 +5,13 @@ Close a persistence-integrity gap in the existing SPEC-0016 Instrument lifecycle
 
 ## Change
 - Validate each transition timestamp against both persisted `created_at` and `updated_at` using timezone-aware UTC datetimes.
+- Reject explicitly supplied falsey timestamp values rather than silently substituting the current time.
 - Reject backdated transitions before any Instrument, usage, or Domain History write.
 - Fail closed if persisted lifecycle timestamps are malformed or timezone-naive.
 - Preserve existing optimistic version checks and caller-owned transaction/savepoint behavior.
 
 ## Tests
-`tests/test_stage31_instrument_application.py` adds coverage for timestamps before creation, timestamps before the latest transition, malformed persisted timestamps, and unchanged state/version/history after rejection.
+`tests/test_stage31_instrument_application.py` adds coverage for timestamps before creation, timestamps before the latest transition, malformed persisted timestamps, falsey explicit timestamps, and unchanged state/version/history after rejection.
 
 ## Traceability
 - SPEC-0016 §§8–10: lifecycle state, failure boundaries, and historical preservation.
