@@ -64,3 +64,29 @@ BEFORE DELETE ON inventory_opening_stock
 BEGIN
     SELECT RAISE(ABORT, 'opening stock records are immutable');
 END;
+
+-- Preserve the immutable opening quantity and scope on its linked position.
+-- Lifecycle state/version updates remain allowed; changing the observed stock
+-- fact itself requires a separately designed correction workflow.
+CREATE TRIGGER trg_inventory_opening_position_snapshot_immutable
+BEFORE UPDATE OF activity_id, product_id, offering_id, location_ref, scope_key,
+                 quantity_minor, observed_at, effective_from, effective_to
+ON inventory_positions
+WHEN EXISTS (
+    SELECT 1 FROM inventory_opening_stock AS opening
+    WHERE opening.inventory_position_id = OLD.inventory_position_id
+)
+AND (
+       OLD.activity_id IS NOT NEW.activity_id
+    OR OLD.product_id IS NOT NEW.product_id
+    OR OLD.offering_id IS NOT NEW.offering_id
+    OR OLD.location_ref IS NOT NEW.location_ref
+    OR OLD.scope_key IS NOT NEW.scope_key
+    OR OLD.quantity_minor IS NOT NEW.quantity_minor
+    OR OLD.observed_at IS NOT NEW.observed_at
+    OR OLD.effective_from IS NOT NEW.effective_from
+    OR OLD.effective_to IS NOT NEW.effective_to
+)
+BEGIN
+    SELECT RAISE(ABORT, 'opening Inventory Position snapshot is immutable');
+END;
