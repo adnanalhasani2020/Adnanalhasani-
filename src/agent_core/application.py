@@ -102,6 +102,52 @@ class InventoryApplication:
         )
 
 
+    def read_product_quantity(
+        self, connection, product_id, activity_id, scope_key: str, *,
+        offering_id=None, as_of: datetime | str | None = None,
+    ) -> InventoryQuantityResult:
+        """Read a product's own stock scope, excluding offering-specific positions unless requested."""
+        try:
+            product_key = str(UUID(str(product_id)))
+        except (ValueError, TypeError, AttributeError) as exc:
+            raise ValidationError("Product identifier must be a valid UUID") from exc
+        try:
+            activity_key = str(UUID(str(activity_id)))
+        except (ValueError, TypeError, AttributeError) as exc:
+            raise ValidationError("Activity identifier must be a valid UUID") from exc
+
+        if connection.execute(
+            "SELECT 1 FROM products WHERE product_id=?", (product_key,)
+        ).fetchone() is None:
+            raise ValidationError("Inventory quantity read requires an existing Product")
+        if connection.execute(
+            "SELECT 1 FROM activities WHERE activity_id=?", (activity_key,)
+        ).fetchone() is None:
+            raise ValidationError("Inventory quantity read requires an existing Activity")
+
+        offering_key = None
+        if offering_id is not None:
+            try:
+                offering_key = str(UUID(str(offering_id)))
+            except (ValueError, TypeError, AttributeError) as exc:
+                raise ValidationError("Offering identifier must be a valid UUID") from exc
+            offering = connection.execute(
+                "SELECT product_id, activity_id FROM offerings WHERE offering_id=?",
+                (offering_key,),
+            ).fetchone()
+            if offering is None:
+                raise ValidationError("Inventory quantity read requires an existing Offering")
+            if offering != (product_key, activity_key):
+                raise ValidationError("Inventory quantity read Product/Activity must match Offering")
+
+        return self._quantity_reader.read_quantity(
+            connection, scope_key, as_of=as_of, product_id=product_key,
+            activity_id=activity_key, offering_id=offering_key,
+            require_no_offering=offering_key is None,
+        )
+
+
+
 class SaleApplication:
     """Application service for authorized Sale lifecycle changes.
 
@@ -549,51 +595,6 @@ class InventoryPositionApplication:
                  timestamp.isoformat().replace("+00:00", "Z")),
             )
         return result
-
-
-    def read_product_quantity(
-        self, connection, product_id, activity_id, scope_key: str, *,
-        offering_id=None, as_of: datetime | str | None = None,
-    ) -> InventoryQuantityResult:
-        """Read a product's own stock scope, excluding offering-specific positions unless requested."""
-        try:
-            product_key = str(UUID(str(product_id)))
-        except (ValueError, TypeError, AttributeError) as exc:
-            raise ValidationError("Product identifier must be a valid UUID") from exc
-        try:
-            activity_key = str(UUID(str(activity_id)))
-        except (ValueError, TypeError, AttributeError) as exc:
-            raise ValidationError("Activity identifier must be a valid UUID") from exc
-
-        if connection.execute(
-            "SELECT 1 FROM products WHERE product_id=?", (product_key,)
-        ).fetchone() is None:
-            raise ValidationError("Inventory quantity read requires an existing Product")
-        if connection.execute(
-            "SELECT 1 FROM activities WHERE activity_id=?", (activity_key,)
-        ).fetchone() is None:
-            raise ValidationError("Inventory quantity read requires an existing Activity")
-
-        offering_key = None
-        if offering_id is not None:
-            try:
-                offering_key = str(UUID(str(offering_id)))
-            except (ValueError, TypeError, AttributeError) as exc:
-                raise ValidationError("Offering identifier must be a valid UUID") from exc
-            offering = connection.execute(
-                "SELECT product_id, activity_id FROM offerings WHERE offering_id=?",
-                (offering_key,),
-            ).fetchone()
-            if offering is None:
-                raise ValidationError("Inventory quantity read requires an existing Offering")
-            if offering != (product_key, activity_key):
-                raise ValidationError("Inventory quantity read Product/Activity must match Offering")
-
-        return self._quantity_reader.read_quantity(
-            connection, scope_key, as_of=as_of, product_id=product_key,
-            activity_id=activity_key, offering_id=offering_key,
-            require_no_offering=offering_key is None,
-        )
 
 
     def create_opening_stock(
