@@ -60,6 +60,7 @@ class InventoryQuantityReader:
         self, connection, scope_key: str, *, as_of: datetime | str | None = None,
         offering_id: str | None = None, activity_id: str | None = None,
         product_id: str | None = None, require_no_offering: bool = False,
+        location_ref: str | None = None, require_no_location: bool = False,
     ):
         if not isinstance(scope_key, str) or not scope_key.strip():
             raise ValidationError("Inventory scope_key is required")
@@ -88,6 +89,15 @@ class InventoryQuantityReader:
             if offering_id is not None:
                 raise ValidationError("An Offering filter cannot be combined with require_no_offering")
             query += " AND offering_id IS NULL"
+        if location_ref is not None:
+            if not isinstance(location_ref, str) or not location_ref.strip():
+                raise ValidationError("Inventory location_ref must be a non-empty string")
+            if require_no_location:
+                raise ValidationError("A location_ref cannot be combined with require_no_location")
+            query += " AND location_ref=?"
+            parameters.append(location_ref.strip())
+        elif require_no_location:
+            query += " AND location_ref IS NULL"
         rows = connection.execute(query, parameters).fetchall()
 
         eligible = []
