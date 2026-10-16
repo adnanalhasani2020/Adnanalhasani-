@@ -150,6 +150,9 @@ class LoanApplication:
             raise ValidationError("Loan does not exist")
         (loan, lender, borrower, state, principal, currency, maturity, provider, external,
          created, updated, version) = row
+        currency = require_canonical_currency_code(
+            currency, label="Persisted Loan currency_code"
+        )
         return LoanRecord(
             UUID(loan), UUID(lender), UUID(borrower), state, principal, currency, maturity,
             provider, external, created, updated, version,
