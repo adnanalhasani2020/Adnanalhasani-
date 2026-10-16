@@ -36,3 +36,8 @@ The database also enforces that Ledger Entry account/currency matches its parent
 ## Follow-up — EXEC-0046
 
 Database migration `0024_linked_financial_currency_consistency.sql` requires linked Loans/Obligations, Payments/Obligations, and Payments/Settlements to use the same currency. Updates that would invalidate linked records are rejected. This is intentionally a no-conversion contract while exchange-rate behavior remains unapproved. Tests and latest-head CI are pending.
+
+
+## Follow-up — EXEC-0047
+
+Migration `0025_settlement_recognition_currency_consistency.sql` ensures a recognized Financial Transaction linked to a Settlement uses the Payment's currency. This closes the final currency link from the source payment through settlement recognition. The regression test rejects a mismatched currency and confirms the persisted transaction remains unchanged. Latest-head CI verification is pending.
