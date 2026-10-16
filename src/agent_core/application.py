@@ -674,6 +674,18 @@ class InventoryPositionApplication:
                 raise ValidationError(
                     "Opening stock already exists for this Product, Activity, location, and scope"
                 )
+            preexisting_position = connection.execute(
+                "SELECT inventory_position_id FROM inventory_positions "
+                "WHERE activity_id=? AND product_id=? "
+                "AND COALESCE(offering_id,'')=COALESCE(?,'') "
+                "AND COALESCE(location_ref,'')=COALESCE(?,'') AND scope_key=? LIMIT 1",
+                (activity_key, product_key, offering_key, location_ref, scope_key),
+            ).fetchone()
+            if preexisting_position is not None:
+                raise ValidationError(
+                    "An Inventory Position already exists for this Product scope; "
+                    "reconcile it before recording opening stock"
+                )
 
             activity = connection.execute(
                 "SELECT state FROM activities WHERE activity_id=?", (activity_key,)
