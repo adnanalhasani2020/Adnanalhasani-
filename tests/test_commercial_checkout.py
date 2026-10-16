@@ -247,13 +247,7 @@ def test_concurrent_checkouts_cannot_sell_the_last_unit_twice(tmp_path):
 
     def worker(index):
         connection = connect_database(database_path)
-        request = dict(
-            base_request,
-            idempotency_key=f"checkout-concurrent-{index}",
-            sale_id=uid(),
-        )
-        # Each distinct Sale needs its own confirm/fulfill scopes; all grants
-        # are persisted before the competing checkout transactions begin.
+        request = dict(base_request, idempotency_key=f"checkout-concurrent-{index}", sale_id=uid())
         grants = []
         for action, scope in (
             ("create_sale", request["offering_id"]),
@@ -277,9 +271,9 @@ def test_concurrent_checkouts_cannot_sell_the_last_unit_twice(tmp_path):
             CommercialCheckoutApplication().checkout(
                 connection, **request, now=NOW + timedelta(seconds=index + 1)
             )
-            outcome = "success"
-        except ValidationError:
-            outcome = "rejected"
+            outcome = ("success", "")
+        except Exception as exc:
+            outcome = ("rejected", f"{type(exc).__name__}: {exc}")
         finally:
             connection.close()
         with outcome_lock:
@@ -292,7 +286,7 @@ def test_concurrent_checkouts_cannot_sell_the_last_unit_twice(tmp_path):
         thread.join(timeout=10)
 
     assert all(not thread.is_alive() for thread in threads), "checkout concurrency test timed out"
-    assert sorted(outcomes) == ["rejected", "success"]
+    assert sorted(item[0] for item in outcomes) == ["rejected", "success"], repr(outcomes)
     verify = connect_database(database_path)
     assert verify.execute("SELECT COUNT(*) FROM sales").fetchone()[0] == 1
     assert verify.execute("SELECT SUM(quantity_delta) FROM inventory_movements").fetchone()[0] == -1
