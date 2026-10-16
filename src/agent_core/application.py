@@ -471,6 +471,21 @@ class InventoryPositionApplication:
             raise ValidationError(f"{label} must be timezone-aware")
         return value.astimezone(timezone.utc)
 
+    def _validate_offering_context(self, connection, offering_key, activity_key, product_key):
+        if offering_key is None:
+            return
+        offering_context = connection.execute(
+            "SELECT product_id, activity_id FROM offerings WHERE offering_id=?",
+            (offering_key,),
+        ).fetchone()
+        if offering_context is None:
+            raise ValidationError("Inventory Position requires an existing Offering")
+        offering_product_key, offering_activity_key = offering_context
+        if offering_activity_key != activity_key:
+            raise ValidationError("Inventory Position context must match its offering")
+        if product_key is not None and offering_product_key != product_key:
+            raise ValidationError("Inventory Position Product must match its Offering Product")
+
     def _restore_position(self, row):
         from agent_core.domain_inventory import InventoryPosition, InventoryPositionState
 
@@ -527,6 +542,7 @@ class InventoryPositionApplication:
             observed_at=observed, effective_from=starts, effective_to=ends,
         )
         with _atomic(connection):
+            self._validate_offering_context(connection, offering_key, activity_key, product_key)
             connection.execute(
                 "INSERT INTO inventory_positions(inventory_position_id,activity_id,product_id,offering_id,"
                 "location_ref,scope_key,state,quantity_minor,observed_at,effective_from,effective_to,"
@@ -632,6 +648,7 @@ class InventoryPositionApplication:
             ).fetchone()
             if row is None:
                 raise ValidationError("Inventory Position does not exist")
+            self._validate_offering_context(connection, row[3], row[1], row[2])
             if row[10] != expected:
                 raise ValidationError(f"Invalid Inventory Position transition from {row[10]} via {action}")
             cursor = connection.execute(
