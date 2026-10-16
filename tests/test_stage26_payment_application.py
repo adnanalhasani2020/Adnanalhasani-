@@ -549,3 +549,92 @@ def test_payment_rejects_amount_or_currency_mismatch_with_linked_obligation(amou
         (payment_id,),
     ).fetchone()[0] == 0
     db.close()
+
+
+def test_payment_transition_preserves_caller_transaction_on_success():
+    db = connect_database()
+    parties = seed(db)
+    app = PaymentApplication()
+    payment, parties = create_payment(db, app, parties)
+    _, _, approver, agent, context, _ = parties
+    grant, action = authorize(
+        db, agent=agent, context=context, payment_id=str(payment.payment_id),
+        action_code="payment.transition.pending", approver=approver,
+    )
+    db.commit()
+    caller_person = uid()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (caller_person, STAMP, STAMP),
+    )
+
+    pending = app.transition_payment(
+        db, payment.payment_id, "pending", expected_version=1, context_ref=context,
+        authorization_grant_id=grant, agent_action_id=action, now=STAMP,
+    )
+
+    assert pending.state == "pending"
+    assert pending.version_no == 2
+    assert db.in_transaction
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=? AND change_payload_ref='state:pending'",
+        (str(payment.payment_id),),
+    ).fetchone()[0] == 1
+
+    db.rollback()
+    restored = app.get_payment(db, payment.payment_id)
+    assert (restored.state, restored.version_no) == ("initiated", 1)
+    assert db.execute(
+        "SELECT COUNT(*) FROM persons WHERE person_id=?", (caller_person,)
+    ).fetchone()[0] == 0
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=? AND change_payload_ref='state:pending'",
+        (str(payment.payment_id),),
+    ).fetchone()[0] == 0
+    db.close()
+
+
+def test_payment_transition_history_failure_preserves_caller_transaction():
+    db = connect_database()
+    parties = seed(db)
+    app = PaymentApplication()
+    payment, parties = create_payment(db, app, parties)
+    _, _, approver, agent, context, _ = parties
+    grant, action = authorize(
+        db, agent=agent, context=context, payment_id=str(payment.payment_id),
+        action_code="payment.transition.pending", approver=approver,
+    )
+    db.execute(
+        "CREATE TRIGGER fail_pending_payment_history BEFORE INSERT ON domain_history "
+        "WHEN NEW.owner_domain='payments' AND NEW.change_payload_ref='state:pending' "
+        "BEGIN SELECT RAISE(ABORT, 'history unavailable'); END"
+    )
+    db.commit()
+    caller_person = uid()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (caller_person, STAMP, STAMP),
+    )
+
+    with pytest.raises(sqlite3.IntegrityError, match="history unavailable"):
+        app.transition_payment(
+            db, payment.payment_id, "pending", expected_version=1, context_ref=context,
+            authorization_grant_id=grant, agent_action_id=action, now=STAMP,
+        )
+
+    assert db.in_transaction
+    assert db.execute(
+        "SELECT COUNT(*) FROM persons WHERE person_id=?", (caller_person,)
+    ).fetchone()[0] == 1
+    restored = app.get_payment(db, payment.payment_id)
+    assert (restored.state, restored.version_no) == ("initiated", 1)
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=? AND change_payload_ref='state:pending'",
+        (str(payment.payment_id),),
+    ).fetchone()[0] == 0
+
+    db.rollback()
+    assert db.execute(
+        "SELECT COUNT(*) FROM persons WHERE person_id=?", (caller_person,)
+    ).fetchone()[0] == 0
+    db.close()
