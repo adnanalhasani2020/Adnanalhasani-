@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from agent_core.shared import ValidationError
+from agent_core.shared import ValidationError, normalize_currency_code, require_canonical_currency_code
 
 
 _TRANSITIONS = {
@@ -153,6 +153,43 @@ class ObligationApplication:
             raise ValidationError("Obligation does not exist")
         (oid, creditor, debtor, invoice, loan, amount, currency, state, due_at,
          created, updated, version) = row
+        currency = require_canonical_currency_code(
+            currency, label="Persisted Obligation currency_code"
+        )
+        if loan is not None:
+            loan_row = connection.execute(
+                "SELECT currency_code FROM loans WHERE loan_id=?", (loan,),
+            ).fetchone()
+            if loan_row is None:
+                raise ValidationError("Persisted Obligation references a missing Loan")
+            loan_currency = require_canonical_currency_code(
+                loan_row[0], label="Persisted linked Loan currency_code"
+            )
+            if loan_currency != currency:
+                raise ValidationError(
+                    "Persisted Obligation currency does not match its linked Loan currency"
+                )
+        for (payment_currency,) in connection.execute(
+            "SELECT currency_code FROM payments WHERE obligation_id=?", (oid,),
+        ).fetchall():
+            payment_currency = require_canonical_currency_code(
+                payment_currency, label="Persisted linked Payment currency_code"
+            )
+            if payment_currency != currency:
+                raise ValidationError(
+                    "Persisted Obligation currency does not match a linked Payment currency"
+                )
+        for (payment_currency,) in connection.execute(
+            "SELECT p.currency_code FROM settlements s "
+            "JOIN payments p ON p.payment_id=s.payment_id WHERE s.obligation_id=?", (oid,),
+        ).fetchall():
+            payment_currency = require_canonical_currency_code(
+                payment_currency, label="Persisted settled Payment currency_code"
+            )
+            if payment_currency != currency:
+                raise ValidationError(
+                    "Persisted Obligation currency does not match its settled Payment currency"
+                )
         if invoice is not None:
             invoice_link = connection.execute(
                 "SELECT obligation_id FROM invoices WHERE invoice_id=?", (invoice,),
@@ -182,9 +219,7 @@ class ObligationApplication:
             raise ValidationError("Obligation parties must differ")
         if type(amount_minor) is not int or amount_minor <= 0:
             raise ValidationError("Obligation amount_minor must be a positive integer")
-        if not isinstance(currency_code, str) or not currency_code.strip():
-            raise ValidationError("Obligation currency_code is required")
-        currency_code = currency_code.strip()
+        currency_code = normalize_currency_code(currency_code, label="Obligation currency_code")
         timestamp = self._timestamp(now if now is not None else datetime.now(timezone.utc), "Obligation creation timestamp")
         due_timestamp = self._timestamp(due_at, "Obligation due_at") if due_at is not None else None
         with self._atomic(connection):
