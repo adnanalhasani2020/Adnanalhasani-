@@ -93,7 +93,7 @@ def test_database_rejects_unsupported_or_noncanonical_currency_policy():
             "INSERT INTO financial_policy_settings(activity_id,enabled_currencies,default_currency,updated_at,updated_by_person_id) "
             "VALUES(?, 'EUR,YER', 'YER', ?, ?)", (activity, stamp, person)
         )
-    with pytest.raises(Exception, match="enabled currencies"):
+    with pytest.raises(sqlite3.IntegrityError, match="enabled currencies"):
         db.execute(
             "INSERT INTO financial_policy_settings(activity_id,enabled_currencies,default_currency,updated_at,updated_by_person_id) "
             "VALUES(?, 'YER,SAR', 'YER', ?, ?)", (activity, stamp, person)
