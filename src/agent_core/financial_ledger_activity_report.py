@@ -107,7 +107,8 @@ class FinancialLedgerActivityReportReader:
 
         invalid_rows = connection.execute(
             "SELECT le.financial_account_id, le.currency_code, le.posted_at, "
-            "ft.financial_account_id, ft.currency_code, ft.state "
+            "ft.financial_account_id, ft.currency_code, ft.state, "
+            "le.amount_minor, ft.amount_minor "
             "FROM ledger_entries le JOIN financial_transactions ft "
             "ON ft.financial_transaction_id=le.financial_transaction_id "
             "WHERE le.state='posted' "
@@ -121,10 +122,11 @@ class FinancialLedgerActivityReportReader:
                 row[0] != row[3]
                 or row[1] != row[4]
                 or row[5] != "recognized"
+                or int(row[6]) != int(row[7])
             ):
                 raise ValidationError(
-                    "Ledger Entry does not match a recognized Financial Transaction "
-                    "for the requested account and currency"
+                    "Ledger Entry does not match its recognized Financial Transaction "
+                    "for the requested account, currency, and amount"
                 )
 
         rows = connection.execute(
