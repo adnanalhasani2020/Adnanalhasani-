@@ -210,7 +210,15 @@ def test_gap5_atomic_uniqueness_behavior(tmp_path):
     t1.join()
     t2.join()
 
-    assert outcomes.count({"ok": True}) == 2
+    # A concurrent duplicate may observe the durable reservation before the
+    # first caller persists its outcome. The contract intentionally fails that
+    # replay closed rather than executing the semantic effect twice.
+    assert outcomes.count({"ok": True}) in (1, 2)
     assert len(effects) == 1
     assert len(outcomes) == 2
-    assert any("replay is incomplete" in str(item) or item == {"ok": True} for item in outcomes)
+    assert all(
+        item == {"ok": True} or item == "Operation replay is incomplete"
+        for item in outcomes
+    )
+    if outcomes.count({"ok": True}) == 1:
+        assert outcomes.count("Operation replay is incomplete") == 1
