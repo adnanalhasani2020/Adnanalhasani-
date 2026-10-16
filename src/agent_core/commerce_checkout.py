@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 from agent_core.application import SaleApplication
@@ -212,17 +212,19 @@ class CommercialCheckoutApplication:
                     raise ValidationError("Authenticated checkout session is required")
                 token_hash = hashlib.sha256(session_token.encode("utf-8")).hexdigest()
                 session_rows = connection.execute(
-                    """SELECT s.person_id, s.expires_at, p.state, a.state
+                    """SELECT s.person_id, s.expires_at, p.state, a.state, c.state
                        FROM commercial_sessions s
                        JOIN persons p ON p.person_id=s.person_id
                        JOIN access_accounts a ON a.person_id=s.person_id
+                       JOIN commercial_credentials c ON c.person_id=s.person_id
                        WHERE s.token_hash=? AND s.revoked_at IS NULL""",
                     (token_hash,),
                 ).fetchall()
                 if len(session_rows) != 1:
                     raise ValidationError("Checkout session is invalid or revoked")
-                session_person, expiry_raw, person_state, account_state = session_rows[0]
-                if session_person != actor or person_state != "active" or account_state != "active":
+                session_person, expiry_raw, person_state, account_state, credential_state = session_rows[0]
+                if (session_person != actor or person_state != "active" or
+                        account_state != "active" or credential_state != "active"):
                     raise ValidationError("Checkout session actor is not active or does not match")
                 if _instant(expiry_raw, "Session expires_at") <= instant:
                     raise ValidationError("Checkout session has expired")
@@ -280,7 +282,7 @@ class CommercialCheckoutApplication:
             confirm_grant = request["confirm_sale_grant_id"]
             fulfill_grant = request["fulfill_sale_grant_id"]
             if session_mode:
-                expiry = _stamp(instant.replace(microsecond=0) + __import__("datetime").timedelta(minutes=5))
+                expiry = _stamp(instant.replace(microsecond=0) + timedelta(minutes=5))
                 create_grant, confirm_grant, fulfill_grant = str(uuid4()), str(uuid4()), str(uuid4())
                 for grant_id, action, scope in (
                     (create_grant, "create_sale", offering),
