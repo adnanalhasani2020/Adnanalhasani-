@@ -107,6 +107,15 @@ class MainActivity : Activity() {
     private fun nav() {
         body.addView(btn("الرئيسية"){dashboard()})
         body.addView(btn("الحسابات والأرصدة"){accounts()})
+        body.addView(btn("العملاء"){catalogScreen("customers", "العملاء", listOf("الاسم", "الهاتف", "العنوان"))})
+        body.addView(btn("الموردون"){catalogScreen("suppliers", "الموردون", listOf("اسم المورد", "الهاتف", "العنوان"))})
+        body.addView(btn("الأصناف والمخزون"){catalogScreen("products", "الأصناف والمخزون", listOf("اسم الصنف", "رمز الصنف", "الوحدة", "الكمية", "سعر الوحدة"))})
+        body.addView(btn("حركة المخزون"){catalogScreen("stock", "حركة المخزون", listOf("الصنف", "نوع الحركة: وارد/صادر", "الكمية", "المرجع"))})
+        body.addView(btn("المشتريات"){catalogScreen("purchases", "المشتريات", listOf("رقم المستند", "المورد", "المبلغ", "العملة"))})
+        body.addView(btn("المبيعات"){catalogScreen("sales", "المبيعات", listOf("رقم المستند", "العميل", "المبلغ", "العملة"))})
+        body.addView(btn("بحث شامل"){searchScreen()})
+        body.addView(btn("كشف حساب"){accountStatement()})
+        body.addView(btn("النسخ الاحتياطي"){backupScreen()})
         body.addView(btn("حركة دخل أو مصروف"){addTransaction()})
         body.addView(btn("سجل الحركات"){transactions()})
         body.addView(btn("الفواتير"){invoices()})
@@ -328,6 +337,153 @@ class MainActivity : Activity() {
             }
         }
     }
+
+    private fun catalogScreen(type: String, title: String, fields: List<String>) {
+        screen(title)
+        val query = field("بحث في " + title)
+        body.addView(query)
+        body.addView(btn("بحث") { renderCatalog(type, title, fields, query.text.toString()) })
+        body.addView(btn("إضافة سجل") { catalogForm(type, title, fields) })
+        body.addView(btn("رجوع للرئيسية") { dashboard() })
+        renderCatalog(type, title, fields, "")
+    }
+
+    private fun renderCatalog(type: String, title: String, fields: List<String>, query: String) {
+        body.removeAllViews()
+        val search = field("بحث في " + title, query)
+        body.addView(search)
+        body.addView(btn("تطبيق البحث") { renderCatalog(type, title, fields, search.text.toString()) })
+        body.addView(btn("إضافة سجل") { catalogForm(type, title, fields) })
+        body.addView(btn("رجوع للرئيسية") { dashboard() })
+        executor.execute {
+            val rows = localDb.readCatalogRecords(type)
+            runOnUiThread {
+                var shown = 0
+                for (i in 0 until rows.length()) {
+                    val row = rows.getJSONObject(i)
+                    val text = fields.map { row.optString(it) }.joinToString(" • ")
+                    if (query.isNotBlank() && !text.contains(query, true)) continue
+                    shown++
+                    body.addView(label(text.ifBlank { "سجل بدون تفاصيل" }, 16f, true))
+                    body.addView(btn("حذف هذا السجل") {
+                        localDb.deleteCatalogRecord(type, row.optString("local_id"))
+                        renderCatalog(type, title, fields, query)
+                    })
+                }
+                if (shown == 0) body.addView(label("لا توجد سجلات مطابقة. أضف سجلاً جديداً للبدء."))
+                status.text = "هذه البيانات محفوظة محلياً على الهاتف"
+            }
+        }
+    }
+
+    private fun catalogForm(type: String, title: String, fields: List<String>) {
+        screen("إضافة — " + title)
+        val inputs = fields.map { f ->
+            val input = field(f)
+            body.addView(label(f)); body.addView(input); input
+        }
+        body.addView(btn("حفظ السجل") {
+            val values = inputs.mapIndexed { i, v -> fields[i] to v.text.toString().trim() }
+            if (values.any { it.second.isBlank() }) {
+                status.text = "أكمل الحقول المطلوبة"; return@btn
+            }
+            val json = JSONObject()
+            values.forEach { (k, v) -> json.put(k, v) }
+            localDb.saveCatalogRecord(type, json)
+            Toast.makeText(this, "تم الحفظ محلياً", Toast.LENGTH_SHORT).show()
+            catalogScreen(type, title, fields)
+        })
+        body.addView(btn("إلغاء") { catalogScreen(type, title, fields) })
+    }
+
+    private fun searchScreen() {
+        screen("بحث شامل")
+        val q = field("اكتب اسم حساب أو وصف حركة أو عميل أو صنف")
+        body.addView(q)
+        body.addView(btn("بحث الآن") {
+            val term = q.text.toString().trim()
+            if (term.isBlank()) { status.text = "اكتب كلمة للبحث"; return@btn }
+            body.addView(label("نتائج البحث المحلي عن: " + term, 18f, true))
+            executor.execute {
+                val results = mutableListOf<String>()
+                for (table in listOf("accounts", "transactions", "invoices", "payments")) {
+                    val rows = localDb.readEntities(table)
+                    for (i in 0 until rows.length()) {
+                        val obj = rows.getJSONObject(i)
+                        if (obj.toString().contains(term, true)) results.add(table + " • " + obj.toString().take(220))
+                    }
+                }
+                for (type in listOf("customers", "suppliers", "products", "stock", "purchases", "sales")) {
+                    val rows = localDb.readCatalogRecords(type)
+                    for (i in 0 until rows.length()) if (rows.getJSONObject(i).toString().contains(term, true)) results.add(type + " • " + rows.getJSONObject(i).toString().take(220))
+                }
+                runOnUiThread {
+                    if (results.isEmpty()) body.addView(label("لا توجد نتائج محلية"))
+                    results.take(100).forEach { body.addView(label(it)) }
+                    status.text = "البحث يشمل بيانات الهاتف فقط"
+                }
+            }
+        })
+        body.addView(btn("رجوع") { dashboard() })
+    }
+
+    private fun accountStatement() {
+        screen("كشف حساب")
+        val accounts = localDb.readEntities("accounts")
+        val choices = (0 until accounts.length()).map { i ->
+            val a = accounts.getJSONObject(i)
+            a.optString("name") + " (" + a.optString("currency") + ")"
+        }
+        if (choices.isEmpty()) {
+            body.addView(label("أضف حساباً أولاً لعرض كشفه"))
+        } else {
+            val spinner = Spinner(this).apply { adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, choices) }
+            body.addView(label("اختر الحساب")); body.addView(spinner)
+            body.addView(btn("عرض الكشف") {
+                val selected = accounts.getJSONObject(spinner.selectedItemPosition)
+                val localId = selected.optString("local_id")
+                body.addView(label("الحساب: " + selected.optString("name"), 18f, true))
+                body.addView(label("الرصيد الافتتاحي: " + selected.optString("opening_balance") + " " + selected.optString("currency")))
+                val tx = localDb.readEntities("transactions")
+                var count = 0
+                for (i in 0 until tx.length()) {
+                    val t = tx.getJSONObject(i)
+                    if (t.optString("account_local_id") == localId) {
+                        count++
+                        body.addView(label((if (t.optString("kind") == "income") "دخل" else "مصروف") + " • " + t.optString("amount") + " " + t.optString("currency") + " • " + t.optString("description")))
+                    }
+                }
+                if (count == 0) body.addView(label("لا توجد حركات مرتبطة بهذا الحساب"))
+                status.text = "كشف محلي مبدئي؛ لا يشمل بيانات الخادم غير المنزّلة"
+            })
+        }
+        body.addView(btn("رجوع") { dashboard() })
+    }
+
+    private fun backupScreen() {
+        screen("النسخ الاحتياطي")
+        body.addView(label("يمكنك تصدير ملخص JSON للمشاركة أو الاحتفاظ به. لا ترفع الملف إلى جهة غير موثوقة.", 16f))
+        body.addView(btn("إنشاء ملف نسخة احتياطية") {
+            try {
+                val backup = JSONObject()
+                for (table in listOf("accounts", "transactions", "invoices", "payments")) backup.put(table, localDb.readEntities(table))
+                for (type in listOf("customers", "suppliers", "products", "stock", "purchases", "sales")) backup.put(type, localDb.readCatalogRecords(type))
+                val file = java.io.File(cacheDir, "accounting-backup-" + System.currentTimeMillis() + ".json")
+                file.writeText(backup.toString(2), Charsets.UTF_8)
+                val uri = androidx.core.content.FileProvider.getUriForFile(this, packageName + ".fileprovider", file)
+                val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                    type = "application/json"; putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                    addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                startActivity(android.content.Intent.createChooser(intent, "حفظ النسخة الاحتياطية"))
+                status.text = "تم تجهيز النسخة الاحتياطية"
+            } catch (e: Exception) {
+                status.text = "تعذر إنشاء النسخة: " + (e.message ?: "")
+            }
+        })
+        body.addView(btn("رجوع") { dashboard() })
+    }
+
     private fun settings() {
         screen("إعدادات الاتصال")
         val url=field("رابط API HTTPS",apiUrl)
