@@ -100,7 +100,11 @@ class LocalDatabase(context: Context) : SQLiteOpenHelper(context, "accounting_lo
                         .put("name", c.getString(c.getColumnIndexOrThrow("name")))
                         .put("currency", c.getString(c.getColumnIndexOrThrow("currency")))
                         .put("opening_balance", c.getString(c.getColumnIndexOrThrow("opening_balance")))
-                        .put("balance", c.getString(c.getColumnIndexOrThrow("balance")))
+                        .put("balance", accountBalance(
+                            c.getString(c.getColumnIndexOrThrow("local_id")),
+                            c.getString(c.getColumnIndexOrThrow("currency")),
+                            c.getString(c.getColumnIndexOrThrow("opening_balance"))
+                        ).toPlainString())
                 } else {
                     JSONObject(c.getString(c.getColumnIndexOrThrow("payload")))
                         .put("local_id", c.getString(c.getColumnIndexOrThrow("local_id")))
@@ -110,6 +114,28 @@ class LocalDatabase(context: Context) : SQLiteOpenHelper(context, "accounting_lo
             }
         }
         return array
+    }
+
+    @Synchronized
+    fun accountBalance(localId: String, currency: String, openingBalance: String): java.math.BigDecimal {
+        var balance = openingBalance.toBigDecimalOrNull() ?: java.math.BigDecimal.ZERO
+        readableDatabase.rawQuery("SELECT payload FROM transactions", null).use { c ->
+            while (c.moveToNext()) {
+                val item = JSONObject(c.getString(0))
+                if (item.optString("account_local_id") != localId || item.optString("currency", currency).uppercase() != currency.uppercase()) continue
+                val amount = item.optString("amount", "0").toBigDecimalOrNull() ?: java.math.BigDecimal.ZERO
+                balance = if (item.optString("kind") == "income") balance.add(amount) else balance.subtract(amount)
+            }
+        }
+        readableDatabase.rawQuery("SELECT payload FROM payments", null).use { c ->
+            while (c.moveToNext()) {
+                val item = JSONObject(c.getString(0))
+                if (item.optString("account_local_id") != localId || item.optString("currency", currency).uppercase() != currency.uppercase()) continue
+                val amount = item.optString("amount", "0").toBigDecimalOrNull() ?: java.math.BigDecimal.ZERO
+                balance = if (item.optString("direction") == "received") balance.add(amount) else balance.subtract(amount)
+            }
+        }
+        return balance
     }
 
     @Synchronized
