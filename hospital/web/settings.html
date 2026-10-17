@@ -38,7 +38,7 @@
 <section class="panel">
 <h2>3. مراجعة المقترح</h2>
 <div class="summary" id="summary" aria-live="polite"></div>
-<div class="row" style="margin-top:14px"><button id="save" type="button">حفظ المقترح في الجلسة</button><button id="reset" class="secondary" type="button">إعادة ضبط المقترح المحفوظ</button><a class="button secondary" href="/">العودة إلى لوحة المستشفى</a></div>
+<div class="row" style="margin-top:14px"><button id="apply-defaults" class="secondary" type="button">تطبيق الوحدات الافتراضية للملف المختار</button><button id="save" type="button">حفظ المقترح في الجلسة</button><button id="reset" class="secondary" type="button">إعادة ضبط المقترح المحفوظ</button><a class="button secondary" href="/">العودة إلى لوحة المستشفى</a></div>
 <div id="status" class="status" role="status"></div>
 </section>
 </main>
@@ -54,7 +54,8 @@ function render(){const p=selectedProfile(),ms=chosenModules();document.getEleme
 function setStatus(text,kind="success"){const s=document.getElementById("status");s.className="status "+kind;s.textContent=text;}
 function applyDefaults(){const allowed=defaults[selectedProfile()];moduleInputs.forEach(x=>x.checked=allowed.includes(x.value));render()}
 function restoreDraft(){try{const raw=sessionStorage.getItem("hospitalManagerSettingsDraft");if(!raw){render();return;}const draft=JSON.parse(raw);if(!draft||draft.mode!=="preview-only"||!Object.hasOwn(profileNames,draft.profile)||!Array.isArray(draft.modules)){render();setStatus("المقترح المحفوظ غير صالح؛ عُرضت الإعدادات الافتراضية دون تغيير الخادم.","error");return;}profileInputs.forEach(x=>x.checked=x.value===draft.profile);const valid=new Set(Object.keys(moduleNames));const saved=new Set(draft.modules.filter(x=>valid.has(x)));moduleInputs.forEach(x=>x.checked=saved.has(x.value));render();setStatus("تمت استعادة المقترح المحفوظ من جلسة المتصفح فقط. لم تُرسل تغييرات إلى الخادم ولم تُفعّل أي وحدة.");}catch(e){render();setStatus("تعذرت قراءة المقترح المحفوظ؛ يمكنك إعادة ضبطه ثم الاختيار من جديد.","error");}}
-profileInputs.forEach(x=>x.addEventListener("change",applyDefaults));moduleInputs.forEach(x=>x.addEventListener("change",render));
+profileInputs.forEach(x=>x.addEventListener("change",render));moduleInputs.forEach(x=>x.addEventListener("change",render));
+document.getElementById("apply-defaults").addEventListener("click",()=>{applyDefaults();setStatus("تم تطبيق الوحدات الافتراضية للملف المختار. راجع اختياراتك قبل حفظ المقترح.");});
 document.getElementById("save").addEventListener("click",()=>{const draft={profile:selectedProfile(),modules:chosenModules(),savedAt:new Date().toISOString(),mode:"preview-only"};try{sessionStorage.setItem("hospitalManagerSettingsDraft",JSON.stringify(draft));setStatus("تم حفظ المقترح مؤقتًا في جلسة المتصفح. لم تُرسل أي تغييرات إلى الخادم ولم تُفعّل أي وحدة.");}catch(e){setStatus("تعذر حفظ المقترح في جلسة المتصفح؛ راجع إعدادات المتصفح.","error");}});
 document.getElementById("reset").addEventListener("click",()=>{try{sessionStorage.removeItem("hospitalManagerSettingsDraft");profileInputs.forEach(x=>x.checked=x.value==="general");applyDefaults();setStatus("تم حذف المقترح المحفوظ من جلسة المتصفح وإعادة الخيارات الافتراضية.");}catch(e){setStatus("تعذر إعادة ضبط المقترح في جلسة المتصفح.","error");}});
 restoreDraft();
