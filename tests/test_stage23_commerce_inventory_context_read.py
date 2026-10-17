@@ -65,3 +65,44 @@ def test_invalid_or_missing_offering_is_rejected():
     with pytest.raises(ValidationError,match="valid UUID"): reader.read(db,"bad-id")
     with pytest.raises(ValidationError,match="does not exist"): reader.read(db,uid())
     db.close()
+
+
+def test_inventory_context_reports_cross_context_position_mismatch_without_writes():
+    db = connect_database()
+    activity, product, offering, _ = setup_graph(db, with_service=False)
+    other_person, other_activity, other_product = uid(), uid(), uid()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,?,?,?)",
+        (other_person, "active", NOW, NOW),
+    )
+    db.execute(
+        "INSERT INTO activities(activity_id,owner_person_id,state,created_at,updated_at) "
+        "VALUES(?,?,?,?,?)",
+        (other_activity, other_person, "active", NOW, NOW),
+    )
+    db.execute(
+        "INSERT INTO products(product_id,name,state,created_at,updated_at) VALUES(?,?,?,?,?)",
+        (other_product, "Other product", "active", NOW, NOW),
+    )
+    position_id = uid()
+    db.execute(
+        "INSERT INTO inventory_positions(inventory_position_id,activity_id,product_id,"
+        "offering_id,scope_key,state,quantity_minor,observed_at,created_at,updated_at) "
+        "VALUES(?,?,?,?,?,?,?,?,?,?)",
+        (position_id, other_activity, other_product, offering, "store-A", "effective",
+         4, NOW, NOW, NOW),
+    )
+    db.commit()
+    before_positions = db.execute("SELECT COUNT(*) FROM inventory_positions").fetchone()[0]
+    before_history = db.execute("SELECT COUNT(*) FROM domain_history").fetchone()[0]
+
+    result = CommerceInventoryContextReader().read(db, offering)
+
+    assert result.activity_id == activity
+    assert result.product_id == product
+    assert f"inventory_position_activity_mismatch:{position_id}" in result.integrity_issues
+    assert f"inventory_position_product_mismatch:{position_id}" in result.integrity_issues
+    assert f"inventory_position_offering_mismatch:{position_id}" not in result.integrity_issues
+    assert db.execute("SELECT COUNT(*) FROM inventory_positions").fetchone()[0] == before_positions
+    assert db.execute("SELECT COUNT(*) FROM domain_history").fetchone()[0] == before_history
+    db.close()
