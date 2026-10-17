@@ -117,6 +117,11 @@ def add_medicine(db: HospitalDB, *, sku: str, name: str, quantity: int,
         cur = conn.execute("""INSERT INTO medicines(sku,name,quantity,reorder_level,unit)
             VALUES(?,?,?,?,?)""", (sku.strip(), name.strip(), quantity, reorder_level, unit))
         ident = cur.lastrowid
+        if quantity:
+            conn.execute("""INSERT INTO inventory_movements
+                (medicine_id,movement_type,quantity_delta,reference_type,reference_id,actor,occurred_at)
+                VALUES(?,'opening',?,'medicine',?,?,?)""",
+                (ident, quantity, str(ident), actor, at))
         db._audit(conn, actor, "medicine.created", "medicine", ident, at,
                   {"initial_quantity": quantity})
         conn.commit()
