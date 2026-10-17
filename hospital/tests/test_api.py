@@ -7,11 +7,24 @@ from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-from hospital.api import make_handler
+from hospital.api import _validate_bind_host, make_handler
 from hospital.core import HospitalDB
 
 
 class HospitalAPITests(unittest.TestCase):
+    def test_bind_host_defaults_to_loopback_only(self):
+        for host in ("127.0.0.1", "::1", "localhost"):
+            self.assertEqual(_validate_bind_host(host), host)
+        for host in ("0.0.0.0", "::", "192.0.2.10", "hospital.example"):
+            with self.subTest(host=host):
+                with self.assertRaisesRegex(ValueError, "loopback address"):
+                    _validate_bind_host(host)
+
+    def test_remote_bind_requires_explicit_opt_in(self):
+        self.assertEqual(
+            _validate_bind_host("0.0.0.0", allow_remote=True), "0.0.0.0"
+        )
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.db = HospitalDB(Path(self.temp.name) / "api.sqlite3")
