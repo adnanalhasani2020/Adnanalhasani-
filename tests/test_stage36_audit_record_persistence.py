@@ -1,4 +1,5 @@
 """Integration tests for append-only audit record persistence."""
+import sqlite3
 import uuid
 
 import pytest
@@ -107,4 +108,38 @@ def test_audit_append_rejects_invalid_explicit_record_identifier(record_id):
             audit_record_id=record_id, now=STAMP,
         )
     assert db.execute("SELECT COUNT(*) FROM audit_records").fetchone()[0] == 0
+    db.close()
+
+
+def test_duplicate_audit_record_id_preserves_original_record_without_second_write():
+    db = connect_database()
+    app = AuditRecordApplication()
+    record_id = uuid.uuid4()
+    app.append(
+        db, event_type="operation.submitted", actor_context_ref="actor-context:1",
+        target_ref="subject:original", result_status="recorded",
+        audit_record_id=record_id, now=STAMP,
+    )
+    before = tuple(db.execute(
+        "SELECT audit_record_id,event_type,actor_context_ref,target_ref,occurred_at,"
+        "result_status,operation_ref,correlation_ref,provenance_id,created_at "
+        "FROM audit_records WHERE audit_record_id=?",
+        (str(record_id),),
+    ).fetchone())
+
+    with pytest.raises(sqlite3.IntegrityError):
+        app.append(
+            db, event_type="operation.approved", actor_context_ref="actor-context:2",
+            target_ref="subject:replacement", result_status="recorded",
+            audit_record_id=record_id, now=STAMP,
+        )
+
+    after = tuple(db.execute(
+        "SELECT audit_record_id,event_type,actor_context_ref,target_ref,occurred_at,"
+        "result_status,operation_ref,correlation_ref,provenance_id,created_at "
+        "FROM audit_records WHERE audit_record_id=?",
+        (str(record_id),),
+    ).fetchone())
+    assert after == before
+    assert db.execute("SELECT COUNT(*) FROM audit_records").fetchone()[0] == 1
     db.close()
