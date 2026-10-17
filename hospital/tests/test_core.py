@@ -122,6 +122,54 @@ class HospitalCoreTests(unittest.TestCase):
                 ("2026-01-03T09:00:00", admission_id),
             )
 
+    def test_database_requires_closure_timestamp_to_match_encounter_status(self):
+        import sqlite3
+
+        with self.db.connect() as conn:
+            with self.assertRaisesRegex(sqlite3.IntegrityError, "status and closure timestamp"):
+                conn.execute(
+                    "INSERT INTO encounters(patient_id,opened_at,status,closed_at) "
+                    "VALUES(?,?,'open',?)",
+                    (self.patient, "2026-01-02T09:00:00", "2026-01-02T10:00:00"),
+                )
+            with self.assertRaisesRegex(sqlite3.IntegrityError, "status and closure timestamp"):
+                conn.execute(
+                    "INSERT INTO encounters(patient_id,opened_at,status) VALUES(?,?,'closed')",
+                    (self.patient, "2026-01-02T09:00:00"),
+                )
+            conn.execute(
+                "INSERT INTO encounters(patient_id,opened_at) VALUES(?,?)",
+                (self.patient, "2026-01-02T09:00:00"),
+            )
+            encounter_id = conn.execute("SELECT id FROM encounters").fetchone()["id"]
+            with self.assertRaisesRegex(sqlite3.IntegrityError, "status and closure timestamp"):
+                conn.execute(
+                    "UPDATE encounters SET status='closed' WHERE id=?",
+                    (encounter_id,),
+                )
+            conn.execute(
+                "UPDATE encounters SET status='closed',closed_at=? WHERE id=?",
+                ("2026-01-02T10:00:00", encounter_id),
+            )
+            with self.assertRaisesRegex(sqlite3.IntegrityError, "status and closure timestamp"):
+                conn.execute(
+                    "UPDATE encounters SET status='open' WHERE id=?",
+                    (encounter_id,),
+                )
+
+    def test_encounter_integrity_triggers_exist_after_reopening_database(self):
+        self.db = HospitalDB(self.db.path)
+        with self.db.connect() as conn:
+            names = {
+                row["name"] for row in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='trigger'"
+                )
+            }
+        self.assertTrue({
+            "encounters_state_consistent_insert",
+            "encounters_state_consistent_update",
+        }.issubset(names))
+
     def test_booking_integrity_triggers_exist_after_reopening_database(self):
         self.db = HospitalDB(self.db.path)
         with self.db.connect() as conn:

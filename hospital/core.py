@@ -76,6 +76,21 @@ CREATE TABLE IF NOT EXISTS encounters (
   diagnosis TEXT NOT NULL DEFAULT '', clinical_notes TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','closed'))
 );
+-- Keep encounter lifecycle state and closure timestamp consistent for all writers.
+CREATE TRIGGER IF NOT EXISTS encounters_state_consistent_insert
+BEFORE INSERT ON encounters
+WHEN (NEW.status='open' AND NEW.closed_at IS NOT NULL)
+  OR (NEW.status='closed' AND NEW.closed_at IS NULL)
+BEGIN
+  SELECT RAISE(ABORT, 'encounter status and closure timestamp are inconsistent');
+END;
+CREATE TRIGGER IF NOT EXISTS encounters_state_consistent_update
+BEFORE UPDATE OF status, closed_at ON encounters
+WHEN (NEW.status='open' AND NEW.closed_at IS NOT NULL)
+  OR (NEW.status='closed' AND NEW.closed_at IS NULL)
+BEGIN
+  SELECT RAISE(ABORT, 'encounter status and closure timestamp are inconsistent');
+END;
 CREATE TABLE IF NOT EXISTS beds (
   id INTEGER PRIMARY KEY, ward TEXT NOT NULL, bed_no TEXT NOT NULL,
   active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
