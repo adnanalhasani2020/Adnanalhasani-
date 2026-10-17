@@ -17,6 +17,7 @@ import java.util.concurrent.Executors
 class MainActivity : Activity() {
     private val executor = Executors.newSingleThreadExecutor()
     private val prefs by lazy { getSharedPreferences("accounting", MODE_PRIVATE) }
+    private val localDb by lazy { LocalDatabase(this) }
     private var token: String? = null
     private var apiUrl = ""
     private lateinit var root: LinearLayout
@@ -244,9 +245,31 @@ class MainActivity : Activity() {
         body.addView(btn("رجوع"){dashboard()})
     }
     private fun post(path:String,payload:String,success:()->Unit) {
-        status.text="جارٍ الحفظ..."
-        executor.execute{try{call(path,"POST",payload);runOnUiThread{Toast.makeText(this,"تم الحفظ",Toast.LENGTH_SHORT).show();success()}}
-            catch(e:Exception){runOnUiThread{status.text="لم يتم الحفظ: "+(e.message?: "")}}}
+        status.text="جارٍ الحفظ محلياً..."
+        executor.execute {
+            try {
+                val entity = when(path) {
+                    "/accounts" -> "accounts"
+                    "/transactions" -> "transactions"
+                    "/invoices" -> "invoices"
+                    "/payments" -> "payments"
+                    else -> throw IllegalArgumentException("مسار حفظ غير معروف")
+                }
+                val json = JSONObject(payload)
+                if (entity == "accounts") {
+                    json.put("opening_balance", json.optString("opening_balance", "0"))
+                    json.put("balance", json.optString("opening_balance", "0"))
+                }
+                localDb.saveEntity(entity, json)
+                runOnUiThread {
+                    Toast.makeText(this,"حُفظت البيانات على الهاتف. المزامنة المشتركة لم تُفعّل بعد.",Toast.LENGTH_LONG).show()
+                    status.text = "محفوظ محلياً — عمليات بانتظار المزامنة: " + localDb.pendingCount()
+                    success()
+                }
+            } catch(e:Exception) {
+                runOnUiThread { status.text="تعذر الحفظ المحلي: "+(e.message?: "") }
+            }
+        }
     }
     override fun onDestroy(){executor.shutdown();super.onDestroy()}
 }
