@@ -1,8 +1,8 @@
 # Commerce Vertical Slice — Readiness and Execution Plan
 
 **Date:** 2026-10-17  
-**Baseline:** `main @ 1f772c90688274b8191007434ec640a4339d6db6`  
-**Status:** Planning evidence only; no requirement is accepted and no implementation stage is opened by this document.
+**Baseline:** `main @ d292afabdf3477552d72006267616d78e8253b76`  
+**Status:** Planning and evidence only; no requirement is accepted and no implementation stage is opened by this document.
 
 ## Objective
 
@@ -11,24 +11,33 @@ Deliver one small, testable commerce journey before expanding the product surfac
 1. Resolve a valid active Offering in its Activity/Product context.
 2. Read inventory in the exact intended scope.
 3. Create and transition a Sale using existing authorization and lifecycle contracts.
-4. Verify that persistence and domain history remain consistent after database reopen.
-5. Fail closed when inventory is unknown, ambiguous, stale for the requested instant, or inconsistent with its Offering context.
+4. Verify persistence and domain history after database reopen.
+5. Return explicit fail-closed inventory statuses for unknown, ambiguous, invalid, stale, or context-inconsistent records.
 
 This is an acceptance target, not a claim that the complete journey currently works.
 
-## Evidence in the current repository
+## Evidence verified on the current main
 
-- Product, Offering, Sale, and InventoryPosition domain/application code exists.
-- SQLite persistence and migrations exist, with tests for Sale lifecycle, InventoryPosition lifecycle, and inventory quantity reads.
-- Inventory quantity reads are read-only. They do not reserve or deduct quantity.
-- Payment records do not prove external money movement; no operational bank, wallet, or payment-gateway integration was evidenced in the reviewed repository.
-- The repository documents that a full Web/Mobile UI and a public operational API are not present in the current implementation.
+- Product, Offering, Sale, InventoryPosition, and SQLite persistence/migrations exist.
+- `tests/test_stage34_commerce_sale_inventory_integration.py` already composes Product → Offering → inventory reads → authorized Sale lifecycle. It verifies exact Activity/Offering stock isolation, authorization scope rejection, rollback when history persistence fails, no stock deduction on Sale confirmation, and database-reopen history integrity.
+- Inventory quantity unit tests already cover unknown quantity (NULL is not zero and does not fall back), ambiguous tied latest observations, time boundaries, invalid persisted quantities, and integer persistence guards.
+- `InventoryApplication` is read-only. It does not reserve or deduct quantity. `InventoryPositionApplication` has lifecycle and opening-stock operations, but no general quantity-correction operation.
+- Opening-stock creation is separately guarded: it requires a non-negative integer and idempotency data. That rule must not be silently generalized to all quantity-correction semantics while Issue #102 remains open.
+- Payment records do not prove external money movement; no operational bank, wallet, or payment-gateway integration was evidenced in the reviewed implementation.
+- The reviewed repository does not provide a complete operational Web/Mobile UI or public operational API.
 
-## Required blockers before implementation
+## Inventory review: what is safe to correct now
+
+- Reject malformed/non-integer persisted quantities through the existing persistence guard; the reader already reports legacy invalid values as `INVALID_QUANTITY` instead of exposing them as usable stock.
+- Keep NULL quantity as `UNKNOWN_QUANTITY`, not zero; tied latest observations remain `AMBIGUOUS`; do not aggregate different scopes or borrow quantity from another Offering/Activity.
+- Do not manually rewrite stored quantities or introduce a correction API without a source count and an approved correction contract. The repository is code, not the live inventory ledger; no live database/count evidence was supplied here.
+- Do not infer that a known quantity means the item is purchasable, reserved, or safe to deduct.
+
+## Required blockers before stock mutation or wider commerce implementation
 
 ### 1. Inventory quantity correction — Issue #102
 
-Do not add a quantity mutation path until the contract is approved. The open decision must define the existing authorization action code, grant scope/context matching, whether an approved persisted AgentAction is required, actor context, expected-version/CAS behavior, atomic history, and negative-quantity policy. No reservation, sale movement, or financial side effect should be inferred.
+Do not add a general quantity mutation path until the contract is approved. It must define the authorization action code, grant scope/context matching, whether a persisted approved AgentAction is required, actor context, expected-version/CAS behavior, atomic history, and negative-quantity policy. No reservation, sale movement, or financial side effect should be inferred.
 
 ### 2. Service lifecycle — Issue #105
 
@@ -36,41 +45,39 @@ Do not invent Service transitions or authorization codes. Existing Sale behavior
 
 ### 3. Sale terminal-state semantics
 
-The repository records an unresolved semantic mismatch between `fulfilled` in SPEC-0005 and `completed` in current domain/schema behavior. Do not silently treat the terms as synonyms. Obtain an authoritative decision before changing domain or schema semantics.
+The repository records a semantic mismatch between `fulfilled` in SPEC-0005 and `completed` in current domain/schema behavior. Do not silently treat the terms as synonyms. Obtain an authoritative decision before changing domain or schema semantics.
 
 ### 4. Availability and reservation semantics
 
-Inventory quantity and commercial availability are not interchangeable. Before implementing reservations or a final purchasability decision, approve the ownership, scope, temporal/freshness, concurrency, expiry, release, and conflict behavior. Do not infer these policies from the existing read interface.
+Inventory quantity and commercial availability are not interchangeable. Before implementing reservations or a final purchasability decision, approve ownership, scope, temporal/freshness, concurrency, expiry, release, and conflict behavior.
 
-## Proposed implementation sequence
+## Next implementation sequence
 
-### Slice A — Read-only commerce acceptance (safe first increment)
+### Slice A — Close the remaining read-only acceptance gaps
 
-- Build on the existing Product/Offering/Sale and inventory read contracts.
-- Add an integration acceptance test that composes existing supported operations without introducing a new stock mutation or financial side effect.
-- Include unknown quantity, ambiguous latest observations, mismatched Offering context, inactive Offering/Service, unauthorized Sale transition, and database-reopen cases.
-- Assert rejected operations leave persisted state and history unchanged.
+Extend the existing `test_stage34_commerce_sale_inventory_integration.py` rather than creating a duplicate integration harness. Cover inventory status outcomes in the same Offering/Activity graph (unknown quantity and tied latest observations), context-integrity failure, and unchanged inventory/history on rejected operations. Keep assertions aligned with the current contract: Sale creation is not blocked by stock status unless an approved rule explicitly says so.
 
-**Exit criteria:** the integrated test passes on the exact PR head in both required workflows, and it does not claim reservation, stock deduction, external payment, or full UI readiness.
+**Exit criteria:** Python tests and the Stage 7 workflow pass on the exact final PR head; the test claims no reservation, deduction, external payment, or full UI readiness.
 
 ### Slice B — Approved stock mutation contract
 
-Only after Issue #102 and relevant availability/reservation decisions are resolved: implement the smallest authorized quantity-correction or stock-movement contract, with compare-and-swap, atomic history, and regression tests. Do not bundle reservations or Sale side effects unless explicitly approved.
+Only after Issue #102 and relevant availability/reservation decisions are resolved: implement the smallest authorized correction contract with compare-and-swap, atomic history, and regression tests. Do not bundle reservations or Sale side effects unless explicitly approved.
 
 ### Slice C — User-facing operational entry point
 
-Once the service contracts are stable and scope is approved, define and implement the minimum operational API/UI for the accepted journey. Do not treat this plan as authorization to open a new stage or bypass repository governance.
+Once service contracts are stable and scope is approved, define and implement the minimum operational API/UI for the accepted journey. This plan does not authorize opening a stage or bypassing repository governance.
 
 ### Slice D — External payment integration
 
-Treat as a separate workstream with provider selection, credentials/secrets handling, callback authenticity, idempotency, reconciliation, failure handling, and explicit financial authority. A locally stored Payment record is not evidence of external payment completion.
+Treat this separately with provider selection, secrets handling, callback authenticity, idempotency, reconciliation, failure handling, and explicit financial authority. A locally stored Payment record is not evidence of external payment completion.
 
-## Verification checklist for the next implementation PR
+## Merge and validation checklist
 
-- [ ] Exact base/head SHAs recorded.
-- [ ] Full diff reviewed against current main.
-- [ ] Python tests pass on the exact final head.
-- [ ] Stage 7 Automated Tests pass on the exact final head.
+- [x] Exact base/head SHAs recorded for PR #267.
+- [x] Full PR diff reviewed; documentation-only change, one file, 81 additions before this revision.
+- [x] Python tests workflow passed on the current PR head.
+- [x] Stage 7 pytest check passed on the current PR head.
+- [ ] Any subsequent code/test PR must pass both workflows on its exact final head.
 - [ ] Rejected operations produce no partial writes or history.
 - [ ] Database-reopen assertions cover the accepted path.
 - [ ] No unresolved policy is silently encoded.
@@ -78,4 +85,4 @@ Treat as a separate workstream with provider selection, credentials/secrets hand
 
 ## Decision
 
-The next safe engineering increment is a read-only, end-to-end acceptance test over already-supported behavior. Quantity correction, reservation, automatic stock deduction, unresolved Sale-state semantics, and external money movement remain blocked until their contracts and authority are explicit.
+The existing read-only commerce integration test is a useful foundation; the next code increment should extend its edge-case coverage rather than duplicate it. Quantity correction, reservation, automatic stock deduction, unresolved Sale-state semantics, and external money movement remain blocked until their contracts and authority are explicit.
