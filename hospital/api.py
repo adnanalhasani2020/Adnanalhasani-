@@ -201,6 +201,21 @@ def make_handler(database: HospitalDB, api_token: str):
                         database._audit(conn, "api", "patient.discharged", "admission", int(parts[2]), str(data["discharged_at"]))
                         conn.commit()
                     self._send(200, {"id": int(parts[2]), "status": "discharged"})
+                elif route == "/api/invoices":
+                    self._required(data, "invoice_no", "patient_id", "total_minor", "created_at")
+                    ident = database.create_invoice(
+                        invoice_no=str(data["invoice_no"]), patient_id=int(data["patient_id"]),
+                        total_minor=int(data["total_minor"]), created_at=str(data["created_at"]),
+                        actor="api", currency=str(data.get("currency", "YER")),
+                        encounter_id=int(data["encounter_id"]) if data.get("encounter_id") is not None else None)
+                    self._send(201, {"id": ident, "status": "unpaid"})
+                elif route == "/api/payments":
+                    self._required(data, "invoice_id", "amount_minor", "method", "received_at")
+                    ident = database.record_payment(
+                        invoice_id=int(data["invoice_id"]), amount_minor=int(data["amount_minor"]),
+                        method=str(data["method"]), received_at=str(data["received_at"]),
+                        actor="api", reference=data.get("reference"))
+                    self._send(201, {"id": ident, "status": "received"})
                 else:
                     self._send(404, {"error": "not_found"})
             except HospitalError as exc:
