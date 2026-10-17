@@ -84,6 +84,15 @@ def test_inventory_context_reports_cross_context_position_mismatch_without_write
         "INSERT INTO products(product_id,name,state,created_at,updated_at) VALUES(?,?,?,?,?)",
         (other_product, "Other product", "active", NOW, NOW),
     )
+    # Recreate a legacy persisted mismatch by removing only inventory context
+    # triggers from this isolated test database; current writes correctly reject it.
+    context_triggers = db.execute(
+        "SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name='inventory_positions'"
+    ).fetchall()
+    for (trigger_name,) in context_triggers:
+        safe_name = trigger_name[0].replace('"', '""')
+        db.execute(f'DROP TRIGGER "{safe_name}"')
+
     position_id = uid()
     db.execute(
         "INSERT INTO inventory_positions(inventory_position_id,activity_id,product_id,"
