@@ -1,0 +1,23 @@
+name: Hospital core tests
+
+on:
+  pull_request:
+    paths:
+      - "hospital/**"
+      - ".github/workflows/hospital-core.yml"
+  push:
+    branches: ["main"]
+    paths:
+      - "hospital/**"
+      - ".github/workflows/hospital-core.yml"
+
+jobs:
+  hospital-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run hospital regression tests
+        run: python -m unittest discover -s hospital/tests -v
