@@ -69,3 +69,9 @@ def test_saved_text_values_respect_declared_length_limits():
     assert "value.slice(0,limit)" in html
     assert "if(d&&typeof d==='object'&&!Array.isArray(d))" in html
 
+def test_prototype_warns_that_browser_saved_choices_can_persist_on_shared_devices():
+    html = PROTOTYPE.read_text(encoding="utf-8")
+
+    assert "قد تبقى الاختيارات على هذا الجهاز حتى حذفها" in html
+    assert "لا تستخدم النموذج على جهاز مشترك" in html
+    assert "لا تدخل بيانات مرضى أو كلمات مرور أو معلومات حساسة" in html
