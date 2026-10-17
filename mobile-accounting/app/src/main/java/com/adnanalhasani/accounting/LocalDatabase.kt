@@ -122,20 +122,31 @@ class LocalDatabase(context: Context) : SQLiteOpenHelper(context, "accounting_lo
     fun summary(): JSONObject {
         val accounts = readEntities("accounts")
         val transactions = readEntities("transactions")
-        var income = java.math.BigDecimal.ZERO
-        var expenses = java.math.BigDecimal.ZERO
+        val totals = linkedMapOf<String, Pair<java.math.BigDecimal, java.math.BigDecimal>>()
         for (i in 0 until transactions.length()) {
             val item = transactions.getJSONObject(i)
             val amount = item.optString("amount", "0").toBigDecimalOrNull() ?: java.math.BigDecimal.ZERO
-            if (item.optString("kind") == "income") income = income.add(amount) else expenses = expenses.add(amount)
+            val currency = item.optString("currency", "YER").uppercase().ifBlank { "YER" }
+            val current = totals[currency] ?: (java.math.BigDecimal.ZERO to java.math.BigDecimal.ZERO)
+            totals[currency] = if (item.optString("kind") == "income") {
+                current.first.add(amount) to current.second
+            } else {
+                current.first to current.second.add(amount)
+            }
+        }
+        val byCurrency = JSONObject()
+        totals.forEach { (currency, values) ->
+            byCurrency.put(currency, JSONObject()
+                .put("income", values.first.toPlainString())
+                .put("expenses", values.second.toPlainString())
+                .put("net", values.first.subtract(values.second).toPlainString()))
         }
         val recent = JSONArray()
         for (i in 0 until minOf(5, transactions.length())) recent.put(transactions.getJSONObject(i))
-        return JSONObject().put("accounts_count", accounts.length()).put("income", income.toPlainString())
-            .put("expenses", expenses.toPlainString()).put("net", income.subtract(expenses).toPlainString())
+        return JSONObject().put("accounts_count", accounts.length())
+            .put("by_currency", byCurrency)
             .put("recent_transactions", recent)
     }
-
 
     @Synchronized
     fun saveCatalogRecord(type: String, payload: JSONObject): String {
