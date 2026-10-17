@@ -119,7 +119,7 @@ class UnifiedClinicalWorkflowTests(unittest.TestCase):
         self.assertEqual(status, 400)
         with self.db.connect() as conn:
             stock = conn.execute("SELECT quantity FROM medicines WHERE id=?", (medicine,)).fetchone()["quantity"]
-            movement = conn.execute("SELECT quantity_delta,movement_type FROM inventory_movements WHERE medicine_id=?", (medicine,)).fetchone()
+            movement = conn.execute("SELECT quantity_delta,movement_type FROM inventory_movements WHERE medicine_id=? ORDER BY id DESC LIMIT 1", (medicine,)).fetchone()
         self.assertEqual(stock, 10)
         self.assertEqual((movement["quantity_delta"], movement["movement_type"]), (6, "purchase"))
 
