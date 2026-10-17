@@ -6,6 +6,7 @@ patient data. Production requires per-user authentication and role enforcement.
 from __future__ import annotations
 
 import hmac
+import ipaddress
 import json
 import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -277,10 +278,33 @@ def make_handler(database: HospitalDB, api_token: str):
     return Handler
 
 
+def _validate_bind_host(host: str, *, allow_remote: bool = False) -> str:
+    """Keep the shared-token development server loopback-only by default."""
+    if allow_remote:
+        return host
+    if host.strip().lower() == "localhost":
+        return host
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError as exc:
+        raise ValueError(
+            "HOSPITAL_API_HOST must be a loopback address unless "
+            "HOSPITAL_API_ALLOW_REMOTE=1 is explicitly set"
+        ) from exc
+    if not address.is_loopback:
+        raise ValueError(
+            "HOSPITAL_API_HOST must be a loopback address unless "
+            "HOSPITAL_API_ALLOW_REMOTE=1 is explicitly set"
+        )
+    return host
+
+
 def serve() -> None:
     token = os.environ.get("HOSPITAL_API_TOKEN", "")
     db_path = os.environ.get("HOSPITAL_DB_PATH", "hospital.sqlite3")
     host = os.environ.get("HOSPITAL_API_HOST", "127.0.0.1")
+    allow_remote = os.environ.get("HOSPITAL_API_ALLOW_REMOTE", "") == "1"
+    host = _validate_bind_host(host, allow_remote=allow_remote)
     port = int(os.environ.get("HOSPITAL_API_PORT", "8080"))
     database = HospitalDB(db_path)
     server = ThreadingHTTPServer((host, port), make_handler(database, token))
