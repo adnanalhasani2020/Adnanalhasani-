@@ -35,10 +35,22 @@ class MainActivity : Activity() {
         setPadding(0,10,0,10);textDirection=View.TEXT_DIRECTION_RTL
     }
     private fun field(h:String,v:String="")=EditText(this).apply { hint=h;setText(v);gravity=Gravity.RIGHT;textDirection=View.TEXT_DIRECTION_RTL }
-    private fun btn(s:String,f:()->Unit)=Button(this).apply { text=s;setOnClickListener{f()} }
+    private fun btn(s:String,f:()->Unit)=Button(this).apply {
+        text=s; textSize=15f; setTextColor(Color.WHITE)
+        background = android.graphics.drawable.GradientDrawable().apply {
+            setColor(Color.rgb(24, 112, 82)); cornerRadius = 18f
+        }
+        elevation = 3f
+        isAllCaps = false
+        setPadding(18, 12, 18, 12)
+        val lp = LinearLayout.LayoutParams(-1, -2)
+        lp.setMargins(0, 6, 0, 6)
+        layoutParams = lp
+        setOnClickListener{f()}
+    }
     private fun screen(title:String) {
         root=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL;setPadding(22,22,22,22);layoutDirection=View.LAYOUT_DIRECTION_RTL;setBackgroundColor(Color.rgb(246,248,246)) }
-        root.addView(label(title,25f,true))
+        root.addView(label(title,25f,true).apply { setTextColor(Color.rgb(18, 91, 66)); setPadding(0, 8, 0, 18) })
         val scroll=ScrollView(this)
         body=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL;layoutDirection=View.LAYOUT_DIRECTION_RTL }
         scroll.addView(body);root.addView(scroll,LinearLayout.LayoutParams(-1,0,1f))
