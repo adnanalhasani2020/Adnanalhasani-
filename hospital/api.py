@@ -102,6 +102,30 @@ def make_handler(database: HospitalDB, api_token: str):
                 self._send(200, {"status": "ok", "service": "hospital-api"})
             elif route == "/api/dashboard":
                 self._send(200, {"data": database.dashboard()})
+            elif route == "/api/audit-log":
+                try:
+                    params = parse_qs(parsed.query, keep_blank_values=True)
+                    limit = int(params.get("limit", ["50"])[0])
+                    offset = int(params.get("offset", ["0"])[0])
+                except (TypeError, ValueError, OverflowError):
+                    self._send(400, {"error": "invalid_pagination"})
+                    return
+                if limit < 1 or limit > 100 or offset < 0:
+                    self._send(400, {"error": "limit must be 1-100 and offset must be non-negative"})
+                    return
+                search = params.get("search", [""])[0].strip()[:100]
+                pattern = "%" + search + "%"
+                with database.connect() as conn:
+                    rows = conn.execute(
+                        """SELECT id,actor,action,entity_type,entity_id,details_json,occurred_at
+                           FROM audit_log
+                           WHERE (?='' OR actor LIKE ? OR action LIKE ?
+                                  OR entity_type LIKE ? OR entity_id LIKE ? OR details_json LIKE ?)
+                           ORDER BY id DESC LIMIT ? OFFSET ?""",
+                        [search, pattern, pattern, pattern, pattern, pattern, limit, offset],
+                    ).fetchall()
+                self._send(200, {"data": [dict(row) for row in rows],
+                                 "pagination": {"limit": limit, "offset": offset, "count": len(rows)}})
             elif route.startswith("/api/") and route.count("/") == 2:
                 collections = {
                     "/api/patients": ("SELECT id,patient_no,full_name,phone,active,created_at FROM patients WHERE (?='' OR patient_no LIKE ? OR full_name LIKE ?) ORDER BY id DESC", 2),
