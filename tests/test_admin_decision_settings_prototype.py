@@ -128,3 +128,16 @@ def test_reset_keeps_the_user_informed_when_local_data_cannot_be_removed():
     assert "summary.hidden=true" in reset_handler
     assert "catch(error)" in reset_handler
     assert "document.getElementById('activity').focus()" in reset_handler
+
+def test_reset_clears_stale_preview_and_status_before_storage_cleanup():
+    html = PROTOTYPE.read_text(encoding="utf-8")
+
+    reset_handler = html.split("document.getElementById('reset').addEventListener", 1)[1]
+    reset_handler = reset_handler.split("function restoreSavedValue", 1)[0]
+
+    # A failed localStorage removal must not leave an old decision preview visible.
+    assert "summary.hidden=true" in reset_handler
+    assert "summary.textContent=''" in reset_handler
+    assert "statusBox.style.display='none'" in reset_handler
+    assert "catch(error)" in reset_handler
+    assert "تعذر حذف النسخة المحلية المحفوظة" in reset_handler
