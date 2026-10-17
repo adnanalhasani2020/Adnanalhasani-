@@ -19,19 +19,20 @@ def apply_migrations(connection: sqlite3.Connection) -> list[str]:
         )
 
     migration_paths = sorted(MIGRATIONS_DIR.glob("*.sql"))
-    prefixes: dict[str, str] = {}
+    prefixes: dict[int, str] = {}
     for path in migration_paths:
         prefix, separator, _name = path.stem.partition("_")
         if not separator or not prefix.isdigit():
             raise MigrationError(
                 f"migration filename must start with a numeric version and underscore: {path.name}"
             )
-        if prefix in prefixes:
+        numeric_prefix = int(prefix)
+        if numeric_prefix in prefixes:
             raise MigrationError(
-                f"duplicate migration version prefix {prefix}: "
-                f"{prefixes[prefix]} and {path.name}"
+                f"duplicate migration version prefix {numeric_prefix}: "
+                f"{prefixes[numeric_prefix]} and {path.name}"
             )
-        prefixes[prefix] = path.name
+        prefixes[numeric_prefix] = path.name
 
     connection.execute("PRAGMA foreign_keys = ON")
     connection.execute(
