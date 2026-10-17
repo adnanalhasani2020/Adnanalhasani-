@@ -5,7 +5,7 @@ An isolated hospital-domain development foundation that does not alter existing 
 ## Included modules
 - SQLite schema with constraints for patients, doctors, appointments, encounters, wards/beds, admissions, laboratory orders, medicines, prescriptions, invoices, payments, and audit events.
 - Transactional workflows for registration, appointment overlap prevention, admission/discharge, invoices/payments, encounter lifecycle, lab status/results, and pharmacy dispensing with atomic stock deduction.
-- Token-protected JSON API and Arabic right-to-left development UI for dashboard metrics, patient/doctor registration, and appointment booking.
+- Token-protected JSON API and Arabic right-to-left development UI for dashboard metrics, patient/doctor registration, appointments, laboratory orders, medicines, prescriptions, admissions, invoices, and payments.
 - API endpoints for encounter lifecycle, laboratory result updates, pharmacy prescriptions/dispensing, beds, and admissions/discharge.
 - Regression tests for business rules, API authentication/validation, and clinical workflows.
 - GitHub Actions workflow dedicated to hospital regression tests.
