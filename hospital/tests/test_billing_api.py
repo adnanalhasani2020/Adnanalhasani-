@@ -77,6 +77,23 @@ class BillingAPIWorkflowTests(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertIn("exceeds invoice balance", data["error"])
 
+    def test_invoice_rejects_encounter_belonging_to_another_patient(self):
+        other = self.post("/api/patients", {
+            "patient_no": "BILL-P-OTHER", "full_name": "Other Billing Patient",
+            "created_at": "2026-01-01T08:00:00"
+        })["id"]
+        encounter = self.post("/api/encounters", {
+            "patient_id": other, "opened_at": "2026-01-02T08:00:00",
+            "chief_complaint": "Synthetic test"
+        })["id"]
+        status, data = self.call("/api/invoices", {
+            "invoice_no": "INV-MISMATCH", "patient_id": self.patient,
+            "encounter_id": encounter, "total_minor": 1000,
+            "created_at": "2026-01-02T09:00:00"
+        })
+        self.assertEqual(status, 400)
+        self.assertIn("encounter does not belong to this patient", data["error"])
+
     def test_invoice_requires_valid_amount_and_patient(self):
         status, data = self.call("/api/invoices", {
             "invoice_no": "INV-API-2", "patient_id": self.patient,
