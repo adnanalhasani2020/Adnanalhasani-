@@ -47,11 +47,22 @@ class HospitalAPITests(unittest.TestCase):
             self.assertEqual(response.status, 200)
             self.assertIn("text/html", response.headers["Content-Type"])
             self.assertIn("نظام إدارة المستشفى", page)
+            self.assertEqual(response.headers["X-Frame-Options"], "DENY")
+            self.assertEqual(response.headers["X-Content-Type-Options"], "nosniff")
+            self.assertEqual(response.headers["Referrer-Policy"], "no-referrer")
+            self.assertIn("frame-ancestors 'none'", response.headers["Content-Security-Policy"])
+            self.assertEqual(response.headers["Cache-Control"], "no-store")
 
     def test_authentication_required(self):
         status, payload = self.request("/api/dashboard", token=False)
         self.assertEqual(status, 401)
         self.assertEqual(payload["error"], "unauthorized")
+        # JSON responses must not be cacheable or embeddable in another origin.
+        req = Request(self.base + "/api/dashboard",
+                      headers={"Authorization": f"Bearer {self.token}"})
+        with urlopen(req, timeout=3) as response:
+            self.assertEqual(response.headers["Cache-Control"], "no-store")
+            self.assertEqual(response.headers["X-Frame-Options"], "DENY")
 
     def test_patient_creation_and_dashboard(self):
         status, payload = self.request("/api/patients", method="POST", payload={
