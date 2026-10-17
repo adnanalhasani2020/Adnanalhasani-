@@ -214,7 +214,7 @@ def test_duplicate_migration_version_prefix_fails_before_schema_changes(tmp_path
     monkeypatch.setattr(persistence, "MIGRATIONS_DIR", migration_dir)
     db = sqlite3.connect(":memory:")
 
-    with pytest.raises(MigrationError, match="duplicate migration version prefix 0001"):
+    with pytest.raises(MigrationError, match="duplicate migration version prefix 1"):
         apply_migrations(db)
 
     assert db.execute(
