@@ -7,11 +7,16 @@
 <title>إعدادات المدير — نظام المستشفى</title>
 <style>
 :root{font-family:Tahoma,Arial,sans-serif;color:#152b3c;background:#f3f7fa}*{box-sizing:border-box}body{margin:0}header{background:#123d56;color:#fff;padding:24px clamp(16px,4vw,48px)}header h1{margin:0 0 8px;font-size:clamp(22px,4vw,32px)}header p{margin:0;color:#d7e8ef}main{max-width:1050px;margin:24px auto;padding:0 16px}.notice{background:#fff7df;border:1px solid #f0d58c;padding:14px 16px;border-radius:10px;margin-bottom:18px;line-height:1.8}.panel{background:#fff;border:1px solid #dbe5eb;border-radius:12px;padding:18px;margin-bottom:18px;box-shadow:0 3px 14px #15364a0a}h2{margin:0 0 12px;font-size:20px}.muted{color:#5d7482;line-height:1.8}.profiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}.profile{display:block;border:1px solid #c6d5df;border-radius:10px;padding:15px;cursor:pointer;transition:.15s}.profile:has(input:checked){border:2px solid #176b87;background:#eef8fb;padding:14px}.profile input{accent-color:#176b87}.profile strong{display:block;margin:8px 0}.profile span{font-size:13px;color:#5d7482;line-height:1.7}.options{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px}.option{display:flex;align-items:flex-start;gap:10px;border:1px solid #dbe5eb;padding:12px;border-radius:9px}.option input{margin-top:4px;accent-color:#176b87}.option strong{display:block}.option small{display:block;color:#5d7482;margin-top:4px;line-height:1.6}.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.row>*{flex:1;min-width:180px}button,a.button{font:inherit;padding:11px 15px;border-radius:8px;border:0;background:#176b87;color:#fff;cursor:pointer;font-weight:bold;text-decoration:none;text-align:center}button.secondary,a.secondary{background:#e7eff3;color:#173c50}.status{min-height:25px;margin-top:12px;line-height:1.7}.error{color:#a32626}.success{color:#155c42}.dirty{color:#9a5a00;font-weight:bold}.summary{background:#eef6fa;border-radius:9px;padding:14px;line-height:1.9}footer{text-align:center;color:#607987;padding:20px}button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid #e6a23c;outline-offset:2px}
+
+.skip-link{position:absolute;top:8px;right:8px;z-index:1000;padding:10px 14px;background:#fff;color:#123d56;border:2px solid #e6a23c;border-radius:8px;transform:translateY(-160%);text-decoration:none;font-weight:bold}
+.skip-link:focus{transform:translateY(0)}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 </style>
 </head>
 <body>
+<a class="skip-link" href="#main-content">تجاوز إلى المحتوى الرئيسي</a>
 <header><h1>إعدادات المدير</h1><p>اختر ملف التشغيل الذي يناسب طبيعة المنشأة، ثم راجع الوحدات المقترحة قبل الاعتماد.</p></header>
-<main>
+<main id="main-content" tabindex="-1">
 <div class="notice"><strong>وضع المعاينة:</strong> هذه الشاشة تحفظ المقترح مؤقتًا في جلسة المتصفح فقط. لا تغيّر إعدادات الخادم ولا تفعّل وحدات فعلية. يتطلب الاعتماد الحقيقي هوية مدير موثوقة وصلاحيات على الخادم، وإصدارات إعدادات، وموافقة صريحة وسجل تدقيق.</div>
 <section class="panel">
 <h2>1. ما طبيعة المنشأة؟</h2>
