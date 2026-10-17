@@ -79,7 +79,7 @@ small{color:#5d7482}form{display:grid;gap:10px}footer{text-align:center;color:#6
 <button>إنشاء الوصفة</button><div class="status" role="status"></div>
 </form></section>
 <section class="panel"><h2>صرف وصفة</h2><form id="dispenseForm">
-<input name="prescription_id" required type="number" min="1" placeholder="رقم الوصفة الداخلي">
+<select name="prescription_id" required aria-label="الوصفة"><option value="">اختر الوصفة المعلقة...</option></select>
 <button>صرف الدواء وخصم المخزون</button><div class="status" role="status"></div>
 </form></section>
 <section class="panel"><h2>إدارة الأسرة والتنويم</h2>
@@ -88,14 +88,14 @@ small{color:#5d7482}form{display:grid;gap:10px}footer{text-align:center;color:#6
 <form id="admissionForm"><h3>تنويم مريض</h3><div class="row"><select name="patient_id" required aria-label="المريض"><option value="">اختر المريض...</option></select><select name="bed_id" required aria-label="السرير"><option value="">اختر السرير...</option></select></div><input name="reason" placeholder="سبب التنويم (اختياري)"><button>تسجيل التنويم</button><div class="status" role="status"></div></form>
 </section>
 <section class="panel"><h2>إدارة الزيارة الطبية</h2>
-<form id="encounterForm"><h3>فتح زيارة</h3><div class="row"><select name="patient_id" required aria-label="المريض"><option value="">اختر المريض...</option></select><select name="doctor_id" aria-label="الطبيب (اختياري)"><option value="">بدون طبيب محدد</option></select></div><input name="chief_complaint" placeholder="الشكوى الرئيسية"><input name="appointment_id" type="number" min="1" placeholder="رقم الموعد (اختياري)"><button>فتح الزيارة</button><div class="status" role="status"></div></form>
+<form id="encounterForm"><h3>فتح زيارة</h3><div class="row"><select name="patient_id" required aria-label="المريض"><option value="">اختر المريض...</option></select><select name="doctor_id" aria-label="الطبيب (اختياري)"><option value="">بدون طبيب محدد</option></select></div><input name="chief_complaint" placeholder="الشكوى الرئيسية"><select name="appointment_id" aria-label="الموعد (اختياري)"><option value="">بدون موعد مرتبط</option></select><button>فتح الزيارة</button><div class="status" role="status"></div></form>
 <hr style="border:0;border-top:1px solid #dbe5eb;margin:18px 0">
 <form id="closeEncounterForm"><h3>إغلاق زيارة وتسجيل التشخيص</h3><input name="encounter_id" required type="number" min="1" placeholder="رقم الزيارة الداخلي"><input name="diagnosis" required placeholder="التشخيص"><input name="clinical_notes" placeholder="ملاحظات سريرية"><button>إغلاق الزيارة</button><div class="status" role="status"></div></form>
 </section>
 <section class="panel"><h2>تحديث المختبر والخروج</h2>
-<form id="labStatusForm"><h3>تحديث حالة طلب المختبر</h3><input name="order_id" required type="number" min="1" placeholder="رقم طلب المختبر الداخلي"><div class="row"><label>الحالة<select name="status" required><option value="collected">تم أخذ العينة</option><option value="processing">قيد المعالجة</option><option value="resulted">ظهرت النتيجة</option><option value="cancelled">ملغى</option></select></label><input name="result" placeholder="النتيجة (عند توفرها)"></div><button>تحديث الطلب</button><div class="status" role="status"></div></form>
+<form id="labStatusForm"><h3>تحديث حالة طلب المختبر</h3><select name="order_id" required aria-label="طلب المختبر"><option value="">اختر طلب المختبر...</option></select><div class="row"><label>الحالة<select name="status" required><option value="collected">تم أخذ العينة</option><option value="processing">قيد المعالجة</option><option value="resulted">ظهرت النتيجة</option><option value="cancelled">ملغى</option></select></label><input name="result" placeholder="النتيجة (عند توفرها)"></div><button>تحديث الطلب</button><div class="status" role="status"></div></form>
 <hr style="border:0;border-top:1px solid #dbe5eb;margin:18px 0">
-<form id="dischargeForm"><h3>تسجيل خروج مريض</h3><input name="admission_id" required type="number" min="1" placeholder="رقم حالة التنويم الداخلية"><button>تسجيل الخروج</button><div class="status" role="status"></div></form>
+<form id="dischargeForm"><h3>تسجيل خروج مريض</h3><select name="admission_id" required aria-label="حالة التنويم"><option value="">اختر حالة التنويم الحالية...</option></select><button>تسجيل الخروج</button><div class="status" role="status"></div></form>
 </section>
 <section class="panel">
 <h2>استعراض سجلات المستشفى</h2>
@@ -128,8 +128,12 @@ async function loadReferenceOptions(){const tasks=[
 ["/api/doctors","select[name='doctor_id']",r=>r.full_name+" — "+r.specialty,"اختر الطبيب..."],
 ["/api/medicines","select[name='medicine_id']",r=>r.name+" ("+r.sku+") — المخزون: "+r.quantity,"اختر الدواء..."],
 ["/api/beds","select[name='bed_id']",r=>r.ward+" — "+r.bed_no+(r.occupied?" (مشغول)":" (متاح)"),"اختر السرير..."],
-["/api/invoices","select[name='invoice_id']",r=>r.invoice_no+" — "+r.patient_name+" — المتبقي: "+(Number(r.total_minor)-Number(r.paid_minor))+" "+r.currency,"اختر الفاتورة..."]
-];const results=await Promise.allSettled(tasks.map(async t=>({task:t,result:await api(t[0]+"?limit=100&offset=0")})));results.forEach(item=>{if(item.status==="fulfilled"){const {task,result}=item.value;const [,selector,label,empty]=task;let rows=result.data||[];if(selector.includes("bed_id"))rows=rows.filter(r=>!r.occupied&&r.active);if(selector.includes("invoice_id"))rows=rows.filter(r=>Number(r.total_minor)>Number(r.paid_minor)&&r.status!=="void");fillSelects(selector,rows,label,empty)}})}
+["/api/invoices","select[name='invoice_id']",r=>r.invoice_no+" — "+r.patient_name+" — المتبقي: "+(Number(r.total_minor)-Number(r.paid_minor))+" "+r.currency,"اختر الفاتورة..."],
+["/api/prescriptions","select[name='prescription_id']",r=>"#"+r.id+" — "+r.patient_name+" — "+r.medicine_name+" ("+r.status+")","اختر الوصفة المعلقة..."],
+["/api/lab-orders","select[name='order_id']",r=>"#"+r.id+" — "+r.patient_name+" — "+r.test_name+" ("+r.status+")","اختر طلب المختبر..."],
+["/api/admissions","select[name='admission_id']",r=>"#"+r.id+" — "+r.patient_name+" — "+r.ward+" / "+r.bed_no,"اختر حالة التنويم الحالية..."],
+["/api/appointments","select[name='appointment_id']",r=>"#"+r.id+" — "+r.patient_name+" — "+r.doctor_name+" — "+r.starts_at,"بدون موعد مرتبط"]
+];const results=await Promise.allSettled(tasks.map(async t=>({task:t,result:await api(t[0]+"?limit=100&offset=0")})));const failures=[];results.forEach(item=>{if(item.status==="fulfilled"){const {task,result}=item.value;const [,selector,label,empty]=task;let rows=result.data||[];if(selector.includes("bed_id"))rows=rows.filter(r=>!r.occupied&&r.active);if(selector.includes("invoice_id"))rows=rows.filter(r=>Number(r.total_minor)>Number(r.paid_minor)&&r.status!=="void");if(selector.includes("prescription_id"))rows=rows.filter(r=>r.status==="pending");if(selector.includes("order_id"))rows=rows.filter(r=>!["resulted","cancelled"].includes(r.status));if(selector.includes("admission_id"))rows=rows.filter(r=>r.status==="admitted");if(selector.includes("appointment_id"))rows=rows.filter(r=>["scheduled","confirmed"].includes(r.status));fillSelects(selector,rows,label,empty)}else{failures.push("تعذر تحميل بعض القوائم المرجعية؛ تحقق من اتصال API وصلاحية الرمز.")}});if(failures.length)msg($("connection"),[...new Set(failures)].join(" "),true)}
 
 $("connect").onclick=async()=>{try{const d=await api("/api/dashboard");$("metrics").replaceChildren(...Object.entries(d.data).map(([k,v])=>{const box=document.createElement("div");box.className="metric";const label=document.createElement("span");label.textContent=labels[k]||k;const value=document.createElement("strong");value.textContent=String(v);box.append(label,value);return box}));await loadReferenceOptions();msg($("connection"),"تم الاتصال وتحديث المؤشرات والقوائم المرجعية")}catch(e){msg($("connection"),e.message,true)}};
 function wire(formId,path,build){const form=$(formId);form.addEventListener("submit",async ev=>{ev.preventDefault();const status=form.querySelector(".status");try{const data=build(Object.fromEntries(new FormData(form).entries()));const result=await api(path,{method:"POST",body:JSON.stringify(data)});msg(status,"تم الحفظ بنجاح. الرقم الداخلي: "+result.id);form.reset();$("connect").click()}catch(e){msg(status,e.message,true)}})}
