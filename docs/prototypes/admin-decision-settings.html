@@ -11,7 +11,7 @@ header{background:#13284b;color:#fff;padding:28px max(20px,calc((100% - 1100px)/
 main{max-width:1100px;margin:24px auto;padding:0 18px 40px}.notice{padding:14px 16px;border:1px solid #e9c76c;background:var(--amber);border-radius:12px;margin-bottom:20px}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:0 3px 12px #1d355710}
 h2{font-size:1.15rem;margin:0 0 10px}h3{font-size:1rem;margin:0 0 8px}label{display:block;font-weight:700;margin:12px 0 6px}
-select,input[type=text],textarea{width:100%;padding:11px;border:1px solid #bdc9da;border-radius:9px;background:#fff;color:var(--ink);font:inherit}
+select,input[type=text],textarea{width:100%;padding:11px;border:1px solid #bdc9da;border-radius:9px;background:#fff;color:var(--ink);font:inherit}:focus-visible{outline:3px solid #2457c5;outline-offset:3px}button:disabled{cursor:not-allowed;opacity:.65}@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
 .help{font-size:.9rem;color:var(--muted);margin:6px 0}.pill{display:inline-block;border-radius:99px;padding:3px 10px;background:#eaf0ff;color:#234ca5;font-size:.8rem;font-weight:bold}
 .pending{background:#fff1d2;color:#8b5b00}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
 button{border:0;border-radius:9px;padding:11px 16px;font:inherit;font-weight:bold;cursor:pointer}.primary{background:var(--blue);color:white}.secondary{background:#e8edf5;color:var(--ink)}
@@ -38,7 +38,7 @@ footer{max-width:1100px;margin:auto;padding:0 18px 24px;color:var(--muted);font-
 <option value="other">نشاط آخر</option>
 </select>
 <label for="orgName">اسم المؤسسة (اختياري في النموذج)</label>
-<input id="orgName" name="orgName" type="text" maxlength="120" placeholder="اسم المؤسسة">
+<input id="orgName" name="orgName" type="text" autocomplete="organization" maxlength="120" placeholder="اسم المؤسسة">
 <label for="notes">ملاحظات المدير</label>
 <textarea id="notes" name="notes" rows="3" maxlength="1000" placeholder="اشرح احتياج المؤسسة أو القرار المطلوب"></textarea>
 </section>
@@ -82,11 +82,11 @@ footer{max-width:1100px;margin:auto;padding:0 18px 24px;color:var(--muted);font-
 const form=document.getElementById('settings'),statusBox=document.getElementById('status'),summary=document.getElementById('summary');
 const labels={activity:{commerce:'التجارة والخدمات اليومية',health:'الخدمات الصحية',education:'التعليم والتدريب',finance:'الخدمات المالية والمحاسبية',mixed:'نشاط مختلط',other:'نشاط آخر'},clinical:{defer:'تأجيل الوظائف الصحية غير المعتمدة',request:'طلب مراجعة واعتماد نطاق صحي'},finance:{blocked:'إبقاء السياسات المالية غير المحسومة محجوبة',review:'طلب مراجعة سياسة مالية'},approval:{all:'موافقة مدير على كل تغيير مؤثر',sensitive:'موافقة مدير على التغييرات الحساسة'},audit:{required:'سجل تدقيق لكل تغيير وإقرار',standard:'سجل تدقيق للتغييرات الحساسة على الأقل'}};
 function data(){return Object.fromEntries(new FormData(form).entries())}
-function show(message){statusBox.textContent=message;statusBox.style.display='block'}
-form.addEventListener('submit',e=>{e.preventDefault();const d=data();if(!d.activity){show('يرجى اختيار النشاط الرئيسي قبل المعاينة.');return}summary.hidden=false;summary.textContent='معاينة غير معتمدة — لا تغيّر النظام\n\nالنشاط: '+labels.activity[d.activity]+'\nالوظائف الصحية: '+labels.clinical[d.clinical]+'\nالسياسات المالية: '+labels.finance[d.finance]+'\nالموافقة: '+labels.approval[d.approval]+'\nالتدقيق: '+labels.audit[d.audit]+'\nاسم المؤسسة: '+(d.orgName||'غير محدد')+'\nملاحظات: '+(d.notes||'لا توجد')+'\n\nالخطوة المطلوبة: اعتماد المدير وتسجيل القرار رسميًا قبل تحويله إلى إعداد نافذ.';show('تم إنشاء معاينة محلية فقط؛ لم يتم اعتماد أو تفعيل أي سياسة.')});
-document.getElementById('save').addEventListener('click',()=>{localStorage.setItem('hospital-admin-decision-prototype',JSON.stringify(data()));show('حُفظت الاختيارات في هذا المتصفح فقط. لا يوجد حفظ على الخادم.')});
-document.getElementById('reset').addEventListener('click',()=>{form.reset();summary.hidden=true;summary.textContent='';statusBox.style.display='none';localStorage.removeItem('hospital-admin-decision-prototype')});
-const saved=localStorage.getItem('hospital-admin-decision-prototype');if(saved){try{const d=JSON.parse(saved);for(const [k,v] of Object.entries(d)){if(form.elements[k])form.elements[k].value=v}}catch{}}
+function show(message){statusBox.textContent=message;statusBox.style.display='block'}function announceError(message){show(message);statusBox.setAttribute('role','alert')}function announceStatus(message){show(message);statusBox.setAttribute('role','status')}
+form.addEventListener('submit',e=>{e.preventDefault();const d=data();if(!d.activity){announceError('يرجى اختيار النشاط الرئيسي قبل المعاينة.');document.getElementById('activity').focus();return}summary.hidden=false;summary.textContent='معاينة غير معتمدة — لا تغيّر النظام\n\nالنشاط: '+labels.activity[d.activity]+'\nالوظائف الصحية: '+labels.clinical[d.clinical]+'\nالسياسات المالية: '+labels.finance[d.finance]+'\nالموافقة: '+labels.approval[d.approval]+'\nالتدقيق: '+labels.audit[d.audit]+'\nاسم المؤسسة: '+(d.orgName||'غير محدد')+'\nملاحظات: '+(d.notes||'لا توجد')+'\n\nالخطوة المطلوبة: اعتماد المدير وتسجيل القرار رسميًا قبل تحويله إلى إعداد نافذ.';announceStatus('تم إنشاء معاينة محلية فقط؛ لم يتم اعتماد أو تفعيل أي سياسة.')});
+document.getElementById('save').addEventListener('click',()=>{try{localStorage.setItem('hospital-admin-decision-prototype',JSON.stringify(data()));announceStatus('حُفظت الاختيارات في هذا المتصفح فقط. لا يوجد حفظ على الخادم.')}catch(error){announceError('تعذر الحفظ المحلي؛ قد يكون تخزين المتصفح معطلاً أو ممتلئًا. انسخ معاينة القرار قبل مغادرة الصفحة.')}});
+document.getElementById('reset').addEventListener('click',()=>{form.reset();summary.hidden=true;summary.textContent='';statusBox.style.display='none';try{localStorage.removeItem('hospital-admin-decision-prototype')}catch(error){announceError('أُعيد ضبط النموذج، لكن تعذر حذف النسخة المحلية المحفوظة من المتصفح. احذف بيانات الموقع من إعدادات المتصفح إذا لزم.')}document.getElementById('activity').focus()});
+try{const saved=localStorage.getItem('hospital-admin-decision-prototype');if(saved){const d=JSON.parse(saved);for(const [k,v] of Object.entries(d)){if(form.elements[k]&&typeof v==='string')form.elements[k].value=v}}}catch(error){announceError('تعذر استعادة الاختيارات المحلية. يمكنك متابعة استخدام النموذج أو إعادة ضبطه.')}
 </script>
 </body>
 </html>
