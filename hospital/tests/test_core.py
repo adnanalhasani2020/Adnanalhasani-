@@ -67,6 +67,37 @@ class HospitalCoreTests(unittest.TestCase):
             row = conn.execute("SELECT action,entity_type FROM audit_log ORDER BY id LIMIT 1").fetchone()
         self.assertEqual((row["action"], row["entity_type"]), ("patient.registered", "patient"))
 
+    def test_audit_log_rejects_updates_and_deletes(self):
+        import sqlite3
+
+        with self.db.connect() as conn:
+            before = conn.execute(
+                "SELECT id,actor,action,entity_type,entity_id,details_json,occurred_at "
+                "FROM audit_log ORDER BY id LIMIT 1"
+            ).fetchone()
+            with self.assertRaisesRegex(sqlite3.IntegrityError, "audit_log is append-only"):
+                conn.execute("UPDATE audit_log SET action='rewritten' WHERE id=?", (before["id"],))
+            with self.assertRaisesRegex(sqlite3.IntegrityError, "audit_log is append-only"):
+                conn.execute("DELETE FROM audit_log WHERE id=?", (before["id"],))
+            after = conn.execute(
+                "SELECT id,actor,action,entity_type,entity_id,details_json,occurred_at "
+                "FROM audit_log ORDER BY id LIMIT 1"
+            ).fetchone()
+        self.assertEqual(tuple(after), tuple(before))
+        self.assertEqual(after["action"], "patient.registered")
+
+    def test_audit_log_append_only_triggers_are_created_for_existing_databases(self):
+        # Reinitializing an existing database should install missing triggers.
+        self.db = HospitalDB(self.db.path)
+        with self.db.connect() as conn:
+            names = {
+                row["name"] for row in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='trigger'"
+                )
+            }
+        self.assertIn("hospital_audit_log_no_update", names)
+        self.assertIn("hospital_audit_log_no_delete", names)
+
 
 if __name__ == "__main__":
     unittest.main()
