@@ -165,13 +165,29 @@ def create_purchase_order(db: HospitalDB, *, order_no: str, supplier_id: int, it
         raise HospitalError("order number and at least one item are required")
     normalized = []
     seen = set()
+    def integer_field(item, field):
+        value = item[field]
+        if isinstance(value, bool):
+            raise HospitalError(field + " must be an integer")
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str):
+            candidate = value.strip()
+            if candidate and (candidate.isdecimal() or (candidate.startswith("+") and candidate[1:].isdecimal())):
+                return int(candidate)
+        raise HospitalError(field + " must be an integer")
+
     for item in items:
+        if not isinstance(item, dict):
+            raise HospitalError("each purchase item must be an object")
         try:
-            medicine_id, quantity, unit_cost = int(item["medicine_id"]), int(item["quantity"]), int(item["unit_cost_minor"])
-        except (KeyError, TypeError, ValueError) as exc:
+            medicine_id = integer_field(item, "medicine_id")
+            quantity = integer_field(item, "quantity")
+            unit_cost = integer_field(item, "unit_cost_minor")
+        except KeyError as exc:
             raise HospitalError("each purchase item requires medicine_id, quantity and unit_cost_minor") from exc
-        if medicine_id in seen or quantity <= 0 or unit_cost < 0:
-            raise HospitalError("purchase items must be unique with positive quantity and non-negative unit cost")
+        if medicine_id <= 0 or medicine_id in seen or quantity <= 0 or unit_cost < 0:
+            raise HospitalError("purchase items must have positive IDs, unique medicines, positive quantity and non-negative unit cost")
         seen.add(medicine_id)
         normalized.append((medicine_id, quantity, unit_cost))
     with db.connect() as conn:
