@@ -86,30 +86,24 @@ class LocalDatabase(context: Context) : SQLiteOpenHelper(context, "accounting_lo
         val array = JSONArray()
         readableDatabase.rawQuery("SELECT * FROM $entity ORDER BY rowid DESC", null).use { c ->
             while (c.moveToNext()) {
-                val obj = JSONObject()
-                when (entity) {
-                    "accounts" -> {
-                        obj.put("local_id", c.getString(c.getColumnIndexOrThrow("local_id")))
-                        if (!c.isNull(c.getColumnIndexOrThrow("server_id"))) obj.put("server_id", c.getInt(c.getColumnIndexOrThrow("server_id")))
-                        obj.put("name", c.getString(c.getColumnIndexOrThrow("name")))
-                        obj.put("currency", c.getString(c.getColumnIndexOrThrow("currency")))
-                        obj.put("opening_balance", c.getString(c.getColumnIndexOrThrow("opening_balance")))
-                        obj.put("balance", c.getString(c.getColumnIndexOrThrow("balance")))
-                    }
-                    else -> {
-                        val payload = JSONObject(c.getString(c.getColumnIndexOrThrow("payload")))
-                        payload.put("local_id", c.getString(c.getColumnIndexOrThrow("local_id")))
-                        if (!c.isNull(c.getColumnIndexOrThrow("server_id"))) payload.put("server_id", c.getInt(c.getColumnIndexOrThrow("server_id")))
-                        array.put(payload)
-                        continue
-                    }
+                val obj = if (entity == "accounts") {
+                    JSONObject()
+                        .put("local_id", c.getString(c.getColumnIndexOrThrow("local_id")))
+                        .put("server_id", if (c.isNull(c.getColumnIndexOrThrow("server_id"))) JSONObject.NULL else c.getInt(c.getColumnIndexOrThrow("server_id")))
+                        .put("name", c.getString(c.getColumnIndexOrThrow("name")))
+                        .put("currency", c.getString(c.getColumnIndexOrThrow("currency")))
+                        .put("opening_balance", c.getString(c.getColumnIndexOrThrow("opening_balance")))
+                        .put("balance", c.getString(c.getColumnIndexOrThrow("balance")))
+                } else {
+                    JSONObject(c.getString(c.getColumnIndexOrThrow("payload")))
+                        .put("local_id", c.getString(c.getColumnIndexOrThrow("local_id")))
+                        .put("server_id", if (c.isNull(c.getColumnIndexOrThrow("server_id"))) JSONObject.NULL else c.getInt(c.getColumnIndexOrThrow("server_id")))
                 }
                 array.put(obj)
             }
         }
         return array
     }
-
 
     @Synchronized
     fun accountByLocalNumber(number: Int): JSONObject? {
