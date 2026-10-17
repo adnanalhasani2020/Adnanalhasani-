@@ -266,7 +266,7 @@ def permission_for_route(method: str, path: str) -> str | None:
     # Resource action routes inherit their module's explicit permission.
     segments = route.split("/")
     if len(segments) >= 4 and segments[2] in {
-        "encounters", "lab-orders", "prescriptions", "beds", "admissions", "invoices", "payments", "users"
+        "encounters", "lab-orders", "prescriptions", "beds", "admissions", "invoices", "payments", "users", "purchase-orders"
     }:
         module = segments[2]
         action = segments[3]
@@ -278,6 +278,8 @@ def permission_for_route(method: str, path: str) -> str | None:
             return "prescriptions:dispense" if "dispense" in segments[3:] else "prescriptions:write"
         if module == "admissions":
             return "admissions:write"
+        if module == "purchase-orders":
+            return "purchases:receive" if action == "receive" else "purchases:write"
         if module == "users":
             return "users:manage"
         return {
