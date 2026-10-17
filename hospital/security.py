@@ -195,6 +195,8 @@ class AuthStore:
 
 
 def require_permission(principal: Principal, permission: str) -> None:
+    if principal.role in ROLE_PERMISSIONS and permission in {"session:read", "session:write"}:
+        return
     if principal.role not in ROLE_PERMISSIONS:
         raise AuthorizationError("role has no permissions")
     allowed = ROLE_PERMISSIONS[principal.role]
