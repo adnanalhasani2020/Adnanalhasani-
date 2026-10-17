@@ -373,7 +373,7 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                         cur = conn.execute("INSERT INTO admissions(patient_id,bed_id,admitted_at,reason) VALUES(?,?,?,?)",
                             (int(data["patient_id"]), int(data["bed_id"]), str(data["admitted_at"]), str(data.get("reason", ""))))
                         ident = cur.lastrowid
-                        database._audit(conn, "api", "patient.admitted", "admission", ident, str(data["admitted_at"]))
+                        database._audit(conn, self._actor(), "patient.admitted", "admission", ident, str(data["admitted_at"]))
                         conn.commit()
                     self._send(201, {"id": int(ident), "status": "admitted"})
                 elif len(parts) == 4 and parts[:2] == ["api", "admissions"] and parts[3] == "discharge":
@@ -387,7 +387,7 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                             raise HospitalError("discharge cannot precede admission")
                         conn.execute("UPDATE admissions SET discharged_at=?,status='discharged' WHERE id=?",
                             (str(data["discharged_at"]), int(parts[2])))
-                        database._audit(conn, "api", "patient.discharged", "admission", int(parts[2]), str(data["discharged_at"]))
+                        database._audit(conn, self._actor(), "patient.discharged", "admission", int(parts[2]), str(data["discharged_at"]))
                         conn.commit()
                     self._send(200, {"id": int(parts[2]), "status": "discharged"})
                 elif route == "/api/invoices":
