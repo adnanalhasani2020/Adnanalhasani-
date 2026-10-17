@@ -234,6 +234,8 @@ def permission_for_route(method: str, path: str) -> str | None:
         "/api/invoices": ("invoices:read", "invoices:write"),
         "/api/payments": ("payments:read", "payments:write"),
     }
+    if route == "/api/lab-orders" and method == "POST":
+        return "lab:order"
     if route in routes:
         return routes[route][0 if method == "GET" else 1 if method == "POST" else 1]
     # Resource action routes inherit their module's explicit permission.
