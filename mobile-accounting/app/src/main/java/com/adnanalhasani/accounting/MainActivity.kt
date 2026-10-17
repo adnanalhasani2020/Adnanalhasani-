@@ -202,20 +202,41 @@ class MainActivity : Activity() {
     }
     private fun addTransaction() {
         screen("تسجيل حركة مالية")
-        val accountsList=field("رقم الحساب");val kind=Spinner(this).apply{adapter=ArrayAdapter(this@MainActivity,android.R.layout.simple_spinner_dropdown_item,listOf("دخل","مصروف"))}
-        val amount=field("المبلغ");val currency=field("العملة","YER");val desc=field("البيان")
-        body.addView(label("رقم الحساب"));body.addView(accountsList);body.addView(label("نوع الحركة"));body.addView(kind);body.addView(label("المبلغ"));body.addView(amount);body.addView(label("العملة"));body.addView(currency);body.addView(label("البيان"));body.addView(desc)
-        body.addView(btn("حفظ الحركة"){val id=accountsList.text.toString().toIntOrNull();val a=amount.text.toString().toBigDecimalOrNull()
-            if(id==null||a==null||a<=java.math.BigDecimal.ZERO||desc.text.isBlank()){status.text="تحقق من البيانات";return@btn}
-            executor.execute {
-                val accountRecord = localDb.accountByLocalNumber(id)
-                runOnUiThread {
-                    if (accountRecord == null) { status.text = "رقم الحساب المحلي غير موجود. أضف حساباً أولاً."; return@runOnUiThread }
-                    val p=JSONObject().put("account_id",id).put("account_local_id",accountRecord.optString("local_id")).put("kind",if(kind.selectedItemPosition==0)"income" else "expense").put("amount",a).put("currency",currency.text.toString().uppercase()).put("description",desc.text.toString().trim()).toString()
-                    post("/transactions",p){dashboard()}
-                }
+        val accounts = localDb.readEntities("accounts")
+        if (accounts.length() == 0) {
+            body.addView(label("أضف حساباً أولاً قبل تسجيل الحركة"))
+            body.addView(btn("إضافة حساب") { addAccount() })
+            body.addView(btn("رجوع") { dashboard() })
+            return
+        }
+        val choices = (0 until accounts.length()).map { i ->
+            val a = accounts.getJSONObject(i)
+            a.optString("name") + " • " + a.optString("currency")
+        }
+        val account = Spinner(this).apply { adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, choices) }
+        val kind = Spinner(this).apply { adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, listOf("دخل", "مصروف")) }
+        val amount = field("المبلغ")
+        val desc = field("البيان")
+        body.addView(label("الحساب")); body.addView(account)
+        body.addView(label("نوع الحركة")); body.addView(kind)
+        body.addView(label("المبلغ")); body.addView(amount)
+        body.addView(label("البيان")); body.addView(desc)
+        body.addView(btn("حفظ الحركة") {
+            val selected = accounts.getJSONObject(account.selectedItemPosition)
+            val a = amount.text.toString().toBigDecimalOrNull()
+            if (a == null || a <= java.math.BigDecimal.ZERO || desc.text.isBlank()) {
+                status.text = "أدخل مبلغاً موجباً وبيان الحركة"; return@btn
             }
-        });body.addView(btn("إلغاء"){dashboard()})
+            val p = JSONObject()
+                .put("account_id", if (selected.isNull("server_id")) 0 else selected.optInt("server_id"))
+                .put("account_local_id", selected.optString("local_id"))
+                .put("kind", if (kind.selectedItemPosition == 0) "income" else "expense")
+                .put("amount", a.toPlainString())
+                .put("currency", selected.optString("currency", "YER"))
+                .put("description", desc.text.toString().trim())
+            post("/transactions", p.toString()) { dashboard() }
+        })
+        body.addView(btn("إلغاء") { dashboard() })
     }
     private fun transactions() {
         screen("سجل الحركات")
@@ -283,20 +304,41 @@ class MainActivity : Activity() {
     }
     private fun addPayment() {
         screen("تسجيل دفعة")
-        val account=field("رقم الحساب");val direction=Spinner(this).apply{adapter=ArrayAdapter(this@MainActivity,android.R.layout.simple_spinner_dropdown_item,listOf("دفعة مستلمة","دفعة مدفوعة"))}
-        val amount=field("المبلغ");val currency=field("العملة","YER");val reference=field("المرجع أو البيان")
-        body.addView(label("رقم الحساب"));body.addView(account);body.addView(label("نوع الدفعة"));body.addView(direction);body.addView(label("المبلغ"));body.addView(amount);body.addView(label("العملة"));body.addView(currency);body.addView(label("المرجع"));body.addView(reference)
-        body.addView(btn("حفظ الدفعة"){val id=account.text.toString().toIntOrNull();val a=amount.text.toString().toBigDecimalOrNull()
-            if(id==null||a==null||a<=java.math.BigDecimal.ZERO||reference.text.isBlank()){status.text="تحقق من البيانات";return@btn}
-            executor.execute {
-                val accountRecord = localDb.accountByLocalNumber(id)
-                runOnUiThread {
-                    if (accountRecord == null) { status.text = "رقم الحساب المحلي غير موجود. أضف حساباً أولاً."; return@runOnUiThread }
-                    val p=JSONObject().put("account_id",id).put("account_local_id",accountRecord.optString("local_id")).put("direction",if(direction.selectedItemPosition==0)"received" else "paid").put("amount",a).put("currency",currency.text.toString().uppercase()).put("reference",reference.text.toString().trim()).toString()
-                    post("/payments",p){payments()}
-                }
+        val accounts = localDb.readEntities("accounts")
+        if (accounts.length() == 0) {
+            body.addView(label("أضف حساباً أولاً قبل تسجيل الدفعة"))
+            body.addView(btn("إضافة حساب") { addAccount() })
+            body.addView(btn("رجوع") { dashboard() })
+            return
+        }
+        val choices = (0 until accounts.length()).map { i ->
+            val a = accounts.getJSONObject(i)
+            a.optString("name") + " • " + a.optString("currency")
+        }
+        val account = Spinner(this).apply { adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, choices) }
+        val direction = Spinner(this).apply { adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, listOf("دفعة مستلمة", "دفعة مدفوعة")) }
+        val amount = field("المبلغ")
+        val reference = field("المرجع أو البيان")
+        body.addView(label("الحساب")); body.addView(account)
+        body.addView(label("نوع الدفعة")); body.addView(direction)
+        body.addView(label("المبلغ")); body.addView(amount)
+        body.addView(label("المرجع")); body.addView(reference)
+        body.addView(btn("حفظ الدفعة") {
+            val selected = accounts.getJSONObject(account.selectedItemPosition)
+            val a = amount.text.toString().toBigDecimalOrNull()
+            if (a == null || a <= java.math.BigDecimal.ZERO || reference.text.isBlank()) {
+                status.text = "تحقق من المبلغ والمرجع"; return@btn
             }
-        });body.addView(btn("إلغاء"){payments()})
+            val p = JSONObject()
+                .put("account_id", if (selected.isNull("server_id")) 0 else selected.optInt("server_id"))
+                .put("account_local_id", selected.optString("local_id"))
+                .put("direction", if (direction.selectedItemPosition == 0) "received" else "paid")
+                .put("amount", a.toPlainString())
+                .put("currency", selected.optString("currency", "YER"))
+                .put("reference", reference.text.toString().trim())
+            post("/payments", p.toString()) { payments() }
+        })
+        body.addView(btn("إلغاء") { dashboard() })
     }
     private fun reports() {
         screen("التقارير المالية")
