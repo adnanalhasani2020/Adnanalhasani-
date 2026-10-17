@@ -395,3 +395,51 @@ def test_report_fails_closed_when_opening_history_has_cross_account_entry():
         (entry_id,),
     ).fetchone()[0] == requested_account_id
     db.close()
+
+
+def test_rejected_report_does_not_mutate_corrupted_financial_history():
+    db = connect_database()
+    account_id = account(db)
+    tx_id, entry_id = ledger(db, account_id, 1200, "YER", "2026-10-03T10:00:00Z")
+
+    # Simulate legacy corruption that normal database guards prevent.
+    db.execute(
+        "UPDATE ledger_entries SET amount_minor=1100 WHERE ledger_entry_id=?",
+        (entry_id,),
+    )
+    db.commit()
+
+    def snapshot():
+        transactions = db.execute(
+            "SELECT financial_transaction_id, financial_account_id, amount_minor, "
+            "currency_code, state, recognized_at, updated_at "
+            "FROM financial_transactions ORDER BY financial_transaction_id"
+        ).fetchall()
+        entries = db.execute(
+            "SELECT ledger_entry_id, financial_account_id, financial_transaction_id, "
+            "amount_minor, currency_code, state, posted_at, updated_at "
+            "FROM ledger_entries ORDER BY ledger_entry_id"
+        ).fetchall()
+        return tuple(tuple(row) for row in transactions), tuple(tuple(row) for row in entries)
+
+    before = snapshot()
+    changes_before = db.total_changes
+
+    with pytest.raises(ValidationError, match="amount"):
+        FinancialLedgerActivityReportReader().read(
+            db, account_id, "YER",
+            start_at="2026-10-03T00:00:00Z",
+            end_at="2026-10-04T00:00:00Z",
+        )
+
+    assert snapshot() == before
+    assert db.total_changes == changes_before
+    assert db.execute(
+        "SELECT amount_minor FROM financial_transactions WHERE financial_transaction_id=?",
+        (tx_id,),
+    ).fetchone()[0] == 1200
+    assert db.execute(
+        "SELECT amount_minor FROM ledger_entries WHERE ledger_entry_id=?",
+        (entry_id,),
+    ).fetchone()[0] == 1100
+    db.close()
