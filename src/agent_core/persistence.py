@@ -18,6 +18,22 @@ def apply_migrations(connection: sqlite3.Connection) -> list[str]:
             "cannot apply migrations while the connection has a caller-owned transaction"
         )
 
+    migration_paths = sorted(MIGRATIONS_DIR.glob("*.sql"))
+    prefixes: dict[int, str] = {}
+    for path in migration_paths:
+        prefix, separator, _name = path.stem.partition("_")
+        if not separator or not prefix.isdigit():
+            raise MigrationError(
+                f"migration filename must start with a numeric version and underscore: {path.name}"
+            )
+        numeric_prefix = int(prefix)
+        if numeric_prefix in prefixes:
+            raise MigrationError(
+                f"duplicate migration version prefix {numeric_prefix}: "
+                f"{prefixes[numeric_prefix]} and {path.name}"
+            )
+        prefixes[numeric_prefix] = path.name
+
     connection.execute("PRAGMA foreign_keys = ON")
     connection.execute(
         """
@@ -35,7 +51,7 @@ def apply_migrations(connection: sqlite3.Connection) -> list[str]:
     }
     applied_now: list[str] = []
 
-    for path in sorted(MIGRATIONS_DIR.glob("*.sql")):
+    for path in migration_paths:
         version = path.stem
         if version in applied:
             continue
