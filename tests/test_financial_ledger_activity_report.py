@@ -352,3 +352,46 @@ def test_report_fails_closed_when_posted_entry_account_differs_from_transaction(
         (tx_id,),
     ).fetchone()[0] == requested_account_id
     db.close()
+
+
+def test_report_fails_closed_when_opening_history_has_cross_account_entry():
+    db = connect_database()
+    requested_account_id = account(db)
+    different_account_id = account(db)
+    tx_id = uid()
+    stamp = "2026-10-01T09:00:00Z"
+
+    # Corrupt history before the requested period; opening balance must validate it too.
+    db.execute("DROP TRIGGER ledger_entry_currency_matches_transaction_insert")
+    db.execute(
+        "INSERT INTO financial_transactions(financial_transaction_id,settlement_id,financial_account_id,"
+        "amount_minor,currency_code,state,recognition_source_type,recognition_source_ref,recognized_at,"
+        "created_at,updated_at) VALUES(?,NULL,?,900,'YER','recognized','correction',?,?,?,?)",
+        (tx_id, different_account_id, uid(), stamp, stamp, stamp),
+    )
+    entry_id = uid()
+    db.execute(
+        "INSERT INTO ledger_entries(ledger_entry_id,financial_account_id,financial_transaction_id,"
+        "amount_minor,currency_code,entry_sequence,state,posted_at,created_at,updated_at) "
+        "VALUES(?,?,?,900,'YER',1,'posted',?,?,?)",
+        (entry_id, requested_account_id, tx_id, stamp, stamp, stamp),
+    )
+    db.commit()
+
+    with pytest.raises(ValidationError, match="does not match a recognized"):
+        FinancialLedgerActivityReportReader().read(
+            db, requested_account_id, "YER",
+            start_at="2026-10-03T00:00:00Z",
+            end_at="2026-10-04T00:00:00Z",
+        )
+
+    # Validation must not silently repair the old transaction or ledger entry.
+    assert db.execute(
+        "SELECT financial_account_id FROM financial_transactions WHERE financial_transaction_id=?",
+        (tx_id,),
+    ).fetchone()[0] == different_account_id
+    assert db.execute(
+        "SELECT financial_account_id FROM ledger_entries WHERE ledger_entry_id=?",
+        (entry_id,),
+    ).fetchone()[0] == requested_account_id
+    db.close()
