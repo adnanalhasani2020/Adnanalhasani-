@@ -95,6 +95,27 @@ class HospitalAPITests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "HOSPITAL_API_TOKEN must be set"):
             make_handler(self.db, "")
 
+    def test_audit_log_endpoint_lists_and_searches_audited_operations(self):
+        status, created = self.request("/api/patients", method="POST", payload={
+            "patient_no": "AUDIT-P-1", "full_name": "Audit Sample",
+            "created_at": "2026-01-01T08:00:00"
+        })
+        self.assertEqual(status, 201)
+        status, payload = self.request("/api/audit-log?limit=10&offset=0")
+        self.assertEqual(status, 200)
+        self.assertGreaterEqual(payload["pagination"]["count"], 1)
+        row = next(item for item in payload["data"] if item["entity_id"] == str(created["id"]))
+        self.assertEqual(row["action"], "patient.registered")
+        self.assertEqual(row["entity_type"], "patient")
+        status, filtered = self.request("/api/audit-log?search=patient.registered")
+        self.assertEqual(status, 200)
+        self.assertTrue(all(item["action"] == "patient.registered" for item in filtered["data"]))
+
+    def test_audit_log_endpoint_validates_pagination(self):
+        status, payload = self.request("/api/audit-log?limit=101")
+        self.assertEqual(status, 400)
+        self.assertEqual(payload["error"], "limit must be 1-100 and offset must be non-negative")
+
     def test_patient_creation_and_dashboard(self):
         status, payload = self.request("/api/patients", method="POST", payload={
             "patient_no": "API-P-1", "full_name": "Sample Patient",
