@@ -123,8 +123,8 @@ class MainActivity : Activity() {
         body.addView(btn("الموردون"){catalogScreen("suppliers", "الموردون", listOf("اسم المورد", "الهاتف", "العنوان"))})
         body.addView(btn("الأصناف والمخزون"){catalogScreen("products", "الأصناف والمخزون", listOf("اسم الصنف", "رمز الصنف", "الوحدة", "الكمية", "سعر الوحدة"))})
         body.addView(btn("حركة المخزون"){catalogScreen("stock", "حركة المخزون", listOf("الصنف", "نوع الحركة: وارد/صادر", "الكمية", "المرجع"))})
-        body.addView(btn("المشتريات"){catalogScreen("purchases", "المشتريات", listOf("رقم المستند", "المورد", "المبلغ", "العملة"))})
-        body.addView(btn("المبيعات"){catalogScreen("sales", "المبيعات", listOf("رقم المستند", "العميل", "المبلغ", "العملة"))})
+        body.addView(btn("المشتريات"){catalogScreen("purchases", "المشتريات", listOf("رقم المستند", "المورد", "الصنف", "الكمية", "المبلغ", "العملة"))})
+        body.addView(btn("المبيعات"){catalogScreen("sales", "المبيعات", listOf("رقم المستند", "العميل", "الصنف", "الكمية", "المبلغ", "العملة"))})
         body.addView(btn("بحث شامل"){searchScreen()})
         body.addView(btn("كشف حساب"){accountStatement()})
         body.addView(btn("النسخ الاحتياطي"){backupScreen()})
@@ -443,8 +443,42 @@ class MainActivity : Activity() {
             }
             val json = JSONObject()
             values.forEach { (k, v) -> json.put(k, v) }
+
+            // Keep product quantities linked to stock movements, purchases and sales.
+            if (type in setOf("stock", "purchases", "sales")) {
+                val itemName = json.optString(if (type == "stock") "الصنف" else "الصنف")
+                val qty = json.optString("الكمية").toBigDecimalOrNull()
+                if (itemName.isBlank() || qty == null || qty <= java.math.BigDecimal.ZERO) {
+                    status.text = "اسم الصنف والكمية الموجبة مطلوبان"
+                    return@btn
+                }
+                val products = localDb.readCatalogRecords("products")
+                var matched: JSONObject? = null
+                for (i in 0 until products.length()) {
+                    val product = products.getJSONObject(i)
+                    if (product.optString("اسم الصنف").equals(itemName, true)) { matched = product; break }
+                }
+                if (matched == null) {
+                    status.text = "الصنف غير موجود. أضفه أولاً في شاشة الأصناف."
+                    return@btn
+                }
+                val product = matched!!
+                val current = product.optString("الكمية", "0").toBigDecimalOrNull() ?: java.math.BigDecimal.ZERO
+                val increase = type == "purchases" || (type == "stock" && json.optString("نوع الحركة: وارد/صادر").contains("وارد", true))
+                val delta = if (increase) qty else qty.negate()
+                val updated = current.add(delta)
+                if (updated < java.math.BigDecimal.ZERO) {
+                    status.text = "الكمية غير كافية في المخزون"
+                    return@btn
+                }
+                product.put("الكمية", updated.stripTrailingZeros().toPlainString())
+                localDb.saveCatalogRecord("products", product)
+                json.put("product_local_id", product.optString("local_id"))
+                json.put("quantity_delta", delta.toPlainString())
+                json.put("quantity_after", updated.toPlainString())
+            }
             localDb.saveCatalogRecord(type, json)
-            Toast.makeText(this, "تم الحفظ محلياً", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "تم الحفظ محلياً وتحديث كمية الصنف", Toast.LENGTH_SHORT).show()
             catalogScreen(type, title, fields)
         })
         body.addView(btn("إلغاء") { catalogScreen(type, title, fields) })
