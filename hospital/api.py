@@ -383,8 +383,13 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                             raise HospitalError("active bed not found")
                         if occupied:
                             raise HospitalError("bed is already occupied")
-                        cur = conn.execute("INSERT INTO admissions(patient_id,bed_id,admitted_at,reason) VALUES(?,?,?,?)",
-                            (int(data["patient_id"]), int(data["bed_id"]), str(data["admitted_at"]), str(data.get("reason", ""))))
+                        encounter_id = int(data["encounter_id"]) if data.get("encounter_id") is not None else None
+                        if encounter_id is not None:
+                            encounter = conn.execute("SELECT patient_id FROM encounters WHERE id=?", (encounter_id,)).fetchone()
+                            if encounter is None or encounter["patient_id"] != int(data["patient_id"]):
+                                raise HospitalError("encounter does not belong to this patient")
+                        cur = conn.execute("INSERT INTO admissions(patient_id,bed_id,admitted_at,reason,encounter_id) VALUES(?,?,?,?,?)",
+                            (int(data["patient_id"]), int(data["bed_id"]), str(data["admitted_at"]), str(data.get("reason", "")), encounter_id))
                         ident = cur.lastrowid
                         database._audit(conn, self._actor(), "patient.admitted", "admission", ident, str(data["admitted_at"]))
                         conn.commit()
