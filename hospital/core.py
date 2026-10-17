@@ -43,6 +43,32 @@ CREATE TABLE IF NOT EXISTS appointments (
 );
 CREATE INDEX IF NOT EXISTS appointments_doctor_time ON appointments(doctor_id, starts_at, ends_at);
 CREATE INDEX IF NOT EXISTS appointments_patient_time ON appointments(patient_id, starts_at);
+-- Enforce schedule integrity even when a caller bypasses the Python workflow.
+CREATE TRIGGER IF NOT EXISTS appointments_no_overlap_insert
+BEFORE INSERT ON appointments
+WHEN NEW.status IN ('scheduled','checked_in')
+ AND EXISTS (
+   SELECT 1 FROM appointments a
+   WHERE a.doctor_id=NEW.doctor_id
+     AND a.status IN ('scheduled','checked_in')
+     AND a.starts_at < NEW.ends_at AND a.ends_at > NEW.starts_at
+ )
+BEGIN
+  SELECT RAISE(ABORT, 'doctor already has an overlapping appointment');
+END;
+CREATE TRIGGER IF NOT EXISTS appointments_no_overlap_update
+BEFORE UPDATE OF doctor_id, starts_at, ends_at, status ON appointments
+WHEN NEW.status IN ('scheduled','checked_in')
+ AND EXISTS (
+   SELECT 1 FROM appointments a
+   WHERE a.id <> NEW.id
+     AND a.doctor_id=NEW.doctor_id
+     AND a.status IN ('scheduled','checked_in')
+     AND a.starts_at < NEW.ends_at AND a.ends_at > NEW.starts_at
+ )
+BEGIN
+  SELECT RAISE(ABORT, 'doctor already has an overlapping appointment');
+END;
 CREATE TABLE IF NOT EXISTS encounters (
   id INTEGER PRIMARY KEY, patient_id INTEGER NOT NULL REFERENCES patients(id),
   doctor_id INTEGER REFERENCES doctors(id), appointment_id INTEGER REFERENCES appointments(id),
@@ -63,6 +89,24 @@ CREATE TABLE IF NOT EXISTS admissions (
   CHECK(discharged_at IS NULL OR discharged_at >= admitted_at)
 );
 CREATE INDEX IF NOT EXISTS admissions_active_bed ON admissions(bed_id, status);
+-- A bed may have at most one active admission, including direct SQL writes.
+CREATE TRIGGER IF NOT EXISTS admissions_one_active_bed_insert
+BEFORE INSERT ON admissions
+WHEN NEW.status='admitted'
+ AND EXISTS (SELECT 1 FROM admissions a WHERE a.bed_id=NEW.bed_id AND a.status='admitted')
+BEGIN
+  SELECT RAISE(ABORT, 'bed is already occupied');
+END;
+CREATE TRIGGER IF NOT EXISTS admissions_one_active_bed_update
+BEFORE UPDATE OF bed_id, status ON admissions
+WHEN NEW.status='admitted'
+ AND EXISTS (
+   SELECT 1 FROM admissions a
+   WHERE a.id <> NEW.id AND a.bed_id=NEW.bed_id AND a.status='admitted'
+ )
+BEGIN
+  SELECT RAISE(ABORT, 'bed is already occupied');
+END;
 CREATE TABLE IF NOT EXISTS lab_orders (
   id INTEGER PRIMARY KEY, patient_id INTEGER NOT NULL REFERENCES patients(id),
   encounter_id INTEGER REFERENCES encounters(id), ordered_by INTEGER REFERENCES doctors(id),

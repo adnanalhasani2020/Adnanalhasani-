@@ -34,6 +34,76 @@ class HospitalCoreTests(unittest.TestCase):
                 starts_at="2026-01-02T09:15:00", ends_at="2026-01-02T10:00:00",
                 created_at="2026-01-01T08:01:00", actor="reception")
 
+    def test_database_rejects_overlapping_appointments_from_direct_sql(self):
+        import sqlite3
+
+        with self.db.connect() as conn:
+            conn.execute(
+                "INSERT INTO appointments(patient_id,doctor_id,starts_at,ends_at,created_at) "
+                "VALUES(?,?,?,?,?)",
+                (self.patient, self.doctor, "2026-01-02T09:00:00",
+                 "2026-01-02T09:30:00", "2026-01-01T08:00:00"),
+            )
+            conn.execute(
+                "INSERT INTO appointments(patient_id,doctor_id,starts_at,ends_at,created_at) "
+                "VALUES(?,?,?,?,?)",
+                (self.patient, self.doctor, "2026-01-02T10:00:00",
+                 "2026-01-02T10:30:00", "2026-01-01T08:01:00"),
+            )
+            with self.assertRaisesRegex(sqlite3.IntegrityError, "overlapping appointment"):
+                conn.execute(
+                    "INSERT INTO appointments(patient_id,doctor_id,starts_at,ends_at,created_at) "
+                    "VALUES(?,?,?,?,?)",
+                    (self.patient, self.doctor, "2026-01-02T09:15:00",
+                     "2026-01-02T10:00:00", "2026-01-01T08:02:00"),
+                )
+            with self.assertRaisesRegex(sqlite3.IntegrityError, "overlapping appointment"):
+                conn.execute(
+                    "UPDATE appointments SET starts_at=?,ends_at=? WHERE id=1",
+                    ("2026-01-02T10:10:00", "2026-01-02T10:20:00"),
+                )
+
+    def test_database_rejects_duplicate_active_admissions_from_direct_sql(self):
+        import sqlite3
+
+        with self.db.connect() as conn:
+            conn.execute("INSERT INTO beds(ward,bed_no) VALUES('A','01')")
+            bed_id = conn.execute("SELECT id FROM beds").fetchone()["id"]
+            conn.execute(
+                "INSERT INTO admissions(patient_id,bed_id,admitted_at) VALUES(?,?,?)",
+                (self.patient, bed_id, "2026-01-02T09:00:00"),
+            )
+            with self.assertRaisesRegex(sqlite3.IntegrityError, "bed is already occupied"):
+                conn.execute(
+                    "INSERT INTO admissions(patient_id,bed_id,admitted_at) VALUES(?,?,?)",
+                    (self.patient, bed_id, "2026-01-02T10:00:00"),
+                )
+            conn.execute("INSERT INTO patients(patient_no,full_name,created_at) VALUES(?,?,?)",
+                         ("P-002", "Second Patient", "2026-01-01T08:00:00"))
+            second_patient = conn.execute(
+                "SELECT id FROM patients WHERE patient_no='P-002'"
+            ).fetchone()["id"]
+            with self.assertRaisesRegex(sqlite3.IntegrityError, "bed is already occupied"):
+                conn.execute(
+                    "INSERT INTO admissions(patient_id,bed_id,admitted_at) VALUES(?,?,?)",
+                    (second_patient, bed_id, "2026-01-02T11:00:00"),
+                )
+
+    def test_booking_integrity_triggers_exist_after_reopening_database(self):
+        self.db = HospitalDB(self.db.path)
+        with self.db.connect() as conn:
+            names = {
+                row["name"] for row in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='trigger'"
+                )
+            }
+        self.assertTrue({
+            "appointments_no_overlap_insert",
+            "appointments_no_overlap_update",
+            "admissions_one_active_bed_insert",
+            "admissions_one_active_bed_update",
+        }.issubset(names))
+
     def test_bed_cannot_be_double_booked_and_can_be_reused_after_discharge(self):
         with self.db.connect() as conn:
             conn.execute("INSERT INTO beds(ward,bed_no) VALUES('A','01')")
