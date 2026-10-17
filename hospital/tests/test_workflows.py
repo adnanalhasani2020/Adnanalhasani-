@@ -39,6 +39,10 @@ class HospitalWorkflowTests(unittest.TestCase):
         with self.assertRaises(HospitalError):
             update_lab_status(self.db, order_id=order, status="resulted", actor="lab",
                 at="2026-01-02T09:00:00", result="")
+        update_lab_status(self.db, order_id=order, status="collected", actor="lab",
+            at="2026-01-02T08:30:00")
+        update_lab_status(self.db, order_id=order, status="processing", actor="lab",
+            at="2026-01-02T08:45:00")
         update_lab_status(self.db, order_id=order, status="resulted", actor="lab",
             at="2026-01-02T09:00:00", result="Example result")
         with self.db.connect() as conn:
