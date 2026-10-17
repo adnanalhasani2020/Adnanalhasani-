@@ -18,11 +18,17 @@ button{background:#176b87;color:#fff;border:0;cursor:pointer;font-weight:bold}bu
 .metric{background:#eef6fa;border-radius:10px;padding:15px}.metric span{display:block;color:#496574;font-size:13px}.metric strong{display:block;font-size:27px;margin-top:7px}
 .status{min-height:24px;margin-top:10px;color:#155c42;overflow-wrap:anywhere}.error{color:#a32626}
 small{color:#5d7482}form{display:grid;gap:10px}footer{text-align:center;color:#607987;padding:20px}.table-wrap{overflow:auto;margin-top:12px}table{border-collapse:collapse;width:100%;min-width:620px;background:#fff}th,td{padding:10px;border-bottom:1px solid #dbe5eb;text-align:right;white-space:nowrap}th{background:#eef6fa}td{font-size:14px}.pager{display:flex;gap:10px;align-items:center;margin-top:12px}.pager button{width:auto;min-width:100px}.pager span{flex:1;text-align:center}
+
+.skip-link{position:absolute;top:8px;right:8px;z-index:1000;padding:10px 14px;background:#fff;color:#123d56;border:2px solid #e6a23c;border-radius:8px;transform:translateY(-160%);text-decoration:none;font-weight:bold}
+.skip-link:focus{transform:translateY(0)}
+:focus-visible{outline:3px solid #e6a23c;outline-offset:3px}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 </style>
 </head>
 <body>
+<a class="skip-link" href="#main-content">تجاوز إلى المحتوى الرئيسي</a>
 <header><h1>نظام إدارة المستشفى</h1><p>لوحة تشغيل تجريبية — المرضى، الأطباء، المواعيد والمؤشرات</p><p style="margin-top:12px"><a href="/settings" style="display:inline-block;color:#fff;border:1px solid #d7e8ef;border-radius:8px;padding:8px 12px;text-decoration:none">إعدادات المدير ←</a></p></header>
-<main>
+<main id="main-content" tabindex="-1">
 <div class="notice"><strong>تنبيه أمني:</strong> هذه واجهة تطوير أولية وليست نظامًا طبيًا معتمدًا. استخدمها محليًا فقط ولا تدخل بيانات مرضى حقيقية. يلزم تطبيق صلاحيات المستخدمين وحماية الإنتاج قبل التشغيل الفعلي.</div>
 <section class="panel">
 <h2>الاتصال بالخادم</h2>
