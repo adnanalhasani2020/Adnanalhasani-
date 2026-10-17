@@ -198,6 +198,7 @@ def test_existing_database_migration_preserves_sales_invoices_and_history_on_reo
         ("0006_inventory_quantity_integer",),
         ("0007_product_name",),
         ("0008_financial_opening_balance",),
+        ("0009_authorization_grant_purpose",),
         ("0013_inventory_opening_stock",),
         ("0014_product_units",),
         ("0015_purchases",),
