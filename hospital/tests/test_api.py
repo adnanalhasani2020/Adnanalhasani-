@@ -75,6 +75,22 @@ class HospitalAPITests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(dashboard["data"]["active_patients"], 1)
 
+    def test_post_rejects_non_json_content_type(self):
+        req = Request(
+            self.base + "/api/patients",
+            data=b'{"patient_no":"P-3"}',
+            headers={
+                "Authorization": f"Bearer {self.token}",
+                "Content-Type": "text/plain",
+            },
+            method="POST",
+        )
+        with self.assertRaises(HTTPError) as raised:
+            urlopen(req, timeout=3)
+        self.assertEqual(raised.exception.code, 400)
+        payload = json.loads(raised.exception.read())
+        self.assertEqual(payload["error"], "Content-Type must be application/json")
+
     def test_missing_required_field_is_rejected(self):
         status, payload = self.request("/api/patients", method="POST",
             payload={"patient_no": "P-2"})
