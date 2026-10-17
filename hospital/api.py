@@ -15,6 +15,10 @@ from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 from .core import HospitalDB, HospitalError
+from .clinical_records import (
+    add_diagnosis, add_nursing_note, adjust_stock, create_purchase_order, create_supplier,
+    receive_purchase_order, record_allergy, record_vitals, reports,
+)
 from .security import (AuthStore, AuthenticationError, AuthorizationError,
                        permission_for_route, require_permission)
 from .workflows import (
@@ -132,6 +136,8 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                 self._send(200, {"status": "ok", "service": "hospital-api"})
             elif route == "/api/dashboard":
                 self._send(200, {"data": database.dashboard()})
+            elif route == "/api/reports":
+                self._send(200, {"data": reports(database)})
             elif route == "/api/search":
                 try:
                     params = parse_qs(parsed.query, keep_blank_values=True)
@@ -234,6 +240,13 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                     "/api/beds": ("SELECT b.id,b.ward,b.bed_no,b.active,CASE WHEN EXISTS(SELECT 1 FROM admissions a WHERE a.bed_id=b.id AND a.status='admitted') THEN 1 ELSE 0 END AS occupied FROM beds b WHERE (?='' OR b.ward LIKE ? OR b.bed_no LIKE ?) ORDER BY b.ward,b.bed_no", 2),
                     "/api/admissions": ("SELECT a.id,a.patient_id,p.full_name AS patient_name,a.bed_id,b.ward,b.bed_no,a.admitted_at,a.discharged_at,a.reason,a.status FROM admissions a JOIN patients p ON p.id=a.patient_id JOIN beds b ON b.id=a.bed_id WHERE (?='' OR p.full_name LIKE ? OR p.patient_no LIKE ? OR b.ward LIKE ? OR b.bed_no LIKE ?) ORDER BY a.id DESC", 4),
                     "/api/invoices": ("SELECT i.id,i.invoice_no,i.patient_id,p.full_name AS patient_name,i.encounter_id,i.total_minor,i.currency,i.status,i.created_at,COALESCE((SELECT SUM(pay.amount_minor) FROM payments pay WHERE pay.invoice_id=i.id),0) AS paid_minor FROM invoices i JOIN patients p ON p.id=i.patient_id WHERE (?='' OR i.invoice_no LIKE ? OR p.full_name LIKE ? OR p.patient_no LIKE ?) ORDER BY i.id DESC", 3),
+                    "/api/diagnoses": ("SELECT d.id,d.encounter_id,e.patient_id,p.full_name AS patient_name,d.code,d.description,d.diagnosis_type,d.recorded_by,d.recorded_at FROM encounter_diagnoses d JOIN encounters e ON e.id=d.encounter_id JOIN patients p ON p.id=e.patient_id WHERE (?='' OR p.full_name LIKE ? OR p.patient_no LIKE ? OR d.description LIKE ?) ORDER BY d.id DESC", 3),
+                    "/api/allergies": ("SELECT a.id,a.patient_id,p.full_name AS patient_name,a.substance,a.reaction,a.severity,a.status,a.recorded_by,a.recorded_at FROM patient_allergies a JOIN patients p ON p.id=a.patient_id WHERE (?='' OR p.full_name LIKE ? OR p.patient_no LIKE ? OR a.substance LIKE ?) ORDER BY a.id DESC", 3),
+                    "/api/vitals": ("SELECT v.id,v.encounter_id,v.patient_id,p.full_name AS patient_name,v.measured_at,v.measured_by,v.temperature_c,v.pulse_bpm,v.respiratory_rate,v.systolic_bp,v.diastolic_bp,v.oxygen_saturation,v.weight_kg,v.height_cm,v.pain_score,v.notes FROM vital_signs v JOIN patients p ON p.id=v.patient_id WHERE (?='' OR p.full_name LIKE ? OR p.patient_no LIKE ? OR v.measured_by LIKE ?) ORDER BY v.measured_at DESC", 3),
+                    "/api/nursing-notes": ("SELECT n.id,n.encounter_id,n.patient_id,p.full_name AS patient_name,n.nurse,n.note_type,n.note,n.recorded_at FROM nursing_notes n JOIN patients p ON p.id=n.patient_id WHERE (?='' OR p.full_name LIKE ? OR p.patient_no LIKE ? OR n.nurse LIKE ?) ORDER BY n.recorded_at DESC", 3),
+                    "/api/inventory-movements": ("SELECT m.id,m.medicine_id,i.name AS medicine_name,m.movement_type,m.quantity_delta,m.reference_type,m.reference_id,m.notes,m.actor,m.occurred_at FROM inventory_movements m JOIN medicines i ON i.id=m.medicine_id WHERE (?='' OR i.name LIKE ? OR i.sku LIKE ?) ORDER BY m.id DESC", 2),
+                    "/api/suppliers": ("SELECT id,supplier_no,name,phone,active,created_at FROM suppliers WHERE (?='' OR supplier_no LIKE ? OR name LIKE ?) ORDER BY name", 2),
+                    "/api/purchase-orders": ("SELECT o.id,o.order_no,o.supplier_id,s.name AS supplier_name,o.status,o.ordered_at,o.received_at,o.actor,o.notes,(SELECT COUNT(*) FROM purchase_order_items i WHERE i.purchase_order_id=o.id) AS item_count FROM purchase_orders o JOIN suppliers s ON s.id=o.supplier_id WHERE (?='' OR o.order_no LIKE ? OR s.name LIKE ?) ORDER BY o.id DESC", 2),
                 }
                 config = collections.get(route)
                 if config is None:
@@ -390,6 +403,57 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                         database._audit(conn, self._actor(), "patient.discharged", "admission", int(parts[2]), str(data["discharged_at"]))
                         conn.commit()
                     self._send(200, {"id": int(parts[2]), "status": "discharged"})
+                elif route == "/api/diagnoses":
+                    self._required(data, "encounter_id", "description", "at")
+                    ident = add_diagnosis(database, encounter_id=int(data["encounter_id"]),
+                        description=str(data["description"]), actor=self._actor(), at=str(data["at"]),
+                        code=str(data.get("code", "")), diagnosis_type=str(data.get("diagnosis_type", "clinical")))
+                    self._send(201, {"id": ident, "status": "recorded"})
+                elif route == "/api/allergies":
+                    self._required(data, "patient_id", "substance", "at")
+                    ident = record_allergy(database, patient_id=int(data["patient_id"]),
+                        substance=str(data["substance"]), actor=self._actor(), at=str(data["at"]),
+                        reaction=str(data.get("reaction", "")), severity=str(data.get("severity", "unknown")),
+                        status=str(data.get("status", "active")))
+                    self._send(201, {"id": ident, "status": "recorded"})
+                elif route == "/api/vitals":
+                    self._required(data, "encounter_id", "measured_at")
+                    fields = ("temperature_c", "pulse_bpm", "respiratory_rate", "systolic_bp",
+                              "diastolic_bp", "oxygen_saturation", "weight_kg", "height_cm", "pain_score")
+                    values = {key: data.get(key) for key in fields}
+                    ident = record_vitals(database, encounter_id=int(data["encounter_id"]),
+                        measured_at=str(data["measured_at"]), actor=self._actor(),
+                        patient_id=int(data["patient_id"]) if data.get("patient_id") is not None else None,
+                        notes=str(data.get("notes", "")), **values)
+                    self._send(201, {"id": ident, "status": "recorded"})
+                elif route == "/api/nursing-notes":
+                    self._required(data, "encounter_id", "note", "at")
+                    ident = add_nursing_note(database, encounter_id=int(data["encounter_id"]),
+                        note=str(data["note"]), actor=self._actor(), at=str(data["at"]),
+                        note_type=str(data.get("note_type", "observation")))
+                    self._send(201, {"id": ident, "status": "recorded"})
+                elif route == "/api/inventory-adjustments":
+                    self._required(data, "medicine_id", "quantity_delta", "at")
+                    ident = adjust_stock(database, medicine_id=int(data["medicine_id"]),
+                        quantity_delta=int(data["quantity_delta"]), actor=self._actor(), at=str(data["at"]),
+                        notes=str(data.get("notes", "")), movement_type=str(data.get("movement_type", "adjustment")))
+                    self._send(201, {"id": ident, "status": "recorded"})
+                elif route == "/api/suppliers":
+                    self._required(data, "supplier_no", "name", "at")
+                    ident = create_supplier(database, supplier_no=str(data["supplier_no"]),
+                        name=str(data["name"]), actor=self._actor(), at=str(data["at"]),
+                        phone=str(data.get("phone", "")))
+                    self._send(201, {"id": ident, "status": "created"})
+                elif route == "/api/purchase-orders":
+                    self._required(data, "order_no", "supplier_id", "items", "at")
+                    ident = create_purchase_order(database, order_no=str(data["order_no"]),
+                        supplier_id=int(data["supplier_id"]), items=data["items"], actor=self._actor(),
+                        at=str(data["at"]), notes=str(data.get("notes", "")))
+                    self._send(201, {"id": ident, "status": "ordered"})
+                elif len(parts) == 4 and parts[:2] == ["api", "purchase-orders"] and parts[3] == "receive":
+                    self._required(data, "at")
+                    receive_purchase_order(database, order_id=int(parts[2]), actor=self._actor(), at=str(data["at"]))
+                    self._send(200, {"id": int(parts[2]), "status": "received"})
                 elif route == "/api/invoices":
                     self._required(data, "invoice_no", "patient_id", "total_minor", "created_at")
                     ident = database.create_invoice(
