@@ -75,3 +75,30 @@ def test_prototype_warns_that_browser_saved_choices_can_persist_on_shared_device
     assert "قد تبقى الاختيارات على هذا الجهاز حتى حذفها" in html
     assert "لا تستخدم النموذج على جهاز مشترك" in html
     assert "لا تدخل بيانات مرضى أو كلمات مرور أو معلومات حساسة" in html
+
+
+def test_form_controls_have_explicit_labels_and_accessible_status_announcements():
+    html = PROTOTYPE.read_text(encoding="utf-8")
+
+    # Every form control should be associated with a visible label by ID.
+    import re
+
+    controls = re.findall(r"<(?:input|select|textarea)\\b[^>]*\\bid=\"([^\"]+)\"", html)
+    labels = re.findall(r"<label\\b[^>]*\\bfor=\"([^\"]+)\"", html)
+    assert controls
+    assert set(controls).issubset(set(labels))
+
+    assert 'id="status" role="status" aria-live="polite"' in html
+    assert ":focus-visible" in html
+    assert "prefers-reduced-motion:reduce" in html
+
+
+def test_preview_and_error_messages_are_announced_without_html_interpolation():
+    html = PROTOTYPE.read_text(encoding="utf-8")
+
+    assert "function announceError(message)" in html
+    assert "function announceStatus(message)" in html
+    assert "statusBox.setAttribute('role','alert')" in html
+    assert "statusBox.setAttribute('role','status')" in html
+    assert "summary.textContent=" in html
+    assert "summary.innerHTML" not in html
