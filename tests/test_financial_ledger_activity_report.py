@@ -311,3 +311,44 @@ def test_report_read_does_not_mutate_populated_financial_history():
     assert snapshot() == before
     assert db.total_changes == changes_before
     db.close()
+
+def test_report_fails_closed_when_posted_entry_account_differs_from_transaction():
+    db = connect_database()
+    requested_account_id = account(db)
+    different_account_id = account(db)
+    tx_id = uid()
+    stamp = "2026-10-03T10:00:00Z"
+
+    # Simulate legacy/corrupt persisted data that normal database guards reject.
+    db.execute("DROP TRIGGER ledger_entry_currency_matches_transaction_insert")
+    db.execute(
+        "INSERT INTO financial_transactions(financial_transaction_id,settlement_id,financial_account_id,"
+        "amount_minor,currency_code,state,recognition_source_type,recognition_source_ref,recognized_at,"
+        "created_at,updated_at) VALUES(?,NULL,?,700,'YER','recognized','correction',?,?,?,?)",
+        (tx_id, different_account_id, uid(), stamp, stamp, stamp),
+    )
+    db.execute(
+        "INSERT INTO ledger_entries(ledger_entry_id,financial_account_id,financial_transaction_id,"
+        "amount_minor,currency_code,entry_sequence,state,posted_at,created_at,updated_at) "
+        "VALUES(?,?,?,700,'YER',1,'posted',?,?,?)",
+        (uid(), requested_account_id, tx_id, stamp, stamp, stamp),
+    )
+    db.commit()
+
+    with pytest.raises(ValidationError, match="does not match a recognized"):
+        FinancialLedgerActivityReportReader().read(
+            db, requested_account_id, "YER",
+            start_at="2026-10-03T00:00:00Z",
+            end_at="2026-10-04T00:00:00Z",
+        )
+
+    # The report must reject corruption, not repair or rewrite either record.
+    assert db.execute(
+        "SELECT financial_account_id FROM financial_transactions WHERE financial_transaction_id=?",
+        (tx_id,),
+    ).fetchone()[0] == different_account_id
+    assert db.execute(
+        "SELECT financial_account_id FROM ledger_entries WHERE financial_transaction_id=?",
+        (tx_id,),
+    ).fetchone()[0] == requested_account_id
+    db.close()
