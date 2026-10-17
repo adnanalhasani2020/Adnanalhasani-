@@ -185,8 +185,14 @@ class MainActivity : Activity() {
         body.addView(label("رقم الحساب"));body.addView(accountsList);body.addView(label("نوع الحركة"));body.addView(kind);body.addView(label("المبلغ"));body.addView(amount);body.addView(label("العملة"));body.addView(currency);body.addView(label("البيان"));body.addView(desc)
         body.addView(btn("حفظ الحركة"){val id=accountsList.text.toString().toIntOrNull();val a=amount.text.toString().toBigDecimalOrNull()
             if(id==null||a==null||a<=java.math.BigDecimal.ZERO||desc.text.isBlank()){status.text="تحقق من البيانات";return@btn}
-            val p=JSONObject().put("account_id",id).put("kind",if(kind.selectedItemPosition==0)"income" else "expense").put("amount",a).put("currency",currency.text.toString().uppercase()).put("description",desc.text.toString().trim()).toString()
-            post("/transactions",p){dashboard()}
+            executor.execute {
+                val accountRecord = localDb.accountByLocalNumber(id)
+                runOnUiThread {
+                    if (accountRecord == null) { status.text = "رقم الحساب المحلي غير موجود. أضف حساباً أولاً."; return@runOnUiThread }
+                    val p=JSONObject().put("account_id",id).put("account_local_id",accountRecord.optString("local_id")).put("kind",if(kind.selectedItemPosition==0)"income" else "expense").put("amount",a).put("currency",currency.text.toString().uppercase()).put("description",desc.text.toString().trim()).toString()
+                    post("/transactions",p){dashboard()}
+                }
+            }
         });body.addView(btn("إلغاء"){dashboard()})
     }
     private fun transactions() {
@@ -260,8 +266,14 @@ class MainActivity : Activity() {
         body.addView(label("رقم الحساب"));body.addView(account);body.addView(label("نوع الدفعة"));body.addView(direction);body.addView(label("المبلغ"));body.addView(amount);body.addView(label("العملة"));body.addView(currency);body.addView(label("المرجع"));body.addView(reference)
         body.addView(btn("حفظ الدفعة"){val id=account.text.toString().toIntOrNull();val a=amount.text.toString().toBigDecimalOrNull()
             if(id==null||a==null||a<=java.math.BigDecimal.ZERO||reference.text.isBlank()){status.text="تحقق من البيانات";return@btn}
-            val p=JSONObject().put("account_id",id).put("direction",if(direction.selectedItemPosition==0)"received" else "paid").put("amount",a).put("currency",currency.text.toString().uppercase()).put("reference",reference.text.toString().trim()).toString()
-            post("/payments",p){payments()}
+            executor.execute {
+                val accountRecord = localDb.accountByLocalNumber(id)
+                runOnUiThread {
+                    if (accountRecord == null) { status.text = "رقم الحساب المحلي غير موجود. أضف حساباً أولاً."; return@runOnUiThread }
+                    val p=JSONObject().put("account_id",id).put("account_local_id",accountRecord.optString("local_id")).put("direction",if(direction.selectedItemPosition==0)"received" else "paid").put("amount",a).put("currency",currency.text.toString().uppercase()).put("reference",reference.text.toString().trim()).toString()
+                    post("/payments",p){payments()}
+                }
+            }
         });body.addView(btn("إلغاء"){payments()})
     }
     private fun reports() {
