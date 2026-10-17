@@ -91,6 +91,39 @@ class HospitalAPITests(unittest.TestCase):
         payload = json.loads(raised.exception.read())
         self.assertEqual(payload["error"], "Content-Type must be application/json")
 
+    def test_post_accepts_json_content_type_with_charset(self):
+        payload = json.dumps({
+            "patient_no": "API-CHARSET-1",
+            "full_name": "Charset Test Patient",
+            "created_at": "2026-01-03T08:00:00",
+        }).encode("utf-8")
+        req = Request(
+            self.base + "/api/patients",
+            data=payload,
+            headers={
+                "Authorization": f"Bearer {self.token}",
+                "Content-Type": "application/json; charset=utf-8",
+            },
+            method="POST",
+        )
+        with urlopen(req, timeout=3) as response:
+            result = json.loads(response.read())
+            self.assertEqual(response.status, 201)
+            self.assertEqual(result["status"], "created")
+
+    def test_post_rejects_missing_content_type(self):
+        req = Request(
+            self.base + "/api/patients",
+            data=b'{"patient_no":"P-4"}',
+            headers={"Authorization": f"Bearer {self.token}"},
+            method="POST",
+        )
+        with self.assertRaises(HTTPError) as raised:
+            urlopen(req, timeout=3)
+        self.assertEqual(raised.exception.code, 400)
+        payload = json.loads(raised.exception.read())
+        self.assertEqual(payload["error"], "Content-Type must be application/json")
+
     def test_missing_required_field_is_rejected(self):
         status, payload = self.request("/api/patients", method="POST",
             payload={"patient_no": "P-2"})
