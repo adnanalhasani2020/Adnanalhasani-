@@ -97,12 +97,21 @@ app=FastAPI(title="Mobile Accounting API",docs_url=None if os.getenv("ENVIRONMEN
 @app.on_event("startup")
 def startup():
     Base.metadata.create_all(engine)
-    password=os.getenv("ADMIN_PASSWORD")
+    # Development-only convenience account. Production must set ADMIN_PASSWORD explicitly.
+    is_production = os.getenv("ENVIRONMENT", "development").lower() == "production"
+    password = os.getenv("ADMIN_PASSWORD")
+    username = os.getenv("ADMIN_USERNAME", "admin")
+    if is_production and not password:
+        raise RuntimeError("ADMIN_PASSWORD is required in production")
+    if not password and not is_production:
+        password = "ChangeMe123!"
+        print("WARNING: Development admin account enabled (admin / ChangeMe123!). Set ADMIN_PASSWORD before deployment.")
     if password:
         with SessionLocal() as db:
-            username=os.getenv("ADMIN_USERNAME","admin")
-            if not db.scalar(select(User).where(User.username==username)):
-                db.add(User(username=username,password_hash=hasher.hash(password)));db.commit()
+            existing = db.scalar(select(User).where(User.username == username))
+            if not existing:
+                db.add(User(username=username, password_hash=hasher.hash(password)))
+                db.commit()
 @app.get("/health")
 def health(): return {"status":"ok"}
 @app.post("/auth/token")
