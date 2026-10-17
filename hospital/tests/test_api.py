@@ -41,6 +41,13 @@ class HospitalAPITests(unittest.TestCase):
         except HTTPError as exc:
             return exc.code, json.loads(exc.read())
 
+    def test_root_serves_arabic_ui_without_api_token(self):
+        with urlopen(self.base + "/", timeout=3) as response:
+            page = response.read().decode("utf-8")
+            self.assertEqual(response.status, 200)
+            self.assertIn("text/html", response.headers["Content-Type"])
+            self.assertIn("نظام إدارة المستشفى", page)
+
     def test_authentication_required(self):
         status, payload = self.request("/api/dashboard", token=False)
         self.assertEqual(status, 401)
