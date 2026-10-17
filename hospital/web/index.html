@@ -104,6 +104,13 @@ wire("doctorForm","/api/doctors",d=>({...d,at:now()}));
 wire("appointmentForm","/api/appointments",d=>({...d,patient_id:Number(d.patient_id),doctor_id:Number(d.doctor_id),starts_at:new Date(d.starts_at).toISOString(),ends_at:new Date(d.ends_at).toISOString(),created_at:now()}));
 wire("invoiceForm","/api/invoices",d=>({...d,patient_id:Number(d.patient_id),total_minor:Number(d.total_minor),encounter_id:d.encounter_id?Number(d.encounter_id):undefined,created_at:now()}));
 wire("paymentForm","/api/payments",d=>({...d,invoice_id:Number(d.invoice_id),amount_minor:Number(d.amount_minor),received_at:now(),reference:d.reference||undefined}));
+wire("labForm","/api/lab-orders",d=>({...d,patient_id:Number(d.patient_id),doctor_id:d.doctor_id?Number(d.doctor_id):undefined,encounter_id:d.encounter_id?Number(d.encounter_id):undefined,ordered_at:now()}));
+wire("medicineForm","/api/medicines",d=>({...d,quantity:Number(d.quantity),reorder_level:Number(d.reorder_level),at:now()}));
+wire("prescriptionForm","/api/prescriptions",d=>({...d,patient_id:Number(d.patient_id),medicine_id:Number(d.medicine_id),quantity:Number(d.quantity),encounter_id:d.encounter_id?Number(d.encounter_id):undefined,prescribed_at:now()}));
+const dispenseForm=$("dispenseForm");
+dispenseForm.addEventListener("submit",async ev=>{ev.preventDefault();const status=dispenseForm.querySelector(".status");const d=Object.fromEntries(new FormData(dispenseForm).entries());try{const result=await api("/api/prescriptions/"+Number(d.prescription_id)+"/dispense",{method:"POST",body:JSON.stringify({dispensed_at:now()})});msg(status,"تم صرف الوصفة بنجاح: "+result.id);dispenseForm.reset();$("connect").click()}catch(e){msg(status,e.message,true)}});
+wire("bedForm","/api/beds",d=>({...d,at:now()}));
+wire("admissionForm","/api/admissions",d=>({...d,patient_id:Number(d.patient_id),bed_id:Number(d.bed_id),reason:d.reason||"",admitted_at:now()}));
 </script>
 </body>
 </html>
