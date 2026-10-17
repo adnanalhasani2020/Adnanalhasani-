@@ -377,13 +377,22 @@ class HospitalDB:
     def create_invoice(self, *, invoice_no: str, patient_id: int, total_minor: int,
                        created_at: str, actor: str, currency: str = "YER",
                        encounter_id: int | None = None) -> int:
-        if not invoice_no.strip() or total_minor < 0:
-            raise HospitalError("invoice number is required and total must be non-negative")
+        if not invoice_no.strip() or not isinstance(total_minor, int) or isinstance(total_minor, bool) or total_minor < 0:
+            raise HospitalError("invoice number is required and total must be a non-negative integer")
+        if not currency.strip() or not created_at.strip():
+            raise HospitalError("currency and created_at are required")
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
+            patient = db.execute("SELECT id FROM patients WHERE id=?", (patient_id,)).fetchone()
+            if patient is None:
+                raise HospitalError("patient not found")
+            if encounter_id is not None:
+                encounter = db.execute("SELECT patient_id FROM encounters WHERE id=?", (encounter_id,)).fetchone()
+                if encounter is None or int(encounter["patient_id"]) != int(patient_id):
+                    raise HospitalError("encounter does not belong to this patient")
             cur = db.execute("""INSERT INTO invoices(invoice_no,patient_id,encounter_id,total_minor,currency,created_at)
                 VALUES(?,?,?,?,?,?)""",
-                (invoice_no.strip(), patient_id, encounter_id, total_minor, currency, created_at))
+                (invoice_no.strip(), patient_id, encounter_id, total_minor, currency.strip().upper(), created_at))
             ident = cur.lastrowid
             self._audit(db, actor, "invoice.created", "invoice", ident, created_at,
                         {"total_minor": total_minor, "currency": currency})
