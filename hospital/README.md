@@ -66,6 +66,31 @@ Use your actual backup filename in place of the example. Store a second encrypte
 - `POST /api/beds`, `POST /api/admissions`, `POST /api/admissions/{id}/discharge`
 - `POST /api/invoices`, `POST /api/payments` (amounts use integer minor units; payments cannot exceed the invoice balance)
 
+## Per-user authentication mode (development preview)
+
+The hospital API now includes an opt-in per-user authentication path and role checks. This is a development preview; it does not make the system production-ready.
+
+Create the first administrator interactively (the command refuses to run when an authentication user already exists):
+
+```bash
+export HOSPITAL_DB_PATH="hospital.sqlite3"
+python -m hospital.bootstrap_admin
+```
+
+Then start the API in per-user mode:
+
+```bash
+export HOSPITAL_AUTH_MODE="users"
+export HOSPITAL_DB_PATH="hospital.sqlite3"
+python -m hospital.api
+```
+
+The login endpoint is `POST /api/auth/login` with a JSON body containing `username` and `password`. Use the returned bearer session token for authenticated API requests. `GET /api/auth/me` reports the current account, `POST /api/auth/logout` revokes its session, and administrators can create accounts with `POST /api/users`, list accounts with `GET /api/users`, and activate/deactivate accounts through `POST /api/users/{id}/active` with boolean `active` and timestamp `at` fields.
+
+Passwords are stored as PBKDF2-HMAC-SHA256 hashes with per-user random salts. Session tokens are stored as SHA-256 hashes and expire after eight hours. The role matrix is deliberately least-privilege and should be reviewed against actual hospital duties before use. The legacy shared-token mode remains the default for backward compatibility; it does not enforce per-user roles. Set `HOSPITAL_AUTH_MODE=users` explicitly to exercise per-user authentication.
+
+Keep the service bound to localhost. Do not expose it to the internet, and do not use real patient data. Production still requires TLS/reverse proxy configuration, secure secret and key management, clinical validation, security review, monitoring, tested backup/restore, and applicable regulatory review.
+
 ## Important safety limits
 This is a development foundation, **not a production-ready or clinically validated hospital information system**. The bearer token is a single shared secret, not per-user authentication; roles in the schema are not yet enforced by API authorization middleware. Do not expose the development server directly to the internet or use real patient data. Before production, add per-user authentication and role-based access control, TLS/reverse proxy, secure secret management, encryption/key management, backup/restore testing, migrations, monitoring, retention policies, audit review, clinical workflow validation, and applicable regulatory review.
 
