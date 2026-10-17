@@ -215,3 +215,8 @@ def create_bed(db: HospitalDB, *, ward: str, bed_no: str, actor: str, at: str) -
                   {"ward": ward.strip(), "bed_no": bed_no.strip()})
         conn.commit()
         return int(ident)
+
+
+# Shared supply-chain workflows live in clinical_records; re-export here for
+# callers that group hospital operational workflows under this module.
+from .clinical_records import create_purchase_order, create_supplier
