@@ -53,6 +53,9 @@ def make_handler(database: HospitalDB, api_token: str):
             return True
 
         def _body(self) -> dict[str, Any]:
+            content_type = self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
+            if content_type != "application/json":
+                raise HospitalError("Content-Type must be application/json")
             try:
                 length = int(self.headers.get("Content-Length", "0"))
             except ValueError as exc:
