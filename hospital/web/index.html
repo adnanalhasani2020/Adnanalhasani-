@@ -51,6 +51,17 @@ small{color:#5d7482}form{display:grid;gap:10px}footer{text-align:center;color:#6
 <input name="reason" placeholder="سبب الزيارة (اختياري)">
 <button>حجز الموعد</button><div class="status" role="status"></div>
 </form></section>
+<section class="panel"><h2>إنشاء فاتورة</h2><form id="invoiceForm">
+<div class="row"><input name="invoice_no" required placeholder="رقم الفاتورة"><input name="patient_id" required type="number" min="1" placeholder="رقم المريض الداخلي"></div>
+<div class="row"><label>الإجمالي بوحدات العملة الصغرى<input name="total_minor" required type="number" min="0" step="1" placeholder="مثال: 12500"></label><input name="currency" value="YER" required aria-label="رمز العملة"><input name="encounter_id" type="number" min="1" placeholder="رقم الزيارة (اختياري)"></div>
+<small>أدخل المبلغ كعدد صحيح بوحدات العملة الصغرى؛ لا تستخدم الكسور العشرية.</small>
+<button>إنشاء الفاتورة</button><div class="status" role="status"></div>
+</form></section>
+<section class="panel"><h2>تسجيل دفعة</h2><form id="paymentForm">
+<div class="row"><input name="invoice_id" required type="number" min="1" placeholder="رقم الفاتورة الداخلي"><input name="amount_minor" required type="number" min="1" step="1" placeholder="المبلغ بوحدات العملة الصغرى"></div>
+<div class="row"><input name="method" required placeholder="طريقة الدفع: نقدًا / تحويل"><input name="reference" placeholder="مرجع الإيصال (اختياري)"></div>
+<button>تسجيل الدفعة</button><div class="status" role="status"></div>
+</form></section>
 </main>
 <footer>واجهة أولية — جميع الأوقات تُرسل بتنسيق ISO-8601 المحلي.</footer>
 <script>
@@ -66,6 +77,8 @@ const now=()=>new Date().toISOString();
 wire("patientForm","/api/patients",d=>({...d,created_at:now()}));
 wire("doctorForm","/api/doctors",d=>({...d,at:now()}));
 wire("appointmentForm","/api/appointments",d=>({...d,patient_id:Number(d.patient_id),doctor_id:Number(d.doctor_id),starts_at:new Date(d.starts_at).toISOString(),ends_at:new Date(d.ends_at).toISOString(),created_at:now()}));
+wire("invoiceForm","/api/invoices",d=>({...d,patient_id:Number(d.patient_id),total_minor:Number(d.total_minor),encounter_id:d.encounter_id?Number(d.encounter_id):undefined,created_at:now()}));
+wire("paymentForm","/api/payments",d=>({...d,invoice_id:Number(d.invoice_id),amount_minor:Number(d.amount_minor),received_at:now(),reference:d.reference||undefined}));
 </script>
 </body>
 </html>
