@@ -128,6 +128,7 @@ class MainActivity : Activity() {
         body.addView(btn("بحث شامل"){searchScreen()})
         body.addView(btn("كشف حساب"){accountStatement()})
         body.addView(btn("النسخ الاحتياطي"){backupScreen()})
+        body.addView(btn("سجل النشاط والتعديلات"){auditScreen()})
         body.addView(btn("حركة دخل أو مصروف"){addTransaction()})
         body.addView(btn("سجل الحركات"){transactions()})
         body.addView(btn("الفواتير"){invoices()})
@@ -613,6 +614,26 @@ class MainActivity : Activity() {
             })
         }
         body.addView(btn("رجوع") { dashboard() })
+    }
+
+    private fun auditScreen() {
+        screen("سجل النشاط والتعديلات")
+        body.addView(label("سجل محلي للعمليات التي نفذها هذا التطبيق على هذا الهاتف.", 15f))
+        body.addView(btn("تحديث السجل") { auditScreen() })
+        body.addView(btn("رجوع للرئيسية") { dashboard() })
+        executor.execute {
+            val entries = localDb.recentAudit(200)
+            runOnUiThread {
+                if (entries.length() == 0) body.addView(label("لا توجد أنشطة مسجلة بعد"))
+                for (i in 0 until entries.length()) {
+                    val entry = entries.getJSONObject(i)
+                    val date = java.text.DateFormat.getDateTimeInstance().format(java.util.Date(entry.optLong("created_at")))
+                    body.addView(label(date + "\n" + entry.optString("action") + " • " + entry.optString("entity") +
+                        "\n" + entry.optString("details").take(180), 14f))
+                }
+                status.text = "السجل محلي ولا يمثل تدقيقاً مركزياً على الخادم"
+            }
+        }
     }
 
     private fun backupScreen() {
