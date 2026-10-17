@@ -507,3 +507,60 @@ def test_commerce_inventory_read_reports_unknown_and_ambiguous_without_mutation(
 
     db.close()
 
+
+
+
+def test_offering_inventory_unknown_and_ambiguous_statuses_fail_closed(tmp_path):
+    db = connect_database(tmp_path / "inventory-status-integration.sqlite")
+    actor_id = _id()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,?,?,?)",
+        (actor_id, "active", STAMP, STAMP),
+    )
+    activity_id = _activity(db, actor_id)
+    products = ProductApplication()
+    product = products.create_product(
+        db, "Inventory status product",
+        actor_context_ref="inventory-status-integration", now=STAMP,
+    )
+    product_id = str(product.product.id)
+    products.transition_product(
+        db, product_id, "activate", expected_version=1,
+        actor_context_ref="inventory-status-integration", now=STAMP,
+    )
+    offerings = OfferingApplication()
+    offering = offerings.create_offering(
+        db, product_id=product_id, activity_id=activity_id, effective_from=STAMP,
+        actor_context_ref="inventory-status-integration", now=STAMP,
+    )
+    offerings.transition_offering(
+        db, offering.offering.id, "activate", expected_version=1,
+        actor_context_ref="inventory-status-integration", now=STAMP,
+    )
+    offering_id = str(offering.offering.id)
+    inventory = InventoryApplication()
+
+    # No eligible row is not equivalent to a known zero quantity.
+    absent = inventory.read_offering_quantity(db, offering_id, "store-A", as_of=NOW)
+    assert absent.status is InventoryStatus.NO_RECORD
+    assert absent.quantity_minor is None
+
+    # A latest row with NULL quantity remains unknown; it does not become zero.
+    _position(
+        db, activity_id=activity_id, product_id=product_id, offering_id=offering_id,
+        quantity=None, observed_at="2026-10-12T11:00:00Z",
+    )
+    unknown = inventory.read_offering_quantity(db, offering_id, "store-A", as_of=NOW)
+    assert unknown.status is InventoryStatus.UNKNOWN_QUANTITY
+    assert unknown.quantity_minor is None
+
+    # Two observations tied at the latest timestamp are ambiguous, even if quantities differ.
+    _position(
+        db, activity_id=activity_id, product_id=product_id, offering_id=offering_id,
+        quantity=7, observed_at="2026-10-12T11:00:00Z",
+    )
+    ambiguous = inventory.read_offering_quantity(db, offering_id, "store-A", as_of=NOW)
+    assert ambiguous.status is InventoryStatus.AMBIGUOUS
+    assert ambiguous.quantity_minor is None
+    assert ambiguous.inventory_position_id is None
+    db.close()
