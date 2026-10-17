@@ -250,7 +250,7 @@ def permission_for_route(method: str, path: str) -> str | None:
         if module == "lab-orders":
             return "lab:write" if method == "POST" else "lab:read"
         if module == "prescriptions":
-            return "prescriptions:dispense" if action == "dispense" else "prescriptions:write"
+            return "prescriptions:dispense" if "dispense" in segments[3:] else "prescriptions:write"
         if module == "admissions":
             return "admissions:write"
         if module == "users":
