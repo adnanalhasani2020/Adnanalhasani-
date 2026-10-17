@@ -24,7 +24,7 @@ def sale_fixture(db, version=2):
 
 def history(db, sale, prior, current):
     db.execute("INSERT INTO domain_history(domain_history_id,owner_domain,target_ref,change_type,historical_at,actor_context_ref,prior_version_ref,current_version_ref,change_payload_ref,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
-               (uid(),"Commerce",sale,"state_change",NOW,"actor",prior,current,"state:confirmed",NOW))
+               (uid(),"commerce",sale,"sale_state_transition",NOW,"actor",prior,current,"state:confirmed",NOW))
 
 def test_audit_recognizes_complete_version_chain():
     db = connect_database()
@@ -61,4 +61,25 @@ def test_audit_rejects_invalid_or_missing_sale():
         auditor.inspect(db,"not-a-uuid")
     with pytest.raises(ValidationError,match="does not exist"):
         auditor.inspect(db,uid())
+    db.close()
+
+
+def test_audit_ignores_non_sale_events_with_same_target_ref():
+    db = connect_database()
+    sale = sale_fixture(db)
+    history(db, sale, None, "v1")
+    history(db, sale, "v1", "v2")
+    db.execute(
+        "INSERT INTO domain_history(domain_history_id,owner_domain,target_ref,change_type,"
+        "historical_at,actor_context_ref,prior_version_ref,current_version_ref,change_payload_ref,created_at) "
+        "VALUES(?,?,?,?,?,?,?,?,?,?)",
+        (uid(), "commerce", sale, "unrelated_event", NOW, "actor", None, "other:v1", "note", NOW),
+    )
+    db.commit()
+
+    result = SaleHistoryIntegrityAuditor().inspect(db, sale)
+
+    assert result.status == "consistent"
+    assert result.history_record_count == 2
+    assert result.findings == ()
     db.close()
