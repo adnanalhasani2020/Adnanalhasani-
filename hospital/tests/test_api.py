@@ -95,6 +95,27 @@ class HospitalAPITests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "HOSPITAL_API_TOKEN must be set"):
             make_handler(self.db, "")
 
+    def test_global_search_finds_records_across_modules_without_private_fields(self):
+        self.request("/api/patients", method="POST", payload={
+            "patient_no": "GLOBAL-P-1", "full_name": "Global Search Patient",
+            "created_at": "2026-01-01T08:00:00", "allergies": "private allergy",
+            "notes": "private note"
+        })
+        status, payload = self.request("/api/search?search=Global%20Search%20Patient&limit=10&offset=0")
+        self.assertEqual(status, 200)
+        patient = next(row for row in payload["data"] if row["record_type"] == "patients")
+        self.assertEqual(patient["title"], "Global Search Patient")
+        self.assertNotIn("allergies", patient)
+        self.assertNotIn("notes", patient)
+
+    def test_global_search_requires_query_and_valid_pagination(self):
+        status, payload = self.request("/api/search")
+        self.assertEqual(status, 400)
+        self.assertEqual(payload["error"], "search_required")
+        status, payload = self.request("/api/search?search=patient&limit=101")
+        self.assertEqual(status, 400)
+        self.assertIn("limit must be", payload["error"])
+
     def test_audit_log_endpoint_lists_and_searches_audited_operations(self):
         status, created = self.request("/api/patients", method="POST", payload={
             "patient_no": "AUDIT-P-1", "full_name": "Audit Sample",

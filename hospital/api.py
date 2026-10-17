@@ -102,6 +102,72 @@ def make_handler(database: HospitalDB, api_token: str):
                 self._send(200, {"status": "ok", "service": "hospital-api"})
             elif route == "/api/dashboard":
                 self._send(200, {"data": database.dashboard()})
+            elif route == "/api/search":
+                try:
+                    params = parse_qs(parsed.query, keep_blank_values=True)
+                    limit = int(params.get("limit", ["50"])[0])
+                    offset = int(params.get("offset", ["0"])[0])
+                except (TypeError, ValueError, OverflowError):
+                    self._send(400, {"error": "invalid_pagination"})
+                    return
+                if limit < 1 or limit > 100 or offset < 0:
+                    self._send(400, {"error": "limit must be 1-100 and offset must be non-negative"})
+                    return
+                search = params.get("search", [""])[0].strip()[:100]
+                if not search:
+                    self._send(400, {"error": "search_required"})
+                    return
+                pattern = "%" + search + "%"
+                # Return only fields already exposed by the record explorer; never include
+                # patient notes, allergies, or other private free-text fields.
+                sql = """
+                    SELECT 'patients' AS record_type,id,full_name AS title,patient_no AS subtitle,created_at AS occurred_at,
+                           CASE WHEN active=1 THEN 'active' ELSE 'inactive' END AS status
+                      FROM patients WHERE patient_no LIKE ? OR full_name LIKE ? OR COALESCE(phone,'') LIKE ?
+                    UNION ALL
+                    SELECT 'doctors',id,full_name,employee_no || ' — ' || specialty,'',
+                           CASE WHEN active=1 THEN 'active' ELSE 'inactive' END
+                      FROM doctors WHERE employee_no LIKE ? OR full_name LIKE ? OR specialty LIKE ? OR COALESCE(phone,'') LIKE ?
+                    UNION ALL
+                    SELECT 'appointments',a.id,p.full_name,d.full_name || ' — ' || a.starts_at,a.starts_at,a.status
+                      FROM appointments a JOIN patients p ON p.id=a.patient_id JOIN doctors d ON d.id=a.doctor_id
+                     WHERE p.full_name LIKE ? OR p.patient_no LIKE ? OR d.full_name LIKE ? OR COALESCE(a.reason,'') LIKE ?
+                    UNION ALL
+                    SELECT 'encounters',e.id,p.full_name,COALESCE(d.full_name,'') || ' — ' || e.status,e.opened_at,e.status
+                      FROM encounters e JOIN patients p ON p.id=e.patient_id LEFT JOIN doctors d ON d.id=e.doctor_id
+                     WHERE p.full_name LIKE ? OR p.patient_no LIKE ? OR COALESCE(d.full_name,'') LIKE ? OR COALESCE(e.diagnosis,'') LIKE ? OR COALESCE(e.chief_complaint,'') LIKE ?
+                    UNION ALL
+                    SELECT 'lab-orders',l.id,p.full_name,l.test_name,l.ordered_at,l.status
+                      FROM lab_orders l JOIN patients p ON p.id=l.patient_id
+                     WHERE p.full_name LIKE ? OR p.patient_no LIKE ? OR l.test_name LIKE ? OR l.status LIKE ?
+                    UNION ALL
+                    SELECT 'medicines',id,name,sku || ' — المخزون: ' || quantity,'',
+                           CASE WHEN quantity<=reorder_level THEN 'low_stock' ELSE 'in_stock' END
+                      FROM medicines WHERE sku LIKE ? OR name LIKE ?
+                    UNION ALL
+                    SELECT 'prescriptions',r.id,p.full_name,m.name || ' — ' || r.dose,r.prescribed_at,r.status
+                      FROM prescriptions r JOIN patients p ON p.id=r.patient_id JOIN medicines m ON m.id=r.medicine_id
+                     WHERE p.full_name LIKE ? OR p.patient_no LIKE ? OR m.name LIKE ? OR r.dose LIKE ?
+                    UNION ALL
+                    SELECT 'beds',id,ward,bed_no,'',CASE WHEN active=1 THEN 'active' ELSE 'inactive' END
+                      FROM beds WHERE ward LIKE ? OR bed_no LIKE ?
+                    UNION ALL
+                    SELECT 'admissions',a.id,p.full_name,b.ward || ' — ' || b.bed_no,a.admitted_at,a.status
+                      FROM admissions a JOIN patients p ON p.id=a.patient_id JOIN beds b ON b.id=a.bed_id
+                     WHERE p.full_name LIKE ? OR p.patient_no LIKE ? OR b.ward LIKE ? OR b.bed_no LIKE ?
+                    UNION ALL
+                    SELECT 'invoices',i.id,i.invoice_no,p.full_name,i.created_at,i.status
+                      FROM invoices i JOIN patients p ON p.id=i.patient_id
+                     WHERE i.invoice_no LIKE ? OR p.full_name LIKE ? OR p.patient_no LIKE ?
+                    UNION ALL
+                    SELECT 'audit-log',id,action,entity_type || ':' || COALESCE(entity_id,''),occurred_at,action
+                      FROM audit_log WHERE actor LIKE ? OR action LIKE ? OR entity_type LIKE ? OR COALESCE(entity_id,'') LIKE ? OR COALESCE(details_json,'') LIKE ?
+                    ORDER BY occurred_at DESC,record_type,id DESC LIMIT ? OFFSET ?
+                """
+                with database.connect() as conn:
+                    rows = conn.execute(sql, [pattern] * 40 + [limit, offset]).fetchall()
+                self._send(200, {"data": [dict(row) for row in rows],
+                                 "pagination": {"limit": limit, "offset": offset, "count": len(rows)}})
             elif route == "/api/audit-log":
                 try:
                     params = parse_qs(parsed.query, keep_blank_values=True)
