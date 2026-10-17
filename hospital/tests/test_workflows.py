@@ -29,6 +29,15 @@ class HospitalWorkflowTests(unittest.TestCase):
         with self.db.connect() as conn:
             row = conn.execute("SELECT status,diagnosis FROM encounters WHERE id=?", (encounter,)).fetchone()
         self.assertEqual((row["status"], row["diagnosis"]), ("closed", "Example diagnosis"))
+        with self.db.connect() as conn:
+            final_rows = conn.execute(
+                """SELECT description,diagnosis_type,recorded_by,recorded_at
+                   FROM encounter_diagnoses WHERE encounter_id=?""",
+                (encounter,),
+            ).fetchall()
+        self.assertEqual(len(final_rows), 1)
+        self.assertEqual(tuple(final_rows[0]),
+                         ("Example diagnosis", "final", "doctor", "2026-01-02T08:30:00"))
         with self.assertRaises(HospitalError):
             close_encounter(self.db, encounter_id=encounter, closed_at="2026-01-02T08:40:00",
                 actor="doctor", diagnosis="Duplicate close")
