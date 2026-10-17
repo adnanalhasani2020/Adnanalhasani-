@@ -599,7 +599,9 @@ class MainActivity : Activity() {
                 val selected = accounts.getJSONObject(spinner.selectedItemPosition)
                 val localId = selected.optString("local_id")
                 body.addView(label("الحساب: " + selected.optString("name"), 18f, true))
-                body.addView(label("الرصيد الافتتاحي: " + selected.optString("opening_balance") + " " + selected.optString("currency")))
+                val currency = selected.optString("currency", "YER")
+                body.addView(label("الرصيد الافتتاحي: " + selected.optString("opening_balance") + " " + currency))
+                body.addView(label("الرصيد الحالي المحسوب: " + localDb.accountBalance(localId, currency, selected.optString("opening_balance")).toPlainString() + " " + currency, 18f, true))
                 val tx = localDb.readEntities("transactions")
                 var count = 0
                 for (i in 0 until tx.length()) {
@@ -607,6 +609,14 @@ class MainActivity : Activity() {
                     if (t.optString("account_local_id") == localId) {
                         count++
                         body.addView(label((if (t.optString("kind") == "income") "دخل" else "مصروف") + " • " + t.optString("amount") + " " + t.optString("currency") + " • " + t.optString("description")))
+                    }
+                }
+                val payments = localDb.readEntities("payments")
+                for (i in 0 until payments.length()) {
+                    val p = payments.getJSONObject(i)
+                    if (p.optString("account_local_id") == localId) {
+                        count++
+                        body.addView(label((if (p.optString("direction") == "received") "دفعة مستلمة" else "دفعة مدفوعة") + " • " + p.optString("amount") + " " + p.optString("currency") + " • " + p.optString("reference")))
                     }
                 }
                 if (count == 0) body.addView(label("لا توجد حركات مرتبطة بهذا الحساب"))
