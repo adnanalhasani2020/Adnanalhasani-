@@ -186,6 +186,66 @@ BEFORE DELETE ON audit_log
 BEGIN
   SELECT RAISE(ABORT, 'audit_log is append-only');
 END;
+
+CREATE TABLE IF NOT EXISTS encounter_diagnoses (
+ id INTEGER PRIMARY KEY, encounter_id INTEGER NOT NULL REFERENCES encounters(id),
+ code TEXT NOT NULL DEFAULT '', description TEXT NOT NULL,
+ diagnosis_type TEXT NOT NULL DEFAULT 'clinical' CHECK(diagnosis_type IN ('clinical','differential','final')),
+ recorded_by TEXT NOT NULL, recorded_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS encounter_diagnoses_encounter ON encounter_diagnoses(encounter_id, recorded_at);
+CREATE TABLE IF NOT EXISTS patient_allergies (
+ id INTEGER PRIMARY KEY, patient_id INTEGER NOT NULL REFERENCES patients(id),
+ substance TEXT NOT NULL, reaction TEXT NOT NULL DEFAULT '',
+ severity TEXT NOT NULL DEFAULT 'unknown' CHECK(severity IN ('unknown','mild','moderate','severe')),
+ status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','inactive')),
+ recorded_by TEXT NOT NULL, recorded_at TEXT NOT NULL,
+ UNIQUE(patient_id, substance)
+);
+CREATE TABLE IF NOT EXISTS vital_signs (
+ id INTEGER PRIMARY KEY, encounter_id INTEGER NOT NULL REFERENCES encounters(id),
+ patient_id INTEGER NOT NULL REFERENCES patients(id), measured_at TEXT NOT NULL, measured_by TEXT NOT NULL,
+ temperature_c REAL, pulse_bpm INTEGER, respiratory_rate INTEGER, systolic_bp INTEGER, diastolic_bp INTEGER,
+ oxygen_saturation REAL, weight_kg REAL, height_cm REAL, pain_score INTEGER, notes TEXT NOT NULL DEFAULT '',
+ CHECK(temperature_c IS NULL OR temperature_c BETWEEN 25 AND 45),
+ CHECK(pulse_bpm IS NULL OR pulse_bpm BETWEEN 0 AND 300),
+ CHECK(respiratory_rate IS NULL OR respiratory_rate BETWEEN 0 AND 100),
+ CHECK(systolic_bp IS NULL OR systolic_bp BETWEEN 0 AND 350),
+ CHECK(diastolic_bp IS NULL OR diastolic_bp BETWEEN 0 AND 250),
+ CHECK(oxygen_saturation IS NULL OR oxygen_saturation BETWEEN 0 AND 100),
+ CHECK(weight_kg IS NULL OR (weight_kg > 0 AND weight_kg < 1000)),
+ CHECK(height_cm IS NULL OR (height_cm > 0 AND height_cm < 300)),
+ CHECK(pain_score IS NULL OR pain_score BETWEEN 0 AND 10)
+);
+CREATE INDEX IF NOT EXISTS vital_signs_encounter_time ON vital_signs(encounter_id, measured_at);
+CREATE TABLE IF NOT EXISTS nursing_notes (
+ id INTEGER PRIMARY KEY, encounter_id INTEGER NOT NULL REFERENCES encounters(id),
+ patient_id INTEGER NOT NULL REFERENCES patients(id), nurse TEXT NOT NULL,
+ note_type TEXT NOT NULL DEFAULT 'observation' CHECK(note_type IN ('observation','care_plan','handover','medication','incident')),
+ note TEXT NOT NULL, recorded_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS nursing_notes_encounter_time ON nursing_notes(encounter_id, recorded_at);
+CREATE TABLE IF NOT EXISTS inventory_movements (
+ id INTEGER PRIMARY KEY, medicine_id INTEGER NOT NULL REFERENCES medicines(id),
+ movement_type TEXT NOT NULL CHECK(movement_type IN ('opening','purchase','dispense','adjustment','return','waste')),
+ quantity_delta INTEGER NOT NULL CHECK(quantity_delta <> 0), reference_type TEXT NOT NULL DEFAULT '',
+ reference_id TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '', actor TEXT NOT NULL, occurred_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS inventory_movements_medicine_time ON inventory_movements(medicine_id, occurred_at);
+CREATE TABLE IF NOT EXISTS suppliers (
+ id INTEGER PRIMARY KEY, supplier_no TEXT NOT NULL UNIQUE, name TEXT NOT NULL,
+ phone TEXT NOT NULL DEFAULT '', active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)), created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS purchase_orders (
+ id INTEGER PRIMARY KEY, order_no TEXT NOT NULL UNIQUE, supplier_id INTEGER NOT NULL REFERENCES suppliers(id),
+ status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','ordered','received','cancelled')),
+ ordered_at TEXT NOT NULL, received_at TEXT, actor TEXT NOT NULL, notes TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS purchase_order_items (
+ id INTEGER PRIMARY KEY, purchase_order_id INTEGER NOT NULL REFERENCES purchase_orders(id),
+ medicine_id INTEGER NOT NULL REFERENCES medicines(id), quantity INTEGER NOT NULL CHECK(quantity > 0),
+ unit_cost_minor INTEGER NOT NULL CHECK(unit_cost_minor >= 0), UNIQUE(purchase_order_id, medicine_id)
+);
 """
 
 
@@ -198,6 +258,10 @@ class HospitalDB:
         self.path = str(path)
         with self.connect() as db:
             db.executescript(SCHEMA)
+            columns = {row["name"] for row in db.execute("PRAGMA table_info(admissions)")}
+            if "encounter_id" not in columns:
+                db.execute("ALTER TABLE admissions ADD COLUMN encounter_id INTEGER REFERENCES encounters(id)")
+            db.execute("CREATE INDEX IF NOT EXISTS admissions_encounter ON admissions(encounter_id)")
 
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:
