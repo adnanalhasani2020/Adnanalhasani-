@@ -64,6 +64,21 @@ class HospitalAPITests(unittest.TestCase):
             self.assertEqual(response.headers["Cache-Control"], "no-store")
             self.assertEqual(response.headers["X-Frame-Options"], "DENY")
 
+    def test_empty_configured_api_token_fails_closed(self):
+        server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(self.db, ""))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            req = Request(f"http://127.0.0.1:{server.server_port}/api/dashboard")
+            with self.assertRaises(HTTPError) as raised:
+                urlopen(req, timeout=3)
+            self.assertEqual(raised.exception.code, 401)
+            self.assertEqual(json.loads(raised.exception.read())["error"], "unauthorized")
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
     def test_patient_creation_and_dashboard(self):
         status, payload = self.request("/api/patients", method="POST", payload={
             "patient_no": "API-P-1", "full_name": "Sample Patient",
