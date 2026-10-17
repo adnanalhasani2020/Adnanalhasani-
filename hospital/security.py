@@ -182,10 +182,17 @@ class AuthStore:
     def set_user_active(self, *, user_id: int, active: bool, at: str, actor: str) -> None:
         with self.database.connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
-            cur = conn.execute("UPDATE auth_users SET active=?,updated_at=? WHERE id=?",
-                               (1 if active else 0, at, user_id))
-            if cur.rowcount != 1:
+            target = conn.execute("SELECT role,active FROM auth_users WHERE id=?", (user_id,)).fetchone()
+            if target is None:
                 raise ValueError("user not found")
+            if not active and target["role"] == "admin" and target["active"]:
+                active_admins = conn.execute(
+                    "SELECT COUNT(*) FROM auth_users WHERE role='admin' AND active=1"
+                ).fetchone()[0]
+                if active_admins <= 1:
+                    raise ValueError("cannot deactivate the last active administrator")
+            conn.execute("UPDATE auth_users SET active=?,updated_at=? WHERE id=?",
+                         (1 if active else 0, at, user_id))
             if not active:
                 conn.execute("UPDATE auth_sessions SET revoked_at=? WHERE user_id=? AND revoked_at IS NULL",
                              (at, user_id))
