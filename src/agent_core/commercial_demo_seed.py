@@ -6,6 +6,7 @@ business database and requires an explicit command-line opt-in.
 from __future__ import annotations
 
 import argparse
+import os
 import secrets
 import sqlite3
 from datetime import datetime, timedelta, timezone
@@ -19,7 +20,7 @@ from agent_core.offering_price_application import OfferingPriceApplication
 from agent_core.persistence import connect_database
 
 
-def seed_demo(database_path: str | Path) -> dict:
+def _seed_demo_locked(database_path: str | Path) -> dict:
     """Seed one demo buyer, one active offering, an effective price, and opening stock."""
     db = connect_database(database_path)
     try:
@@ -93,6 +94,43 @@ def seed_demo(database_path: str | Path) -> dict:
         }
     finally:
         db.close()
+
+
+
+def seed_demo(database_path: str | Path) -> dict:
+    """Serialize seed attempts across processes before opening/migrating the database.
+
+    SQLite's migration runner must finish before the seed operation begins, and the
+    identity registration contract requires an unowned transaction. A separate OS
+    file lock provides mutual exclusion without violating either database contract.
+    """
+    database_path = Path(database_path)
+    lock_path = Path(f"{database_path}.seed.lock")
+    with lock_path.open("a+b") as lock_file:
+        if os.name == "nt":
+            # msvcrt locks byte ranges and requires a byte to exist in the file.
+            import msvcrt
+
+            lock_file.seek(0)
+            if not lock_file.read(1):
+                lock_file.seek(0)
+                lock_file.write(b"0")
+                lock_file.flush()
+            lock_file.seek(0)
+            msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
+            try:
+                return _seed_demo_locked(database_path)
+            finally:
+                lock_file.seek(0)
+                msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            try:
+                return _seed_demo_locked(database_path)
+            finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
 def main() -> None:
