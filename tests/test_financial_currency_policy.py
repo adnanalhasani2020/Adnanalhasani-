@@ -104,3 +104,30 @@ def test_same_currency_conversion_does_not_accept_an_exchange_rate():
     rate = ExchangeRate("USD", "YER", Decimal("250"), STAMP, "admin-entry:fx")
     with pytest.raises(ValidationError, match="same-currency"):
         convert_amount("1", source_currency="YER", target_currency="YER", exchange_rate=rate)
+
+
+def test_exchange_rate_normalizes_non_utc_timestamp_to_utc():
+    from datetime import timedelta
+
+    local_stamp = datetime(2026, 10, 16, 15, 0, tzinfo=timezone(timedelta(hours=3)))
+    rate = ExchangeRate("USD", "YER", Decimal("250"), local_stamp, "admin-entry:fx")
+    assert rate.effective_at == datetime(2026, 10, 16, 12, 0, tzinfo=timezone.utc)
+
+
+@pytest.mark.parametrize("value", ["", "   ", "not-a-number", "NaN", "Infinity"])
+def test_money_rejects_blank_invalid_or_nonfinite_decimal_text(value):
+    with pytest.raises(ValidationError):
+        round_money(value)
+
+
+def test_cross_currency_conversion_rounds_only_final_converted_amount_half_up():
+    rate = ExchangeRate("USD", "YER", Decimal("2.345"), STAMP, "admin-entry:fx")
+    assert convert_amount(
+        "1.00", source_currency="USD", target_currency="YER", exchange_rate=rate
+    ) == Decimal("2.35")
+
+
+def test_exchange_rate_is_immutable_after_normalization():
+    rate = ExchangeRate("usd", "yer", Decimal("250"), STAMP, " admin-entry:fx ")
+    with pytest.raises((AttributeError, TypeError)):
+        rate.rate = Decimal("1")
