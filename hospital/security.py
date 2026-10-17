@@ -274,7 +274,7 @@ def permission_for_route(method: str, path: str) -> str | None:
         return {
             "beds": "beds:write", "invoices": "invoices:write", "payments": "payments:write"
         }.get(module)
-    return "records:read"
+    return "route:unknown"
 
 
 def ensure_user_permission(principal: Principal, permission: str) -> None:
