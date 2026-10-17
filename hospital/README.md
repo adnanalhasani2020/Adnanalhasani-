@@ -65,6 +65,14 @@ Use your actual backup filename in place of the example. Store a second encrypte
 - `POST /api/medicines`, `POST /api/prescriptions`, `POST /api/prescriptions/{id}/dispense`
 - `POST /api/beds`, `POST /api/admissions`, `POST /api/admissions/{id}/discharge`
 - `POST /api/invoices`, `POST /api/payments` (amounts use integer minor units; payments cannot exceed the invoice balance)
+- `GET /api/diagnoses`, `POST /api/diagnoses` (diagnoses are linked to a clinical encounter; a final diagnosis also updates the encounter summary)
+- `GET /api/allergies`, `POST /api/allergies` (patient-level allergy register with severity and active/inactive status)
+- `GET /api/vitals`, `POST /api/vitals` (encounter-linked observations; plausible numeric ranges are enforced by SQLite constraints)
+- `GET /api/nursing-notes`, `POST /api/nursing-notes` (encounter-linked observations, care plans, handovers, medication notes, and incidents)
+- `POST /api/admissions` accepts optional `encounter_id`; when supplied, it must belong to the same patient.
+- `GET /api/inventory-movements`, `POST /api/inventory-adjustments` (signed stock adjustments are audited and cannot make stock negative)
+- `GET /api/suppliers`, `POST /api/suppliers`; `GET /api/purchase-orders`, `POST /api/purchase-orders`, `POST /api/purchase-orders/{id}/receive` (receipt updates stock and writes an inventory ledger entry atomically)
+- `GET /api/reports` (aggregate clinical, bed/inventory/procurement, and financial totals; no patient-level data)
 
 ## Per-user authentication mode (development preview)
 
@@ -90,6 +98,12 @@ The login endpoint is `POST /api/auth/login` with a JSON body containing `userna
 Passwords are stored as PBKDF2-HMAC-SHA256 hashes with per-user random salts. Session tokens are stored as SHA-256 hashes and expire after eight hours. The role matrix is deliberately least-privilege and should be reviewed against actual hospital duties before use. The legacy shared-token mode remains the default for backward compatibility; it does not enforce per-user roles. Set `HOSPITAL_AUTH_MODE=users` explicitly to exercise per-user authentication.
 
 Keep the service bound to localhost. Do not expose it to the internet, and do not use real patient data. Production still requires TLS/reverse proxy configuration, secure secret and key management, clinical validation, security review, monitoring, tested backup/restore, and applicable regulatory review.
+
+## Unified clinical workflow and operational ledger
+
+Visits are represented by encounters. Diagnoses, vital signs, and nursing notes reference an encounter; allergies reference the patient; lab orders and prescriptions already support encounter IDs; admissions now support an optional encounter link with patient consistency validation. Stock adjustments, dispensing, and purchase receipts are recorded in an inventory movement ledger. Purchase receipts can be applied only once, and stock updates and ledger writes are transactional. `GET /api/reports` returns aggregate counts and integer-minor-unit financial totals for the admin dashboard.
+
+The schema initialization includes an additive migration for the admission-to-encounter link. Back up test databases before trying new schema revisions. These workflows are a software foundation only; vital-sign range checks are data-quality guardrails, not clinical interpretation or decision support.
 
 ## Important safety limits
 This is a development foundation, **not a production-ready or clinically validated hospital information system**. Per-user authentication and role checks are available as an opt-in development preview (`HOSPITAL_AUTH_MODE=users`); the legacy shared-token mode remains the default and does not enforce per-user roles. The role matrix and route coverage still require independent security review before real-world use. Do not expose the development server directly to the internet or use real patient data. Before production, complete threat modeling and authorization review, configure TLS/reverse proxy, secure secret management and encryption/key management, test backup/restore, add migrations and monitoring, define retention policies, audit access, validate clinical workflows, and complete applicable regulatory review.
