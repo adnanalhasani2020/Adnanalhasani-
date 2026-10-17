@@ -13,6 +13,7 @@ import java.net.URL
 import java.net.URLEncoder
 import java.io.OutputStreamWriter
 import java.util.concurrent.Executors
+import java.security.MessageDigest
 
 class MainActivity : Activity() {
     private val executor = Executors.newSingleThreadExecutor()
@@ -27,7 +28,9 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         token = prefs.getString("token", null)
         apiUrl = prefs.getString("api_url", "") ?: ""
-        if (token == null && !localDb.hasLocalData()) login() else dashboard()
+        // Local-first access: no server URL or internet is required.
+        token = null
+        if (prefs.getString("local_admin_hash", null) == null) setupLocalAdmin() else login()
     }
     private fun label(s:String,size:Float=16f,bold:Boolean=false):TextView = TextView(this).apply {
         text=s;textSize=size;setTextColor(Color.rgb(25,55,42));gravity=Gravity.RIGHT
@@ -56,25 +59,52 @@ class MainActivity : Activity() {
         scroll.addView(body);root.addView(scroll,LinearLayout.LayoutParams(-1,0,1f))
         status=label("");root.addView(status);setContentView(root)
     }
+    private fun passwordHash(username: String, password: String): String {
+        val bytes = MessageDigest.getInstance("SHA-256").digest(("accounting-local-v1:" + username.trim().lowercase() + ":" + password).toByteArray(Charsets.UTF_8))
+        return bytes.joinToString("") { "%02x".format(it) }
+    }
+    private fun setupLocalAdmin() {
+        screen("إعداد حساب المدير")
+        body.addView(label("إنشاء حساب مدير محلي لا يحتاج إلى خادم أو إنترنت.", 17f, true))
+        val user = field("اسم المدير", "admin")
+        val pass = field("أنشئ كلمة مرور")
+        val confirm = field("أعد كتابة كلمة المرور")
+        pass.inputType = 129; confirm.inputType = 129
+        body.addView(label("اسم المستخدم")); body.addView(user)
+        body.addView(label("كلمة المرور (8 أحرف على الأقل)")); body.addView(pass)
+        body.addView(label("تأكيد كلمة المرور")); body.addView(confirm)
+        body.addView(btn("إنشاء حساب المدير") {
+            val u = user.text.toString().trim()
+            val p = pass.text.toString()
+            if (u.isBlank() || p.length < 8 || p != confirm.text.toString()) {
+                status.text = "أدخل اسم مستخدم، وكلمة مرور من 8 أحرف على الأقل، وتأكد من تطابقها."
+                return@btn
+            }
+            prefs.edit().putString("local_admin_user", u).putString("local_admin_hash", passwordHash(u, p)).remove("token").apply()
+            Toast.makeText(this, "تم إنشاء حساب المدير على هذا الهاتف", Toast.LENGTH_LONG).show()
+            dashboard()
+        })
+        status.text = "هذه الخطوة تُنفذ مرة واحدة على هذا الهاتف."
+    }
     private fun login() {
         screen("حسابات المستودع")
-        body.addView(label("إدارة الحسابات والفواتير والحركات المالية"))
-        val url=field("رابط الخادم HTTPS",apiUrl);val user=field("اسم المستخدم","admin");val pass=field("كلمة المرور")
-        pass.inputType=129
-        body.addView(label("رابط الخادم"));body.addView(url);body.addView(label("اسم المستخدم"));body.addView(user);body.addView(label("كلمة المرور"));body.addView(pass)
-        body.addView(btn("تجربة البرنامج") { demoMode() })
-        body.addView(label("استكشف واجهة تجريبية دون حساب أو اتصال بالخادم. البيانات المعروضة أمثلة فقط."))
-        body.addView(btn("تسجيل الدخول") {
-            apiUrl=url.text.toString().trim().trimEnd('/')
-            if(!apiUrl.startsWith("https://")){status.text="يجب استخدام رابط HTTPS آمن.";return@btn}
-            status.text="جارٍ الاتصال..."
-            executor.execute { try {
-                val form="username="+URLEncoder.encode(user.text.toString(),"UTF-8")+"&password="+URLEncoder.encode(pass.text.toString(),"UTF-8")
-                token=JSONObject(call("/auth/token","POST",form,null,"application/x-www-form-urlencoded")).getString("access_token")
-                prefs.edit().putString("api_url",apiUrl).putString("token",token).apply()
-                runOnUiThread{dashboard()}
-            }catch(e:Exception){runOnUiThread{status.text="تعذر الدخول: "+(e.message?: "تحقق من البيانات")}} }
+        body.addView(label("تسجيل دخول محلي — يعمل دون خادم أو إنترنت", 17f, true))
+        val user = field("اسم المستخدم", prefs.getString("local_admin_user", "admin") ?: "admin")
+        val pass = field("كلمة المرور")
+        pass.inputType = 129
+        body.addView(label("اسم المستخدم")); body.addView(user)
+        body.addView(label("كلمة المرور")); body.addView(pass)
+        body.addView(btn("دخول إلى التطبيق") {
+            val u = user.text.toString().trim()
+            val expectedUser = prefs.getString("local_admin_user", "admin") ?: "admin"
+            val expectedHash = prefs.getString("local_admin_hash", null)
+            if (u != expectedUser || expectedHash == null || passwordHash(u, pass.text.toString()) != expectedHash) {
+                status.text = "اسم المستخدم أو كلمة المرور غير صحيحة."
+                return@btn
+            }
+            dashboard()
         })
+        body.addView(label("تُحفظ الحسابات والحركات على هذا الهاتف. لم تُفعّل المزامنة مع خادم."))
     }
     private fun demoMode() {
         screen("تجربة البرنامج — بيانات وهمية")
@@ -138,7 +168,7 @@ class MainActivity : Activity() {
         body.addView(btn("التقارير"){reports()})
         body.addView(btn("حالة البيانات والمزامنة"){syncStatus()})
         body.addView(btn("إعدادات الاتصال"){settings()})
-        body.addView(btn("تسجيل الخروج"){prefs.edit().remove("token").apply();token=null;login()})
+        body.addView(btn("تسجيل الخروج"){token=null;login()})
     }
     private fun dashboard() {
         screen("لوحة التحكم")
