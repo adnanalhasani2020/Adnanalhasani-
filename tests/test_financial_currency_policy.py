@@ -131,3 +131,15 @@ def test_exchange_rate_is_immutable_after_normalization():
     rate = ExchangeRate("usd", "yer", Decimal("250"), STAMP, " admin-entry:fx ")
     with pytest.raises((AttributeError, TypeError)):
         rate.rate = Decimal("1")
+
+
+@pytest.mark.parametrize("value", [None, 1, True, [], {}])
+def test_currency_normalization_rejects_non_string_inputs(value):
+    with pytest.raises(ValidationError, match="currency_code must be a string"):
+        normalize_supported_currency(value)
+
+
+@pytest.mark.parametrize("value", [None, object(), Decimal("NaN"), Decimal("Infinity")])
+def test_money_rejects_unsupported_or_nonfinite_decimal_objects(value):
+    with pytest.raises(ValidationError):
+        round_money(value)
