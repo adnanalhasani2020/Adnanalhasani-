@@ -141,3 +141,15 @@ def test_reset_clears_stale_preview_and_status_before_storage_cleanup():
     assert "statusBox.style.display='none'" in reset_handler
     assert "catch(error)" in reset_handler
     assert "تعذر حذف النسخة المحلية المحفوظة" in reset_handler
+
+def test_preview_includes_activity_specific_guidance_without_enabling_policies():
+    html = PROTOTYPE.read_text(encoding="utf-8")
+
+    for activity in ("commerce", "health", "education", "finance", "mixed", "other"):
+        assert f"{activity}:" in html
+
+    assert "const activityRecommendations={" in html
+    assert "activityRecommendations[d.activity]" in html
+    assert "الأولوية المقترحة (إرشادية فقط)" in html
+    assert "لا تفعّل سياسات جديدة قبل اعتمادها" in html
+    assert "لم يتم اعتماد أو تفعيل أي سياسة" in html
