@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>إعدادات المدير — نظام المستشفى</title>
+<style>
+:root{font-family:Tahoma,Arial,sans-serif;color:#152b3c;background:#f3f7fa}*{box-sizing:border-box}body{margin:0}header{background:#123d56;color:#fff;padding:24px clamp(16px,4vw,48px)}header h1{margin:0 0 8px;font-size:clamp(22px,4vw,32px)}header p{margin:0;color:#d7e8ef}main{max-width:1050px;margin:24px auto;padding:0 16px}.notice{background:#fff7df;border:1px solid #f0d58c;padding:14px 16px;border-radius:10px;margin-bottom:18px;line-height:1.8}.panel{background:#fff;border:1px solid #dbe5eb;border-radius:12px;padding:18px;margin-bottom:18px;box-shadow:0 3px 14px #15364a0a}h2{margin:0 0 12px;font-size:20px}.muted{color:#5d7482;line-height:1.8}.profiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}.profile{display:block;border:1px solid #c6d5df;border-radius:10px;padding:15px;cursor:pointer;transition:.15s}.profile:has(input:checked){border:2px solid #176b87;background:#eef8fb;padding:14px}.profile input{accent-color:#176b87}.profile strong{display:block;margin:8px 0}.profile span{font-size:13px;color:#5d7482;line-height:1.7}.options{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px}.option{display:flex;align-items:flex-start;gap:10px;border:1px solid #dbe5eb;padding:12px;border-radius:9px}.option input{margin-top:4px;accent-color:#176b87}.option strong{display:block}.option small{display:block;color:#5d7482;margin-top:4px;line-height:1.6}.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.row>*{flex:1;min-width:180px}button,a.button{font:inherit;padding:11px 15px;border-radius:8px;border:0;background:#176b87;color:#fff;cursor:pointer;font-weight:bold;text-decoration:none;text-align:center}button.secondary,a.secondary{background:#e7eff3;color:#173c50}.status{min-height:25px;margin-top:12px;line-height:1.7}.error{color:#a32626}.success{color:#155c42}.summary{background:#eef6fa;border-radius:9px;padding:14px;line-height:1.9}footer{text-align:center;color:#607987;padding:20px}button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid #e6a23c;outline-offset:2px}
+</style>
+</head>
+<body>
+<header><h1>إعدادات المدير</h1><p>اختر ملف التشغيل الذي يناسب طبيعة المنشأة، ثم راجع الوحدات المقترحة قبل الاعتماد.</p></header>
+<main>
+<div class="notice"><strong>وضع المعاينة:</strong> هذه الشاشة تحفظ المقترح مؤقتًا في جلسة المتصفح فقط. لا تغيّر إعدادات الخادم ولا تفعّل وحدات فعلية. يتطلب الاعتماد الحقيقي هوية مدير موثوقة وصلاحيات على الخادم، وإصدارات إعدادات، وموافقة صريحة وسجل تدقيق.</div>
+<section class="panel">
+<h2>1. ما طبيعة المنشأة؟</h2>
+<p class="muted">اختيار الملف يحدد اقتراحًا أوليًا للوحدات الإدارية. لا يضيف هذا الاختيار قدرات سريرية جديدة ولا يغيّر نطاق النظام المعتمد.</p>
+<div class="profiles">
+<label class="profile"><input type="radio" name="profile" value="general" checked><strong>مستشفى عام</strong><span>تنظيم المواعيد، التنويم، الأسرة، الفواتير، وسجل العمليات.</span></label>
+<label class="profile"><input type="radio" name="profile" value="outpatient"><strong>مركز عيادات خارجية</strong><span>التركيز على المواعيد والزيارات والفواتير وتقليل خيارات التنويم.</span></label>
+<label class="profile"><input type="radio" name="profile" value="specialty"><strong>مركز تخصصي</strong><span>إدارة المواعيد والسجلات الإدارية وفق تخصص المنشأة.</span></label>
+<label class="profile"><input type="radio" name="profile" value="admin"><strong>إدارة وتشغيل فقط</strong><span>إظهار المؤشرات والسجلات الإدارية والتدقيق دون اقتراح وحدات إضافية.</span></label>
+</div>
+</section>
+<section class="panel">
+<h2>2. الوحدات الإدارية المقترحة</h2>
+<p class="muted">يمكن تعديل الاختيارات يدويًا. هذه قائمة تفضيلات للمعاينة فقط وليست منحًا للصلاحيات.</p>
+<div class="options">
+<label class="option"><input type="checkbox" name="module" value="appointments" checked><span><strong>إدارة المواعيد</strong><small>عرض وتنظيم المواعيد الإدارية.</small></span></label>
+<label class="option"><input type="checkbox" name="module" value="encounters" checked><span><strong>متابعة الزيارات</strong><small>عرض حالة الزيارة وإغلاقها وفق الصلاحيات المعتمدة.</small></span></label>
+<label class="option"><input type="checkbox" name="module" value="admissions" checked><span><strong>التنويم والأسرة</strong><small>تنظيم إشغال الأسرة وحالات الدخول والخروج.</small></span></label>
+<label class="option"><input type="checkbox" name="module" value="billing" checked><span><strong>الفواتير والمدفوعات</strong><small>متابعة السجلات المالية دون اعتبار التسجيل إثباتًا لتحويل المال.</small></span></label>
+<label class="option"><input type="checkbox" name="module" value="records" checked><span><strong>استعراض السجلات</strong><small>بحث إداري وعرض قوائم مختصرة.</small></span></label>
+<label class="option"><input type="checkbox" name="module" value="audit" checked><span><strong>التدقيق ومراجعة التغييرات</strong><small>مراجعة أثر العمليات؛ لا يمكن تعطيل متطلبات التدقيق الإلزامية.</small></span></label>
+</div>
+</section>
+<section class="panel">
+<h2>3. مراجعة المقترح</h2>
+<div class="summary" id="summary" aria-live="polite"></div>
+<div class="row" style="margin-top:14px"><button id="save">حفظ المقترح في الجلسة</button><a class="button secondary" href="/">العودة إلى لوحة المستشفى</a></div>
+<div id="status" class="status" role="status"></div>
+</section>
+</main>
+<footer>إعدادات تشغيلية تجريبية — لا تستخدم هذه الشاشة لاتخاذ قرارات سريرية.</footer>
+<script>
+const profileNames={general:"مستشفى عام",outpatient:"مركز عيادات خارجية",specialty:"مركز تخصصي",admin:"إدارة وتشغيل فقط"};
+const moduleNames={appointments:"إدارة المواعيد",encounters:"متابعة الزيارات",admissions:"التنويم والأسرة",billing:"الفواتير والمدفوعات",records:"استعراض السجلات",audit:"التدقيق ومراجعة التغييرات"};
+const defaults={general:["appointments","encounters","admissions","billing","records","audit"],outpatient:["appointments","encounters","billing","records","audit"],specialty:["appointments","encounters","billing","records","audit"],admin:["records","audit"]};
+const profileInputs=[...document.querySelectorAll('input[name="profile"]')],moduleInputs=[...document.querySelectorAll('input[name="module"]')];
+function selectedProfile(){return profileInputs.find(x=>x.checked)?.value||"general"}
+function chosenModules(){return moduleInputs.filter(x=>x.checked).map(x=>x.value)}
+function render(){const p=selectedProfile(),ms=chosenModules();document.getElementById("summary").textContent="ملف التشغيل: "+profileNames[p]+" — الوحدات المختارة: "+(ms.length?ms.map(x=>moduleNames[x]).join("، "):"لم يتم اختيار وحدات");}
+function applyDefaults(){const allowed=defaults[selectedProfile()];moduleInputs.forEach(x=>x.checked=allowed.includes(x.value));render()}
+profileInputs.forEach(x=>x.addEventListener("change",applyDefaults));moduleInputs.forEach(x=>x.addEventListener("change",render));
+document.getElementById("save").addEventListener("click",()=>{const draft={profile:selectedProfile(),modules:chosenModules(),savedAt:new Date().toISOString(),mode:"preview-only"};try{sessionStorage.setItem("hospitalManagerSettingsDraft",JSON.stringify(draft));const s=document.getElementById("status");s.className="status success";s.textContent="تم حفظ المقترح مؤقتًا في جلسة المتصفح. لم تُرسل أي تغييرات إلى الخادم ولم تُفعّل أي وحدة.";}catch(e){const s=document.getElementById("status");s.className="status error";s.textContent="تعذر حفظ المقترح في جلسة المتصفح؛ راجع إعدادات المتصفح.";}});render();
+</script>
+</body>
+</html>
