@@ -279,7 +279,7 @@ def permission_for_route(method: str, path: str) -> str | None:
         if module == "admissions":
             return "admissions:write"
         if module == "purchase-orders":
-            return "purchases:receive" if action == "receive" else "purchases:write"
+            return "purchases:receive" if "receive" in segments[3:] else "purchases:write"
         if module == "users":
             return "users:manage"
         return {
