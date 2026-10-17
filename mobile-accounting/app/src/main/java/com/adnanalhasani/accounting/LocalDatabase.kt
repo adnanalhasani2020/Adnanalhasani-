@@ -110,6 +110,34 @@ class LocalDatabase(context: Context) : SQLiteOpenHelper(context, "accounting_lo
         return array
     }
 
+
+    @Synchronized
+    fun accountByLocalNumber(number: Int): JSONObject? {
+        readableDatabase.rawQuery("SELECT local_id, server_id, name, currency, opening_balance, balance FROM accounts ORDER BY rowid ASC LIMIT 1 OFFSET ?", arrayOf((number - 1).toString())).use { c ->
+            if (!c.moveToFirst()) return null
+            return JSONObject().put("local_id", c.getString(0)).put("server_id", if (c.isNull(1)) JSONObject.NULL else c.getInt(1))
+                .put("name", c.getString(2)).put("currency", c.getString(3)).put("opening_balance", c.getString(4)).put("balance", c.getString(5))
+        }
+    }
+
+    @Synchronized
+    fun summary(): JSONObject {
+        val accounts = readEntities("accounts")
+        val transactions = readEntities("transactions")
+        var income = java.math.BigDecimal.ZERO
+        var expenses = java.math.BigDecimal.ZERO
+        for (i in 0 until transactions.length()) {
+            val item = transactions.getJSONObject(i)
+            val amount = item.optString("amount", "0").toBigDecimalOrNull() ?: java.math.BigDecimal.ZERO
+            if (item.optString("kind") == "income") income = income.add(amount) else expenses = expenses.add(amount)
+        }
+        val recent = JSONArray()
+        for (i in 0 until minOf(5, transactions.length())) recent.put(transactions.getJSONObject(i))
+        return JSONObject().put("accounts_count", accounts.length()).put("income", income.toPlainString())
+            .put("expenses", expenses.toPlainString()).put("net", income.subtract(expenses).toPlainString())
+            .put("recent_transactions", recent)
+    }
+
     @Synchronized
     fun pendingOperations(): List<PendingOperation> {
         val rows = mutableListOf<PendingOperation>()
