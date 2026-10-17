@@ -64,6 +64,11 @@ class HospitalAPITests(unittest.TestCase):
             self.assertEqual(response.headers["Cache-Control"], "no-store")
             self.assertEqual(response.headers["X-Frame-Options"], "DENY")
 
+    def test_empty_configured_api_token_fails_closed(self):
+        # The API factory must refuse to start with a missing/empty secret.
+        with self.assertRaisesRegex(ValueError, "HOSPITAL_API_TOKEN must be set"):
+            make_handler(self.db, "")
+
     def test_patient_creation_and_dashboard(self):
         status, payload = self.request("/api/patients", method="POST", payload={
             "patient_no": "API-P-1", "full_name": "Sample Patient",
