@@ -1,4 +1,4 @@
-"""Integration tests for a joined operational Sale context."""
+"Integration tests for a joined operational Sale context."""
 import uuid
 import pytest
 
@@ -47,4 +47,32 @@ def test_invalid_or_missing_sale_is_rejected():
     reader=SaleOperationalContextReader()
     with pytest.raises(ValidationError,match="valid UUID"): reader.read(db,"bad-id")
     with pytest.raises(ValidationError,match="does not exist"): reader.read(db,uid())
+    db.close()
+
+
+def test_sale_operational_context_read_does_not_mutate_inventory_or_database():
+    db = connect_database()
+    activity, product, offering, sale = fixture(db)
+    position_id = uid()
+    db.execute(
+        "INSERT INTO inventory_positions(inventory_position_id,activity_id,product_id,offering_id,scope_key,state,quantity_minor,observed_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+        (position_id, activity, product, offering, "shop-A", "effective", 12, NOW, NOW, NOW),
+    )
+    db.commit()
+
+    before_changes = db.total_changes
+    before_position = db.execute(
+        "SELECT quantity_minor,state FROM inventory_positions WHERE inventory_position_id=?",
+        (position_id,),
+    ).fetchone()
+
+    result = SaleOperationalContextReader().read(db, sale)
+
+    after_position = db.execute(
+        "SELECT quantity_minor,state FROM inventory_positions WHERE inventory_position_id=?",
+        (position_id,),
+    ).fetchone()
+    assert result.offering_context.inventory_positions[0].quantity_minor == 12
+    assert db.total_changes == before_changes
+    assert after_position == before_position
     db.close()
