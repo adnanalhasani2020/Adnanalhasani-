@@ -76,6 +76,16 @@ class HospitalSecurityTests(unittest.TestCase):
                          "prescriptions:dispense")
         self.assertIsNone(permission_for_route("GET", "/settings"))
 
+    def test_last_active_administrator_cannot_be_deactivated(self):
+        user_id = self.auth.create_user(username="only.admin", password="a-strong-password-123",
+                                        role="admin", at="2026-01-01T08:00:00Z")
+        with self.assertRaisesRegex(ValueError, "last active administrator"):
+            self.auth.set_user_active(user_id=user_id, active=False,
+                                      at="2026-01-01T09:00:00Z", actor="only.admin")
+        with self.db.connect() as conn:
+            row = conn.execute("SELECT active FROM auth_users WHERE id=?", (user_id,)).fetchone()
+        self.assertEqual(row["active"], 1)
+
     def test_invalid_user_inputs_are_rejected(self):
         with self.assertRaises(ValueError):
             self.auth.create_user(username="ab", password="a-strong-password-123",
