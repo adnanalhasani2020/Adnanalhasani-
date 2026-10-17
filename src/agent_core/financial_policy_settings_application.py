@@ -160,13 +160,17 @@ class FinancialPolicySettingsApplication:
     def update_settings(self, db, *, activity_id, enabled_currencies=("SAR", "YER", "USD"),
                         default_currency=DEFAULT_CURRENCY, display_decimal_places=2,
                         settlement_cardinality="single", posted_voucher_policy="reversal_only",
-                        require_full_cycle_validation=True, authorization_grant_id, agent_action_id, now=None):
+                        require_full_cycle_validation=True, authorization_grant_id, agent_action_id, now=None,
+                        expected_version_no=None):
         activity = str(self._uuid(activity_id, "Activity identifier"))
         policy = self.validate_policy(enabled_currencies=enabled_currencies, default_currency=default_currency,
                                       display_decimal_places=display_decimal_places,
                                       settlement_cardinality=settlement_cardinality,
                                       posted_voucher_policy=posted_voucher_policy,
                                       require_full_cycle_validation=require_full_cycle_validation)
+        if expected_version_no is not None and (
+                type(expected_version_no) is not int or expected_version_no < 0):
+            raise ValidationError("expected_version_no must be a non-negative integer")
         stamp = self._timestamp(now if now is not None else datetime.now(timezone.utc),
                                 "Finance policy timestamp")
         with self._atomic(db):
@@ -175,7 +179,13 @@ class FinancialPolicySettingsApplication:
             actor = self._authorize(db, activity, authorization_grant_id, agent_action_id, stamp)
             prior = db.execute("SELECT version_no FROM financial_policy_settings WHERE activity_id=?",
                                (activity,)).fetchone()
-            version = 1 if prior is None else prior[0] + 1
+            current_version = 0 if prior is None else prior[0]
+            if expected_version_no is not None and expected_version_no != current_version:
+                raise ValidationError(
+                    f"Stale Finance policy settings version: expected {expected_version_no}, "
+                    f"current version is {current_version}"
+                )
+            version = current_version + 1
             db.execute("INSERT INTO financial_policy_settings(activity_id,enabled_currencies,default_currency,"
                        "display_decimal_places,settlement_cardinality,posted_voucher_policy,"
                        "require_full_cycle_validation,version_no,updated_at,updated_by_person_id) "
