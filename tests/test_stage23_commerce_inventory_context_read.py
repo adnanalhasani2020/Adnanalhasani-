@@ -1,4 +1,5 @@
 """Integration tests for the Commerce/Inventory context projection."""
+import sqlite3
 import uuid
 import pytest
 from agent_core.commerce_inventory_read import CommerceInventoryContextReader
@@ -114,4 +115,58 @@ def test_inventory_context_reports_cross_context_position_mismatch_without_write
     assert f"inventory_position_offering_mismatch:{position_id}" not in result.integrity_issues
     assert db.execute("SELECT COUNT(*) FROM inventory_positions").fetchone()[0] == before_positions
     assert db.execute("SELECT COUNT(*) FROM domain_history").fetchone()[0] == before_history
+    db.close()
+
+
+def test_inventory_context_write_guards_reject_mismatches_atomically():
+    db = connect_database()
+    activity, product, offering, _ = setup_graph(db, with_service=False)
+    other_person, other_activity, other_product = uid(), uid(), uid()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,?,?,?)",
+        (other_person, "active", NOW, NOW),
+    )
+    db.execute(
+        "INSERT INTO activities(activity_id,owner_person_id,state,created_at,updated_at) "
+        "VALUES(?,?,?,?,?)",
+        (other_activity, other_person, "active", NOW, NOW),
+    )
+    db.execute(
+        "INSERT INTO products(product_id,name,state,created_at,updated_at) VALUES(?,?,?,?,?)",
+        (other_product, "Other product", "active", NOW, NOW),
+    )
+    db.commit()
+
+    before = db.execute("SELECT COUNT(*) FROM inventory_positions").fetchone()[0]
+    with pytest.raises(sqlite3.IntegrityError, match="inventory position context must match its offering"):
+        db.execute(
+            "INSERT INTO inventory_positions(inventory_position_id,activity_id,product_id,"
+            "offering_id,scope_key,state,quantity_minor,observed_at,created_at,updated_at) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?)",
+            (uid(), other_activity, other_product, offering, "store-A", "effective",
+             4, NOW, NOW, NOW),
+        )
+    assert db.execute("SELECT COUNT(*) FROM inventory_positions").fetchone()[0] == before
+
+    position_id = uid()
+    db.execute(
+        "INSERT INTO inventory_positions(inventory_position_id,activity_id,product_id,"
+        "offering_id,scope_key,state,quantity_minor,observed_at,created_at,updated_at) "
+        "VALUES(?,?,?,?,?,?,?,?,?,?)",
+        (position_id, activity, product, offering, "store-A", "effective",
+         4, NOW, NOW, NOW),
+    )
+    db.commit()
+    with pytest.raises(sqlite3.IntegrityError, match="offering update would break inventory position context"):
+        db.execute(
+            "UPDATE offerings SET activity_id=? WHERE offering_id=?",
+            (other_activity, offering),
+        )
+    assert db.execute(
+        "SELECT activity_id FROM offerings WHERE offering_id=?", (offering,)
+    ).fetchone()[0] == activity
+    assert db.execute(
+        "SELECT activity_id,product_id FROM inventory_positions WHERE inventory_position_id=?",
+        (position_id,),
+    ).fetchone() == (activity, product)
     db.close()
