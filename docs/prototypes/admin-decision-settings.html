@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>مركز قرارات المدير | نموذج أولي</title>
+<style>
+:root{color-scheme:light;--ink:#172b4d;--muted:#62718a;--line:#dbe3ee;--bg:#f4f7fb;--card:#fff;--blue:#2457c5;--amber:#fff4d6;--green:#e4f7ed}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:Tahoma,Arial,sans-serif;line-height:1.65}
+header{background:#13284b;color:#fff;padding:28px max(20px,calc((100% - 1100px)/2))}header p{color:#d8e4ff;margin:5px 0 0}
+main{max-width:1100px;margin:24px auto;padding:0 18px 40px}.notice{padding:14px 16px;border:1px solid #e9c76c;background:var(--amber);border-radius:12px;margin-bottom:20px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:0 3px 12px #1d355710}
+h2{font-size:1.15rem;margin:0 0 10px}h3{font-size:1rem;margin:0 0 8px}label{display:block;font-weight:700;margin:12px 0 6px}
+select,input[type=text],textarea{width:100%;padding:11px;border:1px solid #bdc9da;border-radius:9px;background:#fff;color:var(--ink);font:inherit}
+.help{font-size:.9rem;color:var(--muted);margin:6px 0}.pill{display:inline-block;border-radius:99px;padding:3px 10px;background:#eaf0ff;color:#234ca5;font-size:.8rem;font-weight:bold}
+.pending{background:#fff1d2;color:#8b5b00}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+button{border:0;border-radius:9px;padding:11px 16px;font:inherit;font-weight:bold;cursor:pointer}.primary{background:var(--blue);color:white}.secondary{background:#e8edf5;color:var(--ink)}
+#status{margin-top:14px;padding:12px;border-radius:10px;background:var(--green);display:none}.summary{white-space:pre-wrap;background:#f7f9fc;border:1px dashed #cbd5e1;border-radius:10px;padding:12px;margin-top:14px}
+footer{max-width:1100px;margin:auto;padding:0 18px 24px;color:var(--muted);font-size:.85rem}
+</style>
+</head>
+<body>
+<header><h1>مركز قرارات المدير</h1><p>اختيارات النشاط والسياسات التي تحتاج اعتمادًا بشريًا</p></header>
+<main>
+<div class="notice"><strong>نموذج أولي فقط:</strong> هذه الصفحة لا تحفظ في النظام ولا تغيّر السياسات أو صلاحيات التشغيل. الحفظ محلي داخل المتصفح لأغراض العرض، ويجب ربطها لاحقًا بتسجيل دخول المدير، وصلاحيات الاعتماد، وسجل التدقيق، وواجهة API.</div>
+<form id="settings">
+<section class="card" aria-labelledby="activity-title">
+<h2 id="activity-title">١. ملف النشاط</h2>
+<p class="help">اختر النشاط الأقرب إلى عمل المؤسسة. يؤثر هذا الاختيار في ترتيب الأولويات المقترحة فقط، ولا يفعّل وحدات محظورة أو غير معتمدة.</p>
+<label for="activity">النشاط الرئيسي</label>
+<select id="activity" name="activity" required>
+<option value="">— اختر نشاط المؤسسة —</option>
+<option value="commerce">التجارة والخدمات اليومية (الأولوية الحالية وفق DEC-0010)</option>
+<option value="health">الخدمات الصحية</option>
+<option value="education">التعليم والتدريب</option>
+<option value="finance">الخدمات المالية والمحاسبية</option>
+<option value="mixed">نشاط مختلط / متعدد القطاعات</option>
+<option value="other">نشاط آخر</option>
+</select>
+<label for="orgName">اسم المؤسسة (اختياري في النموذج)</label>
+<input id="orgName" name="orgName" type="text" maxlength="120" placeholder="اسم المؤسسة">
+<label for="notes">ملاحظات المدير</label>
+<textarea id="notes" name="notes" rows="3" maxlength="1000" placeholder="اشرح احتياج المؤسسة أو القرار المطلوب"></textarea>
+</section>
+<div class="grid" style="margin-top:16px">
+<section class="card">
+<h2>٢. وحدات تحتاج قرارًا</h2><span class="pill pending">اعتماد بشري مطلوب</span>
+<label for="clinical">نطاق الوظائف الصحية</label>
+<select id="clinical" name="clinical">
+<option value="defer">تأجيل وظائف الطبيب/المختبر/الدواء — الخيار الآمن الحالي</option>
+<option value="request">طلب مراجعة واعتماد نطاق صحي جديد</option>
+</select>
+<p class="help">اختيار طلب المراجعة لا يفعّل وظائف سريرية. يتطلب تحديث القرارات والمواصفات والاختبارات قبل أي تنفيذ.</p>
+<label for="finance">السياسات المالية غير المحسومة</label>
+<select id="finance" name="finance">
+<option value="blocked">الإبقاء على السياسات غير المحسومة محجوبة</option>
+<option value="review">فتح مراجعة قرار معتمد للسياسة المطلوبة</option>
+</select>
+<p class="help">لا يغيّر هذا الاختيار العملات المدعومة أو الدقة أو قواعد التسوية أو القيود المالية تلقائيًا.</p>
+</section>
+<section class="card">
+<h2>٣. تفضيلات التشغيل</h2>
+<label for="approval">مستوى الموافقة على تغييرات الإعدادات</label>
+<select id="approval" name="approval">
+<option value="all">موافقة مدير على كل تغيير مؤثر</option>
+<option value="sensitive">موافقة مدير على التغييرات الحساسة فقط</option>
+</select>
+<label for="audit">سجل تدقيق التغييرات</label>
+<select id="audit" name="audit">
+<option value="required">إلزامي لكل تغيير وإقرار</option>
+<option value="standard">سجل التغييرات الحساسة على الأقل</option>
+</select>
+<p class="help">هذه تفضيلات مقترحة للنقاش فقط. لا تغيّر نظام التفويض أو سجل التدقيق الفعلي.</p>
+</section>
+</div>
+<div class="actions"><button class="primary" type="submit">معاينة القرار المقترح</button><button class="secondary" type="button" id="save">حفظ النموذج محليًا</button><button class="secondary" type="button" id="reset">إعادة ضبط</button></div>
+<div id="status" role="status" aria-live="polite"></div><div id="summary" class="summary" hidden></div>
+</form>
+</main>
+<footer>مستشفى / نواة النظام — نموذج تصميم غير متصل بالخدمات الخلفية. لا تدخل بيانات مرضى أو معلومات حساسة هنا.</footer>
+<script>
+const form=document.getElementById('settings'),statusBox=document.getElementById('status'),summary=document.getElementById('summary');
+const labels={activity:{commerce:'التجارة والخدمات اليومية',health:'الخدمات الصحية',education:'التعليم والتدريب',finance:'الخدمات المالية والمحاسبية',mixed:'نشاط مختلط',other:'نشاط آخر'},clinical:{defer:'تأجيل الوظائف الصحية غير المعتمدة',request:'طلب مراجعة واعتماد نطاق صحي'},finance:{blocked:'إبقاء السياسات المالية غير المحسومة محجوبة',review:'طلب مراجعة سياسة مالية'},approval:{all:'موافقة مدير على كل تغيير مؤثر',sensitive:'موافقة مدير على التغييرات الحساسة'},audit:{required:'سجل تدقيق لكل تغيير وإقرار',standard:'سجل تدقيق للتغييرات الحساسة على الأقل'}};
+function data(){return Object.fromEntries(new FormData(form).entries())}
+function show(message){statusBox.textContent=message;statusBox.style.display='block'}
+form.addEventListener('submit',e=>{e.preventDefault();const d=data();if(!d.activity){show('يرجى اختيار النشاط الرئيسي قبل المعاينة.');return}summary.hidden=false;summary.textContent='معاينة غير معتمدة — لا تغيّر النظام\n\nالنشاط: '+labels.activity[d.activity]+'\nالوظائف الصحية: '+labels.clinical[d.clinical]+'\nالسياسات المالية: '+labels.finance[d.finance]+'\nالموافقة: '+labels.approval[d.approval]+'\nالتدقيق: '+labels.audit[d.audit]+'\nاسم المؤسسة: '+(d.orgName||'غير محدد')+'\nملاحظات: '+(d.notes||'لا توجد')+'\n\nالخطوة المطلوبة: اعتماد المدير وتسجيل القرار رسميًا قبل تحويله إلى إعداد نافذ.';show('تم إنشاء معاينة محلية فقط؛ لم يتم اعتماد أو تفعيل أي سياسة.')});
+document.getElementById('save').addEventListener('click',()=>{localStorage.setItem('hospital-admin-decision-prototype',JSON.stringify(data()));show('حُفظت الاختيارات في هذا المتصفح فقط. لا يوجد حفظ على الخادم.')});
+document.getElementById('reset').addEventListener('click',()=>{form.reset();summary.hidden=true;summary.textContent='';statusBox.style.display='none';localStorage.removeItem('hospital-admin-decision-prototype')});
+const saved=localStorage.getItem('hospital-admin-decision-prototype');if(saved){try{const d=JSON.parse(saved);for(const [k,v] of Object.entries(d)){if(form.elements[k])form.elements[k].value=v}}catch{}}
+</script>
+</body>
+</html>
