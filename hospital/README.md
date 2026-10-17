@@ -3,11 +3,11 @@
 An isolated hospital-domain development foundation that does not alter existing commerce/service modules.
 
 ## Included modules
-- SQLite schema with constraints for patients, doctors, appointments, encounters, wards/beds, admissions, laboratory orders, medicines, prescriptions, invoices, payments, and audit events.
-- Transactional workflows for registration, appointment overlap prevention, admission/discharge, invoices/payments, encounter lifecycle, lab status/results, and pharmacy dispensing with atomic stock deduction.
-- Token-protected JSON API and Arabic right-to-left development UI for dashboard metrics, patient/doctor registration, appointments, laboratory orders, medicines, prescriptions, admissions, invoices, and payments.
-- API endpoints for encounter lifecycle, laboratory result updates, pharmacy prescriptions/dispensing, beds, and admissions/discharge.
-- Regression tests for business rules, API authentication/validation, and clinical workflows.
+- SQLite schema with constraints for patients, doctors, appointments, encounters, structured diagnoses, allergies, vital signs, nursing notes, wards/beds, admissions, laboratory orders, medicines, prescriptions, inventory movements, suppliers, purchase orders, invoices, payments, and append-only audit events.
+- Transactional workflows for encounter lifecycle, appointment overlap prevention, encounter-linked lab orders and prescriptions, admissions, diagnosis/allergy/vital/nursing records, pharmacy dispensing, stock adjustments, purchase receiving, and invoice/payment handling.
+- Token-protected JSON API and Arabic right-to-left development UI for dashboard metrics, patient/doctor registration, appointments, clinical records, laboratory, pharmacy, beds/admissions, inventory/procurement, reports, and billing.
+- The medical-record endpoint aggregates a patient's encounters, diagnoses, allergies, vital observations, lab orders, prescriptions, admissions, and nursing notes. Final diagnoses recorded when closing an encounter are also written to the longitudinal diagnosis ledger.
+- Regression tests cover business rules, API authentication/validation, clinical record linkage, stock/procurement integrity, and financial consistency.
 - GitHub Actions workflow dedicated to hospital regression tests.
 
 ## Quick start
@@ -57,14 +57,14 @@ sqlite3 hospital.sqlite3 'PRAGMA integrity_check;'
 Use your actual backup filename in place of the example. Store a second encrypted copy in an access-controlled location if required by your recovery plan; never commit database files or backups to Git.
 
 ### API routes
-- `GET /health`, `GET /api/dashboard`
-- `GET /api/patients`, `/api/doctors`, `/api/appointments`, `/api/lab-orders`, `/api/medicines`, `/api/prescriptions`, `/api/beds`, `/api/admissions`, `/api/invoices` (authenticated, searchable with `?search=`, paginated with `?limit=50&offset=0`; maximum page size 100)
-- `POST /api/patients`, `POST /api/doctors`, `POST /api/appointments`
-- `POST /api/encounters`, `POST /api/encounters/{id}/close`
-- `POST /api/lab-orders`, `POST /api/lab-orders/{id}/status`
-- `POST /api/medicines`, `POST /api/prescriptions`, `POST /api/prescriptions/{id}/dispense`
-- `POST /api/beds`, `POST /api/admissions`, `POST /api/admissions/{id}/discharge`
-- `POST /api/invoices`, `POST /api/payments` (amounts use integer minor units; payments cannot exceed the invoice balance)
+- `GET /health`, `GET /api/dashboard`, `GET /api/reports`
+- `GET /api/medical-record?patient_id={id}` — unified longitudinal view of encounters, diagnoses, allergies, vitals, lab, prescriptions, admissions, and nursing notes.
+- Authenticated searchable/paginated collection reads: `/api/patients`, `/api/doctors`, `/api/appointments`, `/api/encounters`, `/api/diagnoses`, `/api/allergies`, `/api/vitals`, `/api/nursing-notes`, `/api/lab-orders`, `/api/medicines`, `/api/prescriptions`, `/api/beds`, `/api/admissions`, `/api/inventory-movements`, `/api/suppliers`, `/api/purchase-orders`, `/api/invoices`.
+- Clinical write routes: `POST /api/encounters`, `POST /api/encounters/{id}/close`, `POST /api/diagnoses`, `POST /api/allergies`, `POST /api/vitals`, `POST /api/nursing-notes`.
+- Laboratory/pharmacy routes: `POST /api/lab-orders`, `POST /api/lab-orders/{id}/status`, `POST /api/medicines`, `POST /api/prescriptions`, `POST /api/prescriptions/{id}/dispense`.
+- Beds and procurement routes: `POST /api/beds`, `POST /api/admissions`, `POST /api/admissions/{id}/discharge`, `POST /api/inventory-adjustments`, `POST /api/suppliers`, `POST /api/purchase-orders`, `POST /api/purchase-orders/{id}/receive`.
+- Finance routes: `POST /api/invoices`, `POST /api/payments` (amounts use integer minor units; payments cannot exceed the invoice balance; when an encounter is supplied, it must belong to the invoiced patient).
+- Collection reads support `?search=` and `?limit=50&offset=0`; maximum page size is 100.
 - `GET /api/diagnoses`, `POST /api/diagnoses` (diagnoses are linked to a clinical encounter; a final diagnosis also updates the encounter summary)
 - `GET /api/allergies`, `POST /api/allergies` (patient-level allergy register with severity and active/inactive status)
 - `GET /api/vitals`, `POST /api/vitals` (encounter-linked observations; plausible numeric ranges are enforced by SQLite constraints)
