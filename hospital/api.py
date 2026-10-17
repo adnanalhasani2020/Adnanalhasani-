@@ -1,4 +1,4 @@
-"""Small authenticated JSON API for local development.
+"""Small authenticated JSON API and local Arabic web UI for development.
 
 Set HOSPITAL_API_TOKEN to a long random secret before starting. Do not expose this
 development server directly to the public internet; deploy behind TLS, a hardened
@@ -10,6 +10,7 @@ import hmac
 import json
 import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Any
 
 from .core import HospitalDB, HospitalError
@@ -21,7 +22,7 @@ def make_handler(database: HospitalDB, api_token: str):
         raise ValueError("HOSPITAL_API_TOKEN must be set to a secret of at least 32 characters")
 
     class Handler(BaseHTTPRequestHandler):
-        server_version = "HospitalDevAPI/0.1"
+        server_version = "HospitalDevAPI/0.2"
 
         def log_message(self, format: str, *args: Any) -> None:
             # Avoid default access logs containing query strings or accidental PHI.
@@ -64,11 +65,22 @@ def make_handler(database: HospitalDB, api_token: str):
                 raise HospitalError("missing required fields: " + ", ".join(missing))
 
         def do_GET(self) -> None:
+            route = self.path.split("?", 1)[0]
+            if route == "/":
+                page = (Path(__file__).parent / "web" / "index.html").read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(page)))
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.end_headers()
+                self.wfile.write(page)
+                return
             if not self._authorized():
                 return
-            if self.path == "/health":
+            if route == "/health":
                 self._send(200, {"status": "ok", "service": "hospital-api"})
-            elif self.path == "/api/dashboard":
+            elif route == "/api/dashboard":
                 self._send(200, {"data": database.dashboard()})
             else:
                 self._send(404, {"error": "not_found"})
@@ -136,7 +148,7 @@ def serve() -> None:
     port = int(os.environ.get("HOSPITAL_API_PORT", "8080"))
     database = HospitalDB(db_path)
     server = ThreadingHTTPServer((host, port), make_handler(database, token))
-    print(f"Hospital development API listening on http://{host}:{port}")
+    print(f"Hospital development UI/API listening on http://{host}:{port}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
