@@ -1161,3 +1161,268 @@ class ProductApplication:
                  f"action:{action};state:{product.state.value}", timestamp),
             )
         return ProductRecord(product, expected_version + 1)
+
+
+class EncounterAuthorizationError(ValidationError):
+    """An Encounter operation was rejected by the authorization contract."""
+
+
+class EncounterApplication:
+    """Persist Encounter lifecycle operations behind an explicit authorization grant.
+
+    The first contract version authorizes Person actors only. Grants that rely on
+    Delegation fail closed because the current schema cannot represent or verify a
+    complete delegation chain. No user-facing API is implied by this application service.
+    """
+
+    _DB_TO_DOMAIN = {
+        "planned": "planned",
+        "active": "in-progress",
+        "completed": "completed",
+        "cancelled": "cancelled",
+    }
+    _DOMAIN_TO_DB = {
+        "planned": "planned",
+        "in-progress": "active",
+        "completed": "completed",
+        "cancelled": "cancelled",
+    }
+    _ALLOWED = {
+        "planned": ("in-progress", "cancelled"),
+        "in-progress": ("completed", "cancelled"),
+        "completed": (),
+        "cancelled": (),
+    }
+    _ACTIONS = {
+        "create": "health.encounter.create",
+        "read": "health.encounter.read",
+        "start": "health.encounter.start",
+        "complete": "health.encounter.complete",
+        "cancel": "health.encounter.cancel",
+    }
+
+    def _instant(self, now=None):
+        instant = now or datetime.now(timezone.utc)
+        if instant.tzinfo is None or instant.utcoffset() is None:
+            raise ValidationError("Encounter timestamp must be timezone-aware")
+        return instant.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+    def _uuid(self, value, label):
+        try:
+            return str(UUID(str(value)))
+        except (ValueError, TypeError, AttributeError) as exc:
+            raise ValidationError(f"{label} must be a valid UUID") from exc
+
+    def _context_ref(self, patient_context_id):
+        return f"patient_context:{patient_context_id}"
+
+    def _audit(self, connection, *, actor_ref, action, target_ref, timestamp, status, purpose, grant_id=None):
+        # Audit contains references and outcome only, never clinical content.
+        operation_ref = f"purpose:{purpose};grant:{grant_id or 'none'}"
+        connection.execute(
+            "INSERT INTO audit_records(audit_record_id,event_type,actor_context_ref,target_ref,"
+            "occurred_at,result_status,operation_ref,correlation_ref,provenance_id,created_at) "
+            "VALUES(?,?,?,?,?,?,?,NULL,NULL,?)",
+            (str(uuid4()), action, actor_ref, target_ref, timestamp, status, operation_ref, timestamp),
+        )
+
+    def _authorize(self, connection, *, actor_person_id, action, scope_ref, context_ref, purpose, timestamp):
+        actor_id = self._uuid(actor_person_id, "Actor Person identifier")
+        if not isinstance(purpose, str) or not purpose.strip():
+            raise EncounterAuthorizationError("Encounter authorization requires an explicit purpose")
+        purpose = purpose.strip()
+        person = connection.execute(
+            "SELECT state FROM persons WHERE person_id=?", (actor_id,)
+        ).fetchone()
+        if person is None or person[0] != "active":
+            raise EncounterAuthorizationError("Encounter actor must be an existing active Person")
+
+        rows = connection.execute(
+            "SELECT authorization_grant_id,delegation_id FROM authorization_grants "
+            "WHERE subject_person_id=? AND agent_id IS NULL AND action_code=? "
+            "AND scope_ref=? AND context_ref=? AND purpose=? AND state='active' "
+            "AND effective_from<=? AND (effective_to IS NULL OR effective_to>?) "
+            "ORDER BY authorization_grant_id",
+            (actor_id, action, scope_ref, context_ref, purpose, timestamp, timestamp),
+        ).fetchall()
+        direct = [row for row in rows if row[1] is None]
+        if direct:
+            return direct[0][0]
+        if rows:
+            raise EncounterAuthorizationError(
+                "Delegated Encounter grants are disabled until a complete delegation chain can be verified"
+            )
+        raise EncounterAuthorizationError("No active Authorization Grant matches this action, scope, context, and purpose")
+
+    def _restore(self, row):
+        from agent_core.domain_health import Encounter, EncounterState
+
+        encounter_id, context_id, _encounter_type, service_id, state = row[:5]
+        domain_state = self._DB_TO_DOMAIN.get(state)
+        if domain_state is None:
+            raise ValidationError("Encounter has an unsupported persisted state")
+        return Encounter(
+            patient_context_id=UUID(context_id),
+            service_id=UUID(service_id) if service_id else None,
+            id=UUID(encounter_id),
+            state=EncounterState(domain_state),
+        )
+
+    def create_encounter(
+        self, connection, patient_context_id, encounter_type, *, actor_person_id, purpose,
+        service_id=None, now=None, encounter_id=None,
+    ):
+        """Create a planned Encounter only after an exact matching grant is verified."""
+        from agent_core.domain_health import Encounter
+
+        context_key = self._uuid(patient_context_id, "PatientContext identifier")
+        if not isinstance(encounter_type, str) or not encounter_type.strip():
+            raise ValidationError("Encounter type is required")
+        kind = encounter_type.strip()
+        service_key = self._uuid(service_id, "Service identifier") if service_id is not None else None
+        timestamp = self._instant(now)
+        scope_ref = self._context_ref(context_key)
+        context_ref = self._context_ref(context_key)
+        actor_ref = f"person:{actor_person_id}"
+        denied = None
+        result = None
+        with _atomic(connection):
+            try:
+                grant_id = self._authorize(
+                    connection, actor_person_id=actor_person_id, action=self._ACTIONS["create"],
+                    scope_ref=scope_ref, context_ref=context_ref, purpose=purpose, timestamp=timestamp,
+                )
+                context = connection.execute(
+                    "SELECT state FROM patient_contexts WHERE patient_context_id=?", (context_key,)
+                ).fetchone()
+                if context is None or context[0] != "active":
+                    raise ValidationError("Encounter requires an existing active PatientContext")
+                if service_key is not None:
+                    service = connection.execute(
+                        "SELECT state FROM services WHERE service_id=?", (service_key,)
+                    ).fetchone()
+                    if service is None or service[0] != "active":
+                        raise ValidationError("Encounter requires an existing active Service")
+                identifier = self._uuid(encounter_id, "Encounter identifier") if encounter_id is not None else str(uuid4())
+                result = Encounter(
+                    patient_context_id=UUID(context_key),
+                    service_id=UUID(service_key) if service_key else None,
+                    id=UUID(identifier),
+                )
+                connection.execute(
+                    "INSERT INTO encounters(encounter_id,patient_context_id,encounter_type,service_id,"
+                    "state,started_at,ended_at,created_at,updated_at,provenance_id,version_no) "
+                    "VALUES(?,?,?,?, 'planned', ?, NULL, ?, ?, NULL, 1)",
+                    (identifier, context_key, kind, service_key, timestamp, timestamp, timestamp),
+                )
+                self._audit(connection, actor_ref=actor_ref, action=self._ACTIONS["create"],
+                            target_ref=f"encounter:{identifier}", timestamp=timestamp,
+                            status="allowed", purpose=purpose.strip(), grant_id=grant_id)
+            except (EncounterAuthorizationError, ValidationError) as exc:
+                denied = exc
+                self._audit(connection, actor_ref=actor_ref, action=self._ACTIONS["create"],
+                            target_ref=scope_ref, timestamp=timestamp, status="denied",
+                            purpose=purpose.strip() if isinstance(purpose, str) and purpose.strip() else "unspecified")
+        if denied is not None:
+            raise denied
+        return result
+
+    def get_encounter(self, connection, encounter_id, *, actor_person_id, purpose, now=None):
+        """Read a persisted Encounter only after an exact matching read grant."""
+        key = self._uuid(encounter_id, "Encounter identifier")
+        timestamp = self._instant(now)
+        actor_ref = f"person:{actor_person_id}"
+        denied = None
+        result = None
+        with _atomic(connection):
+            row = connection.execute(
+                "SELECT encounter_id,patient_context_id,encounter_type,service_id,state,version_no "
+                "FROM encounters WHERE encounter_id=?", (key,)
+            ).fetchone()
+            if row is None:
+                denied = ValidationError("Encounter does not exist")
+                self._audit(connection, actor_ref=actor_ref, action=self._ACTIONS["read"],
+                            target_ref=f"encounter:{key}", timestamp=timestamp, status="denied",
+                            purpose=purpose.strip() if isinstance(purpose, str) and purpose.strip() else "unspecified")
+            else:
+                context_ref = self._context_ref(row[1])
+                try:
+                    grant_id = self._authorize(
+                        connection, actor_person_id=actor_person_id, action=self._ACTIONS["read"],
+                        scope_ref=f"encounter:{key}", context_ref=context_ref,
+                        purpose=purpose, timestamp=timestamp,
+                    )
+                    result = self._restore(row)
+                    self._audit(connection, actor_ref=actor_ref, action=self._ACTIONS["read"],
+                                target_ref=f"encounter:{key}", timestamp=timestamp,
+                                status="allowed", purpose=purpose.strip(), grant_id=grant_id)
+                except (EncounterAuthorizationError, ValidationError) as exc:
+                    denied = exc
+                    self._audit(connection, actor_ref=actor_ref, action=self._ACTIONS["read"],
+                                target_ref=f"encounter:{key}", timestamp=timestamp, status="denied",
+                                purpose=purpose.strip() if isinstance(purpose, str) and purpose.strip() else "unspecified")
+        if denied is not None:
+            raise denied
+        return result
+
+    def transition_encounter(
+        self, connection, encounter_id, action, *, actor_person_id, purpose, now=None,
+    ):
+        """Apply a lifecycle transition only with the action-specific authorization grant."""
+        from agent_core.domain_health import EncounterState
+
+        key = self._uuid(encounter_id, "Encounter identifier")
+        timestamp = self._instant(now)
+        if action not in ("start", "complete", "cancel"):
+            raise ValidationError("Unsupported Encounter lifecycle action")
+        action_code = self._ACTIONS[action]
+        actor_ref = f"person:{actor_person_id}"
+        denied = None
+        result = None
+        with _atomic(connection):
+            row = connection.execute(
+                "SELECT encounter_id,patient_context_id,encounter_type,service_id,state,version_no "
+                "FROM encounters WHERE encounter_id=?", (key,)
+            ).fetchone()
+            if row is None:
+                denied = ValidationError("Encounter does not exist")
+                self._audit(connection, actor_ref=actor_ref, action=action_code,
+                            target_ref=f"encounter:{key}", timestamp=timestamp, status="denied",
+                            purpose=purpose.strip() if isinstance(purpose, str) and purpose.strip() else "unspecified")
+            else:
+                try:
+                    grant_id = self._authorize(
+                        connection, actor_person_id=actor_person_id, action=action_code,
+                        scope_ref=f"encounter:{key}", context_ref=self._context_ref(row[1]),
+                        purpose=purpose, timestamp=timestamp,
+                    )
+                    current = self._DB_TO_DOMAIN.get(row[4])
+                    if current is None:
+                        raise ValidationError("Encounter has an unsupported persisted state")
+                    target = {"start": "in-progress", "complete": "completed", "cancel": "cancelled"}[action]
+                    if target not in self._ALLOWED[current]:
+                        raise ValidationError(f"Invalid Encounter transition from {current} via {action}")
+                    next_version = row[5] + 1
+                    ended_at = timestamp if target in ("completed", "cancelled") else None
+                    cursor = connection.execute(
+                        "UPDATE encounters SET state=?, updated_at=?, ended_at=?, version_no=? "
+                        "WHERE encounter_id=? AND version_no=?",
+                        (self._DOMAIN_TO_DB[target], timestamp, ended_at, next_version, key, row[5]),
+                    )
+                    if cursor.rowcount != 1:
+                        raise ValidationError("Concurrent Encounter update detected")
+                    updated = (row[0], row[1], row[2], row[3], self._DOMAIN_TO_DB[target], next_version)
+                    result = self._restore(updated)
+                    result.state = EncounterState(target)
+                    self._audit(connection, actor_ref=actor_ref, action=action_code,
+                                target_ref=f"encounter:{key}", timestamp=timestamp,
+                                status="allowed", purpose=purpose.strip(), grant_id=grant_id)
+                except (EncounterAuthorizationError, ValidationError) as exc:
+                    denied = exc
+                    self._audit(connection, actor_ref=actor_ref, action=action_code,
+                                target_ref=f"encounter:{key}", timestamp=timestamp, status="denied",
+                                purpose=purpose.strip() if isinstance(purpose, str) and purpose.strip() else "unspecified")
+        if denied is not None:
+            raise denied
+        return result
+
