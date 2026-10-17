@@ -74,6 +74,20 @@ def record_vitals(db: HospitalDB, *, encounter_id: int, measured_at: str, actor:
         raise HospitalError("at least one vital sign is required")
     if pain_score is not None and not 0 <= int(pain_score) <= 10:
         raise HospitalError("pain_score must be between 0 and 10")
+    bounds = {
+        "temperature_c": (25, 45), "pulse_bpm": (0, 300), "respiratory_rate": (0, 100),
+        "systolic_bp": (0, 350), "diastolic_bp": (0, 250), "oxygen_saturation": (0, 100),
+        "weight_kg": (0, 1000), "height_cm": (0, 300),
+    }
+    for field, (minimum, maximum) in bounds.items():
+        value = values[field]
+        if value is not None:
+            try:
+                numeric = float(value)
+            except (TypeError, ValueError) as exc:
+                raise HospitalError(field + " must be numeric") from exc
+            if numeric < minimum or numeric > maximum or (field in {"weight_kg", "height_cm"} and numeric <= 0):
+                raise HospitalError(field + " is outside the accepted data-quality range")
     with db.connect() as conn:
         conn.execute("BEGIN IMMEDIATE")
         encounter = _encounter(conn, encounter_id, patient_id, open_only=True)
