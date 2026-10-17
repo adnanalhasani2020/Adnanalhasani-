@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>نظام إدارة المستشفى — واجهة تطوير</title>
+<style>
+:root{font-family:Tahoma,Arial,sans-serif;color:#152b3c;background:#f3f7fa}
+*{box-sizing:border-box}body{margin:0}header{background:#123d56;color:#fff;padding:24px clamp(16px,4vw,48px)}
+header h1{margin:0 0 8px;font-size:clamp(22px,4vw,32px)}header p{margin:0;color:#d7e8ef}
+main{max-width:1100px;margin:24px auto;padding:0 16px}.notice{background:#fff7df;border:1px solid #f0d58c;padding:12px 16px;border-radius:10px;margin-bottom:18px}
+.panel{background:#fff;border:1px solid #dbe5eb;border-radius:12px;padding:18px;margin-bottom:18px;box-shadow:0 3px 14px #15364a0a}
+h2{margin-top:0;font-size:19px}.row{display:flex;gap:10px;flex-wrap:wrap}.row>*{flex:1;min-width:180px}
+input,button{font:inherit;padding:11px;border-radius:8px;border:1px solid #c6d5df;width:100%}
+button{background:#176b87;color:#fff;border:0;cursor:pointer;font-weight:bold}button:hover{background:#0e536c}
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:12px}
+.metric{background:#eef6fa;border-radius:10px;padding:15px}.metric span{display:block;color:#496574;font-size:13px}.metric strong{display:block;font-size:27px;margin-top:7px}
+.status{min-height:24px;margin-top:10px;color:#155c42;overflow-wrap:anywhere}.error{color:#a32626}
+small{color:#5d7482}form{display:grid;gap:10px}footer{text-align:center;color:#607987;padding:20px}
+</style>
+</head>
+<body>
+<header><h1>نظام إدارة المستشفى</h1><p>لوحة تشغيل تجريبية — المرضى، الأطباء، المواعيد والمؤشرات</p></header>
+<main>
+<div class="notice"><strong>تنبيه أمني:</strong> هذه واجهة تطوير أولية وليست نظامًا طبيًا معتمدًا. استخدمها محليًا فقط ولا تدخل بيانات مرضى حقيقية. يلزم تطبيق صلاحيات المستخدمين وحماية الإنتاج قبل التشغيل الفعلي.</div>
+<section class="panel">
+<h2>الاتصال بالخادم</h2>
+<div class="row"><input id="base" value="http://127.0.0.1:8080" aria-label="عنوان الخادم"><input id="token" type="password" autocomplete="off" placeholder="رمز API السري" aria-label="رمز API"></div>
+<div class="row" style="margin-top:10px"><button id="connect">اتصال وتحديث المؤشرات</button><div id="connection" class="status" role="status"></div></div>
+</section>
+<section class="panel"><h2>ملخص المستشفى</h2><div class="metrics" id="metrics"><div class="metric"><span>الحالة</span><strong>—</strong></div></div></section>
+<div class="row">
+<section class="panel"><h2>تسجيل مريض</h2><form id="patientForm">
+<input name="patient_no" required placeholder="رقم الملف" aria-label="رقم الملف">
+<input name="full_name" required placeholder="اسم المريض" aria-label="اسم المريض">
+<input name="phone" placeholder="رقم الهاتف (اختياري)" aria-label="رقم الهاتف">
+<button>حفظ بيانات المريض</button><div class="status" role="status"></div>
+</form></section>
+<section class="panel"><h2>تسجيل طبيب</h2><form id="doctorForm">
+<input name="employee_no" required placeholder="الرقم الوظيفي" aria-label="الرقم الوظيفي">
+<input name="full_name" required placeholder="اسم الطبيب" aria-label="اسم الطبيب">
+<input name="specialty" required placeholder="التخصص" aria-label="التخصص">
+<input name="phone" placeholder="رقم الهاتف (اختياري)" aria-label="رقم الهاتف">
+<button>حفظ بيانات الطبيب</button><div class="status" role="status"></div>
+</form></section>
+</div>
+<section class="panel"><h2>حجز موعد</h2><form id="appointmentForm">
+<div class="row"><input name="patient_id" required type="number" min="1" placeholder="رقم المريض الداخلي"><input name="doctor_id" required type="number" min="1" placeholder="رقم الطبيب الداخلي"></div>
+<div class="row"><label>بداية الموعد<input name="starts_at" required type="datetime-local"></label><label>نهاية الموعد<input name="ends_at" required type="datetime-local"></label></div>
+<input name="reason" placeholder="سبب الزيارة (اختياري)">
+<button>حجز الموعد</button><div class="status" role="status"></div>
+</form></section>
+</main>
+<footer>واجهة أولية — جميع الأوقات تُرسل بتنسيق ISO-8601 المحلي.</footer>
+<script>
+const labels={active_patients:"المرضى النشطون",active_doctors:"الأطباء النشطون",scheduled_appointments:"المواعيد المجدولة",current_admissions:"حالات التنويم الحالية",pending_lab_orders:"طلبات المختبر المعلقة",low_stock_medicines:"أدوية منخفضة المخزون",unpaid_or_partial_invoices:"فواتير غير مسددة كليًا"};
+const $=id=>document.getElementById(id);
+function base(){return $("base").value.trim().replace(/\/$/,"")}
+function headers(){return {"Authorization":"Bearer "+$("token").value,"Content-Type":"application/json"}}
+async function api(path,options={}){const r=await fetch(base()+path,{...options,headers:headers(),cache:"no-store"});let d={};try{d=await r.json()}catch{}if(!r.ok)throw Error(d.error||("خطأ HTTP "+r.status));return d}
+function msg(node,text,bad=false){node.textContent=text;node.classList.toggle("error",bad)}
+$("connect").onclick=async()=>{try{const d=await api("/api/dashboard");$("metrics").replaceChildren(...Object.entries(d.data).map(([k,v])=>{const box=document.createElement("div");box.className="metric";const label=document.createElement("span");label.textContent=labels[k]||k;const value=document.createElement("strong");value.textContent=String(v);box.append(label,value);return box}));msg($("connection"),"تم الاتصال وتحديث المؤشرات")}catch(e){msg($("connection"),e.message,true)}};
+function wire(formId,path,build){const form=$(formId);form.addEventListener("submit",async ev=>{ev.preventDefault();const status=form.querySelector(".status");try{const data=build(Object.fromEntries(new FormData(form).entries()));const result=await api(path,{method:"POST",body:JSON.stringify(data)});msg(status,"تم الحفظ بنجاح. الرقم الداخلي: "+result.id);form.reset();$("connect").click()}catch(e){msg(status,e.message,true)}})}
+const now=()=>new Date().toISOString();
+wire("patientForm","/api/patients",d=>({...d,created_at:now()}));
+wire("doctorForm","/api/doctors",d=>({...d,at:now()}));
+wire("appointmentForm","/api/appointments",d=>({...d,patient_id:Number(d.patient_id),doctor_id:Number(d.doctor_id),starts_at:new Date(d.starts_at).toISOString(),ends_at:new Date(d.ends_at).toISOString(),created_at:now()}));
+</script>
+</body>
+</html>
