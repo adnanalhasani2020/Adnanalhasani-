@@ -286,8 +286,18 @@ class MainActivity : Activity() {
         body.addView(label("رقم الفاتورة"));body.addView(number);body.addView(label("اسم العميل"));body.addView(customer);body.addView(label("المبلغ"));body.addView(amount);body.addView(label("العملة"));body.addView(currency)
         body.addView(btn("حفظ الفاتورة"){val a=amount.text.toString().toBigDecimalOrNull()
             if(number.text.isBlank()||customer.text.isBlank()||a==null||a<=java.math.BigDecimal.ZERO){status.text="تحقق من البيانات";return@btn}
-            val p=JSONObject().put("invoice_number",number.text.toString().trim()).put("customer_name",customer.text.toString().trim()).put("amount",a).put("currency",currency.text.toString().uppercase()).toString()
-            post("/invoices",p){invoices()}
+            val customerName = customer.text.toString().trim()
+            val p = JSONObject().put("invoice_number", number.text.toString().trim())
+                .put("customer_name", customerName).put("amount", a.toPlainString())
+                .put("currency", currency.text.toString().uppercase())
+            val customers = localDb.readCatalogRecords("customers")
+            for (i in 0 until customers.length()) {
+                val c = customers.getJSONObject(i)
+                if (c.optString("الاسم").equals(customerName, true)) {
+                    p.put("customer_local_id", c.optString("local_id")); break
+                }
+            }
+            post("/invoices", p.toString()) { invoices() }
         });body.addView(btn("إلغاء"){invoices()})
     }
     private fun payments() {
@@ -325,9 +335,11 @@ class MainActivity : Activity() {
         val direction = Spinner(this).apply { adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, listOf("دفعة مستلمة", "دفعة مدفوعة")) }
         val amount = field("المبلغ")
         val reference = field("المرجع أو البيان")
+        val invoiceNumber = field("رقم الفاتورة (اختياري للربط)")
         body.addView(label("الحساب")); body.addView(account)
         body.addView(label("نوع الدفعة")); body.addView(direction)
         body.addView(label("المبلغ")); body.addView(amount)
+        body.addView(label("رقم الفاتورة إن وجدت")); body.addView(invoiceNumber)
         body.addView(label("المرجع")); body.addView(reference)
         body.addView(btn("حفظ الدفعة") {
             val selected = accounts.getJSONObject(account.selectedItemPosition)
@@ -342,6 +354,19 @@ class MainActivity : Activity() {
                 .put("amount", a.toPlainString())
                 .put("currency", selected.optString("currency", "YER"))
                 .put("reference", reference.text.toString().trim())
+            val invoiceNo = invoiceNumber.text.toString().trim()
+            if (invoiceNo.isNotBlank()) {
+                val invoices = localDb.readEntities("invoices")
+                var found = false
+                for (i in 0 until invoices.length()) {
+                    val invoice = invoices.getJSONObject(i)
+                    if (invoice.optString("invoice_number").equals(invoiceNo, true)) {
+                        p.put("invoice_local_id", invoice.optString("local_id"))
+                        found = true; break
+                    }
+                }
+                if (!found) { status.text = "رقم الفاتورة غير موجود؛ اتركه فارغاً أو أدخل رقماً صحيحاً"; return@btn }
+            }
             post("/payments", p.toString()) { payments() }
         })
         body.addView(btn("إلغاء") { dashboard() })
