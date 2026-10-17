@@ -4,8 +4,9 @@ from pathlib import Path
 
 from hospital.core import HospitalDB, HospitalError
 from hospital.workflows import (
-    add_medicine, close_encounter, create_encounter, dispense_prescription,
-    order_lab_test, prescribe_medicine, update_lab_status,
+    add_medicine, close_encounter, create_encounter, create_purchase_order,
+    create_supplier, dispense_prescription, order_lab_test, prescribe_medicine,
+    update_lab_status,
 )
 
 
@@ -29,6 +30,15 @@ class HospitalWorkflowTests(unittest.TestCase):
         with self.db.connect() as conn:
             row = conn.execute("SELECT status,diagnosis FROM encounters WHERE id=?", (encounter,)).fetchone()
         self.assertEqual((row["status"], row["diagnosis"]), ("closed", "Example diagnosis"))
+        with self.db.connect() as conn:
+            final_rows = conn.execute(
+                """SELECT description,diagnosis_type,recorded_by,recorded_at
+                   FROM encounter_diagnoses WHERE encounter_id=?""",
+                (encounter,),
+            ).fetchall()
+        self.assertEqual(len(final_rows), 1)
+        self.assertEqual(tuple(final_rows[0]),
+                         ("Example diagnosis", "final", "doctor", "2026-01-02T08:30:00"))
         with self.assertRaises(HospitalError):
             close_encounter(self.db, encounter_id=encounter, closed_at="2026-01-02T08:40:00",
                 actor="doctor", diagnosis="Duplicate close")
@@ -105,6 +115,36 @@ class HospitalWorkflowTests(unittest.TestCase):
             dispense_prescription(self.db, prescription_id=second,
                 dispensed_at="2026-01-02T10:05:00", actor="pharmacist")
 
+
+    def test_purchase_order_rejects_fractional_and_boolean_quantities_or_costs(self):
+        medicine = add_medicine(self.db, sku="MED-PO-1", name="Purchase item", quantity=0,
+            reorder_level=1, actor="pharmacist", at="2026-01-01T08:00:00")
+        supplier = create_supplier(self.db, supplier_no="SUP-1", name="Supplier",
+            actor="admin", at="2026-01-01T08:00:00")
+        invalid_items = [
+            [{"medicine_id": medicine, "quantity": 1.5, "unit_cost_minor": 10}],
+            [{"medicine_id": medicine, "quantity": True, "unit_cost_minor": 10}],
+            [{"medicine_id": medicine, "quantity": 1, "unit_cost_minor": 2.5}],
+            [{"medicine_id": medicine, "quantity": 1, "unit_cost_minor": False}],
+        ]
+        for items in invalid_items:
+            with self.subTest(items=items):
+                with self.assertRaises(HospitalError):
+                    create_purchase_order(self.db, order_no="PO-INVALID", supplier_id=supplier,
+                        items=items, actor="admin", at="2026-01-01T08:10:00")
+
+    def test_purchase_order_accepts_integer_minor_units(self):
+        medicine = add_medicine(self.db, sku="MED-PO-2", name="Purchase item 2", quantity=0,
+            reorder_level=1, actor="pharmacist", at="2026-01-01T08:00:00")
+        supplier = create_supplier(self.db, supplier_no="SUP-2", name="Supplier 2",
+            actor="admin", at="2026-01-01T08:00:00")
+        order = create_purchase_order(self.db, order_no="PO-VALID", supplier_id=supplier,
+            items=[{"medicine_id": medicine, "quantity": 3, "unit_cost_minor": 125}],
+            actor="admin", at="2026-01-01T08:10:00")
+        with self.db.connect() as conn:
+            row = conn.execute("SELECT quantity,unit_cost_minor FROM purchase_order_items WHERE purchase_order_id=?",
+                (order,)).fetchone()
+        self.assertEqual((row["quantity"], row["unit_cost_minor"]), (3, 125))
 
 if __name__ == "__main__":
     unittest.main()

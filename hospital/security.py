@@ -23,13 +23,13 @@ ROLE_PERMISSIONS = {
     "admin": frozenset({"*"}),
     "doctor": frozenset({
         "dashboard:read", "patients:read", "doctors:read", "appointments:read",
-        "encounters:read", "encounters:write", "lab:read", "lab:order",
+        "encounters:read", "encounters:write", "medical-record:read", "diagnoses:read", "diagnoses:write", "allergies:read", "allergies:write", "vitals:read", "vitals:write", "nursing:read", "nursing:write", "lab:read", "lab:order",
         "medicines:read", "prescriptions:read", "prescriptions:write",
         "beds:read", "admissions:read", "invoices:read",
     }),
     "nurse": frozenset({
         "dashboard:read", "patients:read", "appointments:read", "encounters:read",
-        "encounters:write", "lab:read", "beds:read", "admissions:read",
+        "encounters:write", "medical-record:read", "diagnoses:read", "allergies:read", "vitals:read", "vitals:write", "nursing:read", "nursing:write", "lab:read", "beds:read", "admissions:read",
     }),
     "reception": frozenset({
         "dashboard:read", "patients:read", "patients:write", "doctors:read",
@@ -39,10 +39,10 @@ ROLE_PERMISSIONS = {
     "lab": frozenset({"dashboard:read", "patients:read", "encounters:read", "lab:read", "lab:write"}),
     "pharmacist": frozenset({
         "dashboard:read", "patients:read", "medicines:read", "medicines:write",
-        "prescriptions:read", "prescriptions:dispense",
+        "prescriptions:read", "prescriptions:dispense", "inventory:read", "purchases:read", "purchases:receive",
     }),
     "accountant": frozenset({
-        "dashboard:read", "patients:read", "invoices:read", "invoices:write", "payments:write",
+        "dashboard:read", "patients:read", "invoices:read", "invoices:write", "payments:write", "reports:read",
     }),
 }
 
@@ -249,6 +249,16 @@ def permission_for_route(method: str, path: str) -> str | None:
         "/api/admissions": ("admissions:read", "admissions:write"),
         "/api/invoices": ("invoices:read", "invoices:write"),
         "/api/payments": ("payments:read", "payments:write"),
+        "/api/diagnoses": ("diagnoses:read", "diagnoses:write"),
+        "/api/allergies": ("allergies:read", "allergies:write"),
+        "/api/vitals": ("vitals:read", "vitals:write"),
+        "/api/nursing-notes": ("nursing:read", "nursing:write"),
+        "/api/inventory-movements": ("inventory:read", "inventory:write"),
+        "/api/inventory-adjustments": ("inventory:read", "inventory:write"),
+        "/api/suppliers": ("suppliers:read", "suppliers:write"),
+        "/api/purchase-orders": ("purchases:read", "purchases:write"),
+        "/api/reports": ("reports:read", "reports:read"),
+        "/api/medical-record": ("medical-record:read", "medical-record:read"),
     }
     if route == "/api/lab-orders" and method == "POST":
         return "lab:order"
@@ -257,7 +267,7 @@ def permission_for_route(method: str, path: str) -> str | None:
     # Resource action routes inherit their module's explicit permission.
     segments = route.split("/")
     if len(segments) >= 4 and segments[2] in {
-        "encounters", "lab-orders", "prescriptions", "beds", "admissions", "invoices", "payments", "users"
+        "encounters", "lab-orders", "prescriptions", "beds", "admissions", "invoices", "payments", "users", "purchase-orders"
     }:
         module = segments[2]
         action = segments[3]
@@ -269,6 +279,8 @@ def permission_for_route(method: str, path: str) -> str | None:
             return "prescriptions:dispense" if "dispense" in segments[3:] else "prescriptions:write"
         if module == "admissions":
             return "admissions:write"
+        if module == "purchase-orders":
+            return "purchases:receive" if "receive" in segments[3:] else "purchases:write"
         if module == "users":
             return "users:manage"
         return {
