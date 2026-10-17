@@ -277,3 +277,37 @@ def test_report_fails_closed_when_ledger_currency_differs_from_transaction():
         (tx_id,),
     ).fetchone()[0] == "USD"
     db.close()
+
+def test_report_read_does_not_mutate_populated_financial_history():
+    db = connect_database()
+    account_id = account(db)
+    ledger(db, account_id, 1800, "YER", "2026-10-01T09:00:00Z")
+    ledger(db, account_id, -250, "YER", "2026-10-03T10:00:00Z")
+
+    def snapshot():
+        transactions = db.execute(
+            "SELECT financial_transaction_id, financial_account_id, amount_minor, "
+            "currency_code, state, recognized_at, updated_at "
+            "FROM financial_transactions ORDER BY financial_transaction_id"
+        ).fetchall()
+        entries = db.execute(
+            "SELECT ledger_entry_id, financial_account_id, financial_transaction_id, "
+            "amount_minor, currency_code, state, posted_at, updated_at "
+            "FROM ledger_entries ORDER BY ledger_entry_id"
+        ).fetchall()
+        return tuple(tuple(row) for row in transactions), tuple(tuple(row) for row in entries)
+
+    before = snapshot()
+    changes_before = db.total_changes
+
+    report = FinancialLedgerActivityReportReader().read(
+        db, account_id, "YER",
+        start_at="2026-10-03T00:00:00Z",
+        end_at="2026-10-04T00:00:00Z",
+    )
+
+    assert report.opening_balance_minor == 1800
+    assert report.activity_total_minor == -250
+    assert snapshot() == before
+    assert db.total_changes == changes_before
+    db.close()
