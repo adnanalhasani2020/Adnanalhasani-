@@ -22,8 +22,10 @@ class LocalDatabase(context: Context) : SQLiteOpenHelper(context, "accounting_lo
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         // Keep existing rows. New schema changes must use additive migrations.
-        if (oldVersion < 2) {
-            db.execSQL("CREATE INDEX IF NOT EXISTS idx_sync_queue_id ON sync_queue(id)")
+        if (oldVersion < 2) db.execSQL("CREATE INDEX IF NOT EXISTS idx_sync_queue_id ON sync_queue(id)")
+        if (oldVersion < 3) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS catalog_records (local_id TEXT PRIMARY KEY, record_type TEXT NOT NULL, payload TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_catalog_type ON catalog_records(record_type)")
         }
     }
 
