@@ -136,6 +136,34 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                 self._send(200, {"status": "ok", "service": "hospital-api"})
             elif route == "/api/dashboard":
                 self._send(200, {"data": database.dashboard()})
+            elif route == "/api/medical-record":
+                params = parse_qs(parsed.query, keep_blank_values=True)
+                try:
+                    patient_id = int(params.get("patient_id", [""])[0])
+                except (TypeError, ValueError, OverflowError):
+                    self._send(400, {"error": "patient_id_required"})
+                    return
+                with database.connect() as conn:
+                    patient = conn.execute(
+                        "SELECT id,patient_no,full_name,date_of_birth,sex,created_at FROM patients WHERE id=?",
+                        (patient_id,)).fetchone()
+                    if patient is None:
+                        self._send(404, {"error": "patient_not_found"})
+                        return
+                    def rows(sql, args=(patient_id,)):
+                        return [dict(row) for row in conn.execute(sql, args).fetchall()]
+                    record = {
+                        "patient": dict(patient),
+                        "allergies": rows("SELECT id,substance,reaction,severity,status,recorded_by,recorded_at FROM patient_allergies WHERE patient_id=? ORDER BY id DESC"),
+                        "encounters": rows("SELECT id,doctor_id,appointment_id,opened_at,closed_at,chief_complaint,diagnosis,clinical_notes,status FROM encounters WHERE patient_id=? ORDER BY opened_at DESC"),
+                        "diagnoses": rows("SELECT d.id,d.encounter_id,d.code,d.description,d.diagnosis_type,d.recorded_by,d.recorded_at FROM encounter_diagnoses d JOIN encounters e ON e.id=d.encounter_id WHERE e.patient_id=? ORDER BY d.recorded_at DESC"),
+                        "vitals": rows("SELECT id,encounter_id,measured_at,measured_by,temperature_c,pulse_bpm,respiratory_rate,systolic_bp,diastolic_bp,oxygen_saturation,weight_kg,height_cm,pain_score,notes FROM vital_signs WHERE patient_id=? ORDER BY measured_at DESC"),
+                        "lab_orders": rows("SELECT id,encounter_id,test_name,status,result,ordered_at,resulted_at FROM lab_orders WHERE patient_id=? ORDER BY ordered_at DESC"),
+                        "prescriptions": rows("SELECT r.id,r.encounter_id,m.name AS medicine_name,r.dose,r.frequency,r.duration,r.quantity,r.status,r.prescribed_at FROM prescriptions r JOIN medicines m ON m.id=r.medicine_id WHERE r.patient_id=? ORDER BY r.prescribed_at DESC"),
+                        "admissions": rows("SELECT a.id,a.encounter_id,b.ward,b.bed_no,a.admitted_at,a.discharged_at,a.reason,a.status FROM admissions a JOIN beds b ON b.id=a.bed_id WHERE a.patient_id=? ORDER BY a.admitted_at DESC"),
+                        "nursing_notes": rows("SELECT id,encounter_id,nurse,note_type,note,recorded_at FROM nursing_notes WHERE patient_id=? ORDER BY recorded_at DESC"),
+                    }
+                self._send(200, {"data": record})
             elif route == "/api/reports":
                 self._send(200, {"data": reports(database)})
             elif route == "/api/search":
