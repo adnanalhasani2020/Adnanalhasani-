@@ -76,3 +76,38 @@ def test_sale_operational_context_read_does_not_mutate_inventory_or_database():
     assert db.total_changes == before_changes
     assert after_position == before_position
     db.close()
+
+def test_sale_activity_mismatch_is_rejected_without_mutating_persisted_sale():
+    db = connect_database()
+    activity, _, _, sale = fixture(db)
+    owner_person_id = db.execute(
+        "SELECT owner_person_id FROM activities WHERE activity_id=?",
+        (activity,),
+    ).fetchone()[0]
+    other_activity = uid()
+    db.execute(
+        "INSERT INTO activities(activity_id,owner_person_id,state,created_at,updated_at) VALUES(?,?,?,?,?)",
+        (other_activity, owner_person_id, "active", NOW, NOW),
+    )
+    db.commit()
+
+    before = db.execute(
+        "SELECT activity_id, offering_id FROM sales WHERE sale_id=?",
+        (sale,),
+    ).fetchone()
+    with pytest.raises(Exception, match="sale activity must match offering activity"):
+        db.execute(
+            "UPDATE sales SET activity_id=? WHERE sale_id=?",
+            (other_activity, sale),
+        )
+    after = db.execute(
+        "SELECT activity_id, offering_id FROM sales WHERE sale_id=?",
+        (sale,),
+    ).fetchone()
+
+    assert after == before
+    result = SaleOperationalContextReader().read(db, sale)
+    assert result.sale_activity_id == activity
+    assert result.offering_context.activity_id == activity
+    assert "sale_offering_activity_mismatch" not in result.integrity_issues
+    db.close()
