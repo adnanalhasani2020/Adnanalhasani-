@@ -70,6 +70,41 @@ class HospitalAPITests(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertIn("missing required fields", payload["error"])
 
+    def test_patient_list_supports_search_and_pagination_without_private_notes(self):
+        self.request("/api/patients", method="POST", payload={
+            "patient_no": "API-P-1", "full_name": "Alpha Patient",
+            "created_at": "2026-01-01T08:00:00", "allergies": "test allergy",
+            "notes": "private note"
+        })
+        self.request("/api/patients", method="POST", payload={
+            "patient_no": "API-P-2", "full_name": "Beta Patient",
+            "created_at": "2026-01-02T08:00:00"
+        })
+        status, payload = self.request("/api/patients?search=Alpha&limit=1&offset=0")
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["pagination"]["count"], 1)
+        self.assertEqual(payload["data"][0]["full_name"], "Alpha Patient")
+        self.assertNotIn("allergies", payload["data"][0])
+        self.assertNotIn("notes", payload["data"][0])
+
+    def test_collection_list_requires_authentication_and_valid_pagination(self):
+        status, payload = self.request("/api/patients", token=False)
+        self.assertEqual(status, 401)
+        status, payload = self.request("/api/patients?limit=101")
+        self.assertEqual(status, 400)
+        self.assertIn("limit must be", payload["error"])
+
+    def test_invoice_list_includes_paid_total(self):
+        patient_id = self.db.register_patient(patient_no="BILL-LIST-1",
+            full_name="Invoice List Patient", created_at="2026-01-01T08:00:00", actor="test")
+        invoice_id = self.db.create_invoice(invoice_no="INV-LIST-1", patient_id=patient_id,
+            total_minor=12000, created_at="2026-01-01T08:00:00", actor="test")
+        self.db.record_payment(invoice_id=invoice_id, amount_minor=3000, method="cash",
+            received_at="2026-01-01T09:00:00", actor="test")
+        status, payload = self.request("/api/invoices?search=INV-LIST-1")
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["data"][0]["paid_minor"], 3000)
+
 
 if __name__ == "__main__":
     unittest.main()
