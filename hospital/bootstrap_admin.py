@@ -38,7 +38,7 @@ def main() -> int:
     try:
         user_id = store.create_user(username=username, password=password, role="admin",
                                     at=now, actor="bootstrap")
-    except (ValueError, Exception) as exc:
+    except Exception as exc:
         print(f"Could not create administrator: {exc}")
         return 2
     print(f"Administrator created (user id {user_id}). Keep the password private.")
