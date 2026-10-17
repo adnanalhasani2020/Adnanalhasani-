@@ -24,7 +24,7 @@ def sale_fixture(db, version=2):
 
 def history(db, sale, prior, current):
     db.execute("INSERT INTO domain_history(domain_history_id,owner_domain,target_ref,change_type,historical_at,actor_context_ref,prior_version_ref,current_version_ref,change_payload_ref,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
-               (uid(),"Commerce",sale,"state_change",NOW,"actor",prior,current,"state:confirmed",NOW))
+               (uid(),"commerce",sale,"sale_state_transition",NOW,"actor",prior,current,"state:confirmed",NOW))
 
 def test_audit_recognizes_complete_version_chain():
     db = connect_database()
