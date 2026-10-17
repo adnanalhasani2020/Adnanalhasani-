@@ -119,7 +119,7 @@ def test_settings_update_rejects_invalid_expected_version_before_database_mutati
     app = FinancialPolicySettingsApplication()
     with pytest.raises(ValidationError, match="expected_version_no"):
         app.update_settings(
-            connect_database(),
+            None,
             activity_id=str(uuid4()),
             authorization_grant_id=str(uuid4()),
             agent_action_id=str(uuid4()),
