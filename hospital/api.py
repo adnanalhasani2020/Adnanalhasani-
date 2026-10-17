@@ -274,6 +274,12 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                 elif route == "/api/auth/logout" and auth_mode == "users":
                     auth_store.revoke(self.headers.get("Authorization", "")[7:])
                     self._send(200, {"status": "logged_out"})
+                elif len(parts) == 4 and parts[:2] == ["api", "users"] and parts[3] == "active" and auth_mode == "users":
+                    self._required(data, "active", "at")
+                    if not isinstance(data["active"], bool):
+                        raise HospitalError("active must be a boolean")
+                    auth_store.set_user_active(user_id=int(parts[2]), active=data["active"], at=str(data["at"]), actor=self._actor())
+                    self._send(200, {"id": int(parts[2]), "active": data["active"]})
                 elif route == "/api/users" and auth_mode == "users":
                     self._required(data, "username", "password", "role", "at")
                     ident = auth_store.create_user(username=str(data["username"]), password=str(data["password"]), role=str(data["role"]), at=str(data["at"]), actor=self._actor())
