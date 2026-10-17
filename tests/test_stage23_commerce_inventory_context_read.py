@@ -90,7 +90,7 @@ def test_inventory_context_reports_cross_context_position_mismatch_without_write
         "SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name='inventory_positions'"
     ).fetchall()
     for (trigger_name,) in context_triggers:
-        safe_name = trigger_name[0].replace('"', '""')
+        safe_name = trigger_name.replace('"', '""')
         db.execute(f'DROP TRIGGER "{safe_name}"')
 
     position_id = uid()
