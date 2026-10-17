@@ -125,7 +125,7 @@ def make_handler(database: HospitalDB, api_token: str):
                            CASE WHEN active=1 THEN 'active' ELSE 'inactive' END AS status
                       FROM patients WHERE patient_no LIKE ? OR full_name LIKE ? OR COALESCE(phone,'') LIKE ?
                     UNION ALL
-                    SELECT 'doctors',id,full_name,employee_no || ' — ' || specialty,COALESCE(created_at,''),
+                    SELECT 'doctors',id,full_name,employee_no || ' — ' || specialty,'',
                            CASE WHEN active=1 THEN 'active' ELSE 'inactive' END
                       FROM doctors WHERE employee_no LIKE ? OR full_name LIKE ? OR specialty LIKE ? OR COALESCE(phone,'') LIKE ?
                     UNION ALL
