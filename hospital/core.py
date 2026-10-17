@@ -101,6 +101,17 @@ CREATE TABLE IF NOT EXISTS audit_log (
   entity_type TEXT NOT NULL, entity_id TEXT NOT NULL,
   details_json TEXT NOT NULL DEFAULT '{}', occurred_at TEXT NOT NULL
 );
+-- Audit history is append-only: corrections must be represented by new events.
+CREATE TRIGGER IF NOT EXISTS hospital_audit_log_no_update
+BEFORE UPDATE ON audit_log
+BEGIN
+  SELECT RAISE(ABORT, 'audit_log is append-only');
+END;
+CREATE TRIGGER IF NOT EXISTS hospital_audit_log_no_delete
+BEFORE DELETE ON audit_log
+BEGIN
+  SELECT RAISE(ABORT, 'audit_log is append-only');
+END;
 """
 
 
