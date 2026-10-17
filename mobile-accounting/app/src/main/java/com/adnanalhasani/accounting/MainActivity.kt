@@ -274,12 +274,42 @@ class MainActivity : Activity() {
                     for (i in 0 until a.length()) {
                         val x = a.getJSONObject(i)
                         body.addView(label("فاتورة " + x.optString("invoice_number") + "\nالعميل: " + x.optString("customer_name") + "\nالمبلغ: " + x.optString("amount") + " " + x.optString("currency"), 17f))
+                        body.addView(btn("تفاصيل الفاتورة والدفعات") { invoiceDetails(x) })
                     }
                     status.text = "الفواتير المحلية — بانتظار المزامنة: " + localDb.pendingCount()
                 }
             } catch (e: Exception) { runOnUiThread { status.text = "تعذر قراءة الفواتير: " + (e.message ?: "") } }
         }
     }
+    private fun invoiceDetails(invoice: JSONObject) {
+        screen("تفاصيل الفاتورة")
+        val currency = invoice.optString("currency", "YER")
+        val total = invoice.optString("amount", "0").toBigDecimalOrNull() ?: java.math.BigDecimal.ZERO
+        var paid = java.math.BigDecimal.ZERO
+        body.addView(label("رقم الفاتورة: " + invoice.optString("invoice_number"), 20f, true))
+        body.addView(label("العميل: " + invoice.optString("customer_name")))
+        body.addView(label("إجمالي الفاتورة: " + total.toPlainString() + " " + currency))
+        val payments = localDb.readEntities("payments")
+        body.addView(label("الدفعات المرتبطة", 18f, true))
+        var linked = 0
+        for (i in 0 until payments.length()) {
+            val payment = payments.getJSONObject(i)
+            if (payment.optString("invoice_local_id") != invoice.optString("local_id")) continue
+            linked++
+            val amount = payment.optString("amount", "0").toBigDecimalOrNull() ?: java.math.BigDecimal.ZERO
+            if (payment.optString("direction") == "received" && payment.optString("currency", currency) == currency) paid = paid.add(amount)
+            body.addView(label((if (payment.optString("direction") == "received") "مستلمة" else "مدفوعة") +
+                " • " + amount.toPlainString() + " " + payment.optString("currency", currency) +
+                " • " + payment.optString("reference")))
+        }
+        if (linked == 0) body.addView(label("لا توجد دفعات مرتبطة بهذه الفاتورة"))
+        val remaining = total.subtract(paid).max(java.math.BigDecimal.ZERO)
+        body.addView(label("المدفوع المستلم بنفس العملة: " + paid.toPlainString() + " " + currency, 17f, true))
+        body.addView(label("المتبقي: " + remaining.toPlainString() + " " + currency, 20f, true))
+        body.addView(label("الحساب محلي مبدئي؛ لا يعتبر قيداً محاسبياً نهائياً قبل تفعيل الخادم.", 14f))
+        body.addView(btn("رجوع للفواتير") { invoices() })
+    }
+
     private fun addInvoice() {
         screen("إضافة فاتورة")
         val number=field("رقم الفاتورة");val customer=field("اسم العميل");val amount=field("المبلغ");val currency=field("العملة","YER")
