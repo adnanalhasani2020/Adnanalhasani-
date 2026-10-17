@@ -9,7 +9,7 @@ import org.json.JSONObject
 import java.util.UUID
 
 /** Local-first SQLite store. Financial writes remain queued until the server acknowledges them. */
-class LocalDatabase(context: Context) : SQLiteOpenHelper(context, "accounting_local.db", null, 3) {
+class LocalDatabase(context: Context) : SQLiteOpenHelper(context, "accounting_local.db", null, 4) {
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE accounts (local_id TEXT PRIMARY KEY, server_id INTEGER, name TEXT NOT NULL, currency TEXT NOT NULL, opening_balance TEXT NOT NULL, balance TEXT, sync_state TEXT NOT NULL DEFAULT 'pending')")
         db.execSQL("CREATE TABLE transactions (local_id TEXT PRIMARY KEY, server_id INTEGER, account_local_id TEXT NOT NULL, payload TEXT NOT NULL, sync_state TEXT NOT NULL DEFAULT 'pending')")
@@ -18,6 +18,7 @@ class LocalDatabase(context: Context) : SQLiteOpenHelper(context, "accounting_lo
         db.execSQL("CREATE TABLE sync_queue (id INTEGER PRIMARY KEY AUTOINCREMENT, operation_id TEXT NOT NULL UNIQUE, entity TEXT NOT NULL, method TEXT NOT NULL, payload TEXT NOT NULL, created_at INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, last_error TEXT)")
         db.execSQL("CREATE TABLE catalog_records (local_id TEXT PRIMARY KEY, record_type TEXT NOT NULL, payload TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)")
         db.execSQL("CREATE INDEX idx_catalog_type ON catalog_records(record_type)")
+        db.execSQL("CREATE TABLE audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT NOT NULL, entity TEXT NOT NULL, local_id TEXT, details TEXT, created_at INTEGER NOT NULL)")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -27,6 +28,7 @@ class LocalDatabase(context: Context) : SQLiteOpenHelper(context, "accounting_lo
             db.execSQL("CREATE TABLE IF NOT EXISTS catalog_records (local_id TEXT PRIMARY KEY, record_type TEXT NOT NULL, payload TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)")
             db.execSQL("CREATE INDEX IF NOT EXISTS idx_catalog_type ON catalog_records(record_type)")
         }
+        if (oldVersion < 4) db.execSQL("CREATE TABLE IF NOT EXISTS audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT NOT NULL, entity TEXT NOT NULL, local_id TEXT, details TEXT, created_at INTEGER NOT NULL)")
     }
 
     @Synchronized
@@ -69,6 +71,7 @@ class LocalDatabase(context: Context) : SQLiteOpenHelper(context, "accounting_lo
                 }
             }
             enqueueInTransaction(db, entity, "POST", normalized)
+            logAudit(db, "CREATE", entity, localId, normalized.toString().take(300))
             db.setTransactionSuccessful()
         } finally { db.endTransaction() }
         return localId
@@ -159,6 +162,7 @@ class LocalDatabase(context: Context) : SQLiteOpenHelper(context, "accounting_lo
             put("created_at", payload.optLong("created_at", now)); put("updated_at", now)
         }
         writableDatabase.insertWithOnConflict("catalog_records", null, values, SQLiteDatabase.CONFLICT_REPLACE)
+        logAudit(writableDatabase, "SAVE", type, id, normalized.toString().take(300))
         return id
     }
 
@@ -175,7 +179,33 @@ class LocalDatabase(context: Context) : SQLiteOpenHelper(context, "accounting_lo
     @Synchronized
     fun deleteCatalogRecord(type: String, localId: String): Boolean {
         require(type in setOf("customers", "suppliers", "products", "stock", "purchases", "sales"))
-        return writableDatabase.delete("catalog_records", "record_type=? AND local_id=?", arrayOf(type, localId)) > 0
+        val deleted = writableDatabase.delete("catalog_records", "record_type=? AND local_id=?", arrayOf(type, localId)) > 0
+        if (deleted) logAudit(writableDatabase, "DELETE", type, localId, "Deleted local catalog record")
+        return deleted
+    }
+
+    private fun logAudit(db: SQLiteDatabase, action: String, entity: String, localId: String?, details: String) {
+        val values = ContentValues().apply {
+            put("action", action); put("entity", entity); put("local_id", localId)
+            put("details", details.take(300)); put("created_at", System.currentTimeMillis())
+        }
+        db.insert("audit_log", null, values)
+    }
+
+    @Synchronized
+    fun recentAudit(limit: Int = 100): JSONArray {
+        val result = JSONArray()
+        readableDatabase.rawQuery("SELECT action, entity, local_id, details, created_at FROM audit_log ORDER BY id DESC LIMIT ?", arrayOf(limit.coerceIn(1, 500).toString())).use { c ->
+            while (c.moveToNext()) {
+                result.put(JSONObject()
+                    .put("action", c.getString(0))
+                    .put("entity", c.getString(1))
+                    .put("local_id", if (c.isNull(2)) "" else c.getString(2))
+                    .put("details", if (c.isNull(3)) "" else c.getString(3))
+                    .put("created_at", c.getLong(4)))
+            }
+        }
+        return result
     }
 
     @Synchronized
