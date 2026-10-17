@@ -277,7 +277,7 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                     self._required(data, "username", "password", "role", "at")
                     ident = auth_store.create_user(username=str(data["username"]), password=str(data["password"]), role=str(data["role"]), at=str(data["at"]), actor=self._actor())
                     self._send(201, {"id": ident, "status": "created"})
-                if route == "/api/patients":
+                elif route == "/api/patients":
                     self._required(data, "patient_no", "full_name", "created_at")
                     ident = database.register_patient(
                         patient_no=str(data["patient_no"]), full_name=str(data["full_name"]),
