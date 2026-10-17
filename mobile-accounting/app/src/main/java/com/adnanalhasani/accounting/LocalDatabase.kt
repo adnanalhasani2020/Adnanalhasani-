@@ -170,7 +170,7 @@ class LocalDatabase(context: Context) : SQLiteOpenHelper(context, "accounting_lo
     @Synchronized
     fun hasLocalData(): Boolean {
         readableDatabase.rawQuery(
-            "SELECT (SELECT COUNT(*) FROM accounts) + (SELECT COUNT(*) FROM transactions) + (SELECT COUNT(*) FROM invoices) + (SELECT COUNT(*) FROM payments)",
+            "SELECT (SELECT COUNT(*) FROM accounts) + (SELECT COUNT(*) FROM transactions) + (SELECT COUNT(*) FROM invoices) + (SELECT COUNT(*) FROM payments) + (SELECT COUNT(*) FROM catalog_records)",
             null
         ).use { c -> return c.moveToFirst() && c.getInt(0) > 0 }
     }
@@ -183,7 +183,7 @@ class LocalDatabase(context: Context) : SQLiteOpenHelper(context, "accounting_lo
             }
         }
         return JSONObject().put("accounts", count("accounts")).put("transactions", count("transactions"))
-            .put("invoices", count("invoices")).put("payments", count("payments")).put("pending", pendingCount())
+            .put("invoices", count("invoices")).put("payments", count("payments")).put("catalog", count("catalog_records")).put("pending", pendingCount())
     }
 
     @Synchronized
