@@ -58,7 +58,9 @@ class HospitalAPITests(unittest.TestCase):
         self.assertEqual(status, 401)
         self.assertEqual(payload["error"], "unauthorized")
         # JSON responses must not be cacheable or embeddable in another origin.
-        with urlopen(self.base + "/api/dashboard", timeout=3) as response:
+        req = Request(self.base + "/api/dashboard",
+                      headers={"Authorization": f"Bearer {self.token}"})
+        with urlopen(req, timeout=3) as response:
             self.assertEqual(response.headers["Cache-Control"], "no-store")
             self.assertEqual(response.headers["X-Frame-Options"], "DENY")
 
