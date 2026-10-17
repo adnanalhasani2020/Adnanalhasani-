@@ -153,9 +153,15 @@ class MainActivity : Activity() {
                     body.removeAllViews()
                     body.addView(label("ملخص محلي — البيانات المحفوظة على هذا الهاتف", 18f, true))
                     body.addView(label("عدد الحسابات: " + j.optInt("accounts_count")))
-                    body.addView(label("إجمالي الدخل: " + j.optString("income") + " ر.ي"))
-                    body.addView(label("إجمالي المصروفات: " + j.optString("expenses") + " ر.ي"))
-                    body.addView(label("صافي الحركة: " + j.optString("net") + " ر.ي", 21f, true))
+                    body.addView(label("الحركة حسب العملة", 18f, true))
+                    val currencyTotals = j.optJSONObject("by_currency") ?: JSONObject()
+                    if (currencyTotals.length() == 0) body.addView(label("لا توجد حركات مالية بعد"))
+                    val currencyKeys = currencyTotals.keys()
+                    while (currencyKeys.hasNext()) {
+                        val currency = currencyKeys.next()
+                        val totals = currencyTotals.getJSONObject(currency)
+                        body.addView(label("$currency • دخل: ${totals.optString("income")} • مصروف: ${totals.optString("expenses")} • الصافي: ${totals.optString("net")}", 16f, true))
+                    }
                     body.addView(label("عمليات بانتظار المزامنة: " + localDb.pendingCount()))
                     body.addView(btn("تحديث") { loadSummary() })
                     nav()
@@ -350,9 +356,15 @@ class MainActivity : Activity() {
                 runOnUiThread {
                     body.addView(label("تقرير محلي", 20f, true))
                     body.addView(label("عدد الحسابات: " + j.optInt("accounts_count")))
-                    body.addView(label("إجمالي الدخل: " + j.optString("income") + " ر.ي", 18f, true))
-                    body.addView(label("إجمالي المصروفات: " + j.optString("expenses") + " ر.ي", 18f, true))
-                    body.addView(label("صافي الحركة: " + j.optString("net") + " ر.ي", 20f, true))
+                    body.addView(label("الحركة حسب العملة", 18f, true))
+                    val currencyTotals = j.optJSONObject("by_currency") ?: JSONObject()
+                    if (currencyTotals.length() == 0) body.addView(label("لا توجد حركات مالية بعد"))
+                    val currencyKeys = currencyTotals.keys()
+                    while (currencyKeys.hasNext()) {
+                        val currency = currencyKeys.next()
+                        val totals = currencyTotals.getJSONObject(currency)
+                        body.addView(label("$currency • دخل: ${totals.optString("income")} • مصروف: ${totals.optString("expenses")} • الصافي: ${totals.optString("net")}", 16f, true))
+                    }
                     body.addView(label("عمليات بانتظار المزامنة: " + localDb.pendingCount()))
                     body.addView(label("هذا تقرير من بيانات الهاتف فقط؛ لا يعرض بعدُ بيانات الخادم غير المنزّلة."))
                     status.text = "تم إعداد التقرير محلياً"
