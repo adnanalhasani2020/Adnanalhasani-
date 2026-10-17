@@ -33,6 +33,22 @@ class HospitalWorkflowTests(unittest.TestCase):
             close_encounter(self.db, encounter_id=encounter, closed_at="2026-01-02T08:40:00",
                 actor="doctor", diagnosis="Duplicate close")
 
+    def test_encounter_appointment_doctor_must_match(self):
+        other_doctor = self.db.register_doctor(employee_no="D-101", full_name="Other Doctor",
+            specialty="General", actor="test", at="2026-01-01T08:00:00")
+        appointment = self.db.book_appointment(patient_id=self.patient, doctor_id=self.doctor,
+            starts_at="2026-01-02T08:00:00", ends_at="2026-01-02T08:30:00",
+            created_at="2026-01-01T08:00:00", actor="reception")
+        with self.assertRaisesRegex(HospitalError, "encounter doctor must match"):
+            create_encounter(self.db, patient_id=self.patient, doctor_id=other_doctor,
+                opened_at="2026-01-02T08:05:00", actor="doctor", appointment_id=appointment)
+        encounter = create_encounter(self.db, patient_id=self.patient, doctor_id=self.doctor,
+            opened_at="2026-01-02T08:05:00", actor="doctor", appointment_id=appointment)
+        with self.db.connect() as conn:
+            row = conn.execute("SELECT doctor_id,appointment_id FROM encounters WHERE id=?",
+                               (encounter,)).fetchone()
+        self.assertEqual((row["doctor_id"], row["appointment_id"]), (self.doctor, appointment))
+
     def test_lab_result_requires_content(self):
         order = order_lab_test(self.db, patient_id=self.patient, test_name="CBC",
             ordered_at="2026-01-02T08:00:00", actor="doctor", doctor_id=self.doctor)
