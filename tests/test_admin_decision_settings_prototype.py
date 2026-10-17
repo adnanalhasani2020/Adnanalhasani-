@@ -53,3 +53,19 @@ def test_local_storage_is_described_as_browser_only_not_server_persistence():
     assert "localStorage" in html
     assert "لا يوجد حفظ على الخادم" in html
     assert "غير متصل بالخدمات الخلفية" in html
+
+def test_saved_select_values_are_restored_only_when_they_match_an_allowed_option():
+    html = PROTOTYPE.read_text(encoding="utf-8")
+
+    assert "function restoreSavedValue(name,value)" in html
+    assert "Array.from(field.options).some(option=>option.value===value)" in html
+    assert "if(field.tagName==='SELECT')" in html
+
+
+def test_saved_text_values_respect_declared_length_limits():
+    html = PROTOTYPE.read_text(encoding="utf-8")
+
+    assert "field.getAttribute('maxlength')" in html
+    assert "value.slice(0,limit)" in html
+    assert "if(d&&typeof d==='object'&&!Array.isArray(d))" in html
+
