@@ -35,6 +35,7 @@ Open `http://127.0.0.1:8080`. The Arabic interface uses the same origin as the A
 - `POST /api/lab-orders`, `POST /api/lab-orders/{id}/status`
 - `POST /api/medicines`, `POST /api/prescriptions`, `POST /api/prescriptions/{id}/dispense`
 - `POST /api/beds`, `POST /api/admissions`, `POST /api/admissions/{id}/discharge`
+- `POST /api/invoices`, `POST /api/payments` (amounts use integer minor units; payments cannot exceed the invoice balance)
 
 ## Important safety limits
 This is a development foundation, **not a production-ready or clinically validated hospital information system**. The bearer token is a single shared secret, not per-user authentication; roles in the schema are not yet enforced by API authorization middleware. Do not expose the development server directly to the internet or use real patient data. Before production, add per-user authentication and role-based access control, TLS/reverse proxy, secure secret management, encryption/key management, backup/restore testing, migrations, monitoring, retention policies, audit review, clinical workflow validation, and applicable regulatory review.
