@@ -26,7 +26,7 @@ export HOSPITAL_DB_PATH="hospital.sqlite3"
 python -m hospital.api
 ```
 
-Open `http://127.0.0.1:8080`. The Arabic interface uses the same origin as the API. Enter the shared token in the UI to call authenticated endpoints. Keep the token private and use a separate random token for each development environment. The API binds to `127.0.0.1` by default; do not change this to `0.0.0.0` on an untrusted network.
+Open `http://127.0.0.1:8080`. The Arabic interface uses the same origin as the API. Enter the shared token in the UI to call authenticated endpoints. Keep the token private and use a separate random token for each development environment. The API binds to `127.0.0.1` by default and rejects non-loopback bind hosts unless `HOSPITAL_API_ALLOW_REMOTE=1` is explicitly set. This override is dangerous with the shared-token development API: only use it behind a properly configured trusted reverse proxy/network, never expose the development server directly to the internet.
 
 ### Database backup and restore
 
