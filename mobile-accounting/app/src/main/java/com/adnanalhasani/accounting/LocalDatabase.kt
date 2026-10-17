@@ -132,6 +132,26 @@ class LocalDatabase(context: Context) : SQLiteOpenHelper(context, "accounting_lo
             .put("recent_transactions", recent)
     }
 
+
+    @Synchronized
+    fun hasLocalData(): Boolean {
+        readableDatabase.rawQuery(
+            "SELECT (SELECT COUNT(*) FROM accounts) + (SELECT COUNT(*) FROM transactions) + (SELECT COUNT(*) FROM invoices) + (SELECT COUNT(*) FROM payments)",
+            null
+        ).use { c -> return c.moveToFirst() && c.getInt(0) > 0 }
+    }
+
+    @Synchronized
+    fun localCounts(): JSONObject {
+        fun count(table: String): Int {
+            readableDatabase.rawQuery("SELECT COUNT(*) FROM $table", null).use { c ->
+                return if (c.moveToFirst()) c.getInt(0) else 0
+            }
+        }
+        return JSONObject().put("accounts", count("accounts")).put("transactions", count("transactions"))
+            .put("invoices", count("invoices")).put("payments", count("payments")).put("pending", pendingCount())
+    }
+
     @Synchronized
     fun pendingOperations(): List<PendingOperation> {
         val rows = mutableListOf<PendingOperation>()
