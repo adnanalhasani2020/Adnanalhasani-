@@ -27,7 +27,7 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         token = prefs.getString("token", null)
         apiUrl = prefs.getString("api_url", "") ?: ""
-        if (token == null) login() else dashboard()
+        if (token == null && !localDb.hasLocalData()) login() else dashboard()
     }
     private fun label(s:String,size:Float=16f,bold:Boolean=false):TextView = TextView(this).apply {
         text=s;textSize=size;setTextColor(Color.rgb(25,55,42));gravity=Gravity.RIGHT
@@ -114,6 +114,7 @@ class MainActivity : Activity() {
         body.addView(btn("الدفعات"){payments()})
         body.addView(btn("تسجيل دفعة"){addPayment()})
         body.addView(btn("التقارير"){reports()})
+        body.addView(btn("حالة البيانات والمزامنة"){syncStatus()})
         body.addView(btn("إعدادات الاتصال"){settings()})
         body.addView(btn("تسجيل الخروج"){prefs.edit().remove("token").apply();token=null;login()})
     }
@@ -294,6 +295,37 @@ class MainActivity : Activity() {
                     status.text = "تم إعداد التقرير محلياً"
                 }
             } catch (e: Exception) { runOnUiThread { status.text = "تعذر إنشاء التقرير: " + (e.message ?: "") } }
+        }
+    }
+
+    private fun syncStatus() {
+        screen("حالة البيانات والمزامنة")
+        body.addView(btn("تحديث الحالة") { syncStatus() })
+        body.addView(btn("رجوع للرئيسية") { dashboard() })
+        executor.execute {
+            try {
+                val counts = localDb.localCounts()
+                val pending = localDb.pendingOperations()
+                runOnUiThread {
+                    body.addView(label("ملخص قاعدة البيانات على هذا الهاتف", 19f, true))
+                    body.addView(label("الحسابات: " + counts.optInt("accounts")))
+                    body.addView(label("الحركات: " + counts.optInt("transactions")))
+                    body.addView(label("الفواتير: " + counts.optInt("invoices")))
+                    body.addView(label("الدفعات: " + counts.optInt("payments")))
+                    body.addView(label("عمليات بانتظار المزامنة: " + counts.optInt("pending"), 18f, true))
+                    body.addView(label("حالة الاتصال: " + if (token == null) "وضع محلي دون تسجيل دخول" else "تم تسجيل الدخول سابقاً؛ المزامنة التلقائية غير مفعلة"))
+                    body.addView(label("تنبيه: لا تحذف بيانات التطبيق قبل إكمال المزامنة والنسخ الاحتياطي.", 16f, true))
+                    if (pending.isNotEmpty()) {
+                        body.addView(label("أقدم العمليات المنتظرة", 18f, true))
+                        pending.take(20).forEach { op ->
+                            body.addView(label(op.entity + " • " + op.method + " • محاولات: " + op.attempts + "\\n" + op.operationId))
+                        }
+                    }
+                    status.text = "تم فحص قاعدة البيانات المحلية"
+                }
+            } catch (e: Exception) {
+                runOnUiThread { status.text = "تعذر فحص قاعدة البيانات: " + (e.message ?: "") }
+            }
         }
     }
     private fun settings() {
