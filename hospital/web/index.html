@@ -12,7 +12,7 @@ header h1{margin:0 0 8px;font-size:clamp(22px,4vw,32px)}header p{margin:0;color:
 main{max-width:1100px;margin:24px auto;padding:0 16px}.notice{background:#fff7df;border:1px solid #f0d58c;padding:12px 16px;border-radius:10px;margin-bottom:18px}
 .panel{background:#fff;border:1px solid #dbe5eb;border-radius:12px;padding:18px;margin-bottom:18px;box-shadow:0 3px 14px #15364a0a}
 h2{margin-top:0;font-size:19px}.row{display:flex;gap:10px;flex-wrap:wrap}.row>*{flex:1;min-width:180px}
-input,button{font:inherit;padding:11px;border-radius:8px;border:1px solid #c6d5df;width:100%}
+input,select,button{font:inherit;padding:11px;border-radius:8px;border:1px solid #c6d5df;width:100%}
 button{background:#176b87;color:#fff;border:0;cursor:pointer;font-weight:bold}button:hover{background:#0e536c}
 .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:12px}
 .metric{background:#eef6fa;border-radius:10px;padding:15px}.metric span{display:block;color:#496574;font-size:13px}.metric strong{display:block;font-size:27px;margin-top:7px}
@@ -46,25 +46,25 @@ small{color:#5d7482}form{display:grid;gap:10px}footer{text-align:center;color:#6
 </form></section>
 </div>
 <section class="panel"><h2>حجز موعد</h2><form id="appointmentForm">
-<div class="row"><input name="patient_id" required type="number" min="1" placeholder="رقم المريض الداخلي"><input name="doctor_id" required type="number" min="1" placeholder="رقم الطبيب الداخلي"></div>
+<div class="row"><select name="patient_id" required aria-label="المريض"><option value="">اختر المريض...</option></select><select name="doctor_id" required aria-label="الطبيب"><option value="">اختر الطبيب...</option></select></div>
 <div class="row"><label>بداية الموعد<input name="starts_at" required type="datetime-local"></label><label>نهاية الموعد<input name="ends_at" required type="datetime-local"></label></div>
 <input name="reason" placeholder="سبب الزيارة (اختياري)">
 <button>حجز الموعد</button><div class="status" role="status"></div>
 </form></section>
 <section class="panel"><h2>إنشاء فاتورة</h2><form id="invoiceForm">
-<div class="row"><input name="invoice_no" required placeholder="رقم الفاتورة"><input name="patient_id" required type="number" min="1" placeholder="رقم المريض الداخلي"></div>
+<div class="row"><input name="invoice_no" required placeholder="رقم الفاتورة"><select name="patient_id" required aria-label="المريض"><option value="">اختر المريض...</option></select></div>
 <div class="row"><label>الإجمالي بوحدات العملة الصغرى<input name="total_minor" required type="number" min="0" step="1" placeholder="مثال: 12500"></label><input name="currency" value="YER" required aria-label="رمز العملة"><input name="encounter_id" type="number" min="1" placeholder="رقم الزيارة (اختياري)"></div>
 <small>أدخل المبلغ كعدد صحيح بوحدات العملة الصغرى؛ لا تستخدم الكسور العشرية.</small>
 <button>إنشاء الفاتورة</button><div class="status" role="status"></div>
 </form></section>
 <section class="panel"><h2>تسجيل دفعة</h2><form id="paymentForm">
-<div class="row"><input name="invoice_id" required type="number" min="1" placeholder="رقم الفاتورة الداخلي"><input name="amount_minor" required type="number" min="1" step="1" placeholder="المبلغ بوحدات العملة الصغرى"></div>
+<div class="row"><select name="invoice_id" required aria-label="الفاتورة"><option value="">اختر الفاتورة...</option></select><input name="amount_minor" required type="number" min="1" step="1" placeholder="المبلغ بوحدات العملة الصغرى"></div>
 <div class="row"><input name="method" required placeholder="طريقة الدفع: نقدًا / تحويل"><input name="reference" placeholder="مرجع الإيصال (اختياري)"></div>
 <button>تسجيل الدفعة</button><div class="status" role="status"></div>
 </form></section>
 <section class="panel"><h2>طلب فحص مختبري</h2><form id="labForm">
-<div class="row"><input name="patient_id" required type="number" min="1" placeholder="رقم المريض الداخلي"><input name="test_name" required placeholder="اسم الفحص"></div>
-<div class="row"><input name="doctor_id" type="number" min="1" placeholder="رقم الطبيب (اختياري)"><input name="encounter_id" type="number" min="1" placeholder="رقم الزيارة المفتوحة (اختياري)"></div>
+<div class="row"><select name="patient_id" required aria-label="المريض"><option value="">اختر المريض...</option></select><input name="test_name" required placeholder="اسم الفحص"></div>
+<div class="row"><select name="doctor_id" aria-label="الطبيب (اختياري)"><option value="">بدون طبيب محدد</option></select><input name="encounter_id" type="number" min="1" placeholder="رقم الزيارة المفتوحة (اختياري)"></div>
 <button>إرسال طلب المختبر</button><div class="status" role="status"></div>
 </form></section>
 <section class="panel"><h2>إضافة دواء للمخزون</h2><form id="medicineForm">
@@ -73,7 +73,7 @@ small{color:#5d7482}form{display:grid;gap:10px}footer{text-align:center;color:#6
 <button>إضافة الدواء</button><div class="status" role="status"></div>
 </form></section>
 <section class="panel"><h2>إنشاء وصفة دوائية</h2><form id="prescriptionForm">
-<div class="row"><input name="patient_id" required type="number" min="1" placeholder="رقم المريض الداخلي"><input name="medicine_id" required type="number" min="1" placeholder="رقم الدواء الداخلي"></div>
+<div class="row"><select name="patient_id" required aria-label="المريض"><option value="">اختر المريض...</option></select><select name="medicine_id" required aria-label="الدواء"><option value="">اختر الدواء...</option></select></div>
 <div class="row"><input name="dose" required placeholder="الجرعة"><input name="frequency" required placeholder="التكرار"><input name="duration" required placeholder="المدة"></div>
 <div class="row"><label>الكمية المصروفة لاحقًا<input name="quantity" required type="number" min="1" step="1"></label><input name="encounter_id" type="number" min="1" placeholder="رقم الزيارة المفتوحة (اختياري)"></div>
 <button>إنشاء الوصفة</button><div class="status" role="status"></div>
@@ -85,10 +85,10 @@ small{color:#5d7482}form{display:grid;gap:10px}footer{text-align:center;color:#6
 <section class="panel"><h2>إدارة الأسرة والتنويم</h2>
 <form id="bedForm"><h3>إضافة سرير</h3><div class="row"><input name="ward" required placeholder="القسم / العنبر"><input name="bed_no" required placeholder="رقم السرير"></div><button>إضافة السرير</button><div class="status" role="status"></div></form>
 <hr style="border:0;border-top:1px solid #dbe5eb;margin:18px 0">
-<form id="admissionForm"><h3>تنويم مريض</h3><div class="row"><input name="patient_id" required type="number" min="1" placeholder="رقم المريض الداخلي"><input name="bed_id" required type="number" min="1" placeholder="رقم السرير الداخلي"></div><input name="reason" placeholder="سبب التنويم (اختياري)"><button>تسجيل التنويم</button><div class="status" role="status"></div></form>
+<form id="admissionForm"><h3>تنويم مريض</h3><div class="row"><select name="patient_id" required aria-label="المريض"><option value="">اختر المريض...</option></select><select name="bed_id" required aria-label="السرير"><option value="">اختر السرير...</option></select></div><input name="reason" placeholder="سبب التنويم (اختياري)"><button>تسجيل التنويم</button><div class="status" role="status"></div></form>
 </section>
 <section class="panel"><h2>إدارة الزيارة الطبية</h2>
-<form id="encounterForm"><h3>فتح زيارة</h3><div class="row"><input name="patient_id" required type="number" min="1" placeholder="رقم المريض الداخلي"><input name="doctor_id" type="number" min="1" placeholder="رقم الطبيب (اختياري)"></div><input name="chief_complaint" placeholder="الشكوى الرئيسية"><input name="appointment_id" type="number" min="1" placeholder="رقم الموعد (اختياري)"><button>فتح الزيارة</button><div class="status" role="status"></div></form>
+<form id="encounterForm"><h3>فتح زيارة</h3><div class="row"><select name="patient_id" required aria-label="المريض"><option value="">اختر المريض...</option></select><select name="doctor_id" aria-label="الطبيب (اختياري)"><option value="">بدون طبيب محدد</option></select></div><input name="chief_complaint" placeholder="الشكوى الرئيسية"><input name="appointment_id" type="number" min="1" placeholder="رقم الموعد (اختياري)"><button>فتح الزيارة</button><div class="status" role="status"></div></form>
 <hr style="border:0;border-top:1px solid #dbe5eb;margin:18px 0">
 <form id="closeEncounterForm"><h3>إغلاق زيارة وتسجيل التشخيص</h3><input name="encounter_id" required type="number" min="1" placeholder="رقم الزيارة الداخلي"><input name="diagnosis" required placeholder="التشخيص"><input name="clinical_notes" placeholder="ملاحظات سريرية"><button>إغلاق الزيارة</button><div class="status" role="status"></div></form>
 </section>
@@ -122,7 +122,16 @@ function base(){return $("base").value.trim().replace(/\/$/,"")}
 function headers(){return {"Authorization":"Bearer "+$("token").value,"Content-Type":"application/json"}}
 async function api(path,options={}){const r=await fetch(base()+path,{...options,headers:headers(),cache:"no-store"});let d={};try{d=await r.json()}catch{}if(!r.ok)throw Error(d.error||("خطأ HTTP "+r.status));return d}
 function msg(node,text,bad=false){node.textContent=text;node.classList.toggle("error",bad)}
-$("connect").onclick=async()=>{try{const d=await api("/api/dashboard");$("metrics").replaceChildren(...Object.entries(d.data).map(([k,v])=>{const box=document.createElement("div");box.className="metric";const label=document.createElement("span");label.textContent=labels[k]||k;const value=document.createElement("strong");value.textContent=String(v);box.append(label,value);return box}));msg($("connection"),"تم الاتصال وتحديث المؤشرات")}catch(e){msg($("connection"),e.message,true)}};
+function fillSelects(selector,rows,label,emptyLabel){document.querySelectorAll(selector).forEach(select=>{const previous=select.value;const empty=document.createElement("option");empty.value="";empty.textContent=emptyLabel;select.replaceChildren(empty);rows.forEach(row=>{const option=document.createElement("option");option.value=String(row.id);option.textContent=label(row);select.appendChild(option)});if(rows.some(row=>String(row.id)===previous))select.value=previous})}
+async function loadReferenceOptions(){const tasks=[
+["/api/patients","select[name='patient_id']",r=>r.patient_no+" — "+r.full_name,"اختر المريض..."],
+["/api/doctors","select[name='doctor_id']",r=>r.full_name+" — "+r.specialty,"اختر الطبيب..."],
+["/api/medicines","select[name='medicine_id']",r=>r.name+" ("+r.sku+") — المخزون: "+r.quantity,"اختر الدواء..."],
+["/api/beds","select[name='bed_id']",r=>r.ward+" — "+r.bed_no+(r.occupied?" (مشغول)":" (متاح)"),"اختر السرير..."],
+["/api/invoices","select[name='invoice_id']",r=>r.invoice_no+" — "+r.patient_name+" — المتبقي: "+(Number(r.total_minor)-Number(r.paid_minor))+" "+r.currency,"اختر الفاتورة..."]
+];const results=await Promise.allSettled(tasks.map(async t=>({task:t,result:await api(t[0]+"?limit=100&offset=0")})));results.forEach(item=>{if(item.status==="fulfilled"){const {task,result}=item.value;const [,selector,label,empty]=task;let rows=result.data||[];if(selector.includes("bed_id"))rows=rows.filter(r=>!r.occupied&&r.active);if(selector.includes("invoice_id"))rows=rows.filter(r=>Number(r.total_minor)>Number(r.paid_minor)&&r.status!=="void");fillSelects(selector,rows,label,empty)}})}
+
+$("connect").onclick=async()=>{try{const d=await api("/api/dashboard");$("metrics").replaceChildren(...Object.entries(d.data).map(([k,v])=>{const box=document.createElement("div");box.className="metric";const label=document.createElement("span");label.textContent=labels[k]||k;const value=document.createElement("strong");value.textContent=String(v);box.append(label,value);return box}));await loadReferenceOptions();msg($("connection"),"تم الاتصال وتحديث المؤشرات والقوائم المرجعية")}catch(e){msg($("connection"),e.message,true)}};
 function wire(formId,path,build){const form=$(formId);form.addEventListener("submit",async ev=>{ev.preventDefault();const status=form.querySelector(".status");try{const data=build(Object.fromEntries(new FormData(form).entries()));const result=await api(path,{method:"POST",body:JSON.stringify(data)});msg(status,"تم الحفظ بنجاح. الرقم الداخلي: "+result.id);form.reset();$("connect").click()}catch(e){msg(status,e.message,true)}})}
 const now=()=>new Date().toISOString();
 wire("patientForm","/api/patients",d=>({...d,created_at:now()}));
