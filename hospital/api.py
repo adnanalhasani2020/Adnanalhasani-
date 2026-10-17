@@ -81,8 +81,9 @@ def make_handler(database: HospitalDB, api_token: str):
         def do_GET(self) -> None:
             parsed = urlsplit(self.path)
             route = parsed.path
-            if route == "/":
-                page = (Path(__file__).parent / "web" / "index.html").read_bytes()
+            if route in ("/", "/settings"):
+                page_name = "settings.html" if route == "/settings" else "index.html"
+                page = (Path(__file__).parent / "web" / page_name).read_bytes()
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.send_header("Content-Length", str(len(page)))

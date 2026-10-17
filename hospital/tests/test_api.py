@@ -66,6 +66,19 @@ class HospitalAPITests(unittest.TestCase):
             self.assertIn("frame-ancestors 'none'", response.headers["Content-Security-Policy"])
             self.assertEqual(response.headers["Cache-Control"], "no-store")
 
+    def test_manager_settings_preview_serves_without_api_token(self):
+        with urlopen(self.base + "/settings", timeout=3) as response:
+            page = response.read().decode("utf-8")
+            self.assertEqual(response.status, 200)
+            self.assertIn("text/html", response.headers["Content-Type"])
+            self.assertIn("إعدادات المدير", page)
+            self.assertIn("مستشفى عام", page)
+            self.assertIn("sessionStorage", page)
+            self.assertIn("لم تُرسل أي تغييرات إلى الخادم", page)
+            self.assertEqual(response.headers["Cache-Control"], "no-store")
+            self.assertEqual(response.headers["X-Frame-Options"], "DENY")
+            self.assertIn("frame-ancestors 'none'", response.headers["Content-Security-Policy"])
+
     def test_authentication_required(self):
         status, payload = self.request("/api/dashboard", token=False)
         self.assertEqual(status, 401)
