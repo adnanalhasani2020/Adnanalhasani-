@@ -15,15 +15,19 @@ from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 from .core import HospitalDB, HospitalError
+from .security import (AuthStore, AuthenticationError, AuthorizationError,\n                       permission_for_route, require_permission)
 from .workflows import (
     add_medicine, close_encounter, create_bed, create_encounter, dispense_prescription,
     order_lab_test, prescribe_medicine, update_lab_status,
 )
 
 
-def make_handler(database: HospitalDB, api_token: str):
-    if not api_token or len(api_token) < 32:
+def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "token"):
+    if auth_mode not in {"token", "users"}:
+        raise ValueError("HOSPITAL_AUTH_MODE must be 'token' or 'users'")
+    if auth_mode == "token" and (not api_token or len(api_token) < 32):
         raise ValueError("HOSPITAL_API_TOKEN must be set to a secret of at least 32 characters")
+    auth_store = AuthStore(database) if auth_mode == "users" else None
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "HospitalDevAPI/0.3"
@@ -45,14 +49,33 @@ def make_handler(database: HospitalDB, api_token: str):
             self.end_headers()
             self.wfile.write(raw)
 
+        def _actor(self) -> str:
+            principal = getattr(self, "principal", None)
+            return principal.username if principal is not None else "api"
+
         def _authorized(self) -> bool:
             supplied = self.headers.get("Authorization", "")
             candidate = supplied[7:] if supplied.startswith("Bearer ") else ""
-            # An unset server token must fail closed: otherwise an empty/missing
-            # Authorization header could match an empty configured secret.
+            if auth_mode == "users":
+                try:
+                    if auth_store is None:
+                        raise AuthenticationError("authentication unavailable")
+                    self.principal = auth_store.resolve(candidate)
+                    permission = permission_for_route(self.command, self.path)
+                    if permission:
+                        require_permission(self.principal, permission)
+                    return True
+                except AuthenticationError:
+                    self._send(401, {"error": "unauthorized"})
+                    return False
+                except AuthorizationError:
+                    self._send(403, {"error": "forbidden"})
+                    return False
+            # Development compatibility mode; shared-token mode is not per-user RBAC.
             if not api_token or not candidate or not hmac.compare_digest(candidate, api_token):
                 self._send(401, {"error": "unauthorized"})
                 return False
+            self.principal = None
             return True
 
         def _body(self) -> dict[str, Any]:
@@ -98,7 +121,13 @@ def make_handler(database: HospitalDB, api_token: str):
                 return
             if not self._authorized():
                 return
-            if route == "/health":
+            if route == "/api/auth/me" and auth_mode == "users":
+                self._send(200, {"user": {"id": self.principal.user_id, "username": self.principal.username, "role": self.principal.role, "expires_at": self.principal.expires_at}})
+            elif route == "/api/users" and auth_mode == "users":
+                with database.connect() as conn:
+                    rows = conn.execute("SELECT id,username,role,active,created_at,updated_at FROM auth_users ORDER BY username").fetchall()
+                self._send(200, {"data": [dict(row) for row in rows]})
+            elif route == "/health":
                 self._send(200, {"status": "ok", "service": "hospital-api"})
             elif route == "/api/dashboard":
                 self._send(200, {"data": database.dashboard()})
@@ -230,17 +259,29 @@ def make_handler(database: HospitalDB, api_token: str):
                 self._send(404, {"error": "not_found"})
 
         def do_POST(self) -> None:
-            if not self._authorized():
+            route = self.path.split("?", 1)[0]
+            login_route = route == "/api/auth/login" and auth_mode == "users"
+            if not login_route and not self._authorized():
                 return
             try:
-                route = self.path.split("?", 1)[0]
                 parts = route.strip("/").split("/")
                 data = self._body()
+                if login_route:
+                    self._required(data, "username", "password")
+                    token, principal = auth_store.authenticate(username=str(data["username"]), password=str(data["password"]))
+                    self._send(200, {"token": token, "user": {"id": principal.user_id, "username": principal.username, "role": principal.role, "expires_at": principal.expires_at}})
+                elif route == "/api/auth/logout" and auth_mode == "users":
+                    auth_store.revoke(self.headers.get("Authorization", "")[7:])
+                    self._send(200, {"status": "logged_out"})
+                elif route == "/api/users" and auth_mode == "users":
+                    self._required(data, "username", "password", "role", "at")
+                    ident = auth_store.create_user(username=str(data["username"]), password=str(data["password"]), role=str(data["role"]), at=str(data["at"]), actor=self._actor())
+                    self._send(201, {"id": ident, "status": "created"})
                 if route == "/api/patients":
                     self._required(data, "patient_no", "full_name", "created_at")
                     ident = database.register_patient(
                         patient_no=str(data["patient_no"]), full_name=str(data["full_name"]),
-                        created_at=str(data["created_at"]), actor="api",
+                        created_at=str(data["created_at"]), actor=self._actor(),
                         date_of_birth=data.get("date_of_birth"), sex=data.get("sex"),
                         phone=data.get("phone"), address=data.get("address"),
                         emergency_contact=data.get("emergency_contact"),
@@ -392,13 +433,14 @@ def _validate_bind_host(host: str, *, allow_remote: bool = False) -> str:
 
 def serve() -> None:
     token = os.environ.get("HOSPITAL_API_TOKEN", "")
+    auth_mode = os.environ.get("HOSPITAL_AUTH_MODE", "token").strip().lower()
     db_path = os.environ.get("HOSPITAL_DB_PATH", "hospital.sqlite3")
     host = os.environ.get("HOSPITAL_API_HOST", "127.0.0.1")
     allow_remote = os.environ.get("HOSPITAL_API_ALLOW_REMOTE", "") == "1"
     host = _validate_bind_host(host, allow_remote=allow_remote)
     port = int(os.environ.get("HOSPITAL_API_PORT", "8080"))
     database = HospitalDB(db_path)
-    server = ThreadingHTTPServer((host, port), make_handler(database, token))
+    server = ThreadingHTTPServer((host, port), make_handler(database, token, auth_mode=auth_mode))
     print(f"Hospital development UI/API listening on http://{host}:{port}")
     try:
         server.serve_forever()
