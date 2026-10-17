@@ -23,13 +23,13 @@ ROLE_PERMISSIONS = {
     "admin": frozenset({"*"}),
     "doctor": frozenset({
         "dashboard:read", "patients:read", "doctors:read", "appointments:read",
-        "encounters:read", "encounters:write", "diagnoses:read", "diagnoses:write", "allergies:read", "allergies:write", "vitals:read", "vitals:write", "nursing:read", "nursing:write", "lab:read", "lab:order",
+        "encounters:read", "encounters:write", "medical-record:read", "diagnoses:read", "diagnoses:write", "allergies:read", "allergies:write", "vitals:read", "vitals:write", "nursing:read", "nursing:write", "lab:read", "lab:order",
         "medicines:read", "prescriptions:read", "prescriptions:write",
         "beds:read", "admissions:read", "invoices:read",
     }),
     "nurse": frozenset({
         "dashboard:read", "patients:read", "appointments:read", "encounters:read",
-        "encounters:write", "diagnoses:read", "allergies:read", "vitals:read", "vitals:write", "nursing:read", "nursing:write", "lab:read", "beds:read", "admissions:read",
+        "encounters:write", "medical-record:read", "diagnoses:read", "allergies:read", "vitals:read", "vitals:write", "nursing:read", "nursing:write", "lab:read", "beds:read", "admissions:read",
     }),
     "reception": frozenset({
         "dashboard:read", "patients:read", "patients:write", "doctors:read",
@@ -258,6 +258,7 @@ def permission_for_route(method: str, path: str) -> str | None:
         "/api/suppliers": ("suppliers:read", "suppliers:write"),
         "/api/purchase-orders": ("purchases:read", "purchases:write"),
         "/api/reports": ("reports:read", "reports:read"),
+        "/api/medical-record": ("medical-record:read", "medical-record:read"),
     }
     if route == "/api/lab-orders" and method == "POST":
         return "lab:order"
