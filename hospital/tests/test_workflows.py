@@ -1,0 +1,71 @@
+import tempfile
+import unittest
+from pathlib import Path
+
+from hospital.core import HospitalDB, HospitalError
+from hospital.workflows import (
+    add_medicine, close_encounter, create_encounter, dispense_prescription,
+    order_lab_test, prescribe_medicine, update_lab_status,
+)
+
+
+class HospitalWorkflowTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.db = HospitalDB(Path(self.temp.name) / "workflows.sqlite3")
+        self.patient = self.db.register_patient(patient_no="P-100", full_name="Sample Patient",
+            created_at="2026-01-01T08:00:00", actor="test")
+        self.doctor = self.db.register_doctor(employee_no="D-100", full_name="Sample Doctor",
+            specialty="General", actor="test", at="2026-01-01T08:00:00")
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def test_encounter_lifecycle(self):
+        encounter = create_encounter(self.db, patient_id=self.patient, doctor_id=self.doctor,
+            opened_at="2026-01-02T08:00:00", actor="doctor", chief_complaint="Cough")
+        close_encounter(self.db, encounter_id=encounter, closed_at="2026-01-02T08:30:00",
+            actor="doctor", diagnosis="Example diagnosis", clinical_notes="Follow up")
+        with self.db.connect() as conn:
+            row = conn.execute("SELECT status,diagnosis FROM encounters WHERE id=?", (encounter,)).fetchone()
+        self.assertEqual((row["status"], row["diagnosis"]), ("closed", "Example diagnosis"))
+        with self.assertRaises(HospitalError):
+            close_encounter(self.db, encounter_id=encounter, closed_at="2026-01-02T08:40:00",
+                actor="doctor", diagnosis="Duplicate close")
+
+    def test_lab_result_requires_content(self):
+        order = order_lab_test(self.db, patient_id=self.patient, test_name="CBC",
+            ordered_at="2026-01-02T08:00:00", actor="doctor", doctor_id=self.doctor)
+        with self.assertRaises(HospitalError):
+            update_lab_status(self.db, order_id=order, status="resulted", actor="lab",
+                at="2026-01-02T09:00:00", result="")
+        update_lab_status(self.db, order_id=order, status="resulted", actor="lab",
+            at="2026-01-02T09:00:00", result="Example result")
+        with self.db.connect() as conn:
+            row = conn.execute("SELECT status,result FROM lab_orders WHERE id=?", (order,)).fetchone()
+        self.assertEqual((row["status"], row["result"]), ("resulted", "Example result"))
+
+    def test_dispensing_deducts_stock_once_and_rejects_insufficient_stock(self):
+        medicine = add_medicine(self.db, sku="MED-1", name="Test medicine", quantity=5,
+            reorder_level=1, actor="pharmacist", at="2026-01-01T08:00:00")
+        prescription = prescribe_medicine(self.db, patient_id=self.patient, medicine_id=medicine,
+            dose="1 tablet", frequency="daily", duration="3 days", quantity=3,
+            prescribed_at="2026-01-02T08:00:00", actor="doctor")
+        dispense_prescription(self.db, prescription_id=prescription,
+            dispensed_at="2026-01-02T09:00:00", actor="pharmacist")
+        with self.db.connect() as conn:
+            stock = conn.execute("SELECT quantity FROM medicines WHERE id=?", (medicine,)).fetchone()["quantity"]
+        self.assertEqual(stock, 2)
+        with self.assertRaises(HospitalError):
+            dispense_prescription(self.db, prescription_id=prescription,
+                dispensed_at="2026-01-02T09:05:00", actor="pharmacist")
+        second = prescribe_medicine(self.db, patient_id=self.patient, medicine_id=medicine,
+            dose="2 tablets", frequency="daily", duration="2 days", quantity=4,
+            prescribed_at="2026-01-02T10:00:00", actor="doctor")
+        with self.assertRaises(HospitalError):
+            dispense_prescription(self.db, prescription_id=second,
+                dispensed_at="2026-01-02T10:05:00", actor="pharmacist")
+
+
+if __name__ == "__main__":
+    unittest.main()
