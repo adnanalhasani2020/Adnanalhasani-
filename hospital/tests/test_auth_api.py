@@ -95,6 +95,28 @@ class HospitalUserAuthAPITests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertTrue(any(row["username"] == "reception.user" for row in users["data"]))
 
+    def test_admission_audit_uses_authenticated_actor(self):
+        token = self.login("admin.user", "administrator-password-123")
+        status, patient = self.request("/api/patients", "POST", {
+            "patient_no": "AUDIT-1", "full_name": "Audit Test Patient",
+            "created_at": "2026-01-01T08:00:00Z"
+        }, token)
+        self.assertEqual(status, 201)
+        status, bed = self.request("/api/beds", "POST", {
+            "ward": "General", "bed_no": "A-01", "at": "2026-01-01T08:00:00Z"
+        }, token)
+        self.assertEqual(status, 201)
+        status, _ = self.request("/api/admissions", "POST", {
+            "patient_id": patient["id"], "bed_id": bed["id"],
+            "admitted_at": "2026-01-01T09:00:00Z"
+        }, token)
+        self.assertEqual(status, 201)
+        with self.db.connect() as conn:
+            row = conn.execute(
+                "SELECT actor FROM audit_log WHERE action='patient.admitted' ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+        self.assertEqual(row["actor"], "admin.user")
+
     def test_logout_revokes_session(self):
         token = self.login("doctor.user", "doctor-password-1234")
         status, _ = self.request("/api/auth/logout", "POST", {}, token)
