@@ -1,4 +1,5 @@
 """Integration tests for append-only audit record persistence."""
+import sqlite3
 import uuid
 
 import pytest
@@ -126,7 +127,7 @@ def test_duplicate_audit_record_id_preserves_original_record_without_second_writ
         (str(record_id),),
     ).fetchone())
 
-    with pytest.raises(Exception):
+    with pytest.raises(sqlite3.IntegrityError):
         app.append(
             db, event_type="operation.approved", actor_context_ref="actor-context:2",
             target_ref="subject:replacement", result_status="recorded",
