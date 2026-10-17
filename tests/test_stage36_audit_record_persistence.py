@@ -143,3 +143,37 @@ def test_duplicate_audit_record_id_preserves_original_record_without_second_writ
     assert after == before
     assert db.execute("SELECT COUNT(*) FROM audit_records").fetchone()[0] == 1
     db.close()
+
+
+@pytest.mark.parametrize("mutation", ["update", "delete"])
+def test_audit_records_reject_mutation_and_preserve_original_history(mutation):
+    db = connect_database()
+    record_id = uuid.uuid4()
+    AuditRecordApplication().append(
+        db, event_type="operation.submitted", actor_context_ref="actor-context:1",
+        target_ref="subject:original", result_status="recorded",
+        audit_record_id=record_id, now=STAMP,
+    )
+
+    def snapshot():
+        return tuple(db.execute(
+            "SELECT audit_record_id,event_type,actor_context_ref,target_ref,occurred_at,"
+            "result_status,operation_ref,correlation_ref,provenance_id,created_at "
+            "FROM audit_records WHERE audit_record_id=?", (str(record_id),),
+        ).fetchone())
+
+    before = snapshot()
+    with pytest.raises(sqlite3.IntegrityError, match="append-only"):
+        if mutation == "update":
+            db.execute(
+                "UPDATE audit_records SET target_ref=? WHERE audit_record_id=?",
+                ("subject:replacement", str(record_id)),
+            )
+        else:
+            db.execute(
+                "DELETE FROM audit_records WHERE audit_record_id=?", (str(record_id),)
+            )
+
+    assert snapshot() == before
+    assert db.execute("SELECT COUNT(*) FROM audit_records").fetchone()[0] == 1
+    db.close()
