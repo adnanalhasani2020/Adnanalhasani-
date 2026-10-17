@@ -83,14 +83,20 @@ def order_lab_test(db: HospitalDB, *, patient_id: int, test_name: str,
 
 def update_lab_status(db: HospitalDB, *, order_id: int, status: str,
                       actor: str, at: str, result: str | None = None) -> None:
-    allowed = {"collected", "processing", "resulted", "cancelled"}
-    if status not in allowed:
+    transitions = {
+        "ordered": {"collected", "cancelled"},
+        "collected": {"processing", "cancelled"},
+        "processing": {"resulted", "cancelled"},
+    }
+    if status not in {"collected", "processing", "resulted", "cancelled"}:
         raise HospitalError("invalid lab status")
     with db.connect() as conn:
         conn.execute("BEGIN IMMEDIATE")
         row = conn.execute("SELECT status FROM lab_orders WHERE id=?", (order_id,)).fetchone()
-        if row is None or row["status"] in ("resulted", "cancelled"):
+        if row is None:
             raise HospitalError("active lab order not found")
+        if status not in transitions.get(row["status"], set()):
+            raise HospitalError(f"invalid lab status transition: {row['status']} -> {status}")
         if status == "resulted" and (result is None or not result.strip()):
             raise HospitalError("a result is required to mark the test resulted")
         conn.execute("""UPDATE lab_orders SET status=?,result=?,resulted_at=?

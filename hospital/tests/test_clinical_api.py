@@ -59,6 +59,12 @@ class ClinicalAPIWorkflowTests(unittest.TestCase):
             "patient_id": self.patient, "doctor_id": self.doctor,
             "encounter_id": encounter, "test_name": "CBC", "ordered_at": "2026-01-02T08:01:00"
         })["id"]
+        for lab_status, at in (("collected", "2026-01-02T08:10:00"),
+                               ("processing", "2026-01-02T08:30:00")):
+            status, data = self.call(f"/api/lab-orders/{order}/status", {
+                "status": lab_status, "at": at
+            })
+            self.assertEqual(status, 200, data)
         status, data = self.call(f"/api/lab-orders/{order}/status", {
             "status": "resulted", "at": "2026-01-02T09:00:00", "result": "Test result"
         })
