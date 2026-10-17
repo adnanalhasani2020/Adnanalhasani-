@@ -153,3 +153,21 @@ def test_preview_includes_activity_specific_guidance_without_enabling_policies()
     assert "الأولوية المقترحة (إرشادية فقط)" in html
     assert "لا تفعّل سياسات جديدة قبل اعتمادها" in html
     assert "لم يتم اعتماد أو تفعيل أي سياسة" in html
+
+def test_activity_selection_updates_live_advisory_guidance_before_preview():
+    html = PROTOTYPE.read_text(encoding="utf-8")
+
+    assert 'id="activity-guidance" class="summary" role="status" aria-live="polite" hidden' in html
+    assert "function updateActivityGuidance()" in html
+    assert "activityField.addEventListener('change',updateActivityGuidance)" in html
+    assert "توصية إرشادية غير ملزمة:" in html
+    assert "لا يفعّل الاختيار أي سياسة." in html
+
+
+def test_reset_clears_live_activity_guidance():
+    html = PROTOTYPE.read_text(encoding="utf-8")
+    reset_handler = html.split("document.getElementById('reset').addEventListener", 1)[1]
+    reset_handler = reset_handler.split("function restoreSavedValue", 1)[0]
+
+    assert "guidance.hidden=true" in reset_handler
+    assert "guidance.textContent=''" in reset_handler
