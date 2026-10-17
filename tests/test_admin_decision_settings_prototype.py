@@ -85,8 +85,8 @@ def test_form_controls_have_explicit_labels_and_accessible_status_announcements(
     # Every form control should be associated with a visible label by ID.
     import re
 
-    controls = re.findall(r'<(?:input|select|textarea)\\b[^>]*\\bid="([^"]+)"', html)
-    labels = re.findall(r'<label\\b[^>]*\\bfor="([^"]+)"', html)
+    controls = re.findall(r'<(?:input|select|textarea)\b[^>]*\bid="([^"]+)"', html)
+    labels = re.findall(r'<label\b[^>]*\bfor="([^"]+)"', html)
     assert controls
     assert set(controls).issubset(set(labels))
 
