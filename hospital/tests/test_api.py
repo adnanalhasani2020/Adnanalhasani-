@@ -164,7 +164,7 @@ class HospitalAPITests(unittest.TestCase):
             full_name="Encounter List Patient", created_at="2026-01-01T08:00:00", actor="test")
         from hospital.workflows import create_encounter
         encounter_id = create_encounter(self.db, patient_id=patient_id,
-            doctor_id=None, opened_at="2026-01-01T09:00:00")
+            doctor_id=None, opened_at="2026-01-01T09:00:00", actor="test")
         status, payload = self.request("/api/encounters?search=Encounter%20List&limit=10&offset=0")
         self.assertEqual(status, 200)
         self.assertEqual(payload["pagination"]["count"], 1)
