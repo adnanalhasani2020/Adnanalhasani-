@@ -25,7 +25,7 @@ ROLE_PERMISSIONS = {
         "dashboard:read", "patients:read", "doctors:read", "appointments:read",
         "encounters:read", "encounters:write", "diagnoses:read", "diagnoses:write", "allergies:read", "allergies:write", "vitals:read", "vitals:write", "nursing:read", "nursing:write", "lab:read", "lab:order",
         "medicines:read", "prescriptions:read", "prescriptions:write",
-        "beds:read", "admissions:read", "inventory:read", "inventory:write", "suppliers:read", "suppliers:write", "purchases:read", "purchases:write", "purchases:receive", "reports:read", "invoices:read",
+        "beds:read", "admissions:read", "invoices:read",
     }),
     "nurse": frozenset({
         "dashboard:read", "patients:read", "appointments:read", "encounters:read",
@@ -39,7 +39,7 @@ ROLE_PERMISSIONS = {
     "lab": frozenset({"dashboard:read", "patients:read", "encounters:read", "lab:read", "lab:write"}),
     "pharmacist": frozenset({
         "dashboard:read", "patients:read", "medicines:read", "medicines:write",
-        "prescriptions:read", "prescriptions:dispense", "inventory:read", "purchases:read",
+        "prescriptions:read", "prescriptions:dispense", "inventory:read", "purchases:read", "purchases:receive",
     }),
     "accountant": frozenset({
         "dashboard:read", "patients:read", "invoices:read", "invoices:write", "payments:write", "reports:read",
