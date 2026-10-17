@@ -15,7 +15,8 @@ from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 from .core import HospitalDB, HospitalError
-from .security import (AuthStore, AuthenticationError, AuthorizationError,\n                       permission_for_route, require_permission)
+from .security import (AuthStore, AuthenticationError, AuthorizationError,
+                       permission_for_route, require_permission)
 from .workflows import (
     add_medicine, close_encounter, create_bed, create_encounter, dispense_prescription,
     order_lab_test, prescribe_medicine, update_lab_status,
