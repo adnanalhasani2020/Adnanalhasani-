@@ -25,6 +25,8 @@ def create_encounter(db: HospitalDB, *, patient_id: int, doctor_id: int | None,
                                 (appointment_id,)).fetchone()
             if appt is None or appt["patient_id"] != patient_id or appt["status"] not in ("scheduled", "checked_in"):
                 raise HospitalError("appointment is not eligible for this encounter")
+            if doctor_id is not None and appt["doctor_id"] != doctor_id:
+                raise HospitalError("encounter doctor must match the appointment doctor")
         cur = conn.execute("""INSERT INTO encounters
             (patient_id,doctor_id,appointment_id,opened_at,chief_complaint)
             VALUES(?,?,?,?,?)""", (patient_id, doctor_id, appointment_id, opened_at, chief_complaint))
