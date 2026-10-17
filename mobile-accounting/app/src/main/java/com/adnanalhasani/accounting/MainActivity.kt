@@ -49,6 +49,8 @@ class MainActivity : Activity() {
         val url=field("رابط الخادم HTTPS",apiUrl);val user=field("اسم المستخدم","admin");val pass=field("كلمة المرور")
         pass.inputType=129
         body.addView(label("رابط الخادم"));body.addView(url);body.addView(label("اسم المستخدم"));body.addView(user);body.addView(label("كلمة المرور"));body.addView(pass)
+        body.addView(btn("تجربة البرنامج") { demoMode() })
+        body.addView(label("استكشف واجهة تجريبية دون حساب أو اتصال بالخادم. البيانات المعروضة أمثلة فقط."))
         body.addView(btn("تسجيل الدخول") {
             apiUrl=url.text.toString().trim().trimEnd('/')
             if(!apiUrl.startsWith("https://")){status.text="يجب استخدام رابط HTTPS آمن.";return@btn}
@@ -60,6 +62,36 @@ class MainActivity : Activity() {
                 runOnUiThread{dashboard()}
             }catch(e:Exception){runOnUiThread{status.text="تعذر الدخول: "+(e.message?: "تحقق من البيانات")}} }
         })
+    }
+    private fun demoMode() {
+        screen("تجربة البرنامج — بيانات وهمية")
+        body.addView(label("أهلاً بك في النسخة التجريبية",21f,true))
+        body.addView(label("هذه أمثلة توضيحية فقط. لا تُحفظ على الخادم ولا تمثل حسابات حقيقية."))
+        body.addView(label("ملخص الحسابات",19f,true))
+        body.addView(label("عدد الحسابات: 3"))
+        body.addView(label("إجمالي الدخل: 125,000 ر.ي"))
+        body.addView(label("إجمالي المصروفات: 42,500 ر.ي"))
+        body.addView(label("صافي الحركة: 82,500 ر.ي",20f,true))
+        body.addView(label("آخر الحركات",19f,true))
+        body.addView(label("دخل — 75,000 ر.ي | مبيعات نقدية — مثال"))
+        body.addView(label("مصروف — 12,500 ر.ي | مصاريف تشغيل — مثال"))
+        body.addView(btn("الحسابات والأرصدة") {
+            screen("الحسابات — بيانات تجريبية")
+            body.addView(label("الصندوق الرئيسي — 80,000 ر.ي"))
+            body.addView(label("حساب العملاء — 35,000 ر.ي"))
+            body.addView(label("حساب المصروفات — 10,000 ر.ي"))
+            body.addView(btn("رجوع للتجربة") { demoMode() })
+        })
+        body.addView(btn("الفواتير والدفعات") {
+            screen("الفواتير والدفعات — تجربة")
+            body.addView(label("فاتورة تجريبية رقم DEMO-001"))
+            body.addView(label("العميل: عميل افتراضي"))
+            body.addView(label("المبلغ: 25,000 ر.ي"))
+            body.addView(label("دفعة مستلمة: 10,000 ر.ي"))
+            body.addView(btn("رجوع للتجربة") { demoMode() })
+        })
+        body.addView(btn("العودة لتسجيل الدخول") { login() })
+        status.text = "وضع التجربة — لا توجد بيانات حقيقية"
     }
     private fun call(path:String,method:String="GET",payload:String?=null,auth:String?=token,contentType:String="application/json"):String {
         val c=URL(apiUrl+path).openConnection() as HttpURLConnection
