@@ -301,3 +301,25 @@ def test_opening_stock_rejects_timestamp_outside_offering_validity_window():
     assert db.execute("SELECT COUNT(*) FROM inventory_positions").fetchone()[0] == 0
     assert db.execute("SELECT COUNT(*) FROM inventory_opening_stock").fetchone()[0] == 0
     db.close()
+
+def test_opening_stock_audit_failure_rolls_back_position_and_history():
+    """Opening snapshot, lifecycle history, and audit row must commit or roll back together."""
+    db = connect_database()
+    activity_id, product_id = seed(db)
+    db.execute(
+        "CREATE TRIGGER reject_opening_stock_audit "
+        "BEFORE INSERT ON inventory_opening_stock "
+        "BEGIN SELECT RAISE(ABORT, 'opening stock audit rejected'); END"
+    )
+
+    with pytest.raises(Exception, match="opening stock audit rejected"):
+        create_opening(db, activity_id, product_id)
+
+    assert db.execute("SELECT COUNT(*) FROM inventory_positions").fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM inventory_opening_stock").fetchone()[0] == 0
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE owner_domain='inventory'"
+    ).fetchone()[0] == 0
+    assert db.execute("PRAGMA foreign_key_check").fetchall() == []
+    db.close()
+
