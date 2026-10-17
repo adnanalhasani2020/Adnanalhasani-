@@ -110,7 +110,11 @@ def test_local_storage_failures_are_caught_and_reported_without_crashing_the_pro
     html = PROTOTYPE.read_text(encoding="utf-8")
 
     # Browser privacy settings, quota limits, or disabled storage can throw.
-    assert "try{localStorage.setItem('hospital-admin-decision-prototype'" in html
+    save_handler = html.split("document.getElementById('save').addEventListener", 1)[1]
+    save_handler = save_handler.split("document.getElementById('reset').addEventListener", 1)[0]
+    assert "try{" in save_handler
+    assert "localStorage.setItem('hospital-admin-decision-prototype',JSON.stringify(safeSettings))" in save_handler
+    assert "catch(error)" in save_handler
     assert "تعذر الحفظ المحلي" in html
     assert "try{localStorage.removeItem('hospital-admin-decision-prototype')" in html
     assert "تعذر حذف النسخة المحلية المحفوظة" in html
