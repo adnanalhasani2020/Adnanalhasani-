@@ -50,8 +50,26 @@ def close_encounter(db: HospitalDB, *, encounter_id: int, closed_at: str,
             raise HospitalError("open encounter not found")
         if closed_at < row["opened_at"]:
             raise HospitalError("close time cannot precede open time")
+        final_diagnosis = diagnosis.strip()
         conn.execute("""UPDATE encounters SET closed_at=?,diagnosis=?,clinical_notes=?,status='closed'
-            WHERE id=?""", (closed_at, diagnosis.strip(), clinical_notes, encounter_id))
+            WHERE id=?""", (closed_at, final_diagnosis, clinical_notes, encounter_id))
+        # Keep the encounter summary and longitudinal diagnosis ledger in sync.
+        # Do not duplicate an identical final diagnosis if it was entered beforehand.
+        existing = conn.execute(
+            """SELECT id FROM encounter_diagnoses
+               WHERE encounter_id=? AND diagnosis_type='final' AND description=? LIMIT 1""",
+            (encounter_id, final_diagnosis),
+        ).fetchone()
+        if existing is None:
+            cur = conn.execute(
+                """INSERT INTO encounter_diagnoses
+                   (encounter_id,code,description,diagnosis_type,recorded_by,recorded_at)
+                   VALUES(?, '', ?, 'final', ?, ?)""",
+                (encounter_id, final_diagnosis, actor, closed_at),
+            )
+            db._audit(conn, actor, "diagnosis.recorded", "encounter_diagnosis", cur.lastrowid,
+                      closed_at, {"encounter_id": encounter_id, "diagnosis_type": "final",
+                                  "source": "encounter.close"})
         if row["appointment_id"] is not None:
             conn.execute("UPDATE appointments SET status='completed' WHERE id=?",
                          (row["appointment_id"],))
