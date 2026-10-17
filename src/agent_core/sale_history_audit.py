@@ -37,7 +37,7 @@ class SaleHistoryIntegrityAuditor:
         persisted_id, state, version = sale
         rows = connection.execute(
             "SELECT prior_version_ref,current_version_ref FROM domain_history "
-            "WHERE target_ref=? AND owner_domain='Commerce' ORDER BY rowid",
+            "WHERE target_ref=? AND owner_domain='commerce' ORDER BY rowid",
             (persisted_id,),
         ).fetchall()
 
