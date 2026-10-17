@@ -468,15 +468,13 @@ class MainActivity : Activity() {
                 val backup = JSONObject()
                 for (table in listOf("accounts", "transactions", "invoices", "payments")) backup.put(table, localDb.readEntities(table))
                 for (type in listOf("customers", "suppliers", "products", "stock", "purchases", "sales")) backup.put(type, localDb.readCatalogRecords(type))
-                val file = java.io.File(cacheDir, "accounting-backup-" + System.currentTimeMillis() + ".json")
-                file.writeText(backup.toString(2), Charsets.UTF_8)
-                val uri = androidx.core.content.FileProvider.getUriForFile(this, packageName + ".fileprovider", file)
                 val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                    type = "application/json"; putExtra(android.content.Intent.EXTRA_STREAM, uri)
-                    addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    type = "text/plain"
+                    putExtra(android.content.Intent.EXTRA_SUBJECT, "نسخة احتياطية للمحاسبة")
+                    putExtra(android.content.Intent.EXTRA_TEXT, backup.toString(2))
                 }
-                startActivity(android.content.Intent.createChooser(intent, "حفظ النسخة الاحتياطية"))
-                status.text = "تم تجهيز النسخة الاحتياطية"
+                startActivity(android.content.Intent.createChooser(intent, "مشاركة النسخة الاحتياطية"))
+                status.text = "تم تجهيز بيانات النسخة للمشاركة؛ احفظها في مكان آمن"
             } catch (e: Exception) {
                 status.text = "تعذر إنشاء النسخة: " + (e.message ?: "")
             }
