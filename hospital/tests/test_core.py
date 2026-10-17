@@ -89,6 +89,39 @@ class HospitalCoreTests(unittest.TestCase):
                     (second_patient, bed_id, "2026-01-02T11:00:00"),
                 )
 
+    def test_database_requires_discharge_timestamp_to_match_admission_status(self):
+        import sqlite3
+
+        with self.db.connect() as conn:
+            conn.execute("INSERT INTO beds(ward,bed_no) VALUES('A','01')")
+            bed_id = conn.execute("SELECT id FROM beds").fetchone()["id"]
+            with self.assertRaisesRegex(sqlite3.IntegrityError, "status and discharge timestamp"):
+                conn.execute(
+                    "INSERT INTO admissions(patient_id,bed_id,admitted_at,status,discharged_at) "
+                    "VALUES(?,?,?,'admitted',?)",
+                    (self.patient, bed_id, "2026-01-02T09:00:00", "2026-01-03T09:00:00"),
+                )
+            with self.assertRaisesRegex(sqlite3.IntegrityError, "status and discharge timestamp"):
+                conn.execute(
+                    "INSERT INTO admissions(patient_id,bed_id,admitted_at,status) "
+                    "VALUES(?,?,?,'discharged')",
+                    (self.patient, bed_id, "2026-01-02T09:00:00"),
+                )
+            conn.execute(
+                "INSERT INTO admissions(patient_id,bed_id,admitted_at) VALUES(?,?,?)",
+                (self.patient, bed_id, "2026-01-02T09:00:00"),
+            )
+            admission_id = conn.execute("SELECT id FROM admissions").fetchone()["id"]
+            with self.assertRaisesRegex(sqlite3.IntegrityError, "status and discharge timestamp"):
+                conn.execute(
+                    "UPDATE admissions SET status='discharged' WHERE id=?",
+                    (admission_id,),
+                )
+            conn.execute(
+                "UPDATE admissions SET status='discharged',discharged_at=? WHERE id=?",
+                ("2026-01-03T09:00:00", admission_id),
+            )
+
     def test_booking_integrity_triggers_exist_after_reopening_database(self):
         self.db = HospitalDB(self.db.path)
         with self.db.connect() as conn:

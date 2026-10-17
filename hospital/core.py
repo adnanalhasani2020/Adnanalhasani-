@@ -107,6 +107,21 @@ WHEN NEW.status='admitted'
 BEGIN
   SELECT RAISE(ABORT, 'bed is already occupied');
 END;
+-- Keep admission status and discharge timestamp consistent for all writers.
+CREATE TRIGGER IF NOT EXISTS admissions_state_consistent_insert
+BEFORE INSERT ON admissions
+WHEN (NEW.status='admitted' AND NEW.discharged_at IS NOT NULL)
+  OR (NEW.status='discharged' AND NEW.discharged_at IS NULL)
+BEGIN
+  SELECT RAISE(ABORT, 'admission status and discharge timestamp are inconsistent');
+END;
+CREATE TRIGGER IF NOT EXISTS admissions_state_consistent_update
+BEFORE UPDATE OF status, discharged_at ON admissions
+WHEN (NEW.status='admitted' AND NEW.discharged_at IS NOT NULL)
+  OR (NEW.status='discharged' AND NEW.discharged_at IS NULL)
+BEGIN
+  SELECT RAISE(ABORT, 'admission status and discharge timestamp are inconsistent');
+END;
 CREATE TABLE IF NOT EXISTS lab_orders (
   id INTEGER PRIMARY KEY, patient_id INTEGER NOT NULL REFERENCES patients(id),
   encounter_id INTEGER REFERENCES encounters(id), ordered_by INTEGER REFERENCES doctors(id),
