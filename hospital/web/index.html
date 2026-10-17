@@ -62,6 +62,31 @@ small{color:#5d7482}form{display:grid;gap:10px}footer{text-align:center;color:#6
 <div class="row"><input name="method" required placeholder="طريقة الدفع: نقدًا / تحويل"><input name="reference" placeholder="مرجع الإيصال (اختياري)"></div>
 <button>تسجيل الدفعة</button><div class="status" role="status"></div>
 </form></section>
+<section class="panel"><h2>طلب فحص مختبري</h2><form id="labForm">
+<div class="row"><input name="patient_id" required type="number" min="1" placeholder="رقم المريض الداخلي"><input name="test_name" required placeholder="اسم الفحص"></div>
+<div class="row"><input name="doctor_id" type="number" min="1" placeholder="رقم الطبيب (اختياري)"><input name="encounter_id" type="number" min="1" placeholder="رقم الزيارة المفتوحة (اختياري)"></div>
+<button>إرسال طلب المختبر</button><div class="status" role="status"></div>
+</form></section>
+<section class="panel"><h2>إضافة دواء للمخزون</h2><form id="medicineForm">
+<div class="row"><input name="sku" required placeholder="رمز الدواء"><input name="name" required placeholder="اسم الدواء"></div>
+<div class="row"><label>الكمية الابتدائية<input name="quantity" required type="number" min="0" step="1"></label><label>حد إعادة الطلب<input name="reorder_level" required type="number" min="0" step="1"></label><input name="unit" value="وحدة" required aria-label="وحدة القياس"></div>
+<button>إضافة الدواء</button><div class="status" role="status"></div>
+</form></section>
+<section class="panel"><h2>إنشاء وصفة دوائية</h2><form id="prescriptionForm">
+<div class="row"><input name="patient_id" required type="number" min="1" placeholder="رقم المريض الداخلي"><input name="medicine_id" required type="number" min="1" placeholder="رقم الدواء الداخلي"></div>
+<div class="row"><input name="dose" required placeholder="الجرعة"><input name="frequency" required placeholder="التكرار"><input name="duration" required placeholder="المدة"></div>
+<div class="row"><label>الكمية المصروفة لاحقًا<input name="quantity" required type="number" min="1" step="1"></label><input name="encounter_id" type="number" min="1" placeholder="رقم الزيارة المفتوحة (اختياري)"></div>
+<button>إنشاء الوصفة</button><div class="status" role="status"></div>
+</form></section>
+<section class="panel"><h2>صرف وصفة</h2><form id="dispenseForm">
+<input name="prescription_id" required type="number" min="1" placeholder="رقم الوصفة الداخلي">
+<button>صرف الدواء وخصم المخزون</button><div class="status" role="status"></div>
+</form></section>
+<section class="panel"><h2>إدارة الأسرة والتنويم</h2>
+<form id="bedForm"><h3>إضافة سرير</h3><div class="row"><input name="ward" required placeholder="القسم / العنبر"><input name="bed_no" required placeholder="رقم السرير"></div><button>إضافة السرير</button><div class="status" role="status"></div></form>
+<hr style="border:0;border-top:1px solid #dbe5eb;margin:18px 0">
+<form id="admissionForm"><h3>تنويم مريض</h3><div class="row"><input name="patient_id" required type="number" min="1" placeholder="رقم المريض الداخلي"><input name="bed_id" required type="number" min="1" placeholder="رقم السرير الداخلي"></div><input name="reason" placeholder="سبب التنويم (اختياري)"><button>تسجيل التنويم</button><div class="status" role="status"></div></form>
+</section>
 </main>
 <footer>واجهة أولية — جميع الأوقات تُرسل بتنسيق ISO-8601 المحلي.</footer>
 <script>
