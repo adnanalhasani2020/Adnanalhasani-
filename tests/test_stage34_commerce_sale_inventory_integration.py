@@ -450,3 +450,60 @@ def test_sale_creation_keeps_authorization_validity_atomic_with_persistence(tmp_
     ).fetchone()[0] == 1
     assert db.execute("PRAGMA foreign_key_check").fetchall() == []
     db.close()
+
+def test_commerce_inventory_read_reports_unknown_and_ambiguous_without_mutation(tmp_path):
+    """Inventory status is explicit in the commerce graph and reads remain side-effect free."""
+    db = connect_database(tmp_path / "commerce-inventory-status.sqlite")
+    actor_id = _id()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,?,?,?)",
+        (actor_id, "active", STAMP, STAMP),
+    )
+    activity_id = _activity(db, actor_id)
+    product = ProductApplication().create_product(
+        db, "Status-check product",
+        actor_context_ref="inventory-status-test", now=STAMP,
+    )
+    product_id = str(product.product.id)
+    ProductApplication().transition_product(
+        db, product_id, "activate", expected_version=1,
+        actor_context_ref="inventory-status-test", now=STAMP,
+    )
+    offering = OfferingApplication().create_offering(
+        db, product_id=product_id, activity_id=activity_id,
+        effective_from=STAMP, actor_context_ref="inventory-status-test", now=STAMP,
+    )
+    OfferingApplication().transition_offering(
+        db, offering.offering.id, "activate", expected_version=1,
+        actor_context_ref="inventory-status-test", now=STAMP,
+    )
+    offering_id = str(offering.offering.id)
+
+    first_position = _position(
+        db, activity_id=activity_id, product_id=product_id,
+        offering_id=offering_id, quantity=None, observed_at="2026-10-12T11:00:00Z",
+    )
+    db.commit()
+    inventory = InventoryApplication()
+    before_history = db.execute("SELECT COUNT(*) FROM domain_history").fetchone()[0]
+    unknown = inventory.read_offering_quantity(db, offering_id, "store-A", as_of=NOW)
+    assert unknown.status is InventoryStatus.UNKNOWN_QUANTITY
+    assert unknown.quantity_minor is None
+    assert unknown.inventory_position_id == first_position
+
+    # Same latest observation time is ambiguous even if the values disagree.
+    second_position = _position(
+        db, activity_id=activity_id, product_id=product_id,
+        offering_id=offering_id, quantity=12, observed_at="2026-10-12T11:00:00Z",
+    )
+    db.commit()
+    ambiguous = inventory.read_offering_quantity(db, offering_id, "store-A", as_of=NOW)
+    assert ambiguous.status is InventoryStatus.AMBIGUOUS
+    assert ambiguous.quantity_minor is None
+    assert ambiguous.inventory_position_id is None
+    assert second_position != first_position
+    assert db.execute("SELECT COUNT(*) FROM domain_history").fetchone()[0] == before_history
+    assert db.execute("SELECT COUNT(*) FROM sales").fetchone()[0] == 0
+
+    db.close()
+
