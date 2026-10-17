@@ -32,7 +32,7 @@ def test_manager_activity_choices_do_not_silently_activate_unapproved_policies()
     ):
         assert activity in html
 
-    assert "لا يفعّل هذا الاختيار" in html
+    assert "لا يفعّل وظائف سريرية" in html
     assert "لا يجوز للاختيار" in html or "لا تغيّر السياسات" in html
     assert "معاينة غير معتمدة" in html
     assert "لم يتم اعتماد أو تفعيل أي سياسة" in html
@@ -52,4 +52,4 @@ def test_local_storage_is_described_as_browser_only_not_server_persistence():
 
     assert "localStorage" in html
     assert "لا يوجد حفظ على الخادم" in html
-    assert "لا تتصل بالخدمات الخلفية" in html
+    assert "غير متصل بالخدمات الخلفية" in html
