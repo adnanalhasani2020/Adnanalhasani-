@@ -82,6 +82,12 @@ class UnifiedClinicalWorkflowTests(unittest.TestCase):
         self.assertEqual(report["data"]["clinical"]["active_allergies"], 1)
         self.assertEqual(report["data"]["clinical"]["vital_observations"], 1)
         self.assertEqual(report["data"]["clinical"]["nursing_notes"], 1)
+        status, medical_record = self.call(f"/api/medical-record?patient_id={self.patient}", method="GET")
+        self.assertEqual(status, 200, medical_record)
+        self.assertEqual(medical_record["data"]["patient"]["id"], self.patient)
+        self.assertEqual(medical_record["data"]["diagnoses"][0]["description"], "Test diagnosis")
+        self.assertEqual(medical_record["data"]["vitals"][0]["pulse_bpm"], 75)
+        self.assertEqual(medical_record["data"]["nursing_notes"][0]["note"], "Routine observation")
         with self.db.connect() as conn:
             encounter = conn.execute("SELECT diagnosis FROM encounters WHERE id=?", (self.encounter,)).fetchone()
         self.assertEqual(encounter["diagnosis"], "Test diagnosis")
