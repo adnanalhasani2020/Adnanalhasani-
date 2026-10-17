@@ -138,6 +138,36 @@ class LocalDatabase(context: Context) : SQLiteOpenHelper(context, "accounting_lo
 
 
     @Synchronized
+    fun saveCatalogRecord(type: String, payload: JSONObject): String {
+        require(type in setOf("customers", "suppliers", "products", "stock", "purchases", "sales"))
+        val id = payload.optString("local_id").ifBlank { UUID.randomUUID().toString() }
+        val now = System.currentTimeMillis()
+        val normalized = JSONObject(payload.toString()).put("local_id", id).put("record_type", type).put("updated_at", now)
+        val values = ContentValues().apply {
+            put("local_id", id); put("record_type", type); put("payload", normalized.toString())
+            put("created_at", payload.optLong("created_at", now)); put("updated_at", now)
+        }
+        writableDatabase.insertWithOnConflict("catalog_records", null, values, SQLiteDatabase.CONFLICT_REPLACE)
+        return id
+    }
+
+    @Synchronized
+    fun readCatalogRecords(type: String): JSONArray {
+        require(type in setOf("customers", "suppliers", "products", "stock", "purchases", "sales"))
+        val result = JSONArray()
+        readableDatabase.rawQuery("SELECT payload FROM catalog_records WHERE record_type=? ORDER BY updated_at DESC", arrayOf(type)).use { c ->
+            while (c.moveToNext()) result.put(JSONObject(c.getString(0)))
+        }
+        return result
+    }
+
+    @Synchronized
+    fun deleteCatalogRecord(type: String, localId: String): Boolean {
+        require(type in setOf("customers", "suppliers", "products", "stock", "purchases", "sales"))
+        return writableDatabase.delete("catalog_records", "record_type=? AND local_id=?", arrayOf(type, localId)) > 0
+    }
+
+    @Synchronized
     fun hasLocalData(): Boolean {
         readableDatabase.rawQuery(
             "SELECT (SELECT COUNT(*) FROM accounts) + (SELECT COUNT(*) FROM transactions) + (SELECT COUNT(*) FROM invoices) + (SELECT COUNT(*) FROM payments)",
