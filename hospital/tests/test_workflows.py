@@ -45,6 +45,25 @@ class HospitalWorkflowTests(unittest.TestCase):
             row = conn.execute("SELECT status,result FROM lab_orders WHERE id=?", (order,)).fetchone()
         self.assertEqual((row["status"], row["result"]), ("resulted", "Example result"))
 
+    def test_lab_status_transitions_must_follow_workflow_order(self):
+        order = order_lab_test(self.db, patient_id=self.patient, test_name="CBC",
+            ordered_at="2026-01-02T08:00:00", actor="doctor", doctor_id=self.doctor)
+        with self.assertRaisesRegex(HospitalError, "invalid lab status transition"):
+            update_lab_status(self.db, order_id=order, status="resulted", actor="lab",
+                at="2026-01-02T08:30:00", result="Premature result")
+        update_lab_status(self.db, order_id=order, status="collected", actor="lab",
+            at="2026-01-02T08:10:00")
+        with self.assertRaisesRegex(HospitalError, "invalid lab status transition"):
+            update_lab_status(self.db, order_id=order, status="collected", actor="lab",
+                at="2026-01-02T08:15:00")
+        update_lab_status(self.db, order_id=order, status="processing", actor="lab",
+            at="2026-01-02T08:20:00")
+        update_lab_status(self.db, order_id=order, status="resulted", actor="lab",
+            at="2026-01-02T08:30:00", result="Example result")
+        with self.assertRaisesRegex(HospitalError, "invalid lab status transition"):
+            update_lab_status(self.db, order_id=order, status="cancelled", actor="lab",
+                at="2026-01-02T08:40:00")
+
     def test_dispensing_deducts_stock_once_and_rejects_insufficient_stock(self):
         medicine = add_medicine(self.db, sku="MED-1", name="Test medicine", quantity=5,
             reorder_level=1, actor="pharmacist", at="2026-01-01T08:00:00")
