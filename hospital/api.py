@@ -145,7 +145,7 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                     return
                 with database.connect() as conn:
                     patient = conn.execute(
-                        "SELECT id,patient_no,full_name,date_of_birth,sex,created_at FROM patients WHERE id=?",
+                        "SELECT id,patient_no,full_name,date_of_birth,sex,allergies AS legacy_allergies,created_at FROM patients WHERE id=?",
                         (patient_id,)).fetchone()
                     if patient is None:
                         self._send(404, {"error": "patient_not_found"})
