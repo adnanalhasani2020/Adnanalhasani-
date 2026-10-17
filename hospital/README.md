@@ -26,7 +26,35 @@ export HOSPITAL_DB_PATH="hospital.sqlite3"
 python -m hospital.api
 ```
 
-Open `http://127.0.0.1:8080`. The Arabic interface uses the same origin as the API. Enter the shared token in the UI to call authenticated endpoints.
+Open `http://127.0.0.1:8080`. The Arabic interface uses the same origin as the API. Enter the shared token in the UI to call authenticated endpoints. Keep the token private and use a separate random token for each development environment. The API binds to `127.0.0.1` by default; do not change this to `0.0.0.0` on an untrusted network.
+
+### Database backup and restore
+
+The database contains sensitive clinical and financial records. Keep backups access-restricted and outside public/web-served directories. The examples below assume the service uses `hospital.sqlite3` in the current directory and that the `sqlite3` CLI is installed.
+
+Create a consistent SQLite backup (this works while the service is running):
+
+```bash
+umask 077
+sqlite3 hospital.sqlite3 ".backup 'hospital-backup-$(date +%Y%m%d-%H%M%S).sqlite3'"
+```
+
+Check a backup before relying on it:
+
+```bash
+sqlite3 hospital-backup-YYYYMMDD-HHMMSS.sqlite3 'PRAGMA integrity_check;'
+```
+
+The expected result is `ok`. Test restore procedures regularly in a separate, non-production directory. To restore, first stop the API, preserve the current database, then replace it with a verified backup; do not overwrite a live database:
+
+```bash
+cp -p hospital.sqlite3 hospital.sqlite3.before-restore
+cp -p hospital-backup-YYYYMMDD-HHMMSS.sqlite3 hospital.sqlite3
+chmod 600 hospital.sqlite3
+sqlite3 hospital.sqlite3 'PRAGMA integrity_check;'
+```
+
+Use your actual backup filename in place of the example. Store a second encrypted copy in an access-controlled location if required by your recovery plan; never commit database files or backups to Git.
 
 ### API routes
 - `GET /health`, `GET /api/dashboard`
