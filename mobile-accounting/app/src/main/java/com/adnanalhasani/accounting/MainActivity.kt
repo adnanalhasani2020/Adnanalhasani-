@@ -487,6 +487,9 @@ class MainActivity : Activity() {
                     if (query.isNotBlank() && !text.contains(query, true)) continue
                     shown++
                     body.addView(label(text.ifBlank { "سجل بدون تفاصيل" }, 16f, true))
+                    if (type in setOf("customers", "suppliers", "products")) {
+                        body.addView(btn("تعديل هذا السجل") { catalogForm(type, title, fields, row) })
+                    }
                     body.addView(btn("حذف هذا السجل") {
                         localDb.deleteCatalogRecord(type, row.optString("local_id"))
                         renderCatalog(type, title, fields, query)
@@ -498,10 +501,11 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun catalogForm(type: String, title: String, fields: List<String>) {
-        screen("إضافة — " + title)
+    private fun catalogForm(type: String, title: String, fields: List<String>, existing: JSONObject? = null) {
+        val editing = existing != null
+        screen((if (editing) "تعديل — " else "إضافة — ") + title)
         val inputs = fields.map { f ->
-            val input = field(f)
+            val input = field(f, existing?.optString(f, "") ?: "")
             body.addView(label(f)); body.addView(input); input
         }
         body.addView(btn("حفظ السجل") {
@@ -511,8 +515,16 @@ class MainActivity : Activity() {
             }
             val json = JSONObject()
             values.forEach { (k, v) -> json.put(k, v) }
+            if (existing != null) {
+                json.put("local_id", existing.optString("local_id"))
+                json.put("created_at", existing.optLong("created_at", System.currentTimeMillis()))
+            }
 
-            // Keep product quantities linked to stock movements, purchases and sales.
+            // Stock movements and purchase/sales documents are append-only to avoid applying quantity changes twice.
+            if (type in setOf("stock", "purchases", "sales") && editing) {
+                status.text = "لا يمكن تعديل حركة مخزون أو مستند شراء/بيع بعد ترحيله؛ سجّل حركة تصحيحية جديدة."
+                return@btn
+            }
             if (type in setOf("stock", "purchases", "sales")) {
                 val itemName = json.optString(if (type == "stock") "الصنف" else "الصنف")
                 val qty = json.optString("الكمية").toBigDecimalOrNull()
@@ -546,7 +558,7 @@ class MainActivity : Activity() {
                 json.put("quantity_after", updated.toPlainString())
             }
             localDb.saveCatalogRecord(type, json)
-            Toast.makeText(this, "تم الحفظ محلياً وتحديث كمية الصنف", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, if (editing) "تم تحديث السجل محلياً" else "تم الحفظ محلياً", Toast.LENGTH_SHORT).show()
             catalogScreen(type, title, fields)
         })
         body.addView(btn("إلغاء") { catalogScreen(type, title, fields) })
