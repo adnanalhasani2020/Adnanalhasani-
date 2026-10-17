@@ -298,46 +298,46 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                     self._required(data, "employee_no", "full_name", "specialty", "at")
                     ident = database.register_doctor(employee_no=str(data["employee_no"]),
                         full_name=str(data["full_name"]), specialty=str(data["specialty"]),
-                        at=str(data["at"]), actor="api", phone=data.get("phone"))
+                        at=str(data["at"]), actor=self._actor(), phone=data.get("phone"))
                     self._send(201, {"id": ident, "status": "created"})
                 elif route == "/api/appointments":
                     self._required(data, "patient_id", "doctor_id", "starts_at", "ends_at", "created_at")
                     ident = database.book_appointment(patient_id=int(data["patient_id"]),
                         doctor_id=int(data["doctor_id"]), starts_at=str(data["starts_at"]),
                         ends_at=str(data["ends_at"]), created_at=str(data["created_at"]),
-                        actor="api", reason=str(data.get("reason", "")))
+                        actor=self._actor(), reason=str(data.get("reason", "")))
                     self._send(201, {"id": ident, "status": "scheduled"})
                 elif route == "/api/encounters":
                     self._required(data, "patient_id", "opened_at")
                     ident = create_encounter(database, patient_id=int(data["patient_id"]),
                         doctor_id=int(data["doctor_id"]) if data.get("doctor_id") is not None else None,
-                        opened_at=str(data["opened_at"]), actor="api",
+                        opened_at=str(data["opened_at"]), actor=self._actor(),
                         chief_complaint=str(data.get("chief_complaint", "")),
                         appointment_id=int(data["appointment_id"]) if data.get("appointment_id") is not None else None)
                     self._send(201, {"id": ident, "status": "open"})
                 elif len(parts) == 4 and parts[:2] == ["api", "encounters"] and parts[3] == "close":
                     self._required(data, "closed_at", "diagnosis")
                     close_encounter(database, encounter_id=int(parts[2]), closed_at=str(data["closed_at"]),
-                        actor="api", diagnosis=str(data["diagnosis"]),
+                        actor=self._actor(), diagnosis=str(data["diagnosis"]),
                         clinical_notes=str(data.get("clinical_notes", "")))
                     self._send(200, {"id": int(parts[2]), "status": "closed"})
                 elif route == "/api/lab-orders":
                     self._required(data, "patient_id", "test_name", "ordered_at")
                     ident = order_lab_test(database, patient_id=int(data["patient_id"]),
                         test_name=str(data["test_name"]), ordered_at=str(data["ordered_at"]),
-                        actor="api", doctor_id=int(data["doctor_id"]) if data.get("doctor_id") is not None else None,
+                        actor=self._actor(), doctor_id=int(data["doctor_id"]) if data.get("doctor_id") is not None else None,
                         encounter_id=int(data["encounter_id"]) if data.get("encounter_id") is not None else None)
                     self._send(201, {"id": ident, "status": "ordered"})
                 elif len(parts) == 4 and parts[:2] == ["api", "lab-orders"] and parts[3] == "status":
                     self._required(data, "status", "at")
                     update_lab_status(database, order_id=int(parts[2]), status=str(data["status"]),
-                        actor="api", at=str(data["at"]), result=data.get("result"))
+                        actor=self._actor(), at=str(data["at"]), result=data.get("result"))
                     self._send(200, {"id": int(parts[2]), "status": str(data["status"])})
                 elif route == "/api/medicines":
                     self._required(data, "sku", "name", "quantity", "reorder_level", "at")
                     ident = add_medicine(database, sku=str(data["sku"]), name=str(data["name"]),
                         quantity=int(data["quantity"]), reorder_level=int(data["reorder_level"]),
-                        actor="api", at=str(data["at"]), unit=str(data.get("unit", "unit")))
+                        actor=self._actor(), at=str(data["at"]), unit=str(data.get("unit", "unit")))
                     self._send(201, {"id": ident, "status": "created"})
                 elif route == "/api/prescriptions":
                     self._required(data, "patient_id", "medicine_id", "dose", "frequency", "duration", "quantity", "prescribed_at")
@@ -345,17 +345,17 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                         medicine_id=int(data["medicine_id"]), dose=str(data["dose"]),
                         frequency=str(data["frequency"]), duration=str(data["duration"]),
                         quantity=int(data["quantity"]), prescribed_at=str(data["prescribed_at"]),
-                        actor="api", encounter_id=int(data["encounter_id"]) if data.get("encounter_id") is not None else None)
+                        actor=self._actor(), encounter_id=int(data["encounter_id"]) if data.get("encounter_id") is not None else None)
                     self._send(201, {"id": ident, "status": "pending"})
                 elif len(parts) == 4 and parts[:2] == ["api", "prescriptions"] and parts[3] == "dispense":
                     self._required(data, "dispensed_at")
                     dispense_prescription(database, prescription_id=int(parts[2]),
-                        dispensed_at=str(data["dispensed_at"]), actor="api")
+                        dispensed_at=str(data["dispensed_at"]), actor=self._actor())
                     self._send(200, {"id": int(parts[2]), "status": "dispensed"})
                 elif route == "/api/beds":
                     self._required(data, "ward", "bed_no", "at")
                     ident = create_bed(database, ward=str(data["ward"]), bed_no=str(data["bed_no"]),
-                        actor="api", at=str(data["at"]))
+                        actor=self._actor(), at=str(data["at"]))
                     self._send(201, {"id": ident, "status": "created"})
                 elif route == "/api/admissions":
                     self._required(data, "patient_id", "bed_id", "admitted_at")
@@ -395,7 +395,7 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                     ident = database.create_invoice(
                         invoice_no=str(data["invoice_no"]), patient_id=int(data["patient_id"]),
                         total_minor=int(data["total_minor"]), created_at=str(data["created_at"]),
-                        actor="api", currency=str(data.get("currency", "YER")),
+                        actor=self._actor(), currency=str(data.get("currency", "YER")),
                         encounter_id=int(data["encounter_id"]) if data.get("encounter_id") is not None else None)
                     self._send(201, {"id": ident, "status": "unpaid"})
                 elif route == "/api/payments":
@@ -403,7 +403,7 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                     ident = database.record_payment(
                         invoice_id=int(data["invoice_id"]), amount_minor=int(data["amount_minor"]),
                         method=str(data["method"]), received_at=str(data["received_at"]),
-                        actor="api", reference=data.get("reference"))
+                        actor=self._actor(), reference=data.get("reference"))
                     self._send(201, {"id": ident, "status": "received"})
                 else:
                     self._send(404, {"error": "not_found"})
