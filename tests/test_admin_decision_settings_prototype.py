@@ -54,6 +54,7 @@ def test_local_storage_is_described_as_browser_only_not_server_persistence():
     assert "لا يوجد حفظ على الخادم" in html
     assert "غير متصل بالخدمات الخلفية" in html
 
+
 def test_saved_select_values_are_restored_only_when_they_match_an_allowed_option():
     html = PROTOTYPE.read_text(encoding="utf-8")
 
@@ -69,6 +70,7 @@ def test_saved_text_values_respect_declared_length_limits():
     assert "value.slice(0,limit)" in html
     assert "if(d&&typeof d==='object'&&!Array.isArray(d))" in html
 
+
 def test_prototype_warns_that_browser_saved_choices_can_persist_on_shared_devices():
     html = PROTOTYPE.read_text(encoding="utf-8")
 
@@ -83,8 +85,8 @@ def test_form_controls_have_explicit_labels_and_accessible_status_announcements(
     # Every form control should be associated with a visible label by ID.
     import re
 
-    controls = re.findall(r'<(?:input|select|textarea)\b[^>]*\bid="([^"]+)"', html)
-    labels = re.findall(r'<label\b[^>]*\bfor="([^"]+)"', html)
+    controls = re.findall(r'<(?:input|select|textarea)\\b[^>]*\\bid="([^"]+)"', html)
+    labels = re.findall(r'<label\\b[^>]*\\bfor="([^"]+)"', html)
     assert controls
     assert set(controls).issubset(set(labels))
 
@@ -102,3 +104,27 @@ def test_preview_and_error_messages_are_announced_without_html_interpolation():
     assert "statusBox.setAttribute('role','status')" in html
     assert "summary.textContent=" in html
     assert "summary.innerHTML" not in html
+
+
+def test_local_storage_failures_are_caught_and_reported_without_crashing_the_prototype():
+    html = PROTOTYPE.read_text(encoding="utf-8")
+
+    # Browser privacy settings, quota limits, or disabled storage can throw.
+    assert "try{localStorage.setItem('hospital-admin-decision-prototype'" in html
+    assert "تعذر الحفظ المحلي" in html
+    assert "try{localStorage.removeItem('hospital-admin-decision-prototype')" in html
+    assert "تعذر حذف النسخة المحلية المحفوظة" in html
+    assert "try{const saved=localStorage.getItem('hospital-admin-decision-prototype')" in html
+    assert "تعذر استعادة الاختيارات المحلية" in html
+
+
+def test_reset_keeps_the_user_informed_when_local_data_cannot_be_removed():
+    html = PROTOTYPE.read_text(encoding="utf-8")
+
+    reset_handler = html.split("document.getElementById('reset').addEventListener", 1)[1]
+    reset_handler = reset_handler.split("function restoreSavedValue", 1)[0]
+
+    assert "form.reset()" in reset_handler
+    assert "summary.hidden=true" in reset_handler
+    assert "catch(error)" in reset_handler
+    assert "document.getElementById('activity').focus()" in reset_handler
