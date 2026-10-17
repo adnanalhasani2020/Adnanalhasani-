@@ -401,6 +401,8 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                     self._send(201, {"id": ident, "status": "received"})
                 else:
                     self._send(404, {"error": "not_found"})
+            except AuthenticationError:
+                self._send(401, {"error": "unauthorized"})
             except HospitalError as exc:
                 self._send(400, {"error": str(exc)})
             except (TypeError, ValueError, OverflowError):
