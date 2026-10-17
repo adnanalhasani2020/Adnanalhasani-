@@ -132,8 +132,17 @@ class AuthStore:
             return user_id
 
     def authenticate(self, *, username: str, password: str, at: str | None = None) -> tuple[str, Principal]:
-        now = _utcnow()
-        at = at or _timestamp(now)
+        if at is None:
+            now = _utcnow()
+        else:
+            try:
+                now = datetime.fromisoformat(at.replace("Z", "+00:00"))
+            except ValueError as exc:
+                raise ValueError("invalid authentication timestamp") from exc
+            if now.tzinfo is None:
+                now = now.replace(tzinfo=timezone.utc)
+            now = now.astimezone(timezone.utc)
+        at = _timestamp(now)
         with self.database.connect() as conn:
             row = conn.execute("""SELECT id,username,password_salt,password_hash,
                     password_iterations,role,active FROM auth_users WHERE username=? COLLATE NOCASE""",
