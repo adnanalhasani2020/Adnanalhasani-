@@ -73,6 +73,7 @@ Use your actual backup filename in place of the example. Store a second encrypte
 - `GET /api/inventory-movements`, `POST /api/inventory-adjustments` (signed stock adjustments are audited and cannot make stock negative)
 - `GET /api/suppliers`, `POST /api/suppliers`; `GET /api/purchase-orders`, `POST /api/purchase-orders`, `POST /api/purchase-orders/{id}/receive` (receipt updates stock and writes an inventory ledger entry atomically)
 - `GET /api/reports` (aggregate clinical, bed/inventory/procurement, and financial totals; no patient-level data)
+- `GET /api/medical-record?patient_id={id}` returns a single patient's authorized clinical summary across encounters, diagnoses, allergies, vitals, lab orders/results, prescriptions, admissions, and nursing notes. Access is limited to roles with the dedicated medical-record permission.
 
 ## Per-user authentication mode (development preview)
 
