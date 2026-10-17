@@ -75,6 +75,7 @@ class HospitalSecurityTests(unittest.TestCase):
         self.assertEqual(permission_for_route("POST", "/api/prescriptions/7/dispense"),
                          "prescriptions:dispense")
         self.assertIsNone(permission_for_route("GET", "/settings"))
+        self.assertEqual(permission_for_route("GET", "/api/future-sensitive-route"), "route:unknown")
 
     def test_last_active_administrator_cannot_be_deactivated(self):
         user_id = self.auth.create_user(username="only.admin", password="a-strong-password-123",
