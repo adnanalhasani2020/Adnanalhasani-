@@ -124,37 +124,50 @@ class MainActivity : Activity() {
         loadSummary()
     }
     private fun loadSummary() {
-        status.text="جارٍ تحديث الملخص..."
-        executor.execute { try {
-            val j=JSONObject(call("/summary"))
-            runOnUiThread {
-                body.removeAllViews()
-                body.addView(label("ملخص الحسابات",20f,true))
-                body.addView(label("عدد الحسابات: "+j.optInt("accounts_count")))
-                body.addView(label("إجمالي الدخل: "+j.optString("income")+" ر.ي"))
-                body.addView(label("إجمالي المصروفات: "+j.optString("expenses")+" ر.ي"))
-                body.addView(label("صافي الحركة: "+j.optString("net")+" ر.ي",21f,true))
-                body.addView(btn("تحديث"){loadSummary()})
-                nav()
-                val recent=j.optJSONArray("recent_transactions")?:JSONArray()
-                body.addView(label("آخر الحركات",18f,true))
-                if(recent.length()==0)body.addView(label("لا توجد حركات حتى الآن"))
-                for(i in 0 until recent.length()){
-                    val t=recent.getJSONObject(i)
-                    body.addView(label((if(t.optString("kind")=="income")"دخل" else "مصروف")+" — "+t.optString("amount")+" "+t.optString("currency")+"\n"+t.optString("description")))
+        executor.execute {
+            try {
+                val j = localDb.summary()
+                runOnUiThread {
+                    body.removeAllViews()
+                    body.addView(label("ملخص محلي — البيانات المحفوظة على هذا الهاتف", 18f, true))
+                    body.addView(label("عدد الحسابات: " + j.optInt("accounts_count")))
+                    body.addView(label("إجمالي الدخل: " + j.optString("income") + " ر.ي"))
+                    body.addView(label("إجمالي المصروفات: " + j.optString("expenses") + " ر.ي"))
+                    body.addView(label("صافي الحركة: " + j.optString("net") + " ر.ي", 21f, true))
+                    body.addView(label("عمليات بانتظار المزامنة: " + localDb.pendingCount()))
+                    body.addView(btn("تحديث") { loadSummary() })
+                    nav()
+                    val recent = j.optJSONArray("recent_transactions") ?: JSONArray()
+                    body.addView(label("آخر الحركات", 18f, true))
+                    if (recent.length() == 0) body.addView(label("لا توجد حركات محفوظة محلياً"))
+                    for (i in 0 until recent.length()) {
+                        val t = recent.getJSONObject(i)
+                        body.addView(label((if (t.optString("kind") == "income") "دخل" else "مصروف") + " — " + t.optString("amount") + " " + t.optString("currency") + "\n" + t.optString("description")))
+                    }
+                    status.text = "الملخص من SQLite — لا يتطلب اتصالاً"
                 }
-                status.text="تم التحديث"
+            } catch (e: Exception) {
+                runOnUiThread { status.text = "تعذر قراءة الملخص المحلي: " + (e.message ?: "") }
             }
-        }catch(e:Exception){runOnUiThread{status.text="تعذر تحميل الملخص: "+(e.message?: "")}}}
+        }
     }
     private fun accounts() {
-        screen("الحسابات والأرصدة");body.addView(btn("إضافة حساب"){addAccount()});body.addView(btn("رجوع"){dashboard()})
-        status.text="جارٍ التحميل..."
-        executor.execute{try{val a=JSONArray(call("/accounts"));runOnUiThread{
-            if(a.length()==0)body.addView(label("لا توجد حسابات مسجلة"))
-            for(i in 0 until a.length()){val x=a.getJSONObject(i);body.addView(label("رقم "+x.optInt("id")+" — "+x.optString("name")+"\nالرصيد: "+x.optString("balance")+" "+x.optString("currency"),18f,true))}
-            status.text="تم التحميل"
-        }}catch(e:Exception){runOnUiThread{status.text="خطأ: "+(e.message?: "")}}}
+        screen("الحسابات والأرصدة")
+        body.addView(btn("إضافة حساب") { addAccount() })
+        body.addView(btn("رجوع") { dashboard() })
+        executor.execute {
+            try {
+                val a = localDb.readEntities("accounts")
+                runOnUiThread {
+                    if (a.length() == 0) body.addView(label("لا توجد حسابات محفوظة على هذا الهاتف"))
+                    for (i in 0 until a.length()) {
+                        val x = a.getJSONObject(i)
+                        body.addView(label("رقم محلي " + (i + 1) + " — " + x.optString("name") + "\nالرصيد: " + x.optString("balance") + " " + x.optString("currency"), 18f, true))
+                    }
+                    status.text = "قراءة محلية — بانتظار المزامنة: " + localDb.pendingCount()
+                }
+            } catch (e: Exception) { runOnUiThread { status.text = "خطأ في قاعدة البيانات: " + (e.message ?: "") } }
+        }
     }
     private fun addAccount() {
         screen("إضافة حساب")
@@ -177,20 +190,40 @@ class MainActivity : Activity() {
         });body.addView(btn("إلغاء"){dashboard()})
     }
     private fun transactions() {
-        screen("سجل الحركات");body.addView(btn("تسجيل حركة جديدة"){addTransaction()});body.addView(btn("رجوع"){dashboard()})
-        executor.execute{try{val a=JSONArray(call("/transactions"));runOnUiThread{
-            if(a.length()==0)body.addView(label("لا توجد حركات مسجلة"))
-            for(i in 0 until a.length()){val t=a.getJSONObject(i);body.addView(label((if(t.optString("kind")=="income")"دخل" else "مصروف")+" — "+t.optString("amount")+" "+t.optString("currency")+"\n"+t.optString("description")))}
-            status.text="تم التحميل"
-        }}catch(e:Exception){runOnUiThread{status.text="تعذر تحميل السجل: "+(e.message?: "")}}}
+        screen("سجل الحركات")
+        body.addView(btn("تسجيل حركة جديدة") { addTransaction() })
+        body.addView(btn("رجوع") { dashboard() })
+        executor.execute {
+            try {
+                val a = localDb.readEntities("transactions")
+                runOnUiThread {
+                    if (a.length() == 0) body.addView(label("لا توجد حركات محفوظة محلياً"))
+                    for (i in 0 until a.length()) {
+                        val t = a.getJSONObject(i)
+                        body.addView(label((if (t.optString("kind") == "income") "دخل" else "مصروف") + " — " + t.optString("amount") + " " + t.optString("currency") + "\n" + t.optString("description"), 17f))
+                    }
+                    status.text = "الحركات المحلية — بانتظار المزامنة: " + localDb.pendingCount()
+                }
+            } catch (e: Exception) { runOnUiThread { status.text = "تعذر قراءة الحركات: " + (e.message ?: "") } }
+        }
     }
     private fun invoices() {
-        screen("الفواتير");body.addView(btn("إضافة فاتورة"){addInvoice()});body.addView(btn("رجوع"){dashboard()})
-        executor.execute{try{val a=JSONArray(call("/invoices"));runOnUiThread{
-            if(a.length()==0)body.addView(label("لا توجد فواتير"))
-            for(i in 0 until a.length()){val x=a.getJSONObject(i);body.addView(label("فاتورة "+x.optString("invoice_number")+"\nالعميل: "+x.optString("customer_name")+"\nالمبلغ: "+x.optString("amount")+" "+x.optString("currency")))}
-            status.text="تم التحميل"
-        }}catch(e:Exception){runOnUiThread{status.text="تعذر تحميل الفواتير: "+(e.message?: "")}}}
+        screen("الفواتير")
+        body.addView(btn("إضافة فاتورة") { addInvoice() })
+        body.addView(btn("رجوع") { dashboard() })
+        executor.execute {
+            try {
+                val a = localDb.readEntities("invoices")
+                runOnUiThread {
+                    if (a.length() == 0) body.addView(label("لا توجد فواتير محفوظة محلياً"))
+                    for (i in 0 until a.length()) {
+                        val x = a.getJSONObject(i)
+                        body.addView(label("فاتورة " + x.optString("invoice_number") + "\nالعميل: " + x.optString("customer_name") + "\nالمبلغ: " + x.optString("amount") + " " + x.optString("currency"), 17f))
+                    }
+                    status.text = "الفواتير المحلية — بانتظار المزامنة: " + localDb.pendingCount()
+                }
+            } catch (e: Exception) { runOnUiThread { status.text = "تعذر قراءة الفواتير: " + (e.message ?: "") } }
+        }
     }
     private fun addInvoice() {
         screen("إضافة فاتورة")
@@ -203,12 +236,22 @@ class MainActivity : Activity() {
         });body.addView(btn("إلغاء"){invoices()})
     }
     private fun payments() {
-        screen("الدفعات");body.addView(btn("تسجيل دفعة"){addPayment()});body.addView(btn("رجوع"){dashboard()})
-        executor.execute{try{val a=JSONArray(call("/payments"));runOnUiThread{
-            if(a.length()==0)body.addView(label("لا توجد دفعات مسجلة"))
-            for(i in 0 until a.length()){val x=a.getJSONObject(i);body.addView(label((if(x.optString("direction")=="received")"مستلمة" else "مدفوعة")+" — "+x.optString("amount")+" "+x.optString("currency")+"\n"+x.optString("reference")+" • "+x.optString("state")))}
-            status.text="تم التحميل"
-        }}catch(e:Exception){runOnUiThread{status.text="تعذر تحميل الدفعات: "+(e.message?: "")}}}
+        screen("الدفعات")
+        body.addView(btn("تسجيل دفعة") { addPayment() })
+        body.addView(btn("رجوع") { dashboard() })
+        executor.execute {
+            try {
+                val a = localDb.readEntities("payments")
+                runOnUiThread {
+                    if (a.length() == 0) body.addView(label("لا توجد دفعات محفوظة محلياً"))
+                    for (i in 0 until a.length()) {
+                        val x = a.getJSONObject(i)
+                        body.addView(label((if (x.optString("direction") == "received") "مستلمة" else "مدفوعة") + " — " + x.optString("amount") + " " + x.optString("currency") + "\n" + x.optString("reference") + " • " + x.optString("state"), 17f))
+                    }
+                    status.text = "الدفعات المحلية — بانتظار المزامنة: " + localDb.pendingCount()
+                }
+            } catch (e: Exception) { runOnUiThread { status.text = "تعذر قراءة الدفعات: " + (e.message ?: "") } }
+        }
     }
     private fun addPayment() {
         screen("تسجيل دفعة")
@@ -222,16 +265,24 @@ class MainActivity : Activity() {
         });body.addView(btn("إلغاء"){payments()})
     }
     private fun reports() {
-        screen("التقارير المالية");body.addView(btn("تحديث التقرير"){reports()});body.addView(btn("رجوع"){dashboard()})
-        status.text="جارٍ حساب الملخص..."
-        executor.execute{try{val j=JSONObject(call("/summary"));runOnUiThread{
-            body.addView(label("ملخص عام",20f,true));body.addView(label("عدد الحسابات: "+j.optInt("accounts_count")))
-            body.addView(label("إجمالي الدخل: "+j.optString("income")+" ر.ي",18f,true))
-            body.addView(label("إجمالي المصروفات: "+j.optString("expenses")+" ر.ي",18f,true))
-            body.addView(label("صافي الحركة: "+j.optString("net")+" ر.ي",20f,true))
-            body.addView(label("الأرقام مبنية على الحركات المسجلة، وليست كشفاً مدققاً أو دفتر أستاذ مزدوج القيد."))
-            status.text="تم إعداد التقرير"
-        }}catch(e:Exception){runOnUiThread{status.text="تعذر إنشاء التقرير: "+(e.message?: "")}}}
+        screen("التقارير المالية")
+        body.addView(btn("تحديث التقرير") { reports() })
+        body.addView(btn("رجوع") { dashboard() })
+        executor.execute {
+            try {
+                val j = localDb.summary()
+                runOnUiThread {
+                    body.addView(label("تقرير محلي", 20f, true))
+                    body.addView(label("عدد الحسابات: " + j.optInt("accounts_count")))
+                    body.addView(label("إجمالي الدخل: " + j.optString("income") + " ر.ي", 18f, true))
+                    body.addView(label("إجمالي المصروفات: " + j.optString("expenses") + " ر.ي", 18f, true))
+                    body.addView(label("صافي الحركة: " + j.optString("net") + " ر.ي", 20f, true))
+                    body.addView(label("عمليات بانتظار المزامنة: " + localDb.pendingCount()))
+                    body.addView(label("هذا تقرير من بيانات الهاتف فقط؛ لا يعرض بعدُ بيانات الخادم غير المنزّلة."))
+                    status.text = "تم إعداد التقرير محلياً"
+                }
+            } catch (e: Exception) { runOnUiThread { status.text = "تعذر إنشاء التقرير: " + (e.message ?: "") } }
+        }
     }
     private fun settings() {
         screen("إعدادات الاتصال")
