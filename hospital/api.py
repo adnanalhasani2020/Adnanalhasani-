@@ -11,6 +11,7 @@ import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlsplit
 
 from .core import HospitalDB, HospitalError
 from .workflows import (
@@ -68,7 +69,8 @@ def make_handler(database: HospitalDB, api_token: str):
                 raise HospitalError("missing required fields: " + ", ".join(missing))
 
         def do_GET(self) -> None:
-            route = self.path.split("?", 1)[0]
+            parsed = urlsplit(self.path)
+            route = parsed.path
             if route == "/":
                 page = (Path(__file__).parent / "web" / "index.html").read_bytes()
                 self.send_response(200)
@@ -85,6 +87,39 @@ def make_handler(database: HospitalDB, api_token: str):
                 self._send(200, {"status": "ok", "service": "hospital-api"})
             elif route == "/api/dashboard":
                 self._send(200, {"data": database.dashboard()})
+            elif route.startswith("/api/") and route.count("/") == 2:
+                collections = {
+                    "/api/patients": ("SELECT id,patient_no,full_name,phone,active,created_at FROM patients WHERE (?='' OR patient_no LIKE ? OR full_name LIKE ?) ORDER BY id DESC", 2),
+                    "/api/doctors": ("SELECT id,employee_no,full_name,specialty,phone,active FROM doctors WHERE (?='' OR employee_no LIKE ? OR full_name LIKE ? OR specialty LIKE ?) ORDER BY id DESC", 3),
+                    "/api/appointments": ("SELECT a.id,a.patient_id,p.full_name AS patient_name,a.doctor_id,d.full_name AS doctor_name,a.starts_at,a.ends_at,a.status,a.reason FROM appointments a JOIN patients p ON p.id=a.patient_id JOIN doctors d ON d.id=a.doctor_id WHERE (?='' OR p.full_name LIKE ? OR p.patient_no LIKE ? OR d.full_name LIKE ?) ORDER BY a.starts_at DESC", 3),
+                    "/api/lab-orders": ("SELECT l.id,l.patient_id,p.full_name AS patient_name,l.test_name,l.status,l.result,l.ordered_at,l.resulted_at FROM lab_orders l JOIN patients p ON p.id=l.patient_id WHERE (?='' OR p.full_name LIKE ? OR p.patient_no LIKE ? OR l.test_name LIKE ?) ORDER BY l.id DESC", 3),
+                    "/api/medicines": ("SELECT id,sku,name,quantity,reorder_level,unit,active FROM medicines WHERE (?='' OR sku LIKE ? OR name LIKE ?) ORDER BY name", 2),
+                    "/api/prescriptions": ("SELECT r.id,r.patient_id,p.full_name AS patient_name,r.medicine_id,m.name AS medicine_name,r.dose,r.frequency,r.duration,r.quantity,r.status,r.prescribed_at FROM prescriptions r JOIN patients p ON p.id=r.patient_id JOIN medicines m ON m.id=r.medicine_id WHERE (?='' OR p.full_name LIKE ? OR p.patient_no LIKE ? OR m.name LIKE ?) ORDER BY r.id DESC", 3),
+                    "/api/beds": ("SELECT b.id,b.ward,b.bed_no,b.active,CASE WHEN EXISTS(SELECT 1 FROM admissions a WHERE a.bed_id=b.id AND a.status='admitted') THEN 1 ELSE 0 END AS occupied FROM beds b WHERE (?='' OR b.ward LIKE ? OR b.bed_no LIKE ?) ORDER BY b.ward,b.bed_no", 2),
+                    "/api/admissions": ("SELECT a.id,a.patient_id,p.full_name AS patient_name,a.bed_id,b.ward,b.bed_no,a.admitted_at,a.discharged_at,a.reason,a.status FROM admissions a JOIN patients p ON p.id=a.patient_id JOIN beds b ON b.id=a.bed_id WHERE (?='' OR p.full_name LIKE ? OR p.patient_no LIKE ? OR b.ward LIKE ? OR b.bed_no LIKE ?) ORDER BY a.id DESC", 4),
+                    "/api/invoices": ("SELECT i.id,i.invoice_no,i.patient_id,p.full_name AS patient_name,i.encounter_id,i.total_minor,i.currency,i.status,i.created_at,COALESCE((SELECT SUM(pay.amount_minor) FROM payments pay WHERE pay.invoice_id=i.id),0) AS paid_minor FROM invoices i JOIN patients p ON p.id=i.patient_id WHERE (?='' OR i.invoice_no LIKE ? OR p.full_name LIKE ? OR p.patient_no LIKE ?) ORDER BY i.id DESC", 3),
+                }
+                config = collections.get(route)
+                if config is None:
+                    self._send(404, {"error": "not_found"})
+                    return
+                try:
+                    params = parse_qs(parsed.query, keep_blank_values=True)
+                    limit = int(params.get("limit", ["50"])[0])
+                    offset = int(params.get("offset", ["0"])[0])
+                except (TypeError, ValueError, OverflowError):
+                    self._send(400, {"error": "invalid_pagination"})
+                    return
+                if limit < 1 or limit > 100 or offset < 0:
+                    self._send(400, {"error": "limit must be 1-100 and offset must be non-negative"})
+                    return
+                search = params.get("search", [""])[0].strip()[:100]
+                sql, search_fields = config
+                patterns = ["%" + search + "%"] * search_fields
+                with database.connect() as conn:
+                    rows = conn.execute(sql + " LIMIT ? OFFSET ?", [search, *patterns, limit, offset]).fetchall()
+                self._send(200, {"data": [dict(row) for row in rows],
+                                 "pagination": {"limit": limit, "offset": offset, "count": len(rows)}})
             else:
                 self._send(404, {"error": "not_found"})
 
