@@ -221,6 +221,7 @@ def test_existing_database_migration_preserves_sales_invoices_and_history_on_reo
         ("0036_financial_policy_currency_guards",),
         ("0037_commercial_checkout",),
         ("0038_commercial_identity_sessions",),
+        ("0039_audit_records_append_only",),
         ("9998_activity_invitations",),
         ("9999_file_attachments",),
     ]
