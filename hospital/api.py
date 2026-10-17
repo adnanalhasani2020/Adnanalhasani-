@@ -47,7 +47,9 @@ def make_handler(database: HospitalDB, api_token: str):
         def _authorized(self) -> bool:
             supplied = self.headers.get("Authorization", "")
             candidate = supplied[7:] if supplied.startswith("Bearer ") else ""
-            if not hmac.compare_digest(candidate, api_token):
+            # An unset server token must fail closed: otherwise an empty/missing
+            # Authorization header could match an empty configured secret.
+            if not api_token or not candidate or not hmac.compare_digest(candidate, api_token):
                 self._send(401, {"error": "unauthorized"})
                 return False
             return True
