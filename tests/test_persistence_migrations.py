@@ -201,3 +201,26 @@ def test_financial_transaction_cannot_be_created_without_valid_recognition_sourc
             " VALUES(?,?,?,?,?,?,?,?,?,?)",
             (str(uuid.uuid4()),account,100,"YER","recognized","invalid","x",now,now,now),
         )
+
+
+def test_duplicate_migration_version_prefix_fails_before_schema_changes(tmp_path, monkeypatch):
+    from agent_core import persistence
+    from agent_core.persistence import MigrationError, apply_migrations
+
+    migration_dir = tmp_path / "migrations"
+    migration_dir.mkdir()
+    (migration_dir / "0001_first.sql").write_text("CREATE TABLE first_table(id INTEGER);", encoding="utf-8")
+    (migration_dir / "0001_second.sql").write_text("CREATE TABLE second_table(id INTEGER);", encoding="utf-8")
+    monkeypatch.setattr(persistence, "MIGRATIONS_DIR", migration_dir)
+    db = sqlite3.connect(":memory:")
+
+    with pytest.raises(MigrationError, match="duplicate migration version prefix 0001"):
+        apply_migrations(db)
+
+    assert db.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'"
+    ).fetchone() is None
+    assert db.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('first_table', 'second_table')"
+    ).fetchall() == []
+    db.close()
