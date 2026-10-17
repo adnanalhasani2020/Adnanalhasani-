@@ -443,3 +443,47 @@ def test_rejected_report_does_not_mutate_corrupted_financial_history():
         (entry_id,),
     ).fetchone()[0] == 1100
     db.close()
+
+
+def test_rejected_report_preserves_orphaned_posted_entry_exactly():
+    db = connect_database()
+    account_id = account(db)
+    stamp = "2026-10-01T09:00:00Z"
+    orphan_transaction_id = uid()
+    orphan_entry_id = uid()
+
+    # Simulate legacy corruption that normal foreign-key/trigger guards prevent.
+    db.execute("PRAGMA foreign_keys = OFF")
+    db.execute("DROP TRIGGER ledger_entry_currency_matches_transaction_insert")
+    db.execute(
+        "INSERT INTO ledger_entries(ledger_entry_id,financial_account_id,financial_transaction_id,"
+        "amount_minor,currency_code,entry_sequence,state,posted_at,created_at,updated_at) "
+        "VALUES(?,?,?,?,?,1,'posted',?,?,?)",
+        (orphan_entry_id, account_id, orphan_transaction_id, 800, "YER", stamp, stamp, stamp),
+    )
+    db.commit()
+
+    def snapshot():
+        return tuple(tuple(row) for row in db.execute(
+            "SELECT ledger_entry_id, financial_account_id, financial_transaction_id, "
+            "amount_minor, currency_code, entry_sequence, state, posted_at, created_at, updated_at "
+            "FROM ledger_entries ORDER BY ledger_entry_id"
+        ).fetchall())
+
+    before = snapshot()
+    changes_before = db.total_changes
+
+    with pytest.raises(ValidationError, match="missing Financial Transaction"):
+        FinancialLedgerActivityReportReader().read(
+            db, account_id, "YER",
+            start_at="2026-10-03T00:00:00Z",
+            end_at="2026-10-10T00:00:00Z",
+        )
+
+    assert snapshot() == before
+    assert db.total_changes == changes_before
+    assert db.execute(
+        "SELECT COUNT(*) FROM financial_transactions WHERE financial_transaction_id=?",
+        (orphan_transaction_id,),
+    ).fetchone()[0] == 0
+    db.close()
