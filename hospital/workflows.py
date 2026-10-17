@@ -166,3 +166,17 @@ def dispense_prescription(db: HospitalDB, *, prescription_id: int,
         db._audit(conn, actor, "prescription.dispensed", "prescription", prescription_id,
                   dispensed_at, {"medicine_id": row["medicine_id"], "quantity": row["quantity"]})
         conn.commit()
+
+
+def create_bed(db: HospitalDB, *, ward: str, bed_no: str, actor: str, at: str) -> int:
+    if not ward.strip() or not bed_no.strip():
+        raise HospitalError("ward and bed number are required")
+    with db.connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        cur = conn.execute("INSERT INTO beds(ward,bed_no) VALUES(?,?)",
+                           (ward.strip(), bed_no.strip()))
+        ident = cur.lastrowid
+        db._audit(conn, actor, "bed.created", "bed", ident, at,
+                  {"ward": ward.strip(), "bed_no": bed_no.strip()})
+        conn.commit()
+        return int(ident)
