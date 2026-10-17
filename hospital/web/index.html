@@ -77,6 +77,8 @@ const now=()=>new Date().toISOString();
 wire("patientForm","/api/patients",d=>({...d,created_at:now()}));
 wire("doctorForm","/api/doctors",d=>({...d,at:now()}));
 wire("appointmentForm","/api/appointments",d=>({...d,patient_id:Number(d.patient_id),doctor_id:Number(d.doctor_id),starts_at:new Date(d.starts_at).toISOString(),ends_at:new Date(d.ends_at).toISOString(),created_at:now()}));
+wire("invoiceForm","/api/invoices",d=>({...d,patient_id:Number(d.patient_id),total_minor:Number(d.total_minor),encounter_id:d.encounter_id?Number(d.encounter_id):undefined,created_at:now()}));
+wire("paymentForm","/api/payments",d=>({...d,invoice_id:Number(d.invoice_id),amount_minor:Number(d.amount_minor),received_at:now(),reference:d.reference||undefined}));
 </script>
 </body>
 </html>
