@@ -171,6 +171,10 @@ def dispense_prescription(db: HospitalDB, *, prescription_id: int,
                      (row["quantity"], row["medicine_id"]))
         conn.execute("UPDATE prescriptions SET status='dispensed' WHERE id=?",
                      (prescription_id,))
+        conn.execute("""INSERT INTO inventory_movements
+            (medicine_id,movement_type,quantity_delta,reference_type,reference_id,actor,occurred_at)
+            VALUES(?,'dispense',?,'prescription',?,?,?)""",
+            (row["medicine_id"], -int(row["quantity"]), str(prescription_id), actor, dispensed_at))
         db._audit(conn, actor, "prescription.dispensed", "prescription", prescription_id,
                   dispensed_at, {"medicine_id": row["medicine_id"], "quantity": row["quantity"]})
         conn.commit()
