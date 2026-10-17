@@ -82,3 +82,33 @@ def test_effective_window_compares_offset_timestamps_as_instants():
         assert result.observed_at.isoformat() == "2026-10-09T11:00:00+00:00"
     finally:
         db.close()
+
+
+def test_effective_from_is_inclusive_at_exact_boundary():
+    db = _db(
+        observed_at="2026-10-09T10:00:00Z",
+        effective_from="2026-10-09T10:00:00Z",
+        effective_to="2026-10-09T12:00:00Z",
+    )
+    try:
+        at_start = _read(db, "2026-10-09T10:00:00Z")
+
+        assert at_start.status is InventoryQuantityStatus.KNOWN
+        assert at_start.quantity_minor == 7
+    finally:
+        db.close()
+
+
+def test_inventory_observation_is_not_visible_before_observed_at():
+    db = _db(
+        observed_at="2026-10-09T11:00:00Z",
+        effective_from="2026-10-09T10:00:00Z",
+        effective_to="2026-10-09T12:00:00Z",
+    )
+    try:
+        before_observation = _read(db, "2026-10-09T10:59:59Z")
+
+        assert before_observation.status is InventoryQuantityStatus.NO_RECORD
+        assert before_observation.quantity_minor is None
+    finally:
+        db.close()
