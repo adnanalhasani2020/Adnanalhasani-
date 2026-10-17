@@ -4,14 +4,12 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
 
-/**
- * Local-first storage foundation. Pending writes are retained until the API acknowledges them.
- * Do not clear pending rows on network errors.
- */
-class LocalDatabase(context: Context) : SQLiteOpenHelper(context, "accounting_local.db", null, 1) {
+/** Local-first SQLite store. Financial writes remain queued until the server acknowledges them. */
+class LocalDatabase(context: Context) : SQLiteOpenHelper(context, "accounting_local.db", null, 2) {
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE accounts (local_id TEXT PRIMARY KEY, server_id INTEGER, name TEXT NOT NULL, currency TEXT NOT NULL, opening_balance TEXT NOT NULL, balance TEXT, sync_state TEXT NOT NULL DEFAULT 'pending')")
         db.execSQL("CREATE TABLE transactions (local_id TEXT PRIMARY KEY, server_id INTEGER, account_local_id TEXT NOT NULL, payload TEXT NOT NULL, sync_state TEXT NOT NULL DEFAULT 'pending')")
@@ -21,33 +19,102 @@ class LocalDatabase(context: Context) : SQLiteOpenHelper(context, "accounting_lo
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // Versioned migrations must preserve financial data; never drop tables here.
+        // Keep existing rows. New schema changes must use additive migrations.
+        if (oldVersion < 2) {
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_sync_queue_id ON sync_queue(id)")
+        }
     }
 
     @Synchronized
-    fun enqueue(entity: String, method: String, payload: JSONObject): String {
+    fun saveEntity(entity: String, payload: JSONObject): String {
+        require(entity in setOf("accounts", "transactions", "invoices", "payments"))
+        val localId = payload.optString("local_id").ifBlank { UUID.randomUUID().toString() }
+        val normalized = JSONObject(payload.toString()).put("local_id", localId)
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            when (entity) {
+                "accounts" -> {
+                    val values = ContentValues().apply {
+                        put("local_id", localId)
+                        if (normalized.has("server_id") && !normalized.isNull("server_id")) put("server_id", normalized.optInt("server_id"))
+                        put("name", normalized.optString("name"))
+                        put("currency", normalized.optString("currency", "YER").uppercase())
+                        put("opening_balance", normalized.optString("opening_balance", "0"))
+                        put("balance", normalized.optString("balance", normalized.optString("opening_balance", "0")))
+                        put("sync_state", "pending")
+                    }
+                    db.insertWithOnConflict(entity, null, values, SQLiteDatabase.CONFLICT_REPLACE)
+                }
+                "transactions", "payments" -> {
+                    val values = ContentValues().apply {
+                        put("local_id", localId)
+                        put("account_local_id", normalized.optString("account_local_id", normalized.optString("account_id")))
+                        put("payload", normalized.toString())
+                        put("sync_state", "pending")
+                    }
+                    db.insertWithOnConflict(entity, null, values, SQLiteDatabase.CONFLICT_REPLACE)
+                }
+                "invoices" -> {
+                    val values = ContentValues().apply {
+                        put("local_id", localId)
+                        put("payload", normalized.toString())
+                        put("sync_state", "pending")
+                    }
+                    db.insertWithOnConflict(entity, null, values, SQLiteDatabase.CONFLICT_REPLACE)
+                }
+            }
+            enqueueInTransaction(db, entity, "POST", normalized)
+            db.setTransactionSuccessful()
+        } finally { db.endTransaction() }
+        return localId
+    }
+
+    private fun enqueueInTransaction(db: SQLiteDatabase, entity: String, method: String, payload: JSONObject): String {
         val id = UUID.randomUUID().toString()
         val values = ContentValues().apply {
-            put("operation_id", id)
-            put("entity", entity)
-            put("method", method)
-            put("payload", payload.toString())
-            put("created_at", System.currentTimeMillis())
+            put("operation_id", id); put("entity", entity); put("method", method)
+            put("payload", payload.toString()); put("created_at", System.currentTimeMillis())
         }
-        writableDatabase.insertOrThrow("sync_queue", null, values)
+        db.insertOrThrow("sync_queue", null, values)
         return id
+    }
+
+    @Synchronized
+    fun readEntities(entity: String): JSONArray {
+        require(entity in setOf("accounts", "transactions", "invoices", "payments"))
+        val array = JSONArray()
+        readableDatabase.rawQuery("SELECT * FROM $entity ORDER BY rowid DESC", null).use { c ->
+            while (c.moveToNext()) {
+                val obj = JSONObject()
+                when (entity) {
+                    "accounts" -> {
+                        obj.put("local_id", c.getString(c.getColumnIndexOrThrow("local_id")))
+                        if (!c.isNull(c.getColumnIndexOrThrow("server_id"))) obj.put("server_id", c.getInt(c.getColumnIndexOrThrow("server_id")))
+                        obj.put("name", c.getString(c.getColumnIndexOrThrow("name")))
+                        obj.put("currency", c.getString(c.getColumnIndexOrThrow("currency")))
+                        obj.put("opening_balance", c.getString(c.getColumnIndexOrThrow("opening_balance")))
+                        obj.put("balance", c.getString(c.getColumnIndexOrThrow("balance")))
+                    }
+                    else -> {
+                        val payload = JSONObject(c.getString(c.getColumnIndexOrThrow("payload")))
+                        payload.put("local_id", c.getString(c.getColumnIndexOrThrow("local_id")))
+                        if (!c.isNull(c.getColumnIndexOrThrow("server_id"))) payload.put("server_id", c.getInt(c.getColumnIndexOrThrow("server_id")))
+                        array.put(payload)
+                        continue
+                    }
+                }
+                array.put(obj)
+            }
+        }
+        return array
     }
 
     @Synchronized
     fun pendingOperations(): List<PendingOperation> {
         val rows = mutableListOf<PendingOperation>()
-        readableDatabase.rawQuery(
-            "SELECT id, operation_id, entity, method, payload, attempts FROM sync_queue ORDER BY id ASC",
-            null
-        ).use { c ->
-            while (c.moveToNext()) rows.add(
-                PendingOperation(c.getLong(0), c.getString(1), c.getString(2), c.getString(3), c.getString(4), c.getInt(5))
-            )
+        readableDatabase.rawQuery("SELECT id, operation_id, entity, method, payload, attempts FROM sync_queue ORDER BY id ASC", null).use { c ->
+            while (c.moveToNext()) rows.add(PendingOperation(c.getLong(0), c.getString(1), c.getString(2), c.getString(3), c.getString(4), c.getInt(5)))
         }
         return rows
     }
@@ -59,22 +126,13 @@ class LocalDatabase(context: Context) : SQLiteOpenHelper(context, "accounting_lo
 
     @Synchronized
     fun markFailed(rowId: Long, error: String) {
-        val values = ContentValues().apply {
-            put("attempts", "attempts + 1")
-            put("last_error", error.take(500))
-        }
-        writableDatabase.execSQL(
-            "UPDATE sync_queue SET attempts=attempts+1, last_error=? WHERE id=?",
-            arrayOf(error.take(500), rowId)
-        )
+        writableDatabase.execSQL("UPDATE sync_queue SET attempts=attempts+1, last_error=? WHERE id=?", arrayOf(error.take(500), rowId))
+    }
+
+    @Synchronized
+    fun pendingCount(): Int {
+        readableDatabase.rawQuery("SELECT COUNT(*) FROM sync_queue", null).use { c -> return if (c.moveToFirst()) c.getInt(0) else 0 }
     }
 }
 
-data class PendingOperation(
-    val rowId: Long,
-    val operationId: String,
-    val entity: String,
-    val method: String,
-    val payload: String,
-    val attempts: Int
-)
+data class PendingOperation(val rowId: Long, val operationId: String, val entity: String, val method: String, val payload: String, val attempts: Int)
