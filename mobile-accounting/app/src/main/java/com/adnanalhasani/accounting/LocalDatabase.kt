@@ -9,13 +9,15 @@ import org.json.JSONObject
 import java.util.UUID
 
 /** Local-first SQLite store. Financial writes remain queued until the server acknowledges them. */
-class LocalDatabase(context: Context) : SQLiteOpenHelper(context, "accounting_local.db", null, 2) {
+class LocalDatabase(context: Context) : SQLiteOpenHelper(context, "accounting_local.db", null, 3) {
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE accounts (local_id TEXT PRIMARY KEY, server_id INTEGER, name TEXT NOT NULL, currency TEXT NOT NULL, opening_balance TEXT NOT NULL, balance TEXT, sync_state TEXT NOT NULL DEFAULT 'pending')")
         db.execSQL("CREATE TABLE transactions (local_id TEXT PRIMARY KEY, server_id INTEGER, account_local_id TEXT NOT NULL, payload TEXT NOT NULL, sync_state TEXT NOT NULL DEFAULT 'pending')")
         db.execSQL("CREATE TABLE invoices (local_id TEXT PRIMARY KEY, server_id INTEGER, payload TEXT NOT NULL, sync_state TEXT NOT NULL DEFAULT 'pending')")
         db.execSQL("CREATE TABLE payments (local_id TEXT PRIMARY KEY, server_id INTEGER, account_local_id TEXT NOT NULL, payload TEXT NOT NULL, sync_state TEXT NOT NULL DEFAULT 'pending')")
         db.execSQL("CREATE TABLE sync_queue (id INTEGER PRIMARY KEY AUTOINCREMENT, operation_id TEXT NOT NULL UNIQUE, entity TEXT NOT NULL, method TEXT NOT NULL, payload TEXT NOT NULL, created_at INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, last_error TEXT)")
+        db.execSQL("CREATE TABLE catalog_records (local_id TEXT PRIMARY KEY, record_type TEXT NOT NULL, payload TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)")
+        db.execSQL("CREATE INDEX idx_catalog_type ON catalog_records(record_type)")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
