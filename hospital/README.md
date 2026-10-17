@@ -30,6 +30,7 @@ Open `http://127.0.0.1:8080`. The Arabic interface uses the same origin as the A
 
 ### API routes
 - `GET /health`, `GET /api/dashboard`
+- `GET /api/patients`, `/api/doctors`, `/api/appointments`, `/api/lab-orders`, `/api/medicines`, `/api/prescriptions`, `/api/beds`, `/api/admissions`, `/api/invoices` (authenticated, searchable with `?search=`, paginated with `?limit=50&offset=0`; maximum page size 100)
 - `POST /api/patients`, `POST /api/doctors`, `POST /api/appointments`
 - `POST /api/encounters`, `POST /api/encounters/{id}/close`
 - `POST /api/lab-orders`, `POST /api/lab-orders/{id}/status`
