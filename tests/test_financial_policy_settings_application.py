@@ -70,10 +70,20 @@ def test_authorized_settings_update_is_versioned_and_audited():
     app = FinancialPolicySettingsApplication()
     result = app.update_settings(db, activity_id=activity, enabled_currencies=("YER", "USD"),
                                  default_currency="USD", display_decimal_places=3,
-                                 authorization_grant_id=grant, agent_action_id=action, now=stamp)
+                                 authorization_grant_id=grant, agent_action_id=action, now=stamp,
+                                 expected_version_no=0)
     assert result.default_currency == "USD"
     assert result.display_decimal_places == 3
     assert result.version_no == 1
+
+    with pytest.raises(ValidationError, match="Stale Finance policy settings version"):
+        app.update_settings(db, activity_id=activity, enabled_currencies=("YER", "USD"),
+                            default_currency="YER", authorization_grant_id=grant,
+                            agent_action_id=action, now=stamp, expected_version_no=0)
+
+    current = app.get_settings(db, activity_id=activity)
+    assert current.version_no == 1
+    assert current.default_currency == "USD"
     history = db.execute("SELECT change_type,current_version_ref FROM domain_history "
                          "WHERE owner_domain='FinancePolicySettings'").fetchall()
     assert history == [("created", "1")]
@@ -104,3 +114,14 @@ def test_database_rejects_unsupported_or_noncanonical_currency_policy():
             "VALUES(?, 'SAR,YER,USD', 'EUR', ?, ?)", (activity, stamp, person)
         )
     db.close()
+
+def test_settings_update_rejects_invalid_expected_version_before_database_mutation():
+    app = FinancialPolicySettingsApplication()
+    with pytest.raises(ValidationError, match="expected_version_no"):
+        app.update_settings(
+            None,
+            activity_id=str(uuid4()),
+            authorization_grant_id=str(uuid4()),
+            agent_action_id=str(uuid4()),
+            expected_version_no=True,
+        )
