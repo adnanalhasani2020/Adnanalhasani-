@@ -15,15 +15,20 @@ from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 from .core import HospitalDB, HospitalError
+from .security import (AuthStore, AuthenticationError, AuthorizationError,
+                       permission_for_route, require_permission)
 from .workflows import (
     add_medicine, close_encounter, create_bed, create_encounter, dispense_prescription,
     order_lab_test, prescribe_medicine, update_lab_status,
 )
 
 
-def make_handler(database: HospitalDB, api_token: str):
-    if not api_token or len(api_token) < 32:
+def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "token"):
+    if auth_mode not in {"token", "users"}:
+        raise ValueError("HOSPITAL_AUTH_MODE must be 'token' or 'users'")
+    if auth_mode == "token" and (not api_token or len(api_token) < 32):
         raise ValueError("HOSPITAL_API_TOKEN must be set to a secret of at least 32 characters")
+    auth_store = AuthStore(database) if auth_mode == "users" else None
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "HospitalDevAPI/0.3"
@@ -45,14 +50,33 @@ def make_handler(database: HospitalDB, api_token: str):
             self.end_headers()
             self.wfile.write(raw)
 
+        def _actor(self) -> str:
+            principal = getattr(self, "principal", None)
+            return principal.username if principal is not None else "api"
+
         def _authorized(self) -> bool:
             supplied = self.headers.get("Authorization", "")
             candidate = supplied[7:] if supplied.startswith("Bearer ") else ""
-            # An unset server token must fail closed: otherwise an empty/missing
-            # Authorization header could match an empty configured secret.
+            if auth_mode == "users":
+                try:
+                    if auth_store is None:
+                        raise AuthenticationError("authentication unavailable")
+                    self.principal = auth_store.resolve(candidate)
+                    permission = permission_for_route(self.command, self.path)
+                    if permission:
+                        require_permission(self.principal, permission)
+                    return True
+                except AuthenticationError:
+                    self._send(401, {"error": "unauthorized"})
+                    return False
+                except AuthorizationError:
+                    self._send(403, {"error": "forbidden"})
+                    return False
+            # Development compatibility mode; shared-token mode is not per-user RBAC.
             if not api_token or not candidate or not hmac.compare_digest(candidate, api_token):
                 self._send(401, {"error": "unauthorized"})
                 return False
+            self.principal = None
             return True
 
         def _body(self) -> dict[str, Any]:
@@ -98,7 +122,13 @@ def make_handler(database: HospitalDB, api_token: str):
                 return
             if not self._authorized():
                 return
-            if route == "/health":
+            if route == "/api/auth/me" and auth_mode == "users":
+                self._send(200, {"user": {"id": self.principal.user_id, "username": self.principal.username, "role": self.principal.role, "expires_at": self.principal.expires_at}})
+            elif route == "/api/users" and auth_mode == "users":
+                with database.connect() as conn:
+                    rows = conn.execute("SELECT id,username,role,active,created_at,updated_at FROM auth_users ORDER BY username").fetchall()
+                self._send(200, {"data": [dict(row) for row in rows]})
+            elif route == "/health":
                 self._send(200, {"status": "ok", "service": "hospital-api"})
             elif route == "/api/dashboard":
                 self._send(200, {"data": database.dashboard()})
@@ -230,17 +260,35 @@ def make_handler(database: HospitalDB, api_token: str):
                 self._send(404, {"error": "not_found"})
 
         def do_POST(self) -> None:
-            if not self._authorized():
+            route = self.path.split("?", 1)[0]
+            login_route = route == "/api/auth/login" and auth_mode == "users"
+            if not login_route and not self._authorized():
                 return
             try:
-                route = self.path.split("?", 1)[0]
                 parts = route.strip("/").split("/")
                 data = self._body()
-                if route == "/api/patients":
+                if login_route:
+                    self._required(data, "username", "password")
+                    token, principal = auth_store.authenticate(username=str(data["username"]), password=str(data["password"]))
+                    self._send(200, {"token": token, "user": {"id": principal.user_id, "username": principal.username, "role": principal.role, "expires_at": principal.expires_at}})
+                elif route == "/api/auth/logout" and auth_mode == "users":
+                    auth_store.revoke(self.headers.get("Authorization", "")[7:])
+                    self._send(200, {"status": "logged_out"})
+                elif len(parts) == 4 and parts[:2] == ["api", "users"] and parts[3] == "active" and auth_mode == "users":
+                    self._required(data, "active", "at")
+                    if not isinstance(data["active"], bool):
+                        raise HospitalError("active must be a boolean")
+                    auth_store.set_user_active(user_id=int(parts[2]), active=data["active"], at=str(data["at"]), actor=self._actor())
+                    self._send(200, {"id": int(parts[2]), "active": data["active"]})
+                elif route == "/api/users" and auth_mode == "users":
+                    self._required(data, "username", "password", "role", "at")
+                    ident = auth_store.create_user(username=str(data["username"]), password=str(data["password"]), role=str(data["role"]), at=str(data["at"]), actor=self._actor())
+                    self._send(201, {"id": ident, "status": "created"})
+                elif route == "/api/patients":
                     self._required(data, "patient_no", "full_name", "created_at")
                     ident = database.register_patient(
                         patient_no=str(data["patient_no"]), full_name=str(data["full_name"]),
-                        created_at=str(data["created_at"]), actor="api",
+                        created_at=str(data["created_at"]), actor=self._actor(),
                         date_of_birth=data.get("date_of_birth"), sex=data.get("sex"),
                         phone=data.get("phone"), address=data.get("address"),
                         emergency_contact=data.get("emergency_contact"),
@@ -250,46 +298,46 @@ def make_handler(database: HospitalDB, api_token: str):
                     self._required(data, "employee_no", "full_name", "specialty", "at")
                     ident = database.register_doctor(employee_no=str(data["employee_no"]),
                         full_name=str(data["full_name"]), specialty=str(data["specialty"]),
-                        at=str(data["at"]), actor="api", phone=data.get("phone"))
+                        at=str(data["at"]), actor=self._actor(), phone=data.get("phone"))
                     self._send(201, {"id": ident, "status": "created"})
                 elif route == "/api/appointments":
                     self._required(data, "patient_id", "doctor_id", "starts_at", "ends_at", "created_at")
                     ident = database.book_appointment(patient_id=int(data["patient_id"]),
                         doctor_id=int(data["doctor_id"]), starts_at=str(data["starts_at"]),
                         ends_at=str(data["ends_at"]), created_at=str(data["created_at"]),
-                        actor="api", reason=str(data.get("reason", "")))
+                        actor=self._actor(), reason=str(data.get("reason", "")))
                     self._send(201, {"id": ident, "status": "scheduled"})
                 elif route == "/api/encounters":
                     self._required(data, "patient_id", "opened_at")
                     ident = create_encounter(database, patient_id=int(data["patient_id"]),
                         doctor_id=int(data["doctor_id"]) if data.get("doctor_id") is not None else None,
-                        opened_at=str(data["opened_at"]), actor="api",
+                        opened_at=str(data["opened_at"]), actor=self._actor(),
                         chief_complaint=str(data.get("chief_complaint", "")),
                         appointment_id=int(data["appointment_id"]) if data.get("appointment_id") is not None else None)
                     self._send(201, {"id": ident, "status": "open"})
                 elif len(parts) == 4 and parts[:2] == ["api", "encounters"] and parts[3] == "close":
                     self._required(data, "closed_at", "diagnosis")
                     close_encounter(database, encounter_id=int(parts[2]), closed_at=str(data["closed_at"]),
-                        actor="api", diagnosis=str(data["diagnosis"]),
+                        actor=self._actor(), diagnosis=str(data["diagnosis"]),
                         clinical_notes=str(data.get("clinical_notes", "")))
                     self._send(200, {"id": int(parts[2]), "status": "closed"})
                 elif route == "/api/lab-orders":
                     self._required(data, "patient_id", "test_name", "ordered_at")
                     ident = order_lab_test(database, patient_id=int(data["patient_id"]),
                         test_name=str(data["test_name"]), ordered_at=str(data["ordered_at"]),
-                        actor="api", doctor_id=int(data["doctor_id"]) if data.get("doctor_id") is not None else None,
+                        actor=self._actor(), doctor_id=int(data["doctor_id"]) if data.get("doctor_id") is not None else None,
                         encounter_id=int(data["encounter_id"]) if data.get("encounter_id") is not None else None)
                     self._send(201, {"id": ident, "status": "ordered"})
                 elif len(parts) == 4 and parts[:2] == ["api", "lab-orders"] and parts[3] == "status":
                     self._required(data, "status", "at")
                     update_lab_status(database, order_id=int(parts[2]), status=str(data["status"]),
-                        actor="api", at=str(data["at"]), result=data.get("result"))
+                        actor=self._actor(), at=str(data["at"]), result=data.get("result"))
                     self._send(200, {"id": int(parts[2]), "status": str(data["status"])})
                 elif route == "/api/medicines":
                     self._required(data, "sku", "name", "quantity", "reorder_level", "at")
                     ident = add_medicine(database, sku=str(data["sku"]), name=str(data["name"]),
                         quantity=int(data["quantity"]), reorder_level=int(data["reorder_level"]),
-                        actor="api", at=str(data["at"]), unit=str(data.get("unit", "unit")))
+                        actor=self._actor(), at=str(data["at"]), unit=str(data.get("unit", "unit")))
                     self._send(201, {"id": ident, "status": "created"})
                 elif route == "/api/prescriptions":
                     self._required(data, "patient_id", "medicine_id", "dose", "frequency", "duration", "quantity", "prescribed_at")
@@ -297,17 +345,17 @@ def make_handler(database: HospitalDB, api_token: str):
                         medicine_id=int(data["medicine_id"]), dose=str(data["dose"]),
                         frequency=str(data["frequency"]), duration=str(data["duration"]),
                         quantity=int(data["quantity"]), prescribed_at=str(data["prescribed_at"]),
-                        actor="api", encounter_id=int(data["encounter_id"]) if data.get("encounter_id") is not None else None)
+                        actor=self._actor(), encounter_id=int(data["encounter_id"]) if data.get("encounter_id") is not None else None)
                     self._send(201, {"id": ident, "status": "pending"})
                 elif len(parts) == 4 and parts[:2] == ["api", "prescriptions"] and parts[3] == "dispense":
                     self._required(data, "dispensed_at")
                     dispense_prescription(database, prescription_id=int(parts[2]),
-                        dispensed_at=str(data["dispensed_at"]), actor="api")
+                        dispensed_at=str(data["dispensed_at"]), actor=self._actor())
                     self._send(200, {"id": int(parts[2]), "status": "dispensed"})
                 elif route == "/api/beds":
                     self._required(data, "ward", "bed_no", "at")
                     ident = create_bed(database, ward=str(data["ward"]), bed_no=str(data["bed_no"]),
-                        actor="api", at=str(data["at"]))
+                        actor=self._actor(), at=str(data["at"]))
                     self._send(201, {"id": ident, "status": "created"})
                 elif route == "/api/admissions":
                     self._required(data, "patient_id", "bed_id", "admitted_at")
@@ -325,7 +373,7 @@ def make_handler(database: HospitalDB, api_token: str):
                         cur = conn.execute("INSERT INTO admissions(patient_id,bed_id,admitted_at,reason) VALUES(?,?,?,?)",
                             (int(data["patient_id"]), int(data["bed_id"]), str(data["admitted_at"]), str(data.get("reason", ""))))
                         ident = cur.lastrowid
-                        database._audit(conn, "api", "patient.admitted", "admission", ident, str(data["admitted_at"]))
+                        database._audit(conn, self._actor(), "patient.admitted", "admission", ident, str(data["admitted_at"]))
                         conn.commit()
                     self._send(201, {"id": int(ident), "status": "admitted"})
                 elif len(parts) == 4 and parts[:2] == ["api", "admissions"] and parts[3] == "discharge":
@@ -339,7 +387,7 @@ def make_handler(database: HospitalDB, api_token: str):
                             raise HospitalError("discharge cannot precede admission")
                         conn.execute("UPDATE admissions SET discharged_at=?,status='discharged' WHERE id=?",
                             (str(data["discharged_at"]), int(parts[2])))
-                        database._audit(conn, "api", "patient.discharged", "admission", int(parts[2]), str(data["discharged_at"]))
+                        database._audit(conn, self._actor(), "patient.discharged", "admission", int(parts[2]), str(data["discharged_at"]))
                         conn.commit()
                     self._send(200, {"id": int(parts[2]), "status": "discharged"})
                 elif route == "/api/invoices":
@@ -347,7 +395,7 @@ def make_handler(database: HospitalDB, api_token: str):
                     ident = database.create_invoice(
                         invoice_no=str(data["invoice_no"]), patient_id=int(data["patient_id"]),
                         total_minor=int(data["total_minor"]), created_at=str(data["created_at"]),
-                        actor="api", currency=str(data.get("currency", "YER")),
+                        actor=self._actor(), currency=str(data.get("currency", "YER")),
                         encounter_id=int(data["encounter_id"]) if data.get("encounter_id") is not None else None)
                     self._send(201, {"id": ident, "status": "unpaid"})
                 elif route == "/api/payments":
@@ -355,10 +403,12 @@ def make_handler(database: HospitalDB, api_token: str):
                     ident = database.record_payment(
                         invoice_id=int(data["invoice_id"]), amount_minor=int(data["amount_minor"]),
                         method=str(data["method"]), received_at=str(data["received_at"]),
-                        actor="api", reference=data.get("reference"))
+                        actor=self._actor(), reference=data.get("reference"))
                     self._send(201, {"id": ident, "status": "received"})
                 else:
                     self._send(404, {"error": "not_found"})
+            except AuthenticationError:
+                self._send(401, {"error": "unauthorized"})
             except HospitalError as exc:
                 self._send(400, {"error": str(exc)})
             except (TypeError, ValueError, OverflowError):
@@ -392,13 +442,14 @@ def _validate_bind_host(host: str, *, allow_remote: bool = False) -> str:
 
 def serve() -> None:
     token = os.environ.get("HOSPITAL_API_TOKEN", "")
+    auth_mode = os.environ.get("HOSPITAL_AUTH_MODE", "token").strip().lower()
     db_path = os.environ.get("HOSPITAL_DB_PATH", "hospital.sqlite3")
     host = os.environ.get("HOSPITAL_API_HOST", "127.0.0.1")
     allow_remote = os.environ.get("HOSPITAL_API_ALLOW_REMOTE", "") == "1"
     host = _validate_bind_host(host, allow_remote=allow_remote)
     port = int(os.environ.get("HOSPITAL_API_PORT", "8080"))
     database = HospitalDB(db_path)
-    server = ThreadingHTTPServer((host, port), make_handler(database, token))
+    server = ThreadingHTTPServer((host, port), make_handler(database, token, auth_mode=auth_mode))
     print(f"Hospital development UI/API listening on http://{host}:{port}")
     try:
         server.serve_forever()
