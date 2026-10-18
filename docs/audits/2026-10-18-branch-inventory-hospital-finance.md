@@ -32,6 +32,38 @@ https://github.com/adnanalhasani2020/Adnanalhasani-/pull/356
 
 **لا تدمج #356 تلقائيًا:** وثيقة `docs/07-التنفيذ/HOSPITAL-CAPABILITY-GATE.md` على `main` تنص أن وجود الكود لا يعني الاعتماد التشغيلي، وأن وظائف سريرية ومختبرية وصيدلانية معينة مستبعدة أو محجوبة حاليًا. كما أن `docs/decisions/HOSPITAL-SCOPE-DECISION-RECORD.md` لا يزال قالب قرار غير معتمد. يجب حسم تعارض النطاق بقرار رسمي قبل تفعيل هذه الوظائف أو إعلانها جاهزة للإنتاج.
 
+## 3A. نتائج المقارنة مع main للفروع ذات الصلة
+
+تمت مقارنة مجموعة من فروع المستشفى والمالية والمشتريات مع `main` عبر GitHub Compare. هذه نتائج لحظية وقت الفحص، وليست حكمًا بأن الفروع جاهزة للدمج:
+
+| الفرع | commits فريدة أمام main | commits خلف main | الملاحظة |
+|---|---:|---:|---|
+| `feature/hospital-clinical-workflow` | 28 | 0 | رأس PR #356؛ تغييرات متجمعة في API/المخطط/التدفقات/الاختبارات |
+| `feature/hospital-auth-rbac` | 26 | 1 | متباعد؛ يحتاج مراجعة تعارضات الصلاحيات قبل انتقاء أي تغييرات |
+| `feature/hospital-api-foundation` | 7 | 83 | أساس قديم نسبيًا؛ لا يُدمج كاملًا فوق main |
+| `feature/hospital-core-foundation` | 7 | 84 | متباعد؛ يحتوي مخططًا وتدفقات واختبارات |
+| `feature/hospital-clinical-endpoints` | 4 | 82 | متباعد؛ يجب مقارنة العقود مع API الحالي |
+| `feature/hospital-billing-api` | 3 | 81 | متباعد؛ يلزم التحقق من التوافق مع الحدود المالية |
+| `feature/hospital-billing-ui` | 2 | 80 | واجهة فقط بحسب diff الظاهر؛ لا تكفي لتأكيد التكامل |
+| `feature/hospital-read-api` | 3 | 78 | متباعد |
+| `feature/hospital-record-browser` | 1 | 77 | متباعد |
+| `fix/hospital-db-constraints` | 3 | 21 | قيود قاعدة بيانات؛ مرشح لمراجعة انتقائية |
+| `fix/hospital-audit-log-append-only` | 2 | 22 | تدقيق append-only؛ يلزم التحقق من وجوده/تعارضه في main |
+| `hospital/security-headers-hardening` | 3 | 75 | تحسينات أمنية على أساس متأخر |
+| `hospital/api-input-validation` | 2 | 74 | تحقق إدخال على أساس متأخر |
+| `feature/health-encounter-application` | 6 | 425 | فرع قديم جدًا بالنسبة إلى main الحالي |
+| `feature/finance-admin-settings` | 8 | 104 | متباعد؛ لا تُستبدل ترحيلات أو إعدادات مالية موجودة |
+| `feature/financial-opening-balances` | 12 | 191 | متباعد؛ يلزم تتبع ما هو مدمج بالفعل قبل انتقاء أي commit |
+| `feature/purchases-main-integration` | 14 | 136 | متباعد؛ يحتوي ترحيلات مشتريات وفواتير موردين |
+| `feature/encounter-authorization-contract` | 4 | 194 | يتضمن ترحيلًا `0008_authorization_grant_purpose.sql` |
+| `health/encounter-auth-migration-fix-20261017` | 5 | 55 | يتضمن ترحيلًا `0009_authorization_grant_purpose.sql` لنطاق قريب؛ يلزم حل تعارض الترقيم/المحتوى قبل أي دمج |
+
+**الاستنتاج:** لا ندمج كل الفروع دفعة واحدة. عدد من الفروع متباعد بشدة عن `main`، وبعضها يحمل ترحيلات قديمة أو متنافسة. يجب انتقاء تغييرات محددة بعد مقارنة محتوى الملفات الفعلي، وتحديد الترحيلات التي دخلت `main` بالفعل، ثم إعادة الاختبارات على رأس موحد.
+
+## 3B. تحقق CI لطلب المستشفى #356
+
+أظهر استعلام سير العمل للرأس الدقيق `fcaae931b491d8fb75ee52ba64fc74e0d11bab28` ثلاث عمليات مكتملة بنجاح: **Hospital core tests** و**Python tests** و**Stage 7 Automated Tests**. هذا دليل إيجابي على الاختبارات الآلية لهذا الرأس، لكنه لا يرفع بوابة النطاق الصحي ولا يثبت جاهزية إنتاجية/سريرية. يجب إعادة التحقق من حالة CI إذا تغير الرأس.
+
 ## 4. مخاطر التكامل التي يجب الحفاظ عليها
 
 1. **قاعدة البيانات:** تطبيق `hospital/` يملك حاليًا مخطط SQLite ومساراته الخاصة؛ نواة `src/agent_core/` تستخدم نظام ترحيلات مستقلًا تحت `schema/migrations/`. وجودهما في مستودع واحد لا يجعلهما قاعدة واحدة.
