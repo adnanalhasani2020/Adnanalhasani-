@@ -183,7 +183,7 @@ def test_reverse_implementation_inventory_has_traceability_owner():
         "domain_authorization.py","domain_commerce.py","domain_communication.py","domain_education.py",
         "domain_exceptions.py","domain_finance.py","domain_health.py","domain_identity.py",
         "domain_inventory.py","domain_provenance.py","domain_product_units.py","domain_purchases.py","product_unit_application.py","purchase_application.py","supplier_invoice_application.py","domain_workflow_read.py","identity_read.py","activity_membership_application.py","idempotency.py","conversation_application.py","file_attachment_application.py","file_attachment_content_application.py","file_attachment_filesystem_store.py","activity_invitation_application.py","role_assignment_application.py","membership_application.py","access_account_read.py","person_registration_application.py","access_account_registration_application.py","inventory_read.py","offering_application.py","commerce_inventory_read.py",
-        "commerce_checkout.py","commercial_demo_seed.py","commercial_identity.py","commercial_web.py","offering_price_application.py","product_legacy_audit.py","sale_history_audit.py","sale_operational_read.py","domain_offline.py","financial_orchestration.py","infrastructure.py","integrity.py","approval_enforcement.py","invoice_application.py","payment_application.py","obligation_application.py","loan_application.py","financial_balance_read.py","financial_currency_policy.py","financial_account_application.py","financial_opening_balance_application.py","financial_policy_settings_application.py","financial_ledger_activity_report.py","instrument_application.py","durable_operation_application.py","message_application.py","participant_application.py","device_read_application.py","persistence.py","runtime.py","shared.py","hospital_management.py","hospital_clinical_services.py",
+        "commerce_checkout.py","commercial_demo_seed.py","commercial_identity.py","commercial_web.py","offering_price_application.py","product_legacy_audit.py","sale_history_audit.py","sale_operational_read.py","domain_offline.py","financial_orchestration.py","infrastructure.py","integrity.py","approval_enforcement.py","invoice_application.py","payment_application.py","obligation_application.py","loan_application.py","financial_balance_read.py","financial_currency_policy.py","financial_account_application.py","financial_opening_balance_application.py","financial_policy_settings_application.py","financial_ledger_activity_report.py","instrument_application.py","durable_operation_application.py","message_application.py","participant_application.py","device_read_application.py","persistence.py","runtime.py","shared.py","hospital_clinical_services.py",
     }
     assert expected == mapped
     impl_text = " ".join(SPEC_TO_IMPL.values())
@@ -241,7 +241,6 @@ def test_reverse_implementation_inventory_has_traceability_owner():
         "person_registration_application.py": "explicit persisted Person registration over the existing schema; no identity deduplication, merge, identifier issuance, authentication, or authorization",
         "domain_provenance.py": "explicit persisted Provenance records under existing provenance_records schema; no inferred lineage or automatic attachment",
         "device_read_application.py": "read-only persisted Device restoration and Person-/Access Account-scoped listing; no device mutation, authorization, or pending-operation effects",
-        "hospital_management.py": "provisional administrative workflow models only; no persistence or authorization integration, pending approved health-scope review",
         "hospital_clinical_services.py": "provisional laboratory/pharmacy domain primitives only; explicitly outside approved EXEC-0006 scope, no persistence or atomic inventory integration; not for clinical operations pending decision",
     }
     for module in expected:
@@ -252,9 +251,6 @@ def test_reverse_implementation_inventory_has_traceability_owner():
 
     # Keep the newly introduced hospital modules explicitly provisional in the
     # traceability inventory; this mapping is not a scope approval.
-    assert "hospital_management.py" in expected
     assert "hospital_clinical_services.py" in expected
-    assert "provisional" in cross_cutting["hospital_management.py"].lower()
-    assert "no persistence or authorization integration" in cross_cutting["hospital_management.py"]
     assert "outside approved EXEC-0006 scope" in cross_cutting["hospital_clinical_services.py"]
     assert "no persistence or atomic inventory integration" in cross_cutting["hospital_clinical_services.py"]
