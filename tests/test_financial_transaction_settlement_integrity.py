@@ -93,3 +93,36 @@ def test_database_rejects_settlement_transaction_for_partial_payment():
         insert_transaction(db, account, settlement)
     assert db.execute("SELECT COUNT(*) FROM financial_transactions").fetchone()[0] == 0
     db.close()
+
+def test_recognized_ledger_fact_prevents_rewriting_its_source_records():
+    db = connect_database()
+    account, settlement = seed_settlement(db)
+    insert_transaction(db, account, settlement)
+
+    with pytest.raises(sqlite3.IntegrityError, match="recognized settlement source is immutable"):
+        db.execute("UPDATE settlements SET state='reversed' WHERE settlement_id=?", (settlement,))
+    with pytest.raises(sqlite3.IntegrityError, match="recognized payment source is immutable"):
+        db.execute(
+            "UPDATE payments SET state='failed' WHERE payment_id="
+            "(SELECT payment_id FROM settlements WHERE settlement_id=?)",
+            (settlement,),
+        )
+    with pytest.raises(sqlite3.IntegrityError, match="recognized obligation source is immutable"):
+        db.execute(
+            "UPDATE obligations SET amount_minor=13000 WHERE obligation_id="
+            "(SELECT obligation_id FROM settlements WHERE settlement_id=?)",
+            (settlement,),
+        )
+    other_person = uid()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (other_person, STAMP, STAMP),
+    )
+    with pytest.raises(sqlite3.IntegrityError, match="owner cannot change"):
+        db.execute("UPDATE financial_accounts SET person_id=? WHERE financial_account_id=?",
+                   (other_person, account))
+
+    assert db.execute("SELECT state FROM settlements WHERE settlement_id=?", (settlement,)).fetchone()[0] == "settled"
+    assert db.execute("SELECT amount_minor FROM obligations WHERE obligation_id=(SELECT obligation_id FROM settlements WHERE settlement_id=?)", (settlement,)).fetchone()[0] == 12500
+    assert db.execute("SELECT COUNT(*) FROM financial_transactions").fetchone()[0] == 1
+    db.close()
