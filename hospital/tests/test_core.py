@@ -259,6 +259,31 @@ class HospitalCoreTests(unittest.TestCase):
             status = conn.execute("SELECT status FROM invoices WHERE id=?", (invoice,)).fetchone()["status"]
         self.assertEqual(status, "paid")
 
+    def test_invoice_and_payment_amounts_require_integer_minor_units(self):
+        for invalid in (1.5, True, "100"):
+            with self.subTest(invoice_amount=invalid):
+                with self.assertRaisesRegex(HospitalError, "integer in minor units"):
+                    self.db.create_invoice(
+                        invoice_no="INV-INVALID-AMOUNT", patient_id=self.patient,
+                        total_minor=invalid, created_at="2026-01-01T08:00:00",
+                        actor="cashier",
+                    )
+
+        invoice = self.db.create_invoice(
+            invoice_no="INV-INTEGER-AMOUNT", patient_id=self.patient,
+            total_minor=100, created_at="2026-01-01T08:00:00", actor="cashier",
+        )
+        for invalid in (1.5, True, "10"):
+            with self.subTest(payment_amount=invalid):
+                with self.assertRaisesRegex(HospitalError, "integer in minor units"):
+                    self.db.record_payment(
+                        invoice_id=invoice, amount_minor=invalid, method="cash",
+                        received_at="2026-01-01T09:00:00", actor="cashier",
+                    )
+        with self.db.connect() as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM payments").fetchone()[0], 0)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM invoices").fetchone()[0], 1)
+
     def test_patient_registration_is_audited(self):
         with self.db.connect() as conn:
             row = conn.execute("SELECT action,entity_type FROM audit_log ORDER BY id LIMIT 1").fetchone()

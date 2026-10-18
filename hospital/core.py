@@ -397,8 +397,10 @@ class HospitalDB:
     def create_invoice(self, *, invoice_no: str, patient_id: int, total_minor: int,
                        created_at: str, actor: str, currency: str = "YER",
                        encounter_id: int | None = None) -> int:
-        if not invoice_no.strip() or total_minor < 0:
-            raise HospitalError("invoice number is required and total must be non-negative")
+        if type(total_minor) is not int or total_minor < 0:
+            raise HospitalError("invoice total must be a non-negative integer in minor units")
+        if not isinstance(invoice_no, str) or not invoice_no.strip():
+            raise HospitalError("invoice number is required")
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             cur = db.execute("""INSERT INTO invoices(invoice_no,patient_id,encounter_id,total_minor,currency,created_at)
@@ -422,8 +424,10 @@ class HospitalDB:
     def record_payment(self, *, invoice_id: int, amount_minor: int, method: str,
                        received_at: str, actor: str, reference: str | None = None,
                        idempotency_key: str | None = None) -> int:
-        if amount_minor <= 0 or not method.strip():
-            raise HospitalError("payment amount must be positive and method is required")
+        if type(amount_minor) is not int or amount_minor <= 0:
+            raise HospitalError("payment amount must be a positive integer in minor units")
+        if not isinstance(method, str) or not method.strip():
+            raise HospitalError("payment method is required")
         if idempotency_key is not None:
             if not isinstance(idempotency_key, str) or not idempotency_key.strip() or len(idempotency_key) > 200:
                 raise HospitalError("idempotency_key must be a non-empty string of at most 200 characters")
