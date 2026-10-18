@@ -133,6 +133,43 @@ class HospitalCoreTests(unittest.TestCase):
                     (second_patient, bed_id, "2026-01-02T11:00:00"),
                 )
 
+    def test_database_rejects_duplicate_active_admissions_for_patient_from_direct_sql(self):
+        import sqlite3
+
+        with self.db.connect() as conn:
+            conn.execute("INSERT INTO beds(ward,bed_no) VALUES('A','01')")
+            conn.execute("INSERT INTO beds(ward,bed_no) VALUES('A','02')")
+            bed_ids = [row["id"] for row in conn.execute("SELECT id FROM beds ORDER BY bed_no")]
+            conn.execute(
+                "INSERT INTO admissions(patient_id,bed_id,admitted_at) VALUES(?,?,?)",
+                (self.patient, bed_ids[0], "2026-01-02T09:00:00"),
+            )
+            with self.assertRaisesRegex(sqlite3.IntegrityError, "patient already has an active admission"):
+                conn.execute(
+                    "INSERT INTO admissions(patient_id,bed_id,admitted_at) VALUES(?,?,?)",
+                    (self.patient, bed_ids[1], "2026-01-02T10:00:00"),
+                )
+            with self.assertRaisesRegex(sqlite3.IntegrityError, "patient already has an active admission"):
+                conn.execute(
+                    "UPDATE admissions SET patient_id=? WHERE bed_id=?",
+                    (self.patient, bed_ids[1]),
+                )
+
+    def test_admission_workflow_rejects_patient_already_admitted_to_another_bed(self):
+        with self.db.connect() as conn:
+            conn.execute("INSERT INTO beds(ward,bed_no) VALUES('A','01')")
+            conn.execute("INSERT INTO beds(ward,bed_no) VALUES('A','02')")
+            bed_ids = [row["id"] for row in conn.execute("SELECT id FROM beds ORDER BY bed_no")]
+        self.db.admit_patient(
+            patient_id=self.patient, bed_id=bed_ids[0],
+            admitted_at="2026-01-02T09:00:00", actor="nurse",
+        )
+        with self.assertRaisesRegex(HospitalError, "patient already has an active admission"):
+            self.db.admit_patient(
+                patient_id=self.patient, bed_id=bed_ids[1],
+                admitted_at="2026-01-02T10:00:00", actor="nurse",
+            )
+
     def test_database_requires_discharge_timestamp_to_match_admission_status(self):
         import sqlite3
 
@@ -229,6 +266,8 @@ class HospitalCoreTests(unittest.TestCase):
             "appointments_patient_no_overlap_update",
             "admissions_one_active_bed_insert",
             "admissions_one_active_bed_update",
+            "admissions_one_active_patient_insert",
+            "admissions_one_active_patient_update",
         }.issubset(names))
 
     def test_bed_cannot_be_double_booked_and_can_be_reused_after_discharge(self):
