@@ -513,7 +513,7 @@ def test_currency_migrations_upgrade_populated_financial_database(tmp_path, monk
     ).fetchone()[0] == 100
     with pytest.raises(sqlite3.IntegrityError, match="recognized obligation source is immutable"):
         upgraded.execute(
-            "UPDATE obligations SET currency_code='USD' WHERE obligation_id=?", (obligation_id,)
+            "UPDATE obligations SET amount_minor=101 WHERE obligation_id=?", (obligation_id,)
         )
     with pytest.raises(sqlite3.IntegrityError, match="recognized settlement source is immutable"):
         upgraded.execute(
