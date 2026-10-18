@@ -176,3 +176,43 @@ def test_outbox_insert_failure_rolls_back_invoice_and_audit_together(tmp_path):
         assert db.execute(
             "SELECT COUNT(*) FROM finance_outbox WHERE event_key LIKE 'hospital:invoice:%'"
         ).fetchone()[0] == 0
+
+
+def test_payment_outbox_failure_rolls_back_payment_and_invoice_status(tmp_path):
+    hospital, patient_id = _hospital(tmp_path)
+    invoice_id = hospital.create_invoice(
+        invoice_no="INV-OUTBOX-PAYMENT-ATOMIC", patient_id=patient_id, total_minor=500,
+        created_at="2026-10-18T10:20:00Z", actor="test",
+    )
+    with hospital.connect() as db:
+        db.execute(
+            """CREATE TRIGGER reject_payment_outbox_insert
+               BEFORE INSERT ON finance_outbox
+               WHEN NEW.event_type='hospital.payment.received'
+               BEGIN SELECT RAISE(ABORT, 'simulated payment outbox failure'); END"""
+        )
+
+    try:
+        hospital.record_payment(
+            invoice_id=invoice_id, amount_minor=200, method="cash",
+            received_at="2026-10-18T10:21:00Z", actor="test",
+        )
+    except Exception as exc:
+        assert "simulated payment outbox failure" in str(exc)
+    else:
+        raise AssertionError("payment recording must fail when its outbox write fails")
+
+    with hospital.connect() as db:
+        invoice = db.execute(
+            "SELECT status FROM invoices WHERE id=?", (invoice_id,)
+        ).fetchone()
+        assert invoice["status"] == "unpaid"
+        assert db.execute(
+            "SELECT COUNT(*) FROM payments WHERE invoice_id=?", (invoice_id,)
+        ).fetchone()[0] == 0
+        assert db.execute(
+            "SELECT COUNT(*) FROM finance_outbox WHERE event_type='hospital.payment.received'"
+        ).fetchone()[0] == 0
+        assert db.execute(
+            "SELECT COUNT(*) FROM audit_log WHERE action='payment.received'"
+        ).fetchone()[0] == 0
