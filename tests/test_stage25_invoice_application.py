@@ -486,7 +486,7 @@ def test_invoice_rejects_obligation_already_linked_to_another_invoice_without_wr
     )
     db.commit()
     second_id = uid()
-    with pytest.raises(ValidationError, match="already linked to a source Invoice"):
+    with pytest.raises(ValidationError, match="already linked to an Invoice"):
         app.create_invoice(
             db, sale_id=sale, actor_context_ref=actor,
             authorization_grant_id=grant, issuer_ref=actor,
