@@ -254,3 +254,78 @@ class HospitalFinanceIntegrationSettingsApplication:
                 correlation_ref=f"{activity}:{scope}",
             )
         return self.get_by_id(db, settings_id=ident)
+
+
+    def reject(self, db, *, settings_id, rejected_by_person_id, reason, now=None):
+        """Reject a pending proposal and persist the decision atomically."""
+        ident = self._uuid(settings_id, "Settings identifier")
+        actor = self._uuid(rejected_by_person_id, "Rejecting Finance Person identifier")
+        explanation = str(reason).strip() if isinstance(reason, str) else ""
+        if not explanation or len(explanation) > 500:
+            raise ValidationError("rejection reason must contain 1-500 characters")
+        stamp = self._stamp(now)
+        with self._atomic(db):
+            row = db.execute(
+                "SELECT activity_id,hospital_scope_ref,status,proposed_by_person_id "
+                "FROM hospital_finance_integration_settings WHERE settings_id=?",
+                (ident,),
+            ).fetchone()
+            if row is None:
+                raise ValidationError("Hospital-Finance settings proposal does not exist")
+            activity, scope, status, proposer = row
+            if status != "pending_approval":
+                raise ValidationError("Only a pending settings proposal can be rejected")
+            if proposer == actor:
+                raise ValidationError("The proposer cannot reject their own settings")
+            if not self._person_is_active(db, actor):
+                raise ValidationError("Rejecting actor must be an active persisted Finance Person")
+            changed = db.execute(
+                "UPDATE hospital_finance_integration_settings SET status='rejected' "
+                "WHERE settings_id=? AND status='pending_approval'",
+                (ident,),
+            ).rowcount
+            if changed != 1:
+                raise ValidationError("Settings proposal changed concurrently; reload and retry")
+            self._audit(
+                db, event_type="hospital_finance.settings.rejected",
+                actor_person_id=actor, target_id=ident, occurred_at=stamp,
+                result_status="rejected", operation_ref=ident,
+                correlation_ref=f"{activity}:{scope}",
+            )
+        return self.get_by_id(db, settings_id=ident)
+
+    def pause(self, db, *, settings_id, paused_by_person_id, reason, now=None):
+        """Pause an active mapping without deleting its immutable history."""
+        ident = self._uuid(settings_id, "Settings identifier")
+        actor = self._uuid(paused_by_person_id, "Pausing Finance Person identifier")
+        explanation = str(reason).strip() if isinstance(reason, str) else ""
+        if not explanation or len(explanation) > 500:
+            raise ValidationError("pause reason must contain 1-500 characters")
+        stamp = self._stamp(now)
+        with self._atomic(db):
+            row = db.execute(
+                "SELECT activity_id,hospital_scope_ref,status "
+                "FROM hospital_finance_integration_settings WHERE settings_id=?",
+                (ident,),
+            ).fetchone()
+            if row is None:
+                raise ValidationError("Hospital-Finance settings record does not exist")
+            activity, scope, status = row
+            if status != "active":
+                raise ValidationError("Only active settings can be paused")
+            if not self._person_is_active(db, actor):
+                raise ValidationError("Pausing actor must be an active persisted Finance Person")
+            changed = db.execute(
+                "UPDATE hospital_finance_integration_settings SET status='paused' "
+                "WHERE settings_id=? AND status='active'",
+                (ident,),
+            ).rowcount
+            if changed != 1:
+                raise ValidationError("Settings changed concurrently; reload and retry")
+            self._audit(
+                db, event_type="hospital_finance.settings.paused",
+                actor_person_id=actor, target_id=ident, occurred_at=stamp,
+                result_status="paused", operation_ref=ident,
+                correlation_ref=f"{activity}:{scope}",
+            )
+        return self.get_by_id(db, settings_id=ident)
