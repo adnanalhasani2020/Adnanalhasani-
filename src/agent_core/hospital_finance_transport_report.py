@@ -25,6 +25,11 @@ _DISPOSITION_GUIDANCE = {
         "Stop automated recovery and reconcile the outbox and intake event types "
         "against the original source evidence; do not replay, remap, or post financially."
     ),
+    "source_content_conflict": (
+        "A previously observed source key has different validated content. Preserve "
+        "the original fingerprint and any Finance mapping; reconcile source evidence "
+        "manually before replay, remapping, settlement, or ledger posting."
+    ),
     "received_not_mapped": (
         "Resolve the source identity using approved Finance mapping; do not create "
         "a payment, settlement, or ledger entry from intake status alone."
@@ -75,6 +80,17 @@ def build_hospital_finance_transport_report(
     ).fetchall()
 
     intake_by_key = {_value(row, "source_event_key", 0): row for row in intake_rows}
+    conflict_counts = {
+        row[0]: row[1]
+        for row in finance_db.execute(
+            "SELECT i.source_event_key,COUNT(*) "
+            "FROM external_event_intake_conflicts AS c "
+            "JOIN external_event_intake AS i "
+            "ON i.external_event_intake_id=c.external_event_intake_id "
+            "WHERE i.source_system='hospital' "
+            "GROUP BY i.source_event_key"
+        )
+    }
     outbox_keys = {_value(row, "event_key", 0) for row in outbox_rows}
 
     events = []
@@ -94,6 +110,8 @@ def build_hospital_finance_transport_report(
             )
         elif event_type != intake_type:
             disposition = "event_type_mismatch"
+        elif conflict_counts.get(key, 0):
+            disposition = "source_content_conflict"
         elif intake_status == "quarantined":
             disposition = "quarantined"
         elif intake_status == "rejected":
@@ -109,6 +127,7 @@ def build_hospital_finance_transport_report(
             "outbox_status": outbox_status,
             "intake_event_type": intake_type,
             "intake_status": intake_status,
+            "conflict_observation_count": conflict_counts.get(key, 0),
             "disposition": disposition,
             "operator_guidance": _DISPOSITION_GUIDANCE[disposition],
         })
@@ -140,6 +159,7 @@ def build_hospital_finance_transport_report(
                 "awaiting_intake",
                 "delivered_without_intake",
                 "event_type_mismatch",
+                "source_content_conflict",
                 "received_not_mapped",
                 "mapped_source_only",
                 "quarantined",

@@ -154,3 +154,59 @@ def test_transport_report_detects_same_key_with_mismatched_event_types(tmp_path)
     assert finance_db.execute("SELECT COUNT(*) FROM financial_transactions").fetchone()[0] == 0
     assert finance_db.execute("SELECT COUNT(*) FROM ledger_entries").fetchone()[0] == 0
     finance_db.close()
+
+
+def test_transport_report_surfaces_conflicts_even_after_mapping(tmp_path):
+    from dataclasses import replace
+
+    hospital = HospitalDB(tmp_path / "hospital-content-conflict.sqlite3")
+    patient_id = hospital.register_patient(
+        patient_no="P-TRANSPORT-CONTENT-CONFLICT",
+        full_name="Synthetic Patient",
+        created_at="2026-10-18T12:00:00Z",
+        actor="test",
+    )
+    hospital.create_invoice(
+        invoice_no="INV-TRANSPORT-CONTENT-CONFLICT",
+        patient_id=patient_id,
+        total_minor=1200,
+        created_at="2026-10-18T12:01:00Z",
+        actor="test",
+    )
+
+    with hospital.connect() as hospital_db:
+        invoice_row = hospital_db.execute(
+            "SELECT event_key,event_type,aggregate_type,aggregate_id,payload_json "
+            "FROM finance_outbox WHERE event_type='hospital.invoice.created'"
+        ).fetchone()
+        finance_db = connect_database()
+        intake = ExternalEventIntake()
+        validated = validate_hospital_finance_event(dict(invoice_row))
+        received = intake.ingest(
+            finance_db, validated, now="2026-10-18T12:02:00Z"
+        )
+        finance_db.execute(
+            "UPDATE external_event_intake SET status='mapped',finance_entity_type='obligation',"
+            "finance_entity_id=?,mapped_at=? WHERE external_event_intake_id=?",
+            ("00000000-0000-4000-8000-000000000003", "2026-10-18T12:03:00Z", received.intake_id),
+        )
+
+        # A reused key with different validated content must remain visible even
+        # after the original source has already been mapped.
+        conflicting = replace(validated, amount_minor=validated.amount_minor + 1)
+        conflict = intake.ingest(
+            finance_db, conflicting, now="2026-10-18T12:04:00Z"
+        )
+        assert conflict.outcome == "conflict"
+        assert conflict.status == "mapped"
+
+        report = build_hospital_finance_transport_report(hospital_db, finance_db)
+
+    assert report["by_disposition"]["source_content_conflict"] == 1
+    event = report["events"][0]
+    assert event["disposition"] == "source_content_conflict"
+    assert event["conflict_observation_count"] == 1
+    assert "Preserve" in event["operator_guidance"]
+    assert finance_db.execute("SELECT COUNT(*) FROM financial_transactions").fetchone()[0] == 0
+    assert finance_db.execute("SELECT COUNT(*) FROM ledger_entries").fetchone()[0] == 0
+    finance_db.close()
