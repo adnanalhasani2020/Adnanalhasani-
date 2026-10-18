@@ -21,6 +21,8 @@ class HospitalUserAuthAPITests(unittest.TestCase):
                               role="admin", at="2026-01-01T08:00:00Z")
         self.auth.create_user(username="doctor.user", password="doctor-password-1234",
                               role="doctor", at="2026-01-01T08:00:00Z")
+        self.auth.create_user(username="accountant.user", password="accountant-password-123",
+                              role="accountant", at="2026-01-01T08:00:00Z")
         self.server = ThreadingHTTPServer(("127.0.0.1", 0),
                                           make_handler(self.db, "", auth_mode="users"))
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -124,6 +126,18 @@ class HospitalUserAuthAPITests(unittest.TestCase):
         status, payload = self.request("/api/auth/me", token=token)
         self.assertEqual(status, 401)
         self.assertEqual(payload["error"], "unauthorized")
+
+
+    def test_finance_outbox_status_is_limited_to_accountants_and_admins(self):
+        doctor_token = self.login("doctor.user", "doctor-password-1234")
+        status, payload = self.request("/api/finance/outbox-status", token=doctor_token)
+        self.assertEqual(status, 403)
+        self.assertEqual(payload["error"], "forbidden")
+
+        accountant_token = self.login("accountant.user", "accountant-password-123")
+        status, payload = self.request("/api/finance/outbox-status", token=accountant_token)
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["data"]["scope"], "hospital_outbox_transport_only")
 
 
 if __name__ == "__main__":

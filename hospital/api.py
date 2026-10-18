@@ -132,6 +132,8 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                 self._send(200, {"status": "ok", "service": "hospital-api"})
             elif route == "/api/dashboard":
                 self._send(200, {"data": database.dashboard()})
+            elif route == "/api/finance/outbox-status":
+                self._send(200, {"data": database.finance_outbox_status()})
             elif route == "/api/search":
                 try:
                     params = parse_qs(parsed.query, keep_blank_values=True)

@@ -269,5 +269,26 @@ class HospitalAPITests(unittest.TestCase):
                 (invoice_id,)).fetchone()[0], 1)
 
 
+    def test_finance_outbox_status_is_transport_only_and_excludes_payloads(self):
+        patient_id = self.db.register_patient(
+            patient_no="OUTBOX-STATUS-P1", full_name="Outbox Status Patient",
+            created_at="2026-01-01T08:00:00Z", actor="test",
+        )
+        invoice_id = self.db.create_invoice(
+            invoice_no="INV-OUTBOX-STATUS", patient_id=patient_id, total_minor=1200,
+            created_at="2026-01-01T08:01:00Z", actor="test",
+        )
+        status, payload = self.request("/api/finance/outbox-status")
+        self.assertEqual(status, 200)
+        data = payload["data"]
+        self.assertEqual(data["total"], 1)
+        self.assertEqual(data["counts"]["pending"], 1)
+        self.assertEqual(data["counts"]["failed"], 0)
+        self.assertEqual(data["scope"], "hospital_outbox_transport_only")
+        self.assertFalse(data["finance_recognition_confirmed"])
+        self.assertNotIn("payload_json", data)
+        self.assertNotIn("event_key", data)
+
+
 if __name__ == "__main__":
     unittest.main()
