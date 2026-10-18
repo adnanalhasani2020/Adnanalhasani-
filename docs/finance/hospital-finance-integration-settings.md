@@ -8,6 +8,7 @@ This phase adds a versioned Finance-owned persistence boundary for manager/accou
 - The selected Finance Person and Financial Account must already exist and be active; the account must belong to that Person.
 - Proposals require a separate active Finance Person to approve them. A proposer cannot approve their own proposal.
 - Approved versions supersede the prior active version for the same Activity/scope. Historical versions remain persisted.
+- Database guards reject suspending/ending an Activity, deactivating the mapped Finance Person, or closing the mapped Financial Account while related settings are pending approval or active. Pause/reject the setting first; this prevents a stale active mapping from silently surviving a reference-state change.
 - Partial payments remain rejected until remaining-obligation support exists. Currency conversion and inferred rounding are not enabled; amount/currency must match exactly.
 - Invoice policy choices are stored explicitly, but this settings record alone does not create an obligation. Invoice events remain unacknowledged until a separately approved Finance obligation lifecycle exists.
 - These settings are not a substitute for the operation-specific AuthorizationGrant, approved AgentAction, human Approval, and Finance recognition application required for every financial write.
