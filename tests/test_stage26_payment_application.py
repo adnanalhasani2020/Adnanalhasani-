@@ -547,7 +547,8 @@ def test_payment_transition_rejects_non_string_target_states_without_mutation(ta
     db.close()
 
 
-def test_payment_restore_rejects_persisted_invoice_obligation_mismatch():
+@pytest.mark.parametrize("payment_obligation_mode", ["different", "missing"])
+def test_payment_restore_rejects_persisted_invoice_obligation_mismatch(payment_obligation_mode):
     db = connect_database()
     payer, payee, approver, agent, context, obligation = seed(db)
     other_obligation = uid()
@@ -585,15 +586,17 @@ def test_payment_restore_rejects_persisted_invoice_obligation_mismatch():
         "INSERT INTO payments(payment_id,obligation_id,invoice_id,payer_person_id,payee_person_id,"
         "amount_minor,currency_code,state,created_at,updated_at,version_no) "
         "VALUES(?,?,?,?,?,?,?,'initiated',?,?,1)",
-        (payment_id, other_obligation, invoice, payer, payee, 1000, "YER", STAMP, STAMP),
+        (payment_id, other_obligation if payment_obligation_mode == "different" else None,
+         invoice, payer, payee, 1000, "YER", STAMP, STAMP),
     )
     db.commit()
 
     with pytest.raises(ValidationError, match="Persisted Payment Invoice and Obligation references do not match"):
         PaymentApplication().get_payment(db, payment_id)
+    expected_obligation = other_obligation if payment_obligation_mode == "different" else None
     assert db.execute(
         "SELECT obligation_id,invoice_id FROM payments WHERE payment_id=?", (payment_id,)
-    ).fetchone() == (other_obligation, invoice)
+    ).fetchone() == (expected_obligation, invoice)
     db.close()
 
 
