@@ -80,7 +80,7 @@ class ManagerSettingsProposalAPITests(unittest.TestCase):
         payload["modules"] = ["appointments"]
         status, result = self.request("/api/manager-settings/proposals", "POST", payload, token)
         self.assertEqual(status, 400)
-        self.assertEqual(result["error"], "invalid_field_value")
+        self.assertEqual(result["error"], "modules must be unique and audit is mandatory")
 
     def test_proposal_persists_and_requires_distinct_reviewer_with_version_check(self):
         author_token = self.login("admin.one", "administrator-password-123")
