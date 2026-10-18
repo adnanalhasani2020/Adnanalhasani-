@@ -133,6 +133,9 @@ class HospitalUserAuthAPITests(unittest.TestCase):
         status, payload = self.request("/api/finance/outbox-status", token=doctor_token)
         self.assertEqual(status, 403)
         self.assertEqual(payload["error"], "forbidden")
+        status, payload = self.request("/api/finance/integration-readiness", token=doctor_token)
+        self.assertEqual(status, 403)
+        self.assertEqual(payload["error"], "forbidden")
 
         accountant_token = self.login("accountant.user", "accountant-password-123")
         status, payload = self.request("/api/finance/outbox-status", token=accountant_token)

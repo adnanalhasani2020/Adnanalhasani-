@@ -1,7 +1,9 @@
 import json
+import os
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError
@@ -355,6 +357,14 @@ class HospitalAPITests(unittest.TestCase):
         self.assertFalse(data["finance_recognition_confirmed"])
         self.assertNotIn("payload_json", data)
         self.assertNotIn("event_key", data)
+
+
+    def test_finance_readiness_fails_closed_when_finance_database_is_missing(self):
+        missing = Path(self.temp.name) / "missing-finance.sqlite3"
+        with patch.dict(os.environ, {"APP_DB_PATH": str(missing)}):
+            status, payload = self.request("/api/finance/integration-readiness")
+        self.assertEqual(status, 503)
+        self.assertEqual(payload, {"error": "finance_store_unavailable"})
 
 
 if __name__ == "__main__":
