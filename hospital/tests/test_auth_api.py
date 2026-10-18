@@ -1,3 +1,4 @@
+import hashlib
 import json
 import tempfile
 import threading
@@ -73,18 +74,54 @@ class HospitalUserAuthAPITests(unittest.TestCase):
         self.assertEqual(status, 401)
         self.assertEqual(payload["error"], "unauthorized")
 
-    def test_doctor_cannot_create_patient_or_manage_users(self):
+    def test_doctor_cannot_create_patient_or_manage_users_without_side_effects(self):
         token = self.login("doctor.user", "doctor-password-1234")
+        with self.db.connect() as conn:
+            patients_before = conn.execute("SELECT COUNT(*) FROM patients").fetchone()[0]
+            users_before = conn.execute("SELECT COUNT(*) FROM auth_users").fetchone()[0]
+            audit_before = conn.execute("SELECT COUNT(*) FROM audit_log").fetchone()[0]
+
         status, payload = self.request("/api/patients", "POST", {
             "patient_no": "DENIED-1", "full_name": "Should Not Be Created",
             "created_at": "2026-01-01T08:00:00"
         }, token)
         self.assertEqual(status, 403)
+        self.assertEqual(payload["error"], "forbidden")
         status, _ = self.request("/api/users", "POST", {
             "username": "intruder.user", "password": "intruder-password-123",
             "role": "admin", "at": "2026-01-01T08:00:00Z"
         }, token)
         self.assertEqual(status, 403)
+
+        with self.db.connect() as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM patients").fetchone()[0], patients_before)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM auth_users").fetchone()[0], users_before)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM audit_log").fetchone()[0], audit_before)
+
+    def test_expired_session_cannot_read_or_write_and_leaves_database_unchanged(self):
+        token = self.login("admin.user", "administrator-password-123")
+        token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+        with self.db.connect() as conn:
+            conn.execute(
+                "UPDATE auth_sessions SET expires_at=? WHERE token_hash=?",
+                ("2000-01-01T00:00:00Z", token_hash),
+            )
+            patients_before = conn.execute("SELECT COUNT(*) FROM patients").fetchone()[0]
+            audit_before = conn.execute("SELECT COUNT(*) FROM audit_log").fetchone()[0]
+
+        status, payload = self.request("/api/patients", "POST", {
+            "patient_no": "EXPIRED-SESSION", "full_name": "Must Not Be Created",
+            "created_at": "2026-01-01T08:00:00Z"
+        }, token)
+        self.assertEqual(status, 401)
+        self.assertEqual(payload["error"], "unauthorized")
+        status, payload = self.request("/api/patients", token=token)
+        self.assertEqual(status, 401)
+        self.assertEqual(payload["error"], "unauthorized")
+
+        with self.db.connect() as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM patients").fetchone()[0], patients_before)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM audit_log").fetchone()[0], audit_before)
 
     def test_admin_can_create_user_and_user_list_is_protected(self):
         token = self.login("admin.user", "administrator-password-123")
