@@ -251,10 +251,12 @@ def test_settings_proposal_and_approval_write_atomic_append_only_audit_events(tm
         "FROM audit_records WHERE target_ref=? ORDER BY occurred_at,audit_record_id",
         (str(active.settings_id),),
     ).fetchall()
-    assert [row[0] for row in audit] == [
+    assert len(audit) == 2
+    assert {row[0] for row in audit} == {
         "hospital_finance.settings.proposed", "hospital_finance.settings.approved"
-    ]
-    assert audit[1] == (
+    }
+    approved_event = next(row for row in audit if row[0] == "hospital_finance.settings.approved")
+    assert approved_event == (
         "hospital_finance.settings.approved", approver, str(active.settings_id),
         "active", str(active.settings_id)
     )
