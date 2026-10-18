@@ -221,3 +221,41 @@ def test_settings_audit_failure_preserves_caller_owned_transaction():
     db.rollback()
     assert db.execute("SELECT COUNT(*) FROM persons WHERE person_id=?", (caller_person,)).fetchone()[0] == 0
     db.close()
+
+
+def test_settings_update_rejects_grant_from_another_activity_without_writes():
+    db = connect_database()
+    stamp = "2026-10-16T12:00:00Z"
+    person, activity, other_activity, agent, grant, action = (str(uuid4()) for _ in range(6))
+    db.execute("INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+               (person, stamp, stamp))
+    for activity_id in (activity, other_activity):
+        db.execute("INSERT INTO activities(activity_id,owner_person_id,state,created_at,updated_at) "
+                   "VALUES(?,?,'active',?,?)", (activity_id, person, stamp, stamp))
+    db.execute("INSERT INTO agents(agent_id,owner_person_id,configured_identity_ref,context_ref,state,created_at,updated_at) "
+               "VALUES(?,?,?,?, 'active',?,?)", (agent, person, "policy-cross-activity-test-agent", activity, stamp, stamp))
+    code = FinancialPolicySettingsApplication.ACTION_CODE
+    db.execute("INSERT INTO authorization_grants(authorization_grant_id,agent_id,action_code,scope_ref,context_ref,"
+               "state,effective_from,created_at,updated_at) VALUES(?,?,?,?,?,'active',?,?,?)",
+               (grant, agent, code, other_activity, other_activity, stamp, stamp, stamp))
+    db.execute("INSERT INTO agent_actions(agent_action_id,agent_id,action_code,target_ref,context_ref,"
+               "authorization_grant_id,state,created_at,updated_at) VALUES(?,?,?,?,?,?,'approved',?,?)",
+               (action, agent, code, activity, activity, grant, stamp, stamp))
+    db.execute("INSERT INTO approvals(approval_id,agent_action_id,state,approver_person_id,decision_at,created_at,updated_at) "
+               "VALUES(?,?,'APPROVED',?,?,?,?)", (str(uuid4()), action, person, stamp, stamp, stamp))
+    db.commit()
+
+    with pytest.raises(ValidationError, match="scope/context must match"):
+        FinancialPolicySettingsApplication().update_settings(
+            db, activity_id=activity, enabled_currencies=("YER", "USD"),
+            default_currency="USD", authorization_grant_id=grant,
+            agent_action_id=action, now=stamp, expected_version_no=0,
+        )
+
+    assert db.execute(
+        "SELECT COUNT(*) FROM financial_policy_settings WHERE activity_id=?", (activity,)
+    ).fetchone()[0] == 0
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE owner_domain='FinancePolicySettings'"
+    ).fetchone()[0] == 0
+    db.close()
