@@ -1,3 +1,4 @@
+import hashlib
 import json
 import tempfile
 import threading
@@ -60,6 +61,18 @@ class HospitalUserAuthAPITests(unittest.TestCase):
         self.assertEqual(status, 200)
         return payload["token"]
 
+    def snapshot_tables(self, *table_names):
+        # Compare complete persisted rows, not just counts; sort by repr so SQL
+        # row order is irrelevant and heterogeneous nullable values are safe.
+        with self.db.connect() as conn:
+            return {
+                table: tuple(sorted(
+                    (tuple(row) for row in conn.execute(f"SELECT * FROM {table}")),
+                    key=repr,
+                ))
+                for table in table_names
+            }
+
     def test_login_and_current_user(self):
         token = self.login("doctor.user", "doctor-password-1234")
         status, payload = self.request("/api/auth/me", token=token)
@@ -73,18 +86,71 @@ class HospitalUserAuthAPITests(unittest.TestCase):
         self.assertEqual(status, 401)
         self.assertEqual(payload["error"], "unauthorized")
 
-    def test_doctor_cannot_create_patient_or_manage_users(self):
+    def test_doctor_cannot_create_patient_or_manage_users_without_side_effects(self):
         token = self.login("doctor.user", "doctor-password-1234")
+        before = self.snapshot_tables("patients", "auth_users", "audit_log")
+
         status, payload = self.request("/api/patients", "POST", {
             "patient_no": "DENIED-1", "full_name": "Should Not Be Created",
             "created_at": "2026-01-01T08:00:00"
         }, token)
         self.assertEqual(status, 403)
+        self.assertEqual(payload["error"], "forbidden")
         status, _ = self.request("/api/users", "POST", {
             "username": "intruder.user", "password": "intruder-password-123",
             "role": "admin", "at": "2026-01-01T08:00:00Z"
         }, token)
         self.assertEqual(status, 403)
+
+        self.assertEqual(self.snapshot_tables("patients", "auth_users", "audit_log"), before)
+
+    def test_unauthenticated_write_is_rejected_without_database_changes(self):
+        before = self.snapshot_tables("patients", "auth_users", "audit_log")
+
+        status, payload = self.request("/api/patients", "POST", {
+            "patient_no": "NO-AUTH-1", "full_name": "Must Not Be Created",
+            "created_at": "2026-01-01T08:00:00Z"
+        })
+        self.assertEqual(status, 401)
+        self.assertEqual(payload["error"], "unauthorized")
+
+        self.assertEqual(self.snapshot_tables("patients", "auth_users", "audit_log"), before)
+
+    def test_expired_session_cannot_read_or_write_and_leaves_database_unchanged(self):
+        token = self.login("admin.user", "administrator-password-123")
+        token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+        with self.db.connect() as conn:
+            conn.execute(
+                "UPDATE auth_sessions SET expires_at=? WHERE token_hash=?",
+                ("2000-01-01T00:00:00Z", token_hash),
+            )
+            before = {
+                table: tuple(sorted(
+                    (tuple(row) for row in conn.execute(f"SELECT * FROM {table}")),
+                    key=repr,
+                ))
+                for table in ("patients", "auth_users", "audit_log")
+            }
+
+        status, payload = self.request("/api/patients", "POST", {
+            "patient_no": "EXPIRED-SESSION", "full_name": "Must Not Be Created",
+            "created_at": "2026-01-01T08:00:00Z"
+        }, token)
+        self.assertEqual(status, 401)
+        self.assertEqual(payload["error"], "unauthorized")
+        status, payload = self.request("/api/patients", token=token)
+        self.assertEqual(status, 401)
+        self.assertEqual(payload["error"], "unauthorized")
+
+        with self.db.connect() as conn:
+            after = {
+                table: tuple(sorted(
+                    (tuple(row) for row in conn.execute(f"SELECT * FROM {table}")),
+                    key=repr,
+                ))
+                for table in ("patients", "auth_users", "audit_log")
+            }
+        self.assertEqual(after, before)
 
     def test_admin_can_create_user_and_user_list_is_protected(self):
         token = self.login("admin.user", "administrator-password-123")
