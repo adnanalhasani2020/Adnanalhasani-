@@ -74,6 +74,38 @@ footer{max-width:1100px;margin:auto;padding:0 18px 24px;color:var(--muted);font-
 <p class="help">هذه تفضيلات مقترحة للنقاش فقط. لا تغيّر نظام التفويض أو سجل التدقيق الفعلي.</p>
 </section>
 </div>
+<section class="card" style="margin-top:16px" aria-labelledby="integration-title">
+<h2 id="integration-title">٤. قرارات ربط المستشفى بالمحاسبة</h2>
+<span class="pill pending">قرار المدير مطلوب قبل اعتماد السياسة</span>
+<p class="help">هذه خيارات مقترحة لتحديد سلوك المؤسسة. اختيارها يعرض التفضيل فقط ولا ينشئ قيودًا أو تسويات أو يغير إعدادات النظام الفعلية.</p>
+<label for="partialPayments">كيف نتعامل مع الدفعات الجزئية؟</label>
+<select id="partialPayments" name="partialPayments">
+<option value="hold_until_full">إبقاء المطابقة النهائية معلّقة حتى اكتمال سداد الفاتورة — الخيار المحافظ</option>
+<option value="multiple_settlements">طلب اعتماد تسويات متعددة لكل دفعة جزئية بعد استكمال الدعم والاختبارات</option>
+<option value="manual_review">إحالة كل دفعة جزئية للمراجعة اليدوية</option>
+</select>
+<p class="help">النظام المالي الحالي لا يدعم بعد تسوية جزئية لالتزام واحد بصورة مكتملة. لا يحوّل هذا الاختيار الدفعات إلى تسويات فعلية.</p>
+<label for="invoiceAccounting">متى تُنشأ المعالجة المحاسبية للفاتورة؟</label>
+<select id="invoiceAccounting" name="invoiceAccounting">
+<option value="review_required">مراجعة سياسة الاعتراف أولًا — الخيار المحافظ</option>
+<option value="obligation_after_approval">طلب اعتماد إنشاء التزام بعد اعتماد الفاتورة والتحقق من الطرف والحساب</option>
+<option value="defer_invoice_event">تأجيل أي معالجة مالية لحدث إنشاء الفاتورة</option>
+</select>
+<p class="help">حدث إنشاء الفاتورة ليس قيدًا محاسبيًا. يجب اعتماد سياسة الاعتراف والحسابات قبل أي كتابة مالية.</p>
+<label for="accountMapping">كيف يتم ربط سجلات المستشفى بالحسابات المالية؟</label>
+<select id="accountMapping" name="accountMapping">
+<option value="approved_mapping_only">استخدام ربط صريح ومعتمد من المدير — الخيار الآمن</option>
+<option value="manual_review">مراجعة يدوية لكل فاتورة/دفعة غير مرتبطة</option>
+<option value="block_unmapped">حظر المعالجة المالية حتى اكتمال الربط</option>
+</select>
+<p class="help">لا تُحوّل أرقام المرضى أو الفواتير إلى معرّفات Finance ولا تستنتج الحساب من بيانات المريض.</p>
+<label for="deliveryFailure">ماذا يحدث إذا تعذر تسليم الحدث إلى Finance؟</label>
+<select id="deliveryFailure" name="deliveryFailure">
+<option value="retry_and_reconcile">إعادة المحاولة مع إبقاء الحدث غير مؤكد حتى القبول الدائم — الخيار الآمن</option>
+<option value="manual_reconciliation">إيقاف الحدث المتعثر للمطابقة اليدوية</option>
+</select>
+<p class="help">لا يجوز اعتبار الحدث مسلّمًا لمجرد التحقق منه أو استلامه مؤقتًا.</p>
+</section>
 <div class="actions"><button class="primary" type="submit">معاينة القرار المقترح</button><button class="secondary" type="button" id="save">حفظ النموذج محليًا</button><button class="secondary" type="button" id="reset">إعادة ضبط</button></div>
 <div id="status" role="status" aria-live="polite"></div><div id="summary" class="summary" hidden></div>
 </form>
@@ -81,15 +113,15 @@ footer{max-width:1100px;margin:auto;padding:0 18px 24px;color:var(--muted);font-
 <footer>مستشفى / نواة النظام — نموذج تصميم غير متصل بالخدمات الخلفية. لا تدخل بيانات مرضى أو معلومات حساسة هنا.</footer>
 <script>
 const form=document.getElementById('settings'),statusBox=document.getElementById('status'),summary=document.getElementById('summary');
-const labels={activity:{commerce:'التجارة والخدمات اليومية',health:'الخدمات الصحية',education:'التعليم والتدريب',finance:'الخدمات المالية والمحاسبية',mixed:'نشاط مختلط',other:'نشاط آخر'},clinical:{defer:'تأجيل الوظائف الصحية غير المعتمدة',request:'طلب مراجعة واعتماد نطاق صحي'},finance:{blocked:'إبقاء السياسات المالية غير المحسومة محجوبة',review:'طلب مراجعة سياسة مالية'},approval:{all:'موافقة مدير على كل تغيير مؤثر',sensitive:'موافقة مدير على التغييرات الحساسة'},audit:{required:'سجل تدقيق لكل تغيير وإقرار',standard:'سجل تدقيق للتغييرات الحساسة على الأقل'}};
+const labels={activity:{commerce:'التجارة والخدمات اليومية',health:'الخدمات الصحية',education:'التعليم والتدريب',finance:'الخدمات المالية والمحاسبية',mixed:'نشاط مختلط',other:'نشاط آخر'},clinical:{defer:'تأجيل الوظائف الصحية غير المعتمدة',request:'طلب مراجعة واعتماد نطاق صحي'},finance:{blocked:'إبقاء السياسات المالية غير المحسومة محجوبة',review:'طلب مراجعة سياسة مالية'},approval:{all:'موافقة مدير على كل تغيير مؤثر',sensitive:'موافقة مدير على التغييرات الحساسة'},audit:{required:'سجل تدقيق لكل تغيير وإقرار',standard:'سجل تدقيق للتغييرات الحساسة على الأقل'},partialPayments:{hold_until_full:'تعليق المطابقة النهائية حتى اكتمال السداد',multiple_settlements:'طلب اعتماد دعم تسويات متعددة',manual_review:'مراجعة يدوية لكل دفعة جزئية'},invoiceAccounting:{review_required:'مراجعة سياسة الاعتراف أولًا',obligation_after_approval:'طلب اعتماد إنشاء التزام بعد الموافقة',defer_invoice_event:'تأجيل المعالجة المالية لحدث الفاتورة'},accountMapping:{approved_mapping_only:'ربط صريح ومعتمد فقط',manual_review:'مراجعة يدوية للسجلات غير المرتبطة',block_unmapped:'حظر المعالجة حتى اكتمال الربط'},deliveryFailure:{retry_and_reconcile:'إعادة المحاولة والمطابقة قبل التأكيد',manual_reconciliation:'إيقاف الحدث المتعثر للمطابقة اليدوية'}};
 const activityRecommendations={commerce:'تحسين تدفق العروض والمبيعات والمخزون مع الحفاظ على قواعد السلامة الحالية.',health:'حصر الاحتياجات الإدارية غير السريرية، وطلب اعتماد رسمي قبل أي نطاق سريري جديد.',education:'ترتيب التسجيل والمحتوى والتقييم مع مراجعة صلاحيات الوصول وحماية بيانات المتعلمين.',finance:'مراجعة التقارير والتسويات وسجل التدقيق؛ إبقاء قواعد العمل غير المحسومة محجوبة.',mixed:'ابدأ بوحدات مستقلة منخفضة المخاطر، وثبّت حدود البيانات والصلاحيات بين الأنشطة.',other:'اجمع متطلبات النشاط أولًا، ولا تفعّل سياسات جديدة قبل اعتمادها.'};
 const activityField=document.getElementById('activity'),activityGuidance=document.getElementById('activity-guidance');
 function updateActivityGuidance(){const activity=activityField.value;if(!activity){activityGuidance.hidden=true;activityGuidance.textContent='';return}activityGuidance.hidden=false;activityGuidance.textContent='توصية إرشادية غير ملزمة: '+activityRecommendations[activity]+' لا يفعّل الاختيار أي سياسة.'}
 activityField.addEventListener('change',updateActivityGuidance);
 function data(){return Object.fromEntries(new FormData(form).entries())}
 function show(message){statusBox.textContent=message;statusBox.style.display='block'}function announceError(message){show(message);statusBox.setAttribute('role','alert')}function announceStatus(message){show(message);statusBox.setAttribute('role','status')}
-form.addEventListener('submit',e=>{e.preventDefault();const d=data();if(!d.activity){announceError('يرجى اختيار النشاط الرئيسي قبل المعاينة.');document.getElementById('activity').focus();return}summary.hidden=false;summary.textContent='معاينة غير معتمدة — لا تغيّر النظام\n\nالنشاط: '+labels.activity[d.activity]+'\nالأولوية المقترحة (إرشادية فقط): '+activityRecommendations[d.activity]+'\nالوظائف الصحية: '+labels.clinical[d.clinical]+'\nالسياسات المالية: '+labels.finance[d.finance]+'\nالموافقة: '+labels.approval[d.approval]+'\nالتدقيق: '+labels.audit[d.audit]+'\nاسم المؤسسة: '+(d.orgName||'غير محدد')+'\nملاحظات: '+(d.notes||'لا توجد')+'\n\nالخطوة المطلوبة: اعتماد المدير وتسجيل القرار رسميًا قبل تحويله إلى إعداد نافذ.';announceStatus('تم إنشاء معاينة محلية فقط؛ لم يتم اعتماد أو تفعيل أي سياسة.')});
-document.getElementById('save').addEventListener('click',()=>{try{const d=data();const safeSettings={activity:d.activity,clinical:d.clinical,finance:d.finance,approval:d.approval,audit:d.audit};localStorage.setItem('hospital-admin-decision-prototype',JSON.stringify(safeSettings));announceStatus('حُفظت خيارات الإعدادات المحددة فقط في هذا المتصفح. لم يُحفظ اسم المؤسسة أو الملاحظات النصية، ولا يوجد حفظ على الخادم.')}catch(error){announceError('تعذر الحفظ المحلي؛ قد يكون تخزين المتصفح معطلاً أو ممتلئًا. انسخ معاينة القرار قبل مغادرة الصفحة.')}});
+form.addEventListener('submit',e=>{e.preventDefault();const d=data();if(!d.activity){announceError('يرجى اختيار النشاط الرئيسي قبل المعاينة.');document.getElementById('activity').focus();return}summary.hidden=false;summary.textContent='معاينة غير معتمدة — لا تغيّر النظام\n\nالنشاط: '+labels.activity[d.activity]+'\nالأولوية المقترحة (إرشادية فقط): '+activityRecommendations[d.activity]+'\nالوظائف الصحية: '+labels.clinical[d.clinical]+'\nالسياسات المالية: '+labels.finance[d.finance]+'\nالموافقة: '+labels.approval[d.approval]+'\nالتدقيق: '+labels.audit[d.audit]+'\nالدفعات الجزئية: '+labels.partialPayments[d.partialPayments]+'\nمعالجة الفاتورة: '+labels.invoiceAccounting[d.invoiceAccounting]+'\nربط الحسابات: '+labels.accountMapping[d.accountMapping]+'\nتعطل التسليم: '+labels.deliveryFailure[d.deliveryFailure]+'\nاسم المؤسسة: '+(d.orgName||'غير محدد')+'\nملاحظات: '+(d.notes||'لا توجد')+'\n\nالخطوة المطلوبة: اعتماد المدير وتسجيل القرار رسميًا قبل تحويله إلى إعداد نافذ.';announceStatus('تم إنشاء معاينة محلية فقط؛ لم يتم اعتماد أو تفعيل أي سياسة.')});
+document.getElementById('save').addEventListener('click',()=>{try{const d=data();const safeSettings={activity:d.activity,clinical:d.clinical,finance:d.finance,approval:d.approval,audit:d.audit,partialPayments:d.partialPayments,invoiceAccounting:d.invoiceAccounting,accountMapping:d.accountMapping,deliveryFailure:d.deliveryFailure};localStorage.setItem('hospital-admin-decision-prototype',JSON.stringify(safeSettings));announceStatus('حُفظت خيارات الإعدادات المحددة فقط في هذا المتصفح. لم يُحفظ اسم المؤسسة أو الملاحظات النصية، ولا يوجد حفظ على الخادم.')}catch(error){announceError('تعذر الحفظ المحلي؛ قد يكون تخزين المتصفح معطلاً أو ممتلئًا. انسخ معاينة القرار قبل مغادرة الصفحة.')}});
 document.getElementById('reset').addEventListener('click',()=>{form.reset();summary.hidden=true;summary.textContent='';const guidance=document.getElementById('activity-guidance');guidance.hidden=true;guidance.textContent='';statusBox.style.display='none';try{localStorage.removeItem('hospital-admin-decision-prototype')}catch(error){announceError('أُعيد ضبط النموذج، لكن تعذر حذف النسخة المحلية المحفوظة من المتصفح. احذف بيانات الموقع من إعدادات المتصفح إذا لزم.')}document.getElementById('activity').focus()});
 function restoreSavedValue(name,value){
  const field=form.elements[name];
@@ -103,7 +135,7 @@ function restoreSavedValue(name,value){
   field.value=Number.isFinite(limit)&&limit>0?value.slice(0,limit):value;
  }
 }
-try{const saved=localStorage.getItem('hospital-admin-decision-prototype');if(saved){const d=JSON.parse(saved);const allowed=new Set(['activity','clinical','finance','approval','audit']);if(d&&typeof d==='object'&&!Array.isArray(d)){for(const [k,v] of Object.entries(d)){if(allowed.has(k))restoreSavedValue(k,v)}}}}catch(error){announceError('تعذر استعادة الاختيارات المحلية. يمكنك متابعة استخدام النموذج أو إعادة ضبطه.')}
+try{const saved=localStorage.getItem('hospital-admin-decision-prototype');if(saved){const d=JSON.parse(saved);const allowed=new Set(['activity','clinical','finance','approval','audit','partialPayments','invoiceAccounting','accountMapping','deliveryFailure']);if(d&&typeof d==='object'&&!Array.isArray(d)){for(const [k,v] of Object.entries(d)){if(allowed.has(k))restoreSavedValue(k,v)}}}}catch(error){announceError('تعذر استعادة الاختيارات المحلية. يمكنك متابعة استخدام النموذج أو إعادة ضبطه.')}
 updateActivityGuidance();
 </script>
 </body>
