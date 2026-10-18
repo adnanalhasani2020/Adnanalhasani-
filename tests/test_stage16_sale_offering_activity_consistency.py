@@ -228,6 +228,7 @@ def test_existing_database_migration_preserves_sales_invoices_and_history_on_reo
         ("0043_hospital_finance_integration_settings",),
         ("0044_financial_transaction_settlement_integrity",),
         ("0045_recognized_settlement_source_immutability",),
+        ("0046_hospital_finance_activity_scope_guards",),
         ("9998_activity_invitations",),
         ("9999_file_attachments",),
     ]
