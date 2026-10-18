@@ -517,6 +517,33 @@ class HospitalDB:
             db.commit()
             return changed == 1
 
+    def finance_outbox_status(self) -> dict[str, Any]:
+        """Return transport-only outbox counts without exposing event payloads.
+
+        These counters describe Hospital delivery work only. They do not prove
+        Finance intake, settlement, recognition, or ledger posting.
+        """
+        with self.connect() as db:
+            counts = {row["status"]: int(row["n"]) for row in db.execute(
+                "SELECT status,COUNT(*) AS n FROM finance_outbox GROUP BY status"
+            ).fetchall()}
+            oldest_pending = db.execute(
+                "SELECT MIN(created_at) FROM finance_outbox WHERE status='pending'"
+            ).fetchone()[0]
+            oldest_failed = db.execute(
+                "SELECT MIN(updated_at) FROM finance_outbox WHERE status='failed'"
+            ).fetchone()[0]
+        for status in ("pending", "processing", "delivered", "failed"):
+            counts.setdefault(status, 0)
+        return {
+            "total": sum(counts.values()),
+            "counts": counts,
+            "oldest_pending_created_at": oldest_pending,
+            "oldest_failed_updated_at": oldest_failed,
+            "scope": "hospital_outbox_transport_only",
+            "finance_recognition_confirmed": False,
+        }
+
     def dashboard(self) -> dict[str, int]:
         """Operational counts only; excludes patient-identifying data."""
         with self.connect() as db:
