@@ -205,7 +205,7 @@ class PaymentApplication:
                 raise ValidationError(
                     "Persisted Payment currency does not match its settled Obligation currency"
                 )
-        if obligation is not None and invoice is not None:
+        if invoice is not None:
             invoice_link = connection.execute(
                 "SELECT obligation_id FROM invoices WHERE invoice_id=?", (invoice,),
             ).fetchone()
