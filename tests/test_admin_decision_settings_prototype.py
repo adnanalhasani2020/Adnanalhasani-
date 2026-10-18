@@ -175,3 +175,31 @@ def test_reset_clears_live_activity_guidance():
 
     assert "guidance.hidden=true" in reset_handler
     assert "guidance.textContent=''" in reset_handler
+
+
+
+def test_finance_currency_choices_are_explicit_and_default_must_be_enabled():
+    html = PROTOTYPE.read_text(encoding="utf-8")
+
+    assert 'name="enabledCurrencies" value="SAR" checked' in html
+    assert 'name="enabledCurrencies" value="YER" checked' in html
+    assert 'name="enabledCurrencies" value="USD" checked' in html
+    assert 'id="defaultCurrency" name="defaultCurrency"' in html
+    assert 'value="YER" selected>الريال اليمني (YER)' in html
+    assert 'id="displayDecimalPlaces" name="displayDecimalPlaces"' in html
+    assert "d.enabledCurrencies.length" in html
+    assert "d.enabledCurrencies.includes(d.defaultCurrency)" in html
+    assert "دقة العرض: " in html
+    assert "للعرض فقط" in html
+
+
+def test_currency_choices_are_saved_as_prototype_preferences_not_active_finance_policy():
+    html = PROTOTYPE.read_text(encoding="utf-8")
+
+    assert "enabledCurrencies:d.enabledCurrencies" in html
+    assert "defaultCurrency:d.defaultCurrency" in html
+    assert "displayDecimalPlaces:d.displayDecimalPlaces" in html
+    assert "name==='enabledCurrencies'&&Array.isArray(value)" in html
+    assert "localStorage" in html
+    assert "لا يوجد حفظ على الخادم" in html
+    assert "لا تغيّر إعدادات Finance المحفوظة على الخادم" in html
