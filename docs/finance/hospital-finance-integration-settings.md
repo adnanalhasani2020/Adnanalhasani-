@@ -15,6 +15,6 @@ This phase adds a versioned Finance-owned persistence boundary for manager/accou
 - Invoice policy choices are stored explicitly, but this settings record alone does not create an obligation. Invoice events remain unacknowledged until a separately approved Finance obligation lifecycle exists.
 - These settings are not a substitute for the operation-specific AuthorizationGrant, approved AgentAction, human Approval, and Finance recognition application required for every financial write.
 
-## Current implementation boundary
+- Pending proposals can be explicitly rejected by a distinct active Finance Person, and active mappings can be paused by an active Finance Person. Both actions require a reason, preserve the versioned snapshot, and write append-only audit events in the same savepoint; audit failure rolls the state change back. Pausing removes the mapping from active lookup without deleting its history. These service methods still require a trusted authenticated caller at the API boundary.\n\n## Current implementation boundary
 
 The HospitalFinanceIntegrationSettingsApplication supplies persisted proposal, approval, active lookup, and versioning. The opt-in consumer is still not automatically scheduled or wired to this application. A manager UI and authenticated endpoint must call this Finance-owned application through the existing authenticated Finance surface before settings can be considered user-configurable end to end. Do not expose database UUID entry as a free-form browser setting; present validated existing Persons/Accounts.

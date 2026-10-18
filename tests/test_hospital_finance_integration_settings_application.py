@@ -293,3 +293,112 @@ def test_settings_proposal_rolls_back_when_required_audit_write_fails(tmp_path):
         "SELECT COUNT(*) FROM audit_records WHERE event_type='hospital_finance.settings.proposed'"
     ).fetchone()[0] == 0
     db.close()
+
+
+
+def test_settings_rejection_requires_distinct_active_actor_and_audits_decision(tmp_path):
+    db = connect_database(tmp_path / "finance-settings-reject.sqlite")
+    activity, owner, proposer, approver, account = _fixture(db)
+    app = HospitalFinanceIntegrationSettingsApplication()
+    proposal = app.propose(
+        db, activity_id=activity, hospital_scope_ref="clinic-main",
+        finance_person_id=owner, financial_account_id=account,
+        proposed_by_person_id=proposer, now=NOW,
+    )
+
+    with pytest.raises(ValidationError, match="cannot reject their own"):
+        app.reject(db, settings_id=proposal.settings_id,
+                   rejected_by_person_id=proposer, reason="Not approved", now=NOW)
+    with pytest.raises(ValidationError, match="reason must contain"):
+        app.reject(db, settings_id=proposal.settings_id,
+                   rejected_by_person_id=approver, reason=" ", now=NOW)
+
+    rejected = app.reject(
+        db, settings_id=proposal.settings_id, rejected_by_person_id=approver,
+        reason="Selected account does not match this activity", now=NOW,
+    )
+    assert rejected.status == "rejected"
+    event = db.execute(
+        "SELECT event_type,actor_context_ref,target_ref,result_status,correlation_ref "
+        "FROM audit_records WHERE event_type='hospital_finance.settings.rejected'"
+    ).fetchone()
+    assert event == (
+        "hospital_finance.settings.rejected", approver, str(proposal.settings_id),
+        "rejected", f"{activity}:clinic-main",
+    )
+    with pytest.raises(ValidationError, match="Only a pending"):
+        app.reject(db, settings_id=proposal.settings_id,
+                   rejected_by_person_id=approver, reason="Again", now=NOW)
+    db.close()
+
+
+def test_settings_pause_removes_mapping_from_active_lookup_and_audits_decision(tmp_path):
+    db = connect_database(tmp_path / "finance-settings-pause.sqlite")
+    activity, owner, proposer, approver, account = _fixture(db)
+    app = HospitalFinanceIntegrationSettingsApplication()
+    proposal = app.propose(
+        db, activity_id=activity, hospital_scope_ref="clinic-main",
+        finance_person_id=owner, financial_account_id=account,
+        proposed_by_person_id=proposer, now=NOW,
+    )
+    active = app.approve(
+        db, settings_id=proposal.settings_id, approved_by_person_id=approver, now=NOW,
+    )
+
+    paused = app.pause(
+        db, settings_id=active.settings_id, paused_by_person_id=owner,
+        reason="Temporarily suspend integration while reviewing account mapping", now=NOW,
+    )
+    assert paused.status == "paused"
+    assert app.get_active(db, activity_id=activity, hospital_scope_ref="clinic-main") is None
+    event = db.execute(
+        "SELECT event_type,actor_context_ref,target_ref,result_status "
+        "FROM audit_records WHERE event_type='hospital_finance.settings.paused'"
+    ).fetchone()
+    assert event == (
+        "hospital_finance.settings.paused", owner, str(active.settings_id), "paused"
+    )
+    with pytest.raises(ValidationError, match="Only active settings"):
+        app.pause(db, settings_id=active.settings_id, paused_by_person_id=owner,
+                  reason="Pause again", now=NOW)
+    db.close()
+
+
+@pytest.mark.parametrize("operation,event_type", [
+    ("reject", "hospital_finance.settings.rejected"),
+    ("pause", "hospital_finance.settings.paused"),
+])
+def test_reject_and_pause_roll_back_when_audit_write_fails(tmp_path, operation, event_type):
+    db = connect_database(tmp_path / f"finance-settings-{operation}-audit-failure.sqlite")
+    activity, owner, proposer, approver, account = _fixture(db)
+    app = HospitalFinanceIntegrationSettingsApplication()
+    proposal = app.propose(
+        db, activity_id=activity, hospital_scope_ref="clinic-main",
+        finance_person_id=owner, financial_account_id=account,
+        proposed_by_person_id=proposer, now=NOW,
+    )
+    target = proposal
+    if operation == "pause":
+        target = app.approve(
+            db, settings_id=proposal.settings_id, approved_by_person_id=approver, now=NOW,
+        )
+    db.execute(
+        "CREATE TRIGGER fail_settings_decision_audit BEFORE INSERT ON audit_records "
+        f"WHEN NEW.event_type='{event_type}' "
+        "BEGIN SELECT RAISE(ABORT, 'simulated decision audit failure'); END"
+    )
+
+    with pytest.raises(sqlite3.IntegrityError, match="simulated decision audit failure"):
+        if operation == "reject":
+            app.reject(db, settings_id=target.settings_id, rejected_by_person_id=approver,
+                       reason="Rejected after review", now=NOW)
+        else:
+            app.pause(db, settings_id=target.settings_id, paused_by_person_id=owner,
+                      reason="Paused after review", now=NOW)
+
+    expected_status = "pending_approval" if operation == "reject" else "active"
+    assert app.get_by_id(db, settings_id=target.settings_id).status == expected_status
+    assert db.execute(
+        "SELECT COUNT(*) FROM audit_records WHERE event_type=?", (event_type,)
+    ).fetchone()[0] == 0
+    db.close()
