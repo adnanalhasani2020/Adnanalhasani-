@@ -540,7 +540,7 @@ def _validate_bind_host(host: str, *, allow_remote: bool = False) -> str:
 def serve() -> None:
     token = os.environ.get("HOSPITAL_API_TOKEN", "")
     auth_mode = os.environ.get("HOSPITAL_AUTH_MODE", "token").strip().lower()
-    db_path = os.environ.get("HOSPITAL_DB_PATH", "hospital.sqlite3")
+    # APP_DB_PATH is the canonical shared SQLite file for Hospital and Finance.\n    # Legacy per-service variables remain fallback-compatible.\n    db_path = os.environ.get("APP_DB_PATH") or os.environ.get("HOSPITAL_DB_PATH", "hospital.sqlite3")
     host = os.environ.get("HOSPITAL_API_HOST", "127.0.0.1")
     allow_remote = os.environ.get("HOSPITAL_API_ALLOW_REMOTE", "") == "1"
     host = _validate_bind_host(host, allow_remote=allow_remote)
