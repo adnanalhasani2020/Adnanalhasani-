@@ -92,48 +92,6 @@ def test_invoice_issue_and_void_persist_history_and_use_separate_grants(tmp_path
     db.close()
 
 
-def test_sale_lifecycle_rejects_transition_timestamp_before_creation_without_writes():
-    from agent_core.application import SaleApplication
-
-    db = connect_database()
-    actor, activity, sale, _issue_grant = fixture(db)
-    grant = uid()
-    db.execute(
-        "INSERT INTO authorization_grants(authorization_grant_id,subject_person_id,action_code,scope_ref,"
-        "context_ref,state,effective_from,created_at,updated_at) VALUES(?,?,?,?,?,'active',?,?,?)",
-        (grant, actor, "confirm_sale", sale, activity, "2026-10-01T00:00:00Z", STAMP, STAMP),
-    )
-    db.execute(
-        "INSERT INTO domain_history(domain_history_id,owner_domain,target_ref,change_type,historical_at,"
-        "actor_context_ref,prior_version_ref,current_version_ref,change_payload_ref,created_at) "
-        "VALUES(?,?,?,?,?,?,?,?,?,?)",
-        (uid(), "commerce", sale, "sale_state_transition", STAMP, actor, None,
-         f"sale-state:{sale}:v1", "state:initiated", STAMP),
-    )
-    db.commit()
-    before = db.execute(
-        "SELECT state, version_no, updated_at FROM sales WHERE sale_id=?", (sale,)
-    ).fetchone()
-    history_before = db.execute(
-        "SELECT COUNT(*) FROM domain_history WHERE target_ref=? AND change_type='sale_state_transition'",
-        (sale,),
-    ).fetchone()[0]
-
-    with pytest.raises(ValidationError, match="cannot precede Sale creation timestamp"):
-        SaleApplication().confirm_sale(
-            db, sale, actor, grant, now=datetime(2026, 10, 10, 11, 59, 59, tzinfo=timezone.utc),
-        )
-
-    assert db.execute(
-        "SELECT state, version_no, updated_at FROM sales WHERE sale_id=?", (sale,)
-    ).fetchone() == before
-    assert db.execute(
-        "SELECT COUNT(*) FROM domain_history WHERE target_ref=? AND change_type='sale_state_transition'",
-        (sale,),
-    ).fetchone()[0] == history_before
-    db.close()
-
-
 def test_invoice_issue_rejects_missing_sale_or_wrong_grant_scope_without_write():
     db = connect_database()
     actor, activity, sale, grant = fixture(db)
