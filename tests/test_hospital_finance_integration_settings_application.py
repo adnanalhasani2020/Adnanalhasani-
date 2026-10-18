@@ -1,0 +1,87 @@
+import uuid
+
+import pytest
+
+from agent_core.hospital_finance_integration_settings_application import (
+    HospitalFinanceIntegrationSettingsApplication,
+)
+from agent_core.persistence import connect_database
+from agent_core.shared import ValidationError
+
+
+NOW = "2026-10-18T12:00:00Z"
+
+
+def _id():
+    return str(uuid.uuid4())
+
+
+def _person(db):
+    ident = _id()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,?,?,?)",
+        (ident, "active", NOW, NOW),
+    )
+    return ident
+
+
+def _fixture(db):
+    owner = _person(db)
+    proposer = _person(db)
+    approver = _person(db)
+    activity = _id()
+    db.execute(
+        "INSERT INTO activities(activity_id,owner_person_id,state,created_at,updated_at) "
+        "VALUES(?,?,?,?,?)", (activity, owner, "active", NOW, NOW)
+    )
+    account = _id()
+    db.execute(
+        "INSERT INTO financial_accounts(financial_account_id,person_id,account_type,state,created_at,updated_at) "
+        "VALUES(?,?,?,?,?,?)", (account, owner, "personal", "active", NOW, NOW)
+    )
+    return activity, owner, proposer, approver, account
+
+
+def test_settings_require_distinct_active_approver_and_preserve_versioned_mapping(tmp_path):
+    db = connect_database(tmp_path / "hospital-finance-settings.sqlite")
+    activity, owner, proposer, approver, account = _fixture(db)
+    app = HospitalFinanceIntegrationSettingsApplication()
+
+    proposal = app.propose(
+        db, activity_id=activity, hospital_scope_ref="clinic-main",
+        finance_person_id=owner, financial_account_id=account,
+        proposed_by_person_id=proposer, payment_trigger="fully_settled_existing_finance_payment",
+        now=NOW,
+    )
+    assert proposal.status == "pending_approval"
+    assert app.get_active(db, activity_id=activity, hospital_scope_ref="clinic-main") is None
+    with pytest.raises(ValidationError, match="cannot approve their own"):
+        app.approve(db, settings_id=proposal.settings_id, approved_by_person_id=proposer, now=NOW)
+
+    active = app.approve(db, settings_id=proposal.settings_id, approved_by_person_id=approver, now=NOW)
+    assert active.status == "active"
+    assert active.approved_by_person_id.hex == uuid.UUID(approver).hex
+    assert app.get_active(db, activity_id=activity, hospital_scope_ref="clinic-main").settings_id == active.settings_id
+    db.close()
+
+
+def test_settings_fail_closed_for_partial_payment_policy_and_account_owner_mismatch(tmp_path):
+    db = connect_database(tmp_path / "hospital-finance-settings-invalid.sqlite")
+    activity, owner, proposer, approver, account = _fixture(db)
+    app = HospitalFinanceIntegrationSettingsApplication()
+    other_person = _person(db)
+
+    with pytest.raises(ValidationError, match="belong to the selected"):
+        app.propose(
+            db, activity_id=activity, hospital_scope_ref="clinic-main",
+            finance_person_id=other_person, financial_account_id=account,
+            proposed_by_person_id=proposer, now=NOW,
+        )
+    with pytest.raises(ValidationError, match="partial payments remain blocked"):
+        app.propose(
+            db, activity_id=activity, hospital_scope_ref="clinic-main",
+            finance_person_id=owner, financial_account_id=account,
+            proposed_by_person_id=proposer, partial_payment_policy="allow",
+            now=NOW,
+        )
+    db.close()
