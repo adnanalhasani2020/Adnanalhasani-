@@ -145,6 +145,18 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                 self._send(200, {"data": [dict(row) for row in rows],
                                  "activation_supported": False,
                                  "notice": "Approved proposals do not automatically activate settings."})
+            elif route == "/api/manager-settings/finance-policy-decisions":
+                with database.connect() as conn:
+                    rows = conn.execute(
+                        """SELECT id,policy_key,rationale,status,version,created_by,created_at,
+                                  reviewed_by,reviewed_at,review_note
+                           FROM manager_finance_policy_decisions ORDER BY id DESC LIMIT 100"""
+                    ).fetchall()
+                self._send(200, {
+                    "data": [dict(row) for row in rows],
+                    "activation_supported": False,
+                    "notice": "This records the manager's preference only; partial settlement recognition remains disabled."
+                })
             elif route == "/api/auth/me" and auth_mode == "users":
                 self._send(200, {"user": {"id": self.principal.user_id, "username": self.principal.username, "role": self.principal.role, "expires_at": self.principal.expires_at}})
             elif route == "/api/users" and auth_mode == "users":
@@ -421,6 +433,84 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                                      "version": expected_version + 1,
                                      "activation_supported": False,
                                      "notice": "Review records the decision only; it does not activate modules or change financial/clinical policy."})
+                elif route == "/api/manager-settings/finance-policy-decisions":
+                    self._required(data, "policy_key", "rationale")
+                    policy_key = data["policy_key"]
+                    rationale = data["rationale"]
+                    allowed_policies = {"multiple_allocations", "remaining_balance"}
+                    if policy_key not in allowed_policies:
+                        raise HospitalError("unsupported partial-settlement policy")
+                    if not isinstance(rationale, str) or not rationale.strip() or len(rationale.strip()) > 500:
+                        raise HospitalError("rationale must contain 1-500 characters")
+                    created_at = _server_timestamp()
+                    with database.connect() as conn:
+                        conn.execute("BEGIN IMMEDIATE")
+                        cur = conn.execute(
+                            """INSERT INTO manager_finance_policy_decisions
+                               (policy_key,rationale,status,version,created_by,created_at)
+                               VALUES(?,?,'proposed',1,?,?)""",
+                            (policy_key, rationale.strip(), self._actor(), created_at),
+                        )
+                        decision_id = int(cur.lastrowid)
+                        database._audit(
+                            conn, self._actor(), "manager.finance_policy.proposed",
+                            "manager_finance_policy_decision", decision_id, created_at,
+                            {"policy_key": policy_key, "status": "proposed", "activation_supported": False},
+                        )
+                        conn.commit()
+                    self._send(201, {
+                        "id": decision_id, "status": "proposed", "version": 1,
+                        "activation_supported": False,
+                        "notice": "The preference awaits a different administrator's review and does not enable financial recognition."
+                    })
+                elif len(parts) == 5 and parts[:3] == ["api", "manager-settings", "finance-policy-decisions"] and parts[4] == "review":
+                    self._required(data, "decision", "expected_version")
+                    decision = data["decision"]
+                    expected_version = data["expected_version"]
+                    if decision not in {"approve", "reject"} or type(expected_version) is not int or expected_version < 1:
+                        raise HospitalError("decision and positive expected_version are required")
+                    note = data.get("note", "")
+                    if not isinstance(note, str) or len(note.strip()) > 1000:
+                        raise HospitalError("review note must be a string of at most 1000 characters")
+                    if decision == "reject" and not note.strip():
+                        raise HospitalError("a reason is required to reject a finance policy preference")
+                    decision_id = int(parts[3])
+                    reviewed_at = _server_timestamp()
+                    with database.connect() as conn:
+                        conn.execute("BEGIN IMMEDIATE")
+                        row = conn.execute(
+                            "SELECT status,version,created_by FROM manager_finance_policy_decisions WHERE id=?",
+                            (decision_id,),
+                        ).fetchone()
+                        if row is None:
+                            raise HospitalError("finance policy decision not found")
+                        if row["created_by"] == self._actor():
+                            raise HospitalError("proposal author cannot review their own proposal")
+                        if row["status"] != "proposed" or row["version"] != expected_version:
+                            self._send(409, {"error": "proposal_changed", "status": row["status"], "version": row["version"]})
+                            return
+                        status = "approved" if decision == "approve" else "rejected"
+                        changed = conn.execute(
+                            """UPDATE manager_finance_policy_decisions
+                               SET status=?,version=version+1,reviewed_by=?,reviewed_at=?,review_note=?
+                               WHERE id=? AND status='proposed' AND version=?""",
+                            (status, self._actor(), reviewed_at, note.strip() or None, decision_id, expected_version),
+                        ).rowcount
+                        if changed != 1:
+                            self._send(409, {"error": "proposal_changed"})
+                            return
+                        database._audit(
+                            conn, self._actor(), "manager.finance_policy.reviewed",
+                            "manager_finance_policy_decision", decision_id, reviewed_at,
+                            {"decision": decision, "status": status, "version": expected_version + 1,
+                             "activation_supported": False},
+                        )
+                        conn.commit()
+                    self._send(200, {
+                        "id": decision_id, "status": status, "version": expected_version + 1,
+                        "activation_supported": False,
+                        "notice": "The decision is recorded for implementation planning only; it does not enable partial settlement recognition."
+                    })
                 elif route == "/api/auth/logout" and auth_mode == "users":
                     auth_store.revoke(self.headers.get("Authorization", "")[7:])
                     self._send(200, {"status": "logged_out"})

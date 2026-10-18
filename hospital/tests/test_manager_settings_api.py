@@ -136,3 +136,71 @@ class ManagerSettingsProposalAPITests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+    def test_finance_settlement_policy_choice_requires_distinct_review_and_never_activates(self):
+        author = self.login("admin.one", "administrator-password-123")
+        reviewer = self.login("admin.two", "administrator-password-456")
+        status, proposal = self.request(
+            "/api/manager-settings/finance-policy-decisions", "POST",
+            {"policy_key": "remaining_balance", "rationale": "Our clinic receives deposits and installments."},
+            author,
+        )
+        self.assertEqual(status, 201)
+        self.assertEqual(proposal["status"], "proposed")
+        self.assertFalse(proposal["activation_supported"])
+
+        status, own_review = self.request(
+            f"/api/manager-settings/finance-policy-decisions/{proposal['id']}/review", "POST",
+            {"decision": "approve", "expected_version": 1}, author,
+        )
+        self.assertEqual(status, 400)
+        self.assertIn("cannot review their own", own_review["error"])
+
+        status, rejected_without_reason = self.request(
+            f"/api/manager-settings/finance-policy-decisions/{proposal['id']}/review", "POST",
+            {"decision": "reject", "expected_version": 1, "note": " "}, reviewer,
+        )
+        self.assertEqual(status, 400)
+        self.assertIn("reason is required", rejected_without_reason["error"])
+
+        status, approved = self.request(
+            f"/api/manager-settings/finance-policy-decisions/{proposal['id']}/review", "POST",
+            {"decision": "approve", "expected_version": 1, "note": "Choice accepted for planning."},
+            reviewer,
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(approved["status"], "approved")
+        self.assertFalse(approved["activation_supported"])
+        status, listing = self.request("/api/manager-settings/finance-policy-decisions", token=reviewer)
+        self.assertEqual(status, 200)
+        self.assertEqual(listing["data"][0]["policy_key"], "remaining_balance")
+        self.assertEqual(listing["data"][0]["reviewed_by"], "admin.two")
+        with self.db.connect() as conn:
+            audit = conn.execute(
+                "SELECT COUNT(*) FROM audit_log WHERE entity_type='manager_finance_policy_decision' AND entity_id=?",
+                (str(proposal["id"]),),
+            ).fetchone()[0]
+        self.assertEqual(audit, 2)
+
+    def test_finance_settlement_policy_rejects_invalid_choices_and_preserves_history(self):
+        import sqlite3
+        author = self.login("admin.one", "administrator-password-123")
+        status, invalid = self.request(
+            "/api/manager-settings/finance-policy-decisions", "POST",
+            {"policy_key": "auto_post_partial", "rationale": "not supported"},
+            author,
+        )
+        self.assertEqual(status, 400)
+        self.assertIn("unsupported partial-settlement policy", invalid["error"])
+        status, proposal = self.request(
+            "/api/manager-settings/finance-policy-decisions", "POST",
+            {"policy_key": "multiple_allocations", "rationale": "Track each payment allocation."},
+            author,
+        )
+        self.assertEqual(status, 201)
+        with self.db.connect() as conn:
+            with self.assertRaises(sqlite3.IntegrityError):
+                conn.execute("DELETE FROM manager_finance_policy_decisions WHERE id=?", (proposal["id"],))
+            count = conn.execute("SELECT COUNT(*) FROM manager_finance_policy_decisions").fetchone()[0]
+        self.assertEqual(count, 1)
