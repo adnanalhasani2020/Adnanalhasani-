@@ -17,6 +17,7 @@ mappings, or creates financial records.
 | --- | --- | --- |
 | `awaiting_intake` | Check the approved consumer and transport path. Use only the supported retry/recovery procedure. | Do not manually mark an event delivered. |
 | `delivered_without_intake` | Compare the delivery acknowledgement with durable Finance intake and recovery logs. Establish whether the intake commit succeeded before considering replay. | Do not assume that a delivery acknowledgement proves durable acceptance. |
+| `event_type_mismatch` | Stop automated recovery and reconcile the outbox and intake event types against original source evidence. | Do not replay, remap, or post financially until the mismatch is resolved through an approved process. |
 | `received_not_mapped` | Resolve the source identity against an approved, active Finance mapping and the applicable organization/activity scope. | Do not create a payment, settlement, or ledger entry solely because intake succeeded. |
 | `mapped_source_only` | Independently inspect the Finance payment, settlement, transaction, and ledger lifecycle records that apply to the event. | Do not treat a mapping as proof of financial recognition. |
 | `quarantined` | Reconcile the source-key conflict against the original event identity and retained audit evidence. Preserve the existing Finance mapping until an authorized resolution is recorded. | Do not overwrite the original event or silently clear quarantine. |
