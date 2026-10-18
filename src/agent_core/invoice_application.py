@@ -154,20 +154,26 @@ class InvoiceApplication:
                 raise ValidationError("Invoice number already exists for this issuer")
             if obligation_key is not None:
                 obligation = connection.execute(
-                    "SELECT creditor_person_id, source_invoice_id FROM obligations WHERE obligation_id=?",
+                    "SELECT creditor_person_id, source_invoice_id, state "
+                    "FROM obligations WHERE obligation_id=?",
                     (obligation_key,),
                 ).fetchone()
                 if obligation is None:
                     raise ValidationError("Invoice references a missing Obligation")
-                if obligation[0] != issuer_key:
+                obligation_creditor, source_invoice_id, obligation_state = obligation
+                if obligation_creditor != issuer_key:
                     raise ValidationError(
                         "Invoice issuer must match the linked Obligation creditor"
+                    )
+                if obligation_state in {"satisfied", "cancelled"}:
+                    raise ValidationError(
+                        "Cannot issue an Invoice against a satisfied or cancelled Obligation"
                     )
                 linked_invoice = connection.execute(
                     "SELECT invoice_id FROM invoices WHERE obligation_id=? LIMIT 1",
                     (obligation_key,),
                 ).fetchone()
-                if obligation[1] is not None or linked_invoice is not None:
+                if source_invoice_id is not None or linked_invoice is not None:
                     raise ValidationError(
                         "Obligation is already linked to an Invoice; explicit reconciliation is required"
                     )
