@@ -1,3 +1,4 @@
+import sqlite3
 import uuid
 
 import pytest
@@ -110,4 +111,25 @@ def test_settings_require_active_activity_when_proposed_and_approved(tmp_path):
     with pytest.raises(ValidationError, match="must remain active to approve"):
         app.approve(db, settings_id=proposal.settings_id, approved_by_person_id=approver, now=NOW)
     assert app.get_by_id(db, settings_id=proposal.settings_id).status == "pending_approval"
+    db.close()
+
+
+def test_database_rejects_settings_for_inactive_activity(tmp_path):
+    db = connect_database(tmp_path / "hospital-finance-settings-db-guard.sqlite")
+    activity, owner, proposer, approver, account = _fixture(db)
+    db.execute("UPDATE activities SET state='suspended' WHERE activity_id=?", (activity,))
+
+    with pytest.raises(sqlite3.IntegrityError, match="require an active Finance Activity"):
+        db.execute(
+            "INSERT INTO hospital_finance_integration_settings("
+            "settings_id,activity_id,hospital_scope_ref,finance_person_id,financial_account_id,"
+            "invoice_policy,payment_trigger,partial_payment_policy,currency_policy,status,"
+            "version_no,proposed_by_person_id,proposed_at,created_at) "
+            "VALUES(?,?,?,?,?,?,?,?,?,'pending_approval',?,?,?,?)",
+            (
+                _id(), activity, "clinic-main", owner, account,
+                "operational_only", "manual_review_only", "reject_until_supported",
+                "require_exact_match", 1, proposer, NOW, NOW,
+            ),
+        )
     db.close()
