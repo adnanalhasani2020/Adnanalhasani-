@@ -7,6 +7,9 @@ from uuid import UUID, uuid4
 from agent_core.shared import ValidationError
 
 
+_SQLITE_MAX_INTEGER = (1 << 63) - 1
+
+
 def _uuid(value, label):
     try:
         return str(UUID(str(value)))
@@ -39,8 +42,8 @@ class OfferingPriceApplication:
     ) -> dict:
         offering = _uuid(offering_id, "Offering identifier")
         price_id = _uuid(offering_price_id, "Offering Price identifier") if offering_price_id is not None else str(uuid4())
-        if type(unit_price_minor) is not int or unit_price_minor < 0:
-            raise ValidationError("unit_price_minor must be a non-negative integer")
+        if type(unit_price_minor) is not int or not 0 <= unit_price_minor <= _SQLITE_MAX_INTEGER:
+            raise ValidationError("unit_price_minor must be a non-negative signed 64-bit integer")
         if currency_code not in {"SAR", "YER", "USD"}:
             raise ValidationError("Currency must be SAR, YER, or USD")
         if not isinstance(actor_context_ref, str) or not actor_context_ref.strip():
