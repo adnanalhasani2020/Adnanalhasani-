@@ -5,6 +5,8 @@ Bind to loopback by default. Put a TLS reverse proxy in front before public expo
 """
 from __future__ import annotations
 
+import csv
+import io
 import json
 import logging
 import os
@@ -191,6 +193,87 @@ class CommercialWebApplication:
                     session_token=token,
                 )
                 return self._json(start_response, "200 OK", result)
+
+            if method == "GET" and path == "/api/reports/sales":
+                # Operational snapshot only: line-price totals are recorded sale values,
+                # not recognized revenue, receivables, settlement, or accounting entries.
+                query = parse_qs(environ.get("QUERY_STRING", ""), keep_blank_values=True)
+                start_date = query.get("from", [""])[0]
+                end_date = query.get("to", [""])[0]
+                if start_date:
+                    try:
+                        parsed_start = __import__("datetime").date.fromisoformat(start_date)
+                        if parsed_start.isoformat() != start_date:
+                            raise ValueError
+                    except ValueError as exc:
+                        raise ValidationError("from must be a date in YYYY-MM-DD format") from exc
+                if end_date:
+                    try:
+                        parsed_end = __import__("datetime").date.fromisoformat(end_date)
+                        if parsed_end.isoformat() != end_date:
+                            raise ValueError
+                    except ValueError as exc:
+                        raise ValidationError("to must be a date in YYYY-MM-DD format") from exc
+                if start_date and end_date and start_date > end_date:
+                    raise ValidationError("from must not be later than to")
+                sql = (
+                    "SELECT s.sale_id, s.occurred_at, s.state, "
+                    "COALESCE(SUM(l.quantity), 0), l.currency_code, "
+                    "COALESCE(SUM(l.line_total_minor), 0) "
+                    "FROM sales s LEFT JOIN sale_lines l ON l.sale_id=s.sale_id"
+                )
+                clauses, parameters = [], []
+                if start_date:
+                    clauses.append("s.occurred_at >= ?")
+                    parameters.append(start_date + "T00:00:00")
+                if end_date:
+                    # Date upper bound is exclusive, so the selected end date is included.
+                    clauses.append("s.occurred_at < ?")
+                    parameters.append((__import__("datetime").date.fromisoformat(end_date) +
+                                       __import__("datetime").timedelta(days=1)).isoformat() + "T00:00:00")
+                if clauses:
+                    sql += " WHERE " + " AND ".join(clauses)
+                sql += " GROUP BY s.sale_id, s.occurred_at, s.state, l.currency_code"
+                sql += " ORDER BY s.occurred_at DESC, s.sale_id"
+                rows = db.execute(sql, parameters).fetchall()
+                items = [
+                    {"sale_id": row[0], "occurred_at": row[1], "state": row[2],
+                     "quantity": row[3], "currency_code": row[4], "line_total_minor": row[5]}
+                    for row in rows
+                ]
+                totals = {}
+                states = {}
+                for item in items:
+                    states[item["state"]] = states.get(item["state"], 0) + 1
+                    currency = item["currency_code"]
+                    if currency is not None:
+                        totals[currency] = totals.get(currency, 0) + item["line_total_minor"]
+                if query.get("format", [""])[0] == "csv":
+                    output = io.StringIO(newline="")
+                    writer = csv.writer(output)
+                    writer.writerow(["sale_id", "occurred_at", "state", "quantity",
+                                     "currency_code", "line_total_minor"])
+                    for item in items:
+                        writer.writerow([item["sale_id"], item["occurred_at"], item["state"],
+                                         item["quantity"], item["currency_code"] or "",
+                                         item["line_total_minor"]])
+                    encoded = output.getvalue().encode("utf-8-sig")
+                    start_response("200 OK", [
+                        ("Content-Type", "text/csv; charset=utf-8"),
+                        ("Content-Length", str(len(encoded))),
+                        ("Content-Disposition", 'attachment; filename="sales-report.csv"'),
+                        ("Cache-Control", "no-store"),
+                        ("X-Content-Type-Options", "nosniff"),
+                    ])
+                    return [encoded]
+                return self._json(start_response, "200 OK", {
+                    "from": start_date or None, "to": end_date or None,
+                    "count": len({item["sale_id"] for item in items}),
+                    "sale_counts_by_state": states,
+                    "recorded_line_totals_by_currency": totals,
+                    "items": items,
+                    "financial_note": "Operational sale-line snapshots only; not recognized revenue or accounting balances.",
+                })
 
             if method == "GET" and path == "/api/receipts":
                 rows = db.execute(
