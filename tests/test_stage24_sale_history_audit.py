@@ -83,3 +83,45 @@ def test_audit_ignores_non_sale_events_with_same_target_ref():
     assert result.history_record_count == 2
     assert result.findings == ()
     db.close()
+
+
+def test_audit_detects_current_version_reference_and_final_state_tampering():
+    db = connect_database()
+    sale = sale_fixture(db)
+    history(db, sale, None, f"sale-state:{sale}:v1")
+    history(db, sale, f"sale-state:{sale}:v1", f"sale-state:{sale}:v2")
+    db.commit()
+
+    # A chain can have the right length and internally linked references yet
+    # point at the wrong version or claim a different final Sale state.
+    db.execute(
+        "UPDATE domain_history SET current_version_ref=? WHERE target_ref=? AND rowid=("
+        "SELECT MAX(rowid) FROM domain_history WHERE target_ref=?)",
+        (f"sale-state:{sale}:v99", sale, sale),
+    )
+    db.execute(
+        "UPDATE domain_history SET change_payload_ref='state:cancelled' WHERE target_ref=? AND rowid=("
+        "SELECT MAX(rowid) FROM domain_history WHERE target_ref=?)",
+        (sale, sale),
+    )
+    db.commit()
+
+    result = SaleHistoryIntegrityAuditor().inspect(db, sale)
+    assert result.status == "inconsistent"
+    assert "history_current_version_mismatch:2" in result.findings
+    assert "history_final_state_mismatch" in result.findings
+    db.close()
+
+
+def test_audit_detects_impossible_historical_state_transition():
+    db = connect_database()
+    sale = sale_fixture(db)
+    history(db, sale, None, f"sale-state:{sale}:v1")
+    history(db, sale, f"sale-state:{sale}:v1", f"sale-state:{sale}:v2", "state:returned")
+    db.commit()
+
+    result = SaleHistoryIntegrityAuditor().inspect(db, sale)
+    assert result.status == "inconsistent"
+    assert "history_state_transition_invalid:2" in result.findings
+    assert "history_final_state_mismatch" in result.findings
+    db.close()
