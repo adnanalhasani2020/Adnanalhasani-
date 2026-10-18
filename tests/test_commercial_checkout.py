@@ -368,10 +368,15 @@ def test_checkout_receipt_does_not_imply_financial_recognition_or_ledger_posting
 
 
 @pytest.mark.parametrize(
-    "occurred_at",
-    ["2026-10-17T10:59:59Z", "2026-10-17T11:30:00Z"],
+    ("occurred_at", "accepted"),
+    [
+        ("2026-10-17T10:59:59Z", False),  # before effective_from
+        ("2026-10-17T11:00:00Z", True),   # inclusive effective_from
+        ("2026-10-17T13:15:00+02:00", True),  # same instant basis, offset format
+        ("2026-10-17T11:30:00Z", False),  # exclusive effective_to
+    ],
 )
-def test_inventory_movement_must_fall_inside_position_effective_window(tmp_path, occurred_at):
+def test_inventory_movement_must_fall_inside_position_effective_window(tmp_path, occurred_at, accepted):
     db, request = setup_checkout(tmp_path)
     sale_app = SaleApplication()
     db.execute(
@@ -408,21 +413,31 @@ def test_inventory_movement_must_fall_inside_position_effective_window(tmp_path,
     )
     db.commit()
 
-    with pytest.raises(sqlite3.IntegrityError, match="within its position effective window"):
-        db.execute(
-            """INSERT INTO inventory_movements(
+    # Reopen the persisted database so this also checks that the migration-installed
+    # trigger remains effective after a connection/process restart.
+    db.close()
+    db = connect_database(tmp_path / "checkout.sqlite")
+
+    insert_movement = """INSERT INTO inventory_movements(
                    inventory_movement_id, inventory_position_id, activity_id, product_id,
                    offering_id, location_ref, scope_key, quantity_delta, source_type,
                    source_ref, actor_context_ref, occurred_at, created_at
                ) VALUES(?,?,?,?,?,?,?,-1,'sale',?,?,?,?)""",
-            (uid(), position_id, request["activity_id"],
-             db.execute("SELECT product_id FROM offerings WHERE offering_id=?",
-                        (request["offering_id"],)).fetchone()[0],
-             request["offering_id"], request["location_ref"], request["scope_key"],
-             request["sale_id"], request["actor_person_id"], occurred_at, STAMP),
-        )
-    db.rollback()
-    assert db.execute("SELECT COUNT(*) FROM inventory_movements").fetchone()[0] == 0
+    movement_values = (
+        uid(), position_id, request["activity_id"],
+        db.execute("SELECT product_id FROM offerings WHERE offering_id=?",
+                   (request["offering_id"],)).fetchone()[0],
+        request["offering_id"], request["location_ref"], request["scope_key"],
+        request["sale_id"], request["actor_person_id"], occurred_at, STAMP,
+    )
+    if accepted:
+        db.execute(insert_movement, movement_values)
+        db.commit()
+    else:
+        with pytest.raises(sqlite3.IntegrityError, match="within its position effective window"):
+            db.execute(insert_movement, movement_values)
+        db.rollback()
+    assert db.execute("SELECT COUNT(*) FROM inventory_movements").fetchone()[0] == int(accepted)
     assert db.execute("SELECT COUNT(*) FROM sale_lines").fetchone()[0] == 1
     assert db.execute("SELECT state FROM sales WHERE sale_id=?", (request["sale_id"],)).fetchone()[0] in {"completed", "fulfilled"}
     db.close()
