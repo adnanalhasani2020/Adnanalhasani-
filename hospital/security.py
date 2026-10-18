@@ -237,6 +237,8 @@ def permission_for_route(method: str, path: str) -> str | None:
         return "users:read"
     if route == "/api/finance/outbox-status" and method == "GET":
         return "finance:transport:read"
+    if route == "/api/finance/integration-readiness" and method == "GET":
+        return "finance:transport:read"
     if route == "/api/manager-settings/proposals" and method == "GET":
         return "manager:settings:read"
     if route == "/api/manager-settings/proposals" and method == "POST":
