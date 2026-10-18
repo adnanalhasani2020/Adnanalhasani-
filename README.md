@@ -1,8 +1,10 @@
 # الوكيل الجديد — الحالة الفعلية الحالية
 
 **المستودع:** `adnanalhasani2020/Adnanalhasani-`  
-**المرجع الذي جرى تدقيقه:** `main @ 9e75b9c3525b002c2911f52cce8211ca6b3991ca`  
-**آخر تحقق CI على هذا المرجع:** GitHub Actions run `38256569039` — SUCCESS — **696 اختباراً ناجحاً**.
+**الالتزام المرجعي الذي جرى التحقق منه:** `563ca1ef4b21d99323061285b02bcaaa6293bd2b` (`main`، 2026-10-18).  
+**تاريخ التحقق:** 2026-10-18.  
+**نتائج GitHub Actions على الالتزام نفسه:** [Python tests](https://github.com/adnanalhasani2020/Adnanalhasani-/actions/runs/39161442147) — SUCCESS، **1,324 اختبارًا ناجحًا**؛ [Hospital core tests](https://github.com/adnanalhasani2020/Adnanalhasani-/actions/runs/39161442118) — SUCCESS، **83 اختبارًا ناجحًا**؛ [Stage 7 Automated Tests](https://github.com/adnanalhasani2020/Adnanalhasani-/actions/runs/39161442184) — SUCCESS، بما في ذلك مجموعة pytest الكاملة (**1,324 اختبارًا**).  
+**حدود الدليل:** تثبت هذه النتائج نجاح مجموعات الاختبار على الالتزام المشار إليه فقط؛ ولا تثبت اكتمال المنتج أو خلوه من العيوب أو جاهزيته للإنتاج.
 
 ## هدفنا الاستراتيجي
 
