@@ -108,15 +108,16 @@ def test_settlement_must_match_payment_and_obligation_currencies():
 
 def test_recognized_settlement_transaction_must_match_payment_currency():
     db = connect_database()
-    creditor, debtor, owner = person(db), person(db), person(db)
+    creditor, debtor = person(db), person(db)
     account_id = uid()
     db.execute(
         "INSERT INTO financial_accounts(financial_account_id,person_id,account_type,state,created_at,updated_at) "
         "VALUES(?,?,?,'active',?,?)",
-        (account_id, owner, "personal", STAMP, STAMP),
+        (account_id, creditor, "personal", STAMP, STAMP),
     )
     obligation_id = obligation(db, creditor, debtor, "YER")
     payment_id = payment(db, debtor, creditor, "YER", obligation_id)
+    db.execute("UPDATE payments SET state='completed' WHERE payment_id=?", (payment_id,))
     settlement_id = uid()
     db.execute(
         "INSERT INTO settlements(settlement_id,payment_id,obligation_id,state,created_at,updated_at) "
