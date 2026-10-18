@@ -443,6 +443,53 @@ class SaleApplication:
                 raise ValidationError(
                     f"Invalid Sale transition from {sale.state.value} via {action}"
                 )
+            return_movement = None
+            if action == "return":
+                # A checkout-backed Sale must restore stock in the same transaction
+                # as its terminal lifecycle transition. Fail closed if its original
+                # sale line and outbound movement cannot be reconciled exactly.
+                lines = connection.execute(
+                    "SELECT offering_id, product_id, quantity FROM sale_lines WHERE sale_id=?",
+                    (str(sale.id),),
+                ).fetchall()
+                if lines:
+                    if len(lines) != 1:
+                        raise ValidationError(
+                            "Commercial Sale return requires one reconciled sale line; explicit reconciliation is required"
+                        )
+                    line_offering, line_product, line_quantity = lines[0]
+                    movements = connection.execute(
+                        "SELECT inventory_position_id, activity_id, product_id, offering_id, "
+                        "location_ref, scope_key, quantity_delta FROM inventory_movements "
+                        "WHERE source_type='sale' AND source_ref=?",
+                        (str(sale.id),),
+                    ).fetchall()
+                    if len(movements) != 1:
+                        raise ValidationError(
+                            "Commercial Sale return requires one original stock movement; explicit reconciliation is required"
+                        )
+                    movement = movements[0]
+                    (position_id, movement_activity, movement_product, movement_offering,
+                     location_ref, scope_key, quantity_delta) = movement
+                    if (line_offering != str(offering_uuid) or movement_activity != str(sale.activity_id)
+                            or movement_product != line_product or movement_offering != line_offering
+                            or type(line_quantity) is not int or quantity_delta != -line_quantity
+                            or line_quantity <= 0):
+                        raise ValidationError(
+                            "Commercial Sale line and stock movement disagree; explicit reconciliation is required"
+                        )
+                    prior_return = connection.execute(
+                        "SELECT 1 FROM inventory_movements "
+                        "WHERE source_type='sale_return' AND source_ref=? LIMIT 1",
+                        (str(sale.id),),
+                    ).fetchone()
+                    if prior_return is not None:
+                        raise ValidationError("Commercial Sale stock has already been returned")
+                    return_movement = (
+                        position_id, str(sale.activity_id), line_product, line_offering,
+                        location_ref, scope_key, line_quantity, str(actor_uuid), timestamp,
+                    )
+
             transition = {
                 "confirm": sale.confirm,
                 "fulfill": sale.complete,
@@ -450,6 +497,15 @@ class SaleApplication:
                 "return": sale.return_sale,
             }[action]
             transition()
+            if return_movement is not None:
+                connection.execute(
+                    "INSERT INTO inventory_movements("
+                    "inventory_movement_id, inventory_position_id, activity_id, product_id, "
+                    "offering_id, location_ref, scope_key, quantity_delta, source_type, "
+                    "source_ref, actor_context_ref, occurred_at, created_at"
+                    ") VALUES(?,?,?,?,?,?,?,?, 'sale_return', ?,?,?,?)",
+                    (str(uuid4()), *return_movement[:7], str(sale.id), *return_movement[7:]),
+                )
             if sale.state is not target_state:
                 raise ValidationError("Domain transition did not produce expected state")
             next_version = version_no + 1
