@@ -373,6 +373,7 @@ def test_checkout_receipt_does_not_imply_financial_recognition_or_ledger_posting
         ("2026-10-17T10:59:59Z", False),  # before effective_from
         ("2026-10-17T11:00:00Z", True),   # inclusive effective_from
         ("2026-10-17T13:15:00+02:00", True),  # same instant basis, offset format
+        ("2026-10-17T13:29:59.999999+02:00", True),  # 1 microsecond before end
         ("2026-10-17T11:30:00Z", False),  # exclusive effective_to
     ],
 )
