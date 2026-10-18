@@ -418,6 +418,28 @@ def test_currency_migrations_upgrade_populated_financial_database(tmp_path, monk
         (extra_payment_id, extra_obligation_id, extra_debtor, extra_creditor, 100, "YER", "completed", NOW, NOW),
     )
 
+    # A settled but not-yet-recognized pair exercises the settlement-link guard
+    # independently of the later source-immutability guard.
+    linked_creditor, linked_debtor = _person(old_db), _person(old_db)
+    linked_obligation_id, linked_payment_id, linked_settlement_id = (
+        str(uuid.uuid4()), str(uuid.uuid4()), str(uuid.uuid4())
+    )
+    old_db.execute(
+        "INSERT INTO obligations(obligation_id,creditor_person_id,debtor_person_id,amount_minor,currency_code,state,created_at,updated_at)"
+        " VALUES(?,?,?,?,?,?,?,?)",
+        (linked_obligation_id, linked_creditor, linked_debtor, 100, "YER", "open", NOW, NOW),
+    )
+    old_db.execute(
+        "INSERT INTO payments(payment_id,obligation_id,payer_person_id,payee_person_id,amount_minor,currency_code,state,created_at,updated_at)"
+        " VALUES(?,?,?,?,?,?,?,?,?)",
+        (linked_payment_id, linked_obligation_id, linked_debtor, linked_creditor, 100, "YER", "completed", NOW, NOW),
+    )
+    old_db.execute(
+        "INSERT INTO settlements(settlement_id,payment_id,obligation_id,state,created_at,updated_at)"
+        " VALUES(?,?,?,?,?,?)",
+        (linked_settlement_id, linked_payment_id, linked_obligation_id, "settled", NOW, NOW),
+    )
+
     # Seed recognized finance history before the currency guards exist. The upgrade
     # must preserve these rows and apply the new cross-record invariants to them.
     transaction_id = str(uuid.uuid4())
@@ -469,7 +491,7 @@ def test_currency_migrations_upgrade_populated_financial_database(tmp_path, monk
         )
     with pytest.raises(sqlite3.IntegrityError, match="payment obligation must match existing settlements"):
         upgraded.execute(
-            "UPDATE payments SET obligation_id=NULL WHERE payment_id=?", (payment_id,)
+            "UPDATE payments SET obligation_id=NULL WHERE payment_id=?", (linked_payment_id,)
         )
 
     assert upgraded.execute(
