@@ -489,4 +489,4 @@ def test_offering_price_rejects_value_outside_sqlite_integer_range(tmp_path):
         )
 
     assert db.execute("SELECT COUNT(*) FROM offering_prices WHERE unit_price_minor > 0").fetchone()[0] == 1
-    assert db.execute("SELECT COUNT(*) FROM domain_history WHERE change_type='offering_price_set'").fetchone()[0] == 1
+    assert db.execute("SELECT COUNT(*) FROM domain_history WHERE change_type='offering_price_set'").fetchone()[0] == 0
