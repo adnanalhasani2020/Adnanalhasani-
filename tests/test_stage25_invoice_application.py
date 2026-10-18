@@ -265,3 +265,39 @@ def test_invoice_rejects_explicit_falsey_issue_timestamp_without_writes(bad_issu
     ).fetchone()[0] == 0
     db.close()
 
+def test_invoice_rejects_due_timestamp_before_issue_timestamp_without_writes():
+    db = connect_database()
+    actor, _activity, sale, grant = fixture(db)
+    invoice_id = uid()
+    with pytest.raises(ValidationError, match="due timestamp cannot precede issue timestamp"):
+        InvoiceApplication().create_invoice(
+            db, sale_id=sale, actor_context_ref=actor,
+            authorization_grant_id=grant, issuer_ref=actor,
+            invoice_number="INV-DUE-BEFORE-ISSUE", invoice_id=invoice_id,
+            issue_at="2026-10-10T12:00:00Z",
+            due_at="2026-10-10T11:59:59Z",
+            now=STAMP,
+        )
+    assert db.execute(
+        "SELECT COUNT(*) FROM invoices WHERE invoice_id=?", (invoice_id,)
+    ).fetchone()[0] == 0
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=?", (invoice_id,)
+    ).fetchone()[0] == 0
+    db.close()
+
+
+def test_invoice_due_timestamp_accepts_same_instant_as_issue_with_different_offset():
+    db = connect_database()
+    actor, _activity, sale, grant = fixture(db)
+    issued = InvoiceApplication().create_invoice(
+        db, sale_id=sale, actor_context_ref=actor,
+        authorization_grant_id=grant, issuer_ref=actor,
+        invoice_number="INV-DUE-EQUAL-ISSUE",
+        issue_at="2026-10-10T12:00:00Z",
+        due_at="2026-10-10T15:00:00+03:00",
+        now=STAMP,
+    )
+    assert issued.issue_at == "2026-10-10T12:00:00Z"
+    assert issued.due_at == "2026-10-10T12:00:00Z"
+    db.close()
