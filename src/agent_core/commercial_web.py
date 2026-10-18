@@ -67,7 +67,7 @@ class _ThreadedWSGIServer(ThreadingMixIn, WSGIServer):
 
 class CommercialWebApplication:
     def __init__(self, database_path=None):
-        self.database_path = str(database_path or os.environ.get("COMMERCIAL_DB_PATH", "commercial-mvp.sqlite3"))
+        # APP_DB_PATH is the canonical shared SQLite file for Hospital and Finance.\n        # Legacy per-service variables remain fallback-compatible.\n        self.database_path = str(database_path or os.environ.get("APP_DB_PATH") or os.environ.get("COMMERCIAL_DB_PATH", "commercial-mvp.sqlite3"))
         self.identity = CommercialIdentityApplication()
         self.checkout = CommercialCheckoutApplication()
 
