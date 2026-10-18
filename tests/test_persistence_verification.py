@@ -125,6 +125,7 @@ def test_clean_install_has_exactly_68_domain_tables_plus_migration_bookkeeping()
         "0044_financial_transaction_settlement_integrity",
         "0045_recognized_settlement_source_immutability",
         "0046_hospital_finance_activity_scope_guards",
+        "0047_hospital_finance_settings_reference_state_guards",
         "9998_activity_invitations",
         "9999_file_attachments",
     ]
@@ -142,7 +143,7 @@ def test_existing_db_migration_preserves_data_and_is_idempotent(tmp_path):
     before = reopened.execute("SELECT COUNT(*) FROM persons").fetchone()[0]
     assert apply_migrations(reopened) == []
     assert reopened.execute("SELECT COUNT(*) FROM persons").fetchone()[0] == before
-    assert reopened.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0] == 41
+    assert reopened.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0] == 42
 
 
 def test_constraints_are_enforced_at_runtime():
