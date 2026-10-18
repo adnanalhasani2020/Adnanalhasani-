@@ -443,6 +443,15 @@ class SaleApplication:
                 raise ValidationError(
                     f"Invalid Sale transition from {sale.state.value} via {action}"
                 )
+            if action in {"cancel", "return"}:
+                issued_invoice = connection.execute(
+                    "SELECT 1 FROM invoices WHERE sale_id=? AND state='issued' LIMIT 1",
+                    (str(sale.id),),
+                ).fetchone()
+                if issued_invoice is not None:
+                    raise ValidationError(
+                        "Sale cancellation or return requires explicit Invoice reconciliation first"
+                    )
             return_movement = None
             if action == "return":
                 # A checkout-backed Sale must restore stock in the same transaction

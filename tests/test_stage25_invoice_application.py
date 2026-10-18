@@ -647,3 +647,154 @@ def test_invoice_void_refuses_financial_links_without_reconciliation(link_kind):
         (invoice_id,),
     ).fetchone()[0] == 1
     db.close()
+
+
+def _sale_grant(db, *, actor, activity, scope, action):
+    # The invoice fixture creates a bare Sale row; lifecycle tests must seed the
+    # same v1 history evidence required by SaleApplication before transitioning it.
+    has_initial_history = db.execute(
+        "SELECT 1 FROM domain_history WHERE owner_domain='commerce' AND target_ref=? "
+        "AND change_type='sale_state_transition' LIMIT 1",
+        (scope,),
+    ).fetchone()
+    if has_initial_history is None:
+        db.execute(
+            "INSERT INTO domain_history(domain_history_id,owner_domain,target_ref,change_type,historical_at,"
+            "actor_context_ref,prior_version_ref,current_version_ref,change_payload_ref,created_at) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?)",
+            (uid(), "commerce", scope, "sale_state_transition", STAMP, actor, None,
+             f"sale-state:{scope}:v1", "state:initiated", STAMP),
+        )
+    grant = uid()
+    db.execute(
+        "INSERT INTO authorization_grants(authorization_grant_id,subject_person_id,action_code,scope_ref,"
+        "context_ref,state,effective_from,created_at,updated_at) VALUES(?,?,?,?,?,'active',?,?,?)",
+        (grant, actor, action, scope, activity, "2026-10-01T00:00:00Z", STAMP, STAMP),
+    )
+    db.commit()
+    return grant
+
+
+def test_invoice_issue_rejects_cancelled_sale_without_writes():
+    from agent_core.application import SaleApplication
+
+    db = connect_database()
+    actor, activity, sale, issue_grant = fixture(db)
+    cancel_grant = _sale_grant(
+        db, actor=actor, activity=activity, scope=sale, action="cancel_sale"
+    )
+    SaleApplication().cancel_sale(
+        db, sale, actor, cancel_grant, now=datetime(2026, 10, 10, 12, 0, tzinfo=timezone.utc),
+    )
+
+    invoice_id = uid()
+    with pytest.raises(ValidationError, match="cancelled or returned Sale"):
+        InvoiceApplication().create_invoice(
+            db, sale_id=sale, actor_context_ref=actor,
+            authorization_grant_id=issue_grant, issuer_ref=actor,
+            invoice_number="INV-CANCELLED-SALE", invoice_id=invoice_id, now=datetime(2026, 10, 10, 12, 0, tzinfo=timezone.utc),
+        )
+
+    assert db.execute(
+        "SELECT COUNT(*) FROM invoices WHERE invoice_id=?", (invoice_id,)
+    ).fetchone()[0] == 0
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=? AND change_type='invoice_state_transition'",
+        (invoice_id,),
+    ).fetchone()[0] == 0
+    db.close()
+
+
+@pytest.mark.parametrize("action", ["cancel", "return"])
+def test_sale_cancel_or_return_requires_reconciliation_of_issued_invoice(action):
+    from agent_core.application import SaleApplication
+
+    db = connect_database()
+    actor, activity, sale, issue_grant = fixture(db)
+    invoice = InvoiceApplication().create_invoice(
+        db, sale_id=sale, actor_context_ref=actor,
+        authorization_grant_id=issue_grant, issuer_ref=actor,
+        invoice_number=f"INV-BLOCK-{action.upper()}", now=datetime(2026, 10, 10, 12, 0, tzinfo=timezone.utc),
+    )
+    sales = SaleApplication()
+
+    if action == "return":
+        confirm_grant = _sale_grant(
+            db, actor=actor, activity=activity, scope=sale, action="confirm_sale"
+        )
+        fulfill_grant = _sale_grant(
+            db, actor=actor, activity=activity, scope=sale, action="fulfill_sale"
+        )
+        sales.confirm_sale(db, sale, actor, confirm_grant, now=datetime(2026, 10, 10, 12, 0, tzinfo=timezone.utc))
+        sales.fulfill_sale(db, sale, actor, fulfill_grant, now=datetime(2026, 10, 10, 12, 0, tzinfo=timezone.utc))
+
+    transition_grant = _sale_grant(
+        db, actor=actor, activity=activity, scope=sale,
+        action="cancel_sale" if action == "cancel" else "return_sale",
+    )
+    before_sale = db.execute(
+        "SELECT state,version_no FROM sales WHERE sale_id=?", (sale,)
+    ).fetchone()
+    before_history = db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=? AND change_type='sale_state_transition'",
+        (sale,),
+    ).fetchone()[0]
+
+    with pytest.raises(ValidationError, match="requires explicit Invoice reconciliation"):
+        if action == "cancel":
+            sales.cancel_sale(db, sale, actor, transition_grant, now=datetime(2026, 10, 10, 12, 0, tzinfo=timezone.utc))
+        else:
+            sales.return_sale(db, sale, actor, transition_grant, now=datetime(2026, 10, 10, 12, 0, tzinfo=timezone.utc))
+
+    assert db.execute(
+        "SELECT state,version_no FROM sales WHERE sale_id=?", (sale,)
+    ).fetchone() == before_sale
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=? AND change_type='sale_state_transition'",
+        (sale,),
+    ).fetchone()[0] == before_history
+    assert InvoiceApplication().get_invoice(db, invoice.invoice.id).invoice.state.value == "issued"
+    assert db.execute(
+        "SELECT COUNT(*) FROM inventory_movements WHERE source_type='sale_return' AND source_ref=?",
+        (sale,),
+    ).fetchone()[0] == 0
+    db.close()
+
+
+@pytest.mark.parametrize("obligation_state", ["satisfied", "cancelled"])
+def test_invoice_issue_rejects_terminal_obligation_without_writes(obligation_state):
+    db = connect_database()
+    actor, _activity, sale, grant = fixture(db)
+    debtor = uid()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (debtor, STAMP, STAMP),
+    )
+    obligation_id = uid()
+    db.execute(
+        "INSERT INTO obligations(obligation_id,creditor_person_id,debtor_person_id,amount_minor,"
+        "currency_code,state,created_at,updated_at,version_no) VALUES(?,?,?,1000,'YER',?,?,?,1)",
+        (obligation_id, actor, debtor, obligation_state, STAMP, STAMP),
+    )
+    db.commit()
+
+    invoice_id = uid()
+    with pytest.raises(ValidationError, match="satisfied or cancelled Obligation"):
+        InvoiceApplication().create_invoice(
+            db, sale_id=sale, actor_context_ref=actor,
+            authorization_grant_id=grant, issuer_ref=actor,
+            invoice_number=f"INV-TERMINAL-{obligation_state.upper()}",
+            invoice_id=invoice_id, obligation_id=obligation_id, now=datetime(2026, 10, 10, 12, 0, tzinfo=timezone.utc),
+        )
+
+    assert db.execute(
+        "SELECT COUNT(*) FROM invoices WHERE invoice_id=?", (invoice_id,)
+    ).fetchone()[0] == 0
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=? AND change_type='invoice_state_transition'",
+        (invoice_id,),
+    ).fetchone()[0] == 0
+    assert db.execute(
+        "SELECT source_invoice_id,state FROM obligations WHERE obligation_id=?", (obligation_id,)
+    ).fetchone() == (None, obligation_state)
+    db.close()

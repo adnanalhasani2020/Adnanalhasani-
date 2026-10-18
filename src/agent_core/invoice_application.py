@@ -124,13 +124,13 @@ class InvoiceApplication:
             # Read and authorize inside the same transaction as the invoice write.
             # This prevents a grant revocation or Sale-context change between authorization and persistence.
             sale = connection.execute(
-                "SELECT s.activity_id, o.activity_id FROM sales s "
+                "SELECT s.activity_id, o.activity_id, s.state FROM sales s "
                 "LEFT JOIN offerings o ON o.offering_id=s.offering_id WHERE s.sale_id=?",
                 (sale_key,),
             ).fetchone()
             if sale is None:
                 raise ValidationError("Invoice requires an existing Sale")
-            activity_key, offering_activity_key = sale
+            activity_key, offering_activity_key, sale_state = sale
             if offering_activity_key is None or activity_key != offering_activity_key:
                 raise ValidationError(
                     "Sale Activity does not match its Offering Activity; explicit reconciliation is required"
@@ -139,6 +139,10 @@ class InvoiceApplication:
                 connection, grant_key, actor_key, "issue_invoice",
                 sale_key, activity_key, timestamp,
             )
+            if sale_state in {"cancelled", "returned"}:
+                raise ValidationError(
+                    "Cannot issue an Invoice for a cancelled or returned Sale"
+                )
             if connection.execute(
                 "SELECT 1 FROM persons WHERE person_id=? AND state='active'", (issuer_key,)
             ).fetchone() is None:
@@ -150,20 +154,26 @@ class InvoiceApplication:
                 raise ValidationError("Invoice number already exists for this issuer")
             if obligation_key is not None:
                 obligation = connection.execute(
-                    "SELECT creditor_person_id, source_invoice_id FROM obligations WHERE obligation_id=?",
+                    "SELECT creditor_person_id, source_invoice_id, state "
+                    "FROM obligations WHERE obligation_id=?",
                     (obligation_key,),
                 ).fetchone()
                 if obligation is None:
                     raise ValidationError("Invoice references a missing Obligation")
-                if obligation[0] != issuer_key:
+                obligation_creditor, source_invoice_id, obligation_state = obligation
+                if obligation_creditor != issuer_key:
                     raise ValidationError(
                         "Invoice issuer must match the linked Obligation creditor"
+                    )
+                if obligation_state in {"satisfied", "cancelled"}:
+                    raise ValidationError(
+                        "Cannot issue an Invoice against a satisfied or cancelled Obligation"
                     )
                 linked_invoice = connection.execute(
                     "SELECT invoice_id FROM invoices WHERE obligation_id=? LIMIT 1",
                     (obligation_key,),
                 ).fetchone()
-                if obligation[1] is not None or linked_invoice is not None:
+                if source_invoice_id is not None or linked_invoice is not None:
                     raise ValidationError(
                         "Obligation is already linked to an Invoice; explicit reconciliation is required"
                     )
