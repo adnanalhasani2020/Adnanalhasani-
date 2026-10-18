@@ -339,6 +339,29 @@ class HospitalAPITests(unittest.TestCase):
                 (invoice_id,)).fetchone()[0], 1)
 
 
+    def test_invoice_api_accepts_idempotency_key_for_safe_retries(self):
+        patient_id = self.db.register_patient(
+            patient_no="P-API-INVOICE-IDEMP", full_name="Invoice Retry Patient",
+            created_at="2026-01-01T08:00:00Z", actor="test",
+        )
+        payload = {
+            "invoice_no": "INV-API-INVOICE-IDEMP",
+            "patient_id": patient_id,
+            "total_minor": 7600,
+            "currency": "YER",
+            "created_at": "2026-01-01T08:30:00Z",
+            "idempotency_key": "invoice-session:receipt-1",
+        }
+        status_first, first = self.request("/api/invoices", method="POST", payload=payload)
+        status_retry, retry = self.request("/api/invoices", method="POST", payload=payload)
+        self.assertEqual(status_first, 201)
+        self.assertEqual(status_retry, 201)
+        self.assertEqual(first["id"], retry["id"])
+        with self.db.connect() as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM invoices WHERE invoice_no=?",
+                                          (payload["invoice_no"],)).fetchone()[0], 1)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM finance_outbox WHERE event_type='hospital.invoice.created'").fetchone()[0], 1)
+
     def test_finance_outbox_status_is_transport_only_and_excludes_payloads(self):
         patient_id = self.db.register_patient(
             patient_no="OUTBOX-STATUS-P1", full_name="Outbox Status Patient",

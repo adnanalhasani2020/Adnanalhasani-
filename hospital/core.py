@@ -208,7 +208,9 @@ CREATE TABLE IF NOT EXISTS invoices (
   encounter_id INTEGER REFERENCES encounters(id), total_minor INTEGER NOT NULL CHECK(total_minor >= 0),
   currency TEXT NOT NULL DEFAULT 'YER',
   status TEXT NOT NULL DEFAULT 'unpaid' CHECK(status IN ('unpaid','partial','paid','void')),
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  idempotency_key TEXT,
+  request_sha256 TEXT
 );
 CREATE TABLE IF NOT EXISTS payments (
   id INTEGER PRIMARY KEY, invoice_id INTEGER NOT NULL REFERENCES invoices(id),
@@ -324,6 +326,15 @@ class HospitalDB:
         with self.connect() as db:
             db.executescript(SCHEMA)
             # Upgrade existing Hospital databases without rewriting historical rows.
+            invoice_columns = {row["name"] for row in db.execute("PRAGMA table_info(invoices)")}
+            if "idempotency_key" not in invoice_columns:
+                db.execute("ALTER TABLE invoices ADD COLUMN idempotency_key TEXT")
+            if "request_sha256" not in invoice_columns:
+                db.execute("ALTER TABLE invoices ADD COLUMN request_sha256 TEXT")
+            db.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS invoices_idempotency_key_unique "
+                "ON invoices(idempotency_key) WHERE idempotency_key IS NOT NULL"
+            )
             payment_columns = {row["name"] for row in db.execute("PRAGMA table_info(payments)")}
             if "idempotency_key" not in payment_columns:
                 db.execute("ALTER TABLE payments ADD COLUMN idempotency_key TEXT")
@@ -459,16 +470,41 @@ class HospitalDB:
 
     def create_invoice(self, *, invoice_no: str, patient_id: int, total_minor: int,
                        created_at: str, actor: str, currency: str = "YER",
-                       encounter_id: int | None = None) -> int:
+                       encounter_id: int | None = None,
+                       idempotency_key: str | None = None) -> int:
         if type(total_minor) is not int or total_minor < 0:
             raise HospitalError("invoice total must be a non-negative integer in minor units")
         if not isinstance(invoice_no, str) or not invoice_no.strip():
             raise HospitalError("invoice number is required")
+        if idempotency_key is not None:
+            if not isinstance(idempotency_key, str) or not idempotency_key.strip() or len(idempotency_key) > 200:
+                raise HospitalError("idempotency_key must be a non-empty string of at most 200 characters")
+            idempotency_key = idempotency_key.strip()
+            request = {"invoice_no": invoice_no.strip(), "patient_id": patient_id,
+                       "encounter_id": encounter_id, "total_minor": total_minor,
+                       "currency": currency, "created_at": created_at}
+            request_sha256 = hashlib.sha256(
+                json.dumps(request, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+            ).hexdigest()
+        else:
+            request_sha256 = None
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
-            cur = db.execute("""INSERT INTO invoices(invoice_no,patient_id,encounter_id,total_minor,currency,created_at)
-                VALUES(?,?,?,?,?,?)""",
-                (invoice_no.strip(), patient_id, encounter_id, total_minor, currency, created_at))
+            if idempotency_key is not None:
+                existing = db.execute(
+                    "SELECT id,request_sha256 FROM invoices WHERE idempotency_key=?",
+                    (idempotency_key,),
+                ).fetchone()
+                if existing is not None:
+                    if existing["request_sha256"] != request_sha256:
+                        raise HospitalError("idempotency_key was already used with different invoice details")
+                    db.commit()
+                    return int(existing["id"])
+            cur = db.execute("""INSERT INTO invoices
+                (invoice_no,patient_id,encounter_id,total_minor,currency,created_at,idempotency_key,request_sha256)
+                VALUES(?,?,?,?,?,?,?,?)""",
+                (invoice_no.strip(), patient_id, encounter_id, total_minor, currency, created_at,
+                 idempotency_key, request_sha256))
             ident = cur.lastrowid
             self._audit(db, actor, "invoice.created", "invoice", ident, created_at,
                         {"total_minor": total_minor, "currency": currency})

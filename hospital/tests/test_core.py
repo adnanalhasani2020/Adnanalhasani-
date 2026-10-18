@@ -403,6 +403,31 @@ class HospitalCoreTests(unittest.TestCase):
                 (invoice,)).fetchone()[0], 1)
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM finance_outbox WHERE event_type='hospital.payment.received'").fetchone()[0], 1)
 
+    def test_invoice_idempotency_returns_original_invoice_without_duplicate_outbox(self):
+        args = dict(invoice_no="INV-IDEMPOTENT-1", patient_id=self.patient,
+                    total_minor=12500, created_at="2026-10-18T10:00:00Z",
+                    actor="cashier", currency="YER", idempotency_key="invoice-form:session-1")
+        first = self.db.create_invoice(**args)
+        retry = self.db.create_invoice(**args)
+        self.assertEqual(first, retry)
+        with self.db.connect() as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM invoices WHERE idempotency_key=?",
+                                          (args["idempotency_key"],)).fetchone()[0], 1)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM finance_outbox WHERE event_type='hospital.invoice.created'").fetchone()[0], 1)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM audit_log WHERE action='invoice.created'").fetchone()[0], 1)
+
+    def test_invoice_idempotency_rejects_reused_key_with_changed_details(self):
+        args = dict(invoice_no="INV-IDEMPOTENT-2", patient_id=self.patient,
+                    total_minor=12500, created_at="2026-10-18T10:00:00Z",
+                    actor="cashier", idempotency_key="invoice-form:session-conflict")
+        self.db.create_invoice(**args)
+        with self.assertRaisesRegex(HospitalError, "different invoice details"):
+            self.db.create_invoice(**{**args, "total_minor": 15000})
+        with self.db.connect() as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM invoices WHERE idempotency_key=?",
+                                          (args["idempotency_key"],)).fetchone()[0], 1)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM finance_outbox WHERE event_type='hospital.invoice.created'").fetchone()[0], 1)
+
     def test_existing_hospital_database_upgrades_payment_idempotency_columns(self):
         with self.db.connect() as conn:
             conn.execute("DROP INDEX IF EXISTS payments_idempotency_key_unique")
