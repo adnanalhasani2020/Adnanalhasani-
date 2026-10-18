@@ -140,6 +140,7 @@ def test_existing_db_migration_preserves_data_and_is_idempotent(tmp_path):
     # Simulate a pre-0049 database: existing data and schema remain, but the new
     # trigger and its migration marker have not yet been installed.
     db.execute("DROP TRIGGER inventory_movement_position_time_guard")
+    db.execute("DROP TRIGGER inventory_movement_position_time_precision_guard")
     db.execute(
         "DELETE FROM schema_migrations WHERE version='0049_inventory_movement_position_time_guard'"
     )
