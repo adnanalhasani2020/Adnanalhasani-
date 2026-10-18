@@ -145,3 +145,35 @@ def test_outbox_recovers_expired_processing_lease(tmp_path):
     assert len(reclaimed) == 1
     assert reclaimed[0]["aggregate_id"] == str(invoice_id)
     assert reclaimed[0]["attempts"] == 2
+
+
+def test_outbox_insert_failure_rolls_back_invoice_and_audit_together(tmp_path):
+    hospital, patient_id = _hospital(tmp_path)
+    with hospital.connect() as db:
+        db.execute(
+            """CREATE TRIGGER reject_finance_outbox_insert
+               BEFORE INSERT ON finance_outbox
+               BEGIN SELECT RAISE(ABORT, 'simulated outbox failure'); END"""
+        )
+
+    try:
+        hospital.create_invoice(
+            invoice_no="INV-OUTBOX-ATOMIC", patient_id=patient_id, total_minor=300,
+            created_at="2026-10-18T10:11:00Z", actor="test",
+        )
+    except Exception as exc:
+        assert "simulated outbox failure" in str(exc)
+    else:
+        raise AssertionError("invoice creation must fail when its outbox write fails")
+
+    with hospital.connect() as db:
+        assert db.execute(
+            "SELECT COUNT(*) FROM invoices WHERE invoice_no='INV-OUTBOX-ATOMIC'"
+        ).fetchone()[0] == 0
+        assert db.execute(
+            "SELECT COUNT(*) FROM audit_log WHERE action='invoice.created' "
+            "AND entity_id IN (SELECT CAST(id AS TEXT) FROM invoices)"
+        ).fetchone()[0] == 0
+        assert db.execute(
+            "SELECT COUNT(*) FROM finance_outbox WHERE event_key LIKE 'hospital:invoice:%'"
+        ).fetchone()[0] == 0
