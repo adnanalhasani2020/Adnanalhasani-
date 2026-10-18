@@ -5,6 +5,7 @@ All timestamps are ISO-8601 strings supplied by the caller.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 from contextlib import contextmanager
@@ -168,7 +169,9 @@ CREATE TABLE IF NOT EXISTS invoices (
 CREATE TABLE IF NOT EXISTS payments (
   id INTEGER PRIMARY KEY, invoice_id INTEGER NOT NULL REFERENCES invoices(id),
   amount_minor INTEGER NOT NULL CHECK(amount_minor > 0), method TEXT NOT NULL,
-  reference TEXT, received_at TEXT NOT NULL
+  reference TEXT, received_at TEXT NOT NULL,
+  idempotency_key TEXT,
+  request_sha256 TEXT
 );
 -- Transactional handoff intents; consumers must not treat these as Finance recognition.
 CREATE TABLE IF NOT EXISTS finance_outbox (
@@ -215,6 +218,16 @@ class HospitalDB:
         self.path = str(path)
         with self.connect() as db:
             db.executescript(SCHEMA)
+            # Upgrade existing Hospital databases without rewriting historical rows.
+            payment_columns = {row["name"] for row in db.execute("PRAGMA table_info(payments)")}
+            if "idempotency_key" not in payment_columns:
+                db.execute("ALTER TABLE payments ADD COLUMN idempotency_key TEXT")
+            if "request_sha256" not in payment_columns:
+                db.execute("ALTER TABLE payments ADD COLUMN request_sha256 TEXT")
+            db.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS payments_idempotency_key_unique "
+                "ON payments(idempotency_key) WHERE idempotency_key IS NOT NULL"
+            )
 
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:
@@ -353,11 +366,35 @@ class HospitalDB:
             return int(ident)
 
     def record_payment(self, *, invoice_id: int, amount_minor: int, method: str,
-                       received_at: str, actor: str, reference: str | None = None) -> int:
+                       received_at: str, actor: str, reference: str | None = None,
+                       idempotency_key: str | None = None) -> int:
         if amount_minor <= 0 or not method.strip():
             raise HospitalError("payment amount must be positive and method is required")
+        if idempotency_key is not None:
+            if not isinstance(idempotency_key, str) or not idempotency_key.strip() or len(idempotency_key) > 200:
+                raise HospitalError("idempotency_key must be a non-empty string of at most 200 characters")
+            idempotency_key = idempotency_key.strip()
+            request = {
+                "invoice_id": invoice_id, "amount_minor": amount_minor,
+                "method": method.strip(), "reference": reference, "received_at": received_at,
+            }
+            request_sha256 = hashlib.sha256(
+                json.dumps(request, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+            ).hexdigest()
+        else:
+            request_sha256 = None
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
+            if idempotency_key is not None:
+                existing = db.execute(
+                    "SELECT id,request_sha256 FROM payments WHERE idempotency_key=?",
+                    (idempotency_key,),
+                ).fetchone()
+                if existing is not None:
+                    if existing["request_sha256"] != request_sha256:
+                        raise HospitalError("idempotency_key was already used with different payment details")
+                    db.commit()
+                    return int(existing["id"])
             invoice = db.execute("SELECT total_minor,status FROM invoices WHERE id=?", (invoice_id,)).fetchone()
             if invoice is None or invoice["status"] == "void":
                 raise HospitalError("valid invoice not found")
@@ -365,12 +402,15 @@ class HospitalDB:
                               (invoice_id,)).fetchone()["n"]
             if paid + amount_minor > invoice["total_minor"]:
                 raise HospitalError("payment exceeds invoice balance")
-            cur = db.execute("""INSERT INTO payments(invoice_id,amount_minor,method,reference,received_at)
-                VALUES(?,?,?,?,?)""", (invoice_id, amount_minor, method.strip(), reference, received_at))
+            cur = db.execute(
+                """INSERT INTO payments(invoice_id,amount_minor,method,reference,received_at,idempotency_key,request_sha256)
+                   VALUES(?,?,?,?,?,?,?)""",
+                (invoice_id, amount_minor, method.strip(), reference, received_at, idempotency_key, request_sha256),
+            )
             status = "paid" if paid + amount_minor == invoice["total_minor"] else "partial"
             db.execute("UPDATE invoices SET status=? WHERE id=?", (status, invoice_id))
             self._audit(db, actor, "payment.received", "invoice", invoice_id, received_at,
-                        {"amount_minor": amount_minor, "method": method, "payment_id": cur.lastrowid})
+                        {"amount_minor": amount_minor, "method": method.strip(), "payment_id": cur.lastrowid})
             db.execute(
                 """INSERT INTO finance_outbox
                    (event_key,event_type,aggregate_type,aggregate_id,payload_json,created_at,updated_at)
