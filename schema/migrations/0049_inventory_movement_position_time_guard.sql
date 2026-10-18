@@ -16,3 +16,18 @@ WHEN NOT EXISTS (
 BEGIN
     SELECT RAISE(ABORT, 'inventory movement must occur within its position effective window');
 END;
+
+
+-- The comparison above is defined at microsecond precision. Reject inputs that
+-- would otherwise be silently truncated by the integer-microsecond conversion.
+CREATE TRIGGER inventory_movement_position_time_precision_guard
+BEFORE INSERT ON inventory_movements
+WHEN (instr(NEW.occurred_at, '.') > 0 AND length(CASE WHEN instr(substr(NEW.occurred_at, instr(NEW.occurred_at, '.') + 1), 'Z') > 0 THEN substr(substr(NEW.occurred_at, instr(NEW.occurred_at, '.') + 1), 1, instr(substr(NEW.occurred_at, instr(NEW.occurred_at, '.') + 1), 'Z') - 1) WHEN instr(substr(NEW.occurred_at, instr(NEW.occurred_at, '.') + 1), '+') > 0 THEN substr(substr(NEW.occurred_at, instr(NEW.occurred_at, '.') + 1), 1, instr(substr(NEW.occurred_at, instr(NEW.occurred_at, '.') + 1), '+') - 1) WHEN instr(substr(NEW.occurred_at, instr(NEW.occurred_at, '.') + 1), '-') > 0 THEN substr(substr(NEW.occurred_at, instr(NEW.occurred_at, '.') + 1), 1, instr(substr(NEW.occurred_at, instr(NEW.occurred_at, '.') + 1), '-') - 1) ELSE substr(NEW.occurred_at, instr(NEW.occurred_at, '.') + 1) END) > 6)
+  OR EXISTS (
+      SELECT 1 FROM inventory_positions p
+      WHERE p.inventory_position_id = NEW.inventory_position_id
+        AND ((instr(p.effective_from, '.') > 0 AND length(CASE WHEN instr(substr(p.effective_from, instr(p.effective_from, '.') + 1), 'Z') > 0 THEN substr(substr(p.effective_from, instr(p.effective_from, '.') + 1), 1, instr(substr(p.effective_from, instr(p.effective_from, '.') + 1), 'Z') - 1) WHEN instr(substr(p.effective_from, instr(p.effective_from, '.') + 1), '+') > 0 THEN substr(substr(p.effective_from, instr(p.effective_from, '.') + 1), 1, instr(substr(p.effective_from, instr(p.effective_from, '.') + 1), '+') - 1) WHEN instr(substr(p.effective_from, instr(p.effective_from, '.') + 1), '-') > 0 THEN substr(substr(p.effective_from, instr(p.effective_from, '.') + 1), 1, instr(substr(p.effective_from, instr(p.effective_from, '.') + 1), '-') - 1) ELSE substr(p.effective_from, instr(p.effective_from, '.') + 1) END) > 6) OR (p.effective_to IS NOT NULL AND (instr(p.effective_to, '.') > 0 AND length(CASE WHEN instr(substr(p.effective_to, instr(p.effective_to, '.') + 1), 'Z') > 0 THEN substr(substr(p.effective_to, instr(p.effective_to, '.') + 1), 1, instr(substr(p.effective_to, instr(p.effective_to, '.') + 1), 'Z') - 1) WHEN instr(substr(p.effective_to, instr(p.effective_to, '.') + 1), '+') > 0 THEN substr(substr(p.effective_to, instr(p.effective_to, '.') + 1), 1, instr(substr(p.effective_to, instr(p.effective_to, '.') + 1), '+') - 1) WHEN instr(substr(p.effective_to, instr(p.effective_to, '.') + 1), '-') > 0 THEN substr(substr(p.effective_to, instr(p.effective_to, '.') + 1), 1, instr(substr(p.effective_to, instr(p.effective_to, '.') + 1), '-') - 1) ELSE substr(p.effective_to, instr(p.effective_to, '.') + 1) END) > 6)))
+  )
+BEGIN
+    SELECT RAISE(ABORT, 'inventory movement timestamps support at most 6 fractional digits');
+END;
