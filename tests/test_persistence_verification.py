@@ -85,7 +85,7 @@ def test_clean_install_has_exactly_68_domain_tables_plus_migration_bookkeeping()
     assert db.execute("PRAGMA foreign_keys").fetchone()[0] == 1
     assert db.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
     versions = [r[0] for r in db.execute("SELECT version FROM schema_migrations ORDER BY version")]
-    assert versions == [
+    expected_versions = [
         "0001_initial_relational_schema",
         "0002_prevent_person_canonical_cycles",
         "0003_enforce_sale_offering_activity_consistency",
@@ -128,10 +128,13 @@ def test_clean_install_has_exactly_68_domain_tables_plus_migration_bookkeeping()
         "0047_hospital_finance_settings_reference_state_guards",
         "0048_hospital_finance_settings_immutable_history",
         "0049_inventory_movement_position_time_guard",
-        "0050_commercial_sale_return_movements",
         "9998_activity_invitations",
         "9999_file_attachments",
     ]
+    expected_versions.extend(
+        path.stem for path in persistence.MIGRATIONS_DIR.glob("005[01]_commercial_*.sql")
+    )
+    assert versions == sorted(expected_versions)
 
 
 def test_existing_db_migration_preserves_data_and_is_idempotent(tmp_path):
@@ -158,7 +161,7 @@ def test_existing_db_migration_preserves_data_and_is_idempotent(tmp_path):
     before = reopened.execute("SELECT COUNT(*) FROM persons").fetchone()[0]
     assert apply_migrations(reopened) == []
     assert reopened.execute("SELECT COUNT(*) FROM persons").fetchone()[0] == before
-    assert reopened.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0] == 45
+    assert reopened.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0] == len(list(persistence.MIGRATIONS_DIR.glob("*.sql")))
 
 
 def test_constraints_are_enforced_at_runtime():
