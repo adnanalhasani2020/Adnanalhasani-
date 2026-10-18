@@ -422,7 +422,7 @@ def test_inventory_movement_must_fall_inside_position_effective_window(tmp_path,
                    inventory_movement_id, inventory_position_id, activity_id, product_id,
                    offering_id, location_ref, scope_key, quantity_delta, source_type,
                    source_ref, actor_context_ref, occurred_at, created_at
-               ) VALUES(?,?,?,?,?,?,?,-1,'sale',?,?,?,?)""",
+               ) VALUES(?,?,?,?,?,?,?,-1,'sale',?,?,?,?)"""
     movement_values = (
         uid(), position_id, request["activity_id"],
         db.execute("SELECT product_id FROM offerings WHERE offering_id=?",
