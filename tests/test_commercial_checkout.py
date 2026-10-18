@@ -1,5 +1,6 @@
 """Commercial checkout acceptance tests: persisted prices, stock movements, and replay."""
 from datetime import datetime, timezone
+import sqlite3
 import uuid
 
 import pytest
@@ -407,7 +408,7 @@ def test_inventory_movement_must_fall_inside_position_effective_window(tmp_path,
     )
     db.commit()
 
-    with pytest.raises(Exception, match="within its position effective window"):
+    with pytest.raises(sqlite3.IntegrityError, match="within its position effective window"):
         db.execute(
             """INSERT INTO inventory_movements(
                    inventory_movement_id, inventory_position_id, activity_id, product_id,
