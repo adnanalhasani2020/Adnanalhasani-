@@ -60,6 +60,7 @@ Use your actual backup filename in place of the example. Store a second encrypte
 - `GET /health`, `GET /api/dashboard`
 - `GET /api/patients`, `/api/doctors`, `/api/appointments`, `/api/lab-orders`, `/api/medicines`, `/api/prescriptions`, `/api/beds`, `/api/admissions`, `/api/invoices` (authenticated, searchable with `?search=`, paginated with `?limit=50&offset=0`; maximum page size 100)
 - `POST /api/patients`, `POST /api/doctors`, `POST /api/appointments`
+- `POST /api/appointments/{id}/cancel` and `/api/appointments/{id}/no-show` are authorized administrative transitions; both are audited, only scheduled appointments can transition, and no-show timestamps cannot precede the appointment start.
 - `POST /api/encounters`, `POST /api/encounters/{id}/close`
 - `POST /api/lab-orders`, `POST /api/lab-orders/{id}/status`
 - `POST /api/medicines`, `POST /api/prescriptions`, `POST /api/prescriptions/{id}/dispense`

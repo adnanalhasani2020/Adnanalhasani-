@@ -590,6 +590,13 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                         ends_at=str(data["ends_at"]), created_at=str(data["created_at"]),
                         actor=self._actor(), reason=str(data.get("reason", "")))
                     self._send(201, {"id": ident, "status": "scheduled"})
+                elif len(parts) == 4 and parts[:2] == ["api", "appointments"] and parts[3] in {"cancel", "no-show"}:
+                    self._required(data, "at")
+                    target_status = "cancelled" if parts[3] == "cancel" else "no_show"
+                    database.transition_appointment(
+                        appointment_id=int(parts[2]), target_status=target_status,
+                        at=str(data["at"]), actor=self._actor())
+                    self._send(200, {"id": int(parts[2]), "status": target_status})
                 elif route == "/api/encounters":
                     self._required(data, "patient_id", "opened_at")
                     ident = create_encounter(database, patient_id=int(data["patient_id"]),
