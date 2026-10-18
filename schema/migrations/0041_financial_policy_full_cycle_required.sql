@@ -9,7 +9,7 @@ BEGIN
 END;
 
 CREATE TRIGGER financial_policy_full_cycle_required_update
-BEFORE UPDATE OF require_full_cycle_validation ON financial_policy_settings
+BEFORE UPDATE ON financial_policy_settings
 WHEN NEW.require_full_cycle_validation <> 1
 BEGIN
     SELECT RAISE(ABORT, 'full-cycle financial validation is mandatory');
