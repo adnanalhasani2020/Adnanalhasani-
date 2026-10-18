@@ -150,8 +150,9 @@ def test_existing_db_migration_preserves_data_and_is_idempotent(tmp_path):
     assert reopened.execute("SELECT state FROM persons WHERE person_id=?", (person,)).fetchone()[0] == "active"
     assert reopened.execute(
         "SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' "
-        "AND name='inventory_movement_position_time_guard'"
-    ).fetchone()[0] == 1
+        "AND name IN ('inventory_movement_position_time_guard', "
+        "'inventory_movement_position_time_precision_guard')"
+    ).fetchone()[0] == 2
     before = reopened.execute("SELECT COUNT(*) FROM persons").fetchone()[0]
     assert apply_migrations(reopened) == []
     assert reopened.execute("SELECT COUNT(*) FROM persons").fetchone()[0] == before
