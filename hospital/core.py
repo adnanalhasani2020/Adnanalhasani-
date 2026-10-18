@@ -403,11 +403,22 @@ class HospitalDB:
                        received_at: str, actor: str, reference: str | None = None) -> int:
         if amount_minor <= 0 or not method.strip():
             raise HospitalError("payment amount must be positive and method is required")
+        if reference is not None and not isinstance(reference, str):
+            raise HospitalError("payment reference must be text")
+        reference = reference.strip() if reference is not None else None
+        reference = reference or None
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             invoice = db.execute("SELECT total_minor,status FROM invoices WHERE id=?", (invoice_id,)).fetchone()
             if invoice is None or invoice["status"] == "void":
                 raise HospitalError("valid invoice not found")
+            if reference is not None:
+                duplicate = db.execute(
+                    "SELECT id FROM payments WHERE invoice_id=? AND reference=?",
+                    (invoice_id, reference),
+                ).fetchone()
+                if duplicate is not None:
+                    raise HospitalError("payment reference already recorded for this invoice")
             paid = db.execute("SELECT COALESCE(SUM(amount_minor),0) AS n FROM payments WHERE invoice_id=?",
                               (invoice_id,)).fetchone()["n"]
             if paid + amount_minor > invoice["total_minor"]:
