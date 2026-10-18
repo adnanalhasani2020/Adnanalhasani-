@@ -149,6 +149,14 @@ class HospitalCoreTests(unittest.TestCase):
                     "INSERT INTO admissions(patient_id,bed_id,admitted_at) VALUES(?,?,?)",
                     (self.patient, bed_ids[1], "2026-01-02T10:00:00"),
                 )
+            second_patient = conn.execute(
+                "INSERT INTO patients(patient_no,full_name,created_at) VALUES(?,?,?)",
+                ("P-002", "Second Patient", "2026-01-01T08:00:00"),
+            ).lastrowid
+            conn.execute(
+                "INSERT INTO admissions(patient_id,bed_id,admitted_at) VALUES(?,?,?)",
+                (second_patient, bed_ids[1], "2026-01-02T10:00:00"),
+            )
             with self.assertRaisesRegex(sqlite3.IntegrityError, "patient already has an active admission"):
                 conn.execute(
                     "UPDATE admissions SET patient_id=? WHERE bed_id=?",
