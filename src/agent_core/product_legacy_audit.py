@@ -50,7 +50,7 @@ class ProductLegacyNameAuditor:
         if type(offset) is not int or offset < 0:
             raise ValueError("offset must be a non-negative integer")
 
-        where = "WHERE p.name IS NULL OR trim(p.name)=''"
+        where = "WHERE (p.name IS NULL OR trim(p.name)='')"
         total = connection.execute(
             f"SELECT COUNT(*) FROM products p {where}"
         ).fetchone()[0]
