@@ -351,3 +351,9 @@ def test_receipt_history_skips_malformed_persisted_row(tmp_path):
     history = request(app, "/api/receipts", cookie=session_cookie)
     assert history["status"] == "200 OK"
     assert history["body"] == {"items": []}
+
+    direct_lookup = request(
+        app, "/api/receipts/damaged-receipt", cookie=session_cookie,
+    )
+    assert direct_lookup["status"] == "404 Not Found"
+    assert direct_lookup["body"] == {"error": "الإيصال غير موجود."}
