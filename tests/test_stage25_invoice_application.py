@@ -92,6 +92,29 @@ def test_invoice_issue_and_void_persist_history_and_use_separate_grants(tmp_path
     db.close()
 
 
+def test_invoice_issue_rejects_issue_timestamp_before_sale_creation_without_writes():
+    db = connect_database()
+    actor, _activity, sale, grant = fixture(db)
+    invoice_id = uid()
+
+    with pytest.raises(ValidationError, match="cannot precede Sale creation timestamp"):
+        InvoiceApplication().create_invoice(
+            db, sale_id=sale, actor_context_ref=actor,
+            authorization_grant_id=grant, issuer_ref=actor,
+            invoice_number="INV-BEFORE-SALE", invoice_id=invoice_id,
+            issue_at="2026-10-10T11:59:59Z", now=STAMP,
+        )
+
+    assert db.execute(
+        "SELECT COUNT(*) FROM invoices WHERE invoice_id=?", (invoice_id,)
+    ).fetchone()[0] == 0
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=? AND change_type='invoice_state_transition'",
+        (invoice_id,),
+    ).fetchone()[0] == 0
+    db.close()
+
+
 def test_invoice_issue_rejects_missing_sale_or_wrong_grant_scope_without_write():
     db = connect_database()
     actor, activity, sale, grant = fixture(db)
