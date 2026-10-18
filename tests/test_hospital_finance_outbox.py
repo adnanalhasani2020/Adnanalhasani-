@@ -216,3 +216,32 @@ def test_payment_outbox_failure_rolls_back_payment_and_invoice_status(tmp_path):
         assert db.execute(
             "SELECT COUNT(*) FROM audit_log WHERE action='payment.received'"
         ).fetchone()[0] == 0
+
+
+def test_outbox_payloads_use_finance_allowlist_not_patient_or_clinical_fields(tmp_path):
+    hospital, patient_id = _hospital(tmp_path)
+    invoice_id = hospital.create_invoice(
+        invoice_no="INV-OUTBOX-MINIMAL", patient_id=patient_id, total_minor=900,
+        created_at="2026-10-18T10:30:00Z", actor="test",
+    )
+    hospital.record_payment(
+        invoice_id=invoice_id, amount_minor=300, method="cash",
+        received_at="2026-10-18T10:31:00Z", actor="test",
+    )
+
+    with hospital.connect() as db:
+        payloads = [
+            json.loads(row["payload_json"])
+            for row in db.execute("SELECT payload_json FROM finance_outbox ORDER BY id")
+        ]
+
+    assert set(payloads[0]) == {
+        "invoice_id", "invoice_no", "total_minor", "currency", "created_at"
+    }
+    assert set(payloads[1]) == {
+        "payment_id", "invoice_id", "amount_minor", "currency", "method",
+        "reference", "received_at"
+    }
+    forbidden = {"patient_id", "patient_name", "date_of_birth", "diagnosis",
+                 "clinical_notes", "allergies", "phone", "address"}
+    assert all(forbidden.isdisjoint(payload) for payload in payloads)
