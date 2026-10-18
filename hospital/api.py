@@ -9,6 +9,7 @@ import hmac
 import ipaddress
 import json
 import os
+import sqlite3
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -156,6 +157,59 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                 self._send(200, {"data": database.dashboard()})
             elif route == "/api/finance/outbox-status":
                 self._send(200, {"data": database.finance_outbox_status()})
+            elif route == "/api/finance/integration-readiness":
+                finance_path = os.environ.get("APP_DB_PATH") or os.environ.get(
+                    "COMMERCIAL_DB_PATH", "commercial-mvp.sqlite3"
+                )
+                if not Path(finance_path).expanduser().is_file():
+                    self._send(503, {"error": "finance_store_unavailable"})
+                    return
+                hospital_uri = "file:" + str(Path(database.path).expanduser().resolve()) + "?mode=ro"
+                finance_uri = "file:" + str(Path(finance_path).expanduser().resolve()) + "?mode=ro"
+                hospital_conn = finance_conn = None
+                try:
+                    hospital_conn = sqlite3.connect(hospital_uri, uri=True, timeout=5)
+                    finance_conn = sqlite3.connect(finance_uri, uri=True, timeout=5)
+                    hospital_conn.row_factory = sqlite3.Row
+                    finance_conn.row_factory = sqlite3.Row
+                    from src.agent_core.hospital_finance_transport_report import (
+                        build_hospital_finance_transport_report,
+                    )
+                    from src.agent_core.hospital_finance_recognition_readiness import (
+                        build_hospital_finance_recognition_readiness_report,
+                    )
+                    transport = build_hospital_finance_transport_report(hospital_conn, finance_conn)
+                    recognition = build_hospital_finance_recognition_readiness_report(finance_conn)
+                    hospital_recognition_events = [
+                        item for item in recognition["events"]
+                        if str(item.get("event_type", "")).startswith("hospital.")
+                    ]
+                    from collections import Counter
+                    recognition_counts = dict(sorted(Counter(
+                        item["disposition"] for item in hospital_recognition_events
+                    ).items()))
+                    # Aggregate only: never expose event keys, Finance UUIDs, payloads,
+                    # patient identifiers, payment references, or exception text.
+                    self._send(200, {"data": {
+                        "read_only": True,
+                        "scope": "aggregate Hospital-Finance transport and persisted recognition readiness; not full accounting reconciliation",
+                        "transport": {
+                            "outbox_event_count": transport["outbox_event_count"],
+                            "intake_without_outbox_count": transport["intake_without_outbox_count"],
+                            "by_disposition": transport["by_disposition"],
+                        },
+                        "recognition": {
+                            "event_count": len(hospital_recognition_events),
+                            "by_disposition": recognition_counts,
+                        },
+                    }})
+                except (sqlite3.Error, OSError, ImportError, KeyError):
+                    self._send(503, {"error": "finance_readiness_unavailable"})
+                finally:
+                    if hospital_conn is not None:
+                        hospital_conn.close()
+                    if finance_conn is not None:
+                        finance_conn.close()
             elif route == "/api/search":
                 try:
                     params = parse_qs(parsed.query, keep_blank_values=True)
