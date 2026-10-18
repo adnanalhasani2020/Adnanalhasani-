@@ -195,8 +195,13 @@ class CommercialWebApplication:
                 return self._json(start_response, "200 OK", result)
 
             if method == "GET" and path == "/api/reports/sales":
-                # Operational snapshot only: persisted sale states and immutable sale-line
-                # snapshots. This does not represent recognized revenue or accounting.
+                # SECURITY BLOCKER: commercial sessions prove identity only. This application
+                # has no approved, enforced report-audience permission or data-scope contract.
+                # Deny before parsing query parameters or querying sales so JSON and CSV fail
+                # closed identically without disclosing report metadata or transaction data.
+                return self._json(start_response, "403 Forbidden", {
+                    "error": "الوصول إلى تقرير المبيعات محجوب حتى اعتماد صلاحيات التقرير وتطبيقها على الخادم."
+                })
                 query = parse_qs(environ.get("QUERY_STRING", ""), keep_blank_values=True)
 
                 def report_integer(name, default, minimum, maximum=None):
