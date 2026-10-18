@@ -98,3 +98,88 @@ def test_invoice_audit_rejects_invalid_or_missing_invoice():
     with pytest.raises(ValidationError, match="does not exist"):
         auditor.inspect(db, uid())
     db.close()
+
+
+
+def test_invoice_audit_detects_broken_prior_reference():
+    from agent_core.invoice_history_audit import InvoiceHistoryIntegrityAuditor
+
+    db = connect_database()
+    *_, issued = setup_invoice(db)
+    invoice_id = str(issued.invoice.id)
+    db.execute(
+        "UPDATE domain_history SET prior_version_ref=? WHERE target_ref=? AND change_type='invoice_state_transition'",
+        (f"invoice-state:{invoice_id}:v9", invoice_id),
+    )
+    db.commit()
+
+    result = InvoiceHistoryIntegrityAuditor().inspect(db, invoice_id)
+    assert result.status == "inconsistent"
+    assert "history_version_chain_break:1" in result.findings
+    db.close()
+
+
+def test_invoice_audit_detects_invalid_state_transition():
+    from agent_core.invoice_history_audit import InvoiceHistoryIntegrityAuditor
+
+    db = connect_database()
+    actor, activity, sale, grant, issued = setup_invoice(db)
+    invoice_id = str(issued.invoice.id)
+    db.execute(
+        "UPDATE authorization_grants SET action_code='void_invoice' WHERE authorization_grant_id=?",
+        (grant,),
+    )
+    db.commit()
+    voided = InvoiceApplication().void_invoice(
+        db, invoice_id, actor_context_ref=actor, authorization_grant_id=grant,
+        now="2026-10-10T12:01:00Z", expected_version=1,
+    )
+    assert voided.invoice.state.value == "void"
+    db.execute(
+        "UPDATE domain_history SET change_payload_ref='state:issued' "
+        "WHERE target_ref=? AND change_type='invoice_state_transition' "
+        "AND current_version_ref=?",
+        (invoice_id, f"invoice-state:{invoice_id}:v2"),
+    )
+    db.commit()
+
+    result = InvoiceHistoryIntegrityAuditor().inspect(db, invoice_id)
+    assert result.status == "inconsistent"
+    assert "history_state_transition_invalid:2" in result.findings
+    db.close()
+
+
+def test_invoice_audit_detects_history_exceeding_persisted_version():
+    from agent_core.invoice_history_audit import InvoiceHistoryIntegrityAuditor
+
+    db = connect_database()
+    *_, issued = setup_invoice(db)
+    invoice_id = str(issued.invoice.id)
+    db.execute(
+        "INSERT INTO domain_history(domain_history_id,owner_domain,target_ref,change_type,historical_at,"
+        "actor_context_ref,prior_version_ref,current_version_ref,change_payload_ref,created_at) "
+        "VALUES(?,?,?,?,?,?,?,?,?,?)",
+        (uid(), "commerce", invoice_id, "invoice_state_transition", STAMP, uid(),
+         f"invoice-state:{invoice_id}:v1", f"invoice-state:{invoice_id}:v2", "state:void", STAMP),
+    )
+    db.commit()
+
+    result = InvoiceHistoryIntegrityAuditor().inspect(db, invoice_id)
+    assert result.status == "inconsistent"
+    assert "invoice_history_exceeds_invoice_version" in result.findings
+    db.close()
+
+
+def test_invoice_audit_detects_final_state_mismatch_at_matching_version():
+    from agent_core.invoice_history_audit import InvoiceHistoryIntegrityAuditor
+
+    db = connect_database()
+    *_, issued = setup_invoice(db)
+    invoice_id = str(issued.invoice.id)
+    db.execute("UPDATE invoices SET state='void' WHERE invoice_id=?", (invoice_id,))
+    db.commit()
+
+    result = InvoiceHistoryIntegrityAuditor().inspect(db, invoice_id)
+    assert result.status == "inconsistent"
+    assert "history_final_state_mismatch" in result.findings
+    db.close()
