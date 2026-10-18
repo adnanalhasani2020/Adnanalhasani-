@@ -99,10 +99,12 @@ def test_outbox_claim_retry_and_delivery_are_state_guarded(tmp_path):
     ) == []
 
     assert hospital.mark_finance_outbox_failed(
-        event_key=event_key, failed_at="2026-10-18T10:05:00Z", error="temporary outage",
+        event_key=event_key, attempts=claimed[0]["attempts"],
+        failed_at="2026-10-18T10:05:00Z", error="temporary outage",
     )
     assert not hospital.mark_finance_outbox_delivered(
-        event_key=event_key, delivered_at="2026-10-18T10:05:30Z",
+        event_key=event_key, attempts=claimed[0]["attempts"],
+        delivered_at="2026-10-18T10:05:30Z",
     )
 
     retried = hospital.claim_finance_outbox(
@@ -112,10 +114,12 @@ def test_outbox_claim_retry_and_delivery_are_state_guarded(tmp_path):
     assert len(retried) == 1
     assert retried[0]["attempts"] == 2
     assert hospital.mark_finance_outbox_delivered(
-        event_key=event_key, delivered_at="2026-10-18T10:07:00Z",
+        event_key=event_key, attempts=retried[0]["attempts"],
+        delivered_at="2026-10-18T10:07:00Z",
     )
     assert not hospital.mark_finance_outbox_failed(
-        event_key=event_key, failed_at="2026-10-18T10:08:00Z", error="late failure",
+        event_key=event_key, attempts=retried[0]["attempts"],
+        failed_at="2026-10-18T10:08:00Z", error="late failure",
     )
 
     with hospital.connect() as db:
@@ -284,3 +288,38 @@ def test_multiple_partial_payments_emit_distinct_outbox_events_and_preserve_amou
     assert all(payload["invoice_id"] == invoice_id for payload in payloads)
     assert all(row["status"] == "pending" for row in rows)
     assert invoice["status"] == "paid"
+
+
+def test_stale_outbox_worker_cannot_acknowledge_or_fail_reclaimed_lease(tmp_path):
+    hospital, patient_id = _hospital(tmp_path)
+    invoice_id = hospital.create_invoice(
+        invoice_no="INV-OUTBOX-FENCING", patient_id=patient_id, total_minor=200,
+        created_at="2026-10-18T10:01:00Z", actor="test",
+    )
+    first = hospital.claim_finance_outbox(
+        now="2026-10-18T10:02:00Z",
+        lease_expired_before="2026-10-18T10:00:00Z",
+    )
+    assert len(first) == 1
+
+    # The first worker stalls; a recovery worker takes over with a new generation.
+    reclaimed = hospital.claim_finance_outbox(
+        now="2026-10-18T10:10:00Z",
+        lease_expired_before="2026-10-18T10:03:00Z",
+    )
+    assert len(reclaimed) == 1
+    assert reclaimed[0]["attempts"] == first[0]["attempts"] + 1
+
+    assert not hospital.mark_finance_outbox_delivered(
+        event_key=first[0]["event_key"], attempts=first[0]["attempts"],
+        delivered_at="2026-10-18T10:11:00Z",
+    )
+    assert not hospital.mark_finance_outbox_failed(
+        event_key=first[0]["event_key"], attempts=first[0]["attempts"],
+        failed_at="2026-10-18T10:11:00Z", error="late worker failure",
+    )
+
+    assert hospital.mark_finance_outbox_delivered(
+        event_key=reclaimed[0]["event_key"], attempts=reclaimed[0]["attempts"],
+        delivered_at="2026-10-18T10:12:00Z",
+    )

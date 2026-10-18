@@ -468,32 +468,51 @@ class HospitalDB:
             db.commit()
             return claimed
 
-    def mark_finance_outbox_delivered(self, *, event_key: str, delivered_at: str) -> bool:
-        """Mark a leased event delivered; return False if it is not currently leased."""
-        if not event_key.strip() or not delivered_at.strip():
-            raise HospitalError("event_key and delivered_at are required")
+    def mark_finance_outbox_delivered(
+        self, *, event_key: str, attempts: int, delivered_at: str
+    ) -> bool:
+        """Mark delivery only for the current lease generation.
+
+        The claim's attempt count is a fencing token: a worker whose lease was
+        reclaimed cannot acknowledge a newer worker's delivery.
+        """
+        if (
+            not event_key.strip()
+            or not delivered_at.strip()
+            or type(attempts) is not int
+            or attempts < 1
+        ):
+            raise HospitalError("event_key, positive attempts and delivered_at are required")
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             changed = db.execute(
                 """UPDATE finance_outbox
                    SET status='delivered', delivered_at=?, updated_at=?, last_error=NULL
-                   WHERE event_key=? AND status='processing'""",
-                (delivered_at, delivered_at, event_key),
+                   WHERE event_key=? AND status='processing' AND attempts=?""",
+                (delivered_at, delivered_at, event_key, attempts),
             ).rowcount
             db.commit()
             return changed == 1
 
-    def mark_finance_outbox_failed(self, *, event_key: str, failed_at: str, error: str) -> bool:
-        """Return a leased event to retryable failure without losing its event identity."""
-        if not event_key.strip() or not failed_at.strip() or not error.strip():
-            raise HospitalError("event_key, failed_at and error are required")
+    def mark_finance_outbox_failed(
+        self, *, event_key: str, attempts: int, failed_at: str, error: str
+    ) -> bool:
+        """Fail only the current lease generation, preserving event identity."""
+        if (
+            not event_key.strip()
+            or not failed_at.strip()
+            or not error.strip()
+            or type(attempts) is not int
+            or attempts < 1
+        ):
+            raise HospitalError("event_key, positive attempts, failed_at and error are required")
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             changed = db.execute(
                 """UPDATE finance_outbox
                    SET status='failed', updated_at=?, last_error=?
-                   WHERE event_key=? AND status='processing'""",
-                (failed_at, error.strip()[:1000], event_key),
+                   WHERE event_key=? AND status='processing' AND attempts=?""",
+                (failed_at, error.strip()[:1000], event_key, attempts),
             ).rowcount
             db.commit()
             return changed == 1
