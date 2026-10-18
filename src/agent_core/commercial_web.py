@@ -262,7 +262,7 @@ button{{font:inherit;padding:.6rem 1rem;cursor:pointer}}dt{{font-weight:700}}dd{
 <dt>رقم البيع</dt><dd>{esc(receipt['sale_id'])}</dd>
 <dt>تاريخ العملية (UTC)</dt><dd>{esc(receipt['occurred_at'])}</dd>
 <dt>الحالة</dt><dd>{esc(receipt['state'])}</dd>
-<dt>معرّف المنتج</dt><dd>{esc(receipt['product_id'])}</dd>
+<dt>المنتج</dt><dd>{esc(receipt.get('product_name') or 'اسم المنتج غير محفوظ في الإيصالات القديمة')}</dd>\n<dt>معرّف المنتج</dt><dd>{esc(receipt['product_id'])}</dd>
 <dt>معرّف العرض</dt><dd>{esc(receipt['offering_id'])}</dd>
 <dt>الكمية</dt><dd>{esc(receipt['quantity'])}</dd>
 <dt>سعر الوحدة</dt><dd>{esc(unit)}</dd>
