@@ -269,10 +269,6 @@ class HospitalAPITests(unittest.TestCase):
                 (invoice_id,)).fetchone()[0], 1)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
     def test_finance_outbox_status_is_transport_only_and_excludes_payloads(self):
         patient_id = self.db.register_patient(
             patient_no="OUTBOX-STATUS-P1", full_name="Outbox Status Patient",
@@ -292,3 +288,7 @@ if __name__ == "__main__":
         self.assertFalse(data["finance_recognition_confirmed"])
         self.assertNotIn("payload_json", data)
         self.assertNotIn("event_key", data)
+
+
+if __name__ == "__main__":
+    unittest.main()
