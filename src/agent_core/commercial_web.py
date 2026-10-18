@@ -313,7 +313,14 @@ button{{font:inherit;padding:.6rem 1rem;cursor:pointer}}dt{{font-weight:700}}dd{
                 ).fetchone()
                 if row is None:
                     return self._json(start_response, "404 Not Found", {"error": "الإيصال غير موجود."})
-                return self._json(start_response, "200 OK", json.loads(row[0]))
+                try:
+                    receipt = json.loads(row[0])
+                except (TypeError, json.JSONDecodeError):
+                    logging.warning("Skipping malformed persisted commercial receipt lookup")
+                    return self._json(start_response, "404 Not Found", {"error": "الإيصال غير موجود."})
+                if not isinstance(receipt, dict):
+                    return self._json(start_response, "404 Not Found", {"error": "الإيصال غير موجود."})
+                return self._json(start_response, "200 OK", receipt)
 
             return self._json(start_response, "404 Not Found", {"error": "المسار غير موجود."})
         except ValidationError as exc:
