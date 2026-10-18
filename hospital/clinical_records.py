@@ -219,6 +219,14 @@ def receive_purchase_order(db: HospitalDB, *, order_id: int, actor: str, at: str
         items = conn.execute("SELECT medicine_id,quantity FROM purchase_order_items WHERE purchase_order_id=?", (order_id,)).fetchall()
         if not items:
             raise HospitalError("purchase order has no items")
+        # Preflight every target before the first mutation. A medicine can be
+        # deactivated after order creation; receiving must then fail atomically.
+        for item in items:
+            medicine = conn.execute(
+                "SELECT active FROM medicines WHERE id=?", (item["medicine_id"],)
+            ).fetchone()
+            if medicine is None or not medicine["active"]:
+                raise HospitalError("active medicine not found")
         for item in items:
             conn.execute("UPDATE medicines SET quantity=quantity+? WHERE id=?", (item["quantity"], item["medicine_id"]))
             conn.execute("""INSERT INTO inventory_movements
