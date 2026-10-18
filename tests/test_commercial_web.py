@@ -199,6 +199,14 @@ def test_web_session_can_buy_sellable_product_and_receive_result(tmp_path):
     assert "ليس فاتورة ضريبية" in printable_html
     assert checkout["body"]["sale_id"] in printable_html
     assert "window.print()" in printable_html
+    # The truthful receipt route is canonical; the historical invoice URL remains compatible.
+    canonical_receipt = request(
+        app, "/receipts/" + checkout["body"]["sale_id"], cookie=session_cookie,
+    )
+    assert canonical_receipt["status"] == "200 OK"
+    canonical_html = canonical_receipt["body"].decode("utf-8")
+    assert "إيصال بيع" in canonical_html
+    assert r"\n<dt>معرّف المنتج" not in canonical_html
 
     other = request(
         app, "/api/register", method="POST",
@@ -310,3 +318,36 @@ def test_checkout_ui_preserves_pending_idempotency_key_for_ambiguous_retry(tmp_p
     assert "توجد عملية شراء معلقة بكمية مختلفة" in html
     assert "else if(pending.quantity!==quantity)" not in html
     assert html.index(guard) < html.index("buy.disabled=true")
+
+
+def test_receipt_history_skips_malformed_persisted_row(tmp_path):
+    db_path = tmp_path / "malformed-receipt-history.sqlite"
+    db = connect_database(db_path)
+    db.close()
+    app = CommercialWebApplication(db_path)
+
+    registered = request(
+        app, "/api/register", method="POST",
+        body={"username": "receipt_owner", "password": "correct horse battery staple"},
+    )
+    assert registered["status"] == "200 OK"
+    cookie = SimpleCookie()
+    cookie.load(dict(registered["headers"])["Set-Cookie"])
+    session_cookie = "commercial_session=" + cookie["commercial_session"].value
+
+    db = connect_database(db_path)
+    db.execute(
+        """INSERT INTO commercial_checkout_receipts(
+               actor_person_id, idempotency_key, request_hash, response_json, created_at
+           ) VALUES(?, ?, ?, ?, ?)""",
+        (
+            registered["body"]["person_id"], "damaged-receipt", "test-hash",
+            "{not valid json", "2026-10-19T00:00:00Z",
+        ),
+    )
+    db.commit()
+    db.close()
+
+    history = request(app, "/api/receipts", cookie=session_cookie)
+    assert history["status"] == "200 OK"
+    assert history["body"] == {"items": []}
