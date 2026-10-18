@@ -102,29 +102,71 @@ class InvoiceApplication:
         issuer_key = str(self._uuid(issuer_ref, "Invoice issuer identifier"))
         obligation_key = str(self._uuid(obligation_id, "Obligation identifier")) if obligation_id is not None else None
         key = str(self._uuid(invoice_id, "Invoice identifier")) if invoice_id is not None else str(uuid4())
-        timestamp = self._timestamp(now if now is not None else datetime.now(timezone.utc), "Invoice creation timestamp")
-        issued = self._timestamp(issue_at if issue_at is not None else (now if now is not None else datetime.now(timezone.utc)), "Invoice issue timestamp")
+        # Use one clock reading for both defaults; separate datetime.now() calls
+        # can make the issue timestamp a few microseconds later than creation.
+        default_instant = now if now is not None else datetime.now(timezone.utc)
+        timestamp = self._timestamp(default_instant, "Invoice creation timestamp")
+        issued = self._timestamp(issue_at if issue_at is not None else default_instant, "Invoice issue timestamp")
         due = self._timestamp(due_at, "Invoice due timestamp", optional=True)
+        created_instant = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+        issue_instant = datetime.fromisoformat(issued.replace("Z", "+00:00"))
+        if issue_instant > created_instant:
+            raise ValidationError("Invoice issue timestamp cannot follow creation timestamp")
+        if due is not None:
+            due_instant = datetime.fromisoformat(due.replace("Z", "+00:00"))
+            if due_instant < issue_instant:
+                raise ValidationError("Invoice due timestamp cannot precede issue timestamp")
         if not isinstance(invoice_number, str) or not invoice_number.strip():
             raise ValidationError("Invoice number must be a non-empty string")
         invoice_number = invoice_number.strip()
 
-        sale = connection.execute(
-            "SELECT activity_id FROM sales WHERE sale_id=?", (sale_key,)
-        ).fetchone()
-        if sale is None:
-            raise ValidationError("Invoice requires an existing Sale")
-        activity_key = sale[0]
-        # Reuse the established exact actor/action/scope/context/effective-period grant contract.
-        SaleApplication()._authorize(
-            connection, grant_key, actor_key, "issue_invoice",
-            sale_key, activity_key, timestamp,
-        )
         with self._atomic(connection):
+            # Read and authorize inside the same transaction as the invoice write.
+            # This prevents a grant revocation or Sale-context change between authorization and persistence.
+            sale = connection.execute(
+                "SELECT s.activity_id, o.activity_id FROM sales s "
+                "LEFT JOIN offerings o ON o.offering_id=s.offering_id WHERE s.sale_id=?",
+                (sale_key,),
+            ).fetchone()
+            if sale is None:
+                raise ValidationError("Invoice requires an existing Sale")
+            activity_key, offering_activity_key = sale
+            if offering_activity_key is None or activity_key != offering_activity_key:
+                raise ValidationError(
+                    "Sale Activity does not match its Offering Activity; explicit reconciliation is required"
+                )
+            SaleApplication()._authorize(
+                connection, grant_key, actor_key, "issue_invoice",
+                sale_key, activity_key, timestamp,
+            )
             if connection.execute(
                 "SELECT 1 FROM persons WHERE person_id=? AND state='active'", (issuer_key,)
             ).fetchone() is None:
                 raise ValidationError("Invoice issuer must be an active persisted Person")
+            if connection.execute(
+                "SELECT 1 FROM invoices WHERE issuer_ref=? AND invoice_number=?",
+                (issuer_key, invoice_number),
+            ).fetchone() is not None:
+                raise ValidationError("Invoice number already exists for this issuer")
+            if obligation_key is not None:
+                obligation = connection.execute(
+                    "SELECT creditor_person_id, source_invoice_id FROM obligations WHERE obligation_id=?",
+                    (obligation_key,),
+                ).fetchone()
+                if obligation is None:
+                    raise ValidationError("Invoice references a missing Obligation")
+                if obligation[0] != issuer_key:
+                    raise ValidationError(
+                        "Invoice issuer must match the linked Obligation creditor"
+                    )
+                linked_invoice = connection.execute(
+                    "SELECT invoice_id FROM invoices WHERE obligation_id=? LIMIT 1",
+                    (obligation_key,),
+                ).fetchone()
+                if obligation[1] is not None or linked_invoice is not None:
+                    raise ValidationError(
+                        "Obligation is already linked to an Invoice; explicit reconciliation is required"
+                    )
             invoice = Invoice(UUID(sale_key), id=UUID(key), state=InvoiceState.ISSUED)
             connection.execute(
                 "INSERT INTO invoices(invoice_id,sale_id,obligation_id,state,issuer_ref,invoice_number,"
@@ -154,6 +196,13 @@ class InvoiceApplication:
         timestamp = self._timestamp(now if now is not None else datetime.now(timezone.utc), "Invoice void timestamp")
         with self._atomic(connection):
             record = self._load(connection, key)
+            created_at = connection.execute(
+                "SELECT created_at FROM invoices WHERE invoice_id=?", (key,)
+            ).fetchone()[0]
+            void_instant = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+            created_instant = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+            if void_instant < created_instant:
+                raise ValidationError("Invoice void timestamp cannot precede creation timestamp")
             SaleApplication()._authorize(
                 connection, authorization_grant_id, actor_key, "void_invoice",
                 str(record.sale_id),
