@@ -220,3 +220,74 @@ def test_database_preserves_immutable_settings_snapshots_and_approval_history(tm
         )
     assert app.get_by_id(db, settings_id=active.settings_id).status == "active"
     db.close()
+
+
+def test_settings_proposal_and_approval_write_atomic_append_only_audit_events(tmp_path):
+    db = connect_database(tmp_path / "hospital-finance-settings-audit.sqlite")
+    activity, owner, proposer, approver, account = _fixture(db)
+    app = HospitalFinanceIntegrationSettingsApplication()
+
+    proposal = app.propose(
+        db, activity_id=activity, hospital_scope_ref="clinic-main",
+        finance_person_id=owner, financial_account_id=account,
+        proposed_by_person_id=proposer, now=NOW,
+    )
+    audit = db.execute(
+        "SELECT event_type,actor_context_ref,target_ref,result_status,operation_ref "
+        "FROM audit_records WHERE target_ref=? ORDER BY occurred_at,audit_record_id",
+        (str(proposal.settings_id),),
+    ).fetchall()
+    assert audit == [
+        ("hospital_finance.settings.proposed", proposer, str(proposal.settings_id),
+         "pending_approval", str(proposal.settings_id))
+    ]
+
+    active = app.approve(
+        db, settings_id=proposal.settings_id, approved_by_person_id=approver, now=NOW,
+        note="Approved for this activity",
+    )
+    audit = db.execute(
+        "SELECT event_type,actor_context_ref,target_ref,result_status,operation_ref "
+        "FROM audit_records WHERE target_ref=? ORDER BY occurred_at,audit_record_id",
+        (str(active.settings_id),),
+    ).fetchall()
+    assert [row[0] for row in audit] == [
+        "hospital_finance.settings.proposed", "hospital_finance.settings.approved"
+    ]
+    assert audit[1] == (
+        "hospital_finance.settings.approved", approver, str(active.settings_id),
+        "active", str(active.settings_id)
+    )
+    with pytest.raises(sqlite3.IntegrityError, match="audit_records are append-only"):
+        db.execute(
+            "DELETE FROM audit_records WHERE target_ref=?",
+            (str(active.settings_id),),
+        )
+    db.close()
+
+
+def test_settings_proposal_rolls_back_when_required_audit_write_fails(tmp_path):
+    db = connect_database(tmp_path / "hospital-finance-settings-audit-failure.sqlite")
+    activity, owner, proposer, approver, account = _fixture(db)
+    app = HospitalFinanceIntegrationSettingsApplication()
+    db.execute(
+        "CREATE TRIGGER fail_hospital_finance_proposal_audit "
+        "BEFORE INSERT ON audit_records "
+        "WHEN NEW.event_type='hospital_finance.settings.proposed' "
+        "BEGIN SELECT RAISE(ABORT, 'simulated audit persistence failure'); END"
+    )
+
+    with pytest.raises(sqlite3.IntegrityError, match="simulated audit persistence failure"):
+        app.propose(
+            db, activity_id=activity, hospital_scope_ref="clinic-main",
+            finance_person_id=owner, financial_account_id=account,
+            proposed_by_person_id=proposer, now=NOW,
+        )
+
+    assert db.execute(
+        "SELECT COUNT(*) FROM hospital_finance_integration_settings"
+    ).fetchone()[0] == 0
+    assert db.execute(
+        "SELECT COUNT(*) FROM audit_records WHERE event_type='hospital_finance.settings.proposed'"
+    ).fetchone()[0] == 0
+    db.close()
