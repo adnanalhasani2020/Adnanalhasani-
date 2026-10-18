@@ -11,12 +11,17 @@ on:
       - "hospital/**"
       - ".github/workflows/hospital-core.yml"
 
+permissions:
+  contents: read
+
 jobs:
   hospital-core:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - name: Run hospital regression tests
