@@ -445,3 +445,30 @@ def test_inventory_movement_must_fall_inside_position_effective_window(tmp_path,
     assert db.execute("SELECT COUNT(*) FROM sale_lines").fetchone()[0] == 1
     assert db.execute("SELECT state FROM sales WHERE sale_id=?", (request["sale_id"],)).fetchone()[0] in {"completed", "fulfilled"}
     db.close()
+
+
+
+def test_checkout_rejects_total_above_sqlite_integer_range_without_partial_writes(tmp_path):
+    from datetime import timedelta
+
+    db, request = setup_checkout(tmp_path, quantity=5)
+    prices = OfferingPriceApplication()
+    prices.set_price(
+        db,
+        offering_id=request["offering_id"],
+        unit_price_minor=(1 << 62),
+        currency_code="SAR",
+        actor_context_ref=request["actor_person_id"],
+        effective_from=NOW,
+        now=NOW,
+    )
+
+    with pytest.raises(ValidationError, match="Sale total exceeds the supported integer range"):
+        CommercialCheckoutApplication().checkout(
+            db, **request, now=NOW + timedelta(minutes=1)
+        )
+
+    assert db.execute("SELECT COUNT(*) FROM sales").fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM sale_lines").fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM inventory_movements").fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM commercial_checkout_receipts").fetchone()[0] == 0
