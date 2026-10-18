@@ -313,6 +313,15 @@ class HospitalDB:
         with self.connect() as db:
             db.executescript(SCHEMA)
             # Upgrade existing Hospital databases without rewriting historical rows.
+            invoice_columns = {row["name"] for row in db.execute("PRAGMA table_info(invoices)")}
+            if "idempotency_key" not in invoice_columns:
+                db.execute("ALTER TABLE invoices ADD COLUMN idempotency_key TEXT")
+            if "request_sha256" not in invoice_columns:
+                db.execute("ALTER TABLE invoices ADD COLUMN request_sha256 TEXT")
+            db.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS invoices_idempotency_key_unique "
+                "ON invoices(idempotency_key) WHERE idempotency_key IS NOT NULL"
+            )
             payment_columns = {row["name"] for row in db.execute("PRAGMA table_info(payments)")}
             if "idempotency_key" not in payment_columns:
                 db.execute("ALTER TABLE payments ADD COLUMN idempotency_key TEXT")
