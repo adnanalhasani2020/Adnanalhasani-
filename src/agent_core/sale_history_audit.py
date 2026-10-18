@@ -36,7 +36,7 @@ class SaleHistoryIntegrityAuditor:
             raise ValidationError("Sale does not exist")
         persisted_id, state, version = sale
         rows = connection.execute(
-            "SELECT prior_version_ref,current_version_ref FROM domain_history "
+            "SELECT prior_version_ref,current_version_ref,change_payload_ref FROM domain_history "
             "WHERE target_ref=? AND owner_domain='commerce' "
             "AND change_type='sale_state_transition' ORDER BY rowid",
             (persisted_id,),
@@ -50,17 +50,62 @@ class SaleHistoryIntegrityAuditor:
         elif len(rows) > version:
             findings.append("sale_history_exceeds_sale_version")
 
-        for index, (prior_ref, current_ref) in enumerate(rows):
-            if current_ref is None or not str(current_ref).strip():
-                findings.append(f"history_current_version_missing:{index + 1}")
-            if index == 0:
-                if prior_ref is not None:
-                    findings.append("history_initial_prior_version_unexpected")
-            elif prior_ref != rows[index - 1][1]:
-                findings.append(f"history_version_chain_break:{index + 1}")
+        allowed_next = {
+            "initiated": {"confirmed", "cancelled"},
+            "confirmed": {"fulfilled", "completed", "cancelled"},
+            "fulfilled": {"returned"},
+            "completed": {"returned"},
+            "cancelled": set(),
+            "returned": set(),
+        }
+        previous_state = None
+        for index, (prior_ref, current_ref, payload_ref) in enumerate(rows, start=1):
+            expected_current = f"sale-state:{persisted_id}:v{index}"
+            if current_ref != expected_current:
+                findings.append(f"history_current_version_mismatch:{index}")
+            if not isinstance(payload_ref, str) or not payload_ref.startswith("state:"):
+                findings.append(f"history_state_payload_invalid:{index}")
+                current_state = None
+            else:
+                current_state = payload_ref.removeprefix("state:")
+                if current_state not in allowed_next:
+                    findings.append(f"history_state_payload_invalid:{index}")
+                    current_state = None
+
+            expected_prior = None if index == 1 else rows[index - 2][1]
+            if prior_ref != expected_prior:
+                findings.append(f"history_version_chain_break:{index}")
+
+            if index == 1:
+                if current_state is not None and current_state != "initiated":
+                    findings.append("history_initial_state_mismatch")
+            elif previous_state is not None and current_state is not None:
+                if current_state not in allowed_next[previous_state]:
+                    findings.append(f"history_state_transition_invalid:{index}")
+            previous_state = current_state
+
+        if rows and len(rows) == version:
+            final_payload = rows[-1][2]
+            if final_payload != f"state:{state}":
+                # Legacy persisted 'completed' and its matching historical payload
+                # remain valid; no silent state normalization is applied here.
+                findings.append("history_final_state_mismatch")
 
         findings = tuple(dict.fromkeys(findings))
-        if any(item.startswith(("history_current_version_missing", "history_initial_prior_version_unexpected", "history_version_chain_break", "sale_history_exceeds_sale_version")) for item in findings):
+        inconsistent_prefixes = (
+            "history_current_version_mismatch:",
+            "history_state_payload_invalid:",
+            "history_initial_prior_version_unexpected",
+            "history_initial_state_mismatch",
+            "history_version_chain_break:",
+            "history_state_transition_invalid:",
+            "history_final_state_mismatch",
+            "sale_history_exceeds_sale_version",
+        )
+        if any(
+            item.startswith(inconsistent_prefixes)
+            for item in findings
+        ):
             status = "inconsistent"
         elif findings:
             status = "incomplete"
