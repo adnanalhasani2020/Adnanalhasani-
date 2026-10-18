@@ -123,8 +123,13 @@ class HospitalFinanceIntegrationSettingsApplication:
             raise ValidationError("partial payments remain blocked until remaining-balance support is implemented")
         if currency_policy != "require_exact_match":
             raise ValidationError("currency conversion and rounding are not enabled for Hospital recognition")
-        if db.execute("SELECT 1 FROM activities WHERE activity_id=?", (activity,)).fetchone() is None:
+        activity_row = db.execute(
+            "SELECT state FROM activities WHERE activity_id=?", (activity,)
+        ).fetchone()
+        if activity_row is None:
             raise ValidationError("Finance Activity does not exist")
+        if activity_row[0] != "active":
+            raise ValidationError("Finance Activity must be active to propose integration settings")
         if not self._person_is_active(db, person) or not self._person_is_active(db, proposer):
             raise ValidationError("Finance Person and proposer must be active persisted Persons")
         owner = self._account_owner(db, account)
@@ -187,6 +192,11 @@ class HospitalFinanceIntegrationSettingsApplication:
             activity, scope, person, account, status, proposer = row
             if status != "pending_approval":
                 raise ValidationError("Only a pending settings proposal can be approved")
+            activity_row = db.execute(
+                "SELECT state FROM activities WHERE activity_id=?", (activity,)
+            ).fetchone()
+            if activity_row is None or activity_row[0] != "active":
+                raise ValidationError("Finance Activity must remain active to approve integration settings")
             if proposer == approver:
                 raise ValidationError("The proposer cannot approve their own settings")
             if not self._person_is_active(db, approver):
