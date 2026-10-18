@@ -136,7 +136,6 @@ def test_e2e_sale_lifecycle_uses_application_authorization_and_round_trips(tmp_p
     db.close()
 
 
-@pytest.mark.parametrize("action", ["confirm", "fulfill", "cancel", "return"])
 def test_lifecycle_transition_rejects_timestamp_before_sale_creation_without_writes():
     db = connect_database()
     app, actor, activity, _offering, sale, _create_grant = _sale_and_create_grant(db)
@@ -168,6 +167,7 @@ def test_lifecycle_transition_rejects_timestamp_before_sale_creation_without_wri
     db.close()
 
 
+@pytest.mark.parametrize("action", ["confirm", "fulfill", "cancel", "return"])
 def test_each_transition_rejects_missing_or_wrong_grant(action):
     db = connect_database()
     app, actor, activity, _offering, sale, _create_grant = _sale_and_create_grant(db)
