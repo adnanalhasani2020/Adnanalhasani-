@@ -10,7 +10,7 @@ from agent_core.application import ProductApplication
 from agent_core.offering_application import OfferingApplication
 
 
-def request(app, path, *, method="GET", body=None, cookie=None, scheme="http"):
+def request(app, path, *, method="GET", body=None, cookie=None, scheme="http", origin=None):
     payload = json.dumps(body or {}).encode("utf-8")
     environ = {
         "REQUEST_METHOD": method,
@@ -23,6 +23,7 @@ def request(app, path, *, method="GET", body=None, cookie=None, scheme="http"):
         "SERVER_NAME": "localhost",
         "SERVER_PORT": "8080",
         "wsgi.url_scheme": scheme,
+        **({"HTTP_ORIGIN": origin} if origin is not None else {}),
     }
     captured = {}
 
