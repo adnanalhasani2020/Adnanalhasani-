@@ -240,6 +240,39 @@ class HospitalAPITests(unittest.TestCase):
         self.assertEqual(payload["data"][0]["status"], "open")
         self.assertEqual(payload["data"][0]["patient_name"], "Encounter List Patient")
 
+    def test_invoice_and_payment_api_reject_fractional_minor_units(self):
+        patient_id = self.db.register_patient(
+            patient_no="P-API-STRICT-MONEY", full_name="Strict Money Patient",
+            created_at="2026-01-01T08:00:00", actor="test",
+        )
+        status, payload = self.request(
+            "/api/invoices", method="POST",
+            payload={"invoice_no": "INV-API-FRACTION", "patient_id": patient_id,
+                     "total_minor": 12.75, "created_at": "2026-01-01T08:00:00"},
+        )
+        self.assertEqual(status, 400)
+        self.assertIn("integer", payload["error"])
+        with self.db.connect() as conn:
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM invoices WHERE invoice_no='INV-API-FRACTION'"
+            ).fetchone()[0], 0)
+
+        invoice_id = self.db.create_invoice(
+            invoice_no="INV-API-STRICT-MONEY", patient_id=patient_id,
+            total_minor=100, created_at="2026-01-01T08:00:00", actor="test",
+        )
+        status, payload = self.request(
+            "/api/payments", method="POST",
+            payload={"invoice_id": invoice_id, "amount_minor": 1.25,
+                     "method": "cash", "received_at": "2026-01-01T09:00:00"},
+        )
+        self.assertEqual(status, 400)
+        self.assertIn("integer", payload["error"])
+        with self.db.connect() as conn:
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM payments WHERE invoice_id=?", (invoice_id,)
+            ).fetchone()[0], 0)
+
     def test_invoice_list_includes_paid_total(self):
         patient_id = self.db.register_patient(patient_no="BILL-LIST-1",
             full_name="Invoice List Patient", created_at="2026-01-01T08:00:00", actor="test")
