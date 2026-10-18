@@ -128,10 +128,6 @@ class HospitalUserAuthAPITests(unittest.TestCase):
         self.assertEqual(payload["error"], "unauthorized")
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
     def test_finance_outbox_status_is_limited_to_accountants_and_admins(self):
         doctor_token = self.login("doctor.user", "doctor-password-1234")
         status, payload = self.request("/api/finance/outbox-status", token=doctor_token)
@@ -142,3 +138,7 @@ if __name__ == "__main__":
         status, payload = self.request("/api/finance/outbox-status", token=accountant_token)
         self.assertEqual(status, 200)
         self.assertEqual(payload["data"]["scope"], "hospital_outbox_transport_only")
+
+
+if __name__ == "__main__":
+    unittest.main()
