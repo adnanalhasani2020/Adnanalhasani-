@@ -181,6 +181,9 @@ def test_web_session_can_buy_sellable_product_and_receive_result(tmp_path):
     assert history["status"] == "200 OK"
     assert len(history["body"]["items"]) == 2
 
+    unauthenticated_report = request(app, "/api/reports/sales")
+    assert unauthenticated_report["status"] == "401 Unauthorized"
+
     # Authenticated operational report supports date filters and CSV export.
     today = now.date().isoformat()
     report = request(app, "/api/reports/sales?from=" + today + "&to=" + today,
@@ -231,7 +234,8 @@ def test_web_session_can_buy_sellable_product_and_receive_result(tmp_path):
     assert invalid_report["status"] == "400 Bad Request"
 
     csv_report = request(
-        app, "/api/reports/sales?format=csv&from=" + today + "&to=" + today,
+        app, "/api/reports/sales?format=csv&from=" + today + "&to=" + today +
+        "&limit=1&offset=1",
         cookie=session_cookie,
     )
     assert csv_report["status"] == "200 OK"
