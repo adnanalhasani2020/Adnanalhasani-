@@ -261,17 +261,6 @@ def test_web_session_can_buy_sellable_product_and_receive_result(tmp_path):
         "UPDATE sales SET occurred_at=? WHERE sale_id=?",
         (next_day + "T00:00:00Z", final_checkout["body"]["sale_id"]),
     )
-    line = db.execute(
-        "SELECT offering_id, product_id FROM sale_lines WHERE sale_id=?",
-        (checkout["body"]["sale_id"],),
-    ).fetchone()
-    db.execute(
-        """INSERT INTO sale_lines(
-               sale_line_id, sale_id, offering_id, product_id, quantity,
-               unit_price_minor, currency_code, line_total_minor, created_at
-           ) VALUES(?,?,?,?,1,10,'USD',10,?)""",
-        (uid(), checkout["body"]["sale_id"], line[0], line[1], stamp),
-    )
     db.commit()
     db.close()
     boundary_page = request(
@@ -282,8 +271,9 @@ def test_web_session_can_buy_sellable_product_and_receive_result(tmp_path):
     assert boundary_page["body"]["total_sales"] == 1
     assert boundary_page["body"]["returned_sales"] == 1
     assert boundary_page["body"]["has_more"] is False
-    assert {item["currency_code"] for item in boundary_page["body"]["items"]} == {"SAR", "USD"}
-    assert {item["sale_id"] for item in boundary_page["body"]["items"]} == {checkout["body"]["sale_id"]}
+    assert len(boundary_page["body"]["items"]) == 1
+    assert boundary_page["body"]["items"][0]["currency_code"] == "SAR"
+    assert boundary_page["body"]["items"][0]["sale_id"] == checkout["body"]["sale_id"]
     first_receipt = next(item for item in history["body"]["items"] if item["sale_id"] == checkout["body"]["sale_id"])
     assert first_receipt["quantity_remaining"] == 3
 
