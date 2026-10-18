@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import re
 import secrets
 import sqlite3
 from dataclasses import dataclass
@@ -226,11 +227,20 @@ def require_permission(principal: Principal, permission: str) -> None:
 
 
 def permission_for_route(method: str, path: str) -> str | None:
-    """Map API routes to explicit permissions; None means route is not an API operation."""
+    """Map only implemented API method/path pairs to permissions.
+
+    Unknown paths, unsupported HTTP methods, and unrecognized action suffixes are
+    denied by the caller rather than inheriting a module permission.
+    """
     method = method.upper()
     route = path.split("?", 1)[0].rstrip("/") or "/"
     if not route.startswith("/api/"):
         return None
+
+    # Reject unsupported verbs before applying the administrator wildcard.
+    if method not in {"GET", "POST"}:
+        return "route:unknown"
+
     if route == "/api/auth/me" and method == "GET":
         return "session:read"
     if route == "/api/auth/logout" and method == "POST":
@@ -239,18 +249,21 @@ def permission_for_route(method: str, path: str) -> str | None:
         return "users:manage"
     if route == "/api/users" and method == "GET":
         return "users:read"
-    if route == "/api/finance/outbox-status" and method == "GET":
+    if route in {"/api/finance/outbox-status", "/api/finance/integration-readiness"} and method == "GET":
         return "finance:transport:read"
-    if route == "/api/finance/integration-readiness" and method == "GET":
-        return "finance:transport:read"
-    if route in {"/api/manager-settings/proposals", "/api/manager-settings/finance-policy-decisions"} and method == "GET":
-        return "manager:settings:read"
-    if route in {"/api/manager-settings/proposals", "/api/manager-settings/finance-policy-decisions"} and method == "POST":
-        return "manager:settings:propose"
-    if route.startswith("/api/manager-settings/proposals/") and method == "POST":
+
+    manager_collections = {
+        "/api/manager-settings/proposals",
+        "/api/manager-settings/finance-policy-decisions",
+    }
+    if route in manager_collections:
+        return "manager:settings:read" if method == "GET" else "manager:settings:propose"
+    if method == "POST" and re.fullmatch(
+        r"/api/manager-settings/(?:proposals|finance-policy-decisions)/[1-9][0-9]*/review",
+        route,
+    ):
         return "manager:settings:review"
-    if route.startswith("/api/manager-settings/finance-policy-decisions/") and method == "POST":
-        return "manager:settings:review"
+
     routes = {
         "/api/dashboard": ("dashboard:read", "dashboard:read"),
         "/api/search": ("records:read", "records:read"),
@@ -259,7 +272,7 @@ def permission_for_route(method: str, path: str) -> str | None:
         "/api/doctors": ("doctors:read", "doctors:write"),
         "/api/appointments": ("appointments:read", "appointments:write"),
         "/api/encounters": ("encounters:read", "encounters:write"),
-        "/api/lab-orders": ("lab:read", "lab:write"),
+        "/api/lab-orders": ("lab:read", "lab:order"),
         "/api/medicines": ("medicines:read", "medicines:write"),
         "/api/prescriptions": ("prescriptions:read", "prescriptions:write"),
         "/api/beds": ("beds:read", "beds:write"),
@@ -267,30 +280,22 @@ def permission_for_route(method: str, path: str) -> str | None:
         "/api/invoices": ("invoices:read", "invoices:write"),
         "/api/payments": ("payments:read", "payments:write"),
     }
-    if route == "/api/lab-orders" and method == "POST":
-        return "lab:order"
     if route in routes:
-        return routes[route][0 if method == "GET" else 1 if method == "POST" else 1]
-    # Resource action routes inherit their module's explicit permission.
-    segments = route.split("/")
-    if len(segments) >= 4 and segments[2] in {
-        "encounters", "lab-orders", "prescriptions", "beds", "admissions", "invoices", "payments", "users"
-    }:
-        module = segments[2]
-        action = segments[3]
-        if module == "encounters":
-            return "encounters:write" if method == "POST" else "encounters:read"
-        if module == "lab-orders":
-            return "lab:write" if method == "POST" else "lab:read"
-        if module == "prescriptions":
-            return "prescriptions:dispense" if "dispense" in segments[3:] else "prescriptions:write"
-        if module == "admissions":
+        return routes[route][0 if method == "GET" else 1]
+
+    # Only implemented resource actions are authorized; arbitrary nested paths
+    # must not inherit a permission merely because their first segment is known.
+    if method == "POST":
+        if re.fullmatch(r"/api/encounters/[1-9][0-9]*/close", route):
+            return "encounters:write"
+        if re.fullmatch(r"/api/lab-orders/[1-9][0-9]*/status", route):
+            return "lab:write"
+        if re.fullmatch(r"/api/prescriptions/[1-9][0-9]*/dispense", route):
+            return "prescriptions:dispense"
+        if re.fullmatch(r"/api/admissions/[1-9][0-9]*/discharge", route):
             return "admissions:write"
-        if module == "users":
+        if re.fullmatch(r"/api/users/[1-9][0-9]*/active", route):
             return "users:manage"
-        return {
-            "beds": "beds:write", "invoices": "invoices:write", "payments": "payments:write"
-        }.get(module)
     return "route:unknown"
 
 
