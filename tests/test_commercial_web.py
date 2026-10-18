@@ -186,9 +186,34 @@ def test_web_session_can_buy_sellable_product_and_receive_result(tmp_path):
     report = request(app, "/api/reports/sales?from=" + today + "&to=" + today,
                      cookie=session_cookie)
     assert report["status"] == "200 OK"
-    assert report["body"]["count"] == 2
-    assert report["body"]["sale_counts_by_state"] == {"fulfilled": 2}
+    assert report["body"]["total_sales"] == 2
+    assert report["body"]["returned_sales"] == 2
+    assert report["body"]["sale_counts_by_state"] == {"completed": 2}
     assert report["body"]["recorded_line_totals_by_currency"] == {"SAR": 4950}
+    assert report["body"]["summary_scope"] == "all_matching_results"
+    assert report["body"]["items_scope"] == "current_page"
+    assert report["body"]["limit"] == 50
+    assert report["body"]["offset"] == 0
+    assert "not recognized revenue" in report["body"]["financial_note"]
+
+    first_page = request(
+        app, "/api/reports/sales?from=" + today + "&to=" + today + "&limit=1&offset=0",
+        cookie=session_cookie,
+    )
+    second_page = request(
+        app, "/api/reports/sales?from=" + today + "&to=" + today + "&limit=1&offset=1",
+        cookie=session_cookie,
+    )
+    assert first_page["status"] == second_page["status"] == "200 OK"
+    assert first_page["body"]["total_sales"] == second_page["body"]["total_sales"] == 2
+    assert first_page["body"]["returned_sales"] == second_page["body"]["returned_sales"] == 1
+    assert first_page["body"]["has_more"] is True
+    assert second_page["body"]["has_more"] is False
+    assert first_page["body"]["items"][0]["sale_id"] != second_page["body"]["items"][0]["sale_id"]
+
+    for bad_query in ("limit=0", "limit=201", "limit=abc", "offset=-1", "offset=1.5"):
+        invalid_page = request(app, "/api/reports/sales?" + bad_query, cookie=session_cookie)
+        assert invalid_page["status"] == "400 Bad Request", bad_query
     assert "not recognized revenue" in report["body"]["financial_note"]
 
     empty_report = request(
@@ -196,7 +221,7 @@ def test_web_session_can_buy_sellable_product_and_receive_result(tmp_path):
         cookie=session_cookie,
     )
     assert empty_report["status"] == "200 OK"
-    assert empty_report["body"]["count"] == 0
+    assert empty_report["body"]["total_sales"] == 0
     assert empty_report["body"]["items"] == []
 
     invalid_report = request(
@@ -212,6 +237,8 @@ def test_web_session_can_buy_sellable_product_and_receive_result(tmp_path):
     assert csv_report["status"] == "200 OK"
     assert dict(csv_report["headers"])["Content-Type"] == "text/csv; charset=utf-8"
     assert b"sale_id,occurred_at,state,quantity,currency_code,line_total_minor" in csv_report["body"]
+    assert dict(csv_report["headers"])["X-Report-Export-Scope"] == "all-matching-results"
+    assert csv_report["body"].count(b"\n") == 3  # header plus both matching sales
     first_receipt = next(item for item in history["body"]["items"] if item["sale_id"] == checkout["body"]["sale_id"])
     assert first_receipt["quantity_remaining"] == 3
 
