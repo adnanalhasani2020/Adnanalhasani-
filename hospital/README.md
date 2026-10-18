@@ -22,7 +22,7 @@ Run the development UI/API locally:
 
 ```bash
 export HOSPITAL_API_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
-export HOSPITAL_DB_PATH="hospital.sqlite3"
+# Use the same file for Hospital and Finance (set this in BOTH service environments).\nexport APP_DB_PATH="application.sqlite3"
 python -m hospital.api
 ```
 
@@ -30,7 +30,7 @@ Open `http://127.0.0.1:8080`. The Arabic interface uses the same origin as the A
 
 ### Database backup and restore
 
-The database contains sensitive clinical and financial records. Keep backups access-restricted and outside public/web-served directories. The examples below assume the service uses `hospital.sqlite3` in the current directory and that the `sqlite3` CLI is installed.
+The database contains sensitive clinical and financial records. Keep backups access-restricted and outside public/web-served directories. When Hospital and Finance are configured with the same `APP_DB_PATH`, both domains use one SQLite file. Set the identical absolute path in BOTH service environments. `APP_DB_PATH` takes precedence over `HOSPITAL_DB_PATH` and `COMMERCIAL_DB_PATH`. This setting changes connection selection; it does not automatically merge or migrate records from two existing database files. Back up both files and perform a reviewed data migration before switching an installation with existing data. The examples below assume the shared file is `application.sqlite3` in the current directory and that the `sqlite3` CLI is installed.
 
 Create a consistent SQLite backup (this works while the service is running):
 
