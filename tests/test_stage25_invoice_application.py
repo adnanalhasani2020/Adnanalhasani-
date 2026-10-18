@@ -316,3 +316,23 @@ def test_invoice_due_timestamp_fraction_after_issue_in_same_second_is_valid():
     assert issued.issue_at == "2026-10-10T12:00:00Z"
     assert issued.due_at == "2026-10-10T12:00:00.000001Z"
     db.close()
+
+def test_invoice_rejects_issue_timestamp_after_creation_without_writes():
+    db = connect_database()
+    actor, _activity, sale, grant = fixture(db)
+    invoice_id = uid()
+    with pytest.raises(ValidationError, match="issue timestamp cannot follow creation timestamp"):
+        InvoiceApplication().create_invoice(
+            db, sale_id=sale, actor_context_ref=actor,
+            authorization_grant_id=grant, issuer_ref=actor,
+            invoice_number="INV-ISSUED-IN-FUTURE", invoice_id=invoice_id,
+            issue_at="2026-10-10T12:00:00.000001Z",
+            now="2026-10-10T12:00:00Z",
+        )
+    assert db.execute(
+        "SELECT COUNT(*) FROM invoices WHERE invoice_id=?", (invoice_id,)
+    ).fetchone()[0] == 0
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=?", (invoice_id,)
+    ).fetchone()[0] == 0
+    db.close()
