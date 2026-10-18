@@ -388,3 +388,19 @@ def test_invoice_issue_rejects_sale_offering_activity_mismatch_without_writes():
         "SELECT COUNT(*) FROM domain_history WHERE target_ref=?", (invoice_id,)
     ).fetchone()[0] == 0
     db.close()
+
+
+def test_invoice_default_issue_and_creation_timestamps_share_one_instant():
+    db = connect_database()
+    actor, _activity, sale, grant = fixture(db)
+    issued = InvoiceApplication().create_invoice(
+        db, sale_id=sale, actor_context_ref=actor,
+        authorization_grant_id=grant, issuer_ref=actor,
+        invoice_number="INV-DEFAULT-TIMESTAMPS",
+    )
+    row = db.execute(
+        "SELECT created_at, issue_at FROM invoices WHERE invoice_id=?",
+        (str(issued.invoice.id),),
+    ).fetchone()
+    assert row[0] == row[1]
+    db.close()
