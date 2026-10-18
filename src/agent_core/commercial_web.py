@@ -224,9 +224,11 @@ class CommercialWebApplication:
                             raise ValidationError(f"{name} must be a date in YYYY-MM-DD format") from exc
                 if start_date and end_date and start_date > end_date:
                     raise ValidationError("from must not be later than to")
-                limit = report_integer("limit", 50, 1, 200)
-                offset = report_integer("offset", 0, 0)
                 export_csv = query.get("format", [""])[0] == "csv"
+                # CSV always exports the complete filtered set, so JSON page controls
+                # are irrelevant to it (including malformed limit/offset values).
+                limit = 50 if export_csv else report_integer("limit", 50, 1, 200)
+                offset = 0 if export_csv else report_integer("offset", 0, 0)
 
                 where_parts, date_parameters = [], []
                 if start_date:
