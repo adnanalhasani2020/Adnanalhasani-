@@ -102,3 +102,55 @@ def test_transport_report_flags_delivered_event_missing_from_intake(tmp_path):
     assert event["disposition"] == "delivered_without_intake"
     assert "durable Finance intake" in event["operator_guidance"]
     finance_db.close()
+
+
+
+def test_transport_report_detects_same_key_with_mismatched_event_types(tmp_path):
+    hospital = HospitalDB(tmp_path / "hospital-mismatch.sqlite3")
+    patient_id = hospital.register_patient(
+        patient_no="P-TRANSPORT-MISMATCH",
+        full_name="Synthetic Patient",
+        created_at="2026-10-18T11:00:00Z",
+        actor="test",
+    )
+    hospital.create_invoice(
+        invoice_no="INV-TRANSPORT-MISMATCH",
+        patient_id=patient_id,
+        total_minor=900,
+        created_at="2026-10-18T11:01:00Z",
+        actor="test",
+    )
+
+    with hospital.connect() as hospital_db:
+        invoice_row = hospital_db.execute(
+            "SELECT event_key,event_type,aggregate_type,aggregate_id,payload_json "
+            "FROM finance_outbox WHERE event_type='hospital.invoice.created'"
+        ).fetchone()
+        finance_db = connect_database()
+        validated = validate_hospital_finance_event(dict(invoice_row))
+        received = ExternalEventIntake().ingest(
+            finance_db, validated, now="2026-10-18T11:02:00Z"
+        )
+        finance_db.execute(
+            "UPDATE external_event_intake SET status='mapped',finance_entity_type='obligation',"
+            "finance_entity_id=?,mapped_at=? WHERE external_event_intake_id=?",
+            ("00000000-0000-4000-8000-000000000002", "2026-10-18T11:03:00Z", received.intake_id),
+        )
+        # Simulate corrupted or inconsistent transport metadata. The report must
+        # not let the matching key hide the event-type disagreement.
+        hospital_db.execute(
+            "UPDATE finance_outbox SET event_type='hospital.payment.received' WHERE event_key=?",
+            (invoice_row["event_key"],),
+        )
+
+        report = build_hospital_finance_transport_report(hospital_db, finance_db)
+
+    assert report["by_disposition"]["event_type_mismatch"] == 1
+    event = report["events"][0]
+    assert event["disposition"] == "event_type_mismatch"
+    assert event["event_type"] == "hospital.payment.received"
+    assert event["intake_event_type"] == "hospital.invoice.created"
+    assert "Stop automated recovery" in event["operator_guidance"]
+    assert finance_db.execute("SELECT COUNT(*) FROM financial_transactions").fetchone()[0] == 0
+    assert finance_db.execute("SELECT COUNT(*) FROM ledger_entries").fetchone()[0] == 0
+    finance_db.close()
