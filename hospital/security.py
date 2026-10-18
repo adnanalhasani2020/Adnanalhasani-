@@ -237,6 +237,12 @@ def permission_for_route(method: str, path: str) -> str | None:
         return "users:read"
     if route == "/api/finance/outbox-status" and method == "GET":
         return "finance:transport:read"
+    if route == "/api/manager-settings/proposals" and method == "GET":
+        return "manager:settings:read"
+    if route == "/api/manager-settings/proposals" and method == "POST":
+        return "manager:settings:propose"
+    if route.startswith("/api/manager-settings/proposals/") and method == "POST":
+        return "manager:settings:review"
     routes = {
         "/api/dashboard": ("dashboard:read", "dashboard:read"),
         "/api/search": ("records:read", "records:read"),
