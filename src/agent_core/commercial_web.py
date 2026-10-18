@@ -5,8 +5,6 @@ Bind to loopback by default. Put a TLS reverse proxy in front before public expo
 """
 from __future__ import annotations
 
-import csv
-import io
 import json
 import logging
 import os
@@ -14,7 +12,6 @@ import secrets
 import sqlite3
 from http.cookies import SimpleCookie
 from pathlib import Path
-from urllib.parse import parse_qs
 from wsgiref.simple_server import WSGIServer, make_server, WSGIRequestHandler
 from socketserver import ThreadingMixIn
 
@@ -202,125 +199,6 @@ class CommercialWebApplication:
                 return self._json(start_response, "403 Forbidden", {
                     "error": "الوصول إلى تقرير المبيعات محجوب حتى اعتماد صلاحيات التقرير وتطبيقها على الخادم."
                 })
-                query = parse_qs(environ.get("QUERY_STRING", ""), keep_blank_values=True)
-
-                def report_integer(name, default, minimum, maximum=None):
-                    raw_values = query.get(name, [str(default)])
-                    if len(raw_values) != 1 or raw_values[0] == "":
-                        raise ValidationError(f"{name} must be an integer")
-                    try:
-                        value = int(raw_values[0])
-                    except (TypeError, ValueError) as exc:
-                        raise ValidationError(f"{name} must be an integer") from exc
-                    if str(value) != raw_values[0] or value < minimum or (maximum is not None and value > maximum):
-                        bound = f" between {minimum} and {maximum}" if maximum is not None else f" at least {minimum}"
-                        raise ValidationError(f"{name} must be an integer{bound}")
-                    return value
-
-                start_date = query.get("from", [""])[0]
-                end_date = query.get("to", [""])[0]
-                for name, value in (("from", start_date), ("to", end_date)):
-                    if value:
-                        try:
-                            parsed = __import__("datetime").date.fromisoformat(value)
-                            if parsed.isoformat() != value:
-                                raise ValueError
-                        except ValueError as exc:
-                            raise ValidationError(f"{name} must be a date in YYYY-MM-DD format") from exc
-                if start_date and end_date and start_date > end_date:
-                    raise ValidationError("from must not be later than to")
-                export_csv = query.get("format", [""])[0] == "csv"
-                # CSV always exports the complete filtered set, so JSON page controls
-                # are irrelevant to it (including malformed limit/offset values).
-                limit = 50 if export_csv else report_integer("limit", 50, 1, 200)
-                offset = 0 if export_csv else report_integer("offset", 0, 0)
-
-                where_parts, date_parameters = [], []
-                if start_date:
-                    where_parts.append("s.occurred_at >= ?")
-                    date_parameters.append(start_date + "T00:00:00")
-                if end_date:
-                    where_parts.append("s.occurred_at < ?")
-                    date_parameters.append((__import__("datetime").date.fromisoformat(end_date) +
-                                            __import__("datetime").timedelta(days=1)).isoformat() + "T00:00:00")
-                where_sql = (" WHERE " + " AND ".join(where_parts)) if where_parts else ""
-
-                total_sales = db.execute(
-                    "SELECT COUNT(*) FROM sales s" + where_sql, date_parameters
-                ).fetchone()[0]
-
-                # CSV always exports every matching sale; limit/offset apply only to JSON.
-                if export_csv:
-                    rows = db.execute(
-                        "SELECT s.sale_id, s.occurred_at, s.state, "
-                        "COALESCE(SUM(l.quantity), 0), l.currency_code, "
-                        "COALESCE(SUM(l.line_total_minor), 0) "
-                        "FROM sales s LEFT JOIN sale_lines l ON l.sale_id=s.sale_id"
-                        + where_sql +
-                        " GROUP BY s.sale_id, s.occurred_at, s.state, l.currency_code"
-                        " ORDER BY s.occurred_at DESC, s.sale_id, l.currency_code",
-                        date_parameters,
-                    ).fetchall()
-                    output = io.StringIO(newline="")
-                    writer = csv.writer(output)
-                    writer.writerow(["sale_id", "occurred_at", "state", "quantity",
-                                     "currency_code", "line_total_minor"])
-                    for row in rows:
-                        writer.writerow([row[0], row[1], row[2], row[3], row[4] or "", row[5]])
-                    encoded = output.getvalue().encode("utf-8-sig")
-                    start_response("200 OK", [
-                        ("Content-Type", "text/csv; charset=utf-8"),
-                        ("Content-Length", str(len(encoded))),
-                        ("Content-Disposition", 'attachment; filename="sales-report.csv"'),
-                        ("Cache-Control", "no-store"),
-                        ("X-Content-Type-Options", "nosniff"),
-                        ("X-Report-Export-Scope", "all-matching-results"),
-                    ])
-                    return [encoded]
-
-                # Page at the sale level, not the joined row level, so one sale with
-                # multiple currencies can never be split across pages.
-                rows = db.execute(
-                    "WITH page_sales AS ("
-                    " SELECT s.sale_id, s.occurred_at, s.state FROM sales s" + where_sql +
-                    " ORDER BY s.occurred_at DESC, s.sale_id LIMIT ? OFFSET ?"
-                    ") SELECT s.sale_id, s.occurred_at, s.state, "
-                    "COALESCE(SUM(l.quantity), 0), l.currency_code, "
-                    "COALESCE(SUM(l.line_total_minor), 0) "
-                    "FROM page_sales s LEFT JOIN sale_lines l ON l.sale_id=s.sale_id "
-                    "GROUP BY s.sale_id, s.occurred_at, s.state, l.currency_code "
-                    "ORDER BY s.occurred_at DESC, s.sale_id, l.currency_code",
-                    [*date_parameters, limit, offset],
-                ).fetchall()
-                items = [
-                    {"sale_id": row[0], "occurred_at": row[1], "state": row[2],
-                     "quantity": row[3], "currency_code": row[4], "line_total_minor": row[5]}
-                    for row in rows
-                ]
-                # Summary values intentionally cover every matching sale, not just this page.
-                state_rows = db.execute(
-                    "SELECT s.state, COUNT(*) FROM sales s" + where_sql +
-                    " GROUP BY s.state ORDER BY s.state", date_parameters
-                ).fetchall()
-                currency_rows = db.execute(
-                    "SELECT l.currency_code, SUM(l.line_total_minor) "
-                    "FROM sales s JOIN sale_lines l ON l.sale_id=s.sale_id" + where_sql +
-                    " GROUP BY l.currency_code ORDER BY l.currency_code", date_parameters
-                ).fetchall()
-                returned_sales = len({item["sale_id"] for item in items})
-                return self._json(start_response, "200 OK", {
-                    "from": start_date or None, "to": end_date or None,
-                    "limit": limit, "offset": offset,
-                    "total_sales": total_sales, "returned_sales": returned_sales,
-                    "has_more": offset + returned_sales < total_sales,
-                    "sale_counts_by_state": {row[0]: row[1] for row in state_rows},
-                    "recorded_line_totals_by_currency": {row[0]: row[1] for row in currency_rows},
-                    "items": items,
-                    "summary_scope": "all_matching_results",
-                    "items_scope": "current_page",
-                    "financial_note": "Operational sale-line snapshots only; not recognized revenue or accounting balances.",
-                })
-
             if method == "GET" and path == "/api/receipts":
                 rows = db.execute(
                     """SELECT response_json FROM commercial_checkout_receipts
