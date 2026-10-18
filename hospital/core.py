@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+from datetime import datetime, timezone
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
@@ -427,6 +428,54 @@ class HospitalDB:
             self._audit(db, actor, "appointment.booked", "appointment", aid, created_at)
             db.commit()
             return int(aid)
+
+    @staticmethod
+    def _parse_appointment_action_time(value: str, label: str) -> datetime:
+        if not isinstance(value, str) or not value.strip():
+            raise HospitalError(f"{label} timestamp is required")
+        try:
+            return datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise HospitalError(f"{label} timestamp must be valid ISO-8601") from exc
+
+    def transition_appointment(self, *, appointment_id: int, target_status: str,
+                               at: str, actor: str) -> None:
+        """Apply the supported administrative terminal transitions atomically."""
+        if target_status not in {"cancelled", "no_show"}:
+            raise HospitalError("unsupported appointment terminal status")
+        action_time = self._parse_appointment_action_time(at, "Appointment action")
+        with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute(
+                "SELECT status, starts_at FROM appointments WHERE id=?", (appointment_id,)
+            ).fetchone()
+            if row is None:
+                raise HospitalError("appointment not found")
+            if row["status"] != "scheduled":
+                raise HospitalError("only scheduled appointments can be cancelled or marked no-show")
+            if target_status == "no_show":
+                starts_at = self._parse_appointment_action_time(
+                    row["starts_at"], "Appointment start"
+                )
+                action_aware = action_time.tzinfo is not None and action_time.utcoffset() is not None
+                start_aware = starts_at.tzinfo is not None and starts_at.utcoffset() is not None
+                if action_aware != start_aware:
+                    raise HospitalError("appointment action and start timestamps must use matching timezone awareness")
+                effective_action = action_time.astimezone(timezone.utc) if action_aware else action_time
+                effective_start = starts_at.astimezone(timezone.utc) if start_aware else starts_at
+                if effective_action < effective_start:
+                    raise HospitalError("no-show cannot be recorded before appointment start")
+            changed = db.execute(
+                "UPDATE appointments SET status=? WHERE id=? AND status='scheduled'",
+                (target_status, appointment_id),
+            ).rowcount
+            if changed != 1:
+                raise HospitalError("appointment state changed; retry with current state")
+            self._audit(
+                db, actor, f"appointment.{target_status}", "appointment", appointment_id, at,
+                {"previous_status": "scheduled", "status": target_status},
+            )
+            db.commit()
 
     def admit_patient(self, *, patient_id: int, bed_id: int, admitted_at: str,
                       actor: str, reason: str = "") -> int:

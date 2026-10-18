@@ -140,6 +140,62 @@ class HospitalAPITests(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertEqual(payload["error"], "limit must be 1-100 and offset must be non-negative")
 
+    def test_appointment_cancel_and_no_show_are_terminal_audited_transitions(self):
+        patient_id = self.db.register_patient(
+            patient_no="APPT-TERMINAL-P1", full_name="Appointment Patient",
+            created_at="2026-01-01T08:00:00", actor="test")
+        doctor_id = self.db.register_doctor(
+            employee_no="APPT-TERMINAL-D1", full_name="Appointment Doctor",
+            specialty="General", at="2026-01-01T08:00:00", actor="test")
+
+        status, created = self.request("/api/appointments", method="POST", payload={
+            "patient_id": patient_id, "doctor_id": doctor_id,
+            "starts_at": "2026-01-02T10:00:00", "ends_at": "2026-01-02T10:30:00",
+            "created_at": "2026-01-01T08:00:00"
+        })
+        self.assertEqual(status, 201)
+        appointment_id = created["id"]
+
+        status, cancelled = self.request(
+            f"/api/appointments/{appointment_id}/cancel", method="POST",
+            payload={"at": "2026-01-02T09:00:00"})
+        self.assertEqual(status, 200)
+        self.assertEqual(cancelled["status"], "cancelled")
+        status, rejected = self.request(
+            f"/api/appointments/{appointment_id}/cancel", method="POST",
+            payload={"at": "2026-01-02T09:01:00"})
+        self.assertEqual(status, 400)
+        self.assertIn("only scheduled appointments", rejected["error"])
+
+        status, created = self.request("/api/appointments", method="POST", payload={
+            "patient_id": patient_id, "doctor_id": doctor_id,
+            "starts_at": "2026-01-03T10:00:00", "ends_at": "2026-01-03T10:30:00",
+            "created_at": "2026-01-01T08:00:00"
+        })
+        self.assertEqual(status, 201)
+        no_show_id = created["id"]
+        status, early = self.request(
+            f"/api/appointments/{no_show_id}/no-show", method="POST",
+            payload={"at": "2026-01-03T09:59:00"})
+        self.assertEqual(status, 400)
+        self.assertIn("before appointment start", early["error"])
+        with self.db.connect() as conn:
+            state = conn.execute("SELECT status FROM appointments WHERE id=?", (no_show_id,)).fetchone()[0]
+        self.assertEqual(state, "scheduled")
+
+        status, no_show = self.request(
+            f"/api/appointments/{no_show_id}/no-show", method="POST",
+            payload={"at": "2026-01-03T10:01:00"})
+        self.assertEqual(status, 200)
+        self.assertEqual(no_show["status"], "no_show")
+        with self.db.connect() as conn:
+            events = conn.execute(
+                "SELECT action FROM audit_log WHERE entity_type='appointment' ORDER BY id"
+            ).fetchall()
+        self.assertEqual([row["action"] for row in events],
+                         ["appointment.booked", "appointment.cancelled",
+                          "appointment.booked", "appointment.no_show"])
+
     def test_patient_creation_and_dashboard(self):
         status, payload = self.request("/api/patients", method="POST", payload={
             "patient_no": "API-P-1", "full_name": "Sample Patient",

@@ -91,6 +91,9 @@ class HospitalSecurityTests(unittest.TestCase):
                 self.assertEqual(permission_for_route(method, path), "route:unknown")
 
     def test_implemented_action_routes_keep_explicit_permissions(self):
+        self.assertEqual(permission_for_route("POST", "/api/appointments/7/cancel"), "appointments:write")
+        self.assertEqual(permission_for_route("POST", "/api/appointments/7/no-show"), "appointments:write")
+        self.assertEqual(permission_for_route("POST", "/api/appointments/7/delete"), "route:unknown")
         self.assertEqual(permission_for_route("POST", "/api/encounters/7/close"), "encounters:write")
         self.assertEqual(permission_for_route("POST", "/api/lab-orders/7/status"), "lab:write")
         self.assertEqual(permission_for_route("POST", "/api/admissions/7/discharge"), "admissions:write")

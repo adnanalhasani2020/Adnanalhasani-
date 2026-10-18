@@ -289,6 +289,8 @@ def permission_for_route(method: str, path: str) -> str | None:
     # Only implemented resource actions are authorized; arbitrary nested paths
     # must not inherit a permission merely because their first segment is known.
     if method == "POST":
+        if re.fullmatch(r"/api/appointments/[1-9][0-9]*/(?:cancel|no-show)", route):
+            return "appointments:write"
         if re.fullmatch(r"/api/encounters/[1-9][0-9]*/close", route):
             return "encounters:write"
         if re.fullmatch(r"/api/lab-orders/[1-9][0-9]*/status", route):
