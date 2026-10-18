@@ -155,9 +155,13 @@ class InvoiceApplication:
                 ).fetchone()
                 if obligation is None:
                     raise ValidationError("Invoice references a missing Obligation")
-                if obligation[0] is not None:
+                linked_invoice = connection.execute(
+                    "SELECT invoice_id FROM invoices WHERE obligation_id=? LIMIT 1",
+                    (obligation_key,),
+                ).fetchone()
+                if obligation[0] is not None or linked_invoice is not None:
                     raise ValidationError(
-                        "Obligation is already linked to a source Invoice; explicit reconciliation is required"
+                        "Obligation is already linked to an Invoice; explicit reconciliation is required"
                     )
             invoice = Invoice(UUID(sale_key), id=UUID(key), state=InvoiceState.ISSUED)
             connection.execute(
