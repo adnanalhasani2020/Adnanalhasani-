@@ -650,6 +650,21 @@ def test_invoice_void_refuses_financial_links_without_reconciliation(link_kind):
 
 
 def _sale_grant(db, *, actor, activity, scope, action):
+    # The invoice fixture creates a bare Sale row; lifecycle tests must seed the
+    # same v1 history evidence required by SaleApplication before transitioning it.
+    has_initial_history = db.execute(
+        "SELECT 1 FROM domain_history WHERE owner_domain='commerce' AND target_ref=? "
+        "AND change_type='sale_state_transition' LIMIT 1",
+        (scope,),
+    ).fetchone()
+    if has_initial_history is None:
+        db.execute(
+            "INSERT INTO domain_history(domain_history_id,owner_domain,target_ref,change_type,historical_at,"
+            "actor_context_ref,prior_version_ref,current_version_ref,change_payload_ref,created_at) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?)",
+            (uid(), "commerce", scope, "sale_state_transition", STAMP, actor, None,
+             f"sale-state:{scope}:v1", "state:initiated", STAMP),
+        )
     grant = uid()
     db.execute(
         "INSERT INTO authorization_grants(authorization_grant_id,subject_person_id,action_code,scope_ref,"
