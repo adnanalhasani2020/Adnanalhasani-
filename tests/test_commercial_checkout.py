@@ -121,6 +121,61 @@ def test_checkout_fulfills_sale_and_records_stock_movement_atomically(tmp_path):
     assert listed[0]["available_quantity"] == 3
 
 
+def test_returning_checkout_sale_restores_stock_atomically_once(tmp_path):
+    db, request = setup_checkout(tmp_path)
+    checkout = CommercialCheckoutApplication()
+    checkout.checkout(db, **request, now=NOW)
+
+    grant_id = uid()
+    db.execute(
+        """INSERT INTO authorization_grants(
+               authorization_grant_id,subject_person_id,agent_id,action_code,scope_ref,
+               context_ref,delegation_id,state,effective_from,effective_to,created_at,updated_at
+           ) VALUES(?,?,NULL,'return_sale',?,?,NULL,'active',?,NULL,?,?)""",
+        (grant_id, request["actor_person_id"], request["sale_id"], request["activity_id"],
+         BEFORE, BEFORE, BEFORE),
+    )
+    db.commit()
+
+    SaleApplication().return_sale(
+        db, request["sale_id"], request["actor_person_id"], grant_id,
+        now=datetime(2026, 10, 17, 12, 2, tzinfo=timezone.utc),
+    )
+
+    movements = db.execute(
+        "SELECT source_type, quantity_delta FROM inventory_movements "
+        "WHERE source_ref=? ORDER BY created_at, inventory_movement_id",
+        (request["sale_id"],),
+    ).fetchall()
+    assert sorted(movements) == [("sale", -2), ("sale_return", 2)]
+    listed = checkout.list_sellable_offerings(
+        db, activity_id=request["activity_id"], scope_key="store-A",
+        location_ref="front",
+        as_of=datetime(2026, 10, 17, 12, 3, tzinfo=timezone.utc),
+    )
+    assert listed[0]["available_quantity"] == 5
+
+    retry_grant = uid()
+    db.execute(
+        """INSERT INTO authorization_grants(
+               authorization_grant_id,subject_person_id,agent_id,action_code,scope_ref,
+               context_ref,delegation_id,state,effective_from,effective_to,created_at,updated_at
+           ) VALUES(?,?,NULL,'return_sale',?,?,NULL,'active',?,NULL,?,?)""",
+        (retry_grant, request["actor_person_id"], request["sale_id"], request["activity_id"],
+         BEFORE, BEFORE, BEFORE),
+    )
+    db.commit()
+    with pytest.raises(ValidationError, match="Invalid Sale transition"):
+        SaleApplication().return_sale(
+            db, request["sale_id"], request["actor_person_id"], retry_grant,
+            now=datetime(2026, 10, 17, 12, 4, tzinfo=timezone.utc),
+        )
+    assert db.execute(
+        "SELECT COUNT(*) FROM inventory_movements WHERE source_type='sale_return' AND source_ref=?",
+        (request["sale_id"],),
+    ).fetchone()[0] == 1
+
+
 def test_checkout_replay_returns_same_result_without_second_deduction(tmp_path):
     db, request = setup_checkout(tmp_path)
     app = CommercialCheckoutApplication()
@@ -490,3 +545,46 @@ def test_offering_price_rejects_value_outside_sqlite_integer_range(tmp_path):
 
     assert db.execute("SELECT COUNT(*) FROM offering_prices WHERE unit_price_minor > 0").fetchone()[0] == 1
     assert db.execute("SELECT COUNT(*) FROM domain_history WHERE change_type='offering_price_set'").fetchone()[0] == 0
+
+
+def test_return_fails_closed_when_checkout_sale_line_is_missing(tmp_path):
+    from datetime import timedelta
+
+    db, request = setup_checkout(tmp_path)
+    app = CommercialCheckoutApplication()
+    app.checkout(db, **request, now=NOW)
+
+    return_grant_id = uid()
+    db.execute(
+        """INSERT INTO authorization_grants(
+               authorization_grant_id,subject_person_id,agent_id,action_code,scope_ref,
+               context_ref,delegation_id,state,effective_from,effective_to,created_at,updated_at
+           ) VALUES(?,?,NULL,'return_sale',?,?,NULL,'active',?,NULL,?,?)""",
+        (return_grant_id, request["actor_person_id"], request["sale_id"],
+         request["activity_id"], "2026-01-01T00:00:00Z", STAMP, STAMP),
+    )
+    # Simulate corruption by bypassing the production append-only guard only in this test.
+    db.execute("DROP TRIGGER sale_line_immutable_delete")
+    db.execute("DELETE FROM sale_lines WHERE sale_id=?", (request["sale_id"],))
+    db.commit()
+    state_before = db.execute(
+        "SELECT state,version_no FROM sales WHERE sale_id=?", (request["sale_id"],)
+    ).fetchone()
+
+    with pytest.raises(ValidationError, match="one reconciled sale line"):
+        SaleApplication().return_sale(
+            db, request["sale_id"], request["actor_person_id"], return_grant_id,
+            now=NOW + timedelta(minutes=1),
+        )
+
+    assert db.execute(
+        "SELECT state,version_no FROM sales WHERE sale_id=?", (request["sale_id"],)
+    ).fetchone() == state_before
+    assert db.execute(
+        "SELECT COUNT(*) FROM inventory_movements WHERE source_type='sale_return' AND source_ref=?",
+        (request["sale_id"],),
+    ).fetchone()[0] == 0
+    assert db.execute(
+        "SELECT SUM(quantity_delta) FROM inventory_movements WHERE source_ref=?",
+        (request["sale_id"],),
+    ).fetchone()[0] == -2
