@@ -21,6 +21,10 @@ _DISPOSITION_GUIDANCE = {
         "Reconcile the delivery acknowledgement against durable Finance intake and "
         "recovery logs before replay; do not assume delivery means acceptance."
     ),
+    "event_type_mismatch": (
+        "Stop automated recovery and reconcile the outbox and intake event types "
+        "against the original source evidence; do not replay, remap, or post financially."
+    ),
     "received_not_mapped": (
         "Resolve the source identity using approved Finance mapping; do not create "
         "a payment, settlement, or ledger entry from intake status alone."
@@ -44,6 +48,11 @@ _DISPOSITION_GUIDANCE = {
 }
 
 
+def _value(row: Any, key: str, index: int) -> Any:
+    """Read a named sqlite row or positional tuple uniformly."""
+    return row[key] if isinstance(row, sqlite3.Row) else row[index]
+
+
 def build_hospital_finance_transport_report(
     hospital_db: sqlite3.Connection,
     finance_db: sqlite3.Connection,
@@ -53,6 +62,8 @@ def build_hospital_finance_transport_report(
     Output intentionally excludes event payloads, patient identifiers, payment
     references, and error text. A Finance mapped status means only that a
     source-to-Finance identity mapping exists; it is not proof of ledger posting.
+    Matching keys with different event types are surfaced as an explicit
+    mismatch rather than being incorrectly reported as mapped or received.
     Each row includes conservative operator guidance, never an automated action.
     """
     outbox_rows = hospital_db.execute(
@@ -63,39 +74,40 @@ def build_hospital_finance_transport_report(
         "WHERE source_system='hospital' ORDER BY first_seen_at,source_event_key"
     ).fetchall()
 
-    intake_by_key = {
-        row["source_event_key"] if isinstance(row, sqlite3.Row) else row[0]: row
-        for row in intake_rows
-    }
-    outbox_keys = {
-        row["event_key"] if isinstance(row, sqlite3.Row) else row[0]
-        for row in outbox_rows
-    }
+    intake_by_key = {_value(row, "source_event_key", 0): row for row in intake_rows}
+    outbox_keys = {_value(row, "event_key", 0) for row in outbox_rows}
 
     events = []
     for row in outbox_rows:
-        if isinstance(row, sqlite3.Row):
-            key, event_type, outbox_status = row["event_key"], row["event_type"], row["status"]
-        else:
-            key, event_type, outbox_status = row[0], row[1], row[2]
+        key = _value(row, "event_key", 0)
+        event_type = _value(row, "event_type", 1)
+        outbox_status = _value(row, "status", 2)
         intake = intake_by_key.get(key)
+        intake_type = _value(intake, "event_type", 1) if intake is not None else None
+        intake_status = _value(intake, "status", 2) if intake is not None else None
+
         if intake is None:
-            intake_status = None
-            disposition = "delivered_without_intake" if outbox_status == "delivered" else "awaiting_intake"
+            disposition = (
+                "delivered_without_intake"
+                if outbox_status == "delivered"
+                else "awaiting_intake"
+            )
+        elif event_type != intake_type:
+            disposition = "event_type_mismatch"
+        elif intake_status == "quarantined":
+            disposition = "quarantined"
+        elif intake_status == "rejected":
+            disposition = "rejected"
+        elif intake_status == "mapped":
+            disposition = "mapped_source_only"
         else:
-            intake_status = intake["status"] if isinstance(intake, sqlite3.Row) else intake[2]
-            if intake_status == "quarantined":
-                disposition = "quarantined"
-            elif intake_status == "rejected":
-                disposition = "rejected"
-            elif intake_status == "mapped":
-                disposition = "mapped_source_only"
-            else:
-                disposition = "received_not_mapped"
+            disposition = "received_not_mapped"
+
         events.append({
             "event_key": key,
             "event_type": event_type,
             "outbox_status": outbox_status,
+            "intake_event_type": intake_type,
             "intake_status": intake_status,
             "disposition": disposition,
             "operator_guidance": _DISPOSITION_GUIDANCE[disposition],
@@ -103,10 +115,9 @@ def build_hospital_finance_transport_report(
 
     intake_without_outbox = []
     for row in intake_rows:
-        if isinstance(row, sqlite3.Row):
-            key, event_type, status = row["source_event_key"], row["event_type"], row["status"]
-        else:
-            key, event_type, status = row[0], row[1], row[2]
+        key = _value(row, "source_event_key", 0)
+        event_type = _value(row, "event_type", 1)
+        status = _value(row, "status", 2)
         if key not in outbox_keys:
             intake_without_outbox.append({
                 "event_key": key,
@@ -128,6 +139,7 @@ def build_hospital_finance_transport_report(
             for key in (
                 "awaiting_intake",
                 "delivered_without_intake",
+                "event_type_mismatch",
                 "received_not_mapped",
                 "mapped_source_only",
                 "quarantined",
