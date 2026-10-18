@@ -243,8 +243,12 @@ class CommercialWebApplication:
                 ]
                 totals = {}
                 states = {}
+                seen_sales_states = set()
                 for item in items:
-                    states[item["state"]] = states.get(item["state"], 0) + 1
+                    state_key = (item["sale_id"], item["state"])
+                    if state_key not in seen_sales_states:
+                        states[item["state"]] = states.get(item["state"], 0) + 1
+                        seen_sales_states.add(state_key)
                     currency = item["currency_code"]
                     if currency is not None:
                         totals[currency] = totals.get(currency, 0) + item["line_total_minor"]
