@@ -636,7 +636,8 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                         invoice_no=str(data["invoice_no"]), patient_id=self._integer(data, "patient_id"),
                         total_minor=self._integer(data, "total_minor"), created_at=str(data["created_at"]),
                         actor=self._actor(), currency=str(data.get("currency", "YER")),
-                        encounter_id=self._integer(data, "encounter_id") if data.get("encounter_id") is not None else None)
+                        encounter_id=self._integer(data, "encounter_id") if data.get("encounter_id") is not None else None,
+                        idempotency_key=data.get("idempotency_key"))
                     self._send(201, {"id": ident, "status": "unpaid"})
                 elif route == "/api/payments":
                     self._required(data, "invoice_id", "amount_minor", "method", "received_at")
