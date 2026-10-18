@@ -24,7 +24,7 @@ WHEN NEW.settlement_id IS NOT NULL
       AND NEW.recognition_source_ref = s.settlement_id
  )
 BEGIN
-    SELECT RAISE(ABORT, 'financial transaction must match a fully settled payment, obligation, account owner, amount, currency, and source');
+    SELECT RAISE(ABORT, 'financial transaction currency_code/amount/source must match a fully settled payment, obligation, account owner, and source');
 END;
 
 CREATE TRIGGER financial_transaction_settlement_consistency_update
@@ -52,5 +52,5 @@ WHEN NEW.settlement_id IS NOT NULL
       AND NEW.recognition_source_ref = s.settlement_id
  )
 BEGIN
-    SELECT RAISE(ABORT, 'financial transaction must match a fully settled payment, obligation, account owner, amount, currency, and source');
+    SELECT RAISE(ABORT, 'financial transaction currency_code/amount/source must match a fully settled payment, obligation, account owner, and source');
 END;
