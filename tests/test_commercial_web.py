@@ -2,6 +2,7 @@ import io
 import json
 from datetime import datetime, timedelta, timezone
 import uuid
+from urllib.parse import urlsplit
 from http.cookies import SimpleCookie
 
 from agent_core.commercial_web import CommercialWebApplication
@@ -11,11 +12,12 @@ from agent_core.offering_application import OfferingApplication
 
 
 def request(app, path, *, method="GET", body=None, cookie=None):
+    parsed_path = urlsplit(path)
     payload = json.dumps(body or {}).encode("utf-8")
     environ = {
         "REQUEST_METHOD": method,
-        "PATH_INFO": path,
-        "QUERY_STRING": "",
+        "PATH_INFO": parsed_path.path,
+        "QUERY_STRING": parsed_path.query,
         "CONTENT_LENGTH": str(len(payload) if method == "POST" else 0),
         "CONTENT_TYPE": "application/json",
         "wsgi.input": io.BytesIO(payload if method == "POST" else b""),
@@ -178,6 +180,38 @@ def test_web_session_can_buy_sellable_product_and_receive_result(tmp_path):
     history = request(app, "/api/receipts", cookie=session_cookie)
     assert history["status"] == "200 OK"
     assert len(history["body"]["items"]) == 2
+
+    # Authenticated operational report supports date filters and CSV export.
+    today = now.date().isoformat()
+    report = request(app, "/api/reports/sales?from=" + today + "&to=" + today,
+                     cookie=session_cookie)
+    assert report["status"] == "200 OK"
+    assert report["body"]["count"] == 2
+    assert report["body"]["sale_counts_by_state"] == {"fulfilled": 2}
+    assert report["body"]["recorded_line_totals_by_currency"] == {"SAR": 4950}
+    assert "not recognized revenue" in report["body"]["financial_note"]
+
+    empty_report = request(
+        app, "/api/reports/sales?from=2000-01-01&to=2000-01-02",
+        cookie=session_cookie,
+    )
+    assert empty_report["status"] == "200 OK"
+    assert empty_report["body"]["count"] == 0
+    assert empty_report["body"]["items"] == []
+
+    invalid_report = request(
+        app, "/api/reports/sales?from=2026-02-02&to=2026-02-01",
+        cookie=session_cookie,
+    )
+    assert invalid_report["status"] == "400 Bad Request"
+
+    csv_report = request(
+        app, "/api/reports/sales?format=csv&from=" + today + "&to=" + today,
+        cookie=session_cookie,
+    )
+    assert csv_report["status"] == "200 OK"
+    assert dict(csv_report["headers"])["Content-Type"] == "text/csv; charset=utf-8"
+    assert b"sale_id,occurred_at,state,quantity,currency_code,line_total_minor" in csv_report["body"]
     first_receipt = next(item for item in history["body"]["items"] if item["sale_id"] == checkout["body"]["sale_id"])
     assert first_receipt["quantity_remaining"] == 3
 
