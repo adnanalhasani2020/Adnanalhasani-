@@ -117,18 +117,19 @@ class InvoiceApplication:
             raise ValidationError("Invoice number must be a non-empty string")
         invoice_number = invoice_number.strip()
 
-        sale = connection.execute(
-            "SELECT activity_id FROM sales WHERE sale_id=?", (sale_key,)
-        ).fetchone()
-        if sale is None:
-            raise ValidationError("Invoice requires an existing Sale")
-        activity_key = sale[0]
-        # Reuse the established exact actor/action/scope/context/effective-period grant contract.
-        SaleApplication()._authorize(
-            connection, grant_key, actor_key, "issue_invoice",
-            sale_key, activity_key, timestamp,
-        )
         with self._atomic(connection):
+            # Read and authorize inside the same transaction as the invoice write.
+            # This prevents a grant revocation or Sale-context change between authorization and persistence.
+            sale = connection.execute(
+                "SELECT activity_id FROM sales WHERE sale_id=?", (sale_key,)
+            ).fetchone()
+            if sale is None:
+                raise ValidationError("Invoice requires an existing Sale")
+            activity_key = sale[0]
+            SaleApplication()._authorize(
+                connection, grant_key, actor_key, "issue_invoice",
+                sale_key, activity_key, timestamp,
+            )
             if connection.execute(
                 "SELECT 1 FROM persons WHERE person_id=? AND state='active'", (issuer_key,)
             ).fetchone() is None:
