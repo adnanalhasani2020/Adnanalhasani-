@@ -158,10 +158,19 @@ class HospitalFinanceIntegrationSettingsApplication:
         scope = str(hospital_scope_ref).strip() if isinstance(hospital_scope_ref, str) else ""
         if not scope:
             raise ValidationError("hospital_scope_ref is required")
-        return self._record(db.execute(
+        record = self._record(db.execute(
             self._SELECT + " WHERE activity_id=? AND hospital_scope_ref=? AND status='active'",
             (activity, scope),
         ).fetchone())
+        if record is None:
+            return None
+        activity_row = db.execute("SELECT state FROM activities WHERE activity_id=?", (activity,)).fetchone()
+        owner = self._account_owner(db, str(record.financial_account_id))
+        if (activity_row is None or activity_row[0] != "active"
+                or not self._person_is_active(db, str(record.finance_person_id))
+                or owner is None or owner[1] != "active" or owner[0] != str(record.finance_person_id)):
+            raise ValidationError("Active Hospital-Finance settings reference inactive or inconsistent Finance records")
+        return record
 
     def approve(self, db, *, settings_id, approved_by_person_id, now=None, note=None):
         ident = self._uuid(settings_id, "Settings identifier")
