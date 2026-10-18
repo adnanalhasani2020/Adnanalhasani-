@@ -358,7 +358,7 @@ class HospitalFinanceIntegrationSettingsApplication:
             allowed_statuses = {
                 "pending_approval", "active", "rejected", "superseded", "paused"
             }
-            if status not in allowed_statuses:
+            if not isinstance(status, str) or status not in allowed_statuses:
                 raise ValidationError("unsupported Hospital-Finance settings status")
             clauses.append("status=?")
             values.append(status)

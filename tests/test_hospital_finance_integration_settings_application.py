@@ -435,7 +435,8 @@ def test_list_settings_filters_and_paginates_without_mutating_history(tmp_path):
 
 @pytest.mark.parametrize("kwargs", [
     {"limit": 0}, {"limit": 201}, {"limit": True}, {"offset": -1}, {"offset": True},
-    {"status": "unknown"}, {"hospital_scope_ref": ""},
+    {"status": "unknown"}, {"status": []}, {"status": {}}, {"status": 1},
+    {"hospital_scope_ref": ""},
 ])
 def test_list_settings_rejects_invalid_pagination_and_filters(tmp_path, kwargs):
     db = connect_database(tmp_path / "finance-settings-list-invalid.sqlite")
