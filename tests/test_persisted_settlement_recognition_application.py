@@ -301,3 +301,27 @@ def test_hospital_recognition_correlation_rolls_back_with_failed_finance_recogni
         (event_key,),
     ).fetchone()[0] == "not_started"
     db.close()
+
+
+def test_hospital_payment_recognition_rejects_existing_source_payload_conflict():
+    db = connect_database()
+    ids = seed_recognition(db)
+    event_key = seed_hospital_payment_intake(db, ids)
+    intake_id = db.execute(
+        "SELECT external_event_intake_id FROM external_event_intake WHERE source_event_key=?",
+        (event_key,),
+    ).fetchone()[0]
+    db.execute(
+        "INSERT INTO external_event_intake_conflicts("
+        "external_event_intake_conflict_id,external_event_intake_id,observed_payload_sha256,observed_at,reason"
+        ") VALUES(?,?,?,?,?)",
+        (uid(), intake_id, "b" * 64, STAMP, "test payload conflict"),
+    )
+    db.commit()
+
+    with pytest.raises(ValidationError, match="payload conflicts"):
+        recognize_hospital_payment(db, ids, event_key)
+
+    assert db.execute("SELECT COUNT(*) FROM financial_transactions").fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM ledger_entries").fetchone()[0] == 0
+    db.close()
