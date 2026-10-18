@@ -1,5 +1,6 @@
 """Integration tests for non-destructive Product legacy-name auditing."""
 import uuid
+import pytest
 from agent_core.persistence import connect_database
 from agent_core.product_legacy_audit import ProductLegacyNameAuditor
 
@@ -42,4 +43,36 @@ def test_audit_includes_blank_names_but_excludes_named_products():
     result=ProductLegacyNameAuditor().inspect(db)
     assert [gap.product_id for gap in result.gaps]==[blank]
     assert result.gaps[0].offering_ids==() and result.gaps[0].sale_ids==()
+    db.close()
+
+
+def test_audit_paginates_stably_while_preserving_total_counts():
+    db = connect_database()
+    person, activity = uid(), uid()
+    db.execute("INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,?,?,?)", (person,"active",NOW,NOW))
+    db.execute("INSERT INTO activities(activity_id,owner_person_id,state,created_at,updated_at) VALUES(?,?,?,?,?)", (activity,person,"active",NOW,NOW))
+    ids = sorted([uid(), uid(), uid()])
+    for product_id, name in zip(ids, [None, "  ", "Named"]):
+        db.execute("INSERT INTO products(product_id,name,state,created_at,updated_at) VALUES(?,?,?,?,?)", (product_id,name,"draft",NOW,NOW))
+    db.commit()
+
+    auditor = ProductLegacyNameAuditor()
+    first = auditor.inspect(db, limit=1)
+    second = auditor.inspect(db, limit=1, offset=1)
+    full = auditor.inspect(db)
+
+    assert [g.product_id for g in first.gaps + second.gaps] == ids[:2]
+    assert first.affected_product_count == second.affected_product_count == full.affected_product_count == 2
+    assert first.referenced_product_count == second.referenced_product_count == 0
+    assert len(first.gaps) == len(second.gaps) == 1
+    db.close()
+
+
+@pytest.mark.parametrize("kwargs", [
+    {"limit": 0}, {"limit": 501}, {"limit": True}, {"offset": -1}, {"offset": False},
+])
+def test_audit_rejects_invalid_pagination(kwargs):
+    db = connect_database()
+    with pytest.raises(ValueError):
+        ProductLegacyNameAuditor().inspect(db, **kwargs)
     db.close()
