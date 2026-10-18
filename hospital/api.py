@@ -401,7 +401,8 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                                         {"activity_profile": profile, "modules": sorted(modules), "status": "proposed"})
                         conn.commit()
                     self._send(201, {"id": proposal_id, "status": "proposed", "version": 1,
-                                     "activation_supported": False})
+                                     "activation_supported": True,
+                                     "notice": "Approval by a different administrator activates the module visibility profile only."})
                 elif len(parts) == 5 and parts[:3] == ["api", "manager-settings", "proposals"] and parts[4] == "review":
                     self._required(data, "decision", "expected_version")
                     decision = data["decision"]
