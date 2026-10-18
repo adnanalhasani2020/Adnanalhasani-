@@ -239,11 +239,13 @@ def permission_for_route(method: str, path: str) -> str | None:
         return "finance:transport:read"
     if route == "/api/finance/integration-readiness" and method == "GET":
         return "finance:transport:read"
-    if route == "/api/manager-settings/proposals" and method == "GET":
+    if route in {"/api/manager-settings/proposals", "/api/manager-settings/finance-policy-decisions"} and method == "GET":
         return "manager:settings:read"
-    if route == "/api/manager-settings/proposals" and method == "POST":
+    if route in {"/api/manager-settings/proposals", "/api/manager-settings/finance-policy-decisions"} and method == "POST":
         return "manager:settings:propose"
     if route.startswith("/api/manager-settings/proposals/") and method == "POST":
+        return "manager:settings:review"
+    if route.startswith("/api/manager-settings/finance-policy-decisions/") and method == "POST":
         return "manager:settings:review"
     routes = {
         "/api/dashboard": ("dashboard:read", "dashboard:read"),
