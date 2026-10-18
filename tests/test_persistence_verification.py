@@ -26,7 +26,7 @@ EXPECTED_DOMAIN_TABLES = {
     "workflows","workflow_events","activity_invitations","file_attachments","financial_policy_settings",
     "offering_prices","sale_lines","inventory_movements","commercial_checkout_receipts",
     "commercial_credentials","commercial_sessions","commercial_login_attempts",
-    "external_event_intake","external_event_intake_conflicts",
+    "external_event_intake","external_event_intake_conflicts","hospital_finance_integration_settings",
 }
 NOW = "2026-10-08T00:00:00Z"
 
@@ -78,10 +78,10 @@ def _financial_fixture(db):
     return account, obligation, payment, settlement
 
 
-def test_clean_install_has_exactly_67_domain_tables_plus_migration_bookkeeping():
+def test_clean_install_has_exactly_68_domain_tables_plus_migration_bookkeeping():
     db = connect_database()
     assert _tables(db) == EXPECTED_DOMAIN_TABLES | {"schema_migrations"}
-    assert len(EXPECTED_DOMAIN_TABLES) == 67
+    assert len(EXPECTED_DOMAIN_TABLES) == 68
     assert db.execute("PRAGMA foreign_keys").fetchone()[0] == 1
     assert db.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
     versions = [r[0] for r in db.execute("SELECT version FROM schema_migrations ORDER BY version")]
@@ -121,6 +121,7 @@ def test_clean_install_has_exactly_67_domain_tables_plus_migration_bookkeeping()
         "0040_external_event_intake",
         "0041_financial_policy_full_cycle_required",
         "0042_hospital_finance_recognition_correlation",
+        "0043_hospital_finance_integration_settings",
         "9998_activity_invitations",
         "9999_file_attachments",
     ]
