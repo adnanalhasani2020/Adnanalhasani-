@@ -563,6 +563,8 @@ def test_return_fails_closed_when_checkout_sale_line_is_missing(tmp_path):
         (return_grant_id, request["actor_person_id"], request["sale_id"],
          request["activity_id"], "2026-01-01T00:00:00Z", STAMP, STAMP),
     )
+    # Simulate corruption by bypassing the production append-only guard only in this test.
+    db.execute("DROP TRIGGER sale_line_immutable_delete")
     db.execute("DELETE FROM sale_lines WHERE sale_id=?", (request["sale_id"],))
     db.commit()
     state_before = db.execute(
