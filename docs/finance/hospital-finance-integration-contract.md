@@ -28,7 +28,13 @@ Migration `0040_external_event_intake.sql` adds:
 
 The schema is used by `agent_core.external_event_intake.ExternalEventIntake` for validated events. It inserts new source identities, treats matching fingerprints as idempotent retries, and records a conflicting fingerprint without overwriting the original facts. Unmapped conflicts become quarantined; a conflict after mapping preserves the established Finance target and is surfaced for manual reconciliation.
 
-### Intake service and read-only report\n\n`ExternalEventIntake.ingest` uses a savepoint so an intake insert or collision record and its status update succeed or roll back together. It fingerprints a canonical, minimized representation of the validated event and never stores raw payload JSON or raw payment references. Matching retries only update `last_seen_at`; they do not reset a quarantined status. `build_intake_reconciliation_report` reports intake status counts, aging received events, and source-key conflicts. It is an operational transport report, not a ledger or financial reconciliation.\n\nThe service does not create Finance entities and does not acknowledge Hospital outbox delivery. Cross-database delivery acknowledgement remains disabled until the caller can confirm durable acceptance and recovery behavior.\n\n## Required before durable Finance writes
+### Intake service and read-only report
+
+`ExternalEventIntake.ingest` uses a savepoint so an intake insert or collision record and its status update succeed or roll back together. It fingerprints a canonical, minimized representation of the validated event and never stores raw payload JSON or raw payment references. Matching retries only update `last_seen_at`; they do not reset a quarantined status. `build_intake_reconciliation_report` reports intake status counts, aging received events, and source-key conflicts. It is an operational transport report, not a ledger or financial reconciliation.
+
+The service does not create Finance entities and does not acknowledge Hospital outbox delivery. Cross-database delivery acknowledgement remains disabled until the caller can confirm durable acceptance and recovery behavior.
+
+## Required before durable Finance writes
 
 1. **Source correlation.** Hospital integer IDs must not be cast or guessed into Finance UUIDs. The consumer must compare fingerprints for duplicate event keys; identical retries are idempotent, while conflicting reuse is recorded and quarantined.
 2. **Party and account mapping.** Resolve active persisted Finance Persons and the correct active Financial Account from approved configuration. Never infer parties from patient records or invent accounts.
