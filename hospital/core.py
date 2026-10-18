@@ -149,6 +149,24 @@ WHEN NEW.status='admitted'
 BEGIN
   SELECT RAISE(ABORT, 'bed is already occupied');
 END;
+-- A patient may have only one active admission, even when another bed is available.
+CREATE TRIGGER IF NOT EXISTS admissions_one_active_patient_insert
+BEFORE INSERT ON admissions
+WHEN NEW.status='admitted'
+ AND EXISTS (SELECT 1 FROM admissions a WHERE a.patient_id=NEW.patient_id AND a.status='admitted')
+BEGIN
+  SELECT RAISE(ABORT, 'patient already has an active admission');
+END;
+CREATE TRIGGER IF NOT EXISTS admissions_one_active_patient_update
+BEFORE UPDATE OF patient_id, status ON admissions
+WHEN NEW.status='admitted'
+ AND EXISTS (
+   SELECT 1 FROM admissions a
+   WHERE a.id <> NEW.id AND a.patient_id=NEW.patient_id AND a.status='admitted'
+ )
+BEGIN
+  SELECT RAISE(ABORT, 'patient already has an active admission');
+END;
 -- Keep admission status and discharge timestamp consistent for all writers.
 CREATE TRIGGER IF NOT EXISTS admissions_state_consistent_insert
 BEFORE INSERT ON admissions
@@ -368,12 +386,18 @@ class HospitalDB:
             bed = db.execute("SELECT active FROM beds WHERE id=?", (bed_id,)).fetchone()
             occupied = db.execute("SELECT 1 FROM admissions WHERE bed_id=? AND status='admitted'",
                                   (bed_id,)).fetchone()
+            patient_admitted = db.execute(
+                "SELECT 1 FROM admissions WHERE patient_id=? AND status='admitted' LIMIT 1",
+                (patient_id,),
+            ).fetchone()
             if patient is None or not patient["active"]:
                 raise HospitalError("active patient not found")
             if bed is None or not bed["active"]:
                 raise HospitalError("active bed not found")
             if occupied:
                 raise HospitalError("bed is already occupied")
+            if patient_admitted:
+                raise HospitalError("patient already has an active admission")
             cur = db.execute("""INSERT INTO admissions(patient_id,bed_id,admitted_at,reason)
                 VALUES(?,?,?,?)""", (patient_id, bed_id, admitted_at, reason))
             ident = cur.lastrowid
