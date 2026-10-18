@@ -122,7 +122,17 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                 return
             if not self._authorized():
                 return
-            if route == "/api/auth/me" and auth_mode == "users":
+            if route == "/api/manager-settings/proposals":
+                with database.connect() as conn:
+                    rows = conn.execute(
+                        """SELECT id,activity_profile,modules_json,status,version,created_by,created_at,
+                                  reviewed_by,reviewed_at,review_note
+                           FROM manager_setting_proposals ORDER BY id DESC LIMIT 100"""
+                    ).fetchall()
+                self._send(200, {"data": [dict(row) for row in rows],
+                                 "activation_supported": False,
+                                 "notice": "Approved proposals do not automatically activate settings."})
+            elif route == "/api/auth/me" and auth_mode == "users":
                 self._send(200, {"user": {"id": self.principal.user_id, "username": self.principal.username, "role": self.principal.role, "expires_at": self.principal.expires_at}})
             elif route == "/api/users" and auth_mode == "users":
                 with database.connect() as conn:
@@ -273,6 +283,77 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                     self._required(data, "username", "password")
                     token, principal = auth_store.authenticate(username=str(data["username"]), password=str(data["password"]))
                     self._send(200, {"token": token, "user": {"id": principal.user_id, "username": principal.username, "role": principal.role, "expires_at": principal.expires_at}})
+                elif route == "/api/manager-settings/proposals":
+                    self._required(data, "activity_profile", "modules", "at")
+                    profile = data["activity_profile"]
+                    modules = data["modules"]
+                    allowed_profiles = {"general", "outpatient", "specialty", "admin"}
+                    allowed_modules = {"appointments", "encounters", "admissions", "billing", "records", "audit"}
+                    if profile not in allowed_profiles or not isinstance(modules, list):
+                        raise HospitalError("invalid manager settings proposal")
+                    if any(not isinstance(item, str) or item not in allowed_modules for item in modules):
+                        raise HospitalError("modules contains an unsupported value")
+                    if len(set(modules)) != len(modules) or "audit" not in modules:
+                        raise HospitalError("modules must be unique and audit is mandatory")
+                    modules_json = json.dumps(sorted(modules), ensure_ascii=False, separators=(",", ":"))
+                    with database.connect() as conn:
+                        conn.execute("BEGIN IMMEDIATE")
+                        cur = conn.execute(
+                            """INSERT INTO manager_setting_proposals
+                               (activity_profile,modules_json,status,version,created_by,created_at)
+                               VALUES(?,?,'proposed',1,?,?)""",
+                            (profile, modules_json, self._actor(), str(data["at"])),
+                        )
+                        proposal_id = int(cur.lastrowid)
+                        database._audit(conn, self._actor(), "manager.settings.proposed",
+                                        "manager_setting_proposal", proposal_id, str(data["at"]),
+                                        {"activity_profile": profile, "modules": sorted(modules), "status": "proposed"})
+                        conn.commit()
+                    self._send(201, {"id": proposal_id, "status": "proposed", "version": 1,
+                                     "activation_supported": False})
+                elif len(parts) == 5 and parts[:3] == ["api", "manager-settings", "proposals"] and parts[4] == "review":
+                    self._required(data, "decision", "expected_version", "at")
+                    decision = data["decision"]
+                    expected_version = data["expected_version"]
+                    if decision not in {"approve", "reject"} or type(expected_version) is not int or expected_version < 1:
+                        raise HospitalError("decision and positive expected_version are required")
+                    proposal_id = int(parts[3])
+                    reviewed_at = str(data["at"])
+                    note = data.get("note", "")
+                    if not isinstance(note, str) or len(note) > 1000:
+                        raise HospitalError("review note must be a string of at most 1000 characters")
+                    with database.connect() as conn:
+                        conn.execute("BEGIN IMMEDIATE")
+                        proposal = conn.execute(
+                            "SELECT status,version,created_by FROM manager_setting_proposals WHERE id=?",
+                            (proposal_id,),
+                        ).fetchone()
+                        if proposal is None:
+                            raise HospitalError("manager settings proposal not found")
+                        if proposal["created_by"] == self._actor():
+                            raise HospitalError("proposal author cannot review their own proposal")
+                        if proposal["status"] != "proposed" or proposal["version"] != expected_version:
+                            self._send(409, {"error": "proposal_changed", "status": proposal["status"],
+                                             "version": proposal["version"]})
+                            return
+                        status = "approved" if decision == "approve" else "rejected"
+                        changed = conn.execute(
+                            """UPDATE manager_setting_proposals
+                               SET status=?,version=version+1,reviewed_by=?,reviewed_at=?,review_note=?
+                               WHERE id=? AND status='proposed' AND version=?""",
+                            (status, self._actor(), reviewed_at, note.strip() or None, proposal_id, expected_version),
+                        ).rowcount
+                        if changed != 1:
+                            self._send(409, {"error": "proposal_changed"})
+                            return
+                        database._audit(conn, self._actor(), "manager.settings.reviewed",
+                                        "manager_setting_proposal", proposal_id, reviewed_at,
+                                        {"decision": decision, "status": status, "version": expected_version + 1})
+                        conn.commit()
+                    self._send(200, {"id": proposal_id, "status": status,
+                                     "version": expected_version + 1,
+                                     "activation_supported": False,
+                                     "notice": "Review records the decision only; it does not activate modules or change financial/clinical policy."})
                 elif route == "/api/auth/logout" and auth_mode == "users":
                     auth_store.revoke(self.headers.get("Authorization", "")[7:])
                     self._send(200, {"status": "logged_out"})
