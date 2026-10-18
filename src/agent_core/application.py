@@ -452,18 +452,20 @@ class SaleApplication:
                     "SELECT offering_id, product_id, quantity FROM sale_lines WHERE sale_id=?",
                     (str(sale.id),),
                 ).fetchall()
-                if lines:
+                movements = connection.execute(
+                    "SELECT inventory_position_id, activity_id, product_id, offering_id, "
+                    "location_ref, scope_key, quantity_delta FROM inventory_movements "
+                    "WHERE source_type='sale' AND source_ref=?",
+                    (str(sale.id),),
+                ).fetchall()
+                # Treat either record as evidence of a checkout-backed sale. If one
+                # side was deleted or corrupted, do not silently skip stock restoration.
+                if lines or movements:
                     if len(lines) != 1:
                         raise ValidationError(
                             "Commercial Sale return requires one reconciled sale line; explicit reconciliation is required"
                         )
                     line_offering, line_product, line_quantity = lines[0]
-                    movements = connection.execute(
-                        "SELECT inventory_position_id, activity_id, product_id, offering_id, "
-                        "location_ref, scope_key, quantity_delta FROM inventory_movements "
-                        "WHERE source_type='sale' AND source_ref=?",
-                        (str(sale.id),),
-                    ).fetchall()
                     if len(movements) != 1:
                         raise ValidationError(
                             "Commercial Sale return requires one original stock movement; explicit reconciliation is required"
