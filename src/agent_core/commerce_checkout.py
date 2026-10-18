@@ -19,6 +19,9 @@ from agent_core.inventory_read import InventoryQuantityReader, InventoryQuantity
 from agent_core.shared import ValidationError
 
 
+_SQLITE_MAX_INTEGER = (1 << 63) - 1
+
+
 def _uuid(value, label: str) -> str:
     try:
         return str(UUID(str(value)))
@@ -316,7 +319,13 @@ class CommercialCheckoutApplication:
                 connection, sale.id, actor, fulfill_grant, now=instant,
             )
 
-            line_total = quantity * price["unit_price_minor"]
+            # SQLite INTEGER values are signed 64-bit. Reject an unrepresentable total
+            # before binding it so this becomes a deterministic validation error rather
+            # than an OverflowError/500 after checkout has begun.
+            unit_price = price["unit_price_minor"]
+            if unit_price and quantity > _SQLITE_MAX_INTEGER // unit_price:
+                raise ValidationError("Sale total exceeds the supported integer range")
+            line_total = quantity * unit_price
             connection.execute(
                 """INSERT INTO sale_lines(
                        sale_line_id, sale_id, offering_id, product_id, quantity,
