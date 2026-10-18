@@ -102,6 +102,12 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
             if missing:
                 raise HospitalError("missing required fields: " + ", ".join(missing))
 
+        def _integer(self, data: dict[str, Any], field: str) -> int:
+            value = data[field]
+            if type(value) is not int:
+                raise HospitalError(f"{field} must be an integer")
+            return value
+
         def do_GET(self) -> None:
             parsed = urlsplit(self.path)
             route = parsed.path
@@ -477,14 +483,14 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                     self._required(data, "invoice_no", "patient_id", "total_minor", "created_at")
                     ident = database.create_invoice(
                         invoice_no=str(data["invoice_no"]), patient_id=int(data["patient_id"]),
-                        total_minor=int(data["total_minor"]), created_at=str(data["created_at"]),
+                        total_minor=self._integer(data, "total_minor"), created_at=str(data["created_at"]),
                         actor=self._actor(), currency=str(data.get("currency", "YER")),
                         encounter_id=int(data["encounter_id"]) if data.get("encounter_id") is not None else None)
                     self._send(201, {"id": ident, "status": "unpaid"})
                 elif route == "/api/payments":
                     self._required(data, "invoice_id", "amount_minor", "method", "received_at")
                     ident = database.record_payment(
-                        invoice_id=int(data["invoice_id"]), amount_minor=int(data["amount_minor"]),
+                        invoice_id=int(data["invoice_id"]), amount_minor=self._integer(data, "amount_minor"),
                         method=str(data["method"]), received_at=str(data["received_at"]),
                         actor=self._actor(), reference=data.get("reference"),
                         idempotency_key=data.get("idempotency_key"))
