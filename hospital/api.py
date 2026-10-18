@@ -164,8 +164,8 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                 if not Path(finance_path).expanduser().is_file():
                     self._send(503, {"error": "finance_store_unavailable"})
                     return
-                hospital_uri = "file:" + str(Path(database.path).expanduser().resolve()) + "?mode=ro"
-                finance_uri = "file:" + str(Path(finance_path).expanduser().resolve()) + "?mode=ro"
+                hospital_uri = Path(database.path).expanduser().resolve().as_uri() + "?mode=ro"
+                finance_uri = Path(finance_path).expanduser().resolve().as_uri() + "?mode=ro"
                 hospital_conn = finance_conn = None
                 try:
                     hospital_conn = sqlite3.connect(hospital_uri, uri=True, timeout=5)
