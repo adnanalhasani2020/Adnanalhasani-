@@ -72,6 +72,35 @@ def create_payment(db, app, parties, *, amount=4000, payment_id=None):
     return record, (payer, payee, approver, agent, context, obligation)
 
 
+def seed_invoice_for_payment(db, *, issuer, obligation, state="issued"):
+    activity, product, offering, sale, invoice = [uid() for _ in range(5)]
+    db.execute(
+        "INSERT INTO activities(activity_id,owner_person_id,state,created_at,updated_at) "
+        "VALUES(?,?,'active',?,?)", (activity, issuer, STAMP, STAMP),
+    )
+    db.execute(
+        "INSERT INTO products(product_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (product, STAMP, STAMP),
+    )
+    db.execute(
+        "INSERT INTO offerings(offering_id,product_id,activity_id,state,effective_from,created_at,updated_at) "
+        "VALUES(?,?,?,'active',?,?,?)",
+        (offering, product, activity, STAMP, STAMP, STAMP),
+    )
+    db.execute(
+        "INSERT INTO sales(sale_id,offering_id,activity_id,state,occurred_at,created_at,updated_at,version_no) "
+        "VALUES(?,?,?,'initiated',?,?,?,1)",
+        (sale, offering, activity, STAMP, STAMP, STAMP),
+    )
+    db.execute(
+        "INSERT INTO invoices(invoice_id,sale_id,obligation_id,state,issuer_ref,invoice_number,issue_at,"
+        "created_at,updated_at,version_no) VALUES(?,?,?, ?,?,?,?, ?,?,1)",
+        (invoice, sale, obligation, state, issuer, "INV-" + invoice, STAMP, STAMP, STAMP),
+    )
+    db.commit()
+    return invoice
+
+
 def test_payment_create_and_complete_are_persisted_separately_from_settlement():
     db = connect_database()
     parties = seed(db)
@@ -312,6 +341,56 @@ def test_payment_rejects_invoice_obligation_reference_mismatch():
             currency_code="YER", context_ref=context, authorization_grant_id=grant,
             agent_action_id=action, now=STAMP,
         )
+    assert db.execute("SELECT COUNT(*) FROM payments").fetchone()[0] == 0
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=? AND change_type='payment_state_transition'",
+        (payment_id,),
+    ).fetchone()[0] == 0
+    db.close()
+
+
+def test_payment_rejects_void_invoice_without_writing():
+    db = connect_database()
+    payer, payee, approver, agent, context, obligation = seed(db)
+    invoice = seed_invoice_for_payment(db, issuer=approver, obligation=obligation, state="void")
+    payment_id = uid()
+    grant, action = authorize(
+        db, agent=agent, context=context, payment_id=payment_id,
+        action_code="payment.create", approver=approver,
+    )
+
+    with pytest.raises(ValidationError, match="issued Invoice"):
+        PaymentApplication().create_payment(
+            db, payment_id=payment_id, payer_person_id=payer, payee_person_id=payee,
+            obligation_id=obligation, invoice_id=invoice, amount_minor=1000,
+            currency_code="YER", context_ref=context, authorization_grant_id=grant,
+            agent_action_id=action, now=STAMP,
+        )
+
+    assert db.execute("SELECT COUNT(*) FROM payments").fetchone()[0] == 0
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=? AND change_type='payment_state_transition'",
+        (payment_id,),
+    ).fetchone()[0] == 0
+    db.close()
+
+
+def test_payment_rejects_parties_that_conflict_with_obligation_without_writing():
+    db = connect_database()
+    payer, payee, approver, agent, context, obligation = seed(db)
+    payment_id = uid()
+    grant, action = authorize(
+        db, agent=agent, context=context, payment_id=payment_id,
+        action_code="payment.create", approver=approver,
+    )
+
+    with pytest.raises(ValidationError, match="do not match the linked Obligation parties"):
+        PaymentApplication().create_payment(
+            db, payment_id=payment_id, payer_person_id=payee, payee_person_id=payer,
+            obligation_id=obligation, amount_minor=1000, currency_code="YER",
+            context_ref=context, authorization_grant_id=grant, agent_action_id=action, now=STAMP,
+        )
+
     assert db.execute("SELECT COUNT(*) FROM payments").fetchone()[0] == 0
     assert db.execute(
         "SELECT COUNT(*) FROM domain_history WHERE target_ref=? AND change_type='payment_state_transition'",
