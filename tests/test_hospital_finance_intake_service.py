@@ -183,3 +183,134 @@ def test_conflict_after_mapping_preserves_finance_target_and_is_reported():
     assert db.execute(
         "SELECT COUNT(*) FROM external_event_intake"
     ).fetchone()[0] == 1
+
+
+
+def _active_person(db, person_id):
+    stamp = "2026-10-18T10:00:00Z"
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (person_id, stamp, stamp),
+    )
+
+
+def test_mapping_requires_existing_matching_obligation_and_is_idempotent():
+    db = connect_database()
+    intake = ExternalEventIntake()
+    event = _invoice_event(amount=1500, invoice_id=12)
+    intake.ingest(db, event, now="2026-10-18T10:10:00Z")
+    creditor, debtor, obligation_id = (str(uuid.uuid4()) for _ in range(3))
+    _active_person(db, creditor)
+    _active_person(db, debtor)
+    db.execute(
+        "INSERT INTO obligations(obligation_id,creditor_person_id,debtor_person_id,"
+        "amount_minor,currency_code,state,created_at,updated_at) "
+        "VALUES(?,?,?,1500,'YER','open',?,?)",
+        (obligation_id, creditor, debtor, "2026-10-18T10:00:00Z", "2026-10-18T10:00:00Z"),
+    )
+
+    mapped = intake.map_to_finance_entity(
+        db, source_event_key=event.event_key, finance_entity_type="obligation",
+        finance_entity_id=obligation_id, now="2026-10-18T10:11:00Z",
+    )
+    retry = intake.map_to_finance_entity(
+        db, source_event_key=event.event_key, finance_entity_type="obligation",
+        finance_entity_id=obligation_id, now="2026-10-18T10:12:00Z",
+    )
+
+    assert mapped.outcome == "mapped"
+    assert retry.outcome == "duplicate"
+    assert retry.intake_id == mapped.intake_id
+    row = db.execute(
+        "SELECT status,finance_entity_type,finance_entity_id,mapped_at "
+        "FROM external_event_intake WHERE source_event_key=?",
+        (event.event_key,),
+    ).fetchone()
+    assert tuple(row) == (
+        "mapped", "obligation", obligation_id, "2026-10-18T10:11:00Z"
+    )
+    assert db.execute("SELECT COUNT(*) FROM financial_transactions").fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM ledger_entries").fetchone()[0] == 0
+
+
+def test_mapping_rejects_missing_target_wrong_lifecycle_and_amount_currency_mismatch():
+    import pytest
+    from agent_core.shared import ValidationError
+
+    db = connect_database()
+    intake = ExternalEventIntake()
+    event = _invoice_event(amount=1500, invoice_id=12)
+    intake.ingest(db, event, now="2026-10-18T10:10:00Z")
+
+    with pytest.raises(ValidationError, match="does not exist"):
+        intake.map_to_finance_entity(
+            db, source_event_key=event.event_key, finance_entity_type="obligation",
+            finance_entity_id=str(uuid.uuid4()), now="2026-10-18T10:11:00Z",
+        )
+    with pytest.raises(ValidationError, match="does not match"):
+        intake.map_to_finance_entity(
+            db, source_event_key=event.event_key, finance_entity_type="payment",
+            finance_entity_id=str(uuid.uuid4()), now="2026-10-18T10:11:00Z",
+        )
+
+    creditor, debtor, obligation_id = (str(uuid.uuid4()) for _ in range(3))
+    _active_person(db, creditor)
+    _active_person(db, debtor)
+    db.execute(
+        "INSERT INTO obligations(obligation_id,creditor_person_id,debtor_person_id,"
+        "amount_minor,currency_code,state,created_at,updated_at) "
+        "VALUES(?,?,?,1600,'YER','open',?,?)",
+        (obligation_id, creditor, debtor, "2026-10-18T10:00:00Z", "2026-10-18T10:00:00Z"),
+    )
+    with pytest.raises(ValidationError, match="amount/currency"):
+        intake.map_to_finance_entity(
+            db, source_event_key=event.event_key, finance_entity_type="obligation",
+            finance_entity_id=obligation_id, now="2026-10-18T10:11:00Z",
+        )
+    assert db.execute(
+        "SELECT status FROM external_event_intake WHERE source_event_key=?",
+        (event.event_key,),
+    ).fetchone()[0] == "received"
+
+
+def test_mapping_refuses_conflicted_events_and_rejects_target_reassignment():
+    import pytest
+    from agent_core.shared import ValidationError
+
+    db = connect_database()
+    intake = ExternalEventIntake()
+    event = _invoice_event(amount=1500, invoice_id=12)
+    intake.ingest(db, event, now="2026-10-18T10:10:00Z")
+    intake.ingest(db, _invoice_event(amount=1600, invoice_id=12), now="2026-10-18T10:12:00Z")
+    with pytest.raises(ValidationError, match="Conflicted"):
+        intake.map_to_finance_entity(
+            db, source_event_key=event.event_key, finance_entity_type="obligation",
+            finance_entity_id=str(uuid.uuid4()), now="2026-10-18T10:13:00Z",
+        )
+
+    clean_db = connect_database()
+    clean_intake = ExternalEventIntake()
+    clean_intake.ingest(clean_db, event, now="2026-10-18T10:10:00Z")
+    creditor, debtor, first_id, second_id = (str(uuid.uuid4()) for _ in range(4))
+    _active_person(clean_db, creditor)
+    _active_person(clean_db, debtor)
+    for oid in (first_id, second_id):
+        clean_db.execute(
+            "INSERT INTO obligations(obligation_id,creditor_person_id,debtor_person_id,"
+            "amount_minor,currency_code,state,created_at,updated_at) "
+            "VALUES(?,?,?,1500,'YER','open',?,?)",
+            (oid, creditor, debtor, "2026-10-18T10:00:00Z", "2026-10-18T10:00:00Z"),
+        )
+    clean_intake.map_to_finance_entity(
+        clean_db, source_event_key=event.event_key, finance_entity_type="obligation",
+        finance_entity_id=first_id, now="2026-10-18T10:11:00Z",
+    )
+    with pytest.raises(ValidationError, match="different Finance target"):
+        clean_intake.map_to_finance_entity(
+            clean_db, source_event_key=event.event_key, finance_entity_type="obligation",
+            finance_entity_id=second_id, now="2026-10-18T10:12:00Z",
+        )
+    assert clean_db.execute(
+        "SELECT finance_entity_id FROM external_event_intake WHERE source_event_key=?",
+        (event.event_key,),
+    ).fetchone()[0] == first_id
