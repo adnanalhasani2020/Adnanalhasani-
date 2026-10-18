@@ -18,14 +18,17 @@ mappings, or creates financial records.
 | `awaiting_intake` | Check the approved consumer and transport path. Use only the supported retry/recovery procedure. | Do not manually mark an event delivered. |
 | `delivered_without_intake` | Compare the delivery acknowledgement with durable Finance intake and recovery logs. Establish whether the intake commit succeeded before considering replay. | Do not assume that a delivery acknowledgement proves durable acceptance. |
 | `event_type_mismatch` | Stop automated recovery and reconcile the outbox and intake event types against original source evidence. | Do not replay, remap, or post financially until the mismatch is resolved through an approved process. |
+| `source_content_conflict` | Reconcile the repeated source key against original source evidence and recorded conflict observations, including when the original source is already mapped. | Do not replace the original fingerprint, clear the conflict, replay, remap, settle, or post financially without an approved resolution. |
 | `received_not_mapped` | Resolve the source identity against an approved, active Finance mapping and the applicable organization/activity scope. | Do not create a payment, settlement, or ledger entry solely because intake succeeded. |
 | `mapped_source_only` | Independently inspect the Finance payment, settlement, transaction, and ledger lifecycle records that apply to the event. | Do not treat a mapping as proof of financial recognition. |
 | `quarantined` | Reconcile the source-key conflict against the original event identity and retained audit evidence. Preserve the existing Finance mapping until an authorized resolution is recorded. | Do not overwrite the original event or silently clear quarantine. |
 | `rejected` | Check the source event against the versioned allowlist and schema; correct the source through an approved, auditable process. | Do not bypass validation or mutate a previously accepted event under the same key. |
 | Intake without outbox | Confirm that both connections point to the intended databases; review retention, migration, and source history. | Do not delete the intake row or process it financially without establishing provenance. |
 
-The report includes conservative `operator_guidance` text alongside each row. It
-is informational only and must not be interpreted as an executable command.
+The report includes conservative `operator_guidance` text alongside each row and
+counts source-content conflict observations. Conflicts remain visible even when an
+existing Finance mapping is preserved. Guidance is informational only and must not
+be interpreted as an executable command.
 
 ## Safe recovery sequence
 
