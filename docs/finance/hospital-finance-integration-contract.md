@@ -51,3 +51,12 @@ The service does not create Finance entities and does not acknowledge Hospital o
 ## Delivery state
 
 Validation, the Finance intake schema, the idempotent intake service, and a read-only operational report are implemented with tests. No worker is enabled, no Finance records are created by the adapter or intake service, and no event should be marked delivered solely after validation or intake. Next: build governed identity/account mapping and a separately authorized Finance lifecycle operation with durable outcomes and end-to-end recovery tests before enabling any outbox acknowledgement.
+
+
+## Durable recognition correlation (migration 0042)
+
+`PersistedSettlementRecognitionApplication.recognize` now accepts an optional `source_event_key` for a Hospital payment event. When supplied, the Finance operation requires that the event already exists in Finance intake, is not rejected or quarantined, is explicitly mapped to the exact persisted Finance Payment, and matches its amount and currency. The application then records the Settlement, FinancialTransaction, and LedgerEntry identifiers on the intake row in the same Finance database transaction/savepoint as ledger recognition.
+
+The intake row exposes `recognition_status` (`not_started`, `recognized`, or `reconciliation_required`) separately from transport `status`. Database triggers prevent a row from claiming recognition without all three durable Finance identifiers. Exact retries reuse the existing recognition and verify the existing correlation; a conflicting correlation is rejected. A correlation write failure rolls back the Finance recognition operation when both are performed through the same connection/transaction boundary.
+
+This does **not** enable an outbox worker or Hospital acknowledgement. The caller must still use approved Finance lifecycle records and authorization, and the two databases remain non-atomic. Delivery remains disabled until governed mapping/settings, lifecycle creation, recovery, and reconciliation gates are satisfied.
