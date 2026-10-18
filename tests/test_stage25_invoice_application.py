@@ -103,6 +103,13 @@ def test_sale_lifecycle_rejects_transition_timestamp_before_creation_without_wri
         "context_ref,state,effective_from,created_at,updated_at) VALUES(?,?,?,?,?,'active',?,?,?)",
         (grant, actor, "confirm_sale", sale, activity, "2026-10-01T00:00:00Z", STAMP, STAMP),
     )
+    db.execute(
+        "INSERT INTO domain_history(domain_history_id,owner_domain,target_ref,change_type,historical_at,"
+        "actor_context_ref,prior_version_ref,current_version_ref,change_payload_ref,created_at) "
+        "VALUES(?,?,?,?,?,?,?,?,?,?)",
+        (uid(), "commerce", sale, "sale_state_transition", STAMP, actor, None,
+         f"sale-state:{sale}:v1", "state:initiated", STAMP),
+    )
     db.commit()
     before = db.execute(
         "SELECT state, version_no, updated_at FROM sales WHERE sale_id=?", (sale,)
