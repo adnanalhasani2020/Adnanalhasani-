@@ -133,3 +133,48 @@ def test_database_rejects_settings_for_inactive_activity(tmp_path):
             ),
         )
     db.close()
+
+
+@pytest.mark.parametrize("settings_status", ["pending_approval", "active"])
+def test_database_prevents_deactivating_referenced_finance_mapping_rows(tmp_path, settings_status):
+    db = connect_database(tmp_path / f"finance-reference-state-{settings_status}.sqlite")
+    activity, owner, proposer, approver, account = _fixture(db)
+    app = HospitalFinanceIntegrationSettingsApplication()
+    proposal = app.propose(
+        db, activity_id=activity, hospital_scope_ref="clinic-main",
+        finance_person_id=owner, financial_account_id=account,
+        proposed_by_person_id=proposer, now=NOW,
+    )
+    if settings_status == "active":
+        app.approve(db, settings_id=proposal.settings_id, approved_by_person_id=approver, now=NOW)
+
+    blocked_changes = [
+        (
+            "UPDATE activities SET state='suspended' WHERE activity_id=?",
+            (activity,),
+            "Pause or reject Hospital Finance settings before deactivating the Finance Activity",
+            "SELECT state FROM activities WHERE activity_id=?",
+            (activity,),
+        ),
+        (
+            "UPDATE persons SET state='deactivated' WHERE person_id=?",
+            (owner,),
+            "Pause or reject Hospital Finance settings before deactivating the mapped Finance Person",
+            "SELECT state FROM persons WHERE person_id=?",
+            (owner,),
+        ),
+        (
+            "UPDATE financial_accounts SET state='closed' WHERE financial_account_id=?",
+            (account,),
+            "Pause or reject Hospital Finance settings before closing the mapped Financial Account",
+            "SELECT state FROM financial_accounts WHERE financial_account_id=?",
+            (account,),
+        ),
+    ]
+    for update_sql, update_args, message, read_sql, read_args in blocked_changes:
+        with pytest.raises(sqlite3.IntegrityError, match=message):
+            db.execute(update_sql, update_args)
+        assert db.execute(read_sql, read_args).fetchone()[0] == "active"
+
+    assert app.get_by_id(db, settings_id=proposal.settings_id).status == settings_status
+    db.close()
