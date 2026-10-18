@@ -61,6 +61,18 @@ class HospitalUserAuthAPITests(unittest.TestCase):
         self.assertEqual(status, 200)
         return payload["token"]
 
+    def snapshot_tables(self, *table_names):
+        # Compare complete persisted rows, not just counts; sort by repr so SQL
+        # row order is irrelevant and heterogeneous nullable values are safe.
+        with self.db.connect() as conn:
+            return {
+                table: tuple(sorted(
+                    (tuple(row) for row in conn.execute(f"SELECT * FROM {table}")),
+                    key=repr,
+                ))
+                for table in table_names
+            }
+
     def test_login_and_current_user(self):
         token = self.login("doctor.user", "doctor-password-1234")
         status, payload = self.request("/api/auth/me", token=token)
@@ -76,10 +88,7 @@ class HospitalUserAuthAPITests(unittest.TestCase):
 
     def test_doctor_cannot_create_patient_or_manage_users_without_side_effects(self):
         token = self.login("doctor.user", "doctor-password-1234")
-        with self.db.connect() as conn:
-            patients_before = conn.execute("SELECT COUNT(*) FROM patients").fetchone()[0]
-            users_before = conn.execute("SELECT COUNT(*) FROM auth_users").fetchone()[0]
-            audit_before = conn.execute("SELECT COUNT(*) FROM audit_log").fetchone()[0]
+        before = self.snapshot_tables("patients", "auth_users", "audit_log")
 
         status, payload = self.request("/api/patients", "POST", {
             "patient_no": "DENIED-1", "full_name": "Should Not Be Created",
@@ -93,15 +102,10 @@ class HospitalUserAuthAPITests(unittest.TestCase):
         }, token)
         self.assertEqual(status, 403)
 
-        with self.db.connect() as conn:
-            self.assertEqual(conn.execute("SELECT COUNT(*) FROM patients").fetchone()[0], patients_before)
-            self.assertEqual(conn.execute("SELECT COUNT(*) FROM auth_users").fetchone()[0], users_before)
-            self.assertEqual(conn.execute("SELECT COUNT(*) FROM audit_log").fetchone()[0], audit_before)
+        self.assertEqual(self.snapshot_tables("patients", "auth_users", "audit_log"), before)
 
     def test_unauthenticated_write_is_rejected_without_database_changes(self):
-        with self.db.connect() as conn:
-            patients_before = conn.execute("SELECT COUNT(*) FROM patients").fetchone()[0]
-            audit_before = conn.execute("SELECT COUNT(*) FROM audit_log").fetchone()[0]
+        before = self.snapshot_tables("patients", "auth_users", "audit_log")
 
         status, payload = self.request("/api/patients", "POST", {
             "patient_no": "NO-AUTH-1", "full_name": "Must Not Be Created",
@@ -110,9 +114,7 @@ class HospitalUserAuthAPITests(unittest.TestCase):
         self.assertEqual(status, 401)
         self.assertEqual(payload["error"], "unauthorized")
 
-        with self.db.connect() as conn:
-            self.assertEqual(conn.execute("SELECT COUNT(*) FROM patients").fetchone()[0], patients_before)
-            self.assertEqual(conn.execute("SELECT COUNT(*) FROM audit_log").fetchone()[0], audit_before)
+        self.assertEqual(self.snapshot_tables("patients", "auth_users", "audit_log"), before)
 
     def test_expired_session_cannot_read_or_write_and_leaves_database_unchanged(self):
         token = self.login("admin.user", "administrator-password-123")
@@ -122,8 +124,13 @@ class HospitalUserAuthAPITests(unittest.TestCase):
                 "UPDATE auth_sessions SET expires_at=? WHERE token_hash=?",
                 ("2000-01-01T00:00:00Z", token_hash),
             )
-            patients_before = conn.execute("SELECT COUNT(*) FROM patients").fetchone()[0]
-            audit_before = conn.execute("SELECT COUNT(*) FROM audit_log").fetchone()[0]
+            before = {
+                table: tuple(sorted(
+                    (tuple(row) for row in conn.execute(f"SELECT * FROM {table}")),
+                    key=repr,
+                ))
+                for table in ("patients", "auth_users", "audit_log")
+            }
 
         status, payload = self.request("/api/patients", "POST", {
             "patient_no": "EXPIRED-SESSION", "full_name": "Must Not Be Created",
@@ -136,8 +143,14 @@ class HospitalUserAuthAPITests(unittest.TestCase):
         self.assertEqual(payload["error"], "unauthorized")
 
         with self.db.connect() as conn:
-            self.assertEqual(conn.execute("SELECT COUNT(*) FROM patients").fetchone()[0], patients_before)
-            self.assertEqual(conn.execute("SELECT COUNT(*) FROM audit_log").fetchone()[0], audit_before)
+            after = {
+                table: tuple(sorted(
+                    (tuple(row) for row in conn.execute(f"SELECT * FROM {table}")),
+                    key=repr,
+                ))
+                for table in ("patients", "auth_users", "audit_log")
+            }
+        self.assertEqual(after, before)
 
     def test_admin_can_create_user_and_user_list_is_protected(self):
         token = self.login("admin.user", "administrator-password-123")
