@@ -77,6 +77,41 @@ class BillingAPIWorkflowTests(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertIn("exceeds invoice balance", data["error"])
 
+    def test_invoice_rejects_encounter_belonging_to_another_patient_atomically(self):
+        other = self.post("/api/patients", {
+            "patient_no": "BILL-P-OTHER", "full_name": "Other Billing Patient",
+            "created_at": "2026-01-01T08:00:00"
+        })["id"]
+        encounter = self.post("/api/encounters", {
+            "patient_id": other, "opened_at": "2026-01-02T08:00:00",
+            "chief_complaint": "Synthetic test"
+        })["id"]
+        with self.db.connect() as conn:
+            before_audit = conn.execute(
+                "SELECT COUNT(*) FROM audit_log WHERE action='invoice.created'"
+            ).fetchone()[0]
+            before_outbox = conn.execute(
+                "SELECT COUNT(*) FROM finance_outbox WHERE event_type='hospital.invoice.created'"
+            ).fetchone()[0]
+
+        status, data = self.call("/api/invoices", {
+            "invoice_no": "INV-MISMATCH", "patient_id": self.patient,
+            "encounter_id": encounter, "total_minor": 1000,
+            "created_at": "2026-01-02T09:00:00"
+        })
+        self.assertEqual(status, 400)
+        self.assertIn("encounter does not belong to this patient", data["error"])
+        with self.db.connect() as conn:
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM invoices WHERE invoice_no='INV-MISMATCH'"
+            ).fetchone()[0], 0)
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM audit_log WHERE action='invoice.created'"
+            ).fetchone()[0], before_audit)
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM finance_outbox WHERE event_type='hospital.invoice.created'"
+            ).fetchone()[0], before_outbox)
+
     def test_invoice_requires_valid_amount_and_patient(self):
         status, data = self.call("/api/invoices", {
             "invoice_no": "INV-API-2", "patient_id": self.patient,

@@ -500,6 +500,14 @@ class HospitalDB:
                         raise HospitalError("idempotency_key was already used with different invoice details")
                     db.commit()
                     return int(existing["id"])
+            if encounter_id is not None:
+                encounter = db.execute(
+                    "SELECT patient_id FROM encounters WHERE id=?", (encounter_id,)
+                ).fetchone()
+                if encounter is None:
+                    raise HospitalError("encounter not found")
+                if encounter["patient_id"] != patient_id:
+                    raise HospitalError("encounter does not belong to this patient")
             cur = db.execute("""INSERT INTO invoices
                 (invoice_no,patient_id,encounter_id,total_minor,currency,created_at,idempotency_key,request_sha256)
                 VALUES(?,?,?,?,?,?,?,?)""",
