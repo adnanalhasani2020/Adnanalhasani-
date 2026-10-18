@@ -143,6 +143,22 @@ class InvoiceApplication:
                 "SELECT 1 FROM persons WHERE person_id=? AND state='active'", (issuer_key,)
             ).fetchone() is None:
                 raise ValidationError("Invoice issuer must be an active persisted Person")
+            if connection.execute(
+                "SELECT 1 FROM invoices WHERE issuer_ref=? AND invoice_number=?",
+                (issuer_key, invoice_number),
+            ).fetchone() is not None:
+                raise ValidationError("Invoice number already exists for this issuer")
+            if obligation_key is not None:
+                obligation = connection.execute(
+                    "SELECT source_invoice_id FROM obligations WHERE obligation_id=?",
+                    (obligation_key,),
+                ).fetchone()
+                if obligation is None:
+                    raise ValidationError("Invoice references a missing Obligation")
+                if obligation[0] is not None:
+                    raise ValidationError(
+                        "Obligation is already linked to a source Invoice; explicit reconciliation is required"
+                    )
             invoice = Invoice(UUID(sale_key), id=UUID(key), state=InvoiceState.ISSUED)
             connection.execute(
                 "INSERT INTO invoices(invoice_id,sale_id,obligation_id,state,issuer_ref,invoice_number,"
