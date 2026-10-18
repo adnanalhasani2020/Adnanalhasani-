@@ -102,8 +102,11 @@ class InvoiceApplication:
         issuer_key = str(self._uuid(issuer_ref, "Invoice issuer identifier"))
         obligation_key = str(self._uuid(obligation_id, "Obligation identifier")) if obligation_id is not None else None
         key = str(self._uuid(invoice_id, "Invoice identifier")) if invoice_id is not None else str(uuid4())
-        timestamp = self._timestamp(now if now is not None else datetime.now(timezone.utc), "Invoice creation timestamp")
-        issued = self._timestamp(issue_at if issue_at is not None else (now if now is not None else datetime.now(timezone.utc)), "Invoice issue timestamp")
+        # Use one clock reading for both defaults; separate datetime.now() calls
+        # can make the issue timestamp a few microseconds later than creation.
+        default_instant = now if now is not None else datetime.now(timezone.utc)
+        timestamp = self._timestamp(default_instant, "Invoice creation timestamp")
+        issued = self._timestamp(issue_at if issue_at is not None else default_instant, "Invoice issue timestamp")
         due = self._timestamp(due_at, "Invoice due timestamp", optional=True)
         created_instant = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
         issue_instant = datetime.fromisoformat(issued.replace("Z", "+00:00"))
