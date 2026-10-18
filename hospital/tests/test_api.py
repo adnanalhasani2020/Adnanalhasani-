@@ -11,6 +11,7 @@ from urllib.request import Request, urlopen
 
 from hospital.api import _validate_bind_host, make_handler
 from hospital.core import HospitalDB
+from hospital.security import AuthStore
 
 
 class HospitalAPITests(unittest.TestCase):
@@ -365,6 +366,63 @@ class HospitalAPITests(unittest.TestCase):
             status, payload = self.request("/api/finance/integration-readiness")
         self.assertEqual(status, 503)
         self.assertEqual(payload, {"error": "finance_store_unavailable"})
+
+
+    def test_approved_manager_settings_become_active_and_are_audited(self):
+        auth = AuthStore(self.db)
+        auth.create_user(username="manager_one", password="Manager-one-password-123!", role="admin",
+                         at="2026-10-18T10:00:00Z")
+        auth.create_user(username="manager_two", password="Manager-two-password-123!", role="admin",
+                         at="2026-10-18T10:00:00Z")
+        token_one, _ = auth.authenticate(username="manager_one", password="Manager-one-password-123!")
+        token_two, _ = auth.authenticate(username="manager_two", password="Manager-two-password-123!")
+        server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(self.db, "", auth_mode="users"))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base = f"http://127.0.0.1:{server.server_port}"
+
+        def request(path, token, method="GET", payload=None):
+            headers = {"Authorization": f"Bearer {token}"}
+            data = None
+            if payload is not None:
+                data = json.dumps(payload).encode()
+                headers["Content-Type"] = "application/json"
+            req = Request(base + path, data=data, headers=headers, method=method)
+            try:
+                with urlopen(req, timeout=3) as response:
+                    return response.status, json.loads(response.read())
+            except HTTPError as exc:
+                return exc.code, json.loads(exc.read())
+
+        try:
+            status, proposal = request("/api/manager-settings/proposals", token_one, "POST", {
+                "activity_profile": "outpatient",
+                "modules": ["appointments", "billing", "records", "audit"],
+            })
+            self.assertEqual(status, 201)
+            self.assertFalse(proposal.get("activated", False))
+
+            status, review = request(
+                f"/api/manager-settings/proposals/{proposal['id']}/review", token_two, "POST",
+                {"decision": "approve", "expected_version": 1, "note": "approved for this facility"},
+            )
+            self.assertEqual(status, 200)
+            self.assertTrue(review["activated"])
+
+            status, active = request("/api/manager-settings/active", token_two)
+            self.assertEqual(status, 200)
+            self.assertEqual(active["data"]["activity_profile"], "outpatient")
+            self.assertEqual(active["data"]["modules"], ["appointments", "audit", "billing", "records"])
+            self.assertEqual(active["data"]["source_proposal_id"], proposal["id"])
+            with self.db.connect() as conn:
+                audit = conn.execute(
+                    "SELECT COUNT(*) FROM audit_log WHERE action='manager.settings.activated'"
+                ).fetchone()[0]
+                self.assertEqual(audit, 1)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
 
 
 if __name__ == "__main__":
