@@ -115,6 +115,31 @@ def test_invoice_issue_rejects_issue_timestamp_before_sale_creation_without_writ
     db.close()
 
 
+def test_invoice_issue_rejects_conflicting_persisted_sale_states_without_writes():
+    db = connect_database()
+    actor, _activity, sale, grant = fixture(db)
+    db.execute(
+        "UPDATE sales SET state='completed', lifecycle_state='cancelled' WHERE sale_id=?",
+        (sale,),
+    )
+    db.commit()
+
+    with pytest.raises(ValidationError, match="Sale state and lifecycle_state disagree"):
+        InvoiceApplication().create_invoice(
+            db, sale_id=sale, actor_context_ref=actor,
+            authorization_grant_id=grant, issuer_ref=actor,
+            invoice_number="INV-STATE-CONFLICT", now=STAMP,
+        )
+
+    assert db.execute(
+        "SELECT COUNT(*) FROM invoices WHERE invoice_number='INV-STATE-CONFLICT'"
+    ).fetchone()[0] == 0
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE change_type='invoice_state_transition'"
+    ).fetchone()[0] == 0
+    db.close()
+
+
 def test_invoice_issue_rejects_missing_sale_or_wrong_grant_scope_without_write():
     db = connect_database()
     actor, activity, sale, grant = fixture(db)
