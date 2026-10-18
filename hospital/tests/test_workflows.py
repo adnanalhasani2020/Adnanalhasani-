@@ -6,7 +6,7 @@ from hospital.core import HospitalDB, HospitalError
 from hospital.workflows import (
     add_medicine, close_encounter, create_encounter, create_purchase_order,
     create_supplier, dispense_prescription, order_lab_test, prescribe_medicine,
-    update_lab_status,
+    receive_purchase_order, adjust_stock, update_lab_status,
 )
 
 
@@ -132,6 +132,64 @@ class HospitalWorkflowTests(unittest.TestCase):
                 with self.assertRaises(HospitalError):
                     create_purchase_order(self.db, order_no="PO-INVALID", supplier_id=supplier,
                         items=items, actor="admin", at="2026-01-01T08:10:00")
+
+    def test_purchase_receipt_is_atomic_and_inactive_medicine_stock_is_immutable(self):
+        first = add_medicine(self.db, sku="MED-ATOMIC-1", name="First item", quantity=2,
+            reorder_level=1, actor="pharmacist", at="2026-01-01T08:00:00")
+        second = add_medicine(self.db, sku="MED-ATOMIC-2", name="Second item", quantity=4,
+            reorder_level=1, actor="pharmacist", at="2026-01-01T08:00:00")
+        supplier = create_supplier(self.db, supplier_no="SUP-ATOMIC", name="Atomic supplier",
+            actor="admin", at="2026-01-01T08:00:00")
+        order = create_purchase_order(self.db, order_no="PO-ATOMIC", supplier_id=supplier,
+            items=[
+                {"medicine_id": first, "quantity": 3, "unit_cost_minor": 100},
+                {"medicine_id": second, "quantity": 5, "unit_cost_minor": 200},
+            ], actor="admin", at="2026-01-01T08:10:00")
+
+        with self.db.connect() as conn:
+            conn.execute("UPDATE medicines SET active=0 WHERE id=?", (second,))
+            quantities_before = {
+                row["id"]: row["quantity"]
+                for row in conn.execute("SELECT id,quantity FROM medicines WHERE id IN (?,?)", (first, second))
+            }
+            movement_count_before = conn.execute("SELECT COUNT(*) FROM inventory_movements").fetchone()[0]
+            receipt_audits_before = conn.execute(
+                "SELECT COUNT(*) FROM audit_log WHERE action='purchase_order.received' AND entity_id=?",
+                (str(order),),
+            ).fetchone()[0]
+
+        with self.assertRaisesRegex(HospitalError, "active medicine not found"):
+            receive_purchase_order(self.db, order_id=order, actor="admin", at="2026-01-01T08:20:00")
+
+        with self.db.connect() as conn:
+            quantities_after = {
+                row["id"]: row["quantity"]
+                for row in conn.execute("SELECT id,quantity FROM medicines WHERE id IN (?,?)", (first, second))
+            }
+            movement_count_after = conn.execute("SELECT COUNT(*) FROM inventory_movements").fetchone()[0]
+            order_status = conn.execute("SELECT status,received_at FROM purchase_orders WHERE id=?", (order,)).fetchone()
+            receipt_audits_after = conn.execute(
+                "SELECT COUNT(*) FROM audit_log WHERE action='purchase_order.received' AND entity_id=?",
+                (str(order),),
+            ).fetchone()[0]
+
+        self.assertEqual(quantities_after, quantities_before)
+        self.assertEqual(movement_count_after, movement_count_before)
+        self.assertEqual(tuple(order_status), ("ordered", None))
+        self.assertEqual(receipt_audits_after, receipt_audits_before)
+
+        with self.assertRaisesRegex(HospitalError, "active medicine not found"):
+            adjust_stock(self.db, medicine_id=second, quantity_delta=1,
+                actor="pharmacist", at="2026-01-01T08:30:00")
+        with self.db.connect() as conn:
+            self.assertEqual(
+                conn.execute("SELECT quantity FROM medicines WHERE id=?", (second,)).fetchone()["quantity"],
+                quantities_before[second],
+            )
+            self.assertEqual(
+                conn.execute("SELECT COUNT(*) FROM inventory_movements").fetchone()[0],
+                movement_count_before,
+            )
 
     def test_purchase_order_accepts_integer_minor_units(self):
         medicine = add_medicine(self.db, sku="MED-PO-2", name="Purchase item 2", quantity=0,
