@@ -669,7 +669,7 @@ def test_invoice_issue_rejects_cancelled_sale_without_writes():
         db, actor=actor, activity=activity, scope=sale, action="cancel_sale"
     )
     SaleApplication().cancel_sale(
-        db, sale, actor, cancel_grant, now=STAMP,
+        db, sale, actor, cancel_grant, now=datetime(2026, 10, 10, 12, 0, tzinfo=timezone.utc),
     )
 
     invoice_id = uid()
@@ -677,7 +677,7 @@ def test_invoice_issue_rejects_cancelled_sale_without_writes():
         InvoiceApplication().create_invoice(
             db, sale_id=sale, actor_context_ref=actor,
             authorization_grant_id=issue_grant, issuer_ref=actor,
-            invoice_number="INV-CANCELLED-SALE", invoice_id=invoice_id, now=STAMP,
+            invoice_number="INV-CANCELLED-SALE", invoice_id=invoice_id, now=datetime(2026, 10, 10, 12, 0, tzinfo=timezone.utc),
         )
 
     assert db.execute(
@@ -699,7 +699,7 @@ def test_sale_cancel_or_return_requires_reconciliation_of_issued_invoice(action)
     invoice = InvoiceApplication().create_invoice(
         db, sale_id=sale, actor_context_ref=actor,
         authorization_grant_id=issue_grant, issuer_ref=actor,
-        invoice_number=f"INV-BLOCK-{action.upper()}", now=STAMP,
+        invoice_number=f"INV-BLOCK-{action.upper()}", now=datetime(2026, 10, 10, 12, 0, tzinfo=timezone.utc),
     )
     sales = SaleApplication()
 
@@ -710,8 +710,8 @@ def test_sale_cancel_or_return_requires_reconciliation_of_issued_invoice(action)
         fulfill_grant = _sale_grant(
             db, actor=actor, activity=activity, scope=sale, action="fulfill_sale"
         )
-        sales.confirm_sale(db, sale, actor, confirm_grant, now=STAMP)
-        sales.fulfill_sale(db, sale, actor, fulfill_grant, now=STAMP)
+        sales.confirm_sale(db, sale, actor, confirm_grant, now=datetime(2026, 10, 10, 12, 0, tzinfo=timezone.utc))
+        sales.fulfill_sale(db, sale, actor, fulfill_grant, now=datetime(2026, 10, 10, 12, 0, tzinfo=timezone.utc))
 
     transition_grant = _sale_grant(
         db, actor=actor, activity=activity, scope=sale,
@@ -727,9 +727,9 @@ def test_sale_cancel_or_return_requires_reconciliation_of_issued_invoice(action)
 
     with pytest.raises(ValidationError, match="requires explicit Invoice reconciliation"):
         if action == "cancel":
-            sales.cancel_sale(db, sale, actor, transition_grant, now=STAMP)
+            sales.cancel_sale(db, sale, actor, transition_grant, now=datetime(2026, 10, 10, 12, 0, tzinfo=timezone.utc))
         else:
-            sales.return_sale(db, sale, actor, transition_grant, now=STAMP)
+            sales.return_sale(db, sale, actor, transition_grant, now=datetime(2026, 10, 10, 12, 0, tzinfo=timezone.utc))
 
     assert db.execute(
         "SELECT state,version_no FROM sales WHERE sale_id=?", (sale,)
@@ -769,7 +769,7 @@ def test_invoice_issue_rejects_terminal_obligation_without_writes(obligation_sta
             db, sale_id=sale, actor_context_ref=actor,
             authorization_grant_id=grant, issuer_ref=actor,
             invoice_number=f"INV-TERMINAL-{obligation_state.upper()}",
-            invoice_id=invoice_id, obligation_id=obligation_id, now=STAMP,
+            invoice_id=invoice_id, obligation_id=obligation_id, now=datetime(2026, 10, 10, 12, 0, tzinfo=timezone.utc),
         )
 
     assert db.execute(
