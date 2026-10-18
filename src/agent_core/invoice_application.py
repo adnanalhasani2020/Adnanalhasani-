@@ -105,6 +105,8 @@ class InvoiceApplication:
         timestamp = self._timestamp(now if now is not None else datetime.now(timezone.utc), "Invoice creation timestamp")
         issued = self._timestamp(issue_at if issue_at is not None else (now if now is not None else datetime.now(timezone.utc)), "Invoice issue timestamp")
         due = self._timestamp(due_at, "Invoice due timestamp", optional=True)
+        if due is not None and due < issued:
+            raise ValidationError("Invoice due timestamp cannot precede issue timestamp")
         if not isinstance(invoice_number, str) or not invoice_number.strip():
             raise ValidationError("Invoice number must be a non-empty string")
         invoice_number = invoice_number.strip()
