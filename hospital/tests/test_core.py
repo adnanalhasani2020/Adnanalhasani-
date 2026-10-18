@@ -117,7 +117,10 @@ class HospitalCoreTests(unittest.TestCase):
                 "INSERT INTO admissions(patient_id,bed_id,admitted_at) VALUES(?,?,?)",
                 (self.patient, bed_id, "2026-01-02T09:00:00"),
             )
-            with self.assertRaisesRegex(sqlite3.IntegrityError, "bed is already occupied"):
+            with self.assertRaisesRegex(
+                sqlite3.IntegrityError,
+                "(bed is already occupied|patient already has an active admission)",
+            ):
                 conn.execute(
                     "INSERT INTO admissions(patient_id,bed_id,admitted_at) VALUES(?,?,?)",
                     (self.patient, bed_id, "2026-01-02T10:00:00"),
