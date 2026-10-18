@@ -329,3 +329,44 @@ class HospitalFinanceIntegrationSettingsApplication:
                 correlation_ref=f"{activity}:{scope}",
             )
         return self.get_by_id(db, settings_id=ident)
+
+
+    def list_settings(self, db, *, activity_id=None, hospital_scope_ref=None,
+                      status=None, limit=100, offset=0):
+        """Return a bounded, read-only page of settings for an authenticated Finance UI.
+
+        This query method is not an API authorization boundary. Callers must authenticate
+        and authorize the Finance user before exposing these records to a client.
+        """
+        if type(limit) is not int or not 1 <= limit <= 200:
+            raise ValidationError("limit must be an integer from 1 to 200")
+        if type(offset) is not int or offset < 0:
+            raise ValidationError("offset must be a non-negative integer")
+
+        clauses = []
+        values = []
+        if activity_id is not None:
+            clauses.append("activity_id=?")
+            values.append(self._uuid(activity_id, "Activity identifier"))
+        if hospital_scope_ref is not None:
+            scope = hospital_scope_ref.strip() if isinstance(hospital_scope_ref, str) else ""
+            if not scope or len(scope) > 160:
+                raise ValidationError("hospital_scope_ref must contain 1-160 characters")
+            clauses.append("hospital_scope_ref=?")
+            values.append(scope)
+        if status is not None:
+            allowed_statuses = {
+                "pending_approval", "active", "rejected", "superseded", "paused"
+            }
+            if status not in allowed_statuses:
+                raise ValidationError("unsupported Hospital-Finance settings status")
+            clauses.append("status=?")
+            values.append(status)
+
+        where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+        rows = db.execute(
+            self._SELECT + where +
+            " ORDER BY proposed_at DESC, settings_id DESC LIMIT ? OFFSET ?",
+            (*values, limit, offset),
+        ).fetchall()
+        return [self._record(row) for row in rows]
