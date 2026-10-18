@@ -233,6 +233,11 @@ def test_web_session_can_buy_sellable_product_and_receive_result(tmp_path):
     )
     assert invalid_report["status"] == "400 Bad Request"
 
+    malformed_date_report = request(
+        app, "/api/reports/sales?from=2026-02-30", cookie=session_cookie,
+    )
+    assert malformed_date_report["status"] == "400 Bad Request"
+
     csv_report = request(
         app, "/api/reports/sales?format=csv&from=" + today + "&to=" + today +
         "&limit=1&offset=1",
@@ -243,6 +248,42 @@ def test_web_session_can_buy_sellable_product_and_receive_result(tmp_path):
     assert b"sale_id,occurred_at,state,quantity,currency_code,line_total_minor" in csv_report["body"]
     assert dict(csv_report["headers"])["X-Report-Export-Scope"] == "all-matching-results"
     assert csv_report["body"].count(b"\n") == 3  # header plus both matching sales
+
+    # Exercise the inclusive end-of-day boundary and sale-level pagination with
+    # multiple currency rows on a single sale. The next midnight is excluded.
+    next_day = (now.date() + timedelta(days=1)).isoformat()
+    db = connect_database(db_path)
+    db.execute(
+        "UPDATE sales SET occurred_at=? WHERE sale_id=?",
+        (today + "T23:59:59.999999Z", checkout["body"]["sale_id"]),
+    )
+    db.execute(
+        "UPDATE sales SET occurred_at=? WHERE sale_id=?",
+        (next_day + "T00:00:00Z", final_checkout["body"]["sale_id"]),
+    )
+    line = db.execute(
+        "SELECT offering_id, product_id FROM sale_lines WHERE sale_id=?",
+        (checkout["body"]["sale_id"],),
+    ).fetchone()
+    db.execute(
+        """INSERT INTO sale_lines(
+               sale_line_id, sale_id, offering_id, product_id, quantity,
+               unit_price_minor, currency_code, line_total_minor, created_at
+           ) VALUES(?,?,?,?,1,10,'USD',10,?)""",
+        (uid(), checkout["body"]["sale_id"], line[0], line[1], stamp),
+    )
+    db.commit()
+    db.close()
+    boundary_page = request(
+        app, "/api/reports/sales?from=" + today + "&to=" + today + "&limit=1",
+        cookie=session_cookie,
+    )
+    assert boundary_page["status"] == "200 OK"
+    assert boundary_page["body"]["total_sales"] == 1
+    assert boundary_page["body"]["returned_sales"] == 1
+    assert boundary_page["body"]["has_more"] is False
+    assert {item["currency_code"] for item in boundary_page["body"]["items"]} == {"SAR", "USD"}
+    assert {item["sale_id"] for item in boundary_page["body"]["items"]} == {checkout["body"]["sale_id"]}
     first_receipt = next(item for item in history["body"]["items"] if item["sale_id"] == checkout["body"]["sale_id"])
     assert first_receipt["quantity_remaining"] == 3
 
