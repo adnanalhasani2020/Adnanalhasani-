@@ -123,9 +123,73 @@ class PersistedSettlementRecognitionApplication:
             raise ValidationError("Settlement recognition Agent must be active")
         return approver
 
+    @staticmethod
+    def _hospital_intake_for_recognition(db, *, source_event_key, payment_id,
+                                         amount_minor, currency_code):
+        """Require an explicit, non-conflicted Hospital payment-to-Finance mapping."""
+        if source_event_key is None:
+            return None
+        if not isinstance(source_event_key, str) or not source_event_key.strip():
+            raise ValidationError("Hospital source_event_key must be a non-empty string")
+        row = db.execute(
+            "SELECT external_event_intake_id,event_type,amount_minor,currency_code,status,"
+            "finance_entity_type,finance_entity_id,recognition_status,recognized_settlement_id,"
+            "financial_transaction_id,ledger_entry_id "
+            "FROM external_event_intake WHERE source_system='hospital' AND source_event_key=?",
+            (source_event_key,),
+        ).fetchone()
+        if row is None:
+            raise ValidationError("Hospital source event must be durably ingested before recognition")
+        (intake_id, event_type, source_amount, source_currency, status, entity_type, entity_id,
+         recognition_status, recognized_settlement, recognized_transaction, recognized_entry) = row
+        if event_type != "hospital.payment.received":
+            raise ValidationError("Only a Hospital payment event can correlate to settlement recognition")
+        if status in {"quarantined", "rejected"}:
+            raise ValidationError("Hospital source event is quarantined or rejected")
+        if status != "mapped" or entity_type != "payment" or entity_id != payment_id:
+            raise ValidationError("Hospital source event must be explicitly mapped to this Finance Payment")
+        if source_amount != amount_minor or source_currency != currency_code:
+            raise ValidationError("Hospital source event amount/currency does not match the Finance Payment")
+        if recognition_status == "reconciliation_required":
+            raise ValidationError("Hospital recognition correlation requires manual reconciliation")
+        if recognition_status == "recognized" and not all(
+            (recognized_settlement, recognized_transaction, recognized_entry)
+        ):
+            raise ValidationError("Existing Hospital recognition correlation is incomplete")
+        return {
+            "intake_id": intake_id,
+            "recognition_status": recognition_status,
+            "settlement_id": recognized_settlement,
+            "transaction_id": recognized_transaction,
+            "entry_id": recognized_entry,
+        }
+
+    @staticmethod
+    def _record_hospital_recognition(db, *, intake, settlement_id, transaction_id,
+                                     entry_id, timestamp):
+        if intake is None:
+            return
+        if intake["recognition_status"] == "recognized":
+            if (intake["settlement_id"], intake["transaction_id"], intake["entry_id"]) != (
+                settlement_id, transaction_id, entry_id
+            ):
+                raise ValidationError(
+                    "Hospital source event is already correlated to different Finance records"
+                )
+            return
+        changed = db.execute(
+            "UPDATE external_event_intake SET recognition_status='recognized',"
+            "recognized_settlement_id=?,financial_transaction_id=?,ledger_entry_id=?,"
+            "last_seen_at=?,last_error=NULL WHERE external_event_intake_id=? "
+            "AND recognition_status='not_started'",
+            (settlement_id, transaction_id, entry_id, timestamp, intake["intake_id"]),
+        ).rowcount
+        if changed != 1:
+            raise ValidationError("Hospital recognition correlation changed concurrently; retry safely")
+
     def recognize(self, connection, *, settlement_id, financial_account_id,
                   context_ref, authorization_grant_id, agent_action_id,
-                  now=None, connected=True):
+                  source_event_key=None, now=None, connected=True):
         if connected is not True:
             raise ValidationError("Finance recognition requires connectivity")
         settlement_key = self._uuid(settlement_id, "Settlement identifier")
@@ -186,6 +250,11 @@ class PersistedSettlementRecognitionApplication:
             if payment_currency != obligation_currency:
                 raise ValidationError("Payment and Obligation currencies do not match")
 
+            intake = self._hospital_intake_for_recognition(
+                connection, source_event_key=source_event_key, payment_id=payment_id,
+                amount_minor=payment_amount, currency_code=payment_currency,
+            )
+
             existing = connection.execute(
                 "SELECT financial_transaction_id,financial_account_id,amount_minor,currency_code,state,"
                 "recognition_source_type,recognition_source_ref,recognized_at "
@@ -205,6 +274,10 @@ class PersistedSettlementRecognitionApplication:
                     raise ValidationError("Settlement recognition identity conflicts with existing Finance records")
                 if entry is None or entry[1:] != (account_key, payment_amount, payment_currency, "posted"):
                     raise ValidationError("Existing recognition is incomplete; reconciliation is required")
+                self._record_hospital_recognition(
+                    connection, intake=intake, settlement_id=settlement_key,
+                    transaction_id=transaction_id, entry_id=entry[0], timestamp=timestamp,
+                )
                 return PersistedSettlementRecognition(
                     UUID(settlement_key), UUID(transaction_id), UUID(entry[0]), UUID(account_key),
                     payment_amount, payment_currency, recognized_at, True,
@@ -246,6 +319,10 @@ class PersistedSettlementRecognitionApplication:
                  approver, f"obligation-state:{obligation_id}:v{self._obligation_prior_version(connection, obligation_id)}",
                  f"obligation-state:{obligation_id}:v{self._obligation_prior_version(connection, obligation_id)+1}",
                  f"settlement:{settlement_key}:transaction:{transaction_id}:ledger:{entry_id}", timestamp),
+            )
+            self._record_hospital_recognition(
+                connection, intake=intake, settlement_id=settlement_key,
+                transaction_id=transaction_id, entry_id=entry_id, timestamp=timestamp,
             )
 
         return PersistedSettlementRecognition(
