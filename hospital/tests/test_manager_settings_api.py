@@ -63,7 +63,7 @@ class ManagerSettingsProposalAPITests(unittest.TestCase):
         return {
             "activity_profile": "outpatient",
             "modules": ["appointments", "billing", "records", "audit"],
-            "at": "2026-10-18T10:00:00Z",
+            "at": "1900-01-01T00:00:00Z",
         }
 
     def test_non_admin_cannot_read_or_submit_proposals(self):
@@ -97,7 +97,7 @@ class ManagerSettingsProposalAPITests(unittest.TestCase):
         self.assertEqual(listing["data"][0]["created_by"], "admin.one")
 
         review = {"decision": "approve", "expected_version": 1,
-                  "at": "2026-10-18T10:05:00Z", "note": "Reviewed"}
+                  "at": "1900-01-01T00:00:00Z", "note": "Reviewed"}
         status, result = self.request(
             f"/api/manager-settings/proposals/{proposal['id']}/review",
             "POST", review, author_token)
@@ -118,7 +118,7 @@ class ManagerSettingsProposalAPITests(unittest.TestCase):
 
         with self.db.connect() as conn:
             row = conn.execute(
-                "SELECT status,version,created_by,reviewed_by FROM manager_setting_proposals WHERE id=?",
+                "SELECT status,version,created_by,reviewed_by,created_at,reviewed_at FROM manager_setting_proposals WHERE id=?",
                 (proposal["id"],),
             ).fetchone()
             audit_count = conn.execute(
@@ -129,6 +129,8 @@ class ManagerSettingsProposalAPITests(unittest.TestCase):
         self.assertEqual(row["version"], 2)
         self.assertEqual(row["created_by"], "admin.one")
         self.assertEqual(row["reviewed_by"], "admin.two")
+        self.assertNotEqual(row["created_at"], "1900-01-01T00:00:00Z")
+        self.assertNotEqual(row["reviewed_at"], "1900-01-01T00:00:00Z")
         self.assertEqual(audit_count, 2)
 
 
