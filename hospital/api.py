@@ -135,7 +135,19 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                 return
             if not self._authorized():
                 return
-            if route == "/api/manager-settings/proposals":
+            if route == "/api/manager-settings/active":
+                with database.connect() as conn:
+                    row = conn.execute(
+                        """SELECT activity_profile,modules_json,version,source_proposal_id,
+                                  activated_by,activated_at
+                           FROM manager_active_settings WHERE id=1"""
+                    ).fetchone()
+                active = dict(row) if row else None
+                if active:
+                    active["modules"] = json.loads(active.pop("modules_json"))
+                self._send(200, {"data": active, "activation_supported": True,
+                                 "scope": "approved module visibility preferences only; permissions and clinical/financial policy are unchanged"})
+            elif route == "/api/manager-settings/proposals":
                 with database.connect() as conn:
                     rows = conn.execute(
                         """SELECT id,activity_profile,modules_json,status,version,created_by,created_at,
@@ -143,8 +155,8 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                            FROM manager_setting_proposals ORDER BY id DESC LIMIT 100"""
                     ).fetchall()
                 self._send(200, {"data": [dict(row) for row in rows],
-                                 "activation_supported": False,
-                                 "notice": "Approved proposals do not automatically activate settings."})
+                                 "activation_supported": True,
+                                 "notice": "Approval activates the module visibility profile; it never changes role permissions."})
             elif route == "/api/manager-settings/finance-policy-decisions":
                 with database.connect() as conn:
                     rows = conn.execute(
@@ -389,7 +401,8 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                                         {"activity_profile": profile, "modules": sorted(modules), "status": "proposed"})
                         conn.commit()
                     self._send(201, {"id": proposal_id, "status": "proposed", "version": 1,
-                                     "activation_supported": False})
+                                     "activation_supported": True,
+                                     "notice": "Approval by a different administrator activates the module visibility profile only."})
                 elif len(parts) == 5 and parts[:3] == ["api", "manager-settings", "proposals"] and parts[4] == "review":
                     self._required(data, "decision", "expected_version")
                     decision = data["decision"]
@@ -404,7 +417,7 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                     with database.connect() as conn:
                         conn.execute("BEGIN IMMEDIATE")
                         proposal = conn.execute(
-                            "SELECT status,version,created_by FROM manager_setting_proposals WHERE id=?",
+                            "SELECT status,version,created_by,activity_profile,modules_json FROM manager_setting_proposals WHERE id=?",
                             (proposal_id,),
                         ).fetchone()
                         if proposal is None:
@@ -425,14 +438,44 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                         if changed != 1:
                             self._send(409, {"error": "proposal_changed"})
                             return
+                        activated = False
+                        if decision == "approve":
+                            conn.execute(
+                                """INSERT INTO manager_active_settings
+                                   (id,activity_profile,modules_json,version,source_proposal_id,activated_by,activated_at)
+                                   VALUES(1,?,?,1,?,?,?)
+                                   ON CONFLICT(id) DO UPDATE SET
+                                     activity_profile=excluded.activity_profile,
+                                     modules_json=excluded.modules_json,
+                                     version=manager_active_settings.version+1,
+                                     source_proposal_id=excluded.source_proposal_id,
+                                     activated_by=excluded.activated_by,
+                                     activated_at=excluded.activated_at""",
+                                (proposal["activity_profile"], proposal["modules_json"],
+                                 proposal_id, self._actor(), reviewed_at),
+                            )
+                            active_version = conn.execute(
+                                "SELECT version FROM manager_active_settings WHERE id=1"
+                            ).fetchone()["version"]
+                            database._audit(
+                                conn, self._actor(), "manager.settings.activated",
+                                "manager_active_settings", 1, reviewed_at,
+                                {"source_proposal_id": proposal_id,
+                                 "activity_profile": proposal["activity_profile"],
+                                 "modules": json.loads(proposal["modules_json"]),
+                                 "version": active_version},
+                            )
+                            activated = True
                         database._audit(conn, self._actor(), "manager.settings.reviewed",
                                         "manager_setting_proposal", proposal_id, reviewed_at,
-                                        {"decision": decision, "status": status, "version": expected_version + 1})
+                                        {"decision": decision, "status": status, "version": expected_version + 1,
+                                         "activated": activated})
                         conn.commit()
                     self._send(200, {"id": proposal_id, "status": status,
                                      "version": expected_version + 1,
-                                     "activation_supported": False,
-                                     "notice": "Review records the decision only; it does not activate modules or change financial/clinical policy."})
+                                     "activated": activated,
+                                     "activation_supported": True,
+                                     "notice": "Approved module visibility preferences are now active; role permissions and clinical/financial policy are unchanged."})
                 elif route == "/api/manager-settings/finance-policy-decisions":
                     self._required(data, "policy_key", "rationale")
                     policy_key = data["policy_key"]

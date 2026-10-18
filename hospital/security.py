@@ -252,6 +252,9 @@ def permission_for_route(method: str, path: str) -> str | None:
     if route in {"/api/finance/outbox-status", "/api/finance/integration-readiness"} and method == "GET":
         return "finance:transport:read"
 
+    if route == "/api/manager-settings/active" and method == "GET":
+        return "manager:settings:read"
+
     manager_collections = {
         "/api/manager-settings/proposals",
         "/api/manager-settings/finance-policy-decisions",
