@@ -29,7 +29,7 @@ END;
 
 CREATE TRIGGER financial_transaction_settlement_consistency_update
 BEFORE UPDATE OF settlement_id, financial_account_id, amount_minor, currency_code,
-                 recognition_source_type, recognition_source_ref
+                 state, recognition_source_type, recognition_source_ref
 ON financial_transactions
 WHEN NEW.settlement_id IS NOT NULL
  AND NOT EXISTS (
