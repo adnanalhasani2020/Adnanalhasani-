@@ -107,9 +107,12 @@ def test_settings_require_active_activity_when_proposed_and_approved(tmp_path):
         finance_person_id=owner, financial_account_id=account,
         proposed_by_person_id=proposer, now=NOW,
     )
-    db.execute("UPDATE activities SET state='suspended' WHERE activity_id=?", (activity,))
-    with pytest.raises(ValidationError, match="must remain active to approve"):
-        app.approve(db, settings_id=proposal.settings_id, approved_by_person_id=approver, now=NOW)
+    with pytest.raises(
+        sqlite3.IntegrityError,
+        match="Pause or reject Hospital Finance settings before deactivating the Finance Activity",
+    ):
+        db.execute("UPDATE activities SET state='suspended' WHERE activity_id=?", (activity,))
+    assert db.execute("SELECT state FROM activities WHERE activity_id=?", (activity,)).fetchone()[0] == "active"
     assert app.get_by_id(db, settings_id=proposal.settings_id).status == "pending_approval"
     db.close()
 
