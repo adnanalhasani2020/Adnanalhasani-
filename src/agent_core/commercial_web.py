@@ -138,6 +138,10 @@ class CommercialWebApplication:
 
     def __call__(self, environ, start_response):
         method, path = environ.get("REQUEST_METHOD", "GET"), environ.get("PATH_INFO", "/")
+        secure_cookie = (
+            os.environ.get("COMMERCIAL_COOKIE_SECURE") == "1"
+            or environ.get("wsgi.url_scheme", "http").lower() == "https"
+        )
         if method == "GET" and path == "/":
             encoded = PAGE.encode("utf-8")
             start_response("200 OK", [("Content-Type", "text/html; charset=utf-8"),
@@ -159,7 +163,7 @@ class CommercialWebApplication:
                 if path == "/api/register":
                     self.identity.register(db, username=body.get("username"), password=body.get("password"))
                 result = self.identity.login(db, username=body.get("username"), password=body.get("password"))
-                secure = "; Secure" if os.environ.get("COMMERCIAL_COOKIE_SECURE") == "1" else ""
+                secure = "; Secure" if secure_cookie else ""
                 cookie = ("commercial_session=" + result["session_token"] +
                           "; Path=/; HttpOnly; SameSite=Lax; Max-Age=28800" + secure)
                 return self._json(start_response, "200 OK",
@@ -169,8 +173,9 @@ class CommercialWebApplication:
 
             if method == "POST" and path == "/api/logout":
                 self.identity.logout(db, token)
+                secure = "; Secure" if secure_cookie else ""
                 return self._json(start_response, "200 OK", {"ok": True},
-                                  [("Set-Cookie", "commercial_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0")])
+                                  [("Set-Cookie", "commercial_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0" + secure)])
 
             person_id = self.identity.resolve_session(db, token)
             if person_id is None:
