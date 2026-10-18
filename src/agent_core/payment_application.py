@@ -249,27 +249,32 @@ class PaymentApplication:
                     "SELECT 1 FROM persons WHERE person_id=? AND state='active'", (person_id,)
                 ).fetchone() is None:
                     raise ValidationError(f"{label} must be an active persisted Person")
-            obligation_record = None
             if obligation is not None:
                 obligation_record = connection.execute(
-                    "SELECT amount_minor,currency_code FROM obligations WHERE obligation_id=?",
+                    "SELECT creditor_person_id,debtor_person_id,amount_minor,currency_code,state "
+                    "FROM obligations WHERE obligation_id=?",
                     (obligation,),
                 ).fetchone()
                 if obligation_record is None:
                     raise ValidationError("Payment references a missing Obligation")
-                obligation_amount, obligation_currency = obligation_record
+                creditor, debtor, obligation_amount, obligation_currency, obligation_state = obligation_record
+                if obligation_state not in {"open", "due", "overdue"}:
+                    raise ValidationError("Payment requires an eligible open Obligation")
+                if payer != debtor or payee != creditor:
+                    raise ValidationError("Payment parties do not match the linked Obligation parties")
                 if amount_minor > obligation_amount:
                     raise ValidationError("Payment amount exceeds the linked Obligation amount")
                 if currency_code != self._currency_code(obligation_currency):
                     raise ValidationError("Payment currency does not match the linked Obligation currency")
-            if invoice is not None and connection.execute(
-                "SELECT 1 FROM invoices WHERE invoice_id=?", (invoice,)
-            ).fetchone() is None:
-                raise ValidationError("Payment references a missing Invoice")
-            if invoice is not None and obligation is not None:
-                invoice_obligation = connection.execute(
-                    "SELECT obligation_id FROM invoices WHERE invoice_id=?", (invoice,)
-                ).fetchone()[0]
+            if invoice is not None:
+                invoice_record = connection.execute(
+                    "SELECT state,obligation_id FROM invoices WHERE invoice_id=?", (invoice,)
+                ).fetchone()
+                if invoice_record is None:
+                    raise ValidationError("Payment references a missing Invoice")
+                invoice_state, invoice_obligation = invoice_record
+                if invoice_state != "issued":
+                    raise ValidationError("Payment requires an issued Invoice; void invoices cannot be paid")
                 if invoice_obligation is not None and invoice_obligation != obligation:
                     raise ValidationError(
                         "Payment Invoice and Obligation references do not match"
