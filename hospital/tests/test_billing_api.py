@@ -62,6 +62,21 @@ class BillingAPIWorkflowTests(unittest.TestCase):
             row = conn.execute("SELECT status FROM invoices WHERE id=?", (invoice,)).fetchone()
         self.assertEqual(row["status"], "partial")
 
+        duplicate_status, duplicate_data = self.call("/api/payments", {
+            "invoice_id": invoice, "amount_minor": 4000, "method": "cash",
+            "received_at": "2026-01-02T09:01:00", "reference": "RCPT-1"
+        })
+        self.assertEqual(duplicate_status, 400)
+        self.assertIn("payment reference already recorded", duplicate_data["error"])
+        with self.db.connect() as conn:
+            payment_rows = conn.execute(
+                "SELECT COUNT(*),COALESCE(SUM(amount_minor),0) FROM payments WHERE invoice_id=?",
+                (invoice,),
+            ).fetchone()
+            row = conn.execute("SELECT status FROM invoices WHERE id=?", (invoice,)).fetchone()
+        self.assertEqual(tuple(payment_rows), (1, 4000))
+        self.assertEqual(row["status"], "partial")
+
         self.post("/api/payments", {
             "invoice_id": invoice, "amount_minor": 6000, "method": "cash",
             "received_at": "2026-01-02T10:00:00"
@@ -76,6 +91,20 @@ class BillingAPIWorkflowTests(unittest.TestCase):
         })
         self.assertEqual(status, 400)
         self.assertIn("exceeds invoice balance", data["error"])
+
+    def test_hospital_billing_schema_remains_separate_from_official_finance_ledger(self):
+        # This database is an operational hospital store. It must not fabricate
+        # official ledger/outbox entries; a future integration needs an explicit,
+        # idempotent Finance boundary rather than implicit double posting.
+        with self.db.connect() as conn:
+            tables = {
+                row["name"] for row in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                )
+            }
+        self.assertNotIn("ledger_entries", tables)
+        self.assertNotIn("finance_ledger_entries", tables)
+        self.assertNotIn("finance_outbox", tables)
 
     def test_invoice_rejects_encounter_belonging_to_another_patient(self):
         other = self.post("/api/patients", {
