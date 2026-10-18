@@ -43,6 +43,7 @@ ROLE_PERMISSIONS = {
     }),
     "accountant": frozenset({
         "dashboard:read", "patients:read", "invoices:read", "invoices:write", "payments:write",
+        "finance:transport:read",
     }),
 }
 
@@ -234,6 +235,8 @@ def permission_for_route(method: str, path: str) -> str | None:
         return "users:manage"
     if route == "/api/users" and method == "GET":
         return "users:read"
+    if route == "/api/finance/outbox-status" and method == "GET":
+        return "finance:transport:read"
     routes = {
         "/api/dashboard": ("dashboard:read", "dashboard:read"),
         "/api/search": ("records:read", "records:read"),
