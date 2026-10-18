@@ -245,3 +245,42 @@ def test_outbox_payloads_use_finance_allowlist_not_patient_or_clinical_fields(tm
     forbidden = {"patient_id", "patient_name", "date_of_birth", "diagnosis",
                  "clinical_notes", "allergies", "phone", "address"}
     assert all(forbidden.isdisjoint(payload) for payload in payloads)
+
+
+def test_multiple_partial_payments_emit_distinct_outbox_events_and_preserve_amounts(tmp_path):
+    hospital, patient_id = _hospital(tmp_path)
+    invoice_id = hospital.create_invoice(
+        invoice_no="INV-OUTBOX-PARTIAL", patient_id=patient_id, total_minor=1500,
+        created_at="2026-10-18T10:01:00Z", actor="test", currency="YER",
+    )
+    payment_ids = []
+    for amount, received_at in (
+        (400, "2026-10-18T10:02:00Z"),
+        (600, "2026-10-18T10:03:00Z"),
+        (500, "2026-10-18T10:04:00Z"),
+    ):
+        payment_ids.append(hospital.record_payment(
+            invoice_id=invoice_id, amount_minor=amount, method="cash",
+            received_at=received_at, actor="test",
+        ))
+
+    with hospital.connect() as db:
+        rows = db.execute(
+            "SELECT event_key,event_type,payload_json,status FROM finance_outbox "
+            "WHERE event_type='hospital.payment.received' ORDER BY id"
+        ).fetchall()
+        invoice = db.execute(
+            "SELECT status FROM invoices WHERE id=?", (invoice_id,)
+        ).fetchone()
+
+    assert len(rows) == 3
+    assert len({row["event_key"] for row in rows}) == 3
+    assert [row["event_key"] for row in rows] == [
+        f"hospital:payment:{payment_id}:received:v1" for payment_id in payment_ids
+    ]
+    payloads = [json.loads(row["payload_json"]) for row in rows]
+    assert [payload["amount_minor"] for payload in payloads] == [400, 600, 500]
+    assert [payload["payment_id"] for payload in payloads] == payment_ids
+    assert all(payload["invoice_id"] == invoice_id for payload in payloads)
+    assert all(row["status"] == "pending" for row in rows)
+    assert invoice["status"] == "paid"
