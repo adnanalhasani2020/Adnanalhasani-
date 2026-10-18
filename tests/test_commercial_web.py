@@ -188,6 +188,16 @@ def test_web_session_can_buy_sellable_product_and_receive_result(tmp_path):
     assert receipt["status"] == "200 OK"
     assert receipt["body"]["sale_id"] == checkout["body"]["sale_id"]
 
+    printable = request(
+        app, "/invoices/" + checkout["body"]["sale_id"], cookie=session_cookie,
+    )
+    assert printable["status"] == "200 OK"
+    printable_html = printable["body"].decode("utf-8")
+    assert "إيصال بيع" in printable_html
+    assert "ليس فاتورة ضريبية" in printable_html
+    assert checkout["body"]["sale_id"] in printable_html
+    assert "window.print()" in printable_html
+
     other = request(
         app, "/api/register", method="POST",
         body={"username": "customer_03", "password": "correct horse battery staple"},
@@ -208,6 +218,12 @@ def test_web_session_can_buy_sellable_product_and_receive_result(tmp_path):
     )
     assert other_receipt["status"] == "404 Not Found"
     assert "sale_id" not in other_receipt["body"]
+
+    other_invoice = request(
+        app, "/invoices/" + checkout["body"]["sale_id"],
+        cookie="commercial_session=" + other_cookie["commercial_session"].value,
+    )
+    assert other_invoice["status"] == "404 Not Found"
 
 
 def test_storefront_displays_preconfirmation_total_preview(tmp_path):
