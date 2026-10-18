@@ -77,6 +77,13 @@ class HospitalSecurityTests(unittest.TestCase):
         self.assertIsNone(permission_for_route("GET", "/settings"))
         self.assertEqual(permission_for_route("GET", "/api/future-sensitive-route"), "route:unknown")
 
+    def test_unknown_api_routes_are_denied_even_to_administrators(self):
+        admin = Principal(1, "admin", "admin", 1, "2026-01-01T16:00:00Z")
+        permission = permission_for_route("GET", "/api/future-sensitive-route")
+        self.assertEqual(permission, "route:unknown")
+        with self.assertRaisesRegex(AuthorizationError, "unknown API route denied"):
+            require_permission(admin, permission)
+
     def test_last_active_administrator_cannot_be_deactivated(self):
         user_id = self.auth.create_user(username="only.admin", password="a-strong-password-123",
                                         role="admin", at="2026-01-01T08:00:00Z")
