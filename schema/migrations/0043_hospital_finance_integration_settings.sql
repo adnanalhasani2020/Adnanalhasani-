@@ -27,3 +27,22 @@ CREATE INDEX hospital_finance_settings_active_scope
 CREATE UNIQUE INDEX hospital_finance_settings_one_active_scope
   ON hospital_finance_integration_settings(activity_id, hospital_scope_ref)
   WHERE status='active';
+
+CREATE TRIGGER hospital_finance_settings_account_owner_insert
+BEFORE INSERT ON hospital_finance_integration_settings
+WHEN NOT EXISTS (
+  SELECT 1 FROM financial_accounts a
+  JOIN persons p ON p.person_id=a.person_id
+  WHERE a.financial_account_id=NEW.financial_account_id
+    AND a.person_id=NEW.finance_person_id AND a.state='active' AND p.state='active'
+)
+BEGIN SELECT RAISE(ABORT, 'Hospital Finance mapping requires active matching Person and Account'); END;
+CREATE TRIGGER hospital_finance_settings_account_owner_update
+BEFORE UPDATE OF finance_person_id,financial_account_id ON hospital_finance_integration_settings
+WHEN NOT EXISTS (
+  SELECT 1 FROM financial_accounts a
+  JOIN persons p ON p.person_id=a.person_id
+  WHERE a.financial_account_id=NEW.financial_account_id
+    AND a.person_id=NEW.finance_person_id AND a.state='active' AND p.state='active'
+)
+BEGIN SELECT RAISE(ABORT, 'Hospital Finance mapping requires active matching Person and Account'); END;
