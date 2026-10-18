@@ -545,3 +545,44 @@ def test_invoice_rejects_reusing_an_obligation_already_linked_by_invoice_foreign
         "SELECT COUNT(*) FROM domain_history WHERE target_ref=?", (second_id,)
     ).fetchone()[0] == 0
     db.close()
+
+
+def test_invoice_rejects_obligation_with_different_creditor_without_writes():
+    db = connect_database()
+    actor, _activity, sale, grant = fixture(db)
+    other_creditor = uid()
+    debtor = uid()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (other_creditor, STAMP, STAMP),
+    )
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (debtor, STAMP, STAMP),
+    )
+    obligation_id = uid()
+    db.execute(
+        "INSERT INTO obligations(obligation_id,creditor_person_id,debtor_person_id,amount_minor,"
+        "currency_code,state,created_at,updated_at,version_no) "
+        "VALUES(?,?,?,1000,'YER','proposed',?,?,1)",
+        (obligation_id, other_creditor, debtor, STAMP, STAMP),
+    )
+    db.commit()
+    invoice_id = uid()
+    with pytest.raises(ValidationError, match="issuer must match the linked Obligation creditor"):
+        InvoiceApplication().create_invoice(
+            db, sale_id=sale, actor_context_ref=actor,
+            authorization_grant_id=grant, issuer_ref=actor,
+            invoice_number="INV-WRONG-CREDITOR", invoice_id=invoice_id,
+            obligation_id=obligation_id, now=STAMP,
+        )
+    assert db.execute(
+        "SELECT COUNT(*) FROM invoices WHERE invoice_id=?", (invoice_id,)
+    ).fetchone()[0] == 0
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=?", (invoice_id,)
+    ).fetchone()[0] == 0
+    assert db.execute(
+        "SELECT creditor_person_id FROM obligations WHERE obligation_id=?", (obligation_id,)
+    ).fetchone()[0] == other_creditor
+    db.close()
