@@ -336,3 +336,25 @@ def test_invoice_rejects_issue_timestamp_after_creation_without_writes():
         "SELECT COUNT(*) FROM domain_history WHERE target_ref=?", (invoice_id,)
     ).fetchone()[0] == 0
     db.close()
+
+def test_invoice_issue_authorization_runs_inside_atomic_write_transaction(monkeypatch):
+    from agent_core.application import SaleApplication
+
+    db = connect_database()
+    actor, _activity, sale, grant = fixture(db)
+    original = SaleApplication._authorize
+    observed = {"inside_transaction": False}
+
+    def checked_authorize(self, connection, *args, **kwargs):
+        observed["inside_transaction"] = connection.in_transaction
+        assert connection.in_transaction
+        return original(self, connection, *args, **kwargs)
+
+    monkeypatch.setattr(SaleApplication, "_authorize", checked_authorize)
+    InvoiceApplication().create_invoice(
+        db, sale_id=sale, actor_context_ref=actor,
+        authorization_grant_id=grant, issuer_ref=actor,
+        invoice_number="INV-AUTH-ATOMIC", now=STAMP,
+    )
+    assert observed["inside_transaction"] is True
+    db.close()
