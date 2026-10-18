@@ -66,10 +66,16 @@ class HospitalCoreTests(unittest.TestCase):
                     (self.patient, second_doctor, "2026-01-02T09:15:00",
                      "2026-01-02T10:00:00", "2026-01-01T08:01:00"),
                 )
+            conn.execute(
+                "INSERT INTO appointments(patient_id,doctor_id,starts_at,ends_at,created_at) "
+                "VALUES(?,?,?,?,?)",
+                (self.patient, second_doctor, "2026-01-02T10:00:00",
+                 "2026-01-02T10:30:00", "2026-01-01T08:02:00"),
+            )
             with self.assertRaisesRegex(sqlite3.IntegrityError, "patient already has an overlapping appointment"):
                 conn.execute(
-                    "UPDATE appointments SET doctor_id=?,starts_at=?,ends_at=? WHERE id=1",
-                    (second_doctor, "2026-01-02T09:10:00", "2026-01-02T09:20:00"),
+                    "UPDATE appointments SET starts_at=?,ends_at=? WHERE id=2",
+                    ("2026-01-02T09:10:00", "2026-01-02T09:20:00"),
                 )
 
     def test_database_rejects_overlapping_appointments_from_direct_sql(self):
