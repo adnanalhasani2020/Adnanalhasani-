@@ -170,6 +170,23 @@ CREATE TABLE IF NOT EXISTS payments (
   amount_minor INTEGER NOT NULL CHECK(amount_minor > 0), method TEXT NOT NULL,
   reference TEXT, received_at TEXT NOT NULL
 );
+-- Transactional handoff intents; consumers must not treat these as Finance recognition.
+CREATE TABLE IF NOT EXISTS finance_outbox (
+  id INTEGER PRIMARY KEY,
+  event_key TEXT NOT NULL UNIQUE,
+  event_type TEXT NOT NULL CHECK(event_type IN ('hospital.invoice.created','hospital.payment.received')),
+  aggregate_type TEXT NOT NULL CHECK(aggregate_type IN ('invoice','payment')),
+  aggregate_id TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','processing','delivered','failed')),
+  attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts >= 0),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  delivered_at TEXT,
+  last_error TEXT
+);
+CREATE INDEX IF NOT EXISTS finance_outbox_pending
+  ON finance_outbox(status, id);
 CREATE TABLE IF NOT EXISTS audit_log (
   id INTEGER PRIMARY KEY, actor TEXT NOT NULL, action TEXT NOT NULL,
   entity_type TEXT NOT NULL, entity_id TEXT NOT NULL,
@@ -323,6 +340,15 @@ class HospitalDB:
             ident = cur.lastrowid
             self._audit(db, actor, "invoice.created", "invoice", ident, created_at,
                         {"total_minor": total_minor, "currency": currency})
+            db.execute(
+                """INSERT INTO finance_outbox
+                   (event_key,event_type,aggregate_type,aggregate_id,payload_json,created_at,updated_at)
+                   VALUES(?,?,?,?,?,?,?)""",
+                (f"hospital:invoice:{ident}:created:v1", "hospital.invoice.created", "invoice",
+                 str(ident), json.dumps({"invoice_id": ident, "invoice_no": invoice_no.strip(),
+                 "total_minor": total_minor, "currency": currency, "created_at": created_at},
+                 ensure_ascii=False, sort_keys=True), created_at, created_at),
+            )
             db.commit()
             return int(ident)
 
@@ -345,8 +371,92 @@ class HospitalDB:
             db.execute("UPDATE invoices SET status=? WHERE id=?", (status, invoice_id))
             self._audit(db, actor, "payment.received", "invoice", invoice_id, received_at,
                         {"amount_minor": amount_minor, "method": method, "payment_id": cur.lastrowid})
+            db.execute(
+                """INSERT INTO finance_outbox
+                   (event_key,event_type,aggregate_type,aggregate_id,payload_json,created_at,updated_at)
+                   VALUES(?,?,?,?,?,?,?)""",
+                (f"hospital:payment:{cur.lastrowid}:received:v1", "hospital.payment.received", "payment",
+                 str(cur.lastrowid), json.dumps({"payment_id": cur.lastrowid, "invoice_id": invoice_id,
+                 "amount_minor": amount_minor, "currency": db.execute(
+                     "SELECT currency FROM invoices WHERE id=?", (invoice_id,)
+                 ).fetchone()["currency"], "method": method.strip(), "reference": reference,
+                 "received_at": received_at}, ensure_ascii=False, sort_keys=True),
+                 received_at, received_at),
+            )
             db.commit()
             return int(cur.lastrowid)
+
+    def claim_finance_outbox(self, *, now: str, lease_expired_before: str,
+                             limit: int = 20) -> list[dict[str, Any]]:
+        """Atomically lease pending/retryable events for a future Finance adapter.
+
+        Claiming an event is transport bookkeeping only; it never recognizes
+        payments or writes Finance ledger facts.
+        """
+        if not isinstance(now, str) or not now.strip():
+            raise HospitalError("now timestamp is required")
+        if not isinstance(lease_expired_before, str) or not lease_expired_before.strip():
+            raise HospitalError("lease_expired_before timestamp is required")
+        if type(limit) is not int or not 1 <= limit <= 500:
+            raise HospitalError("limit must be an integer between 1 and 500")
+        with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            rows = db.execute(
+                """SELECT id,event_key,event_type,aggregate_type,aggregate_id,payload_json,
+                          attempts,created_at
+                   FROM finance_outbox
+                   WHERE status IN ('pending','failed')
+                      OR (status='processing' AND updated_at <= ?)
+                   ORDER BY id LIMIT ?""",
+                (lease_expired_before, limit),
+            ).fetchall()
+            claimed = []
+            for row in rows:
+                changed = db.execute(
+                    """UPDATE finance_outbox
+                       SET status='processing', attempts=attempts+1, updated_at=?, last_error=NULL
+                       WHERE id=? AND (
+                         status IN ('pending','failed')
+                         OR (status='processing' AND updated_at <= ?)
+                       )""",
+                    (now, row["id"], lease_expired_before),
+                ).rowcount
+                if changed == 1:
+                    item = dict(row)
+                    item["attempts"] += 1
+                    claimed.append(item)
+            db.commit()
+            return claimed
+
+    def mark_finance_outbox_delivered(self, *, event_key: str, delivered_at: str) -> bool:
+        """Mark a leased event delivered; return False if it is not currently leased."""
+        if not event_key.strip() or not delivered_at.strip():
+            raise HospitalError("event_key and delivered_at are required")
+        with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            changed = db.execute(
+                """UPDATE finance_outbox
+                   SET status='delivered', delivered_at=?, updated_at=?, last_error=NULL
+                   WHERE event_key=? AND status='processing'""",
+                (delivered_at, delivered_at, event_key),
+            ).rowcount
+            db.commit()
+            return changed == 1
+
+    def mark_finance_outbox_failed(self, *, event_key: str, failed_at: str, error: str) -> bool:
+        """Return a leased event to retryable failure without losing its event identity."""
+        if not event_key.strip() or not failed_at.strip() or not error.strip():
+            raise HospitalError("event_key, failed_at and error are required")
+        with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            changed = db.execute(
+                """UPDATE finance_outbox
+                   SET status='failed', updated_at=?, last_error=?
+                   WHERE event_key=? AND status='processing'""",
+                (failed_at, error.strip()[:1000], event_key),
+            ).rowcount
+            db.commit()
+            return changed == 1
 
     def dashboard(self) -> dict[str, int]:
         """Operational counts only; excludes patient-identifying data."""
