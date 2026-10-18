@@ -8,7 +8,7 @@ The authenticated commercial API exposes a read-only operational sales report:
 
 Both date filters are optional. If supplied, each must be a valid calendar date in `YYYY-MM-DD` format; `from` must not be later than `to`. The end date is inclusive. Requests require the existing commercial session cookie; unauthenticated requests receive the existing `401 Unauthorized` response.
 
-**Authorization blocker:** the current commercial session proves identity only; this API does not yet enforce an approved report role/permission and returns global matching sales. Any authenticated commercial account can therefore see other customers' transactions. Do not merge or enable this endpoint until the project owner approves its audience and authorization contract. No role, action code, or customer-only interpretation is assumed here.
+**Security status (fail-closed):** `GET /api/reports/sales` currently returns `403 Forbidden` for every authenticated caller, for both JSON and CSV, before reading query parameters or querying sales. Unauthenticated requests still receive `401 Unauthorized`. This deliberately disables the report until the project owner approves an audience/authorization contract and the server can enforce it. The commercial session proves identity only; it does not prove a report permission or an organization/activity data scope. No role, action code, or customer-only interpretation is assumed. The existing manager settings prototype is browser-local and is not an authorization source; do not present it as a live report-access control.
 
 ## JSON pagination
 
