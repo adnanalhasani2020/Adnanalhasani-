@@ -504,7 +504,7 @@ class SaleApplication:
                     "offering_id, location_ref, scope_key, quantity_delta, source_type, "
                     "source_ref, actor_context_ref, occurred_at, created_at"
                     ") VALUES(?,?,?,?,?,?,?,?, 'sale_return', ?,?,?,?)",
-                    (str(uuid4()), *return_movement[:7], str(sale.id), *return_movement[7:]),
+                    (str(uuid4()), *return_movement[:7], str(sale.id), *return_movement[7:], timestamp),
                 )
             if sale.state is not target_state:
                 raise ValidationError("Domain transition did not produce expected state")
