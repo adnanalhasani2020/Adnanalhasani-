@@ -124,13 +124,13 @@ class InvoiceApplication:
             # Read and authorize inside the same transaction as the invoice write.
             # This prevents a grant revocation or Sale-context change between authorization and persistence.
             sale = connection.execute(
-                "SELECT s.activity_id, o.activity_id FROM sales s "
+                "SELECT s.activity_id, o.activity_id, s.state FROM sales s "
                 "LEFT JOIN offerings o ON o.offering_id=s.offering_id WHERE s.sale_id=?",
                 (sale_key,),
             ).fetchone()
             if sale is None:
                 raise ValidationError("Invoice requires an existing Sale")
-            activity_key, offering_activity_key = sale
+            activity_key, offering_activity_key, sale_state = sale
             if offering_activity_key is None or activity_key != offering_activity_key:
                 raise ValidationError(
                     "Sale Activity does not match its Offering Activity; explicit reconciliation is required"
@@ -139,6 +139,10 @@ class InvoiceApplication:
                 connection, grant_key, actor_key, "issue_invoice",
                 sale_key, activity_key, timestamp,
             )
+            if sale_state in {"cancelled", "returned"}:
+                raise ValidationError(
+                    "Cannot issue an Invoice for a cancelled or returned Sale"
+                )
             if connection.execute(
                 "SELECT 1 FROM persons WHERE person_id=? AND state='active'", (issuer_key,)
             ).fetchone() is None:
