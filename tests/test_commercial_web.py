@@ -188,6 +188,12 @@ def test_web_session_can_buy_sellable_product_and_receive_result(tmp_path):
     unauthenticated_csv = request(app, "/api/reports/sales?format=csv")
     assert unauthenticated_csv["status"] == "401 Unauthorized"
     assert "text/csv" not in dict(unauthenticated_csv["headers"]).get("Content-Type", "")
+    unauth_csv_body = (
+        unauthenticated_csv["body"].decode("utf-8", errors="replace")
+        if isinstance(unauthenticated_csv["body"], bytes)
+        else json.dumps(unauthenticated_csv["body"], ensure_ascii=False)
+    )
+    assert not any(marker in unauth_csv_body.lower() for marker in ("sale_id", "total_minor", "customer", "csv"))
     assert "items" not in unauthenticated_csv["body"]
 
     sales_before = connect_database(db_path)
@@ -212,6 +218,16 @@ def test_web_session_can_buy_sellable_product_and_receive_result(tmp_path):
     assert blocked_csv["status"] == "403 Forbidden"
     assert blocked_csv["body"]["error"] == blocked_json["body"]["error"]
     assert "text/csv" not in dict(blocked_csv["headers"]).get("Content-Type", "")
+    blocked_csv_body = (
+        blocked_csv["body"].decode("utf-8", errors="replace")
+        if isinstance(blocked_csv["body"], bytes)
+        else json.dumps(blocked_csv["body"], ensure_ascii=False)
+    )
+    assert str(checkout["body"]["sale_id"]) not in blocked_csv_body
+    assert str(checkout["body"]["total_minor"]) not in blocked_csv_body
+    assert "sale_id" not in blocked_csv_body.lower()
+    assert "total_minor" not in blocked_csv_body.lower()
+    assert "1980" not in blocked_csv_body
 
     # Direct API calls and arbitrary report query parameters cannot bypass the block.
     for query in ("", "?format=csv", "?limit=1&offset=0", "?from=invalid"):
