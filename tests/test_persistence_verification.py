@@ -401,6 +401,59 @@ def test_currency_migrations_upgrade_populated_financial_database(tmp_path, monk
     monkeypatch.setattr(persistence, "MIGRATIONS_DIR", legacy_dir)
     old_db = connect_database(database_path)
     account_id, obligation_id, payment_id, settlement_id = _financial_fixture(old_db)
+
+    # Keep a second populated obligation/payment pair without a recognized settlement
+    # so the migration test can exercise ordinary currency and amount guards separately
+    # from the stronger immutability contract for recognized sources.
+    extra_creditor, extra_debtor = _person(old_db), _person(old_db)
+    extra_obligation_id, extra_payment_id = str(uuid.uuid4()), str(uuid.uuid4())
+    old_db.execute(
+        "INSERT INTO obligations(obligation_id,creditor_person_id,debtor_person_id,amount_minor,currency_code,state,created_at,updated_at)"
+        " VALUES(?,?,?,?,?,?,?,?)",
+        (extra_obligation_id, extra_creditor, extra_debtor, 100, "YER", "open", NOW, NOW),
+    )
+    old_db.execute(
+        "INSERT INTO payments(payment_id,obligation_id,payer_person_id,payee_person_id,amount_minor,currency_code,state,created_at,updated_at)"
+        " VALUES(?,?,?,?,?,?,?,?,?)",
+        (extra_payment_id, extra_obligation_id, extra_debtor, extra_creditor, 100, "YER", "completed", NOW, NOW),
+    )
+
+    # A settled but not-yet-recognized pair exercises the settlement-link guard
+    # independently of the later source-immutability guard.
+    linked_creditor, linked_debtor = _person(old_db), _person(old_db)
+    linked_obligation_id, linked_payment_id, linked_settlement_id = (
+        str(uuid.uuid4()), str(uuid.uuid4()), str(uuid.uuid4())
+    )
+    old_db.execute(
+        "INSERT INTO obligations(obligation_id,creditor_person_id,debtor_person_id,amount_minor,currency_code,state,created_at,updated_at)"
+        " VALUES(?,?,?,?,?,?,?,?)",
+        (linked_obligation_id, linked_creditor, linked_debtor, 100, "YER", "open", NOW, NOW),
+    )
+    old_db.execute(
+        "INSERT INTO payments(payment_id,obligation_id,payer_person_id,payee_person_id,amount_minor,currency_code,state,created_at,updated_at)"
+        " VALUES(?,?,?,?,?,?,?,?,?)",
+        (linked_payment_id, linked_obligation_id, linked_debtor, linked_creditor, 100, "YER", "completed", NOW, NOW),
+    )
+    old_db.execute(
+        "INSERT INTO settlements(settlement_id,payment_id,obligation_id,state,created_at,updated_at)"
+        " VALUES(?,?,?,?,?,?)",
+        (linked_settlement_id, linked_payment_id, linked_obligation_id, "settled", NOW, NOW),
+    )
+
+    # Seed recognized finance history before the currency guards exist. The upgrade
+    # must preserve these rows and apply the new cross-record invariants to them.
+    transaction_id = str(uuid.uuid4())
+    old_db.execute(
+        "INSERT INTO financial_transactions(financial_transaction_id,settlement_id,financial_account_id,amount_minor,currency_code,state,recognition_source_type,recognition_source_ref,recognized_at,created_at,updated_at)"
+        " VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+        (transaction_id, settlement_id, account_id, 100, "YER", "recognized", "settlement", settlement_id, NOW, NOW, NOW),
+    )
+    ledger_entry_id = str(uuid.uuid4())
+    old_db.execute(
+        "INSERT INTO ledger_entries(ledger_entry_id,financial_transaction_id,financial_account_id,entry_sequence,amount_minor,currency_code,state,posted_at,created_at,updated_at)"
+        " VALUES(?,?,?,?,?,?,?,?,?,?)",
+        (ledger_entry_id, transaction_id, account_id, 1, 100, "YER", "posted", NOW, NOW, NOW),
+    )
     old_db.commit()
     old_db.close()
 
@@ -428,13 +481,17 @@ def test_currency_migrations_upgrade_populated_financial_database(tmp_path, monk
     ).fetchone() is not None
 
     # The new guards must apply to existing rows after upgrade, not only clean installs.
-    with pytest.raises(sqlite3.IntegrityError, match="payment currency_code must match settled obligation currency_code"):
+    with pytest.raises(sqlite3.IntegrityError, match="recognized payment source is immutable"):
         upgraded.execute(
             "UPDATE payments SET currency_code='USD' WHERE payment_id=?", (payment_id,)
         )
+    with pytest.raises(sqlite3.IntegrityError, match="payment currency_code must match linked obligation currency_code"):
+        upgraded.execute(
+            "UPDATE payments SET currency_code='USD' WHERE payment_id=?", (extra_payment_id,)
+        )
     with pytest.raises(sqlite3.IntegrityError, match="payment obligation must match existing settlements"):
         upgraded.execute(
-            "UPDATE payments SET obligation_id=NULL WHERE payment_id=?", (payment_id,)
+            "UPDATE payments SET obligation_id=NULL WHERE payment_id=?", (linked_payment_id,)
         )
 
     assert upgraded.execute(
@@ -445,13 +502,71 @@ def test_currency_migrations_upgrade_populated_financial_database(tmp_path, monk
     ).fetchone()[0] == 1
 
     with pytest.raises(sqlite3.IntegrityError, match="payment amount_minor must not exceed linked obligation amount_minor"):
-        upgraded.execute("UPDATE payments SET amount_minor=101 WHERE payment_id=?", (payment_id,))
+        upgraded.execute("UPDATE payments SET amount_minor=101 WHERE payment_id=?", (extra_payment_id,))
     with pytest.raises(sqlite3.IntegrityError, match="obligation amount_minor must cover linked payment amount_minor"):
-        upgraded.execute("UPDATE obligations SET amount_minor=99 WHERE obligation_id=?", (obligation_id,))
+        upgraded.execute("UPDATE obligations SET amount_minor=99 WHERE obligation_id=?", (extra_obligation_id,))
     assert upgraded.execute(
-        "SELECT amount_minor FROM payments WHERE payment_id=?", (payment_id,)
+        "SELECT amount_minor FROM payments WHERE payment_id=?", (extra_payment_id,)
     ).fetchone()[0] == 100
     assert upgraded.execute(
-        "SELECT amount_minor FROM obligations WHERE obligation_id=?", (obligation_id,)
+        "SELECT amount_minor FROM obligations WHERE obligation_id=?", (extra_obligation_id,)
     ).fetchone()[0] == 100
+    with pytest.raises(sqlite3.IntegrityError, match="recognized obligation source is immutable"):
+        upgraded.execute(
+            "UPDATE obligations SET amount_minor=101 WHERE obligation_id=?", (obligation_id,)
+        )
+    with pytest.raises(sqlite3.IntegrityError, match="recognized settlement source is immutable"):
+        upgraded.execute(
+            "UPDATE settlements SET state='reversed' WHERE settlement_id=?", (settlement_id,)
+        )
+
+    # Currency guards must also protect recognized transactions and posted ledger
+    # history that predated the upgrade, not only new rows on a clean install.
+    assert upgraded.execute(
+        "SELECT currency_code FROM financial_transactions WHERE financial_transaction_id=?",
+        (transaction_id,),
+    ).fetchone()[0] == "YER"
+    assert upgraded.execute(
+        "SELECT currency_code FROM ledger_entries WHERE ledger_entry_id=?", (ledger_entry_id,)
+    ).fetchone()[0] == "YER"
+    assert upgraded.execute(
+        "SELECT version FROM schema_migrations WHERE version=?",
+        ("0044_financial_transaction_settlement_integrity",),
+    ).fetchone() is not None
+    assert upgraded.execute(
+        "SELECT version FROM schema_migrations WHERE version=?",
+        ("0045_recognized_settlement_source_immutability",),
+    ).fetchone() is not None
+
+    with pytest.raises(sqlite3.IntegrityError):
+        upgraded.execute(
+            "UPDATE financial_transactions SET currency_code='USD' WHERE financial_transaction_id=?",
+            (transaction_id,),
+        )
+    with pytest.raises(sqlite3.IntegrityError, match="ledger entry account/currency_code must match financial transaction"):
+        upgraded.execute(
+            "INSERT INTO ledger_entries(ledger_entry_id,financial_transaction_id,financial_account_id,entry_sequence,amount_minor,currency_code,state,posted_at,created_at,updated_at)"
+            " VALUES(?,?,?,?,?,?,?,?,?,?)",
+            (str(uuid.uuid4()), transaction_id, account_id, 2, 100, "USD", "posted", NOW, NOW, NOW),
+        )
+    assert upgraded.execute(
+        "SELECT currency_code FROM financial_transactions WHERE financial_transaction_id=?",
+        (transaction_id,),
+    ).fetchone()[0] == "YER"
+    assert upgraded.execute(
+        "SELECT COUNT(*) FROM ledger_entries WHERE financial_transaction_id=?", (transaction_id,)
+    ).fetchone()[0] == 1
     upgraded.close()
+
+    # Reopening after migration must retain the original linked finance history.
+    reopened = connect_database(database_path)
+    assert reopened.execute(
+        "SELECT settlement_id, financial_account_id, amount_minor, currency_code FROM financial_transactions WHERE financial_transaction_id=?",
+        (transaction_id,),
+    ).fetchone() == (settlement_id, account_id, 100, "YER")
+    assert reopened.execute(
+        "SELECT financial_transaction_id, amount_minor, currency_code FROM ledger_entries WHERE ledger_entry_id=?",
+        (ledger_entry_id,),
+    ).fetchone() == (transaction_id, 100, "YER")
+    assert reopened.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    reopened.close()
