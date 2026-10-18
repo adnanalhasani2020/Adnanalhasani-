@@ -240,6 +240,40 @@ class HospitalAPITests(unittest.TestCase):
         self.assertEqual(payload["data"][0]["status"], "open")
         self.assertEqual(payload["data"][0]["patient_name"], "Encounter List Patient")
 
+    def test_operational_api_rejects_non_integer_record_ids(self):
+        patient_id = self.db.register_patient(
+            patient_no="P-API-STRICT-ID", full_name="Strict ID Patient",
+            created_at="2026-01-01T08:00:00", actor="test",
+        )
+        doctor_id = self.db.register_doctor(
+            employee_no="D-API-STRICT-ID", full_name="Strict ID Doctor",
+            specialty="General", actor="test", at="2026-01-01T08:00:00",
+        )
+
+        status, payload = self.request(
+            "/api/appointments", method="POST",
+            payload={"patient_id": patient_id + 0.5, "doctor_id": doctor_id,
+                     "starts_at": "2026-01-02T09:00:00",
+                     "ends_at": "2026-01-02T09:30:00",
+                     "created_at": "2026-01-01T08:00:00"},
+        )
+        self.assertEqual(status, 400)
+        self.assertIn("patient_id must be an integer", payload["error"])
+        with self.db.connect() as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM appointments").fetchone()[0], 0)
+
+        status, payload = self.request(
+            "/api/invoices", method="POST",
+            payload={"invoice_no": "INV-API-STRICT-ID", "patient_id": patient_id + 0.5,
+                     "total_minor": 100, "created_at": "2026-01-01T08:00:00"},
+        )
+        self.assertEqual(status, 400)
+        self.assertIn("patient_id must be an integer", payload["error"])
+        with self.db.connect() as conn:
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM invoices WHERE invoice_no='INV-API-STRICT-ID'"
+            ).fetchone()[0], 0)
+
     def test_invoice_and_payment_api_reject_fractional_minor_units(self):
         patient_id = self.db.register_patient(
             patient_no="P-API-STRICT-MONEY", full_name="Strict Money Patient",
