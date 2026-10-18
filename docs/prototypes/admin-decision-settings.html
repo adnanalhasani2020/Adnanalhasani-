@@ -74,6 +74,30 @@ footer{max-width:1100px;margin:auto;padding:0 18px 24px;color:var(--muted);font-
 <p class="help">هذه تفضيلات مقترحة للنقاش فقط. لا تغيّر نظام التفويض أو سجل التدقيق الفعلي.</p>
 </section>
 </div>
+<section class="card" style="margin-top:16px" aria-labelledby="currency-title">
+<h2 id="currency-title">٤. إعدادات العملة والمحاسبة</h2>
+<span class="pill pending">مقترح المدير — غير نافذ</span>
+<p class="help">اختر العملات التي تحتاجها المؤسسة والعملة الافتراضية. هذه اختيارات أولية للمعاينة فقط؛ لا تغيّر إعدادات Finance المحفوظة على الخادم ولا تعيد تفسير السجلات التاريخية.</p>
+<fieldset style="border:1px solid var(--line);border-radius:10px;padding:12px">
+<legend>العملات المسموح بها</legend>
+<label><input type="checkbox" name="enabledCurrencies" value="SAR" checked> الريال السعودي (SAR)</label>
+<label><input type="checkbox" name="enabledCurrencies" value="YER" checked> الريال اليمني (YER)</label>
+<label><input type="checkbox" name="enabledCurrencies" value="USD" checked> الدولار الأمريكي (USD)</label>
+</fieldset>
+<label for="defaultCurrency">العملة الافتراضية للمؤسسة</label>
+<select id="defaultCurrency" name="defaultCurrency" required>
+<option value="YER" selected>الريال اليمني (YER)</option>
+<option value="SAR">الريال السعودي (SAR)</option>
+<option value="USD">الدولار الأمريكي (USD)</option>
+</select>
+<label for="displayDecimalPlaces">عدد المنازل العشرية للعرض</label>
+<select id="displayDecimalPlaces" name="displayDecimalPlaces">
+<option value="2" selected>منزلتان (2) — الافتراضي</option>
+<option value="0">صفر (0)</option><option value="1">منزلة واحدة (1)</option>
+<option value="3">ثلاث منازل (3)</option><option value="4">أربع منازل (4)</option>
+</select>
+<p class="help">دقة العرض لا تغيّر وحدة الحساب الداخلية الثابتة ذات المنزلتين. يجب اختيار عملة افتراضية من العملات المفعّلة، واستخدام أسعار صرف صريحة ومؤرخة ومعتمدة عند الحاجة للتحويل. لا يُسمح باختلاق سعر أو تغيير العملات المسجلة في المعاملات السابقة.</p>
+</section>
 <section class="card" style="margin-top:16px" aria-labelledby="integration-title">
 <h2 id="integration-title">٤. قرارات ربط المستشفى بالمحاسبة</h2>
 <span class="pill pending">قرار المدير مطلوب قبل اعتماد السياسة</span>
@@ -118,13 +142,14 @@ const activityRecommendations={commerce:'تحسين تدفق العروض وال
 const activityField=document.getElementById('activity'),activityGuidance=document.getElementById('activity-guidance');
 function updateActivityGuidance(){const activity=activityField.value;if(!activity){activityGuidance.hidden=true;activityGuidance.textContent='';return}activityGuidance.hidden=false;activityGuidance.textContent='توصية إرشادية غير ملزمة: '+activityRecommendations[activity]+' لا يفعّل الاختيار أي سياسة.'}
 activityField.addEventListener('change',updateActivityGuidance);
-function data(){return Object.fromEntries(new FormData(form).entries())}
+function data(){const d=Object.fromEntries(new FormData(form).entries());d.enabledCurrencies=Array.from(form.querySelectorAll('input[name="enabledCurrencies"]:checked')).map(x=>x.value);return d}
 function show(message){statusBox.textContent=message;statusBox.style.display='block'}function announceError(message){show(message);statusBox.setAttribute('role','alert')}function announceStatus(message){show(message);statusBox.setAttribute('role','status')}
-form.addEventListener('submit',e=>{e.preventDefault();const d=data();if(!d.activity){announceError('يرجى اختيار النشاط الرئيسي قبل المعاينة.');document.getElementById('activity').focus();return}summary.hidden=false;summary.textContent='معاينة غير معتمدة — لا تغيّر النظام\n\nالنشاط: '+labels.activity[d.activity]+'\nالأولوية المقترحة (إرشادية فقط): '+activityRecommendations[d.activity]+'\nالوظائف الصحية: '+labels.clinical[d.clinical]+'\nالسياسات المالية: '+labels.finance[d.finance]+'\nالموافقة: '+labels.approval[d.approval]+'\nالتدقيق: '+labels.audit[d.audit]+'\nالدفعات الجزئية: '+labels.partialPayments[d.partialPayments]+'\nمعالجة الفاتورة: '+labels.invoiceAccounting[d.invoiceAccounting]+'\nربط الحسابات: '+labels.accountMapping[d.accountMapping]+'\nتعطل التسليم: '+labels.deliveryFailure[d.deliveryFailure]+'\nاسم المؤسسة: '+(d.orgName||'غير محدد')+'\nملاحظات: '+(d.notes||'لا توجد')+'\n\nالخطوة المطلوبة: اعتماد المدير وتسجيل القرار رسميًا قبل تحويله إلى إعداد نافذ.';announceStatus('تم إنشاء معاينة محلية فقط؛ لم يتم اعتماد أو تفعيل أي سياسة.')});
-document.getElementById('save').addEventListener('click',()=>{try{const d=data();const safeSettings={activity:d.activity,clinical:d.clinical,finance:d.finance,approval:d.approval,audit:d.audit,partialPayments:d.partialPayments,invoiceAccounting:d.invoiceAccounting,accountMapping:d.accountMapping,deliveryFailure:d.deliveryFailure};localStorage.setItem('hospital-admin-decision-prototype',JSON.stringify(safeSettings));announceStatus('حُفظت خيارات الإعدادات المحددة فقط في هذا المتصفح. لم يُحفظ اسم المؤسسة أو الملاحظات النصية، ولا يوجد حفظ على الخادم.')}catch(error){announceError('تعذر الحفظ المحلي؛ قد يكون تخزين المتصفح معطلاً أو ممتلئًا. انسخ معاينة القرار قبل مغادرة الصفحة.')}});
+form.addEventListener('submit',e=>{e.preventDefault();const d=data();if(!d.activity){announceError('يرجى اختيار النشاط الرئيسي قبل المعاينة.');document.getElementById('activity').focus();return}if(!d.enabledCurrencies.length){announceError('يجب تفعيل عملة واحدة على الأقل.');form.querySelector('input[name="enabledCurrencies"]').focus();return}if(!d.enabledCurrencies.includes(d.defaultCurrency)){announceError('يجب أن تكون العملة الافتراضية ضمن العملات المفعّلة.');document.getElementById('defaultCurrency').focus();return}summary.hidden=false;summary.textContent='معاينة غير معتمدة — لا تغيّر النظام\n\nالنشاط: '+labels.activity[d.activity]+'\nالأولوية المقترحة (إرشادية فقط): '+activityRecommendations[d.activity]+'\nالوظائف الصحية: '+labels.clinical[d.clinical]+'\nالعملات المفعّلة: '+d.enabledCurrencies.join('، ')+'\nالعملة الافتراضية: '+d.defaultCurrency+'\nدقة العرض: '+d.displayDecimalPlaces+' منازل عشرية (للعرض فقط)'+'\nالسياسات المالية: '+labels.finance[d.finance]+'\nالموافقة: '+labels.approval[d.approval]+'\nالتدقيق: '+labels.audit[d.audit]+'\nالدفعات الجزئية: '+labels.partialPayments[d.partialPayments]+'\nمعالجة الفاتورة: '+labels.invoiceAccounting[d.invoiceAccounting]+'\nربط الحسابات: '+labels.accountMapping[d.accountMapping]+'\nتعطل التسليم: '+labels.deliveryFailure[d.deliveryFailure]+'\nاسم المؤسسة: '+(d.orgName||'غير محدد')+'\nملاحظات: '+(d.notes||'لا توجد')+'\n\nالخطوة المطلوبة: اعتماد المدير وتسجيل القرار رسميًا قبل تحويله إلى إعداد نافذ.';announceStatus('تم إنشاء معاينة محلية فقط؛ لم يتم اعتماد أو تفعيل أي سياسة.')});
+document.getElementById('save').addEventListener('click',()=>{try{const d=data();const safeSettings={activity:d.activity,clinical:d.clinical,finance:d.finance,approval:d.approval,audit:d.audit,partialPayments:d.partialPayments,invoiceAccounting:d.invoiceAccounting,accountMapping:d.accountMapping,deliveryFailure:d.deliveryFailure,enabledCurrencies:d.enabledCurrencies,defaultCurrency:d.defaultCurrency,displayDecimalPlaces:d.displayDecimalPlaces};localStorage.setItem('hospital-admin-decision-prototype',JSON.stringify(safeSettings));announceStatus('حُفظت خيارات الإعدادات المحددة فقط في هذا المتصفح. لم يُحفظ اسم المؤسسة أو الملاحظات النصية، ولا يوجد حفظ على الخادم.')}catch(error){announceError('تعذر الحفظ المحلي؛ قد يكون تخزين المتصفح معطلاً أو ممتلئًا. انسخ معاينة القرار قبل مغادرة الصفحة.')}});
 document.getElementById('reset').addEventListener('click',()=>{form.reset();summary.hidden=true;summary.textContent='';const guidance=document.getElementById('activity-guidance');guidance.hidden=true;guidance.textContent='';statusBox.style.display='none';try{localStorage.removeItem('hospital-admin-decision-prototype')}catch(error){announceError('أُعيد ضبط النموذج، لكن تعذر حذف النسخة المحلية المحفوظة من المتصفح. احذف بيانات الموقع من إعدادات المتصفح إذا لزم.')}document.getElementById('activity').focus()});
 function restoreSavedValue(name,value){
  const field=form.elements[name];
+ if(name==='enabledCurrencies'&&Array.isArray(value)){form.querySelectorAll('input[name="enabledCurrencies"]').forEach(x=>x.checked=value.includes(x.value));return}
  if(!field||typeof value!=='string')return;
  if(field.tagName==='SELECT'){
   if(Array.from(field.options).some(option=>option.value===value))field.value=value;
@@ -135,7 +160,7 @@ function restoreSavedValue(name,value){
   field.value=Number.isFinite(limit)&&limit>0?value.slice(0,limit):value;
  }
 }
-try{const saved=localStorage.getItem('hospital-admin-decision-prototype');if(saved){const d=JSON.parse(saved);const allowed=new Set(['activity','clinical','finance','approval','audit','partialPayments','invoiceAccounting','accountMapping','deliveryFailure']);if(d&&typeof d==='object'&&!Array.isArray(d)){for(const [k,v] of Object.entries(d)){if(allowed.has(k))restoreSavedValue(k,v)}}}}catch(error){announceError('تعذر استعادة الاختيارات المحلية. يمكنك متابعة استخدام النموذج أو إعادة ضبطه.')}
+try{const saved=localStorage.getItem('hospital-admin-decision-prototype');if(saved){const d=JSON.parse(saved);const allowed=new Set(['activity','clinical','finance','approval','audit','partialPayments','invoiceAccounting','accountMapping','deliveryFailure','enabledCurrencies','defaultCurrency','displayDecimalPlaces']);if(d&&typeof d==='object'&&!Array.isArray(d)){for(const [k,v] of Object.entries(d)){if(allowed.has(k))restoreSavedValue(k,v)}}}}catch(error){announceError('تعذر استعادة الاختيارات المحلية. يمكنك متابعة استخدام النموذج أو إعادة ضبطه.')}
 updateActivityGuidance();
 </script>
 </body>
