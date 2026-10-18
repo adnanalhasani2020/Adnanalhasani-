@@ -21,6 +21,7 @@ def test_defaults_and_validation():
     {"enabled_currencies": ("YER",), "default_currency": "USD"},
     {"display_decimal_places": -1}, {"display_decimal_places": 5},
     {"display_decimal_places": True}, {"settlement_cardinality": "sometimes"},
+    {"settlement_cardinality": "multiple"},
     {"posted_voucher_policy": "delete_posted"}, {"require_full_cycle_validation": 1},
 ])
 def test_rejects_invalid_policy(kwargs):
