@@ -206,6 +206,28 @@ BEFORE DELETE ON audit_log
 BEGIN
   SELECT RAISE(ABORT, 'audit_log is append-only');
 END;
+-- Manager settings remain proposals until an authorized reviewer approves them.
+CREATE TABLE IF NOT EXISTS manager_setting_proposals (
+  id INTEGER PRIMARY KEY,
+  activity_profile TEXT NOT NULL CHECK(activity_profile IN ('general','outpatient','specialty','admin')),
+  modules_json TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'proposed' CHECK(status IN ('proposed','approved','rejected')),
+  version INTEGER NOT NULL DEFAULT 1 CHECK(version >= 1),
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  reviewed_by TEXT,
+  reviewed_at TEXT,
+  review_note TEXT,
+  CHECK((status='proposed' AND reviewed_by IS NULL AND reviewed_at IS NULL) OR
+        (status IN ('approved','rejected') AND reviewed_by IS NOT NULL AND reviewed_at IS NOT NULL))
+);
+CREATE INDEX IF NOT EXISTS manager_setting_proposals_status_id
+  ON manager_setting_proposals(status, id DESC);
+CREATE TRIGGER IF NOT EXISTS manager_setting_proposals_no_delete
+BEFORE DELETE ON manager_setting_proposals
+BEGIN
+  SELECT RAISE(ABORT, 'manager setting proposals are retained for audit');
+END;
 """
 
 
