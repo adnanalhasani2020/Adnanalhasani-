@@ -6,6 +6,7 @@ Bind to loopback by default. Put a TLS reverse proxy in front before public expo
 from __future__ import annotations
 
 import json
+import logging
 import os
 import secrets
 import sqlite3
@@ -208,6 +209,7 @@ class CommercialWebApplication:
         except sqlite3.IntegrityError:
             return self._json(start_response, "409 Conflict", {"error": "تعارض في البيانات؛ لم تُحفظ العملية."})
         except Exception:
+            logging.exception("Unhandled commercial web request failure")
             return self._json(start_response, "500 Internal Server Error", {"error": "حدث خطأ داخلي. لم تُعرض تفاصيل قاعدة البيانات."})
         finally:
             if db is not None:
