@@ -105,9 +105,12 @@ class InvoiceApplication:
         timestamp = self._timestamp(now if now is not None else datetime.now(timezone.utc), "Invoice creation timestamp")
         issued = self._timestamp(issue_at if issue_at is not None else (now if now is not None else datetime.now(timezone.utc)), "Invoice issue timestamp")
         due = self._timestamp(due_at, "Invoice due timestamp", optional=True)
+        created_instant = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+        issue_instant = datetime.fromisoformat(issued.replace("Z", "+00:00"))
+        if issue_instant > created_instant:
+            raise ValidationError("Invoice issue timestamp cannot follow creation timestamp")
         if due is not None:
             due_instant = datetime.fromisoformat(due.replace("Z", "+00:00"))
-            issue_instant = datetime.fromisoformat(issued.replace("Z", "+00:00"))
             if due_instant < issue_instant:
                 raise ValidationError("Invoice due timestamp cannot precede issue timestamp")
         if not isinstance(invoice_number, str) or not invoice_number.strip():
