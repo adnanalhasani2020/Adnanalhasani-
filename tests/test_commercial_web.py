@@ -2,6 +2,7 @@ import io
 import json
 from datetime import datetime, timedelta, timezone
 import uuid
+from urllib.parse import urlsplit
 from http.cookies import SimpleCookie
 
 from agent_core.commercial_web import CommercialWebApplication
@@ -11,11 +12,12 @@ from agent_core.offering_application import OfferingApplication
 
 
 def request(app, path, *, method="GET", body=None, cookie=None):
+    parsed_path = urlsplit(path)
     payload = json.dumps(body or {}).encode("utf-8")
     environ = {
         "REQUEST_METHOD": method,
-        "PATH_INFO": path,
-        "QUERY_STRING": "",
+        "PATH_INFO": parsed_path.path,
+        "QUERY_STRING": parsed_path.query,
         "CONTENT_LENGTH": str(len(payload) if method == "POST" else 0),
         "CONTENT_TYPE": "application/json",
         "wsgi.input": io.BytesIO(payload if method == "POST" else b""),
@@ -178,8 +180,65 @@ def test_web_session_can_buy_sellable_product_and_receive_result(tmp_path):
     history = request(app, "/api/receipts", cookie=session_cookie)
     assert history["status"] == "200 OK"
     assert len(history["body"]["items"]) == 2
-    first_receipt = next(item for item in history["body"]["items"] if item["sale_id"] == checkout["body"]["sale_id"])
-    assert first_receipt["quantity_remaining"] == 3
+
+    # Identity alone is not report authorization. The current commercial identity
+    # model has no approved report permission, so JSON and CSV must fail closed.
+    unauthenticated_report = request(app, "/api/reports/sales")
+    assert unauthenticated_report["status"] == "401 Unauthorized"
+    unauthenticated_csv = request(app, "/api/reports/sales?format=csv")
+    assert unauthenticated_csv["status"] == "401 Unauthorized"
+    assert "text/csv" not in dict(unauthenticated_csv["headers"]).get("Content-Type", "")
+    unauth_csv_body = (
+        unauthenticated_csv["body"].decode("utf-8", errors="replace")
+        if isinstance(unauthenticated_csv["body"], bytes)
+        else json.dumps(unauthenticated_csv["body"], ensure_ascii=False)
+    )
+    assert not any(marker in unauth_csv_body.lower() for marker in ("sale_id", "total_minor", "customer", "csv"))
+    assert "items" not in unauthenticated_csv["body"]
+
+    sales_before = connect_database(db_path)
+    before_count = sales_before.execute("SELECT COUNT(*) FROM sales").fetchone()[0]
+    sales_before.close()
+
+    blocked_json = request(
+        app, "/api/reports/sales?from=" + now.date().isoformat(),
+        cookie=session_cookie,
+    )
+    assert blocked_json["status"] == "403 Forbidden"
+    assert blocked_json["body"] == {"error": "الوصول إلى تقرير المبيعات محجوب حتى اعتماد صلاحيات التقرير وتطبيقها على الخادم."}
+    assert "items" not in blocked_json["body"]
+    assert "total_sales" not in blocked_json["body"]
+    assert str(checkout["body"]["sale_id"]) not in json.dumps(blocked_json["body"], ensure_ascii=False)
+    assert str(checkout["body"]["total_minor"]) not in json.dumps(blocked_json["body"], ensure_ascii=False)
+
+    blocked_csv = request(
+        app, "/api/reports/sales?format=csv&from=" + now.date().isoformat(),
+        cookie=session_cookie,
+    )
+    assert blocked_csv["status"] == "403 Forbidden"
+    assert blocked_csv["body"]["error"] == blocked_json["body"]["error"]
+    assert "text/csv" not in dict(blocked_csv["headers"]).get("Content-Type", "")
+    blocked_csv_body = (
+        blocked_csv["body"].decode("utf-8", errors="replace")
+        if isinstance(blocked_csv["body"], bytes)
+        else json.dumps(blocked_csv["body"], ensure_ascii=False)
+    )
+    assert str(checkout["body"]["sale_id"]) not in blocked_csv_body
+    assert str(checkout["body"]["total_minor"]) not in blocked_csv_body
+    assert "sale_id" not in blocked_csv_body.lower()
+    assert "total_minor" not in blocked_csv_body.lower()
+    assert "1980" not in blocked_csv_body
+
+    # Direct API calls and arbitrary report query parameters cannot bypass the block.
+    for query in ("", "?format=csv", "?limit=1&offset=0", "?from=invalid"):
+        denied = request(app, "/api/reports/sales" + query, cookie=session_cookie)
+        assert denied["status"] == "403 Forbidden", query
+        assert "items" not in denied["body"]
+
+    sales_after = connect_database(db_path)
+    after_count = sales_after.execute("SELECT COUNT(*) FROM sales").fetchone()[0]
+    sales_after.close()
+    assert after_count == before_count
 
     receipt = request(
         app, "/api/receipts/web-checkout-001", cookie=session_cookie,

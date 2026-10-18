@@ -12,7 +12,6 @@ import secrets
 import sqlite3
 from http.cookies import SimpleCookie
 from pathlib import Path
-from urllib.parse import parse_qs
 from wsgiref.simple_server import WSGIServer, make_server, WSGIRequestHandler
 from socketserver import ThreadingMixIn
 
@@ -192,6 +191,14 @@ class CommercialWebApplication:
                 )
                 return self._json(start_response, "200 OK", result)
 
+            if method == "GET" and path == "/api/reports/sales":
+                # SECURITY BLOCKER: commercial sessions prove identity only. This application
+                # has no approved, enforced report-audience permission or data-scope contract.
+                # Deny before parsing query parameters or querying sales so JSON and CSV fail
+                # closed identically without disclosing report metadata or transaction data.
+                return self._json(start_response, "403 Forbidden", {
+                    "error": "الوصول إلى تقرير المبيعات محجوب حتى اعتماد صلاحيات التقرير وتطبيقها على الخادم."
+                })
             if method == "GET" and path == "/api/receipts":
                 rows = db.execute(
                     """SELECT response_json FROM commercial_checkout_receipts
