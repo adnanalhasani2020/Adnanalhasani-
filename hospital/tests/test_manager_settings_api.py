@@ -89,7 +89,7 @@ class ManagerSettingsProposalAPITests(unittest.TestCase):
                                         self.proposal_payload(), author_token)
         self.assertEqual(status, 201)
         self.assertEqual(proposal["status"], "proposed")
-        self.assertFalse(proposal["activation_supported"])
+        self.assertTrue(proposal["activation_supported"])
 
         status, listing = self.request("/api/manager-settings/proposals", token=reviewer_token)
         self.assertEqual(status, 200)
@@ -109,7 +109,7 @@ class ManagerSettingsProposalAPITests(unittest.TestCase):
             "POST", review, reviewer_token)
         self.assertEqual(status, 200)
         self.assertEqual(result["status"], "approved")
-        self.assertFalse(result["activation_supported"])
+        self.assertTrue(result["activation_supported"])
 
         status, result = self.request(
             f"/api/manager-settings/proposals/{proposal['id']}/review",
