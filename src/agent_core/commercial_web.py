@@ -6,6 +6,7 @@ Bind to loopback by default. Put a TLS reverse proxy in front before public expo
 from __future__ import annotations
 
 import json
+import logging
 import os
 import secrets
 import sqlite3
@@ -67,7 +68,13 @@ class _ThreadedWSGIServer(ThreadingMixIn, WSGIServer):
 
 class CommercialWebApplication:
     def __init__(self, database_path=None):
-        # APP_DB_PATH is the canonical shared SQLite file for Hospital and Finance.\n        # Legacy per-service variables remain fallback-compatible.\n        self.database_path = str(database_path or os.environ.get("APP_DB_PATH") or os.environ.get("COMMERCIAL_DB_PATH", "commercial-mvp.sqlite3"))
+        # APP_DB_PATH is the canonical shared SQLite file for Hospital and Finance.
+        # Legacy per-service variables remain fallback-compatible.
+        self.database_path = str(
+            database_path
+            or os.environ.get("APP_DB_PATH")
+            or os.environ.get("COMMERCIAL_DB_PATH", "commercial-mvp.sqlite3")
+        )
         self.identity = CommercialIdentityApplication()
         self.checkout = CommercialCheckoutApplication()
 
@@ -208,6 +215,7 @@ class CommercialWebApplication:
         except sqlite3.IntegrityError:
             return self._json(start_response, "409 Conflict", {"error": "تعارض في البيانات؛ لم تُحفظ العملية."})
         except Exception:
+            logging.exception("Unhandled commercial web request failure")
             return self._json(start_response, "500 Internal Server Error", {"error": "حدث خطأ داخلي. لم تُعرض تفاصيل قاعدة البيانات."})
         finally:
             if db is not None:
