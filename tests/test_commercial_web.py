@@ -10,7 +10,7 @@ from agent_core.application import ProductApplication
 from agent_core.offering_application import OfferingApplication
 
 
-def request(app, path, *, method="GET", body=None, cookie=None):
+def request(app, path, *, method="GET", body=None, cookie=None, scheme="http"):
     payload = json.dumps(body or {}).encode("utf-8")
     environ = {
         "REQUEST_METHOD": method,
@@ -22,7 +22,7 @@ def request(app, path, *, method="GET", body=None, cookie=None):
         "HTTP_COOKIE": cookie or "",
         "SERVER_NAME": "localhost",
         "SERVER_PORT": "8080",
-        "wsgi.url_scheme": "http",
+        "wsgi.url_scheme": scheme,
     }
     captured = {}
 
@@ -215,3 +215,31 @@ def test_storefront_displays_preconfirmation_total_preview(tmp_path):
     assert page["status"] == "200 OK"
     assert "الإجمالي قبل التأكيد:" in page["body"].decode("utf-8")
     assert "Number.isSafeInteger(amount)" in page["body"].decode("utf-8")
+
+
+
+def test_web_session_cookie_is_secure_by_default_on_https(tmp_path, monkeypatch):
+    monkeypatch.delenv("COMMERCIAL_COOKIE_SECURE", raising=False)
+    db_path = tmp_path / "commercial-web-https.sqlite"
+    db = connect_database(db_path)
+    db.close()
+    app = CommercialWebApplication(db_path)
+
+    registered = request(
+        app, "/api/register", method="POST", scheme="https",
+        body={"username": "secure_buyer", "password": "correct horse battery staple"},
+    )
+    assert registered["status"] == "200 OK"
+    cookie_header = dict(registered["headers"])["Set-Cookie"]
+    assert "; Secure" in cookie_header
+    cookie = SimpleCookie()
+    cookie.load(cookie_header)
+    request_cookie = "commercial_session=" + cookie["commercial_session"].value
+
+    logged_out = request(
+        app, "/api/logout", method="POST", cookie=request_cookie, scheme="https",
+    )
+    assert logged_out["status"] == "200 OK"
+    cleared_cookie = dict(logged_out["headers"])["Set-Cookie"]
+    assert "Max-Age=0" in cleared_cookie
+    assert "; Secure" in cleared_cookie
