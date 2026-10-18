@@ -146,3 +146,40 @@ def test_database_errors_roll_back_partial_intake_changes():
         intake.ingest(db, _invoice_event(amount=1600), now="2026-10-18T10:12:00Z")
     row = db.execute("SELECT amount_minor,status FROM external_event_intake").fetchone()
     assert row == (1500, "received")
+
+
+def test_conflict_after_mapping_preserves_finance_target_and_is_reported():
+    db = connect_database()
+    intake = ExternalEventIntake()
+    first = intake.ingest(db, _invoice_event(), now="2026-10-18T10:10:00Z")
+    finance_entity_id = str(uuid.uuid4())
+    db.execute(
+        "UPDATE external_event_intake SET status='mapped',finance_entity_type='obligation',"
+        "finance_entity_id=?,mapped_at=? WHERE external_event_intake_id=?",
+        (finance_entity_id, "2026-10-18T10:11:00Z", first.intake_id),
+    )
+
+    conflict = intake.ingest(
+        db, _invoice_event(amount=1600), now="2026-10-18T10:12:00Z"
+    )
+
+    row = db.execute(
+        "SELECT status,finance_entity_type,finance_entity_id,mapped_at,last_error "
+        "FROM external_event_intake WHERE external_event_intake_id=?",
+        (first.intake_id,),
+    ).fetchone()
+    report = build_intake_reconciliation_report(
+        db, now="2026-10-18T10:13:00Z", stale_after_hours=24
+    )
+
+    assert conflict.outcome == "conflict"
+    assert conflict.status == "mapped"
+    assert tuple(row[:4]) == (
+        "mapped", "obligation", finance_entity_id, "2026-10-18T10:11:00Z"
+    )
+    assert "manual reconciliation required" in row[4]
+    assert report["mapped_sources_with_conflicts"] == 1
+    assert report["conflict_observations"] == 1
+    assert db.execute(
+        "SELECT COUNT(*) FROM external_event_intake"
+    ).fetchone()[0] == 1
