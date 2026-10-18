@@ -12,7 +12,7 @@ import secrets
 import sqlite3
 from http.cookies import SimpleCookie
 from pathlib import Path
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlsplit
 from wsgiref.simple_server import WSGIServer, make_server, WSGIRequestHandler
 from socketserver import ThreadingMixIn
 
@@ -96,6 +96,27 @@ class CommercialWebApplication:
         return [encoded]
 
     @staticmethod
+    def _validate_same_origin(environ):
+        """Reject cross-origin state-changing requests when a browser supplies Origin."""
+        origin = environ.get("HTTP_ORIGIN")
+        if not origin:
+            return
+        try:
+            parsed = urlsplit(origin)
+            if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.path or parsed.query or parsed.fragment:
+                raise ValueError("invalid origin")
+            request_scheme = environ.get("wsgi.url_scheme", "http").lower()
+            request_host = environ.get("HTTP_HOST") or environ.get("SERVER_NAME", "")
+            if not environ.get("HTTP_HOST") and environ.get("SERVER_PORT"):
+                default_port = "443" if request_scheme == "https" else "80"
+                if environ["SERVER_PORT"] != default_port:
+                    request_host += ":" + environ["SERVER_PORT"]
+            if parsed.scheme.lower() != request_scheme or parsed.netloc.lower() != request_host.lower():
+                raise ValidationError("Cross-origin request rejected")
+        except ValueError as exc:
+            raise ValidationError("Invalid request Origin") from exc
+
+    @staticmethod
     def _body(environ):
         try:
             length = int(environ.get("CONTENT_LENGTH") or "0")
@@ -103,6 +124,9 @@ class CommercialWebApplication:
             raise ValidationError("Invalid request body length") from exc
         if length < 0 or length > 65536:
             raise ValidationError("Request body is too large")
+        content_type = environ.get("CONTENT_TYPE", "").split(";", 1)[0].strip().lower()
+        if content_type != "application/json":
+            raise ValidationError("Content-Type must be application/json")
         raw = environ["wsgi.input"].read(length) if length else b"{}"
         try:
             body = json.loads(raw.decode("utf-8"))
@@ -126,6 +150,8 @@ class CommercialWebApplication:
 
         db = None
         try:
+            if method == "POST":
+                self._validate_same_origin(environ)
             db = connect_database(self.database_path)
             token = self._cookies(environ)
             if method == "POST" and path in {"/api/register", "/api/login"}:
