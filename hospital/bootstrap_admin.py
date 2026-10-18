@@ -15,7 +15,7 @@ from .security import AuthStore
 
 
 def main() -> int:
-    db_path = os.environ.get("HOSPITAL_DB_PATH", "hospital.sqlite3")
+    db_path = os.environ.get("APP_DB_PATH") or os.environ.get("HOSPITAL_DB_PATH", "hospital.sqlite3")
     database = HospitalDB(db_path)
     store = AuthStore(database)
     with database.connect() as conn:
@@ -42,7 +42,7 @@ def main() -> int:
         print(f"Could not create administrator: {exc}")
         return 2
     print(f"Administrator created (user id {user_id}). Keep the password private.")
-    print("Start the API with HOSPITAL_AUTH_MODE=users and the same HOSPITAL_DB_PATH.")
+    print("Start the API with HOSPITAL_AUTH_MODE=users and the same APP_DB_PATH (or legacy HOSPITAL_DB_PATH).")
     return 0
 
 
