@@ -88,8 +88,11 @@ class FinancialPolicySettingsApplication:
             raise ValidationError("default_currency must be enabled")
         if type(display_decimal_places) is not int or not 0 <= display_decimal_places <= 4:
             raise ValidationError("display_decimal_places must be an integer from 0 to 4")
-        if settlement_cardinality not in {"single", "multiple"}:
-            raise ValidationError("settlement_cardinality must be 'single' or 'multiple'")
+        if settlement_cardinality != "single":
+            raise ValidationError(
+                "Multiple settlement records remain blocked until Issue #93 is approved "
+                "and persisted allocation support is implemented"
+            )
         if posted_voucher_policy not in {"reversal_only", "disallow"}:
             raise ValidationError("posted_voucher_policy must be 'reversal_only' or 'disallow'")
         if type(require_full_cycle_validation) is not bool:
