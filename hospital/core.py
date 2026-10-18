@@ -267,6 +267,19 @@ CREATE TABLE IF NOT EXISTS manager_setting_proposals (
 );
 CREATE INDEX IF NOT EXISTS manager_setting_proposals_status_id
   ON manager_setting_proposals(status, id DESC);
+
+-- The last approved operational display profile is effective until another proposal
+-- is approved. This controls module presentation only, never role permissions.
+CREATE TABLE IF NOT EXISTS manager_active_settings (
+  id INTEGER PRIMARY KEY CHECK(id = 1),
+  activity_profile TEXT NOT NULL CHECK(activity_profile IN ('general','outpatient','specialty','admin')),
+  modules_json TEXT NOT NULL,
+  version INTEGER NOT NULL CHECK(version >= 1),
+  source_proposal_id INTEGER NOT NULL REFERENCES manager_setting_proposals(id),
+  activated_by TEXT NOT NULL,
+  activated_at TEXT NOT NULL
+);
+
 CREATE TRIGGER IF NOT EXISTS manager_setting_proposals_no_delete
 BEFORE DELETE ON manager_setting_proposals
 BEGIN
