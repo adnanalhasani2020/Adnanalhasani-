@@ -301,3 +301,18 @@ def test_invoice_due_timestamp_accepts_same_instant_as_issue_with_different_offs
     assert issued.issue_at == "2026-10-10T12:00:00Z"
     assert issued.due_at == "2026-10-10T12:00:00Z"
     db.close()
+
+def test_invoice_due_timestamp_fraction_after_issue_in_same_second_is_valid():
+    db = connect_database()
+    actor, _activity, sale, grant = fixture(db)
+    issued = InvoiceApplication().create_invoice(
+        db, sale_id=sale, actor_context_ref=actor,
+        authorization_grant_id=grant, issuer_ref=actor,
+        invoice_number="INV-DUE-FRACTION-AFTER",
+        issue_at="2026-10-10T12:00:00Z",
+        due_at="2026-10-10T12:00:00.000001Z",
+        now=STAMP,
+    )
+    assert issued.issue_at == "2026-10-10T12:00:00Z"
+    assert issued.due_at == "2026-10-10T12:00:00.000001Z"
+    db.close()
