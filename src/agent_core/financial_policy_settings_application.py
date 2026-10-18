@@ -95,8 +95,10 @@ class FinancialPolicySettingsApplication:
             )
         if posted_voucher_policy not in {"reversal_only", "disallow"}:
             raise ValidationError("posted_voucher_policy must be 'reversal_only' or 'disallow'")
-        if type(require_full_cycle_validation) is not bool:
-            raise ValidationError("require_full_cycle_validation must be a boolean")
+        if require_full_cycle_validation is not True:
+            raise ValidationError(
+                "Full-cycle financial validation is mandatory and cannot be disabled by policy settings"
+            )
         return dict(enabled_currencies=enabled, default_currency=default,
                     display_decimal_places=display_decimal_places,
                     settlement_cardinality=settlement_cardinality,
@@ -147,6 +149,10 @@ class FinancialPolicySettingsApplication:
         if row is None:
             return FinancialPolicySettings(activity_id=UUID(activity))
         enabled, default, places, cardinality, voucher, strict, version, updated, actor = row
+        if strict != 1:
+            raise ValidationError(
+                "Persisted Finance policy settings violate the mandatory full-cycle validation baseline"
+            )
         return FinancialPolicySettings(UUID(activity), tuple(enabled.split(",")), default, places,
                                        cardinality, voucher, bool(strict), version, updated, UUID(actor))
 
