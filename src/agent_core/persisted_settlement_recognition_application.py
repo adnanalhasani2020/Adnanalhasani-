@@ -163,7 +163,7 @@ class PersistedSettlementRecognitionApplication:
                 raise ValidationError("Settlement must be persisted as settled with a settlement timestamp")
             if payment_state != "completed":
                 raise ValidationError("Payment must be completed before recognition")
-            if obligation_state not in {"open", "due", "overdue"}:
+            if obligation_state not in {"open", "due", "overdue", "satisfied"}:
                 raise ValidationError("Obligation is not eligible for settlement recognition")
             if payer != debtor or payee != creditor:
                 raise ValidationError("Payment parties do not match the Obligation parties")
@@ -208,6 +208,11 @@ class PersistedSettlementRecognitionApplication:
                 return PersistedSettlementRecognition(
                     UUID(settlement_key), UUID(transaction_id), UUID(entry[0]), UUID(account_key),
                     payment_amount, payment_currency, recognized_at, True,
+                )
+
+            if obligation_state == "satisfied":
+                raise ValidationError(
+                    "Satisfied Obligation has no matching recognition; reconciliation is required"
                 )
 
             transaction_id, entry_id = str(uuid4()), str(uuid4())
