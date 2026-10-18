@@ -5,6 +5,7 @@ Bind to loopback by default. Put a TLS reverse proxy in front before public expo
 """
 from __future__ import annotations
 
+import html
 import json
 import logging
 import os
@@ -51,7 +52,7 @@ const message=text=>{$('message').textContent=text};
 async function api(path,opts={}){const r=await fetch(path,{credentials:'same-origin',...opts,headers:{'Content-Type':'application/json',...(opts.headers||{})}});let data={};try{data=await r.json()}catch{}if(!r.ok)throw Error(data.error||'تعذر تنفيذ الطلب');return data}
 function formData(form){return Object.fromEntries(new FormData(form).entries())}
 async function loadMe(){try{const me=await api('/api/me');$('auth').classList.add('hidden');$('shop').classList.remove('hidden');$('who').textContent='أهلاً، '+me.username;$('catalog').replaceChildren();await loadCatalog();await loadRecentReceipts()}catch{$('auth').classList.remove('hidden');$('shop').classList.add('hidden')}}
-async function loadRecentReceipts(){const root=$('receipts');root.replaceChildren();try{const data=await api('/api/receipts');if(!data.items.length){root.textContent='لا توجد عمليات بيع سابقة لهذا الحساب.';return}for(const receipt of data.items){const card=document.createElement('article');card.className='card';const title=document.createElement('h3');title.textContent='عملية '+receipt.sale_id;const detail=document.createElement('p');detail.textContent='الحالة: '+receipt.state+' — الكمية: '+receipt.quantity+' — الإجمالي: '+receipt.total_minor+' '+receipt.currency_code;const remaining=document.createElement('p');remaining.textContent='المتبقي عند البيع: '+receipt.quantity_remaining+' — الوقت: '+receipt.occurred_at;card.append(title,detail,remaining);root.append(card)}}catch(e){root.textContent=e.message}}
+async function loadRecentReceipts(){const root=$('receipts');root.replaceChildren();try{const data=await api('/api/receipts');if(!data.items.length){root.textContent='لا توجد عمليات بيع سابقة لهذا الحساب.';return}for(const receipt of data.items){const card=document.createElement('article');card.className='card';const title=document.createElement('h3');title.textContent='عملية '+receipt.sale_id;const detail=document.createElement('p');detail.textContent='الحالة: '+receipt.state+' — الكمية: '+receipt.quantity+' — الإجمالي: '+receipt.total_minor+' '+receipt.currency_code;const remaining=document.createElement('p');remaining.textContent='المتبقي عند البيع: '+receipt.quantity_remaining+' — الوقت: '+receipt.occurred_at;const invoice=document.createElement('a');invoice.href='/invoices/'+encodeURIComponent(receipt.sale_id);invoice.target='_blank';invoice.rel='noopener noreferrer';invoice.textContent='عرض إيصال البيع للطباعة';card.append(title,detail,remaining,invoice);root.append(card)}}catch(e){root.textContent=e.message}}
 async function loadCatalog(){message('جارٍ قراءة المنتجات والمخزون الفعلي...');try{const data=await api('/api/catalog');const root=$('catalog');root.replaceChildren();for(const item of data.items){const card=document.createElement('article');card.className='card';const title=document.createElement('h3');title.textContent=item.product_name;const detail=document.createElement('p');detail.textContent='السعر: '+item.unit_price_minor+' '+item.currency_code+' (وحدات نقدية صغرى)';const stock=document.createElement('p');stock.textContent='المتاح فعلياً: '+item.available_quantity;const context=document.createElement('p');context.className='muted';context.textContent='النشاط: '+item.activity_id+' — الموقع: '+(item.location_ref||'غير محدد')+' — النطاق: '+item.scope_key;const qty=document.createElement('input');qty.type='number';qty.min='1';qty.max=String(item.available_quantity);qty.value='1';qty.setAttribute('aria-label','الكمية');const total=document.createElement('p');total.setAttribute('aria-live','polite');const updateTotal=()=>{const count=Number(qty.value);const amount=count*item.unit_price_minor;if(!Number.isSafeInteger(count)||count<1||count>item.available_quantity||!Number.isSafeInteger(amount)||amount<0){total.textContent='أدخل كمية صحيحة ضمن المتاح لعرض الإجمالي.';return}total.textContent='الإجمالي قبل التأكيد: '+amount+' '+item.currency_code+' (وحدات نقدية صغرى)'};qty.addEventListener('input',updateTotal);updateTotal();const buy=document.createElement('button');buy.textContent='شراء';buy.onclick=async()=>{const quantity=Number(qty.value);if(!Number.isSafeInteger(quantity)||quantity<1||quantity>item.available_quantity){message('الكمية يجب أن تكون عدداً صحيحاً ضمن المخزون المتاح.');return}const keyName='checkout:'+item.offering_id+':'+item.scope_key+':'+(item.location_ref||'');let pending;try{pending=JSON.parse(sessionStorage.getItem(keyName)||'null')}catch{}if(pending&&pending.quantity!==quantity){message('توجد عملية شراء معلقة بكمية مختلفة. أعد المحاولة بالكمية نفسها حتى تتأكد من نتيجتها، ولا تبدأ عملية جديدة قبل حسمها.');return}buy.disabled=true;if(!pending){pending={idempotency_key:crypto.randomUUID(),sale_id:crypto.randomUUID(),quantity};sessionStorage.setItem(keyName,JSON.stringify(pending))}try{const receipt=await api('/api/checkout',{method:'POST',body:JSON.stringify({offering_id:item.offering_id,activity_id:item.activity_id,quantity,scope_key:item.scope_key,location_ref:item.location_ref,idempotency_key:pending.idempotency_key,sale_id:pending.sale_id})});sessionStorage.removeItem(keyName);message('تم البيع بنجاح\nرقم العملية: '+receipt.sale_id+'\nالحالة: '+receipt.state+'\nالكمية: '+receipt.quantity+'\nالإجمالي: '+receipt.total_minor+' '+receipt.currency_code+'\nالمتبقي: '+receipt.quantity_remaining);await loadCatalog();await loadRecentReceipts()}catch(e){message(e.message+'\nيمكن إعادة المحاولة بنفس المفتاح إذا انقطع الاتصال.')}finally{buy.disabled=false}};card.append(title,detail,stock,context,qty,total,buy);root.append(card)}message(data.items.length?'المنتجات المتاحة محدثة من قاعدة البيانات.':'لا توجد حالياً منتجات يمكن إثبات توفرها للبيع.')}catch(e){message(e.message)}}
 $('login').onsubmit=async e=>{e.preventDefault();try{const data=await api('/api/login',{method:'POST',body:JSON.stringify(formData(e.target))});message('تم تسجيل الدخول');e.target.reset();await loadMe()}catch(err){message(err.message)}};
 $('register').onsubmit=async e=>{e.preventDefault();try{await api('/api/register',{method:'POST',body:JSON.stringify(formData(e.target))});message('تم إنشاء الحساب وتسجيل الدخول');e.target.reset();await loadMe()}catch(err){message(err.message)}};
@@ -222,6 +223,65 @@ class CommercialWebApplication:
                     session_token=token,
                 )
                 return self._json(start_response, "200 OK", result)
+
+            if method == "GET" and path.startswith("/invoices/"):
+                requested_sale_id = path.removeprefix("/invoices/").strip()
+                if not requested_sale_id or "/" in requested_sale_id:
+                    return self._json(start_response, "404 Not Found", {"error": "إيصال البيع غير موجود."})
+                rows = db.execute(
+                    """SELECT response_json FROM commercial_checkout_receipts
+                       WHERE actor_person_id=? ORDER BY created_at DESC""", (person_id,),
+                ).fetchall()
+                receipt = None
+                for row in rows:
+                    try:
+                        candidate = json.loads(row[0])
+                    except (TypeError, json.JSONDecodeError):
+                        continue
+                    if candidate.get("sale_id") == requested_sale_id:
+                        receipt = candidate
+                        break
+                if receipt is None:
+                    return self._json(start_response, "404 Not Found", {"error": "إيصال البيع غير موجود."})
+                esc = lambda value: html.escape(str(value), quote=True)
+                amount = f"{receipt['total_minor']:,} {receipt['currency_code']}"
+                unit = f"{receipt['unit_price_minor']:,} {receipt['currency_code']}"
+                page = f"""<!doctype html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>إيصال بيع {esc(receipt['sale_id'])}</title>
+<style>
+body{{font-family:system-ui,sans-serif;max-width:760px;margin:2rem auto;padding:1rem;color:#172033}}
+header,section,footer{{border:1px solid #d8dee8;border-radius:10px;padding:1rem;margin:.8rem 0}}
+h1{{margin:.2rem 0}}.muted{{color:#596579}}.total{{font-size:1.3rem;font-weight:700}}
+button{{font:inherit;padding:.6rem 1rem;cursor:pointer}}dt{{font-weight:700}}dd{{margin:0 0 .7rem}}
+@media print{{button{{display:none}}body{{margin:0;max-width:none}}header,section,footer{{break-inside:avoid}}}}
+</style></head><body>
+<header><h1>إيصال بيع</h1><p class="muted">إثبات عملية بيع مسجلة في النظام — ليس فاتورة ضريبية.</p></header>
+<section><dl>
+<dt>رقم البيع</dt><dd>{esc(receipt['sale_id'])}</dd>
+<dt>تاريخ العملية (UTC)</dt><dd>{esc(receipt['occurred_at'])}</dd>
+<dt>الحالة</dt><dd>{esc(receipt['state'])}</dd>
+<dt>المنتج</dt><dd>{esc(receipt.get('product_name') or 'اسم المنتج غير محفوظ في الإيصالات القديمة')}</dd>\n<dt>معرّف المنتج</dt><dd>{esc(receipt['product_id'])}</dd>
+<dt>معرّف العرض</dt><dd>{esc(receipt['offering_id'])}</dd>
+<dt>الكمية</dt><dd>{esc(receipt['quantity'])}</dd>
+<dt>سعر الوحدة</dt><dd>{esc(unit)}</dd>
+<dt>الموقع</dt><dd>{esc(receipt.get('location_ref') or 'غير محدد')}</dd>
+<dt>النطاق</dt><dd>{esc(receipt['scope_key'])}</dd>
+</dl><p class="total">الإجمالي: {esc(amount)}</p></section>
+<footer><p>المخزون المتبقي بعد البيع: {esc(receipt['quantity_remaining'])}</p>
+<button type="button" onclick="window.print()">طباعة / حفظ PDF</button></footer>
+</body></html>"""
+                encoded = page.encode("utf-8")
+                start_response("200 OK", [
+                    ("Content-Type", "text/html; charset=utf-8"),
+                    ("Content-Length", str(len(encoded))),
+                    ("Cache-Control", "no-store"),
+                    ("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'"),
+                    ("X-Content-Type-Options", "nosniff"),
+                    ("Referrer-Policy", "same-origin"),
+                ])
+                return [encoded]
 
             if method == "GET" and path == "/api/receipts":
                 rows = db.execute(

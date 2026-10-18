@@ -187,9 +187,7 @@ def test_existing_database_migration_preserves_sales_invoices_and_history_on_reo
 
     # connect_database applies the additive lifecycle migration to this pre-existing database.
     db = connect_database(path)
-    assert db.execute(
-        "SELECT version FROM schema_migrations ORDER BY version"
-    ).fetchall() == [
+    expected_versions = [
         ("0001_initial_relational_schema",),
         ("0002_prevent_person_canonical_cycles",),
         ("0003_enforce_sale_offering_activity_consistency",),
@@ -232,10 +230,15 @@ def test_existing_database_migration_preserves_sales_invoices_and_history_on_reo
         ("0047_hospital_finance_settings_reference_state_guards",),
         ("0048_hospital_finance_settings_immutable_history",),
         ("0049_inventory_movement_position_time_guard",),
-        ("0050_commercial_sale_return_movements",),
         ("9998_activity_invitations",),
         ("9999_file_attachments",),
     ]
+    expected_versions.extend(
+        (path.stem,) for path in MIGRATIONS_DIR.glob("005[01]_commercial_*.sql")
+    )
+    assert db.execute(
+        "SELECT version FROM schema_migrations ORDER BY version"
+    ).fetchall() == sorted(expected_versions)
     assert db.execute(
         "SELECT sale_id,offering_id,activity_id,state FROM sales WHERE sale_id=?",
         (sale_id,),
