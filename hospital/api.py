@@ -391,8 +391,8 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                     self._send(201, {"id": ident, "status": "created"})
                 elif route == "/api/appointments":
                     self._required(data, "patient_id", "doctor_id", "starts_at", "ends_at", "created_at")
-                    ident = database.book_appointment(patient_id=int(data["patient_id"]),
-                        doctor_id=int(data["doctor_id"]), starts_at=str(data["starts_at"]),
+                    ident = database.book_appointment(patient_id=self._integer(data, "patient_id"),
+                        doctor_id=self._integer(data, "doctor_id"), starts_at=str(data["starts_at"]),
                         ends_at=str(data["ends_at"]), created_at=str(data["created_at"]),
                         actor=self._actor(), reason=str(data.get("reason", "")))
                     self._send(201, {"id": ident, "status": "scheduled"})
@@ -450,9 +450,9 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                     self._required(data, "patient_id", "bed_id", "admitted_at")
                     with database.connect() as conn:
                         conn.execute("BEGIN IMMEDIATE")
-                        patient = conn.execute("SELECT active FROM patients WHERE id=?", (int(data["patient_id"]),)).fetchone()
-                        bed = conn.execute("SELECT active FROM beds WHERE id=?", (int(data["bed_id"]),)).fetchone()
-                        occupied = conn.execute("SELECT 1 FROM admissions WHERE bed_id=? AND status='admitted'", (int(data["bed_id"]),)).fetchone()
+                        patient = conn.execute("SELECT active FROM patients WHERE id=?", (self._integer(data, "patient_id"),)).fetchone()
+                        bed = conn.execute("SELECT active FROM beds WHERE id=?", (self._integer(data, "bed_id"),)).fetchone()
+                        occupied = conn.execute("SELECT 1 FROM admissions WHERE bed_id=? AND status='admitted'", (self._integer(data, "bed_id"),)).fetchone()
                         if patient is None or not patient["active"]:
                             raise HospitalError("active patient not found")
                         if bed is None or not bed["active"]:
@@ -460,7 +460,7 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                         if occupied:
                             raise HospitalError("bed is already occupied")
                         cur = conn.execute("INSERT INTO admissions(patient_id,bed_id,admitted_at,reason) VALUES(?,?,?,?)",
-                            (int(data["patient_id"]), int(data["bed_id"]), str(data["admitted_at"]), str(data.get("reason", ""))))
+                            (self._integer(data, "patient_id"), self._integer(data, "bed_id"), str(data["admitted_at"]), str(data.get("reason", ""))))
                         ident = cur.lastrowid
                         database._audit(conn, self._actor(), "patient.admitted", "admission", ident, str(data["admitted_at"]))
                         conn.commit()
@@ -482,10 +482,10 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                 elif route == "/api/invoices":
                     self._required(data, "invoice_no", "patient_id", "total_minor", "created_at")
                     ident = database.create_invoice(
-                        invoice_no=str(data["invoice_no"]), patient_id=int(data["patient_id"]),
+                        invoice_no=str(data["invoice_no"]), patient_id=self._integer(data, "patient_id"),
                         total_minor=self._integer(data, "total_minor"), created_at=str(data["created_at"]),
                         actor=self._actor(), currency=str(data.get("currency", "YER")),
-                        encounter_id=int(data["encounter_id"]) if data.get("encounter_id") is not None else None)
+                        encounter_id=self._integer(data, "encounter_id") if data.get("encounter_id") is not None else None)
                     self._send(201, {"id": ident, "status": "unpaid"})
                 elif route == "/api/payments":
                     self._required(data, "invoice_id", "amount_minor", "method", "received_at")
