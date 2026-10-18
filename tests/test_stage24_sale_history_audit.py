@@ -22,15 +22,18 @@ def sale_fixture(db, version=2):
     db.commit()
     return sale
 
-def history(db, sale, prior, current):
+def history(db, sale, prior, current, payload=None):
+    version = int(current.rsplit("v", 1)[1])
+    payload = payload or ("state:initiated" if version == 1 else "state:confirmed")
     db.execute("INSERT INTO domain_history(domain_history_id,owner_domain,target_ref,change_type,historical_at,actor_context_ref,prior_version_ref,current_version_ref,change_payload_ref,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
-               (uid(),"commerce",sale,"sale_state_transition",NOW,"actor",prior,current,"state:confirmed",NOW))
+               (uid(),"commerce",sale,"sale_state_transition",NOW,"actor",prior,current,payload,NOW))
+
 
 def test_audit_recognizes_complete_version_chain():
     db = connect_database()
     sale = sale_fixture(db)
-    history(db,sale,None,"v1")
-    history(db,sale,"v1","v2")
+    history(db,sale,None,f"sale-state:{sale}:v1")
+    history(db,sale,f"sale-state:{sale}:v1",f"sale-state:{sale}:v2")
     db.commit()
     result = SaleHistoryIntegrityAuditor().inspect(db,sale)
     assert result.status=="consistent"
@@ -44,8 +47,8 @@ def test_audit_distinguishes_missing_history_from_broken_chain_without_repair():
     auditor = SaleHistoryIntegrityAuditor()
     missing = auditor.inspect(db,sale)
     assert missing.status=="incomplete" and "sale_history_missing" in missing.findings
-    history(db,sale,None,"v1")
-    history(db,sale,"wrong-prior","v2")
+    history(db,sale,None,f"sale-state:{sale}:v1")
+    history(db,sale,"wrong-prior",f"sale-state:{sale}:v2")
     db.commit()
     before = db.execute("SELECT prior_version_ref,current_version_ref FROM domain_history WHERE target_ref=? ORDER BY rowid",(sale,)).fetchall()
     result = auditor.inspect(db,sale)
@@ -67,8 +70,8 @@ def test_audit_rejects_invalid_or_missing_sale():
 def test_audit_ignores_non_sale_events_with_same_target_ref():
     db = connect_database()
     sale = sale_fixture(db)
-    history(db, sale, None, "v1")
-    history(db, sale, "v1", "v2")
+    history(db, sale, None, f"sale-state:{sale}:v1")
+    history(db, sale, f"sale-state:{sale}:v1", f"sale-state:{sale}:v2")
     db.execute(
         "INSERT INTO domain_history(domain_history_id,owner_domain,target_ref,change_type,"
         "historical_at,actor_context_ref,prior_version_ref,current_version_ref,change_payload_ref,created_at) "
