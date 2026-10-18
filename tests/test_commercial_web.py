@@ -147,6 +147,7 @@ def test_web_session_can_buy_sellable_product_and_receive_result(tmp_path):
     )
     assert checkout["status"] == "200 OK"
     assert checkout["body"]["state"] == "fulfilled"
+    assert checkout["body"]["product_name"] == "Real bottle"
     assert checkout["body"]["total_minor"] == 1980
     assert checkout["body"]["quantity_remaining"] == 3
 
@@ -194,6 +195,7 @@ def test_web_session_can_buy_sellable_product_and_receive_result(tmp_path):
     assert printable["status"] == "200 OK"
     printable_html = printable["body"].decode("utf-8")
     assert "إيصال بيع" in printable_html
+    assert "Real bottle" in printable_html
     assert "ليس فاتورة ضريبية" in printable_html
     assert checkout["body"]["sale_id"] in printable_html
     assert "window.print()" in printable_html
