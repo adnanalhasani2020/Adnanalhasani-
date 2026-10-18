@@ -586,3 +586,64 @@ def test_invoice_rejects_obligation_with_different_creditor_without_writes():
         "SELECT creditor_person_id FROM obligations WHERE obligation_id=?", (obligation_id,)
     ).fetchone()[0] == other_creditor
     db.close()
+
+
+
+@pytest.mark.parametrize("link_kind", ["obligation", "payment"])
+def test_invoice_void_refuses_financial_links_without_reconciliation(link_kind):
+    db = connect_database()
+    actor, activity, sale, grant = fixture(db)
+    app = InvoiceApplication()
+    issued = app.create_invoice(
+        db, sale_id=sale, actor_context_ref=actor, authorization_grant_id=grant,
+        issuer_ref=actor, invoice_number=f"INV-LINK-{link_kind}", now=STAMP,
+    )
+    invoice_id = str(issued.invoice.id)
+    linked_person = uid()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (linked_person, STAMP, STAMP),
+    )
+
+    if link_kind == "obligation":
+        obligation_id = uid()
+        db.execute(
+            "INSERT INTO obligations(obligation_id,creditor_person_id,debtor_person_id,source_invoice_id,"
+            "loan_id,amount_minor,currency_code,state,due_at,created_at,updated_at,version_no) "
+            "VALUES(?,?,?, ?,NULL,100,'SAR','open',NULL,?,?,1)",
+            (obligation_id, actor, linked_person, invoice_id, STAMP, STAMP),
+        )
+        db.execute(
+            "UPDATE invoices SET obligation_id=? WHERE invoice_id=?",
+            (obligation_id, invoice_id),
+        )
+        expected_message = "linked Obligation requires explicit reconciliation"
+    else:
+        db.execute(
+            "INSERT INTO payments(payment_id,obligation_id,invoice_id,payer_person_id,payee_person_id,"
+            "amount_minor,currency_code,state,provider_ref,external_payment_ref,created_at,updated_at,version_no) "
+            "VALUES(?,NULL,?,?,?,?,100,'SAR','initiated',NULL,NULL,?,?,1)",
+            (uid(), invoice_id, linked_person, actor, STAMP, STAMP),
+        )
+        expected_message = "linked Payment history requires explicit reconciliation"
+
+    db.execute(
+        "UPDATE authorization_grants SET action_code='void_invoice' WHERE authorization_grant_id=?",
+        (grant,),
+    )
+    db.commit()
+
+    with pytest.raises(ValidationError, match=expected_message):
+        app.void_invoice(
+            db, invoice_id, actor_context_ref=actor, authorization_grant_id=grant,
+            expected_version=1, now="2026-10-10T12:01:00Z",
+        )
+
+    persisted = app.get_invoice(db, invoice_id)
+    assert persisted.invoice.state.value == "issued"
+    assert persisted.version_no == 1
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=? AND change_type='invoice_state_transition'",
+        (invoice_id,),
+    ).fetchone()[0] == 1
+    db.close()
