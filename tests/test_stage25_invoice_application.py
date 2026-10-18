@@ -404,3 +404,35 @@ def test_invoice_default_issue_and_creation_timestamps_share_one_instant():
     ).fetchone()
     assert row[0] == row[1]
     db.close()
+
+
+def test_invoice_void_rejects_timestamp_before_creation_without_mutation():
+    db = connect_database()
+    actor, activity, sale, issue_grant = fixture(db)
+    app = InvoiceApplication()
+    issued = app.create_invoice(
+        db, sale_id=sale, actor_context_ref=actor,
+        authorization_grant_id=issue_grant, issuer_ref=actor,
+        invoice_number="INV-VOID-BEFORE-CREATION", now=STAMP,
+    )
+    void_grant = uid()
+    db.execute(
+        "INSERT INTO authorization_grants(authorization_grant_id,subject_person_id,action_code,scope_ref,"
+        "context_ref,state,effective_from,created_at,updated_at) VALUES(?,?,?,?,?,'active',?,?,?)",
+        (void_grant, actor, "void_invoice", sale, activity, "2026-10-01T00:00:00Z", STAMP, STAMP),
+    )
+    db.commit()
+    with pytest.raises(ValidationError, match="void timestamp cannot precede creation timestamp"):
+        app.void_invoice(
+            db, issued.invoice.id, actor_context_ref=actor,
+            authorization_grant_id=void_grant, expected_version=1,
+            now="2026-10-10T11:59:59Z",
+        )
+    persisted = app.get_invoice(db, issued.invoice.id)
+    assert persisted.invoice.state.value == "issued"
+    assert persisted.version_no == 1
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=? AND change_type='invoice_state_transition'",
+        (str(issued.invoice.id),),
+    ).fetchone()[0] == 1
+    db.close()
