@@ -403,7 +403,8 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                     ident = database.record_payment(
                         invoice_id=int(data["invoice_id"]), amount_minor=int(data["amount_minor"]),
                         method=str(data["method"]), received_at=str(data["received_at"]),
-                        actor=self._actor(), reference=data.get("reference"))
+                        actor=self._actor(), reference=data.get("reference"),
+                        idempotency_key=data.get("idempotency_key"))
                     self._send(201, {"id": ident, "status": "received"})
                 else:
                     self._send(404, {"error": "not_found"})
