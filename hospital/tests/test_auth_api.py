@@ -98,6 +98,22 @@ class HospitalUserAuthAPITests(unittest.TestCase):
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM auth_users").fetchone()[0], users_before)
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM audit_log").fetchone()[0], audit_before)
 
+    def test_unauthenticated_write_is_rejected_without_database_changes(self):
+        with self.db.connect() as conn:
+            patients_before = conn.execute("SELECT COUNT(*) FROM patients").fetchone()[0]
+            audit_before = conn.execute("SELECT COUNT(*) FROM audit_log").fetchone()[0]
+
+        status, payload = self.request("/api/patients", "POST", {
+            "patient_no": "NO-AUTH-1", "full_name": "Must Not Be Created",
+            "created_at": "2026-01-01T08:00:00Z"
+        })
+        self.assertEqual(status, 401)
+        self.assertEqual(payload["error"], "unauthorized")
+
+        with self.db.connect() as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM patients").fetchone()[0], patients_before)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM audit_log").fetchone()[0], audit_before)
+
     def test_expired_session_cannot_read_or_write_and_leaves_database_unchanged(self):
         token = self.login("admin.user", "administrator-password-123")
         token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
