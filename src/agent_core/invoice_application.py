@@ -172,6 +172,13 @@ class InvoiceApplication:
         timestamp = self._timestamp(now if now is not None else datetime.now(timezone.utc), "Invoice void timestamp")
         with self._atomic(connection):
             record = self._load(connection, key)
+            created_at = connection.execute(
+                "SELECT created_at FROM invoices WHERE invoice_id=?", (key,)
+            ).fetchone()[0]
+            void_instant = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+            created_instant = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+            if void_instant < created_instant:
+                raise ValidationError("Invoice void timestamp cannot precede creation timestamp")
             SaleApplication()._authorize(
                 connection, authorization_grant_id, actor_key, "void_invoice",
                 str(record.sale_id),
