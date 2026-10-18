@@ -294,3 +294,19 @@ def test_web_accepts_matching_origin_for_registration(tmp_path):
         body={"username": "same_origin_buyer", "password": "correct horse battery staple"},
     )
     assert registered["status"] == "200 OK"
+
+
+def test_checkout_ui_preserves_pending_idempotency_key_for_ambiguous_retry(tmp_path):
+    db_path = tmp_path / "commercial-web-idempotency.sqlite"
+    db = connect_database(db_path)
+    db.close()
+    app = CommercialWebApplication(db_path)
+
+    page = request(app, "/", method="GET")
+    assert page["status"] == "200 OK"
+    html = page["body"].decode("utf-8")
+    guard = "if(pending&&pending.quantity!==quantity)"
+    assert guard in html
+    assert "توجد عملية شراء معلقة بكمية مختلفة" in html
+    assert "else if(pending.quantity!==quantity)" not in html
+    assert html.index(guard) < html.index("buy.disabled=true")
