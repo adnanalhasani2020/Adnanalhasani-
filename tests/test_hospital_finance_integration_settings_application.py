@@ -85,3 +85,29 @@ def test_settings_fail_closed_for_partial_payment_policy_and_account_owner_misma
             now=NOW,
         )
     db.close()
+
+
+def test_settings_require_active_activity_when_proposed_and_approved(tmp_path):
+    db = connect_database(tmp_path / "hospital-finance-settings-inactive-activity.sqlite")
+    activity, owner, proposer, approver, account = _fixture(db)
+    app = HospitalFinanceIntegrationSettingsApplication()
+
+    db.execute("UPDATE activities SET state='suspended' WHERE activity_id=?", (activity,))
+    with pytest.raises(ValidationError, match="must be active to propose"):
+        app.propose(
+            db, activity_id=activity, hospital_scope_ref="clinic-main",
+            finance_person_id=owner, financial_account_id=account,
+            proposed_by_person_id=proposer, now=NOW,
+        )
+
+    db.execute("UPDATE activities SET state='active' WHERE activity_id=?", (activity,))
+    proposal = app.propose(
+        db, activity_id=activity, hospital_scope_ref="clinic-main",
+        finance_person_id=owner, financial_account_id=account,
+        proposed_by_person_id=proposer, now=NOW,
+    )
+    db.execute("UPDATE activities SET state='suspended' WHERE activity_id=?", (activity,))
+    with pytest.raises(ValidationError, match="must remain active to approve"):
+        app.approve(db, settings_id=proposal.settings_id, approved_by_person_id=approver, now=NOW)
+    assert app.get_by_id(db, settings_id=proposal.settings_id).status == "pending_approval"
+    db.close()
