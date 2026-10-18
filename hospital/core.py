@@ -170,6 +170,23 @@ CREATE TABLE IF NOT EXISTS payments (
   amount_minor INTEGER NOT NULL CHECK(amount_minor > 0), method TEXT NOT NULL,
   reference TEXT, received_at TEXT NOT NULL
 );
+-- Transactional handoff intents; consumers must not treat these as Finance recognition.
+CREATE TABLE IF NOT EXISTS finance_outbox (
+  id INTEGER PRIMARY KEY,
+  event_key TEXT NOT NULL UNIQUE,
+  event_type TEXT NOT NULL CHECK(event_type IN ('hospital.invoice.created','hospital.payment.received')),
+  aggregate_type TEXT NOT NULL CHECK(aggregate_type IN ('invoice','payment')),
+  aggregate_id TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','processing','delivered','failed')),
+  attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts >= 0),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  delivered_at TEXT,
+  last_error TEXT
+);
+CREATE INDEX IF NOT EXISTS finance_outbox_pending
+  ON finance_outbox(status, id);
 CREATE TABLE IF NOT EXISTS audit_log (
   id INTEGER PRIMARY KEY, actor TEXT NOT NULL, action TEXT NOT NULL,
   entity_type TEXT NOT NULL, entity_id TEXT NOT NULL,
@@ -323,6 +340,15 @@ class HospitalDB:
             ident = cur.lastrowid
             self._audit(db, actor, "invoice.created", "invoice", ident, created_at,
                         {"total_minor": total_minor, "currency": currency})
+            db.execute(
+                """INSERT INTO finance_outbox
+                   (event_key,event_type,aggregate_type,aggregate_id,payload_json,created_at,updated_at)
+                   VALUES(?,?,?,?,?,?,?)""",
+                (f"hospital:invoice:{ident}:created:v1", "hospital.invoice.created", "invoice",
+                 str(ident), json.dumps({"invoice_id": ident, "invoice_no": invoice_no.strip(),
+                 "total_minor": total_minor, "currency": currency, "created_at": created_at},
+                 ensure_ascii=False, sort_keys=True), created_at, created_at),
+            )
             db.commit()
             return int(ident)
 
@@ -345,6 +371,18 @@ class HospitalDB:
             db.execute("UPDATE invoices SET status=? WHERE id=?", (status, invoice_id))
             self._audit(db, actor, "payment.received", "invoice", invoice_id, received_at,
                         {"amount_minor": amount_minor, "method": method, "payment_id": cur.lastrowid})
+            db.execute(
+                """INSERT INTO finance_outbox
+                   (event_key,event_type,aggregate_type,aggregate_id,payload_json,created_at,updated_at)
+                   VALUES(?,?,?,?,?,?,?)""",
+                (f"hospital:payment:{cur.lastrowid}:received:v1", "hospital.payment.received", "payment",
+                 str(cur.lastrowid), json.dumps({"payment_id": cur.lastrowid, "invoice_id": invoice_id,
+                 "amount_minor": amount_minor, "currency": db.execute(
+                     "SELECT currency FROM invoices WHERE id=?", (invoice_id,)
+                 ).fetchone()["currency"], "method": method.strip(), "reference": reference,
+                 "received_at": received_at}, ensure_ascii=False, sort_keys=True),
+                 received_at, received_at),
+            )
             db.commit()
             return int(cur.lastrowid)
 
