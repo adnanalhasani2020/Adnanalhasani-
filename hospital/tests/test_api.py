@@ -251,6 +251,23 @@ class HospitalAPITests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(payload["data"][0]["paid_minor"], 3000)
 
+    def test_payment_api_accepts_idempotency_key_for_safe_retries(self):
+        patient_id = self.db.register_patient(patient_no="P-API-IDEMP", full_name="API Retry Patient",
+            created_at="2026-01-01T08:00:00", actor="test")
+        invoice_id = self.db.create_invoice(invoice_no="INV-API-IDEMP", patient_id=patient_id,
+            total_minor=10000, created_at="2026-01-01T08:30:00", actor="test")
+        payload = {"invoice_id": invoice_id, "amount_minor": 2500, "method": "cash",
+            "received_at": "2026-01-01T09:00:00", "reference": "api-receipt-1",
+            "idempotency_key": "api-session:receipt-1"}
+        status_first, first = self.request("/api/payments", method="POST", payload=payload)
+        status_retry, retry = self.request("/api/payments", method="POST", payload=payload)
+        self.assertEqual(status_first, 201)
+        self.assertEqual(status_retry, 201)
+        self.assertEqual(retry["id"], first["id"])
+        with self.db.connect() as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM payments WHERE invoice_id=?",
+                (invoice_id,)).fetchone()[0], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

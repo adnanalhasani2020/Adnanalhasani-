@@ -249,6 +249,52 @@ class HospitalCoreTests(unittest.TestCase):
         self.assertIn("hospital_audit_log_no_update", names)
         self.assertIn("hospital_audit_log_no_delete", names)
 
+    def test_payment_idempotency_key_returns_original_payment_without_duplicate_side_effects(self):
+        patient = self.db.register_patient(patient_no="P-IDEMP-1", full_name="Retry Patient",
+            created_at="2026-01-01T08:00:00", actor="test")
+        invoice = self.db.create_invoice(invoice_no="INV-IDEMP-1", patient_id=patient,
+            total_minor=10000, created_at="2026-01-01T08:30:00", actor="test")
+        args = dict(invoice_id=invoice, amount_minor=2500, method="cash",
+            received_at="2026-01-01T09:00:00", actor="cashier",
+            reference="receipt-1", idempotency_key="cashier-session:receipt-1")
+        first = self.db.record_payment(**args)
+        retry = self.db.record_payment(**args)
+        self.assertEqual(retry, first)
+        with self.db.connect() as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM payments WHERE invoice_id=?",
+                (invoice,)).fetchone()[0], 1)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM finance_outbox WHERE event_type='hospital.payment.received'").fetchone()[0], 1)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM audit_log WHERE action='payment.received'").fetchone()[0], 1)
+
+    def test_payment_idempotency_key_rejects_changed_request_without_side_effects(self):
+        patient = self.db.register_patient(patient_no="P-IDEMP-2", full_name="Conflict Patient",
+            created_at="2026-01-01T08:00:00", actor="test")
+        invoice = self.db.create_invoice(invoice_no="INV-IDEMP-2", patient_id=patient,
+            total_minor=10000, created_at="2026-01-01T08:30:00", actor="test")
+        args = dict(invoice_id=invoice, amount_minor=2500, method="cash",
+            received_at="2026-01-01T09:00:00", actor="cashier",
+            idempotency_key="cashier-session:receipt-conflict")
+        self.db.record_payment(**args)
+        with self.assertRaisesRegex(HospitalError, "different payment details"):
+            self.db.record_payment(**{**args, "amount_minor": 3500})
+        with self.db.connect() as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM payments WHERE invoice_id=?",
+                (invoice,)).fetchone()[0], 1)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM finance_outbox WHERE event_type='hospital.payment.received'").fetchone()[0], 1)
+
+    def test_existing_hospital_database_upgrades_payment_idempotency_columns(self):
+        with self.db.connect() as conn:
+            conn.execute("DROP INDEX IF EXISTS payments_idempotency_key_unique")
+            conn.execute("ALTER TABLE payments DROP COLUMN request_sha256")
+            conn.execute("ALTER TABLE payments DROP COLUMN idempotency_key")
+        self.db = HospitalDB(self.db.path)
+        with self.db.connect() as conn:
+            columns = {row["name"] for row in conn.execute("PRAGMA table_info(payments)")}
+            self.assertIn("idempotency_key", columns)
+            self.assertIn("request_sha256", columns)
+            indexes = {row["name"] for row in conn.execute("PRAGMA index_list(payments)")}
+            self.assertIn("payments_idempotency_key_unique", indexes)
+
 
 if __name__ == "__main__":
     unittest.main()
