@@ -103,18 +103,18 @@ class CommercialWebApplication:
             return
         try:
             parsed = urlsplit(origin)
-            if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.path or parsed.query or parsed.fragment:
-                raise ValueError("invalid origin")
-            request_scheme = environ.get("wsgi.url_scheme", "http").lower()
-            request_host = environ.get("HTTP_HOST") or environ.get("SERVER_NAME", "")
-            if not environ.get("HTTP_HOST") and environ.get("SERVER_PORT"):
-                default_port = "443" if request_scheme == "https" else "80"
-                if environ["SERVER_PORT"] != default_port:
-                    request_host += ":" + environ["SERVER_PORT"]
-            if parsed.scheme.lower() != request_scheme or parsed.netloc.lower() != request_host.lower():
-                raise ValidationError("Cross-origin request rejected")
         except ValueError as exc:
             raise ValidationError("Invalid request Origin") from exc
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.path or parsed.query or parsed.fragment:
+            raise ValidationError("Invalid request Origin")
+        request_scheme = environ.get("wsgi.url_scheme", "http").lower()
+        request_host = environ.get("HTTP_HOST") or environ.get("SERVER_NAME", "")
+        if not environ.get("HTTP_HOST") and environ.get("SERVER_PORT"):
+            default_port = "443" if request_scheme == "https" else "80"
+            if environ["SERVER_PORT"] != default_port:
+                request_host += ":" + environ["SERVER_PORT"]
+        if parsed.scheme.lower() != request_scheme or parsed.netloc.lower() != request_host.lower():
+            raise ValidationError("Cross-origin request rejected")
 
     @staticmethod
     def _body(environ):
