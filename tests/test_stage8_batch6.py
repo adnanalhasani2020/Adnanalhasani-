@@ -249,3 +249,12 @@ def test_reverse_implementation_inventory_has_traceability_owner():
             assert cross_cutting[module]
         else:
             assert module in impl_text
+
+    # Keep the newly introduced hospital modules explicitly provisional in the
+    # traceability inventory; this mapping is not a scope approval.
+    assert "hospital_management.py" in expected
+    assert "hospital_clinical_services.py" in expected
+    assert "provisional" in cross_cutting["hospital_management.py"].lower()
+    assert "no persistence or authorization integration" in cross_cutting["hospital_management.py"]
+    assert "outside approved EXEC-0006 scope" in cross_cutting["hospital_clinical_services.py"]
+    assert "no persistence or atomic inventory integration" in cross_cutting["hospital_clinical_services.py"]
