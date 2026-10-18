@@ -212,6 +212,10 @@ class AuthStore:
 
 
 def require_permission(principal: Principal, permission: str) -> None:
+    # Unknown routes must be denied even to administrators. The wildcard role is
+    # for explicitly registered permissions, not an escape hatch for unmapped APIs.
+    if permission == "route:unknown":
+        raise AuthorizationError("unknown API route denied")
     if principal.role in ROLE_PERMISSIONS and permission in {"session:read", "session:write"}:
         return
     if principal.role not in ROLE_PERMISSIONS:
