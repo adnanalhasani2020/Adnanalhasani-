@@ -265,3 +265,324 @@ def test_invoice_rejects_explicit_falsey_issue_timestamp_without_writes(bad_issu
     ).fetchone()[0] == 0
     db.close()
 
+def test_invoice_rejects_due_timestamp_before_issue_timestamp_without_writes():
+    db = connect_database()
+    actor, _activity, sale, grant = fixture(db)
+    invoice_id = uid()
+    with pytest.raises(ValidationError, match="due timestamp cannot precede issue timestamp"):
+        InvoiceApplication().create_invoice(
+            db, sale_id=sale, actor_context_ref=actor,
+            authorization_grant_id=grant, issuer_ref=actor,
+            invoice_number="INV-DUE-BEFORE-ISSUE", invoice_id=invoice_id,
+            issue_at="2026-10-10T12:00:00Z",
+            due_at="2026-10-10T11:59:59Z",
+            now=STAMP,
+        )
+    assert db.execute(
+        "SELECT COUNT(*) FROM invoices WHERE invoice_id=?", (invoice_id,)
+    ).fetchone()[0] == 0
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=?", (invoice_id,)
+    ).fetchone()[0] == 0
+    db.close()
+
+
+def test_invoice_due_timestamp_accepts_same_instant_as_issue_with_different_offset():
+    db = connect_database()
+    actor, _activity, sale, grant = fixture(db)
+    issued = InvoiceApplication().create_invoice(
+        db, sale_id=sale, actor_context_ref=actor,
+        authorization_grant_id=grant, issuer_ref=actor,
+        invoice_number="INV-DUE-EQUAL-ISSUE",
+        issue_at="2026-10-10T12:00:00Z",
+        due_at="2026-10-10T15:00:00+03:00",
+        now=STAMP,
+    )
+    assert issued.issue_at == "2026-10-10T12:00:00Z"
+    assert issued.due_at == "2026-10-10T12:00:00Z"
+    db.close()
+
+def test_invoice_due_timestamp_fraction_after_issue_in_same_second_is_valid():
+    db = connect_database()
+    actor, _activity, sale, grant = fixture(db)
+    issued = InvoiceApplication().create_invoice(
+        db, sale_id=sale, actor_context_ref=actor,
+        authorization_grant_id=grant, issuer_ref=actor,
+        invoice_number="INV-DUE-FRACTION-AFTER",
+        issue_at="2026-10-10T12:00:00Z",
+        due_at="2026-10-10T12:00:00.000001Z",
+        now=STAMP,
+    )
+    assert issued.issue_at == "2026-10-10T12:00:00Z"
+    assert issued.due_at == "2026-10-10T12:00:00.000001Z"
+    db.close()
+
+def test_invoice_rejects_issue_timestamp_after_creation_without_writes():
+    db = connect_database()
+    actor, _activity, sale, grant = fixture(db)
+    invoice_id = uid()
+    with pytest.raises(ValidationError, match="issue timestamp cannot follow creation timestamp"):
+        InvoiceApplication().create_invoice(
+            db, sale_id=sale, actor_context_ref=actor,
+            authorization_grant_id=grant, issuer_ref=actor,
+            invoice_number="INV-ISSUED-IN-FUTURE", invoice_id=invoice_id,
+            issue_at="2026-10-10T12:00:00.000001Z",
+            now="2026-10-10T12:00:00Z",
+        )
+    assert db.execute(
+        "SELECT COUNT(*) FROM invoices WHERE invoice_id=?", (invoice_id,)
+    ).fetchone()[0] == 0
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=?", (invoice_id,)
+    ).fetchone()[0] == 0
+    db.close()
+
+def test_invoice_issue_authorization_runs_inside_atomic_write_transaction(monkeypatch):
+    from agent_core.application import SaleApplication
+
+    db = connect_database()
+    actor, _activity, sale, grant = fixture(db)
+    original = SaleApplication._authorize
+    observed = {"inside_transaction": False}
+
+    def checked_authorize(self, connection, *args, **kwargs):
+        observed["inside_transaction"] = connection.in_transaction
+        assert connection.in_transaction
+        return original(self, connection, *args, **kwargs)
+
+    monkeypatch.setattr(SaleApplication, "_authorize", checked_authorize)
+    InvoiceApplication().create_invoice(
+        db, sale_id=sale, actor_context_ref=actor,
+        authorization_grant_id=grant, issuer_ref=actor,
+        invoice_number="INV-AUTH-ATOMIC", now=STAMP,
+    )
+    assert observed["inside_transaction"] is True
+    db.close()
+
+def test_invoice_sale_offering_activity_mismatch_is_rejected_by_database_guard_without_writes():
+    db = connect_database()
+    actor, activity, sale, grant = fixture(db)
+    other_activity = uid()
+    db.execute(
+        "INSERT INTO activities(activity_id,owner_person_id,state,created_at,updated_at) "
+        "VALUES(?,?,'active',?,?)",
+        (other_activity, actor, STAMP, STAMP),
+    )
+    db.commit()
+    with pytest.raises(sqlite3.IntegrityError, match="offering activity update would break sale activity context"):
+        db.execute(
+            "UPDATE offerings SET activity_id=? WHERE offering_id=("
+            "SELECT offering_id FROM sales WHERE sale_id=?)",
+            (other_activity, sale),
+        )
+    db.rollback()
+    invoice_id = uid()
+    issued = InvoiceApplication().create_invoice(
+        db, sale_id=sale, actor_context_ref=actor,
+        authorization_grant_id=grant, issuer_ref=actor,
+        invoice_number="INV-CONTEXT-GUARD", invoice_id=invoice_id, now=STAMP,
+    )
+    assert str(issued.invoice.id) == invoice_id
+    assert db.execute(
+        "SELECT COUNT(*) FROM invoices WHERE invoice_id=?", (invoice_id,)
+    ).fetchone()[0] == 1
+    db.close()
+def test_invoice_default_issue_and_creation_timestamps_share_one_instant():
+    db = connect_database()
+    actor, _activity, sale, grant = fixture(db)
+    issued = InvoiceApplication().create_invoice(
+        db, sale_id=sale, actor_context_ref=actor,
+        authorization_grant_id=grant, issuer_ref=actor,
+        invoice_number="INV-DEFAULT-TIMESTAMPS",
+    )
+    row = db.execute(
+        "SELECT created_at, issue_at FROM invoices WHERE invoice_id=?",
+        (str(issued.invoice.id),),
+    ).fetchone()
+    assert row[0] == row[1]
+    db.close()
+
+
+def test_invoice_void_rejects_timestamp_before_creation_without_mutation():
+    db = connect_database()
+    actor, activity, sale, issue_grant = fixture(db)
+    app = InvoiceApplication()
+    issued = app.create_invoice(
+        db, sale_id=sale, actor_context_ref=actor,
+        authorization_grant_id=issue_grant, issuer_ref=actor,
+        invoice_number="INV-VOID-BEFORE-CREATION", now=STAMP,
+    )
+    void_grant = uid()
+    db.execute(
+        "INSERT INTO authorization_grants(authorization_grant_id,subject_person_id,action_code,scope_ref,"
+        "context_ref,state,effective_from,created_at,updated_at) VALUES(?,?,?,?,?,'active',?,?,?)",
+        (void_grant, actor, "void_invoice", sale, activity, "2026-10-01T00:00:00Z", STAMP, STAMP),
+    )
+    db.commit()
+    with pytest.raises(ValidationError, match="void timestamp cannot precede creation timestamp"):
+        app.void_invoice(
+            db, issued.invoice.id, actor_context_ref=actor,
+            authorization_grant_id=void_grant, expected_version=1,
+            now="2026-10-10T11:59:59Z",
+        )
+    persisted = app.get_invoice(db, issued.invoice.id)
+    assert persisted.invoice.state.value == "issued"
+    assert persisted.version_no == 1
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=? AND change_type='invoice_state_transition'",
+        (str(issued.invoice.id),),
+    ).fetchone()[0] == 1
+    db.close()
+
+
+def test_invoice_rejects_duplicate_number_for_same_issuer_without_writes():
+    db = connect_database()
+    actor, _activity, sale, grant = fixture(db)
+    app = InvoiceApplication()
+    first = app.create_invoice(
+        db, sale_id=sale, actor_context_ref=actor,
+        authorization_grant_id=grant, issuer_ref=actor,
+        invoice_number="INV-DUPLICATE", now=STAMP,
+    )
+    second_id = uid()
+    with pytest.raises(ValidationError, match="Invoice number already exists for this issuer"):
+        app.create_invoice(
+            db, sale_id=sale, actor_context_ref=actor,
+            authorization_grant_id=grant, issuer_ref=actor,
+            invoice_number=" INV-DUPLICATE ", invoice_id=second_id, now=STAMP,
+        )
+    assert db.execute(
+        "SELECT COUNT(*) FROM invoices WHERE issuer_ref=? AND invoice_number='INV-DUPLICATE'",
+        (actor,),
+    ).fetchone()[0] == 1
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=?",
+        (second_id,),
+    ).fetchone()[0] == 0
+    assert app.get_invoice(db, first.invoice.id).invoice.state.value == "issued"
+    db.close()
+
+
+def test_invoice_rejects_obligation_already_linked_to_another_invoice_without_writes():
+    db = connect_database()
+    actor, activity, sale, grant = fixture(db)
+    app = InvoiceApplication()
+    first = app.create_invoice(
+        db, sale_id=sale, actor_context_ref=actor,
+        authorization_grant_id=grant, issuer_ref=actor,
+        invoice_number="INV-SOURCE-OWNER", now=STAMP,
+    )
+    debtor = uid()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (debtor, STAMP, STAMP),
+    )
+    obligation_id = uid()
+    db.execute(
+        "INSERT INTO obligations(obligation_id,creditor_person_id,debtor_person_id,source_invoice_id,"
+        "amount_minor,currency_code,state,created_at,updated_at,version_no) "
+        "VALUES(?,?,?,?,1000,'YER','proposed',?,?,1)",
+        (obligation_id, actor, debtor, str(first.invoice.id), STAMP, STAMP),
+    )
+    db.commit()
+    second_id = uid()
+    with pytest.raises(ValidationError, match="already linked to an Invoice"):
+        app.create_invoice(
+            db, sale_id=sale, actor_context_ref=actor,
+            authorization_grant_id=grant, issuer_ref=actor,
+            invoice_number="INV-SOURCE-SECOND", invoice_id=second_id,
+            obligation_id=obligation_id, now=STAMP,
+        )
+    assert db.execute(
+        "SELECT COUNT(*) FROM invoices WHERE invoice_id=?", (second_id,)
+    ).fetchone()[0] == 0
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=?", (second_id,)
+    ).fetchone()[0] == 0
+    assert db.execute(
+        "SELECT source_invoice_id FROM obligations WHERE obligation_id=?", (obligation_id,)
+    ).fetchone()[0] == str(first.invoice.id)
+    db.close()
+
+
+def test_invoice_rejects_reusing_an_obligation_already_linked_by_invoice_foreign_key():
+    db = connect_database()
+    actor, _activity, sale, grant = fixture(db)
+    debtor = uid()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (debtor, STAMP, STAMP),
+    )
+    obligation_id = uid()
+    db.execute(
+        "INSERT INTO obligations(obligation_id,creditor_person_id,debtor_person_id,amount_minor,"
+        "currency_code,state,created_at,updated_at,version_no) "
+        "VALUES(?,?,?,1000,'YER','proposed',?,?,1)",
+        (obligation_id, actor, debtor, STAMP, STAMP),
+    )
+    db.commit()
+    app = InvoiceApplication()
+    first = app.create_invoice(
+        db, sale_id=sale, actor_context_ref=actor,
+        authorization_grant_id=grant, issuer_ref=actor,
+        invoice_number="INV-OBLIGATION-OWNER-1", obligation_id=obligation_id, now=STAMP,
+    )
+    second_id = uid()
+    with pytest.raises(ValidationError, match="Obligation is already linked to an Invoice"):
+        app.create_invoice(
+            db, sale_id=sale, actor_context_ref=actor,
+            authorization_grant_id=grant, issuer_ref=actor,
+            invoice_number="INV-OBLIGATION-OWNER-2", invoice_id=second_id,
+            obligation_id=obligation_id, now=STAMP,
+        )
+    assert db.execute(
+        "SELECT invoice_id FROM invoices WHERE obligation_id=?", (obligation_id,)
+    ).fetchone()[0] == str(first.invoice.id)
+    assert db.execute(
+        "SELECT COUNT(*) FROM invoices WHERE invoice_id=?", (second_id,)
+    ).fetchone()[0] == 0
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=?", (second_id,)
+    ).fetchone()[0] == 0
+    db.close()
+
+
+def test_invoice_rejects_obligation_with_different_creditor_without_writes():
+    db = connect_database()
+    actor, _activity, sale, grant = fixture(db)
+    other_creditor = uid()
+    debtor = uid()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (other_creditor, STAMP, STAMP),
+    )
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (debtor, STAMP, STAMP),
+    )
+    obligation_id = uid()
+    db.execute(
+        "INSERT INTO obligations(obligation_id,creditor_person_id,debtor_person_id,amount_minor,"
+        "currency_code,state,created_at,updated_at,version_no) "
+        "VALUES(?,?,?,1000,'YER','proposed',?,?,1)",
+        (obligation_id, other_creditor, debtor, STAMP, STAMP),
+    )
+    db.commit()
+    invoice_id = uid()
+    with pytest.raises(ValidationError, match="issuer must match the linked Obligation creditor"):
+        InvoiceApplication().create_invoice(
+            db, sale_id=sale, actor_context_ref=actor,
+            authorization_grant_id=grant, issuer_ref=actor,
+            invoice_number="INV-WRONG-CREDITOR", invoice_id=invoice_id,
+            obligation_id=obligation_id, now=STAMP,
+        )
+    assert db.execute(
+        "SELECT COUNT(*) FROM invoices WHERE invoice_id=?", (invoice_id,)
+    ).fetchone()[0] == 0
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=?", (invoice_id,)
+    ).fetchone()[0] == 0
+    assert db.execute(
+        "SELECT creditor_person_id FROM obligations WHERE obligation_id=?", (obligation_id,)
+    ).fetchone()[0] == other_creditor
+    db.close()
