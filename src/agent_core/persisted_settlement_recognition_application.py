@@ -146,6 +146,11 @@ class PersistedSettlementRecognitionApplication:
             raise ValidationError("Only a Hospital payment event can correlate to settlement recognition")
         if status in {"quarantined", "rejected"}:
             raise ValidationError("Hospital source event is quarantined or rejected")
+        if db.execute(
+            "SELECT 1 FROM external_event_intake_conflicts WHERE external_event_intake_id=? LIMIT 1",
+            (intake_id,),
+        ).fetchone() is not None:
+            raise ValidationError("Hospital source event has payload conflicts and requires reconciliation")
         if status != "mapped" or entity_type != "payment" or entity_id != payment_id:
             raise ValidationError("Hospital source event must be explicitly mapped to this Finance Payment")
         if source_amount != amount_minor or source_currency != currency_code:
