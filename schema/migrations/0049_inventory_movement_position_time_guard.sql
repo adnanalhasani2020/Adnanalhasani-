@@ -7,8 +7,10 @@ WHEN NOT EXISTS (
     SELECT 1
     FROM inventory_positions p
     WHERE p.inventory_position_id = NEW.inventory_position_id
-      AND p.effective_from <= NEW.occurred_at
-      AND (p.effective_to IS NULL OR NEW.occurred_at < p.effective_to)
+      -- SQLite TEXT ordering is not chronological across equivalent ISO-8601
+      -- instants with different UTC offsets. julianday() compares normalized instants.
+      AND julianday(p.effective_from) <= julianday(NEW.occurred_at)
+      AND (p.effective_to IS NULL OR julianday(NEW.occurred_at) < julianday(p.effective_to))
 )
 BEGIN
     SELECT RAISE(ABORT, 'inventory movement must occur within its position effective window');
