@@ -70,3 +70,78 @@ def test_rejected_payment_does_not_create_finance_outbox_event(tmp_path):
             "SELECT COUNT(*) FROM finance_outbox WHERE event_type='hospital.payment.received'"
         ).fetchone()[0] == 0
         assert db.execute("SELECT status FROM invoices WHERE id=?", (invoice_id,)).fetchone()[0] == "unpaid"
+
+
+def test_outbox_claim_retry_and_delivery_are_state_guarded(tmp_path):
+    hospital, patient_id = _hospital(tmp_path)
+    invoice_id = hospital.create_invoice(
+        invoice_no="INV-OUTBOX-3", patient_id=patient_id, total_minor=200,
+        created_at="2026-10-18T10:01:00Z", actor="test",
+    )
+    with hospital.connect() as db:
+        event_key = db.execute(
+            "SELECT event_key FROM finance_outbox WHERE aggregate_id=?",
+            (str(invoice_id),),
+        ).fetchone()[0]
+
+    claimed = hospital.claim_finance_outbox(
+        now="2026-10-18T10:03:00Z",
+        lease_expired_before="2026-10-18T10:02:00Z",
+    )
+    assert len(claimed) == 1
+    assert claimed[0]["event_key"] == event_key
+    assert claimed[0]["attempts"] == 1
+
+    # A second consumer cannot claim the active lease.
+    assert hospital.claim_finance_outbox(
+        now="2026-10-18T10:04:00Z",
+        lease_expired_before="2026-10-18T10:02:00Z",
+    ) == []
+
+    assert hospital.mark_finance_outbox_failed(
+        event_key=event_key, failed_at="2026-10-18T10:05:00Z", error="temporary outage",
+    )
+    assert not hospital.mark_finance_outbox_delivered(
+        event_key=event_key, delivered_at="2026-10-18T10:05:30Z",
+    )
+
+    retried = hospital.claim_finance_outbox(
+        now="2026-10-18T10:06:00Z",
+        lease_expired_before="2026-10-18T10:05:00Z",
+    )
+    assert len(retried) == 1
+    assert retried[0]["attempts"] == 2
+    assert hospital.mark_finance_outbox_delivered(
+        event_key=event_key, delivered_at="2026-10-18T10:07:00Z",
+    )
+    assert not hospital.mark_finance_outbox_failed(
+        event_key=event_key, failed_at="2026-10-18T10:08:00Z", error="late failure",
+    )
+
+    with hospital.connect() as db:
+        row = db.execute(
+            "SELECT status,attempts,delivered_at,last_error FROM finance_outbox WHERE event_key=?",
+            (event_key,),
+        ).fetchone()
+    assert tuple(row) == ("delivered", 2, "2026-10-18T10:07:00Z", None)
+
+
+def test_outbox_recovers_expired_processing_lease(tmp_path):
+    hospital, patient_id = _hospital(tmp_path)
+    invoice_id = hospital.create_invoice(
+        invoice_no="INV-OUTBOX-4", patient_id=patient_id, total_minor=200,
+        created_at="2026-10-18T10:01:00Z", actor="test",
+    )
+    first = hospital.claim_finance_outbox(
+        now="2026-10-18T10:02:00Z",
+        lease_expired_before="2026-10-18T10:00:00Z",
+    )
+    assert len(first) == 1
+
+    reclaimed = hospital.claim_finance_outbox(
+        now="2026-10-18T10:10:00Z",
+        lease_expired_before="2026-10-18T10:03:00Z",
+    )
+    assert len(reclaimed) == 1
+    assert reclaimed[0]["aggregate_id"] == str(invoice_id)
+    assert reclaimed[0]["attempts"] == 2
