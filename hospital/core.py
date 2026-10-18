@@ -213,6 +213,27 @@ CREATE TABLE IF NOT EXISTS invoices (
   idempotency_key TEXT,
   request_sha256 TEXT
 );
+-- Enforce invoice/encounter patient consistency for writers that bypass the application.
+CREATE TRIGGER IF NOT EXISTS invoice_encounter_patient_match_insert
+BEFORE INSERT ON invoices
+WHEN NEW.encounter_id IS NOT NULL
+ AND NOT EXISTS (
+   SELECT 1 FROM encounters e
+   WHERE e.id=NEW.encounter_id AND e.patient_id=NEW.patient_id
+ )
+BEGIN
+  SELECT RAISE(ABORT, 'invoice encounter must belong to the same patient');
+END;
+CREATE TRIGGER IF NOT EXISTS invoice_encounter_patient_match_update
+BEFORE UPDATE OF patient_id, encounter_id ON invoices
+WHEN NEW.encounter_id IS NOT NULL
+ AND NOT EXISTS (
+   SELECT 1 FROM encounters e
+   WHERE e.id=NEW.encounter_id AND e.patient_id=NEW.patient_id
+ )
+BEGIN
+  SELECT RAISE(ABORT, 'invoice encounter must belong to the same patient');
+END;
 CREATE TABLE IF NOT EXISTS payments (
   id INTEGER PRIMARY KEY, invoice_id INTEGER NOT NULL REFERENCES invoices(id),
   amount_minor INTEGER NOT NULL CHECK(amount_minor > 0), method TEXT NOT NULL,

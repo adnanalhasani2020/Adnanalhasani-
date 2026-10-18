@@ -1,9 +1,11 @@
 """Regression tests for the isolated hospital core; run: python -m unittest discover -s hospital/tests."""
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
 
 from hospital.core import HospitalDB, HospitalError
+from hospital.workflows import create_encounter
 
 
 class HospitalCoreTests(unittest.TestCase):
@@ -19,6 +21,44 @@ class HospitalCoreTests(unittest.TestCase):
 
     def tearDown(self):
         self.temp.cleanup()
+
+    def test_invoice_encounter_patient_link_is_guarded_by_sqlite_after_reopen(self):
+        other_patient = self.db.register_patient(
+            patient_no="P-OTHER", full_name="Other Patient",
+            created_at="2026-01-01T08:00:00", actor="test-user")
+        own_encounter = create_encounter(
+            self.db, patient_id=self.patient, doctor_id=self.doctor,
+            opened_at="2026-01-02T09:00:00", actor="test-user")
+        other_encounter = create_encounter(
+            self.db, patient_id=other_patient, doctor_id=self.doctor,
+            opened_at="2026-01-03T09:00:00", actor="test-user")
+
+        # Simulate a pre-guard database, then verify the idempotent schema setup
+        # reinstalls the integrity triggers when an existing database is reopened.
+        with self.db.connect() as conn:
+            conn.execute("DROP TRIGGER invoice_encounter_patient_match_insert")
+            conn.execute("DROP TRIGGER invoice_encounter_patient_match_update")
+        reopened = HospitalDB(self.db.path)
+        with reopened.connect() as conn:
+            with self.assertRaisesRegex(sqlite3.IntegrityError, "invoice encounter must belong to the same patient"):
+                conn.execute(
+                    """INSERT INTO invoices(invoice_no,patient_id,encounter_id,total_minor,created_at)
+                       VALUES(?,?,?,?,?)""",
+                    ("INV-DB-MISMATCH", self.patient, other_encounter, 1000, "2026-01-03T10:00:00"),
+                )
+        valid_invoice = reopened.create_invoice(
+            invoice_no="INV-DB-VALID", patient_id=self.patient, encounter_id=own_encounter,
+            total_minor=1000, created_at="2026-01-03T10:00:00", actor="test-user")
+        with reopened.connect() as conn:
+            with self.assertRaisesRegex(sqlite3.IntegrityError, "invoice encounter must belong to the same patient"):
+                conn.execute(
+                    "UPDATE invoices SET encounter_id=? WHERE id=?",
+                    (other_encounter, valid_invoice),
+                )
+            self.assertEqual(
+                conn.execute("SELECT encounter_id FROM invoices WHERE id=?", (valid_invoice,)).fetchone()[0],
+                own_encounter,
+            )
 
     def test_patient_and_doctor_are_counted(self):
         counts = self.db.dashboard()
