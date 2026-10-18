@@ -545,3 +545,44 @@ def test_offering_price_rejects_value_outside_sqlite_integer_range(tmp_path):
 
     assert db.execute("SELECT COUNT(*) FROM offering_prices WHERE unit_price_minor > 0").fetchone()[0] == 1
     assert db.execute("SELECT COUNT(*) FROM domain_history WHERE change_type='offering_price_set'").fetchone()[0] == 0
+
+
+def test_return_fails_closed_when_checkout_sale_line_is_missing(tmp_path):
+    from datetime import timedelta
+
+    db, request = setup_checkout(tmp_path)
+    app = CommercialCheckoutApplication()
+    app.checkout(db, **request, now=NOW)
+
+    return_grant_id = uid()
+    db.execute(
+        """INSERT INTO authorization_grants(
+               authorization_grant_id,subject_person_id,agent_id,action_code,scope_ref,
+               context_ref,delegation_id,state,effective_from,effective_to,created_at,updated_at
+           ) VALUES(?,?,NULL,'return_sale',?,?,NULL,'active',?,NULL,?,?)""",
+        (return_grant_id, request["actor_person_id"], request["sale_id"],
+         request["activity_id"], "2026-01-01T00:00:00Z", STAMP, STAMP),
+    )
+    db.execute("DELETE FROM sale_lines WHERE sale_id=?", (request["sale_id"],))
+    db.commit()
+    state_before = db.execute(
+        "SELECT state,version_no FROM sales WHERE sale_id=?", (request["sale_id"],)
+    ).fetchone()
+
+    with pytest.raises(ValidationError, match="one reconciled sale line"):
+        SaleApplication().return_sale(
+            db, request["sale_id"], request["actor_person_id"], return_grant_id,
+            now=NOW + timedelta(minutes=1),
+        )
+
+    assert db.execute(
+        "SELECT state,version_no FROM sales WHERE sale_id=?", (request["sale_id"],)
+    ).fetchone() == state_before
+    assert db.execute(
+        "SELECT COUNT(*) FROM inventory_movements WHERE source_type='sale_return' AND source_ref=?",
+        (request["sale_id"],),
+    ).fetchone()[0] == 0
+    assert db.execute(
+        "SELECT SUM(quantity_delta) FROM inventory_movements WHERE source_ref=?",
+        (request["sale_id"],),
+    ).fetchone()[0] == -2
