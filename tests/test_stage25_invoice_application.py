@@ -358,3 +358,33 @@ def test_invoice_issue_authorization_runs_inside_atomic_write_transaction(monkey
     )
     assert observed["inside_transaction"] is True
     db.close()
+
+def test_invoice_issue_rejects_sale_offering_activity_mismatch_without_writes():
+    db = connect_database()
+    actor, activity, sale, grant = fixture(db)
+    other_activity = uid()
+    db.execute(
+        "INSERT INTO activities(activity_id,owner_person_id,state,created_at,updated_at) "
+        "VALUES(?,?,'active',?,?)",
+        (other_activity, actor, STAMP, STAMP),
+    )
+    db.execute(
+        "UPDATE offerings SET activity_id=? WHERE offering_id=("
+        "SELECT offering_id FROM sales WHERE sale_id=?)",
+        (other_activity, sale),
+    )
+    db.commit()
+    invoice_id = uid()
+    with pytest.raises(ValidationError, match="Sale Activity does not match its Offering Activity"):
+        InvoiceApplication().create_invoice(
+            db, sale_id=sale, actor_context_ref=actor,
+            authorization_grant_id=grant, issuer_ref=actor,
+            invoice_number="INV-CONTEXT-MISMATCH", invoice_id=invoice_id, now=STAMP,
+        )
+    assert db.execute(
+        "SELECT COUNT(*) FROM invoices WHERE invoice_id=?", (invoice_id,)
+    ).fetchone()[0] == 0
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=?", (invoice_id,)
+    ).fetchone()[0] == 0
+    db.close()
