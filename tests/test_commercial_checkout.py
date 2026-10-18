@@ -372,9 +372,12 @@ def test_checkout_receipt_does_not_imply_financial_recognition_or_ledger_posting
     [
         ("2026-10-17T10:59:59Z", False),  # before effective_from
         ("2026-10-17T11:00:00Z", True),   # inclusive effective_from
+        ("2026-10-17T13:00:00+02:00", True),  # same instant as start, different offset
         ("2026-10-17T13:15:00+02:00", True),  # same instant basis, offset format
         ("2026-10-17T13:29:59.999999+02:00", True),  # 1 microsecond before end
         ("2026-10-17T11:30:00Z", False),  # exclusive effective_to
+        ("2026-10-17T13:30:00+02:00", False),  # same instant as exclusive end
+        ("2026-10-17T11:00:00.0000001Z", False),  # reject precision below one microsecond
     ],
 )
 def test_inventory_movement_must_fall_inside_position_effective_window(tmp_path, occurred_at, accepted):
@@ -435,7 +438,7 @@ def test_inventory_movement_must_fall_inside_position_effective_window(tmp_path,
         db.execute(insert_movement, movement_values)
         db.commit()
     else:
-        with pytest.raises(sqlite3.IntegrityError, match="within its position effective window"):
+        with pytest.raises(sqlite3.IntegrityError, match="within its position effective window|at most 6 fractional digits"):
             db.execute(insert_movement, movement_values)
         db.rollback()
     assert db.execute("SELECT COUNT(*) FROM inventory_movements").fetchone()[0] == int(accepted)
