@@ -10,7 +10,7 @@ from agent_core.application import ProductApplication
 from agent_core.offering_application import OfferingApplication
 
 
-def request(app, path, *, method="GET", body=None, cookie=None, scheme="http"):
+def request(app, path, *, method="GET", body=None, cookie=None, scheme="http", origin=None):
     payload = json.dumps(body or {}).encode("utf-8")
     environ = {
         "REQUEST_METHOD": method,
@@ -23,6 +23,7 @@ def request(app, path, *, method="GET", body=None, cookie=None, scheme="http"):
         "SERVER_NAME": "localhost",
         "SERVER_PORT": "8080",
         "wsgi.url_scheme": scheme,
+        **({"HTTP_ORIGIN": origin} if origin is not None else {}),
     }
     captured = {}
 
@@ -243,3 +244,35 @@ def test_web_session_cookie_is_secure_by_default_on_https(tmp_path, monkeypatch)
     cleared_cookie = dict(logged_out["headers"])["Set-Cookie"]
     assert "Max-Age=0" in cleared_cookie
     assert "; Secure" in cleared_cookie
+
+
+
+def test_web_rejects_cross_origin_state_changing_requests(tmp_path):
+    db_path = tmp_path / "commercial-web-csrf.sqlite"
+    db = connect_database(db_path)
+    db.close()
+    app = CommercialWebApplication(db_path)
+
+    rejected = request(
+        app, "/api/register", method="POST", origin="https://attacker.example",
+        body={"username": "csrf_buyer", "password": "correct horse battery staple"},
+    )
+    assert rejected["status"] == "400 Bad Request"
+    assert rejected["body"]["error"] == "Cross-origin request rejected"
+
+    verify = connect_database(db_path)
+    assert verify.execute("SELECT COUNT(*) FROM commercial_credentials").fetchone()[0] == 0
+    verify.close()
+
+
+def test_web_accepts_matching_origin_for_registration(tmp_path):
+    db_path = tmp_path / "commercial-web-same-origin.sqlite"
+    db = connect_database(db_path)
+    db.close()
+    app = CommercialWebApplication(db_path)
+
+    registered = request(
+        app, "/api/register", method="POST", origin="http://localhost:8080",
+        body={"username": "same_origin_buyer", "password": "correct horse battery staple"},
+    )
+    assert registered["status"] == "200 OK"
