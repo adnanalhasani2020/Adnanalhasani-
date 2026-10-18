@@ -744,3 +744,42 @@ def test_sale_cancel_or_return_requires_reconciliation_of_issued_invoice(action)
         (sale,),
     ).fetchone()[0] == 0
     db.close()
+
+
+@pytest.mark.parametrize("obligation_state", ["satisfied", "cancelled"])
+def test_invoice_issue_rejects_terminal_obligation_without_writes(obligation_state):
+    db = connect_database()
+    actor, _activity, sale, grant = fixture(db)
+    debtor = uid()
+    db.execute(
+        "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+        (debtor, STAMP, STAMP),
+    )
+    obligation_id = uid()
+    db.execute(
+        "INSERT INTO obligations(obligation_id,creditor_person_id,debtor_person_id,amount_minor,"
+        "currency_code,state,created_at,updated_at,version_no) VALUES(?,?,?,1000,'YER',?,?,?,1)",
+        (obligation_id, actor, debtor, obligation_state, STAMP, STAMP),
+    )
+    db.commit()
+
+    invoice_id = uid()
+    with pytest.raises(ValidationError, match="satisfied or cancelled Obligation"):
+        InvoiceApplication().create_invoice(
+            db, sale_id=sale, actor_context_ref=actor,
+            authorization_grant_id=grant, issuer_ref=actor,
+            invoice_number=f"INV-TERMINAL-{obligation_state.upper()}",
+            invoice_id=invoice_id, obligation_id=obligation_id, now=STAMP,
+        )
+
+    assert db.execute(
+        "SELECT COUNT(*) FROM invoices WHERE invoice_id=?", (invoice_id,)
+    ).fetchone()[0] == 0
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=? AND change_type='invoice_state_transition'",
+        (invoice_id,),
+    ).fetchone()[0] == 0
+    assert db.execute(
+        "SELECT source_invoice_id,state FROM obligations WHERE obligation_id=?", (obligation_id,)
+    ).fetchone() == (None, obligation_state)
+    db.close()
