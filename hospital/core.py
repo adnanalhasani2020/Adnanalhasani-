@@ -70,6 +70,32 @@ WHEN NEW.status IN ('scheduled','checked_in')
 BEGIN
   SELECT RAISE(ABORT, 'doctor already has an overlapping appointment');
 END;
+-- A patient cannot attend two active appointments at the same time, even with different doctors.
+CREATE TRIGGER IF NOT EXISTS appointments_patient_no_overlap_insert
+BEFORE INSERT ON appointments
+WHEN NEW.status IN ('scheduled','checked_in')
+ AND EXISTS (
+   SELECT 1 FROM appointments a
+   WHERE a.patient_id=NEW.patient_id
+     AND a.status IN ('scheduled','checked_in')
+     AND a.starts_at < NEW.ends_at AND a.ends_at > NEW.starts_at
+ )
+BEGIN
+  SELECT RAISE(ABORT, 'patient already has an overlapping appointment');
+END;
+CREATE TRIGGER IF NOT EXISTS appointments_patient_no_overlap_update
+BEFORE UPDATE OF patient_id, starts_at, ends_at, status ON appointments
+WHEN NEW.status IN ('scheduled','checked_in')
+ AND EXISTS (
+   SELECT 1 FROM appointments a
+   WHERE a.id <> NEW.id
+     AND a.patient_id=NEW.patient_id
+     AND a.status IN ('scheduled','checked_in')
+     AND a.starts_at < NEW.ends_at AND a.ends_at > NEW.starts_at
+ )
+BEGIN
+  SELECT RAISE(ABORT, 'patient already has an overlapping appointment');
+END;
 CREATE TABLE IF NOT EXISTS encounters (
   id INTEGER PRIMARY KEY, patient_id INTEGER NOT NULL REFERENCES patients(id),
   doctor_id INTEGER REFERENCES doctors(id), appointment_id INTEGER REFERENCES appointments(id),
@@ -319,6 +345,12 @@ class HospitalDB:
                 (doctor_id, ends_at, starts_at)).fetchone()
             if conflict:
                 raise HospitalError("doctor already has an overlapping appointment")
+            patient_conflict = db.execute("""SELECT 1 FROM appointments
+                WHERE patient_id=? AND status IN ('scheduled','checked_in')
+                AND starts_at < ? AND ends_at > ? LIMIT 1""",
+                (patient_id, ends_at, starts_at)).fetchone()
+            if patient_conflict:
+                raise HospitalError("patient already has an overlapping appointment")
             cur = db.execute("""INSERT INTO appointments
                 (patient_id,doctor_id,starts_at,ends_at,reason,created_at)
                 VALUES(?,?,?,?,?,?)""",
