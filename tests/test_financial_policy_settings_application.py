@@ -23,6 +23,7 @@ def test_defaults_and_validation():
     {"display_decimal_places": True}, {"settlement_cardinality": "sometimes"},
     {"settlement_cardinality": "multiple"},
     {"posted_voucher_policy": "delete_posted"}, {"require_full_cycle_validation": 1},
+    {"require_full_cycle_validation": False},
 ])
 def test_rejects_invalid_policy(kwargs):
     with pytest.raises(ValidationError):
@@ -258,4 +259,52 @@ def test_settings_update_rejects_grant_from_another_activity_without_writes():
     assert db.execute(
         "SELECT COUNT(*) FROM domain_history WHERE owner_domain='FinancePolicySettings'"
     ).fetchone()[0] == 0
+    db.close()
+
+
+
+def test_database_rejects_disabling_mandatory_full_cycle_validation():
+    db = connect_database()
+    stamp = "2026-10-18T12:00:00Z"
+    person, activity = str(uuid4()), str(uuid4())
+    db.execute("INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+               (person, stamp, stamp))
+    db.execute("INSERT INTO activities(activity_id,owner_person_id,state,created_at,updated_at) "
+               "VALUES(?,?,'active',?,?)", (activity, person, stamp, stamp))
+
+    with pytest.raises(sqlite3.IntegrityError, match="full-cycle financial validation is mandatory"):
+        db.execute(
+            "INSERT INTO financial_policy_settings(activity_id,require_full_cycle_validation,updated_at,updated_by_person_id) "
+            "VALUES(?,0,?,?)", (activity, stamp, person)
+        )
+
+    db.execute(
+        "INSERT INTO financial_policy_settings(activity_id,require_full_cycle_validation,updated_at,updated_by_person_id) "
+        "VALUES(?,1,?,?)", (activity, stamp, person)
+    )
+    with pytest.raises(sqlite3.IntegrityError, match="full-cycle financial validation is mandatory"):
+        db.execute(
+            "UPDATE financial_policy_settings SET require_full_cycle_validation=0 WHERE activity_id=?",
+            (activity,),
+        )
+    db.close()
+
+
+def test_read_fails_closed_on_legacy_policy_that_disabled_full_cycle_validation():
+    db = connect_database()
+    stamp = "2026-10-18T12:00:00Z"
+    person, activity = str(uuid4()), str(uuid4())
+    db.execute("INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+               (person, stamp, stamp))
+    db.execute("INSERT INTO activities(activity_id,owner_person_id,state,created_at,updated_at) "
+               "VALUES(?,?,'active',?,?)", (activity, person, stamp, stamp))
+    db.execute("DROP TRIGGER financial_policy_full_cycle_required_insert")
+    db.execute(
+        "INSERT INTO financial_policy_settings(activity_id,require_full_cycle_validation,updated_at,updated_by_person_id) "
+        "VALUES(?,0,?,?)", (activity, stamp, person)
+    )
+    db.commit()
+
+    with pytest.raises(ValidationError, match="mandatory full-cycle validation baseline"):
+        FinancialPolicySettingsApplication().get_settings(db, activity_id=activity)
     db.close()
