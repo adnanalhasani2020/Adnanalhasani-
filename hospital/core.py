@@ -457,7 +457,8 @@ class HospitalDB:
 
     def create_invoice(self, *, invoice_no: str, patient_id: int, total_minor: int,
                        created_at: str, actor: str, currency: str = "YER",
-                       encounter_id: int | None = None) -> int:
+                       encounter_id: int | None = None,
+                       idempotency_key: str | None = None) -> int:
         if type(total_minor) is not int or total_minor < 0:
             raise HospitalError("invoice total must be a non-negative integer in minor units")
         if not isinstance(invoice_no, str) or not invoice_no.strip():
