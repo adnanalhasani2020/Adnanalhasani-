@@ -10,6 +10,40 @@ from typing import Any
 import sqlite3
 
 
+# Guidance is intentionally operational and non-mutating. The report must never
+# turn a transport status into an instruction to post, settle, or acknowledge.
+_DISPOSITION_GUIDANCE = {
+    "awaiting_intake": (
+        "Check the approved consumer/transport path and retry through its "
+        "supported recovery procedure; do not mark the outbox event delivered manually."
+    ),
+    "delivered_without_intake": (
+        "Reconcile the delivery acknowledgement against durable Finance intake and "
+        "recovery logs before replay; do not assume delivery means acceptance."
+    ),
+    "received_not_mapped": (
+        "Resolve the source identity using approved Finance mapping; do not create "
+        "a payment, settlement, or ledger entry from intake status alone."
+    ),
+    "mapped_source_only": (
+        "Verify Finance payment, settlement, and ledger records independently; a "
+        "source mapping is not proof of financial recognition."
+    ),
+    "quarantined": (
+        "Perform manual source-key conflict reconciliation and preserve the existing "
+        "mapping; do not overwrite the original event identity."
+    ),
+    "rejected": (
+        "Review the source event against the versioned event contract and correct "
+        "the source through an approved process; do not bypass validation."
+    ),
+    "intake_without_outbox": (
+        "Check database selection, retention, and source history for the orphaned "
+        "identity; do not delete or financially process it automatically."
+    ),
+}
+
+
 def build_hospital_finance_transport_report(
     hospital_db: sqlite3.Connection,
     finance_db: sqlite3.Connection,
@@ -19,6 +53,7 @@ def build_hospital_finance_transport_report(
     Output intentionally excludes event payloads, patient identifiers, payment
     references, and error text. A Finance mapped status means only that a
     source-to-Finance identity mapping exists; it is not proof of ledger posting.
+    Each row includes conservative operator guidance, never an automated action.
     """
     outbox_rows = hospital_db.execute(
         "SELECT event_key,event_type,status FROM finance_outbox ORDER BY id"
@@ -63,6 +98,7 @@ def build_hospital_finance_transport_report(
             "outbox_status": outbox_status,
             "intake_status": intake_status,
             "disposition": disposition,
+            "operator_guidance": _DISPOSITION_GUIDANCE[disposition],
         })
 
     intake_without_outbox = []
@@ -76,6 +112,7 @@ def build_hospital_finance_transport_report(
                 "event_key": key,
                 "event_type": event_type,
                 "intake_status": status,
+                "operator_guidance": _DISPOSITION_GUIDANCE["intake_without_outbox"],
             })
 
     counts = Counter(event["disposition"] for event in events)
