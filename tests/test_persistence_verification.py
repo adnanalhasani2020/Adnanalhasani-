@@ -137,11 +137,21 @@ def test_existing_db_migration_preserves_data_and_is_idempotent(tmp_path):
     path = tmp_path / "existing.sqlite"
     db = connect_database(path)
     person = _person(db)
+    # Simulate a pre-0049 database: existing data and schema remain, but the new
+    # trigger and its migration marker have not yet been installed.
+    db.execute("DROP TRIGGER inventory_movement_position_time_guard")
+    db.execute(
+        "DELETE FROM schema_migrations WHERE version='0049_inventory_movement_position_time_guard'"
+    )
     db.commit()
     db.close()
 
     reopened = connect_database(path)
     assert reopened.execute("SELECT state FROM persons WHERE person_id=?", (person,)).fetchone()[0] == "active"
+    assert reopened.execute(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' "
+        "AND name='inventory_movement_position_time_guard'"
+    ).fetchone()[0] == 1
     before = reopened.execute("SELECT COUNT(*) FROM persons").fetchone()[0]
     assert apply_migrations(reopened) == []
     assert reopened.execute("SELECT COUNT(*) FROM persons").fetchone()[0] == before
