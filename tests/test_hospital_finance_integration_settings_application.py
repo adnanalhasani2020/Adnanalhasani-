@@ -402,3 +402,44 @@ def test_reject_and_pause_roll_back_when_audit_write_fails(tmp_path, operation, 
         "SELECT COUNT(*) FROM audit_records WHERE event_type=?", (event_type,)
     ).fetchone()[0] == 0
     db.close()
+
+
+def test_list_settings_filters_and_paginates_without_mutating_history(tmp_path):
+    db = connect_database(tmp_path / "finance-settings-list.sqlite")
+    activity, owner, proposer, approver, account = _fixture(db)
+    app = HospitalFinanceIntegrationSettingsApplication()
+    first = app.propose(
+        db, activity_id=activity, hospital_scope_ref="clinic-main",
+        finance_person_id=owner, financial_account_id=account,
+        proposed_by_person_id=proposer, now="2026-10-18T12:00:00Z",
+    )
+    second = app.propose(
+        db, activity_id=activity, hospital_scope_ref="clinic-east",
+        finance_person_id=owner, financial_account_id=account,
+        proposed_by_person_id=proposer, now="2026-10-18T12:01:00Z",
+    )
+
+    page = app.list_settings(db, activity_id=activity, limit=1, offset=0)
+    assert len(page) == 1
+    assert page[0].settings_id == second.settings_id
+    assert app.list_settings(db, activity_id=activity, limit=1, offset=1)[0].settings_id == first.settings_id
+    assert [x.settings_id for x in app.list_settings(
+        db, hospital_scope_ref="clinic-main", status="pending_approval"
+    )] == [first.settings_id]
+    assert app.list_settings(db, activity_id=_id()) == []
+    assert db.execute(
+        "SELECT COUNT(*) FROM audit_records WHERE event_type='hospital_finance.settings.proposed'"
+    ).fetchone()[0] == 2
+    db.close()
+
+
+@pytest.mark.parametrize("kwargs", [
+    {"limit": 0}, {"limit": 201}, {"limit": True}, {"offset": -1}, {"offset": True},
+    {"status": "unknown"}, {"hospital_scope_ref": ""},
+])
+def test_list_settings_rejects_invalid_pagination_and_filters(tmp_path, kwargs):
+    db = connect_database(tmp_path / "finance-settings-list-invalid.sqlite")
+    app = HospitalFinanceIntegrationSettingsApplication()
+    with pytest.raises(ValidationError):
+        app.list_settings(db, **kwargs)
+    db.close()
