@@ -472,3 +472,21 @@ def test_checkout_rejects_total_above_sqlite_integer_range_without_partial_write
     assert db.execute("SELECT COUNT(*) FROM sale_lines").fetchone()[0] == 0
     assert db.execute("SELECT COUNT(*) FROM inventory_movements").fetchone()[0] == 0
     assert db.execute("SELECT COUNT(*) FROM commercial_checkout_receipts").fetchone()[0] == 0
+
+
+
+def test_offering_price_rejects_value_outside_sqlite_integer_range(tmp_path):
+    db, request = setup_checkout(tmp_path)
+    with pytest.raises(ValidationError, match="signed 64-bit integer"):
+        OfferingPriceApplication().set_price(
+            db,
+            offering_id=request["offering_id"],
+            unit_price_minor=(1 << 63),
+            currency_code="SAR",
+            actor_context_ref=request["actor_person_id"],
+            effective_from=NOW,
+            now=NOW,
+        )
+
+    assert db.execute("SELECT COUNT(*) FROM offering_prices WHERE unit_price_minor > 0").fetchone()[0] == 1
+    assert db.execute("SELECT COUNT(*) FROM domain_history WHERE change_type='offering_price_set'").fetchone()[0] == 1
