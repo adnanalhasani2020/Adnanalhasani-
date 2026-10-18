@@ -171,8 +171,7 @@ def test_outbox_insert_failure_rolls_back_invoice_and_audit_together(tmp_path):
             "SELECT COUNT(*) FROM invoices WHERE invoice_no='INV-OUTBOX-ATOMIC'"
         ).fetchone()[0] == 0
         assert db.execute(
-            "SELECT COUNT(*) FROM audit_log WHERE action='invoice.created' "
-            "AND entity_id IN (SELECT CAST(id AS TEXT) FROM invoices)"
+            "SELECT COUNT(*) FROM audit_log WHERE action='invoice.created'"
         ).fetchone()[0] == 0
         assert db.execute(
             "SELECT COUNT(*) FROM finance_outbox WHERE event_key LIKE 'hospital:invoice:%'"
