@@ -72,6 +72,18 @@ class HospitalFinanceIntegrationSettingsApplication:
         return transaction()
 
     @staticmethod
+    def _audit(db, *, event_type, actor_person_id, target_id, occurred_at, result_status,
+               operation_ref, correlation_ref):
+        # Audit and protected settings state must commit or roll back together.
+        db.execute(
+            "INSERT INTO audit_records(audit_record_id,event_type,actor_context_ref,target_ref,"
+            "occurred_at,result_status,operation_ref,correlation_ref,created_at) "
+            "VALUES(?,?,?,?,?,?,?,?,?)",
+            (str(uuid4()), event_type, actor_person_id, target_id, occurred_at,
+             result_status, operation_ref, correlation_ref, occurred_at),
+        )
+
+    @staticmethod
     def _person_is_active(db, person_id):
         return db.execute(
             "SELECT 1 FROM persons WHERE person_id=? AND state='active'", (person_id,)
@@ -152,6 +164,12 @@ class HospitalFinanceIntegrationSettingsApplication:
                 (settings_id, activity, scope, person, account, invoice_policy, payment_trigger,
                  partial_payment_policy, currency_policy, prior + 1, proposer, stamp, stamp),
             )
+            self._audit(
+                db, event_type="hospital_finance.settings.proposed",
+                actor_person_id=proposer, target_id=settings_id, occurred_at=stamp,
+                result_status="pending_approval", operation_ref=settings_id,
+                correlation_ref=f"{activity}:{scope}:v{prior + 1}",
+            )
         return self.get_by_id(db, settings_id=settings_id)
 
     def get_by_id(self, db, *, settings_id):
@@ -206,10 +224,22 @@ class HospitalFinanceIntegrationSettingsApplication:
             owner = self._account_owner(db, account)
             if owner is None or owner[1] != "active" or owner[0] != person:
                 raise ValidationError("Mapped Financial Account is inactive or no longer belongs to the selected Person")
+            prior_active = db.execute(
+                "SELECT settings_id FROM hospital_finance_integration_settings "
+                "WHERE activity_id=? AND hospital_scope_ref=? AND status='active'",
+                (activity, scope),
+            ).fetchall()
             db.execute(
                 "UPDATE hospital_finance_integration_settings SET status='superseded' "
                 "WHERE activity_id=? AND hospital_scope_ref=? AND status='active'", (activity, scope)
             )
+            for (prior_id,) in prior_active:
+                self._audit(
+                    db, event_type="hospital_finance.settings.superseded",
+                    actor_person_id=approver, target_id=prior_id, occurred_at=stamp,
+                    result_status="superseded", operation_ref=ident,
+                    correlation_ref=f"{activity}:{scope}",
+                )
             changed = db.execute(
                 "UPDATE hospital_finance_integration_settings SET status='active',approved_by_person_id=?,"
                 "approved_at=?,approval_note=? WHERE settings_id=? AND status='pending_approval'",
@@ -217,4 +247,10 @@ class HospitalFinanceIntegrationSettingsApplication:
             ).rowcount
             if changed != 1:
                 raise ValidationError("Settings proposal changed concurrently; reload and retry")
+            self._audit(
+                db, event_type="hospital_finance.settings.approved",
+                actor_person_id=approver, target_id=ident, occurred_at=stamp,
+                result_status="active", operation_ref=ident,
+                correlation_ref=f"{activity}:{scope}",
+            )
         return self.get_by_id(db, settings_id=ident)
