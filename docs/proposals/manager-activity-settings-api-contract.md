@@ -53,6 +53,24 @@ The eventual route names may differ to fit the existing application architecture
 - The reason is explanatory text, not proof of authorization or a substitute for a required formal decision.
 - Do not accept `actorId`, `approvedBy`, `active`, or audit timestamps as trusted client fields.
 
+## Required human decision: partial and repeated settlement policy
+
+Issue #93 remains unresolved. The current recognition guard rejects partial settlement because the system does not yet persist and enforce remaining obligation amounts. The manager UI must present the unresolved choice explicitly; it must not silently select a cardinality model or activate financial recognition.
+
+The decision screen should explain these alternatives in plain language:
+
+| Option | Meaning | Required implementation before activation |
+| --- | --- | --- |
+| **A — Multiple settlement records** | Each settlement represents one separately identified allocation against an obligation. | Add a reviewed migration that permits multiple settlement rows per obligation; persist each exact allocation amount and currency; derive the outstanding amount from immutable allocations; enforce total allocations do not exceed the obligation; make retries idempotent and preserve audit/reversal history. |
+| **B — One cumulative settlement record** | One settlement record represents the cumulative settled amount while individual allocation attempts remain separately auditable. | Preserve each allocation/attempt in durable history; define atomic cumulative updates and concurrency control; derive the remaining amount from the immutable allocation history, not from a client-supplied total; prevent duplicate allocations and lost updates. |
+| **Defer partial settlement** | Keep current fail-closed behavior until an authorized accounting owner resolves the model. | Continue rejecting partial recognition. Do not fabricate a full settlement or mark an obligation satisfied after a partial payment. |
+
+The UI must show **Defer partial settlement** as the safe default until an authorized accounting owner records Option A or B through the governed process. A manager's activity preference alone is not sufficient to override accounting invariants.
+
+For either A or B, the proposal and decision record must include the selected option, authorized decision-maker, reason/evidence reference, effective version, timestamp, and audit event. The decision must be rejected if required authorization or durable audit persistence is unavailable. Existing settlement history must not be rewritten to fit the new policy.
+
+Before activation, implementation must also define due-date and overdue behavior, voids/refunds/reversals, overpayments, unapplied receipts, currency matching, concurrency, and migration behavior for populated databases. Payment, Settlement, financial recognition, and LedgerEntry remain distinct lifecycle stages.
+
 ## State machine
 
 `draft → pending_review → approved → active`
@@ -124,6 +142,7 @@ Do not store authoritative active settings only in browser storage. A browser re
 6. Retry/idempotency tests for duplicate proposal and decision requests.
 7. Privacy checks confirming no patient-sensitive data is persisted in browser storage.
 8. Migration-upgrade and rollback rehearsal against a populated database, plus deployment documentation.
+9. For partial settlements, prove remaining-balance derivation, concurrent allocation safety, duplicate retries, over-allocation rejection, currency isolation, and preservation of historical records.
 
 ## Human decisions still required
 
@@ -133,7 +152,8 @@ This proposal deliberately does not decide:
 - which activity-specific settings are configurable and who owns each policy;
 - the formal authorities and evidence required for clinical or financial decisions;
 - whether approval immediately activates a setting or requires a separate release step;
-- retention periods and access policy for audit records.
+- retention periods and access policy for audit records;
+- **Issue #93:** whether partial settlements use multiple settlement records (Option A), one cumulative settlement record with separate allocation history (Option B), or remain deferred.
 
 Record these decisions through the repository's established governance process before implementing policy-sensitive behavior.
 
@@ -149,5 +169,6 @@ Record these decisions through the repository's established governance process b
 ## Traceability
 
 - Related issue: #320 — Production readiness for manager activity settings.
+- Related issue: #93 — Settlement cardinality for partial and repeated payments.
 - Current prototype: `docs/prototypes/admin-decision-settings.html`.
 - Health scope remains constrained by `docs/07-التنفيذ/EXEC-0006-الأساس-الصحي.md`.
