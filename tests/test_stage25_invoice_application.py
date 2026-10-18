@@ -622,7 +622,7 @@ def test_invoice_void_refuses_financial_links_without_reconciliation(link_kind):
         db.execute(
             "INSERT INTO payments(payment_id,obligation_id,invoice_id,payer_person_id,payee_person_id,"
             "amount_minor,currency_code,state,provider_ref,external_payment_ref,created_at,updated_at,version_no) "
-            "VALUES(?,NULL,?,?,?,?,100,'SAR','initiated',NULL,NULL,?,?,1)",
+            "VALUES(?,NULL,?,?,?,100,'SAR','initiated',NULL,NULL,?,?,1)",
             (uid(), invoice_id, linked_person, actor, STAMP, STAMP),
         )
         expected_message = "linked Payment history requires explicit reconciliation"
