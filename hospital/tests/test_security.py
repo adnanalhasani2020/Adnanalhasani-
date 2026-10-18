@@ -77,6 +77,27 @@ class HospitalSecurityTests(unittest.TestCase):
         self.assertIsNone(permission_for_route("GET", "/settings"))
         self.assertEqual(permission_for_route("GET", "/api/future-sensitive-route"), "route:unknown")
 
+    def test_unrecognized_actions_and_http_methods_do_not_inherit_permissions(self):
+        denied_routes = (
+            ("POST", "/api/prescriptions/7/refill"),
+            ("POST", "/api/admissions/7/transfer/extra"),
+            ("POST", "/api/manager-settings/proposals/not-a-number/review"),
+            ("DELETE", "/api/patients"),
+            ("PATCH", "/api/payments"),
+            ("POST", "/api/users/7/password-reset"),
+        )
+        for method, path in denied_routes:
+            with self.subTest(method=method, path=path):
+                self.assertEqual(permission_for_route(method, path), "route:unknown")
+
+    def test_implemented_action_routes_keep_explicit_permissions(self):
+        self.assertEqual(permission_for_route("POST", "/api/encounters/7/close"), "encounters:write")
+        self.assertEqual(permission_for_route("POST", "/api/lab-orders/7/status"), "lab:write")
+        self.assertEqual(permission_for_route("POST", "/api/admissions/7/discharge"), "admissions:write")
+        self.assertEqual(permission_for_route("POST", "/api/users/7/active"), "users:manage")
+        self.assertEqual(permission_for_route("POST", "/api/manager-settings/proposals/7/review"),
+                         "manager:settings:review")
+
     def test_unknown_api_routes_are_denied_even_to_administrators(self):
         admin = Principal(1, "admin", "admin", 1, "2026-01-01T16:00:00Z")
         permission = permission_for_route("GET", "/api/future-sensitive-route")
