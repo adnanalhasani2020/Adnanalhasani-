@@ -401,6 +401,21 @@ def test_currency_migrations_upgrade_populated_financial_database(tmp_path, monk
     monkeypatch.setattr(persistence, "MIGRATIONS_DIR", legacy_dir)
     old_db = connect_database(database_path)
     account_id, obligation_id, payment_id, settlement_id = _financial_fixture(old_db)
+
+    # Seed recognized finance history before the currency guards exist. The upgrade
+    # must preserve these rows and apply the new cross-record invariants to them.
+    transaction_id = str(uuid.uuid4())
+    old_db.execute(
+        "INSERT INTO financial_transactions(financial_transaction_id,settlement_id,financial_account_id,amount_minor,currency_code,state,recognition_source_type,recognition_source_ref,recognized_at,created_at,updated_at)"
+        " VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+        (transaction_id, settlement_id, account_id, 100, "YER", "recognized", "settlement", settlement_id, NOW, NOW, NOW),
+    )
+    ledger_entry_id = str(uuid.uuid4())
+    old_db.execute(
+        "INSERT INTO ledger_entries(ledger_entry_id,financial_transaction_id,financial_account_id,entry_sequence,amount_minor,currency_code,state,posted_at,created_at,updated_at)"
+        " VALUES(?,?,?,?,?,?,?,?,?,?)",
+        (ledger_entry_id, transaction_id, account_id, 1, 100, "YER", "posted", NOW, NOW, NOW),
+    )
     old_db.commit()
     old_db.close()
 
@@ -454,4 +469,54 @@ def test_currency_migrations_upgrade_populated_financial_database(tmp_path, monk
     assert upgraded.execute(
         "SELECT amount_minor FROM obligations WHERE obligation_id=?", (obligation_id,)
     ).fetchone()[0] == 100
+
+    # Currency guards must also protect recognized transactions and posted ledger
+    # history that predated the upgrade, not only new rows on a clean install.
+    assert upgraded.execute(
+        "SELECT currency_code FROM financial_transactions WHERE financial_transaction_id=?",
+        (transaction_id,),
+    ).fetchone()[0] == "YER"
+    assert upgraded.execute(
+        "SELECT currency_code FROM ledger_entries WHERE ledger_entry_id=?", (ledger_entry_id,)
+    ).fetchone()[0] == "YER"
+    assert upgraded.execute(
+        "SELECT version FROM schema_migrations WHERE version=?",
+        ("0044_financial_transaction_settlement_integrity",),
+    ).fetchone() is not None
+    assert upgraded.execute(
+        "SELECT version FROM schema_migrations WHERE version=?",
+        ("0045_recognized_settlement_source_immutability",),
+    ).fetchone() is not None
+
+    with pytest.raises(sqlite3.IntegrityError):
+        upgraded.execute(
+            "UPDATE financial_transactions SET currency_code='USD' WHERE financial_transaction_id=?",
+            (transaction_id,),
+        )
+    with pytest.raises(sqlite3.IntegrityError, match="ledger entry account/currency_code must match financial transaction"):
+        upgraded.execute(
+            "INSERT INTO ledger_entries(ledger_entry_id,financial_transaction_id,financial_account_id,entry_sequence,amount_minor,currency_code,state,posted_at,created_at,updated_at)"
+            " VALUES(?,?,?,?,?,?,?,?,?,?)",
+            (str(uuid.uuid4()), transaction_id, account_id, 2, 100, "USD", "posted", NOW, NOW, NOW),
+        )
+    assert upgraded.execute(
+        "SELECT currency_code FROM financial_transactions WHERE financial_transaction_id=?",
+        (transaction_id,),
+    ).fetchone()[0] == "YER"
+    assert upgraded.execute(
+        "SELECT COUNT(*) FROM ledger_entries WHERE financial_transaction_id=?", (transaction_id,)
+    ).fetchone()[0] == 1
     upgraded.close()
+
+    # Reopening after migration must retain the original linked finance history.
+    reopened = connect_database(database_path)
+    assert reopened.execute(
+        "SELECT settlement_id, financial_account_id, amount_minor, currency_code FROM financial_transactions WHERE financial_transaction_id=?",
+        (transaction_id,),
+    ).fetchone() == (settlement_id, account_id, 100, "YER")
+    assert reopened.execute(
+        "SELECT financial_transaction_id, amount_minor, currency_code FROM ledger_entries WHERE ledger_entry_id=?",
+        (ledger_entry_id,),
+    ).fetchone() == (transaction_id, 100, "YER")
+    assert reopened.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    reopened.close()
