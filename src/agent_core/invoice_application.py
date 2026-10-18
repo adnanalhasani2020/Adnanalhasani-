@@ -209,6 +209,20 @@ class InvoiceApplication:
                 connection.execute("SELECT activity_id FROM sales WHERE sale_id=?", (str(record.sale_id),)).fetchone()[0],
                 timestamp,
             )
+            # Voiding is a commercial state change, not a financial reversal.
+            # Refuse to orphan an active Obligation or any persisted Payment; those
+            # records require an explicit cross-domain reconciliation workflow.
+            if record.obligation_id is not None:
+                raise ValidationError(
+                    "Invoice with a linked Obligation requires explicit reconciliation before voiding"
+                )
+            linked_payment = connection.execute(
+                "SELECT 1 FROM payments WHERE invoice_id=? LIMIT 1", (key,)
+            ).fetchone()
+            if linked_payment is not None:
+                raise ValidationError(
+                    "Invoice with linked Payment history requires explicit reconciliation before voiding"
+                )
             if record.version_no != expected_version:
                 raise ValidationError("Invoice version conflict; reload before retrying")
             if record.invoice.state is not InvoiceState.ISSUED:
