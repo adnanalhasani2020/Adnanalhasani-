@@ -195,8 +195,11 @@ def test_web_session_can_buy_sellable_product_and_receive_result(tmp_path):
         cookie=session_cookie,
     )
     assert blocked_json["status"] == "403 Forbidden"
+    assert blocked_json["body"] == {"error": "تقرير المبيعات غير متاح لهذا الحساب."}
     assert "items" not in blocked_json["body"]
     assert "total_sales" not in blocked_json["body"]
+    assert str(checkout["body"]["sale_id"]) not in json.dumps(blocked_json["body"], ensure_ascii=False)
+    assert str(checkout["body"]["total_minor"]) not in json.dumps(blocked_json["body"], ensure_ascii=False)
 
     blocked_csv = request(
         app, "/api/reports/sales?format=csv&from=" + now.date().isoformat(),
