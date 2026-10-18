@@ -61,6 +61,10 @@ def test_transport_report_compares_keys_without_claiming_ledger_reconciliation(t
     assert report["events"][0]["event_key"] != payment_key
     assert "not financial reconciliation" in report["scope"]
     assert all("payload" not in event for event in report["events"])
+    mapped = next(event for event in report["events"] if event["disposition"] == "mapped_source_only")
+    assert "Verify Finance payment, settlement, and ledger records independently" in mapped["operator_guidance"]
+    awaiting = next(event for event in report["events"] if event["disposition"] == "awaiting_intake")
+    assert "do not mark the outbox event delivered manually" in awaiting["operator_guidance"]
     assert finance_db.execute("SELECT COUNT(*) FROM financial_transactions").fetchone()[0] == 0
     assert finance_db.execute("SELECT COUNT(*) FROM ledger_entries").fetchone()[0] == 0
     finance_db.close()
@@ -94,5 +98,7 @@ def test_transport_report_flags_delivered_event_missing_from_intake(tmp_path):
         report = build_hospital_finance_transport_report(hospital_db, finance_db)
 
     assert report["by_disposition"]["delivered_without_intake"] == 1
-    assert report["events"][0]["disposition"] == "delivered_without_intake"
+    event = report["events"][0]
+    assert event["disposition"] == "delivered_without_intake"
+    assert "durable Finance intake" in event["operator_guidance"]
     finance_db.close()
