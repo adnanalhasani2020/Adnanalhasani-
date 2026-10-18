@@ -258,7 +258,7 @@ class CommercialCheckoutApplication:
 
             offering_row = connection.execute(
                 """SELECT o.product_id, o.activity_id, o.state, o.effective_from, o.effective_to,
-                          p.state, a.state
+                          p.state, a.state, p.name
                    FROM offerings o JOIN products p ON p.product_id=o.product_id
                    JOIN activities a ON a.activity_id=o.activity_id
                    WHERE o.offering_id=?""",
@@ -266,7 +266,7 @@ class CommercialCheckoutApplication:
             ).fetchone()
             if offering_row is None:
                 raise ValidationError("Offering does not exist")
-            product, stored_activity, offering_state, starts_raw, ends_raw, product_state, activity_state = offering_row
+            product, stored_activity, offering_state, starts_raw, ends_raw, product_state, activity_state, product_name = offering_row
             if stored_activity != activity:
                 raise ValidationError("Checkout Activity does not match Offering")
             if offering_state != "active" or product_state != "active" or activity_state != "active":
@@ -329,10 +329,11 @@ class CommercialCheckoutApplication:
             connection.execute(
                 """INSERT INTO sale_lines(
                        sale_line_id, sale_id, offering_id, product_id, quantity,
-                       unit_price_minor, currency_code, line_total_minor, created_at
-                   ) VALUES(?,?,?,?,?,?,?,?,?)""",
+                       unit_price_minor, currency_code, line_total_minor, created_at,
+                       product_name_snapshot
+                   ) VALUES(?,?,?,?,?,?,?,?,?,?)""",
                 (str(uuid4()), sale_key, offering, product, quantity,
-                 price["unit_price_minor"], price["currency_code"], line_total, stamp),
+                 price["unit_price_minor"], price["currency_code"], line_total, stamp, product_name),
             )
             connection.execute(
                 """INSERT INTO inventory_movements(
@@ -347,7 +348,7 @@ class CommercialCheckoutApplication:
             remaining = stock["available_quantity"] - quantity
             response = {
                 "sale_id": sale_key, "state": "fulfilled", "offering_id": offering,
-                "product_id": product, "quantity": quantity,
+                "product_id": product, "product_name": product_name, "quantity": quantity,
                 "unit_price_minor": price["unit_price_minor"], "currency_code": price["currency_code"],
                 "total_minor": line_total, "inventory_position_id": stock["inventory_position_id"],
                 "scope_key": scope_key.strip(),
