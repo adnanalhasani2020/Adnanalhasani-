@@ -224,6 +224,7 @@ def test_existing_database_migration_preserves_sales_invoices_and_history_on_reo
         ("0039_audit_records_append_only",),
         ("0040_external_event_intake",),
         ("0041_financial_policy_full_cycle_required",),
+        ("0042_hospital_finance_recognition_correlation",),
         ("9998_activity_invitations",),
         ("9999_file_attachments",),
     ]

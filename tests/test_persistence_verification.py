@@ -120,6 +120,7 @@ def test_clean_install_has_exactly_67_domain_tables_plus_migration_bookkeeping()
         "0039_audit_records_append_only",
         "0040_external_event_intake",
         "0041_financial_policy_full_cycle_required",
+        "0042_hospital_finance_recognition_correlation",
         "9998_activity_invitations",
         "9999_file_attachments",
     ]
@@ -137,7 +138,7 @@ def test_existing_db_migration_preserves_data_and_is_idempotent(tmp_path):
     before = reopened.execute("SELECT COUNT(*) FROM persons").fetchone()[0]
     assert apply_migrations(reopened) == []
     assert reopened.execute("SELECT COUNT(*) FROM persons").fetchone()[0] == before
-    assert reopened.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0] == 36
+    assert reopened.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0] == 37
 
 
 def test_constraints_are_enforced_at_runtime():

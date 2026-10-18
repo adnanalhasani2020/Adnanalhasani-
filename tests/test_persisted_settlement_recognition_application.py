@@ -184,3 +184,144 @@ def test_missing_human_approval_is_rejected():
 
     assert db.execute("SELECT COUNT(*) FROM financial_transactions").fetchone()[0] == 0
     db.close()
+
+
+def seed_hospital_payment_intake(db, ids, *, amount_minor=12500, currency_code="YER",
+                                  status="mapped", entity_type="payment", entity_id=None):
+    event_key = "hospital:payment:42:received:v1"
+    db.execute(
+        "INSERT INTO external_event_intake("
+        "external_event_intake_id,source_system,source_event_key,event_type,"
+        "source_aggregate_type,source_aggregate_id,payload_sha256,amount_minor,currency_code,"
+        "occurred_at,status,finance_entity_type,finance_entity_id,first_seen_at,last_seen_at,mapped_at"
+        ") VALUES(?, 'hospital', ?, 'hospital.payment.received', 'payment', '42', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (uid(), event_key, "a" * 64, amount_minor, currency_code, STAMP, status,
+         entity_type if status == "mapped" else None,
+         (entity_id or ids["payment"]) if status == "mapped" else None,
+         STAMP, STAMP, STAMP if status == "mapped" else None),
+    )
+    db.commit()
+    return event_key
+
+
+def recognize_hospital_payment(db, ids, event_key):
+    return PersistedSettlementRecognitionApplication().recognize(
+        db, settlement_id=ids["settlement"], financial_account_id=ids["account"],
+        context_ref=ids["context"], authorization_grant_id=ids["grant"],
+        agent_action_id=ids["action"], source_event_key=event_key, now=STAMP,
+    )
+
+
+def test_hospital_payment_recognition_correlation_is_committed_with_ledger_outcome():
+    db = connect_database()
+    ids = seed_recognition(db)
+    event_key = seed_hospital_payment_intake(db, ids)
+
+    result = recognize_hospital_payment(db, ids, event_key)
+
+    assert result.replayed is False
+    assert db.execute(
+        "SELECT recognition_status,recognized_settlement_id,financial_transaction_id,ledger_entry_id "
+        "FROM external_event_intake WHERE source_event_key=?",
+        (event_key,),
+    ).fetchone() == (
+        "recognized", str(result.settlement_id), str(result.financial_transaction_id),
+        str(result.ledger_entry_id),
+    )
+    assert db.execute("SELECT COUNT(*) FROM financial_transactions").fetchone()[0] == 1
+    assert db.execute("SELECT COUNT(*) FROM ledger_entries").fetchone()[0] == 1
+
+    retry = recognize_hospital_payment(db, ids, event_key)
+    assert retry.replayed is True
+    assert retry.financial_transaction_id == result.financial_transaction_id
+    assert db.execute("SELECT COUNT(*) FROM financial_transactions").fetchone()[0] == 1
+    assert db.execute("SELECT COUNT(*) FROM ledger_entries").fetchone()[0] == 1
+    db.close()
+
+
+def test_hospital_payment_correlation_rejects_unmapped_or_wrong_finance_payment():
+    db = connect_database()
+    ids = seed_recognition(db)
+    event_key = seed_hospital_payment_intake(db, ids, entity_id=uid())
+
+    with pytest.raises(ValidationError, match="explicitly mapped to this Finance Payment"):
+        recognize_hospital_payment(db, ids, event_key)
+
+    assert db.execute("SELECT COUNT(*) FROM financial_transactions").fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM ledger_entries").fetchone()[0] == 0
+    assert db.execute(
+        "SELECT recognition_status FROM external_event_intake WHERE source_event_key=?",
+        (event_key,),
+    ).fetchone()[0] == "not_started"
+    db.close()
+
+
+def test_hospital_payment_correlation_rejects_amount_currency_mismatch_and_quarantine():
+    db = connect_database()
+    ids = seed_recognition(db)
+    event_key = seed_hospital_payment_intake(db, ids, amount_minor=12501)
+
+    with pytest.raises(ValidationError, match="amount/currency"):
+        recognize_hospital_payment(db, ids, event_key)
+    assert db.execute("SELECT COUNT(*) FROM financial_transactions").fetchone()[0] == 0
+
+    db.execute(
+        "UPDATE external_event_intake SET status='quarantined',finance_entity_type=NULL,"
+        "finance_entity_id=NULL,mapped_at=NULL WHERE source_event_key=?",
+        (event_key,),
+    )
+    db.commit()
+    with pytest.raises(ValidationError, match="quarantined or rejected"):
+        recognize_hospital_payment(db, ids, event_key)
+    assert db.execute("SELECT COUNT(*) FROM ledger_entries").fetchone()[0] == 0
+    db.close()
+
+
+def test_hospital_recognition_correlation_rolls_back_with_failed_finance_recognition():
+    db = connect_database()
+    ids = seed_recognition(db)
+    event_key = seed_hospital_payment_intake(db, ids)
+    db.execute(
+        "CREATE TRIGGER fail_hospital_correlation BEFORE UPDATE OF recognition_status "
+        "ON external_event_intake WHEN NEW.recognition_status='recognized' "
+        "BEGIN SELECT RAISE(ABORT, 'simulated correlation persistence failure'); END"
+    )
+    db.commit()
+
+    with pytest.raises(Exception, match="simulated correlation persistence failure"):
+        recognize_hospital_payment(db, ids, event_key)
+
+    assert db.execute("SELECT COUNT(*) FROM financial_transactions").fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM ledger_entries").fetchone()[0] == 0
+    assert db.execute(
+        "SELECT state,version_no FROM obligations WHERE obligation_id=?", (ids["obligation"],)
+    ).fetchone() == ("open", 1)
+    assert db.execute(
+        "SELECT recognition_status FROM external_event_intake WHERE source_event_key=?",
+        (event_key,),
+    ).fetchone()[0] == "not_started"
+    db.close()
+
+
+def test_hospital_payment_recognition_rejects_existing_source_payload_conflict():
+    db = connect_database()
+    ids = seed_recognition(db)
+    event_key = seed_hospital_payment_intake(db, ids)
+    intake_id = db.execute(
+        "SELECT external_event_intake_id FROM external_event_intake WHERE source_event_key=?",
+        (event_key,),
+    ).fetchone()[0]
+    db.execute(
+        "INSERT INTO external_event_intake_conflicts("
+        "external_event_intake_conflict_id,external_event_intake_id,observed_payload_sha256,observed_at,reason"
+        ") VALUES(?,?,?,?,?)",
+        (uid(), intake_id, "b" * 64, STAMP, "test payload conflict"),
+    )
+    db.commit()
+
+    with pytest.raises(ValidationError, match="payload conflicts"):
+        recognize_hospital_payment(db, ids, event_key)
+
+    assert db.execute("SELECT COUNT(*) FROM financial_transactions").fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM ledger_entries").fetchone()[0] == 0
+    db.close()
