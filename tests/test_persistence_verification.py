@@ -127,6 +127,7 @@ def test_clean_install_has_exactly_68_domain_tables_plus_migration_bookkeeping()
         "0046_hospital_finance_activity_scope_guards",
         "0047_hospital_finance_settings_reference_state_guards",
         "0048_hospital_finance_settings_immutable_history",
+        "0049_inventory_movement_position_time_guard",
         "9998_activity_invitations",
         "9999_file_attachments",
     ]
@@ -136,15 +137,27 @@ def test_existing_db_migration_preserves_data_and_is_idempotent(tmp_path):
     path = tmp_path / "existing.sqlite"
     db = connect_database(path)
     person = _person(db)
+    # Simulate a pre-0049 database: existing data and schema remain, but the new
+    # trigger and its migration marker have not yet been installed.
+    db.execute("DROP TRIGGER inventory_movement_position_time_guard")
+    db.execute("DROP TRIGGER inventory_movement_position_time_precision_guard")
+    db.execute(
+        "DELETE FROM schema_migrations WHERE version='0049_inventory_movement_position_time_guard'"
+    )
     db.commit()
     db.close()
 
     reopened = connect_database(path)
     assert reopened.execute("SELECT state FROM persons WHERE person_id=?", (person,)).fetchone()[0] == "active"
+    assert reopened.execute(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' "
+        "AND name IN ('inventory_movement_position_time_guard', "
+        "'inventory_movement_position_time_precision_guard')"
+    ).fetchone()[0] == 2
     before = reopened.execute("SELECT COUNT(*) FROM persons").fetchone()[0]
     assert apply_migrations(reopened) == []
     assert reopened.execute("SELECT COUNT(*) FROM persons").fetchone()[0] == before
-    assert reopened.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0] == 43
+    assert reopened.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0] == 44
 
 
 def test_constraints_are_enforced_at_runtime():
