@@ -229,6 +229,7 @@ def test_reverse_implementation_inventory_has_traceability_owner():
         "hospital_finance_reconciliation.py": "compatibility wrapper for the canonical read-only intake reconciliation report",
         "hospital_finance_transport_report.py": "read-only comparison of Hospital outbox and Finance intake event identities; transport reconciliation only, no settlement or ledger-posting claim",
         "hospital_finance_outbox_consumer.py": "opt-in fail-closed Hospital outbox consumer that acknowledges only after durable Finance payment recognition; invoice lifecycle and approved mapping UI remain gated",
+        "hospital_finance_integration_settings_application.py": "Finance-owned versioned Hospital mapping proposals with distinct-person approval and active lookup; no UI, worker activation, or per-operation financial authorization",
         "hospital_finance_recognition_readiness.py": "read-only lifecycle report tracing mapped Hospital events through persisted Finance obligations/payments, settlements, financial transactions, and posted ledger entries; no writes or accounting reconciliation claim",
         "persisted_settlement_recognition_application.py": "Finance-owned atomic persistence for fully settled Payments into FinancialTransaction and LedgerEntry; rejects partial settlement and requires persisted authorization and human approval",
         "runtime.py": "runtime composition over mapped domain boundaries",
