@@ -185,6 +185,10 @@ def test_web_session_can_buy_sellable_product_and_receive_result(tmp_path):
     # model has no approved report permission, so JSON and CSV must fail closed.
     unauthenticated_report = request(app, "/api/reports/sales")
     assert unauthenticated_report["status"] == "401 Unauthorized"
+    unauthenticated_csv = request(app, "/api/reports/sales?format=csv")
+    assert unauthenticated_csv["status"] == "401 Unauthorized"
+    assert "text/csv" not in dict(unauthenticated_csv["headers"]).get("Content-Type", "")
+    assert "items" not in unauthenticated_csv["body"]
 
     sales_before = connect_database(db_path)
     before_count = sales_before.execute("SELECT COUNT(*) FROM sales").fetchone()[0]
