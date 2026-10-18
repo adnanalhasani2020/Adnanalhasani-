@@ -18,6 +18,10 @@ The Hospital database is the source of truth for its operational invoices and re
 
 Validation is not authorization, durable acceptance, settlement, or accounting recognition.
 
+### Payment request retries
+
+`POST /api/payments` accepts an optional `idempotency_key` for client retries. A caller integrating Hospital with Finance must provide a stable, unique key per intended payment operation and reuse that same key only for retries of the exact same request. Hospital returns the original payment ID for a matching retry and rejects a reused key when the normalized request fingerprint differs. The key is persisted with a unique constraint; existing databases are upgraded in place. Legacy requests without a key remain accepted for compatibility but are not protected against duplicate submissions. This protects the Hospital payment write and its audit/outbox side effects; it does not itself create Finance records or prove downstream delivery.
+
 ### Finance-side durable intake schema
 
 Migration `0040_external_event_intake.sql` adds:
