@@ -329,6 +329,7 @@ private fun HospitalWorkspace(repository: HospitalRepository) {
                         onAdd = { key -> selected = key }
                     )
                     selected == "reports" -> Reports(all)
+                    selected == "audit" -> AuditHistoryScreen(repository)
                     selected == "catalogs" -> ReferenceCatalogScreen(repository)
                     selected == "business" -> BusinessProfileScreen(
                         profile = businessProfile,
