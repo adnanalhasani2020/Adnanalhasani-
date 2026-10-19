@@ -51,8 +51,8 @@ class HospitalExportTest {
         )
 
         assertEquals(
-            "id,category,title,details,created_at\\n" +
-                "1,patients,'  =1+1,'@SUM(A1:A2),10\\n",
+            "id,category,title,details,created_at\n" +
+                "1,patients,'  =1+1,'@SUM(A1:A2),10\n",
             csv
         )
     }
