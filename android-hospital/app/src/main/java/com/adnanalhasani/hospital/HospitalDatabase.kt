@@ -267,6 +267,21 @@ interface HospitalDao {
     suspend fun updateRecordRow(id: Long, title: String, details: String)
     @Query("UPDATE module_records SET title = :title, details = :details WHERE sourceRecordId = :id")
     suspend fun updateModuleRecordRow(id: Long, title: String, details: String)
+
+    @Query("UPDATE patients SET fileNumber = :newFileNumber, fullName = :fullName, phone = :phone, age = :age, notes = :notes WHERE fileNumber = :oldFileNumber")
+    suspend fun updatePatientRecord(oldFileNumber: String, newFileNumber: String, fullName: String, phone: String, age: String, notes: String): Int
+
+    @Query("UPDATE doctors SET employeeNumber = :newEmployeeNumber, fullName = :fullName, specialty = :specialty, phone = :phone WHERE employeeNumber = :oldEmployeeNumber")
+    suspend fun updateDoctorRecord(oldEmployeeNumber: String, newEmployeeNumber: String, fullName: String, specialty: String, phone: String): Int
+
+    @Query("UPDATE appointments SET patientName = :patientName, doctorName = :doctorName, patientId = :patientId, doctorId = :doctorId, appointmentAt = :appointmentAt, reason = :reason WHERE patientName = :oldPatientName AND createdAt = :createdAt")
+    suspend fun updateAppointmentRecord(oldPatientName: String, createdAt: Long, patientName: String, doctorName: String, patientId: Long?, doctorId: Long?, appointmentAt: String, reason: String): Int
+
+    @Query("UPDATE invoices SET invoiceNumber = :invoiceNumber, patientName = :patientName, patientId = :patientId, amountMinor = :amountMinor, currency = :currency, status = :status WHERE invoiceNumber = :oldInvoiceNumber")
+    suspend fun updateInvoiceRecord(oldInvoiceNumber: String, invoiceNumber: String, patientName: String, patientId: Long?, amountMinor: Long, currency: String, status: String): Int
+
+    @Query("UPDATE payments SET invoiceNumber = :invoiceNumber, invoiceId = :invoiceId, amountMinor = :amountMinor, method = :method, receiptReference = :receiptReference WHERE invoiceNumber = :oldInvoiceNumber AND createdAt = :createdAt")
+    suspend fun updatePaymentRecord(oldInvoiceNumber: String, createdAt: Long, invoiceNumber: String, invoiceId: Long?, amountMinor: Long, method: String, receiptReference: String): Int
     @Query("""UPDATE vaccination_records SET childName = :childName, childFileNumber = :fileNumber,
         dateOfBirth = :dateOfBirth, vaccineName = :vaccineName, doseNumber = :doseNumber,
         administeredDate = :administeredDate, nextDoseDate = :nextDoseDate, batchNumber = :batchNumber,
@@ -337,6 +352,66 @@ interface HospitalDao {
                 field("الطبيب الطالب"), field("الحالة"), field("التقرير"))
             "maintenance" -> updateMaintenanceTicketRow(id, title, field("مقدم البلاغ"),
                 field("الموقع"), field("نوع العطل"), field("الأولوية"), field("الحالة"))
+            "patients" -> {
+                val updated = updatePatientRecord(current.title, title,
+                    field("اسم المريض").ifBlank { title }, field("رقم الهاتف"),
+                    field("العمر"), field("ملاحظات"))
+                if (updated == 0) upsertPatient(PatientEntity(
+                    fileNumber = title,
+                    fullName = field("اسم المريض").ifBlank { title },
+                    phone = field("رقم الهاتف"), age = field("العمر"),
+                    notes = field("ملاحظات"), createdAt = current.createdAt
+                ))
+            }
+            "doctors" -> {
+                val updated = updateDoctorRecord(current.title, title,
+                    field("اسم الطبيب").ifBlank { title }, field("التخصص"), field("رقم الهاتف"))
+                if (updated == 0) upsertDoctor(DoctorEntity(
+                    employeeNumber = title,
+                    fullName = field("اسم الطبيب").ifBlank { title },
+                    specialty = field("التخصص"), phone = field("رقم الهاتف"),
+                    createdAt = current.createdAt
+                ))
+            }
+            "appointments" -> updateAppointmentRecord(
+                oldPatientName = current.title, createdAt = current.createdAt,
+                patientName = field("اسم المريض"), doctorName = field("اسم الطبيب"),
+                patientId = findPatientIdByName(field("اسم المريض")),
+                doctorId = findDoctorIdByName(field("اسم الطبيب")),
+                appointmentAt = field("التاريخ والوقت"), reason = field("سبب الزيارة")
+            )
+            "invoices" -> {
+                val amountMinor = requireNotNull(
+                    HospitalFieldValidation.toMinorUnitsOrNull(field("المبلغ"))
+                ) { "Invalid invoice amount" }
+                val updated = updateInvoiceRecord(
+                    oldInvoiceNumber = current.title, invoiceNumber = title,
+                    patientName = field("اسم المريض"),
+                    patientId = findPatientIdByName(field("اسم المريض")),
+                    amountMinor = amountMinor,
+                    currency = field("العملة").ifBlank { "YER" },
+                    status = field("الحالة").ifBlank { "open" }
+                )
+                if (updated == 0) upsertInvoice(InvoiceEntity(
+                    invoiceNumber = title, patientName = field("اسم المريض"),
+                    patientId = findPatientIdByName(field("اسم المريض")),
+                    amountMinor = amountMinor, currency = field("العملة").ifBlank { "YER" },
+                    status = field("الحالة").ifBlank { "open" }, createdAt = current.createdAt
+                ))
+            }
+            "payments" -> {
+                val invoiceNumber = field("رقم الفاتورة").ifBlank { title }
+                val amountMinor = requireNotNull(
+                    HospitalFieldValidation.toMinorUnitsOrNull(field("المبلغ المدفوع"))
+                ) { "Invalid payment amount" }
+                updatePaymentRecord(
+                    oldInvoiceNumber = current.title, createdAt = current.createdAt,
+                    invoiceNumber = invoiceNumber,
+                    invoiceId = findInvoiceIdByNumber(invoiceNumber),
+                    amountMinor = amountMinor, method = field("طريقة الدفع"),
+                    receiptReference = field("مرجع الإيصال")
+                )
+            }
         }
     }
 
