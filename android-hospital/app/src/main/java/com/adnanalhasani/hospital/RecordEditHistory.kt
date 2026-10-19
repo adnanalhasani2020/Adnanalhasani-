@@ -21,9 +21,14 @@ object RecordEditHistory {
      * Appends a history entry to the updated details, preserving the previous
      * history even when a caller only passes the visible details for editing.
      */
-    fun append(storedDetails: String, previousStoredDetails: String, timestamp: String): String {
+    fun append(
+        storedDetails: String,
+        previousStoredDetails: String,
+        timestamp: String,
+        action: String = "تم تعديل السجل"
+    ): String {
         val cleanDetails = visibleDetails(storedDetails)
-        val nextEntry = "- $timestamp: تم تعديل السجل"
+        val nextEntry = "- $timestamp: $action"
         val allEntries = entries(previousStoredDetails) + nextEntry
         return cleanDetails + MARKER + allEntries.joinToString("\n")
     }
