@@ -226,6 +226,19 @@ data class ReferenceCatalogEntity(
     val updatedAt: Long = System.currentTimeMillis()
 )
 
+@Entity(tableName = "record_audit_log", indices = [Index(value = ["recordId", "changedAt"]), Index(value = ["category", "changedAt"])])
+data class RecordAuditLogEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val recordId: Long,
+    val category: String,
+    val action: String,
+    val oldTitle: String = "",
+    val newTitle: String = "",
+    val oldDetails: String = "",
+    val newDetails: String = "",
+    val changedAt: Long = System.currentTimeMillis()
+)
+
 @Dao
 interface HospitalDao {
     @Query("SELECT * FROM reference_catalog WHERE category = :category ORDER BY active DESC, name COLLATE NOCASE")
@@ -353,6 +366,7 @@ interface HospitalDao {
     @Transaction
     suspend fun updateRecord(id: Long, title: String, details: String) {
         val current = recordById(id) ?: return
+        insertAuditLog(RecordAuditLogEntity(recordId = id, category = current.category, action = "UPDATE", oldTitle = current.title, newTitle = title, oldDetails = current.details, newDetails = details, changedAt = System.currentTimeMillis()))
         val fields = details.lineSequence().mapNotNull { line ->
             val separator = line.indexOf(": ")
             if (separator <= 0) null else line.substring(0, separator).trim() to line.substring(separator + 2).trim()
@@ -467,6 +481,7 @@ interface HospitalDao {
     @Transaction
     suspend fun saveRecord(record: HospitalRecord) {
         val sourceRecordId = insert(record)
+        insertAuditLog(RecordAuditLogEntity(recordId = sourceRecordId, category = record.category, action = "CREATE", newTitle = record.title, newDetails = record.details, changedAt = System.currentTimeMillis()))
         insertModuleRecord(
             ModuleRecordEntity(
                 sourceRecordId = sourceRecordId,
@@ -710,6 +725,15 @@ interface HospitalDao {
     @Query("SELECT COUNT(*) FROM hospital_records WHERE category = :category")
     suspend fun count(category: String): Int
 
+    @Insert
+    suspend fun insertAuditLog(entry: RecordAuditLogEntity)
+
+    @Query("SELECT * FROM record_audit_log WHERE recordId = :recordId ORDER BY changedAt DESC")
+    fun auditHistory(recordId: Long): Flow<List<RecordAuditLogEntity>>
+
+    @Query("SELECT * FROM record_audit_log ORDER BY changedAt DESC LIMIT 500")
+    fun recentAuditHistory(): Flow<List<RecordAuditLogEntity>>
+
     @Query("SELECT * FROM hospital_records WHERE id = :id LIMIT 1")
     suspend fun recordById(id: Long): HospitalRecord?
 
@@ -758,6 +782,7 @@ interface HospitalDao {
             "invoices" -> deleteInvoiceRecord(record.title, record.createdAt)
             "payments" -> deletePaymentRecord(record.title, record.createdAt)
         }
+        insertAuditLog(RecordAuditLogEntity(recordId = id, category = record.category, action = "DELETE", oldTitle = record.title, oldDetails = record.details, changedAt = System.currentTimeMillis()))
         deleteRecordRow(id)
         deleteModuleRecord(id)
     }
@@ -780,9 +805,10 @@ interface HospitalDao {
         PaymentEntity::class,
         BusinessProfileEntity::class,
         VaccinationRecordEntity::class,
-        ReferenceCatalogEntity::class
+        ReferenceCatalogEntity::class,
+        RecordAuditLogEntity::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 abstract class HospitalDatabase : RoomDatabase() {
@@ -795,6 +821,14 @@ abstract class HospitalDatabase : RoomDatabase() {
          * Version 1 only contained hospital_records. CREATE TABLE IF NOT EXISTS leaves
          * those rows untouched and adds the new typed tables without destructive fallback.
          */
+        private val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS record_audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, recordId INTEGER NOT NULL, category TEXT NOT NULL, action TEXT NOT NULL, oldTitle TEXT NOT NULL, newTitle TEXT NOT NULL, oldDetails TEXT NOT NULL, newDetails TEXT NOT NULL, changedAt INTEGER NOT NULL)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_record_audit_log_recordId_changedAt ON record_audit_log(recordId, changedAt)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_record_audit_log_category_changedAt ON record_audit_log(category, changedAt)")
+            }
+        }
+
         private val MIGRATION_7_8 = object : Migration(7, 8) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("CREATE TABLE IF NOT EXISTS reference_catalog (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, category TEXT NOT NULL, name TEXT NOT NULL, description TEXT NOT NULL, active INTEGER NOT NULL, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL)")
@@ -915,7 +949,7 @@ abstract class HospitalDatabase : RoomDatabase() {
                     HospitalDatabase::class.java,
                     "hospital-local.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                     .build()
                     .also { INSTANCE = it }
             }
