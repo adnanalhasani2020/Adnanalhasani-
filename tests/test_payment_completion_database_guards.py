@@ -67,9 +67,10 @@ def insert_payment(db, creditor, debtor, obligation, invoice, *, state="initiate
 
 def test_direct_sql_cannot_complete_payment_after_invoice_voided():
     db = connect_database()
-    creditor, debtor, obligation, invoice = seed_context(db, invoice_state="issued")
+    # Invoice voiding is separately guarded once linked financial history exists.
+    # Seed the persisted void state first, then verify completion fails closed.
+    creditor, debtor, obligation, invoice = seed_context(db, invoice_state="void")
     payment = insert_payment(db, creditor, debtor, obligation, invoice)
-    db.execute("UPDATE invoices SET state='void' WHERE invoice_id=?", (invoice,))
     db.commit()
 
     with pytest.raises(sqlite3.IntegrityError, match="completed Payment requires"):
