@@ -9,6 +9,10 @@ import kotlinx.coroutines.flow.Flow
 class HospitalRepository(private val dao: HospitalDao) {
     fun allRecords(): Flow<List<HospitalRecord>> = dao.allRecords()
 
+    fun recentAuditHistory(): Flow<List<RecordAuditLogEntity>> = dao.recentAuditHistory()
+
+    fun auditHistory(recordId: Long): Flow<List<RecordAuditLogEntity>> = dao.auditHistory(recordId)
+
     fun referenceItems(category: String): Flow<List<ReferenceCatalogEntity>> = dao.referenceItems(category)
 
     suspend fun seedDefaultReferenceCatalogs() {
