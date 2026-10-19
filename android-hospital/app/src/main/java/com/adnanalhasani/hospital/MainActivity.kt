@@ -329,7 +329,7 @@ private fun HospitalWorkspace(repository: HospitalRepository) {
                     selected == "reports" -> Reports(all)
                     selected == "business" -> BusinessProfileScreen(
                         profile = businessProfile,
-                        onSave = { profile -> scope.launch { repository.saveBusinessProfile(profile) } }
+                        onSave = { profile -> repository.saveBusinessProfile(profile) }
                     )
                     selected == "settings" -> SettingsScreen(
                         allCount = all.size,
