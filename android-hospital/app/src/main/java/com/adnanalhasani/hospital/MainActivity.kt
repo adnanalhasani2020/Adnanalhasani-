@@ -335,6 +335,10 @@ private fun HospitalWorkspace(repository: HospitalRepository) {
                         repository = repository,
                         onDelete = { id -> scope.launch { repository.deleteRecord(id) } }
                     )
+                    selected == "emergency" -> EmergencyScreen(
+                        repository = repository,
+                        onDelete = { id -> scope.launch { repository.deleteRecord(id) } }
+                    )
                     selected == "settings" -> SettingsScreen(
                         allCount = all.size,
                         exportStatus = exportStatus,
