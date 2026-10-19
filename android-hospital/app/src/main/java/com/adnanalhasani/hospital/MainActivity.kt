@@ -219,6 +219,27 @@ private fun HospitalWorkspace(repository: HospitalRepository) {
     val labOrders by repository.labOrders().collectAsState(initial = emptyList())
     val radiologyOrders by repository.radiologyOrders().collectAsState(initial = emptyList())
     val maintenanceTickets by repository.maintenanceTickets().collectAsState(initial = emptyList())
+    val databaseExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri == null) {
+            exportStatus = "تم إلغاء تصدير قاعدة البيانات."
+        } else {
+            scope.launch {
+                val result = withContext(Dispatchers.IO) {
+                    runCatching {
+                        val snapshot = HospitalDatabaseExport.toJson(HospitalDatabase.get(context))
+                        val output = context.contentResolver.openOutputStream(uri)
+                            ?: error("تعذر فتح الملف للكتابة")
+                        output.bufferedWriter(Charsets.UTF_8).use { writer -> writer.write(snapshot) }
+                    }
+                }
+                exportStatus = if (result.isSuccess) {
+                    "تم تصدير نسخة JSON من جداول قاعدة البيانات المحلية."
+                } else {
+                    "تعذر تصدير قاعدة البيانات. تحقق من مساحة التخزين وحاول مجدداً."
+                }
+            }
+        }
+    }
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
         if (uri == null) {
             exportStatus = "تم إلغاء التصدير."
@@ -355,6 +376,11 @@ private fun HospitalWorkspace(repository: HospitalRepository) {
                             exportStatus = null
                             val timestamp = SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date())
                             exportLauncher.launch("hospital-records-$timestamp.csv")
+                        },
+                        onExportDatabase = {
+                            exportStatus = null
+                            val timestamp = SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date())
+                            databaseExportLauncher.launch("hospital-database-$timestamp.json")
                         }
                     )
                     currentModule != null -> ModuleScreen(
@@ -1311,7 +1337,7 @@ private fun Reports(all: List<HospitalRecord>) {
 }
 
 @Composable
-private fun SettingsScreen(allCount: Int, exportStatus: String?, onBusinessProfile: () -> Unit, onReferenceCatalogs: () -> Unit, onExport: () -> Unit) {
+private fun SettingsScreen(allCount: Int, exportStatus: String?, onBusinessProfile: () -> Unit, onReferenceCatalogs: () -> Unit, onExport: () -> Unit, onExportDatabase: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item {
             Box(Modifier.fillMaxWidth().background(Brush.linearGradient(listOf(Navy, Teal)), RoundedCornerShape(24.dp)).padding(22.dp)) {
@@ -1389,10 +1415,15 @@ private fun SettingsScreen(allCount: Int, exportStatus: String?, onBusinessProfi
                     Button(onClick = onExport, modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Default.FileDownload, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
-                        Text("تصدير السجلات إلى ملف CSV")
+                        Text("تصدير السجلات العامة إلى CSV")
+                    }
+                    OutlinedButton(onClick = onExportDatabase, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Default.Storage, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("تصدير جميع جداول قاعدة البيانات إلى JSON")
                     }
                     exportStatus?.let { Text(it, color = if (it.startsWith("تم تصدير")) Teal else Rose, fontSize = 12.sp) }
-                    Text("التصدير يشمل السجلات العامة المحفوظة في التطبيق، ولا يتضمن ملفات مرفقة أو بيانات خادم غير متزامنة.", color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
+                    Text("ملف JSON يشمل الجداول المحلية المتخصصة والقوائم المرجعية وسجل التدقيق. هو نسخة تصدير للقراءة والأرشفة وليس أداة استعادة تلقائية، ولا يشمل ملفات مرفقة أو بيانات الخادم غير المتزامنة.", color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
                 }
             }
         }
