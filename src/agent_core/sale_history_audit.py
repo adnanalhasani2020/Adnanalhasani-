@@ -31,11 +31,11 @@ class SaleHistoryIntegrityAuditor:
             raise ValidationError("Sale identifier must be a valid UUID") from exc
 
         sale = connection.execute(
-            "SELECT sale_id,state,version_no FROM sales WHERE sale_id=?", (key,)
+            "SELECT sale_id,state,version_no,created_at,updated_at FROM sales WHERE sale_id=?", (key,)
         ).fetchone()
         if sale is None:
             raise ValidationError("Sale does not exist")
-        persisted_id, state, version = sale
+        persisted_id, state, version, created_at, updated_at = sale
         rows = connection.execute(
             "SELECT actor_context_ref,historical_at,prior_version_ref,current_version_ref,change_payload_ref "
             "FROM domain_history WHERE target_ref=? AND owner_domain='commerce' "
@@ -61,6 +61,15 @@ class SaleHistoryIntegrityAuditor:
         }
         previous_state = None
         previous_timestamp = None
+        try:
+            created_instant = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+            updated_instant = datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
+            if (created_instant.tzinfo is None or created_instant.utcoffset() is None
+                    or updated_instant.tzinfo is None or updated_instant.utcoffset() is None):
+                raise ValueError("Sale lifecycle timestamps must be timezone-aware")
+        except (ValueError, TypeError, AttributeError):
+            created_instant = updated_instant = None
+            findings.append("sale_lifecycle_timestamp_invalid")
         for index, (actor_ref, historical_at, prior_ref, current_ref, payload_ref) in enumerate(rows, start=1):
             if not isinstance(actor_ref, str) or not actor_ref.strip():
                 findings.append(f"history_actor_context_missing:{index}")
@@ -77,6 +86,10 @@ class SaleHistoryIntegrityAuditor:
             if parsed_timestamp is not None:
                 if previous_timestamp is not None and parsed_timestamp < previous_timestamp:
                     findings.append(f"history_timestamps_not_chronological:{index}")
+                if created_instant is not None and parsed_timestamp < created_instant:
+                    findings.append(f"history_timestamp_before_sale_creation:{index}")
+                if updated_instant is not None and parsed_timestamp > updated_instant:
+                    findings.append(f"history_timestamp_after_sale_update:{index}")
                 previous_timestamp = parsed_timestamp
 
             expected_current = f"sale-state:{persisted_id}:v{index}"
@@ -122,6 +135,9 @@ class SaleHistoryIntegrityAuditor:
             "history_actor_context_missing:",
             "history_timestamp_invalid:",
             "history_timestamps_not_chronological:",
+            "history_timestamp_before_sale_creation:",
+            "history_timestamp_after_sale_update:",
+            "sale_lifecycle_timestamp_invalid",
             "sale_history_exceeds_sale_version",
         )
         if any(

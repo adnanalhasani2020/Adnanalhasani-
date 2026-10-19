@@ -231,3 +231,22 @@ def test_invoice_audit_detects_non_chronological_history():
     assert result.status == "inconsistent"
     assert "history_timestamps_not_chronological:2" in result.findings
     db.close()
+
+
+def test_invoice_audit_detects_history_timestamp_before_invoice_creation():
+    from agent_core.invoice_history_audit import InvoiceHistoryIntegrityAuditor
+
+    db = connect_database()
+    *_, issued = setup_invoice(db)
+    invoice_id = str(issued.invoice.id)
+    db.execute(
+        "UPDATE domain_history SET historical_at='2026-10-10T11:59:00Z' "
+        "WHERE target_ref=? AND change_type='invoice_state_transition'",
+        (invoice_id,),
+    )
+    db.commit()
+
+    result = InvoiceHistoryIntegrityAuditor().inspect(db, invoice_id)
+    assert result.status == "inconsistent"
+    assert "history_timestamp_before_invoice_creation:1" in result.findings
+    db.close()

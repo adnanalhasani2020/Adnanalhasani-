@@ -136,3 +136,26 @@ def test_payment_and_obligation_readers_fail_closed_on_legacy_settled_amount_mis
     assert db.execute("SELECT amount_minor FROM payments WHERE payment_id=?", (payment_id,)).fetchone()[0] == 101
     assert db.execute("SELECT amount_minor FROM obligations WHERE obligation_id=?", (obligation_id,)).fetchone()[0] == 100
     db.close()
+
+
+def test_readers_detect_aggregate_overpayment_across_individually_valid_payments():
+    db, obligation_id, payment_id = seed()
+    second_payment_id = uid()
+    db.execute(
+        "INSERT INTO payments(payment_id,obligation_id,payer_person_id,payee_person_id,amount_minor,"
+        "currency_code,state,created_at,updated_at) "
+        "SELECT ?,obligation_id,payer_person_id,payee_person_id,1,'YER','initiated',?,? "
+        "FROM payments WHERE payment_id=?",
+        (second_payment_id, STAMP, STAMP, payment_id),
+    )
+    db.commit()
+
+    with pytest.raises(ValidationError, match="aggregate"):
+        PaymentApplication().get_payment(db, payment_id)
+    with pytest.raises(ValidationError, match="aggregate"):
+        ObligationApplication().get_obligation(db, obligation_id)
+
+    assert db.execute(
+        "SELECT SUM(amount_minor) FROM payments WHERE obligation_id=?", (obligation_id,)
+    ).fetchone()[0] == 101
+    db.close()
