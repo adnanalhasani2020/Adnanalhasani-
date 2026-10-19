@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChildCare
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.*
@@ -62,6 +63,7 @@ internal fun VaccinationScreen(repository: HospitalRepository, onDelete: (Long) 
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var search by remember { mutableStateOf("") }
     var pendingDelete by remember { mutableStateOf<VaccinationRecordEntity?>(null) }
+    var editingRecord by remember { mutableStateOf<VaccinationRecordEntity?>(null) }
     val filtered = records.filter { record ->
         val sourceDetails = allRecords.firstOrNull { it.id == record.sourceRecordId }?.details.orEmpty()
         search.isBlank() || record.childName.contains(search, true) || record.childFileNumber.contains(search, true) ||
@@ -88,7 +90,7 @@ internal fun VaccinationScreen(repository: HospitalRepository, onDelete: (Long) 
         item {
             Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(20.dp)) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
-                    Text("تسجيل جرعة أو موعد", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Color(0xFF263B4D))
+                    Text(if (editingRecord == null) "تسجيل جرعة أو موعد" else "تعديل سجل التطعيم", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Color(0xFF263B4D))
                     ExposedDropdownMenuBox(expanded = genderExpanded, onExpandedChange = { genderExpanded = it }) {
                         OutlinedTextField(value = gender, onValueChange = {}, readOnly = true,
                             label = { Text("جنس الطفل") },
@@ -163,11 +165,23 @@ internal fun VaccinationScreen(repository: HospitalRepository, onDelete: (Long) 
                                 message = null
                                 errorMessage = null
                                 try {
-                                    repository.saveRecord(HospitalRecord(category = "vaccination", title = values["اسم الطفل"].orEmpty().trim(), details = details))
+                                    val editing = editingRecord
+                                    if (editing == null) {
+                                        repository.saveRecord(HospitalRecord(category = "vaccination", title = values["اسم الطفل"].orEmpty().trim(), details = details))
+                                        message = "تم حفظ السجل محلياً بنجاح."
+                                    } else {
+                                        val oldDetails = allRecords.firstOrNull { it.id == editing.sourceRecordId }?.details.orEmpty()
+                                        val oldHistory = oldDetails.substringAfter("\n\nسجل التعديلات:\n", "")
+                                        val timestamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+                                        val history = (oldHistory.lineSequence().filter { it.isNotBlank() }.toList() + "- $timestamp: تم تعديل سجل التطعيم").joinToString("\n")
+                                        val cleanDetails = details.substringBefore("\n\nسجل التعديلات:\n")
+                                        repository.updateRecord(editing.sourceRecordId, values["اسم الطفل"].orEmpty().trim(), "$cleanDetails\n\nسجل التعديلات:\n$history")
+                                        editingRecord = null
+                                        message = "تم حفظ التعديل مع تسجيل تاريخه."
+                                    }
                                     values = fields.associate { it.first to "" }
                                     status = "تم التطعيم"
                                     gender = "غير محدد"
-                                    message = "تم حفظ السجل محلياً بنجاح."
                                 } catch (_: Exception) {
                                     errorMessage = "تعذر الحفظ. تحقق من البيانات ثم أعد المحاولة."
                                 } finally {
@@ -180,7 +194,7 @@ internal fun VaccinationScreen(repository: HospitalRepository, onDelete: (Long) 
                     ) {
                         if (saving) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp) else Icon(Icons.Default.Save, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
-                        Text(if (saving) "جارٍ الحفظ..." else "حفظ سجل التطعيم")
+                        Text(if (saving) "جارٍ الحفظ..." else if (editingRecord == null) "حفظ سجل التطعيم" else "حفظ التعديل")
                     }
                     message?.let { Text(it, color = Color(0xFF548F88), fontSize = 12.sp) }
                     errorMessage?.let { Text(it, color = Color(0xFFC97979), fontSize = 12.sp) }
@@ -267,7 +281,17 @@ internal fun VaccinationScreen(repository: HospitalRepository, onDelete: (Long) 
                             Text(record.childName, fontWeight = FontWeight.Bold, color = Color(0xFF263B4D))
                             Text(record.vaccineName + " • " + record.doseNumber, color = Color(0xFF293B49), fontSize = 13.sp)
                         }
-                        TextButton(onClick = { pendingDelete = record }) { Icon(Icons.Default.Delete, contentDescription = "حذف السجل", tint = Color(0xFFC97979)) }
+                        Row {
+                            TextButton(onClick = {
+                                editingRecord = record
+                                values = fields.associate { (label, _) -> label to sourceFields[label].orEmpty() }
+                                gender = sourceFields["جنس الطفل"].orEmpty().ifBlank { "غير محدد" }
+                                status = sourceFields["حالة الجرعة"].orEmpty().ifBlank { record.doseStatus }
+                                message = null
+                                errorMessage = null
+                            }) { Icon(Icons.Default.Edit, contentDescription = "تعديل السجل", tint = Color(0xFF548F88)) }
+                            TextButton(onClick = { pendingDelete = record }) { Icon(Icons.Default.Delete, contentDescription = "حذف السجل", tint = Color(0xFFC97979)) }
+                        }
                     }
                     if (record.administeredDate.isNotBlank()) {
                         Text("تاريخ الجرعة: " + record.administeredDate + " • الحالة: " + record.doseStatus, fontSize = 12.sp, color = Color(0xFF788895))
