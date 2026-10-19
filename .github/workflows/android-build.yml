@@ -38,6 +38,8 @@ jobs:
           packages: platform-tools
       - name: Install Android SDK 35
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Run unit tests
+        run: gradle -p android-hospital --no-daemon testDebugUnitTest
       - name: Build debug APK
         run: gradle -p android-hospital --no-daemon assembleDebug
       - name: Upload debug APK
