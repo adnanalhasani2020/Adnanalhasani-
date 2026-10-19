@@ -23,6 +23,26 @@ small{color:#5d7482}form{display:grid;gap:10px}footer{text-align:center;color:#6
 .skip-link:focus{transform:translateY(0)}
 :focus-visible{outline:3px solid #e6a23c;outline-offset:3px}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+
+/* Doctor workspace: queue + patient chart */
+.doctor-layout{display:grid;grid-template-columns:minmax(260px, .85fr) minmax(0,1.5fr);gap:14px}
+.doctor-queue{display:grid;gap:8px;align-content:start;max-height:620px;overflow:auto}
+.queue-card{background:#f7fafc;border:1px solid #d8e5ed;border-radius:10px;padding:12px;text-align:right;color:#18364b}
+.queue-card[aria-pressed="true"]{border:2px solid #176bce;background:#eef6ff}
+.queue-card strong,.queue-card small{display:block}.queue-card small{margin-top:5px}
+.patient-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:14px}
+.summary-item{background:#f2f7fb;padding:10px;border-radius:8px;overflow-wrap:anywhere}
+.summary-item span{display:block;font-size:12px;color:#607987}.summary-item strong{display:block;margin-top:4px}
+.doctor-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px}
+.doctor-actions button{min-height:58px}.doctor-actions .diagnosis{background:#7d43c5}.doctor-actions .labs{background:#176bce}.doctor-actions .meds{background:#159447}.doctor-actions .history{background:#d56c17}.doctor-actions .followup{background:#0c9995}
+.modal-backdrop{position:fixed;inset:0;background:#102b3bcc;display:none;align-items:center;justify-content:center;padding:16px;z-index:1000}
+.modal-backdrop.open{display:flex}.modal-card{background:#fff;border-radius:14px;width:min(720px,100%);max-height:90vh;overflow:auto;padding:20px;box-shadow:0 18px 60px #0003}
+.modal-card h3{margin-top:0}.modal-close{background:#e9eef2;color:#18364b;width:auto;float:left;padding:8px 12px}
+.modal-card textarea{font:inherit;width:100%;min-height:95px;padding:11px;border:1px solid #c6d5df;border-radius:8px;resize:vertical}
+.modal-card label{display:grid;gap:6px;margin:10px 0}.modal-card .status{margin-top:8px}
+.history-list{display:grid;gap:9px}.history-item{border:1px solid #dbe5eb;border-radius:9px;padding:11px}
+@media(max-width:760px){.doctor-layout{grid-template-columns:1fr}.doctor-queue{max-height:320px}}
+
 </style>
 </head>
 <body>
@@ -98,6 +118,31 @@ small{color:#5d7482}form{display:grid;gap:10px}footer{text-align:center;color:#6
 <hr style="border:0;border-top:1px solid #dbe5eb;margin:18px 0">
 <form id="admissionForm"><h3>تنويم مريض</h3><div class="row"><select name="patient_id" required aria-label="المريض"><option value="">اختر المريض...</option></select><select name="bed_id" required aria-label="السرير"><option value="">اختر السرير...</option></select></div><input name="reason" placeholder="سبب التنويم (اختياري)"><button>تسجيل التنويم</button><div class="status" role="status"></div></form>
 </section>
+
+<section class="panel" id="doctorWorkspace">
+<h2>عيادة الطبيب — قائمة الانتظار وملف المريض</h2>
+<p><small>تظهر الزيارات المفتوحة والمواعيد المجدولة/المؤكدة. البيانات تُقرأ وتُحفظ عبر API وقاعدة البيانات الحالية.</small></p>
+<div class="row"><input id="doctorQueueSearch" placeholder="ابحث باسم المريض أو رقم الملف" aria-label="البحث في قائمة الطبيب"><button id="doctorQueueRefresh" type="button">تحديث قائمة المرضى</button></div>
+<div class="doctor-layout" style="margin-top:12px">
+<div><h3>المرضى المنتظرون</h3><div id="doctorQueue" class="doctor-queue"><p>اتصل بالخادم لتحميل القائمة.</p></div><div id="doctorQueueStatus" class="status" role="status" aria-live="polite"></div></div>
+<div><h3>تفاصيل المريض</h3><div id="doctorPatientEmpty" class="notice">اختر مريضًا من القائمة لعرض بياناته والإجراءات الطبية.</div>
+<div id="doctorPatientDetails" hidden>
+<div id="doctorPatientSummary" class="patient-summary"></div>
+<div class="doctor-actions">
+<button class="diagnosis" data-doctor-action="diagnosis" type="button">✚ التشخيص</button>
+<button class="labs" data-doctor-action="labs" type="button">⚕ الفحوصات المطلوبة</button>
+<button class="meds" data-doctor-action="meds" type="button">▣ الأدوية المطلوبة</button>
+<button class="history" data-doctor-action="history" type="button">▤ السجل الطبي السابق</button>
+<button class="followup" data-doctor-action="followup" type="button">▦ موعد المراجعة</button>
+</div>
+<div id="doctorVisitMeta" class="status"></div>
+</div></div></div></section>
+<div id="doctorModal" class="modal-backdrop" role="presentation">
+<section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="doctorModalTitle">
+<button id="doctorModalClose" class="modal-close" type="button" aria-label="إغلاق النافذة">إغلاق ✕</button>
+<h3 id="doctorModalTitle">تفاصيل طبية</h3><div id="doctorModalBody"></div><div id="doctorModalStatus" class="status" role="status" aria-live="polite"></div>
+</section></div>
+
 <section class="panel"><h2>إدارة الزيارة الطبية</h2>
 <form id="encounterForm"><h3>فتح زيارة</h3><div class="row"><select name="patient_id" required aria-label="المريض"><option value="">اختر المريض...</option></select><select name="doctor_id" aria-label="الطبيب (اختياري)"><option value="">بدون طبيب محدد</option></select></div><input name="chief_complaint" placeholder="الشكوى الرئيسية"><select name="appointment_id" aria-label="الموعد (اختياري)"><option value="">بدون موعد مرتبط</option></select><button>فتح الزيارة</button><div class="status" role="status"></div></form>
 <hr style="border:0;border-top:1px solid #dbe5eb;margin:18px 0">
@@ -198,6 +243,82 @@ $("recordExportAllButton").onclick=async()=>{const button=$("recordExportAllButt
 
 async function loadRecords(reset=false){if(reset)recordOffset=0;const type=$("recordType").value;const search=$("recordSearch").value.trim();const status=$("recordStatus");$("recordExportButton").disabled=true;$("recordExportAllButton").disabled=true;try{msg(status,"جارٍ تحميل السجلات…");const path=type==="search"?"/api/search":"/api/"+type;const result=await api(path+"?limit="+recordLimit+"&offset="+recordOffset+"&search="+encodeURIComponent(search));const head=$("recordTable").querySelector("thead");const body=$("recordTable").querySelector("tbody");head.replaceChildren();body.replaceChildren();const rows=result.data||[];currentRecordRows=rows;currentRecordKeys=rows.length?Object.keys(rows[0]):[];$("recordExportButton").disabled=!rows.length;$("recordExportAllButton").disabled=!rows.length;if(rows.length){const keys=Object.keys(rows[0]);const tr=document.createElement("tr");keys.forEach(key=>{const th=document.createElement("th");th.textContent=recordLabels[key]||key;tr.appendChild(th)});head.appendChild(tr);rows.forEach(row=>{const line=document.createElement("tr");keys.forEach(key=>{const td=document.createElement("td");td.textContent=row[key]===null||row[key]===undefined?"—":String(row[key]);line.appendChild(td)});body.appendChild(line)})}else{const tr=document.createElement("tr");const td=document.createElement("td");td.colSpan=1;td.textContent="لا توجد سجلات مطابقة.";tr.appendChild(td);body.appendChild(tr)}$("recordPrev").disabled=recordOffset===0;$("recordNext").disabled=rows.length<recordLimit;$("recordPage").textContent="السجلات "+(rows.length?recordOffset+1:0)+"–"+(recordOffset+rows.length);msg(status,"تم تحميل "+rows.length+" سجلًا")}catch(e){msg(status,e.message,true)}}
 $("recordSearchButton").onclick=()=>loadRecords(true);$("recordType").onchange=()=>loadRecords(true);$("recordPrev").onclick=()=>{recordOffset=Math.max(0,recordOffset-recordLimit);loadRecords()};$("recordNext").onclick=()=>{recordOffset+=recordLimit;loadRecords()};$("recordSearch").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();loadRecords(true)}});
+
+/* Doctor workspace: UI actions backed by existing hospital API */
+let doctorQueueRows=[], doctorSelected=null;
+const doctorById=(rows,id)=>rows.find(r=>Number(r.id)===Number(id));
+function doctorText(value){return value===null||value===undefined||value===""?"غير مسجل":String(value)}
+function doctorSafe(value){return String(value??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]))}
+function doctorOpenModal(title,html){$("doctorModalTitle").textContent=title;$("doctorModalBody").innerHTML=html;msg($("doctorModalStatus"),"");$("doctorModal").classList.add("open");$("doctorModalClose").focus()}
+function doctorCloseModal(){$("doctorModal").classList.remove("open");$("doctorModalBody").replaceChildren()}
+$("doctorModalClose").addEventListener("click",doctorCloseModal);
+$("doctorModal").addEventListener("click",ev=>{if(ev.target===$("doctorModal"))doctorCloseModal()});
+document.addEventListener("keydown",ev=>{if(ev.key==="Escape")doctorCloseModal()});
+function doctorSelectedPatient(){return doctorSelected}
+function doctorRenderSelected(){
+ const empty=$("doctorPatientEmpty"),details=$("doctorPatientDetails");
+ if(!doctorSelected){empty.hidden=false;details.hidden=true;return}
+ empty.hidden=true;details.hidden=false;
+ const p=doctorSelected.patient||{},v=doctorSelected.visit||{};
+ const items=[["اسم المريض",p.full_name],["رقم الملف",p.patient_no],["رقم الهاتف",p.phone],["الجنس",p.sex],["تاريخ الميلاد",p.date_of_birth],["العنوان",p.address],["الحساسية",p.allergies],["الشكوى الحالية",v.chief_complaint],["الطبيب",v.doctor_name],["حالة الزيارة",v.status]];
+ $("doctorPatientSummary").replaceChildren(...items.map(([label,value])=>{const box=document.createElement("div");box.className="summary-item";const span=document.createElement("span");span.textContent=label;const strong=document.createElement("strong");strong.textContent=doctorText(value);box.append(span,strong);return box}));
+ $("doctorVisitMeta").textContent=(v.id?"رقم الزيارة: "+v.id+" — بدأت: "+doctorText(v.opened_at):"موعد: "+doctorText(v.starts_at))+" — "+doctorText(v.status);
+}
+async function doctorLoadQueue(){
+ try{
+  const [pr,er,ar]=await Promise.all([api("/api/patients?limit=100&offset=0"),api("/api/encounters?limit=100&offset=0"),api("/api/appointments?limit=100&offset=0")]);
+  const patients=pr.data||[], encounters=(er.data||[]).filter(x=>x.status==="open"), appointments=(ar.data||[]).filter(x=>["scheduled","confirmed"].includes(x.status));
+  const rows=[];
+  for(const e of encounters){const p=doctorById(patients,e.patient_id);if(p)rows.push({key:"e"+e.id,patient:p,visit:e,kind:"visit",sort:e.opened_at||""})}
+  for(const a of appointments){const p=doctorById(patients,a.patient_id);if(p&&!rows.some(r=>r.patient.id===p.id&&r.visit.appointment_id===a.id))rows.push({key:"a"+a.id,patient:p,visit:a,kind:"appointment",sort:a.starts_at||""})}
+  doctorQueueRows=rows.sort((a,b)=>String(a.sort).localeCompare(String(b.sort)));
+  doctorRenderQueue();
+  msg($("doctorQueueStatus"),"تم تحميل "+rows.length+" سجل انتظار/موعد.");
+ }catch(e){msg($("doctorQueueStatus"),e.message,true)}
+}
+function doctorRenderQueue(){
+ const q=$("doctorQueueSearch").value.trim().toLocaleLowerCase(),container=$("doctorQueue");
+ const rows=doctorQueueRows.filter(r=>(r.patient.full_name+" "+r.patient.patient_no+" "+(r.patient.phone||"")).toLocaleLowerCase().includes(q));
+ if(!rows.length){container.innerHTML="<p>لا توجد نتائج مطابقة. تحقق من تسجيل الزيارة أو الموعد.</p>";return}
+ container.replaceChildren(...rows.map(r=>{const b=document.createElement("button");b.type="button";b.className="queue-card";b.setAttribute("aria-pressed",String(doctorSelected&&doctorSelected.key===r.key));const strong=document.createElement("strong");strong.textContent=r.patient.full_name;const line=document.createElement("small");line.textContent="الملف: "+r.patient.patient_no+" — "+(r.kind==="visit"?"زيارة مفتوحة":"موعد: "+doctorText(r.visit.starts_at));const state=document.createElement("small");state.textContent="الحالة: "+doctorText(r.visit.status)+" — "+(r.visit.doctor_name||"الطبيب غير محدد");b.append(strong,line,state);b.onclick=()=>{doctorSelected=r;doctorRenderSelected();doctorRenderQueue()};return b}))
+}
+$("doctorQueueRefresh").addEventListener("click",doctorLoadQueue);
+$("doctorQueueSearch").addEventListener("input",doctorRenderQueue);
+document.querySelectorAll("[data-doctor-action]").forEach(b=>b.addEventListener("click",()=>doctorOpenAction(b.dataset.doctorAction)));
+async function doctorOpenAction(action){
+ if(!doctorSelected){msg($("doctorQueueStatus"),"اختر مريضًا أولًا.",true);return}
+ const p=doctorSelected.patient,v=doctorSelected.visit,encounterId=doctorSelected.kind==="visit"?v.id:null;
+ if(action==="diagnosis"){
+  if(!encounterId){doctorOpenModal("التشخيص",'<p class="notice">يجب فتح زيارة طبية للمريض أولًا من قسم إدارة الزيارة الطبية، ثم يمكن تسجيل التشخيص.</p>');return}
+  doctorOpenModal("إدخال التشخيص",'<form id="doctorDiagnosisForm"><label>التشخيص<textarea name="diagnosis" required maxlength="2000" placeholder="اكتب التشخيص"></textarea></label><label>ملاحظات الطبيب<textarea name="clinical_notes" maxlength="5000" placeholder="الملاحظات الطبية"></textarea></label><p><small>سيُحفظ التشخيص ضمن الزيارة الحالية، دون إغلاقها.</small></p><button>حفظ التشخيص</button></form>');
+  $("doctorDiagnosisForm").onsubmit=async ev=>{ev.preventDefault();const d=Object.fromEntries(new FormData(ev.target));try{await api("/api/encounters/"+encounterId+"/diagnosis",{method:"POST",body:JSON.stringify({...d,at:now()})});msg($("doctorModalStatus"),"تم حفظ التشخيص في الزيارة.");await doctorLoadQueue()}catch(e){msg($("doctorModalStatus"),e.message,true)}};return
+ }
+ if(action==="labs"){
+  if(!encounterId){msg($("doctorQueueStatus"),"افتح زيارة طبية للمريض قبل طلب الفحوصات.",true);return}
+  let medicines=[];try{const r=await api("/api/lab-orders?limit=100&offset=0");medicines=(r.data||[]).filter(x=>Number(x.patient_id)===Number(p.id))}catch{}
+  doctorOpenModal("الفحوصات المطلوبة",'<form id="doctorLabsForm"><label>اسم الفحص<input name="test_name" required maxlength="200" placeholder="CBC، وظائف الكبد، أشعة..."></label><button>إرسال طلب الفحص</button></form><h4>الطلبات السابقة للمريض</h4><div class="history-list">'+(medicines.length?medicines.map(x=>'<div class="history-item">'+doctorSafe(x.test_name)+' — '+doctorSafe(x.status)+' — '+doctorSafe(x.ordered_at)+'</div>').join(""):"<p>لا توجد طلبات معروضة.</p>")+'</div>');
+  $("doctorLabsForm").onsubmit=async ev=>{ev.preventDefault();const d=Object.fromEntries(new FormData(ev.target));try{const res=await api("/api/lab-orders",{method:"POST",body:JSON.stringify({patient_id:Number(p.id),doctor_id:v.doctor_id?Number(v.doctor_id):undefined,encounter_id:Number(encounterId),test_name:d.test_name,ordered_at:now()})});msg($("doctorModalStatus"),"تم إرسال طلب الفحص. الرقم: "+res.id);await doctorLoadQueue()}catch(e){msg($("doctorModalStatus"),e.message,true)}};return
+ }
+ if(action==="meds"){
+  if(!encounterId){msg($("doctorQueueStatus"),"افتح زيارة طبية للمريض قبل إصدار وصفة.",true);return}
+  let data=[];try{const r=await api("/api/medicines?limit=100&offset=0");data=(r.data||[]).filter(x=>x.active&&Number(x.quantity)>0)}catch{}
+  doctorOpenModal("الأدوية المطلوبة",'<form id="doctorMedsForm"><label>الدواء<select name="medicine_id" required><option value="">اختر الدواء المتاح</option>'+data.map(x=>'<option value="'+Number(x.id)+'">'+doctorSafe(x.name)+' — المتوفر: '+Number(x.quantity)+'</option>').join("")+'</select></label><div class="row"><label>الجرعة<input name="dose" required maxlength="200"></label><label>التكرار<input name="frequency" required maxlength="200" placeholder="مثال: مرتان يوميًا"></label></div><div class="row"><label>المدة<input name="duration" required maxlength="200" placeholder="مثال: 5 أيام"></label><label>الكمية<input name="quantity" required type="number" min="1" step="1"></label></div><button>حفظ الوصفة</button></form><p><small>هذه وصفة محفوظة؛ صرف الدواء وخصم المخزون عملية منفصلة لدى الصيدلية.</small></p>');
+  $("doctorMedsForm").onsubmit=async ev=>{ev.preventDefault();const d=Object.fromEntries(new FormData(ev.target));try{const res=await api("/api/prescriptions",{method:"POST",body:JSON.stringify({patient_id:Number(p.id),medicine_id:Number(d.medicine_id),dose:d.dose,frequency:d.frequency,duration:d.duration,quantity:Number(d.quantity),encounter_id:Number(encounterId),prescribed_at:now()})});msg($("doctorModalStatus"),"تم حفظ الوصفة. الرقم: "+res.id)}catch(e){msg($("doctorModalStatus"),e.message,true)}};return
+ }
+ if(action==="history"){
+  doctorOpenModal("السجل الطبي السابق","<p>جارٍ تحميل السجل...</p>");
+  try{const [er,lr,rr,ar]=await Promise.all([api("/api/encounters?limit=100&offset=0"),api("/api/lab-orders?limit=100&offset=0"),api("/api/prescriptions?limit=100&offset=0"),api("/api/appointments?limit=100&offset=0")]);
+   const sections=[["الزيارات والتشخيصات",(er.data||[]).filter(x=>Number(x.patient_id)===Number(p.id)&&Number(x.id)!==Number(encounterId)).map(x=>[x.opened_at,x.diagnosis||"لم يسجل تشخيص",x.status])],["الفحوصات",(lr.data||[]).filter(x=>Number(x.patient_id)===Number(p.id)).map(x=>[x.ordered_at,x.test_name,x.status])],["الأدوية",(rr.data||[]).filter(x=>Number(x.patient_id)===Number(p.id)).map(x=>[x.prescribed_at,x.medicine_name,(x.dose||"")+" — "+(x.frequency||"")+" — "+(x.duration||"")])],["المواعيد",(ar.data||[]).filter(x=>Number(x.patient_id)===Number(p.id)).map(x=>[x.starts_at,x.doctor_name,x.status])]];
+   $("doctorModalBody").innerHTML=sections.map(([title,items])=>'<h4>'+doctorSafe(title)+'</h4><div class="history-list">'+(items.length?items.map(row=>'<div class="history-item"><strong>'+doctorSafe(row[0])+'</strong><br>'+doctorSafe(row[1])+' — '+doctorSafe(row[2])+'</div>').join(""):"<p>لا توجد سجلات معروضة.</p>")+'</div>').join("");
+  }catch(e){msg($("doctorModalStatus"),e.message,true)}return
+ }
+ if(action==="followup"){
+  doctorOpenModal("موعد المراجعة",'<form id="doctorFollowupForm"><label>تاريخ المراجعة<input name="starts_at" type="datetime-local" required></label><label>وقت الانتهاء<input name="ends_at" type="datetime-local" required></label><label>الطبيب<select name="doctor_id" required><option value="">اختر الطبيب</option></select></label><label>سبب المراجعة<input name="reason" maxlength="500" placeholder="مراجعة النتائج أو متابعة العلاج"></label><button>حفظ موعد المراجعة</button></form>');
+  try{const d=await api("/api/doctors?limit=100&offset=0");fillSelects("select[name='doctor_id']",(d.data||[]).filter(x=>x.active),x=>x.full_name+" — "+x.specialty,"اختر الطبيب")}catch(e){msg($("doctorModalStatus"),e.message,true)}
+  $("doctorFollowupForm").onsubmit=async ev=>{ev.preventDefault();const d=Object.fromEntries(new FormData(ev.target));try{const start=new Date(d.starts_at),end=new Date(d.ends_at);if(!(end>start))throw Error("وقت انتهاء الموعد يجب أن يكون بعد بدايته.");const res=await api("/api/appointments",{method:"POST",body:JSON.stringify({patient_id:Number(p.id),doctor_id:Number(d.doctor_id),starts_at:start.toISOString(),ends_at:end.toISOString(),reason:d.reason,created_at:now()})});msg($("doctorModalStatus"),"تم حفظ موعد المراجعة. الرقم: "+res.id);await doctorLoadQueue()}catch(e){msg($("doctorModalStatus"),e.message,true)}};return
+ }
+}
+
 </script>
 </body>
 </html>
