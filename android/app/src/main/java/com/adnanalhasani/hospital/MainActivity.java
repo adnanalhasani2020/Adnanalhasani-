@@ -69,6 +69,7 @@ public class MainActivity extends Activity {
                 String script = "(function(){"
                     + "var base=document.getElementById('base');if(base)base.value='http://127.0.0.1:" + PORT + "';"
                     + "var token=document.getElementById('token');if(token)token.value='" + localToken + "';"
+                    + "var managerToken=document.getElementById('api-token');if(managerToken)managerToken.value='" + localToken + "';"
                     + "var connect=document.getElementById('connect');if(connect)connect.click();"
                     + "})();";
                 view.evaluateJavascript(script, null);
