@@ -79,7 +79,7 @@ class InvoiceHistoryIntegrityAuditor:
 
             if current_ref != f"invoice-state:{persisted_id}:v{index}":
                 findings.append(f"history_current_version_mismatch:{index}")
-            expected_prior = None if index == 1 else rows[index - 2][1]
+            expected_prior = None if index == 1 else rows[index - 2][3]
             if prior_ref != expected_prior:
                 findings.append(f"history_version_chain_break:{index}")
 
@@ -100,7 +100,7 @@ class InvoiceHistoryIntegrityAuditor:
                     findings.append(f"history_state_transition_invalid:{index}")
             previous_state = current_state
 
-        if rows and len(rows) == version and rows[-1][2] != f"state:{state}":
+        if rows and len(rows) == version and rows[-1][4] != f"state:{state}":
             findings.append("history_final_state_mismatch")
 
         findings = tuple(dict.fromkeys(findings))
