@@ -26,10 +26,18 @@ object HospitalExport {
 
     private fun escape(value: String): String {
         val normalized = value.replace("\r\n", "\n").replace("\r", "\n")
-        return if (normalized.any { it == ',' || it == '"' || it == '\n' }) {
-            "\"" + normalized.replace("\"", "\"\"") + "\""
+        // Prevent spreadsheet formula execution when a user-controlled cell starts
+        // with a formula marker, even when the marker follows whitespace.
+        val firstMeaningful = normalized.trimStart().firstOrNull()
+        val spreadsheetSafe = if (firstMeaningful in listOf('=', '+', '-', '@', '\t')) {
+            "'$normalized"
         } else {
             normalized
+        }
+        return if (spreadsheetSafe.any { it == ',' || it == '"' || it == '\n' }) {
+            "\"" + spreadsheetSafe.replace("\"", "\"\"") + "\""
+        } else {
+            spreadsheetSafe
         }
     }
 }
