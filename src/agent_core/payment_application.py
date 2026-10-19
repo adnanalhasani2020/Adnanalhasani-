@@ -173,6 +173,29 @@ class PaymentApplication:
             raise ValidationError("Payment does not exist")
         (pid, obligation, invoice, payer, payee, amount, currency, state, provider, external,
          created, updated, version) = row
+
+        # Fail closed on corrupted persisted scalars before returning a PaymentRecord.
+        pid = str(self._uuid(pid, "Persisted Payment identifier"))
+        payer = str(self._uuid(payer, "Persisted Payment payer identifier"))
+        payee = str(self._uuid(payee, "Persisted Payment payee identifier"))
+        if obligation is not None:
+            obligation = str(self._uuid(obligation, "Persisted Payment Obligation identifier"))
+        if invoice is not None:
+            invoice = str(self._uuid(invoice, "Persisted Payment Invoice identifier"))
+        if payer == payee:
+            raise ValidationError("Persisted Payment parties must differ")
+        if type(amount) is not int or amount <= 0:
+            raise ValidationError("Persisted Payment amount_minor must be a positive integer")
+        if state not in {"initiated", "pending", "completed", "failed", "cancelled"}:
+            raise ValidationError("Persisted Payment state is invalid")
+        if type(version) is not int or version < 1:
+            raise ValidationError("Persisted Payment version must be a positive integer")
+        created = self._timestamp(created, "Persisted Payment creation timestamp")
+        updated = self._timestamp(updated, "Persisted Payment update timestamp")
+        if self._instant(updated, "Persisted Payment update timestamp") < self._instant(
+            created, "Persisted Payment creation timestamp"
+        ):
+            raise ValidationError("Persisted Payment update timestamp precedes creation timestamp")
         currency = require_canonical_currency_code(
             currency, label="Persisted Payment currency_code"
         )
@@ -222,12 +245,17 @@ class PaymentApplication:
                 )
         if invoice is not None:
             invoice_link = connection.execute(
-                "SELECT obligation_id FROM invoices WHERE invoice_id=?", (invoice,),
+                "SELECT obligation_id, issuer_ref FROM invoices WHERE invoice_id=?", (invoice,),
             ).fetchone()
-            if invoice_link is not None and invoice_link[0] is not None and invoice_link[0] != obligation:
+            if invoice_link is None:
+                raise ValidationError("Persisted Payment references a missing Invoice")
+            invoice_obligation, invoice_issuer = invoice_link
+            if invoice_obligation is not None and invoice_obligation != obligation:
                 raise ValidationError(
                     "Persisted Payment Invoice and Obligation references do not match"
                 )
+            if invoice_issuer != payee:
+                raise ValidationError("Persisted Payment payee does not match linked Invoice issuer")
         return PaymentRecord(
             UUID(pid), UUID(obligation) if obligation else None, UUID(invoice) if invoice else None,
             UUID(payer), UUID(payee), amount, currency, state, provider, external,
