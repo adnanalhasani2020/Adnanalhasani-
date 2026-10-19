@@ -71,7 +71,7 @@ fun DoctorWorkspaceScreen(repository: HospitalRepository) {
 
     val selectedChartPatient = patients.firstOrNull { it.id == chartPatientId }
     val patientVisits = visits.filter { visit ->
-        if (chartPatientId != null) visit.patientId == chartPatientId
+        if (chartPatientId != null) (visit.patientId == chartPatientId || (visit.patientId == null && visit.patientName.equals(chartPatientName, ignoreCase = true)))
         else chartPatientName.isNotBlank() && visit.patientName.equals(chartPatientName, ignoreCase = true)
     }
     val relatedRecords = allRecords.filter { record ->
@@ -251,8 +251,8 @@ fun DoctorWorkspaceScreen(repository: HospitalRepository) {
                                 editingVisit = visit
                                 patient = visit.patientName
                                 doctor = visit.doctorName
-                                selectedPatientId = visit.patientId
-                                selectedDoctorId = visit.doctorId
+                                selectedPatientId = visit.patientId ?: patients.firstOrNull { it.fullName.equals(visit.patientName, ignoreCase = true) }?.id
+                                selectedDoctorId = visit.doctorId ?: doctors.firstOrNull { it.fullName.equals(visit.doctorName, ignoreCase = true) }?.id
                                 visitAt = visit.visitAt
                                 complaint = visit.chiefComplaint
                                 diagnosis = visit.diagnosis
