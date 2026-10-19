@@ -61,7 +61,16 @@ fun AuditHistoryScreen(repository: HospitalRepository) {
                                 Text("العنوان: ${entry.oldTitle.ifBlank { "—" }} ← ${entry.newTitle.ifBlank { "—" }}", color = Color(0xFF263B4D), fontSize = 13.sp)
                             }
                             if (entry.action == "UPDATE" && entry.oldDetails != entry.newDetails) {
-                                Text("تم حفظ النسخة السابقة والجديدة من تفاصيل السجل.", color = Color(0xFF788895), fontSize = 11.sp)
+                                HorizontalDivider(color = Color(0xFFE4EAEE))
+                                Text("قبل التعديل", color = Color(0xFF788895), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                Text(entry.oldDetails.ifBlank { "—" }, color = Color(0xFF263B4D), fontSize = 12.sp)
+                                Text("بعد التعديل", color = Color(0xFF548F88), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                Text(entry.newDetails.ifBlank { "—" }, color = Color(0xFF263B4D), fontSize = 12.sp)
+                            }
+                            if (entry.action == "DELETE" && entry.oldDetails.isNotBlank()) {
+                                HorizontalDivider(color = Color(0xFFE4EAEE))
+                                Text("التفاصيل المحفوظة قبل الحذف", color = Color(0xFF788895), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                Text(entry.oldDetails, color = Color(0xFF263B4D), fontSize = 12.sp)
                             }
                         }
                     }
