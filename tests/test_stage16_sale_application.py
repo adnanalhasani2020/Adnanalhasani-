@@ -1006,3 +1006,31 @@ def test_sale_restore_rejects_impossible_transition_in_history():
         app.get_sale(db, sale.id)
 
     db.close()
+
+
+def test_sale_restore_rejects_non_chronological_history_timestamps():
+    db = connect_database()
+    app, actor, activity, _offering, sale, _create_grant = _sale_and_create_grant(db)
+    confirm_grant = _transition_grant(db, actor, activity, sale, "confirm")
+    fulfill_grant = _transition_grant(db, actor, activity, sale, "fulfill")
+    db.commit()
+    app.confirm_sale(
+        db, sale.id, actor, confirm_grant,
+        now=datetime(2026, 10, 9, 12, 1, tzinfo=timezone.utc),
+    )
+    app.fulfill_sale(
+        db, sale.id, actor, fulfill_grant,
+        now=datetime(2026, 10, 9, 12, 2, tzinfo=timezone.utc),
+    )
+
+    db.execute(
+        "UPDATE domain_history SET historical_at=? WHERE owner_domain='commerce' "
+        "AND target_ref=? AND change_type='sale_state_transition' AND current_version_ref=?",
+        ("2026-10-09T11:59:00Z", str(sale.id), f"sale-state:{sale.id}:v2"),
+    )
+    db.commit()
+
+    with pytest.raises(ValidationError, match="history timestamps are not chronological"):
+        app.get_sale(db, sale.id)
+
+    db.close()
