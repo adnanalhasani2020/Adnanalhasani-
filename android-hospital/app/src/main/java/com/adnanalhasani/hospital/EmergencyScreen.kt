@@ -232,7 +232,11 @@ internal fun EmergencyScreen(repository: HospitalRepository, onEdit: suspend (Lo
                                     val statusIndex = lines.indexOfFirst { it.startsWith("حالة الحالة:") }
                                     if (statusIndex >= 0) lines[statusIndex] = "حالة الحالة: " + nextStatus
                                     else lines.add("حالة الحالة: " + nextStatus)
-                                    val updatedDetails = lines.joinToString("\n")
+                                    val statusDetails = lines.joinToString("\n")
+                                    val now = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+                                    val oldHistory = record.details.substringAfter("\n\nسجل التعديلات:\n", "")
+                                    val history = (oldHistory.lineSequence().filter { it.isNotBlank() }.toList() + "- $now: تم تغيير حالة الطوارئ إلى $nextStatus").joinToString("\n")
+                                    val updatedDetails = statusDetails.substringBefore("\n\nسجل التعديلات:\n") + "\n\nسجل التعديلات:\n" + history
                                     scope.launch {
                                         runCatching { repository.updateEmergencyCase(record.id, updatedDetails, nextStatus) }
                                             .onFailure { error = "تعذر تحديث حالة الطوارئ." }
