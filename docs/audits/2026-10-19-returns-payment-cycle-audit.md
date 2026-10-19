@@ -33,7 +33,7 @@ The repository has sound foundational controls: checkout is transactionally pers
 - Regression: a Settlement-linked Payment consumes the same Obligation capacity as a directly linked Payment.
 - Regression: mismatched nullable Invoice/Obligation references are rejected by the application without writes.
 - Database guards: direct SQL cannot insert or update the same mismatch.
-- CI must run the full Python tests and migration checks against the exact PR head before merge.
+- The first CI run found two migration-registry expectations that enumerated migrations through 0052. Both expected-version lists are updated to include 0053; rerun CI against the new head before merge. Earlier run result: 1,421 passed, 2 failed, both due to these stale expected migration lists (not runtime behavior).
 
 ## Recommended next engineering slice
 

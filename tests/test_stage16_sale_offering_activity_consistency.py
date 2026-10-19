@@ -237,6 +237,7 @@ def test_existing_database_migration_preserves_sales_invoices_and_history_on_reo
         (path.stem,) for path in MIGRATIONS_DIR.glob("005[01]_commercial_*.sql")
     )
     expected_versions.append(("0052_commerce_one_issued_invoice_per_sale",))
+    expected_versions.append(("0053_payment_invoice_obligation_link_guard",))
     assert db.execute(
         "SELECT version FROM schema_migrations ORDER BY version"
     ).fetchall() == sorted(expected_versions)
