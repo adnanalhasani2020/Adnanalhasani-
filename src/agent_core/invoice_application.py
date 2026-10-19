@@ -79,12 +79,62 @@ class InvoiceApplication:
         key = str(self._uuid(invoice_id, "Invoice identifier"))
         row = connection.execute(
             "SELECT invoice_id, sale_id, obligation_id, state, issuer_ref, invoice_number, "
-            "issue_at, due_at, version_no FROM invoices WHERE invoice_id=?",
+            "issue_at, due_at, created_at, updated_at, version_no "
+            "FROM invoices WHERE invoice_id=?",
             (key,),
         ).fetchone()
         if row is None:
             raise ValidationError("Invoice does not exist")
-        iid, sale_id, obligation_id, state, issuer, number, issue_at, due_at, version = row
+        (iid, sale_id, obligation_id, state, issuer, number, issue_at, due_at,
+         created_at, updated_at, version) = row
+
+        # Reads must fail closed on persisted corruption too; otherwise downstream
+        # callers can act on an invoice whose lifecycle or parent Sale is inconsistent.
+        created = self._timestamp(created_at, "Persisted Invoice creation timestamp")
+        updated = self._timestamp(updated_at, "Persisted Invoice update timestamp")
+        issued = self._timestamp(issue_at, "Persisted Invoice issue timestamp")
+        created_instant = datetime.fromisoformat(created.replace("Z", "+00:00"))
+        updated_instant = datetime.fromisoformat(updated.replace("Z", "+00:00"))
+        issue_instant = datetime.fromisoformat(issued.replace("Z", "+00:00"))
+        if updated_instant < created_instant:
+            raise ValidationError("Persisted Invoice update timestamp precedes creation timestamp")
+        if issue_instant > created_instant:
+            raise ValidationError("Persisted Invoice issue timestamp follows creation timestamp")
+        if due_at is not None:
+            due = self._timestamp(due_at, "Persisted Invoice due timestamp")
+            if datetime.fromisoformat(due.replace("Z", "+00:00")) < issue_instant:
+                raise ValidationError("Persisted Invoice due timestamp precedes issue timestamp")
+
+        sale = connection.execute(
+            "SELECT s.activity_id, s.created_at, o.activity_id "
+            "FROM sales s LEFT JOIN offerings o ON o.offering_id=s.offering_id "
+            "WHERE s.sale_id=?",
+            (sale_id,),
+        ).fetchone()
+        if sale is None:
+            raise ValidationError("Persisted Invoice references a missing Sale")
+        sale_activity, sale_created_at, offering_activity = sale
+        if offering_activity is None or sale_activity != offering_activity:
+            raise ValidationError(
+                "Persisted Invoice Sale Activity does not match its Offering Activity"
+            )
+        sale_created = self._timestamp(sale_created_at, "Persisted Sale creation timestamp")
+        if issue_instant < datetime.fromisoformat(sale_created.replace("Z", "+00:00")):
+            raise ValidationError("Persisted Invoice issue timestamp precedes Sale creation timestamp")
+
+        if obligation_id is not None:
+            obligation = connection.execute(
+                "SELECT creditor_person_id, source_invoice_id FROM obligations WHERE obligation_id=?",
+                (obligation_id,),
+            ).fetchone()
+            if obligation is None:
+                raise ValidationError("Persisted Invoice references a missing Obligation")
+            creditor, source_invoice_id = obligation
+            if creditor != issuer:
+                raise ValidationError("Persisted Invoice issuer does not match linked Obligation creditor")
+            if source_invoice_id is not None and source_invoice_id != iid:
+                raise ValidationError("Persisted Invoice and Obligation links conflict")
+
         return InvoiceRecord(
             Invoice(UUID(sale_id), id=UUID(iid), state=InvoiceState(state)),
             UUID(sale_id), UUID(obligation_id) if obligation_id else None,
