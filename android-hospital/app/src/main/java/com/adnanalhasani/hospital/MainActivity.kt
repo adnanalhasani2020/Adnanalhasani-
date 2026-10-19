@@ -592,6 +592,55 @@ private fun ModuleMenu(onSelect: (String) -> Unit) {
     }
 }
 
+/**
+ * Required fields are defined per workflow instead of assuming that the first
+ * field is the only mandatory value. Modules not listed here retain the
+ * conservative legacy rule: their first field is required.
+ */
+private val requiredFieldLabelsByModule = mapOf(
+    "patients" to setOf("رقم الملف", "اسم المريض"),
+    "doctors" to setOf("الرقم الوظيفي", "اسم الطبيب"),
+    "appointments" to setOf("اسم المريض", "اسم الطبيب", "التاريخ والوقت"),
+    "encounters" to setOf("اسم المريض", "الشكوى الرئيسية"),
+    "lab" to setOf("اسم المريض", "اسم الفحص", "حالة الفحص"),
+    "pharmacy" to setOf("اسم الدواء", "الكمية"),
+    "admissions" to setOf("اسم المريض", "القسم / الجناح", "حالة التنويم"),
+    "invoices" to setOf("رقم الفاتورة", "اسم المريض", "المبلغ", "العملة"),
+    "payments" to setOf("رقم الفاتورة", "المبلغ المدفوع", "طريقة الدفع"),
+    "prescriptions" to setOf("اسم المريض", "اسم الدواء", "الجرعة"),
+    "beds" to setOf("الجناح", "رقم السرير", "الحالة"),
+    "nursing" to setOf("اسم المريض"),
+    "radiology" to setOf("اسم المريض", "نوع التصوير", "الحالة"),
+    "operations" to setOf("اسم المريض", "نوع العملية", "التاريخ والوقت"),
+    "inventory" to setOf("اسم الصنف", "الكمية الحالية", "حد إعادة الطلب", "وحدة القياس"),
+    "suppliers" to setOf("اسم المورد", "رقم التواصل"),
+    "expenses" to setOf("نوع المصروف", "المبلغ", "التاريخ"),
+    "insurance" to setOf("اسم المريض", "شركة التأمين", "رقم المطالبة"),
+    "staff" to setOf("اسم الموظف", "الوظيفة", "القسم"),
+    "departments" to setOf("اسم القسم"),
+    "emergency" to setOf("رقم الحالة", "وقت الوصول", "درجة الفرز", "حالة الحالة"),
+    "icu" to setOf("اسم المريض", "رقم السرير", "تاريخ الدخول"),
+    "bloodbank" to setOf("رقم الطلب", "اسم المريض", "فصيلة الدم", "عدد الوحدات"),
+    "vaccination" to setOf("اسم المريض", "اسم اللقاح", "تاريخ التطعيم"),
+    "referrals" to setOf("اسم المريض", "الجهة المحال إليها", "سبب الإحالة"),
+    "discharge" to setOf("اسم المريض", "تاريخ الخروج", "حالة الخروج"),
+    "triage" to setOf("اسم المريض", "وقت الفرز", "مستوى الأولوية"),
+    "queue" to setOf("رقم الدور", "اسم المريض", "الحالة"),
+    "rooms" to setOf("رمز الغرفة", "الطابق", "الحالة"),
+    "sterilization" to setOf("رقم الدورة", "الجهاز", "وقت الدورة", "النتيجة"),
+    "equipment" to setOf("رمز الجهاز", "اسم الجهاز", "الحالة"),
+    "maintenance" to setOf("رقم البلاغ", "مقدم البلاغ", "نوع العطل", "الحالة"),
+    "ambulance" to setOf("رقم الطلب", "موقع الانطلاق", "الوجهة", "الحالة"),
+    "documents" to setOf("عنوان الوثيقة", "نوع الوثيقة"),
+    "audit" to setOf("اسم المستخدم", "نوع العملية", "القسم")
+)
+
+private fun requiredFieldsForModule(module: Module): Set<String> =
+    requiredFieldLabelsByModule[module.key]
+        ?.intersect(module.fields.map { it.first }.toSet())
+        ?.takeIf { it.isNotEmpty() }
+        ?: setOfNotNull(module.fields.firstOrNull()?.first)
+
 private val numericFieldLabels = setOf(
     "العمر", "النبض", "التنفس", "الحرارة", "عدد الأسرة", "عدد الوحدات",
     "حد إعادة الطلب", "المبلغ", "المبلغ المدفوع", "الكمية", "الكمية الحالية",
@@ -822,6 +871,7 @@ private fun ModuleScreen(
     var validationMessage by remember { mutableStateOf<String?>(null) }
     var pendingDeleteId by remember { mutableStateOf<Long?>(null) }
     var searchQuery by remember(module.key) { mutableStateOf("") }
+    val requiredFields = remember(module.key) { requiredFieldsForModule(module) }
     val filteredRecords = remember(records, searchQuery) {
         records.filter { record ->
             record.title.contains(searchQuery, ignoreCase = true) ||
@@ -854,7 +904,7 @@ private fun ModuleScreen(
                             label = label,
                             hint = hint,
                             value = values[label].orEmpty(),
-                            required = index == 0,
+                            required = label in requiredFields,
                             onValueChange = {
                                 values = values + (label to it)
                                 savedMessage = false
@@ -866,8 +916,9 @@ private fun ModuleScreen(
                         onClick = {
                             val titleField = module.fields.firstOrNull()?.first
                             val title = titleField?.let { values[it]?.trim() }.orEmpty()
-                            if (title.isBlank()) {
-                                validationMessage = "أدخل ${titleField ?: "البيانات المطلوبة"} قبل الحفظ."
+                            val missingRequired = requiredFields.firstOrNull { values[it].isNullOrBlank() }
+                            if (missingRequired != null) {
+                                validationMessage = "أكمل الحقل المطلوب: $missingRequired."
                                 savedMessage = false
                                 return@Button
                             }
