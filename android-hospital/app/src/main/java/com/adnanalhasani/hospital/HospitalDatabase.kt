@@ -233,8 +233,39 @@ interface HospitalDao {
     @Query("SELECT COUNT(*) FROM hospital_records WHERE category = :category")
     suspend fun count(category: String): Int
 
+    @Query("SELECT * FROM hospital_records WHERE id = :id LIMIT 1")
+    suspend fun recordById(id: Long): HospitalRecord?
+
+    @Query("DELETE FROM patients WHERE fileNumber = :key AND createdAt = :createdAt")
+    suspend fun deletePatientRecord(key: String, createdAt: Long)
+
+    @Query("DELETE FROM doctors WHERE employeeNumber = :key AND createdAt = :createdAt")
+    suspend fun deleteDoctorRecord(key: String, createdAt: Long)
+
+    @Query("DELETE FROM appointments WHERE patientName = :key AND createdAt = :createdAt")
+    suspend fun deleteAppointmentRecord(key: String, createdAt: Long)
+
+    @Query("DELETE FROM invoices WHERE invoiceNumber = :key AND createdAt = :createdAt")
+    suspend fun deleteInvoiceRecord(key: String, createdAt: Long)
+
+    @Query("DELETE FROM payments WHERE invoiceNumber = :key AND createdAt = :createdAt")
+    suspend fun deletePaymentRecord(key: String, createdAt: Long)
+
     @Query("DELETE FROM hospital_records WHERE id = :id")
-    suspend fun delete(id: Long)
+    suspend fun deleteRecordRow(id: Long)
+
+    @Transaction
+    suspend fun delete(id: Long) {
+        val record = recordById(id) ?: return
+        when (record.category) {
+            "patients" -> deletePatientRecord(record.title, record.createdAt)
+            "doctors" -> deleteDoctorRecord(record.title, record.createdAt)
+            "appointments" -> deleteAppointmentRecord(record.title, record.createdAt)
+            "invoices" -> deleteInvoiceRecord(record.title, record.createdAt)
+            "payments" -> deletePaymentRecord(record.title, record.createdAt)
+        }
+        deleteRecordRow(id)
+    }
 }
 
 @Database(
