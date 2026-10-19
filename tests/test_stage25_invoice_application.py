@@ -924,3 +924,28 @@ def test_invoice_void_rejects_timestamp_before_current_update_without_writes():
         (str(issued.invoice.id),),
     ).fetchone()[0] == history_before
     db.close()
+
+
+
+def test_invoice_issue_rejects_second_active_invoice_for_same_sale_without_writes():
+    db = connect_database()
+    actor, _activity, sale, grant = fixture(db)
+    app = InvoiceApplication()
+    first = app.create_invoice(
+        db, sale_id=sale, actor_context_ref=actor, authorization_grant_id=grant,
+        issuer_ref=actor, invoice_number="INV-SALE-ONE", now=STAMP,
+    )
+    second_id = uid()
+
+    with pytest.raises(ValidationError, match="Sale already has an issued Invoice"):
+        app.create_invoice(
+            db, sale_id=sale, actor_context_ref=actor, authorization_grant_id=grant,
+            issuer_ref=actor, invoice_number="INV-SALE-TWO", invoice_id=second_id, now=STAMP,
+        )
+
+    assert db.execute("SELECT COUNT(*) FROM invoices WHERE sale_id=?", (sale,)).fetchone()[0] == 1
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=?", (second_id,)
+    ).fetchone()[0] == 0
+    assert app.get_invoice(db, first.invoice.id).invoice.state.value == "issued"
+    db.close()
