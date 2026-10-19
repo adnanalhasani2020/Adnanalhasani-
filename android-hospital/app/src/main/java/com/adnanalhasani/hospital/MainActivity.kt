@@ -331,6 +331,10 @@ private fun HospitalWorkspace(repository: HospitalRepository) {
                         profile = businessProfile,
                         onSave = { profile -> repository.saveBusinessProfile(profile) }
                     )
+                    selected == "vaccination" -> VaccinationScreen(
+                        repository = repository,
+                        onDelete = { id -> scope.launch { repository.deleteRecord(id) } }
+                    )
                     selected == "settings" -> SettingsScreen(
                         allCount = all.size,
                         exportStatus = exportStatus,
