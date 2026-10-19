@@ -148,6 +148,20 @@ def test_returning_checkout_sale_restores_stock_atomically_once(tmp_path):
         (request["sale_id"],),
     ).fetchall()
     assert sorted(movements) == [("sale", -2), ("sale_return", 2)]
+
+    # The database itself must reject a duplicate compensation even if a caller
+    # bypasses SaleApplication and attempts to write inventory_movements directly.
+    with pytest.raises(sqlite3.IntegrityError, match="Sale stock has already been returned"):
+        db.execute(
+            "INSERT INTO inventory_movements("
+            "inventory_movement_id,inventory_position_id,activity_id,product_id,offering_id,"
+            "location_ref,scope_key,quantity_delta,source_type,source_ref,actor_context_ref,"
+            "occurred_at,created_at) "
+            "SELECT ?,inventory_position_id,activity_id,product_id,offering_id,location_ref,"
+            "scope_key,quantity_delta,source_type,source_ref,actor_context_ref,occurred_at,created_at "
+            "FROM inventory_movements WHERE source_type='sale_return' AND source_ref=?",
+            (uid(), request["sale_id"]),
+        )
     listed = checkout.list_sellable_offerings(
         db, activity_id=request["activity_id"], scope_key="store-A",
         location_ref="front",
