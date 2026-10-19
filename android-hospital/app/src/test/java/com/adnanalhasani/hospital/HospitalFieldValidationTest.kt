@@ -30,7 +30,7 @@ class HospitalFieldValidationTest {
     fun convertsMoneyExactlyToMinorUnits() {
         assertEquals(0L, HospitalFieldValidation.toMinorUnitsOrNull("0"))
         assertEquals(123L, HospitalFieldValidation.toMinorUnitsOrNull("1.23"))
-        assertEquals(100L, HospitalFieldValidation.toMinorUnitsOrNull("1.2300"))
+        assertEquals(123L, HospitalFieldValidation.toMinorUnitsOrNull("1.2300"))
         assertEquals(100L, HospitalFieldValidation.toMinorUnitsOrNull("01.00"))
         assertTrue(HospitalFieldValidation.isValidMoneyAmount("999999999999.99"))
     }
