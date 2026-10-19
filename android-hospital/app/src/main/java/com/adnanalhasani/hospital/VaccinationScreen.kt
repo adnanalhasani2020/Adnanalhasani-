@@ -30,6 +30,7 @@ internal fun VaccinationScreen(repository: HospitalRepository, onDelete: (Long) 
     val records by repository.vaccinationRecords().collectAsState(initial = emptyList())
     val allRecords by repository.allRecords().collectAsState(initial = emptyList())
     val upcoming by repository.upcomingVaccinations(today).collectAsState(initial = emptyList())
+    val overdue by repository.overdueVaccinations(today).collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
     val fields = listOf(
         "اسم الطفل" to "الاسم الرباعي",
@@ -183,6 +184,27 @@ internal fun VaccinationScreen(repository: HospitalRepository, onDelete: (Long) 
                     }
                     message?.let { Text(it, color = Color(0xFF548F88), fontSize = 12.sp) }
                     errorMessage?.let { Text(it, color = Color(0xFFC97979), fontSize = 12.sp) }
+                }
+            }
+        }
+        if (overdue.isNotEmpty()) {
+            item {
+                Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF1F0)), shape = RoundedCornerShape(18.dp)) {
+                    Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("مواعيد تطعيم متأخرة", fontWeight = FontWeight.Bold, color = Color(0xFFB93838), fontSize = 16.sp)
+                        Text("هذه مواعيد مضى تاريخها المسجل؛ راجع السجل مع الممارس الصحي ولا تغيّر الجرعات اعتماداً على التطبيق وحده.", color = Color(0xFF875454), fontSize = 11.sp, lineHeight = 16.sp)
+                        Text("عدد السجلات المتأخرة: " + overdue.size, color = Color(0xFFB93838), fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+            items(overdue, key = { "overdue-" + it.id }) { record ->
+                Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp)) {
+                    Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(record.childName, fontWeight = FontWeight.SemiBold, color = Color(0xFF263B4D))
+                        Text(record.vaccineName + " • الجرعة " + record.doseNumber, color = Color(0xFF293B49), fontSize = 13.sp)
+                        Text("كان الموعد: " + record.nextDoseDate, color = Color(0xFFB93838), fontSize = 12.sp)
+                        if (record.childFileNumber.isNotBlank()) Text("رقم الملف: " + record.childFileNumber, color = Color(0xFF788895), fontSize = 11.sp)
+                    }
                 }
             }
         }
