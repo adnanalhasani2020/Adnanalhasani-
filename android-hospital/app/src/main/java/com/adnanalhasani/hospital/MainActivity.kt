@@ -32,14 +32,17 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-private val Navy = Color(0xFF142D4E)
-private val Teal = Color(0xFF0D9488)
-private val Mint = Color(0xFFE1F5F1)
-private val Canvas = Color(0xFFF4F7FB)
-private val Ink = Color(0xFF1B2D43)
-private val Muted = Color(0xFF718096)
-private val Amber = Color(0xFFF5B544)
-private val Rose = Color(0xFFE87575)
+private val Navy = Color(0xFF263B4D)
+private val Teal = Color(0xFF548F88)
+private val Mint = Color(0xFFE5F1EE)
+private val Canvas = Color(0xFFF6F8FA)
+private val Ink = Color(0xFF293B49)
+private val Muted = Color(0xFF788895)
+private val Amber = Color(0xFFD5AD6B)
+private val Rose = Color(0xFFC97979)
+private val Border = Color(0xFFE4EAEE)
+private val SoftBlue = Color(0xFF7897B7)
+private val SoftLavender = Color(0xFF9A91B8)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -56,23 +59,23 @@ data class Module(
 )
 
 private val modules = listOf(
-    Module("patients", "المرضى", "ملفات المرضى وبيانات التواصل", Icons.Default.Groups, Color(0xFF0D9488),
+    Module("patients", "المرضى", "ملفات المرضى وبيانات التواصل", Icons.Default.Groups, Color(0xFF548F88),
         listOf("رقم الملف" to "مثال: PT-1001", "اسم المريض" to "الاسم الكامل", "رقم الهاتف" to "رقم التواصل", "العمر" to "العمر", "ملاحظات" to "ملاحظات إدارية")),
-    Module("doctors", "الأطباء", "الطاقم الطبي والتخصصات", Icons.Default.MedicalServices, Color(0xFF5B7CFA),
+    Module("doctors", "الأطباء", "الطاقم الطبي والتخصصات", Icons.Default.MedicalServices, Color(0xFF7897B7),
         listOf("الرقم الوظيفي" to "مثال: DR-101", "اسم الطبيب" to "الاسم الكامل", "التخصص" to "التخصص الطبي", "رقم الهاتف" to "رقم التواصل")),
-    Module("appointments", "المواعيد", "تنظيم المواعيد والحجوزات", Icons.Default.CalendarMonth, Color(0xFF9B72CF),
+    Module("appointments", "المواعيد", "تنظيم المواعيد والحجوزات", Icons.Default.CalendarMonth, Color(0xFF9A91B8),
         listOf("اسم المريض" to "اسم المريض", "اسم الطبيب" to "اسم الطبيب", "التاريخ والوقت" to "مثال: 2026-10-20 10:30", "سبب الزيارة" to "سبب الزيارة")),
-    Module("encounters", "الزيارات الطبية", "متابعة الزيارة والتشخيص", Icons.Default.MedicalInformation, Color(0xFF3286B8),
+    Module("encounters", "الزيارات الطبية", "متابعة الزيارة والتشخيص", Icons.Default.MedicalInformation, Color(0xFF6F9BAE),
         listOf("اسم المريض" to "اسم المريض", "اسم الطبيب" to "اسم الطبيب", "الشكوى الرئيسية" to "الشكوى", "التشخيص والملاحظات" to "التشخيص والملاحظات")),
-    Module("lab", "المختبر", "طلبات الفحوصات والنتائج", Icons.Default.Science, Color(0xFFDF8C42),
+    Module("lab", "المختبر", "طلبات الفحوصات والنتائج", Icons.Default.Science, Color(0xFFD0A06E),
         listOf("اسم المريض" to "اسم المريض", "اسم الفحص" to "نوع الفحص", "حالة الفحص" to "مطلوب / قيد التنفيذ / مكتمل", "النتيجة" to "النتيجة أو ملاحظات")),
-    Module("pharmacy", "الصيدلية والأدوية", "الأدوية والوصفات والمخزون", Icons.Default.Medication, Color(0xFF3C9C79),
+    Module("pharmacy", "الصيدلية والأدوية", "الأدوية والوصفات والمخزون", Icons.Default.Medication, Color(0xFF6D9D86),
         listOf("اسم الدواء" to "اسم الدواء", "رمز الدواء" to "رمز أو SKU", "الكمية" to "الكمية المتوفرة", "الجرعة / الوصفة" to "الجرعة والتعليمات")),
     Module("admissions", "التنويم والأسرة", "إدارة الأسرة والدخول والخروج", Icons.Default.Hotel, Color(0xFF6D82C4),
         listOf("اسم المريض" to "اسم المريض", "القسم / الجناح" to "القسم", "رقم السرير" to "رقم السرير", "حالة التنويم" to "منوّم / خرج", "التاريخ" to "تاريخ الدخول أو الخروج")),
-    Module("invoices", "الفواتير", "إنشاء ومتابعة الفواتير", Icons.Default.ReceiptLong, Color(0xFFCC8B32),
+    Module("invoices", "الفواتير", "إنشاء ومتابعة الفواتير", Icons.Default.ReceiptLong, Color(0xFFD0A06E),
         listOf("رقم الفاتورة" to "رقم الفاتورة", "اسم المريض" to "اسم المريض", "المبلغ" to "المبلغ", "العملة" to "YER", "الحالة" to "مفتوحة / مدفوعة")),
-    Module("payments", "المدفوعات", "تسجيل الدفعات والإيصالات", Icons.Default.Payments, Color(0xFF2B9B91),
+    Module("payments", "المدفوعات", "تسجيل الدفعات والإيصالات", Icons.Default.Payments, Color(0xFF548F88),
         listOf("رقم الفاتورة" to "رقم الفاتورة", "المبلغ المدفوع" to "المبلغ", "طريقة الدفع" to "نقداً / تحويل", "مرجع الإيصال" to "رقم الإيصال")),
     Module("prescriptions", "الوصفات الطبية", "وصفات المرضى وتعليمات الدواء", Icons.Default.Description, Color(0xFFBD6D9D),
         listOf("اسم المريض" to "اسم المريض", "اسم الدواء" to "اسم الدواء", "الجرعة" to "الجرعة", "التكرار والمدة" to "التكرار والمدة", "الحالة" to "معلقة / صُرفت")),
@@ -123,8 +126,9 @@ fun HospitalApp(dao: HospitalDao) {
     MaterialTheme(
         colorScheme = lightColorScheme(
             primary = Teal, onPrimary = Color.White, secondary = Navy,
-            background = Canvas, surface = Color.White, onSurface = Ink,
-            surfaceVariant = Color(0xFFEAF0F6)
+            background = Canvas, onBackground = Ink, surface = Color.White, onSurface = Ink,
+            surfaceVariant = Color(0xFFEDF2F4), outline = Border,
+            secondaryContainer = Mint, onSecondaryContainer = Navy
         )
     ) {
         Scaffold(
