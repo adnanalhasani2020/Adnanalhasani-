@@ -294,6 +294,72 @@ private fun Dashboard(all: List<HospitalRecord>, onSelect: (String) -> Unit, onA
             }
         }
         item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text("أحدث السجلات", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Navy)
+                    Text("آخر ما تم حفظه على هذا الجهاز", fontSize = 11.sp, color = Muted)
+                }
+                Surface(color = Mint, shape = RoundedCornerShape(12.dp)) {
+                    Text("${all.size} سجل", color = Teal, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp))
+                }
+            }
+        }
+        if (all.isEmpty()) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    shape = RoundedCornerShape(18.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(22.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(Icons.Default.Inbox, contentDescription = null, tint = Muted, modifier = Modifier.size(32.dp))
+                        Spacer(Modifier.height(8.dp))
+                        Text("ابدأ بإضافة أول سجل", color = Navy, fontWeight = FontWeight.SemiBold)
+                        Text("ستظهر أحدث البيانات هنا بعد حفظها.", color = Muted, fontSize = 12.sp)
+                    }
+                }
+            }
+        } else {
+            items(all.take(4), key = { "recent-${it.id}" }) { record ->
+                val module = modules.find { it.key == record.category }
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    shape = RoundedCornerShape(18.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Border)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            Modifier.size(42.dp).background((module?.color ?: Teal).copy(alpha = .12f), RoundedCornerShape(14.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(module?.icon ?: Icons.Default.Description, contentDescription = null, tint = module?.color ?: Teal)
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(record.title, color = Navy, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text(module?.title ?: "سجل عام", color = Muted, fontSize = 11.sp)
+                        }
+                        Text(
+                            SimpleDateFormat("MM/dd", Locale.getDefault()).format(Date(record.createdAt)),
+                            color = Muted,
+                            fontSize = 10.sp
+                        )
+                    }
+                }
+            }
+        }
+        item {
             Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF6E4)), shape = RoundedCornerShape(18.dp)) {
                 Row(Modifier.padding(14.dp), verticalAlignment = Alignment.Top) {
                     Icon(Icons.Default.Info, null, tint = Color(0xFFB77816))
@@ -429,8 +495,17 @@ private fun ModuleScreen(
                             value = values[label].orEmpty(),
                             onValueChange = { values = values + (label to it); savedMessage = false; validationMessage = null },
                             modifier = Modifier.fillMaxWidth(),
-                            label = { Text(label) },
+                            label = { Text(if (module.fields.firstOrNull()?.first == label) "$label *" else label) },
                             placeholder = { Text(hint, fontSize = 12.sp) },
+                            supportingText = if (module.fields.firstOrNull()?.first == label) {
+                                { Text("حقل مطلوب", fontSize = 10.sp, color = Muted) }
+                            } else null,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Teal,
+                                unfocusedBorderColor = Border,
+                                focusedLabelColor = Teal,
+                                cursorColor = Teal
+                            ),
                             shape = RoundedCornerShape(14.dp),
                             singleLine = label !in listOf("ملاحظات", "التشخيص والملاحظات", "النتيجة", "الجرعة / الوصفة"),
                             keyboardOptions = if (label.contains("مبلغ") || label == "الكمية" || label == "العمر") KeyboardOptions(keyboardType = KeyboardType.Decimal) else KeyboardOptions.Default
@@ -548,11 +623,38 @@ private fun Reports(all: List<HospitalRecord>) {
         }
         items(modules) { module ->
             val count = all.count { it.category == module.key }
-            Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(16.dp)).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(module.icon, null, tint = module.color)
-                Spacer(Modifier.width(12.dp))
-                Text(module.title, color = Navy, modifier = Modifier.weight(1f), fontWeight = FontWeight.Medium)
-                Text(count.toString(), color = Teal, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            val ratio = if (all.isEmpty()) 0f else count.toFloat() / all.size.toFloat()
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                shape = RoundedCornerShape(18.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Border)
+            ) {
+                Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            Modifier.size(40.dp).background(module.color.copy(alpha = .12f), RoundedCornerShape(13.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(module.icon, contentDescription = null, tint = module.color)
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(module.title, color = Navy, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            Text(module.subtitle, color = Muted, fontSize = 10.sp)
+                        }
+                        Surface(color = Mint, shape = RoundedCornerShape(10.dp)) {
+                            Text(count.toString(), color = Teal, fontWeight = FontWeight.Bold, fontSize = 13.sp,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
+                        }
+                    }
+                    LinearProgressIndicator(
+                        progress = { ratio },
+                        modifier = Modifier.fillMaxWidth().height(5.dp),
+                        color = module.color,
+                        trackColor = Canvas
+                    )
+                }
             }
         }
     }
