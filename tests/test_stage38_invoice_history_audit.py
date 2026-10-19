@@ -183,3 +183,51 @@ def test_invoice_audit_detects_final_state_mismatch_at_matching_version():
     assert result.status == "inconsistent"
     assert "history_final_state_mismatch" in result.findings
     db.close()
+
+
+def test_invoice_audit_detects_missing_history_actor_context():
+    from agent_core.invoice_history_audit import InvoiceHistoryIntegrityAuditor
+
+    db = connect_database()
+    *_, issued = setup_invoice(db)
+    invoice_id = str(issued.invoice.id)
+    db.execute(
+        "UPDATE domain_history SET actor_context_ref=' ' WHERE target_ref=? "
+        "AND change_type='invoice_state_transition'",
+        (invoice_id,),
+    )
+    db.commit()
+
+    result = InvoiceHistoryIntegrityAuditor().inspect(db, invoice_id)
+    assert result.status == "inconsistent"
+    assert "history_actor_context_missing:1" in result.findings
+    db.close()
+
+
+def test_invoice_audit_detects_non_chronological_history():
+    from agent_core.invoice_history_audit import InvoiceHistoryIntegrityAuditor
+
+    db = connect_database()
+    actor, _activity, _sale, grant, issued = setup_invoice(db)
+    invoice_id = str(issued.invoice.id)
+    db.execute(
+        "UPDATE authorization_grants SET action_code='void_invoice' WHERE authorization_grant_id=?",
+        (grant,),
+    )
+    db.commit()
+    InvoiceApplication().void_invoice(
+        db, invoice_id, actor_context_ref=actor, authorization_grant_id=grant,
+        now="2026-10-10T12:01:00Z", expected_version=1,
+    )
+    db.execute(
+        "UPDATE domain_history SET historical_at='2026-10-10T12:02:00Z' "
+        "WHERE target_ref=? AND change_type='invoice_state_transition' "
+        "AND current_version_ref=?",
+        (invoice_id, f"invoice-state:{invoice_id}:v1"),
+    )
+    db.commit()
+
+    result = InvoiceHistoryIntegrityAuditor().inspect(db, invoice_id)
+    assert result.status == "inconsistent"
+    assert "history_timestamps_not_chronological:2" in result.findings
+    db.close()

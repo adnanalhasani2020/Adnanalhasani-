@@ -1,5 +1,6 @@
 """Read-only consistency check between persisted Invoice versions and Domain History."""
 from dataclasses import dataclass
+from datetime import datetime
 from uuid import UUID
 
 from agent_core.shared import ValidationError
@@ -41,8 +42,8 @@ class InvoiceHistoryIntegrityAuditor:
             raise ValidationError("Invoice does not exist")
         persisted_id, state, version = invoice
         rows = connection.execute(
-            "SELECT prior_version_ref,current_version_ref,change_payload_ref FROM domain_history "
-            "WHERE target_ref=? AND owner_domain='commerce' "
+            "SELECT actor_context_ref,historical_at,prior_version_ref,current_version_ref,change_payload_ref "
+            "FROM domain_history WHERE target_ref=? AND owner_domain='commerce' "
             "AND change_type='invoice_state_transition' ORDER BY rowid",
             (persisted_id,),
         ).fetchall()
@@ -56,10 +57,29 @@ class InvoiceHistoryIntegrityAuditor:
             findings.append("invoice_history_exceeds_invoice_version")
 
         previous_state = None
-        for index, (prior_ref, current_ref, payload_ref) in enumerate(rows, start=1):
+        previous_timestamp = None
+        for index, (actor_ref, historical_at, prior_ref, current_ref, payload_ref) in enumerate(rows, start=1):
+            if not isinstance(actor_ref, str) or not actor_ref.strip():
+                findings.append(f"history_actor_context_missing:{index}")
+
+            try:
+                parsed_timestamp = datetime.fromisoformat(
+                    historical_at.replace("Z", "+00:00")
+                ) if isinstance(historical_at, str) else None
+                if (parsed_timestamp is None or parsed_timestamp.tzinfo is None
+                        or parsed_timestamp.utcoffset() is None):
+                    raise ValueError("history timestamp must be timezone-aware")
+            except (ValueError, TypeError, AttributeError):
+                findings.append(f"history_timestamp_invalid:{index}")
+                parsed_timestamp = None
+            if parsed_timestamp is not None:
+                if previous_timestamp is not None and parsed_timestamp < previous_timestamp:
+                    findings.append(f"history_timestamps_not_chronological:{index}")
+                previous_timestamp = parsed_timestamp
+
             if current_ref != f"invoice-state:{persisted_id}:v{index}":
                 findings.append(f"history_current_version_mismatch:{index}")
-            expected_prior = None if index == 1 else rows[index - 2][1]
+            expected_prior = None if index == 1 else rows[index - 2][3]
             if prior_ref != expected_prior:
                 findings.append(f"history_version_chain_break:{index}")
 
@@ -80,7 +100,7 @@ class InvoiceHistoryIntegrityAuditor:
                     findings.append(f"history_state_transition_invalid:{index}")
             previous_state = current_state
 
-        if rows and len(rows) == version and rows[-1][2] != f"state:{state}":
+        if rows and len(rows) == version and rows[-1][4] != f"state:{state}":
             findings.append("history_final_state_mismatch")
 
         findings = tuple(dict.fromkeys(findings))
@@ -91,6 +111,9 @@ class InvoiceHistoryIntegrityAuditor:
             "history_initial_state_mismatch",
             "history_state_transition_invalid:",
             "history_final_state_mismatch",
+            "history_actor_context_missing:",
+            "history_timestamp_invalid:",
+            "history_timestamps_not_chronological:",
             "invoice_history_exceeds_invoice_version",
         )
         if any(item.startswith(inconsistent_prefixes) for item in findings):
