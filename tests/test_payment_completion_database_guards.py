@@ -110,3 +110,38 @@ def test_database_guard_allows_completed_payment_for_issued_invoice_and_open_obl
     db.execute("UPDATE payments SET state='completed' WHERE payment_id=?", (payment,))
     assert db.execute("SELECT state FROM payments WHERE payment_id=?", (payment,)).fetchone()[0] == "completed"
     db.close()
+
+
+def test_direct_sql_cannot_void_invoice_with_linked_obligation():
+    db = connect_database()
+    _creditor, _debtor, _obligation, invoice = seed_context(db)
+
+    with pytest.raises(sqlite3.IntegrityError, match="requires explicit reconciliation"):
+        db.execute("UPDATE invoices SET state='void' WHERE invoice_id=?", (invoice,))
+
+    assert db.execute("SELECT state FROM invoices WHERE invoice_id=?", (invoice,)).fetchone()[0] == "issued"
+    db.close()
+
+
+def test_direct_sql_cannot_void_invoice_with_payment_history():
+    db = connect_database()
+    creditor, debtor, _obligation, invoice = seed_context(db, link_invoice=False)
+    payment = insert_payment(db, creditor, debtor, None, invoice)
+    db.commit()
+
+    with pytest.raises(sqlite3.IntegrityError, match="requires explicit reconciliation"):
+        db.execute("UPDATE invoices SET state='void' WHERE invoice_id=?", (invoice,))
+
+    assert db.execute("SELECT state FROM invoices WHERE invoice_id=?", (invoice,)).fetchone()[0] == "issued"
+    assert db.execute("SELECT state FROM payments WHERE payment_id=?", (payment,)).fetchone()[0] == "initiated"
+    db.close()
+
+
+def test_direct_sql_can_void_invoice_without_linked_obligation_or_payment():
+    db = connect_database()
+    _creditor, _debtor, _obligation, invoice = seed_context(db, link_invoice=False)
+
+    db.execute("UPDATE invoices SET state='void' WHERE invoice_id=?", (invoice,))
+
+    assert db.execute("SELECT state FROM invoices WHERE invoice_id=?", (invoice,)).fetchone()[0] == "void"
+    db.close()
