@@ -101,6 +101,32 @@ def seed_invoice_for_payment(db, *, issuer, obligation, state="issued"):
     return invoice
 
 
+def test_payment_creation_rejects_operation_before_human_approval_without_writes():
+    db = connect_database()
+    parties = seed(db)
+    payer, payee, approver, agent, context, obligation = parties
+    payment_id = uid()
+    grant, action = authorize(
+        db, agent=agent, context=context, payment_id=payment_id,
+        action_code="payment.create", approver=approver,
+    )
+    app = PaymentApplication()
+
+    with pytest.raises(ValidationError, match="cannot precede human approval decision"):
+        app.create_payment(
+            db, payment_id=payment_id, payer_person_id=payer, payee_person_id=payee,
+            obligation_id=obligation, amount_minor=4000, currency_code="YER",
+            context_ref=context, authorization_grant_id=grant, agent_action_id=action,
+            now="2026-10-10T11:59:59Z",
+        )
+
+    assert db.execute("SELECT COUNT(*) FROM payments").fetchone()[0] == 0
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE owner_domain='payments'"
+    ).fetchone()[0] == 0
+    db.close()
+
+
 def test_payment_create_and_complete_are_persisted_separately_from_settlement():
     db = connect_database()
     parties = seed(db)
