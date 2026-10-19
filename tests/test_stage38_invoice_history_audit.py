@@ -295,3 +295,28 @@ def test_invoice_reader_rejects_issue_timestamp_before_sale_creation():
     with pytest.raises(ValidationError, match="issue timestamp precedes Sale creation timestamp"):
         InvoiceApplication().get_invoice(db, invoice_id)
     db.close()
+
+
+
+@pytest.mark.parametrize(
+    ("column", "value", "message"),
+    [
+        ("issuer_ref", "not-a-uuid", "Persisted Invoice issuer identifier must be a valid UUID"),
+        ("invoice_number", "   ", "Persisted Invoice number must be a non-empty string"),
+        ("state", "corrupt-state", "Persisted Invoice state is invalid"),
+        ("version_no", 0, "Persisted Invoice version must be a positive integer"),
+    ],
+)
+def test_invoice_reader_rejects_corrupted_persisted_scalar_fields(column, value, message):
+    db = connect_database()
+    *_, issued = setup_invoice(db)
+    invoice_id = str(issued.invoice.id)
+    # Exercise application-level fail-closed validation even if a schema CHECK
+    # constraint would normally reject this deliberately corrupted persisted row.
+    db.execute("PRAGMA ignore_check_constraints=ON")
+    db.execute(f"UPDATE invoices SET {column}=? WHERE invoice_id=?", (value, invoice_id))
+    db.commit()
+
+    with pytest.raises(ValidationError, match=message):
+        InvoiceApplication().get_invoice(db, invoice_id)
+    db.close()
