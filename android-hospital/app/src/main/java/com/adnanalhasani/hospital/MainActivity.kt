@@ -404,160 +404,147 @@ private fun HospitalWorkspace(repository: HospitalRepository) {
 
 @Composable
 private fun Dashboard(all: List<HospitalRecord>, onSelect: (String) -> Unit, onAdd: (String) -> Unit) {
+    var query by remember { mutableStateOf("") }
+    val groups = listOf(
+        Triple("الرعاية والملفات الطبية", "المرضى والزيارات والمواعيد", listOf("patients", "doctors", "doctor_workspace", "appointments", "encounters", "nursing", "admissions", "beds", "discharge", "referrals", "consents", "handover")),
+        Triple("الطوارئ والرعاية المتخصصة", "خدمات الحالات الحرجة والعيادات", listOf("emergency", "triage", "queue", "icu", "ambulance", "bloodbank", "operations", "anesthesia", "dialysis", "dental", "pediatrics", "homecare", "vaccination")),
+        Triple("الفحوصات والصيدلية", "المختبر والأشعة والأدوية والمخزون", listOf("lab", "lab_catalog", "radiology", "pharmacy", "prescriptions", "refills", "inventory", "pharmacy_suppliers", "suppliers", "sterilization", "equipment")),
+        Triple("المالية والتحصيل", "الفواتير والمدفوعات والتأمين", listOf("invoices", "payments", "cashier", "expenses", "insurance", "insurance_companies", "payroll", "contracts")),
+        Triple("الإدارة والموارد", "الموظفون والأقسام والجودة والخدمات", listOf("users", "staff", "departments", "attendance", "shifts", "leave_requests", "visitors", "diet", "complaints", "quality", "incidents", "maintenance", "rooms", "documents", "certificates"))
+    )
+    val filteredGroups = remember(query) {
+        groups.map { group ->
+            group.first to group.third.mapNotNull { key -> modules.find { it.key == key } }
+                .filter { it.title.contains(query.trim(), ignoreCase = true) || it.subtitle.contains(query.trim(), ignoreCase = true) }
+        }.filter { it.second.isNotEmpty() }
+    }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 12.dp, bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
             Box(
                 Modifier.fillMaxWidth().background(
                     Brush.linearGradient(listOf(Color(0xFF415B70), Color(0xFF548F88))),
-                    RoundedCornerShape(26.dp)
-                ).padding(22.dp)
+                    RoundedCornerShape(24.dp)
+                ).padding(20.dp)
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(48.dp).background(Color.White.copy(alpha = .15f), CircleShape), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Default.LocalHospital, null, tint = Color.White, modifier = Modifier.size(28.dp))
+                        Box(Modifier.size(44.dp).background(Color.White.copy(alpha = .15f), RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.LocalHospital, null, tint = Color.White, modifier = Modifier.size(26.dp))
                         }
                         Spacer(Modifier.width(12.dp))
                         Column {
-                            Text("مرحباً بك 👋", color = Color.White.copy(alpha = .8f), fontSize = 13.sp)
-                            Text("إدارة المستشفى بذكاء", color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+                            Text("لوحة التحكم", color = Color.White.copy(alpha = .85f), fontSize = 12.sp)
+                            Text("نظام إدارة المستشفى", color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold)
                         }
                     }
-                    Text("كل أقسام المستشفى في مكان واحد، بواجهة عربية واضحة وسريعة.", color = Color.White.copy(alpha = .9f), fontSize = 13.sp, lineHeight = 21.sp)
+                    Text("اختر القسم المطلوب مباشرة، أو ابحث عن الخدمة.", color = Color.White.copy(alpha = .92f), fontSize = 13.sp)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Surface(color = Color.White.copy(alpha = .15f), shape = RoundedCornerShape(12.dp)) {
-                            Text("قاعدة محلية SQLite", color = Color.White, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp))
+                        Surface(color = Color.White.copy(alpha = .15f), shape = RoundedCornerShape(10.dp)) {
+                            Text("محلي على الجهاز", color = Color.White, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp))
                         }
-                        Surface(color = Color.White.copy(alpha = .15f), shape = RoundedCornerShape(12.dp)) {
-                            Text("واجهة عربية RTL", color = Color.White, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp))
+                        Surface(color = Color.White.copy(alpha = .15f), shape = RoundedCornerShape(10.dp)) {
+                            Text("${all.size} سجل عام", color = Color.White, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp))
                         }
                     }
                 }
             }
         }
         item {
-            Text("نظرة عامة", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Navy)
-            Spacer(Modifier.height(10.dp))
-            val metrics = listOf(
-                Triple("المرضى", all.count { it.category == "patients" }, Color(0xFF0D9488)),
-                Triple("المواعيد", all.count { it.category == "appointments" }, Color(0xFF5B7CFA)),
-                Triple("طلبات المختبر", all.count { it.category == "lab" }, Color(0xFFDF8C42)),
-                Triple("الفواتير", all.count { it.category == "invoices" }, Color(0xFF9B72CF))
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("ابحث عن قسم أو خدمة") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                trailingIcon = {
+                    if (query.isNotBlank()) IconButton(onClick = { query = "" }) {
+                        Icon(Icons.Default.Close, contentDescription = "مسح البحث")
+                    }
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(14.dp)
             )
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                metrics.chunked(2).forEach { row ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        row.forEach { (label, count, color) ->
-                            Card(
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(20.dp),
-                                colors = CardDefaults.cardColors(containerColor = Color.White),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, Border)
-                            ) {
-                                Column(Modifier.padding(16.dp)) {
-                                    Text(label, color = Muted, fontSize = 12.sp)
-                                    Spacer(Modifier.height(5.dp))
-                                    Text(count.toString(), color = Navy, fontSize = 28.sp, fontWeight = FontWeight.Bold)
-                                    Box(Modifier.padding(top = 8.dp).width(36.dp).height(4.dp).background(color, CircleShape))
-                                }
-                            }
-                        }
-                    }
-                }
-            }
         }
         item {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                Text("الأقسام والخدمات", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Navy)
-                Text("عرض الكل", color = Teal, fontSize = 12.sp, modifier = Modifier.clickable { onSelect("menu") })
-            }
+            Text("الوصول السريع", color = Navy, fontWeight = FontWeight.Bold, fontSize = 17.sp)
         }
-        items(modules.chunked(2)) { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                row.forEach { module ->
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                listOf(
+                    Triple("patients", "المرضى", Icons.Default.Groups),
+                    Triple("appointments", "المواعيد", Icons.Default.CalendarMonth),
+                    Triple("emergency", "الطوارئ", Icons.Default.Emergency),
+                    Triple("cashier", "التحصيل", Icons.Default.Payments)
+                ).forEach { (key, label, icon) ->
                     Card(
-                        modifier = Modifier.weight(1f).clickable { onSelect(module.key) },
-                        shape = RoundedCornerShape(20.dp),
+                        modifier = Modifier.weight(1f).clickable { onAdd(key) },
+                        shape = RoundedCornerShape(15.dp),
                         colors = CardDefaults.cardColors(containerColor = Color.White)
                     ) {
-                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Box(Modifier.size(44.dp).background(module.color.copy(alpha = .12f), RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
-                                Icon(module.icon, null, tint = module.color, modifier = Modifier.size(24.dp))
-                            }
-                            Text(module.title, color = Navy, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                            Text(module.subtitle, color = Muted, fontSize = 10.sp, lineHeight = 15.sp, minLines = 2)
+                        Column(
+                            Modifier.fillMaxWidth().padding(vertical = 12.dp, horizontal = 4.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(icon, contentDescription = label, tint = Teal, modifier = Modifier.size(23.dp))
+                            Text(label, color = Navy, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, maxLines = 1)
                         }
                     }
                 }
-                if (row.size == 1) Spacer(Modifier.weight(1f))
             }
         }
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column {
-                    Text("أحدث السجلات", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Navy)
-                    Text("آخر ما تم حفظه على هذا الجهاز", fontSize = 11.sp, color = Muted)
-                }
-                Surface(color = Mint, shape = RoundedCornerShape(12.dp)) {
-                    Text("${all.size} سجل", color = Teal, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp))
-                }
-            }
-        }
-        if (all.isEmpty()) {
+        if (filteredGroups.isEmpty()) {
             item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    shape = RoundedCornerShape(18.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(22.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(Icons.Default.Inbox, contentDescription = null, tint = Muted, modifier = Modifier.size(32.dp))
-                        Spacer(Modifier.height(8.dp))
-                        Text("ابدأ بإضافة أول سجل", color = Navy, fontWeight = FontWeight.SemiBold)
-                        Text("ستظهر أحدث البيانات هنا بعد حفظها.", color = Muted, fontSize = 12.sp)
-                    }
+                Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp)) {
+                    Text("لا توجد أقسام تطابق البحث.", modifier = Modifier.padding(20.dp), color = Muted)
                 }
             }
         } else {
-            items(all.take(4), key = { "recent-${it.id}" }) { record ->
-                val module = modules.find { it.key == record.category }
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    shape = RoundedCornerShape(18.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Border)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            Modifier.size(42.dp).background((module?.color ?: Teal).copy(alpha = .12f), RoundedCornerShape(14.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(module?.icon ?: Icons.Default.Description, contentDescription = null, tint = module?.color ?: Teal)
+            filteredGroups.forEach { (groupTitle, groupModules) ->
+                item(key = "group-$groupTitle") {
+                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(groupTitle, color = Navy, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                        Text(when (groupTitle) {
+                            "الرعاية والملفات الطبية" -> "ملفات المرضى والزيارات اليومية"
+                            "الطوارئ والرعاية المتخصصة" -> "الخدمات الحرجة والرعاية التخصصية"
+                            "الفحوصات والصيدلية" -> "الفحوصات والتصوير والأدوية والمستلزمات"
+                            "المالية والتحصيل" -> "الفواتير والمدفوعات والإدارة المالية"
+                            else -> "إدارة العاملين والتشغيل والخدمات المساندة"
+                        }, color = Muted, fontSize = 11.sp)
+                    }
+                }
+                items(groupModules.chunked(2), key = { row -> "row-$groupTitle-" + row.joinToString("-") { it.key } }) { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        row.forEach { module ->
+                            Card(
+                                modifier = Modifier.weight(1f).clickable { onSelect(module.key) },
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color.White),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Border)
+                            ) {
+                                Row(
+                                    Modifier.fillMaxWidth().padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        Modifier.size(38.dp).background(module.color.copy(alpha = .12f), RoundedCornerShape(12.dp)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(module.icon, contentDescription = null, tint = module.color, modifier = Modifier.size(21.dp))
+                                    }
+                                    Spacer(Modifier.width(9.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        Text(module.title, color = Navy, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 2)
+                                        Text("فتح القسم", color = Muted, fontSize = 10.sp)
+                                    }
+                                }
+                            }
                         }
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(record.title, color = Navy, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                            Text(module?.title ?: "سجل عام", color = Muted, fontSize = 11.sp)
-                        }
-                        Text(
-                            SimpleDateFormat("yyyy/MM/dd", Locale("ar")).format(Date(record.createdAt)),
-                            color = Muted,
-                            fontSize = 10.sp
-                        )
+                        if (row.size == 1) Spacer(Modifier.weight(1f))
                     }
                 }
             }
@@ -565,13 +552,16 @@ private fun Dashboard(all: List<HospitalRecord>, onSelect: (String) -> Unit, onA
         item {
             Card(
                 colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF8EC)),
-                shape = RoundedCornerShape(18.dp),
+                shape = RoundedCornerShape(16.dp),
                 border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF0E5D2))
             ) {
-                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.Top) {
+                Row(Modifier.padding(13.dp), verticalAlignment = Alignment.Top) {
                     Icon(Icons.Default.Info, null, tint = Color(0xFFB77816))
-                    Spacer(Modifier.width(10.dp))
-                    Text("هذه نسخة تأسيسية محلية. بيانات السجلات تُحفظ على هذا الجهاز في SQLite، ولا تتزامن تلقائياً مع قاعدة Python الموجودة على الخادم.", color = Color(0xFF805C20), fontSize = 12.sp, lineHeight = 18.sp)
+                    Spacer(Modifier.width(9.dp))
+                    Text(
+                        "هذه نسخة تجريبية بقاعدة بيانات محلية. بعض الأقسام تحفظ سجلات عامة وليست كلها مرتبطة بجداول طبية متخصصة، ولا توجد مزامنة آمنة مع الخادم حتى الآن.",
+                        color = Color(0xFF805C20), fontSize = 11.sp, lineHeight = 17.sp
+                    )
                 }
             }
         }
