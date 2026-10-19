@@ -912,6 +912,7 @@ private fun ModuleScreen(
     var validationMessage by remember { mutableStateOf<String?>(null) }
     var pendingDeleteId by remember { mutableStateOf<Long?>(null) }
     var editingRecord by remember { mutableStateOf<HospitalRecord?>(null) }
+    var viewingHistoryRecord by remember { mutableStateOf<HospitalRecord?>(null) }
     var editTitle by remember { mutableStateOf("") }
     var editDetails by remember { mutableStateOf("") }
     var editError by remember { mutableStateOf<String?>(null) }
@@ -1092,10 +1093,14 @@ private fun ModuleScreen(
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f)) {
                             Text(record.title, color = Navy, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                            if (record.details.isNotBlank()) Text(record.details, color = Muted, fontSize = 12.sp, lineHeight = 18.sp)
+                            val visibleDetails = RecordEditHistory.visibleDetails(record.details)
+                            if (visibleDetails.isNotBlank()) Text(visibleDetails, color = Muted, fontSize = 12.sp, lineHeight = 18.sp)
                             Text(SimpleDateFormat("yyyy/MM/dd - HH:mm", Locale.getDefault()).format(Date(record.createdAt)), color = Muted.copy(alpha = .8f), fontSize = 10.sp, modifier = Modifier.padding(top = 6.dp))
                         }
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            IconButton(onClick = { viewingHistoryRecord = record }) {
+                                Icon(Icons.Default.History, contentDescription = "عرض سجل التعديلات", tint = SoftBlue)
+                            }
                             IconButton(onClick = {
                                 editingRecord = record
                                 editTitle = record.title
@@ -1135,6 +1140,27 @@ private fun ModuleScreen(
                 }) { Text(if (isEditing) "جارٍ الحفظ..." else "حفظ التعديل") }
             },
             dismissButton = { TextButton(enabled = !isEditing, onClick = { editingRecord = null }) { Text("إلغاء") } }
+        )
+    }
+    viewingHistoryRecord?.let { record ->
+        val entries = RecordEditHistory.entries(record.details)
+        AlertDialog(
+            onDismissRequest = { viewingHistoryRecord = null },
+            title = { Text("سجل تعديلات: ${record.title}") },
+            text = {
+                if (entries.isEmpty()) {
+                    Text("لا توجد تعديلات مسجلة لهذا السجل.", color = Muted)
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        entries.forEachIndexed { index, entry ->
+                            Text("${index + 1}. ${entry}", color = Ink, fontSize = 13.sp)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { viewingHistoryRecord = null }) { Text("إغلاق") }
+            }
         )
     }
     pendingDeleteId?.let { recordId ->
