@@ -435,6 +435,13 @@ def test_payment_transition_rejects_timestamp_older_than_current_update_without_
         db, agent=agent, context=context, payment_id=str(payment.payment_id),
         action_code="payment.transition.pending", approver=approver,
     )
+    # Make the approval older than the attempted transition so this test isolates
+    # the persisted Payment timestamp guard rather than the approval chronology guard.
+    db.execute(
+        "UPDATE approvals SET decision_at=? WHERE agent_action_id=?",
+        ("2026-10-10T11:59:00Z", action),
+    )
+    db.commit()
     before_history = db.execute(
         "SELECT COUNT(*) FROM domain_history WHERE target_ref=? AND change_type='payment_state_transition'",
         (str(payment.payment_id),),
