@@ -631,9 +631,12 @@ private fun optionsForField(label: String, hint: String): List<String> {
     }
 }
 
+private fun isMonthField(label: String, hint: String): Boolean =
+    label == "الشهر" && hint == "YYYY-MM"
+
 private fun isDateField(label: String, hint: String): Boolean =
     label.startsWith("تاريخ") || label.contains("التاريخ") ||
-        hint.startsWith("YYYY-MM-DD")
+        hint.startsWith("YYYY-MM-DD") || isMonthField(label, hint)
 
 private fun isDateTimeField(label: String, hint: String): Boolean =
     (isDateField(label, hint) && hint.contains("HH:mm")) ||
@@ -655,6 +658,7 @@ private fun ModuleInputField(
     val options = remember(label, hint) { optionsForField(label, hint) }
     var expanded by remember(label) { mutableStateOf(false) }
     val dateTimeField = isDateTimeField(label, hint)
+    val monthField = isMonthField(label, hint)
     val dateField = isDateField(label, hint) || dateTimeField
     val timeOnly = isTimeOnlyField(label, hint)
 
@@ -669,10 +673,14 @@ private fun ModuleInputField(
             context,
             { _, year, month, day ->
                 val pickedDate = String.format(Locale.US, "%04d-%02d-%02d", year, month + 1, day)
-                val picked = if (dateTimeField) {
-                    val timePart = value.substringAfter(' ', "09:00").takeIf { it.matches(Regex("\\d{2}:\\d{2}")) } ?: "09:00"
-                    "$pickedDate $timePart"
-                } else pickedDate
+                val picked = when {
+                    monthField -> pickedDate.take(7)
+                    dateTimeField -> {
+                        val timePart = value.substringAfter(' ', "09:00").takeIf { it.matches(Regex("\\d{2}:\\d{2}")) } ?: "09:00"
+                        "$pickedDate $timePart"
+                    }
+                    else -> pickedDate
+                }
                 onValueChange(picked)
             },
             calendar.get(java.util.Calendar.YEAR),
@@ -885,6 +893,7 @@ private fun ModuleScreen(
                                 when {
                                     raw.isBlank() -> false
                                     isDateTimeField(label, hint) -> !raw.matches(Regex("\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}"))
+                                    isMonthField(label, hint) -> !raw.matches(Regex("\\d{4}-\\d{2}"))
                                     isDateField(label, hint) -> !raw.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))
                                     isTimeOnlyField(label, hint) -> !raw.matches(Regex("\\d{2}:\\d{2}"))
                                     else -> false
