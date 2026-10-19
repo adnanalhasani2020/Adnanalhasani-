@@ -700,19 +700,19 @@ private fun isValidTemporalValue(label: String, hint: String, raw: String): Bool
         isDateTimeField(label, hint) ->
             java.time.LocalDateTime.parse(
                 raw,
-                java.time.format.DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm", Locale.US)
+                java.time.format.DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm", Locale.US).withResolverStyle(java.time.format.ResolverStyle.STRICT)
             )
         isMonthField(label, hint) ->
             java.time.YearMonth.parse(
                 raw,
-                java.time.format.DateTimeFormatter.ofPattern("uuuu-MM", Locale.US)
+                java.time.format.DateTimeFormatter.ofPattern("uuuu-MM", Locale.US).withResolverStyle(java.time.format.ResolverStyle.STRICT)
             )
         isDateField(label, hint) ->
             java.time.LocalDate.parse(raw, java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)
         isTimeOnlyField(label, hint) ->
             java.time.LocalTime.parse(
                 raw,
-                java.time.format.DateTimeFormatter.ofPattern("HH:mm", Locale.US)
+                java.time.format.DateTimeFormatter.ofPattern("HH:mm", Locale.US).withResolverStyle(java.time.format.ResolverStyle.STRICT)
             )
         else -> return true
     }
