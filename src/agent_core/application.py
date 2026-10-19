@@ -434,17 +434,24 @@ class SaleApplication:
             connection.execute(f"SAVEPOINT {savepoint}")
             savepoint_started = True
             sale, offering_uuid, version_no, previous_ref = self._load_sale(connection, sale_uuid)
-            sale_created_raw = connection.execute(
-                "SELECT created_at FROM sales WHERE sale_id=?", (str(sale.id),)
-            ).fetchone()[0]
+            sale_timestamps = connection.execute(
+                "SELECT created_at, updated_at FROM sales WHERE sale_id=?", (str(sale.id),)
+            ).fetchone()
             sale_created = self._grant_instant(
-                sale_created_raw, "creation timestamp", owner="Sale"
+                sale_timestamps[0], "creation timestamp", owner="Sale"
+            )
+            sale_updated = self._grant_instant(
+                sale_timestamps[1], "latest update timestamp", owner="Sale"
             )
             operation_instant = self._grant_instant(
                 timestamp, "operation timestamp", owner="Sale"
             )
             if operation_instant < sale_created:
                 raise ValidationError("Sale lifecycle timestamp cannot precede Sale creation timestamp")
+            if operation_instant < sale_updated:
+                raise ValidationError(
+                    "Sale lifecycle timestamp cannot precede the current update timestamp"
+                )
             grant_action, target_state, allowed_from = self._TRANSITIONS[action]
             self._authorize(
                 connection, authorization_grant_id, str(actor_uuid), grant_action,

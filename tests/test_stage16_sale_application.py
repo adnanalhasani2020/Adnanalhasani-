@@ -136,6 +136,41 @@ def test_e2e_sale_lifecycle_uses_application_authorization_and_round_trips(tmp_p
     db.close()
 
 
+def test_lifecycle_transition_rejects_timestamp_before_latest_sale_update_without_writes():
+    db = connect_database()
+    app, actor, activity, _offering, sale, _create_grant = _sale_and_create_grant(db)
+    confirm_grant = _transition_grant(db, actor, activity, sale, "confirm")
+    fulfill_grant = _transition_grant(db, actor, activity, sale, "fulfill")
+    db.commit()
+
+    confirmed_at = datetime(2026, 10, 9, 12, 1, 0, tzinfo=timezone.utc)
+    app.confirm_sale(db, sale.id, actor, confirm_grant, now=confirmed_at)
+    before = db.execute(
+        "SELECT state, lifecycle_state, version_no, updated_at FROM sales WHERE sale_id=?",
+        (str(sale.id),),
+    ).fetchone()
+    history_before = db.execute(
+        "SELECT count(*) FROM domain_history WHERE target_ref=? AND change_type='sale_state_transition'",
+        (str(sale.id),),
+    ).fetchone()[0]
+
+    with pytest.raises(ValidationError, match="cannot precede the current update timestamp"):
+        app.fulfill_sale(
+            db, sale.id, actor, fulfill_grant,
+            now=datetime(2026, 10, 9, 12, 0, 30, tzinfo=timezone.utc),
+        )
+
+    assert db.execute(
+        "SELECT state, lifecycle_state, version_no, updated_at FROM sales WHERE sale_id=?",
+        (str(sale.id),),
+    ).fetchone() == before
+    assert db.execute(
+        "SELECT count(*) FROM domain_history WHERE target_ref=? AND change_type='sale_state_transition'",
+        (str(sale.id),),
+    ).fetchone()[0] == history_before
+    db.close()
+
+
 def test_lifecycle_transition_rejects_timestamp_before_sale_creation_without_writes():
     db = connect_database()
     app, actor, activity, _offering, sale, _create_grant = _sale_and_create_grant(db)
