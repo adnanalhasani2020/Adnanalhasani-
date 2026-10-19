@@ -47,9 +47,11 @@ fun AuditHistoryScreen(repository: HospitalRepository) {
                                     "CREATE" -> "إضافة"
                                     "UPDATE" -> "تعديل"
                                     "DELETE" -> "حذف"
+                                    "DEACTIVATE" -> "تعطيل عنصر مرجعي"
                                     else -> entry.action
                                 }, color = when (entry.action) {
                                     "DELETE" -> Color(0xFFC97979)
+                                    "DEACTIVATE" -> Color(0xFFD5AD6B)
                                     "UPDATE" -> Color(0xFFD5AD6B)
                                     else -> Color(0xFF548F88)
                                 }, fontWeight = FontWeight.Bold)
