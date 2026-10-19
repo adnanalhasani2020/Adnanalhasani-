@@ -34,6 +34,13 @@ internal fun VaccinationScreen(repository: HospitalRepository, onDelete: (Long) 
         "اسم الطفل" to "الاسم الرباعي",
         "رقم ملف الطفل" to "رقم الملف الصحي (اختياري)",
         "تاريخ الميلاد" to "YYYY-MM-DD (اختياري)",
+        "هاتف الوالد" to "هاتف الأب أو ولي الأمر (اختياري)",
+        "هاتف الوالدة" to "هاتف الأم (اختياري)",
+        "المحافظة" to "المحافظة (اختياري)",
+        "المديرية" to "المديرية (اختياري)",
+        "العزلة" to "العزلة (اختياري)",
+        "القرية أو الحارة" to "القرية أو الحارة (اختياري)",
+        "السكن أو المنزل" to "وصف السكن أو المنزل (اختياري)",
         "اسم اللقاح" to "الاسم كما في السجل الرسمي",
         "رقم الجرعة" to "جرعة الولادة / الأولى / الثانية / معززة",
         "تاريخ التطعيم" to "YYYY-MM-DD",
@@ -44,6 +51,8 @@ internal fun VaccinationScreen(repository: HospitalRepository, onDelete: (Long) 
         "ملاحظات" to "ملاحظات (اختياري)"
     )
     var values by remember { mutableStateOf(fields.associate { it.first to "" }) }
+    var gender by remember { mutableStateOf("غير محدد") }
+    var genderExpanded by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("تم التطعيم") }
     var statusExpanded by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
@@ -73,6 +82,17 @@ internal fun VaccinationScreen(repository: HospitalRepository, onDelete: (Long) 
             Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(20.dp)) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
                     Text("تسجيل جرعة أو موعد", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Color(0xFF263B4D))
+                    ExposedDropdownMenuBox(expanded = genderExpanded, onExpandedChange = { genderExpanded = it }) {
+                        OutlinedTextField(value = gender, onValueChange = {}, readOnly = true,
+                            label = { Text("جنس الطفل") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = genderExpanded) },
+                            modifier = Modifier.menuAnchor().fillMaxWidth(), shape = RoundedCornerShape(13.dp))
+                        ExposedDropdownMenu(expanded = genderExpanded, onDismissRequest = { genderExpanded = false }) {
+                            listOf("ذكر", "أنثى", "غير محدد").forEach { option ->
+                                DropdownMenuItem(text = { Text(option) }, onClick = { gender = option; genderExpanded = false })
+                            }
+                        }
+                    }
                     fields.forEach { (label, hint) ->
                         OutlinedTextField(
                             value = values[label].orEmpty(),
@@ -130,7 +150,7 @@ internal fun VaccinationScreen(repository: HospitalRepository, onDelete: (Long) 
                             }
                             val details = (fields.mapNotNull { (label, _) ->
                                 values[label]?.trim()?.takeIf { it.isNotBlank() }?.let { label + ": " + it }
-                            } + ("حالة الجرعة: " + status)).joinToString("\n")
+                            } + listOf("جنس الطفل: " + gender, "حالة الجرعة: " + status)).joinToString("\n")
                             scope.launch {
                                 saving = true
                                 message = null
@@ -139,6 +159,7 @@ internal fun VaccinationScreen(repository: HospitalRepository, onDelete: (Long) 
                                     repository.saveRecord(HospitalRecord(category = "vaccination", title = values["اسم الطفل"].orEmpty().trim(), details = details))
                                     values = fields.associate { it.first to "" }
                                     status = "تم التطعيم"
+                                    gender = "غير محدد"
                                     message = "تم حفظ السجل محلياً بنجاح."
                                 } catch (_: Exception) {
                                     errorMessage = "تعذر الحفظ. تحقق من البيانات ثم أعد المحاولة."
