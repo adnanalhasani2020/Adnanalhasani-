@@ -602,3 +602,51 @@ def test_return_fails_closed_when_checkout_sale_line_is_missing(tmp_path):
         "SELECT SUM(quantity_delta) FROM inventory_movements WHERE source_ref=?",
         (request["sale_id"],),
     ).fetchone()[0] == -2
+
+
+
+def test_checkout_fails_closed_when_stock_observation_ties_inventory_movement_time(tmp_path):
+    from datetime import timedelta
+
+    db, request = setup_checkout(tmp_path)
+    app = CommercialCheckoutApplication()
+    app.checkout(db, **request, now=NOW)
+
+    # Simulate a stock observation whose timestamp is identical to the committed
+    # sale movement. The data cannot prove whether quantity_minor already includes
+    # that movement, so a later checkout must not guess and risk overselling.
+    db.execute(
+        "UPDATE inventory_positions SET quantity_minor=5, observed_at=? WHERE offering_id=?",
+        (STAMP, request["offering_id"]),
+    )
+    sale_id = uid()
+
+    def grant(action, scope):
+        grant_id = uid()
+        db.execute(
+            """INSERT INTO authorization_grants(
+                   authorization_grant_id,subject_person_id,agent_id,action_code,scope_ref,
+                   context_ref,delegation_id,state,effective_from,effective_to,created_at,updated_at
+               ) VALUES(?,?,NULL,?,?,?,NULL,'active',?,NULL,?,?)""",
+            (grant_id, request["actor_person_id"], action, scope, request["activity_id"],
+             "2026-01-01T00:00:00Z", STAMP, STAMP),
+        )
+        return grant_id
+
+    retry = dict(
+        request,
+        idempotency_key="checkout-after-tied-observation",
+        sale_id=sale_id,
+        create_sale_grant_id=grant("create_sale", request["offering_id"]),
+        confirm_sale_grant_id=grant("confirm_sale", sale_id),
+        fulfill_sale_grant_id=grant("fulfill_sale", sale_id),
+    )
+    db.commit()
+
+    with pytest.raises(ValidationError, match="known, effective, unambiguous stock"):
+        app.checkout(db, **retry, now=NOW + timedelta(minutes=1))
+
+    assert db.execute("SELECT COUNT(*) FROM sales").fetchone()[0] == 1
+    assert db.execute("SELECT COUNT(*) FROM sale_lines").fetchone()[0] == 1
+    assert db.execute("SELECT COUNT(*) FROM inventory_movements").fetchone()[0] == 1
+    assert db.execute("SELECT COUNT(*) FROM commercial_checkout_receipts").fetchone()[0] == 1
