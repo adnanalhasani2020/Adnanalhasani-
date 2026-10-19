@@ -1,6 +1,8 @@
 package com.adnanalhasani.hospital
 
 import android.os.Bundle
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -590,6 +592,194 @@ private fun ModuleMenu(onSelect: (String) -> Unit) {
     }
 }
 
+private val numericFieldLabels = setOf(
+    "العمر", "النبض", "التنفس", "الحرارة", "عدد الأسرة", "عدد الوحدات",
+    "حد إعادة الطلب", "المبلغ", "المبلغ المدفوع", "الكمية", "الكمية الحالية",
+    "قيمة الشراء", "المبلغ المطالب به", "الطابق", "رقم الجرعة"
+)
+
+private val longTextFieldLabels = setOf(
+    "ملاحظات", "ملاحظات إدارية", "ملاحظات التمريض", "ملاحظات الفريق",
+    "التشخيص والملاحظات", "النتيجة", "التقرير", "الجرعة / الوصفة",
+    "خطة المتابعة", "الشكوى الرئيسية", "الأعراض الأولية", "ملاحظات الحساسية",
+    "وصف الوثيقة", "سبب الزيارة", "السبب", "الوصف", "المشكلة", "تفاصيل العملية",
+    "التشخيص عند الخروج", "سبب الإحالة", "تعليمات", "النتيجة أو ملاحظات"
+)
+
+private fun optionsForField(label: String, hint: String): List<String> {
+    if (label == "العملة") return listOf("YER", "USD", "SAR")
+    if (label == "طريقة الدفع") return listOf("نقداً", "تحويل بنكي", "بطاقة", "تأمين")
+    if (label == "فصيلة الدم") return listOf("A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-")
+    if (label == "رقم الجرعة") return listOf("الأولى", "الثانية", "الثالثة", "معززة")
+    if (label == "مستوى الأولوية") return listOf("أحمر", "برتقالي", "أصفر", "أخضر")
+    if (label == "درجة الفرز") return listOf("حرج", "عاجل", "مستقر")
+    if (label == "نوع التصوير") return listOf("أشعة سينية", "CT", "MRI", "موجات فوق صوتية")
+    if (label == "وحدة القياس") return listOf("قطعة", "علبة", "عبوة", "لتر", "مل", "كغ")
+    if (label == "المناوبة") return listOf("صباحي", "مسائي", "ليلي")
+    if (label == "الضغط") return emptyList()
+    return if (hint.contains(" / ")) {
+        hint.split(" / ").map { it.trim() }.filter { it.isNotBlank() && !it.startsWith("مثال:") }
+    } else {
+        emptyList()
+    }
+}
+
+private fun isDateField(label: String, hint: String): Boolean =
+    label.startsWith("تاريخ") || label.contains("التاريخ") ||
+        hint.startsWith("YYYY-MM-DD")
+
+private fun isDateTimeField(label: String, hint: String): Boolean =
+    (isDateField(label, hint) && hint.contains("HH:mm")) ||
+        label == "التاريخ والوقت" || hint == "YYYY-MM-DD HH:mm"
+
+private fun isTimeOnlyField(label: String, hint: String): Boolean =
+    hint == "HH:mm" || (label == "وقت الوصول" && hint == "HH:mm")
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun ModuleInputField(
+    label: String,
+    hint: String,
+    value: String,
+    required: Boolean,
+    onValueChange: (String) -> Unit
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val options = remember(label, hint) { optionsForField(label, hint) }
+    var expanded by remember(label) { mutableStateOf(false) }
+    val dateTimeField = isDateTimeField(label, hint)
+    val dateField = isDateField(label, hint) || dateTimeField
+    val timeOnly = isTimeOnlyField(label, hint)
+
+    val onPickDate = {
+        val calendar = java.util.Calendar.getInstance()
+        val existingDate = value.take(10)
+        val parsed = runCatching {
+            SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(existingDate)
+        }.getOrNull()
+        if (parsed != null) calendar.time = parsed
+        DatePickerDialog(
+            context,
+            { _, year, month, day ->
+                val pickedDate = String.format(Locale.US, "%04d-%02d-%02d", year, month + 1, day)
+                val picked = if (dateTimeField) {
+                    val timePart = value.substringAfter(' ', "09:00").takeIf { it.matches(Regex("\\d{2}:\\d{2}")) } ?: "09:00"
+                    "$pickedDate $timePart"
+                } else pickedDate
+                onValueChange(picked)
+            },
+            calendar.get(java.util.Calendar.YEAR),
+            calendar.get(java.util.Calendar.MONTH),
+            calendar.get(java.util.Calendar.DAY_OF_MONTH)
+        ).show()
+    }
+
+    val onPickTime = {
+        val currentTime = value.substringAfter(' ', value).takeIf { it.matches(Regex("\\d{2}:\\d{2}")) } ?: "09:00"
+        val parts = currentTime.split(":")
+        val hour = parts[0].toIntOrNull() ?: 9
+        val minute = parts[1].toIntOrNull() ?: 0
+        TimePickerDialog(
+            context,
+            { _, selectedHour, selectedMinute ->
+                val pickedTime = String.format(Locale.US, "%02d:%02d", selectedHour, selectedMinute)
+                onValueChange(
+                    if (dateTimeField) {
+                        val date = value.take(10).takeIf { it.matches(Regex("\\d{4}-\\d{2}-\\d{2}")) }
+                            ?: SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                        "$date $pickedTime"
+                    } else pickedTime
+                )
+            },
+            hour,
+            minute,
+            true
+        ).show()
+    }
+
+    val keyboardType = when {
+        label.contains("الهاتف") || label.contains("التواصل") -> KeyboardType.Phone
+        label in numericFieldLabels -> KeyboardType.Decimal
+        else -> KeyboardType.Text
+    }
+    val singleLine = label !in longTextFieldLabels && !label.contains("ملاحظات") &&
+        label !in setOf("التشخيص عند الخروج", "سبب الإحالة", "الأعراض", "التقرير")
+
+    if (options.isNotEmpty()) {
+        Box {
+            OutlinedTextField(
+                value = value,
+                onValueChange = {},
+                modifier = Modifier.fillMaxWidth().clickable { expanded = true },
+                readOnly = true,
+                label = { Text(if (required) "$label *" else label) },
+                placeholder = { Text("اختر من القائمة", fontSize = 12.sp) },
+                trailingIcon = {
+                    IconButton(onClick = { expanded = true }) {
+                        Icon(Icons.Default.ArrowDropDown, contentDescription = "عرض الخيارات")
+                    }
+                },
+                supportingText = if (required) ({ Text("حقل مطلوب", fontSize = 10.sp, color = Muted) }) else null,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Teal, unfocusedBorderColor = Border,
+                    focusedLabelColor = Teal, cursorColor = Teal
+                ),
+                shape = RoundedCornerShape(14.dp),
+                singleLine = true
+            )
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                options.forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(option) },
+                        onClick = {
+                            onValueChange(option)
+                            expanded = false
+                        }
+                    )
+                }
+            }
+        }
+    } else {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier.fillMaxWidth(),
+            readOnly = dateField || timeOnly,
+            label = { Text(if (required) "$label *" else label) },
+            placeholder = { Text(hint, fontSize = 12.sp) },
+            supportingText = if (required) ({ Text("حقل مطلوب", fontSize = 10.sp, color = Muted) }) else null,
+            trailingIcon = when {
+                dateField -> ({
+                    IconButton(onClick = onPickDate) {
+                        Icon(Icons.Default.CalendarMonth, contentDescription = "اختيار التاريخ")
+                    }
+                })
+                timeOnly || dateTimeField -> ({
+                    IconButton(onClick = onPickTime) {
+                        Icon(Icons.Default.Schedule, contentDescription = "اختيار الوقت")
+                    }
+                })
+                else -> null
+            },
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = Teal, unfocusedBorderColor = Border,
+                focusedLabelColor = Teal, cursorColor = Teal
+            ),
+            shape = RoundedCornerShape(14.dp),
+            singleLine = singleLine,
+            minLines = if (singleLine) 1 else 3,
+            keyboardOptions = KeyboardOptions(keyboardType = keyboardType)
+        )
+        if (dateTimeField && value.isNotBlank()) {
+            Text(
+                "يمكن اختيار التاريخ من أيقونة التقويم والوقت من أيقونة الساعة.",
+                color = Muted,
+                fontSize = 10.sp
+            )
+        }
+    }
+}
+
 @Composable
 private fun ModuleScreen(
     module: Module,
@@ -632,25 +822,17 @@ private fun ModuleScreen(
             Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(22.dp)) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("إضافة سجل جديد", color = Navy, fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                    module.fields.forEach { (label, hint) ->
-                        OutlinedTextField(
+                    module.fields.forEachIndexed { index, (label, hint) ->
+                        ModuleInputField(
+                            label = label,
+                            hint = hint,
                             value = values[label].orEmpty(),
-                            onValueChange = { values = values + (label to it); savedMessage = false; validationMessage = null },
-                            modifier = Modifier.fillMaxWidth(),
-                            label = { Text(if (module.fields.firstOrNull()?.first == label) "$label *" else label) },
-                            placeholder = { Text(hint, fontSize = 12.sp) },
-                            supportingText = if (module.fields.firstOrNull()?.first == label) {
-                                { Text("حقل مطلوب", fontSize = 10.sp, color = Muted) }
-                            } else null,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = Teal,
-                                unfocusedBorderColor = Border,
-                                focusedLabelColor = Teal,
-                                cursorColor = Teal
-                            ),
-                            shape = RoundedCornerShape(14.dp),
-                            singleLine = label !in listOf("ملاحظات", "ملاحظات إدارية", "ملاحظات التمريض", "ملاحظات الفريق", "التشخيص والملاحظات", "النتيجة", "التقرير", "الجرعة / الوصفة", "خطة المتابعة", "الشكوى الرئيسية", "الأعراض الأولية", "ملاحظات الحساسية", "وصف الوثيقة"),
-                            keyboardOptions = if (label.contains("مبلغ") || label.contains("الكمية") || label.contains("العمر") || label.contains("النبض") || label.contains("التنفس") || label.contains("الحرارة") || label.contains("عدد الأسرة") || label.contains("عدد الوحدات") || label.contains("حد إعادة الطلب")) KeyboardOptions(keyboardType = KeyboardType.Decimal) else KeyboardOptions.Default
+                            required = index == 0,
+                            onValueChange = {
+                                values = values + (label to it)
+                                savedMessage = false
+                                validationMessage = null
+                            }
                         )
                     }
                     Button(
@@ -662,14 +844,9 @@ private fun ModuleScreen(
                                 savedMessage = false
                                 return@Button
                             }
-                            val numericLabels = setOf(
-                                "العمر", "النبض", "التنفس", "الحرارة", "عدد الأسرة",
-                                "عدد الوحدات", "حد إعادة الطلب", "المبلغ", "المبلغ المدفوع",
-                                "الكمية", "الكمية الحالية", "قيمة الشراء", "المبلغ المطالب به"
-                            )
                             val invalidNumericField = module.fields.firstOrNull { (label, _) ->
                                 val raw = values[label]?.trim().orEmpty()
-                                if (label !in numericLabels || raw.isBlank()) {
+                                if (label !in numericFieldLabels || raw.isBlank()) {
                                     false
                                 } else {
                                     val number = raw.toBigDecimalOrNull()
