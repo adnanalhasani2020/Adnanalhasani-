@@ -1254,6 +1254,23 @@ abstract class HospitalDatabase : RoomDatabase() {
             }
         }
 
+        private fun installAuditImmutability(db: SupportSQLiteDatabase) {
+            db.execSQL("""
+                CREATE TRIGGER IF NOT EXISTS record_audit_log_reject_update
+                BEFORE UPDATE ON record_audit_log
+                BEGIN
+                    SELECT RAISE(ABORT, 'record_audit_log is append-only');
+                END
+            """.trimIndent())
+            db.execSQL("""
+                CREATE TRIGGER IF NOT EXISTS record_audit_log_reject_delete
+                BEFORE DELETE ON record_audit_log
+                BEGIN
+                    SELECT RAISE(ABORT, 'record_audit_log is append-only');
+                END
+            """.trimIndent())
+        }
+
         fun get(context: Context): HospitalDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -1262,6 +1279,15 @@ abstract class HospitalDatabase : RoomDatabase() {
                     "hospital-local.db"
                 )
                     .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14)
+                    .addCallback(object : RoomDatabase.Callback() {
+                        override fun onCreate(db: SupportSQLiteDatabase) {
+                            installAuditImmutability(db)
+                        }
+
+                        override fun onOpen(db: SupportSQLiteDatabase) {
+                            installAuditImmutability(db)
+                        }
+                    })
                     .build()
                     .also { INSTANCE = it }
             }
