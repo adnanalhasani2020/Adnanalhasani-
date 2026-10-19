@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Hospital" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/hospital_primary</item>
+        <item name="colorPrimaryContainer">@color/hospital_primary_dark</item>
+        <item name="colorSecondary">@color/hospital_secondary</item>
+        <item name="android:fontFamily">sans</item>
+        <item name="android:statusBarColor">@color/hospital_primary_dark</item>
+        <item name="android:windowBackground">@color/hospital_background</item>
+    </style>
+</resources>
