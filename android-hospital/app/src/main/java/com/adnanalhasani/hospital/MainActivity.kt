@@ -187,14 +187,29 @@ private val modules = listOf(
         listOf("اسم الموظف" to "اسم الموظف", "نوع الإجازة" to "سنوية / مرضية / طارئة", "تاريخ البداية" to "YYYY-MM-DD", "تاريخ النهاية" to "YYYY-MM-DD", "سبب الطلب" to "السبب", "حالة الطلب" to "جديد / موافق / مرفوض")),
 )
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HospitalApp(repository: HospitalRepository) {
+    val context = LocalContext.current
+    var authenticated by remember { mutableStateOf(FirebaseAuthGateway.currentUser(context) != null) }
+    if (!authenticated) {
+        AuthScreen(
+            onAuthenticated = { authenticated = true },
+            onContinueAsGuest = { authenticated = true }
+        )
+    } else {
+        HospitalWorkspace(repository)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HospitalWorkspace(repository: HospitalRepository) {
     var selected by remember { mutableStateOf("home") }
     var showMenu by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var exportStatus by remember { mutableStateOf<String?>(null) }
+    val businessProfile by repository.businessProfile().collectAsState(initial = null)
     val all by repository.allRecords().collectAsState(initial = emptyList())
     val emergencyCases by repository.emergencyCases().collectAsState(initial = emptyList())
     val icuStays by repository.icuStays().collectAsState(initial = emptyList())
@@ -243,6 +258,7 @@ fun HospitalApp(repository: HospitalRepository) {
         "home" -> "لوحة التحكم"
         "reports" -> "التقارير والمؤشرات"
         "settings" -> "الإعدادات"
+        "business" -> "بيانات المنشأة"
         else -> "نظام المستشفى"
     }
 
@@ -311,9 +327,14 @@ fun HospitalApp(repository: HospitalRepository) {
                         onAdd = { key -> selected = key }
                     )
                     selected == "reports" -> Reports(all)
+                    selected == "business" -> BusinessProfileScreen(
+                        profile = businessProfile,
+                        onSave = { profile -> scope.launch { repository.saveBusinessProfile(profile) } }
+                    )
                     selected == "settings" -> SettingsScreen(
                         allCount = all.size,
                         exportStatus = exportStatus,
+                        onBusinessProfile = { selected = "business" },
                         onExport = {
                             exportStatus = null
                             val timestamp = SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date())
@@ -1135,7 +1156,7 @@ private fun Reports(all: List<HospitalRecord>) {
 }
 
 @Composable
-private fun SettingsScreen(allCount: Int, exportStatus: String?, onExport: () -> Unit) {
+private fun SettingsScreen(allCount: Int, exportStatus: String?, onBusinessProfile: () -> Unit, onExport: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item {
             Box(Modifier.fillMaxWidth().background(Brush.linearGradient(listOf(Navy, Teal)), RoundedCornerShape(24.dp)).padding(22.dp)) {
@@ -1152,6 +1173,29 @@ private fun SettingsScreen(allCount: Int, exportStatus: String?, onExport: () ->
             SettingRow(Icons.Default.Language, "اللغة والاتجاه", "العربية • من اليمين إلى اليسار", Color(0xFF5B7CFA))
             SettingRow(Icons.Default.Palette, "التصميم", "Material 3 • ألوان هادئة وبطاقات حديثة", Color(0xFF9B72CF))
             SettingRow(Icons.Default.Storage, "السجلات على الجهاز", "$allCount سجل محفوظ", Color(0xFFDF8C42))
+        }
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                shape = RoundedCornerShape(18.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Border)
+            ) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Business, contentDescription = null, tint = Teal)
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("بيانات المنشأة والنشاط التجاري", color = Navy, fontWeight = FontWeight.Bold)
+                            Text("الاسم القانوني والسجل التجاري والتواصل والعملة.", color = Muted, fontSize = 12.sp)
+                        }
+                    }
+                    Button(onClick = onBusinessProfile, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Default.Business, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("إدارة بيانات المنشأة")
+                    }
+                }
+            }
         }
         item {
             Card(
