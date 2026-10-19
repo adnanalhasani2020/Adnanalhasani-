@@ -605,6 +605,25 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                         chief_complaint=str(data.get("chief_complaint", "")),
                         appointment_id=int(data["appointment_id"]) if data.get("appointment_id") is not None else None)
                     self._send(201, {"id": ident, "status": "open"})
+                elif len(parts) == 4 and parts[:2] == ["api", "encounters"] and parts[3] == "diagnosis":
+                    self._required(data, "diagnosis", "at")
+                    diagnosis = str(data["diagnosis"]).strip()
+                    if not diagnosis or len(diagnosis) > 2000:
+                        raise HospitalError("diagnosis must contain 1-2000 characters")
+                    clinical_notes = str(data.get("clinical_notes", "")).strip()
+                    if len(clinical_notes) > 5000:
+                        raise HospitalError("clinical_notes must be at most 5000 characters")
+                    with database.connect() as conn:
+                        conn.execute("BEGIN IMMEDIATE")
+                        row = conn.execute("SELECT status FROM encounters WHERE id=?", (int(parts[2]),)).fetchone()
+                        if row is None or row["status"] != "open":
+                            raise HospitalError("open encounter not found")
+                        conn.execute("UPDATE encounters SET diagnosis=?,clinical_notes=? WHERE id=?",
+                                     (diagnosis, clinical_notes, int(parts[2])))
+                        database._audit(conn, self._actor(), "encounter.diagnosis_saved", "encounter",
+                                        int(parts[2]), str(data["at"]), {"diagnosis_length": len(diagnosis)})
+                        conn.commit()
+                    self._send(200, {"id": int(parts[2]), "status": "open", "diagnosis_saved": True})
                 elif len(parts) == 4 and parts[:2] == ["api", "encounters"] and parts[3] == "close":
                     self._required(data, "closed_at", "diagnosis")
                     close_encounter(database, encounter_id=int(parts[2]), closed_at=str(data["closed_at"]),
