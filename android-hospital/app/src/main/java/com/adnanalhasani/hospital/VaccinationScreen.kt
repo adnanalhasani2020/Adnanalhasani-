@@ -100,7 +100,11 @@ internal fun VaccinationScreen(repository: HospitalRepository, onDelete: (Long) 
                     }
                     Button(
                         onClick = {
-                            val required = listOf("اسم الطفل", "اسم اللقاح", "رقم الجرعة", "تاريخ التطعيم")
+                            val required = if (status == "موعد قادم") {
+                                listOf("اسم الطفل", "اسم اللقاح", "رقم الجرعة", "موعد الجرعة التالية")
+                            } else {
+                                listOf("اسم الطفل", "اسم اللقاح", "رقم الجرعة", "تاريخ التطعيم")
+                            }
                             val missing = required.firstOrNull { values[it].isNullOrBlank() }
                             if (missing != null) {
                                 errorMessage = "أكمل الحقل المطلوب: " + missing
@@ -119,7 +123,7 @@ internal fun VaccinationScreen(repository: HospitalRepository, onDelete: (Long) 
                             }
                             val givenDate = values["تاريخ التطعيم"].orEmpty().trim()
                             val nextDate = values["موعد الجرعة التالية"].orEmpty().trim()
-                            if (nextDate.isNotBlank() && nextDate < givenDate) {
+                            if (givenDate.isNotBlank() && nextDate.isNotBlank() && nextDate < givenDate) {
                                 errorMessage = "موعد الجرعة التالية لا يمكن أن يسبق تاريخ التطعيم."
                                 message = null
                                 return@Button
