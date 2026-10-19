@@ -753,10 +753,11 @@ private fun ModuleInputField(
     hint: String,
     value: String,
     required: Boolean,
+    databaseOptions: List<String> = emptyList(),
     onValueChange: (String) -> Unit
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val options = remember(label, hint) { optionsForField(label, hint) }
+    val options = if (databaseOptions.isNotEmpty()) databaseOptions else remember(label, hint) { optionsForField(label, hint) }
     var expanded by remember(label) { mutableStateOf(false) }
     val dateTimeField = isDateTimeField(label, hint)
     val monthField = isMonthField(label, hint)
@@ -931,6 +932,31 @@ private fun ModuleScreen(
     var isEditing by remember { mutableStateOf(false) }
     var searchQuery by remember(module.key) { mutableStateOf("") }
     val requiredFields = remember(module.key) { requiredFieldsForModule(module) }
+    val refTests by repository.referenceItems("lab_tests").collectAsState(initial = emptyList())
+    val refMeds by repository.referenceItems("medications").collectAsState(initial = emptyList())
+    val refDiagnoses by repository.referenceItems("diagnoses").collectAsState(initial = emptyList())
+    val refSpecialties by repository.referenceItems("specialties").collectAsState(initial = emptyList())
+    val refDepartments by repository.referenceItems("departments").collectAsState(initial = emptyList())
+    val refBloodGroups by repository.referenceItems("blood_groups").collectAsState(initial = emptyList())
+    val refPaymentMethods by repository.referenceItems("payment_methods").collectAsState(initial = emptyList())
+    val refLabStatus by repository.referenceItems("lab_status").collectAsState(initial = emptyList())
+    val refAdmissionStatus by repository.referenceItems("admission_status").collectAsState(initial = emptyList())
+    val refVaccinationStatus by repository.referenceItems("vaccination_status").collectAsState(initial = emptyList())
+    val refImagingTypes by repository.referenceItems("imaging_types").collectAsState(initial = emptyList())
+    fun dbOptions(label: String): List<String> = when (label) {
+        "اسم الفحص", "نوع الفحص", "الفحص المطلوب" -> refTests
+        "اسم الدواء", "الدواء", "اسم العلاج" -> refMeds
+        "اسم المرض", "المرض", "التشخيص المبدئي", "التشخيص", "التشخيص عند الخروج" -> refDiagnoses
+        "التخصص", "التخصص المطلوب" -> refSpecialties
+        "القسم", "القسم / الجناح", "الجناح", "العيادة" -> refDepartments
+        "فصيلة الدم" -> refBloodGroups
+        "طريقة الدفع" -> refPaymentMethods
+        "حالة الفحص" -> refLabStatus
+        "حالة التنويم" -> refAdmissionStatus
+        "حالة الجرعة" -> refVaccinationStatus
+        "نوع التصوير" -> refImagingTypes
+        else -> emptyList()
+    }.filter { it.active }.map { it.name }
     val filteredRecords = remember(records, searchQuery) {
         records.filter { record ->
             record.title.contains(searchQuery, ignoreCase = true) ||
@@ -964,6 +990,7 @@ private fun ModuleScreen(
                             hint = hint,
                             value = values[label].orEmpty(),
                             required = label in requiredFields,
+                            databaseOptions = dbOptions(label),
                             onValueChange = {
                                 values = values + (label to it)
                                 savedMessage = false
