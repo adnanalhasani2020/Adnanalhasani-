@@ -241,6 +241,7 @@ def test_existing_database_migration_preserves_sales_invoices_and_history_on_reo
     expected_versions.append(("0054_payment_completion_link_guards",))
     expected_versions.append(("0055_invoice_void_reconciliation_guard",))
     expected_versions.append(("0056_sale_return_once_guard",))
+    expected_versions.append(("0057_sale_return_invoice_reconciliation_guard",))
     assert db.execute(
         "SELECT version FROM schema_migrations ORDER BY version"
     ).fetchall() == sorted(expected_versions)
