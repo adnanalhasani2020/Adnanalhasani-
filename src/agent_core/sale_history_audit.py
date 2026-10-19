@@ -20,7 +20,7 @@ class SaleHistoryIntegrityAuditor:
     """Check the recorded Sale history chain without repairing or rewriting it.
 
     Status is 'consistent', 'incomplete' (history is absent/short), or
-    'inconsistent' (broken references or more records than the persisted version).
+    'inconsistent' (broken references or corrupt persisted lifecycle fields).
     This is a structural check, not a claim that audit records prove a Sale action.
     """
 
@@ -44,13 +44,6 @@ class SaleHistoryIntegrityAuditor:
         ).fetchall()
 
         findings = []
-        if not rows:
-            findings.append("sale_history_missing")
-        elif len(rows) < version:
-            findings.append("sale_history_shorter_than_sale_version")
-        elif len(rows) > version:
-            findings.append("sale_history_exceeds_sale_version")
-
         allowed_next = {
             "initiated": {"confirmed", "cancelled"},
             "confirmed": {"fulfilled", "completed", "cancelled"},
@@ -59,6 +52,18 @@ class SaleHistoryIntegrityAuditor:
             "cancelled": set(),
             "returned": set(),
         }
+        version_valid = type(version) is int and version > 0
+        if not version_valid:
+            findings.append("sale_version_invalid")
+        if state not in allowed_next:
+            findings.append("sale_state_invalid")
+        if not rows:
+            findings.append("sale_history_missing")
+        elif version_valid and len(rows) < version:
+            findings.append("sale_history_shorter_than_sale_version")
+        elif version_valid and len(rows) > version:
+            findings.append("sale_history_exceeds_sale_version")
+
         previous_state = None
         previous_timestamp = None
         try:
@@ -67,6 +72,8 @@ class SaleHistoryIntegrityAuditor:
             if (created_instant.tzinfo is None or created_instant.utcoffset() is None
                     or updated_instant.tzinfo is None or updated_instant.utcoffset() is None):
                 raise ValueError("Sale lifecycle timestamps must be timezone-aware")
+            if updated_instant < created_instant:
+                findings.append("sale_lifecycle_timestamp_order_invalid")
         except (ValueError, TypeError, AttributeError):
             created_instant = updated_instant = None
             findings.append("sale_lifecycle_timestamp_invalid")
@@ -116,15 +123,15 @@ class SaleHistoryIntegrityAuditor:
                     findings.append(f"history_state_transition_invalid:{index}")
             previous_state = current_state
 
-        if rows and len(rows) == version:
+        if rows and version_valid and len(rows) == version:
             final_payload = rows[-1][4]
             if final_payload != f"state:{state}":
-                # Legacy persisted 'completed' and its matching historical payload
-                # remain valid; no silent state normalization is applied here.
                 findings.append("history_final_state_mismatch")
 
         findings = tuple(dict.fromkeys(findings))
         inconsistent_prefixes = (
+            "sale_state_invalid",
+            "sale_version_invalid",
             "history_current_version_mismatch:",
             "history_state_payload_invalid:",
             "history_initial_prior_version_unexpected",
@@ -138,12 +145,10 @@ class SaleHistoryIntegrityAuditor:
             "history_timestamp_before_sale_creation:",
             "history_timestamp_after_sale_update:",
             "sale_lifecycle_timestamp_invalid",
+            "sale_lifecycle_timestamp_order_invalid",
             "sale_history_exceeds_sale_version",
         )
-        if any(
-            item.startswith(inconsistent_prefixes)
-            for item in findings
-        ):
+        if any(item.startswith(inconsistent_prefixes) for item in findings):
             status = "inconsistent"
         elif findings:
             status = "incomplete"
