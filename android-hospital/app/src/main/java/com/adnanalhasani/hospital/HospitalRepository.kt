@@ -25,6 +25,9 @@ class HospitalRepository(private val dao: HospitalDao) {
     fun labOrders(): Flow<List<LabOrderEntity>> = dao.labOrders()
     fun radiologyOrders(): Flow<List<RadiologyOrderEntity>> = dao.radiologyOrders()
     fun maintenanceTickets(): Flow<List<MaintenanceTicketEntity>> = dao.maintenanceTickets()
+    fun vaccinationRecords(): Flow<List<VaccinationRecordEntity>> = dao.vaccinationRecords()
+    fun vaccinationsForChild(fileNumber: String): Flow<List<VaccinationRecordEntity>> = dao.vaccinationsForChild(fileNumber)
+    fun upcomingVaccinations(today: String): Flow<List<VaccinationRecordEntity>> = dao.upcomingVaccinations(today)
 
     suspend fun saveRecord(record: HospitalRecord) = dao.saveRecord(record)
 
