@@ -116,6 +116,8 @@ def test_recognized_settlement_transaction_must_match_payment_currency():
         (account_id, creditor, "personal", STAMP, STAMP),
     )
     obligation_id = obligation(db, creditor, debtor, "YER")
+    # Completion requires an eligible obligation; this test is about currency guards.
+    db.execute("UPDATE obligations SET state='open' WHERE obligation_id=?", (obligation_id,))
     payment_id = payment(db, debtor, creditor, "YER", obligation_id)
     db.execute("UPDATE payments SET state='completed' WHERE payment_id=?", (payment_id,))
     settlement_id = uid()
