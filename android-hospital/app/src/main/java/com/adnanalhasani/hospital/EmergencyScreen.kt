@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -34,7 +35,7 @@ private val erStatuses = listOf("قيد التقييم", "قيد العلاج", 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun EmergencyScreen(repository: HospitalRepository, onDelete: (Long) -> Unit) {
+internal fun EmergencyScreen(repository: HospitalRepository, onEdit: suspend (Long, String, String) -> Unit, onDelete: (Long) -> Unit) {
     val records by repository.allRecords().collectAsState(initial = emptyList())
     val cases = remember(records) { records.filter { it.category == "emergency" }.sortedByDescending { it.createdAt } }
     val scope = rememberCoroutineScope()
@@ -68,6 +69,11 @@ internal fun EmergencyScreen(repository: HospitalRepository, onDelete: (Long) ->
     var success by remember { mutableStateOf<String?>(null) }
     var search by remember { mutableStateOf("") }
     var pendingDelete by remember { mutableStateOf<HospitalRecord?>(null) }
+    var editingRecord by remember { mutableStateOf<HospitalRecord?>(null) }
+    var editTitle by remember { mutableStateOf("") }
+    var editDetails by remember { mutableStateOf("") }
+    var editError by remember { mutableStateOf<String?>(null) }
+    var isEditing by remember { mutableStateOf(false) }
     val filtered = cases.filter { it.title.contains(search, true) || it.details.contains(search, true) }
     val parsedCases = cases.map { record ->
         record to record.details.lineSequence().mapNotNull { line ->
@@ -222,9 +228,11 @@ internal fun EmergencyScreen(repository: HospitalRepository, onDelete: (Long) ->
                         listOf("قيد العلاج", "تحويل", "تنويم", "خروج").forEach { nextStatus ->
                             TextButton(
                                 onClick = {
-                                    val updatedDetails = record.details.lineSequence().map { line ->
-                                        if (line.startsWith("حالة الحالة:")) "حالة الحالة: " + nextStatus else line
-                                    }.joinToString("\\n")
+                                    val lines = record.details.lineSequence().toMutableList()
+                                    val statusIndex = lines.indexOfFirst { it.startsWith("حالة الحالة:") }
+                                    if (statusIndex >= 0) lines[statusIndex] = "حالة الحالة: " + nextStatus
+                                    else lines.add("حالة الحالة: " + nextStatus)
+                                    val updatedDetails = lines.joinToString("\n")
                                     scope.launch {
                                         runCatching { repository.updateEmergencyCase(record.id, updatedDetails, nextStatus) }
                                             .onFailure { error = "تعذر تحديث حالة الطوارئ." }
@@ -236,6 +244,16 @@ internal fun EmergencyScreen(repository: HospitalRepository, onDelete: (Long) ->
                         }
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        TextButton(onClick = {
+                            editingRecord = record
+                            editTitle = record.title
+                            editDetails = record.details.substringBefore("\n\nسجل التعديلات:\n")
+                            editError = null
+                        }) {
+                            Icon(Icons.Default.Edit, null, tint = erGreen)
+                            Spacer(Modifier.width(4.dp))
+                            Text("تعديل السجل", color = erGreen)
+                        }
                         TextButton(onClick = { pendingDelete = record }) {
                             Icon(Icons.Default.DeleteOutline, null, tint = erRed)
                             Spacer(Modifier.width(4.dp))
@@ -245,6 +263,37 @@ internal fun EmergencyScreen(repository: HospitalRepository, onDelete: (Long) ->
                 }
             }
         }
+    }
+    editingRecord?.let { record ->
+        AlertDialog(
+            onDismissRequest = { if (!isEditing) editingRecord = null },
+            title = { Text("تعديل سجل الطوارئ") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(value = editTitle, onValueChange = { editTitle = it }, label = { Text("رقم الحالة") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = editDetails, onValueChange = { editDetails = it }, label = { Text("تفاصيل الحالة") }, modifier = Modifier.fillMaxWidth(), minLines = 5, maxLines = 10)
+                    Text("سيُضاف وقت التعديل تلقائياً إلى سجل التعديلات.", color = erMuted, fontSize = 11.sp)
+                    editError?.let { Text(it, color = erRed, fontSize = 12.sp) }
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = !isEditing && editTitle.isNotBlank(), onClick = {
+                    val now = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+                    val oldHistory = record.details.substringAfter("\n\nسجل التعديلات:\n", "")
+                    val history = (oldHistory.lineSequence().filter { it.isNotBlank() }.toList() + "- $now: تم تعديل سجل الطوارئ").joinToString("\n")
+                    val cleanDetails = editDetails.substringBefore("\n\nسجل التعديلات:\n").trim()
+                    val savedDetails = "$cleanDetails\n\nسجل التعديلات:\n$history"
+                    scope.launch {
+                        isEditing = true
+                        runCatching { onEdit(record.id, editTitle.trim(), savedDetails) }
+                            .onSuccess { editingRecord = null }
+                            .onFailure { editError = "تعذر حفظ التعديل." }
+                        isEditing = false
+                    }
+                }) { Text(if (isEditing) "جارٍ الحفظ..." else "حفظ التعديل") }
+            },
+            dismissButton = { TextButton(enabled = !isEditing, onClick = { editingRecord = null }) { Text("إلغاء") } }
+        )
     }
     pendingDelete?.let { record ->
         AlertDialog(
