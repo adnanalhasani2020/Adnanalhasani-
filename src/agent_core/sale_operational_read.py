@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 from uuid import UUID
 
+from agent_core.domain_commerce import SaleState
 from agent_core.commerce_inventory_read import CommerceInventoryContextReader, OfferingInventoryContext
 from agent_core.shared import ValidationError
 
@@ -36,6 +37,22 @@ class SaleOperationalContextReader:
         persisted_id, state, version, sale_activity_id, offering_id = row
         offering = self._offering_reader.read(connection, offering_id)
         issues = list(offering.integrity_issues)
+
+        # Do not present corrupt persisted lifecycle scalars as trustworthy facts.
+        try:
+            UUID(str(persisted_id))
+        except (ValueError, TypeError, AttributeError):
+            issues.append("sale_identifier_invalid")
+        try:
+            UUID(str(sale_activity_id))
+        except (ValueError, TypeError, AttributeError):
+            issues.append("sale_activity_identifier_invalid")
+        try:
+            SaleState(state)
+        except (ValueError, TypeError):
+            issues.append("sale_state_invalid")
+        if type(version) is not int or version < 1:
+            issues.append("sale_version_invalid")
         if sale_activity_id != offering.activity_id:
             issues.append("sale_offering_activity_mismatch")
         return SaleOperationalContext(
