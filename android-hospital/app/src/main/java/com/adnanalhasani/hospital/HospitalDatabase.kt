@@ -7,6 +7,7 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.ForeignKey
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Transaction
@@ -44,6 +45,52 @@ data class ModuleRecordEntity(
     val category: String,
     val title: String,
     val details: String,
+    val createdAt: Long
+)
+
+@Entity(tableName = "emergency_cases", indices = [Index(value = ["sourceRecordId"], unique = true), Index(value = ["triageLevel", "createdAt"])])
+data class EmergencyCaseEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val sourceRecordId: Long, val caseNumber: String, val patientName: String,
+    val arrivalTime: String, val triageLevel: String, val chiefComplaint: String,
+    val status: String, val createdAt: Long
+)
+
+@Entity(tableName = "icu_stays", indices = [Index(value = ["sourceRecordId"], unique = true), Index(value = ["bedNumber"])])
+data class IcuStayEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val sourceRecordId: Long, val patientName: String, val bedNumber: String,
+    val attendingDoctor: String, val careLevel: String, val admissionDate: String,
+    val teamNotes: String, val createdAt: Long
+)
+
+@Entity(tableName = "inventory_items", indices = [Index(value = ["sourceRecordId"], unique = true), Index(value = ["sku"], unique = true)])
+data class InventoryItemEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val sourceRecordId: Long, val name: String, val sku: String,
+    val quantity: Double, val reorderLevel: Double, val unit: String,
+    val notes: String, val createdAt: Long
+)
+
+@Entity(tableName = "lab_orders", indices = [Index(value = ["sourceRecordId"], unique = true), Index(value = ["status", "createdAt"])])
+data class LabOrderEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val sourceRecordId: Long, val patientName: String, val testName: String,
+    val status: String, val result: String, val createdAt: Long
+)
+
+@Entity(tableName = "radiology_orders", indices = [Index(value = ["sourceRecordId"], unique = true), Index(value = ["status", "createdAt"])])
+data class RadiologyOrderEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val sourceRecordId: Long, val patientName: String, val imagingType: String,
+    val requestingDoctor: String, val status: String, val report: String, val createdAt: Long
+)
+
+@Entity(tableName = "maintenance_tickets", indices = [Index(value = ["sourceRecordId"], unique = true), Index(value = ["status", "createdAt"])])
+data class MaintenanceTicketEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val sourceRecordId: Long, val ticketNumber: String, val reporter: String,
+    val location: String, val issue: String, val priority: String, val status: String,
     val createdAt: Long
 )
 
@@ -145,6 +192,27 @@ interface HospitalDao {
     @Query("DELETE FROM module_records WHERE sourceRecordId = :sourceRecordId")
     suspend fun deleteModuleRecord(sourceRecordId: Long)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveEmergencyCase(entity: EmergencyCaseEntity)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveIcuStay(entity: IcuStayEntity)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveInventoryItem(entity: InventoryItemEntity)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveLabOrder(entity: LabOrderEntity)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveRadiologyOrder(entity: RadiologyOrderEntity)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveMaintenanceTicket(entity: MaintenanceTicketEntity)
+
+    @Query("SELECT * FROM emergency_cases ORDER BY createdAt DESC") fun emergencyCases(): Flow<List<EmergencyCaseEntity>>
+    @Query("SELECT * FROM icu_stays ORDER BY createdAt DESC") fun icuStays(): Flow<List<IcuStayEntity>>
+    @Query("SELECT * FROM inventory_items ORDER BY name COLLATE NOCASE") fun inventoryItems(): Flow<List<InventoryItemEntity>>
+    @Query("SELECT * FROM lab_orders ORDER BY createdAt DESC") fun labOrders(): Flow<List<LabOrderEntity>>
+    @Query("SELECT * FROM radiology_orders ORDER BY createdAt DESC") fun radiologyOrders(): Flow<List<RadiologyOrderEntity>>
+    @Query("SELECT * FROM maintenance_tickets ORDER BY createdAt DESC") fun maintenanceTickets(): Flow<List<MaintenanceTicketEntity>>
+
+    @Query("DELETE FROM emergency_cases WHERE sourceRecordId = :id") suspend fun deleteEmergencyCase(id: Long)
+    @Query("DELETE FROM icu_stays WHERE sourceRecordId = :id") suspend fun deleteIcuStay(id: Long)
+    @Query("DELETE FROM inventory_items WHERE sourceRecordId = :id") suspend fun deleteInventoryItem(id: Long)
+    @Query("DELETE FROM lab_orders WHERE sourceRecordId = :id") suspend fun deleteLabOrder(id: Long)
+    @Query("DELETE FROM radiology_orders WHERE sourceRecordId = :id") suspend fun deleteRadiologyOrder(id: Long)
+    @Query("DELETE FROM maintenance_tickets WHERE sourceRecordId = :id") suspend fun deleteMaintenanceTicket(id: Long)
+
     /**
      * Keep the legacy searchable timeline and the typed domain table in sync.
      * The original user-entered values remain in hospital_records for backward
@@ -171,6 +239,41 @@ interface HospitalDao {
             names.firstNotNullOfOrNull { name -> fields[name]?.takeIf { it.isNotBlank() } }.orEmpty()
 
         when (record.category) {
+            "emergency" -> saveEmergencyCase(EmergencyCaseEntity(
+                sourceRecordId = sourceRecordId, caseNumber = record.title,
+                patientName = field("اسم المريض"), arrivalTime = field("وقت الوصول"),
+                triageLevel = field("درجة الفرز"), chiefComplaint = field("الشكوى الرئيسية"),
+                status = field("حالة الحالة"), createdAt = record.createdAt
+            ))
+            "icu" -> saveIcuStay(IcuStayEntity(
+                sourceRecordId = sourceRecordId, patientName = field("اسم المريض"),
+                bedNumber = field("رقم السرير"), attendingDoctor = field("الطبيب المسؤول"),
+                careLevel = field("مستوى الرعاية"), admissionDate = field("تاريخ الدخول"),
+                teamNotes = field("ملاحظات الفريق"), createdAt = record.createdAt
+            ))
+            "inventory" -> saveInventoryItem(InventoryItemEntity(
+                sourceRecordId = sourceRecordId, name = field("اسم الصنف").ifBlank { record.title },
+                sku = field("رمز الصنف").ifBlank { "ITEM-" + sourceRecordId },
+                quantity = field("الكمية الحالية").toDoubleOrNull() ?: 0.0,
+                reorderLevel = field("حد إعادة الطلب").toDoubleOrNull() ?: 0.0,
+                unit = field("وحدة القياس"), notes = field("ملاحظات"), createdAt = record.createdAt
+            ))
+            "lab" -> saveLabOrder(LabOrderEntity(
+                sourceRecordId = sourceRecordId, patientName = field("اسم المريض"),
+                testName = field("اسم الفحص"), status = field("حالة الفحص"),
+                result = field("النتيجة"), createdAt = record.createdAt
+            ))
+            "radiology" -> saveRadiologyOrder(RadiologyOrderEntity(
+                sourceRecordId = sourceRecordId, patientName = field("اسم المريض"),
+                imagingType = field("نوع التصوير"), requestingDoctor = field("الطبيب الطالب"),
+                status = field("الحالة"), report = field("التقرير"), createdAt = record.createdAt
+            ))
+            "maintenance" -> saveMaintenanceTicket(MaintenanceTicketEntity(
+                sourceRecordId = sourceRecordId, ticketNumber = record.title,
+                reporter = field("مقدم البلاغ"), location = field("الموقع"),
+                issue = field("نوع العطل"), priority = field("الأولوية"),
+                status = field("الحالة"), createdAt = record.createdAt
+            ))
             "patients" -> upsertPatient(
                 PatientEntity(
                     fileNumber = record.title,
@@ -368,6 +471,12 @@ interface HospitalDao {
     suspend fun delete(id: Long) {
         val record = recordById(id) ?: return
         when (record.category) {
+            "emergency" -> deleteEmergencyCase(id)
+            "icu" -> deleteIcuStay(id)
+            "inventory" -> deleteInventoryItem(id)
+            "lab" -> deleteLabOrder(id)
+            "radiology" -> deleteRadiologyOrder(id)
+            "maintenance" -> deleteMaintenanceTicket(id)
             "patients" -> deletePatientRecord(record.title, record.createdAt)
             "doctors" -> deleteDoctorRecord(record.title, record.createdAt)
             "appointments" -> deleteAppointmentRecord(record.title, record.createdAt)
@@ -383,13 +492,19 @@ interface HospitalDao {
     entities = [
         HospitalRecord::class,
         ModuleRecordEntity::class,
+        EmergencyCaseEntity::class,
+        IcuStayEntity::class,
+        InventoryItemEntity::class,
+        LabOrderEntity::class,
+        RadiologyOrderEntity::class,
+        MaintenanceTicketEntity::class,
         PatientEntity::class,
         DoctorEntity::class,
         AppointmentEntity::class,
         InvoiceEntity::class,
         PaymentEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class HospitalDatabase : RoomDatabase() {
@@ -402,6 +517,35 @@ abstract class HospitalDatabase : RoomDatabase() {
          * Version 1 only contained hospital_records. CREATE TABLE IF NOT EXISTS leaves
          * those rows untouched and adds the new typed tables without destructive fallback.
          */
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS emergency_cases (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, sourceRecordId INTEGER NOT NULL, caseNumber TEXT NOT NULL, patientName TEXT NOT NULL, arrivalTime TEXT NOT NULL, triageLevel TEXT NOT NULL, chiefComplaint TEXT NOT NULL, status TEXT NOT NULL, createdAt INTEGER NOT NULL)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_emergency_cases_sourceRecordId ON emergency_cases(sourceRecordId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_emergency_cases_triageLevel_createdAt ON emergency_cases(triageLevel, createdAt)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS icu_stays (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, sourceRecordId INTEGER NOT NULL, patientName TEXT NOT NULL, bedNumber TEXT NOT NULL, attendingDoctor TEXT NOT NULL, careLevel TEXT NOT NULL, admissionDate TEXT NOT NULL, teamNotes TEXT NOT NULL, createdAt INTEGER NOT NULL)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_icu_stays_sourceRecordId ON icu_stays(sourceRecordId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_icu_stays_bedNumber ON icu_stays(bedNumber)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS inventory_items (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, sourceRecordId INTEGER NOT NULL, name TEXT NOT NULL, sku TEXT NOT NULL, quantity REAL NOT NULL, reorderLevel REAL NOT NULL, unit TEXT NOT NULL, notes TEXT NOT NULL, createdAt INTEGER NOT NULL)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_inventory_items_sourceRecordId ON inventory_items(sourceRecordId)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_inventory_items_sku ON inventory_items(sku)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS lab_orders (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, sourceRecordId INTEGER NOT NULL, patientName TEXT NOT NULL, testName TEXT NOT NULL, status TEXT NOT NULL, result TEXT NOT NULL, createdAt INTEGER NOT NULL)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_lab_orders_sourceRecordId ON lab_orders(sourceRecordId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_lab_orders_status_createdAt ON lab_orders(status, createdAt)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS radiology_orders (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, sourceRecordId INTEGER NOT NULL, patientName TEXT NOT NULL, imagingType TEXT NOT NULL, requestingDoctor TEXT NOT NULL, status TEXT NOT NULL, report TEXT NOT NULL, createdAt INTEGER NOT NULL)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_radiology_orders_sourceRecordId ON radiology_orders(sourceRecordId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_radiology_orders_status_createdAt ON radiology_orders(status, createdAt)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS maintenance_tickets (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, sourceRecordId INTEGER NOT NULL, ticketNumber TEXT NOT NULL, reporter TEXT NOT NULL, location TEXT NOT NULL, issue TEXT NOT NULL, priority TEXT NOT NULL, status TEXT NOT NULL, createdAt INTEGER NOT NULL)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_maintenance_tickets_sourceRecordId ON maintenance_tickets(sourceRecordId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_maintenance_tickets_status_createdAt ON maintenance_tickets(status, createdAt)")
+                db.execSQL("INSERT OR IGNORE INTO emergency_cases (sourceRecordId, caseNumber, patientName, arrivalTime, triageLevel, chiefComplaint, status, createdAt) SELECT id, title, '', '', '', details, '', createdAt FROM hospital_records WHERE category = 'emergency'")
+                db.execSQL("INSERT OR IGNORE INTO icu_stays (sourceRecordId, patientName, bedNumber, attendingDoctor, careLevel, admissionDate, teamNotes, createdAt) SELECT id, '', '', '', '', '', details, createdAt FROM hospital_records WHERE category = 'icu'")
+                db.execSQL("INSERT OR IGNORE INTO inventory_items (sourceRecordId, name, sku, quantity, reorderLevel, unit, notes, createdAt) SELECT id, title, 'LEGACY-' || id, 0, 0, '', details, createdAt FROM hospital_records WHERE category = 'inventory'")
+                db.execSQL("INSERT OR IGNORE INTO lab_orders (sourceRecordId, patientName, testName, status, result, createdAt) SELECT id, '', title, '', details, createdAt FROM hospital_records WHERE category = 'lab'")
+                db.execSQL("INSERT OR IGNORE INTO radiology_orders (sourceRecordId, patientName, imagingType, requestingDoctor, status, report, createdAt) SELECT id, '', '', '', '', details, createdAt FROM hospital_records WHERE category = 'radiology'")
+                db.execSQL("INSERT OR IGNORE INTO maintenance_tickets (sourceRecordId, ticketNumber, reporter, location, issue, priority, status, createdAt) SELECT id, title, '', '', details, '', '', createdAt FROM hospital_records WHERE category = 'maintenance'")
+            }
+        }
+
         private val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("CREATE TABLE IF NOT EXISTS module_records (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, sourceRecordId INTEGER NOT NULL, category TEXT NOT NULL, title TEXT NOT NULL, details TEXT NOT NULL, createdAt INTEGER NOT NULL)")
@@ -468,7 +612,7 @@ abstract class HospitalDatabase : RoomDatabase() {
                     HospitalDatabase::class.java,
                     "hospital-local.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .build()
                     .also { INSTANCE = it }
             }
