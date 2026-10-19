@@ -662,6 +662,25 @@ private fun ModuleScreen(
                                 savedMessage = false
                                 return@Button
                             }
+                            val numericLabels = setOf(
+                                "العمر", "النبض", "التنفس", "الحرارة", "عدد الأسرة",
+                                "عدد الوحدات", "حد إعادة الطلب", "المبلغ", "المبلغ المدفوع",
+                                "الكمية", "الكمية الحالية", "قيمة الشراء", "المبلغ المطالب به"
+                            )
+                            val invalidNumericField = module.fields.firstOrNull { (label, _) ->
+                                val raw = values[label]?.trim().orEmpty()
+                                if (label !in numericLabels || raw.isBlank()) {
+                                    false
+                                } else {
+                                    val number = raw.toBigDecimalOrNull()
+                                    number == null || number.signum() < 0
+                                }
+                            }
+                            if (invalidNumericField != null) {
+                                validationMessage = "أدخل رقماً صحيحاً غير سالب في حقل " + invalidNumericField.first + "."
+                                savedMessage = false
+                                return@Button
+                            }
                             val details = module.fields.mapNotNull { (label, _) ->
                                 values[label]?.trim()?.takeIf { it.isNotBlank() }?.let { "$label: $it" }
                             }.joinToString("\n")
