@@ -2,6 +2,7 @@ package com.adnanalhasani.hospital
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -192,6 +193,9 @@ fun HospitalApp(repository: HospitalRepository) {
     val labOrders by repository.labOrders().collectAsState(initial = emptyList())
     val radiologyOrders by repository.radiologyOrders().collectAsState(initial = emptyList())
     val maintenanceTickets by repository.maintenanceTickets().collectAsState(initial = emptyList())
+    BackHandler(enabled = showMenu || selected != "home") {
+        if (showMenu) showMenu = false else selected = "home"
+    }
     val currentModule = modules.find { it.key == selected }
     val specializedRows = when (selected) {
         "emergency" -> emergencyCases.map { it.caseNumber to "${it.patientName} • ${it.triageLevel} • ${it.status}" }
@@ -560,6 +564,7 @@ private fun ModuleScreen(
     var savedMessage by remember { mutableStateOf(false) }
     var isSaving by remember { mutableStateOf(false) }
     var validationMessage by remember { mutableStateOf<String?>(null) }
+    var pendingDeleteId by remember { mutableStateOf<Long?>(null) }
     var searchQuery by remember(module.key) { mutableStateOf("") }
     val filteredRecords = remember(records, searchQuery) {
         records.filter { record ->
@@ -605,7 +610,7 @@ private fun ModuleScreen(
                                 cursorColor = Teal
                             ),
                             shape = RoundedCornerShape(14.dp),
-                            singleLine = label !in listOf("ملاحظات", "التشخيص والملاحظات", "النتيجة", "الجرعة / الوصفة"),
+                            singleLine = label !in listOf("ملاحظات", "ملاحظات إدارية", "ملاحظات التمريض", "ملاحظات الفريق", "التشخيص والملاحظات", "النتيجة", "التقرير", "الجرعة / الوصفة", "خطة المتابعة", "الشكوى الرئيسية", "الأعراض الأولية", "ملاحظات الحساسية", "وصف الوثيقة"),
                             keyboardOptions = if (label.contains("مبلغ") || label == "الكمية" || label == "العمر") KeyboardOptions(keyboardType = KeyboardType.Decimal) else KeyboardOptions.Default
                         )
                     }
@@ -663,7 +668,7 @@ private fun ModuleScreen(
                     shape = RoundedCornerShape(18.dp)
                 ) {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("السجلات المرتبطة بالكلاس المتخصص", color = Navy, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text("بيانات القسم التفصيلية", color = Navy, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                         specializedRows.take(30).forEach { (title, details) ->
                             Column(Modifier.fillMaxWidth().background(Canvas, RoundedCornerShape(12.dp)).padding(12.dp)) {
                                 Text(title.ifBlank { "سجل بدون عنوان" }, color = Navy, fontWeight = FontWeight.SemiBold)
@@ -717,11 +722,27 @@ private fun ModuleScreen(
                             if (record.details.isNotBlank()) Text(record.details, color = Muted, fontSize = 12.sp, lineHeight = 18.sp)
                             Text(SimpleDateFormat("yyyy/MM/dd - HH:mm", Locale.getDefault()).format(Date(record.createdAt)), color = Muted.copy(alpha = .8f), fontSize = 10.sp, modifier = Modifier.padding(top = 6.dp))
                         }
-                        IconButton(onClick = { onDelete(record.id) }) { Icon(Icons.Default.DeleteOutline, null, tint = Rose) }
+                        IconButton(onClick = { pendingDeleteId = record.id }) { Icon(Icons.Default.DeleteOutline, contentDescription = "حذف السجل", tint = Rose) }
                     }
                 }
             }
         }
+    }
+    pendingDeleteId?.let { recordId ->
+        AlertDialog(
+            onDismissRequest = { pendingDeleteId = null },
+            title = { Text("تأكيد حذف السجل") },
+            text = { Text("سيتم حذف هذا السجل من قاعدة البيانات المحلية. لا يمكن التراجع عن العملية.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onDelete(recordId)
+                    pendingDeleteId = null
+                }) { Text("حذف", color = Rose) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteId = null }) { Text("إلغاء") }
+            }
+        )
     }
 }
 
