@@ -165,14 +165,16 @@ internal fun VaccinationScreen(repository: HospitalRepository, onDelete: (Long) 
                     }
                     Text("قائمة مبنية على التواريخ المدخلة، وليست توصية طبية أو جدولاً وطنياً.", fontSize = 11.sp, color = Color(0xFF788895))
                     if (upcoming.isEmpty()) Text("لا توجد مواعيد مستقبلية مسجلة.", color = Color(0xFF788895))
-                    items(upcoming, key = { "upcoming-" + it.id }) { record ->
-                        Column(Modifier.fillMaxWidth().background(Color(0xFFF6F8FA), RoundedCornerShape(12.dp)).padding(12.dp)) {
-                            Text(record.childName, fontWeight = FontWeight.SemiBold, color = Color(0xFF263B4D))
-                            Text(record.vaccineName + " • الجرعة " + record.doseNumber, color = Color(0xFF293B49), fontSize = 13.sp)
-                            Text("الموعد: " + record.nextDoseDate, color = Color(0xFF548F88), fontSize = 12.sp)
-                            if (record.childFileNumber.isNotBlank()) Text("رقم الملف: " + record.childFileNumber, color = Color(0xFF788895), fontSize = 11.sp)
-                        }
-                    }
+                }
+            }
+        }
+        items(upcoming, key = { "upcoming-" + it.id }) { record ->
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp)) {
+                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(record.childName, fontWeight = FontWeight.SemiBold, color = Color(0xFF263B4D))
+                    Text(record.vaccineName + " • الجرعة " + record.doseNumber, color = Color(0xFF293B49), fontSize = 13.sp)
+                    Text("الموعد: " + record.nextDoseDate, color = Color(0xFF548F88), fontSize = 12.sp)
+                    if (record.childFileNumber.isNotBlank()) Text("رقم الملف: " + record.childFileNumber, color = Color(0xFF788895), fontSize = 11.sp)
                 }
             }
         }
