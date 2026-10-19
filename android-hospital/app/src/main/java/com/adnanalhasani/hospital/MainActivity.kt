@@ -1128,6 +1128,38 @@ private fun ModuleScreen(
             },
             confirmButton = {
                 TextButton(enabled = !isEditing && editTitle.isNotBlank(), onClick = {
+                    val editedFields = RecordEditHistory.visibleDetails(editDetails).lineSequence().mapNotNull { line ->
+                        val separator = line.indexOf(": ")
+                        if (separator <= 0) null else line.substring(0, separator).trim() to line.substring(separator + 2).trim()
+                    }.toMap()
+                    // Validate structured records during edits too; legacy free-text records remain editable.
+                    if (editedFields.isNotEmpty()) {
+                        val missing = requiredFields.firstOrNull { editedFields[it].isNullOrBlank() }
+                        if (missing != null) {
+                            editError = "أكمل الحقل المطلوب: $missing."
+                            return@TextButton
+                        }
+                        val invalidDate = module.fields.firstOrNull { (label, hint) ->
+                            val raw = editedFields[label].orEmpty()
+                            raw.isNotBlank() && !isValidTemporalValue(label, hint, raw)
+                        }
+                        if (invalidDate != null) {
+                            editError = "تحقق من تنسيق التاريخ أو الوقت في حقل " + invalidDate.first + "."
+                            return@TextButton
+                        }
+                        val invalidNumber = module.fields.firstOrNull { (label, _) ->
+                            val raw = editedFields[label].orEmpty()
+                            if (raw.isBlank() || label !in numericFieldLabels) false
+                            else if (label in integerFieldLabels) raw.toLongOrNull()?.let { it < 0 } ?: true
+                            else if (label == "المبلغ" || label == "المبلغ المدفوع") !HospitalFieldValidation.isValidMoneyAmount(raw)
+                            else raw.toBigDecimalOrNull()?.let { it.signum() < 0 } ?: true
+                        }
+                        if (invalidNumber != null) {
+                            editError = "أدخل رقماً صحيحاً غير سالب في حقل " + invalidNumber.first + "."
+                            return@TextButton
+                        }
+                    }
+                    editError = null
                     val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
                     val savedDetails = RecordEditHistory.append(editDetails, record.details, now)
                     scope.launch {
