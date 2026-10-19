@@ -20,7 +20,7 @@ class InvoiceHistoryIntegrityAuditor:
     """Inspect invoice state history without repairing or rewriting persisted data.
 
     'incomplete' means history is absent or shorter than the current version.
-    'inconsistent' means references, state transitions, or the final state disagree.
+    'inconsistent' means references, lifecycle fields, or state transitions disagree.
     """
 
     _ALLOWED_NEXT = {
@@ -49,11 +49,16 @@ class InvoiceHistoryIntegrityAuditor:
         ).fetchall()
 
         findings = []
+        version_valid = type(version) is int and version > 0
+        if not version_valid:
+            findings.append("invoice_version_invalid")
+        if state not in self._ALLOWED_NEXT:
+            findings.append("invoice_state_invalid")
         if not rows:
             findings.append("invoice_history_missing")
-        elif len(rows) < version:
+        elif version_valid and len(rows) < version:
             findings.append("invoice_history_shorter_than_invoice_version")
-        elif len(rows) > version:
+        elif version_valid and len(rows) > version:
             findings.append("invoice_history_exceeds_invoice_version")
 
         previous_state = None
@@ -64,6 +69,8 @@ class InvoiceHistoryIntegrityAuditor:
             if (created_instant.tzinfo is None or created_instant.utcoffset() is None
                     or updated_instant.tzinfo is None or updated_instant.utcoffset() is None):
                 raise ValueError("Invoice lifecycle timestamps must be timezone-aware")
+            if updated_instant < created_instant:
+                findings.append("invoice_lifecycle_timestamp_order_invalid")
         except (ValueError, TypeError, AttributeError):
             created_instant = updated_instant = None
             findings.append("invoice_lifecycle_timestamp_invalid")
@@ -113,11 +120,13 @@ class InvoiceHistoryIntegrityAuditor:
                     findings.append(f"history_state_transition_invalid:{index}")
             previous_state = current_state
 
-        if rows and len(rows) == version and rows[-1][4] != f"state:{state}":
+        if rows and version_valid and len(rows) == version and rows[-1][4] != f"state:{state}":
             findings.append("history_final_state_mismatch")
 
         findings = tuple(dict.fromkeys(findings))
         inconsistent_prefixes = (
+            "invoice_state_invalid",
+            "invoice_version_invalid",
             "history_current_version_mismatch:",
             "history_version_chain_break:",
             "history_state_payload_invalid:",
@@ -130,6 +139,7 @@ class InvoiceHistoryIntegrityAuditor:
             "history_timestamp_before_invoice_creation:",
             "history_timestamp_after_invoice_update:",
             "invoice_lifecycle_timestamp_invalid",
+            "invoice_lifecycle_timestamp_order_invalid",
             "invoice_history_exceeds_invoice_version",
         )
         if any(item.startswith(inconsistent_prefixes) for item in findings):
