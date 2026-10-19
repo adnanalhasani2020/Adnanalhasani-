@@ -141,6 +141,7 @@ def test_clean_install_has_exactly_68_domain_tables_plus_migration_bookkeeping()
     expected_versions.append("0056_sale_return_once_guard")
     expected_versions.append("0060_sale_line_checkout_evidence_guard")
     expected_versions.append("0061_sale_line_product_name_snapshot_match_guard")
+    expected_versions.append("0062_commercial_checkout_receipt_immutable")
     assert versions == sorted(expected_versions)
 
 
