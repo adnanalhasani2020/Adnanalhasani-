@@ -356,6 +356,7 @@ private fun HospitalWorkspace(repository: HospitalRepository) {
                         onSave = { title, details ->
                             repository.saveRecord(HospitalRecord(category = currentModule.key, title = title, details = details))
                         },
+                        onEdit = { id, title, details -> repository.updateRecord(id, title, details) },
                         onDelete = { id -> scope.launch { repository.deleteRecord(id) } }
                     )
                     else -> Dashboard(all, { selected = it }, { selected = it })
@@ -900,6 +901,7 @@ private fun ModuleScreen(
     records: List<HospitalRecord>,
     specializedRows: List<Pair<String, String>>,
     onSave: suspend (String, String) -> Unit,
+    onEdit: suspend (Long, String, String) -> Unit,
     onDelete: (Long) -> Unit
 ) {
     val scope = rememberCoroutineScope()
@@ -908,6 +910,11 @@ private fun ModuleScreen(
     var isSaving by remember { mutableStateOf(false) }
     var validationMessage by remember { mutableStateOf<String?>(null) }
     var pendingDeleteId by remember { mutableStateOf<Long?>(null) }
+    var editingRecord by remember { mutableStateOf<HospitalRecord?>(null) }
+    var editTitle by remember { mutableStateOf("") }
+    var editDetails by remember { mutableStateOf("") }
+    var editError by remember { mutableStateOf<String?>(null) }
+    var isEditing by remember { mutableStateOf(false) }
     var searchQuery by remember(module.key) { mutableStateOf("") }
     val requiredFields = remember(module.key) { requiredFieldsForModule(module) }
     val filteredRecords = remember(records, searchQuery) {
@@ -1087,11 +1094,50 @@ private fun ModuleScreen(
                             if (record.details.isNotBlank()) Text(record.details, color = Muted, fontSize = 12.sp, lineHeight = 18.sp)
                             Text(SimpleDateFormat("yyyy/MM/dd - HH:mm", Locale.getDefault()).format(Date(record.createdAt)), color = Muted.copy(alpha = .8f), fontSize = 10.sp, modifier = Modifier.padding(top = 6.dp))
                         }
-                        IconButton(onClick = { pendingDeleteId = record.id }) { Icon(Icons.Default.DeleteOutline, contentDescription = "حذف السجل", tint = Rose) }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            IconButton(onClick = {
+                                editingRecord = record
+                                editTitle = record.title
+                                editDetails = record.details.substringBefore("\n\nسجل التعديلات:\n")
+                                editError = null
+                            }) { Icon(Icons.Default.Edit, contentDescription = "تعديل السجل", tint = Teal) }
+                            IconButton(onClick = { pendingDeleteId = record.id }) { Icon(Icons.Default.DeleteOutline, contentDescription = "حذف السجل", tint = Rose) }
+                        }
                     }
                 }
             }
         }
+    }
+    editingRecord?.let { record ->
+        AlertDialog(
+            onDismissRequest = { if (!isEditing) editingRecord = null },
+            title = { Text("تعديل السجل") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("سيُحفظ وقت التعديل في سجل التعديلات، مع إبقاء تاريخ الإنشاء الأصلي.", color = Muted, fontSize = 12.sp)
+                    OutlinedTextField(value = editTitle, onValueChange = { editTitle = it }, label = { Text("عنوان السجل") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = editDetails, onValueChange = { editDetails = it }, label = { Text("تفاصيل السجل") }, modifier = Modifier.fillMaxWidth(), minLines = 4, maxLines = 8)
+                    editError?.let { Text(it, color = Rose, fontSize = 12.sp) }
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = !isEditing && editTitle.isNotBlank(), onClick = {
+                    val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+                    val oldHistory = record.details.substringAfter("\n\nسجل التعديلات:\n", "")
+                    val history = (oldHistory.lineSequence().filter { it.isNotBlank() }.toList() + "- $now: تم تعديل السجل").joinToString("\n")
+                    val cleanDetails = editDetails.substringBefore("\n\nسجل التعديلات:\n").trim()
+                    val savedDetails = "$cleanDetails\n\nسجل التعديلات:\n$history"
+                    scope.launch {
+                        isEditing = true
+                        runCatching { onEdit(record.id, editTitle.trim(), savedDetails) }
+                            .onSuccess { editingRecord = null }
+                            .onFailure { editError = "تعذر حفظ التعديل. لم يتم إغلاق النافذة." }
+                        isEditing = false
+                    }
+                }) { Text(if (isEditing) "جارٍ الحفظ..." else "حفظ التعديل") }
+            },
+            dismissButton = { TextButton(enabled = !isEditing, onClick = { editingRecord = null }) { Text("إلغاء") } }
+        )
     }
     pendingDeleteId?.let { recordId ->
         AlertDialog(
