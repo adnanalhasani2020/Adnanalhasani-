@@ -410,7 +410,7 @@ private fun Dashboard(all: List<HospitalRecord>, onSelect: (String) -> Unit, onA
         Triple("الطوارئ والرعاية المتخصصة", "خدمات الحالات الحرجة والعيادات", listOf("emergency", "triage", "queue", "icu", "ambulance", "bloodbank", "operations", "anesthesia", "dialysis", "dental", "pediatrics", "homecare", "vaccination")),
         Triple("الفحوصات والصيدلية", "المختبر والأشعة والأدوية والمخزون", listOf("lab", "lab_catalog", "radiology", "pharmacy", "prescriptions", "refills", "inventory", "pharmacy_suppliers", "suppliers", "sterilization", "equipment")),
         Triple("المالية والتحصيل", "الفواتير والمدفوعات والتأمين", listOf("invoices", "payments", "cashier", "expenses", "insurance", "insurance_companies", "payroll", "contracts")),
-        Triple("الإدارة والموارد", "الموظفون والأقسام والجودة والخدمات", listOf("users", "staff", "departments", "attendance", "shifts", "leave_requests", "visitors", "diet", "complaints", "quality", "incidents", "maintenance", "rooms", "documents", "certificates"))
+        Triple("الإدارة والموارد", "الموظفون والأقسام والجودة والخدمات", listOf("users", "staff", "departments", "attendance", "shifts", "leave_requests", "visitors", "diet", "complaints", "quality", "incidents", "maintenance", "rooms", "documents", "certificates", "audit"))
     )
     val filteredGroups = remember(query) {
         groups.map { group ->
