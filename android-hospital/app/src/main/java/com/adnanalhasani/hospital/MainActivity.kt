@@ -694,6 +694,31 @@ private fun isDateTimeField(label: String, hint: String): Boolean =
 private fun isTimeOnlyField(label: String, hint: String): Boolean =
     hint == "HH:mm" || (label == "وقت الوصول" && hint == "HH:mm")
 
+/** Validates both the expected format and real calendar/time values (e.g. rejects 2026-02-31 and 25:90). */
+private fun isValidTemporalValue(label: String, hint: String, raw: String): Boolean = runCatching {
+    when {
+        isDateTimeField(label, hint) ->
+            java.time.LocalDateTime.parse(
+                raw,
+                java.time.format.DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm", Locale.US)
+            )
+        isMonthField(label, hint) ->
+            java.time.YearMonth.parse(
+                raw,
+                java.time.format.DateTimeFormatter.ofPattern("uuuu-MM", Locale.US)
+            )
+        isDateField(label, hint) ->
+            java.time.LocalDate.parse(raw, java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)
+        isTimeOnlyField(label, hint) ->
+            java.time.LocalTime.parse(
+                raw,
+                java.time.format.DateTimeFormatter.ofPattern("HH:mm", Locale.US)
+            )
+        else -> return true
+    }
+    true
+}.getOrDefault(false)
+
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 private fun ModuleInputField(
@@ -941,14 +966,7 @@ private fun ModuleScreen(
                             }
                             val invalidDateField = module.fields.firstOrNull { (label, hint) ->
                                 val raw = values[label]?.trim().orEmpty()
-                                when {
-                                    raw.isBlank() -> false
-                                    isDateTimeField(label, hint) -> !raw.matches(Regex("\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}"))
-                                    isMonthField(label, hint) -> !raw.matches(Regex("\\d{4}-\\d{2}"))
-                                    isDateField(label, hint) -> !raw.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))
-                                    isTimeOnlyField(label, hint) -> !raw.matches(Regex("\\d{2}:\\d{2}"))
-                                    else -> false
-                                }
+                                raw.isNotBlank() && !isValidTemporalValue(label, hint, raw)
                             }
                             if (invalidDateField != null) {
                                 validationMessage = "تحقق من تنسيق التاريخ أو الوقت في حقل " + invalidDateField.first + "."
