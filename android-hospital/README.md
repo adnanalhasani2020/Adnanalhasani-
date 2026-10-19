@@ -61,6 +61,18 @@
 - Firebase Authentication للبريد وكلمة المرور، ويُفعّل Google Services عند وجود ملف إعداد المشروع.
 - Kotlin Coroutines وFlow.
 
+## إعداد Firebase Authentication
+
+شاشة الدخول والتسجيل موجودة في التطبيق، لكن المستودع لا يحتوي على إعدادات مشروع Firebase فعلية. لتفعيل الاتصال الحقيقي:
+
+1. أنشئ مشروعاً في Firebase Console وأضف تطبيق Android بمعرّف الحزمة `com.adnanalhasani.hospital`.
+2. فعّل مزوّد **Email/Password** من Authentication.
+3. نزّل `google-services.json` وضعه في `android-hospital/app/google-services.json`.
+4. أعد Gradle Sync ثم شغّل التطبيق. يطبّق المشروع Google Services plugin فقط عند وجود الملف؛ لذلك يمكن بناء نسخة التجربة المحلية من دونه.
+5. بيانات المنشأة تحفظ حالياً محلياً في Room، ولا تُرفع إلى Firestore ولا تتزامن بين الأجهزة.
+
+خيار «المتابعة للتجربة دون حساب» يتيح اختبار الواجهات محلياً، ولا يعني أن التطبيق أصبح آمناً للإنتاج. Firebase Authentication لا يوفّر وحده صلاحيات الأدوار أو عزل بيانات كل منشأة؛ يلزم إعداد قواعد وصول وخادم/Firestore بعزل صحيح قبل تخزين بيانات فعلية.
+
 ## البناء والتشغيل
 
 1. افتح مجلد `android-hospital` في Android Studio حديث.
