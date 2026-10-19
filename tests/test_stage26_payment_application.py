@@ -753,3 +753,29 @@ def test_payment_transition_history_failure_preserves_caller_transaction():
         "SELECT COUNT(*) FROM persons WHERE person_id=?", (caller_person,)
     ).fetchone()[0] == 0
     db.close()
+
+
+
+def test_payment_rejects_invoice_issuer_mismatch_without_writes():
+    db = connect_database()
+    payer, payee, approver, agent, context, _obligation = seed(db)
+    invoice = seed_invoice_for_payment(db, issuer=approver, obligation=None, state="issued")
+    payment_id = uid()
+    grant, action = authorize(
+        db, agent=agent, context=context, payment_id=payment_id,
+        action_code="payment.create", approver=approver,
+    )
+
+    with pytest.raises(ValidationError, match="payee must match the linked Invoice issuer"):
+        PaymentApplication().create_payment(
+            db, payment_id=payment_id, payer_person_id=payer, payee_person_id=payee,
+            invoice_id=invoice, amount_minor=1000, currency_code="YER",
+            context_ref=context, authorization_grant_id=grant, agent_action_id=action, now=STAMP,
+        )
+
+    assert db.execute("SELECT COUNT(*) FROM payments").fetchone()[0] == 0
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=? AND change_type='payment_state_transition'",
+        (payment_id,),
+    ).fetchone()[0] == 0
+    db.close()
