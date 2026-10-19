@@ -28,6 +28,7 @@ private val vaccinationStatuses = listOf("تم التطعيم", "موعد قاد
 internal fun VaccinationScreen(repository: HospitalRepository, onDelete: (Long) -> Unit) {
     val today = LocalDate.now().toString()
     val records by repository.vaccinationRecords().collectAsState(initial = emptyList())
+    val allRecords by repository.allRecords().collectAsState(initial = emptyList())
     val upcoming by repository.upcomingVaccinations(today).collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
     val fields = listOf(
@@ -59,7 +60,11 @@ internal fun VaccinationScreen(repository: HospitalRepository, onDelete: (Long) 
     var message by remember { mutableStateOf<String?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var search by remember { mutableStateOf("") }
-    val filtered = records.filter { search.isBlank() || it.childName.contains(search, true) || it.childFileNumber.contains(search, true) || it.vaccineName.contains(search, true) }
+    val filtered = records.filter { record ->
+        val sourceDetails = allRecords.firstOrNull { it.id == record.sourceRecordId }?.details.orEmpty()
+        search.isBlank() || record.childName.contains(search, true) || record.childFileNumber.contains(search, true) ||
+            record.vaccineName.contains(search, true) || sourceDetails.contains(search, true)
+    }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item {
@@ -209,6 +214,11 @@ internal fun VaccinationScreen(repository: HospitalRepository, onDelete: (Long) 
         }
         if (filtered.isEmpty()) item { Text("لا توجد سجلات مطابقة للبحث.", color = Color(0xFF788895), modifier = Modifier.padding(8.dp)) }
         items(filtered, key = { it.id }) { record ->
+            val source = allRecords.firstOrNull { it.id == record.sourceRecordId }
+            val sourceFields = source?.details.orEmpty().lineSequence().mapNotNull { line ->
+                val separator = line.indexOf(": ")
+                if (separator <= 0) null else line.substring(0, separator).trim() to line.substring(separator + 2).trim()
+            }.toMap()
             Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp)) {
                 Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -218,9 +228,19 @@ internal fun VaccinationScreen(repository: HospitalRepository, onDelete: (Long) 
                         }
                         TextButton(onClick = { onDelete(record.sourceRecordId) }) { Icon(Icons.Default.Delete, contentDescription = "حذف السجل", tint = Color(0xFFC97979)) }
                     }
-                    Text("تاريخ الجرعة: " + record.administeredDate + " • الحالة: " + record.doseStatus, fontSize = 12.sp, color = Color(0xFF788895))
+                    if (record.administeredDate.isNotBlank()) {
+                        Text("تاريخ الجرعة: " + record.administeredDate + " • الحالة: " + record.doseStatus, fontSize = 12.sp, color = Color(0xFF788895))
+                    } else {
+                        Text("لم تُسجل جرعة منفذة بعد • الحالة: " + record.doseStatus, fontSize = 12.sp, color = Color(0xFF788895))
+                    }
+                    if (sourceFields["جنس الطفل"].orEmpty().isNotBlank()) Text("الجنس: " + sourceFields["جنس الطفل"], fontSize = 12.sp, color = Color(0xFF788895))
                     if (record.nextDoseDate.isNotBlank()) Text("الجرعة التالية: " + record.nextDoseDate, fontSize = 12.sp, color = Color(0xFF548F88))
                     if (record.childFileNumber.isNotBlank()) Text("رقم الملف: " + record.childFileNumber, fontSize = 12.sp, color = Color(0xFF788895))
+                    listOf("هاتف الوالد", "هاتف الوالدة", "المحافظة", "المديرية", "العزلة", "القرية أو الحارة", "السكن أو المنزل").forEach { label ->
+                        sourceFields[label]?.takeIf { it.isNotBlank() }?.let { value ->
+                            Text("$label: $value", fontSize = 12.sp, color = Color(0xFF788895))
+                        }
+                    }
                     if (record.batchNumber.isNotBlank()) Text("التشغيلة: " + record.batchNumber, fontSize = 12.sp, color = Color(0xFF788895))
                     if (record.notes.isNotBlank()) Text("ملاحظات: " + record.notes, fontSize = 12.sp, color = Color(0xFF788895))
                 }
