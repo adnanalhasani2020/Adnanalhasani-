@@ -250,3 +250,50 @@ def test_invoice_audit_detects_history_timestamp_before_invoice_creation():
     assert result.status == "inconsistent"
     assert "history_timestamp_before_invoice_creation:1" in result.findings
     db.close()
+
+
+def test_invoice_reader_rejects_persisted_due_timestamp_before_issue():
+    db = connect_database()
+    *_, issued = setup_invoice(db)
+    invoice_id = str(issued.invoice.id)
+    db.execute(
+        "UPDATE invoices SET due_at='2026-10-10T11:59:59Z' WHERE invoice_id=?",
+        (invoice_id,),
+    )
+    db.commit()
+
+    with pytest.raises(ValidationError, match="due timestamp precedes issue timestamp"):
+        InvoiceApplication().get_invoice(db, invoice_id)
+    db.close()
+
+
+def test_invoice_reader_rejects_sale_offering_activity_drift():
+    db = connect_database()
+    actor, activity, sale, _grant, issued = setup_invoice(db)
+    other_activity = uid()
+    db.execute(
+        "INSERT INTO activities(activity_id,owner_person_id,state,created_at,updated_at) "
+        "VALUES(?,?,'active',?,?)",
+        (other_activity, actor, STAMP, STAMP),
+    )
+    db.execute("UPDATE sales SET activity_id=? WHERE sale_id=?", (other_activity, sale))
+    db.commit()
+
+    with pytest.raises(ValidationError, match="Sale Activity does not match its Offering Activity"):
+        InvoiceApplication().get_invoice(db, str(issued.invoice.id))
+    db.close()
+
+
+def test_invoice_reader_rejects_issue_timestamp_before_sale_creation():
+    db = connect_database()
+    *_, issued = setup_invoice(db)
+    invoice_id = str(issued.invoice.id)
+    db.execute(
+        "UPDATE invoices SET issue_at='2026-10-10T11:59:59Z' WHERE invoice_id=?",
+        (invoice_id,),
+    )
+    db.commit()
+
+    with pytest.raises(ValidationError, match="issue timestamp precedes Sale creation timestamp"):
+        InvoiceApplication().get_invoice(db, invoice_id)
+    db.close()
