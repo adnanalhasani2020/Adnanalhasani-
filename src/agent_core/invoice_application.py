@@ -218,11 +218,21 @@ class InvoiceApplication:
             created_instant = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
             if void_instant < created_instant:
                 raise ValidationError("Invoice void timestamp cannot precede creation timestamp")
+            sale_context = connection.execute(
+                "SELECT s.activity_id, o.activity_id FROM sales s "
+                "LEFT JOIN offerings o ON o.offering_id=s.offering_id WHERE s.sale_id=?",
+                (str(record.sale_id),),
+            ).fetchone()
+            if sale_context is None:
+                raise ValidationError("Invoice requires an existing Sale before voiding")
+            sale_activity_id, offering_activity_id = sale_context
+            if offering_activity_id is None or sale_activity_id != offering_activity_id:
+                raise ValidationError(
+                    "Sale Activity does not match its Offering Activity; explicit reconciliation is required"
+                )
             SaleApplication()._authorize(
                 connection, authorization_grant_id, actor_key, "void_invoice",
-                str(record.sale_id),
-                connection.execute("SELECT activity_id FROM sales WHERE sale_id=?", (str(record.sale_id),)).fetchone()[0],
-                timestamp,
+                str(record.sale_id), sale_activity_id, timestamp,
             )
             # Voiding is a commercial state change, not a financial reversal.
             # Refuse to orphan an active Obligation or any persisted Payment; those
