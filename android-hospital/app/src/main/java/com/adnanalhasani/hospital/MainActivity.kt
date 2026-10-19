@@ -664,7 +664,7 @@ private fun ModuleInputField(
 
     val onPickDate = {
         val calendar = java.util.Calendar.getInstance()
-        val existingDate = value.take(10)
+        val existingDate = if (monthField && value.matches(Regex("\\d{4}-\\d{2}"))) "$value-01" else value.take(10)
         val parsed = runCatching {
             SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(existingDate)
         }.getOrNull()
