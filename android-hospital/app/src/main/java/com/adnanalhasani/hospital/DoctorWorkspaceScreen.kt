@@ -158,7 +158,7 @@ fun DoctorWorkspaceScreen(repository: HospitalRepository) {
                                                     )
                                                     message = "تم حفظ الزيارة وربطها بمعرّفي المريض والطبيب."
                                                 } else {
-                                                    repository.updateRecord(currentEdit.sourceRecordId, patient, visitDetails())
+                                                    repository.updateClinicalVisitRecord(currentEdit.sourceRecordId, patient, visitDetails(), selectedPatientId!!, selectedDoctorId!!)
                                                     message = "تم تعديل الزيارة وتسجيل القيم السابقة والجديدة في سجل التدقيق."
                                                 }
                                                 chartPatientId = selectedPatientId
@@ -243,7 +243,7 @@ fun DoctorWorkspaceScreen(repository: HospitalRepository) {
                     Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(14.dp)) {
                         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                             Text(visit.patientName.ifBlank { "مريض غير محدد" }, fontWeight = FontWeight.Bold, color = Color(0xFF263B4D))
-                            Text("الطبيب: ${visit.doctorName.ifBlank { "غير محدد" }} • ${visit.visitAt}", color = Color(0xFF788895), fontSize = 11.sp)
+                            Text("رقم الزيارة: ${visit.id} • الطبيب: ${visit.doctorName.ifBlank { "غير محدد" }} • ${visit.visitAt}", color = Color(0xFF788895), fontSize = 11.sp)
                             if (visit.chiefComplaint.isNotBlank()) Text("الشكوى: ${visit.chiefComplaint}", fontSize = 13.sp)
                             if (visit.diagnosis.isNotBlank()) Text("التشخيص: ${visit.diagnosis}", fontSize = 13.sp)
                             if (visit.notes.isNotBlank()) Text("ملاحظات: ${visit.notes}", fontSize = 12.sp, color = Color(0xFF788895))
