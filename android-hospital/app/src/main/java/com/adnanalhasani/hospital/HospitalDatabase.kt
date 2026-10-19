@@ -485,8 +485,12 @@ interface HospitalDao {
             "lab" -> deleteLabOrder(id)
             "radiology" -> deleteRadiologyOrder(id)
             "maintenance" -> deleteMaintenanceTicket(id)
-            "patients" -> deletePatientRecord(record.title, record.createdAt)
-            "doctors" -> deleteDoctorRecord(record.title, record.createdAt)
+            "patients" -> {
+                if (countOtherPatientRecords(record.title, id) == 0) deletePatientRecord(record.title)
+            }
+            "doctors" -> {
+                if (countOtherDoctorRecords(record.title, id) == 0) deleteDoctorRecord(record.title)
+            }
             "appointments" -> deleteAppointmentRecord(record.title, record.createdAt)
             "invoices" -> deleteInvoiceRecord(record.title, record.createdAt)
             "payments" -> deletePaymentRecord(record.title, record.createdAt)
