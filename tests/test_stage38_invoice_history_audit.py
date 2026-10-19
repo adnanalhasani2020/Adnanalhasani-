@@ -1,4 +1,5 @@
 """Integration tests for read-only Invoice/Domain History integrity checks."""
+import sqlite3
 import uuid
 
 import pytest
@@ -267,7 +268,7 @@ def test_invoice_reader_rejects_persisted_due_timestamp_before_issue():
     db.close()
 
 
-def test_invoice_reader_rejects_sale_offering_activity_drift():
+def test_database_guard_rejects_sale_offering_activity_drift():
     db = connect_database()
     actor, activity, sale, _grant, issued = setup_invoice(db)
     other_activity = uid()
@@ -276,11 +277,8 @@ def test_invoice_reader_rejects_sale_offering_activity_drift():
         "VALUES(?,?,'active',?,?)",
         (other_activity, actor, STAMP, STAMP),
     )
-    db.execute("UPDATE sales SET activity_id=? WHERE sale_id=?", (other_activity, sale))
-    db.commit()
-
-    with pytest.raises(ValidationError, match="Sale Activity does not match its Offering Activity"):
-        InvoiceApplication().get_invoice(db, str(issued.invoice.id))
+    with pytest.raises(sqlite3.IntegrityError, match="sale activity must match offering activity"):
+        db.execute("UPDATE sales SET activity_id=? WHERE sale_id=?", (other_activity, sale))
     db.close()
 
 
