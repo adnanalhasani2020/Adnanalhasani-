@@ -290,7 +290,7 @@ async function doctorOpenAction(action){
  const p=doctorSelected.patient,v=doctorSelected.visit,encounterId=doctorSelected.kind==="visit"?v.id:null;
  if(action==="diagnosis"){
   if(!encounterId){doctorOpenModal("التشخيص",'<p class="notice">يجب فتح زيارة طبية للمريض أولًا من قسم إدارة الزيارة الطبية، ثم يمكن تسجيل التشخيص.</p>');return}
-  doctorOpenModal("إدخال التشخيص",'<form id="doctorDiagnosisForm"><label>التشخيص<textarea name="diagnosis" required maxlength="2000" placeholder="اكتب التشخيص"></textarea></label><label>ملاحظات الطبيب<textarea name="clinical_notes" maxlength="5000" placeholder="الملاحظات الطبية"></textarea></label><p><small>سيُحفظ التشخيص ضمن الزيارة الحالية، دون إغلاقها.</small></p><button>حفظ التشخيص</button></form>');
+  doctorOpenModal("إدخال التشخيص",'<form id="doctorDiagnosisForm"><label>التشخيص<textarea name="diagnosis" required maxlength="2000" placeholder="اكتب التشخيص"></textarea></label><label>ملاحظات الطبيب<textarea name="clinical_notes" maxlength="5000" placeholder="الملاحظات الطبية"></textarea></label><p><small>سيُحفظ التشخيص ضمن الزيارة الحالية، دون إغلاقها. ترك الملاحظات فارغة يحافظ على الملاحظات المحفوظة سابقًا.</small></p><button>حفظ التشخيص</button></form>');$("doctorDiagnosisForm").elements.diagnosis.value=v.diagnosis||"";$("doctorDiagnosisForm").elements.clinical_notes.value=v.clinical_notes||"";
   $("doctorDiagnosisForm").onsubmit=async ev=>{ev.preventDefault();const d=Object.fromEntries(new FormData(ev.target));try{await api("/api/encounters/"+encounterId+"/diagnosis",{method:"POST",body:JSON.stringify({...d,at:now()})});msg($("doctorModalStatus"),"تم حفظ التشخيص في الزيارة.");await doctorLoadQueue()}catch(e){msg($("doctorModalStatus"),e.message,true)}};return
  }
  if(action==="labs"){
