@@ -200,7 +200,7 @@ fun HospitalApp(dao: HospitalDao) {
         ) { padding ->
             Box(Modifier.fillMaxSize().padding(padding)) {
                 when {
-                    showMenu -> ModuleMenu(onSelect = { selected = it; showMenu = false })
+                    showMenu || selected == "menu" -> ModuleMenu(onSelect = { selected = it; showMenu = false })
                     selected == "home" -> Dashboard(
                         all = all,
                         onSelect = { selected = it },
