@@ -60,6 +60,7 @@ internal fun VaccinationScreen(repository: HospitalRepository, onDelete: (Long) 
     var message by remember { mutableStateOf<String?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var search by remember { mutableStateOf("") }
+    var pendingDelete by remember { mutableStateOf<VaccinationRecordEntity?>(null) }
     val filtered = records.filter { record ->
         val sourceDetails = allRecords.firstOrNull { it.id == record.sourceRecordId }?.details.orEmpty()
         search.isBlank() || record.childName.contains(search, true) || record.childFileNumber.contains(search, true) ||
@@ -213,6 +214,24 @@ internal fun VaccinationScreen(repository: HospitalRepository, onDelete: (Long) 
             OutlinedTextField(value = search, onValueChange = { search = it }, modifier = Modifier.fillMaxWidth(), label = { Text("بحث باسم الطفل أو رقم الملف أو اللقاح") }, singleLine = true, shape = RoundedCornerShape(13.dp))
         }
         if (filtered.isEmpty()) item { Text("لا توجد سجلات مطابقة للبحث.", color = Color(0xFF788895), modifier = Modifier.padding(8.dp)) }
+        item {
+            pendingDelete?.let { record ->
+                AlertDialog(
+                    onDismissRequest = { pendingDelete = null },
+                    title = { Text("تأكيد حذف سجل التطعيم") },
+                    text = { Text("هل تريد حذف سجل ${record.childName} للقاح ${record.vaccineName}؟ لا يمكن التراجع عن الحذف.") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            pendingDelete = null
+                            onDelete(record.sourceRecordId)
+                        }) { Text("حذف", color = Color(0xFFC97979)) }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { pendingDelete = null }) { Text("إلغاء") }
+                    }
+                )
+            }
+        }
         items(filtered, key = { it.id }) { record ->
             val source = allRecords.firstOrNull { it.id == record.sourceRecordId }
             val sourceFields = source?.details.orEmpty().lineSequence().mapNotNull { line ->
@@ -226,7 +245,7 @@ internal fun VaccinationScreen(repository: HospitalRepository, onDelete: (Long) 
                             Text(record.childName, fontWeight = FontWeight.Bold, color = Color(0xFF263B4D))
                             Text(record.vaccineName + " • " + record.doseNumber, color = Color(0xFF293B49), fontSize = 13.sp)
                         }
-                        TextButton(onClick = { onDelete(record.sourceRecordId) }) { Icon(Icons.Default.Delete, contentDescription = "حذف السجل", tint = Color(0xFFC97979)) }
+                        TextButton(onClick = { pendingDelete = record }) { Icon(Icons.Default.Delete, contentDescription = "حذف السجل", tint = Color(0xFFC97979)) }
                     }
                     if (record.administeredDate.isNotBlank()) {
                         Text("تاريخ الجرعة: " + record.administeredDate + " • الحالة: " + record.doseStatus, fontSize = 12.sp, color = Color(0xFF788895))
