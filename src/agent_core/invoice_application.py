@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from agent_core.domain_commerce import Invoice, InvoiceState
+from agent_core.domain_commerce import Invoice, InvoiceState, SaleState
 from agent_core.application import SaleApplication
 from agent_core.shared import ValidationError
 
@@ -124,13 +124,18 @@ class InvoiceApplication:
             # Read and authorize inside the same transaction as the invoice write.
             # This prevents a grant revocation or Sale-context change between authorization and persistence.
             sale = connection.execute(
-                "SELECT s.activity_id, o.activity_id, s.state FROM sales s "
-                "LEFT JOIN offerings o ON o.offering_id=s.offering_id WHERE s.sale_id=?",
+                "SELECT s.activity_id, o.activity_id, s.state, s.lifecycle_state, s.created_at "
+                "FROM sales s LEFT JOIN offerings o ON o.offering_id=s.offering_id WHERE s.sale_id=?",
                 (sale_key,),
             ).fetchone()
             if sale is None:
                 raise ValidationError("Invoice requires an existing Sale")
-            activity_key, offering_activity_key, sale_state = sale
+            activity_key, offering_activity_key, legacy_sale_state, lifecycle_state, sale_created_raw = sale
+            sale_state = SaleState.from_persisted(legacy_sale_state, lifecycle_state)
+            sale_created = self._timestamp(sale_created_raw, "Sale creation timestamp")
+            sale_created_instant = datetime.fromisoformat(sale_created.replace("Z", "+00:00"))
+            if issue_instant < sale_created_instant:
+                raise ValidationError("Invoice issue timestamp cannot precede Sale creation timestamp")
             if offering_activity_key is None or activity_key != offering_activity_key:
                 raise ValidationError(
                     "Sale Activity does not match its Offering Activity; explicit reconciliation is required"
