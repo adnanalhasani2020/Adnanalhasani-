@@ -37,7 +37,20 @@ private val erStatuses = listOf("قيد التقييم", "قيد العلاج", 
 @Composable
 internal fun EmergencyScreen(repository: HospitalRepository, onEdit: suspend (Long, String, String) -> Unit, onDelete: (Long) -> Unit) {
     val records by repository.allRecords().collectAsState(initial = emptyList())
-    val cases = remember(records) { records.filter { it.category == "emergency" }.sortedByDescending { it.createdAt } }
+    val cases = remember(records) {
+        records.filter { it.category == "emergency" }.sortedWith(
+            compareBy<HospitalRecord> {
+                when (RecordEditHistory.visibleDetails(it.details).lineSequence()
+                    .firstOrNull { line -> line.startsWith("درجة الفرز:") }
+                    ?.substringAfter(": ")?.trim()) {
+                    "حرج" -> 0
+                    "عاجل" -> 1
+                    "مستقر" -> 2
+                    else -> 3
+                }
+            }.thenByDescending { it.createdAt }
+        )
+    }
     val scope = rememberCoroutineScope()
     val formatter = remember { DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm") }
     val fields = listOf(
@@ -74,9 +87,9 @@ internal fun EmergencyScreen(repository: HospitalRepository, onEdit: suspend (Lo
     var editDetails by remember { mutableStateOf("") }
     var editError by remember { mutableStateOf<String?>(null) }
     var isEditing by remember { mutableStateOf(false) }
-    val filtered = cases.filter { it.title.contains(search, true) || it.details.contains(search, true) }
+    val filtered = cases.filter { it.title.contains(search, true) || RecordEditHistory.visibleDetails(it.details).contains(search, true) }
     val parsedCases = cases.map { record ->
-        record to record.details.lineSequence().mapNotNull { line ->
+        record to RecordEditHistory.visibleDetails(record.details).lineSequence().mapNotNull { line ->
             val i = line.indexOf(": ")
             if (i <= 0) null else line.substring(0, i).trim() to line.substring(i + 2).trim()
         }.toMap()
@@ -192,7 +205,7 @@ internal fun EmergencyScreen(repository: HospitalRepository, onEdit: suspend (Lo
         }
         if (filtered.isEmpty()) item { Text("لا توجد حالات مطابقة للبحث.", color = erMuted, modifier = Modifier.padding(12.dp)) }
         items(filtered, key = { it.id }) { record ->
-            val parsed = record.details.lineSequence().mapNotNull { line ->
+            val parsed = RecordEditHistory.visibleDetails(record.details).lineSequence().mapNotNull { line ->
                 val i = line.indexOf(": ")
                 if (i <= 0) null else line.substring(0, i).trim() to line.substring(i + 2).trim()
             }.toMap()
@@ -228,15 +241,17 @@ internal fun EmergencyScreen(repository: HospitalRepository, onEdit: suspend (Lo
                         listOf("قيد العلاج", "تحويل", "تنويم", "خروج").forEach { nextStatus ->
                             TextButton(
                                 onClick = {
-                                    val lines = record.details.lineSequence().toMutableList()
+                                    val lines = RecordEditHistory.visibleDetails(record.details).lineSequence().toMutableList()
                                     val statusIndex = lines.indexOfFirst { it.startsWith("حالة الحالة:") }
                                     if (statusIndex >= 0) lines[statusIndex] = "حالة الحالة: " + nextStatus
                                     else lines.add("حالة الحالة: " + nextStatus)
                                     val statusDetails = lines.joinToString("\n")
                                     val now = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
-                                    val oldHistory = record.details.substringAfter("\n\nسجل التعديلات:\n", "")
-                                    val history = (oldHistory.lineSequence().filter { it.isNotBlank() }.toList() + "- $now: تم تغيير حالة الطوارئ إلى $nextStatus").joinToString("\n")
-                                    val updatedDetails = statusDetails.substringBefore("\n\nسجل التعديلات:\n") + "\n\nسجل التعديلات:\n" + history
+                                    val updatedDetails = RecordEditHistory.append(
+                                        statusDetails,
+                                        record.details,
+                                        now
+                                    )
                                     scope.launch {
                                         runCatching { repository.updateEmergencyCase(record.id, updatedDetails, nextStatus) }
                                             .onFailure { error = "تعذر تحديث حالة الطوارئ." }
@@ -251,7 +266,7 @@ internal fun EmergencyScreen(repository: HospitalRepository, onEdit: suspend (Lo
                         TextButton(onClick = {
                             editingRecord = record
                             editTitle = record.title
-                            editDetails = record.details.substringBefore("\n\nسجل التعديلات:\n")
+                            editDetails = RecordEditHistory.visibleDetails(record.details)
                             editError = null
                         }) {
                             Icon(Icons.Default.Edit, null, tint = erGreen)
@@ -283,10 +298,7 @@ internal fun EmergencyScreen(repository: HospitalRepository, onEdit: suspend (Lo
             confirmButton = {
                 TextButton(enabled = !isEditing && editTitle.isNotBlank(), onClick = {
                     val now = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
-                    val oldHistory = record.details.substringAfter("\n\nسجل التعديلات:\n", "")
-                    val history = (oldHistory.lineSequence().filter { it.isNotBlank() }.toList() + "- $now: تم تعديل سجل الطوارئ").joinToString("\n")
-                    val cleanDetails = editDetails.substringBefore("\n\nسجل التعديلات:\n").trim()
-                    val savedDetails = "$cleanDetails\n\nسجل التعديلات:\n$history"
+                    val savedDetails = RecordEditHistory.append(editDetails, record.details, now)
                     scope.launch {
                         isEditing = true
                         runCatching { onEdit(record.id, editTitle.trim(), savedDetails) }
