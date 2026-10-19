@@ -9,6 +9,7 @@ import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -16,7 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 @Composable
-fun BusinessProfileScreen(profile: BusinessProfileEntity?, onSave: (BusinessProfileEntity) -> Unit) {
+fun BusinessProfileScreen(profile: BusinessProfileEntity?, onSave: suspend (BusinessProfileEntity) -> Unit) {
     var name by remember(profile) { mutableStateOf(profile?.name.orEmpty()) }
     var legalName by remember(profile) { mutableStateOf(profile?.legalName.orEmpty()) }
     var businessType by remember(profile) { mutableStateOf(profile?.businessType.orEmpty()) }
@@ -28,6 +29,8 @@ fun BusinessProfileScreen(profile: BusinessProfileEntity?, onSave: (BusinessProf
     var website by remember(profile) { mutableStateOf(profile?.website.orEmpty()) }
     var currency by remember(profile) { mutableStateOf(profile?.currency ?: "YER") }
     var status by remember { mutableStateOf<String?>(null) }
+    var saving by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     LazyColumnCompat(
         content = {
@@ -52,12 +55,20 @@ fun BusinessProfileScreen(profile: BusinessProfileEntity?, onSave: (BusinessProf
                             if (name.isBlank()) status = "اسم المنشأة مطلوب."
                             else if (email.isNotBlank() && !android.util.Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches()) status = "صيغة البريد الإلكتروني غير صحيحة."
                             else if (currency.length != 3 || !currency.all { it in 'A'..'Z' }) status = "اكتب رمز عملة من 3 أحرف مثل YER."
-                            else {
-                                onSave(BusinessProfileEntity(name = name.trim(), legalName = legalName.trim(), businessType = businessType.trim(), registrationNumber = registrationNumber.trim(), taxNumber = taxNumber.trim(), phone = phone.trim(), email = email.trim(), address = address.trim(), website = website.trim(), currency = currency))
-                                status = "تم حفظ بيانات المنشأة."
+                            else if (!saving) {
+                                saving = true
+                                status = "جارٍ حفظ البيانات..."
+                                val profileToSave = BusinessProfileEntity(name = name.trim(), legalName = legalName.trim(), businessType = businessType.trim(), registrationNumber = registrationNumber.trim(), taxNumber = taxNumber.trim(), phone = phone.trim(), email = email.trim(), address = address.trim(), website = website.trim(), currency = currency)
+                                scope.launch {
+                                    val result = runCatching { onSave(profileToSave) }
+                                    status = if (result.isSuccess) "تم حفظ بيانات المنشأة." else "تعذر حفظ البيانات. حاول مرة أخرى."
+                                    saving = false
+                                }
                             }
-                        }, modifier = Modifier.fillMaxWidth()) {
-                            Icon(Icons.Default.Save, null); Spacer(Modifier.width(8.dp)); Text("حفظ بيانات المنشأة")
+                        }, modifier = Modifier.fillMaxWidth(), enabled = !saving) {
+                            if (saving) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                            else Icon(Icons.Default.Save, null)
+                            Spacer(Modifier.width(8.dp)); Text(if (saving) "جارٍ الحفظ..." else "حفظ بيانات المنشأة")
                         }
                     }
                 }
