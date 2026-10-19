@@ -210,6 +210,7 @@ private fun HospitalWorkspace(repository: HospitalRepository) {
     val context = LocalContext.current
     var exportStatus by remember { mutableStateOf<String?>(null) }
     val businessProfile by repository.businessProfile().collectAsState(initial = null)
+    LaunchedEffect(Unit) { repository.seedDefaultReferenceCatalogs() }
     val all by repository.allRecords().collectAsState(initial = emptyList())
     val emergencyCases by repository.emergencyCases().collectAsState(initial = emptyList())
     val icuStays by repository.icuStays().collectAsState(initial = emptyList())
