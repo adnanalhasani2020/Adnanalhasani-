@@ -258,6 +258,7 @@ interface HospitalDao {
     @Query("SELECT * FROM vaccination_records ORDER BY nextDoseDate ASC, administeredDate DESC") fun vaccinationRecords(): Flow<List<VaccinationRecordEntity>>
     @Query("SELECT * FROM vaccination_records WHERE childFileNumber = :fileNumber ORDER BY administeredDate DESC") fun vaccinationsForChild(fileNumber: String): Flow<List<VaccinationRecordEntity>>
     @Query("SELECT * FROM vaccination_records WHERE nextDoseDate != '' AND nextDoseDate >= :today ORDER BY nextDoseDate ASC") fun upcomingVaccinations(today: String): Flow<List<VaccinationRecordEntity>>
+    @Query("SELECT * FROM vaccination_records WHERE nextDoseDate != '' AND nextDoseDate < :today AND doseStatus IN ('موعد قادم', 'تأجيل') ORDER BY nextDoseDate ASC") fun overdueVaccinations(today: String): Flow<List<VaccinationRecordEntity>>
 
     @Query("DELETE FROM emergency_cases WHERE sourceRecordId = :id") suspend fun deleteEmergencyCase(id: Long)
     @Query("DELETE FROM icu_stays WHERE sourceRecordId = :id") suspend fun deleteIcuStay(id: Long)
