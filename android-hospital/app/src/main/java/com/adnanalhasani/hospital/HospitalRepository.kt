@@ -19,6 +19,10 @@ class HospitalRepository(private val dao: HospitalDao) {
 
     fun prescriptionOrders(): Flow<List<PrescriptionOrderEntity>> = dao.prescriptionOrders()
 
+    fun labOrders(): Flow<List<LabOrderEntity>> = dao.labOrders()
+
+    fun radiologyOrders(): Flow<List<RadiologyOrderEntity>> = dao.radiologyOrders()
+
     fun auditHistory(recordId: Long): Flow<List<RecordAuditLogEntity>> = dao.auditHistory(recordId)
 
     fun referenceItems(category: String): Flow<List<ReferenceCatalogEntity>> = dao.referenceItems(category)
