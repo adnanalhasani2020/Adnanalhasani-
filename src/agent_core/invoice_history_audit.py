@@ -36,11 +36,11 @@ class InvoiceHistoryIntegrityAuditor:
             raise ValidationError("Invoice identifier must be a valid UUID") from exc
 
         invoice = connection.execute(
-            "SELECT invoice_id,state,version_no FROM invoices WHERE invoice_id=?", (key,)
+            "SELECT invoice_id,state,version_no,created_at,updated_at FROM invoices WHERE invoice_id=?", (key,)
         ).fetchone()
         if invoice is None:
             raise ValidationError("Invoice does not exist")
-        persisted_id, state, version = invoice
+        persisted_id, state, version, created_at, updated_at = invoice
         rows = connection.execute(
             "SELECT actor_context_ref,historical_at,prior_version_ref,current_version_ref,change_payload_ref "
             "FROM domain_history WHERE target_ref=? AND owner_domain='commerce' "
@@ -58,6 +58,15 @@ class InvoiceHistoryIntegrityAuditor:
 
         previous_state = None
         previous_timestamp = None
+        try:
+            created_instant = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+            updated_instant = datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
+            if (created_instant.tzinfo is None or created_instant.utcoffset() is None
+                    or updated_instant.tzinfo is None or updated_instant.utcoffset() is None):
+                raise ValueError("Invoice lifecycle timestamps must be timezone-aware")
+        except (ValueError, TypeError, AttributeError):
+            created_instant = updated_instant = None
+            findings.append("invoice_lifecycle_timestamp_invalid")
         for index, (actor_ref, historical_at, prior_ref, current_ref, payload_ref) in enumerate(rows, start=1):
             if not isinstance(actor_ref, str) or not actor_ref.strip():
                 findings.append(f"history_actor_context_missing:{index}")
@@ -75,6 +84,10 @@ class InvoiceHistoryIntegrityAuditor:
             if parsed_timestamp is not None:
                 if previous_timestamp is not None and parsed_timestamp < previous_timestamp:
                     findings.append(f"history_timestamps_not_chronological:{index}")
+                if created_instant is not None and parsed_timestamp < created_instant:
+                    findings.append(f"history_timestamp_before_invoice_creation:{index}")
+                if updated_instant is not None and parsed_timestamp > updated_instant:
+                    findings.append(f"history_timestamp_after_invoice_update:{index}")
                 previous_timestamp = parsed_timestamp
 
             if current_ref != f"invoice-state:{persisted_id}:v{index}":
@@ -114,6 +127,9 @@ class InvoiceHistoryIntegrityAuditor:
             "history_actor_context_missing:",
             "history_timestamp_invalid:",
             "history_timestamps_not_chronological:",
+            "history_timestamp_before_invoice_creation:",
+            "history_timestamp_after_invoice_update:",
+            "invoice_lifecycle_timestamp_invalid",
             "invoice_history_exceeds_invoice_version",
         )
         if any(item.startswith(inconsistent_prefixes) for item in findings):
