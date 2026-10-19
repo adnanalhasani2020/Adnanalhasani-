@@ -227,7 +227,7 @@ class HospitalUserAuthAPITests(unittest.TestCase):
         self.assertEqual(row["status"], "open")
         self.assertEqual(audit["actor"], "doctor.user")
         self.assertEqual(audit["entity_type"], "encounter")
-        self.assertEqual(audit["entity_id"], encounter["id"])
+        self.assertEqual(audit["entity_id"], str(encounter["id"]))
 
     def test_doctor_cannot_save_blank_or_oversized_diagnosis(self):
         admin_token = self.login("admin.user", "administrator-password-123")
