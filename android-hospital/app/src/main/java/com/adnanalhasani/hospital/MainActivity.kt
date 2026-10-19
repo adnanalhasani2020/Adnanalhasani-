@@ -188,7 +188,7 @@ fun HospitalApp(dao: HospitalDao) {
                         module = currentModule,
                         records = all.filter { it.category == currentModule.key },
                         onSave = { title, details ->
-                            dao.insert(HospitalRecord(category = currentModule.key, title = title, details = details))
+                            dao.saveRecord(HospitalRecord(category = currentModule.key, title = title, details = details))
                         },
                         onDelete = { id -> scope.launch { dao.delete(id) } }
                     )
