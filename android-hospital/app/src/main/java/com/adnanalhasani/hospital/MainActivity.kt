@@ -303,9 +303,54 @@ private fun Dashboard(all: List<HospitalRecord>, onSelect: (String) -> Unit, onA
 
 @Composable
 private fun ModuleMenu(onSelect: (String) -> Unit) {
+    var query by remember { mutableStateOf("") }
+    val filteredModules = remember(query) {
+        modules.filter { module ->
+            module.title.contains(query.trim(), ignoreCase = true) ||
+                module.subtitle.contains(query.trim(), ignoreCase = true)
+        }
+    }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        item { Text("جميع أقسام النظام", fontSize = 22.sp, color = Navy, fontWeight = FontWeight.Bold); Text("اختر القسم الذي تريد فتحه", color = Muted, fontSize = 13.sp) }
-        items(modules) { module ->
+        item {
+            Text("جميع أقسام النظام", fontSize = 22.sp, color = Navy, fontWeight = FontWeight.Bold)
+            Text("اختر القسم الذي تريد فتحه", color = Muted, fontSize = 13.sp)
+            Spacer(Modifier.height(12.dp))
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("ابحث عن قسم أو خدمة") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = "بحث") },
+                trailingIcon = {
+                    if (query.isNotBlank()) {
+                        IconButton(onClick = { query = "" }) {
+                            Icon(Icons.Default.Close, contentDescription = "مسح البحث")
+                        }
+                    }
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(14.dp)
+            )
+        }
+        if (filteredModules.isEmpty()) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    shape = RoundedCornerShape(18.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(Icons.Default.SearchOff, contentDescription = null, tint = Muted, modifier = Modifier.size(32.dp))
+                        Spacer(Modifier.height(8.dp))
+                        Text("لا توجد أقسام تطابق البحث", color = Muted, fontSize = 13.sp)
+                    }
+                }
+            }
+        }
+        items(filteredModules) { module ->
             Card(
                 modifier = Modifier.fillMaxWidth().clickable { onSelect(module.key) },
                 shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color.White)
