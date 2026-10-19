@@ -94,6 +94,22 @@ data class MaintenanceTicketEntity(
     val createdAt: Long
 )
 
+@Entity(tableName = "business_profile")
+data class BusinessProfileEntity(
+    @PrimaryKey val id: Int = 1,
+    val name: String,
+    val legalName: String = "",
+    val businessType: String = "",
+    val registrationNumber: String = "",
+    val taxNumber: String = "",
+    val phone: String = "",
+    val email: String = "",
+    val address: String = "",
+    val website: String = "",
+    val currency: String = "YER",
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
 @Entity(tableName = "patients", indices = [Index(value = ["fileNumber"], unique = true)])
 data class PatientEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -191,6 +207,12 @@ interface HospitalDao {
 
     @Query("DELETE FROM module_records WHERE sourceRecordId = :sourceRecordId")
     suspend fun deleteModuleRecord(sourceRecordId: Long)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveBusinessProfile(profile: BusinessProfileEntity)
+
+    @Query("SELECT * FROM business_profile WHERE id = 1 LIMIT 1")
+    fun businessProfile(): Flow<BusinessProfileEntity?>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveEmergencyCase(entity: EmergencyCaseEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveIcuStay(entity: IcuStayEntity)
@@ -514,9 +536,10 @@ interface HospitalDao {
         DoctorEntity::class,
         AppointmentEntity::class,
         InvoiceEntity::class,
-        PaymentEntity::class
+        PaymentEntity::class,
+        BusinessProfileEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class HospitalDatabase : RoomDatabase() {
@@ -529,6 +552,12 @@ abstract class HospitalDatabase : RoomDatabase() {
          * Version 1 only contained hospital_records. CREATE TABLE IF NOT EXISTS leaves
          * those rows untouched and adds the new typed tables without destructive fallback.
          */
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS business_profile (id INTEGER NOT NULL PRIMARY KEY, name TEXT NOT NULL, legalName TEXT NOT NULL, businessType TEXT NOT NULL, registrationNumber TEXT NOT NULL, taxNumber TEXT NOT NULL, phone TEXT NOT NULL, email TEXT NOT NULL, address TEXT NOT NULL, website TEXT NOT NULL, currency TEXT NOT NULL, updatedAt INTEGER NOT NULL)")
+            }
+        }
+
         private val MIGRATION_4_5 = object : Migration(4, 5) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("CREATE TABLE IF NOT EXISTS emergency_cases (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, sourceRecordId INTEGER NOT NULL, caseNumber TEXT NOT NULL, patientName TEXT NOT NULL, arrivalTime TEXT NOT NULL, triageLevel TEXT NOT NULL, chiefComplaint TEXT NOT NULL, status TEXT NOT NULL, createdAt INTEGER NOT NULL)")
@@ -624,7 +653,7 @@ abstract class HospitalDatabase : RoomDatabase() {
                     HospitalDatabase::class.java,
                     "hospital-local.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                     .build()
                     .also { INSTANCE = it }
             }
