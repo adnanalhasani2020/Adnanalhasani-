@@ -13,6 +13,8 @@ import com.chaquo.python.Python;
 import com.chaquo.python.android.AndroidPlatform;
 
 import java.io.File;
+import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.security.SecureRandom;
 import android.util.Base64;
 
@@ -54,7 +56,19 @@ public class MainActivity extends Activity {
         }, "hospital-local-api");
         serverThread.setDaemon(true);
         serverThread.start();
-        new Handler().postDelayed(this::openLocalDashboard, 1200);
+        new Thread(() -> {
+            boolean ready = false;
+            for (int attempt = 0; attempt < 60 && !ready; attempt++) {
+                try (Socket socket = new Socket()) {
+                    socket.connect(new InetSocketAddress("127.0.0.1", PORT), 400);
+                    ready = true;
+                } catch (Exception ignored) {
+                    try { Thread.sleep(500); } catch (InterruptedException e) { Thread.currentThread().interrupt(); return; }
+                }
+            }
+            if (ready) runOnUiThread(this::openLocalDashboard);
+            else runOnUiThread(() -> Toast.makeText(this, "تعذر بدء قاعدة البيانات المحلية. أعد تشغيل التطبيق.", Toast.LENGTH_LONG).show());
+        }, "hospital-api-ready-check").start();
     }
 
     private void openLocalDashboard() {
