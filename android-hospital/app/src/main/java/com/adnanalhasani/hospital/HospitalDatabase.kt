@@ -309,8 +309,9 @@ interface HospitalDao {
                     invoiceNumber = record.title,
                     patientName = field("اسم المريض"),
                     patientId = findPatientIdByName(field("اسم المريض")),
-                    amountMinor = field("المبلغ").toBigDecimalOrNull()
-                        ?.movePointRight(2)?.toLong() ?: 0L,
+                    amountMinor = requireNotNull(
+                        HospitalFieldValidation.toMinorUnitsOrNull(field("المبلغ"))
+                    ) { "Invalid invoice amount" },
                     currency = field("العملة").ifBlank { "YER" },
                     status = field("الحالة").ifBlank { "open" },
                     createdAt = record.createdAt
@@ -320,8 +321,9 @@ interface HospitalDao {
                 PaymentEntity(
                     invoiceNumber = field("رقم الفاتورة").ifBlank { record.title },
                     invoiceId = findInvoiceIdByNumber(field("رقم الفاتورة").ifBlank { record.title }),
-                    amountMinor = field("المبلغ المدفوع").toBigDecimalOrNull()
-                        ?.movePointRight(2)?.toLong() ?: 0L,
+                    amountMinor = requireNotNull(
+                        HospitalFieldValidation.toMinorUnitsOrNull(field("المبلغ المدفوع"))
+                    ) { "Invalid payment amount" },
                     method = field("طريقة الدفع"),
                     receiptReference = field("مرجع الإيصال"),
                     createdAt = record.createdAt
