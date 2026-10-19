@@ -171,11 +171,9 @@ internal fun VaccinationScreen(repository: HospitalRepository, onDelete: (Long) 
                                         message = "تم حفظ السجل محلياً بنجاح."
                                     } else {
                                         val oldDetails = allRecords.firstOrNull { it.id == editing.sourceRecordId }?.details.orEmpty()
-                                        val oldHistory = oldDetails.substringAfter("\n\nسجل التعديلات:\n", "")
                                         val timestamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
-                                        val history = (oldHistory.lineSequence().filter { it.isNotBlank() }.toList() + "- $timestamp: تم تعديل سجل التطعيم").joinToString("\n")
-                                        val cleanDetails = details.substringBefore("\n\nسجل التعديلات:\n")
-                                        repository.updateRecord(editing.sourceRecordId, values["اسم الطفل"].orEmpty().trim(), "$cleanDetails\n\nسجل التعديلات:\n$history")
+                                        val savedDetails = RecordEditHistory.append(details, oldDetails, timestamp)
+                                        repository.updateRecord(editing.sourceRecordId, values["اسم الطفل"].orEmpty().trim(), savedDetails)
                                         editingRecord = null
                                         message = "تم حفظ التعديل مع تسجيل تاريخه."
                                     }
