@@ -47,9 +47,7 @@ fun ReferenceCatalogScreen(repository: HospitalRepository) {
     var description by remember { mutableStateOf("") }
     var message by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(Unit) {
-        referenceCategories.forEach { repository.seedReferenceDefaults(it.key, it.defaults) }
-    }
+    LaunchedEffect(Unit) { repository.seedDefaultReferenceCatalogs() }
 
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("إدارة القوائم المرجعية", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color(0xFF263B4D))
