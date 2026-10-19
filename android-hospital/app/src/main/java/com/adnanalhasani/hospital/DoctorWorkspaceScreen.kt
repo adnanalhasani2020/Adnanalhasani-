@@ -32,6 +32,9 @@ fun DoctorWorkspaceScreen(repository: HospitalRepository) {
     val doctors by repository.doctors().collectAsState(initial = emptyList())
     val visits by repository.clinicalVisits().collectAsState(initial = emptyList())
     val allRecords by repository.allRecords().collectAsState(initial = emptyList())
+    val labOrders by repository.labOrders().collectAsState(initial = emptyList())
+    val radiologyOrders by repository.radiologyOrders().collectAsState(initial = emptyList())
+    val prescriptionOrders by repository.prescriptionOrders().collectAsState(initial = emptyList())
 
     var patient by remember { mutableStateOf("") }
     var doctor by remember { mutableStateOf("") }
@@ -247,6 +250,25 @@ fun DoctorWorkspaceScreen(repository: HospitalRepository) {
                             if (visit.chiefComplaint.isNotBlank()) Text("الشكوى: ${visit.chiefComplaint}", fontSize = 13.sp)
                             if (visit.diagnosis.isNotBlank()) Text("التشخيص: ${visit.diagnosis}", fontSize = 13.sp)
                             if (visit.notes.isNotBlank()) Text("ملاحظات: ${visit.notes}", fontSize = 12.sp, color = Color(0xFF788895))
+                            val visitLabs = labOrders.filter { it.clinicalVisitId == visit.id }
+                            val visitRadiology = radiologyOrders.filter { it.clinicalVisitId == visit.id }
+                            val visitPrescriptions = prescriptionOrders.filter { it.clinicalVisitId == visit.id }
+                            if (visitLabs.isNotEmpty() || visitRadiology.isNotEmpty() || visitPrescriptions.isNotEmpty()) {
+                                HorizontalDivider()
+                                Text("الطلبات والوصفات المرتبطة بهذه الزيارة", fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = Color(0xFF356D69))
+                                visitLabs.forEach { order ->
+                                    Text("مختبر • ${order.testName} • ${order.status.ifBlank { "غير محدد" }}", fontSize = 12.sp)
+                                    if (order.result.isNotBlank()) Text("النتيجة: ${order.result}", fontSize = 11.sp, color = Color(0xFF788895))
+                                }
+                                visitRadiology.forEach { order ->
+                                    Text("أشعة • ${order.imagingType} • ${order.status.ifBlank { "غير محدد" }}", fontSize = 12.sp)
+                                    if (order.report.isNotBlank()) Text("التقرير: ${order.report}", fontSize = 11.sp, color = Color(0xFF788895))
+                                }
+                                visitPrescriptions.forEach { order ->
+                                    Text("وصفة • ${order.medicationName} • ${order.dose}", fontSize = 12.sp)
+                                    Text("${order.frequencyAndDuration} • ${order.status}", fontSize = 11.sp, color = Color(0xFF788895))
+                                }
+                            }
                             TextButton(onClick = {
                                 editingVisit = visit
                                 patient = visit.patientName
