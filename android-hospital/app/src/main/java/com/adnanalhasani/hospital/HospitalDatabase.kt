@@ -883,7 +883,7 @@ abstract class HospitalDatabase : RoomDatabase() {
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_clinical_visits_patientId ON clinical_visits(patientId)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_clinical_visits_doctorId ON clinical_visits(doctorId)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_clinical_visits_visitAt ON clinical_visits(visitAt)")
-                db.execSQL("INSERT OR IGNORE INTO clinical_visits (sourceRecordId, patientName, doctorName, chiefComplaint, diagnosis, notes, visitAt, createdAt) SELECT id, '', '', details, '', '', '', createdAt FROM hospital_records WHERE category = 'encounters'")
+                db.execSQL("INSERT OR IGNORE INTO clinical_visits (sourceRecordId, patientName, doctorName, chiefComplaint, diagnosis, notes, visitAt, createdAt) SELECT id, title, '', details, '', '', '', createdAt FROM hospital_records WHERE category = 'encounters'")
             }
         }
 
