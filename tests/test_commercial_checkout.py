@@ -190,6 +190,41 @@ def test_returning_checkout_sale_restores_stock_atomically_once(tmp_path):
     ).fetchone()[0] == 1
 
 
+def test_database_rejects_stock_return_while_invoice_is_issued(tmp_path):
+    db, request = setup_checkout(tmp_path)
+    CommercialCheckoutApplication().checkout(db, **request, now=NOW)
+    db.execute(
+        "INSERT INTO invoices(invoice_id,sale_id,obligation_id,state,issuer_ref,invoice_number,"
+        "issue_at,due_at,created_at,updated_at,provenance_id,version_no) "
+        "VALUES(?,?,NULL,'issued','issuer-test','INV-RETURN-GUARD',?,NULL,?,?,NULL,1)",
+        (uid(), request["sale_id"], STAMP, STAMP, STAMP),
+    )
+    db.commit()
+
+    with pytest.raises(
+        sqlite3.IntegrityError,
+        match="Sale return requires explicit Invoice reconciliation first",
+    ):
+        db.execute(
+            "INSERT INTO inventory_movements("
+            "inventory_movement_id,inventory_position_id,activity_id,product_id,offering_id,"
+            "location_ref,scope_key,quantity_delta,source_type,source_ref,actor_context_ref,"
+            "occurred_at,created_at) "
+            "SELECT ?,inventory_position_id,activity_id,product_id,offering_id,location_ref,"
+            "scope_key,-quantity_delta,'sale_return',source_ref,actor_context_ref,?,? "
+            "FROM inventory_movements WHERE source_type='sale' AND source_ref=?",
+            (uid(), STAMP, STAMP, request["sale_id"]),
+        )
+
+    assert db.execute(
+        "SELECT state FROM sales WHERE sale_id=?", (request["sale_id"],)
+    ).fetchone()[0] in {"completed", "fulfilled"}
+    assert db.execute(
+        "SELECT COUNT(*) FROM inventory_movements WHERE source_type='sale_return' AND source_ref=?",
+        (request["sale_id"],),
+    ).fetchone()[0] == 0
+
+
 def test_checkout_replay_returns_same_result_without_second_deduction(tmp_path):
     db, request = setup_checkout(tmp_path)
     app = CommercialCheckoutApplication()
