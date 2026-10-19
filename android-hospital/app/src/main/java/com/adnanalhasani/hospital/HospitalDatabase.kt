@@ -439,7 +439,7 @@ interface HospitalDao {
         issue: String, priority: String, status: String)
 
     @Transaction
-    suspend fun updateRecord(id: Long, title: String, details: String) {
+    suspend fun updateRecord(id: Long, title: String, details: String, linkedPatientId: Long? = null, linkedDoctorId: Long? = null) {
         val current = recordById(id) ?: return
         insertAuditLog(RecordAuditLogEntity(recordId = id, category = current.category, action = "UPDATE", oldTitle = current.title, newTitle = title, oldDetails = current.details, newDetails = details, changedAt = System.currentTimeMillis()))
         val fields = details.lineSequence().mapNotNull { line ->
@@ -451,11 +451,11 @@ interface HospitalDao {
         updateModuleRecordRow(id, title, details)
         when (current.category) {
             "encounters" -> {
-                val updated = updateClinicalVisit(id, findPatientIdByName(field("اسم المريض")), findDoctorIdByName(field("اسم الطبيب")),
+                val updated = updateClinicalVisit(id, linkedPatientId ?: findPatientIdByName(field("اسم المريض")), linkedDoctorId ?: findDoctorIdByName(field("اسم الطبيب")),
                     field("اسم المريض"), field("اسم الطبيب"), field("الشكوى الرئيسية", "الشكوى"),
                     field("التشخيص"), field("ملاحظات", "التشخيص والملاحظات"), field("تاريخ الزيارة", "التاريخ والوقت"))
                 if (updated == 0) saveClinicalVisit(ClinicalVisitEntity(sourceRecordId = id,
-                    patientId = findPatientIdByName(field("اسم المريض")), doctorId = findDoctorIdByName(field("اسم الطبيب")),
+                    patientId = linkedPatientId ?: findPatientIdByName(field("اسم المريض")), doctorId = linkedDoctorId ?: findDoctorIdByName(field("اسم الطبيب")),
                     patientName = field("اسم المريض"), doctorName = field("اسم الطبيب"),
                     chiefComplaint = field("الشكوى الرئيسية", "الشكوى"), diagnosis = field("التشخيص"),
                     notes = field("ملاحظات", "التشخيص والملاحظات"), visitAt = field("تاريخ الزيارة", "التاريخ والوقت"),
@@ -477,13 +477,13 @@ interface HospitalDao {
                 field("وحدة القياس"), field("ملاحظات"))
             "lab" -> {
                 updateLabOrderRow(id, field("اسم المريض"), findPatientIdByName(field("اسم المريض")), field("اسم الفحص"), field("حالة الفحص"), field("النتيجة"))
-                updateLabClinicalVisit(id, field("معرّف الزيارة").toLongOrNull())
+                updateLabClinicalVisit(id, field("معرّف الزيارة").toLongOrNull()?.let { existingClinicalVisitId(it) })
             }
             "radiology" -> {
                 updateRadiologyOrderRow(id, field("اسم المريض"), findPatientIdByName(field("اسم المريض")), field("نوع التصوير"), field("الطبيب الطالب"), findDoctorIdByName(field("الطبيب الطالب")), field("الحالة"), field("التقرير"))
-                updateRadiologyClinicalVisit(id, field("معرّف الزيارة").toLongOrNull())
+                updateRadiologyClinicalVisit(id, field("معرّف الزيارة").toLongOrNull()?.let { existingClinicalVisitId(it) })
             }
-            "prescriptions" -> updatePrescriptionOrderRow(id, field("اسم المريض"), findPatientIdByName(field("اسم المريض")), field("اسم الطبيب"), findDoctorIdByName(field("اسم الطبيب")), field("اسم الدواء"), field("الجرعة"), field("التكرار والمدة"), field("الحالة"), field("تعليمات إضافية", "ملاحظات"), field("معرّف الزيارة").toLongOrNull())
+            "prescriptions" -> updatePrescriptionOrderRow(id, field("اسم المريض"), findPatientIdByName(field("اسم المريض")), field("اسم الطبيب"), findDoctorIdByName(field("اسم الطبيب")), field("اسم الدواء"), field("الجرعة"), field("التكرار والمدة"), field("الحالة"), field("تعليمات إضافية", "ملاحظات"), field("معرّف الزيارة").toLongOrNull()?.let { existingClinicalVisitId(it) })
             "maintenance" -> updateMaintenanceTicketRow(id, title, field("مقدم البلاغ"),
                 field("الموقع"), field("نوع العطل"), field("الأولوية"), field("الحالة"))
             "patients" -> {
@@ -627,7 +627,7 @@ interface HospitalDao {
             "lab" -> saveLabOrder(LabOrderEntity(
                 sourceRecordId = sourceRecordId, patientName = field("اسم المريض"), testName = field("اسم الفحص"),
                 status = field("حالة الفحص"), result = field("النتيجة"), createdAt = record.createdAt,
-                patientId = findPatientIdByName(field("اسم المريض")), clinicalVisitId = field("معرّف الزيارة").toLongOrNull()
+                patientId = findPatientIdByName(field("اسم المريض")), clinicalVisitId = field("معرّف الزيارة").toLongOrNull()?.let { existingClinicalVisitId(it) }
             ))
             "radiology" -> saveRadiologyOrder(RadiologyOrderEntity(
                 sourceRecordId = sourceRecordId, patientName = field("اسم المريض"), imagingType = field("نوع التصوير"),
@@ -859,6 +859,9 @@ interface HospitalDao {
     @Query("SELECT * FROM prescription_orders ORDER BY createdAt DESC")
     fun prescriptionOrders(): Flow<List<PrescriptionOrderEntity>>
 
+    @Query("SELECT id FROM clinical_visits WHERE id = :id LIMIT 1")
+    suspend fun existingClinicalVisitId(id: Long): Long?
+
     @Query("DELETE FROM clinical_visits WHERE sourceRecordId = :id")
     suspend fun deleteClinicalVisit(id: Long)
 
@@ -1038,14 +1041,7 @@ abstract class HospitalDatabase : RoomDatabase() {
                     (sourceRecordId, patientId, doctorId, clinicalVisitId, patientName, doctorName, medicationName, dose, frequencyAndDuration, status, instructions, createdAt)
                     SELECT h.id, NULL, NULL, NULL, '', '', h.title, '', '', '', h.details, h.createdAt
                     FROM hospital_records h WHERE h.category = 'prescriptions'""".trimIndent())
-                db.execSQL("""UPDATE lab_orders SET clinicalVisitId = (
-                    SELECT v.id FROM clinical_visits v WHERE v.patientId = lab_orders.patientId
-                    ORDER BY v.visitAt DESC, v.createdAt DESC LIMIT 1
-                ) WHERE patientId IS NOT NULL""")
-                db.execSQL("""UPDATE radiology_orders SET clinicalVisitId = (
-                    SELECT v.id FROM clinical_visits v WHERE v.patientId = radiology_orders.patientId
-                    ORDER BY v.visitAt DESC, v.createdAt DESC LIMIT 1
-                ) WHERE patientId IS NOT NULL""")
+
             }
         }
 
