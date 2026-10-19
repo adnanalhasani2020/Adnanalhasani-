@@ -518,7 +518,7 @@ interface HospitalDao {
      * compatibility; selected core modules also get queryable structured rows.
      */
     @Transaction
-    suspend fun saveRecord(record: HospitalRecord) {
+    suspend fun saveRecord(record: HospitalRecord, linkedPatientId: Long? = null, linkedDoctorId: Long? = null) {
         val sourceRecordId = insert(record)
         insertAuditLog(RecordAuditLogEntity(recordId = sourceRecordId, category = record.category, action = "CREATE", newTitle = record.title, newDetails = record.details, changedAt = System.currentTimeMillis()))
         insertModuleRecord(
@@ -541,8 +541,8 @@ interface HospitalDao {
         when (record.category) {
             "encounters" -> saveClinicalVisit(ClinicalVisitEntity(
                 sourceRecordId = sourceRecordId,
-                patientId = findPatientIdByName(field("اسم المريض")),
-                doctorId = findDoctorIdByName(field("اسم الطبيب")),
+                patientId = linkedPatientId ?: findPatientIdByName(field("اسم المريض")),
+                doctorId = linkedDoctorId ?: findDoctorIdByName(field("اسم الطبيب")),
                 patientName = field("اسم المريض"),
                 doctorName = field("اسم الطبيب"),
                 chiefComplaint = field("الشكوى الرئيسية", "الشكوى"),
