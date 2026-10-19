@@ -310,13 +310,57 @@ interface HospitalDao {
     suspend fun referenceCount(category: String): Int
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
-    suspend fun insertReference(item: ReferenceCatalogEntity): Long
+    suspend fun insertReferenceRow(item: ReferenceCatalogEntity): Long
+
+    @Query("SELECT * FROM reference_catalog WHERE id = :id LIMIT 1")
+    suspend fun referenceById(id: Long): ReferenceCatalogEntity?
 
     @Query("UPDATE reference_catalog SET name = :name, description = :description, active = :active, updatedAt = :updatedAt WHERE id = :id")
-    suspend fun updateReference(id: Long, name: String, description: String, active: Boolean, updatedAt: Long): Int
+    suspend fun updateReferenceRow(id: Long, name: String, description: String, active: Boolean, updatedAt: Long): Int
 
     @Query("UPDATE reference_catalog SET active = 0, updatedAt = :updatedAt WHERE id = :id")
-    suspend fun deactivateReference(id: Long, updatedAt: Long): Int
+    suspend fun deactivateReferenceRow(id: Long, updatedAt: Long): Int
+
+    @Transaction
+    suspend fun insertReference(item: ReferenceCatalogEntity): Long {
+        val id = insertReferenceRow(item)
+        if (id > 0L) {
+            insertAuditLog(RecordAuditLogEntity(
+                recordId = id, category = "reference_catalog:\${item.category}", action = "CREATE",
+                newTitle = item.name, newDetails = item.description, changedAt = System.currentTimeMillis()
+            ))
+        }
+        return id
+    }
+
+    @Transaction
+    suspend fun updateReference(id: Long, name: String, description: String, active: Boolean, updatedAt: Long): Int {
+        val old = referenceById(id) ?: return 0
+        val changed = updateReferenceRow(id, name, description, active, updatedAt)
+        if (changed > 0) {
+            insertAuditLog(RecordAuditLogEntity(
+                recordId = id, category = "reference_catalog:\${old.category}", action = "UPDATE",
+                oldTitle = old.name, newTitle = name, oldDetails = old.description,
+                newDetails = description + if (active) "" else "\\nالحالة: معطّل",
+                changedAt = updatedAt
+            ))
+        }
+        return changed
+    }
+
+    @Transaction
+    suspend fun deactivateReference(id: Long, updatedAt: Long): Int {
+        val old = referenceById(id) ?: return 0
+        val changed = deactivateReferenceRow(id, updatedAt)
+        if (changed > 0) {
+            insertAuditLog(RecordAuditLogEntity(
+                recordId = id, category = "reference_catalog:\${old.category}", action = "DEACTIVATE",
+                oldTitle = old.name, newTitle = old.name, oldDetails = old.description,
+                newDetails = old.description + "\\nالحالة: معطّل", changedAt = updatedAt
+            ))
+        }
+        return changed
+    }
 
     @Query("SELECT * FROM hospital_records WHERE category = :category ORDER BY createdAt DESC")
     fun records(category: String): Flow<List<HospitalRecord>>
