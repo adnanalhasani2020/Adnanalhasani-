@@ -139,14 +139,18 @@ class PaymentApplication:
         if action_state != "approved":
             raise ValidationError("Payment operation requires an approved AgentAction")
         approval = connection.execute(
-            "SELECT approver_person_id FROM approvals "
+            "SELECT approver_person_id, decision_at FROM approvals "
             "WHERE agent_action_id=? AND state='APPROVED' AND approver_person_id IS NOT NULL "
             "ORDER BY decision_at DESC LIMIT 1",
             (action_key,),
         ).fetchone()
         if approval is None:
             raise ValidationError("Payment operation requires a recorded human approval")
-        approver = approval[0]
+        approver, decision_at = approval
+        if self._instant(decision_at, "Human approval decision timestamp") > instant:
+            raise ValidationError(
+                "Payment operation timestamp cannot precede human approval decision"
+            )
         if connection.execute(
             "SELECT 1 FROM persons WHERE person_id=? AND state='active'", (approver,)
         ).fetchone() is None:
