@@ -451,8 +451,11 @@ interface HospitalDao {
     @Query("SELECT * FROM hospital_records WHERE id = :id LIMIT 1")
     suspend fun recordById(id: Long): HospitalRecord?
 
-    @Query("DELETE FROM patients WHERE fileNumber = :key AND createdAt = :createdAt")
-    suspend fun deletePatientRecord(key: String, createdAt: Long)
+    @Query("SELECT COUNT(*) FROM hospital_records WHERE category = 'patients' AND title = :key AND id != :id")
+    suspend fun countOtherPatientRecords(key: String, id: Long): Int
+
+    @Query("DELETE FROM patients WHERE fileNumber = :key")
+    suspend fun deletePatientRecord(key: String)
 
     @Query("DELETE FROM doctors WHERE employeeNumber = :key AND createdAt = :createdAt")
     suspend fun deleteDoctorRecord(key: String, createdAt: Long)
