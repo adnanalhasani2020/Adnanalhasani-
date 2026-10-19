@@ -398,6 +398,18 @@ class PaymentApplication:
                 raise ValidationError("Payment transition timestamp cannot precede the current update timestamp")
             if target_state not in _PAYMENT_TRANSITIONS.get(record.state, set()):
                 raise ValidationError(f"Payment cannot transition from {record.state} to {target_state}")
+            # A Payment may have been initiated while its Invoice was issued, then
+            # the Invoice could have been voided before the provider reports success.
+            # Never advance that Payment to completed against a now-void Invoice.
+            if target_state == "completed" and record.invoice_id is not None:
+                invoice_state = connection.execute(
+                    "SELECT state FROM invoices WHERE invoice_id=?",
+                    (str(record.invoice_id),),
+                ).fetchone()
+                if invoice_state is None or invoice_state[0] != "issued":
+                    raise ValidationError(
+                        "Payment cannot complete unless its linked Invoice remains issued"
+                    )
             next_version = record.version_no + 1
             cursor = connection.execute(
                 "UPDATE payments SET state=?, updated_at=?, version_no=? "
@@ -414,4 +426,6 @@ class PaymentApplication:
                  f"payment-state:{key}:v{record.version_no}",
                  f"payment-state:{key}:v{next_version}", f"state:{target_state}", timestamp),
             )
-        return self._load(connection, key)
+            # Validate the final persisted shape before the atomic scope commits.
+            # If any invariant fails, the Payment row and history must roll back.
+            return self._load(connection, key)
