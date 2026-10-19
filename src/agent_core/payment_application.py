@@ -283,6 +283,15 @@ class PaymentApplication:
                     raise ValidationError(
                         "Payment Invoice and Obligation references do not match"
                     )
+                invoice_issuer = connection.execute(
+                    "SELECT issuer_ref FROM invoices WHERE invoice_id=?", (invoice,)
+                ).fetchone()
+                if invoice_issuer is None:
+                    raise ValidationError("Payment references a missing Invoice")
+                if invoice_issuer[0] != payee:
+                    raise ValidationError(
+                        "Payment payee must match the linked Invoice issuer"
+                    )
             connection.execute(
                 "INSERT INTO payments(payment_id,obligation_id,invoice_id,payer_person_id,payee_person_id,"
                 "amount_minor,currency_code,state,provider_ref,external_payment_ref,created_at,updated_at,"
