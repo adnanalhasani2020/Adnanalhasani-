@@ -9,6 +9,10 @@ import kotlinx.coroutines.flow.Flow
 class HospitalRepository(private val dao: HospitalDao) {
     fun allRecords(): Flow<List<HospitalRecord>> = dao.allRecords()
 
+    fun patients(): Flow<List<PatientEntity>> = dao.patients()
+
+    fun doctors(): Flow<List<DoctorEntity>> = dao.doctors()
+
     fun recentAuditHistory(): Flow<List<RecordAuditLogEntity>> = dao.recentAuditHistory()
 
     fun clinicalVisits(): Flow<List<ClinicalVisitEntity>> = dao.clinicalVisits()
@@ -78,6 +82,9 @@ class HospitalRepository(private val dao: HospitalDao) {
     fun overdueVaccinations(today: String): Flow<List<VaccinationRecordEntity>> = dao.overdueVaccinations(today)
 
     suspend fun saveRecord(record: HospitalRecord) = dao.saveRecord(record)
+
+    suspend fun saveClinicalVisit(record: HospitalRecord, patientId: Long, doctorId: Long) =
+        dao.saveRecord(record, linkedPatientId = patientId, linkedDoctorId = doctorId)
 
     suspend fun updateRecord(id: Long, title: String, details: String) = dao.updateRecord(id, title, details)
 
