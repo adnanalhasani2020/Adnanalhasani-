@@ -358,6 +358,7 @@ private fun HospitalWorkspace(repository: HospitalRepository) {
                         }
                     )
                     currentModule != null -> ModuleScreen(
+                        repository = repository,
                         module = currentModule,
                         records = all.filter { it.category == currentModule.key },
                         specializedRows = specializedRows,
@@ -915,6 +916,7 @@ private fun ModuleInputField(
 
 @Composable
 private fun ModuleScreen(
+    repository: HospitalRepository,
     module: Module,
     records: List<HospitalRecord>,
     specializedRows: List<Pair<String, String>>,
@@ -1398,32 +1400,3 @@ private fun SettingsScreen(allCount: Int, exportStatus: String?, onBusinessProfi
             Card(
                 colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF8EC)),
                 shape = RoundedCornerShape(18.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF0E5D2))
-            ) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                    Text("مهم قبل الاستخدام الحقيقي", color = Color(0xFF87520E), fontWeight = FontWeight.Bold)
-                    Text("هذه النسخة تحفظ السجلات محلياً على الجهاز. لم يُنفّذ بعد تسجيل دخول آمن أو مزامنة مع خادم Python أو نقل بيانات قاعدة المستشفى الحالية. لا تستخدم بيانات مرضى حقيقية قبل استكمال الأمان والاختبارات والتحقق السريري.", color = Color(0xFF805C20), fontSize = 12.sp, lineHeight = 19.sp)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SettingRow(icon: ImageVector, title: String, subtitle: String, color: Color) {
-    Row(
-        Modifier.fillMaxWidth()
-            .background(Color.White, RoundedCornerShape(18.dp))
-            .padding(15.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(Modifier.size(44.dp).background(color.copy(alpha = .12f), RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
-            Icon(icon, null, tint = color)
-        }
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(title, color = Navy, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-            Text(subtitle, color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
-        }
-    }
-}
