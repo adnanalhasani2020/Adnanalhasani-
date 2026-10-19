@@ -129,7 +129,7 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                 self.send_header("X-Frame-Options", "DENY")
                 self.send_header("Referrer-Policy", "no-referrer")
                 self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-                self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'")
+                self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'")
                 self.end_headers()
                 self.wfile.write(page)
                 return
