@@ -9,6 +9,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
@@ -96,6 +97,75 @@ interface HospitalDao {
 
     @Insert
     suspend fun insert(record: HospitalRecord)
+
+    /**
+     * Keep the legacy searchable timeline and the typed domain table in sync.
+     * The original user-entered values remain in hospital_records for backward
+     * compatibility; selected core modules also get queryable structured rows.
+     */
+    @Transaction
+    suspend fun saveRecord(record: HospitalRecord) {
+        insert(record)
+        val fields = record.details.lineSequence().mapNotNull { line ->
+            val separator = line.indexOf(": ")
+            if (separator <= 0) null
+            else line.substring(0, separator).trim() to line.substring(separator + 2).trim()
+        }.toMap()
+        fun field(vararg names: String): String =
+            names.firstNotNullOfOrNull { name -> fields[name]?.takeIf { it.isNotBlank() } }.orEmpty()
+
+        when (record.category) {
+            "patients" -> upsertPatient(
+                PatientEntity(
+                    fileNumber = record.title,
+                    fullName = field("اسم المريض").ifBlank { record.title },
+                    phone = field("رقم الهاتف"),
+                    age = field("العمر"),
+                    notes = field("ملاحظات"),
+                    createdAt = record.createdAt
+                )
+            )
+            "doctors" -> upsertDoctor(
+                DoctorEntity(
+                    employeeNumber = record.title,
+                    fullName = field("اسم الطبيب").ifBlank { record.title },
+                    specialty = field("التخصص"),
+                    phone = field("رقم الهاتف"),
+                    createdAt = record.createdAt
+                )
+            )
+            "appointments" -> insertAppointment(
+                AppointmentEntity(
+                    patientName = field("اسم المريض"),
+                    doctorName = field("اسم الطبيب"),
+                    appointmentAt = field("التاريخ والوقت"),
+                    reason = field("سبب الزيارة"),
+                    createdAt = record.createdAt
+                )
+            )
+            "invoices" -> upsertInvoice(
+                InvoiceEntity(
+                    invoiceNumber = record.title,
+                    patientName = field("اسم المريض"),
+                    amountMinor = field("المبلغ").toBigDecimalOrNull()
+                        ?.movePointRight(2)?.toLong() ?: 0L,
+                    currency = field("العملة").ifBlank { "YER" },
+                    status = field("الحالة").ifBlank { "open" },
+                    createdAt = record.createdAt
+                )
+            )
+            "payments" -> insertPayment(
+                PaymentEntity(
+                    invoiceNumber = record.title,
+                    amountMinor = field("المبلغ المدفوع").toBigDecimalOrNull()
+                        ?.movePointRight(2)?.toLong() ?: 0L,
+                    method = field("طريقة الدفع"),
+                    receiptReference = field("مرجع الإيصال"),
+                    createdAt = record.createdAt
+                )
+            )
+        }
+    }
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertPatient(patient: PatientEntity)
