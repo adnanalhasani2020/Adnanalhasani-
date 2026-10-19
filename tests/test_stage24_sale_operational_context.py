@@ -111,3 +111,18 @@ def test_sale_activity_mismatch_is_rejected_without_mutating_persisted_sale():
     assert result.offering_context.activity_id == activity
     assert "sale_offering_activity_mismatch" not in result.integrity_issues
     db.close()
+
+
+def test_sale_operational_context_reports_corrupted_persisted_state_and_version():
+    db = connect_database()
+    _, _, _, sale = fixture(db)
+    db.execute("UPDATE sales SET state='corrupted-state', version_no=0 WHERE sale_id=?", (sale,))
+    db.commit()
+
+    result = SaleOperationalContextReader().read(db, sale)
+
+    assert result.sale_state == "corrupted-state"
+    assert result.sale_version == 0
+    assert "sale_state_invalid" in result.integrity_issues
+    assert "sale_version_invalid" in result.integrity_issues
+    db.close()
