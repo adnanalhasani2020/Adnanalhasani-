@@ -217,6 +217,24 @@ internal fun EmergencyScreen(repository: HospitalRepository, onDelete: (Long) ->
                     }
                     if (vitals.isNotEmpty()) Text(vitals.joinToString(" • "), color = erMuted, fontSize = 11.sp, lineHeight = 16.sp)
                     if (parsed["ملاحظات التسليم"].orEmpty().isNotBlank()) Text("التسليم: " + parsed["ملاحظات التسليم"].orEmpty(), color = erMuted, fontSize = 12.sp)
+                    Text("تحديث مسار الحالة", color = erMuted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        listOf("قيد العلاج", "تحويل", "تنويم", "خروج").forEach { nextStatus ->
+                            TextButton(
+                                onClick = {
+                                    val updatedDetails = record.details.lineSequence().map { line ->
+                                        if (line.startsWith("حالة الحالة:")) "حالة الحالة: " + nextStatus else line
+                                    }.joinToString("\\n")
+                                    scope.launch {
+                                        runCatching { repository.updateEmergencyCase(record.id, updatedDetails, nextStatus) }
+                                            .onFailure { error = "تعذر تحديث حالة الطوارئ." }
+                                    }
+                                },
+                                enabled = caseStatus != nextStatus,
+                                contentPadding = PaddingValues(horizontal = 5.dp, vertical = 2.dp)
+                            ) { Text(nextStatus, fontSize = 10.sp, color = if (nextStatus == "خروج") erGreen else erNavy) }
+                        }
+                    }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                         TextButton(onClick = { pendingDelete = record }) {
                             Icon(Icons.Default.DeleteOutline, null, tint = erRed)
