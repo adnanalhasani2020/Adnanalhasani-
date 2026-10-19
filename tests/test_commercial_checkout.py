@@ -478,8 +478,9 @@ def test_inventory_movement_must_fall_inside_position_effective_window(tmp_path,
     db.execute(
         """INSERT INTO sale_lines(
                sale_line_id, sale_id, offering_id, product_id, quantity,
-               unit_price_minor, currency_code, line_total_minor, created_at
-           ) VALUES(?,?,?,?,1,1250,'SAR',1250,?)""",
+               unit_price_minor, currency_code, line_total_minor, created_at,
+               product_name_snapshot
+           ) VALUES(?,?,?,?,1,1250,'SAR',1250,?,'Bottle')""",
         (uid(), request["sale_id"], request["offering_id"],
          db.execute("SELECT product_id FROM offerings WHERE offering_id=?",
                     (request["offering_id"],)).fetchone()[0], STAMP),
