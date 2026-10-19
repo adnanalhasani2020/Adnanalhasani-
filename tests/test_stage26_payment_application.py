@@ -583,6 +583,9 @@ def test_payment_transition_rejects_non_string_target_states_without_mutation(ta
 @pytest.mark.parametrize("payment_obligation_mode", ["different", "missing"])
 def test_payment_restore_rejects_persisted_invoice_obligation_mismatch(payment_obligation_mode):
     db = connect_database()
+    # This test deliberately simulates a pre-existing/corrupted legacy row. The
+    # migration now prevents creating this mismatch through normal SQL writes.
+    db.execute("DROP TRIGGER payment_invoice_obligation_link_insert")
     payer, payee, approver, agent, context, obligation = seed(db)
     other_obligation = uid()
     db.execute(
