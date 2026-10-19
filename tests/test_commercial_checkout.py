@@ -650,3 +650,33 @@ def test_checkout_fails_closed_when_stock_observation_ties_inventory_movement_ti
     assert db.execute("SELECT COUNT(*) FROM sale_lines").fetchone()[0] == 1
     assert db.execute("SELECT COUNT(*) FROM inventory_movements").fetchone()[0] == 1
     assert db.execute("SELECT COUNT(*) FROM commercial_checkout_receipts").fetchone()[0] == 1
+
+
+
+def test_checkout_receipt_is_immutable_and_remains_replayable(tmp_path):
+    db, request = setup_checkout(tmp_path)
+    app = CommercialCheckoutApplication()
+    original = app.checkout(db, **request, now=NOW)
+
+    with pytest.raises(sqlite3.IntegrityError, match="receipt evidence is immutable"):
+        db.execute(
+            "UPDATE commercial_checkout_receipts SET response_json='{}' "
+            "WHERE actor_person_id=? AND idempotency_key=?",
+            (request["actor_person_id"], request["idempotency_key"]),
+        )
+    db.rollback()
+
+    with pytest.raises(sqlite3.IntegrityError, match="receipt evidence is immutable"):
+        db.execute(
+            "DELETE FROM commercial_checkout_receipts "
+            "WHERE actor_person_id=? AND idempotency_key=?",
+            (request["actor_person_id"], request["idempotency_key"]),
+        )
+    db.rollback()
+
+    replay = app.checkout(db, **request, now=NOW)
+    assert replay == original
+    assert db.execute("SELECT COUNT(*) FROM sales").fetchone()[0] == 1
+    assert db.execute("SELECT COUNT(*) FROM sale_lines").fetchone()[0] == 1
+    assert db.execute("SELECT COUNT(*) FROM inventory_movements").fetchone()[0] == 1
+    assert db.execute("SELECT COUNT(*) FROM commercial_checkout_receipts").fetchone()[0] == 1
