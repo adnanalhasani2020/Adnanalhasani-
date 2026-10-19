@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent" android:layout_height="match_parent" android:background="@color/hospital_background" android:fillViewport="true">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="20dp">
+        <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" app:cardBackgroundColor="@color/hospital_primary" app:cardCornerRadius="24dp" app:cardElevation="0dp">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="24dp">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="نظام إدارة المستشفى" android:textColor="@color/white" android:textSize="25sp" android:textStyle="bold" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="إدارة منظمة للرعاية والعمليات اليومية" android:textColor="#DDF2EF" android:textSize="14sp" />
+                <TextView android:id="@+id/txtPatientCount" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="24dp" android:text="المرضى المسجلون: 0" android:textColor="@color/white" android:textSize="16sp" android:textStyle="bold" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="26dp" android:layout_marginBottom="12dp" android:text="الوصول السريع" android:textColor="@color/hospital_text" android:textSize="20sp" android:textStyle="bold" />
+        <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" app:cardCornerRadius="18dp" app:cardElevation="1dp" app:strokeColor="#DDE7E9" app:strokeWidth="1dp">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal" android:padding="18dp">
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="المرضى" android:textColor="@color/hospital_text" android:textSize="18sp" android:textStyle="bold" />
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="تسجيل المرضى وعرض السجلات المحفوظة" android:textColor="@color/hospital_muted" android:textSize="13sp" />
+                </LinearLayout>
+                <com.google.android.material.button.MaterialButton android:id="@+id/btnPatients" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="فتح المرضى" app:cornerRadius="12dp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="18dp" android:text="نسخة تطوير أولية — سجلات التجربة تحفظ محليًا على هذا الجهاز." android:textColor="@color/hospital_muted" android:textSize="12sp" />
+    </LinearLayout>
+</ScrollView>
