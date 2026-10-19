@@ -11,6 +11,23 @@ class HospitalRepository(private val dao: HospitalDao) {
 
     fun referenceItems(category: String): Flow<List<ReferenceCatalogEntity>> = dao.referenceItems(category)
 
+    suspend fun seedDefaultReferenceCatalogs() {
+        val defaults = mapOf(
+            "lab_tests" to listOf("صورة دم كاملة CBC", "سكر الدم", "الهيموغلوبين السكري HbA1c", "وظائف الكلى", "وظائف الكبد", "تحليل البول", "سرعة الترسيب ESR", "CRP", "دهون الدم", "هرمون الغدة الدرقية TSH"),
+            "medications" to listOf("باراسيتامول", "إيبوبروفين", "أموكسيسيلين", "أوميبرازول", "ميتفورمين", "محلول ملحي 0.9%", "سيتريزين"),
+            "diagnoses" to listOf("ارتفاع ضغط الدم", "داء السكري من النوع الثاني", "فقر الدم", "التهاب الجهاز التنفسي العلوي", "التهاب المسالك البولية", "الربو", "التهاب المعدة والأمعاء"),
+            "specialties" to listOf("طب الأسرة", "الباطنية", "الجراحة العامة", "طب الأطفال", "النساء والولادة", "القلب", "العظام", "الأنف والأذن والحنجرة", "العيون", "الجلدية"),
+            "departments" to listOf("الطوارئ", "العيادات الخارجية", "الباطنية", "الجراحة", "الأطفال", "النساء والولادة", "العناية المركزة", "المختبر", "الأشعة", "الصيدلية"),
+            "blood_groups" to listOf("A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"),
+            "payment_methods" to listOf("نقداً", "بطاقة", "تحويل بنكي", "تأمين"),
+            "lab_status" to listOf("مطلوب", "قيد التنفيذ", "مكتمل", "ملغي"),
+            "admission_status" to listOf("قيد التقييم", "منوّم", "خرج", "محول"),
+            "vaccination_status" to listOf("تم التطعيم", "موعد قادم", "تأجيل", "تعذر"),
+            "imaging_types" to listOf("أشعة سينية X-Ray", "موجات فوق صوتية", "أشعة مقطعية CT", "رنين مغناطيسي MRI")
+        )
+        defaults.forEach { (category, names) -> seedReferenceDefaults(category, names) }
+    }
+
     suspend fun seedReferenceDefaults(category: String, names: List<String>) {
         if (dao.referenceCount(category) > 0) return
         names.distinct().forEach { name ->
