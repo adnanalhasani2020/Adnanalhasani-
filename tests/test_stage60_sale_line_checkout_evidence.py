@@ -5,7 +5,6 @@ import pytest
 
 from agent_core.application import SaleApplication
 from agent_core.commerce_checkout import CommercialCheckoutApplication
-from agent_core.shared import ValidationError
 from test_commercial_checkout import NOW, setup_checkout, uid
 
 
