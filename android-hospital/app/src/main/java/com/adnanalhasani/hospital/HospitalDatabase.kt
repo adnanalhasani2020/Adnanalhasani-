@@ -949,7 +949,7 @@ interface HospitalDao {
         RecordAuditLogEntity::class,
         ClinicalVisitEntity::class
     ],
-    version = 13,
+    version = 14,
     exportSchema = false
 )
 abstract class HospitalDatabase : RoomDatabase() {
@@ -1012,6 +1012,29 @@ abstract class HospitalDatabase : RoomDatabase() {
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_radiology_orders_patientId ON radiology_orders(patientId)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_radiology_orders_doctorId ON radiology_orders(doctorId)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_radiology_orders_status_createdAt ON radiology_orders(status, createdAt)")
+            }
+        }
+
+        /**
+         * Audit rows are historical evidence, not editable application data.
+         * Corrections must be recorded as a new event rather than rewriting history.
+         */
+        private val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TRIGGER IF NOT EXISTS record_audit_log_reject_update
+                    BEFORE UPDATE ON record_audit_log
+                    BEGIN
+                        SELECT RAISE(ABORT, 'record_audit_log is append-only');
+                    END
+                """.trimIndent())
+                db.execSQL("""
+                    CREATE TRIGGER IF NOT EXISTS record_audit_log_reject_delete
+                    BEFORE DELETE ON record_audit_log
+                    BEGIN
+                        SELECT RAISE(ABORT, 'record_audit_log is append-only');
+                    END
+                """.trimIndent())
             }
         }
 
@@ -1222,7 +1245,7 @@ abstract class HospitalDatabase : RoomDatabase() {
                     HospitalDatabase::class.java,
                     "hospital-local.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14)
                     .build()
                     .also { INSTANCE = it }
             }
