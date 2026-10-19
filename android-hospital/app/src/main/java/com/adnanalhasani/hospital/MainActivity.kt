@@ -600,6 +600,11 @@ private val numericFieldLabels = setOf(
     "السعر المرجعي", "مدة النتيجة"
 )
 
+private val integerFieldLabels = setOf(
+    "العمر", "النبض", "التنفس", "عدد الأسرة", "عدد الوحدات", "الطابق",
+    "رقم السن", "مدة الجلسة", "مدة النتيجة"
+)
+
 private val longTextFieldLabels = setOf(
     "ملاحظات", "ملاحظات إدارية", "ملاحظات التمريض", "ملاحظات الفريق",
     "التشخيص والملاحظات", "النتيجة", "التقرير", "الجرعة / الوصفة",
@@ -701,6 +706,8 @@ private fun ModuleInputField(
 
     val keyboardType = when {
         label.contains("الهاتف") || label.contains("التواصل") -> KeyboardType.Phone
+        label.contains("البريد") -> KeyboardType.Email
+        label in integerFieldLabels -> KeyboardType.Number
         label in numericFieldLabels -> KeyboardType.Decimal
         else -> KeyboardType.Text
     }
@@ -860,6 +867,9 @@ private fun ModuleScreen(
                                 val raw = values[label]?.trim().orEmpty()
                                 if (label !in numericFieldLabels || raw.isBlank()) {
                                     false
+                                } else if (label in integerFieldLabels) {
+                                    val number = raw.toLongOrNull()
+                                    number == null || number < 0
                                 } else {
                                     val number = raw.toBigDecimalOrNull()
                                     number == null || number.signum() < 0
