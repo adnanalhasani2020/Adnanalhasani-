@@ -9,6 +9,11 @@ import kotlinx.coroutines.flow.Flow
 class HospitalRepository(private val dao: HospitalDao) {
     fun allRecords(): Flow<List<HospitalRecord>> = dao.allRecords()
 
+    fun businessProfile(): Flow<BusinessProfileEntity?> = dao.businessProfile()
+
+    suspend fun saveBusinessProfile(profile: BusinessProfileEntity) =
+        dao.saveBusinessProfile(profile.copy(id = 1, updatedAt = System.currentTimeMillis()))
+
     fun recordsForModule(category: String): Flow<List<ModuleRecordEntity>> =
         dao.moduleRecords(category)
 
