@@ -779,3 +779,90 @@ def test_payment_rejects_invoice_issuer_mismatch_without_writes():
         (payment_id,),
     ).fetchone()[0] == 0
     db.close()
+
+
+def test_partial_payments_cannot_exceed_remaining_obligation_balance():
+    db = connect_database()
+    parties = seed(db)
+    app = PaymentApplication()
+    first, _ = create_payment(db, app, parties, amount=7000)
+    assert first.amount_minor == 7000
+
+    with pytest.raises(ValidationError, match="remaining linked Obligation balance"):
+        create_payment(db, app, parties, amount=4000)
+
+    assert db.execute(
+        "SELECT COALESCE(SUM(amount_minor),0) FROM payments WHERE obligation_id=? "
+        "AND state IN ('initiated','pending','completed')",
+        (str(parties[-1]),),
+    ).fetchone()[0] == 7000
+    assert db.execute("SELECT COUNT(*) FROM payments").fetchone()[0] == 1
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE owner_domain='payments' "
+        "AND change_type='payment_state_transition'"
+    ).fetchone()[0] == 1
+    db.close()
+
+
+def test_payment_history_auditor_accepts_complete_chain_and_detects_actor_tampering():
+    from agent_core.payment_history_audit import PaymentHistoryIntegrityAuditor
+
+    db = connect_database()
+    parties = seed(db)
+    app = PaymentApplication()
+    payment, parties = create_payment(db, app, parties, amount=4000)
+    grant, action = authorize(
+        db, agent=parties[3], context=parties[4], payment_id=str(payment.payment_id),
+        action_code="payment.transition.completed", approver=parties[2],
+    )
+    app.transition_payment(
+        db, payment.payment_id, "completed", expected_version=1, context_ref=parties[4],
+        authorization_grant_id=grant, agent_action_id=action,
+        now="2026-10-10T12:01:00Z",
+    )
+
+    auditor = PaymentHistoryIntegrityAuditor()
+    result = auditor.inspect(db, str(payment.payment_id))
+    assert result.status == "consistent"
+    assert result.payment_version == result.history_record_count == 2
+
+    db.execute(
+        "UPDATE domain_history SET actor_context_ref=' ' WHERE target_ref=? "
+        "AND change_type='payment_state_transition' AND current_version_ref=?",
+        (str(payment.payment_id), f"payment-state:{payment.payment_id}:v2"),
+    )
+    db.commit()
+    result = auditor.inspect(db, str(payment.payment_id))
+    assert result.status == "inconsistent"
+    assert "history_actor_context_missing:2" in result.findings
+    db.close()
+
+
+def test_payment_history_auditor_detects_non_chronological_events():
+    from agent_core.payment_history_audit import PaymentHistoryIntegrityAuditor
+
+    db = connect_database()
+    parties = seed(db)
+    app = PaymentApplication()
+    payment, parties = create_payment(db, app, parties, amount=4000)
+    grant, action = authorize(
+        db, agent=parties[3], context=parties[4], payment_id=str(payment.payment_id),
+        action_code="payment.transition.completed", approver=parties[2],
+    )
+    app.transition_payment(
+        db, payment.payment_id, "completed", expected_version=1, context_ref=parties[4],
+        authorization_grant_id=grant, agent_action_id=action,
+        now="2026-10-10T12:01:00Z",
+    )
+    db.execute(
+        "UPDATE domain_history SET historical_at='2026-10-10T12:02:00Z' "
+        "WHERE target_ref=? AND change_type='payment_state_transition' "
+        "AND current_version_ref=?",
+        (str(payment.payment_id), f"payment-state:{payment.payment_id}:v1"),
+    )
+    db.commit()
+
+    result = PaymentHistoryIntegrityAuditor().inspect(db, str(payment.payment_id))
+    assert result.status == "inconsistent"
+    assert "history_timestamps_not_chronological:2" in result.findings
+    db.close()
