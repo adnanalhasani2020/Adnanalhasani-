@@ -853,6 +853,9 @@ def test_invoice_void_rejects_sale_offering_activity_mismatch_without_writes():
         "VALUES(?,?,'active',?,?)",
         (other_activity, actor, STAMP, STAMP),
     )
+    # Deliberately bypass the database invariant trigger to model a legacy or
+    # externally-corrupted database; the application guard must still fail closed.
+    db.execute("DROP TRIGGER offering_activity_preserves_sales_context")
     db.execute("UPDATE offerings SET activity_id=? WHERE offering_id=(SELECT offering_id FROM sales WHERE sale_id=?)",
                (other_activity, sale))
     db.commit()
