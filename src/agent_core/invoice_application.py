@@ -224,6 +224,17 @@ class InvoiceApplication:
                 (issuer_key, invoice_number),
             ).fetchone() is not None:
                 raise ValidationError("Invoice number already exists for this issuer")
+            # A Sale may have at most one currently issued Invoice. The check is
+            # inside BEGIN IMMEDIATE / the caller's transaction, so concurrent SQLite
+            # issuances cannot both pass it. A voided invoice remains in history and
+            # does not block a properly reconciled replacement.
+            if connection.execute(
+                "SELECT 1 FROM invoices WHERE sale_id=? AND state='issued' LIMIT 1",
+                (sale_key,),
+            ).fetchone() is not None:
+                raise ValidationError(
+                    "Sale already has an issued Invoice; explicit reconciliation is required"
+                )
             if obligation_key is not None:
                 obligation = connection.execute(
                     "SELECT creditor_person_id, source_invoice_id, state "
