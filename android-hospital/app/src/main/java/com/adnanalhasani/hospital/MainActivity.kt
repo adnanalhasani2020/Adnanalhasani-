@@ -214,7 +214,7 @@ private fun Dashboard(all: List<HospitalRecord>, onSelect: (String) -> Unit, onA
         item {
             Box(
                 Modifier.fillMaxWidth().background(
-                    Brush.linearGradient(listOf(Color(0xFF16365B), Color(0xFF087E82))),
+                    Brush.linearGradient(listOf(Color(0xFF415B70), Color(0xFF548F88))),
                     RoundedCornerShape(26.dp)
                 ).padding(22.dp)
             ) {
@@ -254,7 +254,12 @@ private fun Dashboard(all: List<HospitalRecord>, onSelect: (String) -> Unit, onA
                 metrics.chunked(2).forEach { row ->
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         row.forEach { (label, count, color) ->
-                            Card(Modifier.weight(1f), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                            Card(
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(20.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color.White),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Border)
+                            ) {
                                 Column(Modifier.padding(16.dp)) {
                                     Text(label, color = Muted, fontSize = 12.sp)
                                     Spacer(Modifier.height(5.dp))
@@ -360,7 +365,11 @@ private fun Dashboard(all: List<HospitalRecord>, onSelect: (String) -> Unit, onA
             }
         }
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF6E4)), shape = RoundedCornerShape(18.dp)) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF8EC)),
+                shape = RoundedCornerShape(18.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF0E5D2))
+            ) {
                 Row(Modifier.padding(14.dp), verticalAlignment = Alignment.Top) {
                     Icon(Icons.Default.Info, null, tint = Color(0xFFB77816))
                     Spacer(Modifier.width(10.dp))
@@ -680,7 +689,11 @@ private fun SettingsScreen(allCount: Int) {
             SettingRow(Icons.Default.Storage, "السجلات على الجهاز", "$allCount سجل محفوظ", Color(0xFFDF8C42))
         }
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF2E2)), shape = RoundedCornerShape(18.dp)) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF8EC)),
+                shape = RoundedCornerShape(18.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF0E5D2))
+            ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                     Text("مهم قبل الاستخدام الحقيقي", color = Color(0xFF87520E), fontWeight = FontWeight.Bold)
                     Text("هذه النسخة تحفظ السجلات محلياً على الجهاز. لم يُنفّذ بعد تسجيل دخول آمن أو مزامنة مع خادم Python أو نقل بيانات قاعدة المستشفى الحالية. لا تستخدم بيانات مرضى حقيقية قبل استكمال الأمان والاختبارات والتحقق السريري.", color = Color(0xFF805C20), fontSize = 12.sp, lineHeight = 19.sp)
@@ -692,14 +705,19 @@ private fun SettingsScreen(allCount: Int) {
 
 @Composable
 private fun SettingRow(icon: ImageVector, title: String, subtitle: String, color: Color) {
-    Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(18.dp)).padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        Modifier.fillMaxWidth()
+            .background(Color.White, RoundedCornerShape(18.dp))
+            .padding(15.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         Box(Modifier.size(44.dp).background(color.copy(alpha = .12f), RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
             Icon(icon, null, tint = color)
         }
         Spacer(Modifier.width(12.dp))
-        Column {
+        Column(Modifier.weight(1f)) {
             Text(title, color = Navy, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-            Text(subtitle, color = Muted, fontSize = 11.sp)
+            Text(subtitle, color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
         }
     }
 }
