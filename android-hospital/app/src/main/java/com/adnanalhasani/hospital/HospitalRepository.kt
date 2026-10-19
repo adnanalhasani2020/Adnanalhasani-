@@ -9,6 +9,30 @@ import kotlinx.coroutines.flow.Flow
 class HospitalRepository(private val dao: HospitalDao) {
     fun allRecords(): Flow<List<HospitalRecord>> = dao.allRecords()
 
+    fun referenceItems(category: String): Flow<List<ReferenceCatalogEntity>> = dao.referenceItems(category)
+
+    suspend fun seedReferenceDefaults(category: String, names: List<String>) {
+        if (dao.referenceCount(category) > 0) return
+        names.distinct().forEach { name ->
+            dao.insertReference(ReferenceCatalogEntity(category = category, name = name.trim()))
+        }
+    }
+
+    suspend fun addReference(category: String, name: String, description: String = ""): Boolean {
+        val cleanName = name.trim()
+        if (cleanName.isBlank()) return false
+        return dao.insertReference(ReferenceCatalogEntity(category = category, name = cleanName, description = description.trim())) != -1L
+    }
+
+    suspend fun updateReference(id: Long, name: String, description: String, active: Boolean): Boolean {
+        val cleanName = name.trim()
+        if (cleanName.isBlank()) return false
+        return dao.updateReference(id, cleanName, description.trim(), active, System.currentTimeMillis()) > 0
+    }
+
+    suspend fun deactivateReference(id: Long): Boolean =
+        dao.deactivateReference(id, System.currentTimeMillis()) > 0
+
     fun businessProfile(): Flow<BusinessProfileEntity?> = dao.businessProfile()
 
     suspend fun saveBusinessProfile(profile: BusinessProfileEntity) =
