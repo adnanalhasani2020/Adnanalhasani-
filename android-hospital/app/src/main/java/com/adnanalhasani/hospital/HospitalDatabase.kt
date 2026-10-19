@@ -226,6 +226,21 @@ data class ReferenceCatalogEntity(
     val updatedAt: Long = System.currentTimeMillis()
 )
 
+@Entity(tableName = "clinical_visits", indices = [Index(value = ["sourceRecordId"], unique = true), Index(value = ["patientId"]), Index(value = ["doctorId"]), Index(value = ["visitAt"])])
+data class ClinicalVisitEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val sourceRecordId: Long,
+    val patientId: Long? = null,
+    val doctorId: Long? = null,
+    val patientName: String,
+    val doctorName: String,
+    val chiefComplaint: String,
+    val diagnosis: String,
+    val notes: String,
+    val visitAt: String,
+    val createdAt: Long
+)
+
 @Entity(tableName = "record_audit_log", indices = [Index(value = ["recordId", "changedAt"]), Index(value = ["category", "changedAt"])])
 data class RecordAuditLogEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -375,6 +390,17 @@ interface HospitalDao {
         updateRecordRow(id, title, details)
         updateModuleRecordRow(id, title, details)
         when (current.category) {
+            "encounters" -> {
+                val updated = updateClinicalVisit(id, findPatientIdByName(field("اسم المريض")), findDoctorIdByName(field("اسم الطبيب")),
+                    field("اسم المريض"), field("اسم الطبيب"), field("الشكوى الرئيسية", "الشكوى"),
+                    field("التشخيص"), field("ملاحظات", "التشخيص والملاحظات"), field("تاريخ الزيارة", "التاريخ والوقت"))
+                if (updated == 0) saveClinicalVisit(ClinicalVisitEntity(sourceRecordId = id,
+                    patientId = findPatientIdByName(field("اسم المريض")), doctorId = findDoctorIdByName(field("اسم الطبيب")),
+                    patientName = field("اسم المريض"), doctorName = field("اسم الطبيب"),
+                    chiefComplaint = field("الشكوى الرئيسية", "الشكوى"), diagnosis = field("التشخيص"),
+                    notes = field("ملاحظات", "التشخيص والملاحظات"), visitAt = field("تاريخ الزيارة", "التاريخ والوقت"),
+                    createdAt = current.createdAt))
+            }
             "emergency" -> updateEmergencyCaseRow(id, title, field("اسم المريض"), field("وقت الوصول"),
                 field("درجة الفرز"), field("الشكوى الرئيسية"), field("حالة الحالة"))
             "vaccination" -> updateVaccinationRow(id, field("اسم الطفل", "اسم المريض").ifBlank { title },
@@ -500,6 +526,18 @@ interface HospitalDao {
             names.firstNotNullOfOrNull { name -> fields[name]?.takeIf { it.isNotBlank() } }.orEmpty()
 
         when (record.category) {
+            "encounters" -> saveClinicalVisit(ClinicalVisitEntity(
+                sourceRecordId = sourceRecordId,
+                patientId = findPatientIdByName(field("اسم المريض")),
+                doctorId = findDoctorIdByName(field("اسم الطبيب")),
+                patientName = field("اسم المريض"),
+                doctorName = field("اسم الطبيب"),
+                chiefComplaint = field("الشكوى الرئيسية", "الشكوى"),
+                diagnosis = field("التشخيص"),
+                notes = field("ملاحظات", "التشخيص والملاحظات"),
+                visitAt = field("تاريخ الزيارة", "التاريخ والوقت"),
+                createdAt = record.createdAt
+            ))
             "emergency" -> saveEmergencyCase(EmergencyCaseEntity(
                 sourceRecordId = sourceRecordId, caseNumber = record.title,
                 patientName = field("اسم المريض"), arrivalTime = field("وقت الوصول"),
@@ -734,6 +772,21 @@ interface HospitalDao {
     @Query("SELECT * FROM record_audit_log ORDER BY changedAt DESC LIMIT 500")
     fun recentAuditHistory(): Flow<List<RecordAuditLogEntity>>
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveClinicalVisit(visit: ClinicalVisitEntity)
+
+    @Query("SELECT * FROM clinical_visits ORDER BY visitAt DESC, createdAt DESC")
+    fun clinicalVisits(): Flow<List<ClinicalVisitEntity>>
+
+    @Query("DELETE FROM clinical_visits WHERE sourceRecordId = :id")
+    suspend fun deleteClinicalVisit(id: Long)
+
+    @Query("""UPDATE clinical_visits SET patientId = :patientId, doctorId = :doctorId, patientName = :patientName,
+        doctorName = :doctorName, chiefComplaint = :complaint, diagnosis = :diagnosis, notes = :notes, visitAt = :visitAt
+        WHERE sourceRecordId = :id""")
+    suspend fun updateClinicalVisit(id: Long, patientId: Long?, doctorId: Long?, patientName: String, doctorName: String,
+        complaint: String, diagnosis: String, notes: String, visitAt: String): Int
+
     @Query("SELECT * FROM hospital_records WHERE id = :id LIMIT 1")
     suspend fun recordById(id: Long): HospitalRecord?
 
@@ -765,6 +818,7 @@ interface HospitalDao {
     suspend fun delete(id: Long) {
         val record = recordById(id) ?: return
         when (record.category) {
+            "encounters" -> deleteClinicalVisit(id)
             "vaccination" -> deleteVaccinationRecord(id)
             "emergency" -> deleteEmergencyCase(id)
             "icu" -> deleteIcuStay(id)
@@ -806,9 +860,10 @@ interface HospitalDao {
         BusinessProfileEntity::class,
         VaccinationRecordEntity::class,
         ReferenceCatalogEntity::class,
-        RecordAuditLogEntity::class
+        RecordAuditLogEntity::class,
+        ClinicalVisitEntity::class
     ],
-    version = 9,
+    version = 10,
     exportSchema = false
 )
 abstract class HospitalDatabase : RoomDatabase() {
@@ -821,6 +876,17 @@ abstract class HospitalDatabase : RoomDatabase() {
          * Version 1 only contained hospital_records. CREATE TABLE IF NOT EXISTS leaves
          * those rows untouched and adds the new typed tables without destructive fallback.
          */
+        private val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS clinical_visits (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, sourceRecordId INTEGER NOT NULL, patientId INTEGER, doctorId INTEGER, patientName TEXT NOT NULL, doctorName TEXT NOT NULL, chiefComplaint TEXT NOT NULL, diagnosis TEXT NOT NULL, notes TEXT NOT NULL, visitAt TEXT NOT NULL, createdAt INTEGER NOT NULL)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_clinical_visits_sourceRecordId ON clinical_visits(sourceRecordId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_clinical_visits_patientId ON clinical_visits(patientId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_clinical_visits_doctorId ON clinical_visits(doctorId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_clinical_visits_visitAt ON clinical_visits(visitAt)")
+                db.execSQL("INSERT OR IGNORE INTO clinical_visits (sourceRecordId, patientName, doctorName, chiefComplaint, diagnosis, notes, visitAt, createdAt) SELECT id, '', '', details, '', '', '', createdAt FROM hospital_records WHERE category = 'encounters'")
+            }
+        }
+
         private val MIGRATION_8_9 = object : Migration(8, 9) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("CREATE TABLE IF NOT EXISTS record_audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, recordId INTEGER NOT NULL, category TEXT NOT NULL, action TEXT NOT NULL, oldTitle TEXT NOT NULL, newTitle TEXT NOT NULL, oldDetails TEXT NOT NULL, newDetails TEXT NOT NULL, changedAt INTEGER NOT NULL)")
@@ -949,7 +1015,7 @@ abstract class HospitalDatabase : RoomDatabase() {
                     HospitalDatabase::class.java,
                     "hospital-local.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
                     .build()
                     .also { INSTANCE = it }
             }
