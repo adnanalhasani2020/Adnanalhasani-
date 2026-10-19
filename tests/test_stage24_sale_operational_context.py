@@ -116,6 +116,8 @@ def test_sale_activity_mismatch_is_rejected_without_mutating_persisted_sale():
 def test_sale_operational_context_reports_corrupted_persisted_state_and_version():
     db = connect_database()
     _, _, _, sale = fixture(db)
+    # Simulate legacy/manual database corruption that bypassed table CHECK constraints.
+    db.execute("PRAGMA ignore_check_constraints = ON")
     db.execute("UPDATE sales SET state='corrupted-state', version_no=0 WHERE sale_id=?", (sale,))
     db.commit()
 
