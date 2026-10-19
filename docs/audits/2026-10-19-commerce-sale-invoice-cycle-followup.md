@@ -1,48 +1,44 @@
-# Follow-up: commerce sale and invoice lifecycle
+# Follow-up audit: Commerce sale, invoice, payment and finance boundaries
 
 **Reviewed:** 2026-10-19  
-**Baseline:** merge commit `071eb07d98f2d46987caf08118a6d3edf02bf511`  
-**Scope:** checkout, receipts, sale lifecycle, invoice issuance/voiding, inventory returns, and Finance boundary.
+**Baseline:** `main` at `071eb07d98f2d46987caf08118a6d3edf02bf511`  
+**Scope:** checkout, receipt, sale/return, invoice issuance and voiding, Payment/Settlement, durable Finance recognition, external-event intake, and refund/tax boundaries.
 
-## Verified change merged
+## Verified changes
 
-PR #462, *Prevent duplicate active invoices for a sale*, was merged after both required workflows passed on the exact tested head `5d2ac552cdc8bd4d47a5b6ad06fe49b2f1471f9f`:
+### Duplicate issued invoices blocked
+PR #462 was merged after Python and Stage 7 workflows passed on its exact head. The application service and SQLite INSERT/UPDATE triggers now reject a second `issued` invoice for the same Sale. Historical void invoices remain available; the checkout does not invent an issuer or silently issue an invoice.
 
-- Python tests: passed.
-- Stage 7 automated tests: passed.
-- Merge commit: `071eb07d98f2d46987caf08118a6d3edf02bf511`.
+### UPDATE-trigger regression test
+The follow-up adds a regression test for changing a historical `void` invoice to `issued` when the Sale already has an issued invoice. The invoice schema's canonical states are `issued`, `void`, and `settled`; the test must use `void` rather than a non-existent `voided` state. CI is required on the final head before merge.
 
-The change rejects a second invoice in `issued` state for the same Sale in the application service and at SQLite INSERT/UPDATE boundaries. Voided invoices remain historical evidence. It does not create an invoice automatically at checkout.
+## End-to-end lifecycle findings
 
-## Current lifecycle findings
+1. **Checkout and receipt:** checkout validates offering/product activity, effective price and stock, snapshots sale-line data, records stock movement and a replayable receipt within its transaction. Idempotency rejects reuse of the same key with a different request payload. A receipt is not a tax invoice.
+2. **Invoice:** invoice issuance is separately governed by issuer identity, scoped authorization, obligation checks and invoice-number uniqueness. Void operations preserve history and are guarded when linked financial activity requires reconciliation. A database-level active-issued-invoice invariant is now in place.
+3. **Inventory return:** a return path and compensating positive stock movement already exist. Do not add a duplicate inventory-return feature.
+4. **Payment and Finance recognition:** a Finance-owned `PersistedSettlementRecognitionApplication` exists. It reloads persisted Payment/Settlement/Obligation/Account records, validates authorization and human approval, and transactionally persists a recognized FinancialTransaction, posted LedgerEntry, Obligation state/history and (when supplied) the Hospital intake correlation. Existing-recognition retries verify the durable records. Therefore, it would be incorrect to report that the repository has no persisted recognition service.
+5. **Important Finance limitation:** the recognition application explicitly supports only full settlement: Payment amount must equal the whole Obligation amount. It does not track remaining balances for partial settlement. The existence of a Hospital outbox/intake path does not itself prove that Commerce Sales/receipts/invoices are mapped into that flow.
+6. **Tax/legal configuration:** the generic invoice model does not establish jurisdiction-specific tax compliance. Jurisdiction, issuer registration, tax calculation/rounding, mandatory invoice fields, and credit-note policy need an approved policy.
+7. **Customer refunds:** inventory restoration is not a financial refund. A complete authorized refund/credit-note flow across the original invoice, payment provider, settlement/ledger reversal, and audit/reconciliation has not been verified.
 
-1. **Checkout and receipt:** checkout serializes writes, validates current offering/price/stock, snapshots the line and product name, records an append-only sale stock movement, and stores a replayable receipt in the same transaction. A repeated idempotency key with a different payload is rejected. The printable receipt is correctly not described as a tax invoice.
-2. **Invoice:** invoice issuance is a separate governed operation. It validates persisted issuer identity and a scoped active authorization grant, keeps history, and blocks voiding when linked financial activity exists. The active-invoice uniqueness invariant is now enforced in both service and database layers.
-3. **Sale return and inventory:** the current code/tests already exercise a one-time return transition and a compensating positive stock movement. Do not duplicate this existing inventory-return behavior.
-4. **Financial completion:** a sale or receipt does not prove payment, settlement, or revenue recognition. A verified, durable Commerce → Payment → Settlement → Ledger path has not been established by this review.
-5. **Legal invoice configuration:** the current generic invoice is not proof of compliance with any jurisdiction's tax-invoice rules. Jurisdiction, issuer registration, mandatory fields, tax/rounding policy, and credit-note rules are not configured here.
+## Four highest-priority gaps
 
-## Four highest-priority remaining gaps
+### P0 — Explicit Commerce-to-Finance linkage
+There is no basis to infer that a Commerce Sale/receipt equals a persisted Finance Payment or that a receipt has been financially recognized. Implement an explicit source mapping and retry/reconciliation contract only after deciding which Sale/invoice events create obligations and payments. Reuse existing Finance-owned recognition and outbox/intake components; do not write ledger rows from checkout or create parallel abstractions.
 
-### P0 — Governed invoice orchestration
-A checkout currently produces a receipt, not an issued Commerce invoice. Before linking them, establish a persisted issuer configuration, exact issuance grant, and collision-safe invoice-number allocation. If the authorized issuer is a separate actor, use a durable retry/reconciliation mechanism. Do not invent an issuer or bypass authorization.
+### P0 — Partial settlement and remaining balance
+The current recognition service rejects partial or excess settlement. A safe implementation requires a persisted remaining-balance model, constraints against overpayment/concurrent recognition, and tests for multiple partial payments, duplicate delivery, currency mismatches, final settlement and crash/retry behavior. Do not merely remove the equality check.
 
-### P0 — Verified payment, settlement, and ledger recognition
-Trace and test the canonical Finance-owned persisted workflow, including authorization/approval, durable operation identity, retries, and reconciliation. Do not infer payment from Sale state or write ledger entries directly from checkout.
+### P1 — Governed refund and credit-note workflow
+Define return windows, partial quantities, refund authorization, payment-provider semantics, credit-note requirements, reversal/correction records and retry policy. Preserve original sale, invoice and accounting evidence. Reuse existing stock-return behavior instead of duplicating it.
 
-### P1 — Jurisdiction-specific tax invoice and credit-note rules
-Confirm the target jurisdiction and approved accounting/legal policy before adding tax fields, calculations, numbering semantics, credit notes, or mandated reporting. Keep receipts clearly labeled until then.
-
-### P1 — Governed customer return/refund workflow
-Inventory restoration on the Sale return path exists, but a complete customer-facing partial/full refund workflow across invoice/obligation/payment/recognition has not been verified. Define return windows, partial quantities, refund authorization, payment provider behavior, credit-note treatment, and retry semantics before exposing a new endpoint. Preserve original Sale and financial evidence.
-
-## Regression hardening added in follow-up branch
-
-A further regression test covers direct SQL attempts to change a second, historical voided invoice back to `issued` while another issued invoice exists for the Sale. This checks the UPDATE trigger, complementing the existing INSERT and application-level tests. CI must pass on the follow-up branch before it is merged.
+### P1 — Jurisdiction-specific invoice compliance
+Confirm target jurisdiction and legal/accounting requirements before implementing tax rates, tax IDs, mandatory fields, numbering or credit notes. Until then, keep the receipt clearly distinguished from a tax invoice and avoid compliance claims.
 
 ## Release decision
 
-- **Merged and CI-verified:** one active issued invoice per Sale.
-- **Added, awaiting CI:** database UPDATE-trigger regression test.
-- **Not enabled by design:** automatic invoice creation, tax-compliance claims, automatic settlement/ledger posting, or an unconfigured refund endpoint.
-- **Next implementation order:** Finance path verification; issuer/numbering configuration; then policy-backed return/refund orchestration.
+- **Merged and CI-verified:** one active `issued` invoice per Sale.
+- **Follow-up regression:** direct SQL UPDATE guard test; do not merge until CI passes on the final head.
+- **Already present and should be reused:** persisted Finance settlement recognition, Finance ledger persistence, Hospital external-event correlation/outbox components, and inventory-return stock movement.
+- **Not safe to enable without explicit policy/integration:** automatic invoice issuance, Commerce-to-Finance event mapping, partial settlement, customer refunds/credit notes, and jurisdiction-specific tax treatment.
