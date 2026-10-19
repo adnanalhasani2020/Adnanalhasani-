@@ -595,7 +595,7 @@ private fun ModuleMenu(onSelect: (String) -> Unit) {
 private val numericFieldLabels = setOf(
     "العمر", "النبض", "التنفس", "الحرارة", "عدد الأسرة", "عدد الوحدات",
     "حد إعادة الطلب", "المبلغ", "المبلغ المدفوع", "الكمية", "الكمية الحالية",
-    "قيمة الشراء", "المبلغ المطالب به", "الطابق", "رقم الجرعة"
+    "قيمة الشراء", "المبلغ المطالب به", "الطابق"
 )
 
 private val longTextFieldLabels = setOf(
@@ -749,12 +749,22 @@ private fun ModuleInputField(
             placeholder = { Text(hint, fontSize = 12.sp) },
             supportingText = if (required) ({ Text("حقل مطلوب", fontSize = 10.sp, color = Muted) }) else null,
             trailingIcon = when {
+                dateTimeField -> ({
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = onPickDate) {
+                            Icon(Icons.Default.CalendarMonth, contentDescription = "اختيار التاريخ")
+                        }
+                        IconButton(onClick = onPickTime) {
+                            Icon(Icons.Default.Schedule, contentDescription = "اختيار الوقت")
+                        }
+                    }
+                })
                 dateField -> ({
                     IconButton(onClick = onPickDate) {
                         Icon(Icons.Default.CalendarMonth, contentDescription = "اختيار التاريخ")
                     }
                 })
-                timeOnly || dateTimeField -> ({
+                timeOnly -> ({
                     IconButton(onClick = onPickTime) {
                         Icon(Icons.Default.Schedule, contentDescription = "اختيار الوقت")
                     }
@@ -855,6 +865,21 @@ private fun ModuleScreen(
                             }
                             if (invalidNumericField != null) {
                                 validationMessage = "أدخل رقماً صحيحاً غير سالب في حقل " + invalidNumericField.first + "."
+                                savedMessage = false
+                                return@Button
+                            }
+                            val invalidDateField = module.fields.firstOrNull { (label, hint) ->
+                                val raw = values[label]?.trim().orEmpty()
+                                when {
+                                    raw.isBlank() -> false
+                                    isDateTimeField(label, hint) -> !raw.matches(Regex("\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}"))
+                                    isDateField(label, hint) -> !raw.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))
+                                    isTimeOnlyField(label, hint) -> !raw.matches(Regex("\\d{2}:\\d{2}"))
+                                    else -> false
+                                }
+                            }
+                            if (invalidDateField != null) {
+                                validationMessage = "تحقق من تنسيق التاريخ أو الوقت في حقل " + invalidDateField.first + "."
                                 savedMessage = false
                                 return@Button
                             }
