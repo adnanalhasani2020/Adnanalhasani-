@@ -43,6 +43,21 @@ class HospitalExportTest {
     }
 
     @Test
+    fun prefixesSpreadsheetFormulaMarkersInUserControlledCells() {
+        val csv = HospitalExport.toCsv(
+            listOf(
+                HospitalRecord(id = 1, category = "patients", title = "  =1+1", details = "@SUM(A1:A2)", createdAt = 10)
+            )
+        )
+
+        assertEquals(
+            "id,category,title,details,created_at\\n" +
+                "1,patients,'  =1+1,'@SUM(A1:A2),10\\n",
+            csv
+        )
+    }
+
+    @Test
     fun emptyExportStillContainsHeader() {
         assertEquals("id,category,title,details,created_at\n", HospitalExport.toCsv(emptyList()))
     }
