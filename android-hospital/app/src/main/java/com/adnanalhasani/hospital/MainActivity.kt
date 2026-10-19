@@ -938,6 +938,8 @@ private fun ModuleScreen(
                                 } else if (label in integerFieldLabels) {
                                     val number = raw.toLongOrNull()
                                     number == null || number < 0
+                                } else if (label == "المبلغ" || label == "المبلغ المدفوع") {
+                                    !HospitalFieldValidation.isValidMoneyAmount(raw)
                                 } else {
                                     val number = raw.toBigDecimalOrNull()
                                     number == null || number.signum() < 0
