@@ -31,6 +31,22 @@ data class HospitalRecord(
     val createdAt: Long = System.currentTimeMillis()
 )
 
+/**
+ * Category-indexed module record. sourceRecordId keeps it linked to the legacy row.
+ */
+@Entity(
+    tableName = "module_records",
+    indices = [Index(value = ["sourceRecordId"], unique = true), Index(value = ["category", "createdAt"])]
+)
+data class ModuleRecordEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val sourceRecordId: Long,
+    val category: String,
+    val title: String,
+    val details: String,
+    val createdAt: Long
+)
+
 @Entity(tableName = "patients", indices = [Index(value = ["fileNumber"], unique = true)])
 data class PatientEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -115,7 +131,19 @@ interface HospitalDao {
     fun allRecords(): Flow<List<HospitalRecord>>
 
     @Insert
-    suspend fun insert(record: HospitalRecord)
+    suspend fun insert(record: HospitalRecord): Long
+
+    @Insert
+    suspend fun insertModuleRecord(record: ModuleRecordEntity)
+
+    @Query("SELECT * FROM module_records WHERE category = :category ORDER BY createdAt DESC")
+    fun moduleRecords(category: String): Flow<List<ModuleRecordEntity>>
+
+    @Query("SELECT * FROM module_records ORDER BY createdAt DESC")
+    fun allModuleRecords(): Flow<List<ModuleRecordEntity>>
+
+    @Query("DELETE FROM module_records WHERE sourceRecordId = :sourceRecordId")
+    suspend fun deleteModuleRecord(sourceRecordId: Long)
 
     /**
      * Keep the legacy searchable timeline and the typed domain table in sync.
@@ -124,7 +152,16 @@ interface HospitalDao {
      */
     @Transaction
     suspend fun saveRecord(record: HospitalRecord) {
-        insert(record)
+        val sourceRecordId = insert(record)
+        insertModuleRecord(
+            ModuleRecordEntity(
+                sourceRecordId = sourceRecordId,
+                category = record.category,
+                title = record.title,
+                details = record.details,
+                createdAt = record.createdAt
+            )
+        )
         val fields = record.details.lineSequence().mapNotNull { line ->
             val separator = line.indexOf(": ")
             if (separator <= 0) null
@@ -338,19 +375,21 @@ interface HospitalDao {
             "payments" -> deletePaymentRecord(record.title, record.createdAt)
         }
         deleteRecordRow(id)
+        deleteModuleRecord(id)
     }
 }
 
 @Database(
     entities = [
         HospitalRecord::class,
+        ModuleRecordEntity::class,
         PatientEntity::class,
         DoctorEntity::class,
         AppointmentEntity::class,
         InvoiceEntity::class,
         PaymentEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class HospitalDatabase : RoomDatabase() {
@@ -363,6 +402,16 @@ abstract class HospitalDatabase : RoomDatabase() {
          * Version 1 only contained hospital_records. CREATE TABLE IF NOT EXISTS leaves
          * those rows untouched and adds the new typed tables without destructive fallback.
          */
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS module_records (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, sourceRecordId INTEGER NOT NULL, category TEXT NOT NULL, title TEXT NOT NULL, details TEXT NOT NULL, createdAt INTEGER NOT NULL)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_module_records_sourceRecordId ON module_records(sourceRecordId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_module_records_category_createdAt ON module_records(category, createdAt)")
+                // Preserve and index all rows already present in the legacy table.
+                db.execSQL("INSERT OR IGNORE INTO module_records (sourceRecordId, category, title, details, createdAt) SELECT id, category, title, details, createdAt FROM hospital_records")
+            }
+        }
+
         private val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_hospital_records_category_createdAt ON hospital_records(category, createdAt)")
@@ -419,7 +468,7 @@ abstract class HospitalDatabase : RoomDatabase() {
                     HospitalDatabase::class.java,
                     "hospital-local.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                     .build()
                     .also { INSTANCE = it }
             }
