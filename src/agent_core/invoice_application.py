@@ -278,13 +278,16 @@ class InvoiceApplication:
         timestamp = self._timestamp(now if now is not None else datetime.now(timezone.utc), "Invoice void timestamp")
         with self._atomic(connection):
             record = self._load(connection, key)
-            created_at = connection.execute(
-                "SELECT created_at FROM invoices WHERE invoice_id=?", (key,)
-            ).fetchone()[0]
+            created_at, updated_at = connection.execute(
+                "SELECT created_at, updated_at FROM invoices WHERE invoice_id=?", (key,)
+            ).fetchone()
             void_instant = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
             created_instant = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+            updated_instant = datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
             if void_instant < created_instant:
                 raise ValidationError("Invoice void timestamp cannot precede creation timestamp")
+            if void_instant < updated_instant:
+                raise ValidationError("Invoice void timestamp cannot precede the current update timestamp")
             sale_context = connection.execute(
                 "SELECT s.activity_id, o.activity_id FROM sales s "
                 "LEFT JOIN offerings o ON o.offering_id=s.offering_id WHERE s.sale_id=?",
