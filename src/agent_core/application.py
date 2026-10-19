@@ -290,7 +290,7 @@ class SaleApplication:
             )
         state = SaleState.from_persisted(legacy_state, lifecycle_state)
         history_rows = connection.execute(
-            "SELECT actor_context_ref, prior_version_ref, current_version_ref, change_payload_ref "
+            "SELECT actor_context_ref, prior_version_ref, current_version_ref, change_payload_ref, historical_at "
             "FROM domain_history WHERE owner_domain='commerce' AND target_ref=? "
             "AND change_type='sale_state_transition' ORDER BY rowid",
             (persisted_id,),
@@ -303,7 +303,14 @@ class SaleApplication:
             )
         states = []
         previous_ref = None
-        for index, (actor_context_ref, prior_ref, current_ref, payload_ref) in enumerate(history_rows, start=1):
+        previous_historical_instant = None
+        for index, (actor_context_ref, prior_ref, current_ref, payload_ref, historical_at) in enumerate(history_rows, start=1):
+            historical_instant = self._grant_instant(
+                historical_at, "history timestamp", owner="Sale"
+            )
+            if previous_historical_instant is not None and historical_instant < previous_historical_instant:
+                raise ValidationError("Sale history timestamps are not chronological")
+            previous_historical_instant = historical_instant
             expected_prior = None if index == 1 else history_rows[index - 2][2]
             expected_current = f"sale-state:{persisted_id}:v{index}"
             if not actor_context_ref or not str(actor_context_ref).strip():
@@ -319,7 +326,14 @@ class SaleApplication:
                 raise ValidationError(
                     "Sale history lacks transition-state evidence; explicit legacy reconciliation is required"
                 )
-            states.append(SaleState(payload_ref.removeprefix("state:")))
+            historical_state = SaleState(payload_ref.removeprefix("state:"))
+            if states and not any(
+                previous_state in allowed_from and historical_state is target_state
+                for _action, target_state, allowed_from in self._TRANSITIONS.values()
+                for previous_state in (states[-1],)
+            ):
+                raise ValidationError("Sale history contains an invalid lifecycle transition")
+            states.append(historical_state)
         if states[0] is not SaleState.INITIATED or states[-1] is not state:
             raise ValidationError("Sale history does not agree with the persisted current state")
         sale = Sale(
