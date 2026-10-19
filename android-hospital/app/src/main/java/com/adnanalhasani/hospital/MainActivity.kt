@@ -1099,7 +1099,7 @@ private fun ModuleScreen(
                             IconButton(onClick = {
                                 editingRecord = record
                                 editTitle = record.title
-                                editDetails = record.details.substringBefore("\n\nسجل التعديلات:\n")
+                                editDetails = RecordEditHistory.visibleDetails(record.details)
                                 editError = null
                             }) { Icon(Icons.Default.Edit, contentDescription = "تعديل السجل", tint = Teal) }
                             IconButton(onClick = { pendingDeleteId = record.id }) { Icon(Icons.Default.DeleteOutline, contentDescription = "حذف السجل", tint = Rose) }
@@ -1124,10 +1124,7 @@ private fun ModuleScreen(
             confirmButton = {
                 TextButton(enabled = !isEditing && editTitle.isNotBlank(), onClick = {
                     val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
-                    val oldHistory = record.details.substringAfter("\n\nسجل التعديلات:\n", "")
-                    val history = (oldHistory.lineSequence().filter { it.isNotBlank() }.toList() + "- $now: تم تعديل السجل").joinToString("\n")
-                    val cleanDetails = editDetails.substringBefore("\n\nسجل التعديلات:\n").trim()
-                    val savedDetails = "$cleanDetails\n\nسجل التعديلات:\n$history"
+                    val savedDetails = RecordEditHistory.append(editDetails, record.details, now)
                     scope.launch {
                         isEditing = true
                         runCatching { onEdit(record.id, editTitle.trim(), savedDetails) }
