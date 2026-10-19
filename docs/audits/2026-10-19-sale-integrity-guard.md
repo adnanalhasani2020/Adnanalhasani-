@@ -10,6 +10,8 @@ Harden the persistence boundary for the existing commercial checkout. This chang
 - New `sale_lines` rows are rejected unless the source Sale is already `completed` or `fulfilled` and `product_name_snapshot` is non-empty after trimming.
 - Existing legacy rows are not rewritten; the trigger applies to inserts only. The existing immutable update/delete guards remain authoritative for line history.
 - Added Stage 60 regression tests for persisted product/price/total snapshots, rejection of blank product-name snapshots, and rejection of sale lines attached to an unfulfilled Sale.
+- Fixed an inventory ambiguity: a stock observation and a movement with the exact same instant cannot establish whether the observation already includes the movement. Checkout and catalog availability now fail closed instead of silently counting or ignoring that movement.
+- Added a regression test proving an ambiguous stock observation cannot create a second Sale, sale line, movement, or receipt.
 
 ## Integrity contract
 
@@ -17,7 +19,7 @@ A checkout remains successful only when its existing single SQLite transaction c
 
 ## Verification status
 
-Source-level review confirms the migration is ordered after the sale-line snapshot migration and before the repository's terminal migrations. The repository connector does not provide a local test runner, so these tests have **not been executed in this session**. Run `pytest tests/test_commercial_checkout.py tests/test_stage60_sale_line_checkout_evidence.py` and the full CI suite against the resulting commit before release.
+Source-level review confirms the new trigger is additive and the migration version is included in both migration-registry assertions. The repository connector does not provide a local test runner, so these tests have **not been executed in this session**. Run `pytest tests/test_commercial_checkout.py tests/test_stage60_sale_line_checkout_evidence.py tests/test_persistence_verification.py tests/test_stage16_sale_offering_activity_consistency.py` and the full CI suite against the resulting commit before release.
 
 ## Release boundary
 
