@@ -134,7 +134,7 @@ def test_clean_install_has_exactly_68_domain_tables_plus_migration_bookkeeping()
     expected_versions.extend(
         path.stem for path in persistence.MIGRATIONS_DIR.glob("005[01]_commercial_*.sql")
     )
-    expected_versions.append("0050_commerce_one_issued_invoice_per_sale")
+    expected_versions.append("0051_commerce_one_issued_invoice_per_sale")
     assert versions == sorted(expected_versions)
 
 
