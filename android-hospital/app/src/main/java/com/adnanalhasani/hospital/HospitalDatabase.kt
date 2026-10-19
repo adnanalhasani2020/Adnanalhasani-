@@ -212,8 +212,37 @@ data class PaymentEntity(
     val createdAt: Long = System.currentTimeMillis()
 )
 
+@Entity(
+    tableName = "reference_catalog",
+    indices = [Index(value = ["category", "name"], unique = true), Index(value = ["category", "active"])]
+)
+data class ReferenceCatalogEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val category: String,
+    val name: String,
+    val description: String = "",
+    val active: Boolean = true,
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
 @Dao
 interface HospitalDao {
+    @Query("SELECT * FROM reference_catalog WHERE category = :category ORDER BY active DESC, name COLLATE NOCASE")
+    fun referenceItems(category: String): Flow<List<ReferenceCatalogEntity>>
+
+    @Query("SELECT COUNT(*) FROM reference_catalog WHERE category = :category")
+    suspend fun referenceCount(category: String): Int
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertReference(item: ReferenceCatalogEntity): Long
+
+    @Query("UPDATE reference_catalog SET name = :name, description = :description, active = :active, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun updateReference(id: Long, name: String, description: String, active: Boolean, updatedAt: Long): Int
+
+    @Query("UPDATE reference_catalog SET active = 0, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun deactivateReference(id: Long, updatedAt: Long): Int
+
     @Query("SELECT * FROM hospital_records WHERE category = :category ORDER BY createdAt DESC")
     fun records(category: String): Flow<List<HospitalRecord>>
 
@@ -750,9 +779,10 @@ interface HospitalDao {
         InvoiceEntity::class,
         PaymentEntity::class,
         BusinessProfileEntity::class,
-        VaccinationRecordEntity::class
+        VaccinationRecordEntity::class,
+        ReferenceCatalogEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 abstract class HospitalDatabase : RoomDatabase() {
@@ -765,6 +795,14 @@ abstract class HospitalDatabase : RoomDatabase() {
          * Version 1 only contained hospital_records. CREATE TABLE IF NOT EXISTS leaves
          * those rows untouched and adds the new typed tables without destructive fallback.
          */
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS reference_catalog (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, category TEXT NOT NULL, name TEXT NOT NULL, description TEXT NOT NULL, active INTEGER NOT NULL, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_reference_catalog_category_name ON reference_catalog(category, name)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_reference_catalog_category_active ON reference_catalog(category, active)")
+            }
+        }
+
         private val MIGRATION_6_7 = object : Migration(6, 7) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("CREATE TABLE IF NOT EXISTS vaccination_records (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, sourceRecordId INTEGER NOT NULL, childName TEXT NOT NULL, childFileNumber TEXT NOT NULL, dateOfBirth TEXT NOT NULL, vaccineName TEXT NOT NULL, doseNumber TEXT NOT NULL, administeredDate TEXT NOT NULL, nextDoseDate TEXT NOT NULL, batchNumber TEXT NOT NULL, administrationSite TEXT NOT NULL, administeredBy TEXT NOT NULL, doseStatus TEXT NOT NULL, notes TEXT NOT NULL, createdAt INTEGER NOT NULL)")
@@ -877,7 +915,7 @@ abstract class HospitalDatabase : RoomDatabase() {
                     HospitalDatabase::class.java,
                     "hospital-local.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                     .build()
                     .also { INSTANCE = it }
             }
