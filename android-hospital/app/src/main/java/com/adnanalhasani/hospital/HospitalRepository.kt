@@ -17,6 +17,8 @@ class HospitalRepository(private val dao: HospitalDao) {
 
     fun clinicalVisits(): Flow<List<ClinicalVisitEntity>> = dao.clinicalVisits()
 
+    fun prescriptionOrders(): Flow<List<PrescriptionOrderEntity>> = dao.prescriptionOrders()
+
     fun auditHistory(recordId: Long): Flow<List<RecordAuditLogEntity>> = dao.auditHistory(recordId)
 
     fun referenceItems(category: String): Flow<List<ReferenceCatalogEntity>> = dao.referenceItems(category)
@@ -87,6 +89,9 @@ class HospitalRepository(private val dao: HospitalDao) {
         dao.saveRecord(record, linkedPatientId = patientId, linkedDoctorId = doctorId)
 
     suspend fun updateRecord(id: Long, title: String, details: String) = dao.updateRecord(id, title, details)
+
+    suspend fun updateClinicalVisitRecord(id: Long, title: String, details: String, patientId: Long, doctorId: Long) =
+        dao.updateRecord(id, title, details, linkedPatientId = patientId, linkedDoctorId = doctorId)
 
     suspend fun updateEmergencyCase(id: Long, details: String, status: String) = dao.updateEmergencyCase(id, details, status)
 
