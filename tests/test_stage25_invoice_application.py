@@ -970,3 +970,35 @@ def test_database_guard_rejects_second_issued_invoice_for_sale():
     assert db.execute("SELECT COUNT(*) FROM invoices WHERE sale_id=? AND state='issued'", (sale,)).fetchone()[0] == 1
     assert app.get_invoice(db, first.invoice.id).invoice.state.value == "issued"
     db.close()
+
+
+
+def test_database_guard_rejects_updating_voided_invoice_to_second_issued_invoice():
+    db = connect_database()
+    actor, _activity, sale, grant = fixture(db)
+    app = InvoiceApplication()
+    first = app.create_invoice(
+        db, sale_id=sale, actor_context_ref=actor, authorization_grant_id=grant,
+        issuer_ref=actor, invoice_number="INV-DB-UPDATE-ONE", now=STAMP,
+    )
+    second_id = uid()
+    db.execute(
+        """INSERT INTO invoices(
+               invoice_id,sale_id,obligation_id,state,issuer_ref,invoice_number,
+               issue_at,due_at,created_at,updated_at,version_no
+           ) VALUES(?,?,NULL,'voided',?,?,?,NULL,?,?,1)""",
+        (second_id, sale, actor, "INV-DB-UPDATE-TWO", STAMP, STAMP, STAMP),
+    )
+    db.commit()
+
+    with pytest.raises(sqlite3.IntegrityError, match="Sale already has an issued Invoice"):
+        db.execute("UPDATE invoices SET state='issued' WHERE invoice_id=?", (second_id,))
+
+    assert db.execute(
+        "SELECT state FROM invoices WHERE invoice_id=?", (second_id,)
+    ).fetchone()[0] == "voided"
+    assert db.execute(
+        "SELECT COUNT(*) FROM invoices WHERE sale_id=? AND state='issued'", (sale,)
+    ).fetchone()[0] == 1
+    assert app.get_invoice(db, first.invoice.id).invoice.state.value == "issued"
+    db.close()
