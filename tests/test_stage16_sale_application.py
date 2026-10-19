@@ -981,3 +981,28 @@ def test_create_sale_rejects_linked_delegation_for_other_activity_without_partia
         "AND change_type='sale_state_transition'"
     ).fetchone()[0] == 0
     db.close()
+
+
+def test_sale_restore_rejects_impossible_transition_in_history():
+    db = connect_database()
+    app, actor, activity, _offering, sale, _create_grant = _sale_and_create_grant(db)
+    confirm_grant = _transition_grant(db, actor, activity, sale, "confirm")
+    fulfill_grant = _transition_grant(db, actor, activity, sale, "fulfill")
+    db.commit()
+    app.confirm_sale(db, sale.id, actor, confirm_grant, now=NOW)
+    app.fulfill_sale(db, sale.id, actor, fulfill_grant, now=NOW)
+
+    # Keep the version chain and final persisted state internally consistent,
+    # but tamper v2 so the history claims initiated -> fulfilled directly.
+    db.execute(
+        "UPDATE domain_history SET change_payload_ref='state:fulfilled' "
+        "WHERE owner_domain='commerce' AND target_ref=? AND change_type='sale_state_transition' "
+        "AND current_version_ref=?",
+        (str(sale.id), f"sale-state:{sale.id}:v2"),
+    )
+    db.commit()
+
+    with pytest.raises(ValidationError, match="invalid lifecycle transition"):
+        app.get_sale(db, sale.id)
+
+    db.close()
