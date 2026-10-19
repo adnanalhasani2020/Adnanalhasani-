@@ -48,20 +48,23 @@ data class ModuleRecordEntity(
     val createdAt: Long
 )
 
-@Entity(tableName = "emergency_cases", indices = [Index(value = ["sourceRecordId"], unique = true), Index(value = ["triageLevel", "createdAt"])])
+@Entity(tableName = "emergency_cases", foreignKeys = [ForeignKey(entity = HospitalRecord::class, parentColumns = ["id"], childColumns = ["sourceRecordId"], onDelete = ForeignKey.CASCADE), ForeignKey(entity = PatientEntity::class, parentColumns = ["id"], childColumns = ["patientId"], onDelete = ForeignKey.SET_NULL)], indices = [Index(value = ["sourceRecordId"], unique = true), Index(value = ["patientId"]), Index(value = ["triageLevel", "createdAt"])])
 data class EmergencyCaseEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val sourceRecordId: Long, val caseNumber: String, val patientName: String,
     val arrivalTime: String, val triageLevel: String, val chiefComplaint: String,
-    val status: String, val createdAt: Long
+    val status: String, val createdAt: Long,
+    val patientId: Long? = null
 )
 
-@Entity(tableName = "icu_stays", indices = [Index(value = ["sourceRecordId"], unique = true), Index(value = ["bedNumber"])])
+@Entity(tableName = "icu_stays", foreignKeys = [ForeignKey(entity = HospitalRecord::class, parentColumns = ["id"], childColumns = ["sourceRecordId"], onDelete = ForeignKey.CASCADE), ForeignKey(entity = PatientEntity::class, parentColumns = ["id"], childColumns = ["patientId"], onDelete = ForeignKey.SET_NULL), ForeignKey(entity = DoctorEntity::class, parentColumns = ["id"], childColumns = ["doctorId"], onDelete = ForeignKey.SET_NULL)], indices = [Index(value = ["sourceRecordId"], unique = true), Index(value = ["patientId"]), Index(value = ["doctorId"]), Index(value = ["bedNumber"])])
 data class IcuStayEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val sourceRecordId: Long, val patientName: String, val bedNumber: String,
     val attendingDoctor: String, val careLevel: String, val admissionDate: String,
-    val teamNotes: String, val createdAt: Long
+    val teamNotes: String, val createdAt: Long,
+    val patientId: Long? = null,
+    val doctorId: Long? = null
 )
 
 @Entity(tableName = "inventory_items", indices = [Index(value = ["sourceRecordId"], unique = true), Index(value = ["sku"])])
@@ -72,18 +75,21 @@ data class InventoryItemEntity(
     val notes: String, val createdAt: Long
 )
 
-@Entity(tableName = "lab_orders", indices = [Index(value = ["sourceRecordId"], unique = true), Index(value = ["status", "createdAt"])])
+@Entity(tableName = "lab_orders", foreignKeys = [ForeignKey(entity = HospitalRecord::class, parentColumns = ["id"], childColumns = ["sourceRecordId"], onDelete = ForeignKey.CASCADE), ForeignKey(entity = PatientEntity::class, parentColumns = ["id"], childColumns = ["patientId"], onDelete = ForeignKey.SET_NULL)], indices = [Index(value = ["sourceRecordId"], unique = true), Index(value = ["patientId"]), Index(value = ["status", "createdAt"])])
 data class LabOrderEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val sourceRecordId: Long, val patientName: String, val testName: String,
-    val status: String, val result: String, val createdAt: Long
+    val status: String, val result: String, val createdAt: Long,
+    val patientId: Long? = null
 )
 
-@Entity(tableName = "radiology_orders", indices = [Index(value = ["sourceRecordId"], unique = true), Index(value = ["status", "createdAt"])])
+@Entity(tableName = "radiology_orders", foreignKeys = [ForeignKey(entity = HospitalRecord::class, parentColumns = ["id"], childColumns = ["sourceRecordId"], onDelete = ForeignKey.CASCADE), ForeignKey(entity = PatientEntity::class, parentColumns = ["id"], childColumns = ["patientId"], onDelete = ForeignKey.SET_NULL), ForeignKey(entity = DoctorEntity::class, parentColumns = ["id"], childColumns = ["doctorId"], onDelete = ForeignKey.SET_NULL)], indices = [Index(value = ["sourceRecordId"], unique = true), Index(value = ["patientId"]), Index(value = ["doctorId"]), Index(value = ["status", "createdAt"])])
 data class RadiologyOrderEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val sourceRecordId: Long, val patientName: String, val imagingType: String,
-    val requestingDoctor: String, val status: String, val report: String, val createdAt: Long
+    val requestingDoctor: String, val status: String, val report: String, val createdAt: Long,
+    val patientId: Long? = null,
+    val doctorId: Long? = null
 )
 
 @Entity(tableName = "maintenance_tickets", indices = [Index(value = ["sourceRecordId"], unique = true), Index(value = ["status", "createdAt"])])
@@ -360,31 +366,31 @@ interface HospitalDao {
     suspend fun updateVaccinationRow(id: Long, childName: String, fileNumber: String, dateOfBirth: String,
         vaccineName: String, doseNumber: String, administeredDate: String, nextDoseDate: String,
         batchNumber: String, site: String, administeredBy: String, doseStatus: String, notes: String)
-    @Query("""UPDATE emergency_cases SET caseNumber = :caseNumber, patientName = :patientName,
+    @Query("""UPDATE emergency_cases SET caseNumber = :caseNumber, patientName = :patientName, patientId = :patientId,
         arrivalTime = :arrivalTime, triageLevel = :triageLevel, chiefComplaint = :chiefComplaint,
         status = :status WHERE sourceRecordId = :id""")
-    suspend fun updateEmergencyCaseRow(id: Long, caseNumber: String, patientName: String, arrivalTime: String,
+    suspend fun updateEmergencyCaseRow(id: Long, caseNumber: String, patientName: String, patientId: Long?, arrivalTime: String,
         triageLevel: String, chiefComplaint: String, status: String)
 
-    @Query("""UPDATE icu_stays SET patientName = :patientName, bedNumber = :bedNumber,
-        attendingDoctor = :attendingDoctor, careLevel = :careLevel, admissionDate = :admissionDate,
+    @Query("""UPDATE icu_stays SET patientName = :patientName, patientId = :patientId, bedNumber = :bedNumber,
+        attendingDoctor = :attendingDoctor, doctorId = :doctorId, careLevel = :careLevel, admissionDate = :admissionDate,
         teamNotes = :teamNotes WHERE sourceRecordId = :id""")
-    suspend fun updateIcuStayRow(id: Long, patientName: String, bedNumber: String, attendingDoctor: String,
-        careLevel: String, admissionDate: String, teamNotes: String)
+    suspend fun updateIcuStayRow(id: Long, patientName: String, patientId: Long?, bedNumber: String, attendingDoctor: String,
+        doctorId: Long?, careLevel: String, admissionDate: String, teamNotes: String)
 
     @Query("""UPDATE inventory_items SET name = :name, sku = :sku, quantity = :quantity,
         reorderLevel = :reorderLevel, unit = :unit, notes = :notes WHERE sourceRecordId = :id""")
     suspend fun updateInventoryItemRow(id: Long, name: String, sku: String, quantity: Double,
         reorderLevel: Double, unit: String, notes: String)
 
-    @Query("""UPDATE lab_orders SET patientName = :patientName, testName = :testName,
+    @Query("""UPDATE lab_orders SET patientName = :patientName, patientId = :patientId, testName = :testName,
         status = :status, result = :result WHERE sourceRecordId = :id""")
-    suspend fun updateLabOrderRow(id: Long, patientName: String, testName: String, status: String, result: String)
+    suspend fun updateLabOrderRow(id: Long, patientName: String, patientId: Long?, testName: String, status: String, result: String)
 
-    @Query("""UPDATE radiology_orders SET patientName = :patientName, imagingType = :imagingType,
-        requestingDoctor = :requestingDoctor, status = :status, report = :report WHERE sourceRecordId = :id""")
-    suspend fun updateRadiologyOrderRow(id: Long, patientName: String, imagingType: String,
-        requestingDoctor: String, status: String, report: String)
+    @Query("""UPDATE radiology_orders SET patientName = :patientName, patientId = :patientId, imagingType = :imagingType,
+        requestingDoctor = :requestingDoctor, doctorId = :doctorId, status = :status, report = :report WHERE sourceRecordId = :id""")
+    suspend fun updateRadiologyOrderRow(id: Long, patientName: String, patientId: Long?, imagingType: String,
+        requestingDoctor: String, doctorId: Long?, status: String, report: String)
 
     @Query("""UPDATE maintenance_tickets SET ticketNumber = :ticketNumber, reporter = :reporter,
         location = :location, issue = :issue, priority = :priority, status = :status WHERE sourceRecordId = :id""")
@@ -414,24 +420,24 @@ interface HospitalDao {
                     notes = field("ملاحظات", "التشخيص والملاحظات"), visitAt = field("تاريخ الزيارة", "التاريخ والوقت"),
                     createdAt = current.createdAt))
             }
-            "emergency" -> updateEmergencyCaseRow(id, title, field("اسم المريض"), field("وقت الوصول"),
+            "emergency" -> updateEmergencyCaseRow(id, title, field("اسم المريض"), findPatientIdByName(field("اسم المريض")), field("وقت الوصول"),
                 field("درجة الفرز"), field("الشكوى الرئيسية"), field("حالة الحالة"))
             "vaccination" -> updateVaccinationRow(id, field("اسم الطفل", "اسم المريض").ifBlank { title },
                 field("رقم ملف الطفل", "رقم الملف"), field("تاريخ الميلاد"), field("اسم اللقاح"),
                 field("رقم الجرعة"), field("تاريخ التطعيم"), field("موعد الجرعة التالية"),
                 field("رقم التشغيلة"), field("مكان التطعيم"), field("الممارس الصحي"),
                 field("حالة الجرعة").ifBlank { "تم التطعيم" }, field("ملاحظات"))
-            "icu" -> updateIcuStayRow(id, field("اسم المريض"), field("رقم السرير"),
-                field("الطبيب المسؤول"), field("مستوى الرعاية"), field("تاريخ الدخول"), field("ملاحظات الفريق"))
+            "icu" -> updateIcuStayRow(id, field("اسم المريض"), findPatientIdByName(field("اسم المريض")), field("رقم السرير"),
+                field("الطبيب المسؤول"), findDoctorIdByName(field("الطبيب المسؤول")), field("مستوى الرعاية"), field("تاريخ الدخول"), field("ملاحظات الفريق"))
             "inventory" -> updateInventoryItemRow(id, field("اسم الصنف").ifBlank { title },
                 field("رمز الصنف").ifBlank { "ITEM-" + id },
                 field("الكمية الحالية").toDoubleOrNull() ?: 0.0,
                 field("حد إعادة الطلب").toDoubleOrNull() ?: 0.0,
                 field("وحدة القياس"), field("ملاحظات"))
-            "lab" -> updateLabOrderRow(id, field("اسم المريض"), field("اسم الفحص"),
+            "lab" -> updateLabOrderRow(id, field("اسم المريض"), findPatientIdByName(field("اسم المريض")), field("اسم الفحص"),
                 field("حالة الفحص"), field("النتيجة"))
-            "radiology" -> updateRadiologyOrderRow(id, field("اسم المريض"), field("نوع التصوير"),
-                field("الطبيب الطالب"), field("الحالة"), field("التقرير"))
+            "radiology" -> updateRadiologyOrderRow(id, field("اسم المريض"), findPatientIdByName(field("اسم المريض")), field("نوع التصوير"),
+                field("الطبيب الطالب"), findDoctorIdByName(field("الطبيب الطالب")), field("الحالة"), field("التقرير"))
             "maintenance" -> updateMaintenanceTicketRow(id, title, field("مقدم البلاغ"),
                 field("الموقع"), field("نوع العطل"), field("الأولوية"), field("الحالة"))
             "patients" -> {
@@ -553,7 +559,7 @@ interface HospitalDao {
             ))
             "emergency" -> saveEmergencyCase(EmergencyCaseEntity(
                 sourceRecordId = sourceRecordId, caseNumber = record.title,
-                patientName = field("اسم المريض"), arrivalTime = field("وقت الوصول"),
+                patientName = field("اسم المريض"), arrivalTime = field("وقت الوصول"), patientId = findPatientIdByName(field("اسم المريض")),
                 triageLevel = field("درجة الفرز"), chiefComplaint = field("الشكوى الرئيسية"),
                 status = field("حالة الحالة"), createdAt = record.createdAt
             ))
@@ -561,7 +567,8 @@ interface HospitalDao {
                 sourceRecordId = sourceRecordId, patientName = field("اسم المريض"),
                 bedNumber = field("رقم السرير"), attendingDoctor = field("الطبيب المسؤول"),
                 careLevel = field("مستوى الرعاية"), admissionDate = field("تاريخ الدخول"),
-                teamNotes = field("ملاحظات الفريق"), createdAt = record.createdAt
+                teamNotes = field("ملاحظات الفريق"), createdAt = record.createdAt,
+                patientId = findPatientIdByName(field("اسم المريض")), doctorId = findDoctorIdByName(field("الطبيب المسؤول"))
             ))
             "inventory" -> saveInventoryItem(InventoryItemEntity(
                 sourceRecordId = sourceRecordId, name = field("اسم الصنف").ifBlank { record.title },
@@ -573,12 +580,13 @@ interface HospitalDao {
             "lab" -> saveLabOrder(LabOrderEntity(
                 sourceRecordId = sourceRecordId, patientName = field("اسم المريض"),
                 testName = field("اسم الفحص"), status = field("حالة الفحص"),
-                result = field("النتيجة"), createdAt = record.createdAt
+                result = field("النتيجة"), createdAt = record.createdAt, patientId = findPatientIdByName(field("اسم المريض"))
             ))
             "radiology" -> saveRadiologyOrder(RadiologyOrderEntity(
                 sourceRecordId = sourceRecordId, patientName = field("اسم المريض"),
                 imagingType = field("نوع التصوير"), requestingDoctor = field("الطبيب الطالب"),
-                status = field("الحالة"), report = field("التقرير"), createdAt = record.createdAt
+                status = field("الحالة"), report = field("التقرير"), createdAt = record.createdAt,
+                patientId = findPatientIdByName(field("اسم المريض")), doctorId = findDoctorIdByName(field("الطبيب الطالب"))
             ))
             "vaccination" -> saveVaccinationRecord(VaccinationRecordEntity(
                 sourceRecordId = sourceRecordId,
@@ -876,7 +884,7 @@ interface HospitalDao {
         RecordAuditLogEntity::class,
         ClinicalVisitEntity::class
     ],
-    version = 11,
+    version = 12,
     exportSchema = false
 )
 abstract class HospitalDatabase : RoomDatabase() {
@@ -904,6 +912,44 @@ abstract class HospitalDatabase : RoomDatabase() {
          * Version 11 enforces referential integrity for clinical visits while
          * preserving existing rows and backfilling links where names match.
          */
+        private val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""CREATE TABLE emergency_cases_new (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, sourceRecordId INTEGER NOT NULL, caseNumber TEXT NOT NULL, patientName TEXT NOT NULL, arrivalTime TEXT NOT NULL, triageLevel TEXT NOT NULL, chiefComplaint TEXT NOT NULL, status TEXT NOT NULL, createdAt INTEGER NOT NULL, patientId INTEGER, FOREIGN KEY(sourceRecordId) REFERENCES hospital_records(id) ON UPDATE NO ACTION ON DELETE CASCADE, FOREIGN KEY(patientId) REFERENCES patients(id) ON UPDATE NO ACTION ON DELETE SET NULL)""")
+                db.execSQL("""INSERT INTO emergency_cases_new (id, sourceRecordId, caseNumber, patientName, arrivalTime, triageLevel, chiefComplaint, status, createdAt, patientId) SELECT e.id, e.sourceRecordId, e.caseNumber, e.patientName, e.arrivalTime, e.triageLevel, e.chiefComplaint, e.status, e.createdAt, (SELECT p.id FROM patients p WHERE p.fullName = e.patientName ORDER BY p.createdAt DESC, p.id DESC LIMIT 1) FROM emergency_cases e INNER JOIN hospital_records h ON h.id = e.sourceRecordId""")
+                db.execSQL("DROP TABLE emergency_cases")
+                db.execSQL("ALTER TABLE emergency_cases_new RENAME TO emergency_cases")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_emergency_cases_sourceRecordId ON emergency_cases(sourceRecordId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_emergency_cases_patientId ON emergency_cases(patientId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_emergency_cases_triageLevel_createdAt ON emergency_cases(triageLevel, createdAt)")
+
+                db.execSQL("""CREATE TABLE icu_stays_new (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, sourceRecordId INTEGER NOT NULL, patientName TEXT NOT NULL, bedNumber TEXT NOT NULL, attendingDoctor TEXT NOT NULL, careLevel TEXT NOT NULL, admissionDate TEXT NOT NULL, teamNotes TEXT NOT NULL, createdAt INTEGER NOT NULL, patientId INTEGER, doctorId INTEGER, FOREIGN KEY(sourceRecordId) REFERENCES hospital_records(id) ON UPDATE NO ACTION ON DELETE CASCADE, FOREIGN KEY(patientId) REFERENCES patients(id) ON UPDATE NO ACTION ON DELETE SET NULL, FOREIGN KEY(doctorId) REFERENCES doctors(id) ON UPDATE NO ACTION ON DELETE SET NULL)""")
+                db.execSQL("""INSERT INTO icu_stays_new (id, sourceRecordId, patientName, bedNumber, attendingDoctor, careLevel, admissionDate, teamNotes, createdAt, patientId, doctorId) SELECT u.id, u.sourceRecordId, u.patientName, u.bedNumber, u.attendingDoctor, u.careLevel, u.admissionDate, u.teamNotes, u.createdAt, (SELECT p.id FROM patients p WHERE p.fullName = u.patientName ORDER BY p.createdAt DESC, p.id DESC LIMIT 1), (SELECT d.id FROM doctors d WHERE d.fullName = u.attendingDoctor ORDER BY d.createdAt DESC, d.id DESC LIMIT 1) FROM icu_stays u INNER JOIN hospital_records h ON h.id = u.sourceRecordId""")
+                db.execSQL("DROP TABLE icu_stays")
+                db.execSQL("ALTER TABLE icu_stays_new RENAME TO icu_stays")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_icu_stays_sourceRecordId ON icu_stays(sourceRecordId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_icu_stays_patientId ON icu_stays(patientId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_icu_stays_doctorId ON icu_stays(doctorId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_icu_stays_bedNumber ON icu_stays(bedNumber)")
+
+                db.execSQL("""CREATE TABLE lab_orders_new (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, sourceRecordId INTEGER NOT NULL, patientName TEXT NOT NULL, testName TEXT NOT NULL, status TEXT NOT NULL, result TEXT NOT NULL, createdAt INTEGER NOT NULL, patientId INTEGER, FOREIGN KEY(sourceRecordId) REFERENCES hospital_records(id) ON UPDATE NO ACTION ON DELETE CASCADE, FOREIGN KEY(patientId) REFERENCES patients(id) ON UPDATE NO ACTION ON DELETE SET NULL)""")
+                db.execSQL("""INSERT INTO lab_orders_new (id, sourceRecordId, patientName, testName, status, result, createdAt, patientId) SELECT l.id, l.sourceRecordId, l.patientName, l.testName, l.status, l.result, l.createdAt, (SELECT p.id FROM patients p WHERE p.fullName = l.patientName ORDER BY p.createdAt DESC, p.id DESC LIMIT 1) FROM lab_orders l INNER JOIN hospital_records h ON h.id = l.sourceRecordId""")
+                db.execSQL("DROP TABLE lab_orders")
+                db.execSQL("ALTER TABLE lab_orders_new RENAME TO lab_orders")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_lab_orders_sourceRecordId ON lab_orders(sourceRecordId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_lab_orders_patientId ON lab_orders(patientId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_lab_orders_status_createdAt ON lab_orders(status, createdAt)")
+
+                db.execSQL("""CREATE TABLE radiology_orders_new (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, sourceRecordId INTEGER NOT NULL, patientName TEXT NOT NULL, imagingType TEXT NOT NULL, requestingDoctor TEXT NOT NULL, status TEXT NOT NULL, report TEXT NOT NULL, createdAt INTEGER NOT NULL, patientId INTEGER, doctorId INTEGER, FOREIGN KEY(sourceRecordId) REFERENCES hospital_records(id) ON UPDATE NO ACTION ON DELETE CASCADE, FOREIGN KEY(patientId) REFERENCES patients(id) ON UPDATE NO ACTION ON DELETE SET NULL, FOREIGN KEY(doctorId) REFERENCES doctors(id) ON UPDATE NO ACTION ON DELETE SET NULL)""")
+                db.execSQL("""INSERT INTO radiology_orders_new (id, sourceRecordId, patientName, imagingType, requestingDoctor, status, report, createdAt, patientId, doctorId) SELECT r.id, r.sourceRecordId, r.patientName, r.imagingType, r.requestingDoctor, r.status, r.report, r.createdAt, (SELECT p.id FROM patients p WHERE p.fullName = r.patientName ORDER BY p.createdAt DESC, p.id DESC LIMIT 1), (SELECT d.id FROM doctors d WHERE d.fullName = r.requestingDoctor ORDER BY d.createdAt DESC, d.id DESC LIMIT 1) FROM radiology_orders r INNER JOIN hospital_records h ON h.id = r.sourceRecordId""")
+                db.execSQL("DROP TABLE radiology_orders")
+                db.execSQL("ALTER TABLE radiology_orders_new RENAME TO radiology_orders")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_radiology_orders_sourceRecordId ON radiology_orders(sourceRecordId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_radiology_orders_patientId ON radiology_orders(patientId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_radiology_orders_doctorId ON radiology_orders(doctorId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_radiology_orders_status_createdAt ON radiology_orders(status, createdAt)")
+            }
+        }
+
         private val MIGRATION_10_11 = object : Migration(10, 11) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("""
@@ -1081,7 +1127,7 @@ abstract class HospitalDatabase : RoomDatabase() {
                     HospitalDatabase::class.java,
                     "hospital-local.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
                     .build()
                     .also { INSTANCE = it }
             }
