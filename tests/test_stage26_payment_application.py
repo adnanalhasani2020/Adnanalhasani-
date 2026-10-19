@@ -866,3 +866,50 @@ def test_payment_history_auditor_detects_non_chronological_events():
     assert result.status == "inconsistent"
     assert "history_timestamps_not_chronological:2" in result.findings
     db.close()
+
+
+@pytest.mark.parametrize(
+    ("column", "value", "message"),
+    [
+        ("state", "corrupt-state", "Persisted Payment state is invalid"),
+        ("version_no", 0, "Persisted Payment version must be a positive integer"),
+        ("amount_minor", 0, "Persisted Payment amount_minor must be a positive integer"),
+        ("updated_at", "2026-10-10T11:59:59Z", "Persisted Payment update timestamp precedes creation timestamp"),
+    ],
+)
+def test_payment_reader_rejects_corrupted_persisted_scalars(column, value, message):
+    db = connect_database()
+    parties = seed(db)
+    payment, _ = create_payment(db, PaymentApplication(), parties)
+    db.execute("PRAGMA ignore_check_constraints=ON")
+    db.execute(f"UPDATE payments SET {column}=? WHERE payment_id=?", (value, str(payment.payment_id)))
+    db.commit()
+
+    with pytest.raises(ValidationError, match=message):
+        PaymentApplication().get_payment(db, str(payment.payment_id))
+    db.close()
+
+
+@pytest.mark.parametrize(
+    ("column", "value", "finding"),
+    [
+        ("state", "corrupt-state", "payment_state_invalid"),
+        ("version_no", 0, "payment_version_invalid"),
+        ("updated_at", "2026-10-10T11:59:59Z", "payment_lifecycle_timestamp_order_invalid"),
+    ],
+)
+def test_payment_history_auditor_fails_closed_on_corrupted_persisted_fields(column, value, finding):
+    from agent_core.payment_history_audit import PaymentHistoryIntegrityAuditor
+
+    db = connect_database()
+    parties = seed(db)
+    payment, _ = create_payment(db, PaymentApplication(), parties)
+    db.execute("PRAGMA ignore_check_constraints=ON")
+    db.execute(f"UPDATE payments SET {column}=? WHERE payment_id=?", (value, str(payment.payment_id)))
+    db.commit()
+
+    result = PaymentHistoryIntegrityAuditor().inspect(db, str(payment.payment_id))
+
+    assert result.status == "inconsistent"
+    assert finding in result.findings
+    db.close()
