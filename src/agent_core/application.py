@@ -319,7 +319,14 @@ class SaleApplication:
                 raise ValidationError(
                     "Sale history lacks transition-state evidence; explicit legacy reconciliation is required"
                 )
-            states.append(SaleState(payload_ref.removeprefix("state:")))
+            historical_state = SaleState(payload_ref.removeprefix("state:"))
+            if states and not any(
+                previous_state in allowed_from and historical_state is target_state
+                for _action, target_state, allowed_from in self._TRANSITIONS.values()
+                for previous_state in (states[-1],)
+            ):
+                raise ValidationError("Sale history contains an invalid lifecycle transition")
+            states.append(historical_state)
         if states[0] is not SaleState.INITIATED or states[-1] is not state:
             raise ValidationError("Sale history does not agree with the persisted current state")
         sale = Sale(
