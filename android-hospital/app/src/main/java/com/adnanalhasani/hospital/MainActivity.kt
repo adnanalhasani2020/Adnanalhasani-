@@ -448,7 +448,7 @@ private fun Dashboard(all: List<HospitalRecord>, onSelect: (String) -> Unit, onA
                             Text(module?.title ?: "سجل عام", color = Muted, fontSize = 11.sp)
                         }
                         Text(
-                            SimpleDateFormat("MM/dd", Locale.getDefault()).format(Date(record.createdAt)),
+                            SimpleDateFormat("yyyy/MM/dd", Locale("ar")).format(Date(record.createdAt)),
                             color = Muted,
                             fontSize = 10.sp
                         )
@@ -611,7 +611,7 @@ private fun ModuleScreen(
                             ),
                             shape = RoundedCornerShape(14.dp),
                             singleLine = label !in listOf("ملاحظات", "ملاحظات إدارية", "ملاحظات التمريض", "ملاحظات الفريق", "التشخيص والملاحظات", "النتيجة", "التقرير", "الجرعة / الوصفة", "خطة المتابعة", "الشكوى الرئيسية", "الأعراض الأولية", "ملاحظات الحساسية", "وصف الوثيقة"),
-                            keyboardOptions = if (label.contains("مبلغ") || label == "الكمية" || label == "العمر") KeyboardOptions(keyboardType = KeyboardType.Decimal) else KeyboardOptions.Default
+                            keyboardOptions = if (label.contains("مبلغ") || label.contains("الكمية") || label.contains("العمر") || label.contains("النبض") || label.contains("التنفس") || label.contains("الحرارة") || label.contains("عدد الأسرة") || label.contains("عدد الوحدات") || label.contains("حد إعادة الطلب")) KeyboardOptions(keyboardType = KeyboardType.Decimal) else KeyboardOptions.Default
                         )
                     }
                     Button(
