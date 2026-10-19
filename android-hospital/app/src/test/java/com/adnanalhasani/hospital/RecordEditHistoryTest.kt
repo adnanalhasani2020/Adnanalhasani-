@@ -29,6 +29,22 @@ class RecordEditHistoryTest {
     }
 
     @Test
+    fun recordsSpecificActionsInAuditHistory() {
+        val updated = RecordEditHistory.append(
+            "حالة الحالة: تحويل",
+            "حالة الحالة: قيد العلاج",
+            "2026-10-20 12:00:00",
+            "تم تغيير حالة الطوارئ إلى تحويل"
+        )
+
+        assertEquals(
+            listOf("- 2026-10-20 12:00:00: تم تغيير حالة الطوارئ إلى تحويل"),
+            RecordEditHistory.entries(updated)
+        )
+        assertEquals("حالة الحالة: تحويل", RecordEditHistory.visibleDetails(updated))
+    }
+
+    @Test
     fun safelyReadsRecordsWithoutHistory() {
         assertEquals("تفاصيل عادية", RecordEditHistory.visibleDetails("تفاصيل عادية"))
         assertEquals(emptyList<String>(), RecordEditHistory.entries("تفاصيل عادية"))
