@@ -609,7 +609,7 @@ abstract class HospitalDatabase : RoomDatabase() {
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_vaccination_records_childFileNumber ON vaccination_records(childFileNumber)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_vaccination_records_nextDoseDate ON vaccination_records(nextDoseDate)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_vaccination_records_childName_vaccineName ON vaccination_records(childName, vaccineName)")
-                db.execSQL("INSERT OR IGNORE INTO vaccination_records (sourceRecordId, childName, childFileNumber, dateOfBirth, vaccineName, doseNumber, administeredDate, nextDoseDate, batchNumber, administrationSite, administeredBy, doseStatus, notes, createdAt) SELECT id, COALESCE((SELECT trim(substr(details, instr(details, 'اسم المريض: ') + length('اسم المريض: '), instr(substr(details, instr(details, 'اسم المريض: ') + length('اسم المريض: ')), char(10)) - 1)) FROM hospital_records WHERE id = hospital_records.id), title, '', '', '', '', '', '', '', '', 'تم التطعيم', details, createdAt FROM hospital_records WHERE category = 'vaccination'")
+                // Existing vaccination entries remain intact in hospital_records; new entries are also stored in this typed table.
             }
         }
 
