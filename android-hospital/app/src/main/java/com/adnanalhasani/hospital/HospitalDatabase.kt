@@ -64,7 +64,7 @@ data class IcuStayEntity(
     val teamNotes: String, val createdAt: Long
 )
 
-@Entity(tableName = "inventory_items", indices = [Index(value = ["sourceRecordId"], unique = true), Index(value = ["sku"], unique = true)])
+@Entity(tableName = "inventory_items", indices = [Index(value = ["sourceRecordId"], unique = true), Index(value = ["sku"])])
 data class InventoryItemEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val sourceRecordId: Long, val name: String, val sku: String,
@@ -527,7 +527,7 @@ abstract class HospitalDatabase : RoomDatabase() {
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_icu_stays_bedNumber ON icu_stays(bedNumber)")
                 db.execSQL("CREATE TABLE IF NOT EXISTS inventory_items (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, sourceRecordId INTEGER NOT NULL, name TEXT NOT NULL, sku TEXT NOT NULL, quantity REAL NOT NULL, reorderLevel REAL NOT NULL, unit TEXT NOT NULL, notes TEXT NOT NULL, createdAt INTEGER NOT NULL)")
                 db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_inventory_items_sourceRecordId ON inventory_items(sourceRecordId)")
-                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_inventory_items_sku ON inventory_items(sku)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_inventory_items_sku ON inventory_items(sku)")
                 db.execSQL("CREATE TABLE IF NOT EXISTS lab_orders (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, sourceRecordId INTEGER NOT NULL, patientName TEXT NOT NULL, testName TEXT NOT NULL, status TEXT NOT NULL, result TEXT NOT NULL, createdAt INTEGER NOT NULL)")
                 db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_lab_orders_sourceRecordId ON lab_orders(sourceRecordId)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_lab_orders_status_createdAt ON lab_orders(status, createdAt)")
