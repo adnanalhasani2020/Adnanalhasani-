@@ -263,6 +263,22 @@ interface HospitalDao {
     @Query("UPDATE hospital_records SET details = :details WHERE id = :id") suspend fun updateHospitalRecordDetails(id: Long, details: String)
     @Query("UPDATE module_records SET details = :details WHERE sourceRecordId = :id") suspend fun updateModuleRecordDetails(id: Long, details: String)
     @Query("UPDATE emergency_cases SET status = :status WHERE sourceRecordId = :id") suspend fun updateEmergencyCaseStatus(id: Long, status: String)
+    @Query("UPDATE hospital_records SET title = :title, details = :details WHERE id = :id")
+    suspend fun updateRecordRow(id: Long, title: String, details: String)
+    @Query("UPDATE module_records SET title = :title, details = :details WHERE sourceRecordId = :id")
+    suspend fun updateModuleRecordRow(id: Long, title: String, details: String)
+
+    @Transaction
+    suspend fun updateRecord(id: Long, title: String, details: String) {
+        val current = recordById(id) ?: return
+        updateRecordRow(id, title, details)
+        updateModuleRecordRow(id, title, details)
+        if (current.category == "emergency") {
+            val status = details.lineSequence().firstOrNull { it.startsWith("حالة الحالة:") }
+                ?.substringAfter(":")?.trim().orEmpty()
+            updateEmergencyCaseStatus(id, status)
+        }
+    }
 
     @Transaction
     suspend fun updateEmergencyCase(id: Long, details: String, status: String) {
