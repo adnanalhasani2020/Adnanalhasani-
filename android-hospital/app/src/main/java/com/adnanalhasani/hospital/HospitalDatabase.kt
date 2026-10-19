@@ -5,6 +5,7 @@ import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
 import androidx.room.Index
+import androidx.room.ForeignKey
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
@@ -54,33 +55,52 @@ data class DoctorEntity(
 
 @Entity(
     tableName = "appointments",
-    indices = [Index(value = ["patientName"]), Index(value = ["doctorName"]), Index(value = ["appointmentAt"])]
+    foreignKeys = [
+        ForeignKey(entity = PatientEntity::class, parentColumns = ["id"], childColumns = ["patientId"], onDelete = ForeignKey.SET_NULL),
+        ForeignKey(entity = DoctorEntity::class, parentColumns = ["id"], childColumns = ["doctorId"], onDelete = ForeignKey.SET_NULL)
+    ],
+    indices = [
+        Index(value = ["patientId"]), Index(value = ["doctorId"]),
+        Index(value = ["patientName"]), Index(value = ["doctorName"]), Index(value = ["appointmentAt"])
+    ]
 )
 data class AppointmentEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val patientName: String,
     val doctorName: String,
+    val patientId: Long? = null,
+    val doctorId: Long? = null,
     val appointmentAt: String = "",
     val reason: String = "",
     val status: String = "scheduled",
     val createdAt: Long = System.currentTimeMillis()
 )
 
-@Entity(tableName = "invoices", indices = [Index(value = ["invoiceNumber"], unique = true)])
+@Entity(
+    tableName = "invoices",
+    foreignKeys = [ForeignKey(entity = PatientEntity::class, parentColumns = ["id"], childColumns = ["patientId"], onDelete = ForeignKey.SET_NULL)],
+    indices = [Index(value = ["invoiceNumber"], unique = true), Index(value = ["patientId"])]
+)
 data class InvoiceEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val invoiceNumber: String,
     val patientName: String = "",
+    val patientId: Long? = null,
     val amountMinor: Long = 0,
     val currency: String = "YER",
     val status: String = "open",
     val createdAt: Long = System.currentTimeMillis()
 )
 
-@Entity(tableName = "payments", indices = [Index(value = ["invoiceNumber"]), Index(value = ["createdAt"])])
+@Entity(
+    tableName = "payments",
+    foreignKeys = [ForeignKey(entity = InvoiceEntity::class, parentColumns = ["id"], childColumns = ["invoiceId"], onDelete = ForeignKey.SET_NULL)],
+    indices = [Index(value = ["invoiceNumber"]), Index(value = ["invoiceId"]), Index(value = ["createdAt"])]
+)
 data class PaymentEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val invoiceNumber: String,
+    val invoiceId: Long? = null,
     val amountMinor: Long = 0,
     val method: String = "",
     val receiptReference: String = "",
@@ -138,6 +158,8 @@ interface HospitalDao {
                 AppointmentEntity(
                     patientName = field("اسم المريض"),
                     doctorName = field("اسم الطبيب"),
+                    patientId = findPatientIdByName(field("اسم المريض")),
+                    doctorId = findDoctorIdByName(field("اسم الطبيب")),
                     appointmentAt = field("التاريخ والوقت"),
                     reason = field("سبب الزيارة"),
                     createdAt = record.createdAt
@@ -147,6 +169,7 @@ interface HospitalDao {
                 InvoiceEntity(
                     invoiceNumber = record.title,
                     patientName = field("اسم المريض"),
+                    patientId = findPatientIdByName(field("اسم المريض")),
                     amountMinor = field("المبلغ").toBigDecimalOrNull()
                         ?.movePointRight(2)?.toLong() ?: 0L,
                     currency = field("العملة").ifBlank { "YER" },
@@ -157,6 +180,7 @@ interface HospitalDao {
             "payments" -> insertPayment(
                 PaymentEntity(
                     invoiceNumber = record.title,
+                    invoiceId = findInvoiceIdByNumber(record.title),
                     amountMinor = field("المبلغ المدفوع").toBigDecimalOrNull()
                         ?.movePointRight(2)?.toLong() ?: 0L,
                     method = field("طريقة الدفع"),
@@ -181,6 +205,15 @@ interface HospitalDao {
 
     @Insert
     suspend fun insertPayment(payment: PaymentEntity)
+
+    @Query("SELECT id FROM patients WHERE fullName = :name ORDER BY createdAt DESC LIMIT 1")
+    suspend fun findPatientIdByName(name: String): Long?
+
+    @Query("SELECT id FROM doctors WHERE fullName = :name ORDER BY createdAt DESC LIMIT 1")
+    suspend fun findDoctorIdByName(name: String): Long?
+
+    @Query("SELECT id FROM invoices WHERE invoiceNumber = :number LIMIT 1")
+    suspend fun findInvoiceIdByNumber(number: String): Long?
 
     @Query("SELECT * FROM patients ORDER BY createdAt DESC")
     fun patients(): Flow<List<PatientEntity>>
@@ -213,7 +246,7 @@ interface HospitalDao {
         InvoiceEntity::class,
         PaymentEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class HospitalDatabase : RoomDatabase() {
@@ -246,6 +279,35 @@ abstract class HospitalDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE appointments RENAME TO appointments_old")
+                db.execSQL("CREATE TABLE appointments (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, patientName TEXT NOT NULL, doctorName TEXT NOT NULL, patientId INTEGER, doctorId INTEGER, appointmentAt TEXT NOT NULL, reason TEXT NOT NULL, status TEXT NOT NULL, createdAt INTEGER NOT NULL, FOREIGN KEY(patientId) REFERENCES patients(id) ON UPDATE NO ACTION ON DELETE SET NULL, FOREIGN KEY(doctorId) REFERENCES doctors(id) ON UPDATE NO ACTION ON DELETE SET NULL)")
+                db.execSQL("INSERT INTO appointments (id, patientName, doctorName, patientId, doctorId, appointmentAt, reason, status, createdAt) SELECT a.id, a.patientName, a.doctorName, (SELECT p.id FROM patients p WHERE p.fullName = a.patientName ORDER BY p.createdAt DESC LIMIT 1), (SELECT d.id FROM doctors d WHERE d.fullName = a.doctorName ORDER BY d.createdAt DESC LIMIT 1), a.appointmentAt, a.reason, a.status, a.createdAt FROM appointments_old a")
+                db.execSQL("DROP TABLE appointments_old")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_appointments_patientId ON appointments(patientId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_appointments_doctorId ON appointments(doctorId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_appointments_patientName ON appointments(patientName)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_appointments_doctorName ON appointments(doctorName)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_appointments_appointmentAt ON appointments(appointmentAt)")
+
+                db.execSQL("ALTER TABLE invoices RENAME TO invoices_old")
+                db.execSQL("CREATE TABLE invoices (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, invoiceNumber TEXT NOT NULL, patientName TEXT NOT NULL, patientId INTEGER, amountMinor INTEGER NOT NULL, currency TEXT NOT NULL, status TEXT NOT NULL, createdAt INTEGER NOT NULL, FOREIGN KEY(patientId) REFERENCES patients(id) ON UPDATE NO ACTION ON DELETE SET NULL)")
+                db.execSQL("INSERT INTO invoices (id, invoiceNumber, patientName, patientId, amountMinor, currency, status, createdAt) SELECT i.id, i.invoiceNumber, i.patientName, (SELECT p.id FROM patients p WHERE p.fullName = i.patientName ORDER BY p.createdAt DESC LIMIT 1), i.amountMinor, i.currency, i.status, i.createdAt FROM invoices_old i")
+                db.execSQL("DROP TABLE invoices_old")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_invoices_invoiceNumber ON invoices(invoiceNumber)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_invoices_patientId ON invoices(patientId)")
+
+                db.execSQL("ALTER TABLE payments RENAME TO payments_old")
+                db.execSQL("CREATE TABLE payments (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, invoiceNumber TEXT NOT NULL, invoiceId INTEGER, amountMinor INTEGER NOT NULL, method TEXT NOT NULL, receiptReference TEXT NOT NULL, createdAt INTEGER NOT NULL, FOREIGN KEY(invoiceId) REFERENCES invoices(id) ON UPDATE NO ACTION ON DELETE SET NULL)")
+                db.execSQL("INSERT INTO payments (id, invoiceNumber, invoiceId, amountMinor, method, receiptReference, createdAt) SELECT p.id, p.invoiceNumber, (SELECT i.id FROM invoices i WHERE i.invoiceNumber = p.invoiceNumber LIMIT 1), p.amountMinor, p.method, p.receiptReference, p.createdAt FROM payments_old p")
+                db.execSQL("DROP TABLE payments_old")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_payments_invoiceNumber ON payments(invoiceNumber)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_payments_invoiceId ON payments(invoiceId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_payments_createdAt ON payments(createdAt)")
+            }
+        }
+
         fun get(context: Context): HospitalDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -253,7 +315,7 @@ abstract class HospitalDatabase : RoomDatabase() {
                     HospitalDatabase::class.java,
                     "hospital-local.db"
                 )
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .build()
                     .also { INSTANCE = it }
             }
