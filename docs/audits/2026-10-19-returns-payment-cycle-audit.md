@@ -6,7 +6,7 @@
 
 ## Executive summary
 
-The repository has sound foundational controls: checkout is transactionally persisted and idempotent; inventory movements and domain history are append-only; sale and payment transitions require persisted authorization; Payment, Settlement, FinancialTransaction, and LedgerEntry remain distinct. The full returns/payment journey is nevertheless incomplete. Two concrete Payment integrity defects are corrected in this change, with regression tests and database-level protection.
+The repository has sound foundational controls: checkout is transactionally persisted and idempotent; inventory movements and domain history are append-only; sale and payment transitions require persisted authorization; Payment, Settlement, FinancialTransaction, and LedgerEntry remain distinct. The full returns/payment journey is nevertheless incomplete. Three concrete Payment integrity defects are corrected in this change, with regression tests and database-level protection.
 
 ## Findings and disposition
 
@@ -32,6 +32,7 @@ The repository has sound foundational controls: checkout is transactionally pers
 
 - Regression: a Settlement-linked Payment consumes the same Obligation capacity as a directly linked Payment.
 - Regression: mismatched nullable Invoice/Obligation references are rejected by the application without writes.
+- Regression: a failure while validating the persisted Payment rolls back both the Payment row and its domain-history record.
 - Database guards: direct SQL cannot insert or update the same mismatch.
 - The first CI run found two migration-registry expectations that enumerated migrations through 0052. Both expected-version lists are updated to include 0053; rerun CI against the new head before merge. Earlier run result: 1,421 passed, 2 failed, both due to these stale expected migration lists (not runtime behavior).
 

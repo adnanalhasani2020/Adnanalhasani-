@@ -1008,3 +1008,32 @@ def test_payment_rejects_invoice_and_obligation_reference_mismatch_without_write
             (str(obligation), payment_id),
         )
     db.close()
+
+
+def test_payment_create_rolls_back_when_persisted_validation_fails(monkeypatch):
+    db = connect_database()
+    payer, payee, approver, agent, context, obligation = seed(db)
+    app = PaymentApplication()
+    payment_id = uid()
+    grant, action = authorize(
+        db, agent=agent, context=context, payment_id=payment_id,
+        action_code="payment.create", approver=approver,
+    )
+
+    def fail_persisted_validation(_connection, _payment_id):
+        raise ValidationError("synthetic persisted validation failure")
+
+    monkeypatch.setattr(app, "_load", fail_persisted_validation)
+    with pytest.raises(ValidationError, match="synthetic persisted validation failure"):
+        app.create_payment(
+            db, payment_id=payment_id, payer_person_id=payer, payee_person_id=payee,
+            obligation_id=obligation, amount_minor=1000, currency_code="YER",
+            context_ref=context, authorization_grant_id=grant, agent_action_id=action, now=STAMP,
+        )
+
+    assert db.execute("SELECT COUNT(*) FROM payments WHERE payment_id=?", (payment_id,)).fetchone()[0] == 0
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=? AND change_type='payment_state_transition'",
+        (payment_id,),
+    ).fetchone()[0] == 0
+    db.close()
