@@ -40,6 +40,16 @@ small{color:#5d7482}form{display:grid;gap:10px}footer{text-align:center;color:#6
 .modal-card h3{margin-top:0}.modal-close{background:#e9eef2;color:#18364b;width:auto;float:left;padding:8px 12px}
 .modal-card textarea{font:inherit;width:100%;min-height:95px;padding:11px;border:1px solid #c6d5df;border-radius:8px;resize:vertical}
 .modal-card label{display:grid;gap:6px;margin:10px 0}.modal-card .status{margin-top:8px}
+
+/* Consistent calendar picker controls across static forms and dynamically-created modals */
+.date-picker-field{display:flex;align-items:stretch;gap:6px;min-width:0;width:100%}
+.date-picker-field>input{flex:1;min-width:0;direction:ltr;text-align:left}
+.date-picker-trigger{display:inline-flex;align-items:center;justify-content:center;flex:0 0 44px;width:44px;min-width:44px;min-height:44px;padding:8px;background:#fff;color:#176b87;border:1px solid #c6d5df;border-radius:8px}
+.date-picker-trigger:hover{background:#eef6fa;color:#0e536c}
+.date-picker-trigger:focus-visible{outline:3px solid #e6a23c;outline-offset:2px}
+.date-picker-trigger svg{width:22px;height:22px;display:block}
+input[type="date"],input[type="datetime-local"]{accent-color:#176b87}
+
 .history-list{display:grid;gap:9px}.history-item{border:1px solid #dbe5eb;border-radius:9px;padding:11px}
 @media(max-width:760px){.doctor-layout{grid-template-columns:1fr}.doctor-queue{max-height:320px}}
 
@@ -319,6 +329,37 @@ async function doctorOpenAction(action){
   $("doctorFollowupForm").onsubmit=async ev=>{ev.preventDefault();const d=Object.fromEntries(new FormData(ev.target));try{const start=new Date(d.starts_at),end=new Date(d.ends_at);if(!(end>start))throw Error("وقت انتهاء الموعد يجب أن يكون بعد بدايته.");const res=await api("/api/appointments",{method:"POST",body:JSON.stringify({patient_id:Number(p.id),doctor_id:Number(d.doctor_id),starts_at:start.toISOString(),ends_at:end.toISOString(),reason:d.reason,created_at:now()})});msg($("doctorModalStatus"),"تم حفظ موعد المراجعة. الرقم: "+res.id);await doctorLoadQueue()}catch(e){msg($("doctorModalStatus"),e.message,true)}};return
  }
 }
+
+
+/* Add a visible calendar button to every date/datetime field, including modal forms. */
+(function installCalendarPickers(){
+ const selector='input[type="date"],input[type="datetime-local"]';
+ const icon='<svg viewBox="0 0 24 24" aria-hidden="true" fill="none"><rect x="3.5" y="5.5" width="17" height="15" rx="2.5" stroke="currentColor" stroke-width="1.8"/><path d="M7.5 3.5v4M16.5 3.5v4M4 9.5h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M8 13h2M13 13h2M8 16.5h2M13 16.5h2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
+ function enhance(root){
+  (root||document).querySelectorAll(selector).forEach(input=>{
+   if(input.closest('.date-picker-field'))return;
+   const wrapper=document.createElement('span');wrapper.className='date-picker-field';
+   input.parentNode.insertBefore(wrapper,input);wrapper.appendChild(input);
+   const button=document.createElement('button');button.type='button';button.className='date-picker-trigger';
+   button.setAttribute('aria-label',input.type==='date'?'فتح التقويم لاختيار التاريخ':'فتح التقويم لاختيار التاريخ والوقت');
+   button.title=input.type==='date'?'اختيار التاريخ':'اختيار التاريخ والوقت';button.innerHTML=icon;
+   button.addEventListener('click',()=>{
+    try{
+     if(typeof input.showPicker==='function')input.showPicker();
+     else{input.focus();input.click();}
+    }catch(_){input.focus();input.click();}
+   });
+   wrapper.appendChild(button);
+  });
+ }
+ enhance(document);
+ const observer=new MutationObserver(records=>records.forEach(record=>record.addedNodes.forEach(node=>{
+  if(node.nodeType!==1)return;
+  if(node.matches&&node.matches(selector))enhance(node.parentNode);
+  if(node.querySelectorAll)enhance(node);
+ })));
+ observer.observe(document.body,{childList:true,subtree:true});
+})();
 
 </script>
 </body>
