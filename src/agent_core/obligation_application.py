@@ -169,17 +169,6 @@ class ObligationApplication:
                 raise ValidationError(
                     "Persisted Obligation currency does not match its linked Loan currency"
                 )
-        reserved_amount = connection.execute(
-            "SELECT COALESCE(SUM(p.amount_minor),0) FROM payments p "
-            "WHERE p.state IN ('initiated','pending','completed') AND "
-            "(p.obligation_id=? OR EXISTS (SELECT 1 FROM settlements s "
-            "WHERE s.payment_id=p.payment_id AND s.obligation_id=?))",
-            (oid, oid),
-        ).fetchone()[0]
-        if reserved_amount > amount:
-            raise ValidationError(
-                "Persisted linked Payments exceed Obligation amount in aggregate"
-            )
         for (payment_amount, payment_currency) in connection.execute(
             "SELECT amount_minor,currency_code FROM payments WHERE obligation_id=?", (oid,),
         ).fetchall():
@@ -209,6 +198,17 @@ class ObligationApplication:
                 raise ValidationError(
                     "Persisted Obligation currency does not match its settled Payment currency"
                 )
+        reserved_amount = connection.execute(
+            "SELECT COALESCE(SUM(p.amount_minor),0) FROM payments p "
+            "WHERE p.state IN ('initiated','pending','completed') AND "
+            "(p.obligation_id=? OR EXISTS (SELECT 1 FROM settlements s "
+            "WHERE s.payment_id=p.payment_id AND s.obligation_id=?))",
+            (oid, oid),
+        ).fetchone()[0]
+        if reserved_amount > amount:
+            raise ValidationError(
+                "Persisted linked Payments exceed Obligation amount in aggregate"
+            )
         if invoice is not None:
             invoice_link = connection.execute(
                 "SELECT obligation_id FROM invoices WHERE invoice_id=?", (invoice,),
