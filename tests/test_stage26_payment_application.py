@@ -913,3 +913,95 @@ def test_payment_history_auditor_fails_closed_on_corrupted_persisted_fields(colu
     assert result.status == "inconsistent"
     assert finding in result.findings
     db.close()
+
+
+def test_payment_creation_counts_settlement_linked_payments_when_reserving_obligation_balance():
+    db = connect_database()
+    payer, payee, approver, agent, context, obligation = seed(db)
+    app = PaymentApplication()
+
+    # Existing data may link a Payment to an Obligation through a Settlement while
+    # the Payment's direct obligation_id remains NULL.
+    first_payment_id = uid()
+    grant, action = authorize(
+        db, agent=agent, context=context, payment_id=first_payment_id,
+        action_code="payment.create", approver=approver,
+    )
+    first = app.create_payment(
+        db, payment_id=first_payment_id, payer_person_id=payer, payee_person_id=payee,
+        amount_minor=4000, currency_code="YER", context_ref=context,
+        authorization_grant_id=grant, agent_action_id=action, now=STAMP,
+    )
+    db.execute(
+        "INSERT INTO settlements(settlement_id,payment_id,obligation_id,state,created_at,updated_at,version_no) "
+        "VALUES(?,?,?,'pending',?,?,1)",
+        (uid(), str(first.payment_id), str(obligation), STAMP, STAMP),
+    )
+    db.commit()
+
+    second_payment_id = uid()
+    grant, action = authorize(
+        db, agent=agent, context=context, payment_id=second_payment_id,
+        action_code="payment.create", approver=approver,
+    )
+    with pytest.raises(ValidationError, match="remaining linked Obligation balance"):
+        app.create_payment(
+            db, payment_id=second_payment_id, payer_person_id=payer, payee_person_id=payee,
+            obligation_id=obligation, amount_minor=7000, currency_code="YER",
+            context_ref=context, authorization_grant_id=grant, agent_action_id=action, now=STAMP,
+        )
+
+    assert db.execute("SELECT COUNT(*) FROM payments").fetchone()[0] == 1
+    assert db.execute(
+        "SELECT COUNT(*) FROM payments WHERE payment_id=?", (second_payment_id,)
+    ).fetchone()[0] == 0
+    db.close()
+
+
+def test_payment_rejects_invoice_and_obligation_reference_mismatch_without_writes():
+    db = connect_database()
+    payer, payee, approver, agent, context, obligation = seed(db)
+    invoice = seed_invoice_for_payment(db, issuer=payee, obligation=None, state="issued")
+    payment_id = uid()
+    grant, action = authorize(
+        db, agent=agent, context=context, payment_id=payment_id,
+        action_code="payment.create", approver=approver,
+    )
+
+    with pytest.raises(ValidationError, match="Payment Invoice and Obligation references do not match"):
+        PaymentApplication().create_payment(
+            db, payment_id=payment_id, payer_person_id=payer, payee_person_id=payee,
+            obligation_id=obligation, invoice_id=invoice, amount_minor=1000,
+            currency_code="YER", context_ref=context, authorization_grant_id=grant,
+            agent_action_id=action, now=STAMP,
+        )
+
+    assert db.execute("SELECT COUNT(*) FROM payments WHERE payment_id=?", (payment_id,)).fetchone()[0] == 0
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=? AND change_type='payment_state_transition'",
+        (payment_id,),
+    ).fetchone()[0] == 0
+
+    # Application validation is not the only boundary: direct SQL writes must not
+    # create the same inconsistent link by bypassing PaymentApplication.
+    with pytest.raises(sqlite3.IntegrityError, match="invoice and obligation"):
+        db.execute(
+            "INSERT INTO payments(payment_id,obligation_id,invoice_id,payer_person_id,payee_person_id,"
+            "amount_minor,currency_code,state,created_at,updated_at,version_no) "
+            "VALUES(?,?,?,?,?,?,?,'initiated',?,?,1)",
+            (payment_id, str(obligation), invoice, payer, payee, 1000, "YER", STAMP, STAMP),
+        )
+
+    # The UPDATE trigger closes the same integrity gap for existing Payment rows.
+    db.execute(
+        "INSERT INTO payments(payment_id,obligation_id,invoice_id,payer_person_id,payee_person_id,"
+        "amount_minor,currency_code,state,created_at,updated_at,version_no) "
+        "VALUES(?,NULL,?,?,?,?,?,'initiated',?,?,1)",
+        (payment_id, invoice, payer, payee, 1000, "YER", STAMP, STAMP),
+    )
+    with pytest.raises(sqlite3.IntegrityError, match="invoice and obligation"):
+        db.execute(
+            "UPDATE payments SET obligation_id=? WHERE payment_id=?",
+            (str(obligation), payment_id),
+        )
+    db.close()
