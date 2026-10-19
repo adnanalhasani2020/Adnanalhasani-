@@ -633,11 +633,11 @@ interface HospitalDao {
                 sourceRecordId = sourceRecordId, patientName = field("اسم المريض"), imagingType = field("نوع التصوير"),
                 requestingDoctor = field("الطبيب الطالب"), status = field("الحالة"), report = field("التقرير"), createdAt = record.createdAt,
                 patientId = findPatientIdByName(field("اسم المريض")), doctorId = findDoctorIdByName(field("الطبيب الطالب")),
-                clinicalVisitId = field("معرّف الزيارة").toLongOrNull()
+                clinicalVisitId = field("معرّف الزيارة").toLongOrNull()?.let { existingClinicalVisitId(it) }
             ))
             "prescriptions" -> savePrescriptionOrder(PrescriptionOrderEntity(
                 sourceRecordId = sourceRecordId, patientId = findPatientIdByName(field("اسم المريض")),
-                doctorId = findDoctorIdByName(field("اسم الطبيب")), clinicalVisitId = field("معرّف الزيارة").toLongOrNull(),
+                doctorId = findDoctorIdByName(field("اسم الطبيب")), clinicalVisitId = field("معرّف الزيارة").toLongOrNull()?.let { existingClinicalVisitId(it) },
                 patientName = field("اسم المريض"), doctorName = field("اسم الطبيب"), medicationName = field("اسم الدواء"),
                 dose = field("الجرعة"), frequencyAndDuration = field("التكرار والمدة"), status = field("الحالة"),
                 instructions = field("تعليمات إضافية", "ملاحظات"), createdAt = record.createdAt
