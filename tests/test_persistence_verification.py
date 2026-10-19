@@ -137,6 +137,7 @@ def test_clean_install_has_exactly_68_domain_tables_plus_migration_bookkeeping()
     expected_versions.append("0052_commerce_one_issued_invoice_per_sale")
     expected_versions.append("0053_payment_invoice_obligation_link_guard")
     expected_versions.append("0054_payment_completion_link_guards")
+    expected_versions.append("0055_invoice_void_reconciliation_guard")
     assert versions == sorted(expected_versions)
 
 
