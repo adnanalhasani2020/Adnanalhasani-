@@ -47,8 +47,8 @@ private val SoftLavender = Color(0xFF9A91B8)
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val dao = HospitalDatabase.get(this).hospitalDao()
-        setContent { HospitalApp(dao) }
+        val repository = HospitalRepository(HospitalDatabase.get(this).hospitalDao())
+        setContent { HospitalApp(repository) }
     }
 }
 
@@ -169,11 +169,11 @@ private val modules = listOf(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HospitalApp(dao: HospitalDao) {
+fun HospitalApp(repository: HospitalRepository) {
     var selected by remember { mutableStateOf("home") }
     var showMenu by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val all by dao.allRecords().collectAsState(initial = emptyList())
+    val all by repository.allRecords().collectAsState(initial = emptyList())
     val currentModule = modules.find { it.key == selected }
     val screenTitle = currentModule?.title ?: when (selected) {
         "home" -> "لوحة التحكم"
@@ -252,9 +252,9 @@ fun HospitalApp(dao: HospitalDao) {
                         module = currentModule,
                         records = all.filter { it.category == currentModule.key },
                         onSave = { title, details ->
-                            dao.saveRecord(HospitalRecord(category = currentModule.key, title = title, details = details))
+                            repository.saveRecord(HospitalRecord(category = currentModule.key, title = title, details = details))
                         },
-                        onDelete = { id -> scope.launch { dao.delete(id) } }
+                        onDelete = { id -> scope.launch { repository.deleteRecord(id) } }
                     )
                     else -> Dashboard(all, { selected = it }, { selected = it })
                 }
