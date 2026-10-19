@@ -260,7 +260,7 @@ function doctorRenderSelected(){
  if(!doctorSelected){empty.hidden=false;details.hidden=true;return}
  empty.hidden=true;details.hidden=false;
  const p=doctorSelected.patient||{},v=doctorSelected.visit||{};
- const items=[["اسم المريض",p.full_name],["رقم الملف",p.patient_no],["رقم الهاتف",p.phone],["الجنس",p.sex],["تاريخ الميلاد",p.date_of_birth],["العنوان",p.address],["الحساسية",p.allergies],["الشكوى الحالية",v.chief_complaint],["الطبيب",v.doctor_name],["حالة الزيارة",v.status]];
+ const items=[["اسم المريض",p.full_name],["رقم الملف",p.patient_no],["رقم الهاتف",p.phone],["الشكوى الحالية",v.chief_complaint],["الطبيب",v.doctor_name],["حالة الزيارة",v.status]];
  $("doctorPatientSummary").replaceChildren(...items.map(([label,value])=>{const box=document.createElement("div");box.className="summary-item";const span=document.createElement("span");span.textContent=label;const strong=document.createElement("strong");strong.textContent=doctorText(value);box.append(span,strong);return box}));
  $("doctorVisitMeta").textContent=(v.id?"رقم الزيارة: "+v.id+" — بدأت: "+doctorText(v.opened_at):"موعد: "+doctorText(v.starts_at))+" — "+doctorText(v.status);
 }
