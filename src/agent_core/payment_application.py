@@ -250,7 +250,7 @@ class PaymentApplication:
             if invoice_link is None:
                 raise ValidationError("Persisted Payment references a missing Invoice")
             invoice_obligation, invoice_issuer = invoice_link
-            if invoice_obligation is not None and invoice_obligation != obligation:
+            if invoice_obligation != obligation:
                 raise ValidationError(
                     "Persisted Payment Invoice and Obligation references do not match"
                 )
@@ -310,10 +310,15 @@ class PaymentApplication:
                 # Reserve capacity for in-flight and completed payments together.
                 # Otherwise two individually valid partial Payments can overpay the
                 # same Obligation. Failed/cancelled attempts do not consume capacity.
+                # Count Payments linked directly to this Obligation and Payments
+                # already assigned through a Settlement. Otherwise a settlement-linked
+                # Payment with obligation_id=NULL is invisible to this capacity check.
                 reserved_amount = connection.execute(
-                    "SELECT COALESCE(SUM(amount_minor),0) FROM payments "
-                    "WHERE obligation_id=? AND state IN ('initiated','pending','completed')",
-                    (obligation,),
+                    "SELECT COALESCE(SUM(p.amount_minor),0) FROM payments p "
+                    "WHERE p.state IN ('initiated','pending','completed') AND "
+                    "(p.obligation_id=? OR EXISTS (SELECT 1 FROM settlements s "
+                    "WHERE s.payment_id=p.payment_id AND s.obligation_id=?))",
+                    (obligation, obligation),
                 ).fetchone()[0]
                 if reserved_amount + amount_minor > obligation_amount:
                     raise ValidationError(
@@ -330,7 +335,7 @@ class PaymentApplication:
                 invoice_state, invoice_obligation = invoice_record
                 if invoice_state != "issued":
                     raise ValidationError("Payment requires an issued Invoice; void invoices cannot be paid")
-                if invoice_obligation is not None and invoice_obligation != obligation:
+                if invoice_obligation != obligation:
                     raise ValidationError(
                         "Payment Invoice and Obligation references do not match"
                     )
@@ -357,7 +362,10 @@ class PaymentApplication:
                 (str(uuid4()), "payments", key, "payment_state_transition", timestamp, actor,
                  None, f"payment-state:{key}:v1", "state:initiated", timestamp),
             )
-        return self._load(connection, key)
+            # Validate the persisted result before committing the Payment. Reporting
+            # a validation error after commit would otherwise leave a durable record
+            # despite the caller observing a failed operation.
+            return self._load(connection, key)
 
     def get_payment(self, connection, payment_id) -> PaymentRecord:
         return self._load(connection, payment_id)
