@@ -155,6 +155,11 @@ class CommercialCheckoutApplication:
         delta = 0
         for change, occurred_raw in movements:
             occurred = _instant(occurred_raw, "Inventory movement occurred_at")
+            # If a movement and the stock observation share the same instant,
+            # we cannot prove whether the observation already includes it.
+            # Counting or ignoring it could both misstate stock, so fail closed.
+            if occurred == result.observed_at:
+                return None
             # A committed movement after this request's timestamp means the
             # request is stale relative to serialized inventory writes. Never
             # ignore that movement and permit an oversell; require a fresh retry.
