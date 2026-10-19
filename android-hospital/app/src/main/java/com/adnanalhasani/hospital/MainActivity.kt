@@ -4,6 +4,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -18,6 +20,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -29,6 +32,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -186,6 +191,8 @@ fun HospitalApp(repository: HospitalRepository) {
     var selected by remember { mutableStateOf("home") }
     var showMenu by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var exportStatus by remember { mutableStateOf<String?>(null) }
     val all by repository.allRecords().collectAsState(initial = emptyList())
     val emergencyCases by repository.emergencyCases().collectAsState(initial = emptyList())
     val icuStays by repository.icuStays().collectAsState(initial = emptyList())
@@ -193,6 +200,30 @@ fun HospitalApp(repository: HospitalRepository) {
     val labOrders by repository.labOrders().collectAsState(initial = emptyList())
     val radiologyOrders by repository.radiologyOrders().collectAsState(initial = emptyList())
     val maintenanceTickets by repository.maintenanceTickets().collectAsState(initial = emptyList())
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        if (uri == null) {
+            exportStatus = "تم إلغاء التصدير."
+        } else {
+            val csvSnapshot = HospitalExport.toCsv(all)
+            scope.launch {
+                val result = withContext(Dispatchers.IO) {
+                    runCatching {
+                        val output = context.contentResolver.openOutputStream(uri)
+                            ?: error("تعذر فتح الملف للكتابة")
+                        output.bufferedWriter(Charsets.UTF_8).use { writer ->
+                            writer.write("\uFEFF")
+                            writer.write(csvSnapshot)
+                        }
+                    }
+                }
+                exportStatus = if (result.isSuccess) {
+                    "تم تصدير ${all.size} سجل إلى ملف CSV."
+                } else {
+                    "تعذر التصدير. تحقق من مساحة التخزين وحاول مجدداً."
+                }
+            }
+        }
+    }
     BackHandler(enabled = showMenu || selected != "home") {
         if (showMenu) showMenu = false else selected = "home"
     }
@@ -278,7 +309,15 @@ fun HospitalApp(repository: HospitalRepository) {
                         onAdd = { key -> selected = key }
                     )
                     selected == "reports" -> Reports(all)
-                    selected == "settings" -> SettingsScreen(allCount = all.size)
+                    selected == "settings" -> SettingsScreen(
+                        allCount = all.size,
+                        exportStatus = exportStatus,
+                        onExport = {
+                            exportStatus = null
+                            val timestamp = SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date())
+                            exportLauncher.launch("hospital-records-$timestamp.csv")
+                        }
+                    )
                     currentModule != null -> ModuleScreen(
                         module = currentModule,
                         records = all.filter { it.category == currentModule.key },
@@ -799,7 +838,7 @@ private fun Reports(all: List<HospitalRecord>) {
 }
 
 @Composable
-private fun SettingsScreen(allCount: Int) {
+private fun SettingsScreen(allCount: Int, exportStatus: String?, onExport: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item {
             Box(Modifier.fillMaxWidth().background(Brush.linearGradient(listOf(Navy, Teal)), RoundedCornerShape(24.dp)).padding(22.dp)) {
@@ -816,6 +855,31 @@ private fun SettingsScreen(allCount: Int) {
             SettingRow(Icons.Default.Language, "اللغة والاتجاه", "العربية • من اليمين إلى اليسار", Color(0xFF5B7CFA))
             SettingRow(Icons.Default.Palette, "التصميم", "Material 3 • ألوان هادئة وبطاقات حديثة", Color(0xFF9B72CF))
             SettingRow(Icons.Default.Storage, "السجلات على الجهاز", "$allCount سجل محفوظ", Color(0xFFDF8C42))
+        }
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                shape = RoundedCornerShape(18.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Border)
+            ) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.FileDownload, contentDescription = null, tint = Teal)
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("تصدير نسخة من السجلات", color = Navy, fontWeight = FontWeight.Bold)
+                            Text("CSV بترميز UTF-8 لفتح البيانات العربية في الجداول.", color = Muted, fontSize = 12.sp)
+                        }
+                    }
+                    Button(onClick = onExport, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Default.FileDownload, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("تصدير السجلات إلى ملف CSV")
+                    }
+                    exportStatus?.let { Text(it, color = if (it.startsWith("تم تصدير")) Teal else Rose, fontSize = 12.sp) }
+                    Text("التصدير يشمل السجلات العامة المحفوظة في التطبيق، ولا يتضمن ملفات مرفقة أو بيانات خادم غير متزامنة.", color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
+                }
+            }
         }
         item {
             Card(
