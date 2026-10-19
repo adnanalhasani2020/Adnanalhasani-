@@ -79,8 +79,6 @@ class HospitalRepository(private val dao: HospitalDao) {
     fun emergencyCases(): Flow<List<EmergencyCaseEntity>> = dao.emergencyCases()
     fun icuStays(): Flow<List<IcuStayEntity>> = dao.icuStays()
     fun inventoryItems(): Flow<List<InventoryItemEntity>> = dao.inventoryItems()
-    fun labOrders(): Flow<List<LabOrderEntity>> = dao.labOrders()
-    fun radiologyOrders(): Flow<List<RadiologyOrderEntity>> = dao.radiologyOrders()
     fun maintenanceTickets(): Flow<List<MaintenanceTicketEntity>> = dao.maintenanceTickets()
     fun vaccinationRecords(): Flow<List<VaccinationRecordEntity>> = dao.vaccinationRecords()
     fun vaccinationsForChild(fileNumber: String): Flow<List<VaccinationRecordEntity>> = dao.vaccinationsForChild(fileNumber)
