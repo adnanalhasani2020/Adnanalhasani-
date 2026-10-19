@@ -71,10 +71,11 @@ private val modules = listOf(
         listOf("رقم الملف" to "مثال: PT-1001", "اسم المريض" to "الاسم الكامل", "رقم الهاتف" to "رقم التواصل", "العمر" to "العمر", "ملاحظات" to "ملاحظات إدارية")),
     Module("doctors", "الأطباء", "الطاقم الطبي والتخصصات", Icons.Default.MedicalServices, Color(0xFF7897B7),
         listOf("الرقم الوظيفي" to "مثال: DR-101", "اسم الطبيب" to "الاسم الكامل", "التخصص" to "التخصص الطبي", "رقم الهاتف" to "رقم التواصل")),
+    Module("doctor_workspace", "شاشة الطبيب", "تسجيل الزيارات والتشخيصات ومراجعة السجل الطبي", Icons.Default.MedicalInformation, Color(0xFF6F9BAE), emptyList()),
     Module("appointments", "المواعيد", "تنظيم المواعيد والحجوزات", Icons.Default.CalendarMonth, Color(0xFF9A91B8),
         listOf("اسم المريض" to "اسم المريض", "اسم الطبيب" to "اسم الطبيب", "التاريخ والوقت" to "مثال: 2026-10-20 10:30", "سبب الزيارة" to "سبب الزيارة")),
     Module("encounters", "الزيارات الطبية", "متابعة الزيارة والتشخيص", Icons.Default.MedicalInformation, Color(0xFF6F9BAE),
-        listOf("اسم المريض" to "اسم المريض", "اسم الطبيب" to "اسم الطبيب", "الشكوى الرئيسية" to "الشكوى", "التشخيص والملاحظات" to "التشخيص والملاحظات")),
+        listOf("اسم المريض" to "اسم المريض", "اسم الطبيب" to "اسم الطبيب", "تاريخ الزيارة" to "YYYY-MM-DD HH:mm", "الشكوى الرئيسية" to "الشكوى", "التشخيص" to "التشخيص الطبي", "ملاحظات" to "ملاحظات الزيارة")),
     Module("lab", "المختبر", "طلبات الفحوصات والنتائج", Icons.Default.Science, Color(0xFFD0A06E),
         listOf("اسم المريض" to "اسم المريض", "اسم الفحص" to "نوع الفحص", "حالة الفحص" to "مطلوب / قيد التنفيذ / مكتمل", "النتيجة" to "النتيجة أو ملاحظات")),
     Module("pharmacy", "الصيدلية والأدوية", "الأدوية والوصفات والمخزون", Icons.Default.Medication, Color(0xFF6D9D86),
@@ -330,6 +331,7 @@ private fun HospitalWorkspace(repository: HospitalRepository) {
                     )
                     selected == "reports" -> Reports(all)
                     selected == "audit" -> AuditHistoryScreen(repository)
+                    selected == "doctor_workspace" -> DoctorWorkspaceScreen(repository)
                     selected == "catalogs" -> ReferenceCatalogScreen(repository)
                     selected == "business" -> BusinessProfileScreen(
                         profile = businessProfile,
