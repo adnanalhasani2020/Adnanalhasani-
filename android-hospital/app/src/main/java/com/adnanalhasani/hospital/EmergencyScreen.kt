@@ -250,7 +250,8 @@ internal fun EmergencyScreen(repository: HospitalRepository, onEdit: suspend (Lo
                                     val updatedDetails = RecordEditHistory.append(
                                         statusDetails,
                                         record.details,
-                                        now
+                                        now,
+                                        "تم تغيير حالة الطوارئ إلى $nextStatus"
                                     )
                                     scope.launch {
                                         runCatching { repository.updateEmergencyCase(record.id, updatedDetails, nextStatus) }
@@ -298,7 +299,7 @@ internal fun EmergencyScreen(repository: HospitalRepository, onEdit: suspend (Lo
             confirmButton = {
                 TextButton(enabled = !isEditing && editTitle.isNotBlank(), onClick = {
                     val now = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
-                    val savedDetails = RecordEditHistory.append(editDetails, record.details, now)
+                    val savedDetails = RecordEditHistory.append(editDetails, record.details, now, "تم تعديل سجل الطوارئ")
                     scope.launch {
                         isEditing = true
                         runCatching { onEdit(record.id, editTitle.trim(), savedDetails) }
