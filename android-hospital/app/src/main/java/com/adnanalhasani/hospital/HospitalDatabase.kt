@@ -326,7 +326,7 @@ interface HospitalDao {
         val id = insertReferenceRow(item)
         if (id > 0L) {
             insertAuditLog(RecordAuditLogEntity(
-                recordId = id, category = "reference_catalog:\${item.category}", action = "CREATE",
+                recordId = id, category = "reference_catalog:${item.category}", action = "CREATE",
                 newTitle = item.name, newDetails = item.description, changedAt = System.currentTimeMillis()
             ))
         }
@@ -339,9 +339,9 @@ interface HospitalDao {
         val changed = updateReferenceRow(id, name, description, active, updatedAt)
         if (changed > 0) {
             insertAuditLog(RecordAuditLogEntity(
-                recordId = id, category = "reference_catalog:\${old.category}", action = "UPDATE",
+                recordId = id, category = "reference_catalog:${old.category}", action = "UPDATE",
                 oldTitle = old.name, newTitle = name, oldDetails = old.description,
-                newDetails = description + if (active) "" else "\\nالحالة: معطّل",
+                newDetails = description + if (active) "" else "\nالحالة: معطّل",
                 changedAt = updatedAt
             ))
         }
@@ -354,9 +354,9 @@ interface HospitalDao {
         val changed = deactivateReferenceRow(id, updatedAt)
         if (changed > 0) {
             insertAuditLog(RecordAuditLogEntity(
-                recordId = id, category = "reference_catalog:\${old.category}", action = "DEACTIVATE",
+                recordId = id, category = "reference_catalog:${old.category}", action = "DEACTIVATE",
                 oldTitle = old.name, newTitle = old.name, oldDetails = old.description,
-                newDetails = old.description + "\\nالحالة: معطّل", changedAt = updatedAt
+                newDetails = old.description + "\nالحالة: معطّل", changedAt = updatedAt
             ))
         }
         return changed
