@@ -27,14 +27,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.room.Dao
-import androidx.room.Database
-import androidx.room.Entity
-import androidx.room.Insert
-import androidx.room.PrimaryKey
-import androidx.room.Query
-import androidx.room.Room
-import androidx.room.RoomDatabase
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -48,47 +40,6 @@ private val Ink = Color(0xFF1B2D43)
 private val Muted = Color(0xFF718096)
 private val Amber = Color(0xFFF5B544)
 private val Rose = Color(0xFFE87575)
-
-@Entity(tableName = "hospital_records")
-data class HospitalRecord(
-    @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val category: String,
-    val title: String,
-    val details: String,
-    val createdAt: Long = System.currentTimeMillis()
-)
-
-@Dao
-interface HospitalDao {
-    @Query("SELECT * FROM hospital_records WHERE category = :category ORDER BY createdAt DESC")
-    fun records(category: String): kotlinx.coroutines.flow.Flow<List<HospitalRecord>>
-
-    @Query("SELECT * FROM hospital_records ORDER BY createdAt DESC")
-    fun allRecords(): kotlinx.coroutines.flow.Flow<List<HospitalRecord>>
-
-    @Insert
-    suspend fun insert(record: HospitalRecord)
-
-    @Query("SELECT COUNT(*) FROM hospital_records WHERE category = :category")
-    suspend fun count(category: String): Int
-
-    @Query("DELETE FROM hospital_records WHERE id = :id")
-    suspend fun delete(id: Long)
-}
-
-@Database(entities = [HospitalRecord::class], version = 1, exportSchema = false)
-abstract class HospitalDatabase : RoomDatabase() {
-    abstract fun hospitalDao(): HospitalDao
-    companion object {
-        @Volatile private var INSTANCE: HospitalDatabase? = null
-        fun get(context: android.content.Context): HospitalDatabase =
-            INSTANCE ?: synchronized(this) {
-                INSTANCE ?: Room.databaseBuilder(
-                    context.applicationContext, HospitalDatabase::class.java, "hospital-local.db"
-                ).build().also { INSTANCE = it }
-            }
-    }
-}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
