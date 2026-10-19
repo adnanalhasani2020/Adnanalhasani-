@@ -4,6 +4,8 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.YearMonth
+import java.math.BigDecimal
+import java.math.RoundingMode
 import java.time.format.DateTimeFormatter
 import java.time.format.ResolverStyle
 import java.util.Locale
@@ -38,4 +40,19 @@ object HospitalFieldValidation {
     fun isValidTime(raw: String): Boolean = runCatching {
         LocalTime.parse(raw, timeFormatter)
     }.isSuccess
+
+    /**
+     * Converts a non-negative amount to minor units without silently truncating
+     * fractions or overflowing Long. Trailing zeroes beyond two decimals are OK.
+     */
+    fun toMinorUnitsOrNull(raw: String): Long? = runCatching {
+        val amount = BigDecimal(raw.trim())
+        require(amount.signum() >= 0) { "Amount must not be negative" }
+        require(amount.stripTrailingZeros().scale() <= 2) { "Amount supports at most two decimal places" }
+        amount.setScale(2, RoundingMode.UNNECESSARY)
+            .movePointRight(2)
+            .longValueExact()
+    }.getOrNull()
+
+    fun isValidMoneyAmount(raw: String): Boolean = toMinorUnitsOrNull(raw) != null
 }
