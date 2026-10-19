@@ -72,3 +72,25 @@ def test_database_rejects_sale_line_before_sale_is_fulfilled(tmp_path):
         )
     db.rollback()
     assert db.execute("SELECT COUNT(*) FROM sale_lines WHERE sale_id=?", (request["sale_id"],)).fetchone()[0] == 0
+
+
+
+def test_database_rejects_product_name_snapshot_that_disagrees_with_product(tmp_path):
+    db, request = setup_checkout(tmp_path)
+    CommercialCheckoutApplication().checkout(db, **request, now=NOW)
+    product_id = db.execute(
+        "SELECT product_id FROM offerings WHERE offering_id=?",
+        (request["offering_id"],),
+    ).fetchone()[0]
+
+    with pytest.raises(sqlite3.IntegrityError, match="must match Product at checkout"):
+        db.execute(
+            """INSERT INTO sale_lines(
+                   sale_line_id, sale_id, offering_id, product_id, quantity,
+                   unit_price_minor, currency_code, line_total_minor, created_at,
+                   product_name_snapshot
+               ) VALUES(?,?,?,?,1,1250,'SAR',1250,?,'Forged product name')""",
+            (uid(), request["sale_id"], request["offering_id"], product_id, "2026-10-17T12:01:00Z"),
+        )
+    db.rollback()
+    assert db.execute("SELECT COUNT(*) FROM sale_lines WHERE sale_id=?", (request["sale_id"],)).fetchone()[0] == 1
