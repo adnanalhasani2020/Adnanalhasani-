@@ -174,7 +174,22 @@ fun HospitalApp(repository: HospitalRepository) {
     var showMenu by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val all by repository.allRecords().collectAsState(initial = emptyList())
+    val emergencyCases by repository.emergencyCases().collectAsState(initial = emptyList())
+    val icuStays by repository.icuStays().collectAsState(initial = emptyList())
+    val inventoryItems by repository.inventoryItems().collectAsState(initial = emptyList())
+    val labOrders by repository.labOrders().collectAsState(initial = emptyList())
+    val radiologyOrders by repository.radiologyOrders().collectAsState(initial = emptyList())
+    val maintenanceTickets by repository.maintenanceTickets().collectAsState(initial = emptyList())
     val currentModule = modules.find { it.key == selected }
+    val specializedRows = when (selected) {
+        "emergency" -> emergencyCases.map { it.caseNumber to "${it.patientName} • ${it.triageLevel} • ${it.status}" }
+        "icu" -> icuStays.map { "${it.patientName} • ${it.bedNumber}" to "${it.attendingDoctor} • ${it.careLevel} • ${it.admissionDate}" }
+        "inventory" -> inventoryItems.map { "${it.name} (${it.sku})" to "الكمية: ${it.quantity} • حد الطلب: ${it.reorderLevel} ${it.unit}" }
+        "lab" -> labOrders.map { "${it.patientName} • ${it.testName}" to "${it.status} • ${it.result}" }
+        "radiology" -> radiologyOrders.map { "${it.patientName} • ${it.imagingType}" to "${it.requestingDoctor} • ${it.status} • ${it.report}" }
+        "maintenance" -> maintenanceTickets.map { it.ticketNumber to "${it.location} • ${it.issue} • ${it.priority} • ${it.status}" }
+        else -> emptyList()
+    }
     val screenTitle = currentModule?.title ?: when (selected) {
         "home" -> "لوحة التحكم"
         "reports" -> "التقارير والمؤشرات"
@@ -251,6 +266,7 @@ fun HospitalApp(repository: HospitalRepository) {
                     currentModule != null -> ModuleScreen(
                         module = currentModule,
                         records = all.filter { it.category == currentModule.key },
+                        specializedRows = specializedRows,
                         onSave = { title, details ->
                             repository.saveRecord(HospitalRecord(category = currentModule.key, title = title, details = details))
                         },
@@ -523,6 +539,7 @@ private fun ModuleMenu(onSelect: (String) -> Unit) {
 private fun ModuleScreen(
     module: Module,
     records: List<HospitalRecord>,
+    specializedRows: List<Pair<String, String>>,
     onSave: suspend (String, String) -> Unit,
     onDelete: (Long) -> Unit
 ) {
@@ -623,6 +640,25 @@ private fun ModuleScreen(
                     }
                     validationMessage?.let { Text(it, color = Rose, fontSize = 12.sp) }
                     if (savedMessage) Text("تم حفظ السجل محلياً بنجاح.", color = Teal, fontSize = 12.sp)
+                }
+            }
+        }
+        if (specializedRows.isNotEmpty()) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    shape = RoundedCornerShape(18.dp)
+                ) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("السجلات المرتبطة بالكلاس المتخصص", color = Navy, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        specializedRows.take(30).forEach { (title, details) ->
+                            Column(Modifier.fillMaxWidth().background(Canvas, RoundedCornerShape(12.dp)).padding(12.dp)) {
+                                Text(title.ifBlank { "سجل بدون عنوان" }, color = Navy, fontWeight = FontWeight.SemiBold)
+                                if (details.isNotBlank()) Text(details, color = Muted, fontSize = 12.sp)
+                            }
+                        }
+                    }
                 }
             }
         }
