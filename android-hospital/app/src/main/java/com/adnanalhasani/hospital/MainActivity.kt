@@ -337,6 +337,7 @@ private fun HospitalWorkspace(repository: HospitalRepository) {
                     )
                     selected == "emergency" -> EmergencyScreen(
                         repository = repository,
+                        onEdit = { id, title, details -> repository.updateRecord(id, title, details) },
                         onDelete = { id -> scope.launch { repository.deleteRecord(id) } }
                     )
                     selected == "settings" -> SettingsScreen(
