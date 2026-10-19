@@ -11,6 +11,8 @@ class HospitalRepository(private val dao: HospitalDao) {
 
     fun recentAuditHistory(): Flow<List<RecordAuditLogEntity>> = dao.recentAuditHistory()
 
+    fun clinicalVisits(): Flow<List<ClinicalVisitEntity>> = dao.clinicalVisits()
+
     fun auditHistory(recordId: Long): Flow<List<RecordAuditLogEntity>> = dao.auditHistory(recordId)
 
     fun referenceItems(category: String): Flow<List<ReferenceCatalogEntity>> = dao.referenceItems(category)
