@@ -7,6 +7,7 @@ on:
       - feature/hospital-android-apk-shell
     paths:
       - "android/**"
+      - "hospital/web/**"
       - ".github/workflows/hospital-android-apk.yml"
 
 permissions:
