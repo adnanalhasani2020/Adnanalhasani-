@@ -396,6 +396,13 @@ private fun ModuleScreen(
     var savedMessage by remember { mutableStateOf(false) }
     var isSaving by remember { mutableStateOf(false) }
     var validationMessage by remember { mutableStateOf<String?>(null) }
+    var searchQuery by remember(module.key) { mutableStateOf("") }
+    val filteredRecords = remember(records, searchQuery) {
+        records.filter { record ->
+            record.title.contains(searchQuery, ignoreCase = true) ||
+                record.details.contains(searchQuery, ignoreCase = true)
+        }
+    }
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(18.dp),
@@ -484,7 +491,18 @@ private fun ModuleScreen(
                 }
             }
         }
-        if (records.isEmpty()) {
+        item {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("بحث في سجلات ${module.title}") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = "بحث") },
+                singleLine = true,
+                shape = RoundedCornerShape(14.dp)
+            )
+        }
+        if (filteredRecords.isEmpty()) {
             item {
                 Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
                     Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -495,7 +513,7 @@ private fun ModuleScreen(
                 }
             }
         } else {
-            items(records, key = { it.id }) { record ->
+            items(filteredRecords, key = { it.id }) { record ->
                 Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
                     Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.Top) {
                         Box(Modifier.size(38.dp).background(module.color.copy(alpha = .12f), CircleShape), contentAlignment = Alignment.Center) {
