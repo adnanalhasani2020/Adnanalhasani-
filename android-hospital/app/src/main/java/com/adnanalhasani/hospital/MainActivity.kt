@@ -259,6 +259,7 @@ private fun HospitalWorkspace(repository: HospitalRepository) {
         "reports" -> "التقارير والمؤشرات"
         "settings" -> "الإعدادات"
         "business" -> "بيانات المنشأة"
+        "catalogs" -> "القوائم المرجعية"
         else -> "نظام المستشفى"
     }
 
@@ -327,6 +328,7 @@ private fun HospitalWorkspace(repository: HospitalRepository) {
                         onAdd = { key -> selected = key }
                     )
                     selected == "reports" -> Reports(all)
+                    selected == "catalogs" -> ReferenceCatalogScreen(repository)
                     selected == "business" -> BusinessProfileScreen(
                         profile = businessProfile,
                         onSave = { profile -> repository.saveBusinessProfile(profile) }
@@ -344,6 +346,7 @@ private fun HospitalWorkspace(repository: HospitalRepository) {
                         allCount = all.size,
                         exportStatus = exportStatus,
                         onBusinessProfile = { selected = "business" },
+                        onReferenceCatalogs = { selected = "catalogs" },
                         onExport = {
                             exportStatus = null
                             val timestamp = SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date())
@@ -1275,7 +1278,7 @@ private fun Reports(all: List<HospitalRecord>) {
 }
 
 @Composable
-private fun SettingsScreen(allCount: Int, exportStatus: String?, onBusinessProfile: () -> Unit, onExport: () -> Unit) {
+private fun SettingsScreen(allCount: Int, exportStatus: String?, onBusinessProfile: () -> Unit, onReferenceCatalogs: () -> Unit, onExport: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item {
             Box(Modifier.fillMaxWidth().background(Brush.linearGradient(listOf(Navy, Teal)), RoundedCornerShape(24.dp)).padding(22.dp)) {
@@ -1312,6 +1315,25 @@ private fun SettingsScreen(allCount: Int, exportStatus: String?, onBusinessProfi
                         Icon(Icons.Default.Business, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
                         Text("إدارة بيانات المنشأة")
+                    }
+                }
+            }
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Border)) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.ListAlt, contentDescription = null, tint = Teal)
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("القوائم المرجعية", color = Navy, fontWeight = FontWeight.Bold)
+                            Text("إدارة الفحوصات والأدوية والتشخيصات والأقسام والخيارات الافتراضية المحفوظة في قاعدة البيانات.", color = Muted, fontSize = 12.sp)
+                        }
+                    }
+                    Button(onClick = onReferenceCatalogs, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Default.ListAlt, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("إدارة القوائم المرجعية")
                     }
                 }
             }
