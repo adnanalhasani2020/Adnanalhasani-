@@ -164,3 +164,20 @@ def test_audit_detects_non_chronological_timestamps():
     assert result.status == "inconsistent"
     assert "history_timestamps_not_chronological:2" in result.findings
     db.close()
+
+
+def test_audit_detects_history_timestamp_before_sale_creation():
+    db = connect_database()
+    sale = sale_fixture(db, version=1)
+    history(db, sale, None, f"sale-state:{sale}:v1")
+    db.execute(
+        "UPDATE domain_history SET historical_at='2026-10-10T11:59:00Z' "
+        "WHERE target_ref=? AND change_type='sale_state_transition'",
+        (sale,),
+    )
+    db.commit()
+
+    result = SaleHistoryIntegrityAuditor().inspect(db, sale)
+    assert result.status == "inconsistent"
+    assert "history_timestamp_before_sale_creation:1" in result.findings
+    db.close()
