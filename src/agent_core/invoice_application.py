@@ -88,6 +88,23 @@ class InvoiceApplication:
         (iid, sale_id, obligation_id, state, issuer, number, issue_at, due_at,
          created_at, updated_at, version) = row
 
+        # Validate persisted identifiers and scalar fields before constructing domain
+        # objects; raw ValueError/TypeError leaks make corruption hard to diagnose and
+        # can let malformed invoice metadata pass into downstream callers.
+        iid = str(self._uuid(iid, "Persisted Invoice identifier"))
+        sale_id = str(self._uuid(sale_id, "Persisted Invoice Sale identifier"))
+        if obligation_id is not None:
+            obligation_id = str(self._uuid(obligation_id, "Persisted Invoice Obligation identifier"))
+        issuer = str(self._uuid(issuer, "Persisted Invoice issuer identifier"))
+        if not isinstance(number, str) or not number.strip():
+            raise ValidationError("Persisted Invoice number must be a non-empty string")
+        if type(version) is not int or version < 1:
+            raise ValidationError("Persisted Invoice version must be a positive integer")
+        try:
+            invoice_state = InvoiceState(state)
+        except (ValueError, TypeError) as exc:
+            raise ValidationError("Persisted Invoice state is invalid") from exc
+
         # Reads must fail closed on persisted corruption too; otherwise downstream
         # callers can act on an invoice whose lifecycle or parent Sale is inconsistent.
         created = self._timestamp(created_at, "Persisted Invoice creation timestamp")
@@ -136,7 +153,7 @@ class InvoiceApplication:
                 raise ValidationError("Persisted Invoice and Obligation links conflict")
 
         return InvoiceRecord(
-            Invoice(UUID(sale_id), id=UUID(iid), state=InvoiceState(state)),
+            Invoice(UUID(sale_id), id=UUID(iid), state=invoice_state),
             UUID(sale_id), UUID(obligation_id) if obligation_id else None,
             issuer, number, issue_at, due_at, version,
         )
