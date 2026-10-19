@@ -94,6 +94,33 @@ data class MaintenanceTicketEntity(
     val createdAt: Long
 )
 
+@Entity(
+    tableName = "vaccination_records",
+    indices = [
+        Index(value = ["sourceRecordId"], unique = true),
+        Index(value = ["childFileNumber"]),
+        Index(value = ["nextDoseDate"]),
+        Index(value = ["childName", "vaccineName"])
+    ]
+)
+data class VaccinationRecordEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val sourceRecordId: Long,
+    val childName: String,
+    val childFileNumber: String = "",
+    val dateOfBirth: String = "",
+    val vaccineName: String,
+    val doseNumber: String,
+    val administeredDate: String,
+    val nextDoseDate: String = "",
+    val batchNumber: String = "",
+    val administrationSite: String = "",
+    val administeredBy: String = "",
+    val doseStatus: String = "تم التطعيم",
+    val notes: String = "",
+    val createdAt: Long
+)
+
 @Entity(tableName = "business_profile")
 data class BusinessProfileEntity(
     @PrimaryKey val id: Int = 1,
@@ -220,6 +247,7 @@ interface HospitalDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveLabOrder(entity: LabOrderEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveRadiologyOrder(entity: RadiologyOrderEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveMaintenanceTicket(entity: MaintenanceTicketEntity)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveVaccinationRecord(entity: VaccinationRecordEntity)
 
     @Query("SELECT * FROM emergency_cases ORDER BY createdAt DESC") fun emergencyCases(): Flow<List<EmergencyCaseEntity>>
     @Query("SELECT * FROM icu_stays ORDER BY createdAt DESC") fun icuStays(): Flow<List<IcuStayEntity>>
@@ -227,6 +255,9 @@ interface HospitalDao {
     @Query("SELECT * FROM lab_orders ORDER BY createdAt DESC") fun labOrders(): Flow<List<LabOrderEntity>>
     @Query("SELECT * FROM radiology_orders ORDER BY createdAt DESC") fun radiologyOrders(): Flow<List<RadiologyOrderEntity>>
     @Query("SELECT * FROM maintenance_tickets ORDER BY createdAt DESC") fun maintenanceTickets(): Flow<List<MaintenanceTicketEntity>>
+    @Query("SELECT * FROM vaccination_records ORDER BY nextDoseDate ASC, administeredDate DESC") fun vaccinationRecords(): Flow<List<VaccinationRecordEntity>>
+    @Query("SELECT * FROM vaccination_records WHERE childFileNumber = :fileNumber ORDER BY administeredDate DESC") fun vaccinationsForChild(fileNumber: String): Flow<List<VaccinationRecordEntity>>
+    @Query("SELECT * FROM vaccination_records WHERE nextDoseDate != '' AND nextDoseDate >= :today ORDER BY nextDoseDate ASC") fun upcomingVaccinations(today: String): Flow<List<VaccinationRecordEntity>>
 
     @Query("DELETE FROM emergency_cases WHERE sourceRecordId = :id") suspend fun deleteEmergencyCase(id: Long)
     @Query("DELETE FROM icu_stays WHERE sourceRecordId = :id") suspend fun deleteIcuStay(id: Long)
@@ -234,6 +265,7 @@ interface HospitalDao {
     @Query("DELETE FROM lab_orders WHERE sourceRecordId = :id") suspend fun deleteLabOrder(id: Long)
     @Query("DELETE FROM radiology_orders WHERE sourceRecordId = :id") suspend fun deleteRadiologyOrder(id: Long)
     @Query("DELETE FROM maintenance_tickets WHERE sourceRecordId = :id") suspend fun deleteMaintenanceTicket(id: Long)
+    @Query("DELETE FROM vaccination_records WHERE sourceRecordId = :id") suspend fun deleteVaccinationRecord(id: Long)
 
     /**
      * Keep the legacy searchable timeline and the typed domain table in sync.
@@ -289,6 +321,22 @@ interface HospitalDao {
                 sourceRecordId = sourceRecordId, patientName = field("اسم المريض"),
                 imagingType = field("نوع التصوير"), requestingDoctor = field("الطبيب الطالب"),
                 status = field("الحالة"), report = field("التقرير"), createdAt = record.createdAt
+            ))
+            "vaccination" -> saveVaccinationRecord(VaccinationRecordEntity(
+                sourceRecordId = sourceRecordId,
+                childName = field("اسم المريض", "اسم الطفل"),
+                childFileNumber = field("رقم ملف الطفل", "رقم الملف"),
+                dateOfBirth = field("تاريخ الميلاد"),
+                vaccineName = field("اسم اللقاح"),
+                doseNumber = field("رقم الجرعة"),
+                administeredDate = field("تاريخ التطعيم"),
+                nextDoseDate = field("موعد الجرعة التالية"),
+                batchNumber = field("رقم التشغيلة"),
+                administrationSite = field("مكان التطعيم"),
+                administeredBy = field("الممارس الصحي"),
+                doseStatus = field("حالة الجرعة").ifBlank { "تم التطعيم" },
+                notes = field("ملاحظات"),
+                createdAt = record.createdAt
             ))
             "maintenance" -> saveMaintenanceTicket(MaintenanceTicketEntity(
                 sourceRecordId = sourceRecordId, ticketNumber = record.title,
@@ -501,6 +549,7 @@ interface HospitalDao {
     suspend fun delete(id: Long) {
         val record = recordById(id) ?: return
         when (record.category) {
+            "vaccination" -> deleteVaccinationRecord(id)
             "emergency" -> deleteEmergencyCase(id)
             "icu" -> deleteIcuStay(id)
             "inventory" -> deleteInventoryItem(id)
@@ -537,9 +586,10 @@ interface HospitalDao {
         AppointmentEntity::class,
         InvoiceEntity::class,
         PaymentEntity::class,
-        BusinessProfileEntity::class
+        BusinessProfileEntity::class,
+        VaccinationRecordEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class HospitalDatabase : RoomDatabase() {
@@ -552,6 +602,17 @@ abstract class HospitalDatabase : RoomDatabase() {
          * Version 1 only contained hospital_records. CREATE TABLE IF NOT EXISTS leaves
          * those rows untouched and adds the new typed tables without destructive fallback.
          */
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS vaccination_records (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, sourceRecordId INTEGER NOT NULL, childName TEXT NOT NULL, childFileNumber TEXT NOT NULL, dateOfBirth TEXT NOT NULL, vaccineName TEXT NOT NULL, doseNumber TEXT NOT NULL, administeredDate TEXT NOT NULL, nextDoseDate TEXT NOT NULL, batchNumber TEXT NOT NULL, administrationSite TEXT NOT NULL, administeredBy TEXT NOT NULL, doseStatus TEXT NOT NULL, notes TEXT NOT NULL, createdAt INTEGER NOT NULL)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_vaccination_records_sourceRecordId ON vaccination_records(sourceRecordId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_vaccination_records_childFileNumber ON vaccination_records(childFileNumber)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_vaccination_records_nextDoseDate ON vaccination_records(nextDoseDate)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_vaccination_records_childName_vaccineName ON vaccination_records(childName, vaccineName)")
+                db.execSQL("INSERT OR IGNORE INTO vaccination_records (sourceRecordId, childName, childFileNumber, dateOfBirth, vaccineName, doseNumber, administeredDate, nextDoseDate, batchNumber, administrationSite, administeredBy, doseStatus, notes, createdAt) SELECT id, COALESCE((SELECT trim(substr(details, instr(details, 'اسم المريض: ') + length('اسم المريض: '), instr(substr(details, instr(details, 'اسم المريض: ') + length('اسم المريض: ')), char(10)) - 1)) FROM hospital_records WHERE id = hospital_records.id), title, '', '', '', '', '', '', '', '', 'تم التطعيم', details, createdAt FROM hospital_records WHERE category = 'vaccination'")
+            }
+        }
+
         private val MIGRATION_5_6 = object : Migration(5, 6) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("CREATE TABLE IF NOT EXISTS business_profile (id INTEGER NOT NULL PRIMARY KEY, name TEXT NOT NULL, legalName TEXT NOT NULL, businessType TEXT NOT NULL, registrationNumber TEXT NOT NULL, taxNumber TEXT NOT NULL, phone TEXT NOT NULL, email TEXT NOT NULL, address TEXT NOT NULL, website TEXT NOT NULL, currency TEXT NOT NULL, updatedAt INTEGER NOT NULL)")
@@ -653,7 +714,7 @@ abstract class HospitalDatabase : RoomDatabase() {
                     HospitalDatabase::class.java,
                     "hospital-local.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                     .build()
                     .also { INSTANCE = it }
             }
