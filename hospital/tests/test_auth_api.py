@@ -229,6 +229,32 @@ class HospitalUserAuthAPITests(unittest.TestCase):
         self.assertEqual(audit["entity_type"], "encounter")
         self.assertEqual(audit["entity_id"], str(encounter["id"]))
 
+    def test_saving_diagnosis_without_notes_preserves_existing_clinical_notes(self):
+        admin_token = self.login("admin.user", "administrator-password-123")
+        doctor_token = self.login("doctor.user", "doctor-password-1234")
+        status, patient = self.request("/api/patients", "POST", {
+            "patient_no": "DX-TEST-003", "full_name": "Synthetic Test Patient Three",
+            "created_at": "2026-01-01T08:00:00Z"
+        }, admin_token)
+        self.assertEqual(status, 201)
+        status, encounter = self.request("/api/encounters", "POST", {
+            "patient_id": patient["id"], "opened_at": "2026-01-01T09:00:00Z"
+        }, doctor_token)
+        self.assertEqual(status, 201)
+        with self.db.connect() as conn:
+            conn.execute("UPDATE encounters SET clinical_notes=? WHERE id=?",
+                         ("Existing notes", encounter["id"]))
+        status, payload = self.request(
+            f"/api/encounters/{encounter['id']}/diagnosis", "POST", {
+                "diagnosis": "Updated synthetic diagnosis", "at": "2026-01-01T09:15:00Z"
+            }, doctor_token)
+        self.assertEqual(status, 200)
+        with self.db.connect() as conn:
+            row = conn.execute("SELECT diagnosis,clinical_notes FROM encounters WHERE id=?",
+                                (encounter["id"],)).fetchone()
+        self.assertEqual(row["diagnosis"], "Updated synthetic diagnosis")
+        self.assertEqual(row["clinical_notes"], "Existing notes")
+
     def test_doctor_cannot_save_blank_or_oversized_diagnosis(self):
         admin_token = self.login("admin.user", "administrator-password-123")
         doctor_token = self.login("doctor.user", "doctor-password-1234")
