@@ -75,21 +75,49 @@ data class InventoryItemEntity(
     val notes: String, val createdAt: Long
 )
 
-@Entity(tableName = "lab_orders", foreignKeys = [ForeignKey(entity = HospitalRecord::class, parentColumns = ["id"], childColumns = ["sourceRecordId"], onDelete = ForeignKey.CASCADE), ForeignKey(entity = PatientEntity::class, parentColumns = ["id"], childColumns = ["patientId"], onDelete = ForeignKey.SET_NULL)], indices = [Index(value = ["sourceRecordId"], unique = true), Index(value = ["patientId"]), Index(value = ["status", "createdAt"])])
+@Entity(tableName = "lab_orders", foreignKeys = [ForeignKey(entity = HospitalRecord::class, parentColumns = ["id"], childColumns = ["sourceRecordId"], onDelete = ForeignKey.CASCADE), ForeignKey(entity = PatientEntity::class, parentColumns = ["id"], childColumns = ["patientId"], onDelete = ForeignKey.SET_NULL)], indices = [Index(value = ["sourceRecordId"], unique = true), Index(value = ["patientId"]), Index(value = ["clinicalVisitId"]), Index(value = ["status", "createdAt"])])
 data class LabOrderEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val sourceRecordId: Long, val patientName: String, val testName: String,
     val status: String, val result: String, val createdAt: Long,
-    val patientId: Long? = null
+    val patientId: Long? = null,
+    val clinicalVisitId: Long? = null
 )
 
-@Entity(tableName = "radiology_orders", foreignKeys = [ForeignKey(entity = HospitalRecord::class, parentColumns = ["id"], childColumns = ["sourceRecordId"], onDelete = ForeignKey.CASCADE), ForeignKey(entity = PatientEntity::class, parentColumns = ["id"], childColumns = ["patientId"], onDelete = ForeignKey.SET_NULL), ForeignKey(entity = DoctorEntity::class, parentColumns = ["id"], childColumns = ["doctorId"], onDelete = ForeignKey.SET_NULL)], indices = [Index(value = ["sourceRecordId"], unique = true), Index(value = ["patientId"]), Index(value = ["doctorId"]), Index(value = ["status", "createdAt"])])
+@Entity(tableName = "radiology_orders", foreignKeys = [ForeignKey(entity = HospitalRecord::class, parentColumns = ["id"], childColumns = ["sourceRecordId"], onDelete = ForeignKey.CASCADE), ForeignKey(entity = PatientEntity::class, parentColumns = ["id"], childColumns = ["patientId"], onDelete = ForeignKey.SET_NULL), ForeignKey(entity = DoctorEntity::class, parentColumns = ["id"], childColumns = ["doctorId"], onDelete = ForeignKey.SET_NULL)], indices = [Index(value = ["sourceRecordId"], unique = true), Index(value = ["patientId"]), Index(value = ["doctorId"]), Index(value = ["clinicalVisitId"]), Index(value = ["status", "createdAt"])])
 data class RadiologyOrderEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val sourceRecordId: Long, val patientName: String, val imagingType: String,
     val requestingDoctor: String, val status: String, val report: String, val createdAt: Long,
     val patientId: Long? = null,
-    val doctorId: Long? = null
+    val doctorId: Long? = null,
+    val clinicalVisitId: Long? = null
+)
+
+@Entity(
+    tableName = "prescription_orders",
+    foreignKeys = [
+        ForeignKey(entity = HospitalRecord::class, parentColumns = ["id"], childColumns = ["sourceRecordId"], onDelete = ForeignKey.CASCADE),
+        ForeignKey(entity = PatientEntity::class, parentColumns = ["id"], childColumns = ["patientId"], onDelete = ForeignKey.SET_NULL),
+        ForeignKey(entity = DoctorEntity::class, parentColumns = ["id"], childColumns = ["doctorId"], onDelete = ForeignKey.SET_NULL),
+        ForeignKey(entity = ClinicalVisitEntity::class, parentColumns = ["id"], childColumns = ["clinicalVisitId"], onDelete = ForeignKey.SET_NULL)
+    ],
+    indices = [Index(value = ["sourceRecordId"], unique = true), Index(value = ["patientId"]), Index(value = ["doctorId"]), Index(value = ["clinicalVisitId"]), Index(value = ["status", "createdAt"])]
+)
+data class PrescriptionOrderEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val sourceRecordId: Long,
+    val patientId: Long? = null,
+    val doctorId: Long? = null,
+    val clinicalVisitId: Long? = null,
+    val patientName: String,
+    val doctorName: String,
+    val medicationName: String,
+    val dose: String,
+    val frequencyAndDuration: String,
+    val status: String,
+    val instructions: String,
+    val createdAt: Long
 )
 
 @Entity(tableName = "maintenance_tickets", indices = [Index(value = ["sourceRecordId"], unique = true), Index(value = ["status", "createdAt"])])
@@ -392,6 +420,19 @@ interface HospitalDao {
     suspend fun updateRadiologyOrderRow(id: Long, patientName: String, patientId: Long?, imagingType: String,
         requestingDoctor: String, doctorId: Long?, status: String, report: String)
 
+    @Query("UPDATE lab_orders SET clinicalVisitId = :clinicalVisitId WHERE sourceRecordId = :id")
+    suspend fun updateLabClinicalVisit(id: Long, clinicalVisitId: Long?)
+
+    @Query("UPDATE radiology_orders SET clinicalVisitId = :clinicalVisitId WHERE sourceRecordId = :id")
+    suspend fun updateRadiologyClinicalVisit(id: Long, clinicalVisitId: Long?)
+
+    @Query("""UPDATE prescription_orders SET patientName = :patientName, patientId = :patientId, doctorName = :doctorName,
+        doctorId = :doctorId, medicationName = :medicationName, dose = :dose, frequencyAndDuration = :frequencyAndDuration,
+        status = :status, instructions = :instructions, clinicalVisitId = :clinicalVisitId WHERE sourceRecordId = :id""")
+    suspend fun updatePrescriptionOrderRow(id: Long, patientName: String, patientId: Long?, doctorName: String,
+        doctorId: Long?, medicationName: String, dose: String, frequencyAndDuration: String, status: String,
+        instructions: String, clinicalVisitId: Long?)
+
     @Query("""UPDATE maintenance_tickets SET ticketNumber = :ticketNumber, reporter = :reporter,
         location = :location, issue = :issue, priority = :priority, status = :status WHERE sourceRecordId = :id""")
     suspend fun updateMaintenanceTicketRow(id: Long, ticketNumber: String, reporter: String, location: String,
@@ -434,10 +475,15 @@ interface HospitalDao {
                 field("الكمية الحالية").toDoubleOrNull() ?: 0.0,
                 field("حد إعادة الطلب").toDoubleOrNull() ?: 0.0,
                 field("وحدة القياس"), field("ملاحظات"))
-            "lab" -> updateLabOrderRow(id, field("اسم المريض"), findPatientIdByName(field("اسم المريض")), field("اسم الفحص"),
-                field("حالة الفحص"), field("النتيجة"))
-            "radiology" -> updateRadiologyOrderRow(id, field("اسم المريض"), findPatientIdByName(field("اسم المريض")), field("نوع التصوير"),
-                field("الطبيب الطالب"), findDoctorIdByName(field("الطبيب الطالب")), field("الحالة"), field("التقرير"))
+            "lab" -> {
+                updateLabOrderRow(id, field("اسم المريض"), findPatientIdByName(field("اسم المريض")), field("اسم الفحص"), field("حالة الفحص"), field("النتيجة"))
+                updateLabClinicalVisit(id, field("معرّف الزيارة").toLongOrNull())
+            }
+            "radiology" -> {
+                updateRadiologyOrderRow(id, field("اسم المريض"), findPatientIdByName(field("اسم المريض")), field("نوع التصوير"), field("الطبيب الطالب"), findDoctorIdByName(field("الطبيب الطالب")), field("الحالة"), field("التقرير"))
+                updateRadiologyClinicalVisit(id, field("معرّف الزيارة").toLongOrNull())
+            }
+            "prescriptions" -> updatePrescriptionOrderRow(id, field("اسم المريض"), findPatientIdByName(field("اسم المريض")), field("اسم الطبيب"), findDoctorIdByName(field("اسم الطبيب")), field("اسم الدواء"), field("الجرعة"), field("التكرار والمدة"), field("الحالة"), field("تعليمات إضافية", "ملاحظات"), field("معرّف الزيارة").toLongOrNull())
             "maintenance" -> updateMaintenanceTicketRow(id, title, field("مقدم البلاغ"),
                 field("الموقع"), field("نوع العطل"), field("الأولوية"), field("الحالة"))
             "patients" -> {
@@ -515,6 +561,7 @@ interface HospitalDao {
     @Query("DELETE FROM inventory_items WHERE sourceRecordId = :id") suspend fun deleteInventoryItem(id: Long)
     @Query("DELETE FROM lab_orders WHERE sourceRecordId = :id") suspend fun deleteLabOrder(id: Long)
     @Query("DELETE FROM radiology_orders WHERE sourceRecordId = :id") suspend fun deleteRadiologyOrder(id: Long)
+    @Query("DELETE FROM prescription_orders WHERE sourceRecordId = :id") suspend fun deletePrescriptionOrder(id: Long)
     @Query("DELETE FROM maintenance_tickets WHERE sourceRecordId = :id") suspend fun deleteMaintenanceTicket(id: Long)
     @Query("DELETE FROM vaccination_records WHERE sourceRecordId = :id") suspend fun deleteVaccinationRecord(id: Long)
 
@@ -578,15 +625,22 @@ interface HospitalDao {
                 unit = field("وحدة القياس"), notes = field("ملاحظات"), createdAt = record.createdAt
             ))
             "lab" -> saveLabOrder(LabOrderEntity(
-                sourceRecordId = sourceRecordId, patientName = field("اسم المريض"),
-                testName = field("اسم الفحص"), status = field("حالة الفحص"),
-                result = field("النتيجة"), createdAt = record.createdAt, patientId = findPatientIdByName(field("اسم المريض"))
+                sourceRecordId = sourceRecordId, patientName = field("اسم المريض"), testName = field("اسم الفحص"),
+                status = field("حالة الفحص"), result = field("النتيجة"), createdAt = record.createdAt,
+                patientId = findPatientIdByName(field("اسم المريض")), clinicalVisitId = field("معرّف الزيارة").toLongOrNull()
             ))
             "radiology" -> saveRadiologyOrder(RadiologyOrderEntity(
-                sourceRecordId = sourceRecordId, patientName = field("اسم المريض"),
-                imagingType = field("نوع التصوير"), requestingDoctor = field("الطبيب الطالب"),
-                status = field("الحالة"), report = field("التقرير"), createdAt = record.createdAt,
-                patientId = findPatientIdByName(field("اسم المريض")), doctorId = findDoctorIdByName(field("الطبيب الطالب"))
+                sourceRecordId = sourceRecordId, patientName = field("اسم المريض"), imagingType = field("نوع التصوير"),
+                requestingDoctor = field("الطبيب الطالب"), status = field("الحالة"), report = field("التقرير"), createdAt = record.createdAt,
+                patientId = findPatientIdByName(field("اسم المريض")), doctorId = findDoctorIdByName(field("الطبيب الطالب")),
+                clinicalVisitId = field("معرّف الزيارة").toLongOrNull()
+            ))
+            "prescriptions" -> savePrescriptionOrder(PrescriptionOrderEntity(
+                sourceRecordId = sourceRecordId, patientId = findPatientIdByName(field("اسم المريض")),
+                doctorId = findDoctorIdByName(field("اسم الطبيب")), clinicalVisitId = field("معرّف الزيارة").toLongOrNull(),
+                patientName = field("اسم المريض"), doctorName = field("اسم الطبيب"), medicationName = field("اسم الدواء"),
+                dose = field("الجرعة"), frequencyAndDuration = field("التكرار والمدة"), status = field("الحالة"),
+                instructions = field("تعليمات إضافية", "ملاحظات"), createdAt = record.createdAt
             ))
             "vaccination" -> saveVaccinationRecord(VaccinationRecordEntity(
                 sourceRecordId = sourceRecordId,
@@ -794,10 +848,16 @@ interface HospitalDao {
     fun recentAuditHistory(): Flow<List<RecordAuditLogEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun savePrescriptionOrder(order: PrescriptionOrderEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun saveClinicalVisit(visit: ClinicalVisitEntity)
 
     @Query("SELECT * FROM clinical_visits ORDER BY visitAt DESC, createdAt DESC")
     fun clinicalVisits(): Flow<List<ClinicalVisitEntity>>
+
+    @Query("SELECT * FROM prescription_orders ORDER BY createdAt DESC")
+    fun prescriptionOrders(): Flow<List<PrescriptionOrderEntity>>
 
     @Query("DELETE FROM clinical_visits WHERE sourceRecordId = :id")
     suspend fun deleteClinicalVisit(id: Long)
@@ -846,6 +906,7 @@ interface HospitalDao {
             "inventory" -> deleteInventoryItem(id)
             "lab" -> deleteLabOrder(id)
             "radiology" -> deleteRadiologyOrder(id)
+            "prescriptions" -> deletePrescriptionOrder(id)
             "maintenance" -> deleteMaintenanceTicket(id)
             "patients" -> {
                 if (countOtherPatientRecords(record.title, id) == 0) deletePatientRecord(record.title)
@@ -872,6 +933,7 @@ interface HospitalDao {
         InventoryItemEntity::class,
         LabOrderEntity::class,
         RadiologyOrderEntity::class,
+        PrescriptionOrderEntity::class,
         MaintenanceTicketEntity::class,
         PatientEntity::class,
         DoctorEntity::class,
@@ -884,7 +946,7 @@ interface HospitalDao {
         RecordAuditLogEntity::class,
         ClinicalVisitEntity::class
     ],
-    version = 12,
+    version = 13,
     exportSchema = false
 )
 abstract class HospitalDatabase : RoomDatabase() {
@@ -947,6 +1009,43 @@ abstract class HospitalDatabase : RoomDatabase() {
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_radiology_orders_patientId ON radiology_orders(patientId)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_radiology_orders_doctorId ON radiology_orders(doctorId)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_radiology_orders_status_createdAt ON radiology_orders(status, createdAt)")
+            }
+        }
+
+        private val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE lab_orders ADD COLUMN clinicalVisitId INTEGER")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_lab_orders_clinicalVisitId ON lab_orders(clinicalVisitId)")
+                db.execSQL("ALTER TABLE radiology_orders ADD COLUMN clinicalVisitId INTEGER")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_radiology_orders_clinicalVisitId ON radiology_orders(clinicalVisitId)")
+                db.execSQL("""CREATE TABLE IF NOT EXISTS prescription_orders (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, sourceRecordId INTEGER NOT NULL,
+                    patientId INTEGER, doctorId INTEGER, clinicalVisitId INTEGER,
+                    patientName TEXT NOT NULL, doctorName TEXT NOT NULL, medicationName TEXT NOT NULL,
+                    dose TEXT NOT NULL, frequencyAndDuration TEXT NOT NULL, status TEXT NOT NULL,
+                    instructions TEXT NOT NULL, createdAt INTEGER NOT NULL,
+                    FOREIGN KEY(sourceRecordId) REFERENCES hospital_records(id) ON UPDATE NO ACTION ON DELETE CASCADE,
+                    FOREIGN KEY(patientId) REFERENCES patients(id) ON UPDATE NO ACTION ON DELETE SET NULL,
+                    FOREIGN KEY(doctorId) REFERENCES doctors(id) ON UPDATE NO ACTION ON DELETE SET NULL,
+                    FOREIGN KEY(clinicalVisitId) REFERENCES clinical_visits(id) ON UPDATE NO ACTION ON DELETE SET NULL
+                )""".trimIndent())
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_prescription_orders_sourceRecordId ON prescription_orders(sourceRecordId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_prescription_orders_patientId ON prescription_orders(patientId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_prescription_orders_doctorId ON prescription_orders(doctorId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_prescription_orders_clinicalVisitId ON prescription_orders(clinicalVisitId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_prescription_orders_status_createdAt ON prescription_orders(status, createdAt)")
+                db.execSQL("""INSERT OR IGNORE INTO prescription_orders
+                    (sourceRecordId, patientId, doctorId, clinicalVisitId, patientName, doctorName, medicationName, dose, frequencyAndDuration, status, instructions, createdAt)
+                    SELECT h.id, NULL, NULL, NULL, '', '', h.title, '', '', '', h.details, h.createdAt
+                    FROM hospital_records h WHERE h.category = 'prescriptions'""".trimIndent())
+                db.execSQL("""UPDATE lab_orders SET clinicalVisitId = (
+                    SELECT v.id FROM clinical_visits v WHERE v.patientId = lab_orders.patientId
+                    ORDER BY v.visitAt DESC, v.createdAt DESC LIMIT 1
+                ) WHERE patientId IS NOT NULL""")
+                db.execSQL("""UPDATE radiology_orders SET clinicalVisitId = (
+                    SELECT v.id FROM clinical_visits v WHERE v.patientId = radiology_orders.patientId
+                    ORDER BY v.visitAt DESC, v.createdAt DESC LIMIT 1
+                ) WHERE patientId IS NOT NULL""")
             }
         }
 
@@ -1127,7 +1226,7 @@ abstract class HospitalDatabase : RoomDatabase() {
                     HospitalDatabase::class.java,
                     "hospital-local.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13)
                     .build()
                     .also { INSTANCE = it }
             }
