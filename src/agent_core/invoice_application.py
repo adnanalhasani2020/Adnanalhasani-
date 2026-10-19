@@ -249,6 +249,18 @@ class InvoiceApplication:
                     raise ValidationError(
                         "Obligation is already linked to an Invoice; explicit reconciliation is required"
                     )
+
+            # A Sale may have at most one currently issued Invoice. Check this after
+            # validating the supplied Obligation so callers receive the most specific
+            # domain error. BEGIN IMMEDIATE prevents concurrent SQLite issuances from
+            # both passing the invariant; voided invoices remain historical evidence.
+            if connection.execute(
+                "SELECT 1 FROM invoices WHERE sale_id=? AND state='issued' LIMIT 1",
+                (sale_key,),
+            ).fetchone() is not None:
+                raise ValidationError(
+                    "Sale already has an issued Invoice; explicit reconciliation is required"
+                )
             invoice = Invoice(UUID(sale_key), id=UUID(key), state=InvoiceState.ISSUED)
             connection.execute(
                 "INSERT INTO invoices(invoice_id,sale_id,obligation_id,state,issuer_ref,invoice_number,"
