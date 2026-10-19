@@ -226,7 +226,20 @@ data class ReferenceCatalogEntity(
     val updatedAt: Long = System.currentTimeMillis()
 )
 
-@Entity(tableName = "clinical_visits", indices = [Index(value = ["sourceRecordId"], unique = true), Index(value = ["patientId"]), Index(value = ["doctorId"]), Index(value = ["visitAt"])])
+@Entity(
+    tableName = "clinical_visits",
+    foreignKeys = [
+        ForeignKey(entity = HospitalRecord::class, parentColumns = ["id"], childColumns = ["sourceRecordId"], onDelete = ForeignKey.CASCADE),
+        ForeignKey(entity = PatientEntity::class, parentColumns = ["id"], childColumns = ["patientId"], onDelete = ForeignKey.SET_NULL),
+        ForeignKey(entity = DoctorEntity::class, parentColumns = ["id"], childColumns = ["doctorId"], onDelete = ForeignKey.SET_NULL)
+    ],
+    indices = [
+        Index(value = ["sourceRecordId"], unique = true),
+        Index(value = ["patientId"]),
+        Index(value = ["doctorId"]),
+        Index(value = ["visitAt"])
+    ]
+)
 data class ClinicalVisitEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val sourceRecordId: Long,
@@ -863,7 +876,7 @@ interface HospitalDao {
         RecordAuditLogEntity::class,
         ClinicalVisitEntity::class
     ],
-    version = 10,
+    version = 11,
     exportSchema = false
 )
 abstract class HospitalDatabase : RoomDatabase() {
@@ -884,6 +897,59 @@ abstract class HospitalDatabase : RoomDatabase() {
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_clinical_visits_doctorId ON clinical_visits(doctorId)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_clinical_visits_visitAt ON clinical_visits(visitAt)")
                 db.execSQL("INSERT OR IGNORE INTO clinical_visits (sourceRecordId, patientName, doctorName, chiefComplaint, diagnosis, notes, visitAt, createdAt) SELECT id, title, '', details, '', '', '', createdAt FROM hospital_records WHERE category = 'encounters'")
+            }
+        }
+
+        /**
+         * Version 11 enforces referential integrity for clinical visits while
+         * preserving existing rows and backfilling links where names match.
+         */
+        private val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE clinical_visits_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        sourceRecordId INTEGER NOT NULL,
+                        patientId INTEGER,
+                        doctorId INTEGER,
+                        patientName TEXT NOT NULL,
+                        doctorName TEXT NOT NULL,
+                        chiefComplaint TEXT NOT NULL,
+                        diagnosis TEXT NOT NULL,
+                        notes TEXT NOT NULL,
+                        visitAt TEXT NOT NULL,
+                        createdAt INTEGER NOT NULL,
+                        FOREIGN KEY(sourceRecordId) REFERENCES hospital_records(id) ON UPDATE NO ACTION ON DELETE CASCADE,
+                        FOREIGN KEY(patientId) REFERENCES patients(id) ON UPDATE NO ACTION ON DELETE SET NULL,
+                        FOREIGN KEY(doctorId) REFERENCES doctors(id) ON UPDATE NO ACTION ON DELETE SET NULL
+                    )
+                """.trimIndent())
+                db.execSQL("""
+                    INSERT INTO clinical_visits_new (
+                        id, sourceRecordId, patientId, doctorId, patientName, doctorName,
+                        chiefComplaint, diagnosis, notes, visitAt, createdAt
+                    )
+                    SELECT
+                        v.id,
+                        v.sourceRecordId,
+                        COALESCE(
+                            (SELECT p.id FROM patients p WHERE p.id = v.patientId),
+                            (SELECT p.id FROM patients p WHERE p.fullName = v.patientName ORDER BY p.createdAt DESC, p.id DESC LIMIT 1)
+                        ),
+                        COALESCE(
+                            (SELECT d.id FROM doctors d WHERE d.id = v.doctorId),
+                            (SELECT d.id FROM doctors d WHERE d.fullName = v.doctorName ORDER BY d.createdAt DESC, d.id DESC LIMIT 1)
+                        ),
+                        v.patientName, v.doctorName, v.chiefComplaint, v.diagnosis, v.notes, v.visitAt, v.createdAt
+                    FROM clinical_visits v
+                    INNER JOIN hospital_records h ON h.id = v.sourceRecordId
+                """.trimIndent())
+                db.execSQL("DROP TABLE clinical_visits")
+                db.execSQL("ALTER TABLE clinical_visits_new RENAME TO clinical_visits")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_clinical_visits_sourceRecordId ON clinical_visits(sourceRecordId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_clinical_visits_patientId ON clinical_visits(patientId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_clinical_visits_doctorId ON clinical_visits(doctorId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_clinical_visits_visitAt ON clinical_visits(visitAt)")
             }
         }
 
@@ -1015,7 +1081,7 @@ abstract class HospitalDatabase : RoomDatabase() {
                     HospitalDatabase::class.java,
                     "hospital-local.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
                     .build()
                     .also { INSTANCE = it }
             }
