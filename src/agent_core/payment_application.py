@@ -268,6 +268,18 @@ class PaymentApplication:
                     raise ValidationError("Payment parties do not match the linked Obligation parties")
                 if amount_minor > obligation_amount:
                     raise ValidationError("Payment amount exceeds the linked Obligation amount")
+                # Reserve capacity for in-flight and completed payments together.
+                # Otherwise two individually valid partial Payments can overpay the
+                # same Obligation. Failed/cancelled attempts do not consume capacity.
+                reserved_amount = connection.execute(
+                    "SELECT COALESCE(SUM(amount_minor),0) FROM payments "
+                    "WHERE obligation_id=? AND state IN ('initiated','pending','completed')",
+                    (obligation,),
+                ).fetchone()[0]
+                if reserved_amount + amount_minor > obligation_amount:
+                    raise ValidationError(
+                        "Payment amount would exceed the remaining linked Obligation balance"
+                    )
                 if currency_code != self._currency_code(obligation_currency):
                     raise ValidationError("Payment currency does not match the linked Obligation currency")
             if invoice is not None:
