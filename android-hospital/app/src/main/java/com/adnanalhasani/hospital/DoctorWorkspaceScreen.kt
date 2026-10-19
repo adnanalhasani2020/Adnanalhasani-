@@ -25,16 +25,13 @@ private fun doctorScreenField(record: HospitalRecord, label: String): String =
 @Composable
 fun DoctorWorkspaceScreen(repository: HospitalRepository) {
     val scope = rememberCoroutineScope()
-    val records by repository.allRecords().collectAsState(initial = emptyList())
+    val patients by repository.patients().collectAsState(initial = emptyList())
+    val doctors by repository.doctors().collectAsState(initial = emptyList())
     val visits by repository.clinicalVisits().collectAsState(initial = emptyList())
-    val patients = remember(records) {
-        records.filter { it.category == "patients" }.map { doctorScreenField(it, "اسم المريض").ifBlank { it.title } }.distinct().filter(String::isNotBlank)
-    }
-    val doctors = remember(records) {
-        records.filter { it.category == "doctors" }.map { doctorScreenField(it, "اسم الطبيب").ifBlank { it.title } }.distinct().filter(String::isNotBlank)
-    }
     var patient by remember { mutableStateOf("") }
     var doctor by remember { mutableStateOf("") }
+    var selectedPatientId by remember { mutableStateOf<Long?>(null) }
+    var selectedDoctorId by remember { mutableStateOf<Long?>(null) }
     var visitAt by remember { mutableStateOf(SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(Date())) }
     var complaint by remember { mutableStateOf("") }
     var diagnosis by remember { mutableStateOf("") }
@@ -52,20 +49,20 @@ fun DoctorWorkspaceScreen(repository: HospitalRepository) {
                     Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text("تسجيل زيارة جديدة", fontWeight = FontWeight.Bold, color = Color(0xFF263B4D))
                         if (patients.isEmpty() || doctors.isEmpty()) {
-                            Text("أضف سجل مريض وسجل طبيب أولاً لتظهر الأسماء هنا. يمكنك أيضًا إدخال الأسماء يدويًا.", color = Color(0xFF9A6B28), fontSize = 12.sp)
+                            Text("يجب إنشاء سجل المريض والطبيب أولاً ثم اختيارهما من القوائم لضمان ربط الزيارة بمعرّف صحيح في قاعدة البيانات.", color = Color(0xFF9A6B28), fontSize = 12.sp)
                         }
                         var patientExpanded by remember { mutableStateOf(false) }
                         ExposedDropdownMenuBox(expanded = patientExpanded, onExpandedChange = { patientExpanded = !patientExpanded }) {
-                            OutlinedTextField(value = patient, onValueChange = { patient = it }, label = { Text("اسم المريض *") }, modifier = Modifier.menuAnchor().fillMaxWidth(), singleLine = true)
+                            OutlinedTextField(value = patient, onValueChange = {}, readOnly = true, label = { Text("اختر المريض *") }, modifier = Modifier.menuAnchor().fillMaxWidth(), singleLine = true)
                             ExposedDropdownMenu(expanded = patientExpanded, onDismissRequest = { patientExpanded = false }) {
-                                patients.forEach { option -> DropdownMenuItem(text = { Text(option) }, onClick = { patient = option; patientExpanded = false }) }
+                                patients.forEach { option -> DropdownMenuItem(text = { Text("${option.fullName} • ${option.fileNumber}") }, onClick = { patient = option.fullName; selectedPatientId = option.id; patientExpanded = false }) }
                             }
                         }
                         var doctorExpanded by remember { mutableStateOf(false) }
                         ExposedDropdownMenuBox(expanded = doctorExpanded, onExpandedChange = { doctorExpanded = !doctorExpanded }) {
-                            OutlinedTextField(value = doctor, onValueChange = { doctor = it }, label = { Text("اسم الطبيب *") }, modifier = Modifier.menuAnchor().fillMaxWidth(), singleLine = true)
+                            OutlinedTextField(value = doctor, onValueChange = {}, readOnly = true, label = { Text("اختر الطبيب *") }, modifier = Modifier.menuAnchor().fillMaxWidth(), singleLine = true)
                             ExposedDropdownMenu(expanded = doctorExpanded, onDismissRequest = { doctorExpanded = false }) {
-                                doctors.forEach { option -> DropdownMenuItem(text = { Text(option) }, onClick = { doctor = option; doctorExpanded = false }) }
+                                doctors.forEach { option -> DropdownMenuItem(text = { Text("${option.fullName} • ${option.employeeNumber}") }, onClick = { doctor = option.fullName; selectedDoctorId = option.id; doctorExpanded = false }) }
                             }
                         }
                         OutlinedTextField(value = visitAt, onValueChange = { visitAt = it }, label = { Text("تاريخ ووقت الزيارة") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
@@ -74,8 +71,8 @@ fun DoctorWorkspaceScreen(repository: HospitalRepository) {
                         OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("ملاحظات وخطة المتابعة") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
                         Button(
                             onClick = {
-                                if (patient.isBlank() || doctor.isBlank() || complaint.isBlank()) {
-                                    message = "أدخل اسم المريض والطبيب والشكوى الرئيسية."
+                                if (selectedPatientId == null || selectedDoctorId == null || patient.isBlank() || doctor.isBlank() || complaint.isBlank()) {
+                                    message = "اختر مريضًا وطبيبًا مسجلين من القوائم وأدخل الشكوى الرئيسية."
                                 } else {
                                     scope.launch {
                                         saving = true
@@ -84,9 +81,9 @@ fun DoctorWorkspaceScreen(repository: HospitalRepository) {
                                                 "اسم المريض: $patient", "اسم الطبيب: $doctor", "تاريخ الزيارة: $visitAt",
                                                 "الشكوى الرئيسية: $complaint", "التشخيص: $diagnosis", "ملاحظات: $notes"
                                             ).joinToString("\n")
-                                            repository.saveRecord(HospitalRecord(category = "encounters", title = patient, details = details))
+                                            repository.saveClinicalVisit(HospitalRecord(category = "encounters", title = patient, details = details), selectedPatientId!!, selectedDoctorId!!)
                                             complaint = ""; diagnosis = ""; notes = ""
-                                            message = "تم حفظ الزيارة في قاعدة البيانات وربطها بالمريض والطبيب."
+                                            message = "تم حفظ الزيارة وربطها بمعرّفي المريض والطبيب في قاعدة البيانات."
                                         } catch (e: Exception) {
                                             message = "تعذر حفظ الزيارة. تحقق من البيانات وحاول مجددًا."
                                         } finally { saving = false }
