@@ -4,6 +4,11 @@
 
 Reviewed the persisted Sale return lifecycle, Invoice issue/void lifecycle, PaymentApplication, schema guards, settlement-recognition application, and relevant tests. PR #465 is merged (atomic Payment completion checks in the application layer). PR #466 is merged (regression coverage for preventing a second issued Invoice per Sale on UPDATE).
 
+## Database-level guards now covered
+
+- Payment completion cannot bypass invoice-state and obligation-state checks through direct SQL (PR #467).
+- Direct SQL cannot void an issued Invoice while it still references an Obligation or has Payment history; the existing application reconciliation boundary is enforced at the database as well (PR #468).
+
 ## New correctness gap addressed in this change
 
 Before this change, the PaymentApplication refused to complete a Payment when its linked Invoice was no longer `issued` or its linked Obligation was no longer eligible. That is correct for application callers, but a direct SQL write could bypass the service-level checks and set `payments.state='completed'` against a void Invoice or terminal Obligation. This change adds database triggers for INSERT and UPDATE, plus regression tests for both invalid cases and a valid completion. The triggers are defense in depth; they do not replace the persisted authorization and approval checks in PaymentApplication.
