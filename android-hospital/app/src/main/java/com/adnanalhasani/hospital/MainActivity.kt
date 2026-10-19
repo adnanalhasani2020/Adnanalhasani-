@@ -595,7 +595,9 @@ private fun ModuleMenu(onSelect: (String) -> Unit) {
 private val numericFieldLabels = setOf(
     "العمر", "النبض", "التنفس", "الحرارة", "عدد الأسرة", "عدد الوحدات",
     "حد إعادة الطلب", "المبلغ", "المبلغ المدفوع", "الكمية", "الكمية الحالية",
-    "قيمة الشراء", "المبلغ المطالب به", "الطابق"
+    "الكمية المطلوبة", "قيمة الشراء", "المبلغ المطالب به", "الطابق", "الوزن",
+    "رقم السن", "مدة الجلسة", "الراتب الأساسي", "البدلات", "الخصومات",
+    "السعر المرجعي", "مدة النتيجة"
 )
 
 private val longTextFieldLabels = setOf(
@@ -616,7 +618,7 @@ private fun optionsForField(label: String, hint: String): List<String> {
     if (label == "نوع التصوير") return listOf("أشعة سينية", "CT", "MRI", "موجات فوق صوتية")
     if (label == "وحدة القياس") return listOf("قطعة", "علبة", "عبوة", "لتر", "مل", "كغ")
     if (label == "المناوبة") return listOf("صباحي", "مسائي", "ليلي")
-    if (label == "الضغط") return emptyList()
+    if (label == "الضغط" || label == "عنوان الزيارة" || label == "الموقع") return emptyList()
     return if (hint.contains(" / ")) {
         hint.split(" / ").map { it.trim() }.filter { it.isNotBlank() && !it.startsWith("مثال:") }
     } else {
