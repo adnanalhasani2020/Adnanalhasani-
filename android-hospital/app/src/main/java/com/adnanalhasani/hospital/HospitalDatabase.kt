@@ -551,8 +551,24 @@ interface HospitalDao {
 
     @Transaction
     suspend fun updateEmergencyCase(id: Long, details: String, status: String) {
-        updateHospitalRecordDetails(id, details)
-        updateModuleRecordDetails(id, details)
+        val current = recordById(id) ?: return
+        val timestamp = System.currentTimeMillis()
+        val nextDetails = details.lineSequence().filterNot { it.startsWith("حالة الحالة:") }
+            .toList().plus("حالة الحالة: $status").joinToString("\n")
+        insertAuditLog(
+            RecordAuditLogEntity(
+                recordId = id,
+                category = current.category,
+                action = "UPDATE",
+                oldTitle = current.title,
+                newTitle = current.title,
+                oldDetails = current.details,
+                newDetails = nextDetails,
+                changedAt = timestamp
+            )
+        )
+        updateHospitalRecordDetails(id, nextDetails)
+        updateModuleRecordDetails(id, nextDetails)
         updateEmergencyCaseStatus(id, status)
     }
 
