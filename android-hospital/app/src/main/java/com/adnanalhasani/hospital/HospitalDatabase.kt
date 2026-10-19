@@ -267,16 +267,38 @@ interface HospitalDao {
     suspend fun updateRecordRow(id: Long, title: String, details: String)
     @Query("UPDATE module_records SET title = :title, details = :details WHERE sourceRecordId = :id")
     suspend fun updateModuleRecordRow(id: Long, title: String, details: String)
+    @Query("""UPDATE vaccination_records SET childName = :childName, childFileNumber = :fileNumber,
+        dateOfBirth = :dateOfBirth, vaccineName = :vaccineName, doseNumber = :doseNumber,
+        administeredDate = :administeredDate, nextDoseDate = :nextDoseDate, batchNumber = :batchNumber,
+        administrationSite = :site, administeredBy = :administeredBy, doseStatus = :doseStatus,
+        notes = :notes WHERE sourceRecordId = :id""")
+    suspend fun updateVaccinationRow(id: Long, childName: String, fileNumber: String, dateOfBirth: String,
+        vaccineName: String, doseNumber: String, administeredDate: String, nextDoseDate: String,
+        batchNumber: String, site: String, administeredBy: String, doseStatus: String, notes: String)
+    @Query("""UPDATE emergency_cases SET caseNumber = :caseNumber, patientName = :patientName,
+        arrivalTime = :arrivalTime, triageLevel = :triageLevel, chiefComplaint = :chiefComplaint,
+        status = :status WHERE sourceRecordId = :id""")
+    suspend fun updateEmergencyCaseRow(id: Long, caseNumber: String, patientName: String, arrivalTime: String,
+        triageLevel: String, chiefComplaint: String, status: String)
 
     @Transaction
     suspend fun updateRecord(id: Long, title: String, details: String) {
         val current = recordById(id) ?: return
+        val fields = details.lineSequence().mapNotNull { line ->
+            val separator = line.indexOf(": ")
+            if (separator <= 0) null else line.substring(0, separator).trim() to line.substring(separator + 2).trim()
+        }.toMap()
+        fun field(vararg names: String): String = names.firstNotNullOfOrNull { fields[it]?.takeIf(String::isNotBlank) }.orEmpty()
         updateRecordRow(id, title, details)
         updateModuleRecordRow(id, title, details)
-        if (current.category == "emergency") {
-            val status = details.lineSequence().firstOrNull { it.startsWith("حالة الحالة:") }
-                ?.substringAfter(":")?.trim().orEmpty()
-            updateEmergencyCaseStatus(id, status)
+        when (current.category) {
+            "emergency" -> updateEmergencyCaseRow(id, title, field("اسم المريض"), field("وقت الوصول"),
+                field("درجة الفرز"), field("الشكوى الرئيسية"), field("حالة الحالة"))
+            "vaccination" -> updateVaccinationRow(id, field("اسم الطفل", "اسم المريض").ifBlank { title },
+                field("رقم ملف الطفل", "رقم الملف"), field("تاريخ الميلاد"), field("اسم اللقاح"),
+                field("رقم الجرعة"), field("تاريخ التطعيم"), field("موعد الجرعة التالية"),
+                field("رقم التشغيلة"), field("مكان التطعيم"), field("الممارس الصحي"),
+                field("حالة الجرعة").ifBlank { "تم التطعيم" }, field("ملاحظات"))
         }
     }
 
