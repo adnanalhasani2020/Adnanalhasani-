@@ -128,3 +128,39 @@ def test_audit_detects_impossible_historical_state_transition():
     assert "history_state_transition_invalid:2" in result.findings
     assert "history_final_state_mismatch" in result.findings
     db.close()
+
+
+def test_audit_detects_missing_actor_context():
+    db = connect_database()
+    sale = sale_fixture(db, version=1)
+    history(db, sale, None, f"sale-state:{sale}:v1")
+    db.execute(
+        "UPDATE domain_history SET actor_context_ref=' ' WHERE target_ref=? "
+        "AND change_type='sale_state_transition'",
+        (sale,),
+    )
+    db.commit()
+
+    result = SaleHistoryIntegrityAuditor().inspect(db, sale)
+    assert result.status == "inconsistent"
+    assert "history_actor_context_missing:1" in result.findings
+    db.close()
+
+
+def test_audit_detects_non_chronological_timestamps():
+    db = connect_database()
+    sale = sale_fixture(db, version=2)
+    history(db, sale, None, f"sale-state:{sale}:v1")
+    history(db, sale, f"sale-state:{sale}:v1", f"sale-state:{sale}:v2")
+    db.execute(
+        "UPDATE domain_history SET historical_at='2026-10-10T12:01:00Z' "
+        "WHERE target_ref=? AND change_type='sale_state_transition' "
+        "AND current_version_ref=?",
+        (sale, f"sale-state:{sale}:v1"),
+    )
+    db.commit()
+
+    result = SaleHistoryIntegrityAuditor().inspect(db, sale)
+    assert result.status == "inconsistent"
+    assert "history_timestamps_not_chronological:2" in result.findings
+    db.close()
