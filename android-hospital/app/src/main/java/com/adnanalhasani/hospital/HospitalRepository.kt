@@ -32,5 +32,7 @@ class HospitalRepository(private val dao: HospitalDao) {
 
     suspend fun saveRecord(record: HospitalRecord) = dao.saveRecord(record)
 
+    suspend fun updateEmergencyCase(id: Long, details: String, status: String) = dao.updateEmergencyCase(id, details, status)
+
     suspend fun deleteRecord(id: Long) = dao.delete(id)
 }
