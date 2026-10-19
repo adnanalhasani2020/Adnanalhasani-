@@ -29,7 +29,7 @@ object HospitalExport {
         // Prevent spreadsheet formula execution when a user-controlled cell starts
         // with a formula marker, even when the marker follows whitespace.
         val firstMeaningful = normalized.trimStart().firstOrNull()
-        val spreadsheetSafe = if (firstMeaningful in listOf('=', '+', '-', '@', '\t')) {
+        val spreadsheetSafe = if (firstMeaningful != null && firstMeaningful in listOf('=', '+', '-', '@', '\t')) {
             "'$normalized"
         } else {
             normalized
