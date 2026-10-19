@@ -215,7 +215,7 @@ fun HospitalApp(dao: HospitalDao) {
                         module = currentModule,
                         records = all.filter { it.category == currentModule.key },
                         onSave = { title, details ->
-                            scope.launch { dao.insert(HospitalRecord(category = currentModule.key, title = title, details = details)) }
+                            dao.insert(HospitalRecord(category = currentModule.key, title = title, details = details))
                         },
                         onDelete = { id -> scope.launch { dao.delete(id) } }
                     )
@@ -366,11 +366,13 @@ private fun ModuleMenu(onSelect: (String) -> Unit) {
 private fun ModuleScreen(
     module: Module,
     records: List<HospitalRecord>,
-    onSave: (String, String) -> Unit,
+    onSave: suspend (String, String) -> Unit,
     onDelete: (Long) -> Unit
 ) {
+    val scope = rememberCoroutineScope()
     var values by remember(module.key) { mutableStateOf(module.fields.associate { it.first to "" }) }
     var savedMessage by remember { mutableStateOf(false) }
+    var isSaving by remember { mutableStateOf(false) }
     var validationMessage by remember { mutableStateOf<String?>(null) }
     LazyColumn(
         Modifier.fillMaxSize(),
@@ -417,17 +419,34 @@ private fun ModuleScreen(
                             val details = module.fields.mapNotNull { (label, _) ->
                                 values[label]?.trim()?.takeIf { it.isNotBlank() }?.let { "$label: $it" }
                             }.joinToString("\n")
-                            onSave(title, details)
-                            values = module.fields.associate { it.first to "" }
-                            validationMessage = null
-                            savedMessage = true
+                            scope.launch {
+                                isSaving = true
+                                validationMessage = null
+                                savedMessage = false
+                                try {
+                                    onSave(title, details)
+                                    values = module.fields.associate { it.first to "" }
+                                    savedMessage = true
+                                } catch (error: Exception) {
+                                    validationMessage = "تعذر حفظ السجل. حاول مرة أخرى."
+                                } finally {
+                                    isSaving = false
+                                }
+                            }
                         },
                         modifier = Modifier.fillMaxWidth().height(52.dp),
-                        shape = RoundedCornerShape(15.dp)
+                        shape = RoundedCornerShape(15.dp),
+                        enabled = !isSaving
                     ) {
-                        Icon(Icons.Default.Save, null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("حفظ في قاعدة البيانات")
+                        if (isSaving) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                            Text("جارٍ الحفظ...")
+                        } else {
+                            Icon(Icons.Default.Save, null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("حفظ في قاعدة البيانات")
+                        }
                     }
                     validationMessage?.let { Text(it, color = Rose, fontSize = 12.sp) }
                     if (savedMessage) Text("تم حفظ السجل محلياً بنجاح.", color = Teal, fontSize = 12.sp)
