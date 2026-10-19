@@ -14,6 +14,13 @@ class HospitalRepository(private val dao: HospitalDao) {
 
     fun allModuleRecords(): Flow<List<ModuleRecordEntity>> = dao.allModuleRecords()
 
+    fun emergencyCases(): Flow<List<EmergencyCaseEntity>> = dao.emergencyCases()
+    fun icuStays(): Flow<List<IcuStayEntity>> = dao.icuStays()
+    fun inventoryItems(): Flow<List<InventoryItemEntity>> = dao.inventoryItems()
+    fun labOrders(): Flow<List<LabOrderEntity>> = dao.labOrders()
+    fun radiologyOrders(): Flow<List<RadiologyOrderEntity>> = dao.radiologyOrders()
+    fun maintenanceTickets(): Flow<List<MaintenanceTicketEntity>> = dao.maintenanceTickets()
+
     suspend fun saveRecord(record: HospitalRecord) = dao.saveRecord(record)
 
     suspend fun deleteRecord(id: Long) = dao.delete(id)
