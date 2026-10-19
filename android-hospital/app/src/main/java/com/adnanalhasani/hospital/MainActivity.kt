@@ -16,6 +16,8 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -109,7 +111,7 @@ private val modules = listOf(
         listOf("الرقم الوظيفي" to "مثال: DR-101", "اسم الطبيب" to "الاسم الكامل", "التخصص" to "التخصص الطبي", "رقم الهاتف" to "رقم التواصل")),
     Module("appointments", "المواعيد", "تنظيم المواعيد والحجوزات", Icons.Default.CalendarMonth, Color(0xFF9B72CF),
         listOf("اسم المريض" to "اسم المريض", "اسم الطبيب" to "اسم الطبيب", "التاريخ والوقت" to "مثال: 2026-10-20 10:30", "سبب الزيارة" to "سبب الزيارة")),
-    Module("encounters", "الزيارات الطبية", "متابعة الزيارة والتشخيص", Icons.Default.ClinicalNotes, Color(0xFF3286B8),
+    Module("encounters", "الزيارات الطبية", "متابعة الزيارة والتشخيص", Icons.Default.MedicalInformation, Color(0xFF3286B8),
         listOf("اسم المريض" to "اسم المريض", "اسم الطبيب" to "اسم الطبيب", "الشكوى الرئيسية" to "الشكوى", "التشخيص والملاحظات" to "التشخيص والملاحظات")),
     Module("lab", "المختبر", "طلبات الفحوصات والنتائج", Icons.Default.Science, Color(0xFFDF8C42),
         listOf("اسم المريض" to "اسم المريض", "اسم الفحص" to "نوع الفحص", "حالة الفحص" to "مطلوب / قيد التنفيذ / مكتمل", "النتيجة" to "النتيجة أو ملاحظات")),
@@ -144,6 +146,7 @@ fun HospitalApp(dao: HospitalDao) {
         else -> "نظام المستشفى"
     }
 
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
     MaterialTheme(
         colorScheme = lightColorScheme(
             primary = Teal, onPrimary = Color.White, secondary = Navy,
@@ -220,6 +223,7 @@ fun HospitalApp(dao: HospitalDao) {
                 }
             }
         }
+    }
     }
 }
 
@@ -501,7 +505,7 @@ private fun SettingsScreen(allCount: Int) {
             SettingRow(Icons.Default.Storage, "قاعدة البيانات", "SQLite محلية عبر Room", Teal)
             SettingRow(Icons.Default.Language, "اللغة والاتجاه", "العربية • من اليمين إلى اليسار", Color(0xFF5B7CFA))
             SettingRow(Icons.Default.Palette, "التصميم", "Material 3 • ألوان هادئة وبطاقات حديثة", Color(0xFF9B72CF))
-            SettingRow(Icons.Default.Dataset, "السجلات على الجهاز", "$allCount سجل محفوظ", Color(0xFFDF8C42))
+            SettingRow(Icons.Default.Storage, "السجلات على الجهاز", "$allCount سجل محفوظ", Color(0xFFDF8C42))
         }
         item {
             Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF2E2)), shape = RoundedCornerShape(18.dp)) {
