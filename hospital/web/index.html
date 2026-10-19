@@ -121,7 +121,7 @@ small{color:#5d7482}form{display:grid;gap:10px}footer{text-align:center;color:#6
 
 <section class="panel" id="doctorWorkspace">
 <h2>عيادة الطبيب — قائمة الانتظار وملف المريض</h2>
-<p><small>تظهر الزيارات المفتوحة والمواعيد المجدولة/المؤكدة. البيانات تُقرأ وتُحفظ عبر API وقاعدة البيانات الحالية.</small></p>
+<p><small>تظهر الزيارات المفتوحة والمواعيد المجدولة أو التي تم تسجيل وصول أصحابها. البيانات تُقرأ وتُحفظ عبر API وقاعدة البيانات الحالية.</small></p>
 <div class="row"><input id="doctorQueueSearch" placeholder="ابحث باسم المريض أو رقم الملف" aria-label="البحث في قائمة الطبيب"><button id="doctorQueueRefresh" type="button">تحديث قائمة المرضى</button></div>
 <div class="doctor-layout" style="margin-top:12px">
 <div><h3>المرضى المنتظرون</h3><div id="doctorQueue" class="doctor-queue"><p>اتصل بالخادم لتحميل القائمة.</p></div><div id="doctorQueueStatus" class="status" role="status" aria-live="polite"></div></div>
@@ -267,11 +267,12 @@ function doctorRenderSelected(){
 async function doctorLoadQueue(){
  try{
   const [pr,er,ar]=await Promise.all([api("/api/patients?limit=100&offset=0"),api("/api/encounters?limit=100&offset=0"),api("/api/appointments?limit=100&offset=0")]);
-  const patients=pr.data||[], encounters=(er.data||[]).filter(x=>x.status==="open"), appointments=(ar.data||[]).filter(x=>["scheduled","confirmed"].includes(x.status));
+  const patients=(pr.data||[]).filter(x=>x.active), encounters=(er.data||[]).filter(x=>x.status==="open"), appointments=(ar.data||[]).filter(x=>["scheduled","checked_in"].includes(x.status));
   const rows=[];
   for(const e of encounters){const p=doctorById(patients,e.patient_id);if(p)rows.push({key:"e"+e.id,patient:p,visit:e,kind:"visit",sort:e.opened_at||""})}
   for(const a of appointments){const p=doctorById(patients,a.patient_id);if(p&&!rows.some(r=>r.patient.id===p.id&&r.visit.appointment_id===a.id))rows.push({key:"a"+a.id,patient:p,visit:a,kind:"appointment",sort:a.starts_at||""})}
   doctorQueueRows=rows.sort((a,b)=>String(a.sort).localeCompare(String(b.sort)));
+  if(doctorSelected){doctorSelected=doctorQueueRows.find(r=>r.key===doctorSelected.key)||null;doctorRenderSelected()}
   doctorRenderQueue();
   msg($("doctorQueueStatus"),"تم تحميل "+rows.length+" سجل انتظار/موعد.");
  }catch(e){msg($("doctorQueueStatus"),e.message,true)}
