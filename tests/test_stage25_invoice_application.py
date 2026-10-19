@@ -875,3 +875,52 @@ def test_invoice_void_rejects_sale_offering_activity_mismatch_without_writes():
         (str(issued.invoice.id),),
     ).fetchone()[0] == 1
     db.close()
+
+
+
+def test_invoice_void_rejects_timestamp_before_current_update_without_writes():
+    db = connect_database()
+    actor, activity, sale, issue_grant = fixture(db)
+    app = InvoiceApplication()
+    issued = app.create_invoice(
+        db, sale_id=sale, actor_context_ref=actor, authorization_grant_id=issue_grant,
+        issuer_ref=actor, invoice_number="INV-VOID-OLD-TIME", now=STAMP,
+    )
+    void_grant = uid()
+    db.execute(
+        "INSERT INTO authorization_grants(authorization_grant_id,subject_person_id,action_code,scope_ref,"
+        "context_ref,state,effective_from,created_at,updated_at) VALUES(?,?,?,?,?,'active',?,?,?)",
+        (void_grant, actor, "void_invoice", sale, activity, "2026-10-01T00:00:00Z", STAMP, STAMP),
+    )
+    db.commit()
+    # Move the persisted lifecycle forward without changing the invoice's creation time.
+    db.execute(
+        "UPDATE invoices SET updated_at='2026-10-10T12:01:00Z' WHERE invoice_id=?",
+        (str(issued.invoice.id),),
+    )
+    db.commit()
+    before = db.execute(
+        "SELECT state,updated_at,version_no FROM invoices WHERE invoice_id=?",
+        (str(issued.invoice.id),),
+    ).fetchone()
+    history_before = db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=? AND change_type='invoice_state_transition'",
+        (str(issued.invoice.id),),
+    ).fetchone()[0]
+
+    with pytest.raises(ValidationError, match="cannot precede the current update timestamp"):
+        app.void_invoice(
+            db, issued.invoice.id, actor_context_ref=actor,
+            authorization_grant_id=void_grant, expected_version=1,
+            now="2026-10-10T12:00:30Z",
+        )
+
+    assert db.execute(
+        "SELECT state,updated_at,version_no FROM invoices WHERE invoice_id=?",
+        (str(issued.invoice.id),),
+    ).fetchone() == before
+    assert db.execute(
+        "SELECT COUNT(*) FROM domain_history WHERE target_ref=? AND change_type='invoice_state_transition'",
+        (str(issued.invoice.id),),
+    ).fetchone()[0] == history_before
+    db.close()
