@@ -281,6 +281,31 @@ interface HospitalDao {
     suspend fun updateEmergencyCaseRow(id: Long, caseNumber: String, patientName: String, arrivalTime: String,
         triageLevel: String, chiefComplaint: String, status: String)
 
+    @Query("""UPDATE icu_stays SET patientName = :patientName, bedNumber = :bedNumber,
+        attendingDoctor = :attendingDoctor, careLevel = :careLevel, admissionDate = :admissionDate,
+        teamNotes = :teamNotes WHERE sourceRecordId = :id""")
+    suspend fun updateIcuStayRow(id: Long, patientName: String, bedNumber: String, attendingDoctor: String,
+        careLevel: String, admissionDate: String, teamNotes: String)
+
+    @Query("""UPDATE inventory_items SET name = :name, sku = :sku, quantity = :quantity,
+        reorderLevel = :reorderLevel, unit = :unit, notes = :notes WHERE sourceRecordId = :id""")
+    suspend fun updateInventoryItemRow(id: Long, name: String, sku: String, quantity: Double,
+        reorderLevel: Double, unit: String, notes: String)
+
+    @Query("""UPDATE lab_orders SET patientName = :patientName, testName = :testName,
+        status = :status, result = :result WHERE sourceRecordId = :id""")
+    suspend fun updateLabOrderRow(id: Long, patientName: String, testName: String, status: String, result: String)
+
+    @Query("""UPDATE radiology_orders SET patientName = :patientName, imagingType = :imagingType,
+        requestingDoctor = :requestingDoctor, status = :status, report = :report WHERE sourceRecordId = :id""")
+    suspend fun updateRadiologyOrderRow(id: Long, patientName: String, imagingType: String,
+        requestingDoctor: String, status: String, report: String)
+
+    @Query("""UPDATE maintenance_tickets SET ticketNumber = :ticketNumber, reporter = :reporter,
+        location = :location, issue = :issue, priority = :priority, status = :status WHERE sourceRecordId = :id""")
+    suspend fun updateMaintenanceTicketRow(id: Long, ticketNumber: String, reporter: String, location: String,
+        issue: String, priority: String, status: String)
+
     @Transaction
     suspend fun updateRecord(id: Long, title: String, details: String) {
         val current = recordById(id) ?: return
@@ -299,6 +324,19 @@ interface HospitalDao {
                 field("رقم الجرعة"), field("تاريخ التطعيم"), field("موعد الجرعة التالية"),
                 field("رقم التشغيلة"), field("مكان التطعيم"), field("الممارس الصحي"),
                 field("حالة الجرعة").ifBlank { "تم التطعيم" }, field("ملاحظات"))
+            "icu" -> updateIcuStayRow(id, field("اسم المريض"), field("رقم السرير"),
+                field("الطبيب المسؤول"), field("مستوى الرعاية"), field("تاريخ الدخول"), field("ملاحظات الفريق"))
+            "inventory" -> updateInventoryItemRow(id, field("اسم الصنف").ifBlank { title },
+                field("رمز الصنف").ifBlank { "ITEM-" + id },
+                field("الكمية الحالية").toDoubleOrNull() ?: 0.0,
+                field("حد إعادة الطلب").toDoubleOrNull() ?: 0.0,
+                field("وحدة القياس"), field("ملاحظات"))
+            "lab" -> updateLabOrderRow(id, field("اسم المريض"), field("اسم الفحص"),
+                field("حالة الفحص"), field("النتيجة"))
+            "radiology" -> updateRadiologyOrderRow(id, field("اسم المريض"), field("نوع التصوير"),
+                field("الطبيب الطالب"), field("الحالة"), field("التقرير"))
+            "maintenance" -> updateMaintenanceTicketRow(id, title, field("مقدم البلاغ"),
+                field("الموقع"), field("نوع العطل"), field("الأولوية"), field("الحالة"))
         }
     }
 
