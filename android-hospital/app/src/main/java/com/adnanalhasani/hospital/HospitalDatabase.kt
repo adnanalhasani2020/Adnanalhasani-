@@ -179,8 +179,8 @@ interface HospitalDao {
             )
             "payments" -> insertPayment(
                 PaymentEntity(
-                    invoiceNumber = record.title,
-                    invoiceId = findInvoiceIdByNumber(record.title),
+                    invoiceNumber = field("رقم الفاتورة").ifBlank { record.title },
+                    invoiceId = findInvoiceIdByNumber(field("رقم الفاتورة").ifBlank { record.title }),
                     amountMinor = field("المبلغ المدفوع").toBigDecimalOrNull()
                         ?.movePointRight(2)?.toLong() ?: 0L,
                     method = field("طريقة الدفع"),
