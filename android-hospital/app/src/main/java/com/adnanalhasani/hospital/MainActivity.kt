@@ -371,6 +371,7 @@ private fun ModuleScreen(
 ) {
     var values by remember(module.key) { mutableStateOf(module.fields.associate { it.first to "" }) }
     var savedMessage by remember { mutableStateOf(false) }
+    var validationMessage by remember { mutableStateOf<String?>(null) }
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(18.dp),
@@ -395,7 +396,7 @@ private fun ModuleScreen(
                     module.fields.forEach { (label, hint) ->
                         OutlinedTextField(
                             value = values[label].orEmpty(),
-                            onValueChange = { values = values + (label to it); savedMessage = false },
+                            onValueChange = { values = values + (label to it); savedMessage = false; validationMessage = null },
                             modifier = Modifier.fillMaxWidth(),
                             label = { Text(label) },
                             placeholder = { Text(hint, fontSize = 12.sp) },
@@ -406,10 +407,19 @@ private fun ModuleScreen(
                     }
                     Button(
                         onClick = {
-                            val title = values.values.firstOrNull { it.isNotBlank() } ?: return@Button
-                            val details = module.fields.mapNotNull { (label, _) -> values[label]?.takeIf { it.isNotBlank() }?.let { "$label: $it" } }.joinToString("\n")
+                            val titleField = module.fields.firstOrNull()?.first
+                            val title = titleField?.let { values[it]?.trim() }.orEmpty()
+                            if (title.isBlank()) {
+                                validationMessage = "أدخل ${titleField ?: "البيانات المطلوبة"} قبل الحفظ."
+                                savedMessage = false
+                                return@Button
+                            }
+                            val details = module.fields.mapNotNull { (label, _) ->
+                                values[label]?.trim()?.takeIf { it.isNotBlank() }?.let { "$label: $it" }
+                            }.joinToString("\n")
                             onSave(title, details)
                             values = module.fields.associate { it.first to "" }
+                            validationMessage = null
                             savedMessage = true
                         },
                         modifier = Modifier.fillMaxWidth().height(52.dp),
@@ -419,6 +429,7 @@ private fun ModuleScreen(
                         Spacer(Modifier.width(8.dp))
                         Text("حفظ في قاعدة البيانات")
                     }
+                    validationMessage?.let { Text(it, color = Rose, fontSize = 12.sp) }
                     if (savedMessage) Text("تم حفظ السجل محلياً بنجاح.", color = Teal, fontSize = 12.sp)
                 }
             }
