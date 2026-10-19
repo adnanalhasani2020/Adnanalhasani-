@@ -1,0 +1,61 @@
+# Commerce sale and invoice lifecycle audit
+
+**Reviewed:** 2026-10-19  
+**Scope:** commercial storefront, stock-gated checkout, sale lifecycle, persisted Commerce invoices, and Finance boundary.  
+**Status:** source-level audit; runtime tests were not executed in this review.
+
+## Executive result
+
+The repository has a useful, transaction-oriented checkout path and a separately governed invoice lifecycle. They are not yet one end-to-end sale-to-invoice-to-payment-to-recognition workflow. Automatically creating an invoice from the public checkout endpoint is **not safe with the current contracts**: invoice issuance requires an explicit persisted `AuthorizationGrant` scoped to the Sale and Activity, a valid issuer UUID, and a unique invoice number. The public checkout flow currently establishes a customer session, not an invoice-issuer authorization context. Fabricating these values or bypassing authorization would weaken financial controls.
+
+The current printable `/invoices/{sale_id}` route is explicitly a backward-compatible alias for a sales receipt; the page correctly states that it is not a tax invoice. Do not rename it or represent it as a legally compliant invoice.
+
+## Lifecycle reviewed
+
+1. **Catalog:** only active offerings with one effective price and known positive stock are exposed.
+2. **Checkout:** `CommercialCheckoutApplication.checkout` validates identifiers, quantity, session/grants, and idempotency; uses `BEGIN IMMEDIATE`; snapshots the sale price; writes sale, stock movement, and a persisted receipt in the same transaction.
+3. **Receipt retrieval:** authenticated receipt history and direct lookup are restricted to the buying account. The printable receipt is truthful about its status.
+4. **Invoice issuance:** `InvoiceApplication.create_invoice` validates a persisted Sale, issuer, invoice number, timestamps, and an exact active grant; it records domain history. It is a separate operation and is not invoked by checkout.
+5. **Void/payment boundary:** voiding is blocked when an obligation or payment is linked, avoiding silent financial-history changes. The invoice service itself does not create payments, settlements, or ledger entries.
+6. **Finance boundary:** the existing audit `docs/audits/2026-10-18-finance-reuse-for-hospital.md` records that payment is not financial recognition and that a verified persisted end-to-end settlement/ledger path has not been established.
+
+## Four highest-priority gaps
+
+### 1. No governed sale-to-invoice orchestration
+**Impact: high.** A successful sale produces a receipt, not a Commerce invoice. The invoice service exists but the checkout route has no authorized issuer/grant/numbering context and no retry-safe orchestration between the two.
+
+**Safe fix required:** define an issuer configuration and a governed invoice-number allocation policy; issue through the existing `InvoiceApplication` only with an appropriate persisted grant. If invoice creation must be atomic with checkout, invoke it inside the same SQLite transaction only after authorization is valid. If the required authority belongs to a separate actor/service, use a durable outbox with retries and reconciliation instead of pretending two transactions are atomic.
+
+**Not changed:** no default issuer, fake grant, guessed invoice number, or bypass was added.
+
+### 2. No verified payment → settlement → durable ledger path
+**Impact: critical for accounting claims.** Payment records alone do not prove settlement or revenue recognition. The repository's finance audit explicitly identifies the missing verified persisted path.
+
+**Safe fix required:** verify and test the canonical Finance application/persistence boundary, then add durable operation identity and reconciliation for every step. Do not post ledger entries directly from checkout or infer payment from SaleState.
+
+### 3. Legal/tax invoice semantics are not configured
+**Impact: high for tax compliance.** The existing Commerce invoice lifecycle is a generic persisted invoice, not evidence of compliance with Yemen or Saudi tax law. The storefront receipt correctly disclaims tax-invoice status.
+
+**Safe fix required:** configure jurisdiction, issuer registration details, mandatory invoice fields, numbering, rounding, tax calculation, credit-note/void rules, and any mandated reporting only after the target jurisdiction and legal requirements are established. Keep the receipt label truthful in the meantime.
+
+### 4. Returns/refunds are not demonstrated as a complete reversal workflow
+**Impact: high for inventory and financial integrity.** A sale is fulfilled and inventory movement is recorded, but this review did not establish a complete governed path that reverses inventory, invoice/obligation, payment, and financial recognition together.
+
+**Safe fix required:** add a separate authorized return/refund application with source-sale quantities, duplicate-request protection, append-only compensating inventory movements, credit-note/reversal policy, and reconciliation. Never edit or delete the original sale to simulate a return.
+
+## Existing controls worth preserving
+
+- SQLite write serialization and transaction rollback in checkout.
+- Idempotency fingerprints and stored checkout responses.
+- Effective-price ambiguity is rejected rather than silently resolved.
+- Unknown/stale inventory observations fail closed.
+- Invoice issuer/number uniqueness is enforced by the schema.
+- Invoice lifecycle uses exact persisted grants, optimistic versions, and domain history.
+- Invoice voiding is blocked when linked financial activity exists.
+- Receipt endpoints are account-scoped and receipt wording avoids claiming tax compliance.
+
+## Verification limits and next steps
+
+This is a source-level review, not a full runtime test or production certification. Tests were inspected but not executed here. Before enabling automatic invoice issuance, add integration tests for: authorized issuer setup; missing/expired/wrong-scope grant; unique numbering under concurrent checkout; duplicate checkout replay; invoice failure rollback/outbox recovery; and proof that no payment or ledger recognition is fabricated. Then run the full test suite and migration checks on the exact commit.
+
+**Release recommendation:** keep checkout + receipt behavior as-is; do not enable automatic invoices, tax compliance claims, or automatic ledger posting until the four gaps above are addressed through their canonical governed boundaries.
