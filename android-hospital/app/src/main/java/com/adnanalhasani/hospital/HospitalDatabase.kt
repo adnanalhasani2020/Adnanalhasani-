@@ -191,17 +191,91 @@ interface HospitalDao {
         }
     }
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun upsertPatient(patient: PatientEntity)
+    /**
+     * Update by the natural key instead of SQLite REPLACE. REPLACE deletes the
+     * existing parent row first, which can silently null out foreign keys from
+     * appointments/invoices/payments that point at it.
+     */
+    @Transaction
+    suspend fun upsertPatient(patient: PatientEntity) {
+        val updated = updatePatientByFileNumber(
+            fileNumber = patient.fileNumber,
+            fullName = patient.fullName,
+            phone = patient.phone,
+            age = patient.age,
+            notes = patient.notes,
+            createdAt = patient.createdAt
+        )
+        if (updated == 0) insertPatient(patient)
+    }
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun upsertDoctor(doctor: DoctorEntity)
+    @Insert
+    suspend fun insertPatient(patient: PatientEntity)
+
+    @Query("UPDATE patients SET fullName = :fullName, phone = :phone, age = :age, notes = :notes, createdAt = :createdAt WHERE fileNumber = :fileNumber")
+    suspend fun updatePatientByFileNumber(
+        fileNumber: String,
+        fullName: String,
+        phone: String,
+        age: String,
+        notes: String,
+        createdAt: Long
+    ): Int
+
+    @Transaction
+    suspend fun upsertDoctor(doctor: DoctorEntity) {
+        val updated = updateDoctorByEmployeeNumber(
+            employeeNumber = doctor.employeeNumber,
+            fullName = doctor.fullName,
+            specialty = doctor.specialty,
+            phone = doctor.phone,
+            createdAt = doctor.createdAt
+        )
+        if (updated == 0) insertDoctor(doctor)
+    }
+
+    @Insert
+    suspend fun insertDoctor(doctor: DoctorEntity)
+
+    @Query("UPDATE doctors SET fullName = :fullName, specialty = :specialty, phone = :phone, createdAt = :createdAt WHERE employeeNumber = :employeeNumber")
+    suspend fun updateDoctorByEmployeeNumber(
+        employeeNumber: String,
+        fullName: String,
+        specialty: String,
+        phone: String,
+        createdAt: Long
+    ): Int
 
     @Insert
     suspend fun insertAppointment(appointment: AppointmentEntity)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun upsertInvoice(invoice: InvoiceEntity)
+    @Transaction
+    suspend fun upsertInvoice(invoice: InvoiceEntity) {
+        val updated = updateInvoiceByNumber(
+            invoiceNumber = invoice.invoiceNumber,
+            patientName = invoice.patientName,
+            patientId = invoice.patientId,
+            amountMinor = invoice.amountMinor,
+            currency = invoice.currency,
+            status = invoice.status,
+            createdAt = invoice.createdAt
+        )
+        if (updated == 0) insertInvoice(invoice)
+    }
+
+    @Insert
+    suspend fun insertInvoice(invoice: InvoiceEntity)
+
+    @Query("UPDATE invoices SET patientName = :patientName, patientId = :patientId, amountMinor = :amountMinor, currency = :currency, status = :status, createdAt = :createdAt WHERE invoiceNumber = :invoiceNumber")
+    suspend fun updateInvoiceByNumber(
+        invoiceNumber: String,
+        patientName: String,
+        patientId: Long?,
+        amountMinor: Long,
+        currency: String,
+        status: String,
+        createdAt: Long
+    ): Int
 
     @Insert
     suspend fun insertPayment(payment: PaymentEntity)
