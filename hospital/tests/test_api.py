@@ -82,6 +82,31 @@ class HospitalAPITests(unittest.TestCase):
             self.assertEqual(response.headers["X-Frame-Options"], "DENY")
             self.assertIn("frame-ancestors 'none'", response.headers["Content-Security-Policy"])
 
+    def test_pharmacy_restock_endpoint_updates_stock(self):
+        status, created = self.request("/api/medicines", method="POST", payload={
+            "sku": "API-MED-1", "name": "Synthetic medicine", "quantity": 2,
+            "reorder_level": 1, "at": "2026-01-01T08:00:00Z",
+        })
+        self.assertEqual(status, 201)
+        status, received = self.request(f"/api/medicines/{created['id']}/restock",
+            method="POST", payload={
+                "quantity": 3, "at": "2026-01-02T08:00:00Z", "reference": "GRN-API-1",
+            })
+        self.assertEqual(status, 200)
+        self.assertEqual(received["quantity"], 5)
+        status, listing = self.request("/api/medicines")
+        self.assertEqual(status, 200)
+        row = next(item for item in listing["data"] if item["id"] == created["id"])
+        self.assertEqual(row["quantity"], 5)
+
+    def test_pharmacy_api_rejects_fractional_stock(self):
+        status, payload = self.request("/api/medicines", method="POST", payload={
+            "sku": "API-MED-FLOAT", "name": "Invalid medicine", "quantity": 1.5,
+            "reorder_level": 0, "at": "2026-01-01T08:00:00Z",
+        })
+        self.assertEqual(status, 400)
+        self.assertIn("integer", payload["error"])
+
     def test_authentication_required(self):
         status, payload = self.request("/api/dashboard", token=False)
         self.assertEqual(status, 401)
