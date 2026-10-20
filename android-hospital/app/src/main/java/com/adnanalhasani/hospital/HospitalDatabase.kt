@@ -893,6 +893,12 @@ interface HospitalDao {
     @Query("SELECT * FROM appointments WHERE patientId = :patientId OR (patientId IS NULL AND patientName = :patientName) ORDER BY appointmentAt DESC, createdAt DESC")
     fun appointmentsForPatient(patientId: Long, patientName: String): Flow<List<AppointmentEntity>>
 
+    @Query("UPDATE appointments SET appointmentAt = :appointmentAt, reason = :reason, status = :status WHERE id = :id")
+    suspend fun updateAppointmentById(id: Long, appointmentAt: String, reason: String, status: String): Int
+
+    @Query("UPDATE appointments SET status = :status WHERE id = :id")
+    suspend fun updateAppointmentStatus(id: Long, status: String): Int
+
     @Query("SELECT * FROM invoices ORDER BY createdAt DESC")
     fun invoices(): Flow<List<InvoiceEntity>>
 
