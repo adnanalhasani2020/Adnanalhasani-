@@ -303,7 +303,7 @@ private fun HospitalWorkspace(repository: HospitalRepository) {
         "inventory" -> inventoryItems.map { "${it.name} (${it.sku})" to "الكمية: ${it.quantity} • حد الطلب: ${it.reorderLevel} ${it.unit}" }
         "radiology" -> radiologyOrders.map { "${it.patientName} • ${it.imagingType}" to "${it.requestingDoctor} • ${it.status} • ${it.report}" }
         "maintenance" -> maintenanceTickets.map { it.ticketNumber to "${it.location} • ${it.issue} • ${it.priority} • ${it.status}" }
-        "pharmacy", "beds", "admissions", "appointments", "users", "encounters" -> localWorkflowRows
+        "pharmacy", "beds", "admissions", "appointments", "users", "encounters", "invoices", "payments" -> localWorkflowRows
         "lab" -> localWorkflowRows.ifEmpty { labOrders.map { (it.patientName + " • " + it.testName) to (it.status + " • " + it.result) } }
         else -> emptyList()
     }
