@@ -500,6 +500,23 @@ interface HospitalDao {
     @Query("SELECT * FROM lab_specimens ORDER BY collectedAt DESC")
     fun labSpecimens(): Flow<List<LabSpecimenEntity>>
 
+    /** Search specimens and their linked lab order directly in SQLite. */
+    @Query("""
+        SELECT s.* FROM lab_specimens AS s
+        INNER JOIN lab_orders AS o ON o.id = s.labOrderId
+        WHERE (:status = 'all' OR s.status = :status)
+          AND (
+            :query = '' OR
+            s.specimenCode LIKE '%' || :query || '%' OR
+            s.specimenType LIKE '%' || :query || '%' OR
+            o.patientName LIKE '%' || :query || '%' OR
+            o.testName LIKE '%' || :query || '%' OR
+            CAST(o.id AS TEXT) LIKE '%' || :query || '%'
+          )
+        ORDER BY s.collectedAt DESC, s.id DESC
+    """)
+    fun searchLabSpecimens(query: String, status: String): Flow<List<LabSpecimenEntity>>
+
     @Query("UPDATE lab_specimens SET status = :status, receivedAt = :receivedAt, rejectionReason = :rejectionReason, updatedAt = :updatedAt WHERE id = :id")
     suspend fun updateLabSpecimenStatus(id: Long, status: String, receivedAt: Long?, rejectionReason: String, updatedAt: Long): Int
 
