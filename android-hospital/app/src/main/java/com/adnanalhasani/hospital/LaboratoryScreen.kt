@@ -86,6 +86,7 @@ fun LaboratoryScreen() {
     var requireReceipt by remember { mutableStateOf(true) }
     var specimenTypes by remember { mutableStateOf("دم، بول، مسحة، مصل، براز") }
     var rejectionReasons by remember { mutableStateOf("عينة غير كافية، عينة متجلطة، وعاء غير مناسب، بيانات غير مطابقة") }
+    var turnaroundHours by remember { mutableStateOf("24") }
     var settingsExpanded by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
 
@@ -95,6 +96,9 @@ fun LaboratoryScreen() {
         }
         settings.firstOrNull { it.key == "specimen_types" }?.let { specimenTypes = it.value }
         settings.firstOrNull { it.key == "rejection_reasons" }?.let { rejectionReasons = it.value }
+        settings.firstOrNull { it.key == "specimen_turnaround_hours" }?.let {
+            turnaroundHours = it.value.toIntOrNull()?.coerceIn(1, 720)?.toString() ?: "24"
+        }
         settings.firstOrNull { it.key == "last_operator" }?.let { if (responsibleEmployee.isBlank()) responsibleEmployee = it.value }
         if (specimenType.isBlank()) specimenType = specimenTypes.split(",").firstOrNull()?.trim().orEmpty()
     }
@@ -102,6 +106,10 @@ fun LaboratoryScreen() {
     val selectedOrder = orders.firstOrNull { it.id == selectedOrderId }
     val pendingCount = specimens.count { it.status !in listOf("completed", "rejected") }
     val now = System.currentTimeMillis()
+    val turnaroundLimitMillis = (turnaroundHours.toIntOrNull()?.coerceIn(1, 720) ?: 24) * 60L * 60L * 1000L
+    val overdueCount = specimens.count {
+        it.status !in listOf("completed", "rejected") && now - it.collectedAt >= turnaroundLimitMillis
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -123,7 +131,9 @@ fun LaboratoryScreen() {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("إجمالي العينات: ${specimens.size}", fontWeight = FontWeight.SemiBold)
                         Text("قيد المتابعة: $pendingCount", color = MaterialTheme.colorScheme.primary)
+                        Text("تجاوزت الزمن المستهدف: $overdueCount", color = if (overdueCount > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
                     }
+                    Text("الزمن المستهدف الحالي: \${turnaroundHours.toIntOrNull()?.coerceIn(1, 720) ?: 24} ساعة لكل عينة غير مكتملة.", style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
@@ -254,14 +264,24 @@ fun LaboratoryScreen() {
                             modifier = Modifier.fillMaxWidth(),
                             minLines = 2
                         )
+                        OutlinedTextField(
+                            value = turnaroundHours,
+                            onValueChange = { input -> turnaroundHours = input.filter(Char::isDigit).take(3) },
+                            label = { Text("الحد المستهدف لإنجاز العينة (بالساعات)") },
+                            supportingText = { Text("من 1 إلى 720 ساعة. تظهر إشارة عند تجاوز المدة؛ هذا تنبيه تشغيلي وليس أولوية طبية.") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
                         Button(
                             modifier = Modifier.fillMaxWidth(),
+                            enabled = (turnaroundHours.toIntOrNull() ?: 0) in 1..720,
                             onClick = {
                                 scope.launch {
                                     withContext(Dispatchers.IO) {
                                         dao.saveLabWorkflowSetting(LabWorkflowSettingEntity("require_receipt_confirmation", requireReceipt.toString(), System.currentTimeMillis()))
                                         dao.saveLabWorkflowSetting(LabWorkflowSettingEntity("specimen_types", specimenTypes.split(",").map { it.trim() }.filter { it.isNotBlank() }.distinct().joinToString(", "), System.currentTimeMillis()))
                                         dao.saveLabWorkflowSetting(LabWorkflowSettingEntity("rejection_reasons", rejectionReasons.split(",").map { it.trim() }.filter { it.isNotBlank() }.distinct().joinToString(", "), System.currentTimeMillis()))
+                                        dao.saveLabWorkflowSetting(LabWorkflowSettingEntity("specimen_turnaround_hours", turnaroundHours.toInt().coerceIn(1, 720).toString(), System.currentTimeMillis()))
                                         if (responsibleEmployee.isNotBlank()) dao.saveLabWorkflowSetting(LabWorkflowSettingEntity("last_operator", responsibleEmployee.trim(), System.currentTimeMillis()))
                                     }
                                     message = "تم حفظ إعدادات المختبر في قاعدة SQLite المحلية."
@@ -345,7 +365,17 @@ fun LaboratoryScreen() {
                     Text("${specimen.specimenCode} • ${specimen.specimenType}", fontWeight = FontWeight.Bold)
                     Text("طلب #${specimen.labOrderId} • ${order?.patientName ?: "طلب غير متاح"} • ${order?.testName.orEmpty()}")
                     Text("الحالة: ${labStatusLabel(specimen.status)}")
-                    Text("تاريخ الجمع: ${labTime(specimen.collectedAt)}", style = MaterialTheme.typography.bodySmall)
+
+                    val specimenAgeMillis = (now - specimen.collectedAt).coerceAtLeast(0L)
+                    val specimenOverdue = specimen.status !in listOf("completed", "rejected") && specimenAgeMillis >= turnaroundLimitMillis
+                    if (specimenOverdue) {
+                        val ageHours = specimenAgeMillis / (60L * 60L * 1000L)
+                        Text(
+                            "تنبيه: تجاوزت العينة الزمن المستهدف (" + ageHours + " ساعة من أصل " + (turnaroundHours.toIntOrNull()?.coerceIn(1, 720) ?: 24) + ").",
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }                    Text("تاريخ الجمع: ${labTime(specimen.collectedAt)}", style = MaterialTheme.typography.bodySmall)
                     specimen.receivedAt?.let { Text("تاريخ الاستلام: ${labTime(it)}", style = MaterialTheme.typography.bodySmall) }
                     if (specimen.rejectionReason.isNotBlank()) Text("سبب الرفض: ${specimen.rejectionReason}")
                     if (events.isNotEmpty()) {
