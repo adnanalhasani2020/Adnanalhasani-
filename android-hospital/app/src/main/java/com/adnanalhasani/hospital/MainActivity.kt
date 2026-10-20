@@ -82,8 +82,15 @@ private val modules = listOf(
         listOf("اسم المريض" to "اسم المريض", "اسم الطبيب" to "اسم الطبيب", "التاريخ والوقت" to "مثال: 2026-10-20 10:30", "سبب الزيارة" to "سبب الزيارة")),
     Module("encounters", "الزيارات الطبية", "متابعة الزيارة والتشخيص", Icons.Default.MedicalInformation, Color(0xFF6F9BAE),
         listOf("اسم المريض" to "اسم المريض", "اسم الطبيب" to "اسم الطبيب", "تاريخ الزيارة" to "YYYY-MM-DD HH:mm", "الشكوى الرئيسية" to "الشكوى", "التشخيص" to "التشخيص الطبي", "ملاحظات" to "ملاحظات الزيارة")),
-    Module("lab", "المختبر", "طلبات الفحوصات والنتائج", Icons.Default.Science, Color(0xFFD0A06E),
-        listOf("اسم المريض" to "اسم المريض", "معرّف الزيارة" to "رقم الزيارة من الملف الطبي (اختياري)", "اسم الفحص" to "نوع الفحص", "حالة الفحص" to "مطلوب / قيد التنفيذ / مكتمل", "النتيجة" to "النتيجة أو ملاحظات")),
+    Module("lab", "المختبر", "إدارة طلبات التحاليل ومتابعة النتائج", Icons.Default.Science, Color(0xFFD0A06E),
+        listOf(
+            "اسم المريض" to "ابحث عن اسم المريض أو أدخله",
+            "معرّف الزيارة" to "رقم الزيارة من الملف الطبي (اختياري)",
+            "اسم الفحص" to "اختر الفحص من القائمة أو اكتب اسمه",
+            "حالة الفحص" to "مطلوب / قيد التنفيذ / مكتمل",
+            "النتيجة" to "أدخل النتيجة أو اتركها فارغة حتى صدورها",
+            "ملاحظات المختبر" to "العينة، تعليمات التحضير، أو ملاحظات إضافية"
+        )),
     Module("pharmacy", "الصيدلية والأدوية", "الأدوية والوصفات والمخزون", Icons.Default.Medication, Color(0xFF6D9D86),
         listOf("اسم الدواء" to "اسم الدواء", "رمز الدواء" to "رمز أو SKU", "الكمية" to "الكمية المتوفرة", "الجرعة / الوصفة" to "الجرعة والتعليمات")),
     Module("admissions", "التنويم والأسرة", "إدارة الأسرة والدخول والخروج", Icons.Default.Hotel, Color(0xFF6D82C4),
@@ -1017,7 +1024,17 @@ private fun ModuleScreen(
         item {
             Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(22.dp)) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("إضافة سجل جديد", color = Navy, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                    Text(if (module.key == "lab") "طلب فحص مخبري جديد" else "إضافة سجل جديد", color = Navy, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                    if (module.key == "lab") {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().background(Color(0xFFFFF7ED), RoundedCornerShape(12.dp)).padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Science, contentDescription = null, tint = Color(0xFFB77935), modifier = Modifier.size(24.dp))
+                            Spacer(Modifier.width(10.dp))
+                            Text("أدخل بيانات المريض والفحص. اترك النتيجة فارغة إذا لم تصدر بعد، ثم حدّث حالة الطلب عند تقدم العمل.", color = Color(0xFF815B2D), fontSize = 12.sp)
+                        }
+                    }
                     module.fields.forEachIndexed { index, (label, hint) ->
                         ModuleInputField(
                             label = label,
