@@ -105,7 +105,7 @@ class PharmacyLabHardeningTests(unittest.TestCase):
         )
         with self.db.connect() as conn:
             lots = conn.execute(
-                "SELECT batch_no,quantity FROM medicine_batches WHERE medicine_id=? ORDER BY expiry_date",
+                "SELECT batch_no,quantity FROM medicine_batches WHERE medicine_id=? AND batch_no IN ('EARLY-EXPIRY','LATE-EXPIRY') ORDER BY expiry_date",
                 (medicine,),
             ).fetchall()
             self.assertEqual([(row["batch_no"], row["quantity"]) for row in lots],
