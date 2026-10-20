@@ -292,6 +292,36 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
         }
     }
 
+    fun rows(category: String): List<Pair<String, String>> {
+        val db = database.openHelper.readableDatabase
+        val sql = when (category) {
+            "pharmacy" -> """SELECT name || ' (' || sku || ')',
+                'المتاح: ' || quantity || ' • حد إعادة الطلب: ' || reorderLevel || ' • ' || unit
+                FROM local_medicines ORDER BY name COLLATE NOCASE"""
+            "beds" -> """SELECT b.ward || ' • سرير ' || b.bedNo,
+                CASE WHEN b.active=0 THEN 'غير متاح'
+                     WHEN EXISTS(SELECT 1 FROM local_admissions a WHERE a.ward=b.ward AND a.bedNo=b.bedNo AND a.status='admitted')
+                     THEN 'مشغول' ELSE 'متاح' END || CASE WHEN b.notes='' THEN '' ELSE ' • ' || b.notes END
+                FROM local_beds b ORDER BY b.ward, b.bedNo"""
+            "admissions" -> """SELECT patientName || ' • ' || ward || ' / ' || bedNo,
+                status || ' • دخول: ' || admittedAt || CASE WHEN dischargedAt IS NULL THEN '' ELSE ' • خروج: ' || dischargedAt END
+                FROM local_admissions ORDER BY id DESC"""
+            "appointments" -> """SELECT patientName || ' • ' || doctorName, startsAt || ' — ' || endsAt
+                FROM local_appointments ORDER BY startsAt DESC"""
+            "lab" -> """SELECT h.title, e.status || ' • ' || e.occurredAt ||
+                CASE WHEN e.result='' THEN '' ELSE ' • ' || e.result END
+                FROM local_lab_order_events e INNER JOIN hospital_records h ON h.id=e.sourceRecordId
+                WHERE e.id IN (SELECT MAX(id) FROM local_lab_order_events GROUP BY sourceRecordId)
+                ORDER BY e.id DESC"""
+            else -> return emptyList()
+        }
+        return db.query(sql).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) add(cursor.getString(0).orEmpty() to cursor.getString(1).orEmpty())
+            }
+        }
+    }
+
     private fun canonicalLabStatus(raw: String): String = when {
         raw.contains("جمع") || raw.contains("collected", true) -> "collected"
         raw.contains("تنفيذ") || raw.contains("processing", true) -> "processing"
