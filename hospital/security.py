@@ -286,6 +286,10 @@ def permission_for_route(method: str, path: str) -> str | None:
     if route in routes:
         return routes[route][0 if method == "GET" else 1]
 
+    # Stock history is read-only and inherits only the medicine read permission.
+    if method == "GET" and re.fullmatch(r"/api/medicines/[1-9][0-9]*/stock-movements", route):
+        return "medicines:read"
+
     # Only implemented resource actions are authorized; arbitrary nested paths
     # must not inherit a permission merely because their first segment is known.
     if method == "POST":
