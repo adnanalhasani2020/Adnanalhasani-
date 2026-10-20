@@ -1147,6 +1147,17 @@ abstract class HospitalDatabase : RoomDatabase() {
                 )""")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_local_audit_entity_timeline ON local_audit_log(entityType, entityId, id)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_local_audit_timeline ON local_audit_log(id DESC)")
+                db.execSQL("""CREATE TRIGGER IF NOT EXISTS local_admissions_state_insert
+                    BEFORE INSERT ON local_admissions
+                    WHEN (NEW.status='admitted' AND NEW.dischargedAt IS NOT NULL)
+                      OR (NEW.status='discharged' AND NEW.dischargedAt IS NULL)
+                    BEGIN SELECT RAISE(ABORT, 'admission status and discharge time are inconsistent'); END""")
+                db.execSQL("""CREATE TRIGGER IF NOT EXISTS local_admissions_state_update
+                    BEFORE UPDATE OF status, dischargedAt ON local_admissions
+                    WHEN (NEW.status='admitted' AND NEW.dischargedAt IS NOT NULL)
+                      OR (NEW.status='discharged' AND NEW.dischargedAt IS NULL)
+                      OR (OLD.status='discharged' AND NEW.status='admitted')
+                    BEGIN SELECT RAISE(ABORT, 'invalid admission state transition'); END""")
                 db.execSQL("""CREATE TRIGGER IF NOT EXISTS local_audit_log_no_update
                     BEFORE UPDATE ON local_audit_log BEGIN
                     SELECT RAISE(ABORT, 'local audit history is append-only');
