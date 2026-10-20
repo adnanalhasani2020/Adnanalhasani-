@@ -3,7 +3,7 @@
 An isolated hospital-domain development foundation that does not alter existing commerce/service modules.
 
 ## Included modules
-- SQLite schema with constraints for patients, doctors, appointments, encounters, wards/beds, admissions, laboratory orders, medicines, prescriptions, invoices, payments, and audit events.
+- SQLite schema with constraints for patients, doctors, appointments, encounters, wards/beds, admissions, laboratory orders and an append-only lab status timeline, medicines, prescriptions, invoices, payments, and audit events.
 - Transactional workflows for registration, appointment overlap prevention, admission/discharge, invoices/payments, encounter lifecycle, lab status/results, and pharmacy dispensing with atomic stock deduction.
 - Token-protected JSON API and Arabic right-to-left development UI for dashboard metrics, patient/doctor registration, appointments, laboratory orders, medicines, prescriptions, admissions, invoices, and payments.
 - API endpoints for encounter lifecycle, laboratory result updates, pharmacy prescriptions/dispensing, beds, and admissions/discharge.
@@ -62,7 +62,7 @@ Use your actual backup filename in place of the example. Store a second encrypte
 - `POST /api/patients`, `POST /api/doctors`, `POST /api/appointments`
 - `POST /api/appointments/{id}/cancel` and `/api/appointments/{id}/no-show` are authorized administrative transitions; both are audited, only scheduled appointments can transition, and no-show timestamps cannot precede the appointment start.
 - `POST /api/encounters`, `POST /api/encounters/{id}/close`
-- `POST /api/lab-orders`, `POST /api/lab-orders/{id}/status` (enforces workflow transitions and rejects timestamps before the order; timestamps are compared as ISO-8601 instants)
+- `POST /api/lab-orders`, `POST /api/lab-orders/{id}/status` (enforces workflow transitions and chronological event timestamps; timestamps are compared as ISO-8601 instants, and each status event is recorded)
 - `POST /api/medicines`, `POST /api/medicines/{id}/restock` (integer quantity, optional receipt reference, atomic stock update with audit event), `POST /api/prescriptions`, `POST /api/prescriptions/{id}/dispense`
 - `POST /api/beds`, `POST /api/admissions`, `POST /api/admissions/{id}/discharge`
 - `POST /api/invoices`, `POST /api/payments` (amounts use integer minor units; payments cannot exceed the invoice balance)
