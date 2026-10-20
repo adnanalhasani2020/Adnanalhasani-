@@ -244,7 +244,7 @@ private fun HospitalWorkspace(repository: HospitalRepository) {
     val radiologyOrders by repository.radiologyOrders().collectAsState(initial = emptyList())
     val maintenanceTickets by repository.maintenanceTickets().collectAsState(initial = emptyList())
     var localWorkflowRows by remember { mutableStateOf(emptyList<Pair<String, String>>()) }
-    LaunchedEffect(selected, all.size) {
+    LaunchedEffect(selected, all) {
         delay(150)
         localWorkflowRows = withContext(Dispatchers.IO) { repository.localWorkflowRows(selected) }
     }
