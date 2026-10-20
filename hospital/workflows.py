@@ -112,8 +112,10 @@ def update_lab_status(db: HospitalDB, *, order_id: int, status: str,
 
 def add_medicine(db: HospitalDB, *, sku: str, name: str, quantity: int,
                  reorder_level: int, actor: str, at: str, unit: str = "unit") -> int:
-    if not sku.strip() or not name.strip() or quantity < 0 or reorder_level < 0:
-        raise HospitalError("valid SKU/name and non-negative stock thresholds are required")
+    if not isinstance(sku, str) or not isinstance(name, str) or not sku.strip() or not name.strip():
+        raise HospitalError("valid SKU and medicine name are required")
+    if type(quantity) is not int or type(reorder_level) is not int or quantity < 0 or reorder_level < 0:
+        raise HospitalError("stock quantity and reorder level must be non-negative integers")
     with db.connect() as conn:
         conn.execute("BEGIN IMMEDIATE")
         cur = conn.execute("""INSERT INTO medicines(sku,name,quantity,reorder_level,unit)
