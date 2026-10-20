@@ -12,6 +12,7 @@ from urllib.request import Request, urlopen
 from hospital.api import _validate_bind_host, make_handler
 from hospital.core import HospitalDB
 from hospital.security import AuthStore
+from hospital.workflows import add_medicine, receive_medicine_batch
 
 
 class HospitalAPITests(unittest.TestCase):
@@ -56,6 +57,36 @@ class HospitalAPITests(unittest.TestCase):
                 return response.status, json.loads(response.read())
         except HTTPError as exc:
             return exc.code, json.loads(exc.read())
+
+    def test_inventory_reconciliation_reports_batch_discrepancies_without_mutating_stock(self):
+        medicine_id = add_medicine(
+            self.db, sku="RECON-1", name="Reconciliation test medicine", quantity=0,
+            reorder_level=0, actor="pharmacist", at="2026-01-01T08:00:00Z",
+        )
+        receive_medicine_batch(
+            self.db, medicine_id=medicine_id, batch_no="RECON-BATCH", quantity=5,
+            expiry_date="2027-12-31", actor="pharmacist", at="2026-01-01T09:00:00Z",
+        )
+        with self.db.connect() as conn:
+            conn.execute("UPDATE medicines SET quantity=7 WHERE id=?", (medicine_id,))
+        status, payload = self.request("/api/inventory/reconciliation")
+        self.assertEqual(status, 200)
+        row = next(item for item in payload["data"] if item["id"] == medicine_id)
+        self.assertEqual(row["aggregate_quantity"], 7)
+        self.assertEqual(row["batch_quantity"], 5)
+        self.assertEqual(row["difference"], 2)
+        self.assertEqual(payload["summary"]["discrepancy_count"], 1)
+        self.assertIn("does not adjust stock automatically", payload["scope"])
+        with self.db.connect() as conn:
+            self.assertEqual(
+                conn.execute("SELECT quantity FROM medicines WHERE id=?", (medicine_id,)).fetchone()[0],
+                7,
+            )
+
+    def test_inventory_reconciliation_requires_authentication(self):
+        status, payload = self.request("/api/inventory/reconciliation", token=False)
+        self.assertEqual(status, 401)
+        self.assertEqual(payload["error"], "unauthorized")
 
     def test_root_serves_arabic_ui_without_api_token(self):
         with urlopen(self.base + "/", timeout=3) as response:
