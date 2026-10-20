@@ -4,13 +4,17 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Adds clearly labelled fictional records only on a genuinely empty patient database.
  * This is demo data for development/testing, never real patient information.
  */
 object DemoDataSeeder {
-    suspend fun seedIfEmpty(dao: HospitalDao) {
+    private val mutex = Mutex()
+
+    suspend fun seedIfEmpty(dao: HospitalDao) = mutex.withLock {
         if (dao.patients().first().isNotEmpty()) return
         if (dao.records("patients").first().isNotEmpty()) return
 
