@@ -286,6 +286,42 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                     },
                     "scope": "lab order timeline; chronological event history, not result approval",
                 })
+            elif route == "/api/inventory/reconciliation":
+                # Read-only comparison of aggregate medicine stock against batch-level quantities.
+                with database.connect() as conn:
+                    rows = conn.execute(
+                        """SELECT m.id,m.sku,m.name,m.active,
+                                  m.quantity AS aggregate_quantity,
+                                  COALESCE(SUM(b.quantity),0) AS batch_quantity,
+                                  m.quantity-COALESCE(SUM(b.quantity),0) AS difference,
+                                  COALESCE(SUM(CASE WHEN b.expiry_date < date('now')
+                                                    THEN b.quantity ELSE 0 END),0) AS expired_quantity,
+                                  COALESCE(SUM(CASE WHEN b.expiry_date >= date('now')
+                                                    AND b.expiry_date <= date('now','+90 days')
+                                                    THEN b.quantity ELSE 0 END),0) AS expiring_soon_quantity,
+                                  COALESCE(SUM(CASE WHEN b.expiry_date IS NULL
+                                                    THEN b.quantity ELSE 0 END),0) AS unknown_expiry_quantity
+                           FROM medicines m
+                           LEFT JOIN medicine_batches b ON b.medicine_id=m.id
+                           GROUP BY m.id
+                           ORDER BY CASE WHEN m.quantity-COALESCE(SUM(b.quantity),0)<>0
+                                         THEN 0 ELSE 1 END, m.name COLLATE NOCASE, m.id"""
+                    ).fetchall()
+                data = [dict(row) for row in rows]
+                discrepancies = [row for row in data if row["difference"] != 0]
+                self._send(200, {
+                    "data": data,
+                    "summary": {
+                        "medicine_count": len(data),
+                        "discrepancy_count": len(discrepancies),
+                        "aggregate_quantity": sum(int(row["aggregate_quantity"]) for row in data),
+                        "batch_quantity": sum(int(row["batch_quantity"]) for row in data),
+                        "expired_quantity": sum(int(row["expired_quantity"]) for row in data),
+                        "expiring_soon_quantity": sum(int(row["expiring_soon_quantity"]) for row in data),
+                        "unknown_expiry_quantity": sum(int(row["unknown_expiry_quantity"]) for row in data),
+                    },
+                    "scope": "read-only reconciliation; does not adjust stock automatically",
+                })
             elif route.startswith("/api/medicines/") and route.endswith("/batches") and len(route.strip("/").split("/")) == 4:
                 parts = route.strip("/").split("/")
                 if parts[0:2] != ["api", "medicines"] or parts[3] != "batches":
