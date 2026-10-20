@@ -97,9 +97,13 @@ fun LaboratoryScreen() {
 
     var selectedOrderId by remember { mutableStateOf<Long?>(null) }
     var orderMenuExpanded by remember { mutableStateOf(false) }
+    var specimenTypeMenuExpanded by remember { mutableStateOf(false) }
     var specimenCode by remember { mutableStateOf("") }
     var responsibleEmployee by remember { mutableStateOf("") }
     var specimenType by remember { mutableStateOf("") }
+    val specimenTypeOptions = (specimenGuide.filter { it.active }.map { it.name } +
+        specimenTypes.split(",").map { it.trim() }.filter { it.isNotBlank() }).distinct()
+    val selectedSpecimenGuide = specimenGuide.firstOrNull { it.active && it.name.equals(specimenType, ignoreCase = true) }
     var rejectionReason by remember { mutableStateOf("") }
     var requireReceipt by remember { mutableStateOf(true) }
     var specimenTypes by remember { mutableStateOf("دم، بول، مسحة، مصل، براز") }
@@ -222,14 +226,51 @@ fun LaboratoryScreen() {
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true
                         )
-                        OutlinedTextField(
-                            value = specimenType,
-                            onValueChange = { specimenType = it },
-                            label = { Text("نوع العينة") },
-                            supportingText = { Text("الأنواع المقترحة قابلة للتعديل من إعدادات المدير أدناه.") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true
-                        )
+                        ExposedDropdownMenuBox(
+                            expanded = specimenTypeMenuExpanded,
+                            onExpandedChange = { specimenTypeMenuExpanded = !specimenTypeMenuExpanded }
+                        ) {
+                            OutlinedTextField(
+                                value = specimenType,
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("نوع العينة") },
+                                supportingText = { Text("اختر النوع من دليل العينات أو من الأنواع التشغيلية التي أعدّها المدير.") },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = specimenTypeMenuExpanded) },
+                                modifier = Modifier.fillMaxWidth().menuAnchor(),
+                                singleLine = true
+                            )
+                            ExposedDropdownMenu(
+                                expanded = specimenTypeMenuExpanded,
+                                onDismissRequest = { specimenTypeMenuExpanded = false }
+                            ) {
+                                specimenTypeOptions.forEach { type ->
+                                    DropdownMenuItem(
+                                        text = { Text(type) },
+                                        onClick = { specimenType = type; specimenTypeMenuExpanded = false }
+                                    )
+                                }
+                            }
+                        }
+                        selectedSpecimenGuide?.let { guide ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+                            ) {
+                                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text("إرشادات النوع المحدد: ${guide.name}", fontWeight = FontWeight.SemiBold)
+                                    Text(
+                                        guide.description.ifBlank { "لم يضف المدير تعليمات تفصيلية لهذا النوع بعد." },
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                    Text(
+                                        "تحقق من إجراء المختبر المعتمد وتعليمات الفحص قبل الجمع أو المعالجة.",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
+                        }
                         Button(
                             modifier = Modifier.fillMaxWidth(),
                             enabled = selectedOrder != null && specimenCode.isNotBlank() && specimenType.isNotBlank() && responsibleEmployee.isNotBlank(),
