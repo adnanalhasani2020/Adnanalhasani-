@@ -75,6 +75,7 @@ fun LaboratoryScreen() {
     var selectedOrderId by remember { mutableStateOf<Long?>(null) }
     var orderMenuExpanded by remember { mutableStateOf(false) }
     var specimenCode by remember { mutableStateOf("") }
+    var responsibleEmployee by remember { mutableStateOf("") }
     var specimenType by remember { mutableStateOf("") }
     var rejectionReason by remember { mutableStateOf("") }
     var requireReceipt by remember { mutableStateOf(true) }
@@ -89,6 +90,7 @@ fun LaboratoryScreen() {
         }
         settings.firstOrNull { it.key == "specimen_types" }?.let { specimenTypes = it.value }
         settings.firstOrNull { it.key == "rejection_reasons" }?.let { rejectionReasons = it.value }
+        settings.firstOrNull { it.key == "last_operator" }?.let { if (responsibleEmployee.isBlank()) responsibleEmployee = it.value }
         if (specimenType.isBlank()) specimenType = specimenTypes.split(",").firstOrNull()?.trim().orEmpty()
     }
 
@@ -152,6 +154,14 @@ fun LaboratoryScreen() {
                             }
                         }
                         OutlinedTextField(
+                            value = responsibleEmployee,
+                            onValueChange = { responsibleEmployee = it },
+                            label = { Text("اسم الموظف المسؤول") },
+                            supportingText = { Text("يُسجّل الاسم مع كل انتقال في سجل العينة.") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                        OutlinedTextField(
                             value = specimenCode,
                             onValueChange = { specimenCode = it },
                             label = { Text("رمز العينة الفريد") },
@@ -169,14 +179,14 @@ fun LaboratoryScreen() {
                         )
                         Button(
                             modifier = Modifier.fillMaxWidth(),
-                            enabled = selectedOrder != null && specimenCode.isNotBlank() && specimenType.isNotBlank(),
+                            enabled = selectedOrder != null && specimenCode.isNotBlank() && specimenType.isNotBlank() && responsibleEmployee.isNotBlank(),
                             onClick = {
                                 val order = selectedOrder ?: return@Button
                                 scope.launch {
                                     val result = withContext(Dispatchers.IO) {
                                         runCatching {
                                             val collectedAt = System.currentTimeMillis()
-                                            val id = dao.insertLabSpecimen(
+                                            dao.registerLabSpecimen(
                                                 LabSpecimenEntity(
                                                     labOrderId = order.id,
                                                     specimenCode = specimenCode.trim(),
@@ -184,15 +194,11 @@ fun LaboratoryScreen() {
                                                     status = "collected",
                                                     collectedAt = collectedAt,
                                                     updatedAt = collectedAt
-                                                )
+                                                ),
+                                                responsibleEmployee.trim()
                                             )
-                                            dao.insertLabSpecimenEvent(
-                                                LabSpecimenEventEntity(
-                                                    specimenId = id,
-                                                    status = "collected",
-                                                    note = "تم تسجيل العينة وربطها بطلب الفحص #${order.id}",
-                                                    occurredAt = collectedAt
-                                                )
+                                            dao.saveLabWorkflowSetting(
+                                                LabWorkflowSettingEntity("last_operator", responsibleEmployee.trim(), collectedAt)
                                             )
                                         }
                                     }
@@ -251,6 +257,7 @@ fun LaboratoryScreen() {
                                         dao.saveLabWorkflowSetting(LabWorkflowSettingEntity("require_receipt_confirmation", requireReceipt.toString(), System.currentTimeMillis()))
                                         dao.saveLabWorkflowSetting(LabWorkflowSettingEntity("specimen_types", specimenTypes.split(",").map { it.trim() }.filter { it.isNotBlank() }.distinct().joinToString(", "), System.currentTimeMillis()))
                                         dao.saveLabWorkflowSetting(LabWorkflowSettingEntity("rejection_reasons", rejectionReasons.split(",").map { it.trim() }.filter { it.isNotBlank() }.distinct().joinToString(", "), System.currentTimeMillis()))
+                                        if (responsibleEmployee.isNotBlank()) dao.saveLabWorkflowSetting(LabWorkflowSettingEntity("last_operator", responsibleEmployee.trim(), System.currentTimeMillis()))
                                     }
                                     message = "تم حفظ إعدادات المختبر في قاعدة SQLite المحلية."
                                 }
@@ -286,7 +293,7 @@ fun LaboratoryScreen() {
                         Text("سجل حركة العينة", fontWeight = FontWeight.SemiBold)
                         events.take(5).forEach { event ->
                             Text(
-                                "• ${labStatusLabel(event.status)} — ${labTime(event.occurredAt)}" +
+                                "• ${labStatusLabel(event.status)} — ${labTime(event.occurredAt)} — المسؤول: ${event.actor}" +
                                     if (event.note.isBlank()) "" else " — ${event.note}",
                                 style = MaterialTheme.typography.bodySmall
                             )
@@ -299,11 +306,10 @@ fun LaboratoryScreen() {
                                 OutlinedButton(onClick = {
                                     scope.launch {
                                         val at = System.currentTimeMillis()
-                                        withContext(Dispatchers.IO) {
-                                            dao.updateLabSpecimenStatus(specimen.id, "received", at, "", at)
-                                            dao.insertLabSpecimenEvent(LabSpecimenEventEntity(specimenId = specimen.id, status = "received", note = "تأكيد استلام العينة", occurredAt = at))
+                                        val changed = withContext(Dispatchers.IO) {
+                                            dao.transitionLabSpecimen(specimen.id, specimen.status, "received", responsibleEmployee, "تأكيد استلام العينة", requireReceipt = requireReceipt, occurredAt = at)
                                         }
-                                        message = "تم توثيق استلام العينة."
+                                        message = if (changed) "تم توثيق استلام العينة بواسطة $responsibleEmployee." else "لم يُحفظ الانتقال؛ حدّث القائمة وتأكد من الحالة واسم الموظف."
                                     }
                                 }) { Text("تأكيد الاستلام") }
                             }
@@ -311,11 +317,10 @@ fun LaboratoryScreen() {
                                 OutlinedButton(onClick = {
                                     scope.launch {
                                         val at = System.currentTimeMillis()
-                                        withContext(Dispatchers.IO) {
-                                            dao.updateLabSpecimenStatus(specimen.id, "processing", specimen.receivedAt, "", at)
-                                            dao.insertLabSpecimenEvent(LabSpecimenEventEntity(specimenId = specimen.id, status = "processing", note = "بدء المعالجة", occurredAt = at))
+                                        val changed = withContext(Dispatchers.IO) {
+                                            dao.transitionLabSpecimen(specimen.id, specimen.status, "processing", responsibleEmployee, "بدء المعالجة", requireReceipt = requireReceipt, occurredAt = at)
                                         }
-                                        message = "تم نقل العينة إلى المعالجة."
+                                        message = if (changed) "تم نقل العينة إلى المعالجة بواسطة $responsibleEmployee." else "تعذر بدء المعالجة؛ تحقق من الحالة واسم الموظف."
                                     }
                                 }) { Text("بدء المعالجة") }
                             }
@@ -323,11 +328,10 @@ fun LaboratoryScreen() {
                                 OutlinedButton(onClick = {
                                     scope.launch {
                                         val at = System.currentTimeMillis()
-                                        withContext(Dispatchers.IO) {
-                                            dao.updateLabSpecimenStatus(specimen.id, "completed", specimen.receivedAt, "", at)
-                                            dao.insertLabSpecimenEvent(LabSpecimenEventEntity(specimenId = specimen.id, status = "completed", note = "اكتملت معالجة العينة", occurredAt = at))
+                                        val changed = withContext(Dispatchers.IO) {
+                                            dao.transitionLabSpecimen(specimen.id, specimen.status, "completed", responsibleEmployee, "اكتملت معالجة العينة", requireReceipt = requireReceipt, occurredAt = at)
                                         }
-                                        message = "تم إكمال معالجة العينة."
+                                        message = if (changed) "تم إكمال معالجة العينة بواسطة $responsibleEmployee." else "تعذر إكمال العينة؛ تحقق من الحالة واسم الموظف."
                                     }
                                 }) { Text("إكمال") }
                             }
@@ -342,16 +346,15 @@ fun LaboratoryScreen() {
                                 modifier = Modifier.fillMaxWidth()
                             )
                             Button(
-                                enabled = rejectionReason.isNotBlank(),
+                                enabled = rejectionReason.isNotBlank() && responsibleEmployee.isNotBlank(),
                                 onClick = {
                                     scope.launch {
                                         val at = System.currentTimeMillis()
-                                        withContext(Dispatchers.IO) {
-                                            dao.updateLabSpecimenStatus(specimen.id, "rejected", specimen.receivedAt, rejectionReason.trim(), at)
-                                            dao.insertLabSpecimenEvent(LabSpecimenEventEntity(specimenId = specimen.id, status = "rejected", note = rejectionReason.trim(), occurredAt = at))
+                                        val changed = withContext(Dispatchers.IO) {
+                                            dao.transitionLabSpecimen(specimen.id, specimen.status, "rejected", responsibleEmployee, rejectionReason.trim(), rejectionReason.trim(), requireReceipt, at)
                                         }
                                         rejectionReason = ""
-                                        message = "تم توثيق رفض العينة وسببه."
+                                        message = if (changed) "تم توثيق رفض العينة وسببه بواسطة $responsibleEmployee." else "تعذر رفض العينة؛ تحقق من الحالة واسم الموظف."
                                     }
                                 }
                             ) { Text("تأكيد رفض العينة") }
