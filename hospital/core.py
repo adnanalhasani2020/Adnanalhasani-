@@ -190,6 +190,16 @@ CREATE TABLE IF NOT EXISTS lab_orders (
     CHECK(status IN ('ordered','collected','processing','resulted','cancelled')),
   result TEXT, ordered_at TEXT NOT NULL, resulted_at TEXT
 );
+CREATE TABLE IF NOT EXISTS lab_order_events (
+  id INTEGER PRIMARY KEY,
+  lab_order_id INTEGER NOT NULL REFERENCES lab_orders(id),
+  status TEXT NOT NULL CHECK(status IN ('ordered','collected','processing','resulted','cancelled')),
+  occurred_at TEXT NOT NULL,
+  actor TEXT NOT NULL,
+  UNIQUE(lab_order_id, status, occurred_at)
+);
+CREATE INDEX IF NOT EXISTS lab_order_events_timeline
+  ON lab_order_events(lab_order_id, id);
 CREATE TABLE IF NOT EXISTS medicines (
   id INTEGER PRIMARY KEY, sku TEXT NOT NULL UNIQUE, name TEXT NOT NULL,
   quantity INTEGER NOT NULL DEFAULT 0 CHECK(quantity >= 0),

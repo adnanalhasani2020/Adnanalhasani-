@@ -21,7 +21,7 @@ from .security import (AuthStore, AuthenticationError, AuthorizationError,
                        permission_for_route, require_permission)
 from .workflows import (
     add_medicine, close_encounter, create_bed, create_encounter, dispense_prescription,
-    order_lab_test, prescribe_medicine, update_lab_status,
+    order_lab_test, prescribe_medicine, restock_medicine, update_lab_status,
 )
 
 def _server_timestamp() -> str:
@@ -626,15 +626,21 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                 elif route == "/api/medicines":
                     self._required(data, "sku", "name", "quantity", "reorder_level", "at")
                     ident = add_medicine(database, sku=str(data["sku"]), name=str(data["name"]),
-                        quantity=int(data["quantity"]), reorder_level=int(data["reorder_level"]),
+                        quantity=self._integer(data, "quantity"), reorder_level=self._integer(data, "reorder_level"),
                         actor=self._actor(), at=str(data["at"]), unit=str(data.get("unit", "unit")))
                     self._send(201, {"id": ident, "status": "created"})
+                elif len(parts) == 4 and parts[:2] == ["api", "medicines"] and parts[3] == "restock":
+                    self._required(data, "quantity", "at")
+                    total = restock_medicine(database, medicine_id=int(parts[2]),
+                        quantity=self._integer(data, "quantity"), actor=self._actor(),
+                        at=str(data["at"]), reference=str(data.get("reference", "")))
+                    self._send(200, {"id": int(parts[2]), "quantity": total, "status": "restocked"})
                 elif route == "/api/prescriptions":
                     self._required(data, "patient_id", "medicine_id", "dose", "frequency", "duration", "quantity", "prescribed_at")
                     ident = prescribe_medicine(database, patient_id=int(data["patient_id"]),
                         medicine_id=int(data["medicine_id"]), dose=str(data["dose"]),
                         frequency=str(data["frequency"]), duration=str(data["duration"]),
-                        quantity=int(data["quantity"]), prescribed_at=str(data["prescribed_at"]),
+                        quantity=self._integer(data, "quantity"), prescribed_at=str(data["prescribed_at"]),
                         actor=self._actor(), encounter_id=int(data["encounter_id"]) if data.get("encounter_id") is not None else None)
                     self._send(201, {"id": ident, "status": "pending"})
                 elif len(parts) == 4 and parts[:2] == ["api", "prescriptions"] and parts[3] == "dispense":

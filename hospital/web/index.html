@@ -83,6 +83,12 @@ small{color:#5d7482}form{display:grid;gap:10px}footer{text-align:center;color:#6
 <div class="row"><label>الكمية الابتدائية<input name="quantity" required type="number" min="0" step="1"></label><label>حد إعادة الطلب<input name="reorder_level" required type="number" min="0" step="1"></label><input name="unit" value="وحدة" required aria-label="وحدة القياس"></div>
 <button>إضافة الدواء</button><div class="status" role="status"></div>
 </form></section>
+<section class="panel"><h2>استلام مخزون الصيدلية</h2><form id="restockForm">
+<div class="row"><select name="medicine_id" required aria-label="الدواء المراد استلامه"><option value="">اختر الدواء...</option></select>
+<label>الكمية المستلمة<input name="quantity" required type="number" min="1" step="1"></label>
+<input name="reference" maxlength="120" placeholder="رقم فاتورة المورد / مرجع الاستلام (اختياري)"></div>
+<button>تأكيد استلام المخزون</button><div class="status" role="status"></div>
+</form></section>
 <section class="panel"><h2>إنشاء وصفة دوائية</h2><form id="prescriptionForm">
 <div class="row"><select name="patient_id" required aria-label="المريض"><option value="">اختر المريض...</option></select><select name="medicine_id" required aria-label="الدواء"><option value="">اختر الدواء...</option></select></div>
 <div class="row"><input name="dose" required placeholder="الجرعة"><input name="frequency" required placeholder="التكرار"><input name="duration" required placeholder="المدة"></div>
@@ -149,6 +155,7 @@ async function loadReferenceOptions(){const tasks=[
 ["/api/patients","select[name='patient_id']",r=>r.patient_no+" — "+r.full_name,"اختر المريض..."],
 ["/api/doctors","select[name='doctor_id']",r=>r.full_name+" — "+r.specialty,"اختر الطبيب..."],
 ["/api/medicines","select[name='medicine_id']",r=>r.name+" ("+r.sku+") — المخزون: "+r.quantity,"اختر الدواء..."],
+["/api/medicines","#restockForm select[name='medicine_id']",r=>r.name+" ("+r.sku+") — المخزون: "+r.quantity,"اختر الدواء..."],
 ["/api/beds","select[name='bed_id']",r=>r.ward+" — "+r.bed_no+(r.occupied?" (مشغول)":" (متاح)"),"اختر السرير..."],
 ["/api/invoices","select[name='invoice_id']",r=>r.invoice_no+" — "+r.patient_name+" — المتبقي: "+(Number(r.total_minor)-Number(r.paid_minor))+" "+r.currency,"اختر الفاتورة..."],
 ["/api/prescriptions","select[name='prescription_id']",r=>"#"+r.id+" — "+r.patient_name+" — "+r.medicine_name+" ("+r.status+")","اختر الوصفة المعلقة..."],
@@ -179,6 +186,8 @@ wire("invoiceForm","/api/invoices",d=>({...d,patient_id:Number(d.patient_id),tot
 wire("paymentForm","/api/payments",d=>{const form=$("paymentForm");form.dataset.idempotencyKey=form.dataset.idempotencyKey||((crypto.randomUUID&&crypto.randomUUID())||("payment-"+Date.now()+"-"+Math.random().toString(36).slice(2)));form.dataset.paymentReceivedAt=form.dataset.paymentReceivedAt||now();return {...d,invoice_id:Number(d.invoice_id),amount_minor:Number(d.amount_minor),received_at:form.dataset.paymentReceivedAt,idempotency_key:form.dataset.idempotencyKey,reference:d.reference||undefined}},"تأكيد تسجيل دفعة مالية؟ راجع الفاتورة والمبلغ وطريقة الدفع قبل المتابعة.");
 wire("labForm","/api/lab-orders",d=>({...d,patient_id:Number(d.patient_id),doctor_id:d.doctor_id?Number(d.doctor_id):undefined,encounter_id:d.encounter_id?Number(d.encounter_id):undefined,ordered_at:now()}));
 wire("medicineForm","/api/medicines",d=>({...d,quantity:Number(d.quantity),reorder_level:Number(d.reorder_level),at:now()}));
+const restockForm=$("restockForm");
+restockForm.addEventListener("submit",async ev=>{ev.preventDefault();const unlock=lockFormSubmission(restockForm);if(!unlock)return;const status=restockForm.querySelector(".status");const d=Object.fromEntries(new FormData(restockForm).entries());try{const quantity=Number(d.quantity);if(!Number.isSafeInteger(quantity)||quantity<1){throw new Error("يجب أن تكون الكمية عددًا صحيحًا موجبًا.");}const medicine=restockForm.querySelector("select[name='medicine_id'] option:checked")?.textContent||"الدواء المحدد";if(!window.confirm("تأكيد استلام "+quantity+" وحدة من "+medicine+"؟"+(d.reference.trim()?" مرجع الاستلام: "+d.reference.trim():""))){msg(status,"تم إلغاء الاستلام قبل إرسال الطلب.");return;}const result=await api("/api/medicines/"+Number(d.medicine_id)+"/restock",{method:"POST",body:JSON.stringify({quantity,at:now(),reference:d.reference.trim()||undefined})});msg(status,"تم استلام المخزون بنجاح. الكمية الحالية: "+result.quantity);restockForm.reset();await loadReferenceOptions();await loadRecords(true)}catch(e){msg(status,e.message,true)}finally{unlock()}});
 wire("prescriptionForm","/api/prescriptions",d=>({...d,patient_id:Number(d.patient_id),medicine_id:Number(d.medicine_id),quantity:Number(d.quantity),encounter_id:d.encounter_id?Number(d.encounter_id):undefined,prescribed_at:now()}),"تأكيد إنشاء الوصفة؟ راجع المريض والدواء والجرعة والتكرار والمدة والكمية قبل المتابعة.");
 const dispenseForm=$("dispenseForm");
 dispenseForm.addEventListener("submit",async ev=>{ev.preventDefault();const unlock=lockFormSubmission(dispenseForm);if(!unlock)return;const status=dispenseForm.querySelector(".status");const d=Object.fromEntries(new FormData(dispenseForm).entries());try{if(!window.confirm("تأكيد صرف الوصفة المحددة وخصم الكمية من المخزون؟")){msg(status,"تم إلغاء الصرف قبل إرسال الطلب.");return;}const result=await api("/api/prescriptions/"+Number(d.prescription_id)+"/dispense",{method:"POST",body:JSON.stringify({dispensed_at:now()})});msg(status,"تم صرف الوصفة بنجاح: "+result.id);dispenseForm.reset();$("connect").click()}catch(e){msg(status,e.message,true)}finally{unlock()}});
