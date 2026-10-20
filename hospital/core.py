@@ -916,5 +916,14 @@ class HospitalDB:
                 "current_admissions": db.execute("SELECT COUNT(*) FROM admissions WHERE status='admitted'").fetchone()[0],
                 "pending_lab_orders": db.execute("SELECT COUNT(*) FROM lab_orders WHERE status IN ('ordered','collected','processing')").fetchone()[0],
                 "low_stock_medicines": db.execute("SELECT COUNT(*) FROM medicines WHERE active=1 AND quantity<=reorder_level").fetchone()[0],
+                "expired_batch_quantity": db.execute(
+                    "SELECT COALESCE(SUM(quantity),0) FROM medicine_batches WHERE expiry_date < date('now')"
+                ).fetchone()[0],
+                "expiring_soon_batch_quantity": db.execute(
+                    "SELECT COALESCE(SUM(quantity),0) FROM medicine_batches WHERE expiry_date >= date('now') AND expiry_date <= date('now','+90 days')"
+                ).fetchone()[0],
+                "unknown_expiry_batch_quantity": db.execute(
+                    "SELECT COALESCE(SUM(quantity),0) FROM medicine_batches WHERE expiry_date IS NULL"
+                ).fetchone()[0],
                 "unpaid_or_partial_invoices": db.execute("SELECT COUNT(*) FROM invoices WHERE status IN ('unpaid','partial')").fetchone()[0],
             }
