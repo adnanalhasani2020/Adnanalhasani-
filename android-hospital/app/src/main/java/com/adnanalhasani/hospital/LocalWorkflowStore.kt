@@ -132,21 +132,38 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
                 }
                 val start = canonicalDateTime(f.field("التاريخ والوقت"))
                 val end = canonicalDateTime(f.field("وقت الانتهاء"))
+                val desiredStatus = canonicalAppointmentStatus(f.field("حالة الموعد"))
                 require(end > start) { "وقت انتهاء الموعد يجب أن يأتي بعد وقت بدايته." }
-                val doctorOverlap = db.long(
-                    """SELECT id FROM local_appointments WHERE doctorName=? COLLATE NOCASE
-                       AND status IN ('scheduled','checked_in') AND startsAt<? AND endsAt>?
-                       AND sourceRecordId<>COALESCE(?, -1) LIMIT 1""",
-                    doctor, end, start, existingId
-                )
-                require(doctorOverlap == null) { "لدى الطبيب موعد آخر يتداخل مع هذا الوقت." }
-                val patientOverlap = db.long(
-                    """SELECT id FROM local_appointments WHERE patientName=? COLLATE NOCASE
-                       AND status IN ('scheduled','checked_in') AND startsAt<? AND endsAt>?
-                       AND sourceRecordId<>COALESCE(?, -1) LIMIT 1""",
-                    patient, end, start, existingId
-                )
-                require(patientOverlap == null) { "لدى المريض موعد آخر يتداخل مع هذا الوقت." }
+                val currentStatus = existingId?.let { db.string("SELECT status FROM local_appointments WHERE sourceRecordId=?", it) }
+                if (currentStatus != null && currentStatus != desiredStatus) {
+                    val allowed = when (currentStatus) {
+                        "scheduled" -> setOf("checked_in", "cancelled", "no_show")
+                        "checked_in" -> setOf("completed", "cancelled")
+                        else -> emptySet()
+                    }
+                    require(desiredStatus in allowed) { "انتقال حالة الموعد غير مسموح من $currentStatus إلى $desiredStatus." }
+                }
+                if (desiredStatus == "no_show") {
+                    require(start <= LocalDateTime.now().format(timestampFormatter)) {
+                        "لا يمكن تسجيل عدم الحضور قبل وقت الموعد."
+                    }
+                }
+                if (desiredStatus == "scheduled" || desiredStatus == "checked_in") {
+                    val doctorOverlap = db.long(
+                        """SELECT id FROM local_appointments WHERE doctorName=? COLLATE NOCASE
+                           AND status IN ('scheduled','checked_in') AND startsAt<? AND endsAt>?
+                           AND sourceRecordId<>COALESCE(?, -1) LIMIT 1""",
+                        doctor, end, start, existingId
+                    )
+                    require(doctorOverlap == null) { "لدى الطبيب موعد آخر يتداخل مع هذا الوقت." }
+                    val patientOverlap = db.long(
+                        """SELECT id FROM local_appointments WHERE patientName=? COLLATE NOCASE
+                           AND status IN ('scheduled','checked_in') AND startsAt<? AND endsAt>?
+                           AND sourceRecordId<>COALESCE(?, -1) LIMIT 1""",
+                        patient, end, start, existingId
+                    )
+                    require(patientOverlap == null) { "لدى المريض موعد آخر يتداخل مع هذا الوقت." }
+                }
             }
             "prescriptions" -> {
                 require(db.long("SELECT id FROM patients WHERE fullName=? COLLATE NOCASE LIMIT 1", f.field("اسم المريض")) != null) {
@@ -385,10 +402,11 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
                     val start = canonicalDateTime(f.field("التاريخ والوقت"))
                     val end = canonicalDateTime(f.field("وقت الانتهاء"))
                     db.execSQL("DELETE FROM local_appointments WHERE sourceRecordId=?", arrayOf(sourceRecordId))
+                    val status = canonicalAppointmentStatus(f.field("حالة الموعد"))
                     db.execSQL(
                         """INSERT INTO local_appointments(sourceRecordId,patientName,doctorName,startsAt,endsAt,status)
-                           VALUES(?,?,?,?,?,'scheduled')""",
-                        arrayOf(sourceRecordId, f.field("اسم المريض"), f.field("اسم الطبيب"), start, end)
+                           VALUES(?,?,?,?,?,?)""",
+                        arrayOf(sourceRecordId, f.field("اسم المريض"), f.field("اسم الطبيب"), start, end, status)
                     )
                 }
                 "prescriptions" -> {
@@ -528,7 +546,7 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
             "admissions" -> """SELECT patientName || ' • ' || ward || ' / ' || bedNo,
                 status || ' • دخول: ' || admittedAt || CASE WHEN dischargedAt IS NULL THEN '' ELSE ' • خروج: ' || dischargedAt END
                 FROM local_admissions ORDER BY id DESC"""
-            "appointments" -> """SELECT patientName || ' • ' || doctorName, startsAt || ' — ' || endsAt
+            "appointments" -> """SELECT patientName || ' • ' || doctorName, status || ' • ' || startsAt || ' — ' || endsAt
                 FROM local_appointments ORDER BY startsAt DESC"""
             "lab" -> """SELECT h.title, e.status || ' • ' || e.occurredAt ||
                 CASE WHEN e.result='' THEN '' ELSE ' • ' || e.result END
@@ -555,6 +573,14 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
                 while (cursor.moveToNext()) add(cursor.getString(0).orEmpty() to cursor.getString(1).orEmpty())
             }
         }
+    }
+
+    private fun canonicalAppointmentStatus(raw: String): String = when {
+        raw.contains("حضر") || raw.equals("checked_in", true) -> if (raw.contains("لم يحضر")) "no_show" else "checked_in"
+        raw.contains("مكتمل") || raw.equals("completed", true) -> "completed"
+        raw.contains("ملغ") || raw.equals("cancelled", true) -> "cancelled"
+        raw.contains("عدم الحضور") || raw.equals("no_show", true) -> "no_show"
+        else -> "scheduled"
     }
 
     private fun canonicalUserRole(raw: String): String? = when {
