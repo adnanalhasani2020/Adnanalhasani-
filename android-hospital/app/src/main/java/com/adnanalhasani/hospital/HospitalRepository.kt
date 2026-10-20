@@ -17,6 +17,8 @@ class HospitalRepository(private val dao: HospitalDao, database: HospitalDatabas
 
     suspend fun localAuditRows(): List<Pair<String, String>> = localWorkflowRows("audit")
 
+    suspend fun localFinanceOutboxRows(): List<Pair<String, String>> = localWorkflowRows("finance_outbox")
+
     fun patients(): Flow<List<PatientEntity>> = dao.patients()
 
     fun doctors(): Flow<List<DoctorEntity>> = dao.doctors()
