@@ -732,6 +732,10 @@ class HospitalDB:
             raise HospitalError("payment amount must be a positive integer in minor units")
         if not isinstance(method, str) or not method.strip():
             raise HospitalError("payment method is required")
+        if reference is not None and not isinstance(reference, str):
+            raise HospitalError("payment reference must be text")
+        reference = reference.strip() if reference is not None else None
+        reference = reference or None
         if idempotency_key is not None:
             if not isinstance(idempotency_key, str) or not idempotency_key.strip() or len(idempotency_key) > 200:
                 raise HospitalError("idempotency_key must be a non-empty string of at most 200 characters")
@@ -757,6 +761,13 @@ class HospitalDB:
                         raise HospitalError("idempotency_key was already used with different payment details")
                     db.commit()
                     return int(existing["id"])
+            if reference is not None:
+                duplicate = db.execute(
+                    "SELECT id FROM payments WHERE invoice_id=? AND reference=?",
+                    (invoice_id, reference),
+                ).fetchone()
+                if duplicate is not None:
+                    raise HospitalError("payment reference already recorded for this invoice")
             invoice = db.execute("SELECT total_minor,status FROM invoices WHERE id=?", (invoice_id,)).fetchone()
             if invoice is None or invoice["status"] == "void":
                 raise HospitalError("valid invoice not found")
