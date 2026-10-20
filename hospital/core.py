@@ -213,6 +213,48 @@ CREATE TABLE IF NOT EXISTS prescriptions (
   quantity INTEGER NOT NULL CHECK(quantity > 0), status TEXT NOT NULL DEFAULT 'pending'
     CHECK(status IN ('pending','dispensed','cancelled')), prescribed_at TEXT NOT NULL
 );
+-- Batch-level inventory supports expiry visibility and FEFO dispensing.
+-- NULL expiry means legacy/unknown expiry and is deliberately displayed as unverified.
+CREATE TABLE IF NOT EXISTS medicine_batches (
+  id INTEGER PRIMARY KEY,
+  medicine_id INTEGER NOT NULL REFERENCES medicines(id),
+  batch_no TEXT NOT NULL,
+  expiry_date TEXT,
+  quantity INTEGER NOT NULL DEFAULT 0 CHECK(quantity >= 0),
+  received_at TEXT NOT NULL,
+  reference TEXT NOT NULL DEFAULT '',
+  created_by TEXT NOT NULL,
+  UNIQUE(medicine_id, batch_no),
+  CHECK(expiry_date IS NULL OR
+        (length(expiry_date)=10 AND date(expiry_date) IS NOT NULL AND date(expiry_date)=expiry_date))
+);
+CREATE INDEX IF NOT EXISTS medicine_batches_fefo
+  ON medicine_batches(medicine_id, expiry_date, id);
+CREATE TABLE IF NOT EXISTS medicine_batch_movements (
+  id INTEGER PRIMARY KEY,
+  batch_id INTEGER NOT NULL REFERENCES medicine_batches(id),
+  medicine_id INTEGER NOT NULL REFERENCES medicines(id),
+  movement_type TEXT NOT NULL CHECK(movement_type IN ('opening_balance','initial_stock','restock','dispense')),
+  quantity_delta INTEGER NOT NULL CHECK(quantity_delta <> 0),
+  balance_after INTEGER NOT NULL CHECK(balance_after >= 0),
+  prescription_id INTEGER REFERENCES prescriptions(id),
+  reference TEXT NOT NULL DEFAULT '',
+  actor TEXT NOT NULL,
+  occurred_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS medicine_batch_movements_timeline
+  ON medicine_batch_movements(batch_id, id);
+CREATE TRIGGER IF NOT EXISTS medicine_batch_movements_no_update
+BEFORE UPDATE ON medicine_batch_movements
+BEGIN
+  SELECT RAISE(ABORT, 'medicine batch movements are append-only');
+END;
+CREATE TRIGGER IF NOT EXISTS medicine_batch_movements_no_delete
+BEFORE DELETE ON medicine_batch_movements
+BEGIN
+  SELECT RAISE(ABORT, 'medicine batch movements are append-only');
+END;
+
 -- Append-only stock ledger: quantity snapshots remain for fast reads, but every
 -- inventory change is represented by a durable, attributable movement.
 CREATE TABLE IF NOT EXISTS medicine_stock_movements (
@@ -406,6 +448,30 @@ class HospitalDB:
                 FROM medicines m
                 WHERE NOT EXISTS (
                     SELECT 1 FROM medicine_stock_movements sm WHERE sm.medicine_id=m.id
+                )
+            """)
+            # Existing aggregate stock cannot be assigned a real expiry date safely.
+            # Represent it as an explicit legacy/unknown-expiry batch rather than inventing expiry data.
+            db.execute("""
+                INSERT INTO medicine_batches
+                    (medicine_id,batch_no,expiry_date,quantity,received_at,reference,created_by)
+                SELECT m.id,'LEGACY-' || m.id,NULL,m.quantity,CURRENT_TIMESTAMP,
+                       'migrated aggregate stock; expiry unknown','system:migration'
+                FROM medicines m
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM medicine_batches b WHERE b.medicine_id=m.id
+                )
+            """)
+            db.execute("""
+                INSERT INTO medicine_batch_movements
+                    (batch_id,medicine_id,movement_type,quantity_delta,balance_after,
+                     reference,actor,occurred_at)
+                SELECT b.id,b.medicine_id,'opening_balance',b.quantity,b.quantity,
+                       b.reference,'system:migration',b.received_at
+                FROM medicine_batches b
+                WHERE b.quantity > 0
+                  AND NOT EXISTS (
+                    SELECT 1 FROM medicine_batch_movements bm WHERE bm.batch_id=b.id
                 )
             """)
             # Upgrade existing Hospital databases without rewriting historical rows.

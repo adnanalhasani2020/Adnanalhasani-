@@ -21,7 +21,7 @@ from .security import (AuthStore, AuthenticationError, AuthorizationError,
                        permission_for_route, require_permission)
 from .workflows import (
     add_medicine, close_encounter, create_bed, create_encounter, dispense_prescription,
-    order_lab_test, prescribe_medicine, restock_medicine, update_lab_status,
+    order_lab_test, prescribe_medicine, receive_medicine_batch, restock_medicine, update_lab_status,
 )
 
 def _server_timestamp() -> str:
@@ -286,6 +286,40 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                     },
                     "scope": "lab order timeline; chronological event history, not result approval",
                 })
+            elif route.startswith("/api/medicines/") and route.endswith("/batches") and len(route.strip("/").split("/")) == 4:
+                parts = route.strip("/").split("/")
+                if parts[0:2] != ["api", "medicines"] or parts[3] != "batches":
+                    self._send(404, {"error": "not_found"})
+                    return
+                if not parts[2].isdigit() or int(parts[2]) <= 0:
+                    self._send(400, {"error": "invalid_medicine_id"})
+                    return
+                medicine_id = int(parts[2])
+                with database.connect() as conn:
+                    medicine = conn.execute(
+                        "SELECT id,sku,name,quantity,reorder_level,unit,active FROM medicines WHERE id=?",
+                        (medicine_id,),
+                    ).fetchone()
+                    if medicine is None:
+                        self._send(404, {"error": "medicine_not_found"})
+                        return
+                    rows = conn.execute(
+                        """SELECT id,batch_no,expiry_date,quantity,received_at,reference,created_by,
+                                  CASE WHEN expiry_date IS NULL THEN 'unknown'
+                                       WHEN expiry_date < date('now') THEN 'expired'
+                                       WHEN expiry_date <= date('now','+90 days') THEN 'expiring_soon'
+                                       ELSE 'valid' END AS expiry_status
+                           FROM medicine_batches WHERE medicine_id=? ORDER BY
+                             CASE WHEN expiry_date IS NULL THEN 1 ELSE 0 END, expiry_date, id""",
+                        (medicine_id,),
+                    ).fetchall()
+                self._send(200, {"data": {"medicine": dict(medicine),
+                    "batches": [dict(row) for row in rows],
+                    "summary": {"batch_count": len(rows),
+                        "expired_quantity": sum(int(row["quantity"]) for row in rows if row["expiry_status"] == "expired"),
+                        "expiring_soon_quantity": sum(int(row["quantity"]) for row in rows if row["expiry_status"] == "expiring_soon"),
+                        "unknown_expiry_quantity": sum(int(row["quantity"]) for row in rows if row["expiry_status"] == "unknown")}},
+                    "scope": "expiry is unknown for migrated or received stock without expiry details"})
             elif route.startswith("/api/medicines/") and route.endswith("/stock-movements") and len(route.strip("/").split("/")) == 4:
                 # Expose an attributable, paginated stock ledger without returning unrelated audit details.
                 parts = route.strip("/").split("/")
@@ -481,7 +515,7 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                     profile = data["activity_profile"]
                     modules = data["modules"]
                     allowed_profiles = {"general", "outpatient", "specialty", "admin"}
-                    allowed_modules = {"appointments", "encounters", "admissions", "billing", "records", "audit"}
+                    allowed_modules = {"appointments", "encounters", "admissions", "billing", "records", "pharmacy", "laboratory", "audit"}
                     if profile not in allowed_profiles or not isinstance(modules, list):
                         raise HospitalError("invalid manager settings proposal")
                     if any(not isinstance(item, str) or item not in allowed_modules for item in modules):
@@ -751,6 +785,14 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                         quantity=self._integer(data, "quantity"), reorder_level=self._integer(data, "reorder_level"),
                         actor=self._actor(), at=str(data["at"]), unit=str(data.get("unit", "unit")))
                     self._send(201, {"id": ident, "status": "created"})
+                elif len(parts) == 4 and parts[:2] == ["api", "medicines"] and parts[3] == "batches":
+                    self._required(data, "batch_no", "quantity", "expiry_date", "at")
+                    result = receive_medicine_batch(
+                        database, medicine_id=int(parts[2]), batch_no=str(data["batch_no"]),
+                        quantity=self._integer(data, "quantity"), expiry_date=str(data["expiry_date"]),
+                        actor=self._actor(), at=str(data["at"]), reference=str(data.get("reference", "")),
+                    )
+                    self._send(201, {"data": result, "status": "batch_received"})
                 elif len(parts) == 4 and parts[:2] == ["api", "medicines"] and parts[3] == "restock":
                     self._required(data, "quantity", "at")
                     total = restock_medicine(database, medicine_id=int(parts[2]),
