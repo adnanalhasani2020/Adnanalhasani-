@@ -213,6 +213,43 @@ CREATE TABLE IF NOT EXISTS prescriptions (
   quantity INTEGER NOT NULL CHECK(quantity > 0), status TEXT NOT NULL DEFAULT 'pending'
     CHECK(status IN ('pending','dispensed','cancelled')), prescribed_at TEXT NOT NULL
 );
+-- Append-only stock ledger: quantity snapshots remain for fast reads, but every
+-- inventory change is represented by a durable, attributable movement.
+CREATE TABLE IF NOT EXISTS medicine_stock_movements (
+  id INTEGER PRIMARY KEY,
+  medicine_id INTEGER NOT NULL REFERENCES medicines(id),
+  movement_type TEXT NOT NULL CHECK(movement_type IN
+    ('opening_balance','initial_stock','restock','dispense')),
+  quantity_delta INTEGER NOT NULL,
+  balance_after INTEGER NOT NULL CHECK(balance_after >= 0),
+  source_key TEXT UNIQUE,
+  reference TEXT NOT NULL DEFAULT '',
+  prescription_id INTEGER REFERENCES prescriptions(id),
+  actor TEXT NOT NULL,
+  occurred_at TEXT NOT NULL,
+  CHECK(
+    (movement_type IN ('opening_balance','initial_stock') AND quantity_delta >= 0) OR
+    (movement_type='restock' AND quantity_delta > 0) OR
+    (movement_type='dispense' AND quantity_delta < 0)
+  ),
+  CHECK((movement_type='dispense' AND prescription_id IS NOT NULL) OR
+        (movement_type<>'dispense' AND prescription_id IS NULL))
+);
+CREATE INDEX IF NOT EXISTS medicine_stock_movements_timeline
+  ON medicine_stock_movements(medicine_id, id);
+CREATE INDEX IF NOT EXISTS medicine_stock_movements_type_time
+  ON medicine_stock_movements(movement_type, occurred_at);
+CREATE TRIGGER IF NOT EXISTS medicine_stock_movements_no_update
+BEFORE UPDATE ON medicine_stock_movements
+BEGIN
+  SELECT RAISE(ABORT, 'medicine stock movements are append-only');
+END;
+CREATE TRIGGER IF NOT EXISTS medicine_stock_movements_no_delete
+BEFORE DELETE ON medicine_stock_movements
+BEGIN
+  SELECT RAISE(ABORT, 'medicine stock movements are append-only');
+END;
+
 CREATE TABLE IF NOT EXISTS invoices (
   id INTEGER PRIMARY KEY, invoice_no TEXT NOT NULL UNIQUE,
   patient_id INTEGER NOT NULL REFERENCES patients(id),
@@ -357,6 +394,20 @@ class HospitalDB:
         self.path = str(path)
         with self.connect() as db:
             db.executescript(SCHEMA)
+            # Preserve the current stock as an opening ledger balance for legacy databases.
+            # The NOT EXISTS guard makes this migration idempotent across restarts.
+            db.execute("""
+                INSERT INTO medicine_stock_movements
+                    (medicine_id,movement_type,quantity_delta,balance_after,source_key,
+                     reference,actor,occurred_at)
+                SELECT m.id,'opening_balance',m.quantity,m.quantity,
+                       'migration:opening:' || m.id,'legacy stock at ledger activation',
+                       'system:migration',CURRENT_TIMESTAMP
+                FROM medicines m
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM medicine_stock_movements sm WHERE sm.medicine_id=m.id
+                )
+            """)
             # Upgrade existing Hospital databases without rewriting historical rows.
             invoice_columns = {row["name"] for row in db.execute("PRAGMA table_info(invoices)")}
             if "idempotency_key" not in invoice_columns:
