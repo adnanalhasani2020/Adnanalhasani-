@@ -1058,7 +1058,7 @@ interface HospitalDao {
         RecordAuditLogEntity::class,
         ClinicalVisitEntity::class
     ],
-    version = 15,
+    version = 16,
     exportSchema = false
 )
 abstract class HospitalDatabase : RoomDatabase() {
@@ -1134,6 +1134,45 @@ abstract class HospitalDatabase : RoomDatabase() {
          * medicine stock ledger, bed/admission lifecycle, appointment overlap rules,
          * prescription dispensing state, and lab status history.
          */
+        private val MIGRATION_15_16 = object : Migration(15, 16) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""CREATE TABLE IF NOT EXISTS local_audit_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    actor TEXT NOT NULL DEFAULT 'local-user',
+                    action TEXT NOT NULL,
+                    entityType TEXT NOT NULL,
+                    entityId TEXT NOT NULL,
+                    detailsJson TEXT NOT NULL DEFAULT '{}',
+                    occurredAt TEXT NOT NULL
+                )""")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_local_audit_entity_timeline ON local_audit_log(entityType, entityId, id)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_local_audit_timeline ON local_audit_log(id DESC)")
+                db.execSQL("""CREATE TRIGGER IF NOT EXISTS local_audit_log_no_update
+                    BEFORE UPDATE ON local_audit_log BEGIN
+                    SELECT RAISE(ABORT, 'local audit history is append-only');
+                END""")
+                db.execSQL("""CREATE TRIGGER IF NOT EXISTS local_audit_log_no_delete
+                    BEFORE DELETE ON local_audit_log BEGIN
+                    SELECT RAISE(ABORT, 'local audit history is append-only');
+                END""")
+                db.execSQL("""CREATE TABLE IF NOT EXISTS local_finance_outbox (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    eventKey TEXT NOT NULL UNIQUE,
+                    eventType TEXT NOT NULL CHECK(eventType IN ('hospital.invoice.created','hospital.payment.received')),
+                    aggregateType TEXT NOT NULL CHECK(aggregateType IN ('invoice','payment')),
+                    aggregateId TEXT NOT NULL,
+                    payloadJson TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','processing','delivered','failed')),
+                    attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts >= 0),
+                    createdAt TEXT NOT NULL,
+                    updatedAt TEXT NOT NULL,
+                    deliveredAt TEXT,
+                    lastError TEXT
+                )""")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_local_finance_outbox_pending ON local_finance_outbox(status, id)")
+            }
+        }
+
         private val MIGRATION_14_15 = object : Migration(14, 15) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("""CREATE TABLE IF NOT EXISTS local_medicines (
@@ -1573,7 +1612,7 @@ abstract class HospitalDatabase : RoomDatabase() {
                     HospitalDatabase::class.java,
                     "hospital-local.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16)
                     .addCallback(object : RoomDatabase.Callback() {
                         override fun onCreate(db: SupportSQLiteDatabase) {
                             installAuditImmutability(db)
