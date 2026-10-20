@@ -45,6 +45,24 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
         val f = fields(record)
         val db = database.openHelper.readableDatabase
         when (record.category) {
+            "users" -> {
+                val username = f.field("اسم المستخدم")
+                require(username.isNotBlank()) { "اسم المستخدم مطلوب." }
+                require(canonicalUserRole(f.field("الدور")) != null) {
+                    "اختر دوراً معتمداً: مدير، طبيب، ممرض، استقبال، مختبر، صيدلي أو محاسب."
+                }
+                val duplicate = db.long(
+                    "SELECT id FROM local_users WHERE username=? COLLATE NOCASE AND sourceRecordId<>COALESCE(?, -1) LIMIT 1",
+                    username, existingId
+                )
+                require(duplicate == null) { "اسم المستخدم مستخدم بالفعل." }
+            }
+            "encounters" -> {
+                require(f.field("اسم المريض").isNotBlank() && f.field("الشكوى الرئيسية").isNotBlank()) {
+                    "اسم المريض والشكوى الرئيسية مطلوبان للزيارة."
+                }
+                if (f.field("تاريخ الزيارة").isNotBlank()) canonicalDateTime(f.field("تاريخ الزيارة"))
+            }
             "pharmacy" -> {
                 require(f.field("اسم الدواء").isNotBlank()) { "اسم الدواء مطلوب." }
                 require(f.field("رمز الدواء").isNotBlank()) { "رمز الدواء مطلوب." }
@@ -163,6 +181,45 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
         try {
             val now = LocalDateTime.now().format(timestampFormatter)
             when (record.category) {
+                "users" -> {
+                    val username = f.field("اسم المستخدم")
+                    val role = canonicalUserRole(f.field("الدور")) ?: error("دور المستخدم غير معتمد.")
+                    val active = if (f.field("الحالة").contains("غير نشط") || f.field("الحالة").equals("inactive", true)) 0 else 1
+                    val existing = db.long("SELECT id FROM local_users WHERE sourceRecordId=?", sourceRecordId)
+                    if (existing == null) {
+                        db.execSQL("INSERT INTO local_users(sourceRecordId,username,role,active,createdAt) VALUES(?,?,?,?,?)",
+                            arrayOf(sourceRecordId, username, role, active, now))
+                    } else {
+                        db.execSQL("UPDATE local_users SET username=?,role=?,active=? WHERE sourceRecordId=?",
+                            arrayOf(username, role, active, sourceRecordId))
+                    }
+                }
+                "encounters" -> {
+                    val patient = f.field("اسم المريض")
+                    val doctor = f.field("اسم الطبيب")
+                    val openedAt = f.field("تاريخ الزيارة").takeIf { it.isNotBlank() }?.let(::canonicalDateTime)
+                        ?: db.string("SELECT openedAt FROM local_encounters WHERE sourceRecordId=?", sourceRecordId)
+                        ?: now
+                    val closed = f.field("حالة الزيارة").contains("مغلق") || f.field("حالة الزيارة").equals("closed", true)
+                    val status = if (closed) "closed" else "open"
+                    val closedAt = if (closed) (db.string("SELECT closedAt FROM local_encounters WHERE sourceRecordId=?", sourceRecordId) ?: now) else null
+                    val existing = db.long("SELECT id FROM local_encounters WHERE sourceRecordId=?", sourceRecordId)
+                    if (existing == null) {
+                        db.execSQL(
+                            """INSERT INTO local_encounters(sourceRecordId,patientName,doctorName,openedAt,closedAt,chiefComplaint,diagnosis,notes,status)
+                               VALUES(?,?,?,?,?,?,?,?,?)""",
+                            arrayOf(sourceRecordId, patient, doctor, openedAt, closedAt, f.field("الشكوى الرئيسية"),
+                                f.field("التشخيص"), f.field("ملاحظات"), status)
+                        )
+                    } else {
+                        db.execSQL(
+                            """UPDATE local_encounters SET patientName=?,doctorName=?,openedAt=?,closedAt=?,chiefComplaint=?,diagnosis=?,notes=?,status=?
+                               WHERE sourceRecordId=?""",
+                            arrayOf(patient, doctor, openedAt, closedAt, f.field("الشكوى الرئيسية"),
+                                f.field("التشخيص"), f.field("ملاحظات"), status, sourceRecordId)
+                        )
+                    }
+                }
                 "pharmacy" -> {
                     val sku = f.field("رمز الدواء")
                     val name = f.field("اسم الدواء")
@@ -393,6 +450,11 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
                 FROM local_lab_order_events e INNER JOIN hospital_records h ON h.id=e.sourceRecordId
                 WHERE e.id IN (SELECT MAX(id) FROM local_lab_order_events GROUP BY sourceRecordId)
                 ORDER BY e.id DESC"""
+            "users" -> """SELECT username, role || CASE WHEN active=1 THEN ' • نشط' ELSE ' • غير نشط' END
+                FROM local_users ORDER BY username COLLATE NOCASE"""
+            "encounters" -> """SELECT patientName || CASE WHEN doctorName='' THEN '' ELSE ' • ' || doctorName END,
+                status || ' • فتح: ' || openedAt || CASE WHEN closedAt IS NULL THEN '' ELSE ' • إغلاق: ' || closedAt END
+                FROM local_encounters ORDER BY id DESC""
             else -> return emptyList()
         }
         return db.query(sql).use { cursor ->
@@ -400,6 +462,17 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
                 while (cursor.moveToNext()) add(cursor.getString(0).orEmpty() to cursor.getString(1).orEmpty())
             }
         }
+    }
+
+    private fun canonicalUserRole(raw: String): String? = when {
+        raw.contains("مدير") || raw.equals("admin", true) -> "admin"
+        raw.contains("طبيب") || raw.equals("doctor", true) -> "doctor"
+        raw.contains("ممرض") || raw.equals("nurse", true) -> "nurse"
+        raw.contains("استقبال") || raw.equals("reception", true) -> "reception"
+        raw.contains("مختبر") || raw.equals("lab", true) -> "lab"
+        raw.contains("صيدلي") || raw.equals("pharmacist", true) -> "pharmacist"
+        raw.contains("محاسب") || raw.equals("accountant", true) -> "accountant"
+        else -> null
     }
 
     private fun canonicalLabStatus(raw: String): String = when {
