@@ -24,6 +24,13 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
     private fun Map<String, String>.field(vararg names: String): String =
         names.firstNotNullOfOrNull { this[it]?.takeIf(String::isNotBlank) }.orEmpty()
 
+    private fun canonicalAdmissionDate(raw: String): String {
+        val value = raw.trim().replace('T', ' ')
+        val dateOnly = runCatching { LocalDate.parse(value) }.getOrNull()
+        if (dateOnly != null) return dateOnly.atStartOfDay().format(timestampFormatter)
+        return canonicalDateTime(value)
+    }
+
     private fun canonicalDateTime(raw: String): String {
         val value = raw.trim().replace('T', ' ')
         val parsed = runCatching { LocalDateTime.parse(value, timestampFormatter) }.getOrNull()
@@ -129,6 +136,19 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
                     "حدد الجناح ورقم السرير قبل تسجيل التنويم."
                 }
                 require(f.field("التاريخ").isNotBlank()) { "تاريخ الدخول أو الخروج مطلوب." }
+                val eventDate = canonicalAdmissionDate(f.field("التاريخ"))
+                val desiredStatus = if (f.field("حالة التنويم").contains("خرج")) "discharged" else "admitted"
+                val currentStatus = existingId?.let { db.string("SELECT status FROM local_admissions WHERE sourceRecordId=?", it) }
+                val currentAdmissionDate = existingId?.let { db.string("SELECT admittedAt FROM local_admissions WHERE sourceRecordId=?", it) }
+                if (currentStatus == "discharged" && desiredStatus == "admitted") {
+                    throw IllegalArgumentException("لا يمكن إعادة فتح تنويم مغلق؛ أنشئ سجل تنويم جديداً.")
+                }
+                if (desiredStatus == "discharged") {
+                    require(currentStatus == "admitted") { "سجّل دخول المريض أولاً قبل تسجيل الخروج." }
+                    require(currentAdmissionDate != null && eventDate >= currentAdmissionDate) {
+                        "تاريخ الخروج لا يمكن أن يسبق تاريخ الدخول."
+                    }
+                }
                 val bedId = db.long(
                     "SELECT id FROM local_beds WHERE ward=? AND bedNo=? AND active=1 LIMIT 1",
                     f.field("القسم / الجناح"), f.field("رقم السرير")
@@ -412,7 +432,7 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
                     val patient = f.field("اسم المريض")
                     val ward = f.field("القسم / الجناح")
                     val bedNo = f.field("رقم السرير")
-                    val date = f.field("التاريخ")
+                    val date = canonicalAdmissionDate(f.field("التاريخ"))
                     val discharged = f.field("حالة التنويم").contains("خرج")
                     val oldAdmittedAt = db.string("SELECT admittedAt FROM local_admissions WHERE sourceRecordId=?", sourceRecordId)
                     val admittedAt = oldAdmittedAt ?: date
