@@ -13,7 +13,9 @@ class HospitalRepository(private val dao: HospitalDao, database: HospitalDatabas
     fun allRecords(): Flow<List<HospitalRecord>> = dao.allRecords()
 
     suspend fun localWorkflowRows(category: String): List<Pair<String, String>> =
-        localWorkflows?.rows(category).orEmpty()
+        withContext(Dispatchers.IO) { localWorkflows?.rows(category).orEmpty() }
+
+    suspend fun localAuditRows(): List<Pair<String, String>> = localWorkflowRows("audit")
 
     fun patients(): Flow<List<PatientEntity>> = dao.patients()
 
