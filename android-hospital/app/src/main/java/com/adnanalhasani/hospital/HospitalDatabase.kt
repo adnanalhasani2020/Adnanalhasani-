@@ -1421,10 +1421,6 @@ abstract class HospitalDatabase : RoomDatabase() {
                     BEFORE UPDATE ON lab_specimen_events BEGIN
                     SELECT RAISE(ABORT, 'lab specimen events are append-only');
                 END""".trimIndent())
-                db.execSQL("""CREATE TRIGGER IF NOT EXISTS lab_specimen_events_reject_delete
-                    BEFORE DELETE ON lab_specimen_events BEGIN
-                    SELECT RAISE(ABORT, 'lab specimen events are append-only');
-                END""".trimIndent())
             }
         }
 
