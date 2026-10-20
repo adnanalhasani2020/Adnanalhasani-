@@ -354,6 +354,7 @@ private fun HospitalWorkspace(repository: HospitalRepository) {
                     )
                     selected == "reports" -> Reports(all)
                     selected == "audit" -> AuditHistoryScreen(repository)
+                    selected == "reception" -> ReceptionScreen(repository)
                     selected == "doctor_workspace" -> DoctorWorkspaceScreen(repository)
                     selected == "catalogs" -> ReferenceCatalogScreen(repository)
                     selected == "business" -> BusinessProfileScreen(
