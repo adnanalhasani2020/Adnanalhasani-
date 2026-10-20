@@ -1,6 +1,7 @@
 import sqlite3
 import tempfile
 import unittest
+from datetime import date, timedelta
 from pathlib import Path
 
 from hospital.core import HospitalDB, HospitalError
@@ -134,6 +135,27 @@ class PharmacyLabHardeningTests(unittest.TestCase):
                 self.db, prescription_id=prescription, dispensed_at="2026-01-02T08:00:00Z",
                 actor="pharmacist",
             )
+
+    def test_dashboard_reports_expired_soon_and_unknown_expiry_quantities(self):
+        medicine = add_medicine(
+            self.db, sku="MED-DASH", name="Dashboard medicine", quantity=2,
+            reorder_level=0, actor="pharmacist", at="2026-01-01T08:00:00Z",
+        )
+        today = date.today()
+        receive_medicine_batch(
+            self.db, medicine_id=medicine, batch_no="DASH-EXPIRED", quantity=3,
+            expiry_date=(today - timedelta(days=1)).isoformat(),
+            actor="pharmacist", at="2026-01-02T08:00:00Z",
+        )
+        receive_medicine_batch(
+            self.db, medicine_id=medicine, batch_no="DASH-SOON", quantity=4,
+            expiry_date=(today + timedelta(days=30)).isoformat(),
+            actor="pharmacist", at="2026-01-02T09:00:00Z",
+        )
+        counts = self.db.dashboard()
+        self.assertEqual(counts["expired_batch_quantity"], 3)
+        self.assertEqual(counts["expiring_soon_batch_quantity"], 4)
+        self.assertEqual(counts["unknown_expiry_batch_quantity"], 2)
 
     def test_lab_event_cannot_precede_order_across_time_zones(self):
         order = order_lab_test(
