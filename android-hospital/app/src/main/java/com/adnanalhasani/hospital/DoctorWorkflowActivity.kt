@@ -150,7 +150,7 @@ class DoctorWorkflowActivity : AppCompatActivity() {
                         visit.doctorName
                     ))
                 }
-                val linkedPatientIds = rows.map { it.patient.id }.toSet()
+                val linkedPatientIds = rows.filter { it.status !in setOf("cancelled", "no_show") }.map { it.patient.id }.toSet()
                 patientRows.filter { it.id !in linkedPatientIds }.forEach { row ->
                     rows.add(QueueItem(
                         pmap.getValue(row.id),
