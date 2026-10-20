@@ -61,6 +61,9 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
                 require(f.field("اسم المريض").isNotBlank() && f.field("الشكوى الرئيسية").isNotBlank()) {
                     "اسم المريض والشكوى الرئيسية مطلوبان للزيارة."
                 }
+                require(db.long("SELECT id FROM patients WHERE fullName=? COLLATE NOCASE LIMIT 1", f.field("اسم المريض")) != null) {
+                    "المريض غير مسجل في قاعدة البيانات المحلية."
+                }
                 if (f.field("تاريخ الزيارة").isNotBlank()) canonicalDateTime(f.field("تاريخ الزيارة"))
             }
             "pharmacy" -> {
@@ -89,6 +92,9 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
             }
             "admissions" -> {
                 require(f.field("اسم المريض").isNotBlank()) { "اسم المريض مطلوب للتنويم." }
+                require(db.long("SELECT id FROM patients WHERE fullName=? COLLATE NOCASE LIMIT 1", f.field("اسم المريض")) != null) {
+                    "المريض غير مسجل في قاعدة البيانات المحلية."
+                }
                 require(f.field("القسم / الجناح").isNotBlank() && f.field("رقم السرير").isNotBlank()) {
                     "حدد الجناح ورقم السرير قبل تسجيل التنويم."
                 }
@@ -118,6 +124,12 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
                 val patient = f.field("اسم المريض")
                 val doctor = f.field("اسم الطبيب")
                 require(patient.isNotBlank() && doctor.isNotBlank()) { "اسم المريض والطبيب مطلوبان للموعد." }
+                require(db.long("SELECT id FROM patients WHERE fullName=? COLLATE NOCASE LIMIT 1", patient) != null) {
+                    "المريض غير مسجل في قاعدة البيانات المحلية."
+                }
+                require(db.long("SELECT id FROM doctors WHERE fullName=? COLLATE NOCASE LIMIT 1", doctor) != null) {
+                    "الطبيب غير مسجل في قاعدة البيانات المحلية."
+                }
                 val start = canonicalDateTime(f.field("التاريخ والوقت"))
                 val end = canonicalDateTime(f.field("وقت الانتهاء"))
                 require(end > start) { "وقت انتهاء الموعد يجب أن يأتي بعد وقت بدايته." }
@@ -137,6 +149,9 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
                 require(patientOverlap == null) { "لدى المريض موعد آخر يتداخل مع هذا الوقت." }
             }
             "prescriptions" -> {
+                require(db.long("SELECT id FROM patients WHERE fullName=? COLLATE NOCASE LIMIT 1", f.field("اسم المريض")) != null) {
+                    "المريض غير مسجل في قاعدة البيانات المحلية."
+                }
                 val status = f.field("الحالة")
                 if (status.contains("صرف") || status.equals("dispensed", true)) {
                     val qty = f.field("الكمية المطلوبة", "الكمية المصروفة").toIntOrNull()
@@ -164,6 +179,9 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
             "lab" -> {
                 require(f.field("اسم المريض").isNotBlank() && f.field("اسم الفحص").isNotBlank()) {
                     "اسم المريض والفحص مطلوبان."
+                }
+                require(db.long("SELECT id FROM patients WHERE fullName=? COLLATE NOCASE LIMIT 1", f.field("اسم المريض")) != null) {
+                    "المريض غير مسجل في قاعدة البيانات المحلية."
                 }
                 val status = canonicalLabStatus(f.field("حالة الفحص"))
                 require(status != "resulted" || f.field("النتيجة").isNotBlank()) {
