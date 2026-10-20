@@ -101,7 +101,9 @@ fun AuthScreen(onAuthenticated: () -> Unit, onContinueAsGuest: () -> Unit) {
                         }
                     }
                 }
-                if (BuildConfig.DEBUG) {\n                    OutlinedButton(onClick = onContinueAsGuest, modifier = Modifier.fillMaxWidth()) { Text("المتابعة للتجربة دون حساب") }\n                }
+                if (BuildConfig.DEBUG) {
+                    OutlinedButton(onClick = onContinueAsGuest, modifier = Modifier.fillMaxWidth()) { Text("المتابعة للتجربة دون حساب") }
+                }
                 Text("لا تستخدم بيانات مرضى حقيقية قبل إعداد الأمان والصلاحيات والنسخ الاحتياطي.", color = Color(0xFF788895), fontSize = 11.sp)
             }
         }
