@@ -10,6 +10,9 @@ class HospitalRepository(private val dao: HospitalDao, database: HospitalDatabas
     private val localWorkflows = database?.let(::LocalWorkflowStore)
     fun allRecords(): Flow<List<HospitalRecord>> = dao.allRecords()
 
+    suspend fun localWorkflowRows(category: String): List<Pair<String, String>> =
+        localWorkflows?.rows(category).orEmpty()
+
     fun patients(): Flow<List<PatientEntity>> = dao.patients()
 
     fun doctors(): Flow<List<DoctorEntity>> = dao.doctors()
