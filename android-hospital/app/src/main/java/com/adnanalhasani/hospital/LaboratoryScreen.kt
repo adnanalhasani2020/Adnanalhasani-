@@ -273,6 +273,7 @@ fun LaboratoryScreen() {
         }
         items(specimens, key = { it.id }) { specimen ->
             val order = orders.firstOrNull { it.id == specimen.labOrderId }
+            val events by dao.labSpecimenEvents(specimen.id).collectAsState(initial = emptyList())
             Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                     Text("${specimen.specimenCode} • ${specimen.specimenType}", fontWeight = FontWeight.Bold)
@@ -281,6 +282,16 @@ fun LaboratoryScreen() {
                     Text("تاريخ الجمع: ${labTime(specimen.collectedAt)}", style = MaterialTheme.typography.bodySmall)
                     specimen.receivedAt?.let { Text("تاريخ الاستلام: ${labTime(it)}", style = MaterialTheme.typography.bodySmall) }
                     if (specimen.rejectionReason.isNotBlank()) Text("سبب الرفض: ${specimen.rejectionReason}")
+                    if (events.isNotEmpty()) {
+                        Text("سجل حركة العينة", fontWeight = FontWeight.SemiBold)
+                        events.take(5).forEach { event ->
+                            Text(
+                                "• ${labStatusLabel(event.status)} — ${labTime(event.occurredAt)}" +
+                                    if (event.note.isBlank()) "" else " — ${event.note}",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
                     if (specimen.status !in listOf("completed", "rejected")) {
                         Divider()
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
