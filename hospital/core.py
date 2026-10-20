@@ -469,7 +469,8 @@ class HospitalDB:
                 SELECT b.id,b.medicine_id,'opening_balance',b.quantity,b.quantity,
                        b.reference,'system:migration',b.received_at
                 FROM medicine_batches b
-                WHERE NOT EXISTS (
+                WHERE b.quantity > 0
+                  AND NOT EXISTS (
                     SELECT 1 FROM medicine_batch_movements bm WHERE bm.batch_id=b.id
                 )
             """)
