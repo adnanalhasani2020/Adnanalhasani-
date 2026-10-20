@@ -5,6 +5,9 @@ import android.content.Intent
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import androidx.activity.ComponentActivity
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -56,7 +59,11 @@ private val SoftLavender = Color(0xFF9A91B8)
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val repository = HospitalRepository(HospitalDatabase.get(this).hospitalDao())
+        val database = HospitalDatabase.get(this)
+        val repository = HospitalRepository(database.hospitalDao())
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching { DemoDataSeeder.seedIfEmpty(database.hospitalDao()) }
+        }
         setContent { HospitalApp(repository) }
     }
 }
