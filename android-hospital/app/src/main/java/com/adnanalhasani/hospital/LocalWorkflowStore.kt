@@ -40,6 +40,36 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
     private fun SupportSQLiteDatabase.int(sql: String, vararg args: Any?): Int? =
         query(sql, args).use { cursor -> if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getInt(0) else null }
 
+    private fun jsonEscape(raw: String): String = raw
+        .replace("\\", "\\\\")
+        .replace("\"", "\\\"")
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+        .replace("\t", "\\t")
+
+    private fun appendAudit(
+        db: SupportSQLiteDatabase, action: String, entityType: String, entityId: String, detailsJson: String, occurredAt: String
+    ) {
+        db.execSQL(
+            "INSERT INTO local_audit_log(actor,action,entityType,entityId,detailsJson,occurredAt) VALUES(?,?,?,?,?,?)",
+            arrayOf("local-user", action, entityType, entityId, detailsJson, occurredAt)
+        )
+    }
+
+    private fun queueFinanceEvent(db: SupportSQLiteDatabase, record: HospitalRecord, sourceRecordId: Long, occurredAt: String) {
+        val event = when (record.category) {
+            "invoices" -> Triple("hospital.invoice.created", "invoice", "invoice-created:$sourceRecordId")
+            "payments" -> Triple("hospital.payment.received", "payment", "payment-received:$sourceRecordId")
+            else -> return
+        }
+        val payload = """{"source_record_id":$sourceRecordId,"category":"${jsonEscape(record.category)}","title":"${jsonEscape(record.title)}","details":"${jsonEscape(record.details)}","occurred_at":"$occurredAt"}"""
+        db.execSQL(
+            """INSERT OR IGNORE INTO local_finance_outbox
+               (eventKey,eventType,aggregateType,aggregateId,payloadJson,status,attempts,createdAt,updatedAt)
+               VALUES(?,?,?,?,?,"pending",0,?,?)""",
+            arrayOf(event.third, event.first, event.second, sourceRecordId.toString(), payload, occurredAt, occurredAt)
+        )
+    }
     /** Check user input and current local state before writing the generic record. */
     fun validate(record: HospitalRecord, existingId: Long? = null) {
         val f = fields(record)
@@ -521,6 +551,14 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
                     }
                 }
             }
+            val previousEvent = db.long(
+                "SELECT id FROM local_audit_log WHERE entityType='record' AND entityId=? LIMIT 1",
+                sourceRecordId.toString()
+            )
+            val action = if (previousEvent == null) "record.created" else "record.updated"
+            val auditDetails = """{"category":"${jsonEscape(record.category)}","title":"${jsonEscape(record.title)}"}"""
+            appendAudit(db, action, "record", sourceRecordId.toString(), auditDetails, now)
+            queueFinanceEvent(db, record, sourceRecordId, now)
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
