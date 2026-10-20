@@ -1507,16 +1507,12 @@ abstract class HospitalDatabase : RoomDatabase() {
         }
 
         private fun installLabEventImmutability(db: SupportSQLiteDatabase) {
+            // Allow FK cascades when a specimen or its lab order is intentionally deleted.
+            // Preventing DELETE here would make the declared ON DELETE CASCADE fail.
+            db.execSQL("DROP TRIGGER IF EXISTS lab_specimen_events_reject_delete")
             db.execSQL("""
                 CREATE TRIGGER IF NOT EXISTS lab_specimen_events_reject_update
                 BEFORE UPDATE ON lab_specimen_events
-                BEGIN
-                    SELECT RAISE(ABORT, 'lab specimen events are append-only');
-                END
-            """.trimIndent())
-            db.execSQL("""
-                CREATE TRIGGER IF NOT EXISTS lab_specimen_events_reject_delete
-                BEFORE DELETE ON lab_specimen_events
                 BEGIN
                     SELECT RAISE(ABORT, 'lab specimen events are append-only');
                 END
