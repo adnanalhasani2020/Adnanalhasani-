@@ -248,6 +248,12 @@ class PatientDetailsActivity : AppCompatActivity() {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val values = inputs.map { it.first to it.second.text.toString().trim() }
                 if (values.firstOrNull()?.second.isNullOrBlank()) { inputs.first().second.error = "هذا الحقل مطلوب"; return@setOnClickListener }
+                if (category == "prescriptions") {
+                    val doseIndex = labels.indexOf("الجرعة")
+                    val frequencyIndex = labels.indexOf("التكرار والمدة")
+                    if (doseIndex >= 0 && values[doseIndex].second.isBlank()) { inputs[doseIndex].second.error = "الجرعة مطلوبة"; return@setOnClickListener }
+                    if (frequencyIndex >= 0 && values[frequencyIndex].second.isBlank()) { inputs[frequencyIndex].second.error = "التكرار والمدة مطلوبان"; return@setOnClickListener }
+                }
                 val detail = buildString {
                     append("اسم المريض: $patient\nاسم الطبيب: $doctor\n")
                     values.forEach { (key, value) -> append("$key: $value\n") }
