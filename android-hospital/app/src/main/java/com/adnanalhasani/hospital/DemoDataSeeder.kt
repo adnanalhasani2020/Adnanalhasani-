@@ -60,7 +60,7 @@ object DemoDataSeeder {
             Triple("DEMO-1004", "DEMO-DR-02", 3)
         )
         val patientNames = patients.associate { it.first to it.second }
-        val doctorNames = doctors.associate { it.first to it.value.first }
+        val doctorNames: Map<String, String> = doctors.associate { doctor -> doctor.first to doctor.second.first }
         val reasons = listOf("مراجعة عامة (تجريبية)", "متابعة دورية (تجريبية)", "استشارة أولية (تجريبية)", "متابعة أعراض (تجريبية)")
         appointments.forEachIndexed { index, (fileNumber, employeeNumber, dayOffset) ->
             dao.saveRecord(
