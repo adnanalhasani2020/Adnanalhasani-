@@ -59,8 +59,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val database = HospitalDatabase.get(this)
         val repository = HospitalRepository(database.hospitalDao())
-        lifecycleScope.launch(Dispatchers.IO) {
-            runCatching { DemoDataSeeder.seedIfEmpty(database.hospitalDao()) }
+        if (BuildConfig.DEBUG) {
+            lifecycleScope.launch(Dispatchers.IO) {
+                runCatching { DemoDataSeeder.seedIfEmpty(database.hospitalDao()) }
+            }
         }
         setContent { HospitalApp(repository) }
     }
@@ -208,7 +210,9 @@ fun HospitalApp(repository: HospitalRepository) {
     if (!authenticated) {
         AuthScreen(
             onAuthenticated = { authenticated = true },
-            onContinueAsGuest = { authenticated = true }
+            onContinueAsGuest = {
+                if (BuildConfig.DEBUG) authenticated = true
+            }
         )
     } else {
         HospitalWorkspace(repository)
