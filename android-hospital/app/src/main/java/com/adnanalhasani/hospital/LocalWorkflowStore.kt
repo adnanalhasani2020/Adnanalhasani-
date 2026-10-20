@@ -66,7 +66,7 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
         db.execSQL(
             """INSERT OR IGNORE INTO local_finance_outbox
                (eventKey,eventType,aggregateType,aggregateId,payloadJson,status,attempts,createdAt,updatedAt)
-               VALUES(?,?,?,?,?,"pending",0,?,?)""",
+               VALUES(?,?,?,?,?,'pending',0,?,?)""",
             arrayOf(event.third, event.first, event.second, sourceRecordId.toString(), payload, occurredAt, occurredAt)
         )
     }
@@ -568,6 +568,12 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
     fun rows(category: String): List<Pair<String, String>> {
         val db = database.openHelper.readableDatabase
         val sql = when (category) {
+            "audit" -> """SELECT action || ' • ' || entityType || ' #' || entityId,
+                occurredAt || ' • ' || detailsJson FROM local_audit_log ORDER BY id DESC LIMIT 500"""
+            "finance_outbox" -> """SELECT eventType || ' • ' || aggregateType || ' #' || aggregateId,
+                status || ' • محاولات: ' || attempts || ' • ' || updatedAt ||
+                CASE WHEN lastError IS NULL OR lastError='' THEN '' ELSE ' • ' || lastError END
+                FROM local_finance_outbox ORDER BY id DESC LIMIT 500"""
             "pharmacy" -> """SELECT name || ' (' || sku || ')',
                 'إجمالي المخزون: ' || quantity ||
                 ' • الصالح للصرف: ' || (SELECT COALESCE(SUM(b.quantity),0) FROM local_medicine_batches b
