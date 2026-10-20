@@ -3,6 +3,7 @@ name: Build Android APK
 on:
   push:
     branches:
+      - main
       - feature/connect-doctor-screen
     paths:
       - 'android-hospital/**'
