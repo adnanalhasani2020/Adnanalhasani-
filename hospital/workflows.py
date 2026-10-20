@@ -83,11 +83,18 @@ def order_lab_test(db: HospitalDB, *, patient_id: int, test_name: str,
         patient = conn.execute("SELECT active FROM patients WHERE id=?", (patient_id,)).fetchone()
         if patient is None or not patient["active"]:
             raise HospitalError("active patient not found")
+        if doctor_id is not None:
+            doctor = conn.execute("SELECT active FROM doctors WHERE id=?", (doctor_id,)).fetchone()
+            if doctor is None or not doctor["active"]:
+                raise HospitalError("active ordering doctor not found")
         if encounter_id is not None:
-            encounter = conn.execute("SELECT patient_id,status FROM encounters WHERE id=?",
+            encounter = conn.execute("SELECT patient_id,doctor_id,status FROM encounters WHERE id=?",
                                      (encounter_id,)).fetchone()
             if encounter is None or encounter["patient_id"] != patient_id or encounter["status"] != "open":
                 raise HospitalError("an open encounter for this patient is required")
+            if doctor_id is not None and encounter["doctor_id"] != doctor_id:
+                raise HospitalError("ordering doctor must match the encounter doctor")
+        _parse_utc(ordered_at, "ordered_at")
         cur = conn.execute("""INSERT INTO lab_orders
             (patient_id,encounter_id,ordered_by,test_name,ordered_at)
             VALUES(?,?,?,?,?)""", (patient_id, encounter_id, doctor_id, test_name.strip(), ordered_at))
