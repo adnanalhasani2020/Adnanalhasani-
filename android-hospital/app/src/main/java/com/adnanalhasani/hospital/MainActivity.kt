@@ -7,6 +7,7 @@ import android.app.TimePickerDialog
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -242,6 +243,11 @@ private fun HospitalWorkspace(repository: HospitalRepository) {
     val labOrders by repository.labOrders().collectAsState(initial = emptyList())
     val radiologyOrders by repository.radiologyOrders().collectAsState(initial = emptyList())
     val maintenanceTickets by repository.maintenanceTickets().collectAsState(initial = emptyList())
+    var localWorkflowRows by remember { mutableStateOf(emptyList<Pair<String, String>>()) }
+    LaunchedEffect(selected, all.size) {
+        delay(150)
+        localWorkflowRows = withContext(Dispatchers.IO) { repository.localWorkflowRows(selected) }
+    }
     val databaseExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri == null) {
             exportStatus = "تم إلغاء تصدير قاعدة البيانات."
@@ -298,6 +304,8 @@ private fun HospitalWorkspace(repository: HospitalRepository) {
         "lab" -> labOrders.map { "${it.patientName} • ${it.testName}" to "${it.status} • ${it.result}" }
         "radiology" -> radiologyOrders.map { "${it.patientName} • ${it.imagingType}" to "${it.requestingDoctor} • ${it.status} • ${it.report}" }
         "maintenance" -> maintenanceTickets.map { it.ticketNumber to "${it.location} • ${it.issue} • ${it.priority} • ${it.status}" }
+        "pharmacy", "beds", "admissions", "appointments" -> localWorkflowRows
+        "lab" -> localWorkflowRows.ifEmpty { labOrders.map { it.patientName + " • " + it.testName to (it.status + " • " + it.result) } }
         else -> emptyList()
     }
     val screenTitle = currentModule?.title ?: when (selected) {
