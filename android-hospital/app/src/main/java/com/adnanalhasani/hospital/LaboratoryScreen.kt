@@ -1,0 +1,354 @@
+package com.adnanalhasani.hospital
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Science
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.Divider
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+private fun labStatusLabel(status: String): String = when (status) {
+    "collected" -> "تم جمع العينة"
+    "received" -> "استُلمت في المختبر"
+    "processing" -> "قيد المعالجة"
+    "completed" -> "مكتملة"
+    "rejected" -> "مرفوضة"
+    else -> status
+}
+
+private fun labTime(value: Long): String =
+    SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()).format(Date(value))
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun LaboratoryScreen() {
+    val context = LocalContext.current
+    val database = remember(context) { HospitalDatabase.get(context) }
+    val dao = remember(database) { database.hospitalDao() }
+    val scope = rememberCoroutineScope()
+    val orders by dao.labOrders().collectAsState(initial = emptyList())
+    val specimens by dao.labSpecimens().collectAsState(initial = emptyList())
+    val settings by dao.labWorkflowSettings().collectAsState(initial = emptyList())
+
+    var selectedOrderId by remember { mutableStateOf<Long?>(null) }
+    var orderMenuExpanded by remember { mutableStateOf(false) }
+    var specimenCode by remember { mutableStateOf("") }
+    var specimenType by remember { mutableStateOf("") }
+    var rejectionReason by remember { mutableStateOf("") }
+    var requireReceipt by remember { mutableStateOf(true) }
+    var specimenTypes by remember { mutableStateOf("دم، بول، مسحة، مصل، براز") }
+    var rejectionReasons by remember { mutableStateOf("عينة غير كافية، عينة متجلطة، وعاء غير مناسب، بيانات غير مطابقة") }
+    var settingsExpanded by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(settings) {
+        settings.firstOrNull { it.key == "require_receipt_confirmation" }?.let {
+            requireReceipt = it.value.equals("true", ignoreCase = true)
+        }
+        settings.firstOrNull { it.key == "specimen_types" }?.let { specimenTypes = it.value }
+        settings.firstOrNull { it.key == "rejection_reasons" }?.let { rejectionReasons = it.value }
+        if (specimenType.isBlank()) specimenType = specimenTypes.split(",").firstOrNull()?.trim().orEmpty()
+    }
+
+    val selectedOrder = orders.firstOrNull { it.id == selectedOrderId }
+    val pendingCount = specimens.count { it.status !in listOf("completed", "rejected") }
+    val now = System.currentTimeMillis()
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Icon(Icons.Default.Science, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Text("متابعة العينات", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    }
+                    Text("تسجيل العينة وربطها بطلب الفحص، مع توثيق الاستلام ومراحل المعالجة في SQLite.")
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("إجمالي العينات: ${specimens.size}", fontWeight = FontWeight.SemiBold)
+                        Text("قيد المتابعة: $pendingCount", color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+        }
+        item {
+            Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("تسجيل عينة جديدة", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    if (orders.isEmpty()) {
+                        Text("لا توجد طلبات فحوصات بعد. أنشئ طلب فحص من قسم المختبر أولاً.")
+                    } else {
+                        ExposedDropdownMenuBox(
+                            expanded = orderMenuExpanded,
+                            onExpandedChange = { orderMenuExpanded = !orderMenuExpanded }
+                        ) {
+                            OutlinedTextField(
+                                value = selectedOrder?.let { "#${it.id} • ${it.patientName} • ${it.testName}" } ?: "اختر طلب الفحص",
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("طلب الفحص") },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = orderMenuExpanded) },
+                                modifier = Modifier.fillMaxWidth().menuAnchor()
+                            )
+                            ExposedDropdownMenu(
+                                expanded = orderMenuExpanded,
+                                onDismissRequest = { orderMenuExpanded = false }
+                            ) {
+                                orders.filter { it.status != "cancelled" }.forEach { order ->
+                                    DropdownMenuItem(
+                                        text = { Text("#${order.id} • ${order.patientName} • ${order.testName}") },
+                                        onClick = { selectedOrderId = order.id; orderMenuExpanded = false }
+                                    )
+                                }
+                            }
+                        }
+                        OutlinedTextField(
+                            value = specimenCode,
+                            onValueChange = { specimenCode = it },
+                            label = { Text("رمز العينة الفريد") },
+                            supportingText = { Text("يُرفض الرمز المكرر بواسطة قيد SQLite.") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                        OutlinedTextField(
+                            value = specimenType,
+                            onValueChange = { specimenType = it },
+                            label = { Text("نوع العينة") },
+                            supportingText = { Text("الأنواع المقترحة قابلة للتعديل من إعدادات المدير أدناه.") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                        Button(
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = selectedOrder != null && specimenCode.isNotBlank() && specimenType.isNotBlank(),
+                            onClick = {
+                                val order = selectedOrder ?: return@Button
+                                scope.launch {
+                                    val result = withContext(Dispatchers.IO) {
+                                        runCatching {
+                                            val collectedAt = System.currentTimeMillis()
+                                            val id = dao.insertLabSpecimen(
+                                                LabSpecimenEntity(
+                                                    labOrderId = order.id,
+                                                    specimenCode = specimenCode.trim(),
+                                                    specimenType = specimenType.trim(),
+                                                    status = "collected",
+                                                    collectedAt = collectedAt,
+                                                    updatedAt = collectedAt
+                                                )
+                                            )
+                                            dao.insertLabSpecimenEvent(
+                                                LabSpecimenEventEntity(
+                                                    specimenId = id,
+                                                    status = "collected",
+                                                    note = "تم تسجيل العينة وربطها بطلب الفحص #${order.id}",
+                                                    occurredAt = collectedAt
+                                                )
+                                            )
+                                        }
+                                    }
+                                    message = if (result.isSuccess) {
+                                        specimenCode = ""
+                                        "تم حفظ العينة وربطها بطلب الفحص."
+                                    } else {
+                                        "تعذر حفظ العينة. تأكد من عدم تكرار الرمز ومن سلامة البيانات."
+                                    }
+                                }
+                            }
+                        ) { Text("حفظ العينة في SQLite") }
+                    }
+                }
+            }
+        }
+        item {
+            Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("إعدادات سير عمل المختبر", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                        TextButton(onClick = { settingsExpanded = !settingsExpanded }) {
+                            Text(if (settingsExpanded) "إخفاء" else "إعدادات المدير")
+                        }
+                    }
+                    Text("هذه خيارات تشغيلية يحددها مدير المنشأة، ولا تغيّر النتائج الطبية أو الأولويات السريرية.")
+                    if (settingsExpanded) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(checked = requireReceipt, onCheckedChange = { requireReceipt = it })
+                            Column {
+                                Text("اشتراط تسجيل استلام العينة")
+                                Text("عند التفعيل، يلزم تسجيل الاستلام قبل بدء المعالجة.", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                        OutlinedTextField(
+                            value = specimenTypes,
+                            onValueChange = { specimenTypes = it },
+                            label = { Text("أنواع العينات المتاحة") },
+                            supportingText = { Text("افصل الخيارات بفواصل عربية أو إنجليزية.") },
+                            modifier = Modifier.fillMaxWidth(),
+                            minLines = 2
+                        )
+                        OutlinedTextField(
+                            value = rejectionReasons,
+                            onValueChange = { rejectionReasons = it },
+                            label = { Text("أسباب رفض العينة المقترحة") },
+                            supportingText = { Text("تُعرض كمرجع للفريق؛ ويظل سبب الرفض موثقاً لكل عينة.") },
+                            modifier = Modifier.fillMaxWidth(),
+                            minLines = 2
+                        )
+                        Button(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = {
+                                scope.launch {
+                                    withContext(Dispatchers.IO) {
+                                        dao.saveLabWorkflowSetting(LabWorkflowSettingEntity("require_receipt_confirmation", requireReceipt.toString(), System.currentTimeMillis()))
+                                        dao.saveLabWorkflowSetting(LabWorkflowSettingEntity("specimen_types", specimenTypes.split(",").map { it.trim() }.filter { it.isNotBlank() }.distinct().joinToString(", "), System.currentTimeMillis()))
+                                        dao.saveLabWorkflowSetting(LabWorkflowSettingEntity("rejection_reasons", rejectionReasons.split(",").map { it.trim() }.filter { it.isNotBlank() }.distinct().joinToString(", "), System.currentTimeMillis()))
+                                    }
+                                    message = "تم حفظ إعدادات المختبر في قاعدة SQLite المحلية."
+                                }
+                            }
+                        ) { Text("حفظ إعدادات المختبر") }
+                    }
+                }
+            }
+        }
+        if (message != null) {
+            item {
+                Text(message.orEmpty(), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+            }
+        }
+        item {
+            Text("سجل العينات", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        }
+        if (specimens.isEmpty()) {
+            item { Text("لا توجد عينات مسجلة حتى الآن.") }
+        }
+        items(specimens, key = { it.id }) { specimen ->
+            val order = orders.firstOrNull { it.id == specimen.labOrderId }
+            Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Text("${specimen.specimenCode} • ${specimen.specimenType}", fontWeight = FontWeight.Bold)
+                    Text("طلب #${specimen.labOrderId} • ${order?.patientName ?: "طلب غير متاح"} • ${order?.testName.orEmpty()}")
+                    Text("الحالة: ${labStatusLabel(specimen.status)}")
+                    Text("تاريخ الجمع: ${labTime(specimen.collectedAt)}", style = MaterialTheme.typography.bodySmall)
+                    specimen.receivedAt?.let { Text("تاريخ الاستلام: ${labTime(it)}", style = MaterialTheme.typography.bodySmall) }
+                    if (specimen.rejectionReason.isNotBlank()) Text("سبب الرفض: ${specimen.rejectionReason}")
+                    if (specimen.status !in listOf("completed", "rejected")) {
+                        Divider()
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            if (specimen.status == "collected") {
+                                OutlinedButton(onClick = {
+                                    scope.launch {
+                                        val at = System.currentTimeMillis()
+                                        withContext(Dispatchers.IO) {
+                                            dao.updateLabSpecimenStatus(specimen.id, "received", at, "", at)
+                                            dao.insertLabSpecimenEvent(LabSpecimenEventEntity(specimenId = specimen.id, status = "received", note = "تأكيد استلام العينة", occurredAt = at))
+                                        }
+                                        message = "تم توثيق استلام العينة."
+                                    }
+                                }) { Text("تأكيد الاستلام") }
+                            }
+                            if (specimen.status == "received" || (specimen.status == "collected" && !requireReceipt)) {
+                                OutlinedButton(onClick = {
+                                    scope.launch {
+                                        val at = System.currentTimeMillis()
+                                        withContext(Dispatchers.IO) {
+                                            dao.updateLabSpecimenStatus(specimen.id, "processing", specimen.receivedAt, "", at)
+                                            dao.insertLabSpecimenEvent(LabSpecimenEventEntity(specimenId = specimen.id, status = "processing", note = "بدء المعالجة", occurredAt = at))
+                                        }
+                                        message = "تم نقل العينة إلى المعالجة."
+                                    }
+                                }) { Text("بدء المعالجة") }
+                            }
+                            if (specimen.status == "processing") {
+                                OutlinedButton(onClick = {
+                                    scope.launch {
+                                        val at = System.currentTimeMillis()
+                                        withContext(Dispatchers.IO) {
+                                            dao.updateLabSpecimenStatus(specimen.id, "completed", specimen.receivedAt, "", at)
+                                            dao.insertLabSpecimenEvent(LabSpecimenEventEntity(specimenId = specimen.id, status = "completed", note = "اكتملت معالجة العينة", occurredAt = at))
+                                        }
+                                        message = "تم إكمال معالجة العينة."
+                                    }
+                                }) { Text("إكمال") }
+                            }
+                            TextButton(onClick = { rejectionReason = ""; message = "اكتب سبب الرفض في الحقل أدناه ثم أكد الرفض للعينة ${specimen.specimenCode}." }) { Text("رفض العينة") }
+                        }
+                        if (message?.contains(specimen.specimenCode) == true) {
+                            OutlinedTextField(
+                                value = rejectionReason,
+                                onValueChange = { rejectionReason = it },
+                                label = { Text("سبب الرفض") },
+                                supportingText = { Text("المقترحات: $rejectionReasons") },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Button(
+                                enabled = rejectionReason.isNotBlank(),
+                                onClick = {
+                                    scope.launch {
+                                        val at = System.currentTimeMillis()
+                                        withContext(Dispatchers.IO) {
+                                            dao.updateLabSpecimenStatus(specimen.id, "rejected", specimen.receivedAt, rejectionReason.trim(), at)
+                                            dao.insertLabSpecimenEvent(LabSpecimenEventEntity(specimenId = specimen.id, status = "rejected", note = rejectionReason.trim(), occurredAt = at))
+                                        }
+                                        rejectionReason = ""
+                                        message = "تم توثيق رفض العينة وسببه."
+                                    }
+                                }
+                            ) { Text("تأكيد رفض العينة") }
+                        }
+                    }
+                }
+            }
+        }
+        item { Spacer(Modifier.height(8.dp)) }
+    }
+}
