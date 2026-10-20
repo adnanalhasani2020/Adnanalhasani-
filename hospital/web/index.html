@@ -240,7 +240,7 @@ input[type="date"],input[type="datetime-local"]{accent-color:#176b87}
 </main>
 <footer>واجهة أولية — جميع الأوقات تُرسل بتنسيق ISO-8601 المحلي.</footer>
 <script>
-const labels={active_patients:"المرضى النشطون",active_doctors:"الأطباء النشطون",scheduled_appointments:"المواعيد المجدولة",current_admissions:"حالات التنويم الحالية",pending_lab_orders:"طلبات المختبر المعلقة",low_stock_medicines:"أدوية منخفضة المخزون",unpaid_or_partial_invoices:"فواتير غير مسددة كليًا"};
+const labels={active_patients:"المرضى النشطون",active_doctors:"الأطباء النشطون",scheduled_appointments:"المواعيد المجدولة",current_admissions:"حالات التنويم الحالية",pending_lab_orders:"طلبات المختبر المعلقة",low_stock_medicines:"أدوية منخفضة المخزون",expired_batch_quantity:"وحدات أدوية منتهية الصلاحية",expiring_soon_batch_quantity:"وحدات تنتهي خلال 90 يومًا",unknown_expiry_batch_quantity:"وحدات بصلاحية غير معروفة",unpaid_or_partial_invoices:"فواتير غير مسددة كليًا"};
 const $=id=>document.getElementById(id);
 function base(){return $("base").value.trim().replace(/\/$/,"")}
 function authMode(){return $("authMode")?$("authMode").value:"token"}
