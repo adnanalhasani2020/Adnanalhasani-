@@ -28,7 +28,11 @@ import java.util.Locale
 fun AuditHistoryScreen(repository: HospitalRepository) {
     val entries by repository.recentAuditHistory().collectAsState(initial = emptyList())
     var localEntries by remember { mutableStateOf(emptyList<Pair<String, String>>()) }
-    LaunchedEffect(repository) { localEntries = repository.localAuditRows() }
+    var outboxEntries by remember { mutableStateOf(emptyList<Pair<String, String>>()) }
+    LaunchedEffect(repository) {
+        localEntries = repository.localAuditRows()
+        outboxEntries = repository.localFinanceOutboxRows()
+    }
     val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Text("سجل تاريخ التعديلات", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color(0xFF263B4D))
@@ -45,6 +49,27 @@ fun AuditHistoryScreen(repository: HospitalRepository) {
                 contentPadding = PaddingValues(bottom = 8.dp)
             ) {
                 items(localEntries) { entry ->
+                    Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(12.dp)) {
+                        Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(entry.first, fontWeight = FontWeight.SemiBold, color = Color(0xFF263B4D), fontSize = 12.sp)
+                            Text(entry.second, color = Color(0xFF788895), fontSize = 11.sp)
+                        }
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Text("طابور الأحداث المالية المحلية", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF263B4D))
+        Text("الأحداث تبقى محلياً بانتظار إضافة/تفعيل مزامنة آمنة مع الخادم.", fontSize = 11.sp, color = Color(0xFF788895))
+        if (outboxEntries.isEmpty()) {
+            Text("لا توجد أحداث مالية في الطابور.", fontSize = 12.sp, color = Color(0xFF788895))
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth().heightIn(max = 160.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                contentPadding = PaddingValues(bottom = 8.dp)
+            ) {
+                items(outboxEntries) { entry ->
                     Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(12.dp)) {
                         Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(entry.first, fontWeight = FontWeight.SemiBold, color = Color(0xFF263B4D), fontSize = 12.sp)
