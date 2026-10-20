@@ -86,7 +86,7 @@ class MainActivity : AppCompatActivity() {
             button.textSize = 12f
             button.isAllCaps = false
             button.background = rounded(if (active) Color.WHITE else Color.rgb(235, 241, 248), 12, if (active) blue else Color.TRANSPARENT)
-            button.elevation = if (active) dp(2) else 0f
+            button.elevation = if (active) dp(2).toFloat() else 0f
         }
     }
 
