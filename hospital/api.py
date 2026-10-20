@@ -286,6 +286,50 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                     },
                     "scope": "lab order timeline; chronological event history, not result approval",
                 })
+            elif route == "/api/lab/workload":
+                # Aggregate-only workload view: no patient identifiers or result values.
+                with database.connect() as conn:
+                    status_rows = conn.execute(
+                        """SELECT status,COUNT(*) AS count
+                           FROM lab_orders GROUP BY status ORDER BY status"""
+                    ).fetchall()
+                    pending = conn.execute(
+                        """SELECT status,COUNT(*) AS count,
+                                  SUM(CASE WHEN julianday('now')-julianday(ordered_at) >= 1
+                                           THEN 1 ELSE 0 END) AS older_than_24h,
+                                  SUM(CASE WHEN julianday('now')-julianday(ordered_at) >= 2
+                                           THEN 1 ELSE 0 END) AS older_than_48h,
+                                  MAX(ROUND((julianday('now')-julianday(ordered_at))*24,1))
+                                      AS oldest_age_hours
+                           FROM lab_orders
+                           WHERE status IN ('ordered','collected','processing')
+                           GROUP BY status ORDER BY CASE status
+                             WHEN 'ordered' THEN 1 WHEN 'collected' THEN 2 ELSE 3 END"""
+                    ).fetchall()
+                    by_test = conn.execute(
+                        """SELECT test_name,COUNT(*) AS pending_count,
+                                  SUM(CASE WHEN julianday('now')-julianday(ordered_at) >= 1
+                                           THEN 1 ELSE 0 END) AS older_than_24h,
+                                  MAX(ROUND((julianday('now')-julianday(ordered_at))*24,1))
+                                      AS oldest_age_hours
+                           FROM lab_orders
+                           WHERE status IN ('ordered','collected','processing')
+                           GROUP BY test_name ORDER BY pending_count DESC, test_name COLLATE NOCASE
+                           LIMIT 100"""
+                    ).fetchall()
+                status_counts = {row["status"]: int(row["count"]) for row in status_rows}
+                pending_rows = [dict(row) for row in pending]
+                self._send(200, {
+                    "data": {
+                        "status_counts": status_counts,
+                        "total_orders": sum(status_counts.values()),
+                        "pending_count": sum(item["count"] for item in pending_rows),
+                        "pending_by_status": pending_rows,
+                        "pending_by_test": [dict(row) for row in by_test],
+                        "aging_threshold_hours": [24, 48],
+                    },
+                    "scope": "aggregate laboratory workload and elapsed time since order; not clinical priority or a result-quality assessment",
+                })
             elif route == "/api/inventory/reconciliation":
                 # Read-only comparison of aggregate medicine stock against batch-level quantities.
                 with database.connect() as conn:

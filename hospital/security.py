@@ -286,6 +286,9 @@ def permission_for_route(method: str, path: str) -> str | None:
     if route in routes:
         return routes[route][0 if method == "GET" else 1]
 
+    if route == "/api/lab/workload" and method == "GET":
+        return "lab:read"
+
     if route == "/api/inventory/reconciliation" and method == "GET":
         return "medicines:read"
 
