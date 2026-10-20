@@ -70,6 +70,24 @@ class HospitalWorkflowTests(unittest.TestCase):
             row = conn.execute("SELECT status,result FROM lab_orders WHERE id=?", (order,)).fetchone()
         self.assertEqual((row["status"], row["result"]), ("resulted", "Example result"))
 
+    def test_lab_events_must_be_chronological_not_only_after_order(self):
+        order = order_lab_test(self.db, patient_id=self.patient, test_name="CBC",
+            ordered_at="2026-01-02T08:00:00Z", actor="doctor", doctor_id=self.doctor)
+        update_lab_status(self.db, order_id=order, status="collected", actor="lab",
+            at="2026-01-02T08:30:00Z")
+        with self.assertRaisesRegex(HospitalError, "previous lab event"):
+            update_lab_status(self.db, order_id=order, status="processing", actor="lab",
+                at="2026-01-02T08:20:00Z")
+        update_lab_status(self.db, order_id=order, status="processing", actor="lab",
+            at="2026-01-02T08:45:00Z")
+        with self.db.connect() as conn:
+            events = conn.execute(
+                "SELECT status FROM lab_order_events WHERE lab_order_id=? ORDER BY id",
+                (order,),
+            ).fetchall()
+        self.assertEqual([event["status"] for event in events],
+            ["ordered", "collected", "processing"])
+
     def test_lab_status_transitions_must_follow_workflow_order(self):
         order = order_lab_test(self.db, patient_id=self.patient, test_name="CBC",
             ordered_at="2026-01-02T08:00:00", actor="doctor", doctor_id=self.doctor)
