@@ -37,6 +37,8 @@
 <label class="option"><input type="checkbox" name="module" value="admissions" checked><span><strong>التنويم والأسرة</strong><small>تنظيم إشغال الأسرة وحالات الدخول والخروج.</small></span></label>
 <label class="option"><input type="checkbox" name="module" value="billing" checked><span><strong>الفواتير والمدفوعات</strong><small>متابعة السجلات المالية دون اعتبار التسجيل إثباتًا لتحويل المال.</small></span></label>
 <label class="option"><input type="checkbox" name="module" value="records" checked><span><strong>استعراض السجلات</strong><small>بحث إداري وعرض قوائم مختصرة.</small></span></label>
+<label class="option"><input type="checkbox" name="module" value="pharmacy" checked><span><strong>الصيدلية والمخزون والصلاحية</strong><small>تتبع الدفعات والكميات والأدوية المنتهية أو القريبة من الانتهاء.</small></span></label>
+<label class="option"><input type="checkbox" name="module" value="laboratory" checked><span><strong>المختبر والنتائج</strong><small>متابعة طلبات التحاليل وحالاتها وسجل الأحداث.</small></span></label>
 <label class="option"><input type="checkbox" name="module" value="audit" checked disabled aria-label="التدقيق ومراجعة التغييرات إلزامي"><span><strong>التدقيق ومراجعة التغييرات (إلزامي)</strong><small>مراجعة أثر العمليات. يبقى التدقيق مفعّلًا ولا يمكن تعطيله من ملف التشغيل.</small></span></label>
 </div>
 </section>
@@ -72,8 +74,8 @@
 <footer>إعدادات تشغيلية تجريبية — لا تستخدم هذه الشاشة لاتخاذ قرارات سريرية.</footer>
 <script>
 const profileNames={general:"مستشفى عام",outpatient:"مركز عيادات خارجية",specialty:"مركز تخصصي",admin:"إدارة وتشغيل فقط"};
-const moduleNames={appointments:"إدارة المواعيد",encounters:"متابعة الزيارات",admissions:"التنويم والأسرة",billing:"الفواتير والمدفوعات",records:"استعراض السجلات",audit:"التدقيق ومراجعة التغييرات"};
-const defaults={general:["appointments","encounters","admissions","billing","records","audit"],outpatient:["appointments","encounters","billing","records","audit"],specialty:["appointments","encounters","billing","records","audit"],admin:["records","audit"]};
+const moduleNames={appointments:"إدارة المواعيد",encounters:"متابعة الزيارات",admissions:"التنويم والأسرة",billing:"الفواتير والمدفوعات",records:"استعراض السجلات",pharmacy:"الصيدلية والمخزون والصلاحية",laboratory:"المختبر والنتائج",audit:"التدقيق ومراجعة التغييرات"};
+const defaults={general:["appointments","encounters","admissions","billing","records","pharmacy","laboratory","audit"],outpatient:["appointments","encounters","billing","records","pharmacy","laboratory","audit"],specialty:["appointments","encounters","billing","records","pharmacy","laboratory","audit"],admin:["records","audit"]};
 const profileInputs=[...document.querySelectorAll('input[name="profile"]')],moduleInputs=[...document.querySelectorAll('input[name="module"]')];
 let savedSnapshot=null;
 function selectedProfile(){return profileInputs.find(x=>x.checked)?.value||"general"}
