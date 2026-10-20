@@ -58,7 +58,7 @@ fun AuthScreen(onAuthenticated: () -> Unit, onContinueAsGuest: () -> Unit) {
                             OutlinedTextField(confirmPassword, { confirmPassword = it; status = null }, Modifier.fillMaxWidth(), label = { Text("تأكيد كلمة المرور") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
                         }
                         if (!configured) {
-                            Text("الاتصال بـ Firebase غير مهيأ بعد. أضف google-services.json وفعّل Email/Password من Firebase Console لتشغيل الحسابات. يمكنك متابعة التجربة المحلية دون حساب.", color = Color(0xFF8A5A16), fontSize = 12.sp, lineHeight = 18.sp)
+                            Text(if (BuildConfig.DEBUG) "الاتصال بـ Firebase غير مهيأ بعد. وضع الضيف متاح في نسخة التطوير فقط؛ لا تستخدم بيانات حقيقية." else "الاتصال بـ Firebase غير مهيأ بعد. أضف إعدادات المشروع وفعّل Email/Password لتسجيل الدخول.", color = Color(0xFF8A5A16), fontSize = 12.sp, lineHeight = 18.sp)
                         }
                         status?.let { Text(it, color = if (it.startsWith("تم")) Color(0xFF267B60) else Color(0xFFB44444), fontSize = 12.sp) }
                         Button(
@@ -67,7 +67,7 @@ fun AuthScreen(onAuthenticated: () -> Unit, onContinueAsGuest: () -> Unit) {
                                     email.isBlank() || !android.util.Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches() -> status = "أدخل بريداً إلكترونياً صحيحاً."
                                     password.length < 6 -> status = "يجب ألا تقل كلمة المرور عن 6 أحرف."
                                     createAccount && password != confirmPassword -> status = "كلمتا المرور غير متطابقتين."
-                                    !configured -> status = "أضف إعدادات Firebase أولاً، أو اختر المتابعة دون حساب."
+                                    !configured -> status = "أضف إعدادات Firebase أولاً لتسجيل الدخول."
                                     else -> {
                                         busy = true
                                         val callback: (Result<Unit>) -> Unit = { result ->
@@ -101,7 +101,7 @@ fun AuthScreen(onAuthenticated: () -> Unit, onContinueAsGuest: () -> Unit) {
                         }
                     }
                 }
-                OutlinedButton(onClick = onContinueAsGuest, modifier = Modifier.fillMaxWidth()) { Text("المتابعة للتجربة دون حساب") }
+                if (BuildConfig.DEBUG) {\n                    OutlinedButton(onClick = onContinueAsGuest, modifier = Modifier.fillMaxWidth()) { Text("المتابعة للتجربة دون حساب") }\n                }
                 Text("لا تستخدم بيانات مرضى حقيقية قبل إعداد الأمان والصلاحيات والنسخ الاحتياطي.", color = Color(0xFF788895), fontSize = 11.sp)
             }
         }
