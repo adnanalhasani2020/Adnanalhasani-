@@ -130,6 +130,9 @@ def add_medicine(db: HospitalDB, *, sku: str, name: str, quantity: int,
         raise HospitalError("valid SKU and medicine name are required")
     if type(quantity) is not int or type(reorder_level) is not int or quantity < 0 or reorder_level < 0:
         raise HospitalError("stock quantity and reorder level must be non-negative integers")
+    if not isinstance(unit, str) or not unit.strip():
+        raise HospitalError("medicine unit is required")
+    _parse_utc(at, "at")
     with db.connect() as conn:
         conn.execute("BEGIN IMMEDIATE")
         cur = conn.execute("""INSERT INTO medicines(sku,name,quantity,reorder_level,unit)
@@ -166,8 +169,11 @@ def restock_medicine(db: HospitalDB, *, medicine_id: int, quantity: int,
 def prescribe_medicine(db: HospitalDB, *, patient_id: int, medicine_id: int, dose: str,
                        frequency: str, duration: str, quantity: int, prescribed_at: str,
                        actor: str, encounter_id: int | None = None) -> int:
-    if not dose.strip() or not frequency.strip() or not duration.strip() or quantity <= 0:
-        raise HospitalError("dose, frequency, duration and positive quantity are required")
+    if not all(isinstance(value, str) and value.strip() for value in (dose, frequency, duration)):
+        raise HospitalError("dose, frequency and duration are required")
+    if type(quantity) is not int or quantity <= 0:
+        raise HospitalError("prescription quantity must be a positive integer")
+    _parse_utc(prescribed_at, "prescribed_at")
     with db.connect() as conn:
         conn.execute("BEGIN IMMEDIATE")
         patient = conn.execute("SELECT active FROM patients WHERE id=?", (patient_id,)).fetchone()
@@ -198,11 +204,14 @@ def dispense_prescription(db: HospitalDB, *, prescription_id: int,
     """Atomically deduct stock and mark a prescription dispensed exactly once."""
     with db.connect() as conn:
         conn.execute("BEGIN IMMEDIATE")
-        row = conn.execute("""SELECT p.status,p.quantity,p.medicine_id,m.quantity AS stock,m.active
-            FROM prescriptions p JOIN medicines m ON m.id=p.medicine_id WHERE p.id=?""",
+        row = conn.execute("""SELECT p.status,p.quantity,p.medicine_id,p.prescribed_at,
+            m.quantity AS stock,m.active FROM prescriptions p
+            JOIN medicines m ON m.id=p.medicine_id WHERE p.id=?""",
             (prescription_id,)).fetchone()
         if row is None or row["status"] != "pending":
             raise HospitalError("pending prescription not found")
+        if _parse_utc(dispensed_at, "dispensed_at") < _parse_utc(row["prescribed_at"], "prescribed_at"):
+            raise HospitalError("dispense timestamp cannot precede the prescription")
         if not row["active"]:
             raise HospitalError("medicine is inactive")
         if row["stock"] < row["quantity"]:
