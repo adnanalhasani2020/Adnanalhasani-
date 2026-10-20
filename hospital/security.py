@@ -286,6 +286,9 @@ def permission_for_route(method: str, path: str) -> str | None:
     if route in routes:
         return routes[route][0 if method == "GET" else 1]
 
+    if method == "GET" and re.fullmatch(r"/api/medicines/[1-9][0-9]*/batches", route):
+        return "medicines:read"
+
     # Stock history is read-only and inherits only the medicine read permission.
     if method == "GET" and re.fullmatch(r"/api/medicines/[1-9][0-9]*/stock-movements", route):
         return "medicines:read"
