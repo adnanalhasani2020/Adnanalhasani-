@@ -751,6 +751,7 @@ interface HospitalDao {
                     doctorId = findDoctorIdByName(field("اسم الطبيب")),
                     appointmentAt = field("التاريخ والوقت"),
                     reason = field("سبب الزيارة"),
+                    status = field("حالة الموعد", "الحالة").ifBlank { "مجدول" },
                     createdAt = record.createdAt
                 )
             )
@@ -888,6 +889,9 @@ interface HospitalDao {
 
     @Query("SELECT * FROM appointments ORDER BY createdAt DESC")
     fun appointments(): Flow<List<AppointmentEntity>>
+
+    @Query("SELECT * FROM appointments WHERE patientId = :patientId OR (patientId IS NULL AND patientName = :patientName) ORDER BY appointmentAt DESC, createdAt DESC")
+    fun appointmentsForPatient(patientId: Long, patientName: String): Flow<List<AppointmentEntity>>
 
     @Query("SELECT * FROM invoices ORDER BY createdAt DESC")
     fun invoices(): Flow<List<InvoiceEntity>>
