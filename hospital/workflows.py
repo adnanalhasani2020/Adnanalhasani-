@@ -161,6 +161,20 @@ def add_medicine(db: HospitalDB, *, sku: str, name: str, quantity: int,
                VALUES(?,?,?,?,?,?,?)""",
             (ident, "initial_stock", quantity, quantity, f"medicine:create:{ident}", actor, at),
         )
+        batch_no = f"OPENING-{ident}"
+        batch_cur = conn.execute(
+            """INSERT INTO medicine_batches
+               (medicine_id,batch_no,expiry_date,quantity,received_at,reference,created_by)
+               VALUES(?,?,NULL,?,?,?,?)""",
+            (ident, batch_no, quantity, at, "opening stock; expiry not supplied", actor),
+        )
+        conn.execute(
+            """INSERT INTO medicine_batch_movements
+               (batch_id,medicine_id,movement_type,quantity_delta,balance_after,reference,actor,occurred_at)
+               VALUES(?,?,?,?,?,?,?,?)""",
+            (batch_cur.lastrowid, ident, "initial_stock", quantity, quantity,
+             "opening stock; expiry not supplied", actor, at),
+        )
         db._audit(conn, actor, "medicine.created", "medicine", ident, at,
                   {"initial_quantity": quantity})
         conn.commit()
@@ -190,11 +204,96 @@ def restock_medicine(db: HospitalDB, *, medicine_id: int, quantity: int,
                VALUES(?,?,?,?,?,?,?)""",
             (medicine_id, "restock", quantity, new_balance, reference.strip(), actor, at),
         )
+        next_batch = conn.execute(
+            "SELECT COALESCE(MAX(id),0)+1 FROM medicine_batches"
+        ).fetchone()[0]
+        batch_no = f"UNTRACKED-{medicine_id}-{next_batch}"
+        batch_cur = conn.execute(
+            """INSERT INTO medicine_batches
+               (medicine_id,batch_no,expiry_date,quantity,received_at,reference,created_by)
+               VALUES(?,?,NULL,?,?,?,?)""",
+            (medicine_id, batch_no, quantity, at,
+             reference.strip() or "restock received without expiry details", actor),
+        )
+        conn.execute(
+            """INSERT INTO medicine_batch_movements
+               (batch_id,medicine_id,movement_type,quantity_delta,balance_after,reference,actor,occurred_at)
+               VALUES(?,?,?,?,?,?,?,?)""",
+            (batch_cur.lastrowid, medicine_id, "restock", quantity, quantity,
+             reference.strip() or "expiry not supplied", actor, at),
+        )
         db._audit(conn, actor, "medicine.stock_received", "medicine", medicine_id, at,
                   {"quantity_added": quantity, "reference": reference.strip(),
                    "balance_after": new_balance})
         conn.commit()
         return int(row["quantity"] + quantity)
+
+
+def receive_medicine_batch(db: HospitalDB, *, medicine_id: int, batch_no: str,
+                           quantity: int, expiry_date: str, actor: str, at: str,
+                           reference: str = "") -> dict[str, int | str]:
+    """Receive a traceable batch and update aggregate and lot stock atomically."""
+    if type(medicine_id) is not int or medicine_id <= 0:
+        raise HospitalError("medicine_id must be a positive integer")
+    if type(quantity) is not int or quantity <= 0:
+        raise HospitalError("batch quantity must be a positive integer")
+    if not isinstance(batch_no, str) or not batch_no.strip() or len(batch_no.strip()) > 100:
+        raise HospitalError("batch number is required and must be at most 100 characters")
+    if not isinstance(expiry_date, str) or len(expiry_date) != 10:
+        raise HospitalError("expiry_date must use YYYY-MM-DD")
+    try:
+        parsed_expiry = datetime.strptime(expiry_date, "%Y-%m-%d").date()
+    except ValueError as exc:
+        raise HospitalError("expiry_date must be a valid YYYY-MM-DD date") from exc
+    if parsed_expiry.isoformat() != expiry_date:
+        raise HospitalError("expiry_date must use YYYY-MM-DD")
+    _parse_utc(at, "at")
+    if not isinstance(reference, str):
+        raise HospitalError("reference must be text")
+    with db.connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        medicine = conn.execute(
+            "SELECT quantity,active FROM medicines WHERE id=?", (medicine_id,)
+        ).fetchone()
+        if medicine is None or not medicine["active"]:
+            raise HospitalError("active medicine not found")
+        existing = conn.execute(
+            "SELECT id FROM medicine_batches WHERE medicine_id=? AND batch_no=?",
+            (medicine_id, batch_no.strip()),
+        ).fetchone()
+        if existing is not None:
+            raise HospitalError("batch number already exists for this medicine")
+        new_balance = int(medicine["quantity"]) + quantity
+        cur = conn.execute(
+            """INSERT INTO medicine_batches
+               (medicine_id,batch_no,expiry_date,quantity,received_at,reference,created_by)
+               VALUES(?,?,?,?,?,?,?)""",
+            (medicine_id, batch_no.strip(), expiry_date, quantity, at, reference.strip(), actor),
+        )
+        batch_id = int(cur.lastrowid)
+        conn.execute("UPDATE medicines SET quantity=? WHERE id=?", (new_balance, medicine_id))
+        conn.execute(
+            """INSERT INTO medicine_stock_movements
+               (medicine_id,movement_type,quantity_delta,balance_after,reference,actor,occurred_at)
+               VALUES(?,?,?,?,?,?,?)""",
+            (medicine_id, "restock", quantity, new_balance,
+             f"batch:{batch_no.strip()}" + (f" | {reference.strip()}" if reference.strip() else ""),
+             actor, at),
+        )
+        conn.execute(
+            """INSERT INTO medicine_batch_movements
+               (batch_id,medicine_id,movement_type,quantity_delta,balance_after,
+                reference,actor,occurred_at)
+               VALUES(?,?,'restock',?,?,?,?,?)""",
+            (batch_id, medicine_id, quantity, quantity, reference.strip(), actor, at),
+        )
+        db._audit(conn, actor, "medicine.batch_received", "medicine_batch", batch_id, at,
+                  {"medicine_id": medicine_id, "batch_no": batch_no.strip(),
+                   "quantity": quantity, "expiry_date": expiry_date,
+                   "balance_after": new_balance})
+        conn.commit()
+        return {"batch_id": batch_id, "batch_no": batch_no.strip(),
+                "quantity": quantity, "medicine_balance": new_balance, "expiry_date": expiry_date}
 
 
 def prescribe_medicine(db: HospitalDB, *, patient_id: int, medicine_id: int, dose: str,
@@ -247,6 +346,35 @@ def dispense_prescription(db: HospitalDB, *, prescription_id: int,
             raise HospitalError("medicine is inactive")
         if row["stock"] < row["quantity"]:
             raise HospitalError("insufficient medicine stock")
+        # Dispense using FEFO (first-expiring, first-out); expired stock is never dispensed.
+        dispense_day = _parse_utc(dispensed_at, "dispensed_at").date().isoformat()
+        lots = conn.execute(
+            """SELECT id,quantity,expiry_date FROM medicine_batches
+               WHERE medicine_id=? AND quantity>0
+                 AND (expiry_date IS NULL OR expiry_date>=?)
+               ORDER BY CASE WHEN expiry_date IS NULL THEN 1 ELSE 0 END,
+                        expiry_date ASC, id ASC""",
+            (row["medicine_id"], dispense_day),
+        ).fetchall()
+        available = sum(int(lot["quantity"]) for lot in lots)
+        if available < int(row["quantity"]):
+            raise HospitalError("insufficient non-expired batch stock; check expiry dates and batch balances")
+        remaining = int(row["quantity"])
+        for lot in lots:
+            if remaining <= 0:
+                break
+            take = min(remaining, int(lot["quantity"]))
+            balance = int(lot["quantity"]) - take
+            conn.execute("UPDATE medicine_batches SET quantity=? WHERE id=?", (balance, lot["id"]))
+            conn.execute(
+                """INSERT INTO medicine_batch_movements
+                   (batch_id,medicine_id,movement_type,quantity_delta,balance_after,
+                    prescription_id,reference,actor,occurred_at)
+                   VALUES(?,?, 'dispense', ?,?,?,?,?,?)""",
+                (lot["id"], row["medicine_id"], -take, balance, prescription_id,
+                 f"prescription:{prescription_id}", actor, dispensed_at),
+            )
+            remaining -= take
         new_balance = int(row["stock"] - row["quantity"])
         conn.execute("UPDATE medicines SET quantity=? WHERE id=?",
                      (new_balance, row["medicine_id"]))
