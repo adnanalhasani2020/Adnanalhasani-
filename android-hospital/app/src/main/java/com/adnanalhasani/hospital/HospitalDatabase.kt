@@ -1057,7 +1057,7 @@ interface HospitalDao {
         RecordAuditLogEntity::class,
         ClinicalVisitEntity::class
     ],
-    version = 14,
+    version = 15,
     exportSchema = false
 )
 abstract class HospitalDatabase : RoomDatabase() {
@@ -1127,6 +1127,138 @@ abstract class HospitalDatabase : RoomDatabase() {
          * Audit rows are historical evidence, not editable application data.
          * Corrections must be recorded as a new event rather than rewriting history.
          */
+
+        /**
+         * Version 15 brings the core server workflows into the offline database:
+         * medicine stock ledger, bed/admission lifecycle, appointment overlap rules,
+         * prescription dispensing state, and lab status history.
+         */
+        private val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""CREATE TABLE IF NOT EXISTS local_medicines (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    sourceRecordId INTEGER NOT NULL,
+                    sku TEXT NOT NULL UNIQUE,
+                    name TEXT NOT NULL,
+                    quantity INTEGER NOT NULL DEFAULT 0 CHECK(quantity >= 0),
+                    reorderLevel INTEGER NOT NULL DEFAULT 0 CHECK(reorderLevel >= 0),
+                    unit TEXT NOT NULL DEFAULT 'unit',
+                    active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+                    updatedAt TEXT NOT NULL,
+                    FOREIGN KEY(sourceRecordId) REFERENCES hospital_records(id) ON DELETE CASCADE
+                )""")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_local_medicines_name ON local_medicines(name COLLATE NOCASE)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_local_medicines_stock ON local_medicines(quantity, reorderLevel)")
+                db.execSQL("""CREATE TABLE IF NOT EXISTS local_medicine_movements (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    sourceRecordId INTEGER NOT NULL UNIQUE,
+                    medicineId INTEGER NOT NULL,
+                    movementType TEXT NOT NULL CHECK(movementType IN ('initial_stock','restock','dispense')),
+                    quantityDelta INTEGER NOT NULL CHECK(quantityDelta <> 0),
+                    balanceAfter INTEGER NOT NULL CHECK(balanceAfter >= 0),
+                    reference TEXT NOT NULL DEFAULT '',
+                    actor TEXT NOT NULL DEFAULT 'local-user',
+                    occurredAt TEXT NOT NULL,
+                    FOREIGN KEY(sourceRecordId) REFERENCES hospital_records(id) ON DELETE CASCADE,
+                    FOREIGN KEY(medicineId) REFERENCES local_medicines(id)
+                )""")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_local_medicine_movements_timeline ON local_medicine_movements(medicineId, id)")
+                db.execSQL("""CREATE TRIGGER IF NOT EXISTS local_medicine_movements_no_update
+                    BEFORE UPDATE ON local_medicine_movements BEGIN
+                    SELECT RAISE(ABORT, 'medicine stock movements are append-only');
+                END""")
+                db.execSQL("""CREATE TRIGGER IF NOT EXISTS local_medicine_movements_no_delete
+                    BEFORE DELETE ON local_medicine_movements BEGIN
+                    SELECT RAISE(ABORT, 'medicine stock movements are append-only');
+                END""")
+                db.execSQL("""CREATE TABLE IF NOT EXISTS local_beds (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    sourceRecordId INTEGER NOT NULL UNIQUE,
+                    ward TEXT NOT NULL,
+                    bedNo TEXT NOT NULL,
+                    active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+                    notes TEXT NOT NULL DEFAULT '',
+                    UNIQUE(ward, bedNo),
+                    FOREIGN KEY(sourceRecordId) REFERENCES hospital_records(id) ON DELETE CASCADE
+                )""")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_local_beds_active ON local_beds(active, ward)")
+                db.execSQL("""CREATE TABLE IF NOT EXISTS local_admissions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    sourceRecordId INTEGER NOT NULL UNIQUE,
+                    patientName TEXT NOT NULL,
+                    ward TEXT NOT NULL,
+                    bedNo TEXT NOT NULL,
+                    admittedAt TEXT NOT NULL,
+                    dischargedAt TEXT,
+                    reason TEXT NOT NULL DEFAULT '',
+                    status TEXT NOT NULL CHECK(status IN ('admitted','discharged')),
+                    FOREIGN KEY(sourceRecordId) REFERENCES hospital_records(id) ON DELETE CASCADE
+                )""")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_local_admissions_status_bed ON local_admissions(status, ward, bedNo)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_local_admissions_patient ON local_admissions(patientName, status)")
+                db.execSQL("""CREATE TRIGGER IF NOT EXISTS local_admissions_one_active_bed_insert
+                    BEFORE INSERT ON local_admissions WHEN NEW.status='admitted'
+                    AND EXISTS(SELECT 1 FROM local_admissions a WHERE a.ward=NEW.ward AND a.bedNo=NEW.bedNo AND a.status='admitted')
+                    BEGIN SELECT RAISE(ABORT, 'bed is already occupied'); END""")
+                db.execSQL("""CREATE TRIGGER IF NOT EXISTS local_admissions_one_active_bed_update
+                    BEFORE UPDATE OF ward, bedNo, status ON local_admissions WHEN NEW.status='admitted'
+                    AND EXISTS(SELECT 1 FROM local_admissions a WHERE a.id<>NEW.id AND a.ward=NEW.ward AND a.bedNo=NEW.bedNo AND a.status='admitted')
+                    BEGIN SELECT RAISE(ABORT, 'bed is already occupied'); END""")
+                db.execSQL("""CREATE TRIGGER IF NOT EXISTS local_admissions_one_active_patient_insert
+                    BEFORE INSERT ON local_admissions WHEN NEW.status='admitted'
+                    AND EXISTS(SELECT 1 FROM local_admissions a WHERE a.patientName=NEW.patientName COLLATE NOCASE AND a.status='admitted')
+                    BEGIN SELECT RAISE(ABORT, 'patient already has an active admission'); END""")
+                db.execSQL("""CREATE TRIGGER IF NOT EXISTS local_admissions_one_active_patient_update
+                    BEFORE UPDATE OF patientName, status ON local_admissions WHEN NEW.status='admitted'
+                    AND EXISTS(SELECT 1 FROM local_admissions a WHERE a.id<>NEW.id AND a.patientName=NEW.patientName COLLATE NOCASE AND a.status='admitted')
+                    BEGIN SELECT RAISE(ABORT, 'patient already has an active admission'); END""")
+                db.execSQL("""CREATE TABLE IF NOT EXISTS local_appointments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    sourceRecordId INTEGER NOT NULL UNIQUE,
+                    patientName TEXT NOT NULL,
+                    doctorName TEXT NOT NULL,
+                    startsAt TEXT NOT NULL,
+                    endsAt TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'scheduled' CHECK(status IN ('scheduled','checked_in','completed','cancelled','no_show')),
+                    FOREIGN KEY(sourceRecordId) REFERENCES hospital_records(id) ON DELETE CASCADE,
+                    CHECK(endsAt > startsAt)
+                )""")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_local_appointments_doctor_time ON local_appointments(doctorName, startsAt, endsAt)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_local_appointments_patient_time ON local_appointments(patientName, startsAt, endsAt)")
+                db.execSQL("""CREATE TRIGGER IF NOT EXISTS local_appointments_no_doctor_overlap_insert
+                    BEFORE INSERT ON local_appointments WHEN NEW.status IN ('scheduled','checked_in')
+                    AND EXISTS(SELECT 1 FROM local_appointments a WHERE a.doctorName=NEW.doctorName COLLATE NOCASE
+                    AND a.status IN ('scheduled','checked_in') AND a.startsAt<NEW.endsAt AND a.endsAt>NEW.startsAt)
+                    BEGIN SELECT RAISE(ABORT, 'doctor already has an overlapping appointment'); END""")
+                db.execSQL("""CREATE TRIGGER IF NOT EXISTS local_appointments_no_patient_overlap_insert
+                    BEFORE INSERT ON local_appointments WHEN NEW.status IN ('scheduled','checked_in')
+                    AND EXISTS(SELECT 1 FROM local_appointments a WHERE a.patientName=NEW.patientName COLLATE NOCASE
+                    AND a.status IN ('scheduled','checked_in') AND a.startsAt<NEW.endsAt AND a.endsAt>NEW.startsAt)
+                    BEGIN SELECT RAISE(ABORT, 'patient already has an overlapping appointment'); END""")
+                db.execSQL("""CREATE TABLE IF NOT EXISTS local_prescriptions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    sourceRecordId INTEGER NOT NULL UNIQUE,
+                    medicineId INTEGER,
+                    medicationName TEXT NOT NULL,
+                    quantity INTEGER NOT NULL DEFAULT 0 CHECK(quantity >= 0),
+                    status TEXT NOT NULL CHECK(status IN ('pending','dispensed','cancelled')),
+                    dispensedAt TEXT,
+                    FOREIGN KEY(sourceRecordId) REFERENCES hospital_records(id) ON DELETE CASCADE,
+                    FOREIGN KEY(medicineId) REFERENCES local_medicines(id)
+                )""")
+                db.execSQL("""CREATE TABLE IF NOT EXISTS local_lab_order_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    sourceRecordId INTEGER NOT NULL,
+                    status TEXT NOT NULL CHECK(status IN ('ordered','collected','processing','resulted','cancelled')),
+                    result TEXT NOT NULL DEFAULT '',
+                    occurredAt TEXT NOT NULL,
+                    actor TEXT NOT NULL DEFAULT 'local-user',
+                    FOREIGN KEY(sourceRecordId) REFERENCES hospital_records(id) ON DELETE CASCADE
+                )""")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_local_lab_events_timeline ON local_lab_order_events(sourceRecordId, id)")
+            }
+        }
+
         private val MIGRATION_13_14 = object : Migration(13, 14) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("""
@@ -1370,7 +1502,7 @@ abstract class HospitalDatabase : RoomDatabase() {
                     HospitalDatabase::class.java,
                     "hospital-local.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15)
                     .addCallback(object : RoomDatabase.Callback() {
                         override fun onCreate(db: SupportSQLiteDatabase) {
                             installAuditImmutability(db)
