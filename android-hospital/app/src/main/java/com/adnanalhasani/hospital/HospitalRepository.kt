@@ -98,7 +98,13 @@ class HospitalRepository(private val dao: HospitalDao, database: HospitalDatabas
     suspend fun saveRecord(record: HospitalRecord) {
         withContext(Dispatchers.IO) { localWorkflows?.validate(record) }
         val sourceRecordId = dao.saveRecord(record)
-        withContext(Dispatchers.IO) { localWorkflows?.sync(record, sourceRecordId) }
+        try {
+            withContext(Dispatchers.IO) { localWorkflows?.sync(record, sourceRecordId) }
+        } catch (failure: Throwable) {
+            // Keep the searchable Room record and operational SQLite projection consistent.
+            runCatching { dao.delete(sourceRecordId) }
+            throw failure
+        }
     }
 
     suspend fun saveClinicalVisit(record: HospitalRecord, patientId: Long, doctorId: Long) =
@@ -109,7 +115,13 @@ class HospitalRepository(private val dao: HospitalDao, database: HospitalDatabas
         val updated = current.copy(title = title, details = details)
         withContext(Dispatchers.IO) { localWorkflows?.validate(updated, id) }
         dao.updateRecord(id, title, details)
-        withContext(Dispatchers.IO) { localWorkflows?.sync(updated, id) }
+        try {
+            withContext(Dispatchers.IO) { localWorkflows?.sync(updated, id) }
+        } catch (failure: Throwable) {
+            // Restore the generic record if its local workflow projection rejects the update.
+            runCatching { dao.updateRecord(id, current.title, current.details) }
+            throw failure
+        }
     }
 
     suspend fun updateClinicalVisitRecord(id: Long, title: String, details: String, patientId: Long, doctorId: Long) =
