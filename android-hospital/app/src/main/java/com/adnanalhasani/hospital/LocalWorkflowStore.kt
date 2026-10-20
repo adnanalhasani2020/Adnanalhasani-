@@ -1,6 +1,7 @@
 package com.adnanalhasani.hospital
 
 import androidx.sqlite.db.SupportSQLiteDatabase
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
@@ -49,6 +50,19 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
                 require(f.field("رمز الدواء").isNotBlank()) { "رمز الدواء مطلوب." }
                 val qty = f.field("الكمية").toIntOrNull()
                 require(qty != null && qty >= 0) { "كمية المخزون يجب أن تكون عدداً صحيحاً غير سالب." }
+                val expiry = f.field("تاريخ الصلاحية")
+                if (expiry.isNotBlank()) {
+                    val parsed = runCatching { LocalDate.parse(expiry) }.getOrNull()
+                    require(parsed != null && parsed.toString() == expiry) { "تاريخ الصلاحية يجب أن يكون بصيغة YYYY-MM-DD." }
+                    require(parsed!! >= LocalDate.now()) { "لا يمكن إدخال تشغيلة منتهية الصلاحية." }
+                }
+                val batchNo = f.field("رقم التشغيلة")
+                val existingMedicineId = db.long("SELECT id FROM local_medicines WHERE sku=?", f.field("رمز الدواء"))
+                if (existingMedicineId != null && batchNo.isNotBlank() && expiry.isNotBlank()) {
+                    val oldExpiry = db.string("SELECT expiryDate FROM local_medicine_batches WHERE medicineId=? AND batchNo=?",
+                        existingMedicineId, batchNo)
+                    require(oldExpiry == null || oldExpiry == expiry) { "رقم التشغيلة مسجل بتاريخ صلاحية مختلف." }
+                }
             }
             "beds" -> {
                 require(f.field("الجناح").isNotBlank() && f.field("رقم السرير").isNotBlank()) {
@@ -119,8 +133,13 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
                         "SELECT status FROM local_prescriptions WHERE sourceRecordId=?",
                         existingId ?: -1L
                     ) == "dispensed"
-                    if (!alreadyDispensed) require(available >= qty) {
-                        "المخزون غير كافٍ. المتاح: $available."
+                    val batchAvailable = db.long(
+                        """SELECT COALESCE(SUM(quantity),0) FROM local_medicine_batches
+                           WHERE medicineId=? AND quantity>0 AND (expiryDate IS NULL OR expiryDate>=?)""",
+                        medId, LocalDate.now().toString()
+                    )?.toInt() ?: 0
+                    if (!alreadyDispensed) require(batchAvailable >= qty) {
+                        "المخزون الصالح للصرف غير كافٍ. المتاح: $batchAvailable."
                     }
                 }
             }
@@ -153,6 +172,7 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
                     )
                     if (existingMovement == null) {
                         var medicineId = db.long("SELECT id FROM local_medicines WHERE sku=?", sku)
+                        val isNewMedicine = medicineId == null
                         if (medicineId == null) {
                             db.execSQL(
                                 """INSERT INTO local_medicines(sourceRecordId,sku,name,quantity,reorderLevel,unit,active,updatedAt)
@@ -163,20 +183,51 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
                             )
                             medicineId = db.long("SELECT id FROM local_medicines WHERE sku=?", sku)
                                 ?: error("تعذر إنشاء صنف الدواء.")
-                            if (addQty > 0) db.execSQL(
-                                """INSERT INTO local_medicine_movements(sourceRecordId,medicineId,movementType,quantityDelta,balanceAfter,reference,occurredAt)
-                                   VALUES(?,?, 'initial_stock', ?, ?, ?, ?)""",
-                                arrayOf(sourceRecordId, medicineId, addQty, addQty, record.title, now)
-                            )
                         } else if (addQty > 0) {
                             val current = db.int("SELECT quantity FROM local_medicines WHERE id=?", medicineId) ?: 0
                             val next = Math.addExact(current, addQty)
                             db.execSQL("UPDATE local_medicines SET quantity=?,name=?,updatedAt=? WHERE id=?",
                                 arrayOf(next, name, now, medicineId))
+                        }
+                        if (addQty > 0) {
+                            val balance = db.int("SELECT quantity FROM local_medicines WHERE id=?", medicineId) ?: addQty
                             db.execSQL(
                                 """INSERT INTO local_medicine_movements(sourceRecordId,medicineId,movementType,quantityDelta,balanceAfter,reference,occurredAt)
-                                   VALUES(?,?, 'restock', ?, ?, ?, ?)""",
-                                arrayOf(sourceRecordId, medicineId, addQty, next, record.title, now)
+                                   VALUES(?,?,?,?,?,?,?)""",
+                                arrayOf(sourceRecordId, medicineId, if (isNewMedicine) "initial_stock" else "restock",
+                                    addQty, balance, f.field("المرجع", "اسم المورد").ifBlank { record.title }, now)
+                            )
+                            val batchNo = f.field("رقم التشغيلة").ifBlank { "BATCH-$sourceRecordId" }
+                            val expiry = f.field("تاريخ الصلاحية").takeIf { it.isNotBlank() }
+                            var batchId = db.long(
+                                "SELECT id FROM local_medicine_batches WHERE medicineId=? AND batchNo=?",
+                                medicineId, batchNo
+                            )
+                            if (batchId == null) {
+                                db.execSQL(
+                                    """INSERT INTO local_medicine_batches(medicineId,batchNo,expiryDate,quantity,receivedAt,reference,createdBy)
+                                       VALUES(?,?,?,?,?,?,?)""",
+                                    arrayOf(medicineId, batchNo, expiry, addQty, now,
+                                        f.field("المرجع", "اسم المورد").ifBlank { record.title }, "local-user")
+                                )
+                                batchId = db.long(
+                                    "SELECT id FROM local_medicine_batches WHERE medicineId=? AND batchNo=?",
+                                    medicineId, batchNo
+                                ) ?: error("تعذر إنشاء تشغيلة الدواء.")
+                            } else {
+                                val currentBatchQty = db.int("SELECT quantity FROM local_medicine_batches WHERE id=?", batchId) ?: 0
+                                val nextBatchQty = Math.addExact(currentBatchQty, addQty)
+                                db.execSQL(
+                                    "UPDATE local_medicine_batches SET quantity=?,reference=? WHERE id=?",
+                                    arrayOf(nextBatchQty, f.field("المرجع", "اسم المورد").ifBlank { record.title }, batchId)
+                                )
+                            }
+                            val batchBalance = db.int("SELECT quantity FROM local_medicine_batches WHERE id=?", batchId) ?: addQty
+                            db.execSQL(
+                                """INSERT INTO local_medicine_batch_movements(sourceRecordId,batchId,medicineId,movementType,quantityDelta,balanceAfter,reference,occurredAt)
+                                   VALUES(?,?,?,?,?,?,?,?)""",
+                                arrayOf(sourceRecordId, batchId, medicineId, if (isNewMedicine) "initial_stock" else "restock",
+                                    addQty, batchBalance, f.field("المرجع", "اسم المورد").ifBlank { record.title }, now)
                             )
                         }
                     }
@@ -247,6 +298,30 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
                         val available = db.int("SELECT quantity FROM local_medicines WHERE id=?", medicineId) ?: 0
                         require(available >= qty && qty > 0) { "المخزون غير كافٍ لصرف الوصفة." }
                         val next = available - qty
+                        val eligibleBatches = mutableListOf<Pair<Long, Int>>()
+                        db.query(
+                            """SELECT id,quantity FROM local_medicine_batches
+                               WHERE medicineId=? AND quantity>0 AND (expiryDate IS NULL OR expiryDate>=?)
+                               ORDER BY CASE WHEN expiryDate IS NULL THEN 1 ELSE 0 END, expiryDate, id""",
+                            arrayOf(medicineId, LocalDate.now().toString())
+                        ).use { cursor ->
+                            while (cursor.moveToNext()) eligibleBatches += cursor.getLong(0) to cursor.getInt(1)
+                        }
+                        var remaining = qty
+                        eligibleBatches.forEach { (batchId, batchQuantity) ->
+                            if (remaining > 0) {
+                                val taken = minOf(remaining, batchQuantity)
+                                val batchBalance = batchQuantity - taken
+                                db.execSQL("UPDATE local_medicine_batches SET quantity=? WHERE id=?", arrayOf(batchBalance, batchId))
+                                db.execSQL(
+                                    """INSERT INTO local_medicine_batch_movements(sourceRecordId,batchId,medicineId,movementType,quantityDelta,balanceAfter,reference,occurredAt)
+                                       VALUES(?,?,?,'dispense',?,?,?,?)""",
+                                    arrayOf(sourceRecordId, batchId, medicineId, -taken, batchBalance, record.title, now)
+                                )
+                                remaining -= taken
+                            }
+                        }
+                        require(remaining == 0) { "المخزون الصالح للصرف غير كافٍ." }
                         db.execSQL("UPDATE local_medicines SET quantity=?,updatedAt=? WHERE id=?", arrayOf(next, now, medicineId))
                         db.execSQL(
                             """INSERT INTO local_medicine_movements(sourceRecordId,medicineId,movementType,quantityDelta,balanceAfter,reference,occurredAt)
@@ -296,7 +371,8 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
         val db = database.openHelper.readableDatabase
         val sql = when (category) {
             "pharmacy" -> """SELECT name || ' (' || sku || ')',
-                'المتاح: ' || quantity || ' • حد إعادة الطلب: ' || reorderLevel || ' • ' || unit
+                'المتاح: ' || quantity || ' • حد إعادة الطلب: ' || reorderLevel || ' • ' || unit ||
+                ' • تشغيلات: ' || (SELECT COUNT(*) FROM local_medicine_batches b WHERE b.medicineId=local_medicines.id AND b.quantity>0)
                 FROM local_medicines ORDER BY name COLLATE NOCASE"""
             "beds" -> """SELECT b.ward || ' • سرير ' || b.bedNo,
                 CASE WHEN b.active=0 THEN 'غير متاح'
