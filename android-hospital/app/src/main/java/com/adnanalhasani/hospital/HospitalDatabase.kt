@@ -1172,6 +1172,44 @@ abstract class HospitalDatabase : RoomDatabase() {
                     BEFORE DELETE ON local_medicine_movements BEGIN
                     SELECT RAISE(ABORT, 'medicine stock movements are append-only');
                 END""")
+                db.execSQL("""CREATE TABLE IF NOT EXISTS local_medicine_batches (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    medicineId INTEGER NOT NULL,
+                    batchNo TEXT NOT NULL,
+                    expiryDate TEXT,
+                    quantity INTEGER NOT NULL DEFAULT 0 CHECK(quantity >= 0),
+                    receivedAt TEXT NOT NULL,
+                    reference TEXT NOT NULL DEFAULT '',
+                    createdBy TEXT NOT NULL DEFAULT 'local-user',
+                    UNIQUE(medicineId, batchNo),
+                    CHECK(expiryDate IS NULL OR (length(expiryDate)=10 AND date(expiryDate) IS NOT NULL AND date(expiryDate)=expiryDate)),
+                    FOREIGN KEY(medicineId) REFERENCES local_medicines(id)
+                )""")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_local_medicine_batches_fefo ON local_medicine_batches(medicineId, expiryDate, id)")
+                db.execSQL("""CREATE TABLE IF NOT EXISTS local_medicine_batch_movements (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    sourceRecordId INTEGER NOT NULL,
+                    batchId INTEGER NOT NULL,
+                    medicineId INTEGER NOT NULL,
+                    movementType TEXT NOT NULL CHECK(movementType IN ('initial_stock','restock','dispense')),
+                    quantityDelta INTEGER NOT NULL CHECK(quantityDelta <> 0),
+                    balanceAfter INTEGER NOT NULL CHECK(balanceAfter >= 0),
+                    reference TEXT NOT NULL DEFAULT '',
+                    actor TEXT NOT NULL DEFAULT 'local-user',
+                    occurredAt TEXT NOT NULL,
+                    FOREIGN KEY(sourceRecordId) REFERENCES hospital_records(id) ON DELETE CASCADE,
+                    FOREIGN KEY(batchId) REFERENCES local_medicine_batches(id),
+                    FOREIGN KEY(medicineId) REFERENCES local_medicines(id)
+                )""")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_local_batch_movements_timeline ON local_medicine_batch_movements(batchId, id)")
+                db.execSQL("""CREATE TRIGGER IF NOT EXISTS local_medicine_batch_movements_no_update
+                    BEFORE UPDATE ON local_medicine_batch_movements BEGIN
+                    SELECT RAISE(ABORT, 'medicine batch movements are append-only');
+                END""")
+                db.execSQL("""CREATE TRIGGER IF NOT EXISTS local_medicine_batch_movements_no_delete
+                    BEFORE DELETE ON local_medicine_batch_movements BEGIN
+                    SELECT RAISE(ABORT, 'medicine batch movements are append-only');
+                END""")
                 db.execSQL("""CREATE TABLE IF NOT EXISTS local_beds (
                     id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
                     sourceRecordId INTEGER NOT NULL UNIQUE,
