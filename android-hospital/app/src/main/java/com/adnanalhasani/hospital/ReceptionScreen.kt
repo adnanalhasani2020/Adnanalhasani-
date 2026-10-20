@@ -54,8 +54,11 @@ fun ReceptionScreen(repository: HospitalRepository) {
     var saving by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     val matchingDoctors = doctors.filter { doctor ->
-        department.isBlank() || doctor.specialty.contains(department.trim(), ignoreCase = true) ||
-            department.contains(doctor.specialty, ignoreCase = true)
+        department.isBlank() || (
+            doctor.specialty.isNotBlank() &&
+                (doctor.specialty.contains(department.trim(), ignoreCase = true) ||
+                    department.contains(doctor.specialty, ignoreCase = true))
+        )
     }
     val doctorOptions = matchingDoctors.ifEmpty { doctors }
     val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd", Locale.US) }
@@ -117,7 +120,7 @@ fun ReceptionScreen(repository: HospitalRepository) {
                             department = value
                             message = null
                             val matches = doctors.filter { doctor ->
-                                value.isNotBlank() && (
+                                value.isNotBlank() && doctor.specialty.isNotBlank() && (
                                     doctor.specialty.contains(value.trim(), ignoreCase = true) ||
                                     value.trim().contains(doctor.specialty, ignoreCase = true)
                                 )
