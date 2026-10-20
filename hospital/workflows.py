@@ -9,6 +9,18 @@ from datetime import datetime, timezone
 
 from .core import HospitalDB, HospitalError
 
+def _parse_utc(value: str, field: str) -> datetime:
+    if not isinstance(value, str) or not value.strip():
+        raise HospitalError(f"{field} must be a valid ISO-8601 timestamp")
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise HospitalError(f"{field} must be a valid ISO-8601 timestamp") from exc
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
 
 def create_encounter(db: HospitalDB, *, patient_id: int, doctor_id: int | None,
                      opened_at: str, actor: str, chief_complaint: str = "",
@@ -99,7 +111,7 @@ def update_lab_status(db: HospitalDB, *, order_id: int, status: str,
         row = conn.execute("SELECT status,ordered_at FROM lab_orders WHERE id=?", (order_id,)).fetchone()
         if row is None:
             raise HospitalError("lab order not found")
-        if at < row["ordered_at"]:
+        if _parse_utc(at, "at") < _parse_utc(row["ordered_at"], "ordered_at"):
             raise HospitalError("lab status timestamp cannot precede the order timestamp")
         if status not in transitions.get(row["status"], set()):
             raise HospitalError(f"invalid lab status transition: {row['status']} -> {status}")
