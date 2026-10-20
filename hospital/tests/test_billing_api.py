@@ -62,6 +62,21 @@ class BillingAPIWorkflowTests(unittest.TestCase):
             row = conn.execute("SELECT status FROM invoices WHERE id=?", (invoice,)).fetchone()
         self.assertEqual(row["status"], "partial")
 
+        duplicate_status, duplicate_data = self.call("/api/payments", {
+            "invoice_id": invoice, "amount_minor": 4000, "method": "cash",
+            "received_at": "2026-01-02T09:01:00", "reference": "RCPT-1"
+        })
+        self.assertEqual(duplicate_status, 400)
+        self.assertIn("payment reference already recorded", duplicate_data["error"])
+        with self.db.connect() as conn:
+            payment_rows = conn.execute(
+                "SELECT COUNT(*),COALESCE(SUM(amount_minor),0) FROM payments WHERE invoice_id=?",
+                (invoice,),
+            ).fetchone()
+            row = conn.execute("SELECT status FROM invoices WHERE id=?", (invoice,)).fetchone()
+        self.assertEqual(tuple(payment_rows), (1, 4000))
+        self.assertEqual(row["status"], "partial")
+
         self.post("/api/payments", {
             "invoice_id": invoice, "amount_minor": 6000, "method": "cash",
             "received_at": "2026-01-02T10:00:00"
