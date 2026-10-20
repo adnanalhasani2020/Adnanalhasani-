@@ -206,7 +206,7 @@ class PatientDetailsActivity : AppCompatActivity() {
         body.addView(actionsSection, marginBottomSmall())
         val actions = listOf(
             "إدخال التشخيص" to { showEntry("encounters", name, doctor, "إدخال التشخيص", listOf("الشكوى الرئيسية", "التشخيص", "ملاحظات"), visitTime) },
-            "الفحوصات المطلوبة" to { showEntry("lab", name, doctor, "طلب فحص", listOf("اسم الفحص", "ملاحظات"), visitTime) },
+            "الفحوصات المطلوبة" to { showEntry("lab", name, doctor, "طلب فحص مخبري", listOf("اسم الفحص", "حالة الفحص", "النتيجة", "ملاحظات المختبر"), visitTime) },
             "الأدوية المطلوبة" to { showEntry("prescriptions", name, doctor, "وصفة دوائية", listOf("اسم الدواء", "الجرعة", "التكرار والمدة", "تعليمات إضافية"), visitTime) },
             "السجل الطبي السابق" to { showHistory(name) },
             "موعد المراجعة" to { showEntry("appointments", name, doctor, "موعد مراجعة", listOf("التاريخ والوقت", "سبب الزيارة"), visitTime) }
