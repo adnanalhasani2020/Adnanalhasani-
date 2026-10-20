@@ -1,6 +1,8 @@
 package com.adnanalhasani.hospital
 
 import android.app.AlertDialog
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -209,7 +211,8 @@ class PatientDetailsActivity : AppCompatActivity() {
             "الفحوصات المطلوبة" to { showEntry("lab", name, doctor, "طلب فحص مخبري", listOf("اسم الفحص", "حالة الفحص", "النتيجة", "ملاحظات المختبر"), visitTime) },
             "الأدوية المطلوبة" to { showEntry("prescriptions", name, doctor, "وصفة دوائية", listOf("اسم الدواء", "الجرعة", "التكرار والمدة", "الحالة", "تعليمات إضافية"), visitTime) },
             "السجل الطبي السابق" to { showHistory(name) },
-            "موعد المراجعة" to { showAppointmentDialog(name, doctor, visitTime) }
+            "موعد المراجعة" to { showAppointmentDialog(name, doctor, visitTime) },
+            "مواعيد المراجعة السابقة" to { showAppointments(name) }
         )
         actions.chunked(2).forEach { rowItems ->
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
@@ -407,6 +410,41 @@ class PatientDetailsActivity : AppCompatActivity() {
             }
         }
         dialog.show()
+    }
+
+    private fun showAppointments(patient: String) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val appointments = dao.appointmentsForPatient(patientId, patient).first()
+                val message = if (appointments.isEmpty()) {
+                    "لا توجد مواعيد مراجعة مسجلة لهذا المريض."
+                } else {
+                    appointments.joinToString("\n\n") { appointment ->
+                        buildString {
+                            append("📅 ${appointment.appointmentAt.ifBlank { "تاريخ غير محدد" }}\n")
+                            append("الطبيب: ${appointment.doctorName.ifBlank { "غير محدد" }}\n")
+                            append("السبب: ${appointment.reason.ifBlank { "غير مسجل" }}\n")
+                            append("الحالة: ${appointment.status.ifBlank { "مجدول" }}")
+                        }
+                    }
+                }
+                runOnUiThread {
+                    val content = TextView(this@PatientDetailsActivity).apply {
+                        text = message
+                        textSize = 14f
+                        setTextColor(ink)
+                        setPadding(dp(16), dp(12), dp(16), dp(12))
+                    }
+                    AlertDialog.Builder(this@PatientDetailsActivity)
+                        .setTitle("مواعيد المراجعة السابقة")
+                        .setView(ScrollView(this@PatientDetailsActivity).apply { addView(content) })
+                        .setPositiveButton("إغلاق", null)
+                        .show()
+                }
+            } catch (e: Exception) {
+                runOnUiThread { toast("تعذر تحميل المواعيد: ${e.message ?: "خطأ"}") }
+            }
+        }
     }
 
     private fun showHistory(patient: String) {
