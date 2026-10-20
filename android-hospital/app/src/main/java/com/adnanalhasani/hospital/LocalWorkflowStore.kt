@@ -170,7 +170,7 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
                     "المريض غير مسجل في قاعدة البيانات المحلية."
                 }
                 val status = f.field("الحالة")
-                if (status.contains("صرف") || status.equals("dispensed", true)) {
+                if (status.contains("صرف") || status.contains("صُرف") || status.equals("dispensed", true)) {
                     val qty = f.field("الكمية المطلوبة", "الكمية المصروفة").toIntOrNull()
                     require(qty != null && qty > 0) { "أدخل كمية صحيحة أكبر من صفر قبل صرف الوصفة." }
                     val medId = db.long(
@@ -414,7 +414,7 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
                     val qty = f.field("الكمية المطلوبة", "الكمية المصروفة").toIntOrNull() ?: 0
                     val enteredStatus = f.field("الحالة")
                     val status = when {
-                        enteredStatus.contains("صرف") || enteredStatus.equals("dispensed", true) -> "dispensed"
+                        enteredStatus.contains("صرف") || enteredStatus.contains("صُرف") || enteredStatus.equals("dispensed", true) -> "dispensed"
                         enteredStatus.contains("لغ") || enteredStatus.equals("cancelled", true) -> "cancelled"
                         else -> "pending"
                     }
