@@ -49,6 +49,11 @@ class HospitalWorkflowTests(unittest.TestCase):
                                (encounter,)).fetchone()
         self.assertEqual((row["doctor_id"], row["appointment_id"]), (self.doctor, appointment))
 
+    def test_lab_order_rejects_inactive_or_unknown_doctor(self):
+        with self.assertRaisesRegex(HospitalError, "active ordering doctor"):
+            order_lab_test(self.db, patient_id=self.patient, test_name="CBC",
+                ordered_at="2026-01-02T08:00:00Z", actor="doctor", doctor_id=999999)
+
     def test_lab_result_requires_content(self):
         order = order_lab_test(self.db, patient_id=self.patient, test_name="CBC",
             ordered_at="2026-01-02T08:00:00", actor="doctor", doctor_id=self.doctor)
