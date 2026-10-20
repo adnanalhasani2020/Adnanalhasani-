@@ -230,7 +230,7 @@ class PatientDetailsActivity : AppCompatActivity() {
 
     private fun showEntry(category: String, patient: String, doctor: String, title: String, labels: List<String>, visitTime: String) {
         val inputs = labels.map { label ->
-            label to EditText(this).apply { hint = label; if (label.contains("ملاحظات") || label.contains("تعليمات")) minLines = 2 }
+            label to EditText(this).apply { hint = label; if (category == "lab" && label == "حالة الفحص") setText("مطلوب"); if (label.contains("ملاحظات") || label.contains("تعليمات")) minLines = 2 }
         }
         val form = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; layoutDirection = View.LAYOUT_DIRECTION_RTL
