@@ -70,15 +70,16 @@ fun LaboratoryScreen() {
     val scope = rememberCoroutineScope()
     val orders by dao.labOrders().collectAsState(initial = emptyList())
     val specimens by dao.labSpecimens().collectAsState(initial = emptyList())
-    val filteredSpecimens by dao.searchLabSpecimens(searchQuery.trim(), statusFilter).collectAsState(initial = emptyList())
     val settings by dao.labWorkflowSettings().collectAsState(initial = emptyList())
+
+    var searchQuery by remember { mutableStateOf("") }
+    var statusFilter by remember { mutableStateOf("all") }
+    var statusMenuExpanded by remember { mutableStateOf(false) }
+    val filteredSpecimens by dao.searchLabSpecimens(searchQuery.trim(), statusFilter).collectAsState(initial = emptyList())
 
     var selectedOrderId by remember { mutableStateOf<Long?>(null) }
     var orderMenuExpanded by remember { mutableStateOf(false) }
     var specimenCode by remember { mutableStateOf("") }
-    var searchQuery by remember { mutableStateOf("") }
-    var statusFilter by remember { mutableStateOf("all") }
-    var statusMenuExpanded by remember { mutableStateOf(false) }
     var responsibleEmployee by remember { mutableStateOf("") }
     var specimenType by remember { mutableStateOf("") }
     var rejectionReason by remember { mutableStateOf("") }
