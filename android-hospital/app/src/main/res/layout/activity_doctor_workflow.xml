@@ -35,7 +35,7 @@
             android:layout_marginTop="8dp" android:minHeight="50dp" android:singleLine="true"
             android:paddingStart="14dp" android:paddingEnd="14dp" android:hint="⌕  ابحث باسم المريض أو رقم الملف"
             android:inputType="text" android:backgroundTint="#B9CADB" android:contentDescription="البحث عن مريض"/>
-        <TextView android:id="@+id/configureConnection" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="⚙ إعداد الاتصال بالخادم" android:textColor="#145DA8" android:textSize="12sp" android:gravity="end" android:paddingTop="6dp" android:paddingBottom="4dp" android:clickable="true" android:focusable="true" />
+        <TextView android:id="@+id/configureConnection" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="↻ تحديث البيانات المحلية" android:textColor="#145DA8" android:textSize="12sp" android:gravity="end" android:paddingTop="6dp" android:paddingBottom="4dp" android:clickable="true" android:focusable="true" />
         <TextView android:id="@+id/listTitle" android:layout_width="match_parent" android:layout_height="wrap_content"
             android:paddingTop="12dp" android:paddingBottom="4dp" android:text="المرضى المنتظرون"
             android:textColor="#123E78" android:textStyle="bold" android:textSize="17sp"/>
