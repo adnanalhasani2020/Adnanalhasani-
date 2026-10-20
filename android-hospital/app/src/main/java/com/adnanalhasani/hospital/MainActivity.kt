@@ -267,7 +267,7 @@ private fun HospitalWorkspace(repository: HospitalRepository) {
         }
     }
     BackHandler(enabled = showMenu || selected != "home") {
-        if (showMenu) showMenu = false else selected = "home"
+        if (showMenu) showMenu = false else selected = if (selected == "lab_specimen_settings") "lab_specimens" else "home"
     }
     val currentModule = modules.find { it.key == selected }
     val specializedRows = when (selected) {
@@ -354,6 +354,14 @@ private fun HospitalWorkspace(repository: HospitalRepository) {
                         onAdd = { key -> selected = key }
                     )
                     selected == "reports" -> Reports(all)
+                    selected == "lab_specimens" -> LabSpecimenScreen(
+                        repository = repository,
+                        onSettings = { selected = "lab_specimen_settings" }
+                    )
+                    selected == "lab_specimen_settings" -> LabSpecimenSettingsScreen(
+                        repository = repository,
+                        onBack = { selected = "lab_specimens" }
+                    )
                     selected == "audit" -> AuditHistoryScreen(repository)
                     selected == "reception" -> ReceptionScreen(repository)
                     selected == "doctor_workspace" -> DoctorWorkspaceScreen(repository)
@@ -364,7 +372,8 @@ private fun HospitalWorkspace(repository: HospitalRepository) {
                     )
                     selected == "vaccination" -> VaccinationScreen(
                         repository = repository,
-                        onDelete = { id -> scope.launch { repository.deleteRecord(id) } }
+                        onDelete = { id -> scope.launch { repository.deleteRecord(id) } },
+                        onManageSpecimens = { selected = "lab_specimens" }
                     )
                     selected == "emergency" -> EmergencyScreen(
                         repository = repository,
@@ -943,7 +952,8 @@ private fun ModuleScreen(
     specializedRows: List<Pair<String, String>>,
     onSave: suspend (String, String) -> Unit,
     onEdit: suspend (Long, String, String) -> Unit,
-    onDelete: (Long) -> Unit
+    onDelete: (Long) -> Unit,
+    onManageSpecimens: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
     var values by remember(module.key) { mutableStateOf(module.fields.associate { it.first to "" }) }
@@ -1004,6 +1014,15 @@ private fun ModuleScreen(
                 Column {
                     Text(module.title, color = Navy, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                     Text(module.subtitle, color = Muted, fontSize = 12.sp)
+                }
+            }
+        }
+        if (module.key == "lab") {
+            item {
+                OutlinedButton(onClick = onManageSpecimens, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Default.Science, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("تتبّع العينات ومراحل الاستلام")
                 }
             }
         }
