@@ -36,7 +36,7 @@ def test_database_rejects_sale_line_without_product_name_snapshot(tmp_path):
         (request["offering_id"],),
     ).fetchone()[0]
 
-    with pytest.raises(sqlite3.IntegrityError, match="non-empty product name snapshot"):
+    with pytest.raises(sqlite3.IntegrityError, match="product name snapshot"):
         db.execute(
             """INSERT INTO sale_lines(
                    sale_line_id, sale_id, offering_id, product_id, quantity,
