@@ -218,8 +218,8 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
                                 val currentBatchQty = db.int("SELECT quantity FROM local_medicine_batches WHERE id=?", batchId) ?: 0
                                 val nextBatchQty = Math.addExact(currentBatchQty, addQty)
                                 db.execSQL(
-                                    "UPDATE local_medicine_batches SET quantity=?,reference=? WHERE id=?",
-                                    arrayOf(nextBatchQty, f.field("المرجع", "اسم المورد").ifBlank { record.title }, batchId)
+                                    "UPDATE local_medicine_batches SET quantity=?,reference=?,expiryDate=COALESCE(expiryDate,?) WHERE id=?",
+                                    arrayOf(nextBatchQty, f.field("المرجع", "اسم المورد").ifBlank { record.title }, expiry, batchId)
                                 )
                             }
                             val batchBalance = db.int("SELECT quantity FROM local_medicine_batches WHERE id=?", batchId) ?: addQty
@@ -371,7 +371,11 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
         val db = database.openHelper.readableDatabase
         val sql = when (category) {
             "pharmacy" -> """SELECT name || ' (' || sku || ')',
-                'المتاح: ' || quantity || ' • حد إعادة الطلب: ' || reorderLevel || ' • ' || unit ||
+                'إجمالي المخزون: ' || quantity ||
+                ' • الصالح للصرف: ' || (SELECT COALESCE(SUM(b.quantity),0) FROM local_medicine_batches b
+                    WHERE b.medicineId=local_medicines.id AND b.quantity>0
+                    AND (b.expiryDate IS NULL OR b.expiryDate>=date('now','localtime'))) ||
+                ' • حد الطلب: ' || reorderLevel || ' • ' || unit ||
                 ' • تشغيلات: ' || (SELECT COUNT(*) FROM local_medicine_batches b WHERE b.medicineId=local_medicines.id AND b.quantity>0)
                 FROM local_medicines ORDER BY name COLLATE NOCASE"""
             "beds" -> """SELECT b.ward || ' • سرير ' || b.bedNo,
