@@ -58,6 +58,40 @@ class HospitalAPITests(unittest.TestCase):
         except HTTPError as exc:
             return exc.code, json.loads(exc.read())
 
+    def test_lab_workload_reports_aggregate_pending_aging_without_patient_details(self):
+        patient_id = self.db.register_patient(
+            patient_no="LAB-WORKLOAD-P1", full_name="Lab Workload Patient",
+            created_at="2026-01-01T08:00:00Z", actor="test",
+        )
+        from hospital.workflows import order_lab_test, update_lab_status
+        order_id = order_lab_test(
+            self.db, patient_id=patient_id, test_name="CBC",
+            ordered_at="2026-01-01T08:00:00Z", actor="doctor",
+        )
+        status, payload = self.request("/api/lab/workload")
+        self.assertEqual(status, 200)
+        data = payload["data"]
+        self.assertGreaterEqual(data["status_counts"]["ordered"], 1)
+        self.assertGreaterEqual(data["pending_count"], 1)
+        cbc = next(item for item in data["pending_by_test"] if item["test_name"] == "CBC")
+        self.assertGreaterEqual(cbc["pending_count"], 1)
+        self.assertGreaterEqual(cbc["older_than_24h"], 1)
+        self.assertNotIn("patient_name", cbc)
+        self.assertNotIn("result", cbc)
+        self.assertIn("not clinical priority", payload["scope"])
+        update_lab_status(
+            self.db, order_id=order_id, status="collected", actor="lab",
+            at="2026-01-01T09:00:00Z",
+        )
+        status, refreshed = self.request("/api/lab/workload")
+        self.assertEqual(status, 200)
+        self.assertGreaterEqual(refreshed["data"]["status_counts"]["collected"], 1)
+
+    def test_lab_workload_requires_authentication(self):
+        status, payload = self.request("/api/lab/workload", token=False)
+        self.assertEqual(status, 401)
+        self.assertEqual(payload["error"], "unauthorized")
+
     def test_inventory_reconciliation_reports_batch_discrepancies_without_mutating_stock(self):
         medicine_id = add_medicine(
             self.db, sku="RECON-1", name="Reconciliation test medicine", quantity=0,
