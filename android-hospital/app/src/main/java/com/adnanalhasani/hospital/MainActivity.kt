@@ -82,7 +82,7 @@ private val modules = listOf(
         listOf("الرقم الوظيفي" to "مثال: DR-101", "اسم الطبيب" to "الاسم الكامل", "التخصص" to "التخصص الطبي", "رقم الهاتف" to "رقم التواصل")),
     Module("doctor_workspace", "شاشة الطبيب", "تسجيل الزيارات والتشخيصات ومراجعة السجل الطبي", Icons.Default.MedicalInformation, Color(0xFF6F9BAE), emptyList()),
     Module("appointments", "المواعيد", "تنظيم المواعيد والحجوزات", Icons.Default.CalendarMonth, Color(0xFF9A91B8),
-        listOf("اسم المريض" to "اسم المريض", "اسم الطبيب" to "اسم الطبيب", "التاريخ والوقت" to "البداية: YYYY-MM-DD HH:mm", "وقت الانتهاء" to "النهاية: YYYY-MM-DD HH:mm", "سبب الزيارة" to "سبب الزيارة")),
+        listOf("اسم المريض" to "اسم المريض", "اسم الطبيب" to "اسم الطبيب", "التاريخ والوقت" to "البداية: YYYY-MM-DD HH:mm", "وقت الانتهاء" to "النهاية: YYYY-MM-DD HH:mm", "سبب الزيارة" to "سبب الزيارة", "حالة الموعد" to "مجدول / حضر / مكتمل / ملغي / لم يحضر")),
     Module("encounters", "الزيارات الطبية", "متابعة الزيارة والتشخيص", Icons.Default.MedicalInformation, Color(0xFF6F9BAE),
         listOf("اسم المريض" to "اسم المريض", "اسم الطبيب" to "اسم الطبيب", "تاريخ الزيارة" to "YYYY-MM-DD HH:mm", "الشكوى الرئيسية" to "الشكوى", "التشخيص" to "التشخيص الطبي", "ملاحظات" to "ملاحظات الزيارة", "حالة الزيارة" to "مفتوحة / مغلقة")),
     Module("lab", "المختبر", "إدارة طلبات التحاليل ومتابعة النتائج", Icons.Default.Science, Color(0xFFD0A06E),
