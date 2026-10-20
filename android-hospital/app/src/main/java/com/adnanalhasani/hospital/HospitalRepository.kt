@@ -20,6 +20,53 @@ class HospitalRepository(private val dao: HospitalDao) {
     fun prescriptionOrders(): Flow<List<PrescriptionOrderEntity>> = dao.prescriptionOrders()
 
     fun labOrders(): Flow<List<LabOrderEntity>> = dao.labOrders()
+    fun labSpecimens(): Flow<List<LabSpecimenEntity>> = dao.labSpecimens()
+
+    fun labSpecimenEvents(specimenId: Long): Flow<List<LabSpecimenEventEntity>> =
+        dao.labSpecimenEvents(specimenId)
+
+    suspend fun createLabSpecimen(
+        labOrderId: Long,
+        specimenCode: String,
+        specimenType: String,
+        actor: String,
+        notes: String = ""
+    ): Long {
+        val cleanCode = specimenCode.trim()
+        val cleanType = specimenType.trim()
+        val cleanActor = actor.trim()
+        require(cleanCode.isNotBlank()) { "رمز العينة مطلوب" }
+        require(cleanType.isNotBlank()) { "نوع العينة مطلوب" }
+        require(cleanActor.isNotBlank()) { "اسم مستلم/جامع العينة مطلوب" }
+        val now = System.currentTimeMillis()
+        return dao.createLabSpecimenWithEvent(
+            LabSpecimenEntity(
+                labOrderId = labOrderId,
+                specimenCode = cleanCode,
+                specimenType = cleanType,
+                status = "collected",
+                collectedAt = now,
+                notes = notes.trim(),
+                createdAt = now,
+                updatedAt = now
+            ),
+            cleanActor
+        )
+    }
+
+    suspend fun transitionLabSpecimen(
+        specimenId: Long,
+        nextStatus: String,
+        actor: String,
+        note: String = ""
+    ): Boolean = dao.transitionLabSpecimen(
+        id = specimenId,
+        nextStatus = nextStatus,
+        actor = actor.trim(),
+        note = note.trim(),
+        at = System.currentTimeMillis()
+    )
+
 
     fun radiologyOrders(): Flow<List<RadiologyOrderEntity>> = dao.radiologyOrders()
 
@@ -30,6 +77,9 @@ class HospitalRepository(private val dao: HospitalDao) {
     suspend fun seedDefaultReferenceCatalogs() {
         val defaults = mapOf(
             "lab_tests" to listOf("صورة دم كاملة CBC", "سكر الدم", "الهيموغلوبين السكري HbA1c", "وظائف الكلى", "وظائف الكبد", "تحليل البول", "سرعة الترسيب ESR", "CRP", "دهون الدم", "هرمون الغدة الدرقية TSH"),
+            "lab_specimen_types" to listOf("دم", "بول", "براز", "مسحة", "مصل", "بلازما", "سائل نخاعي", "نسيج"),
+            "lab_specimen_rejection_reasons" to listOf("عينة غير كافية", "وعاء غير مناسب", "تسرب أو كسر الوعاء", "بيانات غير مطابقة", "تأخر النقل", "تجلط العينة", "تلوث محتمل"),
+
             "medications" to listOf("باراسيتامول", "إيبوبروفين", "أموكسيسيلين", "أوميبرازول", "ميتفورمين", "محلول ملحي 0.9%", "سيتريزين"),
             "diagnoses" to listOf("ارتفاع ضغط الدم", "داء السكري من النوع الثاني", "فقر الدم", "التهاب الجهاز التنفسي العلوي", "التهاب المسالك البولية", "الربو", "التهاب المعدة والأمعاء"),
             "specialties" to listOf("طب الأسرة", "الباطنية", "الجراحة العامة", "طب الأطفال", "النساء والولادة", "القلب", "العظام", "الأنف والأذن والحنجرة", "العيون", "الجلدية"),
