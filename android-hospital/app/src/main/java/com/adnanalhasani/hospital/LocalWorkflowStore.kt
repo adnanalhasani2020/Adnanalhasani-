@@ -539,7 +539,15 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
                 FROM local_users ORDER BY username COLLATE NOCASE"""
             "encounters" -> """SELECT patientName || CASE WHEN doctorName='' THEN '' ELSE ' • ' || doctorName END,
                 status || ' • فتح: ' || openedAt || CASE WHEN closedAt IS NULL THEN '' ELSE ' • إغلاق: ' || closedAt END
-                FROM local_encounters ORDER BY id DESC""
+                FROM local_encounters ORDER BY id DESC"""
+            "invoices" -> """SELECT invoiceNumber || ' • ' || patientName,
+                status || ' • الإجمالي: ' || amountMinor || ' • المدفوع: ' ||
+                (SELECT COALESCE(SUM(p.amountMinor),0) FROM payments p WHERE p.invoiceId=invoices.id) ||
+                ' • المتبقي: ' || MAX(0, amountMinor-(SELECT COALESCE(SUM(p.amountMinor),0) FROM payments p WHERE p.invoiceId=invoices.id))
+                FROM invoices ORDER BY createdAt DESC"""
+            "payments" -> """SELECT invoiceNumber || ' • ' || method,
+                'المبلغ بالوحدة الصغرى: ' || amountMinor || CASE WHEN receiptReference='' THEN '' ELSE ' • مرجع: ' || receiptReference END
+                FROM payments ORDER BY createdAt DESC"""
             else -> return emptyList()
         }
         return db.query(sql).use { cursor ->
