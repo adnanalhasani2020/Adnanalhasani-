@@ -755,6 +755,7 @@ private fun optionsForField(label: String, hint: String): List<String> {
     if (label == "الدور") return listOf("مدير", "طبيب", "ممرض", "استقبال", "مختبر", "صيدلي", "محاسب")
     if (label == "الحالة" && hint.contains("نشط")) return listOf("نشط", "غير نشط")
     if (label == "الحالة" && hint.contains("متاح")) return listOf("متاح", "مشغول", "صيانة")
+    if (label == "الحالة" && hint.contains(" / ")) return hint.split(" / ").map { it.trim() }.filter { it.isNotBlank() }
     when (label) {
         "اسم الفحص", "نوع الفحص", "الفحص المطلوب" -> return tests
         "اسم الدواء", "الدواء", "اسم العلاج" -> return drugs
