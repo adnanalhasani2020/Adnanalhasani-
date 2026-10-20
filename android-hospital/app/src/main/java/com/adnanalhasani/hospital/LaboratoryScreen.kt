@@ -375,7 +375,8 @@ fun LaboratoryScreen() {
                             color = MaterialTheme.colorScheme.error,
                             fontWeight = FontWeight.SemiBold
                         )
-                    }                    Text("تاريخ الجمع: ${labTime(specimen.collectedAt)}", style = MaterialTheme.typography.bodySmall)
+                    }
+                    Text("تاريخ الجمع: ${labTime(specimen.collectedAt)}", style = MaterialTheme.typography.bodySmall)
                     specimen.receivedAt?.let { Text("تاريخ الاستلام: ${labTime(it)}", style = MaterialTheme.typography.bodySmall) }
                     if (specimen.rejectionReason.isNotBlank()) Text("سبب الرفض: ${specimen.rejectionReason}")
                     if (events.isNotEmpty()) {
