@@ -322,6 +322,56 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                     },
                     "scope": "read-only reconciliation; does not adjust stock automatically",
                 })
+            elif route == "/api/inventory/stock-movements":
+                # Cross-medicine, paginated ledger view for stock review and audit.
+                try:
+                    params = parse_qs(parsed.query, keep_blank_values=True)
+                    limit = int(params.get("limit", ["50"])[0])
+                    offset = int(params.get("offset", ["0"])[0])
+                    medicine_id_raw = params.get("medicine_id", [""])[0].strip()
+                except (TypeError, ValueError, OverflowError):
+                    self._send(400, {"error": "invalid_pagination"})
+                    return
+                if limit < 1 or limit > 100 or offset < 0:
+                    self._send(400, {"error": "limit must be 1-100 and offset must be non-negative"})
+                    return
+                if medicine_id_raw and (not medicine_id_raw.isdigit() or int(medicine_id_raw) <= 0):
+                    self._send(400, {"error": "invalid_medicine_id"})
+                    return
+                movement_type = params.get("movement_type", [""])[0].strip()
+                allowed_types = {"opening", "restock", "dispense", "adjustment"}
+                if movement_type and movement_type not in allowed_types:
+                    self._send(400, {"error": "invalid_movement_type"})
+                    return
+                conditions = []
+                values = []
+                if medicine_id_raw:
+                    conditions.append("sm.medicine_id=?")
+                    values.append(int(medicine_id_raw))
+                if movement_type:
+                    conditions.append("sm.movement_type=?")
+                    values.append(movement_type)
+                where = (" WHERE " + " AND ".join(conditions)) if conditions else ""
+                with database.connect() as conn:
+                    total = conn.execute(
+                        "SELECT COUNT(*) FROM medicine_stock_movements sm" + where, values
+                    ).fetchone()[0]
+                    rows = conn.execute(
+                        """SELECT sm.id,sm.medicine_id,m.sku,m.name AS medicine_name,
+                                  sm.movement_type,sm.quantity_delta,sm.balance_after,
+                                  sm.reference,sm.prescription_id,sm.actor,sm.occurred_at
+                           FROM medicine_stock_movements sm
+                           JOIN medicines m ON m.id=sm.medicine_id"""
+                        + where + " ORDER BY sm.id DESC LIMIT ? OFFSET ?",
+                        [*values, limit, offset],
+                    ).fetchall()
+                self._send(200, {
+                    "data": [dict(row) for row in rows],
+                    "pagination": {"limit": limit, "offset": offset, "count": len(rows), "total": total},
+                    "filters": {"medicine_id": int(medicine_id_raw) if medicine_id_raw else None,
+                                "movement_type": movement_type or None},
+                    "scope": "read-only, cross-medicine stock ledger; does not adjust inventory",
+                })
             elif route.startswith("/api/medicines/") and route.endswith("/batches") and len(route.strip("/").split("/")) == 4:
                 parts = route.strip("/").split("/")
                 if parts[0:2] != ["api", "medicines"] or parts[3] != "batches":
