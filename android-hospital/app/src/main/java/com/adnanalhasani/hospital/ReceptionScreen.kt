@@ -111,7 +111,29 @@ fun ReceptionScreen(repository: HospitalRepository) {
             Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
                     Text("إحالة المريض للعيادة", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF263B4D))
-                    OutlinedTextField(department, { department = it; selectedDoctorId = null; doctorName = "" }, label = { Text("القسم / العيادة *") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    OutlinedTextField(
+                        department,
+                        { value ->
+                            department = value
+                            message = null
+                            val matches = doctors.filter { doctor ->
+                                value.isNotBlank() && (
+                                    doctor.specialty.contains(value.trim(), ignoreCase = true) ||
+                                    value.trim().contains(doctor.specialty, ignoreCase = true)
+                                )
+                            }
+                            if (matches.size == 1) {
+                                selectedDoctorId = matches.first().id
+                                doctorName = matches.first().fullName
+                            } else {
+                                selectedDoctorId = null
+                                doctorName = ""
+                            }
+                        },
+                        label = { Text("القسم / العيادة *") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
                     ExposedDropdownMenuBox(expanded = doctorExpanded, onExpandedChange = { doctorExpanded = !doctorExpanded }) {
                         OutlinedTextField(doctorName, {}, readOnly = true, label = { Text("الطبيب المختص *") }, modifier = Modifier.menuAnchor().fillMaxWidth())
                         ExposedDropdownMenu(expanded = doctorExpanded, onDismissRequest = { doctorExpanded = false }) {
