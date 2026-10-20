@@ -101,13 +101,13 @@ fun LaboratoryScreen() {
     var specimenCode by remember { mutableStateOf("") }
     var responsibleEmployee by remember { mutableStateOf("") }
     var specimenType by remember { mutableStateOf("") }
-    val specimenTypeOptions = (specimenGuide.filter { it.active }.map { it.name } +
-        specimenTypes.split(",").map { it.trim() }.filter { it.isNotBlank() }).distinct()
-    val selectedSpecimenGuide = specimenGuide.firstOrNull { it.active && it.name.equals(specimenType, ignoreCase = true) }
     var rejectionReason by remember { mutableStateOf("") }
     var requireReceipt by remember { mutableStateOf(true) }
     var specimenTypes by remember { mutableStateOf("دم، بول، مسحة، مصل، براز") }
     var rejectionReasons by remember { mutableStateOf("عينة غير كافية، عينة متجلطة، وعاء غير مناسب، بيانات غير مطابقة") }
+    val specimenTypeOptions = (specimenGuide.filter { it.active }.map { it.name } +
+        specimenTypes.split(",").map { it.trim() }.filter { it.isNotBlank() }).distinct()
+    val selectedSpecimenGuide = specimenGuide.firstOrNull { it.active && it.name.equals(specimenType, ignoreCase = true) }
     var turnaroundHours by remember { mutableStateOf("24") }
     var settingsExpanded by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
