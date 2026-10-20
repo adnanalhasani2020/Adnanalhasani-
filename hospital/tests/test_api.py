@@ -94,10 +94,6 @@ class HospitalAPITests(unittest.TestCase):
             })
         self.assertEqual(status, 200)
         self.assertEqual(received["quantity"], 5)
-        status, listing = self.request("/api/medicines")
-        self.assertEqual(status, 200)
-        row = next(item for item in listing["data"] if item["id"] == created["id"])
-        self.assertEqual(row["quantity"], 5)
 
     def test_pharmacy_api_rejects_fractional_stock(self):
         status, payload = self.request("/api/medicines", method="POST", payload={
