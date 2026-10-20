@@ -62,8 +62,8 @@ Use your actual backup filename in place of the example. Store a second encrypte
 - `POST /api/patients`, `POST /api/doctors`, `POST /api/appointments`
 - `POST /api/appointments/{id}/cancel` and `/api/appointments/{id}/no-show` are authorized administrative transitions; both are audited, only scheduled appointments can transition, and no-show timestamps cannot precede the appointment start.
 - `POST /api/encounters`, `POST /api/encounters/{id}/close`
-- `POST /api/lab-orders`, `POST /api/lab-orders/{id}/status`
-- `POST /api/medicines`, `POST /api/prescriptions`, `POST /api/prescriptions/{id}/dispense`
+- `POST /api/lab-orders`, `POST /api/lab-orders/{id}/status` (enforces workflow transitions and rejects timestamps before the order; timestamps are compared as ISO-8601 instants)
+- `POST /api/medicines`, `POST /api/medicines/{id}/restock` (integer quantity, optional receipt reference, atomic stock update with audit event), `POST /api/prescriptions`, `POST /api/prescriptions/{id}/dispense`
 - `POST /api/beds`, `POST /api/admissions`, `POST /api/admissions/{id}/discharge`
 - `POST /api/invoices`, `POST /api/payments` (amounts use integer minor units; payments cannot exceed the invoice balance)
 
