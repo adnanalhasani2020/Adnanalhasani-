@@ -9,6 +9,12 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.EditText
+import android.widget.Toast
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -38,6 +44,8 @@ class PatientDetailsActivity : AppCompatActivity() {
     private val muted = Color.rgb(103, 121, 140)
     private val border = Color.rgb(225, 233, 241)
     private val page = Color.rgb(243, 247, 251)
+    private val dao by lazy { HospitalDatabase.get(applicationContext).hospitalDao() }
+    private val patientId by lazy { intent.getLongExtra(EXTRA_ID, -1L) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -173,33 +181,20 @@ class PatientDetailsActivity : AppCompatActivity() {
 
         body.addView(sectionTitle("إجراءات الطبيب"), marginBottomSmall())
         val actions = listOf(
-            "إدخال التشخيص" to "يمكن إضافة التشخيص وملاحظات الطبيب في شاشة التشخيص.",
-            "الفحوصات المطلوبة" to "يمكن مراجعة الفحوصات المطلوبة لهذا المريض.",
-            "الأدوية المطلوبة" to "يمكن مراجعة الأدوية والوصفات الخاصة بالمريض.",
-            "السجل الطبي السابق" to "عرض السجل الطبي السابق للمريض.",
-            "موعد المراجعة" to "تحديد موعد مراجعة جديد للمريض."
+            "إدخال التشخيص" to { showEntry("encounters", name, doctor, "إدخال التشخيص", listOf("الشكوى الرئيسية", "التشخيص", "ملاحظات"), visitTime) },
+            "الفحوصات المطلوبة" to { showEntry("lab", name, doctor, "طلب فحص", listOf("اسم الفحص", "ملاحظات"), visitTime) },
+            "الأدوية المطلوبة" to { showEntry("prescriptions", name, doctor, "وصفة دوائية", listOf("اسم الدواء", "الجرعة", "التكرار والمدة", "تعليمات إضافية"), visitTime) },
+            "السجل الطبي السابق" to { showHistory(name) },
+            "موعد المراجعة" to { showEntry("appointments", name, doctor, "موعد مراجعة", listOf("التاريخ والوقت", "سبب الزيارة"), visitTime) }
         )
         actions.chunked(2).forEach { rowItems ->
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-            rowItems.forEach { (label, message) ->
+            rowItems.forEach { (label, action) ->
                 row.addView(Button(this).apply {
-                    text = label
-                    isAllCaps = false
-                    textSize = 12f
-                    setTextColor(Color.WHITE)
+                    text = label; isAllCaps = false; textSize = 12f; setTextColor(Color.WHITE)
                     background = rounded(blue, 12, Color.TRANSPARENT)
-                    setOnClickListener {
-                        AlertDialog.Builder(this@PatientDetailsActivity)
-                            .setTitle(label)
-                            .setMessage(message)
-                            .setPositiveButton("حسنًا", null)
-                            .show()
-                    }
-                }, LinearLayout.LayoutParams(0, dp(58), 1f).apply {
-                    marginEnd = dp(4)
-                    marginStart = dp(4)
-                    bottomMargin = dp(8)
-                })
+                    setOnClickListener { action() }
+                }, LinearLayout.LayoutParams(0, dp(58), 1f).apply { marginEnd = dp(4); marginStart = dp(4); bottomMargin = dp(8) })
             }
             if (rowItems.size == 1) row.addView(View(this), LinearLayout.LayoutParams(0, dp(58), 1f))
             body.addView(row)
@@ -207,6 +202,65 @@ class PatientDetailsActivity : AppCompatActivity() {
 
         setContentView(root)
     }
+
+
+    private fun showEntry(category: String, patient: String, doctor: String, title: String, labels: List<String>, visitTime: String) {
+        val inputs = labels.map { label ->
+            label to EditText(this).apply { hint = label; if (label.contains("ملاحظات") || label.contains("تعليمات")) minLines = 2 }
+        }
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; layoutDirection = View.LAYOUT_DIRECTION_RTL
+            setPadding(dp(20), dp(8), dp(20), dp(4))
+        }
+        inputs.forEach { (label, edit) ->
+            form.addView(TextView(this).apply { text = label; textSize = 13f; setTextColor(muted); setPadding(0, dp(7), 0, dp(3)) })
+            edit.setPadding(dp(12), dp(10), dp(12), dp(10)); edit.background = rounded(Color.WHITE, 10, border)
+            form.addView(edit, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        }
+        val scroll = ScrollView(this).apply { addView(form) }
+        val dialog = AlertDialog.Builder(this).setTitle(title).setView(scroll)
+            .setNegativeButton("إلغاء", null).setPositiveButton("حفظ", null).create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val values = inputs.map { it.first to it.second.text.toString().trim() }
+                if (values.firstOrNull()?.second.isNullOrBlank()) { inputs.first().second.error = "هذا الحقل مطلوب"; return@setOnClickListener }
+                val detail = buildString {
+                    append("اسم المريض: $patient\nاسم الطبيب: $doctor\n")
+                    values.forEach { (key, value) -> append("$key: $value\n") }
+                    append("تاريخ الزيارة: $visitTime")
+                }
+                lifecycleScope.launch(Dispatchers.IO) {
+                    try {
+                        dao.saveRecord(HospitalRecord(category = category, title = "$title - $patient", details = detail, createdAt = System.currentTimeMillis()), linkedPatientId = patientId.takeIf { it > 0 })
+                        runOnUiThread { dialog.dismiss(); toast("تم الحفظ في SQLite المحلية") }
+                    } catch (e: Exception) { runOnUiThread { toast("تعذر الحفظ: ${e.message ?: "خطأ"}") } }
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun showHistory(patient: String) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val records = listOf("encounters", "lab", "radiology", "prescriptions", "appointments")
+                    .flatMap { dao.records(it).first() }
+                    .filter { it.details.contains("اسم المريض: $patient") || it.title.contains(patient) }
+                    .sortedByDescending { it.createdAt }
+                val message = if (records.isEmpty()) "لا يوجد سجل سابق لهذا المريض." else records.joinToString("\n\n") {
+                    "${it.category} • ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(it.createdAt))}\n${it.title}\n${it.details}"
+                }
+                runOnUiThread {
+                    val text = TextView(this@PatientDetailsActivity).apply { this.text = message; textSize = 14f; setTextColor(ink); setPadding(dp(16), dp(12), dp(16), dp(12)) }
+                    AlertDialog.Builder(this@PatientDetailsActivity).setTitle("السجل الطبي السابق")
+                        .setView(ScrollView(this@PatientDetailsActivity).apply { addView(text) })
+                        .setPositiveButton("إغلاق", null).show()
+                }
+            } catch (e: Exception) { runOnUiThread { toast("تعذر تحميل السجل: ${e.message ?: "خطأ"}") } }
+        }
+    }
+
+    private fun toast(message: String) = Toast.makeText(this, message, Toast.LENGTH_LONG).show()
 
     private fun sectionTitle(value: String) = TextView(this).apply {
         text = value
