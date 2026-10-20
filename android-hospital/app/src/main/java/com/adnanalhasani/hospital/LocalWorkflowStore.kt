@@ -565,6 +565,16 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
         }
     }
 
+    fun auditDeletion(record: HospitalRecord) {
+        val db = database.openHelper.writableDatabase
+        val now = LocalDateTime.now().format(timestampFormatter)
+        val details = """{"category":"${jsonEscape(record.category)}","title":"${jsonEscape(record.title)}"}"""
+        db.execSQL(
+            "INSERT INTO local_audit_log(actor,action,entityType,entityId,detailsJson,occurredAt) VALUES(?,?,?,?,?,?)",
+            arrayOf("local-user", "record.deleted", "record", record.id.toString(), details, now)
+        )
+    }
+
     fun rows(category: String): List<Pair<String, String>> {
         val db = database.openHelper.readableDatabase
         val sql = when (category) {
