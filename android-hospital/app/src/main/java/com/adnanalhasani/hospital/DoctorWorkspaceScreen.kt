@@ -433,10 +433,16 @@ fun DoctorWorkspaceScreen(repository: HospitalRepository) {
                                             val oldDetails = visitRecord?.details.orEmpty()
                                             val nextLines = oldDetails.lineSequence().filterNot { it.startsWith("التشخيص: ") }.toMutableList()
                                             nextLines.add("التشخيص: ${dialogValue.trim()}")
+                                            val linkedPatientId = selectedVisit.patientId
+                                                ?: patients.firstOrNull { it.fullName.equals(selectedVisit.patientName, ignoreCase = true) }?.id
+                                            val linkedDoctorId = selectedVisit.doctorId
+                                                ?: doctors.firstOrNull { it.fullName.equals(selectedVisit.doctorName, ignoreCase = true) }?.id
+                                            if (linkedPatientId == null || linkedDoctorId == null) {
+                                                throw IllegalStateException("لا يمكن تحديث الزيارة دون ربط المريض والطبيب.")
+                                            }
                                             repository.updateClinicalVisitRecord(
                                                 selectedVisit.sourceRecordId, selectedVisit.patientName,
-                                                nextLines.joinToString("\n"), selectedVisit.patientId ?: 0L,
-                                                selectedVisit.doctorId ?: 0L
+                                                nextLines.joinToString("\n"), linkedPatientId, linkedDoctorId
                                             )
                                             activeVisit = null
                                         }
