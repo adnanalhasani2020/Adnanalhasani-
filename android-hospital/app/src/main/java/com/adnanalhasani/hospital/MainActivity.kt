@@ -656,7 +656,8 @@ private fun ModuleMenu(onSelect: (String) -> Unit) {
  * conservative legacy rule: their first field is required.
  */
 private val requiredFieldLabelsByModule = mapOf(
-    "reception" to setOf("رقم الملف", "اسم المريض", "القسم / العيادة", "سبب الزيارة"),\n    "patients" to setOf("رقم الملف", "اسم المريض"),
+    "reception" to setOf("رقم الملف", "اسم المريض", "القسم / العيادة", "سبب الزيارة"),
+    "patients" to setOf("رقم الملف", "اسم المريض"),
     "doctors" to setOf("الرقم الوظيفي", "اسم الطبيب"),
     "appointments" to setOf("اسم المريض", "اسم الطبيب", "التاريخ والوقت"),
     "encounters" to setOf("اسم المريض", "الشكوى الرئيسية"),
