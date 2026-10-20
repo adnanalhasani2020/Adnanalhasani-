@@ -119,7 +119,7 @@ fun LabSpecimenScreen(
                         value = selectedType.ifBlank { "اختر نوع العينة" },
                         expanded = typeMenu, onExpandedChange = { typeMenu = it },
                         options = activeTypes.mapIndexed { i, value -> i.toLong() to value },
-                        onSelect = { selectedType = activeTypes.firstOrNull { value -> value == activeTypes.getOrNull(it.toInt()) }.orEmpty(); typeMenu = false }
+                        onSelect = { selectedType = activeTypes.getOrNull(it.toInt()).orEmpty(); typeMenu = false }
                     )
                     OutlinedTextField(
                         value = actor, onValueChange = { actor = it; message = null },
