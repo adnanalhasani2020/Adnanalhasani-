@@ -115,5 +115,9 @@ class HospitalRepository(private val dao: HospitalDao, database: HospitalDatabas
 
     suspend fun updateEmergencyCase(id: Long, details: String, status: String) = dao.updateEmergencyCase(id, details, status)
 
-    suspend fun deleteRecord(id: Long) = dao.delete(id)
+    suspend fun deleteRecord(id: Long) {
+        val current = dao.recordById(id)
+        dao.delete(id)
+        if (current != null) withContext(Dispatchers.IO) { localWorkflows?.auditDeletion(current) }
+    }
 }
