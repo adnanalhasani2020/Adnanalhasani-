@@ -90,17 +90,20 @@ class PatientDetailsActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         toolbar.addView(TextView(this).apply {
-            text = "↔"
-            textSize = 23f
-            setTextColor(Color.WHITE)
+            text = "ملف طبي"
+            textSize = 11f
+            setTextColor(Color.rgb(220, 235, 255))
             gravity = Gravity.CENTER
-        }, LinearLayout.LayoutParams(dp(32), dp(48)))
+            background = rounded(Color.rgb(35, 83, 135), 20, Color.TRANSPARENT)
+            setPadding(dp(10), dp(6), dp(10), dp(6))
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         root.addView(toolbar)
 
         val scroll = ScrollView(this).apply { clipToPadding = false }
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), dp(12), dp(12), dp(20))
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            setPadding(dp(14), dp(14), dp(14), dp(24))
         }
         scroll.addView(body)
         root.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
@@ -113,7 +116,7 @@ class PatientDetailsActivity : AppCompatActivity() {
             background = rounded(Color.WHITE, 18, border)
         }
         identity.addView(TextView(this).apply {
-            text = "♙"
+            text = "👤"
             textSize = 42f
             gravity = Gravity.CENTER
             setTextColor(blue)
@@ -133,12 +136,29 @@ class PatientDetailsActivity : AppCompatActivity() {
             setPadding(0, dp(5), 0, dp(4))
         })
         identityText.addView(TextView(this).apply {
-            text = "العمر: $age    •    الهاتف: $phone"
+            text = "العمر: $age"
+            textSize = 12f
+            setTextColor(muted)
+            setPadding(0, dp(2), 0, dp(2))
+        })
+        identityText.addView(TextView(this).apply {
+            text = "الهاتف: $phone"
             textSize = 12f
             setTextColor(muted)
         })
+        identityText.addView(TextView(this).apply {
+            text = "●  $status"
+            textSize = 11f
+            setTextColor(Color.rgb(22, 125, 78))
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(0, dp(7), 0, 0)
+        })
         identity.addView(identityText, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         body.addView(identity, marginBottom())
+
+        val personalSection = sectionTitle("البيانات الشخصية")
+        val visitSection = sectionTitle("معلومات الزيارة")
+        val actionsSection = sectionTitle("إجراءات الطبيب")
 
         val tabs = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -146,7 +166,7 @@ class PatientDetailsActivity : AppCompatActivity() {
             background = rounded(Color.WHITE, 12, border)
             setPadding(dp(4), dp(4), dp(4), dp(4))
         }
-        listOf("معلومات أساسية", "الزيارة الحالية", "الحالة الطبية").forEachIndexed { index, label ->
+        listOf("البيانات الأساسية", "الزيارة الحالية", "إجراءات الطبيب").forEachIndexed { index, label ->
             tabs.addView(TextView(this).apply {
                 text = label
                 textSize = 12f
@@ -155,11 +175,15 @@ class PatientDetailsActivity : AppCompatActivity() {
                 typeface = if (index == 0) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
                 setPadding(dp(8), dp(12), dp(8), dp(12))
                 if (index == 0) background = rounded(Color.rgb(239, 246, 255), 9, Color.TRANSPARENT)
+                setOnClickListener {
+                    val target = when (index) { 1 -> visitSection; 2 -> actionsSection; else -> personalSection }
+                    scroll.post { scroll.smoothScrollTo(0, target.top) }
+                }
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         }
         body.addView(tabs, marginBottom())
 
-        body.addView(sectionTitle("البيانات الشخصية"), marginBottomSmall())
+        body.addView(personalSection, marginBottomSmall())
         body.addView(infoCard(listOf(
             "الاسم الكامل" to name,
             "رقم الملف" to fileNo,
@@ -168,7 +192,7 @@ class PatientDetailsActivity : AppCompatActivity() {
             "ملاحظات الملف" to notes
         )), marginBottom())
 
-        body.addView(sectionTitle("معلومات الزيارة"), marginBottomSmall())
+        body.addView(visitSection, marginBottomSmall())
         body.addView(infoCard(listOf(
             "تاريخ الزيارة" to visitTime,
             "القسم" to "العيادة العامة",
@@ -179,7 +203,7 @@ class PatientDetailsActivity : AppCompatActivity() {
             "الطبيب المعالج" to doctor
         )), marginBottom())
 
-        body.addView(sectionTitle("إجراءات الطبيب"), marginBottomSmall())
+        body.addView(actionsSection, marginBottomSmall())
         val actions = listOf(
             "إدخال التشخيص" to { showEntry("encounters", name, doctor, "إدخال التشخيص", listOf("الشكوى الرئيسية", "التشخيص", "ملاحظات"), visitTime) },
             "الفحوصات المطلوبة" to { showEntry("lab", name, doctor, "طلب فحص", listOf("اسم الفحص", "ملاحظات"), visitTime) },
@@ -293,6 +317,8 @@ class PatientDetailsActivity : AppCompatActivity() {
                 textSize = 14f
                 setTextColor(ink)
                 typeface = Typeface.DEFAULT_BOLD
+                gravity = Gravity.START
+                maxWidth = dp(220)
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             card.addView(row)
             if (index != rows.lastIndex) card.addView(View(this).apply { setBackgroundColor(border) },
