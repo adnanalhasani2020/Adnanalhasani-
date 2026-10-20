@@ -123,6 +123,7 @@ class DoctorWorkflowActivity : AppCompatActivity() {
         connectionLabel.text = "جارٍ قراءة قاعدة البيانات المحلية..."
         io.execute {
             try {
+                DemoDataSeeder.seedIfEmpty(dao)
                 val patientRows = dao.patients().first()
                 val appointmentRows = dao.appointments().first()
                 val visitRows = dao.clinicalVisits().first()
