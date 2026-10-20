@@ -1,6 +1,7 @@
 package com.adnanalhasani.hospital
 
 import android.os.Bundle
+import android.content.Intent
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import androidx.activity.ComponentActivity
@@ -209,6 +210,12 @@ private fun HospitalWorkspace(repository: HospitalRepository) {
     var showMenu by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    LaunchedEffect(selected) {
+        if (selected == "doctor_workspace") {
+            selected = "home"
+            context.startActivity(Intent(context, DoctorWorkflowActivity::class.java))
+        }
+    }
     var exportStatus by remember { mutableStateOf<String?>(null) }
     val businessProfile by repository.businessProfile().collectAsState(initial = null)
     LaunchedEffect(Unit) { repository.seedDefaultReferenceCatalogs() }
@@ -352,7 +359,7 @@ private fun HospitalWorkspace(repository: HospitalRepository) {
                     )
                     selected == "reports" -> Reports(all)
                     selected == "audit" -> AuditHistoryScreen(repository)
-                    selected == "doctor_workspace" -> DoctorWorkspaceScreen(repository)
+                    selected == "doctor_workspace" -> Box(Modifier.fillMaxSize())
                     selected == "catalogs" -> ReferenceCatalogScreen(repository)
                     selected == "business" -> BusinessProfileScreen(
                         profile = businessProfile,
