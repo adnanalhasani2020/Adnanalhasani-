@@ -141,6 +141,28 @@ def add_medicine(db: HospitalDB, *, sku: str, name: str, quantity: int,
         return int(ident)
 
 
+def restock_medicine(db: HospitalDB, *, medicine_id: int, quantity: int,
+                     actor: str, at: str, reference: str = "") -> int:
+    """Receive stock atomically and write an audit event."""
+    if type(medicine_id) is not int or medicine_id <= 0:
+        raise HospitalError("medicine_id must be a positive integer")
+    if type(quantity) is not int or quantity <= 0:
+        raise HospitalError("restock quantity must be a positive integer")
+    _parse_utc(at, "at")
+    if not isinstance(reference, str):
+        raise HospitalError("reference must be text")
+    with db.connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute("SELECT quantity,active FROM medicines WHERE id=?", (medicine_id,)).fetchone()
+        if row is None or not row["active"]:
+            raise HospitalError("active medicine not found")
+        conn.execute("UPDATE medicines SET quantity=quantity+? WHERE id=?", (quantity, medicine_id))
+        db._audit(conn, actor, "medicine.stock_received", "medicine", medicine_id, at,
+                  {"quantity_added": quantity, "reference": reference.strip()})
+        conn.commit()
+        return int(row["quantity"] + quantity)
+
+
 def prescribe_medicine(db: HospitalDB, *, patient_id: int, medicine_id: int, dose: str,
                        frequency: str, duration: str, quantity: int, prescribed_at: str,
                        actor: str, encounter_id: int | None = None) -> int:
