@@ -70,11 +70,15 @@ fun LaboratoryScreen() {
     val scope = rememberCoroutineScope()
     val orders by dao.labOrders().collectAsState(initial = emptyList())
     val specimens by dao.labSpecimens().collectAsState(initial = emptyList())
+    val filteredSpecimens by dao.searchLabSpecimens(searchQuery.trim(), statusFilter).collectAsState(initial = emptyList())
     val settings by dao.labWorkflowSettings().collectAsState(initial = emptyList())
 
     var selectedOrderId by remember { mutableStateOf<Long?>(null) }
     var orderMenuExpanded by remember { mutableStateOf(false) }
     var specimenCode by remember { mutableStateOf("") }
+    var searchQuery by remember { mutableStateOf("") }
+    var statusFilter by remember { mutableStateOf("all") }
+    var statusMenuExpanded by remember { mutableStateOf(false) }
     var responsibleEmployee by remember { mutableStateOf("") }
     var specimenType by remember { mutableStateOf("") }
     var rejectionReason by remember { mutableStateOf("") }
@@ -274,11 +278,65 @@ fun LaboratoryScreen() {
         }
         item {
             Text("سجل العينات", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text("ابحث برمز العينة أو نوعها أو اسم المريض أو الفحص أو رقم الطلب.", style = MaterialTheme.typography.bodySmall)
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                label = { Text("البحث في العينات") },
+                placeholder = { Text("رمز العينة، المريض، الفحص...") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+            ExposedDropdownMenuBox(
+                expanded = statusMenuExpanded,
+                onExpandedChange = { statusMenuExpanded = !statusMenuExpanded }
+            ) {
+                OutlinedTextField(
+                    value = when (statusFilter) {
+                        "all" -> "كل الحالات"
+                        "collected" -> "تم جمع العينة"
+                        "received" -> "استُلمت في المختبر"
+                        "processing" -> "قيد المعالجة"
+                        "completed" -> "مكتملة"
+                        "rejected" -> "مرفوضة"
+                        else -> statusFilter
+                    },
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("تصفية حسب الحالة") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = statusMenuExpanded) },
+                    modifier = Modifier.fillMaxWidth().menuAnchor()
+                )
+                ExposedDropdownMenu(
+                    expanded = statusMenuExpanded,
+                    onDismissRequest = { statusMenuExpanded = false }
+                ) {
+                    listOf(
+                        "all" to "كل الحالات",
+                        "collected" to "تم جمع العينة",
+                        "received" to "استُلمت في المختبر",
+                        "processing" to "قيد المعالجة",
+                        "completed" to "مكتملة",
+                        "rejected" to "مرفوضة"
+                    ).forEach { (value, label) ->
+                        DropdownMenuItem(
+                            text = { Text(label) },
+                            onClick = { statusFilter = value; statusMenuExpanded = false }
+                        )
+                    }
+                }
+            }
+            Text("النتائج المطابقة: ${filteredSpecimens.size} من أصل ${specimens.size}", style = MaterialTheme.typography.bodySmall)
         }
-        if (specimens.isEmpty()) {
-            item { Text("لا توجد عينات مسجلة حتى الآن.") }
+        if (filteredSpecimens.isEmpty()) {
+            item {
+                Text(
+                    if (specimens.isEmpty()) "لا توجد عينات مسجلة حتى الآن."
+                    else "لا توجد عينات تطابق البحث أو الحالة المحددة."
+                )
+            }
         }
-        items(specimens, key = { it.id }) { specimen ->
+        items(filteredSpecimens, key = { it.id }) { specimen ->
             val order = orders.firstOrNull { it.id == specimen.labOrderId }
             val events by dao.labSpecimenEvents(specimen.id).collectAsState(initial = emptyList())
             Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
