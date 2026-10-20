@@ -102,6 +102,16 @@ class HospitalWorkflowTests(unittest.TestCase):
             restock_medicine(self.db, medicine_id=medicine, quantity=1.5,
                 actor="pharmacist", at="2026-01-02T08:00:00Z")
 
+    def test_dispensing_cannot_precede_prescription_timestamp(self):
+        medicine = add_medicine(self.db, sku="MED-TIME", name="Timestamp test", quantity=5,
+            reorder_level=1, actor="pharmacist", at="2026-01-01T08:00:00Z")
+        prescription = prescribe_medicine(self.db, patient_id=self.patient, medicine_id=medicine,
+            dose="1 tablet", frequency="daily", duration="2 days", quantity=1,
+            prescribed_at="2026-01-02T08:00:00Z", actor="doctor")
+        with self.assertRaisesRegex(HospitalError, "cannot precede"):
+            dispense_prescription(self.db, prescription_id=prescription,
+                dispensed_at="2026-01-02T07:59:00Z", actor="pharmacist")
+
     def test_dispensing_deducts_stock_once_and_rejects_insufficient_stock(self):
         medicine = add_medicine(self.db, sku="MED-1", name="Test medicine", quantity=5,
             reorder_level=1, actor="pharmacist", at="2026-01-01T08:00:00")
