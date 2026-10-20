@@ -515,7 +515,7 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                     profile = data["activity_profile"]
                     modules = data["modules"]
                     allowed_profiles = {"general", "outpatient", "specialty", "admin"}
-                    allowed_modules = {"appointments", "encounters", "admissions", "billing", "records", "audit"}
+                    allowed_modules = {"appointments", "encounters", "admissions", "billing", "records", "pharmacy", "laboratory", "audit"}
                     if profile not in allowed_profiles or not isinstance(modules, list):
                         raise HospitalError("invalid manager settings proposal")
                     if any(not isinstance(item, str) or item not in allowed_modules for item in modules):
