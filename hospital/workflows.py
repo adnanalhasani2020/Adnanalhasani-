@@ -168,13 +168,14 @@ def add_medicine(db: HospitalDB, *, sku: str, name: str, quantity: int,
                VALUES(?,?,NULL,?,?,?,?)""",
             (ident, batch_no, quantity, at, "opening stock; expiry not supplied", actor),
         )
-        conn.execute(
-            """INSERT INTO medicine_batch_movements
-               (batch_id,medicine_id,movement_type,quantity_delta,balance_after,reference,actor,occurred_at)
-               VALUES(?,?,?,?,?,?,?,?)""",
-            (batch_cur.lastrowid, ident, "initial_stock", quantity, quantity,
-             "opening stock; expiry not supplied", actor, at),
-        )
+        if quantity > 0:
+            conn.execute(
+                """INSERT INTO medicine_batch_movements
+                   (batch_id,medicine_id,movement_type,quantity_delta,balance_after,reference,actor,occurred_at)
+                   VALUES(?,?,?,?,?,?,?,?)""",
+                (batch_cur.lastrowid, ident, "initial_stock", quantity, quantity,
+                 "opening stock; expiry not supplied", actor, at),
+            )
         db._audit(conn, actor, "medicine.created", "medicine", ident, at,
                   {"initial_quantity": quantity})
         conn.commit()
@@ -370,7 +371,7 @@ def dispense_prescription(db: HospitalDB, *, prescription_id: int,
                 """INSERT INTO medicine_batch_movements
                    (batch_id,medicine_id,movement_type,quantity_delta,balance_after,
                     prescription_id,reference,actor,occurred_at)
-                   VALUES(?,?, 'dispense', ?,?,?,?,?,?)""",
+                   VALUES(?,?, 'dispense', ?,?,?,?,?)""",
                 (lot["id"], row["medicine_id"], -take, balance, prescription_id,
                  f"prescription:{prescription_id}", actor, dispensed_at),
             )
