@@ -133,7 +133,7 @@ fun LaboratoryScreen() {
                         Text("قيد المتابعة: $pendingCount", color = MaterialTheme.colorScheme.primary)
                         Text("تجاوزت الزمن المستهدف: $overdueCount", color = if (overdueCount > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
                     }
-                    Text("الزمن المستهدف الحالي: \${turnaroundHours.toIntOrNull()?.coerceIn(1, 720) ?: 24} ساعة لكل عينة غير مكتملة.", style = MaterialTheme.typography.bodySmall)
+                    Text("الزمن المستهدف الحالي: ${turnaroundHours.toIntOrNull()?.coerceIn(1, 720) ?: 24} ساعة لكل عينة غير مكتملة.", style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
