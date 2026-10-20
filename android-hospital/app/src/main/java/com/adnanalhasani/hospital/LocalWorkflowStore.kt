@@ -188,6 +188,40 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
                     "أدخل نتيجة الفحص قبل تحويل الحالة إلى مكتمل."
                 }
             }
+            "invoices" -> {
+                require(db.long("SELECT id FROM patients WHERE fullName=? COLLATE NOCASE LIMIT 1", f.field("اسم المريض")) != null) {
+                    "المريض غير مسجل في قاعدة البيانات المحلية."
+                }
+                val amount = HospitalFieldValidation.toMinorUnitsOrNull(f.field("المبلغ"))
+                require(amount != null && amount >= 0L) { "قيمة الفاتورة غير صحيحة." }
+                val oldNumber = existingId?.let { db.string("SELECT invoiceNumber FROM invoices WHERE invoiceNumber=(SELECT title FROM hospital_records WHERE id=?)", it) }
+                val duplicate = db.long("SELECT id FROM invoices WHERE invoiceNumber=? AND invoiceNumber<>COALESCE(?, '') LIMIT 1",
+                    record.title, oldNumber)
+                require(duplicate == null) { "رقم الفاتورة مستخدم بالفعل." }
+            }
+            "payments" -> {
+                val invoiceNumber = f.field("رقم الفاتورة").ifBlank { record.title }
+                val invoiceId = db.long("SELECT id FROM invoices WHERE invoiceNumber=? LIMIT 1", invoiceNumber)
+                require(invoiceId != null) { "الفاتورة غير موجودة في قاعدة البيانات المحلية." }
+                val invoiceStatus = db.string("SELECT status FROM invoices WHERE id=?", invoiceId).orEmpty()
+                require(!invoiceStatus.contains("void", true) && !invoiceStatus.contains("ملغ")) {
+                    "لا يمكن الدفع على فاتورة ملغاة."
+                }
+                val amount = HospitalFieldValidation.toMinorUnitsOrNull(f.field("المبلغ المدفوع"))
+                require(amount != null && amount > 0L) { "قيمة الدفعة يجب أن تكون أكبر من صفر." }
+                require(f.field("طريقة الدفع").isNotBlank()) { "طريقة الدفع مطلوبة." }
+                val invoiceTotal = db.long("SELECT amountMinor FROM invoices WHERE id=?", invoiceId) ?: 0L
+                val oldTitle = existingId?.let { db.string("SELECT title FROM hospital_records WHERE id=?", it) }
+                val oldPaymentId = if (existingId != null) db.long(
+                    "SELECT id FROM payments WHERE invoiceNumber=? AND createdAt=(SELECT createdAt FROM hospital_records WHERE id=?) LIMIT 1",
+                    oldTitle ?: invoiceNumber, existingId
+                ) else null
+                val alreadyPaid = db.long("SELECT COALESCE(SUM(amountMinor),0) FROM payments WHERE invoiceId=? AND id<>COALESCE(?, -1)",
+                    invoiceId, oldPaymentId) ?: 0L
+                require(amount <= invoiceTotal - alreadyPaid) {
+                    "قيمة الدفعة تتجاوز الرصيد المتبقي للفاتورة."
+                }
+            }
         }
     }
 
@@ -417,6 +451,39 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
                                WHERE sourceRecordId=?""",
                             arrayOf(medId, medication, qty, status, dispensedAt, sourceRecordId)
                         )
+                    }
+                }
+                "invoices" -> {
+                    val invoiceNumber = f.field("رقم الفاتورة").ifBlank { record.title }
+                    val invoiceId = db.long("SELECT id FROM invoices WHERE invoiceNumber=? LIMIT 1", invoiceNumber)
+                    if (invoiceId != null) {
+                        val total = db.long("SELECT amountMinor FROM invoices WHERE id=?", invoiceId) ?: 0L
+                        val paid = db.long("SELECT COALESCE(SUM(amountMinor),0) FROM payments WHERE invoiceId=?", invoiceId) ?: 0L
+                        val entered = f.field("الحالة")
+                        val status = when {
+                            entered.contains("ملغ") || entered.equals("void", true) -> "void"
+                            paid <= 0L -> "unpaid"
+                            paid < total -> "partial"
+                            else -> "paid"
+                        }
+                        db.execSQL("UPDATE invoices SET status=? WHERE id=?", arrayOf(status, invoiceId))
+                    }
+                }
+                "payments" -> {
+                    val invoiceNumber = f.field("رقم الفاتورة").ifBlank { record.title }
+                    val invoiceId = db.long("SELECT id FROM invoices WHERE invoiceNumber=? LIMIT 1", invoiceNumber)
+                    if (invoiceId != null) {
+                        val total = db.long("SELECT amountMinor FROM invoices WHERE id=?", invoiceId) ?: 0L
+                        val paid = db.long("SELECT COALESCE(SUM(amountMinor),0) FROM payments WHERE invoiceId=?", invoiceId) ?: 0L
+                        val currentStatus = db.string("SELECT status FROM invoices WHERE id=?", invoiceId).orEmpty()
+                        if (!currentStatus.equals("void", true)) {
+                            val status = when {
+                                paid <= 0L -> "unpaid"
+                                paid < total -> "partial"
+                                else -> "paid"
+                            }
+                            db.execSQL("UPDATE invoices SET status=? WHERE id=?", arrayOf(status, invoiceId))
+                        }
                     }
                 }
                 "lab" -> {
