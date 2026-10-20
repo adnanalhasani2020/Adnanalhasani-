@@ -326,7 +326,7 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                                  "pagination": {"limit": limit, "offset": offset, "count": len(rows)}})
             elif route.startswith("/api/") and route.count("/") == 2:
                 collections = {
-                    "/api/patients": ("SELECT id,patient_no,full_name,phone,active,created_at FROM patients WHERE (?='' OR patient_no LIKE ? OR full_name LIKE ?) ORDER BY id DESC", 2),
+                    "/api/patients": ("SELECT id,patient_no,full_name,date_of_birth,sex,phone,address,allergies,active,created_at FROM patients WHERE (?='' OR patient_no LIKE ? OR full_name LIKE ? OR COALESCE(phone,'') LIKE ?) ORDER BY id DESC", 3),
                     "/api/doctors": ("SELECT id,employee_no,full_name,specialty,phone,active FROM doctors WHERE (?='' OR employee_no LIKE ? OR full_name LIKE ? OR specialty LIKE ?) ORDER BY id DESC", 3),
                     "/api/appointments": ("SELECT a.id,a.patient_id,p.full_name AS patient_name,a.doctor_id,d.full_name AS doctor_name,a.starts_at,a.ends_at,a.status,a.reason FROM appointments a JOIN patients p ON p.id=a.patient_id JOIN doctors d ON d.id=a.doctor_id WHERE (?='' OR p.full_name LIKE ? OR p.patient_no LIKE ? OR d.full_name LIKE ?) ORDER BY a.starts_at DESC", 3),
                     "/api/encounters": ("SELECT e.id,e.patient_id,p.full_name AS patient_name,e.doctor_id,d.full_name AS doctor_name,e.appointment_id,e.opened_at,e.closed_at,e.chief_complaint,e.diagnosis,e.clinical_notes,e.status FROM encounters e JOIN patients p ON p.id=e.patient_id LEFT JOIN doctors d ON d.id=e.doctor_id WHERE (?='' OR p.full_name LIKE ? OR p.patient_no LIKE ? OR COALESCE(d.full_name,'') LIKE ? OR e.status LIKE ?) ORDER BY e.id DESC", 4),
