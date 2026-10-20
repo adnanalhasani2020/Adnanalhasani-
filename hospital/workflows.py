@@ -155,6 +155,12 @@ def add_medicine(db: HospitalDB, *, sku: str, name: str, quantity: int,
         cur = conn.execute("""INSERT INTO medicines(sku,name,quantity,reorder_level,unit)
             VALUES(?,?,?,?,?)""", (sku.strip(), name.strip(), quantity, reorder_level, unit))
         ident = cur.lastrowid
+        conn.execute(
+            """INSERT INTO medicine_stock_movements
+               (medicine_id,movement_type,quantity_delta,balance_after,source_key,actor,occurred_at)
+               VALUES(?,?,?,?,?,?,?)""",
+            (ident, "initial_stock", quantity, quantity, f"medicine:create:{ident}", actor, at),
+        )
         db._audit(conn, actor, "medicine.created", "medicine", ident, at,
                   {"initial_quantity": quantity})
         conn.commit()
@@ -176,9 +182,17 @@ def restock_medicine(db: HospitalDB, *, medicine_id: int, quantity: int,
         row = conn.execute("SELECT quantity,active FROM medicines WHERE id=?", (medicine_id,)).fetchone()
         if row is None or not row["active"]:
             raise HospitalError("active medicine not found")
-        conn.execute("UPDATE medicines SET quantity=quantity+? WHERE id=?", (quantity, medicine_id))
+        new_balance = int(row["quantity"] + quantity)
+        conn.execute("UPDATE medicines SET quantity=? WHERE id=?", (new_balance, medicine_id))
+        conn.execute(
+            """INSERT INTO medicine_stock_movements
+               (medicine_id,movement_type,quantity_delta,balance_after,reference,actor,occurred_at)
+               VALUES(?,?,?,?,?,?,?)""",
+            (medicine_id, "restock", quantity, new_balance, reference.strip(), actor, at),
+        )
         db._audit(conn, actor, "medicine.stock_received", "medicine", medicine_id, at,
-                  {"quantity_added": quantity, "reference": reference.strip()})
+                  {"quantity_added": quantity, "reference": reference.strip(),
+                   "balance_after": new_balance})
         conn.commit()
         return int(row["quantity"] + quantity)
 
@@ -233,12 +247,23 @@ def dispense_prescription(db: HospitalDB, *, prescription_id: int,
             raise HospitalError("medicine is inactive")
         if row["stock"] < row["quantity"]:
             raise HospitalError("insufficient medicine stock")
-        conn.execute("UPDATE medicines SET quantity=quantity-? WHERE id=?",
-                     (row["quantity"], row["medicine_id"]))
+        new_balance = int(row["stock"] - row["quantity"])
+        conn.execute("UPDATE medicines SET quantity=? WHERE id=?",
+                     (new_balance, row["medicine_id"]))
         conn.execute("UPDATE prescriptions SET status='dispensed' WHERE id=?",
                      (prescription_id,))
+        conn.execute(
+            """INSERT INTO medicine_stock_movements
+               (medicine_id,movement_type,quantity_delta,balance_after,source_key,
+                reference,prescription_id,actor,occurred_at)
+               VALUES(?,?,?,?,?,?,?,?,?)""",
+            (row["medicine_id"], "dispense", -int(row["quantity"]), new_balance,
+             f"prescription:dispense:{prescription_id}", f"prescription:{prescription_id}",
+             prescription_id, actor, dispensed_at),
+        )
         db._audit(conn, actor, "prescription.dispensed", "prescription", prescription_id,
-                  dispensed_at, {"medicine_id": row["medicine_id"], "quantity": row["quantity"]})
+                  dispensed_at, {"medicine_id": row["medicine_id"], "quantity": row["quantity"],
+                                 "balance_after": new_balance})
         conn.commit()
 
 
