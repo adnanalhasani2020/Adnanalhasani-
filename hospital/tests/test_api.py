@@ -132,12 +132,12 @@ class HospitalAPITests(unittest.TestCase):
         self.assertEqual(payload["pagination"]["count"], 1)
         self.assertEqual(payload["pagination"]["total"], 2)
         status, filtered = self.request(
-            f"/api/inventory/stock-movements?medicine_id={first}&movement_type=opening"
+            f"/api/inventory/stock-movements?medicine_id={first}&movement_type=initial_stock"
         )
         self.assertEqual(status, 200)
         self.assertEqual(len(filtered["data"]), 1)
         self.assertEqual(filtered["data"][0]["medicine_id"], first)
-        self.assertEqual(filtered["data"][0]["movement_type"], "opening")
+        self.assertEqual(filtered["data"][0]["movement_type"], "initial_stock")
         self.assertNotEqual(filtered["data"][0]["medicine_id"], second)
         self.assertIn("does not adjust inventory", filtered["scope"])
 
