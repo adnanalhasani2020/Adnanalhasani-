@@ -67,6 +67,8 @@ data class Module(
 )
 
 private val modules = listOf(
+    Module("reception", "الاستقبال والتحصيل", "تسجيل بيانات المريض وإحالته للعيادة وتوثيق التحصيل", Icons.Default.HowToReg, Color(0xFF548F88),
+        listOf("رقم الملف" to "رقم ملف المريض", "اسم المريض" to "الاسم الرباعي", "رقم الهوية" to "رقم الهوية أو الوثيقة", "تاريخ الميلاد" to "YYYY-MM-DD", "العمر" to "العمر بالسنوات", "الجنس" to "ذكر / أنثى", "رقم الهاتف" to "رقم التواصل", "العنوان" to "المدينة والعنوان", "فصيلة الدم" to "فصيلة الدم", "الحساسية" to "الحساسيات المعروفة", "التاريخ الطبي الأساسي" to "أمراض مزمنة وأدوية حالية", "القسم / العيادة" to "القسم المطلوب", "اسم الطبيب" to "الطبيب المختص", "سبب الزيارة" to "الشكوى الرئيسية", "رقم الفاتورة" to "رقم الفاتورة", "إجمالي الرسوم" to "المبلغ المستحق", "المبلغ المدفوع" to "المبلغ المحصل", "طريقة الدفع" to "نقداً / بطاقة / تحويل / تأمين", "مرجع الإيصال" to "رقم الإيصال")),
     Module("patients", "المرضى", "ملفات المرضى وبيانات التواصل", Icons.Default.Groups, Color(0xFF548F88),
         listOf("رقم الملف" to "مثال: PT-1001", "اسم المريض" to "الاسم الكامل", "رقم الهاتف" to "رقم التواصل", "العمر" to "العمر", "ملاحظات" to "ملاحظات إدارية")),
     Module("doctors", "الأطباء", "الطاقم الطبي والتخصصات", Icons.Default.MedicalServices, Color(0xFF7897B7),
@@ -322,6 +324,7 @@ private fun HospitalWorkspace(repository: HospitalRepository) {
                 NavigationBar(containerColor = Color.White, tonalElevation = 8.dp) {
                     val tabs = listOf(
                         Triple("home", "الرئيسية", Icons.Default.Home),
+                        Triple("reception", "الاستقبال", Icons.Default.HowToReg),
                         Triple("patients", "المرضى", Icons.Default.Groups),
                         Triple("appointments", "المواعيد", Icons.Default.CalendarMonth),
                         Triple("invoices", "المالية", Icons.Default.ReceiptLong),
@@ -352,6 +355,7 @@ private fun HospitalWorkspace(repository: HospitalRepository) {
                     )
                     selected == "reports" -> Reports(all)
                     selected == "audit" -> AuditHistoryScreen(repository)
+                    selected == "reception" -> ReceptionScreen(repository)
                     selected == "doctor_workspace" -> DoctorWorkspaceScreen(repository)
                     selected == "catalogs" -> ReferenceCatalogScreen(repository)
                     selected == "business" -> BusinessProfileScreen(
@@ -406,7 +410,7 @@ private fun HospitalWorkspace(repository: HospitalRepository) {
 private fun Dashboard(all: List<HospitalRecord>, onSelect: (String) -> Unit, onAdd: (String) -> Unit) {
     var query by remember { mutableStateOf("") }
     val groups = listOf(
-        Triple("الرعاية والملفات الطبية", "المرضى والزيارات والمواعيد", listOf("patients", "doctors", "doctor_workspace", "appointments", "encounters", "nursing", "admissions", "beds", "discharge", "referrals", "consents", "handover")),
+        Triple("الرعاية والملفات الطبية", "المرضى والزيارات والمواعيد", listOf("reception", "patients", "doctors", "doctor_workspace", "appointments", "encounters", "nursing", "admissions", "beds", "discharge", "referrals", "consents", "handover")),
         Triple("الطوارئ والرعاية المتخصصة", "خدمات الحالات الحرجة والعيادات", listOf("emergency", "triage", "queue", "icu", "ambulance", "bloodbank", "operations", "anesthesia", "dialysis", "dental", "pediatrics", "homecare", "vaccination")),
         Triple("الفحوصات والصيدلية", "المختبر والأشعة والأدوية والمخزون", listOf("lab", "lab_catalog", "radiology", "pharmacy", "prescriptions", "refills", "inventory", "pharmacy_suppliers", "suppliers", "sterilization", "equipment")),
         Triple("المالية والتحصيل", "الفواتير والمدفوعات والتأمين", listOf("invoices", "payments", "cashier", "expenses", "insurance", "insurance_companies", "payroll", "contracts")),
@@ -653,6 +657,7 @@ private fun ModuleMenu(onSelect: (String) -> Unit) {
  * conservative legacy rule: their first field is required.
  */
 private val requiredFieldLabelsByModule = mapOf(
+    "reception" to setOf("رقم الملف", "اسم المريض", "القسم / العيادة", "سبب الزيارة"),
     "patients" to setOf("رقم الملف", "اسم المريض"),
     "doctors" to setOf("الرقم الوظيفي", "اسم الطبيب"),
     "appointments" to setOf("اسم المريض", "اسم الطبيب", "التاريخ والوقت"),
@@ -697,7 +702,7 @@ private fun requiredFieldsForModule(module: Module): Set<String> =
         ?: setOfNotNull(module.fields.firstOrNull()?.first)
 
 private val numericFieldLabels = setOf(
-    "العمر", "النبض", "التنفس", "الحرارة", "عدد الأسرة", "عدد الوحدات",
+    "العمر", "إجمالي الرسوم", "المبلغ المدفوع", "النبض", "التنفس", "الحرارة", "عدد الأسرة", "عدد الوحدات",
     "حد إعادة الطلب", "المبلغ", "المبلغ المدفوع", "الكمية", "الكمية الحالية",
     "الكمية المطلوبة", "قيمة الشراء", "المبلغ المطالب به", "الطابق", "الوزن",
     "رقم السن", "مدة الجلسة", "الراتب الأساسي", "البدلات", "الخصومات",

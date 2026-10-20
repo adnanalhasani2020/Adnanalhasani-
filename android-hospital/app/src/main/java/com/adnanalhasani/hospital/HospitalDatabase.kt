@@ -880,6 +880,25 @@ interface HospitalDao {
     @Query("SELECT id FROM invoices WHERE invoiceNumber = :number LIMIT 1")
     suspend fun findInvoiceIdByNumber(number: String): Long?
 
+    @Query("SELECT id FROM patients WHERE fileNumber = :fileNumber LIMIT 1")
+    suspend fun findPatientIdByFileNumber(fileNumber: String): Long?
+
+    @Transaction
+    suspend fun saveReceptionBundle(
+        patientRecord: HospitalRecord,
+        visitRecord: HospitalRecord,
+        invoiceRecord: HospitalRecord,
+        paymentRecord: HospitalRecord?,
+        doctorId: Long?
+    ) {
+        saveRecord(patientRecord)
+        val patientId = findPatientIdByFileNumber(patientRecord.title)
+            ?: throw IllegalStateException("تعذر إنشاء ملف المريض")
+        saveRecord(visitRecord, linkedPatientId = patientId, linkedDoctorId = doctorId)
+        saveRecord(invoiceRecord, linkedPatientId = patientId)
+        if (paymentRecord != null) saveRecord(paymentRecord, linkedPatientId = patientId)
+    }
+
     @Query("SELECT * FROM patients ORDER BY createdAt DESC")
     fun patients(): Flow<List<PatientEntity>>
 
