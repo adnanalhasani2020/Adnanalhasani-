@@ -84,6 +84,41 @@ data class LabOrderEntity(
     val clinicalVisitId: Long? = null
 )
 
+
+@Entity(
+    tableName = "lab_specimens",
+    foreignKeys = [ForeignKey(entity = LabOrderEntity::class, parentColumns = ["id"], childColumns = ["labOrderId"], onDelete = ForeignKey.CASCADE)],
+    indices = [Index(value = ["labOrderId"]), Index(value = ["status", "collectedAt"]), Index(value = ["specimenCode"], unique = true)]
+)
+data class LabSpecimenEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val labOrderId: Long,
+    val specimenCode: String,
+    val specimenType: String,
+    val status: String = "collected",
+    val collectedAt: Long,
+    val receivedAt: Long? = null,
+    val receivedBy: String = "",
+    val rejectionReason: String = "",
+    val notes: String = "",
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
+@Entity(
+    tableName = "lab_specimen_events",
+    foreignKeys = [ForeignKey(entity = LabSpecimenEntity::class, parentColumns = ["id"], childColumns = ["specimenId"], onDelete = ForeignKey.CASCADE)],
+    indices = [Index(value = ["specimenId", "occurredAt"])]
+)
+data class LabSpecimenEventEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val specimenId: Long,
+    val fromStatus: String?,
+    val toStatus: String,
+    val occurredAt: Long,
+    val actor: String,
+    val note: String = ""
+)
 @Entity(tableName = "radiology_orders", foreignKeys = [ForeignKey(entity = HospitalRecord::class, parentColumns = ["id"], childColumns = ["sourceRecordId"], onDelete = ForeignKey.CASCADE), ForeignKey(entity = PatientEntity::class, parentColumns = ["id"], childColumns = ["patientId"], onDelete = ForeignKey.SET_NULL), ForeignKey(entity = DoctorEntity::class, parentColumns = ["id"], childColumns = ["doctorId"], onDelete = ForeignKey.SET_NULL)], indices = [Index(value = ["sourceRecordId"], unique = true), Index(value = ["patientId"]), Index(value = ["doctorId"]), Index(value = ["clinicalVisitId"]), Index(value = ["status", "createdAt"])])
 data class RadiologyOrderEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -392,6 +427,53 @@ interface HospitalDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveEmergencyCase(entity: EmergencyCaseEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveIcuStay(entity: IcuStayEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveInventoryItem(entity: InventoryItemEntity)
+    @Insert
+    suspend fun insertLabSpecimen(entity: LabSpecimenEntity): Long
+
+    @Insert
+    suspend fun insertLabSpecimenEvent(entity: LabSpecimenEventEntity)
+
+    @Query("SELECT * FROM lab_specimens ORDER BY createdAt DESC")
+    fun labSpecimens(): Flow<List<LabSpecimenEntity>>
+
+    @Query("SELECT * FROM lab_specimens WHERE id = :id LIMIT 1")
+    suspend fun labSpecimenById(id: Long): LabSpecimenEntity?
+
+    @Query("UPDATE lab_specimens SET status = :status, receivedAt = CASE WHEN :status = 'received' THEN :at ELSE receivedAt END, receivedBy = CASE WHEN :status = 'received' THEN :actor ELSE receivedBy END, rejectionReason = CASE WHEN :status = 'rejected' THEN :note ELSE rejectionReason END, updatedAt = :at WHERE id = :id")
+    suspend fun updateLabSpecimenStatus(id: Long, status: String, actor: String, note: String, at: Long): Int
+
+    @Query("SELECT * FROM lab_specimen_events WHERE specimenId = :specimenId ORDER BY occurredAt DESC, id DESC")
+    fun labSpecimenEvents(specimenId: Long): Flow<List<LabSpecimenEventEntity>>
+
+    @Transaction
+    suspend fun createLabSpecimenWithEvent(specimen: LabSpecimenEntity, actor: String): Long {
+        val id = insertLabSpecimen(specimen)
+        insertLabSpecimenEvent(LabSpecimenEventEntity(
+            specimenId = id, fromStatus = null, toStatus = "collected",
+            occurredAt = specimen.createdAt, actor = actor, note = specimen.notes
+        ))
+        return id
+    }
+
+    @Transaction
+    suspend fun transitionLabSpecimen(id: Long, nextStatus: String, actor: String, note: String, at: Long): Boolean {
+        val current = labSpecimenById(id) ?: return false
+        val allowed = when (current.status) {
+            "collected" -> setOf("received", "rejected")
+            "received" -> setOf("processing", "rejected")
+            "processing" -> setOf("accepted", "rejected")
+            else -> emptySet()
+        }
+        if (nextStatus !in allowed || actor.isBlank()) return false
+        if (nextStatus == "rejected" && note.isBlank()) return false
+        if (updateLabSpecimenStatus(id, nextStatus, actor.trim(), note.trim(), at) != 1) return false
+        insertLabSpecimenEvent(LabSpecimenEventEntity(
+            specimenId = id, fromStatus = current.status, toStatus = nextStatus,
+            occurredAt = at, actor = actor.trim(), note = note.trim()
+        ))
+        return true
+    }
+
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveLabOrder(entity: LabOrderEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveRadiologyOrder(entity: RadiologyOrderEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveMaintenanceTicket(entity: MaintenanceTicketEntity)
@@ -1014,6 +1096,8 @@ interface HospitalDao {
         IcuStayEntity::class,
         InventoryItemEntity::class,
         LabOrderEntity::class,
+        LabSpecimenEntity::class,
+        LabSpecimenEventEntity::class,
         RadiologyOrderEntity::class,
         PrescriptionOrderEntity::class,
         MaintenanceTicketEntity::class,
@@ -1028,7 +1112,7 @@ interface HospitalDao {
         RecordAuditLogEntity::class,
         ClinicalVisitEntity::class
     ],
-    version = 14,
+    version = 15,
     exportSchema = false
 )
 abstract class HospitalDatabase : RoomDatabase() {
@@ -1317,6 +1401,51 @@ abstract class HospitalDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""CREATE TABLE IF NOT EXISTS lab_specimens (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    labOrderId INTEGER NOT NULL, specimenCode TEXT NOT NULL,
+                    specimenType TEXT NOT NULL, status TEXT NOT NULL,
+                    collectedAt INTEGER NOT NULL, receivedAt INTEGER,
+                    receivedBy TEXT NOT NULL, rejectionReason TEXT NOT NULL,
+                    notes TEXT NOT NULL, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL,
+                    FOREIGN KEY(labOrderId) REFERENCES lab_orders(id) ON UPDATE NO ACTION ON DELETE CASCADE
+                )""".trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_lab_specimens_labOrderId ON lab_specimens(labOrderId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_lab_specimens_status_collectedAt ON lab_specimens(status, collectedAt)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_lab_specimens_specimenCode ON lab_specimens(specimenCode)")
+                db.execSQL("""CREATE TABLE IF NOT EXISTS lab_specimen_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    specimenId INTEGER NOT NULL, fromStatus TEXT, toStatus TEXT NOT NULL,
+                    occurredAt INTEGER NOT NULL, actor TEXT NOT NULL, note TEXT NOT NULL,
+                    FOREIGN KEY(specimenId) REFERENCES lab_specimens(id) ON UPDATE NO ACTION ON DELETE CASCADE
+                )""".trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_lab_specimen_events_specimenId_occurredAt ON lab_specimen_events(specimenId, occurredAt)")
+                db.execSQL("""
+                    CREATE TRIGGER IF NOT EXISTS lab_specimen_status_transition_guard
+                    BEFORE UPDATE OF status ON lab_specimens
+                    WHEN NOT (
+                      OLD.status = NEW.status OR
+                      (OLD.status = 'collected' AND NEW.status IN ('received','rejected')) OR
+                      (OLD.status = 'received' AND NEW.status IN ('processing','rejected')) OR
+                      (OLD.status = 'processing' AND NEW.status IN ('accepted','rejected'))
+                    )
+                    BEGIN SELECT RAISE(ABORT, 'invalid lab specimen status transition'); END
+                """.trimIndent())
+                db.execSQL("""
+                    CREATE TRIGGER IF NOT EXISTS lab_specimen_events_reject_update
+                    BEFORE UPDATE ON lab_specimen_events
+                    BEGIN SELECT RAISE(ABORT, 'lab specimen events are append-only'); END
+                """.trimIndent())
+                db.execSQL("""
+                    CREATE TRIGGER IF NOT EXISTS lab_specimen_events_reject_delete
+                    BEFORE DELETE ON lab_specimen_events
+                    BEGIN SELECT RAISE(ABORT, 'lab specimen events are append-only'); END
+                """.trimIndent())
+            }
+        }
+
         private fun installAuditImmutability(db: SupportSQLiteDatabase) {
             db.execSQL("""
                 CREATE TRIGGER IF NOT EXISTS record_audit_log_reject_update
@@ -1341,7 +1470,7 @@ abstract class HospitalDatabase : RoomDatabase() {
                     HospitalDatabase::class.java,
                     "hospital-local.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15)
                     .addCallback(object : RoomDatabase.Callback() {
                         override fun onCreate(db: SupportSQLiteDatabase) {
                             installAuditImmutability(db)
