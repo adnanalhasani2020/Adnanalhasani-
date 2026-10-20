@@ -209,7 +209,7 @@ class PatientDetailsActivity : AppCompatActivity() {
             "الفحوصات المطلوبة" to { showEntry("lab", name, doctor, "طلب فحص مخبري", listOf("اسم الفحص", "حالة الفحص", "النتيجة", "ملاحظات المختبر"), visitTime) },
             "الأدوية المطلوبة" to { showEntry("prescriptions", name, doctor, "وصفة دوائية", listOf("اسم الدواء", "الجرعة", "التكرار والمدة", "الحالة", "تعليمات إضافية"), visitTime) },
             "السجل الطبي السابق" to { showHistory(name) },
-            "موعد المراجعة" to { showEntry("appointments", name, doctor, "موعد مراجعة", listOf("التاريخ والوقت", "سبب الزيارة"), visitTime) }
+            "موعد المراجعة" to { showAppointmentDialog(name, doctor, visitTime) }
         )
         actions.chunked(2).forEach { rowItems ->
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
@@ -264,6 +264,145 @@ class PatientDetailsActivity : AppCompatActivity() {
                         dao.saveRecord(HospitalRecord(category = category, title = "$title - $patient", details = detail, createdAt = System.currentTimeMillis()), linkedPatientId = patientId.takeIf { it > 0 })
                         runOnUiThread { dialog.dismiss(); toast("تم الحفظ في SQLite المحلية") }
                     } catch (e: Exception) { runOnUiThread { toast("تعذر الحفظ: ${e.message ?: "خطأ"}") } }
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun showAppointmentDialog(patient: String, doctor: String, currentVisitTime: String) {
+        val now = java.util.Calendar.getInstance()
+        val selectedDate = java.util.Calendar.getInstance()
+        val selectedTime = java.util.Calendar.getInstance()
+        val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+        val timeFormat = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            setPadding(dp(20), dp(8), dp(20), dp(8))
+        }
+        fun addLabel(text: String) {
+            form.addView(TextView(this).apply {
+                this.text = text
+                textSize = 13f
+                setTextColor(muted)
+                setPadding(0, dp(8), 0, dp(4))
+            })
+        }
+        fun addReadOnlyValue(value: String): TextView {
+            val view = TextView(this).apply {
+                text = value
+                textSize = 15f
+                setTextColor(ink)
+                setPadding(dp(12), dp(12), dp(12), dp(12))
+                background = rounded(Color.rgb(245, 248, 252), 10, border)
+            }
+            form.addView(view, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            return view
+        }
+
+        addLabel("المريض")
+        addReadOnlyValue(patient)
+        addLabel("الطبيب المعالج")
+        addReadOnlyValue(doctor)
+        addLabel("تاريخ المراجعة")
+        val dateInput = Button(this).apply {
+            text = dateFormat.format(selectedDate.time)
+            isAllCaps = false
+            setTextColor(ink)
+            background = rounded(Color.WHITE, 10, border)
+            setOnClickListener {
+                DatePickerDialog(this@PatientDetailsActivity,
+                    { _, year, month, day ->
+                        selectedDate.set(year, month, day)
+                        text = dateFormat.format(selectedDate.time)
+                    },
+                    selectedDate.get(java.util.Calendar.YEAR),
+                    selectedDate.get(java.util.Calendar.MONTH),
+                    selectedDate.get(java.util.Calendar.DAY_OF_MONTH)
+                ).show()
+            }
+        }
+        form.addView(dateInput, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
+        addLabel("وقت المراجعة")
+        val timeInput = Button(this).apply {
+            text = timeFormat.format(selectedTime.time)
+            isAllCaps = false
+            setTextColor(ink)
+            background = rounded(Color.WHITE, 10, border)
+            setOnClickListener {
+                TimePickerDialog(this@PatientDetailsActivity,
+                    { _, hour, minute ->
+                        selectedTime.set(java.util.Calendar.HOUR_OF_DAY, hour)
+                        selectedTime.set(java.util.Calendar.MINUTE, minute)
+                        text = timeFormat.format(selectedTime.time)
+                    },
+                    selectedTime.get(java.util.Calendar.HOUR_OF_DAY),
+                    selectedTime.get(java.util.Calendar.MINUTE),
+                    true
+                ).show()
+            }
+        }
+        form.addView(timeInput, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
+        addLabel("سبب المراجعة")
+        val reasonInput = EditText(this).apply {
+            hint = "اكتب سبب المراجعة"
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = rounded(Color.WHITE, 10, border)
+            minLines = 2
+        }
+        form.addView(reasonInput, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        addLabel("ملاحظات إضافية")
+        val notesInput = EditText(this).apply {
+            hint = "اختياري"
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = rounded(Color.WHITE, 10, border)
+            minLines = 2
+        }
+        form.addView(notesInput, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("تحديد موعد المراجعة")
+            .setView(ScrollView(this).apply { addView(form) })
+            .setNegativeButton("إلغاء", null)
+            .setPositiveButton("حفظ الموعد", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val reason = reasonInput.text.toString().trim()
+                if (reason.isBlank()) {
+                    reasonInput.error = "سبب المراجعة مطلوب"
+                    return@setOnClickListener
+                }
+                val appointmentAt = "${dateFormat.format(selectedDate.time)} ${timeFormat.format(selectedTime.time)}"
+                val detail = buildString {
+                    append("اسم المريض: $patient\n")
+                    append("اسم الطبيب: $doctor\n")
+                    append("التاريخ والوقت: $appointmentAt\n")
+                    append("سبب الزيارة: $reason\n")
+                    append("حالة الموعد: مجدول\n")
+                    append("تاريخ الزيارة السابقة: $currentVisitTime\n")
+                    append("ملاحظات: ${notesInput.text.toString().trim()}")
+                }
+                lifecycleScope.launch(Dispatchers.IO) {
+                    try {
+                        dao.saveRecord(
+                            HospitalRecord(
+                                category = "appointments",
+                                title = "موعد مراجعة - $patient",
+                                details = detail,
+                                createdAt = System.currentTimeMillis()
+                            ),
+                            linkedPatientId = patientId.takeIf { it > 0 }
+                        )
+                        runOnUiThread {
+                            dialog.dismiss()
+                            toast("تم حفظ موعد المراجعة في SQLite")
+                        }
+                    } catch (e: Exception) {
+                        runOnUiThread { toast("تعذر حفظ الموعد: ${e.message ?: "خطأ"}") }
+                    }
                 }
             }
         }
