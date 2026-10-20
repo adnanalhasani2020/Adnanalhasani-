@@ -99,6 +99,8 @@ def order_lab_test(db: HospitalDB, *, patient_id: int, test_name: str,
             (patient_id,encounter_id,ordered_by,test_name,ordered_at)
             VALUES(?,?,?,?,?)""", (patient_id, encounter_id, doctor_id, test_name.strip(), ordered_at))
         ident = cur.lastrowid
+        conn.execute("INSERT INTO lab_order_events(lab_order_id,status,occurred_at,actor) VALUES(?,?,?,?)",
+                     (ident, "ordered", ordered_at, actor))
         db._audit(conn, actor, "lab.ordered", "lab_order", ident, ordered_at)
         conn.commit()
         return int(ident)
@@ -118,8 +120,14 @@ def update_lab_status(db: HospitalDB, *, order_id: int, status: str,
         row = conn.execute("SELECT status,ordered_at FROM lab_orders WHERE id=?", (order_id,)).fetchone()
         if row is None:
             raise HospitalError("lab order not found")
-        if _parse_utc(at, "at") < _parse_utc(row["ordered_at"], "ordered_at"):
-            raise HospitalError("lab status timestamp cannot precede the order timestamp")
+        event_time = _parse_utc(at, "at")
+        last_event = conn.execute(
+            "SELECT occurred_at FROM lab_order_events WHERE lab_order_id=? ORDER BY id DESC LIMIT 1",
+            (order_id,),
+        ).fetchone()
+        previous_time = last_event["occurred_at"] if last_event is not None else row["ordered_at"]
+        if event_time < _parse_utc(previous_time, "previous lab event timestamp"):
+            raise HospitalError("lab status timestamp cannot precede the previous lab event")
         if status not in transitions.get(row["status"], set()):
             raise HospitalError(f"invalid lab status transition: {row['status']} -> {status}")
         if status == "resulted" and (result is None or not result.strip()):
@@ -127,6 +135,8 @@ def update_lab_status(db: HospitalDB, *, order_id: int, status: str,
         conn.execute("""UPDATE lab_orders SET status=?,result=?,resulted_at=?
             WHERE id=?""", (status, result if status == "resulted" else None,
                             at if status == "resulted" else None, order_id))
+        conn.execute("INSERT INTO lab_order_events(lab_order_id,status,occurred_at,actor) VALUES(?,?,?,?)",
+                     (order_id, status, at, actor))
         db._audit(conn, actor, "lab.status_changed", "lab_order", order_id, at, {"status": status})
         conn.commit()
 
