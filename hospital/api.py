@@ -626,7 +626,7 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                 elif route == "/api/medicines":
                     self._required(data, "sku", "name", "quantity", "reorder_level", "at")
                     ident = add_medicine(database, sku=str(data["sku"]), name=str(data["name"]),
-                        quantity=int(data["quantity"]), reorder_level=int(data["reorder_level"]),
+                        quantity=self._integer(data, "quantity"), reorder_level=self._integer(data, "reorder_level"),
                         actor=self._actor(), at=str(data["at"]), unit=str(data.get("unit", "unit")))
                     self._send(201, {"id": ident, "status": "created"})
                 elif route == "/api/prescriptions":
@@ -634,7 +634,7 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                     ident = prescribe_medicine(database, patient_id=int(data["patient_id"]),
                         medicine_id=int(data["medicine_id"]), dose=str(data["dose"]),
                         frequency=str(data["frequency"]), duration=str(data["duration"]),
-                        quantity=int(data["quantity"]), prescribed_at=str(data["prescribed_at"]),
+                        quantity=self._integer(data, "quantity"), prescribed_at=str(data["prescribed_at"]),
                         actor=self._actor(), encounter_id=int(data["encounter_id"]) if data.get("encounter_id") is not None else None)
                     self._send(201, {"id": ident, "status": "pending"})
                 elif len(parts) == 4 and parts[:2] == ["api", "prescriptions"] and parts[3] == "dispense":
