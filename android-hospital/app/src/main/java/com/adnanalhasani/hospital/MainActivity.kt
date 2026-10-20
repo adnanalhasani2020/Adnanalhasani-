@@ -324,7 +324,8 @@ private fun HospitalWorkspace(repository: HospitalRepository) {
                 NavigationBar(containerColor = Color.White, tonalElevation = 8.dp) {
                     val tabs = listOf(
                         Triple("home", "الرئيسية", Icons.Default.Home),
-                        Triple("reception", "الاستقبال", Icons.Default.HowToReg),\n                    Triple("patients", "المرضى", Icons.Default.Groups),
+                        Triple("reception", "الاستقبال", Icons.Default.HowToReg),
+                        Triple("patients", "المرضى", Icons.Default.Groups),
                         Triple("appointments", "المواعيد", Icons.Default.CalendarMonth),
                         Triple("invoices", "المالية", Icons.Default.ReceiptLong),
                         Triple("settings", "الإعدادات", Icons.Default.Settings)
