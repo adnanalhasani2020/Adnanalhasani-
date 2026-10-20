@@ -220,7 +220,26 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
                     "المريض غير مسجل في قاعدة البيانات المحلية."
                 }
                 val status = f.field("الحالة")
-                if (status.contains("صرف") || status.contains("صُرف") || status.equals("dispensed", true)) {
+                val desiredDispensed = status.contains("صرف") || status.contains("صُرف") || status.equals("dispensed", true)
+                val previousStatus = existingId?.let {
+                    db.string("SELECT status FROM local_prescriptions WHERE sourceRecordId=?", it)
+                }
+                if (previousStatus == "dispensed") {
+                    require(desiredDispensed) {
+                        "الوصفة المصروفة لا يمكن إرجاعها إلى معلقة أو إلغاؤها دون حركة عكسية للمخزون."
+                    }
+                    val previousQuantity = db.int(
+                        "SELECT quantity FROM local_prescriptions WHERE sourceRecordId=?", existingId!!
+                    )
+                    val previousMedication = db.string(
+                        "SELECT medicationName FROM local_prescriptions WHERE sourceRecordId=?", existingId
+                    )
+                    require(f.field("الكمية المطلوبة", "الكمية المصروفة").toIntOrNull() == previousQuantity &&
+                        f.field("اسم الدواء") == previousMedication) {
+                        "لا يمكن تغيير الدواء أو الكمية بعد الصرف؛ أنشئ وصفة جديدة للتعديل."
+                    }
+                }
+                if (desiredDispensed) {
                     val qty = f.field("الكمية المطلوبة", "الكمية المصروفة").toIntOrNull()
                     require(qty != null && qty > 0) { "أدخل كمية صحيحة أكبر من صفر قبل صرف الوصفة." }
                     val medId = db.long(
@@ -228,11 +247,7 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
                         f.field("اسم الدواء")
                     )
                     require(medId != null) { "الدواء غير موجود في مخزون الصيدلية." }
-                    val available = db.int("SELECT quantity FROM local_medicines WHERE id=?", medId) ?: 0
-                    val alreadyDispensed = db.string(
-                        "SELECT status FROM local_prescriptions WHERE sourceRecordId=?",
-                        existingId ?: -1L
-                    ) == "dispensed"
+                    val alreadyDispensed = previousStatus == "dispensed"
                     val batchAvailable = db.long(
                         """SELECT COALESCE(SUM(quantity),0) FROM local_medicine_batches
                            WHERE medicineId=? AND quantity>0 AND (expiryDate IS NULL OR expiryDate>=?)""",
