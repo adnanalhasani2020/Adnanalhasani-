@@ -1151,7 +1151,7 @@ interface HospitalDao {
         RecordAuditLogEntity::class,
         ClinicalVisitEntity::class
     ],
-    version = 15,
+    version = 16,
     exportSchema = false
 )
 abstract class HospitalDatabase : RoomDatabase() {
@@ -1483,6 +1483,29 @@ abstract class HospitalDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_15_16 = object : Migration(15, 16) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                installLabEventImmutability(db)
+            }
+        }
+
+        private fun installLabEventImmutability(db: SupportSQLiteDatabase) {
+            db.execSQL("""
+                CREATE TRIGGER IF NOT EXISTS lab_specimen_events_reject_update
+                BEFORE UPDATE ON lab_specimen_events
+                BEGIN
+                    SELECT RAISE(ABORT, 'lab specimen events are append-only');
+                END
+            """.trimIndent())
+            db.execSQL("""
+                CREATE TRIGGER IF NOT EXISTS lab_specimen_events_reject_delete
+                BEFORE DELETE ON lab_specimen_events
+                BEGIN
+                    SELECT RAISE(ABORT, 'lab specimen events are append-only');
+                END
+            """.trimIndent())
+        }
+
         private fun installAuditImmutability(db: SupportSQLiteDatabase) {
             db.execSQL("""
                 CREATE TRIGGER IF NOT EXISTS record_audit_log_reject_update
@@ -1507,14 +1530,16 @@ abstract class HospitalDatabase : RoomDatabase() {
                     HospitalDatabase::class.java,
                     "hospital-local.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16)
                     .addCallback(object : RoomDatabase.Callback() {
                         override fun onCreate(db: SupportSQLiteDatabase) {
                             installAuditImmutability(db)
+                            installLabEventImmutability(db)
                         }
 
                         override fun onOpen(db: SupportSQLiteDatabase) {
                             installAuditImmutability(db)
+                            installLabEventImmutability(db)
                         }
                     })
                     .build()
