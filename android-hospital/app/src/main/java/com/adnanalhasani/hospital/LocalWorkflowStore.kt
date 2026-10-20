@@ -11,7 +11,7 @@ import java.time.format.DateTimeFormatter
  * operational invariants that must also hold when the device is offline.
  */
 internal class LocalWorkflowStore(private val database: HospitalDatabase) {
-    private val timestampFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+    private val timestampFormatter = DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm")
 
     private fun fields(record: HospitalRecord): Map<String, String> =
         record.details.lineSequence().mapNotNull { line ->
