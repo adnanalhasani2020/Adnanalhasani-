@@ -6,7 +6,8 @@ import kotlinx.coroutines.flow.Flow
  * Repository boundary for Compose screens.
  * The DAO transaction keeps module-indexed rows and legacy records synchronized.
  */
-class HospitalRepository(private val dao: HospitalDao) {
+class HospitalRepository(private val dao: HospitalDao, database: HospitalDatabase? = null) {
+    private val localWorkflows = database?.let(::LocalWorkflowStore)
     fun allRecords(): Flow<List<HospitalRecord>> = dao.allRecords()
 
     fun patients(): Flow<List<PatientEntity>> = dao.patients()
@@ -85,12 +86,22 @@ class HospitalRepository(private val dao: HospitalDao) {
     fun upcomingVaccinations(today: String): Flow<List<VaccinationRecordEntity>> = dao.upcomingVaccinations(today)
     fun overdueVaccinations(today: String): Flow<List<VaccinationRecordEntity>> = dao.overdueVaccinations(today)
 
-    suspend fun saveRecord(record: HospitalRecord) = dao.saveRecord(record)
+    suspend fun saveRecord(record: HospitalRecord) {
+        localWorkflows?.validate(record)
+        val sourceRecordId = dao.saveRecord(record)
+        localWorkflows?.sync(record, sourceRecordId)
+    }
 
     suspend fun saveClinicalVisit(record: HospitalRecord, patientId: Long, doctorId: Long) =
         dao.saveRecord(record, linkedPatientId = patientId, linkedDoctorId = doctorId)
 
-    suspend fun updateRecord(id: Long, title: String, details: String) = dao.updateRecord(id, title, details)
+    suspend fun updateRecord(id: Long, title: String, details: String) {
+        val current = dao.recordById(id) ?: return
+        val updated = current.copy(title = title, details = details)
+        localWorkflows?.validate(updated, id)
+        dao.updateRecord(id, title, details)
+        localWorkflows?.sync(updated, id)
+    }
 
     suspend fun updateClinicalVisitRecord(id: Long, title: String, details: String, patientId: Long, doctorId: Long) =
         dao.updateRecord(id, title, details, linkedPatientId = patientId, linkedDoctorId = doctorId)
