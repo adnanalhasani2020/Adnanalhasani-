@@ -76,7 +76,7 @@ def close_encounter(db: HospitalDB, *, encounter_id: int, closed_at: str,
 def order_lab_test(db: HospitalDB, *, patient_id: int, test_name: str,
                    ordered_at: str, actor: str, doctor_id: int | None = None,
                    encounter_id: int | None = None) -> int:
-    if not test_name.strip():
+    if not isinstance(test_name, str) or not test_name.strip():
         raise HospitalError("test name is required")
     with db.connect() as conn:
         conn.execute("BEGIN IMMEDIATE")
@@ -130,8 +130,8 @@ def update_lab_status(db: HospitalDB, *, order_id: int, status: str,
             raise HospitalError("lab status timestamp cannot precede the previous lab event")
         if status not in transitions.get(row["status"], set()):
             raise HospitalError(f"invalid lab status transition: {row['status']} -> {status}")
-        if status == "resulted" and (result is None or not result.strip()):
-            raise HospitalError("a result is required to mark the test resulted")
+        if status == "resulted" and (not isinstance(result, str) or not result.strip()):
+            raise HospitalError("a text result is required to mark the test resulted")
         conn.execute("""UPDATE lab_orders SET status=?,result=?,resulted_at=?
             WHERE id=?""", (status, result if status == "resulted" else None,
                             at if status == "resulted" else None, order_id))
