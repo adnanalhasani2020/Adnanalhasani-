@@ -371,7 +371,7 @@ def dispense_prescription(db: HospitalDB, *, prescription_id: int,
                 """INSERT INTO medicine_batch_movements
                    (batch_id,medicine_id,movement_type,quantity_delta,balance_after,
                     prescription_id,reference,actor,occurred_at)
-                   VALUES(?,?, 'dispense', ?,?,?,?,?)""",
+                   VALUES(?,?, 'dispense', ?,?,?,?,?,?)""",
                 (lot["id"], row["medicine_id"], -take, balance, prescription_id,
                  f"prescription:{prescription_id}", actor, dispensed_at),
             )
