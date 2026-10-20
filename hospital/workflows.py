@@ -96,9 +96,11 @@ def update_lab_status(db: HospitalDB, *, order_id: int, status: str,
         raise HospitalError("invalid lab status")
     with db.connect() as conn:
         conn.execute("BEGIN IMMEDIATE")
-        row = conn.execute("SELECT status FROM lab_orders WHERE id=?", (order_id,)).fetchone()
+        row = conn.execute("SELECT status,ordered_at FROM lab_orders WHERE id=?", (order_id,)).fetchone()
         if row is None:
-            raise HospitalError("active lab order not found")
+            raise HospitalError("lab order not found")
+        if at < row["ordered_at"]:
+            raise HospitalError("lab status timestamp cannot precede the order timestamp")
         if status not in transitions.get(row["status"], set()):
             raise HospitalError(f"invalid lab status transition: {row['status']} -> {status}")
         if status == "resulted" and (result is None or not result.strip()):
