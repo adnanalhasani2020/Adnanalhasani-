@@ -185,6 +185,100 @@ class HospitalUserAuthAPITests(unittest.TestCase):
             ).fetchone()
         self.assertEqual(row["actor"], "admin.user")
 
+    def test_doctor_can_save_diagnosis_to_open_encounter_with_audit_record(self):
+        admin_token = self.login("admin.user", "administrator-password-123")
+        doctor_token = self.login("doctor.user", "doctor-password-1234")
+        status, patient = self.request("/api/patients", "POST", {
+            "patient_no": "DX-TEST-001", "full_name": "Synthetic Test Patient",
+            "created_at": "2026-01-01T08:00:00Z"
+        }, admin_token)
+        self.assertEqual(status, 201)
+        status, doctor = self.request("/api/doctors", "POST", {
+            "employee_no": "DX-DOC-001", "full_name": "Synthetic Test Doctor",
+            "specialty": "General", "at": "2026-01-01T08:00:00Z"
+        }, admin_token)
+        self.assertEqual(status, 201)
+        status, encounter = self.request("/api/encounters", "POST", {
+            "patient_id": patient["id"], "doctor_id": doctor["id"],
+            "opened_at": "2026-01-01T09:00:00Z",
+            "chief_complaint": "Synthetic complaint"
+        }, doctor_token)
+        self.assertEqual(status, 201)
+
+        status, payload = self.request(
+            f"/api/encounters/{encounter['id']}/diagnosis", "POST", {
+                "diagnosis": "Synthetic diagnosis",
+                "clinical_notes": "Synthetic clinical notes",
+                "at": "2026-01-01T09:15:00Z"
+            }, doctor_token)
+        self.assertEqual(status, 200)
+        self.assertTrue(payload["diagnosis_saved"])
+        with self.db.connect() as conn:
+            row = conn.execute(
+                "SELECT diagnosis,clinical_notes,status FROM encounters WHERE id=?",
+                (encounter["id"],),
+            ).fetchone()
+            audit = conn.execute(
+                "SELECT actor,action,entity_type,entity_id FROM audit_log "
+                "WHERE action='encounter.diagnosis_saved' ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+        self.assertEqual(row["diagnosis"], "Synthetic diagnosis")
+        self.assertEqual(row["clinical_notes"], "Synthetic clinical notes")
+        self.assertEqual(row["status"], "open")
+        self.assertEqual(audit["actor"], "doctor.user")
+        self.assertEqual(audit["entity_type"], "encounter")
+        self.assertEqual(audit["entity_id"], str(encounter["id"]))
+
+    def test_saving_diagnosis_without_notes_preserves_existing_clinical_notes(self):
+        admin_token = self.login("admin.user", "administrator-password-123")
+        doctor_token = self.login("doctor.user", "doctor-password-1234")
+        status, patient = self.request("/api/patients", "POST", {
+            "patient_no": "DX-TEST-003", "full_name": "Synthetic Test Patient Three",
+            "created_at": "2026-01-01T08:00:00Z"
+        }, admin_token)
+        self.assertEqual(status, 201)
+        status, encounter = self.request("/api/encounters", "POST", {
+            "patient_id": patient["id"], "opened_at": "2026-01-01T09:00:00Z"
+        }, doctor_token)
+        self.assertEqual(status, 201)
+        with self.db.connect() as conn:
+            conn.execute("UPDATE encounters SET clinical_notes=? WHERE id=?",
+                         ("Existing notes", encounter["id"]))
+        status, payload = self.request(
+            f"/api/encounters/{encounter['id']}/diagnosis", "POST", {
+                "diagnosis": "Updated synthetic diagnosis", "at": "2026-01-01T09:15:00Z"
+            }, doctor_token)
+        self.assertEqual(status, 200)
+        with self.db.connect() as conn:
+            row = conn.execute("SELECT diagnosis,clinical_notes FROM encounters WHERE id=?",
+                                (encounter["id"],)).fetchone()
+        self.assertEqual(row["diagnosis"], "Updated synthetic diagnosis")
+        self.assertEqual(row["clinical_notes"], "Existing notes")
+
+    def test_doctor_cannot_save_blank_or_oversized_diagnosis(self):
+        admin_token = self.login("admin.user", "administrator-password-123")
+        doctor_token = self.login("doctor.user", "doctor-password-1234")
+        status, patient = self.request("/api/patients", "POST", {
+            "patient_no": "DX-TEST-002", "full_name": "Synthetic Test Patient Two",
+            "created_at": "2026-01-01T08:00:00Z"
+        }, admin_token)
+        self.assertEqual(status, 201)
+        status, encounter = self.request("/api/encounters", "POST", {
+            "patient_id": patient["id"], "opened_at": "2026-01-01T09:00:00Z"
+        }, doctor_token)
+        self.assertEqual(status, 201)
+        for diagnosis in ("   ", "D" * 2001):
+            status, payload = self.request(
+                f"/api/encounters/{encounter['id']}/diagnosis", "POST", {
+                    "diagnosis": diagnosis, "at": "2026-01-01T09:15:00Z"
+                }, doctor_token)
+            self.assertEqual(status, 400)
+            self.assertNotEqual(payload.get("status"), "open")
+        with self.db.connect() as conn:
+            row = conn.execute("SELECT diagnosis FROM encounters WHERE id=?",
+                                (encounter["id"],)).fetchone()
+        self.assertEqual(row["diagnosis"], "")
+
     def test_logout_revokes_session(self):
         token = self.login("doctor.user", "doctor-password-1234")
         status, _ = self.request("/api/auth/logout", "POST", {}, token)

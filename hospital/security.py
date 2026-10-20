@@ -291,7 +291,7 @@ def permission_for_route(method: str, path: str) -> str | None:
     if method == "POST":
         if re.fullmatch(r"/api/appointments/[1-9][0-9]*/(?:cancel|no-show)", route):
             return "appointments:write"
-        if re.fullmatch(r"/api/encounters/[1-9][0-9]*/close", route):
+        if re.fullmatch(r"/api/encounters/[1-9][0-9]*/(?:close|diagnosis)", route):
             return "encounters:write"
         if re.fullmatch(r"/api/lab-orders/[1-9][0-9]*/status", route):
             return "lab:write"

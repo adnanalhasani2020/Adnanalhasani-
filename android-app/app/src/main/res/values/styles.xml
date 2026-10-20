@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.HospitalDoctor" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">#145DA8</item>
+        <item name="colorPrimaryVariant">#0C4380</item>
+        <item name="colorSecondary">#12A6A0</item>
+        <item name="android:fontFamily">sans</item>
+        <item name="android:statusBarColor">#104B88</item>
+        <item name="android:navigationBarColor">#F4F7FB</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+</resources>

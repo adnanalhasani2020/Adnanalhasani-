@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:background="#F3F7FB">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="vertical" android:paddingStart="18dp" android:paddingEnd="18dp"
+        android:paddingTop="18dp" android:paddingBottom="20dp" android:background="#145DA8">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:gravity="center_vertical">
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                android:text="☰   العيادة العامة" android:textColor="#FFFFFF" android:textStyle="bold" android:textSize="20sp"/>
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="🔔" android:textColor="#FFFFFF" android:textSize="21sp" android:contentDescription="الإشعارات"/>
+        </LinearLayout>
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="7dp" android:text="د. أحمد العسيري  •  قائمة المرضى"
+            android:textColor="#E5F1FF" android:textSize="14sp"/>
+    </LinearLayout>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:padding="7dp" android:layout_marginStart="10dp" android:layout_marginEnd="10dp"
+        android:layout_marginTop="10dp" android:background="#EAF0F7" android:orientation="horizontal">
+        <Button android:id="@+id/tabToday" android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1" android:minHeight="44dp" android:text="المرضى اليوم" android:textSize="12sp"/>
+        <Button android:id="@+id/tabUpcoming" android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1" android:minHeight="44dp" android:text="المواعيد القادمة" android:textSize="12sp"/>
+        <Button android:id="@+id/tabCompleted" android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1" android:minHeight="44dp" android:text="المنتهية" android:textSize="12sp"/>
+    </LinearLayout>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="vertical" android:paddingStart="12dp" android:paddingEnd="12dp"
+        android:paddingTop="10dp" android:paddingBottom="6dp">
+        <Button android:id="@+id/dateButton" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:minHeight="48dp" android:text="▦   اختيار التاريخ" android:contentDescription="اختيار تاريخ قائمة المرضى"/>
+        <EditText android:id="@+id/searchInput" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="8dp" android:minHeight="50dp" android:singleLine="true"
+            android:paddingStart="14dp" android:paddingEnd="14dp" android:hint="⌕  ابحث باسم المريض أو رقم الملف"
+            android:inputType="text" android:backgroundTint="#B9CADB" android:contentDescription="البحث عن مريض"/>
+        <TextView android:id="@+id/configureConnection" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="⚙ إعداد الاتصال بالخادم" android:textColor="#145DA8" android:textSize="12sp" android:gravity="end" android:paddingTop="6dp" android:paddingBottom="4dp" android:clickable="true" android:focusable="true" />
+        <TextView android:id="@+id/listTitle" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:paddingTop="12dp" android:paddingBottom="4dp" android:text="المرضى المنتظرون"
+            android:textColor="#123E78" android:textStyle="bold" android:textSize="17sp"/>
+    </LinearLayout>
+    <ScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
+        android:clipToPadding="false" android:fillViewport="true">
+        <LinearLayout android:id="@+id/patientList" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:orientation="vertical" android:paddingStart="12dp"
+            android:paddingEnd="12dp" android:paddingTop="4dp" android:paddingBottom="12dp"/>
+    </ScrollView>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal" android:paddingTop="9dp" android:paddingBottom="9dp"
+        android:background="#FFFFFF" android:elevation="8dp">
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+            android:gravity="center" android:text="♙\nالمرضى" android:textColor="#145DA8" android:textStyle="bold" android:textSize="12sp"/>
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+            android:gravity="center" android:text="▦\nالمواعيد" android:textColor="#66788A" android:textSize="12sp"/>
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+            android:gravity="center" android:text="▥\nالإحصائيات" android:textColor="#66788A" android:textSize="12sp"/>
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+            android:gravity="center" android:text="•••\nالمزيد" android:textColor="#66788A" android:textSize="12sp"/>
+    </LinearLayout>
+</LinearLayout>

@@ -326,10 +326,10 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                                  "pagination": {"limit": limit, "offset": offset, "count": len(rows)}})
             elif route.startswith("/api/") and route.count("/") == 2:
                 collections = {
-                    "/api/patients": ("SELECT id,patient_no,full_name,phone,active,created_at FROM patients WHERE (?='' OR patient_no LIKE ? OR full_name LIKE ?) ORDER BY id DESC", 2),
+                    "/api/patients": ("SELECT id,patient_no,full_name,date_of_birth,sex,phone,address,active,created_at FROM patients WHERE (?='' OR patient_no LIKE ? OR full_name LIKE ? OR COALESCE(phone,'') LIKE ?) ORDER BY id DESC", 3),
                     "/api/doctors": ("SELECT id,employee_no,full_name,specialty,phone,active FROM doctors WHERE (?='' OR employee_no LIKE ? OR full_name LIKE ? OR specialty LIKE ?) ORDER BY id DESC", 3),
                     "/api/appointments": ("SELECT a.id,a.patient_id,p.full_name AS patient_name,a.doctor_id,d.full_name AS doctor_name,a.starts_at,a.ends_at,a.status,a.reason FROM appointments a JOIN patients p ON p.id=a.patient_id JOIN doctors d ON d.id=a.doctor_id WHERE (?='' OR p.full_name LIKE ? OR p.patient_no LIKE ? OR d.full_name LIKE ?) ORDER BY a.starts_at DESC", 3),
-                    "/api/encounters": ("SELECT e.id,e.patient_id,p.full_name AS patient_name,e.doctor_id,d.full_name AS doctor_name,e.appointment_id,e.opened_at,e.closed_at,e.chief_complaint,e.diagnosis,e.status FROM encounters e JOIN patients p ON p.id=e.patient_id LEFT JOIN doctors d ON d.id=e.doctor_id WHERE (?='' OR p.full_name LIKE ? OR p.patient_no LIKE ? OR COALESCE(d.full_name,'') LIKE ? OR e.status LIKE ?) ORDER BY e.id DESC", 4),
+                    "/api/encounters": ("SELECT e.id,e.patient_id,p.full_name AS patient_name,e.doctor_id,d.full_name AS doctor_name,e.appointment_id,e.opened_at,e.closed_at,e.chief_complaint,e.diagnosis,e.clinical_notes,e.status FROM encounters e JOIN patients p ON p.id=e.patient_id LEFT JOIN doctors d ON d.id=e.doctor_id WHERE (?='' OR p.full_name LIKE ? OR p.patient_no LIKE ? OR COALESCE(d.full_name,'') LIKE ? OR e.status LIKE ?) ORDER BY e.id DESC", 4),
                     "/api/lab-orders": ("SELECT l.id,l.patient_id,p.full_name AS patient_name,l.test_name,l.status,l.result,l.ordered_at,l.resulted_at FROM lab_orders l JOIN patients p ON p.id=l.patient_id WHERE (?='' OR p.full_name LIKE ? OR p.patient_no LIKE ? OR l.test_name LIKE ?) ORDER BY l.id DESC", 3),
                     "/api/medicines": ("SELECT id,sku,name,quantity,reorder_level,unit,active FROM medicines WHERE (?='' OR sku LIKE ? OR name LIKE ?) ORDER BY name", 2),
                     "/api/prescriptions": ("SELECT r.id,r.patient_id,p.full_name AS patient_name,r.medicine_id,m.name AS medicine_name,r.dose,r.frequency,r.duration,r.quantity,r.status,r.prescribed_at FROM prescriptions r JOIN patients p ON p.id=r.patient_id JOIN medicines m ON m.id=r.medicine_id WHERE (?='' OR p.full_name LIKE ? OR p.patient_no LIKE ? OR m.name LIKE ?) ORDER BY r.id DESC", 3),
@@ -605,6 +605,25 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                         chief_complaint=str(data.get("chief_complaint", "")),
                         appointment_id=int(data["appointment_id"]) if data.get("appointment_id") is not None else None)
                     self._send(201, {"id": ident, "status": "open"})
+                elif len(parts) == 4 and parts[:2] == ["api", "encounters"] and parts[3] == "diagnosis":
+                    self._required(data, "diagnosis", "at")
+                    diagnosis = str(data["diagnosis"]).strip()
+                    if not diagnosis or len(diagnosis) > 2000:
+                        raise HospitalError("diagnosis must contain 1-2000 characters")
+                    clinical_notes = str(data.get("clinical_notes", "")).strip()
+                    if len(clinical_notes) > 5000:
+                        raise HospitalError("clinical_notes must be at most 5000 characters")
+                    with database.connect() as conn:
+                        conn.execute("BEGIN IMMEDIATE")
+                        row = conn.execute("SELECT status FROM encounters WHERE id=?", (int(parts[2]),)).fetchone()
+                        if row is None or row["status"] != "open":
+                            raise HospitalError("open encounter not found")
+                        conn.execute("UPDATE encounters SET diagnosis=?,clinical_notes=CASE WHEN ?='' THEN clinical_notes ELSE ? END WHERE id=?",
+                                     (diagnosis, clinical_notes, clinical_notes, int(parts[2])))
+                        database._audit(conn, self._actor(), "encounter.diagnosis_saved", "encounter",
+                                        int(parts[2]), str(data["at"]), {"diagnosis_length": len(diagnosis)})
+                        conn.commit()
+                    self._send(200, {"id": int(parts[2]), "status": "open", "diagnosis_saved": True})
                 elif len(parts) == 4 and parts[:2] == ["api", "encounters"] and parts[3] == "close":
                     self._required(data, "closed_at", "diagnosis")
                     close_encounter(database, encounter_id=int(parts[2]), closed_at=str(data["closed_at"]),
