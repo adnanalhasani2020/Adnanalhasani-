@@ -87,6 +87,14 @@ class HospitalRepository(private val dao: HospitalDao) {
 
     suspend fun saveRecord(record: HospitalRecord) = dao.saveRecord(record)
 
+    suspend fun registerReception(
+        patientRecord: HospitalRecord,
+        visitRecord: HospitalRecord,
+        invoiceRecord: HospitalRecord,
+        paymentRecord: HospitalRecord?,
+        doctorId: Long?
+    ) = dao.saveReceptionBundle(patientRecord, visitRecord, invoiceRecord, paymentRecord, doctorId)
+
     suspend fun saveClinicalVisit(record: HospitalRecord, patientId: Long, doctorId: Long) =
         dao.saveRecord(record, linkedPatientId = patientId, linkedDoctorId = doctorId)
 
