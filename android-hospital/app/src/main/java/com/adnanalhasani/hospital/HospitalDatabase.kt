@@ -87,7 +87,7 @@ data class LabOrderEntity(
 
 @Entity(
     tableName = "lab_specimens",
-    foreignKeys = [ForeignKey(entity = LabOrderEntity::class, parentColumns = ["id"], childColumns = ["labOrderId"], onDelete = ForeignKey.CASCADE)],
+    foreignKeys = [ForeignKey(entity = LabOrderEntity::class, parentColumns = ["id"], childColumns = ["labOrderId"])],
     indices = [Index(value = ["labOrderId"]), Index(value = ["status", "collectedAt"]), Index(value = ["specimenCode"], unique = true)]
 )
 data class LabSpecimenEntity(
@@ -107,7 +107,7 @@ data class LabSpecimenEntity(
 
 @Entity(
     tableName = "lab_specimen_events",
-    foreignKeys = [ForeignKey(entity = LabSpecimenEntity::class, parentColumns = ["id"], childColumns = ["specimenId"], onDelete = ForeignKey.CASCADE)],
+    foreignKeys = [ForeignKey(entity = LabSpecimenEntity::class, parentColumns = ["id"], childColumns = ["specimenId"])],
     indices = [Index(value = ["specimenId", "occurredAt"])]
 )
 data class LabSpecimenEventEntity(
@@ -1410,7 +1410,7 @@ abstract class HospitalDatabase : RoomDatabase() {
                     collectedAt INTEGER NOT NULL, receivedAt INTEGER,
                     receivedBy TEXT NOT NULL, rejectionReason TEXT NOT NULL,
                     notes TEXT NOT NULL, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL,
-                    FOREIGN KEY(labOrderId) REFERENCES lab_orders(id) ON UPDATE NO ACTION ON DELETE CASCADE
+                    FOREIGN KEY(labOrderId) REFERENCES lab_orders(id) ON UPDATE NO ACTION ON DELETE NO ACTION
                 )""".trimIndent())
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_lab_specimens_labOrderId ON lab_specimens(labOrderId)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_lab_specimens_status_collectedAt ON lab_specimens(status, collectedAt)")
@@ -1419,7 +1419,7 @@ abstract class HospitalDatabase : RoomDatabase() {
                     id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
                     specimenId INTEGER NOT NULL, fromStatus TEXT, toStatus TEXT NOT NULL,
                     occurredAt INTEGER NOT NULL, actor TEXT NOT NULL, note TEXT NOT NULL,
-                    FOREIGN KEY(specimenId) REFERENCES lab_specimens(id) ON UPDATE NO ACTION ON DELETE CASCADE
+                    FOREIGN KEY(specimenId) REFERENCES lab_specimens(id) ON UPDATE NO ACTION ON DELETE NO ACTION
                 )""".trimIndent())
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_lab_specimen_events_specimenId_occurredAt ON lab_specimen_events(specimenId, occurredAt)")
                 db.execSQL("""
