@@ -295,6 +295,8 @@ def permission_for_route(method: str, path: str) -> str | None:
             return "encounters:write"
         if re.fullmatch(r"/api/lab-orders/[1-9][0-9]*/status", route):
             return "lab:write"
+        if re.fullmatch(r"/api/medicines/[1-9][0-9]*/restock", route):
+            return "medicines:write"
         if re.fullmatch(r"/api/prescriptions/[1-9][0-9]*/dispense", route):
             return "prescriptions:dispense"
         if re.fullmatch(r"/api/admissions/[1-9][0-9]*/discharge", route):
