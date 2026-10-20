@@ -438,8 +438,84 @@ interface HospitalDao {
     @Insert
     suspend fun insertLabSpecimenEvent(event: LabSpecimenEventEntity): Long
 
+    @Query("SELECT * FROM lab_specimens WHERE id = :id LIMIT 1")
+    suspend fun labSpecimenById(id: Long): LabSpecimenEntity?
+
+    /** Insert the specimen and its first audit event atomically. */
+    @Transaction
+    suspend fun registerLabSpecimen(specimen: LabSpecimenEntity, actor: String): Long {
+        val id = insertLabSpecimen(specimen)
+        insertLabSpecimenEvent(
+            LabSpecimenEventEntity(
+                specimenId = id,
+                status = specimen.status,
+                note = "تم تسجيل العينة وربطها بطلب الفحص #${specimen.labOrderId}",
+                actor = actor.trim(),
+                occurredAt = specimen.collectedAt
+            )
+        )
+        return id
+    }
+
+    /**
+     * Apply a guarded state transition and append its audit event in one SQLite
+     * transaction. Expected status prevents stale screens from overwriting newer work.
+     */
+    @Transaction
+    suspend fun transitionLabSpecimen(
+        id: Long,
+        expectedStatus: String,
+        nextStatus: String,
+        actor: String,
+        note: String,
+        rejectionReason: String = "",
+        requireReceipt: Boolean = true,
+        occurredAt: Long = System.currentTimeMillis()
+    ): Boolean {
+        val current = labSpecimenById(id) ?: return false
+        if (current.status != expectedStatus || current.status in listOf("completed", "rejected")) return false
+        val allowed = when (nextStatus) {
+            "received" -> current.status == "collected"
+            "processing" -> current.status == "received" || (current.status == "collected" && !requireReceipt)
+            "completed" -> current.status == "processing"
+            "rejected" -> current.status in listOf("collected", "received", "processing") && rejectionReason.isNotBlank()
+            else -> false
+        }
+        if (!allowed || actor.isBlank()) return false
+        val receivedAt = if (nextStatus == "received") occurredAt else current.receivedAt
+        val reason = if (nextStatus == "rejected") rejectionReason.trim() else ""
+        if (updateLabSpecimenStatus(id, nextStatus, receivedAt, reason, occurredAt) != 1) return false
+        insertLabSpecimenEvent(
+            LabSpecimenEventEntity(
+                specimenId = id,
+                status = nextStatus,
+                note = note.trim(),
+                actor = actor.trim(),
+                occurredAt = occurredAt
+            )
+        )
+        return true
+    }
+
     @Query("SELECT * FROM lab_specimens ORDER BY collectedAt DESC")
     fun labSpecimens(): Flow<List<LabSpecimenEntity>>
+
+    /** Search specimens and their linked lab order directly in SQLite. */
+    @Query("""
+        SELECT s.* FROM lab_specimens AS s
+        INNER JOIN lab_orders AS o ON o.id = s.labOrderId
+        WHERE (:status = 'all' OR s.status = :status)
+          AND (
+            :query = '' OR
+            s.specimenCode LIKE '%' || :query || '%' OR
+            s.specimenType LIKE '%' || :query || '%' OR
+            o.patientName LIKE '%' || :query || '%' OR
+            o.testName LIKE '%' || :query || '%' OR
+            CAST(o.id AS TEXT) LIKE '%' || :query || '%'
+          )
+        ORDER BY s.collectedAt DESC, s.id DESC
+    """)
+    fun searchLabSpecimens(query: String, status: String): Flow<List<LabSpecimenEntity>>
 
     @Query("UPDATE lab_specimens SET status = :status, receivedAt = :receivedAt, rejectionReason = :rejectionReason, updatedAt = :updatedAt WHERE id = :id")
     suspend fun updateLabSpecimenStatus(id: Long, status: String, receivedAt: Long?, rejectionReason: String, updatedAt: Long): Int
@@ -1092,7 +1168,7 @@ interface HospitalDao {
         RecordAuditLogEntity::class,
         ClinicalVisitEntity::class
     ],
-    version = 15,
+    version = 16,
     exportSchema = false
 )
 abstract class HospitalDatabase : RoomDatabase() {
@@ -1424,6 +1500,25 @@ abstract class HospitalDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_15_16 = object : Migration(15, 16) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                installLabEventImmutability(db)
+            }
+        }
+
+        private fun installLabEventImmutability(db: SupportSQLiteDatabase) {
+            // Allow FK cascades when a specimen or its lab order is intentionally deleted.
+            // Preventing DELETE here would make the declared ON DELETE CASCADE fail.
+            db.execSQL("DROP TRIGGER IF EXISTS lab_specimen_events_reject_delete")
+            db.execSQL("""
+                CREATE TRIGGER IF NOT EXISTS lab_specimen_events_reject_update
+                BEFORE UPDATE ON lab_specimen_events
+                BEGIN
+                    SELECT RAISE(ABORT, 'lab specimen events are append-only');
+                END
+            """.trimIndent())
+        }
+
         private fun installAuditImmutability(db: SupportSQLiteDatabase) {
             db.execSQL("""
                 CREATE TRIGGER IF NOT EXISTS record_audit_log_reject_update
@@ -1448,14 +1543,16 @@ abstract class HospitalDatabase : RoomDatabase() {
                     HospitalDatabase::class.java,
                     "hospital-local.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16)
                     .addCallback(object : RoomDatabase.Callback() {
                         override fun onCreate(db: SupportSQLiteDatabase) {
                             installAuditImmutability(db)
+                            installLabEventImmutability(db)
                         }
 
                         override fun onOpen(db: SupportSQLiteDatabase) {
                             installAuditImmutability(db)
+                            installLabEventImmutability(db)
                         }
                     })
                     .build()
