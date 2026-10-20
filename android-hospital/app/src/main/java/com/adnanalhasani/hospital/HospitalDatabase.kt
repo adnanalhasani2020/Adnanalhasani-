@@ -1423,6 +1423,12 @@ abstract class HospitalDatabase : RoomDatabase() {
                 )""".trimIndent())
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_lab_specimen_events_specimenId_occurredAt ON lab_specimen_events(specimenId, occurredAt)")
                 db.execSQL("""
+                    CREATE TRIGGER IF NOT EXISTS lab_specimen_status_insert_guard
+                    BEFORE INSERT ON lab_specimens
+                    WHEN NEW.status NOT IN ('collected','received','processing','accepted','rejected')
+                    BEGIN SELECT RAISE(ABORT, 'invalid lab specimen status'); END
+                """.trimIndent())
+                db.execSQL("""
                     CREATE TRIGGER IF NOT EXISTS lab_specimen_status_transition_guard
                     BEFORE UPDATE OF status ON lab_specimens
                     WHEN NOT (
