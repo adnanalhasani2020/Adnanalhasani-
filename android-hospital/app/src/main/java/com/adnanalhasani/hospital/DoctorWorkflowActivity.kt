@@ -237,30 +237,18 @@ class DoctorWorkflowActivity : AppCompatActivity() {
 
     private fun showPatientDetails(item: QueueItem) {
         val p = item.patient
-        val dialog = Dialog(this)
-        val outer = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(20), dp(20), dp(20), dp(16)); background = rounded(Color.WHITE, 22, Color.TRANSPARENT)
-        }
-        outer.addView(TextView(this).apply { text = "تفاصيل المريض"; textSize = 20f; setTextColor(navy); typeface = Typeface.DEFAULT_BOLD })
-        outer.addView(TextView(this).apply { text = p.name + "\nرقم الملف: " + p.fileNo; textSize = 15f; setTextColor(ink); setPadding(0, dp(12), 0, dp(14)) })
-        val detailRows = listOf(
-            "العمر" to p.age.ifBlank { "غير مسجل" }, "الهاتف" to p.phone.ifBlank { "غير مسجل" },
-            "الوقت" to item.time, "حالة السجل" to statusLabel(item.status), "الطبيب" to item.doctor.ifBlank { "غير محدد" },
-            "سبب الزيارة / الملاحظات" to item.reason.ifBlank { "غير مسجل" }, "ملاحظات الملف" to p.notes.ifBlank { "لا توجد ملاحظات" }
-        )
-        detailRows.forEach { pair ->
-            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(8), 0, dp(8)) }
-            row.addView(TextView(this).apply { text = pair.first; textSize = 13f; setTextColor(muted) }, LinearLayout.LayoutParams(dp(100), ViewGroup.LayoutParams.WRAP_CONTENT))
-            row.addView(TextView(this).apply { text = pair.second; textSize = 14f; setTextColor(ink); typeface = Typeface.DEFAULT_BOLD })
-            outer.addView(row)
-        }
-        outer.addView(Button(this).apply { text = "إغلاق"; isAllCaps = false; setOnClickListener { dialog.dismiss() } },
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(12) })
-        dialog.setContentView(outer)
-        dialog.show()
-        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-        dialog.window?.setLayout((resources.displayMetrics.widthPixels * 0.92).toInt(), ViewGroup.LayoutParams.WRAP_CONTENT)
+        startActivity(android.content.Intent(this, PatientDetailsActivity::class.java).apply {
+            putExtra(PatientDetailsActivity.EXTRA_ID, p.id)
+            putExtra(PatientDetailsActivity.EXTRA_NAME, p.name)
+            putExtra(PatientDetailsActivity.EXTRA_FILE_NO, p.fileNo)
+            putExtra(PatientDetailsActivity.EXTRA_AGE, p.age)
+            putExtra(PatientDetailsActivity.EXTRA_PHONE, p.phone)
+            putExtra(PatientDetailsActivity.EXTRA_NOTES, p.notes)
+            putExtra(PatientDetailsActivity.EXTRA_TIME, item.time)
+            putExtra(PatientDetailsActivity.EXTRA_STATUS, statusLabel(item.status))
+            putExtra(PatientDetailsActivity.EXTRA_DOCTOR, item.doctor)
+            putExtra(PatientDetailsActivity.EXTRA_REASON, item.reason)
+        })
     }
 
     private fun statusLabel(status: String) = when (status) {
