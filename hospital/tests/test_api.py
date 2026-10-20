@@ -83,6 +83,38 @@ class HospitalAPITests(unittest.TestCase):
                 7,
             )
 
+    def test_global_inventory_stock_ledger_filters_and_paginates(self):
+        first = add_medicine(
+            self.db, sku="LEDGER-1", name="Ledger medicine one", quantity=3,
+            reorder_level=0, actor="pharmacist", at="2026-01-01T08:00:00Z",
+        )
+        second = add_medicine(
+            self.db, sku="LEDGER-2", name="Ledger medicine two", quantity=4,
+            reorder_level=0, actor="pharmacist", at="2026-01-01T08:01:00Z",
+        )
+        status, payload = self.request("/api/inventory/stock-movements?limit=1&offset=0")
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["pagination"]["limit"], 1)
+        self.assertEqual(payload["pagination"]["count"], 1)
+        self.assertEqual(payload["pagination"]["total"], 2)
+        status, filtered = self.request(
+            f"/api/inventory/stock-movements?medicine_id={first}&movement_type=opening"
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(len(filtered["data"]), 1)
+        self.assertEqual(filtered["data"][0]["medicine_id"], first)
+        self.assertEqual(filtered["data"][0]["movement_type"], "opening")
+        self.assertNotEqual(filtered["data"][0]["medicine_id"], second)
+        self.assertIn("does not adjust inventory", filtered["scope"])
+
+    def test_global_inventory_stock_ledger_rejects_invalid_filters(self):
+        status, payload = self.request("/api/inventory/stock-movements?movement_type=delete")
+        self.assertEqual(status, 400)
+        self.assertEqual(payload["error"], "invalid_movement_type")
+        status, payload = self.request("/api/inventory/stock-movements?medicine_id=0")
+        self.assertEqual(status, 400)
+        self.assertEqual(payload["error"], "invalid_medicine_id")
+
     def test_inventory_reconciliation_requires_authentication(self):
         status, payload = self.request("/api/inventory/reconciliation", token=False)
         self.assertEqual(status, 401)
