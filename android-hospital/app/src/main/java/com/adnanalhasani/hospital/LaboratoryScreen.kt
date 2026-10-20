@@ -103,10 +103,10 @@ fun LaboratoryScreen() {
     var specimenType by remember { mutableStateOf("") }
     var rejectionReason by remember { mutableStateOf("") }
     var requireReceipt by remember { mutableStateOf(true) }
-    var specimenTypes by remember { mutableStateOf("دم، بول، مسحة، مصل، براز") }
+    var specimenTypes by remember { mutableStateOf("دم كامل EDTA, بول, مسحة, مصل, براز") }
     var rejectionReasons by remember { mutableStateOf("عينة غير كافية، عينة متجلطة، وعاء غير مناسب، بيانات غير مطابقة") }
     val specimenTypeOptions = (specimenGuide.filter { it.active }.map { it.name } +
-        specimenTypes.split(",").map { it.trim() }.filter { it.isNotBlank() }).distinct()
+        specimenTypes.split(Regex("[,،]")).map { it.trim() }.filter { it.isNotBlank() }).distinct()
     val selectedSpecimenGuide = specimenGuide.firstOrNull { it.active && it.name.equals(specimenType, ignoreCase = true) }
     var turnaroundHours by remember { mutableStateOf("24") }
     var settingsExpanded by remember { mutableStateOf(false) }
@@ -122,7 +122,7 @@ fun LaboratoryScreen() {
             turnaroundHours = it.value.toIntOrNull()?.coerceIn(1, 720)?.toString() ?: "24"
         }
         settings.firstOrNull { it.key == "last_operator" }?.let { if (responsibleEmployee.isBlank()) responsibleEmployee = it.value }
-        if (specimenType.isBlank()) specimenType = specimenTypes.split(",").firstOrNull()?.trim().orEmpty()
+        if (specimenType.isBlank()) specimenType = specimenTypes.split(Regex("[,،]")).firstOrNull()?.trim().orEmpty()
     }
 
     val selectedOrder = orders.firstOrNull { it.id == selectedOrderId }
@@ -358,7 +358,7 @@ fun LaboratoryScreen() {
                                 scope.launch {
                                     withContext(Dispatchers.IO) {
                                         dao.saveLabWorkflowSetting(LabWorkflowSettingEntity("require_receipt_confirmation", requireReceipt.toString(), System.currentTimeMillis()))
-                                        dao.saveLabWorkflowSetting(LabWorkflowSettingEntity("specimen_types", specimenTypes.split(",").map { it.trim() }.filter { it.isNotBlank() }.distinct().joinToString(", "), System.currentTimeMillis()))
+                                        dao.saveLabWorkflowSetting(LabWorkflowSettingEntity("specimen_types", specimenTypes.split(Regex("[,،]")).map { it.trim() }.filter { it.isNotBlank() }.distinct().joinToString(", "), System.currentTimeMillis()))
                                         dao.saveLabWorkflowSetting(LabWorkflowSettingEntity("rejection_reasons", rejectionReasons.split(",").map { it.trim() }.filter { it.isNotBlank() }.distinct().joinToString(", "), System.currentTimeMillis()))
                                         dao.saveLabWorkflowSetting(LabWorkflowSettingEntity("specimen_turnaround_hours", turnaroundHours.toInt().coerceIn(1, 720).toString(), System.currentTimeMillis()))
                                         if (responsibleEmployee.isNotBlank()) dao.saveLabWorkflowSetting(LabWorkflowSettingEntity("last_operator", responsibleEmployee.trim(), System.currentTimeMillis()))
