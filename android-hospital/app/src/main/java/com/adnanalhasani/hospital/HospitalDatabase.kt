@@ -84,6 +84,45 @@ data class LabOrderEntity(
     val clinicalVisitId: Long? = null
 )
 
+
+@Entity(
+    tableName = "lab_specimens",
+    foreignKeys = [ForeignKey(entity = LabOrderEntity::class, parentColumns = ["id"], childColumns = ["labOrderId"], onDelete = ForeignKey.CASCADE)],
+    indices = [Index(value = ["specimenCode"], unique = true), Index(value = ["labOrderId"]), Index(value = ["status", "collectedAt"])]
+)
+data class LabSpecimenEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val labOrderId: Long,
+    val specimenCode: String,
+    val specimenType: String,
+    val status: String = "collected",
+    val collectedAt: Long = System.currentTimeMillis(),
+    val receivedAt: Long? = null,
+    val rejectionReason: String = "",
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
+@Entity(
+    tableName = "lab_specimen_events",
+    foreignKeys = [ForeignKey(entity = LabSpecimenEntity::class, parentColumns = ["id"], childColumns = ["specimenId"], onDelete = ForeignKey.CASCADE)],
+    indices = [Index(value = ["specimenId", "occurredAt"])]
+)
+data class LabSpecimenEventEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val specimenId: Long,
+    val status: String,
+    val note: String = "",
+    val actor: String = "operator",
+    val occurredAt: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "lab_workflow_settings")
+data class LabWorkflowSettingEntity(
+    @PrimaryKey val key: String,
+    val value: String,
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
 @Entity(tableName = "radiology_orders", foreignKeys = [ForeignKey(entity = HospitalRecord::class, parentColumns = ["id"], childColumns = ["sourceRecordId"], onDelete = ForeignKey.CASCADE), ForeignKey(entity = PatientEntity::class, parentColumns = ["id"], childColumns = ["patientId"], onDelete = ForeignKey.SET_NULL), ForeignKey(entity = DoctorEntity::class, parentColumns = ["id"], childColumns = ["doctorId"], onDelete = ForeignKey.SET_NULL)], indices = [Index(value = ["sourceRecordId"], unique = true), Index(value = ["patientId"]), Index(value = ["doctorId"]), Index(value = ["clinicalVisitId"]), Index(value = ["status", "createdAt"])])
 data class RadiologyOrderEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -392,6 +431,28 @@ interface HospitalDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveEmergencyCase(entity: EmergencyCaseEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveIcuStay(entity: IcuStayEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveInventoryItem(entity: InventoryItemEntity)
+
+    @Insert
+    suspend fun insertLabSpecimen(specimen: LabSpecimenEntity): Long
+
+    @Insert
+    suspend fun insertLabSpecimenEvent(event: LabSpecimenEventEntity): Long
+
+    @Query("SELECT * FROM lab_specimens ORDER BY collectedAt DESC")
+    fun labSpecimens(): Flow<List<LabSpecimenEntity>>
+
+    @Query("UPDATE lab_specimens SET status = :status, receivedAt = :receivedAt, rejectionReason = :rejectionReason, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun updateLabSpecimenStatus(id: Long, status: String, receivedAt: Long?, rejectionReason: String, updatedAt: Long): Int
+
+    @Query("SELECT * FROM lab_specimen_events WHERE specimenId = :specimenId ORDER BY occurredAt DESC, id DESC")
+    fun labSpecimenEvents(specimenId: Long): Flow<List<LabSpecimenEventEntity>>
+
+    @Query("SELECT * FROM lab_workflow_settings ORDER BY key")
+    fun labWorkflowSettings(): Flow<List<LabWorkflowSettingEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveLabWorkflowSetting(setting: LabWorkflowSettingEntity): Long
+
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveLabOrder(entity: LabOrderEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveRadiologyOrder(entity: RadiologyOrderEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveMaintenanceTicket(entity: MaintenanceTicketEntity)
@@ -1014,6 +1075,9 @@ interface HospitalDao {
         IcuStayEntity::class,
         InventoryItemEntity::class,
         LabOrderEntity::class,
+        LabSpecimenEntity::class,
+        LabSpecimenEventEntity::class,
+        LabWorkflowSettingEntity::class,
         RadiologyOrderEntity::class,
         PrescriptionOrderEntity::class,
         MaintenanceTicketEntity::class,
@@ -1028,7 +1092,7 @@ interface HospitalDao {
         RecordAuditLogEntity::class,
         ClinicalVisitEntity::class
     ],
-    version = 14,
+    version = 15,
     exportSchema = false
 )
 abstract class HospitalDatabase : RoomDatabase() {
@@ -1317,6 +1381,49 @@ abstract class HospitalDatabase : RoomDatabase() {
             }
         }
 
+
+        private val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""CREATE TABLE IF NOT EXISTS lab_specimens (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    labOrderId INTEGER NOT NULL,
+                    specimenCode TEXT NOT NULL,
+                    specimenType TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    collectedAt INTEGER NOT NULL,
+                    receivedAt INTEGER,
+                    rejectionReason TEXT NOT NULL,
+                    updatedAt INTEGER NOT NULL,
+                    FOREIGN KEY(labOrderId) REFERENCES lab_orders(id) ON UPDATE NO ACTION ON DELETE CASCADE
+                )""".trimIndent())
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_lab_specimens_specimenCode ON lab_specimens(specimenCode)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_lab_specimens_labOrderId ON lab_specimens(labOrderId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_lab_specimens_status_collectedAt ON lab_specimens(status, collectedAt)")
+                db.execSQL("""CREATE TABLE IF NOT EXISTS lab_specimen_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    specimenId INTEGER NOT NULL,
+                    status TEXT NOT NULL,
+                    note TEXT NOT NULL,
+                    actor TEXT NOT NULL,
+                    occurredAt INTEGER NOT NULL,
+                    FOREIGN KEY(specimenId) REFERENCES lab_specimens(id) ON UPDATE NO ACTION ON DELETE CASCADE
+                )""".trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_lab_specimen_events_specimenId_occurredAt ON lab_specimen_events(specimenId, occurredAt)")
+                db.execSQL("""CREATE TABLE IF NOT EXISTS lab_workflow_settings (
+                    `key` TEXT NOT NULL PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    updatedAt INTEGER NOT NULL
+                )""".trimIndent())
+                db.execSQL("INSERT OR IGNORE INTO lab_workflow_settings (`key`, value, updatedAt) VALUES ('require_receipt_confirmation', 'true', 0)")
+                db.execSQL("INSERT OR IGNORE INTO lab_workflow_settings (`key`, value, updatedAt) VALUES ('specimen_types', 'دم، بول، مسحة، مصل، براز', 0)")
+                db.execSQL("INSERT OR IGNORE INTO lab_workflow_settings (`key`, value, updatedAt) VALUES ('rejection_reasons', 'عينة غير كافية، عينة متجلطة، وعاء غير مناسب، بيانات غير مطابقة', 0)")
+                db.execSQL("""CREATE TRIGGER IF NOT EXISTS lab_specimen_events_reject_update
+                    BEFORE UPDATE ON lab_specimen_events BEGIN
+                    SELECT RAISE(ABORT, 'lab specimen events are append-only');
+                END""".trimIndent())
+            }
+        }
+
         private fun installAuditImmutability(db: SupportSQLiteDatabase) {
             db.execSQL("""
                 CREATE TRIGGER IF NOT EXISTS record_audit_log_reject_update
@@ -1341,7 +1448,7 @@ abstract class HospitalDatabase : RoomDatabase() {
                     HospitalDatabase::class.java,
                     "hospital-local.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15)
                     .addCallback(object : RoomDatabase.Callback() {
                         override fun onCreate(db: SupportSQLiteDatabase) {
                             installAuditImmutability(db)

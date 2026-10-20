@@ -358,6 +358,7 @@ private fun HospitalWorkspace(repository: HospitalRepository) {
                     selected == "reception" -> ReceptionScreen(repository)
                     selected == "doctor_workspace" -> DoctorWorkspaceScreen(repository)
                     selected == "catalogs" -> ReferenceCatalogScreen(repository)
+                    selected == "lab" -> LaboratoryScreen()
                     selected == "business" -> BusinessProfileScreen(
                         profile = businessProfile,
                         onSave = { profile -> repository.saveBusinessProfile(profile) }
