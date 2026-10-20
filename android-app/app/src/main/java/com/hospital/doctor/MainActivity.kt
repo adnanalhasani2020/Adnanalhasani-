@@ -131,14 +131,14 @@ class MainActivity : AppCompatActivity() {
         }
         box.addView(urlInput); box.addView(tokenInput)
         box.addView(TextView(this).apply {
-            text = "أدخل عنوان الخادم ورمز المصادقة. لا تستخدم بيانات مرضى حقيقية عبر HTTP غير مشفّر. للمحاكي المحلي استخدم http://10.0.2.2:8080."
+            text = "أدخل عنوان HTTPS لخادم المستشفى ورمز المصادقة. لا تستخدم بيانات مرضى حقيقية عبر اتصال HTTP غير مشفّر."
             textSize = 12f; setTextColor(muted); setPadding(0, dp(8), 0, 0)
         })
         AlertDialog.Builder(this).setTitle("الاتصال بقاعدة بيانات المستشفى").setView(box)
             .setPositiveButton("حفظ والاتصال") { _, _ ->
                 val u = urlInput.text.toString().trim().trimEnd('/')
                 val t = tokenInput.text.toString().trim()
-                if (u.isBlank() || t.isBlank() || !(u.startsWith("https://") || u.startsWith("http://"))) {
+                if (u.isBlank() || t.isBlank() || !u.startsWith("https://")) {
                     toast("أدخل عنوان API صحيحًا ورمز المصادقة.")
                 } else {
                     baseUrl = u; bearer = t
@@ -159,6 +159,7 @@ class MainActivity : AppCompatActivity() {
                 val pmap = mutableMapOf<Int, Patient>()
                 for (i in 0 until pj.length()) {
                     val j = pj.getJSONObject(i)
+                    if (j.optInt("active", 1) != 1) continue
                     val p = Patient(j.optInt("id"), j.optString("patient_no"), j.optString("full_name"), j.optString("date_of_birth"), j.optString("sex"), j.optString("phone"), j.optString("allergies"))
                     pmap[p.id] = p
                 }
