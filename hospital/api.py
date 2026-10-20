@@ -234,6 +234,109 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                         hospital_conn.close()
                     if finance_conn is not None:
                         finance_conn.close()
+            elif route.startswith("/api/lab-orders/") and route.endswith("/events") and len(route.strip("/").split("/")) == 4:
+                # A dedicated, paginated timeline makes collection/processing/result changes
+                # inspectable without exposing the full audit log.
+                parts = route.strip("/").split("/")
+                if parts[0:2] != ["api", "lab-orders"] or parts[3] != "events":
+                    self._send(404, {"error": "not_found"})
+                    return
+                if not parts[2].isdigit() or int(parts[2]) <= 0:
+                    self._send(400, {"error": "invalid_lab_order_id"})
+                    return
+                order_id = int(parts[2])
+                try:
+                    params = parse_qs(parsed.query, keep_blank_values=True)
+                    limit = int(params.get("limit", ["50"])[0])
+                    offset = int(params.get("offset", ["0"])[0])
+                except (TypeError, ValueError, OverflowError):
+                    self._send(400, {"error": "invalid_pagination"})
+                    return
+                if limit < 1 or limit > 100 or offset < 0:
+                    self._send(400, {"error": "limit must be 1-100 and offset must be non-negative"})
+                    return
+                with database.connect() as conn:
+                    order = conn.execute(
+                        """SELECT l.id,l.patient_id,p.full_name AS patient_name,l.test_name,
+                                  l.status,l.result,l.ordered_at,l.resulted_at
+                           FROM lab_orders l JOIN patients p ON p.id=l.patient_id
+                           WHERE l.id=?""", (order_id,)
+                    ).fetchone()
+                    if order is None:
+                        self._send(404, {"error": "lab_order_not_found"})
+                        return
+                    total = conn.execute(
+                        "SELECT COUNT(*) FROM lab_order_events WHERE lab_order_id=?",
+                        (order_id,),
+                    ).fetchone()[0]
+                    rows = conn.execute(
+                        """SELECT id,status,occurred_at,actor
+                           FROM (
+                               SELECT id,status,occurred_at,actor
+                               FROM lab_order_events WHERE lab_order_id=?
+                               ORDER BY id DESC LIMIT ? OFFSET ?
+                           ) ORDER BY id ASC""",
+                        (order_id, limit, offset),
+                    ).fetchall()
+                self._send(200, {
+                    "data": {
+                        "order": dict(order),
+                        "events": [dict(row) for row in rows],
+                        "pagination": {"limit": limit, "offset": offset, "count": len(rows), "total": total},
+                    },
+                    "scope": "lab order timeline; chronological event history, not result approval",
+                })
+            elif route.startswith("/api/medicines/") and route.endswith("/stock-movements") and len(route.strip("/").split("/")) == 4:
+                # Expose an attributable, paginated stock ledger without returning unrelated audit details.
+                parts = route.strip("/").split("/")
+                if parts[0:2] != ["api", "medicines"] or parts[3] != "stock-movements":
+                    self._send(404, {"error": "not_found"})
+                    return
+                if not parts[2].isdigit() or int(parts[2]) <= 0:
+                    self._send(400, {"error": "invalid_medicine_id"})
+                    return
+                medicine_id = int(parts[2])
+                try:
+                    params = parse_qs(parsed.query, keep_blank_values=True)
+                    limit = int(params.get("limit", ["50"])[0])
+                    offset = int(params.get("offset", ["0"])[0])
+                except (TypeError, ValueError, OverflowError):
+                    self._send(400, {"error": "invalid_pagination"})
+                    return
+                if limit < 1 or limit > 100 or offset < 0:
+                    self._send(400, {"error": "limit must be 1-100 and offset must be non-negative"})
+                    return
+                with database.connect() as conn:
+                    medicine = conn.execute(
+                        "SELECT id,sku,name,quantity,reorder_level,unit,active FROM medicines WHERE id=?",
+                        (medicine_id,),
+                    ).fetchone()
+                    if medicine is None:
+                        self._send(404, {"error": "medicine_not_found"})
+                        return
+                    total = conn.execute(
+                        "SELECT COUNT(*) FROM medicine_stock_movements WHERE medicine_id=?",
+                        (medicine_id,),
+                    ).fetchone()[0]
+                    rows = conn.execute(
+                        """SELECT id,movement_type,quantity_delta,balance_after,reference,
+                                  prescription_id,actor,occurred_at
+                           FROM (
+                               SELECT id,movement_type,quantity_delta,balance_after,reference,
+                                      prescription_id,actor,occurred_at
+                               FROM medicine_stock_movements WHERE medicine_id=?
+                               ORDER BY id DESC LIMIT ? OFFSET ?
+                           ) ORDER BY id ASC""",
+                        (medicine_id, limit, offset),
+                    ).fetchall()
+                self._send(200, {
+                    "data": {
+                        "medicine": dict(medicine),
+                        "movements": [dict(row) for row in rows],
+                        "pagination": {"limit": limit, "offset": offset, "count": len(rows), "total": total},
+                    },
+                    "scope": "append-only stock movement history; legacy balances are represented by an opening entry",
+                })
             elif route == "/api/search":
                 try:
                     params = parse_qs(parsed.query, keep_blank_values=True)
