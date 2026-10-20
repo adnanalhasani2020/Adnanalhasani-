@@ -71,6 +71,24 @@ fun LaboratoryScreen() {
     val orders by dao.labOrders().collectAsState(initial = emptyList())
     val specimens by dao.labSpecimens().collectAsState(initial = emptyList())
     val settings by dao.labWorkflowSettings().collectAsState(initial = emptyList())
+    val specimenGuide by dao.referenceItems("lab_specimen_guide").collectAsState(initial = emptyList())
+
+    LaunchedEffect(database) {
+        withContext(Dispatchers.IO) {
+            if (dao.referenceCount("lab_specimen_guide") == 0) {
+                val guideDefaults = listOf(
+                    ReferenceCatalogEntity(category = "lab_specimen_guide", name = "دم كامل EDTA", description = "الوعاء: أنبوب EDTA المناسب للاختبار. التعامل: امزج بقلب الأنبوب برفق وفق تعليمات الشركة. تحقق: لا تقبل العينة المتجلطة أو غير الموسومة/المتعارضة. التخزين والكمية يعتمدان على الاختبار ودليل المختبر المحلي."),
+                    ReferenceCatalogEntity(category = "lab_specimen_guide", name = "مصل", description = "الوعاء: أنبوب مصل أو فاصل مصل مناسب للاختبار. التعامل: اترك التخثر والطرد المركزي حسب الإجراء المعتمد. تحقق من الانحلال أو التلوث وفق معايير الاختبار. اتبع متطلبات النقل والتخزين الخاصة بالفحص."),
+                    ReferenceCatalogEntity(category = "lab_specimen_guide", name = "بلازما السيترات", description = "الوعاء: أنبوب سيترات مخصص لاختبارات التخثر. مهم: مستوى التعبئة ونسبة الدم إلى مانع التخثر حاسمان؛ لا تستخدم أنبوبًا ناقص التعبئة أو متجلطًا. اتبع إجراء المختبر المعتمد."),
+                    ReferenceCatalogEntity(category = "lab_specimen_guide", name = "بول", description = "الوعاء: حاوية نظيفة/معقمة حسب نوع الفحص. اجمع عينة منتصف المجرى إذا طلب الإجراء ذلك، وتجنب تلوثها. انقلها سريعًا؛ وإذا تأخر النقل فاتبع سياسة التبريد المعتمدة للاختبار."),
+                    ReferenceCatalogEntity(category = "lab_specimen_guide", name = "براز", description = "الوعاء: حاوية نظيفة محكمة الإغلاق ومناسبة للفحص. تجنب اختلاط العينة بالبول أو الماء. نوع العينة ووقت النقل ووسيط الحفظ تتحدد وفق الفحص المطلوب وتعليمات المختبر."),
+                    ReferenceCatalogEntity(category = "lab_specimen_guide", name = "مسحة", description = "اختر نوع المسحة ووسط النقل الموافقين لموضع العينة والاختبار المطلوب؛ لا يوجد وسط واحد مناسب لكل الفحوص. تجنب جفاف العينة، وتحقق من الوسم والنقل والمدة وفق تعليمات الاختبار."),
+                    ReferenceCatalogEntity(category = "lab_specimen_guide", name = "بلغم", description = "الوعاء: حاوية معقمة محكمة الإغلاق. وضّح للمريض أن المطلوب بلغم من الجهاز التنفسي لا لعابًا. تجنب التلوث، وانقل العينة حسب تعليمات الفحص وسياسة المختبر.")
+                )
+                guideDefaults.forEach { dao.insertReference(it) }
+            }
+        }
+    }
 
     var searchQuery by remember { mutableStateOf("") }
     var statusFilter by remember { mutableStateOf("all") }
@@ -134,6 +152,26 @@ fun LaboratoryScreen() {
                         Text("تجاوزت الزمن المستهدف: $overdueCount", color = if (overdueCount > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
                     }
                     Text("الزمن المستهدف الحالي: ${turnaroundHours.toIntOrNull()?.coerceIn(1, 720) ?: 24} ساعة لكل عينة غير مكتملة.", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+        item {
+            Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("دليل العينات", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("إرشادات تشغيلية عامة. المرجع النهائي هو إجراء المختبر المعتمد وتعليمات الاختبار والشركة المصنّعة؛ لا تعتمد هذه الملاحظات وحدها لتحديد كمية أو مدة حفظ العينة.")
+                    if (specimenGuide.none { it.active }) {
+                        Text("لا توجد عناصر دليل نشطة. يمكن للمدير تعديل الدليل من القوائم المرجعية.")
+                    } else {
+                        specimenGuide.filter { it.active }.forEach { guide ->
+                            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                Text(guide.name, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                                Text(guide.description.ifBlank { "لم يضف المدير تعليمات تفصيلية لهذا النوع بعد." }, style = MaterialTheme.typography.bodySmall)
+                            }
+                            Divider()
+                        }
+                    }
+                    Text("يمكن إضافة الأنواع وتعديل إرشاداتها أو تعطيلها من شاشة «إدارة القوائم المرجعية» ضمن «دليل جمع العينات».", style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
