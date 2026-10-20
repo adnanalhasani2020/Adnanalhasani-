@@ -438,6 +438,65 @@ interface HospitalDao {
     @Insert
     suspend fun insertLabSpecimenEvent(event: LabSpecimenEventEntity): Long
 
+    @Query("SELECT * FROM lab_specimens WHERE id = :id LIMIT 1")
+    suspend fun labSpecimenById(id: Long): LabSpecimenEntity?
+
+    /** Insert the specimen and its first audit event atomically. */
+    @Transaction
+    suspend fun registerLabSpecimen(specimen: LabSpecimenEntity, actor: String): Long {
+        val id = insertLabSpecimen(specimen)
+        insertLabSpecimenEvent(
+            LabSpecimenEventEntity(
+                specimenId = id,
+                status = specimen.status,
+                note = "تم تسجيل العينة وربطها بطلب الفحص #${specimen.labOrderId}",
+                actor = actor.trim(),
+                occurredAt = specimen.collectedAt
+            )
+        )
+        return id
+    }
+
+    /**
+     * Apply a guarded state transition and append its audit event in one SQLite
+     * transaction. Expected status prevents stale screens from overwriting newer work.
+     */
+    @Transaction
+    suspend fun transitionLabSpecimen(
+        id: Long,
+        expectedStatus: String,
+        nextStatus: String,
+        actor: String,
+        note: String,
+        rejectionReason: String = "",
+        requireReceipt: Boolean = true,
+        occurredAt: Long = System.currentTimeMillis()
+    ): Boolean {
+        val current = labSpecimenById(id) ?: return false
+        if (current.status != expectedStatus || current.status in listOf("completed", "rejected")) return false
+        val allowed = when (nextStatus) {
+            "received" -> current.status == "collected"
+            "processing" -> current.status == "received" || (current.status == "collected" && !requireReceipt)
+            "completed" -> current.status == "processing"
+            "rejected" -> current.status in listOf("collected", "received", "processing") && rejectionReason.isNotBlank()
+            else -> false
+        }
+        if (!allowed || actor.isBlank()) return false
+        val receivedAt = if (nextStatus == "received") occurredAt else current.receivedAt
+        val reason = if (nextStatus == "rejected") rejectionReason.trim() else ""
+        if (updateLabSpecimenStatus(id, nextStatus, receivedAt, reason, occurredAt) != 1) return false
+        insertLabSpecimenEvent(
+            LabSpecimenEventEntity(
+                specimenId = id,
+                status = nextStatus,
+                note = note.trim(),
+                actor = actor.trim(),
+                occurredAt = occurredAt
+            )
+        )
+        return true
+    }
+
     @Query("SELECT * FROM lab_specimens ORDER BY collectedAt DESC")
     fun labSpecimens(): Flow<List<LabSpecimenEntity>>
 
