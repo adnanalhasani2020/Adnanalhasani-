@@ -84,7 +84,7 @@ private val modules = listOf(
     Module("appointments", "المواعيد", "تنظيم المواعيد والحجوزات", Icons.Default.CalendarMonth, Color(0xFF9A91B8),
         listOf("اسم المريض" to "اسم المريض", "اسم الطبيب" to "اسم الطبيب", "التاريخ والوقت" to "البداية: YYYY-MM-DD HH:mm", "وقت الانتهاء" to "النهاية: YYYY-MM-DD HH:mm", "سبب الزيارة" to "سبب الزيارة")),
     Module("encounters", "الزيارات الطبية", "متابعة الزيارة والتشخيص", Icons.Default.MedicalInformation, Color(0xFF6F9BAE),
-        listOf("اسم المريض" to "اسم المريض", "اسم الطبيب" to "اسم الطبيب", "تاريخ الزيارة" to "YYYY-MM-DD HH:mm", "الشكوى الرئيسية" to "الشكوى", "التشخيص" to "التشخيص الطبي", "ملاحظات" to "ملاحظات الزيارة")),
+        listOf("اسم المريض" to "اسم المريض", "اسم الطبيب" to "اسم الطبيب", "تاريخ الزيارة" to "YYYY-MM-DD HH:mm", "الشكوى الرئيسية" to "الشكوى", "التشخيص" to "التشخيص الطبي", "ملاحظات" to "ملاحظات الزيارة", "حالة الزيارة" to "مفتوحة / مغلقة")),
     Module("lab", "المختبر", "إدارة طلبات التحاليل ومتابعة النتائج", Icons.Default.Science, Color(0xFFD0A06E),
         listOf(
             "اسم المريض" to "ابحث عن اسم المريض أو أدخله",
@@ -303,7 +303,7 @@ private fun HospitalWorkspace(repository: HospitalRepository) {
         "inventory" -> inventoryItems.map { "${it.name} (${it.sku})" to "الكمية: ${it.quantity} • حد الطلب: ${it.reorderLevel} ${it.unit}" }
         "radiology" -> radiologyOrders.map { "${it.patientName} • ${it.imagingType}" to "${it.requestingDoctor} • ${it.status} • ${it.report}" }
         "maintenance" -> maintenanceTickets.map { it.ticketNumber to "${it.location} • ${it.issue} • ${it.priority} • ${it.status}" }
-        "pharmacy", "beds", "admissions", "appointments" -> localWorkflowRows
+        "pharmacy", "beds", "admissions", "appointments", "users", "encounters" -> localWorkflowRows
         "lab" -> localWorkflowRows.ifEmpty { labOrders.map { (it.patientName + " • " + it.testName) to (it.status + " • " + it.result) } }
         else -> emptyList()
     }
@@ -684,6 +684,7 @@ private fun ModuleMenu(onSelect: (String) -> Unit) {
  */
 private val requiredFieldLabelsByModule = mapOf(
     "patients" to setOf("رقم الملف", "اسم المريض"),
+    "users" to setOf("اسم المستخدم", "الدور"),
     "doctors" to setOf("الرقم الوظيفي", "اسم الطبيب"),
     "appointments" to setOf("اسم المريض", "اسم الطبيب", "التاريخ والوقت", "وقت الانتهاء"),
     "encounters" to setOf("اسم المريض", "الشكوى الرئيسية"),
