@@ -301,11 +301,10 @@ private fun HospitalWorkspace(repository: HospitalRepository) {
         "emergency" -> emergencyCases.map { it.caseNumber to "${it.patientName} • ${it.triageLevel} • ${it.status}" }
         "icu" -> icuStays.map { "${it.patientName} • ${it.bedNumber}" to "${it.attendingDoctor} • ${it.careLevel} • ${it.admissionDate}" }
         "inventory" -> inventoryItems.map { "${it.name} (${it.sku})" to "الكمية: ${it.quantity} • حد الطلب: ${it.reorderLevel} ${it.unit}" }
-        "lab" -> labOrders.map { "${it.patientName} • ${it.testName}" to "${it.status} • ${it.result}" }
         "radiology" -> radiologyOrders.map { "${it.patientName} • ${it.imagingType}" to "${it.requestingDoctor} • ${it.status} • ${it.report}" }
         "maintenance" -> maintenanceTickets.map { it.ticketNumber to "${it.location} • ${it.issue} • ${it.priority} • ${it.status}" }
         "pharmacy", "beds", "admissions", "appointments" -> localWorkflowRows
-        "lab" -> localWorkflowRows.ifEmpty { labOrders.map { it.patientName + " • " + it.testName to (it.status + " • " + it.result) } }
+        "lab" -> localWorkflowRows.ifEmpty { labOrders.map { (it.patientName + " • " + it.testName) to (it.status + " • " + it.result) } }
         else -> emptyList()
     }
     val screenTitle = currentModule?.title ?: when (selected) {
