@@ -21,13 +21,14 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
-import java.util.concurrent.Executors
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 
 class DoctorWorkflowActivity : AppCompatActivity() {
     private data class Patient(val id: Long, val fileNo: String, val name: String, val age: String, val phone: String, val notes: String)
     private data class QueueItem(val patient: Patient, val time: String, val status: String, val kind: String, val recordId: Long, val reason: String, val doctor: String)
-    private val io = Executors.newSingleThreadExecutor()
     private lateinit var dao: HospitalDao
     private var activeTab = "today"
     private var selectedDate = Calendar.getInstance()
@@ -121,7 +122,7 @@ class DoctorWorkflowActivity : AppCompatActivity() {
      */
     private fun loadQueue() {
         connectionLabel.text = "جارٍ قراءة قاعدة البيانات المحلية..."
-        io.execute {
+        lifecycleScope.launch(Dispatchers.IO) {
             try {
                 DemoDataSeeder.seedIfEmpty(dao)
                 val patientRows = dao.patients().first()
@@ -274,8 +275,4 @@ class DoctorWorkflowActivity : AppCompatActivity() {
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
     private fun toast(message: String) = Toast.makeText(this, message, Toast.LENGTH_LONG).show()
 
-    override fun onDestroy() {
-        io.shutdown()
-        super.onDestroy()
-    }
 }
