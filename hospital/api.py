@@ -383,7 +383,7 @@ def make_handler(database: HospitalDB, api_token: str, *, auth_mode: str = "toke
                     self._send(400, {"error": "invalid_medicine_id"})
                     return
                 movement_type = params.get("movement_type", [""])[0].strip()
-                allowed_types = {"opening", "restock", "dispense", "adjustment"}
+                allowed_types = {"initial_stock", "opening", "restock", "dispense", "adjustment"}
                 if movement_type and movement_type not in allowed_types:
                     self._send(400, {"error": "invalid_movement_type"})
                     return
