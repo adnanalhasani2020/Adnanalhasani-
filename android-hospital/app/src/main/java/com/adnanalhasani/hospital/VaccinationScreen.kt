@@ -1,0 +1,323 @@
+package com.adnanalhasani.hospital
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChildCare
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
+import java.time.LocalDate
+
+private val vaccinationStatuses = listOf("تم التطعيم", "موعد قادم", "تأجيل", "تعذر")
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun VaccinationScreen(repository: HospitalRepository, onDelete: (Long) -> Unit) {
+    val today = LocalDate.now().toString()
+    val records by repository.vaccinationRecords().collectAsState(initial = emptyList())
+    val allRecords by repository.allRecords().collectAsState(initial = emptyList())
+    val upcoming by repository.upcomingVaccinations(today).collectAsState(initial = emptyList())
+    val overdue by repository.overdueVaccinations(today).collectAsState(initial = emptyList())
+    val scope = rememberCoroutineScope()
+    val fields = listOf(
+        "اسم الطفل" to "الاسم الرباعي",
+        "رقم ملف الطفل" to "رقم الملف الصحي (اختياري)",
+        "تاريخ الميلاد" to "YYYY-MM-DD (اختياري)",
+        "هاتف الوالد" to "هاتف الأب أو ولي الأمر (اختياري)",
+        "هاتف الوالدة" to "هاتف الأم (اختياري)",
+        "المحافظة" to "المحافظة (اختياري)",
+        "المديرية" to "المديرية (اختياري)",
+        "العزلة" to "العزلة (اختياري)",
+        "القرية أو الحارة" to "القرية أو الحارة (اختياري)",
+        "السكن أو المنزل" to "وصف السكن أو المنزل (اختياري)",
+        "اسم اللقاح" to "الاسم كما في السجل الرسمي",
+        "رقم الجرعة" to "جرعة الولادة / الأولى / الثانية / معززة",
+        "تاريخ التطعيم" to "YYYY-MM-DD",
+        "موعد الجرعة التالية" to "YYYY-MM-DD (اختياري)",
+        "رقم التشغيلة" to "رقم دفعة اللقاح (اختياري)",
+        "مكان التطعيم" to "موضع إعطاء اللقاح (اختياري)",
+        "الممارس الصحي" to "اسم الممارس الصحي (اختياري)",
+        "ملاحظات" to "ملاحظات (اختياري)"
+    )
+    var values by remember { mutableStateOf(fields.associate { it.first to "" }) }
+    var gender by remember { mutableStateOf("غير محدد") }
+    var genderExpanded by remember { mutableStateOf(false) }
+    var status by remember { mutableStateOf("تم التطعيم") }
+    var statusExpanded by remember { mutableStateOf(false) }
+    var saving by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf<String?>(null) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var search by remember { mutableStateOf("") }
+    var pendingDelete by remember { mutableStateOf<VaccinationRecordEntity?>(null) }
+    var editingRecord by remember { mutableStateOf<VaccinationRecordEntity?>(null) }
+    val filtered = records.filter { record ->
+        val sourceDetails = allRecords.firstOrNull { it.id == record.sourceRecordId }?.details.orEmpty()
+        search.isBlank() || record.childName.contains(search, true) || record.childFileNumber.contains(search, true) ||
+            record.vaccineName.contains(search, true) || sourceDetails.contains(search, true)
+    }
+
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(20.dp)) {
+                Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.ChildCare, contentDescription = null, tint = Color(0xFF548F88), modifier = Modifier.size(30.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("سجل تحصين الأطفال", fontSize = 21.sp, fontWeight = FontWeight.Bold, color = Color(0xFF263B4D))
+                    }
+                    Text("أدخل الجرعات كما وثّقها الممارس الصحي، بالتاريخ YYYY-MM-DD.", color = Color(0xFF788895), fontSize = 12.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        SummaryTile("إجمالي الجرعات", records.size.toString(), Modifier.weight(1f))
+                        SummaryTile("مواعيد قادمة", upcoming.size.toString(), Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(20.dp)) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
+                    Text(if (editingRecord == null) "تسجيل جرعة أو موعد" else "تعديل سجل التطعيم", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Color(0xFF263B4D))
+                    ExposedDropdownMenuBox(expanded = genderExpanded, onExpandedChange = { genderExpanded = it }) {
+                        OutlinedTextField(value = gender, onValueChange = {}, readOnly = true,
+                            label = { Text("جنس الطفل") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = genderExpanded) },
+                            modifier = Modifier.menuAnchor().fillMaxWidth(), shape = RoundedCornerShape(13.dp))
+                        ExposedDropdownMenu(expanded = genderExpanded, onDismissRequest = { genderExpanded = false }) {
+                            listOf("ذكر", "أنثى", "غير محدد").forEach { option ->
+                                DropdownMenuItem(text = { Text(option) }, onClick = { gender = option; genderExpanded = false })
+                            }
+                        }
+                    }
+                    fields.forEach { (label, hint) ->
+                        OutlinedTextField(
+                            value = values[label].orEmpty(),
+                            onValueChange = { values = values + (label to it); message = null; errorMessage = null },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text(label) },
+                            placeholder = { Text(hint, fontSize = 12.sp) },
+                            singleLine = label != "ملاحظات",
+                            minLines = if (label == "ملاحظات") 2 else 1,
+                            shape = RoundedCornerShape(13.dp)
+                        )
+                    }
+                    ExposedDropdownMenuBox(expanded = statusExpanded, onExpandedChange = { statusExpanded = it }) {
+                        OutlinedTextField(
+                            value = status, onValueChange = {}, readOnly = true,
+                            label = { Text("حالة الجرعة") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = statusExpanded) },
+                            modifier = Modifier.menuAnchor().fillMaxWidth(), shape = RoundedCornerShape(13.dp)
+                        )
+                        ExposedDropdownMenu(expanded = statusExpanded, onDismissRequest = { statusExpanded = false }) {
+                            vaccinationStatuses.forEach { option ->
+                                DropdownMenuItem(text = { Text(option) }, onClick = { status = option; statusExpanded = false })
+                            }
+                        }
+                    }
+                    Button(
+                        onClick = {
+                            val required = if (status == "موعد قادم") {
+                                listOf("اسم الطفل", "اسم اللقاح", "رقم الجرعة", "موعد الجرعة التالية")
+                            } else {
+                                listOf("اسم الطفل", "اسم اللقاح", "رقم الجرعة", "تاريخ التطعيم")
+                            }
+                            val missing = required.firstOrNull { values[it].isNullOrBlank() }
+                            if (missing != null) {
+                                errorMessage = "أكمل الحقل المطلوب: " + missing
+                                message = null
+                                return@Button
+                            }
+                            val dateFields = listOf("تاريخ الميلاد", "تاريخ التطعيم", "موعد الجرعة التالية")
+                            val invalidDate = dateFields.firstOrNull { key ->
+                                val raw = values[key].orEmpty().trim()
+                                raw.isNotBlank() && runCatching { LocalDate.parse(raw) }.isFailure
+                            }
+                            if (invalidDate != null) {
+                                errorMessage = "التاريخ في حقل " + invalidDate + " غير صحيح. استخدم YYYY-MM-DD."
+                                message = null
+                                return@Button
+                            }
+                            val givenDate = values["تاريخ التطعيم"].orEmpty().trim()
+                            val nextDate = values["موعد الجرعة التالية"].orEmpty().trim()
+                            if (givenDate.isNotBlank() && nextDate.isNotBlank() && nextDate < givenDate) {
+                                errorMessage = "موعد الجرعة التالية لا يمكن أن يسبق تاريخ التطعيم."
+                                message = null
+                                return@Button
+                            }
+                            val details = (fields.mapNotNull { (label, _) ->
+                                values[label]?.trim()?.takeIf { it.isNotBlank() }?.let { label + ": " + it }
+                            } + listOf("جنس الطفل: " + gender, "حالة الجرعة: " + status)).joinToString("\n")
+                            scope.launch {
+                                saving = true
+                                message = null
+                                errorMessage = null
+                                try {
+                                    val editing = editingRecord
+                                    if (editing == null) {
+                                        repository.saveRecord(HospitalRecord(category = "vaccination", title = values["اسم الطفل"].orEmpty().trim(), details = details))
+                                        message = "تم حفظ السجل محلياً بنجاح."
+                                    } else {
+                                        val oldDetails = allRecords.firstOrNull { it.id == editing.sourceRecordId }?.details.orEmpty()
+                                        val timestamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+                                        val savedDetails = RecordEditHistory.append(details, oldDetails, timestamp)
+                                        repository.updateRecord(editing.sourceRecordId, values["اسم الطفل"].orEmpty().trim(), savedDetails)
+                                        editingRecord = null
+                                        message = "تم حفظ التعديل مع تسجيل تاريخه."
+                                    }
+                                    values = fields.associate { it.first to "" }
+                                    status = "تم التطعيم"
+                                    gender = "غير محدد"
+                                } catch (_: Exception) {
+                                    errorMessage = "تعذر الحفظ. تحقق من البيانات ثم أعد المحاولة."
+                                } finally {
+                                    saving = false
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                        enabled = !saving, shape = RoundedCornerShape(14.dp)
+                    ) {
+                        if (saving) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp) else Icon(Icons.Default.Save, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (saving) "جارٍ الحفظ..." else if (editingRecord == null) "حفظ سجل التطعيم" else "حفظ التعديل")
+                    }
+                    message?.let { Text(it, color = Color(0xFF548F88), fontSize = 12.sp) }
+                    errorMessage?.let { Text(it, color = Color(0xFFC97979), fontSize = 12.sp) }
+                }
+            }
+        }
+        if (overdue.isNotEmpty()) {
+            item {
+                Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF1F0)), shape = RoundedCornerShape(18.dp)) {
+                    Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("مواعيد تطعيم متأخرة", fontWeight = FontWeight.Bold, color = Color(0xFFB93838), fontSize = 16.sp)
+                        Text("هذه مواعيد مضى تاريخها المسجل؛ راجع السجل مع الممارس الصحي ولا تغيّر الجرعات اعتماداً على التطبيق وحده.", color = Color(0xFF875454), fontSize = 11.sp, lineHeight = 16.sp)
+                        Text("عدد السجلات المتأخرة: " + overdue.size, color = Color(0xFFB93838), fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+            items(overdue, key = { "overdue-" + it.id }) { record ->
+                Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp)) {
+                    Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(record.childName, fontWeight = FontWeight.SemiBold, color = Color(0xFF263B4D))
+                        Text(record.vaccineName + " • الجرعة " + record.doseNumber, color = Color(0xFF293B49), fontSize = 13.sp)
+                        Text("كان الموعد: " + record.nextDoseDate, color = Color(0xFFB93838), fontSize = 12.sp)
+                        if (record.childFileNumber.isNotBlank()) Text("رقم الملف: " + record.childFileNumber, color = Color(0xFF788895), fontSize = 11.sp)
+                    }
+                }
+            }
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(20.dp)) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Event, contentDescription = null, tint = Color(0xFF548F88))
+                        Spacer(Modifier.width(8.dp))
+                        Text("الجرعات ذات الموعد القادم", fontWeight = FontWeight.Bold, fontSize = 17.sp, color = Color(0xFF263B4D))
+                    }
+                    Text("قائمة مبنية على التواريخ المدخلة، وليست توصية طبية أو جدولاً وطنياً.", fontSize = 11.sp, color = Color(0xFF788895))
+                    if (upcoming.isEmpty()) Text("لا توجد مواعيد مستقبلية مسجلة.", color = Color(0xFF788895))
+                }
+            }
+        }
+        items(upcoming, key = { "upcoming-" + it.id }) { record ->
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp)) {
+                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(record.childName, fontWeight = FontWeight.SemiBold, color = Color(0xFF263B4D))
+                    Text(record.vaccineName + " • الجرعة " + record.doseNumber, color = Color(0xFF293B49), fontSize = 13.sp)
+                    Text("الموعد: " + record.nextDoseDate, color = Color(0xFF548F88), fontSize = 12.sp)
+                    if (record.childFileNumber.isNotBlank()) Text("رقم الملف: " + record.childFileNumber, color = Color(0xFF788895), fontSize = 11.sp)
+                }
+            }
+        }
+        item {
+            Text("سجل الجرعات المحفوظة", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Color(0xFF263B4D))
+            OutlinedTextField(value = search, onValueChange = { search = it }, modifier = Modifier.fillMaxWidth(), label = { Text("بحث باسم الطفل أو رقم الملف أو اللقاح") }, singleLine = true, shape = RoundedCornerShape(13.dp))
+        }
+        if (filtered.isEmpty()) item { Text("لا توجد سجلات مطابقة للبحث.", color = Color(0xFF788895), modifier = Modifier.padding(8.dp)) }
+        item {
+            pendingDelete?.let { record ->
+                AlertDialog(
+                    onDismissRequest = { pendingDelete = null },
+                    title = { Text("تأكيد حذف سجل التطعيم") },
+                    text = { Text("هل تريد حذف سجل ${record.childName} للقاح ${record.vaccineName}؟ لا يمكن التراجع عن الحذف.") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            pendingDelete = null
+                            onDelete(record.sourceRecordId)
+                        }) { Text("حذف", color = Color(0xFFC97979)) }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { pendingDelete = null }) { Text("إلغاء") }
+                    }
+                )
+            }
+        }
+        items(filtered, key = { it.id }) { record ->
+            val source = allRecords.firstOrNull { it.id == record.sourceRecordId }
+            val sourceFields = source?.details.orEmpty().lineSequence().mapNotNull { line ->
+                val separator = line.indexOf(": ")
+                if (separator <= 0) null else line.substring(0, separator).trim() to line.substring(separator + 2).trim()
+            }.toMap()
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp)) {
+                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(record.childName, fontWeight = FontWeight.Bold, color = Color(0xFF263B4D))
+                            Text(record.vaccineName + " • " + record.doseNumber, color = Color(0xFF293B49), fontSize = 13.sp)
+                        }
+                        Row {
+                            TextButton(onClick = {
+                                editingRecord = record
+                                values = fields.associate { (label, _) -> label to sourceFields[label].orEmpty() }
+                                gender = sourceFields["جنس الطفل"].orEmpty().ifBlank { "غير محدد" }
+                                status = sourceFields["حالة الجرعة"].orEmpty().ifBlank { record.doseStatus }
+                                message = null
+                                errorMessage = null
+                            }) { Icon(Icons.Default.Edit, contentDescription = "تعديل السجل", tint = Color(0xFF548F88)) }
+                            TextButton(onClick = { pendingDelete = record }) { Icon(Icons.Default.Delete, contentDescription = "حذف السجل", tint = Color(0xFFC97979)) }
+                        }
+                    }
+                    if (record.administeredDate.isNotBlank()) {
+                        Text("تاريخ الجرعة: " + record.administeredDate + " • الحالة: " + record.doseStatus, fontSize = 12.sp, color = Color(0xFF788895))
+                    } else {
+                        Text("لم تُسجل جرعة منفذة بعد • الحالة: " + record.doseStatus, fontSize = 12.sp, color = Color(0xFF788895))
+                    }
+                    if (sourceFields["جنس الطفل"].orEmpty().isNotBlank()) Text("الجنس: " + sourceFields["جنس الطفل"], fontSize = 12.sp, color = Color(0xFF788895))
+                    if (record.nextDoseDate.isNotBlank()) Text("الجرعة التالية: " + record.nextDoseDate, fontSize = 12.sp, color = Color(0xFF548F88))
+                    if (record.childFileNumber.isNotBlank()) Text("رقم الملف: " + record.childFileNumber, fontSize = 12.sp, color = Color(0xFF788895))
+                    listOf("هاتف الوالد", "هاتف الوالدة", "المحافظة", "المديرية", "العزلة", "القرية أو الحارة", "السكن أو المنزل").forEach { label ->
+                        sourceFields[label]?.takeIf { it.isNotBlank() }?.let { value ->
+                            Text("$label: $value", fontSize = 12.sp, color = Color(0xFF788895))
+                        }
+                    }
+                    if (record.batchNumber.isNotBlank()) Text("التشغيلة: " + record.batchNumber, fontSize = 12.sp, color = Color(0xFF788895))
+                    if (record.notes.isNotBlank()) Text("ملاحظات: " + record.notes, fontSize = 12.sp, color = Color(0xFF788895))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SummaryTile(label: String, value: String, modifier: Modifier = Modifier) {
+    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = Color(0xFFE5F1EE)), shape = RoundedCornerShape(14.dp)) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(value, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color(0xFF263B4D))
+            Text(label, fontSize = 11.sp, color = Color(0xFF548F88))
+        }
+    }
+}

@@ -1,0 +1,50 @@
+name: Android build
+
+on:
+  pull_request:
+    paths:
+      - "android-hospital/**"
+      - ".github/workflows/android-build.yml"
+  push:
+    branches:
+      - main
+      - feature/native-hospital-android
+    paths:
+      - "android-hospital/**"
+      - ".github/workflows/android-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  assemble-debug:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - name: Install Android SDK 35
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Run unit tests
+        run: gradle -p android-hospital --no-daemon testDebugUnitTest
+      - name: Build debug APK
+        run: gradle -p android-hospital --no-daemon assembleDebug
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: hospital-debug-apk
+          path: android-hospital/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error

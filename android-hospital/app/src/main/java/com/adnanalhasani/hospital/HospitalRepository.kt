@@ -1,0 +1,101 @@
+package com.adnanalhasani.hospital
+
+import kotlinx.coroutines.flow.Flow
+
+/**
+ * Repository boundary for Compose screens.
+ * The DAO transaction keeps module-indexed rows and legacy records synchronized.
+ */
+class HospitalRepository(private val dao: HospitalDao) {
+    fun allRecords(): Flow<List<HospitalRecord>> = dao.allRecords()
+
+    fun patients(): Flow<List<PatientEntity>> = dao.patients()
+
+    fun doctors(): Flow<List<DoctorEntity>> = dao.doctors()
+
+    fun recentAuditHistory(): Flow<List<RecordAuditLogEntity>> = dao.recentAuditHistory()
+
+    fun clinicalVisits(): Flow<List<ClinicalVisitEntity>> = dao.clinicalVisits()
+
+    fun prescriptionOrders(): Flow<List<PrescriptionOrderEntity>> = dao.prescriptionOrders()
+
+    fun labOrders(): Flow<List<LabOrderEntity>> = dao.labOrders()
+
+    fun radiologyOrders(): Flow<List<RadiologyOrderEntity>> = dao.radiologyOrders()
+
+    fun auditHistory(recordId: Long): Flow<List<RecordAuditLogEntity>> = dao.auditHistory(recordId)
+
+    fun referenceItems(category: String): Flow<List<ReferenceCatalogEntity>> = dao.referenceItems(category)
+
+    suspend fun seedDefaultReferenceCatalogs() {
+        val defaults = mapOf(
+            "lab_tests" to listOf("صورة دم كاملة CBC", "سكر الدم", "الهيموغلوبين السكري HbA1c", "وظائف الكلى", "وظائف الكبد", "تحليل البول", "سرعة الترسيب ESR", "CRP", "دهون الدم", "هرمون الغدة الدرقية TSH"),
+            "medications" to listOf("باراسيتامول", "إيبوبروفين", "أموكسيسيلين", "أوميبرازول", "ميتفورمين", "محلول ملحي 0.9%", "سيتريزين"),
+            "diagnoses" to listOf("ارتفاع ضغط الدم", "داء السكري من النوع الثاني", "فقر الدم", "التهاب الجهاز التنفسي العلوي", "التهاب المسالك البولية", "الربو", "التهاب المعدة والأمعاء"),
+            "specialties" to listOf("طب الأسرة", "الباطنية", "الجراحة العامة", "طب الأطفال", "النساء والولادة", "القلب", "العظام", "الأنف والأذن والحنجرة", "العيون", "الجلدية"),
+            "departments" to listOf("الطوارئ", "العيادات الخارجية", "الباطنية", "الجراحة", "الأطفال", "النساء والولادة", "العناية المركزة", "المختبر", "الأشعة", "الصيدلية"),
+            "blood_groups" to listOf("A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"),
+            "payment_methods" to listOf("نقداً", "بطاقة", "تحويل بنكي", "تأمين"),
+            "lab_status" to listOf("مطلوب", "قيد التنفيذ", "مكتمل", "ملغي"),
+            "admission_status" to listOf("قيد التقييم", "منوّم", "خرج", "محول"),
+            "vaccination_status" to listOf("تم التطعيم", "موعد قادم", "تأجيل", "تعذر"),
+            "imaging_types" to listOf("أشعة سينية X-Ray", "موجات فوق صوتية", "أشعة مقطعية CT", "رنين مغناطيسي MRI")
+        )
+        defaults.forEach { (category, names) -> seedReferenceDefaults(category, names) }
+    }
+
+    suspend fun seedReferenceDefaults(category: String, names: List<String>) {
+        if (dao.referenceCount(category) > 0) return
+        names.distinct().forEach { name ->
+            dao.insertReference(ReferenceCatalogEntity(category = category, name = name.trim()))
+        }
+    }
+
+    suspend fun addReference(category: String, name: String, description: String = ""): Boolean {
+        val cleanName = name.trim()
+        if (cleanName.isBlank()) return false
+        return dao.insertReference(ReferenceCatalogEntity(category = category, name = cleanName, description = description.trim())) != -1L
+    }
+
+    suspend fun updateReference(id: Long, name: String, description: String, active: Boolean): Boolean {
+        val cleanName = name.trim()
+        if (cleanName.isBlank()) return false
+        return dao.updateReference(id, cleanName, description.trim(), active, System.currentTimeMillis()) > 0
+    }
+
+    suspend fun deactivateReference(id: Long): Boolean =
+        dao.deactivateReference(id, System.currentTimeMillis()) > 0
+
+    fun businessProfile(): Flow<BusinessProfileEntity?> = dao.businessProfile()
+
+    suspend fun saveBusinessProfile(profile: BusinessProfileEntity) =
+        dao.saveBusinessProfile(profile.copy(id = 1, updatedAt = System.currentTimeMillis()))
+
+    fun recordsForModule(category: String): Flow<List<ModuleRecordEntity>> =
+        dao.moduleRecords(category)
+
+    fun allModuleRecords(): Flow<List<ModuleRecordEntity>> = dao.allModuleRecords()
+
+    fun emergencyCases(): Flow<List<EmergencyCaseEntity>> = dao.emergencyCases()
+    fun icuStays(): Flow<List<IcuStayEntity>> = dao.icuStays()
+    fun inventoryItems(): Flow<List<InventoryItemEntity>> = dao.inventoryItems()
+    fun maintenanceTickets(): Flow<List<MaintenanceTicketEntity>> = dao.maintenanceTickets()
+    fun vaccinationRecords(): Flow<List<VaccinationRecordEntity>> = dao.vaccinationRecords()
+    fun vaccinationsForChild(fileNumber: String): Flow<List<VaccinationRecordEntity>> = dao.vaccinationsForChild(fileNumber)
+    fun upcomingVaccinations(today: String): Flow<List<VaccinationRecordEntity>> = dao.upcomingVaccinations(today)
+    fun overdueVaccinations(today: String): Flow<List<VaccinationRecordEntity>> = dao.overdueVaccinations(today)
+
+    suspend fun saveRecord(record: HospitalRecord) = dao.saveRecord(record)
+
+    suspend fun saveClinicalVisit(record: HospitalRecord, patientId: Long, doctorId: Long) =
+        dao.saveRecord(record, linkedPatientId = patientId, linkedDoctorId = doctorId)
+
+    suspend fun updateRecord(id: Long, title: String, details: String) = dao.updateRecord(id, title, details)
+
+    suspend fun updateClinicalVisitRecord(id: Long, title: String, details: String, patientId: Long, doctorId: Long) =
+        dao.updateRecord(id, title, details, linkedPatientId = patientId, linkedDoctorId = doctorId)
+
+    suspend fun updateEmergencyCase(id: Long, details: String, status: String) = dao.updateEmergencyCase(id, details, status)
+
+    suspend fun deleteRecord(id: Long) = dao.delete(id)
+}
