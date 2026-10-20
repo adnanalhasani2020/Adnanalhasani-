@@ -416,35 +416,140 @@ class PatientDetailsActivity : AppCompatActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val appointments = dao.appointmentsForPatient(patientId, patient).first()
-                val message = if (appointments.isEmpty()) {
-                    "لا توجد مواعيد مراجعة مسجلة لهذا المريض."
-                } else {
-                    appointments.joinToString("\n\n") { appointment ->
-                        buildString {
-                            append("📅 ${appointment.appointmentAt.ifBlank { "تاريخ غير محدد" }}\n")
-                            append("الطبيب: ${appointment.doctorName.ifBlank { "غير محدد" }}\n")
-                            append("السبب: ${appointment.reason.ifBlank { "غير مسجل" }}\n")
-                            append("الحالة: ${appointment.status.ifBlank { "مجدول" }}")
-                        }
-                    }
-                }
                 runOnUiThread {
-                    val content = TextView(this@PatientDetailsActivity).apply {
-                        text = message
-                        textSize = 14f
-                        setTextColor(ink)
-                        setPadding(dp(16), dp(12), dp(16), dp(12))
+                    if (appointments.isEmpty()) {
+                        AlertDialog.Builder(this@PatientDetailsActivity)
+                            .setTitle("مواعيد المراجعة السابقة")
+                            .setMessage("لا توجد مواعيد مراجعة مسجلة لهذا المريض.")
+                            .setPositiveButton("إغلاق", null)
+                            .show()
+                        return@runOnUiThread
                     }
+                    val labels = appointments.map { appointment ->
+                        "${appointment.appointmentAt.ifBlank { "تاريخ غير محدد" }} • ${appointment.reason.ifBlank { "بدون سبب" }} • ${appointment.status.ifBlank { "مجدول" }}"
+                    }.toTypedArray()
                     AlertDialog.Builder(this@PatientDetailsActivity)
-                        .setTitle("مواعيد المراجعة السابقة")
-                        .setView(ScrollView(this@PatientDetailsActivity).apply { addView(content) })
-                        .setPositiveButton("إغلاق", null)
+                        .setTitle("اختر موعدًا لإدارته")
+                        .setItems(labels) { _, index ->
+                            val selected = appointments[index]
+                            AlertDialog.Builder(this@PatientDetailsActivity)
+                                .setTitle("موعد المراجعة")
+                                .setItems(arrayOf("تعديل الموعد", "إلغاء الموعد", "رجوع")) { _, action ->
+                                    when (action) {
+                                        0 -> showEditAppointmentDialog(selected.id, selected.appointmentAt, selected.reason, selected.status)
+                                        1 -> confirmCancelAppointment(selected.id, selected.appointmentAt)
+                                    }
+                                }
+                                .show()
+                        }
+                        .setNegativeButton("إغلاق", null)
                         .show()
                 }
             } catch (e: Exception) {
                 runOnUiThread { toast("تعذر تحميل المواعيد: ${e.message ?: "خطأ"}") }
             }
         }
+    }
+
+    private fun showEditAppointmentDialog(id: Long, appointmentAt: String, reason: String, status: String) {
+        val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+        val timeFormat = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+        val calendar = java.util.Calendar.getInstance()
+        try {
+            val parsed = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault()).parse(appointmentAt)
+            if (parsed != null) calendar.time = parsed
+        } catch (_: Exception) { }
+
+        val dateCalendar = calendar.clone() as java.util.Calendar
+        val timeCalendar = calendar.clone() as java.util.Calendar
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            setPadding(dp(20), dp(8), dp(20), dp(8))
+        }
+        val dateButton = Button(this).apply {
+            text = dateFormat.format(dateCalendar.time)
+            isAllCaps = false
+            setOnClickListener {
+                DatePickerDialog(this@PatientDetailsActivity, { _, year, month, day ->
+                    dateCalendar.set(year, month, day)
+                    text = dateFormat.format(dateCalendar.time)
+                }, dateCalendar.get(java.util.Calendar.YEAR), dateCalendar.get(java.util.Calendar.MONTH), dateCalendar.get(java.util.Calendar.DAY_OF_MONTH)).show()
+            }
+        }
+        val timeButton = Button(this).apply {
+            text = timeFormat.format(timeCalendar.time)
+            isAllCaps = false
+            setOnClickListener {
+                TimePickerDialog(this@PatientDetailsActivity, { _, hour, minute ->
+                    timeCalendar.set(java.util.Calendar.HOUR_OF_DAY, hour)
+                    timeCalendar.set(java.util.Calendar.MINUTE, minute)
+                    text = timeFormat.format(timeCalendar.time)
+                }, timeCalendar.get(java.util.Calendar.HOUR_OF_DAY), timeCalendar.get(java.util.Calendar.MINUTE), true).show()
+            }
+        }
+        val reasonInput = EditText(this).apply {
+            setText(reason)
+            hint = "سبب المراجعة"
+            minLines = 2
+        }
+        listOf("تاريخ المراجعة" to dateButton, "وقت المراجعة" to timeButton, "سبب المراجعة" to reasonInput).forEach { (label, view) ->
+            form.addView(TextView(this).apply {
+                text = label
+                setTextColor(muted)
+                textSize = 13f
+                setPadding(0, dp(8), 0, dp(4))
+            })
+            view.setPadding(dp(12), dp(10), dp(12), dp(10))
+            view.background = rounded(Color.WHITE, 10, border)
+            form.addView(view, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("تعديل موعد المراجعة")
+            .setView(ScrollView(this).apply { addView(form) })
+            .setNegativeButton("إلغاء", null)
+            .setPositiveButton("حفظ التعديل", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val newReason = reasonInput.text.toString().trim()
+                if (newReason.isBlank()) {
+                    reasonInput.error = "سبب المراجعة مطلوب"
+                    return@setOnClickListener
+                }
+                val newDateTime = "${dateFormat.format(dateCalendar.time)} ${timeFormat.format(timeCalendar.time)}"
+                lifecycleScope.launch(Dispatchers.IO) {
+                    try {
+                        dao.updateAppointmentById(id, newDateTime, newReason, status.ifBlank { "مجدول" })
+                        runOnUiThread {
+                            dialog.dismiss()
+                            toast("تم تحديث الموعد")
+                        }
+                    } catch (e: Exception) {
+                        runOnUiThread { toast("تعذر تحديث الموعد: ${e.message ?: "خطأ"}") }
+                    }
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun confirmCancelAppointment(id: Long, appointmentAt: String) {
+        AlertDialog.Builder(this)
+            .setTitle("إلغاء موعد المراجعة")
+            .setMessage("هل تريد إلغاء الموعد بتاريخ $appointmentAt؟")
+            .setNegativeButton("رجوع", null)
+            .setPositiveButton("تأكيد الإلغاء") { _, _ ->
+                lifecycleScope.launch(Dispatchers.IO) {
+                    try {
+                        dao.updateAppointmentStatus(id, "ملغى")
+                        runOnUiThread { toast("تم إلغاء الموعد") }
+                    } catch (e: Exception) {
+                        runOnUiThread { toast("تعذر إلغاء الموعد: ${e.message ?: "خطأ"}") }
+                    }
+                }
+            }
+            .show()
     }
 
     private fun showHistory(patient: String) {
