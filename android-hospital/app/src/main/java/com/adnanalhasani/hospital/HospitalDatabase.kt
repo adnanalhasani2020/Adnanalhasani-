@@ -687,7 +687,7 @@ interface HospitalDao {
             "lab" -> saveLabOrder(LabOrderEntity(
                 sourceRecordId = sourceRecordId, patientName = field("اسم المريض"), testName = field("اسم الفحص"),
                 status = field("حالة الفحص"), result = field("النتيجة"), createdAt = record.createdAt,
-                patientId = findPatientIdByName(field("اسم المريض")), clinicalVisitId = field("معرّف الزيارة").toLongOrNull()?.let { existingClinicalVisitId(it) }
+                patientId = linkedPatientId ?: findPatientIdByName(field("اسم المريض")), clinicalVisitId = field("معرّف الزيارة").toLongOrNull()?.let { existingClinicalVisitId(it) }
             ))
             "radiology" -> saveRadiologyOrder(RadiologyOrderEntity(
                 sourceRecordId = sourceRecordId, patientName = field("اسم المريض"), imagingType = field("نوع التصوير"),
