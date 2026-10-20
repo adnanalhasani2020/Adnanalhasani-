@@ -631,7 +631,7 @@ interface HospitalDao {
      * compatibility; selected core modules also get queryable structured rows.
      */
     @Transaction
-    suspend fun saveRecord(record: HospitalRecord, linkedPatientId: Long? = null, linkedDoctorId: Long? = null) {
+    suspend fun saveRecord(record: HospitalRecord, linkedPatientId: Long? = null, linkedDoctorId: Long? = null): Long {
         val sourceRecordId = insert(record)
         insertAuditLog(RecordAuditLogEntity(recordId = sourceRecordId, category = record.category, action = "CREATE", newTitle = record.title, newDetails = record.details, changedAt = System.currentTimeMillis()))
         insertModuleRecord(
@@ -781,6 +781,7 @@ interface HospitalDao {
                 )
             )
         }
+        return sourceRecordId
     }
 
     /**
