@@ -1295,6 +1295,38 @@ abstract class HospitalDatabase : RoomDatabase() {
                     FOREIGN KEY(sourceRecordId) REFERENCES hospital_records(id) ON DELETE CASCADE
                 )""")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_local_lab_events_timeline ON local_lab_order_events(sourceRecordId, id)")
+                db.execSQL("""CREATE TABLE IF NOT EXISTS local_users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    sourceRecordId INTEGER NOT NULL UNIQUE,
+                    username TEXT NOT NULL UNIQUE,
+                    role TEXT NOT NULL CHECK(role IN ('admin','doctor','nurse','reception','lab','pharmacist','accountant')),
+                    active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+                    createdAt TEXT NOT NULL,
+                    FOREIGN KEY(sourceRecordId) REFERENCES hospital_records(id) ON DELETE CASCADE
+                )""")
+                db.execSQL("""CREATE TABLE IF NOT EXISTS local_encounters (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    sourceRecordId INTEGER NOT NULL UNIQUE,
+                    patientName TEXT NOT NULL,
+                    doctorName TEXT NOT NULL DEFAULT '',
+                    openedAt TEXT NOT NULL,
+                    closedAt TEXT,
+                    chiefComplaint TEXT NOT NULL DEFAULT '',
+                    diagnosis TEXT NOT NULL DEFAULT '',
+                    notes TEXT NOT NULL DEFAULT '',
+                    status TEXT NOT NULL CHECK(status IN ('open','closed')),
+                    FOREIGN KEY(sourceRecordId) REFERENCES hospital_records(id) ON DELETE CASCADE,
+                    CHECK((status='open' AND closedAt IS NULL) OR (status='closed' AND closedAt IS NOT NULL))
+                )""")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_local_encounters_patient_status ON local_encounters(patientName, status)")
+                db.execSQL("""CREATE TRIGGER IF NOT EXISTS local_encounters_state_insert
+                    BEFORE INSERT ON local_encounters
+                    WHEN (NEW.status='open' AND NEW.closedAt IS NOT NULL) OR (NEW.status='closed' AND NEW.closedAt IS NULL)
+                    BEGIN SELECT RAISE(ABORT, 'encounter status and closure timestamp are inconsistent'); END""")
+                db.execSQL("""CREATE TRIGGER IF NOT EXISTS local_encounters_state_update
+                    BEFORE UPDATE OF status, closedAt ON local_encounters
+                    WHEN (NEW.status='open' AND NEW.closedAt IS NOT NULL) OR (NEW.status='closed' AND NEW.closedAt IS NULL)
+                    BEGIN SELECT RAISE(ABORT, 'encounter status and closure timestamp are inconsistent'); END""")
             }
         }
 
