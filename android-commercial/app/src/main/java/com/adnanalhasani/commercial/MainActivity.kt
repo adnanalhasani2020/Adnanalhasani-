@@ -581,7 +581,7 @@ private fun DebtScreen(sales: List<SaleRecord>, onBack: () -> Unit, onSettle: (S
                 Column(Modifier.padding(18.dp)) {
                     Text("إجمالي الديون المتبقية", color = Color(0xFFBFD9D0), fontSize = 13.sp)
                     Text(money(totalOutstanding), color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Bold)
-                    Text("#{debts.size} فاتورة غير مسددة بالكامل", color = Color(0xFF8DE0B8), fontSize = 12.sp)
+                    Text("${debts.size} فاتورة غير مسددة بالكامل", color = Color(0xFF8DE0B8), fontSize = 12.sp)
                 }
             }
         }
@@ -590,12 +590,12 @@ private fun DebtScreen(sales: List<SaleRecord>, onBack: () -> Unit, onSettle: (S
             Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, Border), modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                     Text(sale.customer.ifBlank { "عميل غير محدد" }, color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    Text("فاتورة ##{sale.number} • #{sale.product} × #{sale.quantity}", color = Muted, fontSize = 12.sp)
+                    Text("فاتورة #${sale.number} • ${sale.product} × ${sale.quantity}", color = Muted, fontSize = 12.sp)
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("قيمة الفاتورة: #{money(sale.total)}", color = Muted, fontSize = 12.sp)
-                        Text("المسدّد: #{money(sale.paid)}", color = Green, fontSize = 12.sp)
+                        Text("قيمة الفاتورة: ${money(sale.total)}", color = Muted, fontSize = 12.sp)
+                        Text("المسدّد: ${money(sale.paid)}", color = Green, fontSize = 12.sp)
                     }
-                    Text("المتبقي: #{money((sale.total - sale.paid).coerceAtLeast(0))}", color = Orange, fontWeight = FontWeight.Bold)
+                    Text("المتبقي: ${money((sale.total - sale.paid).coerceAtLeast(0))}", color = Orange, fontWeight = FontWeight.Bold)
                     Button(onClick = { onSettle(sale) }, modifier = Modifier.fillMaxWidth()) { Text("تسجيل تسديد") }
                 }
             }
@@ -613,8 +613,8 @@ private fun SettlementDialog(sale: SaleRecord, onDismiss: () -> Unit, onSave: (I
         title = { Text("تسديد دين العميل") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("#{sale.customer.ifBlank { "عميل غير محدد" }} • فاتورة ##{sale.number}", color = Muted)
-                Text("المتبقي: #{money(remaining)}", color = Green, fontWeight = FontWeight.Bold)
+                Text("${sale.customer.ifBlank { "عميل غير محدد" }} • فاتورة #${sale.number}", color = Muted)
+                Text("المتبقي: ${money(remaining)}", color = Green, fontWeight = FontWeight.Bold)
                 OutlinedTextField(value = amountText, onValueChange = { amountText = it.filter(Char::isDigit).take(9); error = null }, label = { Text("مبلغ التسديد بالريال اليمني") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
             }
