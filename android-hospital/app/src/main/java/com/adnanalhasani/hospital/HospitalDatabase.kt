@@ -1017,6 +1017,10 @@ interface HospitalDao {
     @Query("SELECT id FROM invoices WHERE invoiceNumber = :number LIMIT 1")
     suspend fun findInvoiceIdByNumber(number: String): Long?
 
+    // Older app versions may have invoice records only in the legacy table.
+    @Query("SELECT EXISTS(SELECT 1 FROM hospital_records WHERE category = 'invoices' AND title = :number)")
+    suspend fun hasLegacyInvoiceNumber(number: String): Boolean
+
     @Query("SELECT id FROM patients WHERE fileNumber = :fileNumber LIMIT 1")
     suspend fun findPatientIdByFileNumber(fileNumber: String): Long?
 
@@ -1032,7 +1036,10 @@ interface HospitalDao {
         // A new reception must never reuse an invoice number: upsertInvoice is
         // intentionally update-capable for edits, but reuse here could attach a
         // second patient's visit/payment to an existing financial record.
-        check(findInvoiceIdByNumber(invoiceRecord.title) == null) {
+        check(
+            findInvoiceIdByNumber(invoiceRecord.title) == null &&
+                !hasLegacyInvoiceNumber(invoiceRecord.title)
+        ) {
             "رقم الفاتورة مستخدم مسبقاً"
         }
         saveRecord(patientRecord)
