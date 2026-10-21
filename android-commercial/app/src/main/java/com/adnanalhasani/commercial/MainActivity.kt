@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Bundle
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.Locale
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.BorderStroke
@@ -42,7 +43,7 @@ class MainActivity : ComponentActivity() {
 
 internal data class Product(val name: String, val category: String, val stock: Int, val price: String)
 internal data class SaleRecord(val number: Int, val product: String, val quantity: Int, val total: Int, val credit: Boolean)
-private fun money(value: Int): String = "%,d ر.ي".format(value)
+private fun money(value: Int): String = String.format(Locale.US, "%,d ر.ي", value)
 
 private const val STORE_PREFS = "commercial_store_local_v1"
 private const val PRODUCTS_KEY = "products_json"
