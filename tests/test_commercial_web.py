@@ -76,6 +76,16 @@ def test_web_register_login_catalog_and_logout(tmp_path):
     assert "text/csv" not in dict(blocked_report["headers"]).get("Content-Type", "")
     assert "items" not in blocked_report["body"]
 
+    # Authorization must precede parsing export and pagination options.
+    blocked_malformed_report = request(
+        app,
+        "/api/reports/sales?format=csv&limit=not-an-integer&from=not-a-date",
+        cookie=request_cookie,
+    )
+    assert blocked_malformed_report["status"] == "403 Forbidden"
+    assert "text/csv" not in dict(blocked_malformed_report["headers"]).get("Content-Type", "")
+    assert "items" not in blocked_malformed_report["body"]
+
     catalog = request(app, "/api/catalog", cookie=request_cookie)
     assert catalog["status"] == "200 OK"
     assert catalog["body"] == {"items": []}
