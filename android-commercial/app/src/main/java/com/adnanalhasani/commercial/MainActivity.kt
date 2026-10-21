@@ -158,7 +158,7 @@ private fun StoreApp(context: Context) {
             addProduct = false
         }
     )
-    if (newSale) SaleEntryDialog(
+    if (newSale && inventory.isNotEmpty()) SaleEntryDialog(
         inventory = inventory,
         onDismiss = { newSale = false },
         onSave = { productIndex, product, quantity, credit, unitPrice ->
@@ -170,6 +170,13 @@ private fun StoreApp(context: Context) {
             nextInvoice = maxOf(nextInvoice + 1, (sales.maxOfOrNull { it.number } ?: 1048) + 1)
             newSale = false
         }
+    )
+    if (newSale && inventory.isEmpty()) AlertDialog(
+        onDismissRequest = { newSale = false },
+        title = { Text("لا توجد منتجات") },
+        text = { Text("أضف منتجًا إلى المخزون أولًا قبل تسجيل عملية بيع.") },
+        confirmButton = { Button(onClick = { newSale = false; tab = 2; addProduct = true }) { Text("إضافة منتج") } },
+        dismissButton = { TextButton(onClick = { newSale = false }) { Text("إغلاق") } }
     )
 }
 
@@ -424,7 +431,7 @@ private fun AddProductDialog(
                 OutlinedTextField(name, { name = it; error = null }, label = { Text("اسم المنتج") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(category, { category = it; error = null }, label = { Text("التصنيف") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(stockText, { stockText = it.filter(Char::isDigit).take(7); error = null }, label = { Text("الكمية الافتتاحية") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(priceText, { priceText = it.filter(Char::isDigit).take(9); error = null }, label = { Text("سعر الوحدة بالريال اليمني") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(priceText, { priceText = it.filter(Char::isDigit).take(5); error = null }, label = { Text("سعر الوحدة بالريال اليمني") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
             }
         },
