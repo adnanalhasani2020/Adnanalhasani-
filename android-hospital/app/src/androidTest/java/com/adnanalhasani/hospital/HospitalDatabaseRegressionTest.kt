@@ -2,10 +2,10 @@ package com.adnanalhasani.hospital
 
 import android.content.Context
 import android.database.sqlite.SQLiteException
+import androidx.room.Database
 import androidx.room.Room
+import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
-import androidx.sqlite.db.SupportSQLiteOpenHelper
-import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import kotlinx.coroutines.runBlocking
@@ -14,6 +14,34 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+
+
+@Database(
+    entities = [
+        HospitalRecord::class,
+        ModuleRecordEntity::class,
+        EmergencyCaseEntity::class,
+        IcuStayEntity::class,
+        InventoryItemEntity::class,
+        LabOrderEntity::class,
+        RadiologyOrderEntity::class,
+        PrescriptionOrderEntity::class,
+        MaintenanceTicketEntity::class,
+        PatientEntity::class,
+        DoctorEntity::class,
+        AppointmentEntity::class,
+        InvoiceEntity::class,
+        PaymentEntity::class,
+        BusinessProfileEntity::class,
+        VaccinationRecordEntity::class,
+        ReferenceCatalogEntity::class,
+        RecordAuditLogEntity::class,
+        ClinicalVisitEntity::class
+    ],
+    version = 14,
+    exportSchema = false
+)
+abstract class HospitalDatabaseV14Fixture : RoomDatabase()
 
 @RunWith(AndroidJUnit4::class)
 class HospitalDatabaseRegressionTest {
@@ -26,45 +54,36 @@ class HospitalDatabaseRegressionTest {
     }
 
     @Test
-    fun v14MigrationPreservesExistingRowsAndMakesSpecimenEventsAppendOnly() {
+    fun v14RoomDatabaseMigratesToV16WithoutLosingRowsOrAllowingEventEdits() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val fixtureName = "hospital-v14-fixture-${System.nanoTime()}.db"
-        val helper = FrameworkSQLiteOpenHelperFactory().create(
-            SupportSQLiteOpenHelper.Configuration.builder(context)
-                .name(fixtureName)
-                .callback(object : SupportSQLiteOpenHelper.Callback(14) {
-                    override fun onCreate(db: SupportSQLiteDatabase) {
-                        db.execSQL(
-                            "CREATE TABLE hospital_records (" +
-                                "id INTEGER PRIMARY KEY NOT NULL, category TEXT NOT NULL, " +
-                                "title TEXT NOT NULL, details TEXT NOT NULL, createdAt INTEGER NOT NULL)"
-                        )
-                        db.execSQL(
-                            "CREATE TABLE lab_orders (" +
-                                "id INTEGER PRIMARY KEY NOT NULL, sourceRecordId INTEGER NOT NULL, " +
-                                "patientName TEXT NOT NULL, testName TEXT NOT NULL, status TEXT NOT NULL, " +
-                                "result TEXT NOT NULL, createdAt INTEGER NOT NULL, patientId INTEGER, clinicalVisitId INTEGER)"
-                        )
-                        db.execSQL(
-                            "INSERT INTO hospital_records(id, category, title, details, createdAt) " +
-                                "VALUES (41, 'patients', 'PT-41', 'existing patient record', 1234)"
-                        )
-                        db.execSQL(
-                            "INSERT INTO lab_orders(id, sourceRecordId, patientName, testName, status, result, createdAt) " +
-                                "VALUES (7, 41, 'Existing Patient', 'CBC', 'requested', '', 1234)"
-                        )
-                    }
-
-                    override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
-                })
-                .build()
-        )
+        val legacy = Room.databaseBuilder(context, HospitalDatabaseV14Fixture::class.java, fixtureName)
+            .allowMainThreadQueries()
+            .build()
 
         try {
-            val db = helper.writableDatabase
-            HospitalDatabase.MIGRATION_14_15.migrate(db)
-            HospitalDatabase.MIGRATION_15_16.migrate(db)
+            val oldDb = legacy.openHelper.writableDatabase
+            oldDb.execSQL(
+                "INSERT INTO hospital_records(id, category, title, details, createdAt) " +
+                    "VALUES (41, 'patients', 'PT-41', 'existing patient record', 1234)"
+            )
+            oldDb.execSQL(
+                "INSERT INTO lab_orders(id, sourceRecordId, patientName, testName, status, result, createdAt, patientId, clinicalVisitId) " +
+                    "VALUES (7, 41, 'Existing Patient', 'CBC', 'requested', '', 1234, NULL, NULL)"
+            )
+        } finally {
+            legacy.close()
+        }
 
+        try {
+            val migrated = Room.databaseBuilder(context, HospitalDatabase::class.java, fixtureName)
+                .addMigrations(HospitalDatabase.MIGRATION_14_15, HospitalDatabase.MIGRATION_15_16)
+                .allowMainThreadQueries()
+                .build()
+            roomDatabase = migrated
+            val db = migrated.openHelper.writableDatabase
+
+            // Opening Room v16 validates the complete schema after both migrations.
             assertEquals(1, scalarCount(db, "SELECT COUNT(*) FROM hospital_records WHERE id = 41 AND title = 'PT-41'"))
             assertEquals(1, scalarCount(db, "SELECT COUNT(*) FROM lab_orders WHERE id = 7 AND testName = 'CBC'"))
             assertEquals(1, scalarCount(db, "SELECT COUNT(*) FROM lab_workflow_settings WHERE `key` = 'require_receipt_confirmation'"))
@@ -87,7 +106,8 @@ class HospitalDatabaseRegressionTest {
             assertTrue("Specimen event history must reject updates", updateRejected)
             assertEquals(1, scalarCount(db, "SELECT COUNT(*) FROM lab_specimen_events WHERE id = 19 AND note = 'registered'"))
         } finally {
-            helper.close()
+            roomDatabase?.close()
+            roomDatabase = null
             context.deleteDatabase(fixtureName)
         }
     }
