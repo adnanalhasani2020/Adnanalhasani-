@@ -26,6 +26,7 @@ EXPECTED_DOMAIN_TABLES = {
     "workflows","workflow_events","activity_invitations","file_attachments","financial_policy_settings",
     "offering_prices","sale_lines","inventory_movements","commercial_checkout_receipts",
     "commercial_credentials","commercial_sessions","commercial_login_attempts",
+    "commercial_sale_terms","commercial_sale_payments",
     "external_event_intake","external_event_intake_conflicts","hospital_finance_integration_settings",
 }
 NOW = "2026-10-08T00:00:00Z"
@@ -78,10 +79,10 @@ def _financial_fixture(db):
     return account, obligation, payment, settlement
 
 
-def test_clean_install_has_exactly_68_domain_tables_plus_migration_bookkeeping():
+def test_clean_install_has_exactly_70_domain_tables_plus_migration_bookkeeping():
     db = connect_database()
     assert _tables(db) == EXPECTED_DOMAIN_TABLES | {"schema_migrations"}
-    assert len(EXPECTED_DOMAIN_TABLES) == 68
+    assert len(EXPECTED_DOMAIN_TABLES) == 70
     assert db.execute("PRAGMA foreign_keys").fetchone()[0] == 1
     assert db.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
     versions = [r[0] for r in db.execute("SELECT version FROM schema_migrations ORDER BY version")]
@@ -144,6 +145,7 @@ def test_clean_install_has_exactly_68_domain_tables_plus_migration_bookkeeping()
     expected_versions.append("0061_sale_line_product_name_snapshot_match_guard")
     expected_versions.append("0062_commercial_checkout_receipt_immutable")
     expected_versions.append("0063_sale_line_snapshot_error_order")
+    expected_versions.append("0064_commercial_cash_credit_settlement")
     assert versions == sorted(expected_versions)
 
 
