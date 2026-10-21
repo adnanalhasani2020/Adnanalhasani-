@@ -130,8 +130,22 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
                 }
             }
             "beds" -> {
-                require(f.field("الجناح").isNotBlank() && f.field("رقم السرير").isNotBlank()) {
+                val ward = f.field("الجناح")
+                val bedNo = f.field("رقم السرير")
+                require(ward.isNotBlank() && bedNo.isNotBlank()) {
                     "اسم الجناح ورقم السرير مطلوبان."
+                }
+                // A bed must have exactly one owning record. Without this guard,
+                // sync() could silently update another record's bed instead of
+                // creating a distinct bed, leaving the new source record unlinked.
+                val duplicateBed = db.long(
+                    """SELECT id FROM local_beds
+                       WHERE ward=? COLLATE NOCASE AND bedNo=? COLLATE NOCASE
+                         AND sourceRecordId<>COALESCE(?, -1) LIMIT 1""",
+                    ward, bedNo, existingId
+                )
+                require(duplicateBed == null) {
+                    "رقم السرير مسجل مسبقاً في هذا الجناح؛ افتح سجل السرير الموجود لتعديله."
                 }
             }
             "admissions" -> {
