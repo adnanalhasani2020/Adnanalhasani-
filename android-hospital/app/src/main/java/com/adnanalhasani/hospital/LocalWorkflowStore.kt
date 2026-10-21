@@ -600,6 +600,44 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
         }
     }
 
+    /** Prevent generic-record deletion from silently breaking operational stock/finance state. */
+    fun validateDeletion(record: HospitalRecord) {
+        val db = database.openHelper.readableDatabase
+        when (record.category) {
+            "pharmacy" -> require(db.long(
+                "SELECT id FROM local_medicine_movements WHERE sourceRecordId=? LIMIT 1", record.id
+            ) == null) {
+                "سجل توريد الدواء مرتبط بحركة مخزون ثابتة؛ لا تحذفه. أضف حركة تصحيح أو توريد جديدة."
+            }
+            "prescriptions" -> require(db.string(
+                "SELECT status FROM local_prescriptions WHERE sourceRecordId=?", record.id
+            ) != "dispensed") {
+                "الوصفة المصروفة لا يمكن حذفها لأن ذلك سيخفي سجل الصرف. استخدم إجراء تصحيح موثق."
+            }
+            "payments" -> require(db.long(
+                "SELECT id FROM payments WHERE invoiceNumber=? AND createdAt=(SELECT createdAt FROM hospital_records WHERE id=?) LIMIT 1",
+                record.title, record.id
+            ) == null) {
+                "لا يمكن حذف دفعة مالية مسجلة؛ حافظ على أثرها المحاسبي واستخدم إجراء عكس موثق."
+            }
+            "invoices" -> {
+                val invoiceNumber = fields(record).field("رقم الفاتورة").ifBlank { record.title }
+                require(db.long("SELECT id FROM payments WHERE invoiceNumber=? LIMIT 1", invoiceNumber) == null) {
+                    "لا يمكن حذف فاتورة لها مدفوعات مسجلة."
+                }
+                require(db.long(
+                    "SELECT id FROM local_finance_outbox WHERE aggregateType='invoice' AND aggregateId=? LIMIT 1",
+                    record.id.toString()
+                ) == null) { "الفاتورة لها حدث مالي محفوظ؛ لا تحذفها قبل معالجة الحدث وفق سياسة مالية موثقة." }
+            }
+            "admissions" -> require(db.string(
+                "SELECT status FROM local_admissions WHERE sourceRecordId=?", record.id
+            ) != "admitted") {
+                "لا يمكن حذف تنويم نشط؛ سجّل خروج المريض أولاً."
+            }
+        }
+    }
+
     fun auditDeletion(record: HospitalRecord) {
         val db = database.openHelper.writableDatabase
         val now = LocalDateTime.now().format(timestampFormatter)
