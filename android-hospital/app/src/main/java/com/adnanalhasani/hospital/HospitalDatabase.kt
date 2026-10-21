@@ -123,6 +123,13 @@ data class LabWorkflowSettingEntity(
     val updatedAt: Long = System.currentTimeMillis()
 )
 
+/** New specimens must enter the workflow in its first state with traceable identifiers. */
+internal fun isValidLabSpecimenRegistration(specimen: LabSpecimenEntity, actor: String): Boolean =
+    specimen.specimenCode.isNotBlank() &&
+        specimen.specimenType.isNotBlank() &&
+        specimen.status == "collected" &&
+        actor.isNotBlank()
+
 @Entity(tableName = "radiology_orders", foreignKeys = [ForeignKey(entity = HospitalRecord::class, parentColumns = ["id"], childColumns = ["sourceRecordId"], onDelete = ForeignKey.CASCADE), ForeignKey(entity = PatientEntity::class, parentColumns = ["id"], childColumns = ["patientId"], onDelete = ForeignKey.SET_NULL), ForeignKey(entity = DoctorEntity::class, parentColumns = ["id"], childColumns = ["doctorId"], onDelete = ForeignKey.SET_NULL)], indices = [Index(value = ["sourceRecordId"], unique = true), Index(value = ["patientId"]), Index(value = ["doctorId"]), Index(value = ["clinicalVisitId"]), Index(value = ["status", "createdAt"])])
 data class RadiologyOrderEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -441,17 +448,25 @@ interface HospitalDao {
     @Query("SELECT * FROM lab_specimens WHERE id = :id LIMIT 1")
     suspend fun labSpecimenById(id: Long): LabSpecimenEntity?
 
-    /** Insert the specimen and its first audit event atomically. */
+    /** Insert a new specimen only in its initial state, with an accountable actor and identifiers. */
     @Transaction
     suspend fun registerLabSpecimen(specimen: LabSpecimenEntity, actor: String): Long {
-        val id = insertLabSpecimen(specimen)
+        require(isValidLabSpecimenRegistration(specimen, actor)) {
+            "Specimen code, type, initial status, and actor are required"
+        }
+        val normalized = specimen.copy(
+            specimenCode = specimen.specimenCode.trim(),
+            specimenType = specimen.specimenType.trim(),
+            rejectionReason = ""
+        )
+        val id = insertLabSpecimen(normalized)
         insertLabSpecimenEvent(
             LabSpecimenEventEntity(
                 specimenId = id,
-                status = specimen.status,
-                note = "تم تسجيل العينة وربطها بطلب الفحص #${specimen.labOrderId}",
+                status = normalized.status,
+                note = "تم تسجيل العينة وربطها بطلب الفحص #${normalized.labOrderId}",
                 actor = actor.trim(),
-                occurredAt = specimen.collectedAt
+                occurredAt = normalized.collectedAt
             )
         )
         return id
