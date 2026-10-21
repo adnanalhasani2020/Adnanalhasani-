@@ -1,6 +1,9 @@
 package com.adnanalhasani.commercial
 
+import android.content.Context
 import android.os.Bundle
+import org.json.JSONArray
+import org.json.JSONObject
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.BorderStroke
@@ -33,13 +36,59 @@ private val Border = Color(0xFFE5EBE8)
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { MaterialTheme(colorScheme = lightColorScheme(primary = Green, background = Canvas, surface = Color.White)) { StoreApp() } }
+        setContent { MaterialTheme(colorScheme = lightColorScheme(primary = Green, background = Canvas, surface = Color.White)) { StoreApp(applicationContext) } }
     }
 }
 
-private data class Product(val name: String, val category: String, val stock: Int, val price: String)
-private data class SaleRecord(val number: Int, val product: String, val quantity: Int, val total: Int, val credit: Boolean)
+internal data class Product(val name: String, val category: String, val stock: Int, val price: String)
+internal data class SaleRecord(val number: Int, val product: String, val quantity: Int, val total: Int, val credit: Boolean)
 private fun money(value: Int): String = "%,d ر.ي".format(value)
+
+private const val STORE_PREFS = "commercial_store_local_v1"
+private const val PRODUCTS_KEY = "products_json"
+private const val SALES_KEY = "sales_json"
+
+private fun loadProducts(context: Context): List<Product> {
+    val saved = context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).getString(PRODUCTS_KEY, null)
+        ?: return products
+    return runCatching {
+        val json = JSONArray(saved)
+        List(json.length()) { i ->
+            val item = json.getJSONObject(i)
+            Product(item.getString("name"), item.getString("category"), item.getInt("stock"), item.getString("price"))
+        }
+    }.getOrElse { products }
+}
+
+private fun saveProducts(context: Context, items: List<Product>) {
+    val json = JSONArray()
+    items.forEach { item ->
+        json.put(JSONObject().put("name", item.name).put("category", item.category)
+            .put("stock", item.stock).put("price", item.price))
+    }
+    context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).edit().putString(PRODUCTS_KEY, json.toString()).apply()
+}
+
+private fun loadSales(context: Context): List<SaleRecord> {
+    val saved = context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).getString(SALES_KEY, null) ?: return emptyList()
+    return runCatching {
+        val json = JSONArray(saved)
+        List(json.length()) { i ->
+            val item = json.getJSONObject(i)
+            SaleRecord(item.getInt("number"), item.getString("product"), item.getInt("quantity"),
+                item.getInt("total"), item.getBoolean("credit"))
+        }
+    }.getOrElse { emptyList() }
+}
+
+private fun saveSales(context: Context, items: List<SaleRecord>) {
+    val json = JSONArray()
+    items.forEach { item ->
+        json.put(JSONObject().put("number", item.number).put("product", item.product)
+            .put("quantity", item.quantity).put("total", item.total).put("credit", item.credit))
+    }
+    context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).edit().putString(SALES_KEY, json.toString()).apply()
+}
 private val products = listOf(
     Product("قهوة عربية فاخرة", "مشروبات", 18, "3,500 ر.ي"),
     Product("سكر أبيض 1 كجم", "مواد غذائية", 7, "1,200 ر.ي"),
@@ -50,12 +99,12 @@ private val products = listOf(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun StoreApp() {
+private fun StoreApp(context: Context) {
     var tab by remember { mutableIntStateOf(0) }
     var query by remember { mutableStateOf("") }
     var newSale by remember { mutableStateOf(false) }
-    val sales = remember { mutableStateListOf<SaleRecord>() }
-    val inventory = remember { mutableStateListOf<Product>().apply { addAll(products) } }
+    val sales = remember { mutableStateListOf<SaleRecord>().apply { addAll(loadSales(context)) } }
+    val inventory = remember { mutableStateListOf<Product>().apply { addAll(loadProducts(context)) } }
     var nextInvoice by remember { mutableIntStateOf(1049) }
     Scaffold(
         containerColor = Canvas,
@@ -106,8 +155,10 @@ private fun StoreApp() {
         onSave = { productIndex, product, quantity, credit, unitPrice ->
             val currentProduct = inventory[productIndex]
             inventory[productIndex] = currentProduct.copy(stock = currentProduct.stock - quantity)
+            saveProducts(context, inventory)
             sales.add(0, SaleRecord(nextInvoice, product, quantity, quantity * unitPrice, credit))
-            nextInvoice += 1
+            saveSales(context, sales)
+            nextInvoice = maxOf(nextInvoice + 1, (sales.maxOfOrNull { it.number } ?: 1048) + 1)
             newSale = false
         }
     )
