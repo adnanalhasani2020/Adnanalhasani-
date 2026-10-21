@@ -62,6 +62,23 @@ class HospitalFieldValidationTest {
     }
 
     @Test
+    fun guardsLaboratorySpecimenTransitionsAndTerminalStates() {
+        assertTrue(isAllowedLabSpecimenTransition("collected", "collected", "received", "tech"))
+        assertTrue(isAllowedLabSpecimenTransition("received", "received", "processing", "tech"))
+        assertTrue(isAllowedLabSpecimenTransition("processing", "processing", "completed", "tech"))
+        assertTrue(isAllowedLabSpecimenTransition("collected", "collected", "processing", "tech", requireReceipt = false))
+        assertTrue(isAllowedLabSpecimenTransition("received", "received", "rejected", "tech", rejectionReason = "sample mismatch"))
+
+        assertFalse(isAllowedLabSpecimenTransition("collected", "received", "processing", "tech"))
+        assertFalse(isAllowedLabSpecimenTransition("collected", "collected", "processing", "tech"))
+        assertFalse(isAllowedLabSpecimenTransition("collected", "collected", "rejected", "tech"))
+        assertFalse(isAllowedLabSpecimenTransition("processing", "processing", "completed", " "))
+        assertFalse(isAllowedLabSpecimenTransition("completed", "completed", "processing", "tech"))
+        assertFalse(isAllowedLabSpecimenTransition("rejected", "rejected", "received", "tech"))
+        assertFalse(isAllowedLabSpecimenTransition("received", "received", "unknown", "tech"))
+    }
+
+    @Test
     fun validatesMonthAndTimeBoundaries() {
         assertTrue(HospitalFieldValidation.isValidMonth("2026-10"))
         assertFalse(HospitalFieldValidation.isValidMonth("2026-13"))
