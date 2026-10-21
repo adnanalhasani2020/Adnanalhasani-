@@ -107,4 +107,15 @@ class HospitalFieldValidationTest {
         assertFalse(HospitalFieldValidation.isValidTime("25:00"))
         assertFalse(HospitalFieldValidation.isValidTime("12:60"))
     }
+
+    @Test
+    fun rejectsInventoryQuantityOverflowAndMalformedDecimalInputs() {
+        assertTrue(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("999999999999999999999999999999999999999999") == null)
+        assertTrue(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull(".5") == null)
+        assertTrue(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("1.") == null)
+        assertTrue(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("+1") == null)
+        assertTrue(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("-0") == null)
+        assertTrue(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("1,5") == null)
+    }
+
 }
