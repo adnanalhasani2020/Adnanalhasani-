@@ -52,4 +52,20 @@ class HospitalFieldValidationTest {
         assertFalse(HospitalFieldValidation.isValidTime("25:00"))
         assertFalse(HospitalFieldValidation.isValidTime("12:60"))
     }
+
+    @Test
+    fun rejectsNonCanonicalDateTimeMonthAndTimeFormats() {
+        assertFalse(HospitalFieldValidation.isValidDate("2026-2-03"))
+        assertFalse(HospitalFieldValidation.isValidDateTime("2026-10-19 9:05"))
+        assertFalse(HospitalFieldValidation.isValidMonth("2026-2"))
+        assertFalse(HospitalFieldValidation.isValidTime("9:05"))
+        assertFalse(HospitalFieldValidation.isValidTime(" 09:05 "))
+    }
+
+    @Test
+    fun trimsMoneyInputButRejectsBlankAndSubMinorPrecision() {
+        assertEquals(120L, HospitalFieldValidation.toMinorUnitsOrNull(" 1.20 "))
+        assertFalse(HospitalFieldValidation.isValidMoneyAmount(" "))
+        assertFalse(HospitalFieldValidation.isValidMoneyAmount("0.001"))
+    }
 }
