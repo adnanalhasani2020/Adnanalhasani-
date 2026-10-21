@@ -149,6 +149,8 @@ fun DoctorWorkspaceScreen(repository: HospitalRepository) {
                                 onClick = {
                                     if (selectedPatientId == null || selectedDoctorId == null || patient.isBlank() || doctor.isBlank() || complaint.isBlank() || visitAt.isBlank()) {
                                         message = "اختر مريضًا وطبيبًا مسجلين وأدخل تاريخ الزيارة والشكوى الرئيسية."
+                                    } else if (!HospitalFieldValidation.isValidDateTime(visitAt.trim())) {
+                                        message = "تاريخ ووقت الزيارة غير صحيح. استخدم الصيغة YYYY-MM-DD HH:mm وتأكد من صلاحية التاريخ والوقت."
                                     } else {
                                         scope.launch {
                                             saving = true
