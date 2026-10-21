@@ -206,7 +206,7 @@ private fun Dashboard(products: List<Product>, sales: List<SaleRecord>, onNewSal
                         Column(Modifier.weight(1f)) {
                             Text("أهلًا بك 👋", color = Color(0xFFBFD9D0), fontSize = 14.sp)
                             Spacer(Modifier.height(5.dp))
-                            Text("إليك ملخص متجرك اليوم", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                            Text("إليك ملخص المبيعات المسجلة", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
                         }
                         Box(Modifier.size(46.dp).background(Color(0xFF31584F), CircleShape), contentAlignment = Alignment.Center) {
                             Icon(Icons.Default.TrendingUp, null, tint = Color(0xFF8DE0B8))
@@ -246,7 +246,7 @@ private fun Dashboard(products: List<Product>, sales: List<SaleRecord>, onNewSal
             }
         }
         items(products.filter { it.stock <= 9 }.take(3)) { ProductRow(it) }
-        item { Heading("آخر المبيعات", "عمليات اليوم") }
+        item { Heading("آخر المبيعات", "أحدث الفواتير المسجلة") }
         items(sales.take(3)) { sale -> SaleRow("فاتورة #${sale.number}", "${sale.product} · ${sale.quantity} قطعة", money(sale.total), sale.credit) }
         
     }
