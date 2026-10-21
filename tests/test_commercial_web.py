@@ -3,6 +3,7 @@ import json
 from datetime import datetime, timedelta, timezone
 import uuid
 from http.cookies import SimpleCookie
+from urllib.parse import urlsplit
 
 from agent_core.commercial_web import CommercialWebApplication
 from agent_core.persistence import connect_database
@@ -11,11 +12,13 @@ from agent_core.offering_application import OfferingApplication
 
 
 def request(app, path, *, method="GET", body=None, cookie=None, scheme="http", origin=None):
+    parsed_path = urlsplit(path)
+    path = parsed_path.path
     payload = json.dumps(body or {}).encode("utf-8")
     environ = {
         "REQUEST_METHOD": method,
         "PATH_INFO": path,
-        "QUERY_STRING": "",
+        "QUERY_STRING": parsed_path.query,
         "CONTENT_LENGTH": str(len(payload) if method == "POST" else 0),
         "CONTENT_TYPE": "application/json",
         "wsgi.input": io.BytesIO(payload if method == "POST" else b""),
@@ -41,6 +44,17 @@ def test_web_register_login_catalog_and_logout(tmp_path):
     db = connect_database(db_path)
     db.close()
     app = CommercialWebApplication(db_path)
+    page = request(app, "/")
+    assert page["status"] == "200 OK"
+    assert b'id="reportSettings"' in page["body"]
+    assert b'id="reportAudience"' in page["body"]
+    assert b'id="reportScope"' in page["body"]
+    assert "لا تمنح صلاحية وصول".encode("utf-8") in page["body"]
+    assert b"localStorage.setItem(key,JSON.stringify(readReportSettings()))" in page["body"]
+
+    unauthenticated_report = request(app, "/api/reports/sales?format=csv")
+    assert unauthenticated_report["status"] == "401 Unauthorized"
+    assert "text/csv" not in dict(unauthenticated_report["headers"]).get("Content-Type", "")
 
     registered = request(
         app, "/api/register", method="POST",
@@ -56,6 +70,11 @@ def test_web_register_login_catalog_and_logout(tmp_path):
     me = request(app, "/api/me", cookie=request_cookie)
     assert me["status"] == "200 OK"
     assert me["body"]["username"] == "buyer_01"
+
+    blocked_report = request(app, "/api/reports/sales?format=csv", cookie=request_cookie)
+    assert blocked_report["status"] == "403 Forbidden"
+    assert "text/csv" not in dict(blocked_report["headers"]).get("Content-Type", "")
+    assert "items" not in blocked_report["body"]
 
     catalog = request(app, "/api/catalog", cookie=request_cookie)
     assert catalog["status"] == "200 OK"
