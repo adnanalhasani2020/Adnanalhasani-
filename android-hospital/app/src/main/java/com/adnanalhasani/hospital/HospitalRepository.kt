@@ -107,8 +107,16 @@ class HospitalRepository(private val dao: HospitalDao, database: HospitalDatabas
         }
     }
 
-    suspend fun saveClinicalVisit(record: HospitalRecord, patientId: Long, doctorId: Long) =
-        dao.saveRecord(record, linkedPatientId = patientId, linkedDoctorId = doctorId)
+    suspend fun saveClinicalVisit(record: HospitalRecord, patientId: Long, doctorId: Long) {
+        withContext(Dispatchers.IO) { localWorkflows?.validate(record) }
+        val sourceRecordId = dao.saveRecord(record, linkedPatientId = patientId, linkedDoctorId = doctorId)
+        try {
+            withContext(Dispatchers.IO) { localWorkflows?.sync(record, sourceRecordId) }
+        } catch (failure: Throwable) {
+            runCatching { dao.delete(sourceRecordId) }
+            throw failure
+        }
+    }
 
     suspend fun updateRecord(id: Long, title: String, details: String) {
         val current = dao.recordById(id) ?: return
@@ -124,8 +132,25 @@ class HospitalRepository(private val dao: HospitalDao, database: HospitalDatabas
         }
     }
 
-    suspend fun updateClinicalVisitRecord(id: Long, title: String, details: String, patientId: Long, doctorId: Long) =
+    suspend fun updateClinicalVisitRecord(id: Long, title: String, details: String, patientId: Long, doctorId: Long) {
+        val current = dao.recordById(id) ?: return
+        val currentVisit = dao.clinicalVisitBySourceRecordId(id)
+        val updated = current.copy(title = title, details = details)
+        withContext(Dispatchers.IO) { localWorkflows?.validate(updated, id) }
         dao.updateRecord(id, title, details, linkedPatientId = patientId, linkedDoctorId = doctorId)
+        try {
+            withContext(Dispatchers.IO) { localWorkflows?.sync(updated, id) }
+        } catch (failure: Throwable) {
+            runCatching {
+                dao.updateRecord(
+                    id, current.title, current.details,
+                    linkedPatientId = currentVisit?.patientId,
+                    linkedDoctorId = currentVisit?.doctorId
+                )
+            }
+            throw failure
+        }
+    }
 
     suspend fun updateEmergencyCase(id: Long, details: String, status: String) = dao.updateEmergencyCase(id, details, status)
 
