@@ -66,11 +66,14 @@ fun ReceptionScreen(repository: HospitalRepository) {
     fun chooseDate(current: String, onSelected: (String) -> Unit) {
         val calendar = Calendar.getInstance()
         runCatching { dateFormat.parse(current) }.getOrNull()?.let { calendar.time = it }
-        DatePickerDialog(
+        val picker = DatePickerDialog(
             context,
             { _, year, month, day -> onSelected(String.format(Locale.US, "%04d-%02d-%02d", year, month + 1, day)) },
             calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DAY_OF_MONTH)
-        ).show()
+        )
+        // A birth date in the future is invalid; prevent selecting one in the UI.
+        picker.datePicker.maxDate = System.currentTimeMillis()
+        picker.show()
     }
 
     LazyColumn(
