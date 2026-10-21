@@ -105,6 +105,7 @@ private fun StoreApp(context: Context) {
     var query by remember { mutableStateOf("") }
     var newSale by remember { mutableStateOf(false) }
     var addProduct by remember { mutableStateOf(false) }
+    var editingProductIndex by remember { mutableIntStateOf(-1) }
     val sales = remember { mutableStateListOf<SaleRecord>().apply { addAll(loadSales(context)) } }
     val inventory = remember { mutableStateListOf<Product>().apply { addAll(loadProducts(context)) } }
     var nextInvoice by remember { mutableIntStateOf((sales.maxOfOrNull { it.number } ?: 1048) + 1) }
@@ -146,11 +147,25 @@ private fun StoreApp(context: Context) {
             when (tab) {
                 0 -> Dashboard(products = inventory, sales = sales, onNewSale = { newSale = true }, onInventory = { tab = 2 })
                 1 -> SalesScreen(sales = sales, onNewSale = { newSale = true })
-                2 -> InventoryScreen(inventory, query, { query = it }, { addProduct = true })
+                2 -> InventoryScreen(inventory, query, { query = it }, { addProduct = true }, { editingProductIndex = it })
                 else -> MoreScreen()
             }
         }
     }
+    if (editingProductIndex in inventory.indices) EditProductDialog(
+        product = inventory[editingProductIndex],
+        onDismiss = { editingProductIndex = -1 },
+        onSave = { name, category, stock, price ->
+            inventory[editingProductIndex] = inventory[editingProductIndex].copy(name = name, category = category, stock = stock, price = money(price))
+            saveProducts(context, inventory)
+            editingProductIndex = -1
+        },
+        onDelete = {
+            inventory.removeAt(editingProductIndex)
+            saveProducts(context, inventory)
+            editingProductIndex = -1
+        }
+    )
     if (addProduct) AddProductDialog(
         onDismiss = { addProduct = false },
         onSave = { name, category, stock, price ->
@@ -277,7 +292,7 @@ private fun SalesScreen(sales: List<SaleRecord>, onNewSale: () -> Unit) {
 }
 
 @Composable
-private fun InventoryScreen(products: List<Product>, query: String, onQuery: (String) -> Unit, onAddProduct: () -> Unit) {
+private fun InventoryScreen(products: List<Product>, query: String, onQuery: (String) -> Unit, onAddProduct: () -> Unit, onEditProduct: (Int) -> Unit) {
     val filtered = products.filter { it.name.contains(query, true) || it.category.contains(query, true) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
         item { Heading("المخزون والمنتجات", "إدارة الأصناف والكميات والأسعار") }
@@ -293,15 +308,15 @@ private fun InventoryScreen(products: List<Product>, query: String, onQuery: (St
         }
         item { Button(onClick = onAddProduct, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(8.dp)); Text("إضافة منتج") } }
         item { Heading("قائمة المنتجات", "عدد النتائج: " + filtered.size) }
-        items(filtered) { ProductRow(it) }
+        items(filtered) { product -> ProductRow(product, onClick = { onEditProduct(products.indexOf(product)) }) }
         if (filtered.isEmpty()) item { Text("لا توجد منتجات تطابق البحث.", color = Muted) }
     }
 }
 
 @Composable
-private fun ProductRow(product: Product) {
+private fun ProductRow(product: Product, onClick: () -> Unit = {}) {
     val warning = product.stock <= 9
-    Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, Border), modifier = Modifier.fillMaxWidth()) {
+    Card(onClick = onClick, colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, Border), modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(45.dp).background(if (warning) Color(0xFFFFF1DF) else Mint, RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
                 Icon(if (warning) Icons.Default.WarningAmber else Icons.Default.Inventory2, null, tint = if (warning) Color(0xFFB96A14) else Green)
@@ -410,6 +425,52 @@ private fun SaleEntryDialog(
             }) { Text("حفظ الفاتورة") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } }
+    )
+}
+
+@Composable
+private fun EditProductDialog(
+    product: Product,
+    onDismiss: () -> Unit,
+    onSave: (String, String, Int, Int) -> Unit,
+    onDelete: () -> Unit
+) {
+    var name by remember(product) { mutableStateOf(product.name) }
+    var category by remember(product) { mutableStateOf(product.category) }
+    var stockText by remember(product) { mutableStateOf(product.stock.toString()) }
+    var priceText by remember(product) { mutableStateOf(product.price.replace(",", "").replace(" ر.ي", "")) }
+    var error by remember { mutableStateOf<String?>(null) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("تعديل المنتج", color = Ink, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                OutlinedTextField(name, { name = it; error = null }, label = { Text("اسم المنتج") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(category, { category = it; error = null }, label = { Text("التصنيف") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(stockText, { stockText = it.filter(Char::isDigit).take(7); error = null }, label = { Text("الكمية الحالية") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(priceText, { priceText = it.filter(Char::isDigit).take(5); error = null }, label = { Text("سعر الوحدة بالريال اليمني") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                val stock = stockText.toIntOrNull()
+                val price = priceText.toIntOrNull()
+                when {
+                    name.isBlank() -> error = "أدخل اسم المنتج."
+                    category.isBlank() -> error = "أدخل تصنيف المنتج."
+                    stock == null || stock < 0 -> error = "أدخل كمية صحيحة."
+                    price == null || price <= 0 -> error = "أدخل سعرًا أكبر من صفر."
+                    else -> onSave(name.trim(), category.trim(), stock, price)
+                }
+            }) { Text("حفظ التعديلات") }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onDelete) { Text("حذف", color = MaterialTheme.colorScheme.error) }
+                TextButton(onClick = onDismiss) { Text("إلغاء") }
+            }
+        }
     )
 }
 
