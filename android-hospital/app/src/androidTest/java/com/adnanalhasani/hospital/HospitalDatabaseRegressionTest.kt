@@ -68,8 +68,12 @@ class HospitalDatabaseRegressionTest {
                     "VALUES (41, 'patients', 'PT-41', 'existing patient record', 1234)"
             )
             oldDb.execSQL(
+                "INSERT INTO patients(id, fileNumber, fullName, phone, age, notes, createdAt) " +
+                    "VALUES (1, 'PT-41', 'Existing Patient', '700', '42', 'preserve me', 1234)"
+            )
+            oldDb.execSQL(
                 "INSERT INTO lab_orders(id, sourceRecordId, patientName, testName, status, result, createdAt, patientId, clinicalVisitId) " +
-                    "VALUES (7, 41, 'Existing Patient', 'CBC', 'requested', '', 1234, NULL, NULL)"
+                    "VALUES (7, 41, 'Existing Patient', 'CBC', 'requested', '', 1234, 1, NULL)"
             )
         } finally {
             legacy.close()
@@ -85,7 +89,8 @@ class HospitalDatabaseRegressionTest {
 
             // Opening Room v16 validates the complete schema after both migrations.
             assertEquals(1, scalarCount(db, "SELECT COUNT(*) FROM hospital_records WHERE id = 41 AND title = 'PT-41'"))
-            assertEquals(1, scalarCount(db, "SELECT COUNT(*) FROM lab_orders WHERE id = 7 AND testName = 'CBC'"))
+            assertEquals(1, scalarCount(db, "SELECT COUNT(*) FROM patients WHERE id = 1 AND fileNumber = 'PT-41' AND notes = 'preserve me'"))
+            assertEquals(1, scalarCount(db, "SELECT COUNT(*) FROM lab_orders WHERE id = 7 AND testName = 'CBC' AND patientId = 1"))
             assertEquals(1, scalarCount(db, "SELECT COUNT(*) FROM lab_workflow_settings WHERE `key` = 'require_receipt_confirmation'"))
 
             db.execSQL(
