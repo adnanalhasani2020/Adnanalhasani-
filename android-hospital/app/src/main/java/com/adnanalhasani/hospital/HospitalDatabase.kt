@@ -965,6 +965,9 @@ interface HospitalDao {
     @Query("SELECT * FROM clinical_visits ORDER BY visitAt DESC, createdAt DESC")
     fun clinicalVisits(): Flow<List<ClinicalVisitEntity>>
 
+    @Query("SELECT * FROM clinical_visits WHERE sourceRecordId = :sourceRecordId LIMIT 1")
+    suspend fun clinicalVisitBySourceRecordId(sourceRecordId: Long): ClinicalVisitEntity?
+
     @Query("SELECT * FROM prescription_orders ORDER BY createdAt DESC")
     fun prescriptionOrders(): Flow<List<PrescriptionOrderEntity>>
 
