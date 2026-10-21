@@ -20,8 +20,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
 
 private val erNavy = Color(0xFF263B4D)
 private val erMuted = Color(0xFF788895)
@@ -52,7 +50,6 @@ internal fun EmergencyScreen(repository: HospitalRepository, onEdit: suspend (Lo
         )
     }
     val scope = rememberCoroutineScope()
-    val formatter = remember { DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm") }
     val fields = listOf(
         "اسم المريض" to "الاسم الكامل أو هوية مؤقتة",
         "رقم الملف" to "رقم الملف إن توفر",
@@ -147,7 +144,7 @@ internal fun EmergencyScreen(repository: HospitalRepository, onEdit: suspend (Lo
                                 error = "أكمل اسم المريض والشكوى الرئيسية ووقت الوصول."
                                 return@Button
                             }
-                            if (runCatching { LocalDateTime.parse(arrival, formatter) }.isFailure) {
+                            if (!HospitalFieldValidation.isValidDateTime(arrival)) {
                                 error = "وقت الوصول غير صحيح. استخدم YYYY-MM-DD HH:mm."
                                 return@Button
                             }
