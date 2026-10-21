@@ -43,11 +43,13 @@ class MainActivity : ComponentActivity() {
 
 internal data class Product(val name: String, val category: String, val stock: Int, val price: String)
 internal data class SaleRecord(val number: Int, val product: String, val quantity: Int, val total: Int, val credit: Boolean, val customer: String = "", val paid: Int = 0)
+internal data class SettlementRecord(val invoiceNumber: Int, val customer: String, val amount: Int, val timestamp: Long = System.currentTimeMillis())
 private fun money(value: Int): String = String.format(Locale.US, "%,d ر.ي", value)
 
 private const val STORE_PREFS = "commercial_store_local_v1"
 private const val PRODUCTS_KEY = "products_json"
 private const val SALES_KEY = "sales_json"
+private const val SETTLEMENTS_KEY = "settlements_json"
 
 private fun loadProducts(context: Context): List<Product> {
     val saved = context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).getString(PRODUCTS_KEY, null)
@@ -82,6 +84,26 @@ private fun loadSales(context: Context): List<SaleRecord> {
     }.getOrElse { emptyList() }
 }
 
+private fun loadSettlements(context: Context): List<SettlementRecord> {
+    val saved = context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).getString(SETTLEMENTS_KEY, null) ?: return emptyList()
+    return runCatching {
+        val json = JSONArray(saved)
+        List(json.length()) { i ->
+            val item = json.getJSONObject(i)
+            SettlementRecord(item.getInt("invoiceNumber"), item.optString("customer", ""), item.getInt("amount"), item.optLong("timestamp", 0L))
+        }
+    }.getOrElse { emptyList() }
+}
+
+private fun saveSettlements(context: Context, items: List<SettlementRecord>) {
+    val json = JSONArray()
+    items.forEach { item ->
+        json.put(JSONObject().put("invoiceNumber", item.invoiceNumber).put("customer", item.customer)
+            .put("amount", item.amount).put("timestamp", item.timestamp))
+    }
+    context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).edit().putString(SETTLEMENTS_KEY, json.toString()).apply()
+}
+
 private fun saveSales(context: Context, items: List<SaleRecord>) {
     val json = JSONArray()
     items.forEach { item ->
@@ -110,6 +132,7 @@ private fun StoreApp(context: Context) {
     var showDebts by remember { mutableStateOf(false) }
     var settlingSaleNumber by remember { mutableIntStateOf(-1) }
     val sales = remember { mutableStateListOf<SaleRecord>().apply { addAll(loadSales(context)) } }
+    val settlements = remember { mutableStateListOf<SettlementRecord>().apply { addAll(loadSettlements(context)) } }
     val inventory = remember { mutableStateListOf<Product>().apply { addAll(loadProducts(context)) } }
     var nextInvoice by remember { mutableIntStateOf((sales.maxOfOrNull { it.number } ?: 1048) + 1) }
     Scaffold(
@@ -151,7 +174,7 @@ private fun StoreApp(context: Context) {
                 0 -> Dashboard(products = inventory, sales = sales, onNewSale = { newSale = true }, onInventory = { tab = 2 })
                 1 -> SalesScreen(sales = sales, onNewSale = { newSale = true })
                 2 -> InventoryScreen(inventory, query, { query = it }, { addProduct = true }, { editingProductIndex = it })
-                else -> if (showDebts) DebtScreen(sales = sales, onBack = { showDebts = false }, onSettle = { settlingSaleNumber = it.number }) else MoreScreen(onCustomers = { showDebts = true })
+                else -> if (showDebts) DebtScreen(sales = sales, settlements = settlements, onBack = { showDebts = false }, onSettle = { settlingSaleNumber = it.number }) else MoreScreen(onCustomers = { showDebts = true })
             }
         }
     }
@@ -198,7 +221,9 @@ private fun StoreApp(context: Context) {
             onSave = { amount ->
                 val current = sales[saleIndex]
                 sales[saleIndex] = current.copy(paid = (current.paid + amount).coerceAtMost(current.total))
+                settlements.add(0, SettlementRecord(current.number, current.customer, amount))
                 saveSales(context, sales)
+                saveSettlements(context, settlements)
                 settlingSaleNumber = -1
             }
         ) else settlingSaleNumber = -1
@@ -566,7 +591,7 @@ private fun MoreScreen(onCustomers: () -> Unit) {
 }
 
 @Composable
-private fun DebtScreen(sales: List<SaleRecord>, onBack: () -> Unit, onSettle: (SaleRecord) -> Unit) {
+private fun DebtScreen(sales: List<SaleRecord>, settlements: List<SettlementRecord>, onBack: () -> Unit, onSettle: (SaleRecord) -> Unit) {
     val debts = sales.filter { it.credit && it.total > it.paid }
     val totalOutstanding = debts.sumOf { it.total - it.paid }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
@@ -585,6 +610,21 @@ private fun DebtScreen(sales: List<SaleRecord>, onBack: () -> Unit, onSettle: (S
                 }
             }
         }
+        item { Heading("ملخص العملاء", "إجمالي المستحق لكل عميل") }
+        val customerBalances = debts.groupBy { it.customer.trim().ifBlank { "عميل غير محدد" } }
+            .mapValues { (_, invoices) -> invoices.sumOf { (it.total - it.paid).coerceAtLeast(0) } }
+            .toList().sortedByDescending { it.second }
+        items(customerBalances, key = { it.first }) { (customerName, balance) ->
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(14.dp), border = BorderStroke(1.dp, Border), modifier = Modifier.fillMaxWidth()) {
+                Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(customerName, color = Ink, fontWeight = FontWeight.SemiBold)
+                        Text("الرصيد المستحق", color = Muted, fontSize = 11.sp)
+                    }
+                    Text(money(balance), color = Orange, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
         if (debts.isEmpty()) item { Text("لا توجد ديون مستحقة حاليًا.", color = Muted) }
         items(debts, key = { it.number }) { sale ->
             Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, Border), modifier = Modifier.fillMaxWidth()) {
@@ -597,6 +637,18 @@ private fun DebtScreen(sales: List<SaleRecord>, onBack: () -> Unit, onSettle: (S
                     }
                     Text("المتبقي: ${money((sale.total - sale.paid).coerceAtLeast(0))}", color = Orange, fontWeight = FontWeight.Bold)
                     Button(onClick = { onSettle(sale) }, modifier = Modifier.fillMaxWidth()) { Text("تسجيل تسديد") }
+                }
+            }
+        }
+        item { Heading("سجل التسديدات", "أحدث الدفعات المسجلة") }
+        if (settlements.isEmpty()) item { Text("لم تُسجّل دفعات تسديد بعد.", color = Muted, fontSize = 12.sp) }
+        items(settlements.take(30), key = { "${it.invoiceNumber}-${it.timestamp}" }) { payment ->
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(13.dp), border = BorderStroke(1.dp, Border), modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(payment.customer.ifBlank { "عميل غير محدد" }, color = Ink, fontWeight = FontWeight.SemiBold)
+                    Text("فاتورة #${payment.invoiceNumber}", color = Muted, fontSize = 11.sp)
+                    Text("التسديد: ${money(payment.amount)}", color = Green, fontWeight = FontWeight.Bold)
+                    Text(java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT, Locale.getDefault()).format(java.util.Date(payment.timestamp)), color = Muted, fontSize = 10.sp)
                 }
             }
         }
