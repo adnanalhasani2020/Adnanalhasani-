@@ -50,6 +50,15 @@ fun DoctorWorkspaceScreen(repository: HospitalRepository) {
     var chartPatientId by remember { mutableStateOf<Long?>(null) }
     var chartPatientName by remember { mutableStateOf("") }
     var chartPatientExpanded by remember { mutableStateOf(false) }
+    var queueDoctorId by remember { mutableStateOf<Long?>(null) }
+    var queueDoctorName by remember { mutableStateOf("") }
+    var queueDoctorExpanded by remember { mutableStateOf(false) }
+    var activeVisit by remember { mutableStateOf<ClinicalVisitEntity?>(null) }
+    var dialogType by remember { mutableStateOf("details") }
+    var dialogValue by remember { mutableStateOf("") }
+    var dialogExtra by remember { mutableStateOf("") }
+    var dialogError by remember { mutableStateOf<String?>(null) }
+    var dialogSaving by remember { mutableStateOf(false) }
 
     fun clearForm() {
         editingVisit = null
@@ -92,6 +101,40 @@ fun DoctorWorkspaceScreen(repository: HospitalRepository) {
         )
         Spacer(Modifier.height(12.dp))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
+            item {
+                Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
+                    Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                        Text("قائمة انتظار العيادة", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Color(0xFF263B4D))
+                        Text("اختر الطبيب لعرض المرضى الذين أحالهم الاستقبال إليه مباشرة.", fontSize = 12.sp, color = Color(0xFF788895))
+                        ExposedDropdownMenuBox(expanded = queueDoctorExpanded, onExpandedChange = { queueDoctorExpanded = !queueDoctorExpanded }) {
+                            OutlinedTextField(queueDoctorName, {}, readOnly = true, label = { Text("الطبيب المختص") }, modifier = Modifier.menuAnchor().fillMaxWidth())
+                            ExposedDropdownMenu(expanded = queueDoctorExpanded, onDismissRequest = { queueDoctorExpanded = false }) {
+                                doctors.forEach { option ->
+                                    DropdownMenuItem(text = { Text("${option.fullName} • ${option.specialty}") }, onClick = {
+                                        queueDoctorId = option.id; queueDoctorName = option.fullName; queueDoctorExpanded = false
+                                    })
+                                }
+                            }
+                        }
+                        val waitingVisits = visits.filter { it.doctorId == queueDoctorId && queueDoctorId != null }.sortedByDescending { it.createdAt }
+                        if (queueDoctorId == null) Text("اختر الطبيب لعرض قائمة المرضى المحالين.", fontSize = 12.sp, color = Color(0xFF788895))
+                        else if (waitingVisits.isEmpty()) Text("لا توجد إحالات لهذا الطبيب حتى الآن.", fontSize = 12.sp, color = Color(0xFF788895))
+                        else waitingVisits.forEach { visit ->
+                            val p = patients.firstOrNull { it.id == visit.patientId }
+                            OutlinedButton(onClick = {
+                                activeVisit = visit; dialogType = "details"; dialogValue = ""; dialogExtra = ""; dialogError = null
+                                chartPatientId = visit.patientId; chartPatientName = visit.patientName
+                            }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+                                Column(Modifier.fillMaxWidth()) {
+                                    Text(visit.patientName, fontWeight = FontWeight.Bold, color = Color(0xFF263B4D))
+                                    Text("رقم الملف: ${p?.fileNumber ?: "غير معروف"} • ${visit.visitAt}", fontSize = 11.sp, color = Color(0xFF788895))
+                                    Text("الشكوى: ${visit.chiefComplaint}", fontSize = 12.sp, color = Color(0xFF356D69))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             item {
                 Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
                     Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -314,6 +357,140 @@ fun DoctorWorkspaceScreen(repository: HospitalRepository) {
                     }
                 }
             }
+        }
+        val selectedVisit = activeVisit
+        if (selectedVisit != null) {
+            val patientProfile = patients.firstOrNull { it.id == selectedVisit.patientId }
+            val visitRecord = allRecords.firstOrNull { it.id == selectedVisit.sourceRecordId }
+            AlertDialog(
+                onDismissRequest = { activeVisit = null },
+                title = { Text(when (dialogType) {
+                    "details" -> "ملف المريض • ${selectedVisit.patientName}"
+                    "diagnosis" -> "تسجيل التشخيص"
+                    "lab" -> "الفحوصات المطلوبة"
+                    "medication" -> "الأدوية المطلوبة"
+                    "history" -> "السجل الطبي السابق"
+                    "followup" -> "موعد المراجعة"
+                    else -> "ملف المريض"
+                }) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        when (dialogType) {
+                            "details" -> {
+                                Text("الطبيب: ${selectedVisit.doctorName}")
+                                Text("تاريخ الزيارة: ${selectedVisit.visitAt}")
+                                Text("رقم الملف: ${patientProfile?.fileNumber ?: "غير متوفر"}")
+                                Text("الهاتف: ${patientProfile?.phone ?: "غير متوفر"}")
+                                Text("العمر: ${patientProfile?.age ?: "غير متوفر"}")
+                                Text("بيانات إضافية: ${patientProfile?.notes?.ifBlank { "غير مدخلة" } ?: "غير متوفرة"}")
+                                Text("الشكوى: ${selectedVisit.chiefComplaint}")
+                                Text("التشخيص الحالي: ${selectedVisit.diagnosis.ifBlank { "لم يسجل بعد" }}")
+                                Text("ملاحظات الزيارة: ${selectedVisit.notes.ifBlank { "لا توجد" }}")
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    OutlinedButton(onClick = { dialogType = "diagnosis"; dialogValue = selectedVisit.diagnosis; dialogError = null }) { Text("التشخيص") }
+                                    OutlinedButton(onClick = { dialogType = "lab"; dialogValue = ""; dialogExtra = ""; dialogError = null }) { Text("الفحوصات") }
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    OutlinedButton(onClick = { dialogType = "medication"; dialogValue = ""; dialogExtra = ""; dialogError = null }) { Text("الأدوية") }
+                                    OutlinedButton(onClick = { dialogType = "history"; dialogError = null }) { Text("السجل السابق") }
+                                }
+                                OutlinedButton(onClick = { dialogType = "followup"; dialogValue = ""; dialogExtra = ""; dialogError = null }, modifier = Modifier.fillMaxWidth()) { Text("موعد المراجعة") }
+                            }
+                            "diagnosis" -> OutlinedTextField(dialogValue, { dialogValue = it }, label = { Text("التشخيص") }, modifier = Modifier.fillMaxWidth(), minLines = 3)
+                            "lab" -> {
+                                OutlinedTextField(dialogValue, { dialogValue = it }, label = { Text("اسم الفحص المطلوب") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
+                                OutlinedTextField(dialogExtra, { dialogExtra = it }, label = { Text("ملاحظات للمختبر (اختياري)") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
+                            }
+                            "medication" -> {
+                                OutlinedTextField(dialogValue, { dialogValue = it }, label = { Text("اسم الدواء | الجرعة") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
+                                OutlinedTextField(dialogExtra, { dialogExtra = it }, label = { Text("التكرار والمدة والتعليمات") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
+                            }
+                            "history" -> {
+                                val previousVisits = visits.filter { it.patientId == selectedVisit.patientId && it.id != selectedVisit.id }.sortedByDescending { it.createdAt }
+                                if (patientProfile?.notes?.isNotBlank() == true) Text("التاريخ الطبي الأساسي: ${patientProfile.notes}")
+                                if (previousVisits.isEmpty()) Text("لا توجد زيارات سابقة مسجلة.")
+                                previousVisits.forEach { previous ->
+                                    HorizontalDivider()
+                                    Text("${previous.visitAt} • ${previous.doctorName}", fontWeight = FontWeight.SemiBold)
+                                    Text("الشكوى: ${previous.chiefComplaint}")
+                                    Text("التشخيص: ${previous.diagnosis.ifBlank { "غير مسجل" }}")
+                                    if (previous.notes.isNotBlank()) Text("ملاحظات: ${previous.notes}")
+                                }
+                            }
+                            "followup" -> {
+                                OutlinedTextField(dialogValue, { dialogValue = it; dialogError = null }, label = { Text("تاريخ المراجعة YYYY-MM-DD") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                                OutlinedTextField(dialogExtra, { dialogExtra = it; dialogError = null }, label = { Text("وقت المراجعة / التعليمات") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                            }
+                        }
+                        dialogError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                    }
+                },
+                confirmButton = {
+                    if (dialogType != "details" && dialogType != "history") {
+                        TextButton(enabled = !dialogSaving, onClick = {
+                            dialogError = null
+                            if (dialogValue.isBlank()) {
+                                dialogError = "أدخل القيمة المطلوبة قبل الحفظ."
+                                return@TextButton
+                            }
+                            if (dialogType == "followup" && !HospitalFieldValidation.isValidDate(dialogValue.trim())) {
+                                dialogError = "تاريخ المراجعة غير صحيح. استخدم الصيغة YYYY-MM-DD وتأكد من صلاحية التاريخ."
+                                return@TextButton
+                            }
+                            dialogSaving = true
+                            scope.launch {
+                                try {
+                                    when (dialogType) {
+                                        "diagnosis" -> {
+                                            val oldDetails = visitRecord?.details.orEmpty()
+                                            val nextLines = oldDetails.lineSequence().filterNot { it.startsWith("التشخيص: ") }.toMutableList()
+                                            nextLines.add("التشخيص: ${dialogValue.trim()}")
+                                            val linkedPatientId = selectedVisit.patientId
+                                                ?: patients.firstOrNull { it.fullName.equals(selectedVisit.patientName, ignoreCase = true) }?.id
+                                            val linkedDoctorId = selectedVisit.doctorId
+                                                ?: doctors.firstOrNull { it.fullName.equals(selectedVisit.doctorName, ignoreCase = true) }?.id
+                                            if (linkedPatientId == null || linkedDoctorId == null) {
+                                                throw IllegalStateException("لا يمكن تحديث الزيارة دون ربط المريض والطبيب.")
+                                            }
+                                            repository.updateClinicalVisitRecord(
+                                                selectedVisit.sourceRecordId, selectedVisit.patientName,
+                                                nextLines.joinToString("\n"), linkedPatientId, linkedDoctorId
+                                            )
+                                            activeVisit = null
+                                        }
+                                        "lab" -> repository.saveRecord(HospitalRecord(
+                                            category = "lab", title = "LAB-${System.currentTimeMillis()}",
+                                            details = "اسم المريض: ${selectedVisit.patientName}\nاسم الفحص: ${dialogValue.trim()}\nحالة الفحص: مطلوب\nالنتيجة: ${dialogExtra.trim()}\nمعرّف الزيارة: ${selectedVisit.id}",
+                                            createdAt = System.currentTimeMillis()
+                                        ))
+                                        "medication" -> {
+                                            val parts = dialogValue.split("|", limit = 2)
+                                            repository.saveRecord(HospitalRecord(
+                                                category = "prescriptions", title = parts.first().trim(),
+                                                details = "اسم المريض: ${selectedVisit.patientName}\nاسم الطبيب: ${selectedVisit.doctorName}\nاسم الدواء: ${parts.first().trim()}\nالجرعة: ${parts.getOrElse(1) { "" }.trim()}\nالتكرار والمدة: ${dialogExtra.trim()}\nالحالة: مطلوب\nتعليمات إضافية: ${dialogExtra.trim()}\nمعرّف الزيارة: ${selectedVisit.id}",
+                                                createdAt = System.currentTimeMillis()
+                                            ))
+                                        }
+                                        "followup" -> repository.saveRecord(HospitalRecord(
+                                            category = "appointments", title = selectedVisit.patientName,
+                                            details = "اسم المريض: ${selectedVisit.patientName}\nاسم الطبيب: ${selectedVisit.doctorName}\nالتاريخ والوقت: ${dialogValue.trim()} ${dialogExtra.trim()}\nسبب الزيارة: مراجعة بعد الزيارة رقم ${selectedVisit.id}",
+                                            createdAt = System.currentTimeMillis()
+                                        ))
+                                    }
+                                    if (dialogType != "diagnosis") dialogType = "details"
+                                } catch (e: Exception) {
+                                    dialogError = "تعذر الحفظ؛ تحقق من البيانات ثم أعد المحاولة."
+                                } finally { dialogSaving = false }
+                            }
+                        }) { Text(if (dialogSaving) "جارٍ الحفظ..." else "حفظ") }
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { if (dialogType == "details") activeVisit = null else dialogType = "details" }) {
+                        Text(if (dialogType == "details") "إغلاق" else "رجوع")
+                    }
+                }
+            )
         }
     }
 }
