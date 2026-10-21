@@ -42,6 +42,14 @@ jobs:
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
       - name: Run unit tests
         run: gradle -p android-hospital --no-daemon testDebugUnitTest
+      - name: Run Android database regression tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          script: gradle -p android-hospital --no-daemon connectedDebugAndroidTest
       - name: Build debug APK
         run: gradle -p android-hospital --no-daemon assembleDebug
       - name: Upload debug APK
