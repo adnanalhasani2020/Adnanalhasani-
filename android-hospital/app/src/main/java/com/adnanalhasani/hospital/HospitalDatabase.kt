@@ -1028,6 +1028,13 @@ interface HospitalDao {
         paymentRecord: HospitalRecord?,
         doctorId: Long?
     ) {
+        require(invoiceRecord.title.isNotBlank()) { "رقم الفاتورة مطلوب" }
+        // A new reception must never reuse an invoice number: upsertInvoice is
+        // intentionally update-capable for edits, but reuse here could attach a
+        // second patient's visit/payment to an existing financial record.
+        check(findInvoiceIdByNumber(invoiceRecord.title) == null) {
+            "رقم الفاتورة مستخدم مسبقاً"
+        }
         saveRecord(patientRecord)
         val patientId = findPatientIdByFileNumber(patientRecord.title)
             ?: throw IllegalStateException("تعذر إنشاء ملف المريض")
