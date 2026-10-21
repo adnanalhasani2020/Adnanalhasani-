@@ -38,6 +38,8 @@ class MainActivity : ComponentActivity() {
 }
 
 private data class Product(val name: String, val category: String, val stock: Int, val price: String)
+private data class SaleRecord(val number: Int, val product: String, val quantity: Int, val total: Int, val credit: Boolean)
+private fun money(value: Int): String = "%,d ر.ي".format(value)
 private val products = listOf(
     Product("قهوة عربية فاخرة", "مشروبات", 18, "3,500 ر.ي"),
     Product("سكر أبيض 1 كجم", "مواد غذائية", 7, "1,200 ر.ي"),
@@ -52,6 +54,8 @@ private fun StoreApp() {
     var tab by remember { mutableIntStateOf(0) }
     var query by remember { mutableStateOf("") }
     var newSale by remember { mutableStateOf(false) }
+    val sales = remember { mutableStateListOf<SaleRecord>() }
+    var nextInvoice by remember { mutableIntStateOf(1049) }
     Scaffold(
         containerColor = Canvas,
         topBar = {
@@ -88,24 +92,25 @@ private fun StoreApp() {
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (tab) {
-                0 -> Dashboard(onNewSale = { newSale = true }, onInventory = { tab = 2 })
-                1 -> SalesScreen(onNewSale = { newSale = true })
+                0 -> Dashboard(sales = sales, onNewSale = { newSale = true }, onInventory = { tab = 2 })
+                1 -> SalesScreen(sales = sales, onNewSale = { newSale = true })
                 2 -> InventoryScreen(query, { query = it })
                 else -> MoreScreen()
             }
         }
     }
-    if (newSale) AlertDialog(
-        onDismissRequest = { newSale = false },
-        title = { Text("إنشاء فاتورة جديدة", fontWeight = FontWeight.Bold) },
-        text = { Text("واجهة البيع قيد التجهيز. ستضاف خطوات اختيار المنتجات والكميات وطريقة الدفع في المرحلة التالية.") },
-        confirmButton = { Button(onClick = { newSale = false }) { Text("حسنًا") } },
-        dismissButton = { TextButton(onClick = { newSale = false }) { Text("إغلاق") } }
+    if (newSale) SaleEntryDialog(
+        onDismiss = { newSale = false },
+        onSave = { product, quantity, credit, unitPrice ->
+            sales.add(0, SaleRecord(nextInvoice, product, quantity, quantity * unitPrice, credit))
+            nextInvoice += 1
+            newSale = false
+        }
     )
 }
 
 @Composable
-private fun Dashboard(onNewSale: () -> Unit, onInventory: () -> Unit) {
+private fun Dashboard(sales: List<SaleRecord>, onNewSale: () -> Unit, onInventory: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(15.dp)) {
         item {
             Card(colors = CardDefaults.cardColors(containerColor = Ink), shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth()) {
@@ -155,6 +160,7 @@ private fun Dashboard(onNewSale: () -> Unit, onInventory: () -> Unit) {
         }
         items(products.filter { it.stock <= 9 }.take(3)) { ProductRow(it) }
         item { Heading("آخر المبيعات", "عمليات اليوم") }
+        items(sales.take(3)) { sale -> SaleRow("فاتورة #${sale.number}", "${sale.product} · ${sale.quantity} قطعة", money(sale.total), sale.credit) }
         item { SaleRow("فاتورة #1048", "قبل ١٠ دقائق · نقدي", "١٨٬٥٠٠ ر.ي", false) }
         item { SaleRow("فاتورة #1047", "قبل ٢٥ دقيقة · آجل", "٧٬٢٠٠ ر.ي", true) }
     }
@@ -183,7 +189,7 @@ private fun Heading(title: String, subtitle: String) {
 }
 
 @Composable
-private fun SalesScreen(onNewSale: () -> Unit) {
+private fun SalesScreen(sales: List<SaleRecord>, onNewSale: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item { Heading("المبيعات والفواتير", "تابع عمليات البيع والتحصيل") }
         item {
@@ -193,7 +199,8 @@ private fun SalesScreen(onNewSale: () -> Unit) {
             }
         }
         item { Button(onClick = onNewSale, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(8.dp)); Text("فاتورة بيع جديدة") } }
-        item { Heading("أحدث الفواتير", "سجلات توضيحية للواجهة") }
+        item { Heading("أحدث الفواتير", "الفواتير التي أنشأتها في هذه الجلسة") }
+        items(sales) { sale -> SaleRow("فاتورة #${sale.number}", "${sale.product} · ${sale.quantity} قطعة", money(sale.total), sale.credit) }
         item { SaleRow("فاتورة #1048", "اليوم، ١٠:٤٢ ص · نقدي", "١٨٬٥٠٠ ر.ي", false) }
         item { SaleRow("فاتورة #1047", "اليوم، ١٠:٢٧ ص · آجل", "٧٬٢٠٠ ر.ي", true) }
         item { SaleRow("فاتورة #1046", "اليوم، ٠٩:٥٥ ص · نقدي", "٢٤٬٠٠٠ ر.ي", false) }
@@ -261,6 +268,78 @@ private fun SaleRow(title: String, subtitle: String, amount: String, credit: Boo
             }
         }
     }
+}
+
+
+@Composable
+private fun SaleEntryDialog(
+    onDismiss: () -> Unit,
+    onSave: (String, Int, Boolean, Int) -> Unit
+) {
+    var selected by remember { mutableIntStateOf(0) }
+    var quantityText by remember { mutableStateOf("1") }
+    var credit by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val product = products[selected]
+    val quantity = quantityText.toIntOrNull()
+    val unitPrice = product.price.replace(",", "").replace(" ر.ي", "").toIntOrNull() ?: 0
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("فاتورة بيع جديدة", fontWeight = FontWeight.Bold, color = Ink) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("اختر المنتج", color = Muted, fontSize = 12.sp)
+                products.forEachIndexed { index, item ->
+                    Surface(
+                        onClick = { selected = index; error = null },
+                        color = if (selected == index) Mint else Color.White,
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, if (selected == index) Green else Border)
+                    ) {
+                        Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected == index, onClick = { selected = index; error = null })
+                            Column(Modifier.weight(1f)) {
+                                Text(item.name, color = Ink, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                Text(item.price, color = Green, fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
+                OutlinedTextField(
+                    value = quantityText,
+                    onValueChange = { quantityText = it.filter(Char::isDigit).take(4); error = null },
+                    label = { Text("الكمية") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text("طريقة الدفع", color = Muted, fontSize = 12.sp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = !credit, onClick = { credit = false })
+                    Text("نقدي", color = Ink)
+                    Spacer(Modifier.width(12.dp))
+                    RadioButton(selected = credit, onClick = { credit = true })
+                    Text("آجل", color = Ink)
+                }
+                HorizontalDivider(color = Border)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("الإجمالي", color = Muted)
+                    Text(if (quantity != null && quantity > 0) money(quantity * unitPrice) else "—", color = Green, fontWeight = FontWeight.Bold)
+                }
+                if (credit) Text("سيُسجّل المبلغ كبيع آجل (تجريبي).", color = Orange, fontSize = 12.sp)
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                if (quantity == null || quantity <= 0) {
+                    error = "أدخل كمية صحيحة أكبر من صفر."
+                } else {
+                    onSave(product.name, quantity, credit, unitPrice)
+                }
+            }) { Text("حفظ الفاتورة") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } }
+    )
 }
 
 @Composable
