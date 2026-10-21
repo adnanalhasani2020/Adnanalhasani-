@@ -7,6 +7,26 @@ import org.junit.Test
 
 class HospitalFieldValidationTest {
     @Test
+    fun normalizesInvoiceNumbersWithoutChangingInternalCharacters() {
+        assertEquals("INV-001", HospitalFieldValidation.normalizeInvoiceNumber("  INV-001  "))
+        assertEquals("INV 001", HospitalFieldValidation.normalizeInvoiceNumber("INV 001"))
+        assertEquals("", HospitalFieldValidation.normalizeInvoiceNumber("   "))
+    }
+
+    @Test
+    fun parsesInventoryQuantitiesWithoutSilentZeroFallback() {
+        assertEquals(0.0, HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("0"), 0.0)
+        assertEquals(12.5, HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull(" 12.5 "), 0.0)
+        assertEquals(0.25, HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("0.25"), 0.0)
+        assertTrue(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("") == null)
+        assertTrue(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("abc") == null)
+        assertTrue(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("-1") == null)
+        assertTrue(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("NaN") == null)
+        assertTrue(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("Infinity") == null)
+        assertTrue(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("1e3") == null)
+    }
+
+    @Test
     fun acceptsValidDatesIncludingLeapDay() {
         assertTrue(HospitalFieldValidation.isValidDate("2024-02-29"))
         assertTrue(HospitalFieldValidation.isValidDate("2026-10-19"))

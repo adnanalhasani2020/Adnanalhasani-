@@ -688,8 +688,8 @@ interface HospitalDao {
                 field("الطبيب المسؤول"), findDoctorIdByName(field("الطبيب المسؤول")), field("مستوى الرعاية"), field("تاريخ الدخول"), field("ملاحظات الفريق"))
             "inventory" -> updateInventoryItemRow(id, field("اسم الصنف").ifBlank { title },
                 field("رمز الصنف").ifBlank { "ITEM-" + id },
-                field("الكمية الحالية").toDoubleOrNull() ?: 0.0,
-                field("حد إعادة الطلب").toDoubleOrNull() ?: 0.0,
+                requireNotNull(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull(field("الكمية الحالية"))) { "Invalid inventory quantity" },
+                requireNotNull(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull(field("حد إعادة الطلب"))) { "Invalid inventory reorder level" },
                 field("وحدة القياس"), field("ملاحظات"))
             "lab" -> {
                 updateLabOrderRow(id, field("اسم المريض"), findPatientIdByName(field("اسم المريض")), field("اسم الفحص"), field("حالة الفحص"), field("النتيجة"))
@@ -852,8 +852,8 @@ interface HospitalDao {
             "inventory" -> saveInventoryItem(InventoryItemEntity(
                 sourceRecordId = sourceRecordId, name = field("اسم الصنف").ifBlank { record.title },
                 sku = field("رمز الصنف").ifBlank { "ITEM-" + sourceRecordId },
-                quantity = field("الكمية الحالية").toDoubleOrNull() ?: 0.0,
-                reorderLevel = field("حد إعادة الطلب").toDoubleOrNull() ?: 0.0,
+                quantity = requireNotNull(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull(field("الكمية الحالية"))) { "Invalid inventory quantity" },
+                reorderLevel = requireNotNull(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull(field("حد إعادة الطلب"))) { "Invalid inventory reorder level" },
                 unit = field("وحدة القياس"), notes = field("ملاحظات"), createdAt = record.createdAt
             ))
             "lab" -> saveLabOrder(LabOrderEntity(
@@ -926,31 +926,41 @@ interface HospitalDao {
                     createdAt = record.createdAt
                 )
             )
-            "invoices" -> upsertInvoice(
-                InvoiceEntity(
-                    invoiceNumber = record.title,
-                    patientName = field("اسم المريض"),
-                    patientId = findPatientIdByName(field("اسم المريض")),
-                    amountMinor = requireNotNull(
-                        HospitalFieldValidation.toMinorUnitsOrNull(field("المبلغ"))
-                    ) { "Invalid invoice amount" },
-                    currency = field("العملة").ifBlank { "YER" },
-                    status = field("الحالة").ifBlank { "open" },
-                    createdAt = record.createdAt
+            "invoices" -> {
+                val invoiceNumber = HospitalFieldValidation.normalizeInvoiceNumber(record.title)
+                require(invoiceNumber.isNotBlank()) { "رقم الفاتورة مطلوب" }
+                upsertInvoice(
+                    InvoiceEntity(
+                        invoiceNumber = invoiceNumber,
+                        patientName = field("اسم المريض"),
+                        patientId = findPatientIdByName(field("اسم المريض")),
+                        amountMinor = requireNotNull(
+                            HospitalFieldValidation.toMinorUnitsOrNull(field("المبلغ"))
+                        ) { "Invalid invoice amount" },
+                        currency = field("العملة").ifBlank { "YER" },
+                        status = field("الحالة").ifBlank { "open" },
+                        createdAt = record.createdAt
+                    )
                 )
-            )
-            "payments" -> insertPayment(
-                PaymentEntity(
-                    invoiceNumber = field("رقم الفاتورة").ifBlank { record.title },
-                    invoiceId = findInvoiceIdByNumber(field("رقم الفاتورة").ifBlank { record.title }),
-                    amountMinor = requireNotNull(
-                        HospitalFieldValidation.toMinorUnitsOrNull(field("المبلغ المدفوع"))
-                    ) { "Invalid payment amount" },
-                    method = field("طريقة الدفع"),
-                    receiptReference = field("مرجع الإيصال"),
-                    createdAt = record.createdAt
+            }
+            "payments" -> {
+                val invoiceNumber = HospitalFieldValidation.normalizeInvoiceNumber(
+                    field("رقم الفاتورة").ifBlank { record.title }
                 )
-            )
+                require(invoiceNumber.isNotBlank()) { "رقم الفاتورة مطلوب للدفعة" }
+                insertPayment(
+                    PaymentEntity(
+                        invoiceNumber = invoiceNumber,
+                        invoiceId = findInvoiceIdByNumber(invoiceNumber),
+                        amountMinor = requireNotNull(
+                            HospitalFieldValidation.toMinorUnitsOrNull(field("المبلغ المدفوع"))
+                        ) { "Invalid payment amount" },
+                        method = field("طريقة الدفع"),
+                        receiptReference = field("مرجع الإيصال"),
+                        createdAt = record.createdAt
+                    )
+                )
+            }
         }
     }
 
@@ -1029,7 +1039,7 @@ interface HospitalDao {
     @Insert
     suspend fun insertInvoice(invoice: InvoiceEntity)
 
-    @Query("UPDATE invoices SET patientName = :patientName, patientId = :patientId, amountMinor = :amountMinor, currency = :currency, status = :status, createdAt = :createdAt WHERE invoiceNumber = :invoiceNumber")
+    @Query("UPDATE invoices SET patientName = :patientName, patientId = :patientId, amountMinor = :amountMinor, currency = :currency, status = :status, createdAt = :createdAt WHERE TRIM(invoiceNumber) = :invoiceNumber")
     suspend fun updateInvoiceByNumber(
         invoiceNumber: String,
         patientName: String,
@@ -1049,11 +1059,11 @@ interface HospitalDao {
     @Query("SELECT id FROM doctors WHERE fullName = :name ORDER BY createdAt DESC LIMIT 1")
     suspend fun findDoctorIdByName(name: String): Long?
 
-    @Query("SELECT id FROM invoices WHERE invoiceNumber = :number LIMIT 1")
+    @Query("SELECT id FROM invoices WHERE TRIM(invoiceNumber) = :number LIMIT 1")
     suspend fun findInvoiceIdByNumber(number: String): Long?
 
     // Older app versions may have invoice records only in the legacy table.
-    @Query("SELECT EXISTS(SELECT 1 FROM hospital_records WHERE category = 'invoices' AND title = :number)")
+    @Query("SELECT EXISTS(SELECT 1 FROM hospital_records WHERE category = 'invoices' AND TRIM(title) = :number)")
     suspend fun hasLegacyInvoiceNumber(number: String): Boolean
 
     @Query("SELECT id FROM patients WHERE fileNumber = :fileNumber LIMIT 1")
@@ -1067,13 +1077,14 @@ interface HospitalDao {
         paymentRecord: HospitalRecord?,
         doctorId: Long?
     ) {
-        require(invoiceRecord.title.isNotBlank()) { "رقم الفاتورة مطلوب" }
+        val normalizedInvoiceNumber = HospitalFieldValidation.normalizeInvoiceNumber(invoiceRecord.title)
+        require(normalizedInvoiceNumber.isNotBlank()) { "رقم الفاتورة مطلوب" }
         // A new reception must never reuse an invoice number: upsertInvoice is
         // intentionally update-capable for edits, but reuse here could attach a
         // second patient's visit/payment to an existing financial record.
         check(
-            findInvoiceIdByNumber(invoiceRecord.title) == null &&
-                !hasLegacyInvoiceNumber(invoiceRecord.title)
+            findInvoiceIdByNumber(normalizedInvoiceNumber) == null &&
+                !hasLegacyInvoiceNumber(normalizedInvoiceNumber)
         ) {
             "رقم الفاتورة مستخدم مسبقاً"
         }
@@ -1081,7 +1092,7 @@ interface HospitalDao {
         val patientId = findPatientIdByFileNumber(patientRecord.title)
             ?: throw IllegalStateException("تعذر إنشاء ملف المريض")
         saveRecord(visitRecord, linkedPatientId = patientId, linkedDoctorId = doctorId)
-        saveRecord(invoiceRecord, linkedPatientId = patientId)
+        saveRecord(invoiceRecord.copy(title = normalizedInvoiceNumber), linkedPatientId = patientId)
         if (paymentRecord != null) saveRecord(paymentRecord, linkedPatientId = patientId)
     }
 
