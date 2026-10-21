@@ -1038,7 +1038,7 @@ interface HospitalDao {
     @Insert
     suspend fun insertInvoice(invoice: InvoiceEntity)
 
-    @Query("UPDATE invoices SET patientName = :patientName, patientId = :patientId, amountMinor = :amountMinor, currency = :currency, status = :status, createdAt = :createdAt WHERE invoiceNumber = :invoiceNumber")
+    @Query("UPDATE invoices SET patientName = :patientName, patientId = :patientId, amountMinor = :amountMinor, currency = :currency, status = :status, createdAt = :createdAt WHERE TRIM(invoiceNumber) = :invoiceNumber")
     suspend fun updateInvoiceByNumber(
         invoiceNumber: String,
         patientName: String,
