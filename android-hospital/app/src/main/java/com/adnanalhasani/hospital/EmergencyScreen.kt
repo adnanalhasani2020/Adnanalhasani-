@@ -147,7 +147,7 @@ internal fun EmergencyScreen(repository: HospitalRepository, onEdit: suspend (Lo
                                 error = "أكمل اسم المريض والشكوى الرئيسية ووقت الوصول."
                                 return@Button
                             }
-                            if (runCatching { LocalDateTime.parse(arrival, formatter) }.isFailure) {
+                            if (!HospitalFieldValidation.isValidDateTime(arrival)) {
                                 error = "وقت الوصول غير صحيح. استخدم YYYY-MM-DD HH:mm."
                                 return@Button
                             }
