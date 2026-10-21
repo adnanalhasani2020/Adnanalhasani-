@@ -40,6 +40,9 @@ class HospitalFieldValidationTest {
         assertFalse(HospitalFieldValidation.isValidMoneyAmount("-0.01"))
         assertFalse(HospitalFieldValidation.isValidMoneyAmount("1.234"))
         assertFalse(HospitalFieldValidation.isValidMoneyAmount("abc"))
+        assertFalse(HospitalFieldValidation.isValidMoneyAmount("1e2"))
+        assertFalse(HospitalFieldValidation.isValidMoneyAmount("1E2"))
+        assertFalse(HospitalFieldValidation.isValidMoneyAmount("1e-2"))
         assertFalse(HospitalFieldValidation.isValidMoneyAmount("999999999999999999999999"))
     }
 
