@@ -20,6 +20,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
 private val erNavy = Color(0xFF263B4D)
 private val erMuted = Color(0xFF788895)
@@ -68,7 +70,7 @@ internal fun EmergencyScreen(repository: HospitalRepository, onEdit: suspend (Lo
         "الإجراء الأولي" to "ما تم عمله فعلياً",
         "ملاحظات التسليم" to "ملاحظات للفريق التالي"
     )
-    fun initialValues() = fields.associate { it.first to "" } + ("وقت الوصول" to LocalDateTime.now().format(formatter))
+    fun initialValues() = fields.associate { it.first to "" } + ("وقت الوصول" to LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")))
     var values by remember { mutableStateOf(initialValues()) }
     var triage by remember { mutableStateOf("عاجل") }
     var triageExpanded by remember { mutableStateOf(false) }
