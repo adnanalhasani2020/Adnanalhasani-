@@ -769,12 +769,31 @@ private fun ReportsScreen(sales: List<SaleRecord>, settlements: List<SettlementR
                 Metric("تكلفة البضاعة", money(costOfGoods), "تكلفة وحدات اليوم المباعة", Icons.Default.Inventory2, Modifier.weight(1f))
             }
         }
-        item { Text("تنبيه: دقة تقدير الربح تعتمد على إدخال تكلفة الشراء الصحيحة لكل منتج. الفواتير القديمة التي لا تحتوي على تكلفة محفوظة لا يمكن احتساب تكلفتها بأثر رجعي.", color = Muted, fontSize = 11.sp) }
+        if (todaySales.any { it.unitCost == 0 }) {
+            item {
+                Text(
+                    "تنبيه: توجد ${todaySales.count { it.unitCost == 0 }} فاتورة/فواتير اليوم بتكلفة شراء صفرية أو غير مسجلة؛ قد يكون تقدير الربح أعلى من الواقع. أدخل تكلفة الشراء الصحيحة لكل منتج.",
+                    color = Muted,
+                    fontSize = 11.sp
+                )
+            }
+        } else {
+            item { Text("تقدير الربح يعتمد على تكاليف الشراء المسجلة، ولا يشمل الضرائب أو التكاليف الأخرى.", color = Muted, fontSize = 11.sp) }
+        }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Metric("الربح الإجمالي التقديري", money(grossProfit), "المبيعات ناقص تكلفة البضاعة", Icons.Default.TrendingUp, Modifier.weight(1f))
                 Metric("النتيجة بعد المصروفات", money(netOperatingResult), "قبل أي تكاليف أخرى أو ضرائب", Icons.Default.AccountBalanceWallet, Modifier.weight(1f))
             }
+        }
+        item {
+            Metric(
+                "صافي حركة النقد",
+                money(netCashFlow),
+                "التحصيلات ناقص المصروفات؛ ليس صافي الربح",
+                Icons.Default.AccountBalanceWallet,
+                Modifier.fillMaxWidth()
+            )
         }
         item {
             Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Border), modifier = Modifier.fillMaxWidth()) {
