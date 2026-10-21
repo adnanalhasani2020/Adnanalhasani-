@@ -623,7 +623,7 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
             }
             "payments" -> require(db.long(
                 "SELECT id FROM payments WHERE invoiceNumber=? AND createdAt=(SELECT createdAt FROM hospital_records WHERE id=?) LIMIT 1",
-                record.title, record.id
+                fields(record).field("رقم الفاتورة").ifBlank { record.title }, record.id
             ) == null) {
                 "لا يمكن حذف دفعة مالية مسجلة؛ حافظ على أثرها المحاسبي واستخدم إجراء عكس موثق."
             }
