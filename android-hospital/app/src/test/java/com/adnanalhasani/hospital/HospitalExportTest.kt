@@ -58,6 +58,35 @@ class HospitalExportTest {
     }
 
     @Test
+    fun protectsAllSpreadsheetFormulaPrefixesIncludingLeadingWhitespace() {
+        val csv = HospitalExport.toCsv(
+            listOf(
+                HospitalRecord(
+                    id = 1,
+                    category = "patients",
+                    title = "+SUM(A1:A2)",
+                    details = "-1+2",
+                    createdAt = 10
+                ),
+                HospitalRecord(
+                    id = 2,
+                    category = "patients",
+                    title = "\t=1+1",
+                    details = "  @SUM(A1:A2)",
+                    createdAt = 11
+                )
+            )
+        )
+
+        assertEquals(
+            "id,category,title,details,created_at\n" +
+                "1,patients,'+SUM(A1:A2),'-1+2,10\n" +
+                "2,patients,'\t=1+1,'  @SUM(A1:A2),11\n",
+            csv
+        )
+    }
+
+    @Test
     fun emptyExportStillContainsHeader() {
         assertEquals("id,category,title,details,created_at\n", HospitalExport.toCsv(emptyList()))
     }
