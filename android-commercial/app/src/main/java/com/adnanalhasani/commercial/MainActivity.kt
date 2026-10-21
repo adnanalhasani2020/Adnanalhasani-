@@ -440,6 +440,7 @@ private fun EditProductDialog(
     var stockText by remember(product) { mutableStateOf(product.stock.toString()) }
     var priceText by remember(product) { mutableStateOf(product.price.replace(",", "").replace(" ر.ي", "")) }
     var error by remember { mutableStateOf<String?>(null) }
+    var confirmDelete by remember(product) { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("تعديل المنتج", color = Ink, fontWeight = FontWeight.Bold) },
@@ -467,10 +468,21 @@ private fun EditProductDialog(
         },
         dismissButton = {
             Row {
-                TextButton(onClick = onDelete) { Text("حذف", color = MaterialTheme.colorScheme.error) }
+                TextButton(onClick = { confirmDelete = true }) { Text("حذف", color = MaterialTheme.colorScheme.error) }
                 TextButton(onClick = onDismiss) { Text("إلغاء") }
             }
         }
+    )
+    if (confirmDelete) AlertDialog(
+        onDismissRequest = { confirmDelete = false },
+        title = { Text("تأكيد حذف المنتج") },
+        text = { Text("هل تريد حذف «${product.name}» من المخزون؟ لا يمكن التراجع عن هذا الإجراء.") },
+        confirmButton = {
+            TextButton(onClick = { confirmDelete = false; onDelete() }) {
+                Text("حذف المنتج", color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("إلغاء") } }
     )
 }
 
