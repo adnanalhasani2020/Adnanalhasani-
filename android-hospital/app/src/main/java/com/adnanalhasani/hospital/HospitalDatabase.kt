@@ -947,6 +947,7 @@ interface HospitalDao {
                 val invoiceNumber = HospitalFieldValidation.normalizeInvoiceNumber(
                     field("رقم الفاتورة").ifBlank { record.title }
                 )
+                require(invoiceNumber.isNotBlank()) { "رقم الفاتورة مطلوب للدفعة" }
                 insertPayment(
                     PaymentEntity(
                         invoiceNumber = invoiceNumber,
