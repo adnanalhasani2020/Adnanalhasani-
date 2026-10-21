@@ -9,6 +9,7 @@ on:
     branches:
       - main
       - feature/native-hospital-android
+      - feature/native-reception-doctor-workflow-v2
     paths:
       - "android-hospital/**"
       - ".github/workflows/android-build.yml"
