@@ -769,6 +769,7 @@ private fun ReportsScreen(sales: List<SaleRecord>, settlements: List<SettlementR
                 Metric("تكلفة البضاعة", money(costOfGoods), "تكلفة وحدات اليوم المباعة", Icons.Default.Inventory2, Modifier.weight(1f))
             }
         }
+        item { Text("تنبيه: دقة تقدير الربح تعتمد على إدخال تكلفة الشراء الصحيحة لكل منتج. الفواتير القديمة التي لا تحتوي على تكلفة محفوظة لا يمكن احتساب تكلفتها بأثر رجعي.", color = Muted, fontSize = 11.sp) }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Metric("الربح الإجمالي التقديري", money(grossProfit), "المبيعات ناقص تكلفة البضاعة", Icons.Default.TrendingUp, Modifier.weight(1f))
