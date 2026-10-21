@@ -46,7 +46,7 @@ def test_web_register_login_catalog_and_logout(tmp_path):
     assert b'id="reportSettings"' in page["body"]
     assert b'id="reportAudience"' in page["body"]
     assert b'id="reportScope"' in page["body"]
-    assert b"لا تمنح صلاحية وصول" in page["body"]
+    assert "لا تمنح صلاحية وصول".encode("utf-8") in page["body"]
     assert b"localStorage.setItem(key,JSON.stringify(readReportSettings()))" in page["body"]
 
     unauthenticated_report = request(app, "/api/reports/sales?format=csv")
