@@ -122,7 +122,7 @@ fun DoctorWorkspaceScreen(repository: HospitalRepository) {
                         else waitingVisits.forEach { visit ->
                             val p = patients.firstOrNull { it.id == visit.patientId }
                             OutlinedButton(onClick = {
-                                activeVisit = visit; dialogType = "details"; dialogValue = ""; dialogExtra = ""
+                                activeVisit = visit; dialogType = "details"; dialogValue = ""; dialogExtra = ""; dialogError = null
                                 chartPatientId = visit.patientId; chartPatientName = visit.patientName
                             }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
                                 Column(Modifier.fillMaxWidth()) {
@@ -387,14 +387,14 @@ fun DoctorWorkspaceScreen(repository: HospitalRepository) {
                                 Text("التشخيص الحالي: ${selectedVisit.diagnosis.ifBlank { "لم يسجل بعد" }}")
                                 Text("ملاحظات الزيارة: ${selectedVisit.notes.ifBlank { "لا توجد" }}")
                                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    OutlinedButton(onClick = { dialogType = "diagnosis"; dialogValue = selectedVisit.diagnosis }) { Text("التشخيص") }
-                                    OutlinedButton(onClick = { dialogType = "lab"; dialogValue = ""; dialogExtra = "" }) { Text("الفحوصات") }
+                                    OutlinedButton(onClick = { dialogType = "diagnosis"; dialogValue = selectedVisit.diagnosis; dialogError = null }) { Text("التشخيص") }
+                                    OutlinedButton(onClick = { dialogType = "lab"; dialogValue = ""; dialogExtra = ""; dialogError = null }) { Text("الفحوصات") }
                                 }
                                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    OutlinedButton(onClick = { dialogType = "medication"; dialogValue = ""; dialogExtra = "" }) { Text("الأدوية") }
-                                    OutlinedButton(onClick = { dialogType = "history" }) { Text("السجل السابق") }
+                                    OutlinedButton(onClick = { dialogType = "medication"; dialogValue = ""; dialogExtra = ""; dialogError = null }) { Text("الأدوية") }
+                                    OutlinedButton(onClick = { dialogType = "history"; dialogError = null }) { Text("السجل السابق") }
                                 }
-                                OutlinedButton(onClick = { dialogType = "followup"; dialogValue = ""; dialogExtra = "" }, modifier = Modifier.fillMaxWidth()) { Text("موعد المراجعة") }
+                                OutlinedButton(onClick = { dialogType = "followup"; dialogValue = ""; dialogExtra = ""; dialogError = null }, modifier = Modifier.fillMaxWidth()) { Text("موعد المراجعة") }
                             }
                             "diagnosis" -> OutlinedTextField(dialogValue, { dialogValue = it }, label = { Text("التشخيص") }, modifier = Modifier.fillMaxWidth(), minLines = 3)
                             "lab" -> {
