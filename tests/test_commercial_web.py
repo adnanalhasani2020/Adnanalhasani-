@@ -381,6 +381,12 @@ def test_checkout_ui_preserves_pending_idempotency_key_for_ambiguous_retry(tmp_p
     assert "else if(pending.quantity!==quantity)" not in html
     assert html.index(guard) < html.index("buy.disabled=true")
     assert 'id="debts"' in html
+    assert 'id="storeManagementModel"' in html
+    assert 'value="merchant_account"' in html
+    assert 'value="dedicated_manager" selected' in html
+    assert 'value="scoped_managers"' in html
+    assert "لا تنشئ حساب مدير ولا تغيّر صلاحيات الخادم" in html
+    assert "const reportSettingFields=['storeManagementModel','reportAudience','reportScope','reportExport','reportAudit']" in html
     assert "const keyName='commercial-payment:'+debt.sale_id" in html
     assert "pending.amount_minor!==value" in html
     assert "idempotency_key:pending.idempotency_key" in html
