@@ -10,6 +10,7 @@ on:
       - main
       - feature/native-hospital-android
       - feature/native-reception-doctor-workflow-v2
+      - integration/native-workflow-current-base
     paths:
       - "android-hospital/**"
       - ".github/workflows/android-build.yml"
