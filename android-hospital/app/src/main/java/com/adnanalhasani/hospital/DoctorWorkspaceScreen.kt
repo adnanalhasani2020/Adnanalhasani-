@@ -472,7 +472,7 @@ fun DoctorWorkspaceScreen(repository: HospitalRepository) {
                                             ))
                                         }
                                         "followup" -> repository.saveRecord(HospitalRecord(
-                                            category = "appointments", title = selectedVisit.patientName,
+                                            category = "appointments", title = "موعد مراجعة - ${selectedVisit.patientName}",
                                             details = "اسم المريض: ${selectedVisit.patientName}\nاسم الطبيب: ${selectedVisit.doctorName}\nالتاريخ والوقت: ${dialogValue.trim()} ${dialogExtra.trim()}\nسبب الزيارة: مراجعة بعد الزيارة رقم ${selectedVisit.id}",
                                             createdAt = System.currentTimeMillis()
                                         ))
