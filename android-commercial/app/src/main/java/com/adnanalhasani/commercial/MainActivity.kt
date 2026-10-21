@@ -181,10 +181,10 @@ private fun Dashboard(products: List<Product>, sales: List<SaleRecord>, onNewSal
                         }
                     }
                     Spacer(Modifier.height(22.dp))
-                    Text("إجمالي المبيعات اليوم", color = Color(0xFFBFD9D0), fontSize = 13.sp)
-                    Text("١٢٨٬٥٠٠ ر.ي", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 29.sp)
+                    Text("إجمالي المبيعات المسجلة", color = Color(0xFFBFD9D0), fontSize = 13.sp)
+                    Text(money(sales.sumOf { it.total }), color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 29.sp)
                     Spacer(Modifier.height(5.dp))
-                    Text("↑ ١٢٪ مقارنة بالأمس", color = Color(0xFF8DE0B8), fontSize = 12.sp)
+                    Text("${sales.size} فاتورة محفوظة على هذا الجهاز", color = Color(0xFF8DE0B8), fontSize = 12.sp)
                     Spacer(Modifier.height(17.dp))
                     Button(onClick = onNewSale, modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Default.Add, null)
@@ -194,17 +194,17 @@ private fun Dashboard(products: List<Product>, sales: List<SaleRecord>, onNewSal
                 }
             }
         }
-        item { Heading("ملخص اليوم", "أرقام توضيحية للواجهة") }
+        item { Heading("ملخص المبيعات", "إحصاءات الفواتير المحفوظة محليًا") }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Metric("الفواتير", "٣٨", "فاتورة اليوم", Icons.Default.PointOfSale, Modifier.weight(1f))
-                Metric("نقدي", "٩٦٬٠٠٠", "ر.ي", Icons.Default.AttachMoney, Modifier.weight(1f))
+                Metric("الفواتير", sales.size.toString(), "فاتورة محفوظة", Icons.Default.PointOfSale, Modifier.weight(1f))
+                Metric("نقدي", money(sales.filter { !it.credit }.sumOf { it.total }), "إجمالي النقدي", Icons.Default.AttachMoney, Modifier.weight(1f))
             }
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Metric("الآجل", "٣٢٬٥٠٠", "ر.ي مستحق", Icons.Default.TrendingUp, Modifier.weight(1f))
-                Metric("المنتجات", "١٢٤", "صنف بالمخزون", Icons.Default.Inventory2, Modifier.weight(1f))
+                Metric("الآجل", money(sales.filter { it.credit }.sumOf { it.total }), "إجمالي الآجل", Icons.Default.TrendingUp, Modifier.weight(1f))
+                Metric("المنتجات", products.size.toString(), "صنف مسجل", Icons.Default.Inventory2, Modifier.weight(1f))
             }
         }
         item {
@@ -216,8 +216,7 @@ private fun Dashboard(products: List<Product>, sales: List<SaleRecord>, onNewSal
         items(products.filter { it.stock <= 9 }.take(3)) { ProductRow(it) }
         item { Heading("آخر المبيعات", "عمليات اليوم") }
         items(sales.take(3)) { sale -> SaleRow("فاتورة #${sale.number}", "${sale.product} · ${sale.quantity} قطعة", money(sale.total), sale.credit) }
-        item { SaleRow("فاتورة #1048", "قبل ١٠ دقائق · نقدي", "١٨٬٥٠٠ ر.ي", false) }
-        item { SaleRow("فاتورة #1047", "قبل ٢٥ دقيقة · آجل", "٧٬٢٠٠ ر.ي", true) }
+        
     }
 }
 
@@ -249,17 +248,14 @@ private fun SalesScreen(sales: List<SaleRecord>, onNewSale: () -> Unit) {
         item { Heading("المبيعات والفواتير", "تابع عمليات البيع والتحصيل") }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Metric("مبيعات اليوم", "١٢٨٬٥٠٠", "ر.ي", Icons.Default.AttachMoney, Modifier.weight(1f))
-                Metric("عدد الفواتير", "٣٨", "فاتورة", Icons.Default.PointOfSale, Modifier.weight(1f))
+                Metric("إجمالي المبيعات", money(sales.sumOf { it.total }), "الفواتير المحفوظة", Icons.Default.AttachMoney, Modifier.weight(1f))
+                Metric("عدد الفواتير", sales.size.toString(), "فاتورة", Icons.Default.PointOfSale, Modifier.weight(1f))
             }
         }
         item { Button(onClick = onNewSale, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(8.dp)); Text("فاتورة بيع جديدة") } }
-        item { Heading("أحدث الفواتير", "الفواتير التي أنشأتها في هذه الجلسة") }
+        item { Heading("أحدث الفواتير", "الفواتير المحفوظة على هذا الجهاز") }
         items(sales) { sale -> SaleRow("فاتورة #${sale.number}", "${sale.product} · ${sale.quantity} قطعة", money(sale.total), sale.credit) }
-        item { SaleRow("فاتورة #1048", "اليوم، ١٠:٤٢ ص · نقدي", "١٨٬٥٠٠ ر.ي", false) }
-        item { SaleRow("فاتورة #1047", "اليوم، ١٠:٢٧ ص · آجل", "٧٬٢٠٠ ر.ي", true) }
-        item { SaleRow("فاتورة #1046", "اليوم، ٠٩:٥٥ ص · نقدي", "٢٤٬٠٠٠ ر.ي", false) }
-        item { SaleRow("فاتورة #1045", "اليوم، ٠٩:١٢ ص · نقدي", "٤٬٨٠٠ ر.ي", false) }
+        
     }
 }
 
@@ -274,8 +270,8 @@ private fun InventoryScreen(products: List<Product>, query: String, onQuery: (St
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Metric("إجمالي الأصناف", "١٢٤", "صنف", Icons.Default.Inventory2, Modifier.weight(1f))
-                Metric("مخزون منخفض", "٠٣", "أصناف", Icons.Default.WarningAmber, Modifier.weight(1f))
+                Metric("إجمالي الأصناف", products.size.toString(), "صنف", Icons.Default.Inventory2, Modifier.weight(1f))
+                Metric("مخزون منخفض", products.count { it.stock <= 9 }.toString(), "أصناف", Icons.Default.WarningAmber, Modifier.weight(1f))
             }
         }
         item { Button(onClick = {}, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(8.dp)); Text("إضافة منتج") } }
