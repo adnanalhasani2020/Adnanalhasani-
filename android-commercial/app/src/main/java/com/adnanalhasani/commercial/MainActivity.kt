@@ -42,7 +42,7 @@ class MainActivity : ComponentActivity() {
 }
 
 internal data class Product(val name: String, val category: String, val stock: Int, val price: String)
-internal data class SaleRecord(val number: Int, val product: String, val quantity: Int, val total: Int, val credit: Boolean, val customer: String = "", val paid: Int = 0)
+internal data class SaleRecord(val number: Int, val product: String, val quantity: Int, val total: Int, val credit: Boolean, val customer: String = "", val paid: Int = 0, val createdAt: Long = System.currentTimeMillis())
 internal data class SettlementRecord(val invoiceNumber: Int, val customer: String, val amount: Int, val timestamp: Long = System.currentTimeMillis())
 private fun money(value: Int): String = String.format(Locale.US, "%,d ر.ي", value)
 
@@ -79,7 +79,7 @@ private fun loadSales(context: Context): List<SaleRecord> {
         List(json.length()) { i ->
             val item = json.getJSONObject(i)
             SaleRecord(item.getInt("number"), item.getString("product"), item.getInt("quantity"),
-                item.getInt("total"), item.getBoolean("credit"), item.optString("customer", ""), item.optInt("paid", 0))
+                item.getInt("total"), item.getBoolean("credit"), item.optString("customer", ""), item.optInt("paid", 0), item.optLong("createdAt", 0L))
         }
     }.getOrElse { emptyList() }
 }
@@ -109,7 +109,7 @@ private fun saveSales(context: Context, items: List<SaleRecord>) {
     items.forEach { item ->
         json.put(JSONObject().put("number", item.number).put("product", item.product)
             .put("quantity", item.quantity).put("total", item.total).put("credit", item.credit)
-            .put("customer", item.customer).put("paid", item.paid))
+            .put("customer", item.customer).put("paid", item.paid).put("createdAt", item.createdAt))
     }
     context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).edit().putString(SALES_KEY, json.toString()).apply()
 }
@@ -130,6 +130,7 @@ private fun StoreApp(context: Context) {
     var addProduct by remember { mutableStateOf(false) }
     var editingProductIndex by remember { mutableIntStateOf(-1) }
     var showDebts by remember { mutableStateOf(false) }
+    var showReports by remember { mutableStateOf(false) }
     var settlingSaleNumber by remember { mutableIntStateOf(-1) }
     val sales = remember { mutableStateListOf<SaleRecord>().apply { addAll(loadSales(context)) } }
     val settlements = remember { mutableStateListOf<SettlementRecord>().apply { addAll(loadSettlements(context)) } }
@@ -174,7 +175,11 @@ private fun StoreApp(context: Context) {
                 0 -> Dashboard(products = inventory, sales = sales, onNewSale = { newSale = true }, onInventory = { tab = 2 })
                 1 -> SalesScreen(sales = sales, onNewSale = { newSale = true })
                 2 -> InventoryScreen(inventory, query, { query = it }, { addProduct = true }, { editingProductIndex = it })
-                else -> if (showDebts) DebtScreen(sales = sales, settlements = settlements, onBack = { showDebts = false }, onSettle = { settlingSaleNumber = it.number }) else MoreScreen(onCustomers = { showDebts = true })
+                else -> when {
+                    showDebts -> DebtScreen(sales = sales, settlements = settlements, onBack = { showDebts = false }, onSettle = { settlingSaleNumber = it.number })
+                    showReports -> ReportsScreen(sales = sales, settlements = settlements, onBack = { showReports = false })
+                    else -> MoreScreen(onCustomers = { showDebts = true }, onReports = { showReports = true })
+                }
             }
         }
     }
@@ -572,12 +577,12 @@ private fun AddProductDialog(
 }
 
 @Composable
-private fun MoreScreen(onCustomers: () -> Unit) {
+private fun MoreScreen(onCustomers: () -> Unit, onReports: () -> Unit) {
     val options = listOf("العملاء والمديونيات", "الموردون والمشتريات", "التقارير والأرباح", "المصروفات", "إعدادات المتجر", "النسخ الاحتياطي")
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Heading("إدارة المتجر", "الأدوات والإعدادات") }
         items(options) { label ->
-            Card(onClick = { if (label == "العملاء والمديونيات") onCustomers() }, colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Border)) {
+            Card(onClick = { when (label) { "العملاء والمديونيات" -> onCustomers(); "التقارير والأرباح" -> onReports() } }, colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Border)) {
                 Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(38.dp).background(Mint, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) { Icon(Icons.Default.Settings, null, tint = Green) }
                     Spacer(Modifier.width(12.dp))
@@ -587,6 +592,80 @@ private fun MoreScreen(onCustomers: () -> Unit) {
             }
         }
         item { Text("نسخة واجهات أولية • البيانات المعروضة تجريبية", color = Muted, fontSize = 11.sp, modifier = Modifier.padding(vertical = 12.dp)) }
+    }
+}
+
+@Composable
+private fun ReportsScreen(sales: List<SaleRecord>, settlements: List<SettlementRecord>, onBack: () -> Unit) {
+    val calendar = java.util.Calendar.getInstance()
+    calendar.set(java.util.Calendar.HOUR_OF_DAY, 0)
+    calendar.set(java.util.Calendar.MINUTE, 0)
+    calendar.set(java.util.Calendar.SECOND, 0)
+    calendar.set(java.util.Calendar.MILLISECOND, 0)
+    val dayStart = calendar.timeInMillis
+    val dayEnd = dayStart + 24L * 60L * 60L * 1000L
+    val todaySales = sales.filter { it.createdAt >= dayStart && it.createdAt < dayEnd }
+    val todaySettlements = settlements.filter { it.timestamp >= dayStart && it.timestamp < dayEnd }
+    val cashSales = todaySales.filter { !it.credit }.sumOf { it.total }
+    val creditSales = todaySales.filter { it.credit }.sumOf { it.total }
+    val collections = cashSales + todaySettlements.sumOf { it.amount }
+    val outstanding = sales.filter { it.credit }.sumOf { (it.total - it.paid).coerceAtLeast(0) }
+    val dateLabel = java.text.DateFormat.getDateInstance(java.text.DateFormat.FULL, Locale("ar")).format(java.util.Date(dayStart))
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "رجوع") }
+                Heading("التقارير اليومية", dateLabel)
+            }
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = Ink), shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("إجمالي التحصيل اليوم", color = Color(0xFFBFD9D0), fontSize = 13.sp)
+                    Text(money(collections), color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Bold)
+                    Text("يشمل المبيعات النقدية ودفعات تسديد الديون اليوم", color = Color(0xFF8DE0B8), fontSize = 11.sp)
+                }
+            }
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Metric("مبيعات اليوم", money(todaySales.sumOf { it.total }), "${todaySales.size} فاتورة", Icons.Default.PointOfSale, Modifier.weight(1f))
+                Metric("المبيعات النقدية", money(cashSales), "مدفوعة عند البيع", Icons.Default.AttachMoney, Modifier.weight(1f))
+            }
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Metric("المبيعات الآجلة", money(creditSales), "فواتير اليوم الآجلة", Icons.Default.TrendingUp, Modifier.weight(1f))
+                Metric("تحصيل الديون", money(todaySettlements.sumOf { it.amount }), "${todaySettlements.size} دفعة اليوم", Icons.Default.Payments, Modifier.weight(1f))
+            }
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Border), modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Text("إجمالي الديون المتبقية", color = Muted, fontSize = 12.sp)
+                    Text(money(outstanding), color = Orange, fontSize = 23.sp, fontWeight = FontWeight.Bold)
+                    Text("هذا الرصيد يشمل جميع الفواتير الآجلة غير المسددة بالكامل.", color = Muted, fontSize = 11.sp)
+                }
+            }
+        }
+        item { Heading("فواتير اليوم", "المبيعات المسجلة خلال اليوم الحالي") }
+        if (todaySales.isEmpty()) item { Text("لا توجد فواتير مسجلة اليوم.", color = Muted) }
+        items(todaySales, key = { "daily-sale-${it.number}" }) { sale ->
+            SaleRow("فاتورة #${sale.number}", "${sale.product} · ${sale.quantity} قطعة", money(sale.total), sale.credit)
+        }
+        item { Heading("دفعات التحصيل اليوم", "التسديدات التي تم تسجيلها اليوم") }
+        if (todaySettlements.isEmpty()) item { Text("لا توجد دفعات تحصيل مسجلة اليوم.", color = Muted) }
+        items(todaySettlements, key = { "daily-payment-${it.invoiceNumber}-${it.timestamp}" }) { payment ->
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(14.dp), border = BorderStroke(1.dp, Border), modifier = Modifier.fillMaxWidth()) {
+                Row(Modifier.fillMaxWidth().padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(payment.customer.ifBlank { "عميل غير محدد" }, color = Ink, fontWeight = FontWeight.SemiBold)
+                        Text("فاتورة #${payment.invoiceNumber}", color = Muted, fontSize = 11.sp)
+                    }
+                    Text(money(payment.amount), color = Green, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
     }
 }
 
