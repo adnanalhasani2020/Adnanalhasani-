@@ -18,12 +18,12 @@ class HospitalFieldValidationTest {
         assertEquals(0.0, HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("0"), 0.0)
         assertEquals(12.5, HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull(" 12.5 "), 0.0)
         assertEquals(0.25, HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("0.25"), 0.0)
-        assertEquals(null, HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull(""))
-        assertEquals(null, HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("abc"))
-        assertEquals(null, HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("-1"))
-        assertEquals(null, HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("NaN"))
-        assertEquals(null, HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("Infinity"))
-        assertEquals(null, HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("1e3"))
+        assertTrue(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("") == null)
+        assertTrue(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("abc") == null)
+        assertTrue(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("-1") == null)
+        assertTrue(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("NaN") == null)
+        assertTrue(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("Infinity") == null)
+        assertTrue(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("1e3") == null)
     }
 
     @Test
