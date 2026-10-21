@@ -28,9 +28,10 @@ class HospitalDatabaseRegressionTest {
     @Test
     fun v14MigrationPreservesExistingRowsAndMakesSpecimenEventsAppendOnly() {
         val context = ApplicationProvider.getApplicationContext<Context>()
+        val fixtureName = "hospital-v14-fixture-${System.nanoTime()}.db"
         val helper = FrameworkSQLiteOpenHelperFactory().create(
             SupportSQLiteOpenHelper.Configuration.builder(context)
-                .name("hospital-v14-fixture-${System.nanoTime()}.db")
+                .name(fixtureName)
                 .callback(object : SupportSQLiteOpenHelper.Callback(14) {
                     override fun onCreate(db: SupportSQLiteDatabase) {
                         db.execSQL(
@@ -87,7 +88,7 @@ class HospitalDatabaseRegressionTest {
             assertEquals(1, scalarCount(db, "SELECT COUNT(*) FROM lab_specimen_events WHERE id = 19 AND note = 'registered'"))
         } finally {
             helper.close()
-            context.deleteDatabase("hospital-v14-fixture.db")
+            context.deleteDatabase(fixtureName)
         }
     }
 
