@@ -1,10 +1,10 @@
 # الوكيل الجديد — الحالة الفعلية الحالية
 
 **المستودع:** `adnanalhasani2020/Adnanalhasani-`  
-**الالتزام المرجعي الذي جرى التحقق منه:** `563ca1ef4b21d99323061285b02bcaaa6293bd2b` (`main`، 2026-10-18).  
-**تاريخ التحقق:** 2026-10-18.  
-**نتائج GitHub Actions على الالتزام نفسه:** [Python tests](https://github.com/adnanalhasani2020/Adnanalhasani-/actions/runs/39161442147) — SUCCESS، **1,324 اختبارًا ناجحًا**؛ [Hospital core tests](https://github.com/adnanalhasani2020/Adnanalhasani-/actions/runs/39161442118) — SUCCESS، **83 اختبارًا ناجحًا**؛ [Stage 7 Automated Tests](https://github.com/adnanalhasani2020/Adnanalhasani-/actions/runs/39161442184) — SUCCESS، بما في ذلك مجموعة pytest الكاملة (**1,324 اختبارًا**).  
-**حدود الدليل:** تثبت هذه النتائج نجاح مجموعات الاختبار على الالتزام المشار إليه فقط؛ ولا تثبت اكتمال المنتج أو خلوه من العيوب أو جاهزيته للإنتاج.
+**الالتزام المرجعي للحالة الحالية:** `fe2bf775b31ea04c16eee4abe4d0606fac50ebe3` (`main`، 2026-10-21).  
+**تاريخ تحديث هذه الصفحة:** 2026-10-21.  
+**أحدث دليل اختبارات جرى التحقق منه:** فحوصات [PR #502](https://github.com/adnanalhasani2020/Adnanalhasani-/pull/502) نجحت على رأس الفرع `132c11e914ce2b2b3dcac4f1278d5d0d97f44632` في Python tests وHospital core tests وStage 7 Automated Tests. هذه نتيجة على رأس PR، وليست ادعاءً بأن الفحوصات أعيد تشغيلها على الالتزام `main` الحالي.  
+**حدود الدليل:** نجاح الاختبارات يثبت نجاح المجموعات التي شُغّلت على الالتزام المحدد فقط؛ ولا يثبت اكتمال المنتج أو خلوه من العيوب أو جاهزيته للإنتاج.
 
 ## هدفنا الاستراتيجي
 
