@@ -175,8 +175,10 @@ fun ReceptionScreen(repository: HospitalRepository) {
         item {
             Button(
                 onClick = {
-                    val total = totalAmount.trim().toBigDecimalOrNull()
-                    val paid = paidAmount.trim().ifBlank { "0" }.toBigDecimalOrNull()
+                    val totalRaw = totalAmount.trim()
+                    val paidRaw = paidAmount.trim().ifBlank { "0" }
+                    val total = totalRaw.takeIf(HospitalFieldValidation::isValidMoneyAmount)?.toBigDecimalOrNull()
+                    val paid = paidRaw.takeIf(HospitalFieldValidation::isValidMoneyAmount)?.toBigDecimalOrNull()
                     when {
                         fileNumber.isBlank() || fullName.isBlank() || department.isBlank() || complaint.isBlank() || invoiceNumber.isBlank() || total == null || paid == null -> message = "أكمل الحقول المطلوبة وأدخل مبالغ رقمية صحيحة."
                         selectedDoctorId == null || doctorName.isBlank() -> message = "اختر الطبيب المختص حتى تظهر الزيارة في شاشة الطبيب."
