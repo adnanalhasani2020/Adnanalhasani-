@@ -380,6 +380,11 @@ def test_checkout_ui_preserves_pending_idempotency_key_for_ambiguous_retry(tmp_p
     assert "توجد عملية شراء معلقة بتفاصيل مختلفة" in html
     assert "else if(pending.quantity!==quantity)" not in html
     assert html.index(guard) < html.index("buy.disabled=true")
+    assert 'id="debts"' in html
+    assert "commercial-payment:"+ "debt.sale_id" in html
+    assert "pending.amount_minor!==value" in html
+    assert "idempotency_key:pending.idempotency_key" in html
+    assert "sessionStorage.removeItem(keyName)" in html
 
 
 def test_receipt_history_skips_malformed_persisted_row(tmp_path):
