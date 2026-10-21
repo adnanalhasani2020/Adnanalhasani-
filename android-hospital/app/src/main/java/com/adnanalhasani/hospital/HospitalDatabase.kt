@@ -1115,7 +1115,7 @@ interface HospitalDao {
                 line.startsWith("حالة الموعد: ") -> "حالة الموعد: $status"
                 else -> line
             }
-        }.joinToString("\\n")
+        }.joinToString("\n")
         updateHospitalRecordDetails(source.id, newDetails)
         updateModuleRecordDetails(source.id, newDetails)
         insertAuditLog(RecordAuditLogEntity(recordId = source.id, category = "appointments", action = action, oldTitle = source.title, newTitle = source.title, oldDetails = oldDetails, newDetails = newDetails, changedAt = System.currentTimeMillis()))
