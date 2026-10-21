@@ -104,6 +104,13 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
                 if (f.field("تاريخ الزيارة").isNotBlank()) canonicalDateTime(f.field("تاريخ الزيارة"))
             }
             "pharmacy" -> {
+                if (existingId != null) {
+                    require(db.long(
+                        "SELECT id FROM local_medicine_movements WHERE sourceRecordId=? LIMIT 1", existingId
+                    ) == null) {
+                        "سجل توريد المخزون أصبح حركة ثابتة؛ لا تعدّل تفاصيله بعد التسجيل. أنشئ توريداً جديداً أو حركة تصحيح."
+                    }
+                }
                 require(f.field("اسم الدواء").isNotBlank()) { "اسم الدواء مطلوب." }
                 require(f.field("رمز الدواء").isNotBlank()) { "رمز الدواء مطلوب." }
                 val qty = f.field("الكمية").toIntOrNull()
