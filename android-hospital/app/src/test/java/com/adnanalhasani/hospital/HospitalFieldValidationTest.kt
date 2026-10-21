@@ -110,7 +110,7 @@ class HospitalFieldValidationTest {
 
     @Test
     fun rejectsInventoryQuantityOverflowAndMalformedDecimalInputs() {
-        assertTrue(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("999999999999999999999999999999999999999999") == null)
+        assertTrue(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("9".repeat(400)) == null)
         assertTrue(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull(".5") == null)
         assertTrue(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("1.") == null)
         assertTrue(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("+1") == null)
