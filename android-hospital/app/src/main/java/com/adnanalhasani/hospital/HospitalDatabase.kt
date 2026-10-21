@@ -1045,6 +1045,53 @@ interface HospitalDao {
     @Query("SELECT * FROM appointments ORDER BY createdAt DESC")
     fun appointments(): Flow<List<AppointmentEntity>>
 
+    @Query("SELECT * FROM appointments WHERE patientId = :patientId OR (patientId IS NULL AND patientName = :patientName) ORDER BY appointmentAt DESC, createdAt DESC")
+    fun appointmentsForPatient(patientId: Long, patientName: String): Flow<List<AppointmentEntity>>
+
+    @Query("SELECT * FROM appointments WHERE id = :id LIMIT 1")
+    suspend fun appointmentById(id: Long): AppointmentEntity?
+
+    @Query("UPDATE appointments SET appointmentAt = :appointmentAt, reason = :reason, status = :status WHERE id = :id")
+    suspend fun updateAppointmentRow(id: Long, appointmentAt: String, reason: String, status: String): Int
+
+    @Query("UPDATE appointments SET status = :status WHERE id = :id")
+    suspend fun updateAppointmentStatusRow(id: Long, status: String): Int
+
+    @Transaction
+    suspend fun updateAppointmentById(id: Long, appointmentAt: String, reason: String, status: String): Int {
+        val appointment = appointmentById(id) ?: return 0
+        val changed = updateAppointmentRow(id, appointmentAt, reason, status)
+        if (changed > 0) syncAppointmentRecord(appointment, appointmentAt, reason, status, "UPDATE")
+        return changed
+    }
+
+    @Transaction
+    suspend fun updateAppointmentStatus(id: Long, status: String): Int {
+        val appointment = appointmentById(id) ?: return 0
+        val changed = updateAppointmentStatusRow(id, status)
+        if (changed > 0) syncAppointmentRecord(appointment, appointment.appointmentAt, appointment.reason, status, "STATUS")
+        return changed
+    }
+
+    @Query("SELECT * FROM hospital_records WHERE category = 'appointments' AND title = :title AND createdAt = :createdAt LIMIT 1")
+    suspend fun appointmentSourceRecord(title: String, createdAt: Long): HospitalRecord?
+
+    suspend fun syncAppointmentRecord(appointment: AppointmentEntity, appointmentAt: String, reason: String, status: String, action: String) {
+        val source = appointmentSourceRecord("موعد مراجعة - ${appointment.patientName}", appointment.createdAt) ?: return
+        val oldDetails = source.details
+        val newDetails = oldDetails.lineSequence().map { line ->
+            when {
+                line.startsWith("التاريخ والوقت: ") -> "التاريخ والوقت: $appointmentAt"
+                line.startsWith("سبب الزيارة: ") -> "سبب الزيارة: $reason"
+                line.startsWith("حالة الموعد: ") -> "حالة الموعد: $status"
+                else -> line
+            }
+        }.joinToString("\\n")
+        updateHospitalRecordDetails(source.id, newDetails)
+        updateModuleRecordDetails(source.id, newDetails)
+        insertAuditLog(RecordAuditLogEntity(recordId = source.id, category = "appointments", action = action, oldTitle = source.title, newTitle = source.title, oldDetails = oldDetails, newDetails = newDetails, changedAt = System.currentTimeMillis()))
+    }
+
     @Query("SELECT * FROM invoices ORDER BY createdAt DESC")
     fun invoices(): Flow<List<InvoiceEntity>>
 
