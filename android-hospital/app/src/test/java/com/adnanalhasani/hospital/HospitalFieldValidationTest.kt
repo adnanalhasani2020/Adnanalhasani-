@@ -47,6 +47,21 @@ class HospitalFieldValidationTest {
     }
 
     @Test
+    fun acceptsOnlyTraceableNewLabSpecimensInInitialState() {
+        val valid = LabSpecimenEntity(
+            labOrderId = 1,
+            specimenCode = "  LAB-001  ",
+            specimenType = " Blood "
+        )
+        assertTrue(isValidLabSpecimenRegistration(valid, " lab-tech "))
+
+        assertFalse(isValidLabSpecimenRegistration(valid.copy(specimenCode = "  "), "lab-tech"))
+        assertFalse(isValidLabSpecimenRegistration(valid.copy(specimenType = ""), "lab-tech"))
+        assertFalse(isValidLabSpecimenRegistration(valid.copy(status = "completed"), "lab-tech"))
+        assertFalse(isValidLabSpecimenRegistration(valid, "  "))
+    }
+
+    @Test
     fun validatesMonthAndTimeBoundaries() {
         assertTrue(HospitalFieldValidation.isValidMonth("2026-10"))
         assertFalse(HospitalFieldValidation.isValidMonth("2026-13"))
