@@ -55,6 +55,7 @@ private fun StoreApp() {
     var query by remember { mutableStateOf("") }
     var newSale by remember { mutableStateOf(false) }
     val sales = remember { mutableStateListOf<SaleRecord>() }
+    val inventory = remember { mutableStateListOf<Product>().apply { addAll(products) } }
     var nextInvoice by remember { mutableIntStateOf(1049) }
     Scaffold(
         containerColor = Canvas,
@@ -92,16 +93,19 @@ private fun StoreApp() {
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (tab) {
-                0 -> Dashboard(sales = sales, onNewSale = { newSale = true }, onInventory = { tab = 2 })
+                0 -> Dashboard(products = inventory, sales = sales, onNewSale = { newSale = true }, onInventory = { tab = 2 })
                 1 -> SalesScreen(sales = sales, onNewSale = { newSale = true })
-                2 -> InventoryScreen(query, { query = it })
+                2 -> InventoryScreen(inventory, query, { query = it })
                 else -> MoreScreen()
             }
         }
     }
     if (newSale) SaleEntryDialog(
+        inventory = inventory,
         onDismiss = { newSale = false },
-        onSave = { product, quantity, credit, unitPrice ->
+        onSave = { productIndex, product, quantity, credit, unitPrice ->
+            val currentProduct = inventory[productIndex]
+            inventory[productIndex] = currentProduct.copy(stock = currentProduct.stock - quantity)
             sales.add(0, SaleRecord(nextInvoice, product, quantity, quantity * unitPrice, credit))
             nextInvoice += 1
             newSale = false
@@ -110,7 +114,7 @@ private fun StoreApp() {
 }
 
 @Composable
-private fun Dashboard(sales: List<SaleRecord>, onNewSale: () -> Unit, onInventory: () -> Unit) {
+private fun Dashboard(products: List<Product>, sales: List<SaleRecord>, onNewSale: () -> Unit, onInventory: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(15.dp)) {
         item {
             Card(colors = CardDefaults.cardColors(containerColor = Ink), shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth()) {
@@ -209,7 +213,7 @@ private fun SalesScreen(sales: List<SaleRecord>, onNewSale: () -> Unit) {
 }
 
 @Composable
-private fun InventoryScreen(query: String, onQuery: (String) -> Unit) {
+private fun InventoryScreen(products: List<Product>, query: String, onQuery: (String) -> Unit) {
     val filtered = products.filter { it.name.contains(query, true) || it.category.contains(query, true) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
         item { Heading("المخزون والمنتجات", "إدارة الأصناف والكميات والأسعار") }
@@ -273,14 +277,15 @@ private fun SaleRow(title: String, subtitle: String, amount: String, credit: Boo
 
 @Composable
 private fun SaleEntryDialog(
+    inventory: List<Product>,
     onDismiss: () -> Unit,
-    onSave: (String, Int, Boolean, Int) -> Unit
+    onSave: (Int, String, Int, Boolean, Int) -> Unit
 ) {
     var selected by remember { mutableIntStateOf(0) }
     var quantityText by remember { mutableStateOf("1") }
     var credit by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    val product = products[selected]
+    val product = inventory[selected.coerceIn(0, inventory.lastIndex)]
     val quantity = quantityText.toIntOrNull()
     val unitPrice = product.price.replace(",", "").replace(" ر.ي", "").toIntOrNull() ?: 0
     AlertDialog(
@@ -289,7 +294,7 @@ private fun SaleEntryDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("اختر المنتج", color = Muted, fontSize = 12.sp)
-                products.forEachIndexed { index, item ->
+                inventory.forEachIndexed { index, item ->
                     Surface(
                         onClick = { selected = index; error = null },
                         color = if (selected == index) Mint else Color.White,
@@ -333,8 +338,10 @@ private fun SaleEntryDialog(
             Button(onClick = {
                 if (quantity == null || quantity <= 0) {
                     error = "أدخل كمية صحيحة أكبر من صفر."
+                } else if (quantity > product.stock) {
+                    error = "الكمية المطلوبة أكبر من المخزون المتاح (${product.stock})."
                 } else {
-                    onSave(product.name, quantity, credit, unitPrice)
+                    onSave(selected, product.name, quantity, credit, unitPrice)
                 }
             }) { Text("حفظ الفاتورة") }
         },
