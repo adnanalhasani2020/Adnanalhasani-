@@ -592,8 +592,15 @@ private fun MoreScreen(onCustomers: () -> Unit) {
 
 @Composable
 private fun DebtScreen(sales: List<SaleRecord>, settlements: List<SettlementRecord>, onBack: () -> Unit, onSettle: (SaleRecord) -> Unit) {
-    val debts = sales.filter { it.credit && it.total > it.paid }
-    val totalOutstanding = debts.sumOf { it.total - it.paid }
+    var customerQuery by remember { mutableStateOf("") }
+    val allDebts = sales.filter { it.credit && it.total > it.paid }
+    val debts = allDebts.filter {
+        customerQuery.isBlank() ||
+            it.customer.contains(customerQuery.trim(), ignoreCase = true) ||
+            it.product.contains(customerQuery.trim(), ignoreCase = true) ||
+            it.number.toString().contains(customerQuery.trim())
+    }
+    val totalOutstanding = allDebts.sumOf { (it.total - it.paid).coerceAtLeast(0) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -602,11 +609,21 @@ private fun DebtScreen(sales: List<SaleRecord>, settlements: List<SettlementReco
             }
         }
         item {
+            OutlinedTextField(
+                value = customerQuery,
+                onValueChange = { customerQuery = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text("ابحث باسم العميل أو المنتج أو رقم الفاتورة") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) }
+            )
+        }
+        item {
             Card(colors = CardDefaults.cardColors(containerColor = Ink), shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(18.dp)) {
                     Text("إجمالي الديون المتبقية", color = Color(0xFFBFD9D0), fontSize = 13.sp)
                     Text(money(totalOutstanding), color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Bold)
-                    Text("${debts.size} فاتورة غير مسددة بالكامل", color = Color(0xFF8DE0B8), fontSize = 12.sp)
+                    Text("${allDebts.size} فاتورة غير مسددة بالكامل", color = Color(0xFF8DE0B8), fontSize = 12.sp)
                 }
             }
         }
