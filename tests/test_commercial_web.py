@@ -376,3 +376,52 @@ def test_receipt_history_skips_malformed_persisted_row(tmp_path):
     )
     assert direct_lookup["status"] == "404 Not Found"
     assert direct_lookup["body"] == {"error": "الإيصال غير موجود."}
+
+
+
+def test_sales_report_stays_fail_closed_for_all_query_variants(tmp_path):
+    db_path = tmp_path / "sales-report-denial.sqlite"
+    db = connect_database(db_path)
+    db.close()
+    app = CommercialWebApplication(db_path)
+
+    paths = [
+        "/api/reports/sales",
+        "/api/reports/sales?format=json",
+        "/api/reports/sales?format=csv",
+        "/api/reports/sales?format=csv&start_date=2026-01-01&end_date=2026-12-31",
+        "/api/reports/sales?activity_id=another-activity&scope=all",
+    ]
+
+    # A missing session is rejected regardless of requested representation or scope.
+    for path in paths:
+        response = request(app, path)
+        assert response["status"] == "401 Unauthorized"
+        assert "text/csv" not in dict(response["headers"]).get("Content-Type", "")
+
+    registered = request(
+        app, "/api/register", method="POST",
+        body={"username": "report_guard", "password": "correct horse battery staple"},
+    )
+    assert registered["status"] == "200 OK"
+    cookie = SimpleCookie()
+    cookie.load(dict(registered["headers"])["Set-Cookie"])
+    session_cookie = "commercial_session=" + cookie["commercial_session"].value
+
+    db = connect_database(db_path)
+    sales_before = db.execute("SELECT COUNT(*) FROM sales").fetchone()[0]
+    db.close()
+
+    # Authentication identifies the caller but must not grant report authority.
+    for path in paths:
+        response = request(app, path, cookie=session_cookie)
+        assert response["status"] == "403 Forbidden"
+        assert "text/csv" not in dict(response["headers"]).get("Content-Type", "")
+        assert "items" not in response["body"]
+        assert "summary" not in response["body"]
+        assert "csv" not in response["body"]
+
+    db = connect_database(db_path)
+    sales_after = db.execute("SELECT COUNT(*) FROM sales").fetchone()[0]
+    db.close()
+    assert sales_after == sales_before
