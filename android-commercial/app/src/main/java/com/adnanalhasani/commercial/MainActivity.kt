@@ -105,7 +105,7 @@ private fun StoreApp(context: Context) {
     var newSale by remember { mutableStateOf(false) }
     val sales = remember { mutableStateListOf<SaleRecord>().apply { addAll(loadSales(context)) } }
     val inventory = remember { mutableStateListOf<Product>().apply { addAll(loadProducts(context)) } }
-    var nextInvoice by remember { mutableIntStateOf(1049) }
+    var nextInvoice by remember { mutableIntStateOf((sales.maxOfOrNull { it.number } ?: 1048) + 1) }
     Scaffold(
         containerColor = Canvas,
         topBar = {
