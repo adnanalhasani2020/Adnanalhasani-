@@ -203,3 +203,21 @@ def test_currency_choices_are_saved_as_prototype_preferences_not_active_finance_
     assert "localStorage" in html
     assert "لا يوجد حفظ على الخادم" in html
     assert "لا تغيّر إعدادات Finance المحفوظة على الخادم" in html
+
+def test_sales_report_access_settings_are_proposals_and_keep_access_blocked_by_default():
+    html = PROTOTYPE.read_text(encoding="utf-8")
+
+    assert 'id="reportAudience" name="reportAudience"' in html
+    assert 'option value="blocked" selected' in html
+    assert 'id="reportScope" name="reportScope"' in html
+    assert 'id="reportExport" name="reportExport"' in html
+    assert 'id="reportAudit" name="reportAudit"' in html
+    assert "لا تمنح أي مستخدم صلاحية ولا تفتح واجهة التقرير" in html
+    assert "يجب ربط القرار بمنحة تفويض موجودة ومعتمدة على الخادم" in html
+    assert "reportAudience:d.reportAudience" in html
+    assert "reportScope:d.reportScope" in html
+    assert "reportExport:d.reportExport" in html
+    assert "reportAudit:d.reportAudit" in html
+    assert "labels.reportAudience[d.reportAudience]" in html
+    assert "labels.reportScope[d.reportScope]" in html
+    assert "JSON وCSV محجوبين" in html
