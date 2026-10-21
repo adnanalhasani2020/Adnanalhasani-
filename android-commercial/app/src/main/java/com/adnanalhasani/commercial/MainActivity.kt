@@ -1,0 +1,283 @@
+package com.adnanalhasani.commercial
+
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+
+private val Ink = Color(0xFF183B35)
+private val Green = Color(0xFF167D63)
+private val Mint = Color(0xFFE8F5EF)
+private val Canvas = Color(0xFFF5F7F6)
+private val Muted = Color(0xFF71817B)
+private val Orange = Color(0xFFF4A340)
+private val Border = Color(0xFFE5EBE8)
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent { MaterialTheme(colorScheme = lightColorScheme(primary = Green, background = Canvas, surface = Color.White)) { StoreApp() } }
+    }
+}
+
+private data class Product(val name: String, val category: String, val stock: Int, val price: String)
+private val products = listOf(
+    Product("قهوة عربية فاخرة", "مشروبات", 18, "3,500 ر.ي"),
+    Product("سكر أبيض 1 كجم", "مواد غذائية", 7, "1,200 ر.ي"),
+    Product("زيت نباتي 1 لتر", "مواد غذائية", 4, "2,800 ر.ي"),
+    Product("مياه معدنية", "مشروبات", 32, "300 ر.ي"),
+    Product("أرز بسمتي 5 كجم", "مواد غذائية", 9, "6,500 ر.ي")
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun StoreApp() {
+    var tab by remember { mutableIntStateOf(0) }
+    var query by remember { mutableStateOf("") }
+    var newSale by remember { mutableStateOf(false) }
+    Scaffold(
+        containerColor = Canvas,
+        topBar = {
+            TopAppBar(
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(42.dp).background(Mint, RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.Storefront, null, tint = Green)
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Column {
+                            Text("متجري", fontWeight = FontWeight.Bold, color = Ink)
+                            Text("إدارة متجرك ببساطة", fontSize = 11.sp, color = Muted)
+                        }
+                    }
+                },
+                actions = { IconButton(onClick = {}) { Icon(Icons.Default.NotificationsNone, "الإشعارات", tint = Ink) } },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Canvas)
+            )
+        },
+        bottomBar = {
+            NavigationBar(containerColor = Color.White) {
+                val nav = listOf("الرئيسية" to Icons.Default.Storefront, "المبيعات" to Icons.Default.PointOfSale, "المخزون" to Icons.Default.Inventory2, "المزيد" to Icons.Default.MoreHoriz)
+                nav.forEachIndexed { index, item ->
+                    NavigationBarItem(selected = tab == index, onClick = { tab = index }, icon = { Icon(item.second, item.first) }, label = { Text(item.first, fontSize = 11.sp) })
+                }
+            }
+        },
+        floatingActionButton = {
+            if (tab == 1) FloatingActionButton(onClick = { newSale = true }, containerColor = Green, contentColor = Color.White) {
+                Icon(Icons.Default.Add, "فاتورة جديدة")
+            }
+        }
+    ) { padding ->
+        Box(Modifier.fillMaxSize().padding(padding)) {
+            when (tab) {
+                0 -> Dashboard(onNewSale = { newSale = true }, onInventory = { tab = 2 })
+                1 -> SalesScreen(onNewSale = { newSale = true })
+                2 -> InventoryScreen(query, { query = it })
+                else -> MoreScreen()
+            }
+        }
+    }
+    if (newSale) AlertDialog(
+        onDismissRequest = { newSale = false },
+        title = { Text("إنشاء فاتورة جديدة", fontWeight = FontWeight.Bold) },
+        text = { Text("واجهة البيع قيد التجهيز. ستضاف خطوات اختيار المنتجات والكميات وطريقة الدفع في المرحلة التالية.") },
+        confirmButton = { Button(onClick = { newSale = false }) { Text("حسنًا") } },
+        dismissButton = { TextButton(onClick = { newSale = false }) { Text("إغلاق") } }
+    )
+}
+
+@Composable
+private fun Dashboard(onNewSale: () -> Unit, onInventory: () -> Unit) {
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(15.dp)) {
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = Ink), shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(20.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("أهلًا بك 👋", color = Color(0xFFBFD9D0), fontSize = 14.sp)
+                            Spacer(Modifier.height(5.dp))
+                            Text("إليك ملخص متجرك اليوم", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                        }
+                        Box(Modifier.size(46.dp).background(Color(0xFF31584F), CircleShape), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.TrendingUp, null, tint = Color(0xFF8DE0B8))
+                        }
+                    }
+                    Spacer(Modifier.height(22.dp))
+                    Text("إجمالي المبيعات اليوم", color = Color(0xFFBFD9D0), fontSize = 13.sp)
+                    Text("١٢٨٬٥٠٠ ر.ي", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 29.sp)
+                    Spacer(Modifier.height(5.dp))
+                    Text("↑ ١٢٪ مقارنة بالأمس", color = Color(0xFF8DE0B8), fontSize = 12.sp)
+                    Spacer(Modifier.height(17.dp))
+                    Button(onClick = onNewSale, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Default.Add, null)
+                        Spacer(Modifier.width(7.dp))
+                        Text("تسجيل عملية بيع")
+                    }
+                }
+            }
+        }
+        item { Heading("ملخص اليوم", "أرقام توضيحية للواجهة") }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Metric("الفواتير", "٣٨", "فاتورة اليوم", Icons.Default.PointOfSale, Modifier.weight(1f))
+                Metric("نقدي", "٩٦٬٠٠٠", "ر.ي", Icons.Default.AttachMoney, Modifier.weight(1f))
+            }
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Metric("الآجل", "٣٢٬٥٠٠", "ر.ي مستحق", Icons.Default.TrendingUp, Modifier.weight(1f))
+                Metric("المنتجات", "١٢٤", "صنف بالمخزون", Icons.Default.Inventory2, Modifier.weight(1f))
+            }
+        }
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) { Heading("تنبيهات المخزون", "أصناف تحتاج إلى إعادة طلب") }
+                TextButton(onClick = onInventory) { Text("عرض الكل") }
+            }
+        }
+        items(products.filter { it.stock <= 9 }.take(3)) { ProductRow(it) }
+        item { Heading("آخر المبيعات", "عمليات اليوم") }
+        item { SaleRow("فاتورة #1048", "قبل ١٠ دقائق · نقدي", "١٨٬٥٠٠ ر.ي", false) }
+        item { SaleRow("فاتورة #1047", "قبل ٢٥ دقيقة · آجل", "٧٬٢٠٠ ر.ي", true) }
+    }
+}
+
+@Composable
+private fun Metric(title: String, value: String, note: String, icon: ImageVector, modifier: Modifier = Modifier) {
+    Card(modifier, colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(19.dp), border = BorderStroke(1.dp, Border)) {
+        Column(Modifier.padding(14.dp)) {
+            Box(Modifier.size(36.dp).background(Mint, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) { Icon(icon, null, tint = Green) }
+            Spacer(Modifier.height(10.dp))
+            Text(title, color = Muted, fontSize = 12.sp)
+            Text(value, color = Ink, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            Text(note, color = Muted, fontSize = 11.sp)
+        }
+    }
+}
+
+@Composable
+private fun Heading(title: String, subtitle: String) {
+    Column {
+        Text(title, color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+        Spacer(Modifier.height(3.dp))
+        Text(subtitle, color = Muted, fontSize = 12.sp)
+    }
+}
+
+@Composable
+private fun SalesScreen(onNewSale: () -> Unit) {
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        item { Heading("المبيعات والفواتير", "تابع عمليات البيع والتحصيل") }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Metric("مبيعات اليوم", "١٢٨٬٥٠٠", "ر.ي", Icons.Default.AttachMoney, Modifier.weight(1f))
+                Metric("عدد الفواتير", "٣٨", "فاتورة", Icons.Default.PointOfSale, Modifier.weight(1f))
+            }
+        }
+        item { Button(onClick = onNewSale, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(8.dp)); Text("فاتورة بيع جديدة") } }
+        item { Heading("أحدث الفواتير", "سجلات توضيحية للواجهة") }
+        item { SaleRow("فاتورة #1048", "اليوم، ١٠:٤٢ ص · نقدي", "١٨٬٥٠٠ ر.ي", false) }
+        item { SaleRow("فاتورة #1047", "اليوم، ١٠:٢٧ ص · آجل", "٧٬٢٠٠ ر.ي", true) }
+        item { SaleRow("فاتورة #1046", "اليوم، ٠٩:٥٥ ص · نقدي", "٢٤٬٠٠٠ ر.ي", false) }
+        item { SaleRow("فاتورة #1045", "اليوم، ٠٩:١٢ ص · نقدي", "٤٬٨٠٠ ر.ي", false) }
+    }
+}
+
+@Composable
+private fun InventoryScreen(query: String, onQuery: (String) -> Unit) {
+    val filtered = products.filter { it.name.contains(query, true) || it.category.contains(query, true) }
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
+        item { Heading("المخزون والمنتجات", "إدارة الأصناف والكميات والأسعار") }
+        item {
+            OutlinedTextField(query, onQuery, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(16.dp),
+                placeholder = { Text("ابحث عن منتج أو تصنيف") }, leadingIcon = { Icon(Icons.Default.Search, null) })
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Metric("إجمالي الأصناف", "١٢٤", "صنف", Icons.Default.Inventory2, Modifier.weight(1f))
+                Metric("مخزون منخفض", "٠٣", "أصناف", Icons.Default.WarningAmber, Modifier.weight(1f))
+            }
+        }
+        item { Button(onClick = {}, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(8.dp)); Text("إضافة منتج") } }
+        item { Heading("قائمة المنتجات", "عدد النتائج: " + filtered.size) }
+        items(filtered) { ProductRow(it) }
+        if (filtered.isEmpty()) item { Text("لا توجد منتجات تطابق البحث.", color = Muted) }
+    }
+}
+
+@Composable
+private fun ProductRow(product: Product) {
+    val warning = product.stock <= 9
+    Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, Border), modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(45.dp).background(if (warning) Color(0xFFFFF1DF) else Mint, RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
+                Icon(if (warning) Icons.Default.WarningAmber else Icons.Default.Inventory2, null, tint = if (warning) Color(0xFFB96A14) else Green)
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(product.name, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                Text(product.category, color = Muted, fontSize = 12.sp)
+                Text("المتوفر: " + product.stock + " قطع", color = if (warning) Color(0xFFB96A14) else Muted, fontSize = 11.sp)
+            }
+            Spacer(Modifier.width(6.dp))
+            Text(product.price, color = Green, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        }
+    }
+}
+
+@Composable
+private fun SaleRow(title: String, subtitle: String, amount: String, credit: Boolean) {
+    Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, Border), modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(42.dp).background(Mint, RoundedCornerShape(13.dp)), contentAlignment = Alignment.Center) { Icon(Icons.Default.PointOfSale, null, tint = Green) }
+            Spacer(Modifier.width(11.dp))
+            Column(Modifier.weight(1f)) {
+                Text(title, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                Text(subtitle, color = Muted, fontSize = 11.sp)
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                Text(amount, color = Ink, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Surface(color = (if (credit) Orange else Green).copy(alpha = 0.12f), shape = RoundedCornerShape(7.dp)) {
+                    Text(if (credit) "آجل" else "مكتمل", color = if (credit) Orange else Green, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MoreScreen() {
+    val options = listOf("العملاء والمديونيات", "الموردون والمشتريات", "التقارير والأرباح", "المصروفات", "إعدادات المتجر", "النسخ الاحتياطي")
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item { Heading("إدارة المتجر", "الأدوات والإعدادات") }
+        items(options) { label ->
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Border)) {
+                Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(38.dp).background(Mint, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) { Icon(Icons.Default.Settings, null, tint = Green) }
+                    Spacer(Modifier.width(12.dp))
+                    Text(label, modifier = Modifier.weight(1f), color = Ink, fontWeight = FontWeight.Medium)
+                    Icon(Icons.Default.ChevronLeft, null, tint = Muted)
+                }
+            }
+        }
+        item { Text("نسخة واجهات أولية • البيانات المعروضة تجريبية", color = Muted, fontSize = 11.sp, modifier = Modifier.padding(vertical = 12.dp)) }
+    }
+}
