@@ -688,8 +688,8 @@ interface HospitalDao {
                 field("الطبيب المسؤول"), findDoctorIdByName(field("الطبيب المسؤول")), field("مستوى الرعاية"), field("تاريخ الدخول"), field("ملاحظات الفريق"))
             "inventory" -> updateInventoryItemRow(id, field("اسم الصنف").ifBlank { title },
                 field("رمز الصنف").ifBlank { "ITEM-" + id },
-                field("الكمية الحالية").toDoubleOrNull() ?: 0.0,
-                field("حد إعادة الطلب").toDoubleOrNull() ?: 0.0,
+                requireNotNull(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull(field("الكمية الحالية"))) { "Invalid inventory quantity" },
+                requireNotNull(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull(field("حد إعادة الطلب"))) { "Invalid inventory reorder level" },
                 field("وحدة القياس"), field("ملاحظات"))
             "lab" -> {
                 updateLabOrderRow(id, field("اسم المريض"), findPatientIdByName(field("اسم المريض")), field("اسم الفحص"), field("حالة الفحص"), field("النتيجة"))
@@ -852,8 +852,8 @@ interface HospitalDao {
             "inventory" -> saveInventoryItem(InventoryItemEntity(
                 sourceRecordId = sourceRecordId, name = field("اسم الصنف").ifBlank { record.title },
                 sku = field("رمز الصنف").ifBlank { "ITEM-" + sourceRecordId },
-                quantity = field("الكمية الحالية").toDoubleOrNull() ?: 0.0,
-                reorderLevel = field("حد إعادة الطلب").toDoubleOrNull() ?: 0.0,
+                quantity = requireNotNull(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull(field("الكمية الحالية"))) { "Invalid inventory quantity" },
+                reorderLevel = requireNotNull(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull(field("حد إعادة الطلب"))) { "Invalid inventory reorder level" },
                 unit = field("وحدة القياس"), notes = field("ملاحظات"), createdAt = record.createdAt
             ))
             "lab" -> saveLabOrder(LabOrderEntity(
