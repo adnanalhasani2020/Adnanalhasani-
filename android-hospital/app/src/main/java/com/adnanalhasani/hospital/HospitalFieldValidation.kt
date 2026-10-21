@@ -46,7 +46,13 @@ object HospitalFieldValidation {
      * fractions or overflowing Long. Trailing zeroes beyond two decimals are OK.
      */
     fun toMinorUnitsOrNull(raw: String): Long? = runCatching {
-        val amount = BigDecimal(raw.trim())
+        val normalized = raw.trim()
+        // BigDecimal accepts exponent notation (for example, 1e2); money fields
+        // intentionally accept plain decimal input only.
+        require(normalized.matches(Regex("\\d+(?:\\.\\d+)?"))) {
+            "Amount must use plain decimal notation"
+        }
+        val amount = BigDecimal(normalized)
         require(amount.signum() >= 0) { "Amount must not be negative" }
         require(amount.stripTrailingZeros().scale() <= 2) { "Amount supports at most two decimal places" }
         amount.setScale(2, RoundingMode.UNNECESSARY)
