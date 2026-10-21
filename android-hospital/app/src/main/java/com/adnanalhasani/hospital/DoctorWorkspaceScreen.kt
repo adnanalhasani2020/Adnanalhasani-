@@ -460,7 +460,7 @@ fun DoctorWorkspaceScreen(repository: HospitalRepository) {
                                         }
                                         "lab" -> repository.saveRecord(HospitalRecord(
                                             category = "lab", title = "LAB-${System.currentTimeMillis()}",
-                                            details = "اسم المريض: ${selectedVisit.patientName}\nاسم الفحص: ${dialogValue.trim()}\nحالة الفحص: مطلوب\nالنتيجة: ${dialogExtra.trim()}\nمعرّف الزيارة: ${selectedVisit.id}",
+                                            details = "اسم المريض: ${selectedVisit.patientName}\nاسم الفحص: ${dialogValue.trim()}\nحالة الفحص: مطلوب\nملاحظات للمختبر: ${dialogExtra.trim()}\nمعرّف الزيارة: ${selectedVisit.id}",
                                             createdAt = System.currentTimeMillis()
                                         ))
                                         "medication" -> {
