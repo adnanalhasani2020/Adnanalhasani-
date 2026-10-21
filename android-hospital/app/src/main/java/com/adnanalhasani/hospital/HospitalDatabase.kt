@@ -1067,7 +1067,7 @@ interface HospitalDao {
         paymentRecord: HospitalRecord?,
         doctorId: Long?
     ) {
-        val normalizedInvoiceNumber = invoiceRecord.title.trim()
+        val normalizedInvoiceNumber = HospitalFieldValidation.normalizeInvoiceNumber(invoiceRecord.title)
         require(normalizedInvoiceNumber.isNotBlank()) { "رقم الفاتورة مطلوب" }
         // A new reception must never reuse an invoice number: upsertInvoice is
         // intentionally update-capable for edits, but reuse here could attach a

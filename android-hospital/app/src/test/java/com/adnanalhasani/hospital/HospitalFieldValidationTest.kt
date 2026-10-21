@@ -7,6 +7,13 @@ import org.junit.Test
 
 class HospitalFieldValidationTest {
     @Test
+    fun normalizesInvoiceNumbersWithoutChangingInternalCharacters() {
+        assertEquals("INV-001", HospitalFieldValidation.normalizeInvoiceNumber("  INV-001  "))
+        assertEquals("INV 001", HospitalFieldValidation.normalizeInvoiceNumber("INV 001"))
+        assertEquals("", HospitalFieldValidation.normalizeInvoiceNumber("   "))
+    }
+
+    @Test
     fun acceptsValidDatesIncludingLeapDay() {
         assertTrue(HospitalFieldValidation.isValidDate("2024-02-29"))
         assertTrue(HospitalFieldValidation.isValidDate("2026-10-19"))

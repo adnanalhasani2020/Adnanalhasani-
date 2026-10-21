@@ -25,6 +25,9 @@ object HospitalFieldValidation {
         .ofPattern("HH:mm", Locale.US)
         .withResolverStyle(ResolverStyle.STRICT)
 
+    /** Trims invoice identifiers consistently before duplicate checks and persistence. */
+    fun normalizeInvoiceNumber(raw: String): String = raw.trim()
+
     fun isValidDate(raw: String): Boolean = runCatching {
         LocalDate.parse(raw, DateTimeFormatter.ISO_LOCAL_DATE)
     }.isSuccess
