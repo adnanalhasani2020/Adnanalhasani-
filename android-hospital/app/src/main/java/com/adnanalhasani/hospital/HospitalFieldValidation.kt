@@ -63,5 +63,15 @@ object HospitalFieldValidation {
             .longValueExact()
     }.getOrNull()
 
+    /** Parses inventory quantities without converting invalid input to zero. */
+    fun toNonNegativeFiniteDoubleOrNull(raw: String): Double? = runCatching {
+        val normalized = raw.trim()
+        require(normalized.isNotEmpty()) { "Quantity is required" }
+        require(normalized.matches(Regex("\\d+(?:\\.\\d+)?"))) { "Quantity must be a plain non-negative decimal" }
+        normalized.toDouble().also { value ->
+            require(value.isFinite() && value >= 0.0) { "Quantity must be finite and non-negative" }
+        }
+    }.getOrNull()
+
     fun isValidMoneyAmount(raw: String): Boolean = toMinorUnitsOrNull(raw) != null
 }
