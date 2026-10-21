@@ -57,6 +57,7 @@ fun DoctorWorkspaceScreen(repository: HospitalRepository) {
     var dialogType by remember { mutableStateOf("details") }
     var dialogValue by remember { mutableStateOf("") }
     var dialogExtra by remember { mutableStateOf("") }
+    var dialogError by remember { mutableStateOf<String?>(null) }
     var dialogSaving by remember { mutableStateOf(false) }
 
     fun clearForm() {
@@ -417,16 +418,25 @@ fun DoctorWorkspaceScreen(repository: HospitalRepository) {
                                 }
                             }
                             "followup" -> {
-                                OutlinedTextField(dialogValue, { dialogValue = it }, label = { Text("تاريخ المراجعة YYYY-MM-DD") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                                OutlinedTextField(dialogExtra, { dialogExtra = it }, label = { Text("وقت المراجعة / التعليمات") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                                OutlinedTextField(dialogValue, { dialogValue = it; dialogError = null }, label = { Text("تاريخ المراجعة YYYY-MM-DD") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                                OutlinedTextField(dialogExtra, { dialogExtra = it; dialogError = null }, label = { Text("وقت المراجعة / التعليمات") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                             }
                         }
+                        dialogError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                     }
                 },
                 confirmButton = {
                     if (dialogType != "details" && dialogType != "history") {
                         TextButton(enabled = !dialogSaving, onClick = {
-                            if (dialogValue.isBlank()) return@TextButton
+                            dialogError = null
+                            if (dialogValue.isBlank()) {
+                                dialogError = "أدخل القيمة المطلوبة قبل الحفظ."
+                                return@TextButton
+                            }
+                            if (dialogType == "followup" && !HospitalFieldValidation.isValidDate(dialogValue.trim())) {
+                                dialogError = "تاريخ المراجعة غير صحيح. استخدم الصيغة YYYY-MM-DD وتأكد من صلاحية التاريخ."
+                                return@TextButton
+                            }
                             dialogSaving = true
                             scope.launch {
                                 try {
@@ -469,7 +479,7 @@ fun DoctorWorkspaceScreen(repository: HospitalRepository) {
                                     }
                                     if (dialogType != "diagnosis") dialogType = "details"
                                 } catch (e: Exception) {
-                                    dialogExtra = "تعذر الحفظ؛ تحقق من البيانات ثم أعد المحاولة."
+                                    dialogError = "تعذر الحفظ؛ تحقق من البيانات ثم أعد المحاولة."
                                 } finally { dialogSaving = false }
                             }
                         }) { Text(if (dialogSaving) "جارٍ الحفظ..." else "حفظ") }
