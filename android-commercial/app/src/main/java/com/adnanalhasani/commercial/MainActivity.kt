@@ -41,8 +41,8 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-internal data class Product(val name: String, val category: String, val stock: Int, val price: String)
-internal data class SaleRecord(val number: Int, val product: String, val quantity: Int, val total: Int, val credit: Boolean, val customer: String = "", val paid: Int = 0, val createdAt: Long = System.currentTimeMillis())
+internal data class Product(val name: String, val category: String, val stock: Int, val price: String, val costPrice: Int = 0)
+internal data class SaleRecord(val number: Int, val product: String, val quantity: Int, val total: Int, val credit: Boolean, val customer: String = "", val paid: Int = 0, val createdAt: Long = System.currentTimeMillis(), val unitCost: Int = 0)
 internal data class SettlementRecord(val invoiceNumber: Int, val customer: String, val amount: Int, val timestamp: Long = System.currentTimeMillis())
 internal data class ExpenseRecord(val id: Long, val category: String, val amount: Int, val note: String, val timestamp: Long = System.currentTimeMillis())
 private fun money(value: Int): String = String.format(Locale.US, "%,d ر.ي", value)
@@ -60,7 +60,7 @@ private fun loadProducts(context: Context): List<Product> {
         val json = JSONArray(saved)
         List(json.length()) { i ->
             val item = json.getJSONObject(i)
-            Product(item.getString("name"), item.getString("category"), item.getInt("stock"), item.getString("price"))
+            Product(item.getString("name"), item.getString("category"), item.getInt("stock"), item.getString("price"), item.optInt("costPrice", 0))
         }
     }.getOrElse { products }
 }
@@ -69,7 +69,7 @@ private fun saveProducts(context: Context, items: List<Product>) {
     val json = JSONArray()
     items.forEach { item ->
         json.put(JSONObject().put("name", item.name).put("category", item.category)
-            .put("stock", item.stock).put("price", item.price))
+            .put("stock", item.stock).put("price", item.price).put("costPrice", item.costPrice))
     }
     context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).edit().putString(PRODUCTS_KEY, json.toString()).apply()
 }
@@ -81,7 +81,7 @@ private fun loadSales(context: Context): List<SaleRecord> {
         List(json.length()) { i ->
             val item = json.getJSONObject(i)
             SaleRecord(item.getInt("number"), item.getString("product"), item.getInt("quantity"),
-                item.getInt("total"), item.getBoolean("credit"), item.optString("customer", ""), item.optInt("paid", 0), item.optLong("createdAt", 0L))
+                item.getInt("total"), item.getBoolean("credit"), item.optString("customer", ""), item.optInt("paid", 0), item.optLong("createdAt", 0L), item.optInt("unitCost", 0))
         }
     }.getOrElse { emptyList() }
 }
@@ -132,7 +132,7 @@ private fun saveSales(context: Context, items: List<SaleRecord>) {
     items.forEach { item ->
         json.put(JSONObject().put("number", item.number).put("product", item.product)
             .put("quantity", item.quantity).put("total", item.total).put("credit", item.credit)
-            .put("customer", item.customer).put("paid", item.paid).put("createdAt", item.createdAt))
+            .put("customer", item.customer).put("paid", item.paid).put("createdAt", item.createdAt).put("unitCost", item.unitCost))
     }
     context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).edit().putString(SALES_KEY, json.toString()).apply()
 }
@@ -213,8 +213,8 @@ private fun StoreApp(context: Context) {
     if (editingProductIndex in inventory.indices) EditProductDialog(
         product = inventory[editingProductIndex],
         onDismiss = { editingProductIndex = -1 },
-        onSave = { name, category, stock, price ->
-            inventory[editingProductIndex] = inventory[editingProductIndex].copy(name = name, category = category, stock = stock, price = money(price))
+        onSave = { name, category, stock, price, costPrice ->
+            inventory[editingProductIndex] = inventory[editingProductIndex].copy(name = name, category = category, stock = stock, price = money(price), costPrice = costPrice)
             saveProducts(context, inventory)
             editingProductIndex = -1
         },
@@ -226,8 +226,8 @@ private fun StoreApp(context: Context) {
     )
     if (addProduct) AddProductDialog(
         onDismiss = { addProduct = false },
-        onSave = { name, category, stock, price ->
-            inventory.add(Product(name, category, stock, money(price)))
+        onSave = { name, category, stock, price, costPrice ->
+            inventory.add(Product(name, category, stock, money(price), costPrice))
             saveProducts(context, inventory)
             addProduct = false
         }
@@ -239,7 +239,7 @@ private fun StoreApp(context: Context) {
             val currentProduct = inventory[productIndex]
             inventory[productIndex] = currentProduct.copy(stock = currentProduct.stock - quantity)
             saveProducts(context, inventory)
-            sales.add(0, SaleRecord(nextInvoice, product, quantity, quantity * unitPrice, credit, customer, 0))
+            sales.add(0, SaleRecord(nextInvoice, product, quantity, quantity * unitPrice, credit, customer, 0, System.currentTimeMillis(), currentProduct.costPrice))
             saveSales(context, sales)
             nextInvoice = maxOf(nextInvoice + 1, (sales.maxOfOrNull { it.number } ?: 1048) + 1)
             newSale = false
@@ -514,13 +514,14 @@ private fun SaleEntryDialog(
 private fun EditProductDialog(
     product: Product,
     onDismiss: () -> Unit,
-    onSave: (String, String, Int, Int) -> Unit,
+    onSave: (String, String, Int, Int, Int) -> Unit,
     onDelete: () -> Unit
 ) {
     var name by remember(product) { mutableStateOf(product.name) }
     var category by remember(product) { mutableStateOf(product.category) }
     var stockText by remember(product) { mutableStateOf(product.stock.toString()) }
     var priceText by remember(product) { mutableStateOf(product.price.replace(",", "").replace(" ر.ي", "")) }
+    var costText by remember(product) { mutableStateOf(if (product.costPrice > 0) product.costPrice.toString() else "") }
     var error by remember { mutableStateOf<String?>(null) }
     var confirmDelete by remember(product) { mutableStateOf(false) }
     AlertDialog(
@@ -531,7 +532,8 @@ private fun EditProductDialog(
                 OutlinedTextField(name, { name = it; error = null }, label = { Text("اسم المنتج") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(category, { category = it; error = null }, label = { Text("التصنيف") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(stockText, { stockText = it.filter(Char::isDigit).take(7); error = null }, label = { Text("الكمية الحالية") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(priceText, { priceText = it.filter(Char::isDigit).take(5); error = null }, label = { Text("سعر الوحدة بالريال اليمني") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(priceText, { priceText = it.filter(Char::isDigit).take(7); error = null }, label = { Text("سعر البيع للوحدة (ر.ي)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(costText, { costText = it.filter(Char::isDigit).take(7); error = null }, label = { Text("تكلفة شراء الوحدة (ر.ي)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
             }
         },
@@ -539,12 +541,14 @@ private fun EditProductDialog(
             Button(onClick = {
                 val stock = stockText.toIntOrNull()
                 val price = priceText.toIntOrNull()
+                val cost = costText.toIntOrNull()
                 when {
                     name.isBlank() -> error = "أدخل اسم المنتج."
                     category.isBlank() -> error = "أدخل تصنيف المنتج."
                     stock == null || stock < 0 -> error = "أدخل كمية صحيحة."
-                    price == null || price <= 0 -> error = "أدخل سعرًا أكبر من صفر."
-                    else -> onSave(name.trim(), category.trim(), stock, price)
+                    price == null || price <= 0 -> error = "أدخل سعر بيع أكبر من صفر."
+                    cost == null || cost < 0 -> error = "أدخل تكلفة شراء صحيحة (يمكن أن تكون صفرًا)."
+                    else -> onSave(name.trim(), category.trim(), stock, price, cost)
                 }
             }) { Text("حفظ التعديلات") }
         },
@@ -571,12 +575,13 @@ private fun EditProductDialog(
 @Composable
 private fun AddProductDialog(
     onDismiss: () -> Unit,
-    onSave: (String, String, Int, Int) -> Unit
+    onSave: (String, String, Int, Int, Int) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
     var category by remember { mutableStateOf("") }
     var stockText by remember { mutableStateOf("0") }
     var priceText by remember { mutableStateOf("") }
+    var costText by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
 
     AlertDialog(
@@ -587,7 +592,8 @@ private fun AddProductDialog(
                 OutlinedTextField(name, { name = it; error = null }, label = { Text("اسم المنتج") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(category, { category = it; error = null }, label = { Text("التصنيف") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(stockText, { stockText = it.filter(Char::isDigit).take(7); error = null }, label = { Text("الكمية الافتتاحية") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(priceText, { priceText = it.filter(Char::isDigit).take(5); error = null }, label = { Text("سعر الوحدة بالريال اليمني") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(priceText, { priceText = it.filter(Char::isDigit).take(7); error = null }, label = { Text("سعر البيع للوحدة (ر.ي)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(costText, { costText = it.filter(Char::isDigit).take(7); error = null }, label = { Text("تكلفة شراء الوحدة (ر.ي)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
             }
         },
@@ -595,12 +601,14 @@ private fun AddProductDialog(
             Button(onClick = {
                 val stock = stockText.toIntOrNull()
                 val price = priceText.toIntOrNull()
+                val cost = costText.toIntOrNull()
                 when {
                     name.isBlank() -> error = "أدخل اسم المنتج."
                     category.isBlank() -> error = "أدخل تصنيف المنتج."
                     stock == null || stock < 0 -> error = "أدخل كمية صحيحة."
-                    price == null || price <= 0 -> error = "أدخل سعرًا أكبر من صفر."
-                    else -> onSave(name.trim(), category.trim(), stock, price)
+                    price == null || price <= 0 -> error = "أدخل سعر بيع أكبر من صفر."
+                    cost == null || cost < 0 -> error = "أدخل تكلفة شراء صحيحة (يمكن أن تكون صفرًا)."
+                    else -> onSave(name.trim(), category.trim(), stock, price, cost)
                 }
             }) { Text("حفظ المنتج") }
         },
@@ -718,6 +726,9 @@ private fun ReportsScreen(sales: List<SaleRecord>, settlements: List<SettlementR
     val todaySettlements = settlements.filter { it.timestamp >= dayStart && it.timestamp < dayEnd }
     val todayExpenses = expenses.filter { it.timestamp >= dayStart && it.timestamp < dayEnd }
     val totalExpenses = todayExpenses.sumOf { it.amount }
+    val costOfGoods = todaySales.sumOf { it.quantity * it.unitCost }
+    val grossProfit = todaySales.sumOf { it.total } - costOfGoods
+    val netOperatingResult = grossProfit - totalExpenses
     val cashSales = todaySales.filter { !it.credit }.sumOf { it.total }
     val creditSales = todaySales.filter { it.credit }.sumOf { it.total }
     val collections = cashSales + todaySettlements.sumOf { it.amount }
@@ -755,7 +766,13 @@ private fun ReportsScreen(sales: List<SaleRecord>, settlements: List<SettlementR
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Metric("مصروفات اليوم", money(totalExpenses), "${todayExpenses.size} مصروف", Icons.Default.ReceiptLong, Modifier.weight(1f))
-                Metric("صافي حركة النقد", money(netCashFlow), "التحصيل ناقص المصروفات", Icons.Default.AccountBalanceWallet, Modifier.weight(1f))
+                Metric("تكلفة البضاعة", money(costOfGoods), "تكلفة وحدات اليوم المباعة", Icons.Default.Inventory2, Modifier.weight(1f))
+            }
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Metric("الربح الإجمالي التقديري", money(grossProfit), "المبيعات ناقص تكلفة البضاعة", Icons.Default.TrendingUp, Modifier.weight(1f))
+                Metric("النتيجة بعد المصروفات", money(netOperatingResult), "قبل أي تكاليف أخرى أو ضرائب", Icons.Default.AccountBalanceWallet, Modifier.weight(1f))
             }
         }
         item {
