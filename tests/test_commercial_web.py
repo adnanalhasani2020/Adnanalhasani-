@@ -180,6 +180,8 @@ def test_web_session_can_buy_sellable_product_and_receive_result(tmp_path):
     history = request(app, "/api/receipts", cookie=session_cookie)
     assert history["status"] == "200 OK"
     assert len(history["body"]["items"]) == 2
+    first_receipt = next(item for item in history["body"]["items"] if item["sale_id"] == checkout["body"]["sale_id"])
+    assert first_receipt["quantity_remaining"] == 3
 
     # Identity alone is not report authorization. The current commercial identity
     # model has no approved report permission, so JSON and CSV must fail closed.
