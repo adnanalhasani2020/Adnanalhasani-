@@ -375,9 +375,9 @@ def test_checkout_ui_preserves_pending_idempotency_key_for_ambiguous_retry(tmp_p
     page = request(app, "/", method="GET")
     assert page["status"] == "200 OK"
     html = page["body"].decode("utf-8")
-    guard = "if(pending&&pending.quantity!==quantity)"
+    guard = "if(pending&&(pending.quantity!==quantity||pending.payment_method!==payment_method||pending.initial_paid_minor!==initial_paid_minor))"
     assert guard in html
-    assert "توجد عملية شراء معلقة بكمية مختلفة" in html
+    assert "توجد عملية شراء معلقة بتفاصيل مختلفة" in html
     assert "else if(pending.quantity!==quantity)" not in html
     assert html.index(guard) < html.index("buy.disabled=true")
 
