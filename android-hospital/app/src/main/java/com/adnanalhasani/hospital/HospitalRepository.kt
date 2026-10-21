@@ -131,6 +131,9 @@ class HospitalRepository(private val dao: HospitalDao, database: HospitalDatabas
 
     suspend fun deleteRecord(id: Long) {
         val current = dao.recordById(id)
+        if (current != null) {
+            withContext(Dispatchers.IO) { localWorkflows?.validateDeletion(current) }
+        }
         dao.delete(id)
         if (current != null) withContext(Dispatchers.IO) { localWorkflows?.auditDeletion(current) }
     }
