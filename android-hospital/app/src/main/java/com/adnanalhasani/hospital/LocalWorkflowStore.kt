@@ -612,21 +612,41 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
         val db = database.openHelper.readableDatabase
         when (record.category) {
             "pharmacy" -> require(db.long(
-                "SELECT id FROM local_medicine_movements WHERE sourceRecordId=? LIMIT 1", record.id
+                """SELECT id FROM local_medicine_movements WHERE sourceRecordId=?
+                   UNION ALL SELECT id FROM local_medicines WHERE sourceRecordId=? LIMIT 1""",
+                record.id, record.id
             ) == null) {
-                "سجل توريد الدواء مرتبط بحركة مخزون ثابتة؛ لا تحذفه. أضف حركة تصحيح أو توريد جديدة."
+                "سجل توريد الدواء مرتبط بالمخزون؛ لا تحذفه. أنشئ توريداً جديداً أو حركة تصحيح موثقة."
             }
-            "prescriptions" -> require(db.string(
-                "SELECT status FROM local_prescriptions WHERE sourceRecordId=?", record.id
-            ) != "dispensed") {
-                "الوصفة المصروفة لا يمكن حذفها لأن ذلك سيخفي سجل الصرف. استخدم إجراء تصحيح موثق."
+            "prescriptions" -> require(db.long(
+                "SELECT id FROM local_prescriptions WHERE sourceRecordId=? LIMIT 1", record.id
+            ) == null) {
+                "الوصفة مرتبطة بسجل الصيدلية؛ لا تحذفها حتى لا ينفصل السجل التشغيلي عن سجل الوصفة."
             }
             "payments" -> require(db.long(
-                "SELECT id FROM payments WHERE invoiceNumber=? AND createdAt=(SELECT createdAt FROM hospital_records WHERE id=?) LIMIT 1",
-                fields(record).field("رقم الفاتورة").ifBlank { record.title }, record.id
+                "SELECT id FROM payments WHERE createdAt=(SELECT createdAt FROM hospital_records WHERE id=?) LIMIT 1",
+                record.id
             ) == null) {
                 "لا يمكن حذف دفعة مالية مسجلة؛ حافظ على أثرها المحاسبي واستخدم إجراء عكس موثق."
             }
+            "users" -> require(db.long(
+                "SELECT id FROM local_users WHERE sourceRecordId=? LIMIT 1", record.id
+            ) == null) { "المستخدم مرتبط بسجل تشغيلي محلي؛ عطّله بدلاً من حذفه." }
+            "encounters" -> require(db.long(
+                "SELECT id FROM local_encounters WHERE sourceRecordId=? LIMIT 1", record.id
+            ) == null) { "الزيارة مرتبطة بالسجل التشغيلي المحلي؛ أغلقها بدلاً من حذفها." }
+            "beds" -> require(db.long(
+                "SELECT id FROM local_beds WHERE sourceRecordId=? LIMIT 1", record.id
+            ) == null) { "السرير مسجل في إدارة الأسرة؛ لا تحذف سجل تعريفه مباشرة." }
+            "appointments" -> require(db.long(
+                "SELECT id FROM local_appointments WHERE sourceRecordId=? LIMIT 1", record.id
+            ) == null) { "الموعد مرتبط بسجل المواعيد المحلي؛ غيّر حالته بدلاً من حذفه." }
+            "lab" -> require(db.long(
+                "SELECT id FROM local_lab_order_events WHERE sourceRecordId=? LIMIT 1", record.id
+            ) == null) { "طلب المختبر له سجل حالات؛ حافظ على التسلسل التاريخي ولا تحذفه." }
+            "admissions" -> require(db.long(
+                "SELECT id FROM local_admissions WHERE sourceRecordId=? LIMIT 1", record.id
+            ) == null) { "التنويم له سجل تشغيلي؛ حافظ على سجل الدخول والخروج ولا تحذفه." }
             "invoices" -> {
                 val invoiceNumber = fields(record).field("رقم الفاتورة").ifBlank { record.title }
                 require(db.long("SELECT id FROM payments WHERE invoiceNumber=? LIMIT 1", invoiceNumber) == null) {
