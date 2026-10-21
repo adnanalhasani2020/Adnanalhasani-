@@ -7,6 +7,26 @@ import org.junit.Test
 
 class HospitalFieldValidationTest {
     @Test
+    fun normalizesInvoiceNumbersWithoutChangingInternalCharacters() {
+        assertEquals("INV-001", HospitalFieldValidation.normalizeInvoiceNumber("  INV-001  "))
+        assertEquals("INV 001", HospitalFieldValidation.normalizeInvoiceNumber("INV 001"))
+        assertEquals("", HospitalFieldValidation.normalizeInvoiceNumber("   "))
+    }
+
+    @Test
+    fun parsesInventoryQuantitiesWithoutSilentZeroFallback() {
+        assertEquals(0.0, requireNotNull(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("0")), 0.0)
+        assertEquals(12.5, requireNotNull(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull(" 12.5 ")), 0.0)
+        assertEquals(0.25, requireNotNull(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("0.25")), 0.0)
+        assertTrue(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("") == null)
+        assertTrue(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("abc") == null)
+        assertTrue(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("-1") == null)
+        assertTrue(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("NaN") == null)
+        assertTrue(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("Infinity") == null)
+        assertTrue(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("1e3") == null)
+    }
+
+    @Test
     fun acceptsValidDatesIncludingLeapDay() {
         assertTrue(HospitalFieldValidation.isValidDate("2024-02-29"))
         assertTrue(HospitalFieldValidation.isValidDate("2026-10-19"))
@@ -47,6 +67,38 @@ class HospitalFieldValidationTest {
     }
 
     @Test
+    fun acceptsOnlyTraceableNewLabSpecimensInInitialState() {
+        val valid = LabSpecimenEntity(
+            labOrderId = 1,
+            specimenCode = "  LAB-001  ",
+            specimenType = " Blood "
+        )
+        assertTrue(isValidLabSpecimenRegistration(valid, " lab-tech "))
+
+        assertFalse(isValidLabSpecimenRegistration(valid.copy(specimenCode = "  "), "lab-tech"))
+        assertFalse(isValidLabSpecimenRegistration(valid.copy(specimenType = ""), "lab-tech"))
+        assertFalse(isValidLabSpecimenRegistration(valid.copy(status = "completed"), "lab-tech"))
+        assertFalse(isValidLabSpecimenRegistration(valid, "  "))
+    }
+
+    @Test
+    fun guardsLaboratorySpecimenTransitionsAndTerminalStates() {
+        assertTrue(isAllowedLabSpecimenTransition("collected", "collected", "received", "tech"))
+        assertTrue(isAllowedLabSpecimenTransition("received", "received", "processing", "tech"))
+        assertTrue(isAllowedLabSpecimenTransition("processing", "processing", "completed", "tech"))
+        assertTrue(isAllowedLabSpecimenTransition("collected", "collected", "processing", "tech", requireReceipt = false))
+        assertTrue(isAllowedLabSpecimenTransition("received", "received", "rejected", "tech", rejectionReason = "sample mismatch"))
+
+        assertFalse(isAllowedLabSpecimenTransition("collected", "received", "processing", "tech"))
+        assertFalse(isAllowedLabSpecimenTransition("collected", "collected", "processing", "tech"))
+        assertFalse(isAllowedLabSpecimenTransition("collected", "collected", "rejected", "tech"))
+        assertFalse(isAllowedLabSpecimenTransition("processing", "processing", "completed", " "))
+        assertFalse(isAllowedLabSpecimenTransition("completed", "completed", "processing", "tech"))
+        assertFalse(isAllowedLabSpecimenTransition("rejected", "rejected", "received", "tech"))
+        assertFalse(isAllowedLabSpecimenTransition("received", "received", "unknown", "tech"))
+    }
+
+    @Test
     fun validatesMonthAndTimeBoundaries() {
         assertTrue(HospitalFieldValidation.isValidMonth("2026-10"))
         assertFalse(HospitalFieldValidation.isValidMonth("2026-13"))
@@ -55,4 +107,15 @@ class HospitalFieldValidationTest {
         assertFalse(HospitalFieldValidation.isValidTime("25:00"))
         assertFalse(HospitalFieldValidation.isValidTime("12:60"))
     }
+
+    @Test
+    fun rejectsInventoryQuantityOverflowAndMalformedDecimalInputs() {
+        assertTrue(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("9".repeat(400)) == null)
+        assertTrue(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull(".5") == null)
+        assertTrue(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("1.") == null)
+        assertTrue(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("+1") == null)
+        assertTrue(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("-0") == null)
+        assertTrue(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("1,5") == null)
+    }
+
 }

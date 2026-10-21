@@ -21,6 +21,42 @@ class HospitalRepository(private val dao: HospitalDao) {
 
     fun labOrders(): Flow<List<LabOrderEntity>> = dao.labOrders()
 
+    fun labSpecimens(): Flow<List<LabSpecimenEntity>> = dao.labSpecimens()
+
+    fun labWorkflowSettings(): Flow<List<LabWorkflowSettingEntity>> = dao.labWorkflowSettings()
+
+    fun searchLabSpecimens(query: String, status: String): Flow<List<LabSpecimenEntity>> =
+        dao.searchLabSpecimens(query, status)
+
+    fun labSpecimenEvents(specimenId: Long): Flow<List<LabSpecimenEventEntity>> =
+        dao.labSpecimenEvents(specimenId)
+
+    suspend fun seedReferenceItemsIfEmpty(category: String, defaults: List<ReferenceCatalogEntity>) {
+        if (dao.referenceCount(category) > 0) return
+        defaults.filter { it.category == category }.distinctBy { it.name.trim() }.forEach { item ->
+            dao.insertReference(item.copy(name = item.name.trim(), description = item.description.trim()))
+        }
+    }
+
+    suspend fun registerLabSpecimen(specimen: LabSpecimenEntity, actor: String): Long =
+        dao.registerLabSpecimen(specimen, actor)
+
+    suspend fun saveLabWorkflowSetting(setting: LabWorkflowSettingEntity): Long =
+        dao.saveLabWorkflowSetting(setting)
+
+    suspend fun transitionLabSpecimen(
+        id: Long,
+        expectedStatus: String,
+        nextStatus: String,
+        actor: String,
+        note: String,
+        rejectionReason: String = "",
+        requireReceipt: Boolean = true,
+        occurredAt: Long = System.currentTimeMillis()
+    ): Boolean = dao.transitionLabSpecimen(
+        id, expectedStatus, nextStatus, actor, note, rejectionReason, requireReceipt, occurredAt
+    )
+
     fun radiologyOrders(): Flow<List<RadiologyOrderEntity>> = dao.radiologyOrders()
 
     fun auditHistory(recordId: Long): Flow<List<RecordAuditLogEntity>> = dao.auditHistory(recordId)
@@ -86,6 +122,14 @@ class HospitalRepository(private val dao: HospitalDao) {
     fun overdueVaccinations(today: String): Flow<List<VaccinationRecordEntity>> = dao.overdueVaccinations(today)
 
     suspend fun saveRecord(record: HospitalRecord) = dao.saveRecord(record)
+
+    suspend fun registerReception(
+        patientRecord: HospitalRecord,
+        visitRecord: HospitalRecord,
+        invoiceRecord: HospitalRecord,
+        paymentRecord: HospitalRecord?,
+        doctorId: Long?
+    ) = dao.saveReceptionBundle(patientRecord, visitRecord, invoiceRecord, paymentRecord, doctorId)
 
     suspend fun saveClinicalVisit(record: HospitalRecord, patientId: Long, doctorId: Long) =
         dao.saveRecord(record, linkedPatientId = patientId, linkedDoctorId = doctorId)

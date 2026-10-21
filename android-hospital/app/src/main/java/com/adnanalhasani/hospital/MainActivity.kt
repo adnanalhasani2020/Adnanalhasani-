@@ -1,13 +1,9 @@
 package com.adnanalhasani.hospital
 
 import android.os.Bundle
-import android.content.Intent
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import androidx.activity.ComponentActivity
-import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -37,6 +33,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -57,11 +55,7 @@ private val SoftLavender = Color(0xFF9A91B8)
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val database = HospitalDatabase.get(this)
-        val repository = HospitalRepository(database.hospitalDao())
-        lifecycleScope.launch(Dispatchers.IO) {
-            runCatching { DemoDataSeeder.seedIfEmpty(database.hospitalDao()) }
-        }
+        val repository = HospitalRepository(HospitalDatabase.get(this).hospitalDao())
         setContent { HospitalApp(repository) }
     }
 }
@@ -73,6 +67,8 @@ data class Module(
 )
 
 private val modules = listOf(
+    Module("reception", "الاستقبال والتحصيل", "تسجيل بيانات المريض وإحالته للعيادة وتوثيق التحصيل", Icons.Default.HowToReg, Color(0xFF548F88),
+        listOf("رقم الملف" to "رقم ملف المريض", "اسم المريض" to "الاسم الرباعي", "رقم الهوية" to "رقم الهوية أو الوثيقة", "تاريخ الميلاد" to "YYYY-MM-DD", "العمر" to "العمر بالسنوات", "الجنس" to "ذكر / أنثى", "رقم الهاتف" to "رقم التواصل", "العنوان" to "المدينة والعنوان", "فصيلة الدم" to "فصيلة الدم", "الحساسية" to "الحساسيات المعروفة", "التاريخ الطبي الأساسي" to "أمراض مزمنة وأدوية حالية", "القسم / العيادة" to "القسم المطلوب", "اسم الطبيب" to "الطبيب المختص", "سبب الزيارة" to "الشكوى الرئيسية", "رقم الفاتورة" to "رقم الفاتورة", "إجمالي الرسوم" to "المبلغ المستحق", "المبلغ المدفوع" to "المبلغ المحصل", "طريقة الدفع" to "نقداً / بطاقة / تحويل / تأمين", "مرجع الإيصال" to "رقم الإيصال")),
     Module("patients", "المرضى", "ملفات المرضى وبيانات التواصل", Icons.Default.Groups, Color(0xFF548F88),
         listOf("رقم الملف" to "مثال: PT-1001", "اسم المريض" to "الاسم الكامل", "رقم الهاتف" to "رقم التواصل", "العمر" to "العمر", "ملاحظات" to "ملاحظات إدارية")),
     Module("doctors", "الأطباء", "الطاقم الطبي والتخصصات", Icons.Default.MedicalServices, Color(0xFF7897B7),
@@ -82,15 +78,8 @@ private val modules = listOf(
         listOf("اسم المريض" to "اسم المريض", "اسم الطبيب" to "اسم الطبيب", "التاريخ والوقت" to "مثال: 2026-10-20 10:30", "سبب الزيارة" to "سبب الزيارة")),
     Module("encounters", "الزيارات الطبية", "متابعة الزيارة والتشخيص", Icons.Default.MedicalInformation, Color(0xFF6F9BAE),
         listOf("اسم المريض" to "اسم المريض", "اسم الطبيب" to "اسم الطبيب", "تاريخ الزيارة" to "YYYY-MM-DD HH:mm", "الشكوى الرئيسية" to "الشكوى", "التشخيص" to "التشخيص الطبي", "ملاحظات" to "ملاحظات الزيارة")),
-    Module("lab", "المختبر", "إدارة طلبات التحاليل ومتابعة النتائج", Icons.Default.Science, Color(0xFFD0A06E),
-        listOf(
-            "اسم المريض" to "ابحث عن اسم المريض أو أدخله",
-            "معرّف الزيارة" to "رقم الزيارة من الملف الطبي (اختياري)",
-            "اسم الفحص" to "اختر الفحص من القائمة أو اكتب اسمه",
-            "حالة الفحص" to "مطلوب / قيد التنفيذ / مكتمل",
-            "النتيجة" to "أدخل النتيجة أو اتركها فارغة حتى صدورها",
-            "ملاحظات المختبر" to "العينة، تعليمات التحضير، أو ملاحظات إضافية"
-        )),
+    Module("lab", "المختبر", "طلبات الفحوصات والنتائج", Icons.Default.Science, Color(0xFFD0A06E),
+        listOf("اسم المريض" to "اسم المريض", "معرّف الزيارة" to "رقم الزيارة من الملف الطبي (اختياري)", "اسم الفحص" to "نوع الفحص", "حالة الفحص" to "مطلوب / قيد التنفيذ / مكتمل", "النتيجة" to "النتيجة أو ملاحظات")),
     Module("pharmacy", "الصيدلية والأدوية", "الأدوية والوصفات والمخزون", Icons.Default.Medication, Color(0xFF6D9D86),
         listOf("اسم الدواء" to "اسم الدواء", "رمز الدواء" to "رمز أو SKU", "الكمية" to "الكمية المتوفرة", "الجرعة / الوصفة" to "الجرعة والتعليمات")),
     Module("admissions", "التنويم والأسرة", "إدارة الأسرة والدخول والخروج", Icons.Default.Hotel, Color(0xFF6D82C4),
@@ -222,12 +211,6 @@ private fun HospitalWorkspace(repository: HospitalRepository) {
     var showMenu by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    LaunchedEffect(selected) {
-        if (selected == "doctor_workspace") {
-            selected = "home"
-            context.startActivity(Intent(context, DoctorWorkflowActivity::class.java))
-        }
-    }
     var exportStatus by remember { mutableStateOf<String?>(null) }
     val businessProfile by repository.businessProfile().collectAsState(initial = null)
     LaunchedEffect(Unit) { repository.seedDefaultReferenceCatalogs() }
@@ -341,6 +324,7 @@ private fun HospitalWorkspace(repository: HospitalRepository) {
                 NavigationBar(containerColor = Color.White, tonalElevation = 8.dp) {
                     val tabs = listOf(
                         Triple("home", "الرئيسية", Icons.Default.Home),
+                        Triple("reception", "الاستقبال", Icons.Default.HowToReg),
                         Triple("patients", "المرضى", Icons.Default.Groups),
                         Triple("appointments", "المواعيد", Icons.Default.CalendarMonth),
                         Triple("invoices", "المالية", Icons.Default.ReceiptLong),
@@ -371,8 +355,10 @@ private fun HospitalWorkspace(repository: HospitalRepository) {
                     )
                     selected == "reports" -> Reports(all)
                     selected == "audit" -> AuditHistoryScreen(repository)
-                    selected == "doctor_workspace" -> Box(Modifier.fillMaxSize())
+                    selected == "reception" -> ReceptionScreen(repository)
+                    selected == "doctor_workspace" -> DoctorWorkspaceScreen(repository)
                     selected == "catalogs" -> ReferenceCatalogScreen(repository)
+                    selected == "lab" -> LaboratoryScreen()
                     selected == "business" -> BusinessProfileScreen(
                         profile = businessProfile,
                         onSave = { profile -> repository.saveBusinessProfile(profile) }
@@ -425,7 +411,7 @@ private fun HospitalWorkspace(repository: HospitalRepository) {
 private fun Dashboard(all: List<HospitalRecord>, onSelect: (String) -> Unit, onAdd: (String) -> Unit) {
     var query by remember { mutableStateOf("") }
     val groups = listOf(
-        Triple("الرعاية والملفات الطبية", "المرضى والزيارات والمواعيد", listOf("patients", "doctors", "doctor_workspace", "appointments", "encounters", "nursing", "admissions", "beds", "discharge", "referrals", "consents", "handover")),
+        Triple("الرعاية والملفات الطبية", "المرضى والزيارات والمواعيد", listOf("reception", "patients", "doctors", "doctor_workspace", "appointments", "encounters", "nursing", "admissions", "beds", "discharge", "referrals", "consents", "handover")),
         Triple("الطوارئ والرعاية المتخصصة", "خدمات الحالات الحرجة والعيادات", listOf("emergency", "triage", "queue", "icu", "ambulance", "bloodbank", "operations", "anesthesia", "dialysis", "dental", "pediatrics", "homecare", "vaccination")),
         Triple("الفحوصات والصيدلية", "المختبر والأشعة والأدوية والمخزون", listOf("lab", "lab_catalog", "radiology", "pharmacy", "prescriptions", "refills", "inventory", "pharmacy_suppliers", "suppliers", "sterilization", "equipment")),
         Triple("المالية والتحصيل", "الفواتير والمدفوعات والتأمين", listOf("invoices", "payments", "cashier", "expenses", "insurance", "insurance_companies", "payroll", "contracts")),
@@ -672,6 +658,7 @@ private fun ModuleMenu(onSelect: (String) -> Unit) {
  * conservative legacy rule: their first field is required.
  */
 private val requiredFieldLabelsByModule = mapOf(
+    "reception" to setOf("رقم الملف", "اسم المريض", "القسم / العيادة", "سبب الزيارة"),
     "patients" to setOf("رقم الملف", "اسم المريض"),
     "doctors" to setOf("الرقم الوظيفي", "اسم الطبيب"),
     "appointments" to setOf("اسم المريض", "اسم الطبيب", "التاريخ والوقت"),
@@ -716,7 +703,7 @@ private fun requiredFieldsForModule(module: Module): Set<String> =
         ?: setOfNotNull(module.fields.firstOrNull()?.first)
 
 private val numericFieldLabels = setOf(
-    "العمر", "النبض", "التنفس", "الحرارة", "عدد الأسرة", "عدد الوحدات",
+    "العمر", "إجمالي الرسوم", "المبلغ المدفوع", "النبض", "التنفس", "الحرارة", "عدد الأسرة", "عدد الوحدات",
     "حد إعادة الطلب", "المبلغ", "المبلغ المدفوع", "الكمية", "الكمية الحالية",
     "الكمية المطلوبة", "قيمة الشراء", "المبلغ المطالب به", "الطابق", "الوزن",
     "رقم السن", "مدة الجلسة", "الراتب الأساسي", "البدلات", "الخصومات",
@@ -1024,17 +1011,7 @@ private fun ModuleScreen(
         item {
             Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(22.dp)) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(if (module.key == "lab") "طلب فحص مخبري جديد" else "إضافة سجل جديد", color = Navy, fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                    if (module.key == "lab") {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().background(Color(0xFFFFF7ED), RoundedCornerShape(12.dp)).padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.Default.Science, contentDescription = null, tint = Color(0xFFB77935), modifier = Modifier.size(24.dp))
-                            Spacer(Modifier.width(10.dp))
-                            Text("أدخل بيانات المريض والفحص. اترك النتيجة فارغة إذا لم تصدر بعد، ثم حدّث حالة الطلب عند تقدم العمل.", color = Color(0xFF815B2D), fontSize = 12.sp)
-                        }
-                    }
+                    Text("إضافة سجل جديد", color = Navy, fontWeight = FontWeight.Bold, fontSize = 17.sp)
                     module.fields.forEachIndexed { index, (label, hint) ->
                         ModuleInputField(
                             label = label,

@@ -84,6 +84,73 @@ data class LabOrderEntity(
     val clinicalVisitId: Long? = null
 )
 
+
+@Entity(
+    tableName = "lab_specimens",
+    foreignKeys = [ForeignKey(entity = LabOrderEntity::class, parentColumns = ["id"], childColumns = ["labOrderId"], onDelete = ForeignKey.CASCADE)],
+    indices = [Index(value = ["specimenCode"], unique = true), Index(value = ["labOrderId"]), Index(value = ["status", "collectedAt"])]
+)
+data class LabSpecimenEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val labOrderId: Long,
+    val specimenCode: String,
+    val specimenType: String,
+    val status: String = "collected",
+    val collectedAt: Long = System.currentTimeMillis(),
+    val receivedAt: Long? = null,
+    val rejectionReason: String = "",
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
+@Entity(
+    tableName = "lab_specimen_events",
+    foreignKeys = [ForeignKey(entity = LabSpecimenEntity::class, parentColumns = ["id"], childColumns = ["specimenId"], onDelete = ForeignKey.CASCADE)],
+    indices = [Index(value = ["specimenId", "occurredAt"])]
+)
+data class LabSpecimenEventEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val specimenId: Long,
+    val status: String,
+    val note: String = "",
+    val actor: String = "operator",
+    val occurredAt: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "lab_workflow_settings")
+data class LabWorkflowSettingEntity(
+    @PrimaryKey val key: String,
+    val value: String,
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
+/** New specimens must enter the workflow in its first state with traceable identifiers. */
+internal fun isValidLabSpecimenRegistration(specimen: LabSpecimenEntity, actor: String): Boolean =
+    specimen.specimenCode.isNotBlank() &&
+        specimen.specimenType.isNotBlank() &&
+        specimen.status == "collected" &&
+        actor.isNotBlank()
+
+/** Pure transition guard shared by the DAO and JVM regression tests. */
+internal fun isAllowedLabSpecimenTransition(
+    currentStatus: String,
+    expectedStatus: String,
+    nextStatus: String,
+    actor: String,
+    rejectionReason: String = "",
+    requireReceipt: Boolean = true
+): Boolean {
+    if (currentStatus != expectedStatus || currentStatus in listOf("completed", "rejected") || actor.isBlank()) {
+        return false
+    }
+    return when (nextStatus) {
+        "received" -> currentStatus == "collected"
+        "processing" -> currentStatus == "received" || (currentStatus == "collected" && !requireReceipt)
+        "completed" -> currentStatus == "processing"
+        "rejected" -> currentStatus in listOf("collected", "received", "processing") && rejectionReason.isNotBlank()
+        else -> false
+    }
+}
+
 @Entity(tableName = "radiology_orders", foreignKeys = [ForeignKey(entity = HospitalRecord::class, parentColumns = ["id"], childColumns = ["sourceRecordId"], onDelete = ForeignKey.CASCADE), ForeignKey(entity = PatientEntity::class, parentColumns = ["id"], childColumns = ["patientId"], onDelete = ForeignKey.SET_NULL), ForeignKey(entity = DoctorEntity::class, parentColumns = ["id"], childColumns = ["doctorId"], onDelete = ForeignKey.SET_NULL)], indices = [Index(value = ["sourceRecordId"], unique = true), Index(value = ["patientId"]), Index(value = ["doctorId"]), Index(value = ["clinicalVisitId"]), Index(value = ["status", "createdAt"])])
 data class RadiologyOrderEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -392,6 +459,111 @@ interface HospitalDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveEmergencyCase(entity: EmergencyCaseEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveIcuStay(entity: IcuStayEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveInventoryItem(entity: InventoryItemEntity)
+
+    @Insert
+    suspend fun insertLabSpecimen(specimen: LabSpecimenEntity): Long
+
+    @Insert
+    suspend fun insertLabSpecimenEvent(event: LabSpecimenEventEntity): Long
+
+    @Query("SELECT * FROM lab_specimens WHERE id = :id LIMIT 1")
+    suspend fun labSpecimenById(id: Long): LabSpecimenEntity?
+
+    /** Insert a new specimen only in its initial state, with an accountable actor and identifiers. */
+    @Transaction
+    suspend fun registerLabSpecimen(specimen: LabSpecimenEntity, actor: String): Long {
+        require(isValidLabSpecimenRegistration(specimen, actor)) {
+            "Specimen code, type, initial status, and actor are required"
+        }
+        val normalized = specimen.copy(
+            specimenCode = specimen.specimenCode.trim(),
+            specimenType = specimen.specimenType.trim(),
+            rejectionReason = ""
+        )
+        val id = insertLabSpecimen(normalized)
+        insertLabSpecimenEvent(
+            LabSpecimenEventEntity(
+                specimenId = id,
+                status = normalized.status,
+                note = "تم تسجيل العينة وربطها بطلب الفحص #${normalized.labOrderId}",
+                actor = actor.trim(),
+                occurredAt = normalized.collectedAt
+            )
+        )
+        return id
+    }
+
+    /**
+     * Apply a guarded state transition and append its audit event in one SQLite
+     * transaction. Expected status prevents stale screens from overwriting newer work.
+     */
+    @Transaction
+    suspend fun transitionLabSpecimen(
+        id: Long,
+        expectedStatus: String,
+        nextStatus: String,
+        actor: String,
+        note: String,
+        rejectionReason: String = "",
+        requireReceipt: Boolean = true,
+        occurredAt: Long = System.currentTimeMillis()
+    ): Boolean {
+        val current = labSpecimenById(id) ?: return false
+        if (!isAllowedLabSpecimenTransition(
+                currentStatus = current.status,
+                expectedStatus = expectedStatus,
+                nextStatus = nextStatus,
+                actor = actor,
+                rejectionReason = rejectionReason,
+                requireReceipt = requireReceipt
+            )) return false
+        val receivedAt = if (nextStatus == "received") occurredAt else current.receivedAt
+        val reason = if (nextStatus == "rejected") rejectionReason.trim() else ""
+        if (updateLabSpecimenStatus(id, nextStatus, receivedAt, reason, occurredAt) != 1) return false
+        insertLabSpecimenEvent(
+            LabSpecimenEventEntity(
+                specimenId = id,
+                status = nextStatus,
+                note = note.trim(),
+                actor = actor.trim(),
+                occurredAt = occurredAt
+            )
+        )
+        return true
+    }
+
+    @Query("SELECT * FROM lab_specimens ORDER BY collectedAt DESC")
+    fun labSpecimens(): Flow<List<LabSpecimenEntity>>
+
+    /** Search specimens and their linked lab order directly in SQLite. */
+    @Query("""
+        SELECT s.* FROM lab_specimens AS s
+        INNER JOIN lab_orders AS o ON o.id = s.labOrderId
+        WHERE (:status = 'all' OR s.status = :status)
+          AND (
+            :query = '' OR
+            s.specimenCode LIKE '%' || :query || '%' OR
+            s.specimenType LIKE '%' || :query || '%' OR
+            o.patientName LIKE '%' || :query || '%' OR
+            o.testName LIKE '%' || :query || '%' OR
+            CAST(o.id AS TEXT) LIKE '%' || :query || '%'
+          )
+        ORDER BY s.collectedAt DESC, s.id DESC
+    """)
+    fun searchLabSpecimens(query: String, status: String): Flow<List<LabSpecimenEntity>>
+
+    @Query("UPDATE lab_specimens SET status = :status, receivedAt = :receivedAt, rejectionReason = :rejectionReason, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun updateLabSpecimenStatus(id: Long, status: String, receivedAt: Long?, rejectionReason: String, updatedAt: Long): Int
+
+    @Query("SELECT * FROM lab_specimen_events WHERE specimenId = :specimenId ORDER BY occurredAt DESC, id DESC")
+    fun labSpecimenEvents(specimenId: Long): Flow<List<LabSpecimenEventEntity>>
+
+    @Query("SELECT * FROM lab_workflow_settings ORDER BY key")
+    fun labWorkflowSettings(): Flow<List<LabWorkflowSettingEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveLabWorkflowSetting(setting: LabWorkflowSettingEntity): Long
+
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveLabOrder(entity: LabOrderEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveRadiologyOrder(entity: RadiologyOrderEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveMaintenanceTicket(entity: MaintenanceTicketEntity)
@@ -516,8 +688,8 @@ interface HospitalDao {
                 field("الطبيب المسؤول"), findDoctorIdByName(field("الطبيب المسؤول")), field("مستوى الرعاية"), field("تاريخ الدخول"), field("ملاحظات الفريق"))
             "inventory" -> updateInventoryItemRow(id, field("اسم الصنف").ifBlank { title },
                 field("رمز الصنف").ifBlank { "ITEM-" + id },
-                field("الكمية الحالية").toDoubleOrNull() ?: 0.0,
-                field("حد إعادة الطلب").toDoubleOrNull() ?: 0.0,
+                requireNotNull(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull(field("الكمية الحالية"))) { "Invalid inventory quantity" },
+                requireNotNull(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull(field("حد إعادة الطلب"))) { "Invalid inventory reorder level" },
                 field("وحدة القياس"), field("ملاحظات"))
             "lab" -> {
                 updateLabOrderRow(id, field("اسم المريض"), findPatientIdByName(field("اسم المريض")), field("اسم الفحص"), field("حالة الفحص"), field("النتيجة"))
@@ -680,14 +852,14 @@ interface HospitalDao {
             "inventory" -> saveInventoryItem(InventoryItemEntity(
                 sourceRecordId = sourceRecordId, name = field("اسم الصنف").ifBlank { record.title },
                 sku = field("رمز الصنف").ifBlank { "ITEM-" + sourceRecordId },
-                quantity = field("الكمية الحالية").toDoubleOrNull() ?: 0.0,
-                reorderLevel = field("حد إعادة الطلب").toDoubleOrNull() ?: 0.0,
+                quantity = requireNotNull(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull(field("الكمية الحالية"))) { "Invalid inventory quantity" },
+                reorderLevel = requireNotNull(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull(field("حد إعادة الطلب"))) { "Invalid inventory reorder level" },
                 unit = field("وحدة القياس"), notes = field("ملاحظات"), createdAt = record.createdAt
             ))
             "lab" -> saveLabOrder(LabOrderEntity(
                 sourceRecordId = sourceRecordId, patientName = field("اسم المريض"), testName = field("اسم الفحص"),
                 status = field("حالة الفحص"), result = field("النتيجة"), createdAt = record.createdAt,
-                patientId = linkedPatientId ?: findPatientIdByName(field("اسم المريض")), clinicalVisitId = field("معرّف الزيارة").toLongOrNull()?.let { existingClinicalVisitId(it) }
+                patientId = findPatientIdByName(field("اسم المريض")), clinicalVisitId = field("معرّف الزيارة").toLongOrNull()?.let { existingClinicalVisitId(it) }
             ))
             "radiology" -> saveRadiologyOrder(RadiologyOrderEntity(
                 sourceRecordId = sourceRecordId, patientName = field("اسم المريض"), imagingType = field("نوع التصوير"),
@@ -696,8 +868,8 @@ interface HospitalDao {
                 clinicalVisitId = field("معرّف الزيارة").toLongOrNull()?.let { existingClinicalVisitId(it) }
             ))
             "prescriptions" -> savePrescriptionOrder(PrescriptionOrderEntity(
-                sourceRecordId = sourceRecordId, patientId = linkedPatientId ?: findPatientIdByName(field("اسم المريض")),
-                doctorId = linkedDoctorId ?: findDoctorIdByName(field("اسم الطبيب")), clinicalVisitId = field("معرّف الزيارة").toLongOrNull()?.let { existingClinicalVisitId(it) },
+                sourceRecordId = sourceRecordId, patientId = findPatientIdByName(field("اسم المريض")),
+                doctorId = findDoctorIdByName(field("اسم الطبيب")), clinicalVisitId = field("معرّف الزيارة").toLongOrNull()?.let { existingClinicalVisitId(it) },
                 patientName = field("اسم المريض"), doctorName = field("اسم الطبيب"), medicationName = field("اسم الدواء"),
                 dose = field("الجرعة"), frequencyAndDuration = field("التكرار والمدة"), status = field("الحالة"),
                 instructions = field("تعليمات إضافية", "ملاحظات"), createdAt = record.createdAt
@@ -751,35 +923,44 @@ interface HospitalDao {
                     doctorId = findDoctorIdByName(field("اسم الطبيب")),
                     appointmentAt = field("التاريخ والوقت"),
                     reason = field("سبب الزيارة"),
-                    status = field("حالة الموعد", "الحالة").ifBlank { "مجدول" },
                     createdAt = record.createdAt
                 )
             )
-            "invoices" -> upsertInvoice(
-                InvoiceEntity(
-                    invoiceNumber = record.title,
-                    patientName = field("اسم المريض"),
-                    patientId = findPatientIdByName(field("اسم المريض")),
-                    amountMinor = requireNotNull(
-                        HospitalFieldValidation.toMinorUnitsOrNull(field("المبلغ"))
-                    ) { "Invalid invoice amount" },
-                    currency = field("العملة").ifBlank { "YER" },
-                    status = field("الحالة").ifBlank { "open" },
-                    createdAt = record.createdAt
+            "invoices" -> {
+                val invoiceNumber = HospitalFieldValidation.normalizeInvoiceNumber(record.title)
+                require(invoiceNumber.isNotBlank()) { "رقم الفاتورة مطلوب" }
+                upsertInvoice(
+                    InvoiceEntity(
+                        invoiceNumber = invoiceNumber,
+                        patientName = field("اسم المريض"),
+                        patientId = findPatientIdByName(field("اسم المريض")),
+                        amountMinor = requireNotNull(
+                            HospitalFieldValidation.toMinorUnitsOrNull(field("المبلغ"))
+                        ) { "Invalid invoice amount" },
+                        currency = field("العملة").ifBlank { "YER" },
+                        status = field("الحالة").ifBlank { "open" },
+                        createdAt = record.createdAt
+                    )
                 )
-            )
-            "payments" -> insertPayment(
-                PaymentEntity(
-                    invoiceNumber = field("رقم الفاتورة").ifBlank { record.title },
-                    invoiceId = findInvoiceIdByNumber(field("رقم الفاتورة").ifBlank { record.title }),
-                    amountMinor = requireNotNull(
-                        HospitalFieldValidation.toMinorUnitsOrNull(field("المبلغ المدفوع"))
-                    ) { "Invalid payment amount" },
-                    method = field("طريقة الدفع"),
-                    receiptReference = field("مرجع الإيصال"),
-                    createdAt = record.createdAt
+            }
+            "payments" -> {
+                val invoiceNumber = HospitalFieldValidation.normalizeInvoiceNumber(
+                    field("رقم الفاتورة").ifBlank { record.title }
                 )
-            )
+                require(invoiceNumber.isNotBlank()) { "رقم الفاتورة مطلوب للدفعة" }
+                insertPayment(
+                    PaymentEntity(
+                        invoiceNumber = invoiceNumber,
+                        invoiceId = findInvoiceIdByNumber(invoiceNumber),
+                        amountMinor = requireNotNull(
+                            HospitalFieldValidation.toMinorUnitsOrNull(field("المبلغ المدفوع"))
+                        ) { "Invalid payment amount" },
+                        method = field("طريقة الدفع"),
+                        receiptReference = field("مرجع الإيصال"),
+                        createdAt = record.createdAt
+                    )
+                )
+            }
         }
     }
 
@@ -858,7 +1039,7 @@ interface HospitalDao {
     @Insert
     suspend fun insertInvoice(invoice: InvoiceEntity)
 
-    @Query("UPDATE invoices SET patientName = :patientName, patientId = :patientId, amountMinor = :amountMinor, currency = :currency, status = :status, createdAt = :createdAt WHERE invoiceNumber = :invoiceNumber")
+    @Query("UPDATE invoices SET patientName = :patientName, patientId = :patientId, amountMinor = :amountMinor, currency = :currency, status = :status, createdAt = :createdAt WHERE TRIM(invoiceNumber) = :invoiceNumber")
     suspend fun updateInvoiceByNumber(
         invoiceNumber: String,
         patientName: String,
@@ -878,8 +1059,42 @@ interface HospitalDao {
     @Query("SELECT id FROM doctors WHERE fullName = :name ORDER BY createdAt DESC LIMIT 1")
     suspend fun findDoctorIdByName(name: String): Long?
 
-    @Query("SELECT id FROM invoices WHERE invoiceNumber = :number LIMIT 1")
+    @Query("SELECT id FROM invoices WHERE TRIM(invoiceNumber) = :number LIMIT 1")
     suspend fun findInvoiceIdByNumber(number: String): Long?
+
+    // Older app versions may have invoice records only in the legacy table.
+    @Query("SELECT EXISTS(SELECT 1 FROM hospital_records WHERE category = 'invoices' AND TRIM(title) = :number)")
+    suspend fun hasLegacyInvoiceNumber(number: String): Boolean
+
+    @Query("SELECT id FROM patients WHERE fileNumber = :fileNumber LIMIT 1")
+    suspend fun findPatientIdByFileNumber(fileNumber: String): Long?
+
+    @Transaction
+    suspend fun saveReceptionBundle(
+        patientRecord: HospitalRecord,
+        visitRecord: HospitalRecord,
+        invoiceRecord: HospitalRecord,
+        paymentRecord: HospitalRecord?,
+        doctorId: Long?
+    ) {
+        val normalizedInvoiceNumber = HospitalFieldValidation.normalizeInvoiceNumber(invoiceRecord.title)
+        require(normalizedInvoiceNumber.isNotBlank()) { "رقم الفاتورة مطلوب" }
+        // A new reception must never reuse an invoice number: upsertInvoice is
+        // intentionally update-capable for edits, but reuse here could attach a
+        // second patient's visit/payment to an existing financial record.
+        check(
+            findInvoiceIdByNumber(normalizedInvoiceNumber) == null &&
+                !hasLegacyInvoiceNumber(normalizedInvoiceNumber)
+        ) {
+            "رقم الفاتورة مستخدم مسبقاً"
+        }
+        saveRecord(patientRecord)
+        val patientId = findPatientIdByFileNumber(patientRecord.title)
+            ?: throw IllegalStateException("تعذر إنشاء ملف المريض")
+        saveRecord(visitRecord, linkedPatientId = patientId, linkedDoctorId = doctorId)
+        saveRecord(invoiceRecord.copy(title = normalizedInvoiceNumber), linkedPatientId = patientId)
+        if (paymentRecord != null) saveRecord(paymentRecord, linkedPatientId = patientId)
+    }
 
     @Query("SELECT * FROM patients ORDER BY createdAt DESC")
     fun patients(): Flow<List<PatientEntity>>
@@ -1043,6 +1258,9 @@ interface HospitalDao {
         IcuStayEntity::class,
         InventoryItemEntity::class,
         LabOrderEntity::class,
+        LabSpecimenEntity::class,
+        LabSpecimenEventEntity::class,
+        LabWorkflowSettingEntity::class,
         RadiologyOrderEntity::class,
         PrescriptionOrderEntity::class,
         MaintenanceTicketEntity::class,
@@ -1057,7 +1275,7 @@ interface HospitalDao {
         RecordAuditLogEntity::class,
         ClinicalVisitEntity::class
     ],
-    version = 14,
+    version = 16,
     exportSchema = false
 )
 abstract class HospitalDatabase : RoomDatabase() {
@@ -1346,6 +1564,68 @@ abstract class HospitalDatabase : RoomDatabase() {
             }
         }
 
+
+        internal val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""CREATE TABLE IF NOT EXISTS lab_specimens (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    labOrderId INTEGER NOT NULL,
+                    specimenCode TEXT NOT NULL,
+                    specimenType TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    collectedAt INTEGER NOT NULL,
+                    receivedAt INTEGER,
+                    rejectionReason TEXT NOT NULL,
+                    updatedAt INTEGER NOT NULL,
+                    FOREIGN KEY(labOrderId) REFERENCES lab_orders(id) ON UPDATE NO ACTION ON DELETE CASCADE
+                )""".trimIndent())
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_lab_specimens_specimenCode ON lab_specimens(specimenCode)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_lab_specimens_labOrderId ON lab_specimens(labOrderId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_lab_specimens_status_collectedAt ON lab_specimens(status, collectedAt)")
+                db.execSQL("""CREATE TABLE IF NOT EXISTS lab_specimen_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    specimenId INTEGER NOT NULL,
+                    status TEXT NOT NULL,
+                    note TEXT NOT NULL,
+                    actor TEXT NOT NULL,
+                    occurredAt INTEGER NOT NULL,
+                    FOREIGN KEY(specimenId) REFERENCES lab_specimens(id) ON UPDATE NO ACTION ON DELETE CASCADE
+                )""".trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_lab_specimen_events_specimenId_occurredAt ON lab_specimen_events(specimenId, occurredAt)")
+                db.execSQL("""CREATE TABLE IF NOT EXISTS lab_workflow_settings (
+                    `key` TEXT NOT NULL PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    updatedAt INTEGER NOT NULL
+                )""".trimIndent())
+                db.execSQL("INSERT OR IGNORE INTO lab_workflow_settings (`key`, value, updatedAt) VALUES ('require_receipt_confirmation', 'true', 0)")
+                db.execSQL("INSERT OR IGNORE INTO lab_workflow_settings (`key`, value, updatedAt) VALUES ('specimen_types', 'دم، بول، مسحة، مصل، براز', 0)")
+                db.execSQL("INSERT OR IGNORE INTO lab_workflow_settings (`key`, value, updatedAt) VALUES ('rejection_reasons', 'عينة غير كافية، عينة متجلطة، وعاء غير مناسب، بيانات غير مطابقة', 0)")
+                db.execSQL("""CREATE TRIGGER IF NOT EXISTS lab_specimen_events_reject_update
+                    BEFORE UPDATE ON lab_specimen_events BEGIN
+                    SELECT RAISE(ABORT, 'lab specimen events are append-only');
+                END""".trimIndent())
+            }
+        }
+
+        internal val MIGRATION_15_16 = object : Migration(15, 16) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                installLabEventImmutability(db)
+            }
+        }
+
+        private fun installLabEventImmutability(db: SupportSQLiteDatabase) {
+            // Allow FK cascades when a specimen or its lab order is intentionally deleted.
+            // Preventing DELETE here would make the declared ON DELETE CASCADE fail.
+            db.execSQL("DROP TRIGGER IF EXISTS lab_specimen_events_reject_delete")
+            db.execSQL("""
+                CREATE TRIGGER IF NOT EXISTS lab_specimen_events_reject_update
+                BEFORE UPDATE ON lab_specimen_events
+                BEGIN
+                    SELECT RAISE(ABORT, 'lab specimen events are append-only');
+                END
+            """.trimIndent())
+        }
+
         private fun installAuditImmutability(db: SupportSQLiteDatabase) {
             db.execSQL("""
                 CREATE TRIGGER IF NOT EXISTS record_audit_log_reject_update
@@ -1370,14 +1650,16 @@ abstract class HospitalDatabase : RoomDatabase() {
                     HospitalDatabase::class.java,
                     "hospital-local.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16)
                     .addCallback(object : RoomDatabase.Callback() {
                         override fun onCreate(db: SupportSQLiteDatabase) {
                             installAuditImmutability(db)
+                            installLabEventImmutability(db)
                         }
 
                         override fun onOpen(db: SupportSQLiteDatabase) {
                             installAuditImmutability(db)
+                            installLabEventImmutability(db)
                         }
                     })
                     .build()
