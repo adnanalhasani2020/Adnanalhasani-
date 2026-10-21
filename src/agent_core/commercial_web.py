@@ -31,9 +31,44 @@ PAGE = r"""<!doctype html>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>المتجر — النسخة التجارية الأولى</title>
 <style>
-body{font-family:system-ui,sans-serif;max-width:980px;margin:2rem auto;padding:0 1rem;background:#f6f7f9;color:#18212f}
-main{background:white;padding:1.25rem;border-radius:14px;box-shadow:0 3px 20px #0001}
-form,.row{display:flex;gap:.6rem;flex-wrap:wrap;margin:.7rem 0}input,button{font:inherit;padding:.65rem;border:1px solid #ccd2db;border-radius:8px}input{min-width:150px;max-width:100%}button{cursor:pointer;background:#173b67;color:white;border:0}button:disabled{opacity:.55;cursor:wait}.card{border:1px solid #e0e4ea;border-radius:10px;padding:1rem;margin:.7rem 0}.muted{color:#596579}.hidden{display:none}#message{white-space:pre-wrap;padding:.6rem}#catalog{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:.8rem}
+:root{color-scheme:light;--ink:#17243b;--muted:#68758b;--line:#e1e7f0;--surface:#fff;--canvas:#f3f6fb;--brand:#2457c5;--brand-dark:#173b82;--accent:#dce8ff;--success:#e8f7ef;--shadow:0 18px 48px #18345b12}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Tahoma,Arial,sans-serif;max-width:1240px;margin:0 auto;padding:clamp(1rem,3vw,2.5rem);background:radial-gradient(ellipse at 90% 0%,#e5edff 0,transparent 36%),var(--canvas);color:var(--ink);line-height:1.65}
+main{background:rgba(255,255,255,.94);padding:clamp(1rem,3vw,2.25rem);border:1px solid #ffffff;border-radius:26px;box-shadow:var(--shadow);min-height:70vh}
+body>main>h1{font-size:clamp(2rem,4vw,3rem);letter-spacing:-.04em;line-height:1.15;margin:.2rem 0 .65rem;font-weight:850}
+body>main>h1:before{content:"";display:inline-block;width:9px;height:1.05em;background:linear-gradient(180deg,#4f83ff,var(--brand-dark));border-radius:9px;margin-inline-end:.55rem;vertical-align:-.13em}
+h2{font-size:clamp(1.2rem,2vw,1.55rem);letter-spacing:-.02em;margin:1.6rem 0 .75rem;font-weight:780}
+h3{font-size:1.05rem;margin:.15rem 0 .55rem;font-weight:750}
+p{margin:.55rem 0}
+form,.row{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin:1rem 0}
+input,select,button{font:inherit;max-width:100%;border-radius:12px;transition:border-color .16s,box-shadow .16s,transform .16s}
+input,select{min-width:150px;padding:.78rem .9rem;border:1px solid #d4dce8;background:#fff;color:var(--ink);outline:none}
+input:focus,select:focus{border-color:#6c94ee;box-shadow:0 0 0 4px #2457c51a}
+input::placeholder{color:#98a3b4}
+button{cursor:pointer;padding:.78rem 1.1rem;background:linear-gradient(135deg,var(--brand),var(--brand-dark));color:white;border:1px solid transparent;font-weight:700;box-shadow:0 5px 12px #2457c51f}
+button:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 8px 18px #2457c52b}
+button:focus-visible,a:focus-visible{outline:3px solid #7aa0ff;outline-offset:3px}
+button:disabled{opacity:.55;cursor:wait;transform:none}
+a{color:var(--brand);font-weight:700;text-decoration:none}a:hover{text-decoration:underline}
+label{display:block;font-size:.94rem;font-weight:700;margin:.9rem 0 .35rem}
+.card{border:1px solid var(--line);border-radius:18px;padding:clamp(1rem,2vw,1.4rem);margin:1rem 0;background:var(--surface);box-shadow:0 5px 18px #203b6410}
+#auth{max-width:780px;margin:2rem auto;padding:clamp(1rem,3vw,2rem);background:linear-gradient(145deg,#f8faff,#fff);border:1px solid var(--line);border-radius:22px}
+#auth h2{margin-top:0}
+#shop>.row{padding:.9rem 1rem;background:#f7f9fd;border:1px solid var(--line);border-radius:15px}
+#who{margin-inline-end:auto;font-size:1.05rem}
+#catalog{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,270px),1fr));gap:1rem;margin:1rem 0}
+#catalog>.card{margin:0;display:flex;flex-direction:column;gap:.25rem;position:relative;overflow:hidden}
+#catalog>.card:before{content:"";height:4px;position:absolute;inset:0 0 auto;background:linear-gradient(90deg,#76a0ff,var(--brand-dark))}
+#receipts,#debts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:.8rem}
+#receipts>.card,#debts>.card{margin:0;overflow-wrap:anywhere}
+#reportSettings{margin-top:2rem;background:linear-gradient(145deg,#f8faff,#fff)}
+#reportSettings select{width:100%}
+#message{white-space:pre-wrap;padding:.85rem 1rem;margin-top:1rem;border-radius:12px;background:#eef3fc;color:#263b60;border:1px solid #dbe6fa;min-height:1rem}
+.muted{color:var(--muted);font-size:.94rem}
+.hidden{display:none!important}
+@media(max-width:600px){body{padding:.6rem}main{padding:1rem;border-radius:18px}form{align-items:stretch}form input,form select,form button{width:100%}#shop>.row{align-items:stretch}#who{width:100%;margin:0}button{min-height:44px}input,select{min-height:44px}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{transition:none!important}}
 </style></head>
 <body><main>
 <h1>المتجر</h1><p class="muted">نسخة تجريبية تجارية: عرض المنتجات ذات المخزون المثبت فقط، ثم تنفيذ بيع ذري مع إيصال.</p>
