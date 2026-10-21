@@ -42,6 +42,13 @@ def test_web_register_login_catalog_and_logout(tmp_path):
     db = connect_database(db_path)
     db.close()
     app = CommercialWebApplication(db_path)
+    page = request(app, "/")
+    assert page["status"] == "200 OK"
+    assert b'id="reportSettings"' in page["body"]
+    assert b'id="reportAudience"' in page["body"]
+    assert b'id="reportScope"' in page["body"]
+    assert b"لا تمنح صلاحية وصول" in page["body"]
+    assert b"localStorage.setItem(key,JSON.stringify(readReportSettings()))" in page["body"]
 
     registered = request(
         app, "/api/register", method="POST",
