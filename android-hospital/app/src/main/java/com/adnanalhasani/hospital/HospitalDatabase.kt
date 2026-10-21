@@ -1049,11 +1049,11 @@ interface HospitalDao {
     @Query("SELECT id FROM doctors WHERE fullName = :name ORDER BY createdAt DESC LIMIT 1")
     suspend fun findDoctorIdByName(name: String): Long?
 
-    @Query("SELECT id FROM invoices WHERE invoiceNumber = :number LIMIT 1")
+    @Query("SELECT id FROM invoices WHERE TRIM(invoiceNumber) = :number LIMIT 1")
     suspend fun findInvoiceIdByNumber(number: String): Long?
 
     // Older app versions may have invoice records only in the legacy table.
-    @Query("SELECT EXISTS(SELECT 1 FROM hospital_records WHERE category = 'invoices' AND title = :number)")
+    @Query("SELECT EXISTS(SELECT 1 FROM hospital_records WHERE category = 'invoices' AND TRIM(title) = :number)")
     suspend fun hasLegacyInvoiceNumber(number: String): Boolean
 
     @Query("SELECT id FROM patients WHERE fileNumber = :fileNumber LIMIT 1")
@@ -1067,13 +1067,14 @@ interface HospitalDao {
         paymentRecord: HospitalRecord?,
         doctorId: Long?
     ) {
-        require(invoiceRecord.title.isNotBlank()) { "رقم الفاتورة مطلوب" }
+        val normalizedInvoiceNumber = invoiceRecord.title.trim()
+        require(normalizedInvoiceNumber.isNotBlank()) { "رقم الفاتورة مطلوب" }
         // A new reception must never reuse an invoice number: upsertInvoice is
         // intentionally update-capable for edits, but reuse here could attach a
         // second patient's visit/payment to an existing financial record.
         check(
-            findInvoiceIdByNumber(invoiceRecord.title) == null &&
-                !hasLegacyInvoiceNumber(invoiceRecord.title)
+            findInvoiceIdByNumber(normalizedInvoiceNumber) == null &&
+                !hasLegacyInvoiceNumber(normalizedInvoiceNumber)
         ) {
             "رقم الفاتورة مستخدم مسبقاً"
         }
@@ -1081,7 +1082,7 @@ interface HospitalDao {
         val patientId = findPatientIdByFileNumber(patientRecord.title)
             ?: throw IllegalStateException("تعذر إنشاء ملف المريض")
         saveRecord(visitRecord, linkedPatientId = patientId, linkedDoctorId = doctorId)
-        saveRecord(invoiceRecord, linkedPatientId = patientId)
+        saveRecord(invoiceRecord.copy(title = normalizedInvoiceNumber), linkedPatientId = patientId)
         if (paymentRecord != null) saveRecord(paymentRecord, linkedPatientId = patientId)
     }
 
