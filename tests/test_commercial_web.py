@@ -3,6 +3,7 @@ import json
 from datetime import datetime, timedelta, timezone
 import uuid
 from http.cookies import SimpleCookie
+from urllib.parse import urlsplit
 
 from agent_core.commercial_web import CommercialWebApplication
 from agent_core.persistence import connect_database
@@ -11,11 +12,13 @@ from agent_core.offering_application import OfferingApplication
 
 
 def request(app, path, *, method="GET", body=None, cookie=None, scheme="http", origin=None):
+    parsed_path = urlsplit(path)
+    path = parsed_path.path
     payload = json.dumps(body or {}).encode("utf-8")
     environ = {
         "REQUEST_METHOD": method,
         "PATH_INFO": path,
-        "QUERY_STRING": "",
+        "QUERY_STRING": parsed_path.query,
         "CONTENT_LENGTH": str(len(payload) if method == "POST" else 0),
         "CONTENT_TYPE": "application/json",
         "wsgi.input": io.BytesIO(payload if method == "POST" else b""),
