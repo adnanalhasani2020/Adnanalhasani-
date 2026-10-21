@@ -44,12 +44,14 @@ class MainActivity : ComponentActivity() {
 internal data class Product(val name: String, val category: String, val stock: Int, val price: String)
 internal data class SaleRecord(val number: Int, val product: String, val quantity: Int, val total: Int, val credit: Boolean, val customer: String = "", val paid: Int = 0, val createdAt: Long = System.currentTimeMillis())
 internal data class SettlementRecord(val invoiceNumber: Int, val customer: String, val amount: Int, val timestamp: Long = System.currentTimeMillis())
+internal data class ExpenseRecord(val id: Long, val category: String, val amount: Int, val note: String, val timestamp: Long = System.currentTimeMillis())
 private fun money(value: Int): String = String.format(Locale.US, "%,d ر.ي", value)
 
 private const val STORE_PREFS = "commercial_store_local_v1"
 private const val PRODUCTS_KEY = "products_json"
 private const val SALES_KEY = "sales_json"
 private const val SETTLEMENTS_KEY = "settlements_json"
+private const val EXPENSES_KEY = "expenses_json"
 
 private fun loadProducts(context: Context): List<Product> {
     val saved = context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).getString(PRODUCTS_KEY, null)
@@ -95,6 +97,27 @@ private fun loadSettlements(context: Context): List<SettlementRecord> {
     }.getOrElse { emptyList() }
 }
 
+private fun loadExpenses(context: Context): List<ExpenseRecord> {
+    val saved = context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).getString(EXPENSES_KEY, null) ?: return emptyList()
+    return runCatching {
+        val json = JSONArray(saved)
+        List(json.length()) { i ->
+            val item = json.getJSONObject(i)
+            ExpenseRecord(item.optLong("id", i.toLong()), item.optString("category", "أخرى"),
+                item.getInt("amount"), item.optString("note", ""), item.optLong("timestamp", 0L))
+        }
+    }.getOrElse { emptyList() }
+}
+
+private fun saveExpenses(context: Context, items: List<ExpenseRecord>) {
+    val json = JSONArray()
+    items.forEach { item ->
+        json.put(JSONObject().put("id", item.id).put("category", item.category)
+            .put("amount", item.amount).put("note", item.note).put("timestamp", item.timestamp))
+    }
+    context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).edit().putString(EXPENSES_KEY, json.toString()).apply()
+}
+
 private fun saveSettlements(context: Context, items: List<SettlementRecord>) {
     val json = JSONArray()
     items.forEach { item ->
@@ -131,9 +154,12 @@ private fun StoreApp(context: Context) {
     var editingProductIndex by remember { mutableIntStateOf(-1) }
     var showDebts by remember { mutableStateOf(false) }
     var showReports by remember { mutableStateOf(false) }
+    var showExpenses by remember { mutableStateOf(false) }
     var settlingSaleNumber by remember { mutableIntStateOf(-1) }
     val sales = remember { mutableStateListOf<SaleRecord>().apply { addAll(loadSales(context)) } }
     val settlements = remember { mutableStateListOf<SettlementRecord>().apply { addAll(loadSettlements(context)) } }
+    val expenses = remember { mutableStateListOf<ExpenseRecord>().apply { addAll(loadExpenses(context)) } }
+    var expenseDialog by remember { mutableStateOf(false) }
     val inventory = remember { mutableStateListOf<Product>().apply { addAll(loadProducts(context)) } }
     var nextInvoice by remember { mutableIntStateOf((sales.maxOfOrNull { it.number } ?: 1048) + 1) }
     Scaffold(
@@ -177,8 +203,9 @@ private fun StoreApp(context: Context) {
                 2 -> InventoryScreen(inventory, query, { query = it }, { addProduct = true }, { editingProductIndex = it })
                 else -> when {
                     showDebts -> DebtScreen(sales = sales, settlements = settlements, onBack = { showDebts = false }, onSettle = { settlingSaleNumber = it.number })
-                    showReports -> ReportsScreen(sales = sales, settlements = settlements, onBack = { showReports = false })
-                    else -> MoreScreen(onCustomers = { showDebts = true }, onReports = { showReports = true })
+                    showReports -> ReportsScreen(sales = sales, settlements = settlements, expenses = expenses, onBack = { showReports = false })
+                    showExpenses -> ExpensesScreen(expenses = expenses, onBack = { showExpenses = false }, onAdd = { expenseDialog = true })
+                    else -> MoreScreen(onCustomers = { showDebts = true }, onReports = { showReports = true }, onExpenses = { showExpenses = true })
                 }
             }
         }
@@ -233,6 +260,11 @@ private fun StoreApp(context: Context) {
             }
         ) else settlingSaleNumber = -1
     }
+    if (expenseDialog) ExpenseEntryDialog(onDismiss = { expenseDialog = false }, onSave = { category, amount, note ->
+        expenses.add(0, ExpenseRecord(System.currentTimeMillis(), category, amount, note))
+        saveExpenses(context, expenses)
+        expenseDialog = false
+    })
     if (newSale && inventory.isEmpty()) AlertDialog(
         onDismissRequest = { newSale = false },
         title = { Text("لا توجد منتجات") },
@@ -577,12 +609,12 @@ private fun AddProductDialog(
 }
 
 @Composable
-private fun MoreScreen(onCustomers: () -> Unit, onReports: () -> Unit) {
+private fun MoreScreen(onCustomers: () -> Unit, onReports: () -> Unit, onExpenses: () -> Unit) {
     val options = listOf("العملاء والمديونيات", "الموردون والمشتريات", "التقارير والأرباح", "المصروفات", "إعدادات المتجر", "النسخ الاحتياطي")
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Heading("إدارة المتجر", "الأدوات والإعدادات") }
         items(options) { label ->
-            Card(onClick = { when (label) { "العملاء والمديونيات" -> onCustomers(); "التقارير والأرباح" -> onReports() } }, colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Border)) {
+            Card(onClick = { when (label) { "العملاء والمديونيات" -> onCustomers(); "التقارير والأرباح" -> onReports(); "المصروفات" -> onExpenses() } }, colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Border)) {
                 Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(38.dp).background(Mint, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) { Icon(Icons.Default.Settings, null, tint = Green) }
                     Spacer(Modifier.width(12.dp))
@@ -596,7 +628,84 @@ private fun MoreScreen(onCustomers: () -> Unit, onReports: () -> Unit) {
 }
 
 @Composable
-private fun ReportsScreen(sales: List<SaleRecord>, settlements: List<SettlementRecord>, onBack: () -> Unit) {
+private fun ExpensesScreen(expenses: List<ExpenseRecord>, onBack: () -> Unit, onAdd: () -> Unit) {
+    val calendar = java.util.Calendar.getInstance()
+    calendar.set(java.util.Calendar.HOUR_OF_DAY, 0); calendar.set(java.util.Calendar.MINUTE, 0)
+    calendar.set(java.util.Calendar.SECOND, 0); calendar.set(java.util.Calendar.MILLISECOND, 0)
+    val start = calendar.timeInMillis
+    val today = expenses.filter { it.timestamp >= start && it.timestamp < start + 86400000L }
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "رجوع") }
+                Heading("المصروفات", "تسجيل ومتابعة مصروفات المتجر")
+            }
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = Ink), shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(18.dp)) {
+                    Text("إجمالي مصروفات اليوم", color = Color(0xFFBFD9D0), fontSize = 13.sp)
+                    Text(money(today.sumOf { it.amount }), color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Bold)
+                    Text("${today.size} مصروف مسجل", color = Color(0xFF8DE0B8), fontSize = 12.sp)
+                }
+            }
+        }
+        item { Button(onClick = onAdd, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(8.dp)); Text("تسجيل مصروف") } }
+        item { Heading("سجل المصروفات", "الأحدث أولًا") }
+        if (expenses.isEmpty()) item { Text("لا توجد مصروفات مسجلة بعد.", color = Muted) }
+        items(expenses.sortedByDescending { it.timestamp }, key = { it.id }) { expense ->
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(14.dp), border = BorderStroke(1.dp, Border), modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(expense.category, color = Ink, fontWeight = FontWeight.SemiBold)
+                    if (expense.note.isNotBlank()) Text(expense.note, color = Muted, fontSize = 12.sp)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(money(expense.amount), color = Orange, fontWeight = FontWeight.Bold)
+                        Text(java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT, Locale.getDefault()).format(java.util.Date(expense.timestamp)), color = Muted, fontSize = 10.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExpenseEntryDialog(onDismiss: () -> Unit, onSave: (String, Int, String) -> Unit) {
+    val categories = listOf("إيجار", "كهرباء ومياه", "نقل ومواصلات", "رواتب", "مشتريات تشغيلية", "صيانة", "أخرى")
+    var category by remember { mutableStateOf(categories.first()) }
+    var amountText by remember { mutableStateOf("") }
+    var note by remember { mutableStateOf("") }
+    var expanded by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("تسجيل مصروف جديد") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+                    OutlinedTextField(value = category, onValueChange = {}, readOnly = true, label = { Text("تصنيف المصروف") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                        modifier = Modifier.menuAnchor().fillMaxWidth())
+                    ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                        categories.forEach { option -> DropdownMenuItem(text = { Text(option) }, onClick = { category = option; expanded = false }) }
+                    }
+                }
+                OutlinedTextField(value = amountText, onValueChange = { amountText = it.filter(Char::isDigit).take(9); error = null },
+                    label = { Text("المبلغ بالريال اليمني") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = note, onValueChange = { note = it.take(120) }, label = { Text("ملاحظة (اختياري)") }, modifier = Modifier.fillMaxWidth())
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
+            }
+        },
+        confirmButton = { Button(onClick = {
+            val amount = amountText.toIntOrNull()
+            if (amount == null || amount <= 0) error = "أدخل مبلغًا أكبر من صفر."
+            else onSave(category, amount, note.trim())
+        }) { Text("حفظ المصروف") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } }
+    )
+}
+
+@Composable
+private fun ReportsScreen(sales: List<SaleRecord>, settlements: List<SettlementRecord>, expenses: List<ExpenseRecord>, onBack: () -> Unit) {
     val calendar = java.util.Calendar.getInstance()
     calendar.set(java.util.Calendar.HOUR_OF_DAY, 0)
     calendar.set(java.util.Calendar.MINUTE, 0)
@@ -606,9 +715,12 @@ private fun ReportsScreen(sales: List<SaleRecord>, settlements: List<SettlementR
     val dayEnd = dayStart + 24L * 60L * 60L * 1000L
     val todaySales = sales.filter { it.createdAt >= dayStart && it.createdAt < dayEnd }
     val todaySettlements = settlements.filter { it.timestamp >= dayStart && it.timestamp < dayEnd }
+    val todayExpenses = expenses.filter { it.timestamp >= dayStart && it.timestamp < dayEnd }
+    val totalExpenses = todayExpenses.sumOf { it.amount }
     val cashSales = todaySales.filter { !it.credit }.sumOf { it.total }
     val creditSales = todaySales.filter { it.credit }.sumOf { it.total }
     val collections = cashSales + todaySettlements.sumOf { it.amount }
+    val netCashFlow = collections - totalExpenses
     val outstanding = sales.filter { it.credit }.sumOf { (it.total - it.paid).coerceAtLeast(0) }
     val dateLabel = java.text.DateFormat.getDateInstance(java.text.DateFormat.FULL, Locale("ar")).format(java.util.Date(dayStart))
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
@@ -640,6 +752,12 @@ private fun ReportsScreen(sales: List<SaleRecord>, settlements: List<SettlementR
             }
         }
         item {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Metric("مصروفات اليوم", money(totalExpenses), "${todayExpenses.size} مصروف", Icons.Default.ReceiptLong, Modifier.weight(1f))
+                Metric("صافي حركة النقد", money(netCashFlow), "التحصيل ناقص المصروفات", Icons.Default.AccountBalanceWallet, Modifier.weight(1f))
+            }
+        }
+        item {
             Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Border), modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     Text("إجمالي الديون المتبقية", color = Muted, fontSize = 12.sp)
@@ -652,6 +770,17 @@ private fun ReportsScreen(sales: List<SaleRecord>, settlements: List<SettlementR
         if (todaySales.isEmpty()) item { Text("لا توجد فواتير مسجلة اليوم.", color = Muted) }
         items(todaySales, key = { "daily-sale-${it.number}" }) { sale ->
             SaleRow("فاتورة #${sale.number}", "${sale.product} · ${sale.quantity} قطعة", money(sale.total), sale.credit)
+        }
+        item { Heading("مصروفات اليوم", "المصروفات المسجلة خلال اليوم الحالي") }
+        if (todayExpenses.isEmpty()) item { Text("لا توجد مصروفات مسجلة اليوم.", color = Muted) }
+        items(todayExpenses, key = { "daily-expense-${it.id}" }) { expense ->
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(14.dp), border = BorderStroke(1.dp, Border), modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(expense.category, color = Ink, fontWeight = FontWeight.SemiBold)
+                    if (expense.note.isNotBlank()) Text(expense.note, color = Muted, fontSize = 11.sp)
+                    Text(money(expense.amount), color = Orange, fontWeight = FontWeight.Bold)
+                }
+            }
         }
         item { Heading("دفعات التحصيل اليوم", "التسديدات التي تم تسجيلها اليوم") }
         if (todaySettlements.isEmpty()) item { Text("لا توجد دفعات تحصيل مسجلة اليوم.", color = Muted) }
