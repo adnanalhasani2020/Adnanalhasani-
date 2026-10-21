@@ -130,6 +130,27 @@ internal fun isValidLabSpecimenRegistration(specimen: LabSpecimenEntity, actor: 
         specimen.status == "collected" &&
         actor.isNotBlank()
 
+/** Pure transition guard shared by the DAO and JVM regression tests. */
+internal fun isAllowedLabSpecimenTransition(
+    currentStatus: String,
+    expectedStatus: String,
+    nextStatus: String,
+    actor: String,
+    rejectionReason: String = "",
+    requireReceipt: Boolean = true
+): Boolean {
+    if (currentStatus != expectedStatus || currentStatus in listOf("completed", "rejected") || actor.isBlank()) {
+        return false
+    }
+    return when (nextStatus) {
+        "received" -> currentStatus == "collected"
+        "processing" -> currentStatus == "received" || (currentStatus == "collected" && !requireReceipt)
+        "completed" -> currentStatus == "processing"
+        "rejected" -> currentStatus in listOf("collected", "received", "processing") && rejectionReason.isNotBlank()
+        else -> false
+    }
+}
+
 @Entity(tableName = "radiology_orders", foreignKeys = [ForeignKey(entity = HospitalRecord::class, parentColumns = ["id"], childColumns = ["sourceRecordId"], onDelete = ForeignKey.CASCADE), ForeignKey(entity = PatientEntity::class, parentColumns = ["id"], childColumns = ["patientId"], onDelete = ForeignKey.SET_NULL), ForeignKey(entity = DoctorEntity::class, parentColumns = ["id"], childColumns = ["doctorId"], onDelete = ForeignKey.SET_NULL)], indices = [Index(value = ["sourceRecordId"], unique = true), Index(value = ["patientId"]), Index(value = ["doctorId"]), Index(value = ["clinicalVisitId"]), Index(value = ["status", "createdAt"])])
 data class RadiologyOrderEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -488,15 +509,14 @@ interface HospitalDao {
         occurredAt: Long = System.currentTimeMillis()
     ): Boolean {
         val current = labSpecimenById(id) ?: return false
-        if (current.status != expectedStatus || current.status in listOf("completed", "rejected")) return false
-        val allowed = when (nextStatus) {
-            "received" -> current.status == "collected"
-            "processing" -> current.status == "received" || (current.status == "collected" && !requireReceipt)
-            "completed" -> current.status == "processing"
-            "rejected" -> current.status in listOf("collected", "received", "processing") && rejectionReason.isNotBlank()
-            else -> false
-        }
-        if (!allowed || actor.isBlank()) return false
+        if (!isAllowedLabSpecimenTransition(
+                currentStatus = current.status,
+                expectedStatus = expectedStatus,
+                nextStatus = nextStatus,
+                actor = actor,
+                rejectionReason = rejectionReason,
+                requireReceipt = requireReceipt
+            )) return false
         val receivedAt = if (nextStatus == "received") occurredAt else current.receivedAt
         val reason = if (nextStatus == "rejected") rejectionReason.trim() else ""
         if (updateLabSpecimenStatus(id, nextStatus, receivedAt, reason, occurredAt) != 1) return false
