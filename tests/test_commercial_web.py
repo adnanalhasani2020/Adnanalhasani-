@@ -382,6 +382,10 @@ def test_checkout_ui_preserves_pending_idempotency_key_for_ambiguous_retry(tmp_p
     assert html.index(guard) < html.index("buy.disabled=true")
     assert 'id="debts"' in html
     assert 'id="storeManagementModel"' in html
+    assert '--brand:#2457c5' in html
+    assert 'grid-template-columns:repeat(auto-fit,minmax(min(100%,270px),1fr))' in html
+    assert '@media(max-width:600px)' in html
+    assert 'prefers-reduced-motion:reduce' in html
     assert 'value="merchant_account"' in html
     assert 'value="dedicated_manager" selected' in html
     assert 'value="scoped_managers"' in html
