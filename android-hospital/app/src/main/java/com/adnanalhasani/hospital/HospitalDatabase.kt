@@ -1565,7 +1565,7 @@ abstract class HospitalDatabase : RoomDatabase() {
         }
 
 
-        private val MIGRATION_14_15 = object : Migration(14, 15) {
+        internal val MIGRATION_14_15 = object : Migration(14, 15) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("""CREATE TABLE IF NOT EXISTS lab_specimens (
                     id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
@@ -1607,7 +1607,7 @@ abstract class HospitalDatabase : RoomDatabase() {
             }
         }
 
-        private val MIGRATION_15_16 = object : Migration(15, 16) {
+        internal val MIGRATION_15_16 = object : Migration(15, 16) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 installLabEventImmutability(db)
             }
