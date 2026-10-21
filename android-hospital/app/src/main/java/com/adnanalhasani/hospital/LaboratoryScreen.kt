@@ -39,6 +39,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -62,12 +63,14 @@ private fun labTime(value: Long): String =
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LaboratoryScreen(repository: HospitalRepository) {
+fun LaboratoryScreen(repository: HospitalRepository? = null) {
+    val context = LocalContext.current
+    val activeRepository = repository ?: remember(context) { HospitalRepository(HospitalDatabase.get(context).hospitalDao()) }
     val scope = rememberCoroutineScope()
-    val orders by repository.labOrders().collectAsState(initial = emptyList())
-    val specimens by repository.labSpecimens().collectAsState(initial = emptyList())
-    val settings by repository.labWorkflowSettings().collectAsState(initial = emptyList())
-    val specimenGuide by repository.referenceItems("lab_specimen_guide").collectAsState(initial = emptyList())
+    val orders by activeRepository.labOrders().collectAsState(initial = emptyList())
+    val specimens by activeRepository.labSpecimens().collectAsState(initial = emptyList())
+    val settings by activeRepository.labWorkflowSettings().collectAsState(initial = emptyList())
+    val specimenGuide by activeRepository.referenceItems("lab_specimen_guide").collectAsState(initial = emptyList())
 
     LaunchedEffect(repository) {
         withContext(Dispatchers.IO) {
@@ -80,14 +83,14 @@ fun LaboratoryScreen(repository: HospitalRepository) {
                     ReferenceCatalogEntity(category = "lab_specimen_guide", name = "مسحة", description = "اختر نوع المسحة ووسط النقل الموافقين لموضع العينة والاختبار المطلوب؛ لا يوجد وسط واحد مناسب لكل الفحوص. تجنب جفاف العينة، وتحقق من الوسم والنقل والمدة وفق تعليمات الاختبار."),
                     ReferenceCatalogEntity(category = "lab_specimen_guide", name = "بلغم", description = "الوعاء: حاوية معقمة محكمة الإغلاق. وضّح للمريض أن المطلوب بلغم من الجهاز التنفسي لا لعابًا. تجنب التلوث، وانقل العينة حسب تعليمات الفحص وسياسة المختبر.")
                 )
-                repository.seedReferenceItemsIfEmpty("lab_specimen_guide", guideDefaults)
+                activeRepository.seedReferenceItemsIfEmpty("lab_specimen_guide", guideDefaults)
         }
     }
 
     var searchQuery by remember { mutableStateOf("") }
     var statusFilter by remember { mutableStateOf("all") }
     var statusMenuExpanded by remember { mutableStateOf(false) }
-    val filteredSpecimens by repository.searchLabSpecimens(searchQuery.trim(), statusFilter).collectAsState(initial = emptyList())
+    val filteredSpecimens by activeRepository.searchLabSpecimens(searchQuery.trim(), statusFilter).collectAsState(initial = emptyList())
 
     var selectedOrderId by remember { mutableStateOf<Long?>(null) }
     var orderMenuExpanded by remember { mutableStateOf(false) }
@@ -274,7 +277,7 @@ fun LaboratoryScreen(repository: HospitalRepository) {
                                     val result = withContext(Dispatchers.IO) {
                                         runCatching {
                                             val collectedAt = System.currentTimeMillis()
-                                            repository.registerLabSpecimen(
+                                            activeRepository.registerLabSpecimen(
                                                 LabSpecimenEntity(
                                                     labOrderId = order.id,
                                                     specimenCode = specimenCode.trim(),
@@ -285,7 +288,7 @@ fun LaboratoryScreen(repository: HospitalRepository) {
                                                 ),
                                                 responsibleEmployee.trim()
                                             )
-                                            repository.saveLabWorkflowSetting(
+                                            activeRepository.saveLabWorkflowSetting(
                                                 LabWorkflowSettingEntity("last_operator", responsibleEmployee.trim(), collectedAt)
                                             )
                                         }
@@ -351,11 +354,11 @@ fun LaboratoryScreen(repository: HospitalRepository) {
                             onClick = {
                                 scope.launch {
                                     withContext(Dispatchers.IO) {
-                                        repository.saveLabWorkflowSetting(LabWorkflowSettingEntity("require_receipt_confirmation", requireReceipt.toString(), System.currentTimeMillis()))
-                                        repository.saveLabWorkflowSetting(LabWorkflowSettingEntity("specimen_types", specimenTypes.split(Regex("[,،]")).map { it.trim() }.filter { it.isNotBlank() }.distinct().joinToString(", "), System.currentTimeMillis()))
-                                        repository.saveLabWorkflowSetting(LabWorkflowSettingEntity("rejection_reasons", rejectionReasons.split(",").map { it.trim() }.filter { it.isNotBlank() }.distinct().joinToString(", "), System.currentTimeMillis()))
-                                        repository.saveLabWorkflowSetting(LabWorkflowSettingEntity("specimen_turnaround_hours", turnaroundHours.toInt().coerceIn(1, 720).toString(), System.currentTimeMillis()))
-                                        if (responsibleEmployee.isNotBlank()) repository.saveLabWorkflowSetting(LabWorkflowSettingEntity("last_operator", responsibleEmployee.trim(), System.currentTimeMillis()))
+                                        activeRepository.saveLabWorkflowSetting(LabWorkflowSettingEntity("require_receipt_confirmation", requireReceipt.toString(), System.currentTimeMillis()))
+                                        activeRepository.saveLabWorkflowSetting(LabWorkflowSettingEntity("specimen_types", specimenTypes.split(Regex("[,،]")).map { it.trim() }.filter { it.isNotBlank() }.distinct().joinToString(", "), System.currentTimeMillis()))
+                                        activeRepository.saveLabWorkflowSetting(LabWorkflowSettingEntity("rejection_reasons", rejectionReasons.split(",").map { it.trim() }.filter { it.isNotBlank() }.distinct().joinToString(", "), System.currentTimeMillis()))
+                                        activeRepository.saveLabWorkflowSetting(LabWorkflowSettingEntity("specimen_turnaround_hours", turnaroundHours.toInt().coerceIn(1, 720).toString(), System.currentTimeMillis()))
+                                        if (responsibleEmployee.isNotBlank()) activeRepository.saveLabWorkflowSetting(LabWorkflowSettingEntity("last_operator", responsibleEmployee.trim(), System.currentTimeMillis()))
                                     }
                                     message = "تم حفظ إعدادات المختبر في قاعدة SQLite المحلية."
                                 }
@@ -432,7 +435,7 @@ fun LaboratoryScreen(repository: HospitalRepository) {
         }
         items(filteredSpecimens, key = { it.id }) { specimen ->
             val order = orders.firstOrNull { it.id == specimen.labOrderId }
-            val events by repository.labSpecimenEvents(specimen.id).collectAsState(initial = emptyList())
+            val events by activeRepository.labSpecimenEvents(specimen.id).collectAsState(initial = emptyList())
             Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                     Text("${specimen.specimenCode} • ${specimen.specimenType}", fontWeight = FontWeight.Bold)
@@ -470,7 +473,7 @@ fun LaboratoryScreen(repository: HospitalRepository) {
                                     scope.launch {
                                         val at = System.currentTimeMillis()
                                         val changed = withContext(Dispatchers.IO) {
-                                            repository.transitionLabSpecimen(specimen.id, specimen.status, "received", responsibleEmployee, "تأكيد استلام العينة", requireReceipt = requireReceipt, occurredAt = at)
+                                            activeRepository.transitionLabSpecimen(specimen.id, specimen.status, "received", responsibleEmployee, "تأكيد استلام العينة", requireReceipt = requireReceipt, occurredAt = at)
                                         }
                                         message = if (changed) "تم توثيق استلام العينة بواسطة $responsibleEmployee." else "لم يُحفظ الانتقال؛ حدّث القائمة وتأكد من الحالة واسم الموظف."
                                     }
@@ -481,7 +484,7 @@ fun LaboratoryScreen(repository: HospitalRepository) {
                                     scope.launch {
                                         val at = System.currentTimeMillis()
                                         val changed = withContext(Dispatchers.IO) {
-                                            repository.transitionLabSpecimen(specimen.id, specimen.status, "processing", responsibleEmployee, "بدء المعالجة", requireReceipt = requireReceipt, occurredAt = at)
+                                            activeRepository.transitionLabSpecimen(specimen.id, specimen.status, "processing", responsibleEmployee, "بدء المعالجة", requireReceipt = requireReceipt, occurredAt = at)
                                         }
                                         message = if (changed) "تم نقل العينة إلى المعالجة بواسطة $responsibleEmployee." else "تعذر بدء المعالجة؛ تحقق من الحالة واسم الموظف."
                                     }
@@ -492,7 +495,7 @@ fun LaboratoryScreen(repository: HospitalRepository) {
                                     scope.launch {
                                         val at = System.currentTimeMillis()
                                         val changed = withContext(Dispatchers.IO) {
-                                            repository.transitionLabSpecimen(specimen.id, specimen.status, "completed", responsibleEmployee, "اكتملت معالجة العينة", requireReceipt = requireReceipt, occurredAt = at)
+                                            activeRepository.transitionLabSpecimen(specimen.id, specimen.status, "completed", responsibleEmployee, "اكتملت معالجة العينة", requireReceipt = requireReceipt, occurredAt = at)
                                         }
                                         message = if (changed) "تم إكمال معالجة العينة بواسطة $responsibleEmployee." else "تعذر إكمال العينة؛ تحقق من الحالة واسم الموظف."
                                     }
@@ -514,7 +517,7 @@ fun LaboratoryScreen(repository: HospitalRepository) {
                                     scope.launch {
                                         val at = System.currentTimeMillis()
                                         val changed = withContext(Dispatchers.IO) {
-                                            repository.transitionLabSpecimen(specimen.id, specimen.status, "rejected", responsibleEmployee, rejectionReason.trim(), rejectionReason.trim(), requireReceipt, at)
+                                            activeRepository.transitionLabSpecimen(specimen.id, specimen.status, "rejected", responsibleEmployee, rejectionReason.trim(), rejectionReason.trim(), requireReceipt, at)
                                         }
                                         rejectionReason = ""
                                         message = if (changed) "تم توثيق رفض العينة وسببه بواسطة $responsibleEmployee." else "تعذر رفض العينة؛ تحقق من الحالة واسم الموظف."
