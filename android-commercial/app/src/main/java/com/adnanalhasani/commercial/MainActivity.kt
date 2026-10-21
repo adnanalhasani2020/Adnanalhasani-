@@ -668,6 +668,7 @@ private fun ExpensesScreen(expenses: List<ExpenseRecord>, onBack: () -> Unit, on
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ExpenseEntryDialog(onDismiss: () -> Unit, onSave: (String, Int, String) -> Unit) {
     val categories = listOf("إيجار", "كهرباء ومياه", "نقل ومواصلات", "رواتب", "مشتريات تشغيلية", "صيانة", "أخرى")
