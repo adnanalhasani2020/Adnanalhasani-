@@ -103,6 +103,7 @@ private fun StoreApp(context: Context) {
     var tab by remember { mutableIntStateOf(0) }
     var query by remember { mutableStateOf("") }
     var newSale by remember { mutableStateOf(false) }
+    var addProduct by remember { mutableStateOf(false) }
     val sales = remember { mutableStateListOf<SaleRecord>().apply { addAll(loadSales(context)) } }
     val inventory = remember { mutableStateListOf<Product>().apply { addAll(loadProducts(context)) } }
     var nextInvoice by remember { mutableIntStateOf((sales.maxOfOrNull { it.number } ?: 1048) + 1) }
@@ -144,11 +145,19 @@ private fun StoreApp(context: Context) {
             when (tab) {
                 0 -> Dashboard(products = inventory, sales = sales, onNewSale = { newSale = true }, onInventory = { tab = 2 })
                 1 -> SalesScreen(sales = sales, onNewSale = { newSale = true })
-                2 -> InventoryScreen(inventory, query, { query = it })
+                2 -> InventoryScreen(inventory, query, { query = it }, { addProduct = true })
                 else -> MoreScreen()
             }
         }
     }
+    if (addProduct) AddProductDialog(
+        onDismiss = { addProduct = false },
+        onSave = { name, category, stock, price ->
+            inventory.add(Product(name, category, stock, money(price)))
+            saveProducts(context, inventory)
+            addProduct = false
+        }
+    )
     if (newSale) SaleEntryDialog(
         inventory = inventory,
         onDismiss = { newSale = false },
@@ -260,7 +269,7 @@ private fun SalesScreen(sales: List<SaleRecord>, onNewSale: () -> Unit) {
 }
 
 @Composable
-private fun InventoryScreen(products: List<Product>, query: String, onQuery: (String) -> Unit) {
+private fun InventoryScreen(products: List<Product>, query: String, onQuery: (String) -> Unit, onAddProduct: () -> Unit) {
     val filtered = products.filter { it.name.contains(query, true) || it.category.contains(query, true) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
         item { Heading("المخزون والمنتجات", "إدارة الأصناف والكميات والأسعار") }
@@ -274,7 +283,7 @@ private fun InventoryScreen(products: List<Product>, query: String, onQuery: (St
                 Metric("مخزون منخفض", products.count { it.stock <= 9 }.toString(), "أصناف", Icons.Default.WarningAmber, Modifier.weight(1f))
             }
         }
-        item { Button(onClick = {}, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(8.dp)); Text("إضافة منتج") } }
+        item { Button(onClick = onAddProduct, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(8.dp)); Text("إضافة منتج") } }
         item { Heading("قائمة المنتجات", "عدد النتائج: " + filtered.size) }
         items(filtered) { ProductRow(it) }
         if (filtered.isEmpty()) item { Text("لا توجد منتجات تطابق البحث.", color = Muted) }
@@ -391,6 +400,46 @@ private fun SaleEntryDialog(
                     onSave(selected, product.name, quantity, credit, unitPrice)
                 }
             }) { Text("حفظ الفاتورة") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } }
+    )
+}
+
+@Composable
+private fun AddProductDialog(
+    onDismiss: () -> Unit,
+    onSave: (String, String, Int, Int) -> Unit
+) {
+    var name by remember { mutableStateOf("") }
+    var category by remember { mutableStateOf("") }
+    var stockText by remember { mutableStateOf("0") }
+    var priceText by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("إضافة منتج جديد", color = Ink, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(name, { name = it; error = null }, label = { Text("اسم المنتج") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(category, { category = it; error = null }, label = { Text("التصنيف") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(stockText, { stockText = it.filter(Char::isDigit).take(7); error = null }, label = { Text("الكمية الافتتاحية") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(priceText, { priceText = it.filter(Char::isDigit).take(9); error = null }, label = { Text("سعر الوحدة بالريال اليمني") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                val stock = stockText.toIntOrNull()
+                val price = priceText.toIntOrNull()
+                when {
+                    name.isBlank() -> error = "أدخل اسم المنتج."
+                    category.isBlank() -> error = "أدخل تصنيف المنتج."
+                    stock == null || stock < 0 -> error = "أدخل كمية صحيحة."
+                    price == null || price <= 0 -> error = "أدخل سعرًا أكبر من صفر."
+                    else -> onSave(name.trim(), category.trim(), stock, price)
+                }
+            }) { Text("حفظ المنتج") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } }
     )
