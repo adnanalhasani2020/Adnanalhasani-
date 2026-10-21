@@ -47,6 +47,7 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
     implementation("com.google.firebase:firebase-auth")
     ksp("androidx.room:room-compiler:2.6.1")
+    kspAndroidTest("androidx.room:room-compiler:2.6.1")
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test:core:1.6.1")
