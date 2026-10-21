@@ -38,7 +38,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
@@ -63,20 +62,16 @@ private fun labTime(value: Long): String =
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LaboratoryScreen() {
-    val context = LocalContext.current
-    val database = remember(context) { HospitalDatabase.get(context) }
-    val dao = remember(database) { database.hospitalDao() }
+fun LaboratoryScreen(repository: HospitalRepository) {
     val scope = rememberCoroutineScope()
-    val orders by dao.labOrders().collectAsState(initial = emptyList())
-    val specimens by dao.labSpecimens().collectAsState(initial = emptyList())
-    val settings by dao.labWorkflowSettings().collectAsState(initial = emptyList())
-    val specimenGuide by dao.referenceItems("lab_specimen_guide").collectAsState(initial = emptyList())
+    val orders by repository.labOrders().collectAsState(initial = emptyList())
+    val specimens by repository.labSpecimens().collectAsState(initial = emptyList())
+    val settings by repository.labWorkflowSettings().collectAsState(initial = emptyList())
+    val specimenGuide by repository.referenceItems("lab_specimen_guide").collectAsState(initial = emptyList())
 
-    LaunchedEffect(database) {
+    LaunchedEffect(repository) {
         withContext(Dispatchers.IO) {
-            if (dao.referenceCount("lab_specimen_guide") == 0) {
-                val guideDefaults = listOf(
+            val guideDefaults = listOf(
                     ReferenceCatalogEntity(category = "lab_specimen_guide", name = "دم كامل EDTA", description = "الوعاء: أنبوب EDTA المناسب للاختبار. امزج بقلب الأنبوب برفق وفق تعليمات الشركة. لا تقبل العينة المتجلطة أو غير الموسومة/المتعارضة. التخزين والكمية يعتمدان على الاختبار ودليل المختبر المحلي."),
                     ReferenceCatalogEntity(category = "lab_specimen_guide", name = "مصل", description = "الوعاء: أنبوب مصل أو فاصل مصل مناسب للاختبار. اترك التخثر والطرد المركزي حسب الإجراء المعتمد. تحقق من الانحلال أو التلوث وفق معايير الاختبار واتبع متطلبات النقل والتخزين الخاصة بالفحص."),
                     ReferenceCatalogEntity(category = "lab_specimen_guide", name = "بلازما السيترات", description = "الوعاء: أنبوب سيترات مخصص لاختبارات التخثر. مستوى التعبئة ونسبة الدم إلى مانع التخثر حاسمان؛ لا تستخدم أنبوبًا ناقص التعبئة أو متجلطًا. اتبع إجراء المختبر المعتمد."),
@@ -85,15 +80,14 @@ fun LaboratoryScreen() {
                     ReferenceCatalogEntity(category = "lab_specimen_guide", name = "مسحة", description = "اختر نوع المسحة ووسط النقل الموافقين لموضع العينة والاختبار المطلوب؛ لا يوجد وسط واحد مناسب لكل الفحوص. تجنب جفاف العينة، وتحقق من الوسم والنقل والمدة وفق تعليمات الاختبار."),
                     ReferenceCatalogEntity(category = "lab_specimen_guide", name = "بلغم", description = "الوعاء: حاوية معقمة محكمة الإغلاق. وضّح للمريض أن المطلوب بلغم من الجهاز التنفسي لا لعابًا. تجنب التلوث، وانقل العينة حسب تعليمات الفحص وسياسة المختبر.")
                 )
-                guideDefaults.forEach { dao.insertReference(it) }
-            }
+                repository.seedReferenceItemsIfEmpty("lab_specimen_guide", guideDefaults)
         }
     }
 
     var searchQuery by remember { mutableStateOf("") }
     var statusFilter by remember { mutableStateOf("all") }
     var statusMenuExpanded by remember { mutableStateOf(false) }
-    val filteredSpecimens by dao.searchLabSpecimens(searchQuery.trim(), statusFilter).collectAsState(initial = emptyList())
+    val filteredSpecimens by repository.searchLabSpecimens(searchQuery.trim(), statusFilter).collectAsState(initial = emptyList())
 
     var selectedOrderId by remember { mutableStateOf<Long?>(null) }
     var orderMenuExpanded by remember { mutableStateOf(false) }
@@ -280,7 +274,7 @@ fun LaboratoryScreen() {
                                     val result = withContext(Dispatchers.IO) {
                                         runCatching {
                                             val collectedAt = System.currentTimeMillis()
-                                            dao.registerLabSpecimen(
+                                            repository.registerLabSpecimen(
                                                 LabSpecimenEntity(
                                                     labOrderId = order.id,
                                                     specimenCode = specimenCode.trim(),
@@ -291,7 +285,7 @@ fun LaboratoryScreen() {
                                                 ),
                                                 responsibleEmployee.trim()
                                             )
-                                            dao.saveLabWorkflowSetting(
+                                            repository.saveLabWorkflowSetting(
                                                 LabWorkflowSettingEntity("last_operator", responsibleEmployee.trim(), collectedAt)
                                             )
                                         }
@@ -357,11 +351,11 @@ fun LaboratoryScreen() {
                             onClick = {
                                 scope.launch {
                                     withContext(Dispatchers.IO) {
-                                        dao.saveLabWorkflowSetting(LabWorkflowSettingEntity("require_receipt_confirmation", requireReceipt.toString(), System.currentTimeMillis()))
-                                        dao.saveLabWorkflowSetting(LabWorkflowSettingEntity("specimen_types", specimenTypes.split(Regex("[,،]")).map { it.trim() }.filter { it.isNotBlank() }.distinct().joinToString(", "), System.currentTimeMillis()))
-                                        dao.saveLabWorkflowSetting(LabWorkflowSettingEntity("rejection_reasons", rejectionReasons.split(",").map { it.trim() }.filter { it.isNotBlank() }.distinct().joinToString(", "), System.currentTimeMillis()))
-                                        dao.saveLabWorkflowSetting(LabWorkflowSettingEntity("specimen_turnaround_hours", turnaroundHours.toInt().coerceIn(1, 720).toString(), System.currentTimeMillis()))
-                                        if (responsibleEmployee.isNotBlank()) dao.saveLabWorkflowSetting(LabWorkflowSettingEntity("last_operator", responsibleEmployee.trim(), System.currentTimeMillis()))
+                                        repository.saveLabWorkflowSetting(LabWorkflowSettingEntity("require_receipt_confirmation", requireReceipt.toString(), System.currentTimeMillis()))
+                                        repository.saveLabWorkflowSetting(LabWorkflowSettingEntity("specimen_types", specimenTypes.split(Regex("[,،]")).map { it.trim() }.filter { it.isNotBlank() }.distinct().joinToString(", "), System.currentTimeMillis()))
+                                        repository.saveLabWorkflowSetting(LabWorkflowSettingEntity("rejection_reasons", rejectionReasons.split(",").map { it.trim() }.filter { it.isNotBlank() }.distinct().joinToString(", "), System.currentTimeMillis()))
+                                        repository.saveLabWorkflowSetting(LabWorkflowSettingEntity("specimen_turnaround_hours", turnaroundHours.toInt().coerceIn(1, 720).toString(), System.currentTimeMillis()))
+                                        if (responsibleEmployee.isNotBlank()) repository.saveLabWorkflowSetting(LabWorkflowSettingEntity("last_operator", responsibleEmployee.trim(), System.currentTimeMillis()))
                                     }
                                     message = "تم حفظ إعدادات المختبر في قاعدة SQLite المحلية."
                                 }
@@ -438,7 +432,7 @@ fun LaboratoryScreen() {
         }
         items(filteredSpecimens, key = { it.id }) { specimen ->
             val order = orders.firstOrNull { it.id == specimen.labOrderId }
-            val events by dao.labSpecimenEvents(specimen.id).collectAsState(initial = emptyList())
+            val events by repository.labSpecimenEvents(specimen.id).collectAsState(initial = emptyList())
             Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                     Text("${specimen.specimenCode} • ${specimen.specimenType}", fontWeight = FontWeight.Bold)
@@ -476,7 +470,7 @@ fun LaboratoryScreen() {
                                     scope.launch {
                                         val at = System.currentTimeMillis()
                                         val changed = withContext(Dispatchers.IO) {
-                                            dao.transitionLabSpecimen(specimen.id, specimen.status, "received", responsibleEmployee, "تأكيد استلام العينة", requireReceipt = requireReceipt, occurredAt = at)
+                                            repository.transitionLabSpecimen(specimen.id, specimen.status, "received", responsibleEmployee, "تأكيد استلام العينة", requireReceipt = requireReceipt, occurredAt = at)
                                         }
                                         message = if (changed) "تم توثيق استلام العينة بواسطة $responsibleEmployee." else "لم يُحفظ الانتقال؛ حدّث القائمة وتأكد من الحالة واسم الموظف."
                                     }
@@ -487,7 +481,7 @@ fun LaboratoryScreen() {
                                     scope.launch {
                                         val at = System.currentTimeMillis()
                                         val changed = withContext(Dispatchers.IO) {
-                                            dao.transitionLabSpecimen(specimen.id, specimen.status, "processing", responsibleEmployee, "بدء المعالجة", requireReceipt = requireReceipt, occurredAt = at)
+                                            repository.transitionLabSpecimen(specimen.id, specimen.status, "processing", responsibleEmployee, "بدء المعالجة", requireReceipt = requireReceipt, occurredAt = at)
                                         }
                                         message = if (changed) "تم نقل العينة إلى المعالجة بواسطة $responsibleEmployee." else "تعذر بدء المعالجة؛ تحقق من الحالة واسم الموظف."
                                     }
@@ -498,7 +492,7 @@ fun LaboratoryScreen() {
                                     scope.launch {
                                         val at = System.currentTimeMillis()
                                         val changed = withContext(Dispatchers.IO) {
-                                            dao.transitionLabSpecimen(specimen.id, specimen.status, "completed", responsibleEmployee, "اكتملت معالجة العينة", requireReceipt = requireReceipt, occurredAt = at)
+                                            repository.transitionLabSpecimen(specimen.id, specimen.status, "completed", responsibleEmployee, "اكتملت معالجة العينة", requireReceipt = requireReceipt, occurredAt = at)
                                         }
                                         message = if (changed) "تم إكمال معالجة العينة بواسطة $responsibleEmployee." else "تعذر إكمال العينة؛ تحقق من الحالة واسم الموظف."
                                     }
@@ -520,7 +514,7 @@ fun LaboratoryScreen() {
                                     scope.launch {
                                         val at = System.currentTimeMillis()
                                         val changed = withContext(Dispatchers.IO) {
-                                            dao.transitionLabSpecimen(specimen.id, specimen.status, "rejected", responsibleEmployee, rejectionReason.trim(), rejectionReason.trim(), requireReceipt, at)
+                                            repository.transitionLabSpecimen(specimen.id, specimen.status, "rejected", responsibleEmployee, rejectionReason.trim(), rejectionReason.trim(), requireReceipt, at)
                                         }
                                         rejectionReason = ""
                                         message = if (changed) "تم توثيق رفض العينة وسببه بواسطة $responsibleEmployee." else "تعذر رفض العينة؛ تحقق من الحالة واسم الموظف."
