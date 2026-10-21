@@ -15,9 +15,9 @@ class HospitalFieldValidationTest {
 
     @Test
     fun parsesInventoryQuantitiesWithoutSilentZeroFallback() {
-        assertEquals(0.0, HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("0"), 0.0)
-        assertEquals(12.5, HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull(" 12.5 "), 0.0)
-        assertEquals(0.25, HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("0.25"), 0.0)
+        assertEquals(0.0, requireNotNull(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("0")), 0.0)
+        assertEquals(12.5, requireNotNull(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull(" 12.5 ")), 0.0)
+        assertEquals(0.25, requireNotNull(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("0.25")), 0.0)
         assertTrue(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("") == null)
         assertTrue(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("abc") == null)
         assertTrue(HospitalFieldValidation.toNonNegativeFiniteDoubleOrNull("-1") == null)
