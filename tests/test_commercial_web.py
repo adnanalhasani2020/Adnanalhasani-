@@ -179,6 +179,9 @@ def test_web_session_can_buy_sellable_product_and_receive_result(tmp_path):
     assert checkout["body"]["product_name"] == "Real bottle"
     assert checkout["body"]["total_minor"] == 1980
     assert checkout["body"]["quantity_remaining"] == 3
+    assert checkout["body"]["payment_method"] == "cash"
+    assert checkout["body"]["paid_minor"] == checkout["body"]["total_minor"]
+    assert checkout["body"]["balance_remaining_minor"] == 0
 
     # Read the catalog again through the public user flow and prove stock changed.
     refreshed_catalog = request(app, "/api/catalog", cookie=session_cookie)
@@ -192,10 +195,40 @@ def test_web_session_can_buy_sellable_product_and_receive_result(tmp_path):
             "offering_id": item["offering_id"], "activity_id": activity,
             "quantity": 3, "scope_key": "store-A", "location_ref": "front",
             "idempotency_key": "web-checkout-002", "sale_id": uid(),
+            "payment_method": "credit", "initial_paid_minor": 1000,
         },
     )
     assert final_checkout["status"] == "200 OK"
     assert final_checkout["body"]["quantity_remaining"] == 0
+    assert final_checkout["body"]["payment_method"] == "credit"
+    assert final_checkout["body"]["paid_minor"] == 1000
+    assert final_checkout["body"]["balance_remaining_minor"] == 1970
+
+    debts = request(app, "/api/debts", cookie=session_cookie)
+    assert debts["status"] == "200 OK"
+    assert len(debts["body"]["items"]) == 1
+    assert debts["body"]["items"][0]["sale_id"] == final_checkout["body"]["sale_id"]
+    assert debts["body"]["items"][0]["balance_remaining_minor"] == 1970
+
+    payment_body = {
+        "sale_id": final_checkout["body"]["sale_id"], "amount_minor": 500,
+        "idempotency_key": "web-payment-partial-001",
+    }
+    partial_payment = request(app, "/api/payments", method="POST", cookie=session_cookie, body=payment_body)
+    assert partial_payment["status"] == "200 OK"
+    assert partial_payment["body"]["balance_remaining_minor"] == 1470
+    replay_payment = request(app, "/api/payments", method="POST", cookie=session_cookie, body=payment_body)
+    assert replay_payment["status"] == "200 OK"
+    assert replay_payment["body"] == partial_payment["body"]
+
+    final_payment = request(
+        app, "/api/payments", method="POST", cookie=session_cookie,
+        body={"sale_id": final_checkout["body"]["sale_id"], "amount_minor": 1470,
+              "idempotency_key": "web-payment-final-001"},
+    )
+    assert final_payment["status"] == "200 OK"
+    assert final_payment["body"]["balance_remaining_minor"] == 0
+    assert request(app, "/api/debts", cookie=session_cookie)["body"]["items"] == []
     sold_out_catalog = request(app, "/api/catalog", cookie=session_cookie)
     assert sold_out_catalog["status"] == "200 OK"
     assert sold_out_catalog["body"]["items"] == []
@@ -342,11 +375,29 @@ def test_checkout_ui_preserves_pending_idempotency_key_for_ambiguous_retry(tmp_p
     page = request(app, "/", method="GET")
     assert page["status"] == "200 OK"
     html = page["body"].decode("utf-8")
-    guard = "if(pending&&pending.quantity!==quantity)"
+    guard = "if(pending&&(pending.quantity!==quantity||pending.payment_method!==payment_method||pending.initial_paid_minor!==initial_paid_minor))"
     assert guard in html
-    assert "توجد عملية شراء معلقة بكمية مختلفة" in html
+    assert "توجد عملية شراء معلقة بتفاصيل مختلفة" in html
     assert "else if(pending.quantity!==quantity)" not in html
     assert html.index(guard) < html.index("buy.disabled=true")
+    assert 'id="debts"' in html
+    assert 'id="storeManagementModel"' in html
+    assert 'class="topbar"' in html
+    assert 'class="hero"' in html
+    assert 'id="catalog"' in html
+    assert 'id="receipts"' in html
+    assert 'grid-template-columns:repeat(auto-fit,minmax(min(100%,275px),1fr))' in html
+    assert '@media(max-width:680px)' in html
+    assert 'prefers-reduced-motion:reduce' in html
+    assert 'value="merchant_account"' in html
+    assert 'value="dedicated_manager" selected' in html
+    assert 'value="scoped_managers"' in html
+    assert "لا تنشئ حساب مدير ولا تغيّر صلاحيات الخادم" in html
+    assert "const reportSettingFields=['storeManagementModel','reportAudience','reportScope','reportExport','reportAudit']" in html
+    assert "const keyName='commercial-payment:'+debt.sale_id" in html
+    assert "pending.amount_minor!==value" in html
+    assert "idempotency_key:pending.idempotency_key" in html
+    assert "sessionStorage.removeItem(keyName)" in html
 
 
 def test_receipt_history_skips_malformed_persisted_row(tmp_path):

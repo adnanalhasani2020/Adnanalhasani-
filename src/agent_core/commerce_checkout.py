@@ -182,7 +182,7 @@ class CommercialCheckoutApplication:
         self, connection, *, actor_person_id, activity_id, offering_id, quantity,
         scope_key, location_ref, idempotency_key, sale_id,
         create_sale_grant_id=None, confirm_sale_grant_id=None, fulfill_sale_grant_id=None,
-        session_token=None, now=None,
+        session_token=None, payment_method="cash", initial_paid_minor=None, now=None,
     ) -> dict:
         """Atomically fulfill a sale, snapshot its price, and record its stock movement.
 
@@ -209,7 +209,8 @@ class CommercialCheckoutApplication:
             "actor_person_id": actor, "activity_id": activity, "offering_id": offering,
             "quantity": quantity, "scope_key": scope_key.strip(),
             "location_ref": location_ref.strip() if location_ref is not None else None,
-            "sale_id": sale_key,
+            "sale_id": sale_key, "payment_method": payment_method,
+            "initial_paid_minor": initial_paid_minor,
             "create_sale_grant_id": _uuid(create_sale_grant_id, "Create Sale grant") if create_sale_grant_id is not None else None,
             "confirm_sale_grant_id": _uuid(confirm_sale_grant_id, "Confirm Sale grant") if confirm_sale_grant_id is not None else None,
             "fulfill_sale_grant_id": _uuid(fulfill_sale_grant_id, "Fulfill Sale grant") if fulfill_sale_grant_id is not None else None,
@@ -331,6 +332,14 @@ class CommercialCheckoutApplication:
             if unit_price and quantity > _SQLITE_MAX_INTEGER // unit_price:
                 raise ValidationError("Sale total exceeds the supported integer range")
             line_total = quantity * unit_price
+            if payment_method not in {"cash", "credit"}:
+                raise ValidationError("Payment method must be cash or credit")
+            paid_minor = line_total if payment_method == "cash" and initial_paid_minor is None else (0 if initial_paid_minor is None else initial_paid_minor)
+            if type(paid_minor) is not int or paid_minor < 0 or paid_minor > line_total:
+                raise ValidationError("Initial payment must be a non-negative integer no greater than the sale total")
+            if payment_method == "cash" and paid_minor != line_total:
+                raise ValidationError("Cash checkout must be paid in full; use credit for an outstanding balance")
+            balance_minor = line_total - paid_minor
             connection.execute(
                 """INSERT INTO sale_lines(
                        sale_line_id, sale_id, offering_id, product_id, quantity,
@@ -350,12 +359,35 @@ class CommercialCheckoutApplication:
                  location_ref.strip() if location_ref is not None else None, scope_key.strip(),
                  -quantity, "sale", sale_key, actor, stamp, stamp),
             )
+            connection.execute(
+                """INSERT INTO commercial_sale_terms(
+                       sale_id, buyer_person_id, payment_method, total_minor, currency_code, created_at
+                   ) VALUES(?,?,?,?,?,?)""",
+                (sale_key, actor, payment_method, line_total, price["currency_code"], stamp),
+            )
+            if paid_minor > 0:
+                payment_id = str(uuid4())
+                payment_key = "checkout:" + hashlib.sha256((actor + ":" + key).encode("utf-8")).hexdigest()
+                payment_response = {
+                    "payment_id": payment_id, "sale_id": sale_key,
+                    "amount_minor": paid_minor, "balance_remaining_minor": balance_minor,
+                }
+                connection.execute(
+                    """INSERT INTO commercial_sale_payments(
+                           payment_id, sale_id, buyer_person_id, amount_minor, currency_code,
+                           method, idempotency_key, request_hash, response_json, created_at
+                       ) VALUES(?,?,?,?,?,'cash',?,?,?,?)""",
+                    (payment_id, sale_key, actor, paid_minor, price["currency_code"],
+                     payment_key, fingerprint, json.dumps(payment_response, sort_keys=True, separators=(",", ":")), stamp),
+                )
             remaining = stock["available_quantity"] - quantity
             response = {
                 "sale_id": sale_key, "state": "fulfilled", "offering_id": offering,
                 "product_id": product, "product_name": product_name, "quantity": quantity,
                 "unit_price_minor": price["unit_price_minor"], "currency_code": price["currency_code"],
-                "total_minor": line_total, "inventory_position_id": stock["inventory_position_id"],
+                "total_minor": line_total, "payment_method": payment_method,
+                "paid_minor": paid_minor, "balance_remaining_minor": balance_minor,
+                "inventory_position_id": stock["inventory_position_id"],
                 "scope_key": scope_key.strip(),
                 "location_ref": location_ref.strip() if location_ref is not None else None,
                 "quantity_remaining": remaining, "occurred_at": stamp,
