@@ -657,11 +657,6 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
                     record.id.toString()
                 ) == null) { "الفاتورة لها حدث مالي محفوظ؛ لا تحذفها قبل معالجة الحدث وفق سياسة مالية موثقة." }
             }
-            "admissions" -> require(db.string(
-                "SELECT status FROM local_admissions WHERE sourceRecordId=?", record.id
-            ) != "admitted") {
-                "لا يمكن حذف تنويم نشط؛ سجّل خروج المريض أولاً."
-            }
         }
     }
 
