@@ -31,47 +31,19 @@ PAGE = r"""<!doctype html>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>المتجر — النسخة التجارية الأولى</title>
 <style>
-:root{color-scheme:light;--ink:#17243b;--muted:#68758b;--line:#e1e7f0;--surface:#fff;--canvas:#f3f6fb;--brand:#2457c5;--brand-dark:#173b82;--accent:#dce8ff;--success:#e8f7ef;--shadow:0 18px 48px #18345b12}
-*{box-sizing:border-box}
-html{scroll-behavior:smooth}
-body{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Tahoma,Arial,sans-serif;max-width:1240px;margin:0 auto;padding:clamp(1rem,3vw,2.5rem);background:radial-gradient(ellipse at 90% 0%,#e5edff 0,transparent 36%),var(--canvas);color:var(--ink);line-height:1.65}
-main{background:rgba(255,255,255,.94);padding:clamp(1rem,3vw,2.25rem);border:1px solid #ffffff;border-radius:26px;box-shadow:var(--shadow);min-height:70vh}
-body>main>h1{font-size:clamp(2rem,4vw,3rem);letter-spacing:-.04em;line-height:1.15;margin:.2rem 0 .65rem;font-weight:850}
-body>main>h1:before{content:"";display:inline-block;width:9px;height:1.05em;background:linear-gradient(180deg,#4f83ff,var(--brand-dark));border-radius:9px;margin-inline-end:.55rem;vertical-align:-.13em}
-h2{font-size:clamp(1.2rem,2vw,1.55rem);letter-spacing:-.02em;margin:1.6rem 0 .75rem;font-weight:780}
-h3{font-size:1.05rem;margin:.15rem 0 .55rem;font-weight:750}
-p{margin:.55rem 0}
-form,.row{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin:1rem 0}
-input,select,button{font:inherit;max-width:100%;border-radius:12px;transition:border-color .16s,box-shadow .16s,transform .16s}
-input,select{min-width:150px;padding:.78rem .9rem;border:1px solid #d4dce8;background:#fff;color:var(--ink);outline:none}
-input:focus,select:focus{border-color:#6c94ee;box-shadow:0 0 0 4px #2457c51a}
-input::placeholder{color:#98a3b4}
-button{cursor:pointer;padding:.78rem 1.1rem;background:linear-gradient(135deg,var(--brand),var(--brand-dark));color:white;border:1px solid transparent;font-weight:700;box-shadow:0 5px 12px #2457c51f}
-button:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 8px 18px #2457c52b}
-button:focus-visible,a:focus-visible{outline:3px solid #7aa0ff;outline-offset:3px}
-button:disabled{opacity:.55;cursor:wait;transform:none}
-a{color:var(--brand);font-weight:700;text-decoration:none}a:hover{text-decoration:underline}
-label{display:block;font-size:.94rem;font-weight:700;margin:.9rem 0 .35rem}
-.card{border:1px solid var(--line);border-radius:18px;padding:clamp(1rem,2vw,1.4rem);margin:1rem 0;background:var(--surface);box-shadow:0 5px 18px #203b6410}
-#auth{max-width:780px;margin:2rem auto;padding:clamp(1rem,3vw,2rem);background:linear-gradient(145deg,#f8faff,#fff);border:1px solid var(--line);border-radius:22px}
-#auth h2{margin-top:0}
-#shop>.row{padding:.9rem 1rem;background:#f7f9fd;border:1px solid var(--line);border-radius:15px}
-#who{margin-inline-end:auto;font-size:1.05rem}
-#catalog{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,270px),1fr));gap:1rem;margin:1rem 0}
-#catalog>.card{margin:0;display:flex;flex-direction:column;gap:.25rem;position:relative;overflow:hidden}
-#catalog>.card:before{content:"";height:4px;position:absolute;inset:0 0 auto;background:linear-gradient(90deg,#76a0ff,var(--brand-dark))}
-#receipts,#debts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:.8rem}
-#receipts>.card,#debts>.card{margin:0;overflow-wrap:anywhere}
-#reportSettings{margin-top:2rem;background:linear-gradient(145deg,#f8faff,#fff)}
-#reportSettings select{width:100%}
-#message{white-space:pre-wrap;padding:.85rem 1rem;margin-top:1rem;border-radius:12px;background:#eef3fc;color:#263b60;border:1px solid #dbe6fa;min-height:1rem}
-.muted{color:var(--muted);font-size:.94rem}
-.hidden{display:none!important}
-@media(max-width:600px){body{padding:.6rem}main{padding:1rem;border-radius:18px}form{align-items:stretch}form input,form select,form button{width:100%}#shop>.row{align-items:stretch}#who{width:100%;margin:0}button{min-height:44px}input,select{min-height:44px}}
-@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{transition:none!important}}
+:root{color-scheme:light;--ink:#14243b;--muted:#697991;--line:#e3e9f2;--paper:#fff;--canvas:#f3f6fb;--navy:#102849;--blue:#285bd4;--blue-dark:#1d46ac;--shadow:0 18px 55px rgba(24,48,83,.08)}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:radial-gradient(ellipse at 85% 0%,#e1ebff 0,transparent 35%),var(--canvas);color:var(--ink);font-family:Tahoma,"Segoe UI",Arial,sans-serif;line-height:1.65;min-height:100vh}
+main{max-width:1240px;margin:0 auto;padding:28px clamp(16px,3vw,42px) 54px}.topbar{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:30px}.brand{display:flex;align-items:center;gap:12px;font-weight:800;font-size:1.1rem}.brand-mark{width:46px;height:46px;display:grid;place-items:center;background:linear-gradient(145deg,#2d68e5,#15396e);color:white;border-radius:15px;box-shadow:0 8px 20px #285bd433;font-size:1.15rem}.brand small{display:block;font-size:.74rem;color:var(--muted);font-weight:500}.top-pill{display:inline-flex;align-items:center;gap:8px;padding:8px 13px;border:1px solid #dce5f3;background:#ffffffb8;border-radius:999px;color:#53657f;font-size:.8rem}.dot{width:8px;height:8px;border-radius:50%;background:#18a879;box-shadow:0 0 0 4px #18a87920}
+.hero{position:relative;overflow:hidden;background:linear-gradient(115deg,#102849 0%,#193e70 62%,#285bd4 130%);border-radius:26px;padding:clamp(24px,4vw,44px);color:white;margin-bottom:24px;box-shadow:0 18px 40px #10284920}.hero:after{content:"";position:absolute;width:290px;height:290px;border:1px solid #ffffff1a;border-radius:50%;left:-65px;top:-145px;box-shadow:0 0 0 35px #ffffff08,0 0 0 70px #ffffff06;pointer-events:none}.eyebrow{font-size:.75rem;font-weight:800;letter-spacing:.08em;color:#7d9bd3;margin:0 0 7px}.hero .eyebrow{color:#b9d2ff}.hero h1{font-size:clamp(1.8rem,3.2vw,2.8rem);line-height:1.3;margin:0 0 12px;letter-spacing:-1px}.hero p:not(.eyebrow){max-width:720px;color:#d3e0f6;margin:0}.hero-meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:24px}.hero-meta span{border:1px solid #ffffff28;background:#ffffff0d;padding:7px 12px;border-radius:10px;font-size:.82rem;color:#e6efff}
+#auth{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;background:var(--paper);padding:clamp(20px,3vw,34px);border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow)}#auth h2{grid-column:1/-1;margin:0;font-size:1.35rem}#auth:before{content:"دخول آمن • ابدأ بإدارة مشترياتك وسجلاتك";grid-column:1/-1;color:var(--muted);font-size:.92rem;margin-top:-12px}#auth form{display:flex;flex-direction:column;gap:12px;padding:20px;background:#f8faff;border:1px solid var(--line);border-radius:16px;margin:0}#auth form:before{font-weight:800;color:var(--ink);font-size:1rem}#login:before{content:"لديك حساب بالفعل؟"}#register:before{content:"مستخدم جديد؟ أنشئ حسابك"}
+form,.row{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}input,select,textarea{width:100%;min-width:0;max-width:100%;font:inherit;padding:12px 14px;border:1px solid #d5deeb;border-radius:11px;background:#fff;color:var(--ink);outline:none;transition:border-color .16s,box-shadow .16s}input:focus,select:focus,textarea:focus{border-color:#5a85e8;box-shadow:0 0 0 4px #285bd41a}input::placeholder{color:#98a5b7}button{font:inherit;font-weight:700;padding:11px 16px;border:1px solid transparent;border-radius:11px;cursor:pointer;background:var(--blue);color:white;transition:transform .16s,background .16s,box-shadow .16s}button:hover{background:var(--blue-dark);box-shadow:0 7px 15px #285bd426}button:active{transform:translateY(1px)}button:disabled{opacity:.55;cursor:wait;box-shadow:none}#auth button{width:100%;margin-top:auto}#refresh,#refreshReceipts,#refreshDebts{background:#edf3ff;color:#244da8;border-color:#dce7ff}#refresh:hover,#refreshReceipts:hover,#refreshDebts:hover{background:#dfeaff}
+#shop{display:block}.hidden{display:none!important}#shop>.row:first-child{align-items:center;justify-content:space-between;padding:13px 16px;background:#fff;border:1px solid var(--line);border-radius:16px;margin:0 0 25px;box-shadow:0 5px 20px #17365c08}#who{margin-inline-end:auto;font-weight:800}h2{font-size:1.35rem;letter-spacing:-.3px;margin:30px 0 12px}h3{font-size:1.03rem;margin:0 0 8px}label{display:block;font-weight:700;font-size:.9rem;margin:12px 0 6px}.muted{color:var(--muted);font-size:.9rem}.card{min-width:0;background:var(--paper);border:1px solid var(--line);border-radius:17px;padding:20px;margin:0;box-shadow:0 6px 20px #17365c08}.card p{overflow-wrap:anywhere}#catalog{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,275px),1fr));gap:15px;margin:14px 0 30px}#catalog .card{display:flex;flex-direction:column;gap:9px;position:relative;overflow:hidden;padding:22px}#catalog .card:before{content:"";position:absolute;inset:0 0 auto;height:4px;background:linear-gradient(90deg,#285bd4,#6ba7ff)}#catalog .card h3{font-size:1.15rem;padding-top:5px}#catalog .card p{margin:0;color:var(--muted);font-size:.88rem}#catalog .card p[aria-live]{color:#1a8b6b;background:#eaf9f3;border-radius:10px;padding:9px 11px;font-weight:700}#catalog .card button{margin-top:4px}#catalog .card select,#catalog .card input{margin-top:1px}#receipts,#debts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,310px),1fr));gap:13px;margin:13px 0 30px}#receipts .card,#debts .card{box-shadow:none;background:#fbfcff}#receipts a{display:inline-flex;color:var(--blue);font-weight:700;text-decoration:none;margin-top:7px}#receipts a:hover{text-decoration:underline}#debts .card button{margin-top:10px}
+#reportSettings{margin-top:32px;background:linear-gradient(145deg,#fff,#f8faff);padding:clamp(20px,3vw,30px)}#reportSettings h2{margin:0 0 8px}#reportSettings>p{max-width:900px}#reportSettings label{margin-top:18px}#reportSettings select{max-width:760px}#reportSettings .row{margin-top:22px}#reportSettingsStatus{padding:10px 13px;background:#f0f5ff;border-radius:10px;min-height:20px}#message{white-space:pre-wrap;padding:13px 16px;border-radius:13px;margin:18px 0;background:#eaf2ff;color:#234575;border:1px solid #d6e5ff;min-height:18px;font-size:.92rem}footer{color:var(--muted);text-align:center;padding:26px 0 0;font-size:.8rem}
+:focus-visible{outline:3px solid #6b95f2;outline-offset:3px}@media(max-width:680px){main{padding:15px 12px 35px}.topbar{margin-bottom:18px}.top-pill{font-size:.72rem;padding:6px 9px}.hero{border-radius:20px;margin-bottom:15px}.hero-meta span{font-size:.75rem}#auth{grid-template-columns:1fr;padding:17px}#auth h2,#auth:before{grid-column:auto}#auth:before{margin-top:-10px}#auth form{padding:16px}#shop>.row:first-child{align-items:stretch}#shop>.row:first-child button{flex:1}#who{width:100%;margin-bottom:5px}h2{margin-top:24px}}@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important}}
 </style></head>
 <body><main>
-<h1>المتجر</h1><p class="muted">نسخة تجريبية تجارية: عرض المنتجات ذات المخزون المثبت فقط، ثم تنفيذ بيع ذري مع إيصال.</p>
+<header class="topbar"><div class="brand"><span class="brand-mark" aria-hidden="true">ت</span><span>تجاري<small>منصة البيع وإدارة العمليات</small></span></div><span class="top-pill"><span class="dot" aria-hidden="true"></span>بيئة تشغيل تجريبية</span></header>
+<section class="hero" aria-labelledby="pageTitle"><p class="eyebrow">COMMERCIAL WORKSPACE</p><h1 id="pageTitle">كل عملياتك التجارية،<br>في مكان واحد.</h1><p>واجهة موحّدة لاستعراض المنتجات، تنفيذ البيع النقدي أو الآجل، ومتابعة الإيصالات والأرصدة المستحقة بتجربة واضحة وسريعة.</p><div class="hero-meta"><span>✓ مخزون محدث من قاعدة البيانات</span><span>✓ سجل عمليات خاص بحسابك</span><span>✓ سداد موثّق وقابل لإعادة المحاولة بأمان</span></div></section>
 <section id="auth">
 <h2>تسجيل الدخول أو إنشاء حساب</h2>
 <form id="login"><input name="username" autocomplete="username" placeholder="اسم المستخدم" required><input name="password" type="password" autocomplete="current-password" placeholder="كلمة المرور (12 حرفاً على الأقل)" required><button>دخول</button></form>
@@ -79,9 +51,10 @@ label{display:block;font-size:.94rem;font-weight:700;margin:.9rem 0 .35rem}
 </section>
 <section id="shop" class="hidden">
 <div class="row"><strong id="who"></strong><button id="refresh">تحديث المنتجات</button><button id="logout">تسجيل الخروج</button></div>
+<div class="section-head"><p class="eyebrow">PRODUCT CATALOG</p><h2 style="margin:0">المنتجات المتاحة</h2><p class="muted">الأسعار والكميات تُقرأ من بيانات التشغيل الفعلية.</p></div>
 <div id="catalog"></div>
-<h2>عملياتي الأخيرة</h2><button id="refreshReceipts" type="button">تحديث سجل المبيعات</button><div id="receipts"></div>
-<h2>الديون المستحقة</h2><button id="refreshDebts" type="button">تحديث الديون</button><div id="debts"></div>
+<div class="section-head"><p class="eyebrow">YOUR ACTIVITY</p><h2 style="margin:0">عملياتي الأخيرة</h2><p class="muted">إيصالات المبيعات المسجلة لهذا الحساب.</p></div><button id="refreshReceipts" type="button">تحديث سجل المبيعات</button><div id="receipts"></div>
+<div class="section-head"><p class="eyebrow">OUTSTANDING BALANCES</p><h2 style="margin:0">الديون المستحقة</h2><p class="muted">تابع الرصيد المتبقي وسجّل السداد النقدي عند استلامه.</p></div><button id="refreshDebts" type="button">تحديث الديون</button><div id="debts"></div>
 <section id="reportSettings" class="card" aria-labelledby="reportSettingsTitle">
 <h2 id="reportSettingsTitle">إعدادات طلب تقرير المبيعات</h2>
 <p class="muted">اختر نموذج إدارة المتجر المقترح والتفضيلات التي تريد رفعها للمراجعة. تُحفظ هذه الاختيارات على هذا الجهاز فقط؛ لا تغيّر صلاحيات الخادم ولا تمنح وصولًا للمبيعات. تبقى التقارير محجوبة حتى تنفيذ سياسة صلاحيات معتمدة على الخادم.</p>
@@ -104,6 +77,7 @@ label{display:block;font-size:.94rem;font-weight:700;margin:.9rem 0 .35rem}
 <p id="reportSettingsStatus" class="muted" role="status" aria-live="polite"></p>
 </section>
 </section><div id="message" role="status" aria-live="polite"></div>
+<footer>تجاري · تجربة تشغيلية تجريبية — التقارير الإدارية وصلاحيات إدارة المتجر لا تزال خاضعة للاعتماد على الخادم.</footer>
 </main>
 <script>
 const $=id=>document.getElementById(id);
