@@ -42,7 +42,7 @@ class MainActivity : ComponentActivity() {
 }
 
 internal data class Product(val name: String, val category: String, val stock: Int, val price: String)
-internal data class SaleRecord(val number: Int, val product: String, val quantity: Int, val total: Int, val credit: Boolean)
+internal data class SaleRecord(val number: Int, val product: String, val quantity: Int, val total: Int, val credit: Boolean, val customer: String = "", val paid: Int = 0)
 private fun money(value: Int): String = String.format(Locale.US, "%,d ر.ي", value)
 
 private const val STORE_PREFS = "commercial_store_local_v1"
@@ -77,7 +77,7 @@ private fun loadSales(context: Context): List<SaleRecord> {
         List(json.length()) { i ->
             val item = json.getJSONObject(i)
             SaleRecord(item.getInt("number"), item.getString("product"), item.getInt("quantity"),
-                item.getInt("total"), item.getBoolean("credit"))
+                item.getInt("total"), item.getBoolean("credit"), item.optString("customer", ""), item.optInt("paid", 0))
         }
     }.getOrElse { emptyList() }
 }
@@ -86,7 +86,8 @@ private fun saveSales(context: Context, items: List<SaleRecord>) {
     val json = JSONArray()
     items.forEach { item ->
         json.put(JSONObject().put("number", item.number).put("product", item.product)
-            .put("quantity", item.quantity).put("total", item.total).put("credit", item.credit))
+            .put("quantity", item.quantity).put("total", item.total).put("credit", item.credit)
+            .put("customer", item.customer).put("paid", item.paid))
     }
     context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).edit().putString(SALES_KEY, json.toString()).apply()
 }
@@ -106,6 +107,8 @@ private fun StoreApp(context: Context) {
     var newSale by remember { mutableStateOf(false) }
     var addProduct by remember { mutableStateOf(false) }
     var editingProductIndex by remember { mutableIntStateOf(-1) }
+    var showDebts by remember { mutableStateOf(false) }
+    var settlingSaleNumber by remember { mutableIntStateOf(-1) }
     val sales = remember { mutableStateListOf<SaleRecord>().apply { addAll(loadSales(context)) } }
     val inventory = remember { mutableStateListOf<Product>().apply { addAll(loadProducts(context)) } }
     var nextInvoice by remember { mutableIntStateOf((sales.maxOfOrNull { it.number } ?: 1048) + 1) }
@@ -148,7 +151,7 @@ private fun StoreApp(context: Context) {
                 0 -> Dashboard(products = inventory, sales = sales, onNewSale = { newSale = true }, onInventory = { tab = 2 })
                 1 -> SalesScreen(sales = sales, onNewSale = { newSale = true })
                 2 -> InventoryScreen(inventory, query, { query = it }, { addProduct = true }, { editingProductIndex = it })
-                else -> MoreScreen()
+                else -> if (showDebts) DebtScreen(sales = sales, onBack = { showDebts = false }, onSettle = { settlingSaleNumber = it.number }) else MoreScreen(onCustomers = { showDebts = true })
             }
         }
     }
@@ -177,16 +180,29 @@ private fun StoreApp(context: Context) {
     if (newSale && inventory.isNotEmpty()) SaleEntryDialog(
         inventory = inventory,
         onDismiss = { newSale = false },
-        onSave = { productIndex, product, quantity, credit, unitPrice ->
+        onSave = { productIndex, product, quantity, credit, unitPrice, customer ->
             val currentProduct = inventory[productIndex]
             inventory[productIndex] = currentProduct.copy(stock = currentProduct.stock - quantity)
             saveProducts(context, inventory)
-            sales.add(0, SaleRecord(nextInvoice, product, quantity, quantity * unitPrice, credit))
+            sales.add(0, SaleRecord(nextInvoice, product, quantity, quantity * unitPrice, credit, customer, 0))
             saveSales(context, sales)
             nextInvoice = maxOf(nextInvoice + 1, (sales.maxOfOrNull { it.number } ?: 1048) + 1)
             newSale = false
         }
     )
+    if (settlingSaleNumber >= 0) {
+        val saleIndex = sales.indexOfFirst { it.number == settlingSaleNumber }
+        if (saleIndex >= 0) SettlementDialog(
+            sale = sales[saleIndex],
+            onDismiss = { settlingSaleNumber = -1 },
+            onSave = { amount ->
+                val current = sales[saleIndex]
+                sales[saleIndex] = current.copy(paid = (current.paid + amount).coerceAtMost(current.total))
+                saveSales(context, sales)
+                settlingSaleNumber = -1
+            }
+        ) else settlingSaleNumber = -1
+    }
     if (newSale && inventory.isEmpty()) AlertDialog(
         onDismissRequest = { newSale = false },
         title = { Text("لا توجد منتجات") },
@@ -358,11 +374,12 @@ private fun SaleRow(title: String, subtitle: String, amount: String, credit: Boo
 private fun SaleEntryDialog(
     inventory: List<Product>,
     onDismiss: () -> Unit,
-    onSave: (Int, String, Int, Boolean, Int) -> Unit
+    onSave: (Int, String, Int, Boolean, Int, String) -> Unit
 ) {
     var selected by remember { mutableIntStateOf(0) }
     var quantityText by remember { mutableStateOf("1") }
     var credit by remember { mutableStateOf(false) }
+    var customer by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     val product = inventory[selected.coerceIn(0, inventory.lastIndex)]
     val quantity = quantityText.toIntOrNull()
@@ -396,6 +413,7 @@ private fun SaleEntryDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+                if (credit) OutlinedTextField(value = customer, onValueChange = { customer = it; error = null }, label = { Text("اسم العميل المدين") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 Text("طريقة الدفع", color = Muted, fontSize = 12.sp)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     RadioButton(selected = !credit, onClick = { credit = false })
@@ -419,8 +437,10 @@ private fun SaleEntryDialog(
                     error = "أدخل كمية صحيحة أكبر من صفر."
                 } else if (quantity > product.stock) {
                     error = "الكمية المطلوبة أكبر من المخزون المتاح (${product.stock})."
+                } else if (credit && customer.isBlank()) {
+                    error = "أدخل اسم العميل للبيع الآجل."
                 } else {
-                    onSave(selected, product.name, quantity, credit, unitPrice)
+                    onSave(selected, product.name, quantity, credit, unitPrice, if (credit) customer.trim() else "")
                 }
             }) { Text("حفظ الفاتورة") }
         },
@@ -527,12 +547,12 @@ private fun AddProductDialog(
 }
 
 @Composable
-private fun MoreScreen() {
+private fun MoreScreen(onCustomers: () -> Unit) {
     val options = listOf("العملاء والمديونيات", "الموردون والمشتريات", "التقارير والأرباح", "المصروفات", "إعدادات المتجر", "النسخ الاحتياطي")
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Heading("إدارة المتجر", "الأدوات والإعدادات") }
         items(options) { label ->
-            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Border)) {
+            Card(onClick = { if (label == "العملاء والمديونيات") onCustomers() }, colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Border)) {
                 Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(38.dp).background(Mint, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) { Icon(Icons.Default.Settings, null, tint = Green) }
                     Spacer(Modifier.width(12.dp))
@@ -543,4 +563,72 @@ private fun MoreScreen() {
         }
         item { Text("نسخة واجهات أولية • البيانات المعروضة تجريبية", color = Muted, fontSize = 11.sp, modifier = Modifier.padding(vertical = 12.dp)) }
     }
+}
+
+@Composable
+private fun DebtScreen(sales: List<SaleRecord>, onBack: () -> Unit, onSettle: (SaleRecord) -> Unit) {
+    val debts = sales.filter { it.credit && it.total > it.paid }
+    val totalOutstanding = debts.sumOf { it.total - it.paid }
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "رجوع") }
+                Heading("العملاء والمديونيات", "الأرصدة المتبقية من المبيعات الآجلة")
+            }
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = Ink), shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(18.dp)) {
+                    Text("إجمالي الديون المتبقية", color = Color(0xFFBFD9D0), fontSize = 13.sp)
+                    Text(money(totalOutstanding), color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Bold)
+                    Text("#{debts.size} فاتورة غير مسددة بالكامل", color = Color(0xFF8DE0B8), fontSize = 12.sp)
+                }
+            }
+        }
+        if (debts.isEmpty()) item { Text("لا توجد ديون مستحقة حاليًا.", color = Muted) }
+        items(debts, key = { it.number }) { sale ->
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, Border), modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Text(sale.customer.ifBlank { "عميل غير محدد" }, color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text("فاتورة ##{sale.number} • #{sale.product} × #{sale.quantity}", color = Muted, fontSize = 12.sp)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("قيمة الفاتورة: #{money(sale.total)}", color = Muted, fontSize = 12.sp)
+                        Text("المسدّد: #{money(sale.paid)}", color = Green, fontSize = 12.sp)
+                    }
+                    Text("المتبقي: #{money((sale.total - sale.paid).coerceAtLeast(0))}", color = Orange, fontWeight = FontWeight.Bold)
+                    Button(onClick = { onSettle(sale) }, modifier = Modifier.fillMaxWidth()) { Text("تسجيل تسديد") }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettlementDialog(sale: SaleRecord, onDismiss: () -> Unit, onSave: (Int) -> Unit) {
+    var amountText by remember(sale.number, sale.paid) { mutableStateOf((sale.total - sale.paid).coerceAtLeast(0).toString()) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val remaining = (sale.total - sale.paid).coerceAtLeast(0)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("تسديد دين العميل") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("#{sale.customer.ifBlank { "عميل غير محدد" }} • فاتورة ##{sale.number}", color = Muted)
+                Text("المتبقي: #{money(remaining)}", color = Green, fontWeight = FontWeight.Bold)
+                OutlinedTextField(value = amountText, onValueChange = { amountText = it.filter(Char::isDigit).take(9); error = null }, label = { Text("مبلغ التسديد بالريال اليمني") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                val amount = amountText.toIntOrNull()
+                when {
+                    amount == null || amount <= 0 -> error = "أدخل مبلغًا أكبر من صفر."
+                    amount > remaining -> error = "مبلغ التسديد أكبر من الرصيد المتبقي."
+                    else -> onSave(amount)
+                }
+            }) { Text("حفظ التسديد") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } }
+    )
 }
