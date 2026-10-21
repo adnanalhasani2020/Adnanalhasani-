@@ -47,25 +47,7 @@ internal class LocalWorkflowStore(private val database: HospitalDatabase) {
     private fun SupportSQLiteDatabase.int(sql: String, vararg args: Any?): Int? =
         query(sql, args).use { cursor -> if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getInt(0) else null }
 
-    private fun jsonEscape(raw: String): String = buildString(raw.length) {
-        raw.forEach { character ->
-            when (character) {
-                '\\' -> append("\\\\")
-                '"' -> append("\\\"")
-                '\b' -> append("\\b")
-                '\u000C' -> append("\\f")
-                '\n' -> append("\\n")
-                '\r' -> append("\\r")
-                '\t' -> append("\\t")
-                else -> if (character.code < 0x20) {
-                    append("\\u")
-                    append(character.code.toString(16).padStart(4, '0'))
-                } else {
-                    append(character)
-                }
-            }
-        }
-    }
+    private fun jsonEscape(raw: String): String = escapeJsonString(raw)
 
     private fun appendAudit(
         db: SupportSQLiteDatabase, action: String, entityType: String, entityId: String, detailsJson: String, occurredAt: String
