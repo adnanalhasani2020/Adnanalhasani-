@@ -25,12 +25,13 @@ import java.net.URL
 import java.util.concurrent.Executors
 
 internal data class CatalogUnit(val unitCode: String, val role: String, val quantityInBase: String, val barcode: String, val packageName: String, val imageUrl: String, val isDefault: Boolean)
+internal data class CatalogRuling(val id: String, val domain: String, val authority: String, val religion: String, val jurisdiction: String, val outcome: String, val rationale: String, val sourceTitle: String, val sourceUrl: String, val confidence: String, val reviewedAt: String)
 internal data class CatalogProduct(
     val id: String, val catalogCode: String, val name: String, val description: String,
     val categoryCode: String, val category: String, val brand: String, val manufacturer: String,
     val countryOfManufacture: String, val imageUrl: String, val prescriptionOnly: Boolean,
     val recommendationScore: Int, val barcode: String = "", val unitCode: String = "EA",
-    val availableUnits: List<CatalogUnit> = emptyList(), val createdBy: String = "", val createdAt: String = "", val importedBy: String = ""
+    val availableUnits: List<CatalogUnit> = emptyList(), val createdBy: String = "", val createdAt: String = "", val importedBy: String = "", val attributesSchema: String = "", val materialComposition: String = "", val ingredients: String = "", val recipe: String = "", val specifications: String = "", val allergens: String = "", val storageInstructions: String = "", val usageInstructions: String = "", val warnings: String = "", val shelfLifeDays: Int? = null, val requiresExpiryDate: Boolean = false, val isBatchTracked: Boolean = false, val isSerialTracked: Boolean = false, val rulings: List<CatalogRuling> = emptyList()
 )
 private data class CatalogCategory(val code: String, val parentCode: String, val nameAr: String, val nameEn: String)
 private data class DirectoryUnit(val code: String, val nameAr: String, val nameEn: String, val dimension: String, val baseCode: String, val factor: String, val owner: String)\nprivate data class PendingTransfer(val id: String, val source: String, val destination: String, val itemCount: Int, val createdAt: String)
@@ -157,7 +158,30 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                     recommendationScore=row.optInt("recommendation_score"),barcode=row.optString("barcode"),unitCode=row.optString("unit_code").ifBlank { "EA" },
                     availableUnits=row.optJSONArray("available_units")?.let { arr -> List(arr.length()) { j ->
                         val u=arr.getJSONObject(j); CatalogUnit(u.optString("unit_code"),u.optString("unit_role"),u.optString("quantity_in_base","1"),u.optString("barcode"),u.optString("package_name"),u.optString("image_url"),u.optBoolean("is_default"))
-                    } } ?: emptyList(),createdBy=row.optString("created_by"),createdAt=row.optString("created_at"),importedBy=signedInUserId
+                    } } ?: emptyList(),createdBy=row.optString("created_by"),createdAt=row.optString("created_at"),importedBy=signedInUserId,
+                    attributesSchema=row.optJSONObject("attributes_schema")?.toString().orEmpty(),
+                    materialComposition=row.optJSONArray("material_composition")?.let { arr -> List(arr.length()) { arr.get(it).toString() }.joinToString(", ") }.orEmpty(),
+                    ingredients=row.optJSONArray("ingredients")?.let { arr -> List(arr.length()) { arr.get(it).toString() }.joinToString(", ") }.orEmpty(),
+                    recipe=row.optJSONObject("recipe")?.let { rec ->
+                        listOf(rec.optString("instructions").takeUnless { it == "null" || it.isBlank() },
+                            rec.optJSONArray("ingredients")?.let { ing -> List(ing.length()) { ing.getJSONObject(it).let { row -> "${row.optString("ingredient_name")} ${row.optString("quantity")} ${row.optString("unit_code")}" } }.joinToString(", ") })
+                            .filterNotNull().joinToString(" • ")
+                    }.orEmpty(),
+                    specifications=row.optJSONObject("specifications")?.toString().orEmpty(),
+                    allergens=row.optJSONArray("allergens")?.let { arr -> List(arr.length()) { arr.get(it).toString() }.joinToString(", ") }.orEmpty(),
+                    storageInstructions=row.optString("storage_instructions").takeUnless { it == "null" }.orEmpty(),
+                    usageInstructions=row.optString("usage_instructions").takeUnless { it == "null" }.orEmpty(),
+                    warnings=row.optString("warnings").takeUnless { it == "null" }.orEmpty(),
+                    shelfLifeDays=if(row.isNull("shelf_life_days")) null else row.optInt("shelf_life_days"),
+                    requiresExpiryDate=row.optBoolean("requires_expiry_date",false),isBatchTracked=row.optBoolean("is_batch_tracked",false),
+                    isSerialTracked=row.optBoolean("is_serial_tracked",false),
+                    rulings=row.optJSONArray("rulings")?.let { arr -> List(arr.length()) { i -> val ruling=arr.getJSONObject(i); CatalogRuling(
+                        ruling.optString("ruling_id"),ruling.optString("ruling_domain"),ruling.optString("authority_code"),
+                        ruling.optString("religion_code").takeUnless { it == "null" }.orEmpty(),ruling.optString("jurisdiction_code").takeUnless { it == "null" }.orEmpty(),
+                        ruling.optString("outcome"),ruling.optString("rationale").takeUnless { it == "null" }.orEmpty(),
+                        ruling.optString("source_title").takeUnless { it == "null" }.orEmpty(),ruling.optString("source_url").takeUnless { it == "null" }.orEmpty(),
+                        ruling.optString("confidence"),ruling.optString("reviewed_at").takeUnless { it == "null" }.orEmpty()
+                    ) } } ?: emptyList()
                 )
             }
             feedback="تم جلب ${items.size} صنفًا. راجع بيانات القوالب العامة قبل اعتمادها."
@@ -375,9 +399,32 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                                         item.createdAt.takeIf{it.isNotBlank()}?.let{"تاريخ إدخال سجل الدليل: $it"},
                                         item.createdBy.takeIf{it.isNotBlank()}?.let{"معرّف مدخل سجل الدليل: $it"},
                                         item.imageUrl.takeIf{it.isNotBlank()}?.let{"رابط الصورة الخارجية: $it"},
+                                        item.materialComposition.takeIf{it.isNotBlank()}?.let{"تركيب المواد: $it"},
+                                        item.ingredients.takeIf{it.isNotBlank()}?.let{"المكونات: $it"},
+                                        item.recipe.takeIf{it.isNotBlank()}?.let{"الوصفة: $it"},
+                                        item.specifications.takeIf{it.isNotBlank()}?.let{"المواصفات: $it"},
+                                        item.allergens.takeIf{it.isNotBlank()}?.let{"مسببات الحساسية: $it"},
+                                        item.storageInstructions.takeIf{it.isNotBlank()}?.let{"التخزين: $it"},
+                                        item.usageInstructions.takeIf{it.isNotBlank()}?.let{"الاستخدام: $it"},
+                                        item.warnings.takeIf{it.isNotBlank()}?.let{"تحذيرات: $it"},
+                                        item.shelfLifeDays?.let{"مدة الصلاحية بالأيام: $it"},
+                                        if(item.requiresExpiryDate) "يتطلب تاريخ صلاحية" else null,
+                                        if(item.isBatchTracked) "يتطلب تتبع رقم التشغيلة" else null,
+                                        if(item.isSerialTracked) "يتطلب تتبع الرقم التسلسلي" else null,
+                                        item.attributesSchema.takeIf{it.isNotBlank() && it!="{}"}?.let{"حقول إضافية: $it"},
                                         if(item.prescriptionOnly) "صنف يتطلب وصفة طبية — تحقق من التصنيف المحلي" else null
                                     ).filterNotNull()
                                     facts.forEach{Text(it,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
+                                    item.rulings.forEach { ruling ->
+                                        HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant)
+                                        Text("الحكم ${ruling.domain}: ${ruling.outcome} • الجهة: ${ruling.authority} • الحالة: ${ruling.confidence}",fontWeight=FontWeight.SemiBold,style=MaterialTheme.typography.bodySmall)
+                                        if(ruling.religion.isNotBlank()) Text("الدين/المذهب: ${ruling.religion}",style=MaterialTheme.typography.bodySmall)
+                                        if(ruling.jurisdiction.isNotBlank()) Text("الاختصاص: ${ruling.jurisdiction}",style=MaterialTheme.typography.bodySmall)
+                                        if(ruling.rationale.isNotBlank()) Text(ruling.rationale,style=MaterialTheme.typography.bodySmall)
+                                        if(ruling.sourceTitle.isNotBlank()) Text("المصدر: ${ruling.sourceTitle}",style=MaterialTheme.typography.bodySmall)
+                                        if(ruling.sourceUrl.isNotBlank()) Text("رابط المصدر: ${ruling.sourceUrl}",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.primary)
+                                        if(ruling.reviewedAt.isNotBlank()) Text("تاريخ المراجعة: ${ruling.reviewedAt}",style=MaterialTheme.typography.labelSmall)
+                                    }
                                     item.availableUnits.filter { it.imageUrl.startsWith("https://",true) }.forEach { unit ->
                                         Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                                             AsyncImage(model=unit.imageUrl,contentDescription=unit.packageName.ifBlank { unit.unitCode },modifier=Modifier.size(64.dp),contentScale=ContentScale.Crop)
