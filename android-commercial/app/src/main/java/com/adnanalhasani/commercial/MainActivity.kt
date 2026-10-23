@@ -505,7 +505,7 @@ private fun SaleEntryDialog(
     val effectiveUnitIndex = selectedUnitIndex.takeIf { it in saleUnits.indices } ?: defaultUnitIndex
     val selectedUnit = saleUnits[effectiveUnitIndex]
     val basePrice = product.price.replace(",", "").replace(" ر.ي", "").toIntOrNull() ?: 0
-    val suggestedUnitPrice = (basePrice * selectedUnit.quantityInBase).toInt()
+    val suggestedUnitPrice = kotlin.math.round(basePrice.toDouble() * selectedUnit.quantityInBase).toInt()
     val quantity = quantityText.toIntOrNull()
     val unitPrice = priceOverrideText.toIntOrNull() ?: suggestedUnitPrice
     val baseQuantityExact = (quantity ?: 0) * selectedUnit.quantityInBase
