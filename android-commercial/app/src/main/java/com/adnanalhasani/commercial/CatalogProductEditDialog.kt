@@ -33,7 +33,12 @@ private fun jsonArrayLines(raw: String): String = runCatching {
 }.getOrDefault("")
 
 private fun nonBlankLines(raw: String): JSONArray = JSONArray().apply {
-    raw.lineSequence().map { it.trim() }.filter { it.isNotBlank() }.forEach { put(it) }
+    raw.lineSequence().map { it.trim() }.filter { it.isNotBlank() }.forEach { line ->
+        // Preserve structured objects/arrays when the editor round-trips existing JSON metadata.
+        val structured: Any? = runCatching { JSONObject(line) }.getOrNull()
+            ?: runCatching { JSONArray(line) }.getOrNull()
+        put(structured ?: line)
+    }
 }
 
 @Composable
