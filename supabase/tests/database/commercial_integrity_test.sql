@@ -1,7 +1,7 @@
 -- Run with Supabase CLI / pgTAP in a disposable local or staging database.
 -- These are schema regression tests; they do not replace authenticated-session integration tests.
 BEGIN;
-SELECT plan(15);
+SELECT plan(16);
 
 SELECT has_table('public', 'commercial_audit_events',
   'append-only audit event table exists');
@@ -91,6 +91,16 @@ SELECT has_index('public', 'commercial_sales_returns',
 SELECT has_index('public', 'commercial_inventory',
   'commercial_inventory_offering_id_key',
   'personal inventory has one row per offering');
+
+
+SELECT ok(
+  position('p_items IS NULL' in pg_get_functiondef(
+    'public.commercial_request_sale_return(uuid,text,text,jsonb,text)'::regprocedure
+  )) > 0
+  AND position('duplicate_sale_item_in_return_request' in pg_get_functiondef(
+    'public.commercial_request_sale_return(uuid,text,text,jsonb,text)'::regprocedure
+  )) > 0,
+  'return RPC rejects null item arrays and duplicate sale lines in one request');
 
 SELECT * FROM finish();
 ROLLBACK;
