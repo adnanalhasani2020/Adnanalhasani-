@@ -1,15 +1,15 @@
 # Universal product and unit catalog — implementation contract
 
-This migration introduces the database foundation for a shared, multilingual, cross-industry catalog without replacing existing product, offering, inventory, or sales tables.
+These additive migrations extend the existing global catalog, organization catalog links, unit directory, and translation tables. They do not create parallel product, category, organization-catalog, unit, or generic translation masters.
 
 ## Included model
-- Category tree uses a self-reference with cycle prevention and no fixed depth limit.
+- The existing `commercial_global_catalog_categories.parent_code` hierarchy is retained and guarded against cycles; depth is unbounded.
 - Shared global templates and organization-owned categories/products coexist.
-- Reuses the existing `commercial_global_units` directory and its canonical Arabic/English labels and conversion factors; adds locale-keyed unit-label overrides without duplicating the unit master. Unit dimensions use the existing canonical dimension constraints.
+- Reuses `commercial_global_units` and its canonical Arabic/English labels and conversion factors, plus `commercial_global_entity_translations` for additional locales. Unit dimensions honor the existing canonical constraints.
 - Product-level data includes identifiers, descriptions, brand, manufacturer/country, model/part number, ingredients/materials/recipe/specifications, storage/use/warnings, expiry/lot/serial tracking and HTTPS image URL.
 - Translations are normalized by locale for categories, products and units. Do not assume only Arabic/English.
 - Product units support separate sale/purchase/stock/recipe/shipping/consumption roles, product-specific conversion to base quantity, multiple package variants, SKU, barcode, net quantity and per-package image URL.
-- Sector, business-level and geographic targeting are explicit include/exclude rules; sector and level codes are data-driven rather than restricted to a fixed business list. Common sector codes include hospital, pharmacy, grocery, restaurant, hotel, general/mobile/automotive/heavy-equipment companies, wholesale and retail. Sector codes are data-driven rather than restricted to this starter list, so new business specializations do not require a schema migration.
+- Sector, business-level and geographic targeting are explicit include/exclude rules; sector and level codes are data-driven rather than restricted to a fixed business list. Common sector codes include hospital, pharmacy, grocery, restaurant, hotel, general/mobile/automotive/heavy-equipment companies, wholesale and retail. Arbitrary sector and business-level codes are accepted without schema migrations.
 - Recipe ingredients reference either another catalog product or a free-text ingredient.
 - Religious, medical, regulatory and dietary statements are source-attributed, jurisdiction-aware, time-scoped and carry review/confidence metadata. These records are not universal religious rulings or a substitute for clinician/regulator advice.
 - Organization catalog links can be transferred by an owner/admin who has rights to both source and destination organizations. Transfer is idempotent and does not overwrite existing destination links.
