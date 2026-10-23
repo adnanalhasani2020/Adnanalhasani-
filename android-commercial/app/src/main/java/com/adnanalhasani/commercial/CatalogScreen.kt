@@ -159,7 +159,9 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                 CatalogProduct(
                     id=row.optString("product_id"),catalogCode=row.optString("catalog_code"),name=row.optString("product_name"),
                     description=row.optString("short_description"),categoryCode=row.optString("category_code"),category=row.optString("category_name"),
-                    brand=row.optString("brand"),manufacturer=row.optString("manufacturer_name"),countryOfManufacture=row.optString("country_of_manufacture"),
+                    brand=localized.optString("brand").takeUnless { it.isBlank() || it == "null" } ?: row.optString("brand"),
+                    manufacturer=localized.optString("manufacturer_name").takeUnless { it.isBlank() || it == "null" } ?: row.optString("manufacturer_name"),
+                    countryOfManufacture=localized.optString("country_of_manufacture").takeUnless { it.isBlank() || it == "null" } ?: row.optString("country_of_manufacture"),
                     imageUrl=row.optString("image_url"),prescriptionOnly=row.optBoolean("is_prescription_only",false),
                     recommendationScore=row.optInt("recommendation_score"),barcode=row.optString("barcode"),unitCode=row.optString("unit_code").ifBlank { "EA" },
                     availableUnits=row.optJSONArray("available_units")?.let { arr -> List(arr.length()) { j ->
