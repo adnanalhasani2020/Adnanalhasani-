@@ -164,7 +164,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                     ingredients=row.optJSONArray("ingredients")?.let { arr -> List(arr.length()) { arr.get(it).toString() }.joinToString(", ") }.orEmpty(),
                     recipe=row.optJSONObject("recipe")?.let { rec ->
                         listOf(rec.optString("instructions").takeUnless { it == "null" || it.isBlank() },
-                            rec.optJSONArray("ingredients")?.let { ing -> List(ing.length()) { ing.getJSONObject(it).let { row -> "${row.optString("ingredient_name")} ${row.optString("quantity")} ${row.optString("unit_code")}" } }.joinToString(", ") })
+                            rec.optJSONArray("ingredients")?.let { ing -> List(ing.length()) { ingredientIndex -> val ingredient=ing.getJSONObject(ingredientIndex); "${ingredient.optString("ingredient_name")} ${ingredient.optString("quantity")} ${ingredient.optString("unit_code")}" }.joinToString(", ") })
                             .filterNotNull().joinToString(" • ")
                     }.orEmpty(),
                     specifications=row.optJSONObject("specifications")?.toString().orEmpty(),
