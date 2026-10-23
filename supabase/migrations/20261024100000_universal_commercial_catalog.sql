@@ -467,6 +467,22 @@ BEGIN
     AND (p_global_item_ids IS NULL OR i.global_item_id=ANY(p_global_item_ids))
   ON CONFLICT (organization_id,global_item_id) DO NOTHING;
   GET DIAGNOSTICS v_count=ROW_COUNT;
+
+  -- Preserve per-organization translations for the catalog items that were linked.
+  INSERT INTO public.commercial_organization_entity_translations(
+    organization_id,entity_type,entity_id,locale_code,field_key,translated_value,created_by
+  )
+  SELECT p_destination_organization_id,t.entity_type,t.entity_id,t.locale_code,t.field_key,t.translated_value,auth.uid()
+  FROM public.commercial_organization_entity_translations t
+  WHERE t.organization_id=p_source_organization_id
+    AND t.entity_type='catalog_item'
+    AND EXISTS (
+      SELECT 1 FROM public.commercial_organization_catalog_items src
+      WHERE src.organization_id=p_source_organization_id AND src.global_item_id=t.entity_id
+        AND (p_global_item_ids IS NULL OR src.global_item_id=ANY(p_global_item_ids))
+    )
+  ON CONFLICT DO NOTHING;
+
   UPDATE public.commercial_catalog_transfers SET item_count=v_count WHERE id=v_transfer_id;
   RETURN jsonb_build_object('transfer_id',v_transfer_id,'items_transferred',v_count);
 END $$;
