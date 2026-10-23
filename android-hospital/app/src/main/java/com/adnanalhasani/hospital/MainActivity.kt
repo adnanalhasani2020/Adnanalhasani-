@@ -64,7 +64,7 @@ class MainActivity : ComponentActivity() {
                 runCatching { DemoDataSeeder.seedIfEmpty(database.hospitalDao()) }
             }
         }
-        setContent { HospitalApp(repository) }
+        setContent { HospitalEntry(repository) }
     }
 }
 
@@ -202,6 +202,24 @@ private val modules = listOf(
     Module("leave_requests", "الإجازات وطلبات الموظفين", "طلبات الإجازة والموافقة الإدارية", Icons.Default.CalendarMonth, Color(0xFF9A91B8),
         listOf("اسم الموظف" to "اسم الموظف", "نوع الإجازة" to "سنوية / مرضية / طارئة", "تاريخ البداية" to "YYYY-MM-DD", "تاريخ النهاية" to "YYYY-MM-DD", "سبب الطلب" to "السبب", "حالة الطلب" to "جديد / موافق / مرفوض")),
 )
+
+@Composable
+private fun HospitalEntry(repository: HospitalRepository) {
+    val context = LocalContext.current
+    var entered by remember {
+        mutableStateOf(FirebaseAuthGateway.currentUser(context) != null)
+    }
+    if (entered) {
+        HospitalApp(repository)
+    } else {
+        AuthScreen(
+            onAuthenticated = { entered = true },
+            onContinueAsGuest = {
+                if (BuildConfig.DEBUG) entered = true
+            }
+        )
+    }
+}
 
 @Composable
 fun HospitalApp(repository: HospitalRepository) {
