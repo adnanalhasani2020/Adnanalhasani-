@@ -32,6 +32,12 @@
         "commercial_user_locale_preferences"
       ]
     },
-    "note": "The remaining authenticated DML grants correspond to existing user/organization-scoped RLS policies. Review default privileges for future tables separately."
+    "note": "The remaining authenticated DML grants correspond to existing user/organization-scoped RLS policies. Review default privileges for future tables separately.",
+    "default_privileges": {
+      "status": "pending_owner_level_change",
+      "observed": "Default ACLs for postgres and supabase_admin grant broad table privileges to anon and authenticated for future public tables.",
+      "attempted": "ALTER DEFAULT PRIVILEGES revocations were rejected with permission denied.",
+      "required_follow_up": "Apply the default-privilege revocations through a database-owner-controlled migration or administrative session; current-table grants are already hardened."
+    }
   }
 }
