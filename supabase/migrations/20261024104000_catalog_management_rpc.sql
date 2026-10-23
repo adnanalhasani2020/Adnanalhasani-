@@ -173,7 +173,7 @@ CREATE OR REPLACE FUNCTION public.commercial_catalog_create_product(
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
 DECLARE
   v_id uuid; v_code text; v_unit_code text; v_category text; v_type text;
-  v_barcode text; v_image text; v_unit jsonb; v_level jsonb; v_region jsonb; v_ruling jsonb; v_translation jsonb; v_unit_dimension text;
+  v_barcode text; v_image text; v_unit jsonb; v_level jsonb; v_region jsonb; v_ruling jsonb; v_translation jsonb; v_ingredient jsonb; v_unit_dimension text; v_recipe_id uuid;
 BEGIN
   IF auth.uid() IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
   IF NOT public.commercial_catalog_member_of(p_organization_id, ARRAY['owner','admin']::text[]) THEN
@@ -296,6 +296,41 @@ BEGIN
         nullif(btrim(v_unit->>'sku'),''),nullif(btrim(v_unit->>'package_name'),''),
         nullif(v_unit->>'net_quantity','')::numeric,nullif(v_unit->>'net_unit_code',''),
         nullif(v_unit->>'image_url',''),COALESCE((v_unit->>'is_default')::boolean,false),auth.uid()
+      );
+    END LOOP;
+  END IF;
+
+  IF nullif(btrim(p_product->'recipe'->>'instructions'),'') IS NOT NULL
+     OR jsonb_array_length(COALESCE(p_product->'recipe'->'ingredients','[]'::jsonb))>0 THEN
+    INSERT INTO public.commercial_catalog_product_recipes(
+      product_id,locale_code,recipe_name,instructions,yield_quantity,yield_unit_code,
+      preparation_minutes,cooking_minutes,allergen_notes,source_reference,created_by
+    ) VALUES (
+      v_id,COALESCE(nullif(p_product->'recipe'->>'locale_code',''),'ar'),
+      COALESCE(nullif(btrim(p_product->'recipe'->>'recipe_name'),''),btrim(p_product->>'name_ar')),
+      nullif(btrim(p_product->'recipe'->>'instructions'),''),
+      nullif(p_product->'recipe'->>'yield_quantity','')::numeric,
+      nullif(p_product->'recipe'->>'yield_unit_code',''),
+      nullif(p_product->'recipe'->>'preparation_minutes','')::integer,
+      nullif(p_product->'recipe'->>'cooking_minutes','')::integer,
+      nullif(btrim(p_product->'recipe'->>'allergen_notes'),''),
+      nullif(btrim(p_product->'recipe'->>'source_reference'),''),auth.uid()
+    ) RETURNING id INTO v_recipe_id;
+    FOR v_ingredient IN SELECT value FROM jsonb_array_elements(COALESCE(p_product->'recipe'->'ingredients','[]'::jsonb)) LOOP
+      IF jsonb_typeof(v_ingredient)<>'object'
+         OR COALESCE(nullif(btrim(v_ingredient->>'ingredient_name'),''),nullif(btrim(v_ingredient->>'ingredient_product_id'),'')) IS NULL
+         OR COALESCE(nullif(v_ingredient->>'quantity','')::numeric,0)<=0
+         OR nullif(btrim(v_ingredient->>'unit_code'),'') IS NULL
+         OR NOT EXISTS (SELECT 1 FROM public.commercial_global_units u WHERE u.code=v_ingredient->>'unit_code' AND u.is_active
+           AND (u.owner_organization_id IS NULL OR u.owner_organization_id=p_organization_id)) THEN
+        RAISE EXCEPTION 'invalid_recipe_ingredient' USING ERRCODE='22023';
+      END IF;
+      INSERT INTO public.commercial_catalog_recipe_ingredients(
+        recipe_id,ingredient_product_id,ingredient_name,quantity,unit_code,preparation_note
+      ) VALUES (
+        v_recipe_id,nullif(v_ingredient->>'ingredient_product_id','')::uuid,
+        nullif(btrim(v_ingredient->>'ingredient_name'),''),(v_ingredient->>'quantity')::numeric,
+        v_ingredient->>'unit_code',nullif(btrim(v_ingredient->>'preparation_note'),'')
       );
     END LOOP;
   END IF;
