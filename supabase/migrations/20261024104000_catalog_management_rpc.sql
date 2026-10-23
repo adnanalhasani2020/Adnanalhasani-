@@ -54,6 +54,13 @@ BEGIN
     v_code,p_parent_code,btrim(p_name_ar),btrim(p_name_en),nullif(btrim(p_description_ar),''),nullif(btrim(p_description_en),''),
     COALESCE(p_sort_order,100),true,1,p_organization_id,auth.uid(),auth.uid()
   );
+  INSERT INTO public.commercial_global_entity_translations(
+    entity_type,entity_key,locale_code,field_key,translated_value,translation_status,source_language,owner_organization_id,created_by
+  ) VALUES
+    ('catalog_category',v_code,'ar','name',btrim(p_name_ar),'reviewed','ar',p_organization_id,auth.uid()),
+    ('catalog_category',v_code,'en','name',btrim(p_name_en),'reviewed','en',p_organization_id,auth.uid())
+  ON CONFLICT (entity_type,entity_key,locale_code,field_key) DO UPDATE
+    SET translated_value=EXCLUDED.translated_value,owner_organization_id=EXCLUDED.owner_organization_id;
   RETURN jsonb_build_object('category_code',v_code,'parent_code',p_parent_code);
 END $$;
 REVOKE ALL ON FUNCTION public.commercial_catalog_create_category(uuid,text,text,text,text,text,text,integer) FROM PUBLIC, anon;
@@ -96,6 +103,13 @@ BEGIN
     v_code,btrim(p_name_ar),btrim(p_name_en),p_dimension,p_base_unit_code,p_factor_to_base,
     p_decimal_places,true,1,p_organization_id,auth.uid()
   );
+  INSERT INTO public.commercial_global_entity_translations(
+    entity_type,entity_key,locale_code,field_key,translated_value,translation_status,source_language,owner_organization_id,created_by
+  ) VALUES
+    ('unit',v_code,'ar','name',btrim(p_name_ar),'reviewed','ar',p_organization_id,auth.uid()),
+    ('unit',v_code,'en','name',btrim(p_name_en),'reviewed','en',p_organization_id,auth.uid())
+  ON CONFLICT (entity_type,entity_key,locale_code,field_key) DO UPDATE
+    SET translated_value=EXCLUDED.translated_value,owner_organization_id=EXCLUDED.owner_organization_id;
   RETURN jsonb_build_object('unit_code',v_code,'base_unit_code',p_base_unit_code,'dimension',p_dimension);
 END $$;
 REVOKE ALL ON FUNCTION public.commercial_catalog_create_unit(uuid,text,text,text,text,numeric,text,smallint) FROM PUBLIC, anon;
@@ -113,7 +127,7 @@ CREATE OR REPLACE FUNCTION public.commercial_catalog_create_product(
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
 DECLARE
   v_id uuid; v_code text; v_unit_code text; v_category text; v_type text;
-  v_barcode text; v_image text; v_unit jsonb; v_level jsonb; v_region jsonb; v_ruling jsonb;
+  v_barcode text; v_image text; v_unit jsonb; v_level jsonb; v_region jsonb; v_ruling jsonb; v_translation jsonb;
 BEGIN
   IF auth.uid() IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
   IF NOT public.commercial_catalog_member_of(p_organization_id, ARRAY['owner','admin']::text[]) THEN
@@ -173,6 +187,33 @@ BEGIN
     COALESCE((p_product->>'is_prescription_only')::boolean,false),v_image,nullif(btrim(p_product->>'image_alt'),''),
     auth.uid(),auth.uid()
   );
+
+  INSERT INTO public.commercial_global_entity_translations(
+    entity_type,entity_key,locale_code,field_key,translated_value,translation_status,source_language,owner_organization_id,created_by
+  ) VALUES
+    ('catalog_item',v_code,'ar','name',btrim(p_product->>'name_ar'),'reviewed','ar',p_organization_id,auth.uid()),
+    ('catalog_item',v_code,'en','name',btrim(p_product->>'name_en'),'reviewed','en',p_organization_id,auth.uid())
+  ON CONFLICT (entity_type,entity_key,locale_code,field_key) DO UPDATE
+    SET translated_value=EXCLUDED.translated_value,owner_organization_id=EXCLUDED.owner_organization_id;
+
+  IF jsonb_typeof(COALESCE(p_product->'translations','[]'::jsonb))<>'array' THEN
+    RAISE EXCEPTION 'invalid_product_translations' USING ERRCODE='22023';
+  END IF;
+  FOR v_translation IN SELECT value FROM jsonb_array_elements(COALESCE(p_product->'translations','[]'::jsonb)) LOOP
+    IF nullif(btrim(v_translation->>'locale_code'),'') IS NULL
+       OR nullif(btrim(v_translation->>'field_key'),'') IS NULL
+       OR nullif(btrim(v_translation->>'translated_value'),'') IS NULL THEN
+      RAISE EXCEPTION 'invalid_translation_fields' USING ERRCODE='22023';
+    END IF;
+    INSERT INTO public.commercial_global_entity_translations(
+      entity_type,entity_key,locale_code,field_key,translated_value,translation_status,source_language,owner_organization_id,created_by
+    ) VALUES ('catalog_item',v_code,lower(btrim(v_translation->>'locale_code')),lower(btrim(v_translation->>'field_key')),
+      btrim(v_translation->>'translated_value'),COALESCE(nullif(v_translation->>'translation_status',''),'machine_draft'),
+      nullif(v_translation->>'source_language',''),p_organization_id,auth.uid())
+    ON CONFLICT (entity_type,entity_key,locale_code,field_key) DO UPDATE
+      SET translated_value=EXCLUDED.translated_value,translation_status=EXCLUDED.translation_status,
+          source_language=EXCLUDED.source_language,owner_organization_id=EXCLUDED.owner_organization_id;
+  END LOOP;
 
   IF jsonb_array_length(COALESCE(p_units,'[]'::jsonb))=0 THEN
     INSERT INTO public.commercial_catalog_product_units(product_id,unit_code,unit_role,quantity_in_base,is_default,created_by)
