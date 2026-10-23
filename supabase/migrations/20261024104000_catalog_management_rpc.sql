@@ -292,15 +292,29 @@ BEGIN
     INSERT INTO public.commercial_catalog_product_units(product_id,unit_code,unit_role,quantity_in_base,is_default,created_by)
     VALUES(v_id,v_unit_code,'base',1,true,auth.uid());
   ELSE
+    IF (SELECT count(*) FROM jsonb_array_elements(p_units) x WHERE COALESCE((x->>'is_default')::boolean,false))<>1
+       OR NOT EXISTS (
+         SELECT 1 FROM jsonb_array_elements(p_units) x
+         WHERE x->>'unit_code'=v_unit_code AND COALESCE(x->>'unit_role','base')='base'
+           AND COALESCE(nullif(x->>'quantity_in_base','')::numeric,1)=1
+           AND COALESCE((x->>'is_default')::boolean,false)
+       ) THEN
+      RAISE EXCEPTION 'product_requires_one_default_base_unit' USING ERRCODE='22023';
+    END IF;
     FOR v_unit IN SELECT value FROM jsonb_array_elements(p_units) LOOP
       IF nullif(v_unit->>'unit_code','') IS NULL
          OR NOT EXISTS (SELECT 1 FROM public.commercial_global_units u WHERE u.code=v_unit->>'unit_code' AND u.is_active
            AND (u.owner_organization_id IS NULL OR u.owner_organization_id=p_organization_id)) THEN
         RAISE EXCEPTION 'invalid_product_unit_variant' USING ERRCODE='22023';
       END IF;
+      IF COALESCE(v_unit->>'unit_role','sale')='base'
+         AND (v_unit->>'unit_code'<>v_unit_code OR COALESCE(nullif(v_unit->>'quantity_in_base','')::numeric,1)<>1) THEN
+        RAISE EXCEPTION 'base_unit_variant_must_match_product_unit' USING ERRCODE='22023';
+      END IF;
       IF NOT EXISTS (
         SELECT 1 FROM public.commercial_global_units u
-        WHERE u.code=v_unit->>'unit_code' AND u.dimension=v_unit_dimension
+        WHERE u.code=v_unit->>'unit_code'
+          AND (u.dimension=v_unit_dimension OR (COALESCE(v_unit->>'unit_role','sale')<>'base' AND u.dimension='count'))
           AND (u.owner_organization_id IS NULL OR u.owner_organization_id=p_organization_id)
       ) THEN RAISE EXCEPTION 'product_unit_dimension_mismatch' USING ERRCODE='22023'; END IF;
       IF nullif(v_unit->>'image_url','') IS NOT NULL AND (length(v_unit->>'image_url')>1000 OR v_unit->>'image_url' !~* '^https://[^[:space:]]+$') THEN
