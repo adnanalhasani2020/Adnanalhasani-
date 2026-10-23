@@ -51,12 +51,15 @@ class UniversalCommercialCatalogContractTests(unittest.TestCase):
         self.assertIn("commercial_catalog_product_regions", self.discovery)
         self.assertIn("material_composition jsonb", self.discovery)
         self.assertIn("rulings jsonb", self.discovery)
+        self.assertIn("localized_details jsonb", self.discovery)
+        self.assertIn("model_number text", self.discovery)
         self.assertIn("commercial_catalog_product_rulings", self.discovery)
 
     def test_transactional_authoring_covers_metadata_translations_and_rulings(self):
         self.assertIn("commercial_catalog_create_product", self.management)
         self.assertIn("commercial_catalog_create_category", self.management)
         self.assertIn("commercial_catalog_create_unit", self.management)
+        self.assertIn("v_code := 'O'", self.management)
         self.assertIn("commercial_global_entity_translations", self.management)
         self.assertIn("ingredients", self.management)
         self.assertIn("material_composition", self.management)
