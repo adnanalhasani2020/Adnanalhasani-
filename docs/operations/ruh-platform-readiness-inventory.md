@@ -41,7 +41,7 @@ Empty business tables may be expected before onboarding; they are not automatica
 
 ### P0 — Runtime/application integration
 - Repository quickstart documents `applications/commercial-mvp` as a local SQLite application (`commercial-mvp.sqlite3`) with its own migrations.
-- No evidence yet proves this application is connected to the live Supabase schema. Treat the Supabase schema and SQLite app as separate until integration is implemented and tested.
+- Commercial registration/login now use Supabase Auth when `SUPABASE_URL` and `SUPABASE_ANON_KEY` are configured; the app then creates a local commerce session/profile link. No evidence yet proves the commercial data paths (catalog, inventory, sales, receipts) are connected to the live Supabase schema. Treat Supabase business tables and SQLite commerce data as separate until those paths are implemented and tested.
 - The local MVP quickstart explicitly notes there is no product/price/opening-stock admin UI, no electronic payment gateway, and return/refund/tax/discount/final-invoice workflows are outside that path.
 
 ### P1 — Bootstrap/configuration data
