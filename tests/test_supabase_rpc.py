@@ -223,3 +223,22 @@ def test_add_store_item_rejects_zero_stock(monkeypatch):
             location_id="location-uuid", product_name="Water",
             unit_name="bottle", price_minor=1500, initial_quantity=0,
         )
+
+
+def test_checkout_maps_insufficient_stock_to_safe_conflict_message(monkeypatch):
+    from urllib.error import HTTPError
+
+    rpc = client(monkeypatch)
+    error = HTTPError(
+        "https://example.supabase.co/rest/v1/rpc/commercial_checkout_sale",
+        400, "Bad Request", {}, BytesIO(b'{"code":"22023","message":"insufficient_available_stock"}'),
+    )
+    with patch("agent_core.supabase_rpc.urlopen", side_effect=error):
+        with pytest.raises(SupabaseRPCError) as caught:
+            rpc.checkout(
+                offering_id="offer-uuid", location_id="location-uuid",
+                quantity=2, idempotency_key="checkout-key-123",
+            )
+    assert caught.value.http_status == 409
+    assert "المخزون المتاح" in str(caught.value)
+    assert "22023" not in str(caught.value)

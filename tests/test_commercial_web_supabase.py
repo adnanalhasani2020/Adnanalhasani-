@@ -5,6 +5,7 @@ import json
 from unittest.mock import patch
 
 from agent_core.commercial_web import CommercialWebApplication
+from agent_core.supabase_rpc import SupabaseRPCError
 
 
 def invoke(app, body, *, authorization=""):
@@ -257,3 +258,28 @@ def test_supabase_add_store_item_requires_auth_and_uses_catalog_context():
         location_id="location-uuid", product_name="Water", unit_name="bottle",
         price_minor=1500, initial_quantity=8,
     )
+
+
+def test_supabase_checkout_returns_conflict_for_insufficient_stock():
+    app = CommercialWebApplication()
+    body = {"offering_id": "offer-uuid", "location_id": "location-uuid",
+            "quantity": 2, "idempotency_key": "checkout-key-123"}
+    raw = json.dumps(body).encode()
+    environ = {
+        "REQUEST_METHOD": "POST", "PATH_INFO": "/api/supabase/checkout",
+        "wsgi.url_scheme": "https", "HTTP_HOST": "example.test",
+        "HTTP_COOKIE": "supabase_access=access-token", "CONTENT_TYPE": "application/json",
+        "CONTENT_LENGTH": str(len(raw)), "wsgi.input": io.BytesIO(raw),
+    }
+    captured = {}
+    def start_response(status, headers):
+        captured["status"] = status
+    with patch("agent_core.commercial_web.SupabaseAuthClient") as auth_class, \
+         patch("agent_core.commercial_web.SupabaseRPCClient") as rpc_class:
+        auth_class.return_value.get_user.return_value = {"id": "user-1"}
+        rpc_class.return_value.checkout.side_effect = SupabaseRPCError(
+            "المخزون المتاح لا يكفي للكمية المطلوبة.", http_status=409
+        )
+        result = b"".join(app(environ, start_response))
+    assert captured["status"] == "409 Conflict"
+    assert "المخزون المتاح" in json.loads(result.decode())["error"]

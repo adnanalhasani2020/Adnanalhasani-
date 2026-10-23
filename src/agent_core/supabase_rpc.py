@@ -8,7 +8,9 @@ from urllib.request import Request, urlopen
 
 
 class SupabaseRPCError(RuntimeError):
-    pass
+    def __init__(self, message: str, *, http_status: int | None = None):
+        super().__init__(message)
+        self.http_status = http_status
 
 
 class SupabaseRPCClient:
@@ -40,9 +42,37 @@ class SupabaseRPCClient:
                     raise SupabaseRPCError("Supabase response exceeded the size limit.")
                 return json.loads(raw.decode("utf-8")) if raw else None
         except HTTPError as exc:
-            if exc.code in (400, 401, 403, 409):
-                raise SupabaseRPCError(f"Supabase rejected the request (HTTP {exc.code}).") from None
-            raise SupabaseRPCError(f"Supabase RPC failed (HTTP {exc.code}).") from None
+            try:
+                error_body = json.loads(exc.read(8192).decode("utf-8"))
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+                error_body = {}
+            detail = error_body.get("message", "") if isinstance(error_body, dict) else ""
+            known_errors = {
+                "authentication_required": (401, "سجّل الدخول بحسابك للمتابعة."),
+                "organization_access_denied": (403, "ليس لديك صلاحية الوصول إلى هذا النشاط."),
+                "organization_management_permission_required": (403, "تحتاج إلى صلاحية إدارة المؤسسة لإضافة المنتجات."),
+                "insufficient_available_stock": (409, "المخزون المتاح لا يكفي للكمية المطلوبة."),
+                "idempotency_key_reused_with_different_request": (409, "مفتاح العملية مستخدم لطلب مختلف؛ لا تعِد المحاولة بمفتاح جديد قبل التحقق من سجل البيع."),
+                "offering_not_available": (409, "المنتج أو العرض لم يعد متاحًا للبيع."),
+                "inventory_location_not_found": (404, "الموقع أو رصيد المخزون غير متاح."),
+                "active_organization_not_found": (404, "المؤسسة غير موجودة أو غير نشطة."),
+                "active_activity_not_found": (404, "النشاط التجاري غير موجود أو غير نشط."),
+                "active_location_not_found": (404, "الموقع غير موجود أو غير نشط."),
+                "invalid_quantity": (400, "الكمية المدخلة غير صحيحة."),
+                "invalid_initial_quantity": (400, "كمية المخزون الافتتاحي غير صحيحة."),
+                "invalid_price": (400, "السعر المدخل غير صحيح."),
+                "invalid_idempotency_key": (400, "مفتاح العملية غير صالح."),
+                "invalid_storefront_name": (400, "تحقق من أسماء المؤسسة والنشاط والمنتج والموقع."),
+                "invalid_product_name_or_unit": (400, "تحقق من اسم المنتج ووحدة القياس."),
+            }
+            for token, (status, message) in known_errors.items():
+                if token in str(detail):
+                    raise SupabaseRPCError(message, http_status=status) from None
+            if exc.code in (400, 401, 403, 404, 409):
+                raise SupabaseRPCError(f"تعذر قبول الطلب من Supabase (HTTP {exc.code}).",
+                                       http_status=exc.code) from None
+            raise SupabaseRPCError(f"تعذر تنفيذ طلب Supabase (HTTP {exc.code}).",
+                                   http_status=502) from None
         except (URLError, TimeoutError, OSError, UnicodeDecodeError, json.JSONDecodeError):
             raise SupabaseRPCError("Supabase connection or response failed; verify operation before retrying.") from None
 
