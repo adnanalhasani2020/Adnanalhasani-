@@ -19,7 +19,7 @@ These additive migrations extend the existing global catalog, organization catal
 ## Business activity directory (separate from product categories)
 - `commercial_global_business_activity_nodes` is the distinct, unbounded-depth activity hierarchy. It is not a second product-category table; product categories remain in `commercial_global_catalog_categories`.
 - The hierarchy uses stable internal codes and `parent_code`, with a cycle guard, selectable leaf/specialization nodes, Arabic/English labels, path labels, and optional default business-level hints. The API caps traversal at 30 levels as a defensive query bound; storage does not impose a fixed hierarchy depth.
-- `commercial_global_business_activity_aliases` provides curated localized search synonyms with a unique active alias per locale, preventing ambiguous aliases from pointing to multiple activities.
+- `commercial_global_business_activity_aliases` provides curated localized search synonyms with globally unique active normalized aliases across locales, preventing ambiguous aliases from pointing to multiple activities.
 - `commercial_global_business_activity_codes` maps a node to an external standard/version only when an explicit mapping has been reviewed. Seed labels are ROUH-maintained starter taxonomy inspired by international classification practice; no ISIC/NAICS code is claimed without a stored external mapping.
 - Additional languages reuse `commercial_global_entity_translations` with `entity_type='business_activity'`; no parallel translation master is created.
 - Existing `commercial_activities.activity_code` remains compatible, while `business_activity_node_id` provides the normalized FK. A guarded trigger links a clear canonical name/code match without forcing old free-text activities into a possibly incorrect category.
@@ -39,6 +39,7 @@ RLS is enabled on every table added here. Global reference/product rows are read
 7. `20261024112000_business_activity_taxonomy_expansion.sql` — broader cross-sector activity coverage, unique alias guard, and explicit ROUH-owned provenance for unmapped starter nodes.
 8. `20261024113000_catalog_policy_deduplication.sql` — removes overlapping SELECT policies and replaces broad `FOR ALL` catalog writes with separate insert/update/delete policies.
 9. `20261024114000_catalog_integrity_performance.sql` — removes the obsolete one-phase transfer RPC, adds missing FK indexes, and adds stable row identity to region rules.
+10. `20261024115000_business_activity_alias_global_uniqueness.sql` — replaces per-locale alias uniqueness with global normalized-alias uniqueness so an alias can never resolve to different nodes.
 
 The product discovery response includes the full product detail payload and the source-attributed rulings, not just a product name. Additional locale values use the existing translation directory; the UI accepts one field translation per line in `locale|field|value` form. For package variants, the UI accepts `unit_code|role|qty_in_base|barcode|package_name|image_url` lines. For multiple region rules, it accepts `country|region|city|include-or-exclude` lines.
 
