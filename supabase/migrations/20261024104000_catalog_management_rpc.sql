@@ -234,7 +234,7 @@ BEGIN
     price_minor,currency_code,is_available,metadata,created_by
   )
   SELECT p_organization_id,v_id,btrim(p_product->>'name_ar'),
-    nullif(btrim(p_product->>'description_ar'),''),0,COALESCE(o.currency_code,'YER'),true,
+    nullif(btrim(p_product->>'description_ar'),''),0,COALESCE(nullif(p_product->>'currency_code',''),'YER'),true,
     jsonb_build_object('created_from_catalog_manager',true),auth.uid()
   FROM public.commercial_organizations o WHERE o.id=p_organization_id
   ON CONFLICT (organization_id,global_item_id) DO NOTHING;
