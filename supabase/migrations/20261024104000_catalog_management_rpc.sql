@@ -47,16 +47,19 @@ CREATE OR REPLACE FUNCTION public.commercial_catalog_create_category(
   p_translations jsonb DEFAULT '[]'::jsonb
 ) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
-DECLARE v_code text; v_translation jsonb;
+DECLARE v_code text; v_slug text; v_translation jsonb;
 BEGIN
   IF auth.uid() IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
   IF NOT public.commercial_catalog_member_of(p_organization_id, ARRAY['owner','admin']::text[]) THEN
     RAISE EXCEPTION 'catalog_category_create_forbidden' USING ERRCODE='42501';
   END IF;
-  v_code := upper(regexp_replace(btrim(COALESCE(p_code,'')), '[^A-Za-z0-9_-]+', '-', 'g'));
-  IF length(v_code) NOT BETWEEN 2 AND 80 OR p_name_ar IS NULL OR btrim(p_name_ar)='' OR p_name_en IS NULL OR btrim(p_name_en)='' THEN
+  v_slug := upper(regexp_replace(btrim(COALESCE(p_code,'')), '[^A-Za-z0-9_-]+', '-', 'g'));
+  IF nullif(btrim(p_code),'') IS NULL OR v_slug !~ '[A-Z0-9]'
+     OR p_name_ar IS NULL OR btrim(p_name_ar)='' OR p_name_en IS NULL OR btrim(p_name_en)='' THEN
     RAISE EXCEPTION 'invalid_category_fields' USING ERRCODE='22023';
   END IF;
+  v_code := 'O' || upper(substr(replace(p_organization_id::text,'-',''),1,8)) || '-' || substr(v_slug,1,60);
+  IF length(v_code) NOT BETWEEN 2 AND 80 THEN RAISE EXCEPTION 'invalid_category_code' USING ERRCODE='22023'; END IF;
   IF p_parent_code IS NOT NULL AND NOT EXISTS (
     SELECT 1 FROM public.commercial_global_catalog_categories c
     WHERE c.code=p_parent_code AND c.is_active
@@ -111,14 +114,15 @@ CREATE OR REPLACE FUNCTION public.commercial_catalog_create_unit(
   p_translations jsonb DEFAULT '[]'::jsonb
 ) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
-DECLARE v_code text; v_dimension text; v_owner uuid; v_translation jsonb;
+DECLARE v_code text; v_suffix text; v_dimension text; v_owner uuid; v_translation jsonb;
 BEGIN
   IF auth.uid() IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
   IF NOT public.commercial_catalog_member_of(p_organization_id, ARRAY['owner','admin']::text[]) THEN
     RAISE EXCEPTION 'catalog_unit_create_forbidden' USING ERRCODE='42501';
   END IF;
-  v_code := 'O' || upper(substr(replace(p_organization_id::text,'-',''),1,8)) || '_' ||
-    substr(upper(regexp_replace(btrim(COALESCE(p_code,'')), '[^A-Za-z0-9_]+', '_', 'g')),1,6);
+  v_suffix := upper(regexp_replace(btrim(COALESCE(p_code,'')), '[^A-Za-z0-9]+', '_', 'g'));
+  IF nullif(btrim(p_code),'') IS NULL OR v_suffix !~ '[A-Z0-9]' THEN RAISE EXCEPTION 'invalid_unit_code' USING ERRCODE='22023'; END IF;
+  v_code := 'O' || upper(substr(replace(p_organization_id::text,'-',''),1,8)) || '_' || substr(v_suffix,1,6);
   IF length(v_code) > 80 OR length(btrim(COALESCE(p_name_ar,'')))=0 OR length(btrim(COALESCE(p_name_en,'')))=0
      OR length(btrim(COALESCE(p_dimension,'')))=0 OR COALESCE(p_factor_to_base,0)<=0
      OR COALESCE(p_decimal_places,0)<0 OR COALESCE(p_decimal_places,0)>6
@@ -179,7 +183,7 @@ CREATE OR REPLACE FUNCTION public.commercial_catalog_create_product(
 ) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
 DECLARE
-  v_id uuid; v_code text; v_unit_code text; v_category text; v_type text;
+  v_id uuid; v_code text; v_slug text; v_unit_code text; v_category text; v_type text;
   v_barcode text; v_image text; v_unit jsonb; v_level jsonb; v_region jsonb; v_ruling jsonb; v_translation jsonb; v_ingredient jsonb; v_unit_dimension text; v_recipe_id uuid;
 BEGIN
   IF auth.uid() IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
@@ -216,7 +220,14 @@ BEGIN
   IF NOT FOUND THEN RAISE EXCEPTION 'invalid_product_unit' USING ERRCODE='22023'; END IF;
 
   v_id := gen_random_uuid();
-  v_code := COALESCE(nullif(btrim(p_product->>'catalog_code'),''), 'ORG-'||upper(substr(replace(p_organization_id::text,'-',''),1,8))||'-'||upper(substr(replace(v_id::text,'-',''),1,12)));
+  v_slug := upper(regexp_replace(btrim(COALESCE(p_product->>'catalog_code','')), '[^A-Za-z0-9_-]+', '-', 'g'));
+  IF nullif(btrim(p_product->>'catalog_code'),'') IS NOT NULL AND v_slug !~ '[A-Z0-9]' THEN
+    RAISE EXCEPTION 'invalid_catalog_code' USING ERRCODE='22023';
+  END IF;
+  v_code := 'O' || upper(substr(replace(p_organization_id::text,'-',''),1,8)) || '-' ||
+    CASE WHEN nullif(btrim(p_product->>'catalog_code'),'') IS NULL
+      THEN upper(substr(replace(v_id::text,'-',''),1,12))
+      ELSE substr(v_slug,1,60) END;
   INSERT INTO public.commercial_global_catalog_items(
     id,catalog_code,name_ar,name_en,description_ar,description_en,category_code,item_type,unit_code,
     barcode_gtin,attributes_schema,is_active,version,owner_organization_id,brand,manufacturer_name,
