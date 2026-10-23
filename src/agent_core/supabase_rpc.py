@@ -53,7 +53,7 @@ class SupabaseRPCClient:
         from urllib.parse import urlencode
 
         query = {
-            "select": "id,activity_id,product_id,price_minor,currency_code,scope_key,location_ref,valid_from,valid_to,product:commercial_products(id,name,unit_name,state),inventory:commercial_inventory(quantity_on_hand)",
+            "select": "id,activity_id,product_id,price_minor,currency_code,scope_key,location_ref,valid_from,valid_to,product:commercial_products(id,name,unit_name,state),balances:commercial_inventory_balances(quantity_on_hand,quantity_reserved,location_id,organization_id,location:commercial_organization_locations(name,code,state))",
             "state": "eq.active", "order": "created_at.desc", "limit": "500",
         }
         request = Request(
@@ -81,30 +81,46 @@ class SupabaseRPCClient:
         for row in rows:
             if not isinstance(row, dict):
                 continue
-            product, inventory = row.get("product"), row.get("inventory")
+            product, balances = row.get("product"), row.get("balances")
             if isinstance(product, list):
                 product = product[0] if product else None
-            if isinstance(inventory, list):
-                inventory = inventory[0] if inventory else None
-            if not isinstance(product, dict) or product.get("state") != "active" or not isinstance(inventory, dict):
+            if not isinstance(product, dict) or product.get("state") != "active":
+                continue
+            if isinstance(balances, dict):
+                balances = [balances]
+            if not isinstance(balances, list):
                 continue
             try:
-                available = int(inventory.get("quantity_on_hand", 0))
                 price = int(row["price_minor"])
                 starts = datetime.fromisoformat(str(row["valid_from"]).replace("Z", "+00:00"))
                 ends_raw = row.get("valid_to")
                 ends = datetime.fromisoformat(str(ends_raw).replace("Z", "+00:00")) if ends_raw else None
             except (KeyError, TypeError, ValueError, OverflowError):
                 continue
-            if available < 1 or starts > now or (ends is not None and ends <= now):
+            if starts > now or (ends is not None and ends <= now):
                 continue
-            items.append({
-                "offering_id": row.get("id"), "activity_id": row.get("activity_id"),
-                "product_id": row.get("product_id"), "product_name": product.get("name"),
-                "unit_name": product.get("unit_name"), "unit_price_minor": price,
-                "currency_code": row.get("currency_code"), "scope_key": row.get("scope_key"),
-                "location_ref": row.get("location_ref"), "available_quantity": available,
-            })
+            for balance in balances:
+                if not isinstance(balance, dict):
+                    continue
+                location = balance.get("location")
+                if isinstance(location, list):
+                    location = location[0] if location else None
+                if not isinstance(location, dict) or location.get("state") != "active":
+                    continue
+                try:
+                    available = int(float(balance.get("quantity_on_hand", 0)) - float(balance.get("quantity_reserved", 0)))
+                except (TypeError, ValueError, OverflowError):
+                    continue
+                if available < 1:
+                    continue
+                items.append({
+                    "offering_id": row.get("id"), "activity_id": row.get("activity_id"),
+                    "product_id": row.get("product_id"), "product_name": product.get("name"),
+                    "unit_name": product.get("unit_name"), "unit_price_minor": price,
+                    "currency_code": row.get("currency_code"), "scope_key": row.get("scope_key"),
+                    "location_ref": balance.get("location_id"), "location_name": location.get("name"),
+                    "organization_id": balance.get("organization_id"), "available_quantity": available,
+                })
         return items
 
     def create_organization(self, *, name: str, slug: str, organization_type: str,
