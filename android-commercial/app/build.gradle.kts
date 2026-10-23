@@ -8,7 +8,7 @@ android {
     namespace = "com.adnanalhasani.commercial"
     compileSdk = 35
     val supabaseUrl = (project.findProperty("SUPABASE_URL") as String?) ?: System.getenv("SUPABASE_URL") ?: "https://dukeigbrzvpxzkbmdbeh.supabase.co"
-    val supabaseAnonKey = (project.findProperty("SUPABASE_ANON_KEY") as String?) ?: System.getenv("SUPABASE_ANON_KEY") ?: ""
+    val supabaseAnonKey = (project.findProperty("SUPABASE_ANON_KEY") as String?) ?: System.getenv("SUPABASE_ANON_KEY") ?: "sb_publishable_5D4jD0Soc1eCaWfDAPZy0A_fZgY_7Gh"
     defaultConfig {
         applicationId = "com.adnanalhasani.commercial"
         minSdk = 26
