@@ -44,7 +44,14 @@ CREATE OR REPLACE FUNCTION public.commercial_catalog_discover_products(
   model_number text,
   part_number text,
   image_alt text,
-  localized_details jsonb
+  localized_details jsonb,
+  owner_organization_id uuid,
+  name_ar text,
+  name_en text,
+  description_ar text,
+  description_en text,
+  item_type text,
+  barcode_gtin text
 )
 LANGUAGE plpgsql
 SECURITY INVOKER
@@ -112,7 +119,14 @@ BEGIN
     p.model_number,
     p.part_number,
     p.image_alt,
-    COALESCE(localized_details.fields,'{}'::jsonb)
+    COALESCE(localized_details.fields,'{}'::jsonb),
+    p.owner_organization_id,
+    p.name_ar,
+    p.name_en,
+    p.description_ar,
+    p.description_en,
+    p.item_type,
+    p.barcode_gtin
   FROM public.commercial_global_catalog_items p
   LEFT JOIN LATERAL (
     SELECT pu.unit_code
