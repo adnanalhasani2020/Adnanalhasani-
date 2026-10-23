@@ -45,6 +45,36 @@ class MainActivity : ComponentActivity() {
 }
 
 internal data class Product(val name: String, val category: String, val stock: Int, val price: String, val costPrice: Int = 0, val catalogCode: String = "", val barcode: String = "", val unitCode: String = "EA", val imageUrl: String = "", val description: String = "", val brand: String = "", val manufacturer: String = "", val countryOfManufacture: String = "", val createdAt: Long = System.currentTimeMillis(), val createdBy: String = "", val unitVariantsJson: String = "[]")
+
+private data class LocalSaleUnit(
+    val code: String,
+    val label: String,
+    val quantityInBase: Double,
+    val barcode: String,
+    val imageUrl: String,
+    val isDefault: Boolean
+)
+
+private fun localSaleUnits(product: Product): List<LocalSaleUnit> {
+    val parsed = runCatching {
+        val json = JSONArray(product.unitVariantsJson)
+        List(json.length()) { index ->
+            val item = json.getJSONObject(index)
+            LocalSaleUnit(
+                code = item.optString("unitCode", product.unitCode).ifBlank { product.unitCode },
+                label = item.optString("packageName").takeUnless { it.isNullOrBlank() || it == "null" }
+                    ?: item.optString("unitCode", product.unitCode).ifBlank { product.unitCode },
+                quantityInBase = item.optString("quantityInBase", "1").toDoubleOrNull()?.takeIf { it > 0 } ?: 1.0,
+                barcode = item.optString("barcode").takeUnless { it == "null" }.orEmpty(),
+                imageUrl = item.optString("imageUrl").takeUnless { it == "null" }.orEmpty(),
+                isDefault = item.optBoolean("isDefault", false)
+            )
+        }.filter { it.code.isNotBlank() }
+    }.getOrDefault(emptyList())
+    return parsed.ifEmpty {
+        listOf(LocalSaleUnit(product.unitCode.ifBlank { "EA" }, product.unitCode.ifBlank { "EA" }, 1.0, product.barcode, product.imageUrl, true))
+    }
+}
 internal data class SaleRecord(val number: Int, val product: String, val quantity: Int, val total: Int, val credit: Boolean, val customer: String = "", val paid: Int = 0, val createdAt: Long = System.currentTimeMillis(), val unitCost: Int = 0, val unitCode: String = "EA", val baseQuantitySold: Int = quantity)
 internal data class SettlementRecord(val invoiceNumber: Int, val customer: String, val amount: Int, val timestamp: Long = System.currentTimeMillis())
 internal data class ExpenseRecord(val id: Long, val category: String, val amount: Int, val note: String, val timestamp: Long = System.currentTimeMillis())
