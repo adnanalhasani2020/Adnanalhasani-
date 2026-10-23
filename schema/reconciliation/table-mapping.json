@@ -87,22 +87,16 @@
       "reason": "Generic workflow event history may not share the work-item event lifecycle, actor model, or retention contract."
     },
     {
-      "sqlite_table": "measurements_units",
+      "sqlite_table": "measurement_units",
       "supabase_table": "commercial_unit_of_measure",
       "status": "unresolved",
-      "reason": "The SQLite table name may not exist in the current schema; verify against all SQLite migrations before treating this as a mapping."
+      "reason": "Candidate based on SQLite migration naming and the Supabase unit-of-measure concept; compare columns and unit semantics before accepting equivalence."
     },
     {
       "sqlite_table": "messages",
       "supabase_table": "commercial_user_notifications",
       "status": "unresolved",
       "reason": "Conversation messages and user notifications are distinct communication concepts."
-    },
-    {
-      "sqlite_table": "instruments",
-      "supabase_table": "commercial_ledger_accounts",
-      "status": "unresolved",
-      "reason": "Financial instruments and ledger accounts are different entities despite possible finance-related naming."
     }
   ]
 }
