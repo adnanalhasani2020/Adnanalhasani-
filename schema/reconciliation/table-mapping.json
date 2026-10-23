@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "policy": "No pair is automatically equivalent. Names are candidates only; review identity, lifecycle, tenant scope, constraints, and data meaning before migration.",
+  "mappings": [
+    {
+      "sqlite_table": "activities",
+      "supabase_table": "commercial_activities",
+      "status": "partial_overlap",
+      "reason": "Both represent activities, but SQLite uses person-oriented owner IDs and text identifiers while Supabase uses UUID user IDs and optional organization scope."
+    },
+    {
+      "sqlite_table": "products",
+      "supabase_table": "commercial_products",
+      "status": "partial_overlap",
+      "reason": "Supabase product schema includes name/description/unit_name; SQLite product identity and fields differ and may be extended by later migrations."
+    },
+    {
+      "sqlite_table": "offerings",
+      "supabase_table": "commercial_offerings",
+      "status": "partial_overlap",
+      "reason": "Both model offers, but their IDs, pricing, currency, scope, location, and effective-time contracts differ."
+    },
+    {
+      "sqlite_table": "sales",
+      "supabase_table": "commercial_sales",
+      "status": "partial_overlap",
+      "reason": "Sales lifecycle and identifiers differ; Supabase includes user/org, idempotency, currency and amount fields."
+    },
+    {
+      "sqlite_table": "payments",
+      "supabase_table": "commercial_payments",
+      "status": "partial_overlap",
+      "reason": "Payment ownership, amount, status and relationship contracts require a field-level mapping before copying."
+    },
+    {
+      "sqlite_table": "invoices",
+      "supabase_table": "commercial_documents",
+      "status": "unresolved",
+      "reason": "The Supabase documents table may support multiple document types; invoice equivalence and lifecycle have not been proven."
+    },
+    {
+      "sqlite_table": "inventory_positions",
+      "supabase_table": "commercial_inventory",
+      "status": "unresolved",
+      "reason": "SQLite models effective-dated positions by activity/scope/location; Supabase inventory is linked to offerings and has a different quantity model."
+    },
+    {
+      "sqlite_table": "financial_accounts",
+      "supabase_table": "commercial_party_accounts",
+      "status": "unresolved",
+      "reason": "A financial account is not necessarily the same entity as a party account; do not merge without a domain-approved contract."
+    },
+    {
+      "sqlite_table": "ledger_entries",
+      "supabase_table": "commercial_journal_entries",
+      "status": "unresolved",
+      "reason": "Ledger entries and journal entries are different accounting concepts and cannot be merged by matching names."
+    },
+    {
+      "sqlite_table": "audit_records",
+      "supabase_table": "commercial_audit_events",
+      "status": "partial_overlap",
+      "reason": "Both are audit-related, but payload, actor identity, target identity, retention and immutability rules differ."
+    }
+  ]
+}
