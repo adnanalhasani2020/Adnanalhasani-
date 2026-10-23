@@ -76,14 +76,16 @@ def test_catalog_uses_user_jwt_and_filters_inactive_or_unavailable_rows(monkeypa
     rpc = client(monkeypatch)
     payload = [{
         "id": "offer-1", "activity_id": "activity-1", "product_id": "product-1",
+        "activity": {"state": "active", "deleted_at": None, "organization_id": "org-1"},
         "price_minor": 1250, "currency_code": "YER", "scope_key": "retail",
         "location_ref": "legacy-location", "valid_from": "2020-01-01T00:00:00Z", "valid_to": None,
         "product": {"id": "product-1", "name": "Tea", "unit_name": "box", "state": "active"},
         "balances": [{"quantity_on_hand": 6, "quantity_reserved": 2, "location_id": "loc-1",
-                      "organization_id": "org-1",
+                      "organization_id": "org-1", "organization": {"state": "active", "deleted_at": None},
                       "location": {"name": "Main", "code": "MAIN", "state": "active"}}],
     }, {
         "id": "offer-2", "activity_id": "activity-1", "product_id": "product-2",
+        "activity": {"state": "active", "deleted_at": None, "organization_id": "org-1"},
         "price_minor": 100, "currency_code": "YER", "scope_key": "retail",
         "location_ref": "legacy-location", "valid_from": "2020-01-01T00:00:00Z", "valid_to": None,
         "product": {"id": "product-2", "name": "Inactive", "unit_name": "piece", "state": "inactive"},
@@ -92,6 +94,7 @@ def test_catalog_uses_user_jwt_and_filters_inactive_or_unavailable_rows(monkeypa
                       "location": {"name": "Main", "code": "MAIN", "state": "active"}}],
     }, {
         "id": "offer-3", "activity_id": "activity-1", "product_id": "product-3",
+        "activity": {"state": "active", "deleted_at": None, "organization_id": "org-1"},
         "price_minor": 200, "currency_code": "YER", "scope_key": "retail",
         "location_ref": "legacy-location", "valid_from": "2020-01-01T00:00:00Z", "valid_to": None,
         "product": {"id": "product-3", "name": "Reserved", "unit_name": "piece", "state": "active"},

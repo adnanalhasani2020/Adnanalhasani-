@@ -54,6 +54,7 @@ class SupabaseRPCClient:
                 "insufficient_available_stock": (409, "المخزون المتاح لا يكفي للكمية المطلوبة."),
                 "idempotency_key_reused_with_different_request": (409, "مفتاح العملية مستخدم لطلب مختلف؛ لا تعِد المحاولة بمفتاح جديد قبل التحقق من سجل البيع."),
                 "offering_not_available": (409, "المنتج أو العرض لم يعد متاحًا للبيع."),
+                "organization_inactive": (409, "المؤسسة موقوفة أو غير متاحة للبيع."),
                 "inventory_location_not_found": (404, "الموقع أو رصيد المخزون غير متاح."),
                 "active_organization_not_found": (404, "المؤسسة غير موجودة أو غير نشطة."),
                 "active_activity_not_found": (404, "النشاط التجاري غير موجود أو غير نشط."),
