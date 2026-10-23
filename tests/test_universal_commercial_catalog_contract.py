@@ -14,6 +14,7 @@ class UniversalCommercialCatalogContractTests(unittest.TestCase):
         cls.seed = (MIGRATIONS / "20261024102000_seed_universal_catalog_templates.sql").read_text(encoding="utf-8")
         cls.discovery = (MIGRATIONS / "20261024103000_catalog_discovery_rpc.sql").read_text(encoding="utf-8")
         cls.management = (MIGRATIONS / "20261024104000_catalog_management_rpc.sql").read_text(encoding="utf-8")
+        cls.update_rpc = (MIGRATIONS / "20261024105000_catalog_update_rpc.sql").read_text(encoding="utf-8")
         cls.android = (ANDROID / "CatalogScreen.kt").read_text(encoding="utf-8")
         cls.main = (ANDROID / "MainActivity.kt").read_text(encoding="utf-8")
 
