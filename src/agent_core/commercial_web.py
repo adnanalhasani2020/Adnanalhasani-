@@ -217,12 +217,12 @@ class CommercialWebApplication:
             raise ValidationError("Cross-origin request rejected")
 
     @staticmethod
-    def _body(environ):
+    def _body(environ, *, max_bytes=65_536):
         try:
             length = int(environ.get("CONTENT_LENGTH") or "0")
         except ValueError as exc:
             raise ValidationError("Invalid request body length") from exc
-        if length < 0 or length > 7_000_000:
+        if length < 0 or length > max_bytes:
             raise ValidationError("Request body is too large")
         content_type = environ.get("CONTENT_TYPE", "").split(";", 1)[0].strip().lower()
         if content_type != "application/json":
@@ -356,7 +356,7 @@ class CommercialWebApplication:
                 user_id = self._supabase_user_ids.get(token) if token else None
                 if not access_token or not user_id or self.identity.resolve_session(db, token) is None:
                     return self._json(start_response, "401 Unauthorized", {"error": "أعد تسجيل الدخول قبل رفع الملفات."})
-                body = self._body(environ)
+                body = self._body(environ, max_bytes=7_000_000)
                 asset_type = body.get("asset_type")
                 allowed = {
                     "logo": ("commercial-brand-assets", {"image/png", "image/jpeg", "image/webp"}, True),
