@@ -188,6 +188,8 @@ internal fun ActivityProfileScreen(onBack: () -> Unit) {
                 activityOptions.firstOrNull { it.code == activityCode }?.let { selected ->
                     Text("المسار: ${selected.pathAr}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                 }
+            } else if (!activityDirectoryLoaded) {
+                Text("جارٍ تحميل دليل الأنشطة من الخادم...", color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
                 ProfileField("الاسم التفصيلي للنشاط *", activityName) { activityName = it }
                 if (activityDirectoryError.isNotBlank()) Text(activityDirectoryError, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
