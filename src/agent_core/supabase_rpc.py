@@ -120,7 +120,9 @@ class SupabaseRPCClient:
                                 city: str | None = None, district: str | None = None,
                                 street: str | None = None, landmark: str | None = None,
                                 logo_url: str | None = None, cover_image_url: str | None = None,
-                                locations: list | None = None) -> dict:
+                                locations: list | None = None,
+                                owner_identity_front_path: str | None = None,
+                                owner_identity_back_path: str | None = None) -> dict:
         result = self.rpc("commercial_create_activity_profile", {
             "p_organization_name": organization_name, "p_organization_slug": organization_slug,
             "p_activity_name": activity_name, "p_activity_type": activity_type,
@@ -130,7 +132,9 @@ class SupabaseRPCClient:
             "p_currency_code": currency_code, "p_public_phone": public_phone, "p_public_email": public_email,
             "p_website_url": website_url, "p_public_description": public_description, "p_city": city,
             "p_district": district, "p_street": street, "p_landmark": landmark,
-            "p_logo_url": logo_url, "p_cover_image_url": cover_image_url, "p_locations": locations or [],
+            "p_logo_url": logo_url, "p_cover_image_url": cover_image_url,
+            "p_owner_identity_front_path": owner_identity_front_path,
+            "p_owner_identity_back_path": owner_identity_back_path, "p_locations": locations or [],
         })
         if not isinstance(result, dict) or not result.get("organization_id") or not result.get("activity_id"):
             raise SupabaseRPCError("Unexpected activity profile response; verify the result before retrying.")
