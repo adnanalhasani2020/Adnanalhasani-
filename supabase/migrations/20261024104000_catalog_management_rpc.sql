@@ -366,6 +366,11 @@ BEGIN
              AND (ip.owner_organization_id IS NULL OR ip.owner_organization_id=p_organization_id
                OR EXISTS (SELECT 1 FROM public.commercial_organization_catalog_items oi
                  WHERE oi.organization_id=p_organization_id AND oi.global_item_id=ip.id))
+             AND (
+               ip.unit_code=v_ingredient->>'unit_code'
+               OR EXISTS (SELECT 1 FROM public.commercial_catalog_product_units pu
+                 WHERE pu.product_id=ip.id AND pu.unit_code=v_ingredient->>'unit_code' AND pu.is_active)
+             )
          )) THEN
         RAISE EXCEPTION 'invalid_recipe_ingredient' USING ERRCODE='22023';
       END IF;
