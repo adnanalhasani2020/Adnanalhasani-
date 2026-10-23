@@ -174,6 +174,81 @@ class CommercialIdentityApplication:
                 connection.rollback()
             raise
 
+    def login_external(self, connection: sqlite3.Connection, *, provider_user_id: str,
+                       email: str, now=None) -> dict:
+        """Create/reuse a local commerce profile after the external provider authenticated the user."""
+        if not isinstance(provider_user_id, str) or not provider_user_id.strip() or len(provider_user_id) > 128:
+            raise ValidationError("External identity is invalid")
+        if not isinstance(email, str) or not email.strip() or len(email) > 320 or "@" not in email:
+            raise ValidationError("External identity email is invalid")
+        provider_user_id = provider_user_id.strip()
+        email = email.strip().lower()
+        instant = _now(now)
+        stamp = _stamp(instant)
+        if connection.in_transaction:
+            raise ValidationError("External login requires an unowned transaction")
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            row = connection.execute(
+                """SELECT i.person_id,p.state,a.state,c.state
+                   FROM commercial_supabase_identities i
+                   JOIN persons p ON p.person_id=i.person_id
+                   JOIN access_accounts a ON a.person_id=i.person_id
+                   JOIN commercial_credentials c ON c.person_id=i.person_id
+                   WHERE i.supabase_user_id=?""",
+                (provider_user_id,),
+            ).fetchone()
+            if row is None:
+                person_id, account_id, credential_id = str(uuid4()), str(uuid4()), str(uuid4())
+                username = "sb_" + hashlib.sha256(provider_user_id.encode("utf-8")).hexdigest()[:32]
+                salt = secrets.token_bytes(16)
+                # This random local credential is never returned or used for authentication.
+                digest = _password_hash(secrets.token_urlsafe(32), salt).hex()
+                connection.execute(
+                    """INSERT INTO persons(person_id,state,canonical_person_id,created_at,updated_at,version_no)
+                       VALUES(?,'active',NULL,?,?,1)""", (person_id, stamp, stamp),
+                )
+                connection.execute(
+                    """INSERT INTO access_accounts(access_account_id,person_id,state,created_at,updated_at,version_no)
+                       VALUES(?,?,'active',?,?,1)""", (account_id, person_id, stamp, stamp),
+                )
+                connection.execute(
+                    """INSERT INTO commercial_credentials(
+                           credential_id,person_id,access_account_id,username,password_salt,
+                           password_hash,state,created_at,updated_at
+                       ) VALUES(?,?,?,?,?,?,'active',?,?)""",
+                    (credential_id, person_id, account_id, username, salt.hex(), digest, stamp, stamp),
+                )
+                connection.execute(
+                    """INSERT INTO commercial_supabase_identities(
+                           supabase_user_id,person_id,email,created_at,updated_at
+                       ) VALUES(?,?,?,?,?)""",
+                    (provider_user_id, person_id, email, stamp, stamp),
+                )
+            else:
+                person_id = row[0]
+                if row[1:] != ("active", "active", "active"):
+                    raise ValidationError("الحساب التجاري موقوف؛ تواصل مع المسؤول.")
+                connection.execute(
+                    "UPDATE commercial_supabase_identities SET email=?,updated_at=? WHERE supabase_user_id=?",
+                    (email, stamp, provider_user_id),
+                )
+                username = "sb_" + hashlib.sha256(provider_user_id.encode("utf-8")).hexdigest()[:32]
+
+            token = secrets.token_urlsafe(32)
+            expires = _stamp(instant + self.SESSION_LIFETIME)
+            connection.execute(
+                """INSERT INTO commercial_sessions(session_id,person_id,token_hash,created_at,expires_at,revoked_at)
+                   VALUES(?,?,?,?,?,NULL)""",
+                (str(uuid4()), person_id, hashlib.sha256(token.encode("utf-8")).hexdigest(), stamp, expires),
+            )
+            connection.commit()
+            return {"person_id": person_id, "username": email, "session_token": token, "expires_at": expires}
+        except BaseException:
+            if connection.in_transaction:
+                connection.rollback()
+            raise
+
     def resolve_session(self, connection: sqlite3.Connection, token, *, now=None) -> str | None:
         if not isinstance(token, str) or not token:
             return None
