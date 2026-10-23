@@ -43,7 +43,8 @@ CREATE OR REPLACE FUNCTION public.commercial_catalog_discover_products(
   rulings jsonb,
   model_number text,
   part_number text,
-  image_alt text
+  image_alt text,
+  localized_details jsonb
 )
 LANGUAGE plpgsql
 SECURITY INVOKER
@@ -110,7 +111,8 @@ BEGIN
     COALESCE(ruling_list.rulings,'[]'::jsonb),
     p.model_number,
     p.part_number,
-    p.image_alt
+    p.image_alt,
+    COALESCE(localized_details.fields,'{}'::jsonb)
   FROM public.commercial_global_catalog_items p
   LEFT JOIN LATERAL (
     SELECT pu.unit_code
@@ -121,14 +123,39 @@ BEGIN
   ) default_unit ON true
   LEFT JOIN LATERAL (
     SELECT jsonb_agg(jsonb_build_object(
-      'unit_code',pu.unit_code,'unit_role',pu.unit_role,'quantity_in_base',pu.quantity_in_base,
+      'unit_code',pu.unit_code,'unit_name',COALESCE(ut.translated_value,CASE WHEN p_locale_code LIKE 'en%' THEN u.name_en ELSE u.name_ar END),
+      'unit_role',pu.unit_role,'quantity_in_base',pu.quantity_in_base,
       'barcode',pu.barcode,'sku',pu.sku,'package_name',pu.package_name,
       'net_quantity',pu.net_quantity,'net_unit_code',pu.net_unit_code,'image_url',pu.image_url,
       'is_default',pu.is_default
     ) ORDER BY pu.is_default DESC, pu.unit_role, pu.unit_code) AS units
     FROM public.commercial_catalog_product_units pu
+    JOIN public.commercial_global_units u ON u.code=pu.unit_code
+    LEFT JOIN public.commercial_global_entity_translations ut
+      ON ut.entity_type='unit' AND ut.entity_key=pu.unit_code AND ut.field_key='name'
+      AND ut.locale_code=p_locale_code AND ut.owner_organization_id IS NOT DISTINCT FROM u.owner_organization_id
     WHERE pu.product_id=p.id AND pu.is_active
   ) unit_list ON true
+  LEFT JOIN LATERAL (
+    SELECT jsonb_object_agg(t.field_key,t.translated_value) AS fields
+    FROM (
+      SELECT DISTINCT ON (candidates.field_key) candidates.field_key,candidates.translated_value
+      FROM (
+        SELECT ot.field_key,ot.translated_value,1 AS priority
+        FROM public.commercial_organization_entity_translations ot
+        WHERE ot.organization_id=p_organization_id AND ot.entity_type='catalog_item'
+          AND ot.entity_id=p.id AND ot.locale_code=p_locale_code
+          AND ot.field_key NOT IN ('name','description')
+        UNION ALL
+        SELECT gt.field_key,gt.translated_value,2 AS priority
+        FROM public.commercial_global_entity_translations gt
+        WHERE gt.entity_type='catalog_item' AND gt.entity_key=p.catalog_code
+          AND gt.locale_code=p_locale_code AND gt.owner_organization_id IS NOT DISTINCT FROM p.owner_organization_id
+          AND gt.field_key NOT IN ('name','description')
+      ) candidates
+      ORDER BY candidates.field_key,candidates.priority
+    ) t
+  ) localized_details ON true
   LEFT JOIN LATERAL (
     SELECT jsonb_agg(jsonb_build_object(
       'ruling_id',r.id,'ruling_domain',r.ruling_domain,'authority_code',r.authority_code,
