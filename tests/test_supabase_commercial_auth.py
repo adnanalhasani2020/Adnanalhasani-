@@ -136,6 +136,17 @@ def test_supabase_auth_ui_uses_email_fields_when_configured(monkeypatch):
     assert 'id="loginEmail" name="email" type="email"' in page
     assert 'id="registerEmail" name="email" type="email"' in page
     assert 'id="loginUsername"' not in page
+    assert 'id="storeSetupForm"' in page
+    assert 'name="activity_type"' in page
+    assert 'name="business_level"' in page
+    assert 'name="commercial_registration_number"' in page
+    assert 'name="owner_full_name"' in page
+    assert 'name="opened_on"' in page
+    assert 'name="logo_url"' in page
+    assert 'name="cover_image_url"' in page
+    assert 'id="locationRows"' in page
+    assert 'firstProductName' not in page
+    assert 'initialQuantity' not in page
 
 
 def test_storefront_api_requires_authenticated_supabase_session(tmp_path, monkeypatch):
@@ -192,3 +203,49 @@ def test_logout_clears_server_side_supabase_token(tmp_path, monkeypatch):
     assert session in app._supabase_tokens
     request(app, "/api/logout", method="POST", cookie=cookie)
     assert session not in app._supabase_tokens
+
+
+def test_profile_api_requires_authenticated_supabase_session(tmp_path, monkeypatch):
+    enable_supabase(monkeypatch)
+    app = CommercialWebApplication(tmp_path / "commerce.sqlite")
+    response, payload = request(app, "/api/supabase/store-profiles", method="POST",
+                                body={"organization_name": "متجر النور"})
+    assert response["status"] == "401 Unauthorized"
+    assert "Supabase" in payload["error"]
+
+
+def test_profile_api_persists_activity_owner_registration_and_hierarchy(tmp_path, monkeypatch):
+    enable_supabase(monkeypatch)
+    app = CommercialWebApplication(tmp_path / "commerce.sqlite")
+    with patch("agent_core.commercial_web.SupabaseAuthClient") as auth_class:
+        auth_class.return_value.sign_in_with_password.return_value = {
+            "user": {"id": "activity-owner-001", "email": "owner@example.com"},
+            "access_token": "profile-owner-token",
+        }
+        login_response, _ = request(app, "/api/login", method="POST",
+                                    body={"email": "owner@example.com", "password": "correct horse battery staple"})
+    expected = {"organization_id": "org-profile-1", "activity_id": "activity-profile-1",
+                "location_id": "hq-1", "location_count": 3, "commercial_registration_number": "CR-001"}
+    with patch("agent_core.commercial_web.SupabaseRPCClient") as client_class:
+        client_class.return_value.create_activity_profile.return_value = expected
+        response, payload = request(
+            app, "/api/supabase/store-profiles", method="POST", cookie=cookie_from(login_response),
+            body={"organization_name": "مؤسسة النور", "organization_slug": "alnoor-org",
+                  "activity_name": "خدمات تقنية", "activity_type": "service", "business_level": "institution",
+                  "commercial_registration_number": "CR-001", "opened_on": "2024-05-10",
+                  "owner_full_name": "مالك النشاط", "legal_name": "مؤسسة النور",
+                  "country_code": "YE", "timezone": "Asia/Aden", "locale": "ar",
+                  "currency_code": "YER", "logo_url": "https://example.com/logo.png",
+                  "cover_image_url": "https://example.com/cover.png",
+                  "locations": [
+                      {"name": "القناة الأولى", "location_type": "office", "parent_index": -1},
+                      {"name": "فرع القناة الأولى", "location_type": "branch", "parent_index": 0},
+                  ]},
+        )
+    assert response["status"] == "201 Created"
+    assert payload == expected
+    client_class.assert_called_once_with("profile-owner-token")
+    args = client_class.return_value.create_activity_profile.call_args.kwargs
+    assert args["commercial_registration_number"] == "CR-001"
+    assert args["opened_on"] == "2024-05-10"
+    assert args["locations"][1]["parent_index"] == 0
