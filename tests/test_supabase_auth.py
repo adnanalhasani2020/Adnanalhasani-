@@ -115,3 +115,40 @@ def test_refresh_session_rejects_malformed_provider_response(monkeypatch):
     monkeypatch.setattr("agent_core.supabase_auth.urlopen", lambda request, timeout: Response())
     with pytest.raises(SupabaseAuthError):
         auth.refresh_session("old-refresh-token")
+
+
+
+@pytest.mark.parametrize("payload", [
+    {"access_token": "access-only", "user": {"id": "user-1", "email": "a@example.com"}},
+    {"access_token": "access", "refresh_token": "refresh", "user": {"id": "", "email": "a@example.com"}},
+    {"access_token": "access", "refresh_token": "refresh", "token_type": "mac", "user": {"id": "user-1", "email": "a@example.com"}},
+])
+def test_sign_in_rejects_incomplete_or_unsupported_session_payload(monkeypatch, payload):
+    auth = client(monkeypatch)
+
+    class Response:
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+        def read(self, size): return json.dumps(payload).encode()
+
+    monkeypatch.setattr("agent_core.supabase_auth.urlopen", lambda request, timeout: Response())
+    with pytest.raises(SupabaseAuthError):
+        auth.sign_in("a@example.com", "a long password")
+
+
+def test_sign_in_accepts_complete_bearer_session(monkeypatch):
+    auth = client(monkeypatch)
+    payload = {
+        "access_token": "access",
+        "refresh_token": "refresh",
+        "token_type": "bearer",
+        "user": {"id": "user-1", "email": "a@example.com"},
+    }
+
+    class Response:
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+        def read(self, size): return json.dumps(payload).encode()
+
+    monkeypatch.setattr("agent_core.supabase_auth.urlopen", lambda request, timeout: Response())
+    assert auth.sign_in("a@example.com", "a long password") == payload
