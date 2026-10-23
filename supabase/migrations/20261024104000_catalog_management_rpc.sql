@@ -229,6 +229,16 @@ BEGIN
     );
   END LOOP;
 
+  INSERT INTO public.commercial_organization_catalog_items(
+    organization_id,global_item_id,merchant_display_name,merchant_description,
+    price_minor,currency_code,is_available,metadata,created_by
+  )
+  SELECT p_organization_id,v_id,btrim(p_product->>'name_ar'),
+    nullif(btrim(p_product->>'description_ar'),''),0,COALESCE(o.currency_code,'YER'),true,
+    jsonb_build_object('created_from_catalog_manager',true),auth.uid()
+  FROM public.commercial_organizations o WHERE o.id=p_organization_id
+  ON CONFLICT (organization_id,global_item_id) DO NOTHING;
+
   RETURN jsonb_build_object('product_id',v_id,'catalog_code',v_code,'created_by',auth.uid());
 END $$;
 REVOKE ALL ON FUNCTION public.commercial_catalog_create_product(uuid,jsonb,jsonb,text[],jsonb,jsonb,jsonb) FROM PUBLIC, anon;
