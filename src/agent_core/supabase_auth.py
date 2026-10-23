@@ -61,15 +61,42 @@ class SupabaseAuthClient:
             raise SupabaseAuthError("Password must be between 12 and 1024 characters.")
         return self._request("/auth/v1/signup", {"email": email.strip().lower(), "password": password})
 
+    @staticmethod
+    def _validate_session(result: dict, *, refreshed: bool = False) -> dict:
+        """Reject incomplete provider payloads before callers persist session cookies."""
+        if not isinstance(result, dict):
+            raise SupabaseAuthError("Supabase did not return a valid session.")
+        required_tokens = ("access_token", "refresh_token")
+        if any(not isinstance(result.get(key), str) or not result[key]
+               for key in required_tokens):
+            raise SupabaseAuthError("Supabase did not return a valid session.")
+        if not refreshed:
+            user = result.get("user")
+            if (
+                not isinstance(user, dict)
+                or not isinstance(user.get("id"), str)
+                or not user["id"]
+                or not isinstance(user.get("email"), str)
+                or not user["email"]
+            ):
+                raise SupabaseAuthError("Supabase did not return a valid signed-in user.")
+        token_type = result.get("token_type")
+        if token_type is not None and (
+            not isinstance(token_type, str) or token_type.lower() != "bearer"
+        ):
+            raise SupabaseAuthError("Supabase returned an unsupported session token type.")
+        return result
+
     def sign_in(self, email: str, password: str) -> dict:
         if not isinstance(email, str) or not email.strip() or len(email) > 320:
             raise SupabaseAuthError("Enter a valid email address.")
         if not isinstance(password, str) or not 12 <= len(password) <= 1024:
             raise SupabaseAuthError("Password must be between 12 and 1024 characters.")
-        return self._request(
+        result = self._request(
             "/auth/v1/token?grant_type=password",
             {"email": email.strip().lower(), "password": password},
         )
+        return self._validate_session(result)
 
     def refresh_session(self, refresh_token: str) -> dict:
         """Exchange a Supabase refresh token for a new session token pair."""
@@ -79,15 +106,7 @@ class SupabaseAuthClient:
             "/auth/v1/token?grant_type=refresh_token",
             {"refresh_token": refresh_token},
         )
-        if (
-            not isinstance(result, dict)
-            or not isinstance(result.get("access_token"), str)
-            or not result.get("access_token")
-            or not isinstance(result.get("refresh_token"), str)
-            or not result.get("refresh_token")
-        ):
-            raise SupabaseAuthError("Supabase did not return a valid refreshed session.")
-        return result
+        return self._validate_session(result, refreshed=True)
 
     def get_user(self, access_token: str) -> dict:
         if not isinstance(access_token, str) or not access_token or len(access_token) > 16_384:
