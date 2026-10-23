@@ -16,6 +16,7 @@ class BusinessActivityTaxonomyContractTests(unittest.TestCase):
         cls.profile_screen = (ANDROID / "ActivityProfileScreen.kt").read_text(encoding="utf-8")
         cls.policy_fix = (MIGRATIONS / "20261024113000_catalog_policy_deduplication.sql").read_text(encoding="utf-8")
         cls.integrity_fix = (MIGRATIONS / "20261024114000_catalog_integrity_performance.sql").read_text(encoding="utf-8")
+        cls.alias_guard = (MIGRATIONS / "20261024115000_business_activity_alias_global_uniqueness.sql").read_text(encoding="utf-8")
 
     def test_activity_taxonomy_does_not_duplicate_product_or_unit_masters(self):
         self.assertIn("commercial_global_business_activity_nodes", self.taxonomy)
@@ -57,7 +58,8 @@ class BusinessActivityTaxonomyContractTests(unittest.TestCase):
         self.assertIn("standard_id", self.taxonomy)
         self.assertIn("external_version", self.taxonomy)
         self.assertIn("source_system='ROUH_ACTIVITY'", self.expansion)
-        self.assertIn("ux_business_activity_alias_locale_normalized", self.expansion)
+        self.assertIn("ux_business_activity_alias_normalized_active", self.alias_guard)
+        self.assertIn("DROP INDEX IF EXISTS public.ux_business_activity_alias_locale_normalized", self.alias_guard)
 
     def test_catalog_policies_do_not_use_overlapping_for_all_write_policies(self):
         self.assertIn("DROP POLICY IF EXISTS commercial_catalog_items_org_select", self.policy_fix)
