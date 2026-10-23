@@ -241,6 +241,16 @@ BEGIN
   ON CONFLICT (entity_type,entity_key,locale_code,field_key) DO UPDATE
     SET translated_value=EXCLUDED.translated_value,owner_organization_id=EXCLUDED.owner_organization_id;
 
+  INSERT INTO public.commercial_global_entity_translations(
+    entity_type,entity_key,locale_code,field_key,translated_value,translation_status,source_language,owner_organization_id,created_by
+  )
+  SELECT 'catalog_item',v_code,x.locale_code,'description',x.translated_value,'human_authored',x.locale_code,p_organization_id,auth.uid()
+  FROM (VALUES ('ar',nullif(btrim(p_product->>'description_ar'),'')),('en',nullif(btrim(p_product->>'description_en'),''))) x(locale_code,translated_value)
+  WHERE x.translated_value IS NOT NULL
+  ON CONFLICT (entity_type,entity_key,locale_code,field_key) DO UPDATE
+    SET translated_value=EXCLUDED.translated_value,translation_status=EXCLUDED.translation_status,
+        source_language=EXCLUDED.source_language,owner_organization_id=EXCLUDED.owner_organization_id;
+
   IF jsonb_typeof(COALESCE(p_product->'translations','[]'::jsonb))<>'array' THEN
     RAISE EXCEPTION 'invalid_product_translations' USING ERRCODE='22023';
   END IF;
