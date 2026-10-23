@@ -208,7 +208,7 @@ BEGIN
   END IF;
   NEW.updated_at := now();
   RETURN NEW;
-END $;
+END $$;
 DROP TRIGGER IF EXISTS commercial_catalog_items_audit ON public.commercial_global_catalog_items;
 CREATE TRIGGER commercial_catalog_items_audit
 BEFORE INSERT OR UPDATE ON public.commercial_global_catalog_items
@@ -255,7 +255,7 @@ BEGIN
     RAISE EXCEPTION 'catalog_item_category_owner_mismatch';
   END IF;
   RETURN NEW;
-END $;
+END $$;
 DROP TRIGGER IF EXISTS commercial_catalog_item_category_owner_guard ON public.commercial_global_catalog_items;
 CREATE TRIGGER commercial_catalog_item_category_owner_guard
 BEFORE INSERT OR UPDATE OF category_code, owner_organization_id
