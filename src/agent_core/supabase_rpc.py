@@ -58,3 +58,62 @@ class SupabaseRPCClient:
         if not isinstance(result, str) or not result:
             raise SupabaseRPCError("Unexpected organization-creation response; verify before retrying.")
         return result
+
+class SupabaseAuthError(SupabaseRPCError):
+    """Supabase Auth rejected user-provided credentials or signup details."""
+
+
+class SupabaseAuthClient:
+    """Email/password authentication against Supabase Auth; no service-role secret is used."""
+
+    def __init__(self, *, timeout: float = 10.0):
+        self.url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+        self.anon_key = os.environ.get("SUPABASE_ANON_KEY", "")
+        if not self.url.startswith("https://") or not self.anon_key:
+            raise SupabaseRPCError("Set HTTPS SUPABASE_URL and SUPABASE_ANON_KEY.")
+        if not 0 < timeout <= 60:
+            raise ValueError("timeout must be in (0, 60].")
+        self.timeout = timeout
+
+    def _auth_request(self, path: str, payload: dict) -> dict:
+        request = Request(
+            f"{self.url}/auth/v1/{path}",
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            method="POST",
+            headers={"apikey": self.anon_key, "Content-Type": "application/json",
+                     "Cache-Control": "no-store"},
+        )
+        try:
+            with urlopen(request, timeout=self.timeout) as response:
+                raw = response.read(1_000_001)
+                if len(raw) > 1_000_000:
+                    raise SupabaseRPCError("Supabase Auth response exceeded the size limit.")
+                result = json.loads(raw.decode("utf-8")) if raw else {}
+                if not isinstance(result, dict):
+                    raise SupabaseRPCError("Unexpected Supabase Auth response.")
+                return result
+        except HTTPError as exc:
+            if exc.code in (400, 401, 403, 409, 422):
+                raise SupabaseAuthError(
+                    "تعذر التحقق من الحساب عبر Supabase؛ راجع البريد وكلمة المرور أو حالة الحساب."
+                ) from None
+            raise SupabaseRPCError(f"Supabase Auth failed (HTTP {exc.code}).") from None
+        except (URLError, TimeoutError, OSError, UnicodeDecodeError, json.JSONDecodeError):
+            raise SupabaseRPCError("تعذر الاتصال بخدمة تسجيل الدخول الخارجية. حاول مرة أخرى.") from None
+
+    @staticmethod
+    def _validate_credentials(email: str, password: str) -> tuple[str, str]:
+        if not isinstance(email, str) or not email.strip() or len(email) > 320 or "@" not in email:
+            raise SupabaseAuthError("أدخل بريدًا إلكترونيًا صالحًا.")
+        if not isinstance(password, str) or not 12 <= len(password) <= 1024:
+            raise SupabaseAuthError("يجب أن تتكون كلمة المرور من 12 إلى 1024 حرفًا.")
+        return email.strip().lower(), password
+
+    def sign_up(self, *, email: str, password: str) -> dict:
+        email, password = self._validate_credentials(email, password)
+        return self._auth_request("signup", {"email": email, "password": password})
+
+    def sign_in_with_password(self, *, email: str, password: str) -> dict:
+        email, password = self._validate_credentials(email, password)
+        return self._auth_request("token?grant_type=password",
+                                  {"email": email, "password": password})
