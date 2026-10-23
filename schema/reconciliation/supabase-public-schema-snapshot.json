@@ -1,0 +1,872 @@
+{
+  "tables": {
+    "commercial_sales": {
+      "columns": {
+        "id": "uuid",
+        "status": "text",
+        "channel": "text",
+        "user_id": "uuid",
+        "created_at": "timestamp with time zone",
+        "updated_at": "timestamp with time zone",
+        "activity_id": "uuid",
+        "customer_id": "uuid",
+        "total_minor": "bigint",
+        "currency_code": "text",
+        "payment_status": "text",
+        "receipt_number": "bigint",
+        "idempotency_key": "text",
+        "organization_id": "uuid",
+        "request_fingerprint": "text"
+      }
+    },
+    "commercial_bookings": {
+      "columns": {
+        "id": "uuid",
+        "notes": "text",
+        "status": "text",
+        "ends_at": "timestamp with time zone",
+        "order_id": "uuid",
+        "starts_at": "timestamp with time zone",
+        "created_at": "timestamp with time zone",
+        "created_by": "uuid",
+        "paid_minor": "bigint",
+        "updated_at": "timestamp with time zone",
+        "price_minor": "bigint",
+        "resource_id": "uuid",
+        "currency_code": "text",
+        "booking_number": "bigint",
+        "idempotency_key": "text",
+        "organization_id": "uuid",
+        "cancellation_reason": "text",
+        "customer_account_id": "uuid"
+      }
+    },
+    "commercial_payments": {
+      "columns": {
+        "id": "uuid",
+        "status": "text",
+        "sale_id": "uuid",
+        "provider": "text",
+        "created_at": "timestamp with time zone",
+        "updated_at": "timestamp with time zone",
+        "amount_minor": "bigint",
+        "failure_code": "text",
+        "currency_code": "text",
+        "idempotency_key": "text",
+        "organization_id": "uuid",
+        "payment_method_type": "text",
+        "provider_payment_id": "text"
+      }
+    },
+    "commercial_products": {
+      "columns": {
+        "id": "uuid",
+        "name": "text",
+        "state": "text",
+        "unit_name": "text",
+        "created_at": "timestamp with time zone",
+        "updated_at": "timestamp with time zone",
+        "description": "text"
+      }
+    },
+    "commercial_profiles": {
+      "columns": {
+        "user_id": "uuid",
+        "created_at": "timestamp with time zone",
+        "updated_at": "timestamp with time zone",
+        "display_name": "text",
+        "week_starts_on": "smallint",
+        "preferred_locale": "text",
+        "preferred_timezone": "text",
+        "number_format_locale": "text",
+        "date_format_preference": "text"
+      }
+    },
+    "commercial_customers": {
+      "columns": {
+        "id": "uuid",
+        "email": "text",
+        "notes": "text",
+        "phone": "text",
+        "state": "text",
+        "created_at": "timestamp with time zone",
+        "created_by": "uuid",
+        "updated_at": "timestamp with time zone",
+        "display_name": "text",
+        "organization_id": "uuid",
+        "external_reference": "text"
+      }
+    },
+    "commercial_documents": {
+      "columns": {
+        "id": "uuid",
+        "title": "text",
+        "metadata": "jsonb",
+        "mime_type": "text",
+        "created_at": "timestamp with time zone",
+        "size_bytes": "bigint",
+        "visibility": "text",
+        "uploaded_by": "uuid",
+        "storage_path": "text",
+        "document_type": "text",
+        "owner_user_id": "uuid",
+        "storage_bucket": "text",
+        "checksum_sha256": "text",
+        "organization_id": "uuid"
+      }
+    },
+    "commercial_inventory": {
+      "columns": {
+        "id": "uuid",
+        "updated_at": "timestamp with time zone",
+        "offering_id": "uuid",
+        "quantity_on_hand": "bigint"
+      }
+    },
+    "commercial_offerings": {
+      "columns": {
+        "id": "uuid",
+        "state": "text",
+        "valid_to": "timestamp with time zone",
+        "scope_key": "text",
+        "created_at": "timestamp with time zone",
+        "product_id": "uuid",
+        "updated_at": "timestamp with time zone",
+        "valid_from": "timestamp with time zone",
+        "activity_id": "uuid",
+        "price_minor": "bigint",
+        "location_ref": "text",
+        "currency_code": "text"
+      }
+    },
+    "commercial_suppliers": {
+      "columns": {
+        "id": "uuid",
+        "email": "text",
+        "notes": "text",
+        "phone": "text",
+        "state": "text",
+        "address": "jsonb",
+        "created_at": "timestamp with time zone",
+        "created_by": "uuid",
+        "updated_at": "timestamp with time zone",
+        "display_name": "text",
+        "supplier_code": "text",
+        "tax_identifier": "text",
+        "organization_id": "uuid",
+        "payment_terms_days": "integer"
+      }
+    },
+    "commercial_activities": {
+      "columns": {
+        "id": "uuid",
+        "name": "text",
+        "state": "text",
+        "metadata": "jsonb",
+        "created_at": "timestamp with time zone",
+        "deleted_at": "timestamp with time zone",
+        "updated_at": "timestamp with time zone",
+        "description": "text",
+        "activity_code": "text",
+        "activity_type": "text",
+        "owner_user_id": "uuid",
+        "organization_id": "uuid"
+      }
+    },
+    "commercial_sale_items": {
+      "columns": {
+        "id": "uuid",
+        "sale_id": "uuid",
+        "quantity": "integer",
+        "created_at": "timestamp with time zone",
+        "offering_id": "uuid",
+        "line_total_minor": "bigint",
+        "unit_price_minor": "bigint",
+        "product_name_snapshot": "text"
+      }
+    },
+    "commercial_work_items": {
+      "columns": {
+        "id": "uuid",
+        "title": "text",
+        "due_at": "timestamp with time zone",
+        "status": "text",
+        "unit_id": "uuid",
+        "metadata": "jsonb",
+        "priority": "text",
+        "item_type": "text",
+        "created_at": "timestamp with time zone",
+        "created_by": "uuid",
+        "module_key": "text",
+        "updated_at": "timestamp with time zone",
+        "assigned_to": "uuid",
+        "description": "text",
+        "location_id": "uuid",
+        "completed_at": "timestamp with time zone",
+        "organization_id": "uuid"
+      }
+    },
+    "commercial_audit_events": {
+      "columns": {
+        "id": "bigint",
+        "action": "text",
+        "metadata": "jsonb",
+        "entity_id": "text",
+        "created_at": "timestamp with time zone",
+        "request_id": "text",
+        "entity_type": "text",
+        "actor_user_id": "uuid",
+        "organization_id": "uuid"
+      }
+    },
+    "commercial_fulfillments": {
+      "columns": {
+        "id": "uuid",
+        "notes": "text",
+        "status": "text",
+        "order_id": "uuid",
+        "created_at": "timestamp with time zone",
+        "created_by": "uuid",
+        "shipped_at": "timestamp with time zone",
+        "updated_at": "timestamp with time zone",
+        "carrier_name": "text",
+        "delivered_at": "timestamp with time zone",
+        "organization_id": "uuid",
+        "tracking_number": "text",
+        "fulfillment_method": "text",
+        "fulfillment_number": "bigint",
+        "source_location_id": "uuid"
+      }
+    },
+    "commercial_global_units": {
+      "columns": {
+        "code": "text",
+        "name_ar": "text",
+        "name_en": "text",
+        "version": "integer",
+        "dimension": "text",
+        "is_active": "boolean",
+        "created_at": "timestamp with time zone",
+        "updated_at": "timestamp with time zone",
+        "base_unit_code": "text",
+        "decimal_places": "smallint",
+        "factor_to_base": "numeric"
+      }
+    },
+    "commercial_journal_lines": {
+      "columns": {
+        "id": "uuid",
+        "created_at": "timestamp with time zone",
+        "debit_minor": "bigint",
+        "description": "text",
+        "line_number": "integer",
+        "credit_minor": "bigint",
+        "currency_code": "text",
+        "organization_id": "uuid",
+        "journal_entry_id": "uuid",
+        "party_account_id": "uuid",
+        "ledger_account_id": "uuid"
+      }
+    },
+    "commercial_organizations": {
+      "columns": {
+        "id": "uuid",
+        "name": "text",
+        "slug": "text",
+        "state": "text",
+        "metadata": "jsonb",
+        "size_tier": "text",
+        "created_at": "timestamp with time zone",
+        "created_by": "uuid",
+        "deleted_at": "timestamp with time zone",
+        "legal_name": "text",
+        "updated_at": "timestamp with time zone",
+        "website_url": "text",
+        "country_code": "text",
+        "public_email": "text",
+        "public_phone": "text",
+        "default_locale": "text",
+        "public_listing": "boolean",
+        "tax_identifier": "text",
+        "default_timezone": "text",
+        "organization_type": "text",
+        "public_description": "text",
+        "default_currency_code": "text"
+      }
+    },
+    "commercial_sales_returns": {
+      "columns": {
+        "id": "uuid",
+        "status": "text",
+        "sale_id": "uuid",
+        "created_at": "timestamp with time zone",
+        "decided_at": "timestamp with time zone",
+        "updated_at": "timestamp with time zone",
+        "approved_by": "uuid",
+        "reason_code": "text",
+        "reason_note": "text",
+        "completed_at": "timestamp with time zone",
+        "requested_by": "uuid",
+        "currency_code": "text",
+        "decision_note": "text",
+        "refund_status": "text",
+        "restock_status": "text",
+        "idempotency_key": "text",
+        "organization_id": "uuid",
+        "request_fingerprint": "text",
+        "approved_refund_minor": "bigint",
+        "requested_refund_minor": "bigint"
+      }
+    },
+    "commercial_account_access": {
+      "columns": {
+        "state": "text",
+        "can_pay": "boolean",
+        "user_id": "uuid",
+        "account_id": "uuid",
+        "granted_at": "timestamp with time zone",
+        "granted_by": "uuid",
+        "revoked_at": "timestamp with time zone",
+        "updated_at": "timestamp with time zone",
+        "access_role": "text",
+        "can_purchase": "boolean",
+        "can_view_balance": "boolean",
+        "can_manage_access": "boolean",
+        "can_view_transactions": "boolean"
+      }
+    },
+    "commercial_module_catalog": {
+      "columns": {
+        "sector": "text",
+        "created_at": "timestamp with time zone",
+        "module_key": "text",
+        "updated_at": "timestamp with time zone",
+        "description": "text",
+        "display_name": "text",
+        "is_enabled_by_default": "boolean"
+      }
+    },
+    "commercial_party_accounts": {
+      "columns": {
+        "id": "uuid",
+        "status": "text",
+        "created_at": "timestamp with time zone",
+        "updated_at": "timestamp with time zone",
+        "account_type": "text",
+        "allow_credit": "boolean",
+        "display_name": "text",
+        "currency_code": "text",
+        "owner_user_id": "uuid",
+        "account_number": "text",
+        "organization_id": "uuid"
+      }
+    },
+    "commercial_service_orders": {
+      "columns": {
+        "id": "uuid",
+        "status": "text",
+        "created_at": "timestamp with time zone",
+        "updated_at": "timestamp with time zone",
+        "order_number": "text",
+        "service_name": "text",
+        "organization_id": "uuid"
+      }
+    },
+    "commercial_webhook_events": {
+      "columns": {
+        "id": "bigint",
+        "payload": "jsonb",
+        "attempts": "integer",
+        "provider": "text",
+        "event_type": "text",
+        "updated_at": "timestamp with time zone",
+        "received_at": "timestamp with time zone",
+        "processed_at": "timestamp with time zone",
+        "last_error_code": "text",
+        "processing_status": "text",
+        "provider_event_id": "text"
+      }
+    },
+    "commercial_customer_orders": {
+      "columns": {
+        "id": "uuid",
+        "status": "text",
+        "tax_minor": "bigint",
+        "created_at": "timestamp with time zone",
+        "created_by": "uuid",
+        "order_type": "text",
+        "updated_at": "timestamp with time zone",
+        "total_minor": "bigint",
+        "order_number": "bigint",
+        "currency_code": "text",
+        "customer_note": "text",
+        "reserved_from": "timestamp with time zone",
+        "discount_minor": "bigint",
+        "payment_status": "text",
+        "reserved_until": "timestamp with time zone",
+        "subtotal_minor": "bigint",
+        "idempotency_key": "text",
+        "organization_id": "uuid",
+        "buyer_account_id": "uuid"
+      }
+    },
+    "commercial_journal_entries": {
+      "columns": {
+        "id": "uuid",
+        "status": "text",
+        "metadata": "jsonb",
+        "posted_at": "timestamp with time zone",
+        "posted_by": "uuid",
+        "source_id": "uuid",
+        "created_at": "timestamp with time zone",
+        "created_by": "uuid",
+        "entry_date": "date",
+        "description": "text",
+        "reversal_of": "uuid",
+        "source_type": "text",
+        "entry_number": "bigint",
+        "idempotency_key": "text",
+        "organization_id": "uuid"
+      }
+    },
+    "commercial_ledger_accounts": {
+      "columns": {
+        "id": "uuid",
+        "is_active": "boolean",
+        "is_system": "boolean",
+        "created_at": "timestamp with time zone",
+        "updated_at": "timestamp with time zone",
+        "account_code": "text",
+        "account_name": "text",
+        "account_type": "text",
+        "currency_code": "text",
+        "normal_balance": "text",
+        "organization_id": "uuid",
+        "parent_account_id": "uuid",
+        "global_template_account_id": "uuid"
+      }
+    },
+    "commercial_purchase_orders": {
+      "columns": {
+        "id": "uuid",
+        "notes": "text",
+        "status": "text",
+        "created_at": "timestamp with time zone",
+        "created_by": "uuid",
+        "ordered_at": "timestamp with time zone",
+        "updated_at": "timestamp with time zone",
+        "approved_at": "timestamp with time zone",
+        "approved_by": "uuid",
+        "expected_at": "timestamp with time zone",
+        "supplier_id": "uuid",
+        "order_number": "text",
+        "currency_code": "text",
+        "organization_id": "uuid"
+      }
+    },
+    "commercial_stock_movements": {
+      "columns": {
+        "id": "uuid",
+        "sale_id": "uuid",
+        "created_at": "timestamp with time zone",
+        "created_by": "uuid",
+        "source_ref": "text",
+        "offering_id": "uuid",
+        "movement_type": "text",
+        "quantity_delta": "bigint"
+      }
+    },
+    "commercial_unit_of_measure": {
+      "columns": {
+        "code": "text",
+        "dimension": "text",
+        "is_active": "boolean",
+        "updated_at": "timestamp with time zone",
+        "display_name": "text",
+        "decimal_places": "smallint"
+      }
+    },
+    "commercial_work_item_events": {
+      "columns": {
+        "id": "uuid",
+        "note": "text",
+        "metadata": "jsonb",
+        "to_status": "text",
+        "created_at": "timestamp with time zone",
+        "event_type": "text",
+        "from_status": "text",
+        "work_item_id": "uuid",
+        "actor_user_id": "uuid",
+        "organization_id": "uuid"
+      }
+    },
+    "commercial_booking_resources": {
+      "columns": {
+        "id": "uuid",
+        "name": "text",
+        "status": "text",
+        "capacity": "integer",
+        "metadata": "jsonb",
+        "timezone": "text",
+        "created_at": "timestamp with time zone",
+        "updated_at": "timestamp with time zone",
+        "description": "text",
+        "location_id": "uuid",
+        "resource_type": "text",
+        "organization_id": "uuid"
+      }
+    },
+    "commercial_sale_return_items": {
+      "columns": {
+        "id": "uuid",
+        "note": "text",
+        "restock": "boolean",
+        "quantity": "integer",
+        "return_id": "uuid",
+        "created_at": "timestamp with time zone",
+        "updated_at": "timestamp with time zone",
+        "sale_item_id": "uuid",
+        "condition_code": "text",
+        "restocked_quantity": "integer",
+        "refund_amount_minor": "bigint"
+      }
+    },
+    "commercial_supported_locales": {
+      "columns": {
+        "is_active": "boolean",
+        "created_at": "timestamp with time zone",
+        "sort_order": "integer",
+        "updated_at": "timestamp with time zone",
+        "locale_code": "text",
+        "text_direction": "text",
+        "language_name_en": "text",
+        "language_name_native": "text"
+      }
+    },
+    "commercial_inventory_balances": {
+      "columns": {
+        "id": "uuid",
+        "updated_at": "timestamp with time zone",
+        "location_id": "uuid",
+        "offering_id": "uuid",
+        "reorder_point": "numeric",
+        "organization_id": "uuid",
+        "quantity_on_hand": "numeric",
+        "quantity_reserved": "numeric"
+      }
+    },
+    "commercial_organization_units": {
+      "columns": {
+        "id": "uuid",
+        "code": "text",
+        "name": "text",
+        "state": "text",
+        "metadata": "jsonb",
+        "unit_type": "text",
+        "created_at": "timestamp with time zone",
+        "updated_at": "timestamp with time zone",
+        "location_id": "uuid",
+        "parent_unit_id": "uuid",
+        "organization_id": "uuid"
+      }
+    },
+    "commercial_subscription_plans": {
+      "columns": {
+        "id": "uuid",
+        "code": "text",
+        "name": "text",
+        "state": "text",
+        "limits": "jsonb",
+        "features": "jsonb",
+        "created_at": "timestamp with time zone",
+        "updated_at": "timestamp with time zone",
+        "description": "text",
+        "price_minor": "bigint",
+        "currency_code": "text",
+        "billing_interval": "text"
+      }
+    },
+    "commercial_user_notifications": {
+      "columns": {
+        "id": "uuid",
+        "body": "text",
+        "title": "text",
+        "read_at": "timestamp with time zone",
+        "user_id": "uuid",
+        "metadata": "jsonb",
+        "priority": "text",
+        "entity_id": "uuid",
+        "created_at": "timestamp with time zone",
+        "entity_type": "text",
+        "organization_id": "uuid",
+        "notification_type": "text"
+      }
+    },
+    "commercial_payment_allocations": {
+      "columns": {
+        "id": "uuid",
+        "order_id": "uuid",
+        "created_at": "timestamp with time zone",
+        "payment_id": "uuid",
+        "updated_at": "timestamp with time zone",
+        "reversed_at": "timestamp with time zone",
+        "allocated_by": "uuid",
+        "amount_minor": "bigint",
+        "currency_code": "text",
+        "idempotency_key": "text",
+        "organization_id": "uuid",
+        "allocation_status": "text"
+      }
+    },
+    "commercial_account_transactions": {
+      "columns": {
+        "id": "uuid",
+        "status": "text",
+        "metadata": "jsonb",
+        "direction": "text",
+        "posted_at": "timestamp with time zone",
+        "source_id": "uuid",
+        "account_id": "uuid",
+        "created_at": "timestamp with time zone",
+        "description": "text",
+        "source_type": "text",
+        "amount_minor": "bigint",
+        "performed_by": "uuid",
+        "currency_code": "text",
+        "idempotency_key": "text",
+        "transaction_type": "text",
+        "transaction_number": "bigint",
+        "counterparty_account_id": "uuid"
+      }
+    },
+    "commercial_customer_order_items": {
+      "columns": {
+        "id": "uuid",
+        "order_id": "uuid",
+        "quantity": "numeric",
+        "item_type": "text",
+        "created_at": "timestamp with time zone",
+        "offering_id": "uuid",
+        "line_total_minor": "bigint",
+        "unit_price_minor": "bigint",
+        "item_name_snapshot": "text"
+      }
+    },
+    "commercial_global_catalog_items": {
+      "columns": {
+        "id": "uuid",
+        "name_ar": "text",
+        "name_en": "text",
+        "version": "integer",
+        "is_active": "boolean",
+        "item_type": "text",
+        "unit_code": "text",
+        "created_at": "timestamp with time zone",
+        "updated_at": "timestamp with time zone",
+        "barcode_gtin": "text",
+        "catalog_code": "text",
+        "category_code": "text",
+        "description_ar": "text",
+        "description_en": "text",
+        "attributes_schema": "jsonb"
+      }
+    },
+    "commercial_organization_members": {
+      "columns": {
+        "role": "text",
+        "state": "text",
+        "user_id": "uuid",
+        "joined_at": "timestamp with time zone",
+        "created_at": "timestamp with time zone",
+        "updated_at": "timestamp with time zone",
+        "organization_id": "uuid"
+      }
+    },
+    "commercial_organization_modules": {
+      "columns": {
+        "enabled": "boolean",
+        "enabled_at": "timestamp with time zone",
+        "enabled_by": "uuid",
+        "module_key": "text",
+        "updated_at": "timestamp with time zone",
+        "configuration": "jsonb",
+        "organization_id": "uuid"
+      }
+    },
+    "commercial_purchase_order_items": {
+      "columns": {
+        "id": "uuid",
+        "created_at": "timestamp with time zone",
+        "updated_at": "timestamp with time zone",
+        "line_number": "integer",
+        "organization_id": "uuid",
+        "unit_cost_minor": "bigint",
+        "item_description": "text",
+        "quantity_ordered": "numeric",
+        "purchase_order_id": "uuid",
+        "quantity_received": "numeric"
+      }
+    },
+    "commercial_global_chart_accounts": {
+      "columns": {
+        "id": "uuid",
+        "name_ar": "text",
+        "name_en": "text",
+        "version": "integer",
+        "is_active": "boolean",
+        "chart_code": "text",
+        "created_at": "timestamp with time zone",
+        "updated_at": "timestamp with time zone",
+        "account_code": "text",
+        "account_type": "text",
+        "country_code": "text",
+        "normal_balance": "text",
+        "is_control_account": "boolean",
+        "parent_account_code": "text"
+      }
+    },
+    "commercial_organization_settings": {
+      "columns": {
+        "updated_at": "timestamp with time zone",
+        "updated_by": "uuid",
+        "setting_key": "text",
+        "setting_value": "jsonb",
+        "organization_id": "uuid"
+      }
+    },
+    "commercial_organization_locations": {
+      "columns": {
+        "id": "uuid",
+        "code": "text",
+        "name": "text",
+        "state": "text",
+        "address": "jsonb",
+        "latitude": "numeric",
+        "metadata": "jsonb",
+        "timezone": "text",
+        "longitude": "numeric",
+        "created_at": "timestamp with time zone",
+        "updated_at": "timestamp with time zone",
+        "country_code": "text",
+        "location_type": "text",
+        "organization_id": "uuid",
+        "parent_location_id": "uuid"
+      }
+    },
+    "commercial_user_locale_preferences": {
+      "columns": {
+        "user_id": "uuid",
+        "updated_at": "timestamp with time zone",
+        "date_format": "text",
+        "locale_code": "text",
+        "time_format": "text",
+        "timezone_name": "text",
+        "week_starts_on": "smallint",
+        "calendar_system": "text",
+        "number_format_locale": "text"
+      }
+    },
+    "commercial_global_catalog_categories": {
+      "columns": {
+        "code": "text",
+        "name_ar": "text",
+        "name_en": "text",
+        "version": "integer",
+        "is_active": "boolean",
+        "created_at": "timestamp with time zone",
+        "sort_order": "integer",
+        "updated_at": "timestamp with time zone",
+        "parent_code": "text",
+        "description_ar": "text",
+        "description_en": "text"
+      }
+    },
+    "commercial_global_entity_translations": {
+      "columns": {
+        "field_key": "text",
+        "entity_key": "text",
+        "updated_at": "timestamp with time zone",
+        "entity_type": "text",
+        "locale_code": "text",
+        "reviewed_at": "timestamp with time zone",
+        "source_language": "text",
+        "translated_value": "text",
+        "translation_status": "text"
+      }
+    },
+    "commercial_organization_catalog_items": {
+      "columns": {
+        "id": "uuid",
+        "metadata": "jsonb",
+        "created_at": "timestamp with time zone",
+        "created_by": "uuid",
+        "updated_at": "timestamp with time zone",
+        "price_minor": "bigint",
+        "is_available": "boolean",
+        "merchant_sku": "text",
+        "currency_code": "text",
+        "global_item_id": "uuid",
+        "organization_id": "uuid",
+        "merchant_description": "text",
+        "merchant_display_name": "text"
+      }
+    },
+    "commercial_organization_subscriptions": {
+      "columns": {
+        "id": "uuid",
+        "status": "text",
+        "plan_id": "uuid",
+        "provider": "text",
+        "created_at": "timestamp with time zone",
+        "updated_at": "timestamp with time zone",
+        "trial_ends_at": "timestamp with time zone",
+        "organization_id": "uuid",
+        "current_period_end": "timestamp with time zone",
+        "cancel_at_period_end": "boolean",
+        "current_period_start": "timestamp with time zone",
+        "provider_customer_id": "text",
+        "provider_subscription_id": "text"
+      }
+    },
+    "commercial_global_geographic_locations": {
+      "columns": {
+        "id": "uuid",
+        "geo_code": "text",
+        "latitude": "numeric",
+        "is_active": "boolean",
+        "longitude": "numeric",
+        "parent_id": "uuid",
+        "created_at": "timestamp with time zone",
+        "updated_at": "timestamp with time zone",
+        "source_name": "text",
+        "country_code": "text",
+        "location_type": "text",
+        "timezone_name": "text",
+        "source_record_id": "text",
+        "iso_subdivision_code": "text"
+      }
+    },
+    "commercial_global_geographic_location_names": {
+      "columns": {
+        "locale_code": "text",
+        "location_id": "uuid",
+        "display_name": "text",
+        "official_name": "text",
+        "alternate_names": "ARRAY"
+      }
+    },
+    "commercial_organization_entity_translations": {
+      "columns": {
+        "entity_id": "uuid",
+        "field_key": "text",
+        "created_at": "timestamp with time zone",
+        "created_by": "uuid",
+        "updated_at": "timestamp with time zone",
+        "entity_type": "text",
+        "locale_code": "text",
+        "organization_id": "uuid",
+        "translated_value": "text"
+      }
+    }
+  }
+}
