@@ -285,7 +285,7 @@ BEGIN
         WHERE u.code=v_unit->>'unit_code' AND u.dimension=v_unit_dimension
           AND (u.owner_organization_id IS NULL OR u.owner_organization_id=p_organization_id)
       ) THEN RAISE EXCEPTION 'product_unit_dimension_mismatch' USING ERRCODE='22023'; END IF;
-      IF nullif(v_unit->>'image_url','') IS NOT NULL AND (length(v_unit->>'image_url')>1000 OR v_unit->>'image_url' !~* '^https://[^[:space:]]+
+      IF nullif(v_unit->>'image_url','') IS NOT NULL AND (length(v_unit->>'image_url')>1000 OR v_unit->>'image_url' !~* '^https://[^[:space:]]+$') THEN
         RAISE EXCEPTION 'unit_image_url_must_be_https' USING ERRCODE='22023';
       END IF;
       INSERT INTO public.commercial_catalog_product_units(
