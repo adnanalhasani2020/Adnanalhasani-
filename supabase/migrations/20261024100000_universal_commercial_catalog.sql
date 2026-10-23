@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS public.commercial_catalog_product_units (
   is_active boolean NOT NULL DEFAULT true,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (product_id, unit_id, unit_role),
+  UNIQUE NULLS NOT DISTINCT (product_id, unit_code, unit_role, package_name),
   CHECK (barcode IS NULL OR length(btrim(barcode)) BETWEEN 3 AND 128),
   CHECK (sku IS NULL OR length(btrim(sku)) <= 100)
 );
