@@ -11,6 +11,7 @@ AS $$
 DECLARE
   v_code text;
   v_image_url text;
+  v_old_image_url text;
 BEGIN
   IF auth.uid() IS NULL THEN
     RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501';
@@ -37,7 +38,7 @@ BEGIN
     RAISE EXCEPTION 'invalid_gtin_barcode' USING ERRCODE='22023';
   END IF;
 
-  SELECT catalog_code INTO v_code
+  SELECT catalog_code,image_url INTO v_code,v_old_image_url
   FROM public.commercial_global_catalog_items
   WHERE id=p_product_id AND owner_organization_id=p_organization_id
   FOR UPDATE;
@@ -72,6 +73,13 @@ BEGIN
       is_prescription_only=CASE WHEN p_product ? 'is_prescription_only' THEN COALESCE((p_product->>'is_prescription_only')::boolean,false) ELSE is_prescription_only END,
       attributes_schema=CASE WHEN p_product ? 'attributes_schema' THEN p_product->'attributes_schema' ELSE attributes_schema END
   WHERE id=p_product_id;
+
+  IF p_product ? 'image_url' THEN
+    UPDATE public.commercial_catalog_product_units
+    SET image_url=v_image_url
+    WHERE product_id=p_product_id AND is_default
+      AND (image_url IS NULL OR image_url IS NOT DISTINCT FROM v_old_image_url);
+  END IF;
 
   DELETE FROM public.commercial_global_entity_translations
   WHERE entity_type='catalog_item' AND entity_key=v_code
