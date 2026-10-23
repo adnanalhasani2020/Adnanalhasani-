@@ -149,7 +149,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                 .put("p_business_level_code",businessLevel.trim().ifBlank { JSONObject.NULL })
                 .put("p_country_code",country.trim().ifBlank { JSONObject.NULL })
                 .put("p_region_code",region.trim().ifBlank { JSONObject.NULL }).put("p_city",city.trim().ifBlank { JSONObject.NULL })
-                .put("p_locale_code",locale.trim().ifBlank { "ar" }).put("p_query",query.trim().ifBlank { JSONObject.NULL }).put("p_limit",100)
+                .put("p_locale_code",locale.trim().lowercase().ifBlank { "ar" }).put("p_query",query.trim().ifBlank { JSONObject.NULL }).put("p_limit",100)
             catalogHttp("/rest/v1/rpc/commercial_catalog_discover_products",payload,active)
         }, { raw ->
             val json=JSONArray(raw)
