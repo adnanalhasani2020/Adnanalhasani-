@@ -39,7 +39,8 @@ RLS is enabled on every table added here. Global reference/product rows are read
 7. `20261024112000_business_activity_taxonomy_expansion.sql` — broader cross-sector activity coverage, unique alias guard, and explicit ROUH-owned provenance for unmapped starter nodes.
 8. `20261024113000_catalog_policy_deduplication.sql` — removes overlapping SELECT policies and replaces broad `FOR ALL` catalog writes with separate insert/update/delete policies.
 9. `20261024114000_catalog_integrity_performance.sql` — removes the obsolete one-phase transfer RPC, adds missing FK indexes, and adds stable row identity to region rules.
-10. `20261024115000_business_activity_alias_global_uniqueness.sql` — replaces per-locale alias uniqueness with global normalized-alias uniqueness so an alias can never resolve to different nodes.\n11. `20261024116000_business_activity_unbounded_api_depth.sql` — removes the arbitrary API traversal depth cap and uses cycle-safe recursion.
+10. `20261024115000_business_activity_alias_global_uniqueness.sql` — replaces per-locale alias uniqueness with global normalized-alias uniqueness so an alias can never resolve to different nodes.
+11. `20261024116000_business_activity_unbounded_api_depth.sql` — removes the arbitrary API traversal depth cap and uses cycle-safe recursion.
 
 The product discovery response includes the full product detail payload and the source-attributed rulings, not just a product name. Additional locale values use the existing translation directory; the UI accepts one field translation per line in `locale|field|value` form. For package variants, the UI accepts `unit_code|role|qty_in_base|barcode|package_name|image_url` lines. For multiple region rules, it accepts `country|region|city|include-or-exclude` lines.
 
