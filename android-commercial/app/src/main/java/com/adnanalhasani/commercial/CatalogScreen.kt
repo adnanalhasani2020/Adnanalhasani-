@@ -266,6 +266,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                     .put("source_reference",recipeSource.ifBlank { JSONObject.NULL })
                     .put("allergen_notes",recipeAllergenNotes.ifBlank { JSONObject.NULL }))
                 .put("specifications",JSONObject().put("notes",specifications.ifBlank { JSONObject.NULL }))
+                .put("attributes_schema",runCatching { JSONObject(customAttributesJson) }.getOrElse { throw IllegalArgumentException("الحقول الإضافية يجب أن تكون JSON صالحًا.") })
                 .put("allergens",JSONArray(allergens.split(",").map { it.trim() }.filter { it.isNotBlank() }))
                 .put("storage_instructions",storage.ifBlank { JSONObject.NULL }).put("usage_instructions",usage.ifBlank { JSONObject.NULL })
                 .put("warnings",warnings.ifBlank { JSONObject.NULL }).put("shelf_life_days",shelfLife.toIntOrNull() ?: JSONObject.NULL)
