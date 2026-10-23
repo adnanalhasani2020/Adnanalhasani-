@@ -136,6 +136,16 @@ VALUES
  ('OFFICE-STAPLER','دباسة مكتبية','Office stapler','قالب عام؛ حدد نوع الدبابيس والسعة.','Generic template; specify staple type and capacity.','OFFICE-SUPPLIES','product','EA','{"catalog_template":true,"requires_review":true}'::jsonb)
 ON CONFLICT (catalog_code) DO NOTHING;
 
+-- Give every generic starter template a canonical unit row; unknown pack conversions and barcodes are intentionally not fabricated.
+INSERT INTO public.commercial_catalog_product_units(
+  product_id,unit_code,unit_role,quantity_in_base,is_default,is_active
+)
+SELECT i.id,i.unit_code,'base',1,true,true
+FROM public.commercial_global_catalog_items i
+WHERE i.owner_organization_id IS NULL
+  AND i.attributes_schema->>'catalog_template'='true'
+ON CONFLICT (product_id,unit_code,unit_role,package_name) DO NOTHING;
+
 INSERT INTO public.commercial_global_entity_translations
   (entity_type,entity_key,locale_code,field_key,translated_value,source_language)
 SELECT 'catalog_item',i.catalog_code,'ar','name',i.name_ar,'ar'
