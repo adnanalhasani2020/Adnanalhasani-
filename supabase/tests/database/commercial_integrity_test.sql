@@ -1,7 +1,7 @@
 -- Run with Supabase CLI / pgTAP in a disposable local or staging database.
 -- These are schema regression tests; they do not replace authenticated-session integration tests.
 BEGIN;
-SELECT plan(5);
+SELECT plan(7);
 
 SELECT has_table('public', 'commercial_audit_events',
   'append-only audit event table exists');
@@ -9,6 +9,14 @@ SELECT has_table('public', 'commercial_audit_events',
 SELECT has_trigger('public', 'commercial_journal_entries',
   'commercial_journal_entries_audit_trg',
   'journal entry lifecycle changes are audited');
+
+SELECT has_trigger('public', 'commercial_sales_returns',
+  'commercial_sales_returns_audit_trg',
+  'sale return lifecycle changes are audited');
+
+SELECT has_trigger('public', 'commercial_sale_return_items',
+  'commercial_sale_return_items_audit_trg',
+  'sale return item changes are audited');
 
 SELECT has_trigger('public', 'commercial_journal_lines',
   'commercial_journal_lines_immutable_after_posting',
