@@ -142,8 +142,10 @@ def test_supabase_auth_ui_uses_email_fields_when_configured(monkeypatch):
     assert 'name="commercial_registration_number"' in page
     assert 'name="owner_full_name"' in page
     assert 'name="opened_on"' in page
-    assert 'name="logo_url"' in page
-    assert 'name="cover_image_url"' in page
+    assert 'id="storeLogo"' in page
+    assert 'id="storeCover"' in page
+    assert 'id="ownerIdentityFront"' in page
+    assert 'id="ownerIdentityBack"' in page
     assert 'id="locationRows"' in page
     assert 'firstProductName' not in page
     assert 'initialQuantity' not in page
