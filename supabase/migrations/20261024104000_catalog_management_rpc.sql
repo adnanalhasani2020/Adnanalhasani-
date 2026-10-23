@@ -87,12 +87,14 @@ BEGIN
     substr(upper(regexp_replace(btrim(COALESCE(p_code,'')), '[^A-Za-z0-9_]+', '_', 'g')),1,6);
   IF length(v_code) > 80 OR length(btrim(COALESCE(p_name_ar,'')))=0 OR length(btrim(COALESCE(p_name_en,'')))=0
      OR length(btrim(COALESCE(p_dimension,'')))=0 OR COALESCE(p_factor_to_base,0)<=0
-     OR COALESCE(p_decimal_places,0)<0 OR COALESCE(p_decimal_places,0)>6 THEN
+     OR COALESCE(p_decimal_places,0)<0 OR COALESCE(p_decimal_places,0)>6
+     OR p_dimension NOT IN ('count','mass','volume','length','area','time','service','other')
+     OR nullif(btrim(COALESCE(p_code,'')),'') IS NULL THEN
     RAISE EXCEPTION 'invalid_unit_fields' USING ERRCODE='22023';
   END IF;
   SELECT u.dimension,u.owner_organization_id INTO v_dimension,v_owner
   FROM public.commercial_global_units u
-  WHERE u.code=p_base_unit_code AND u.is_active;
+  WHERE u.code=p_base_unit_code AND u.is_active AND u.base_unit_code IS NULL;
   IF NOT FOUND OR v_dimension<>p_dimension OR (v_owner IS NOT NULL AND v_owner<>p_organization_id) THEN
     RAISE EXCEPTION 'invalid_unit_base_or_dimension' USING ERRCODE='22023';
   END IF;
