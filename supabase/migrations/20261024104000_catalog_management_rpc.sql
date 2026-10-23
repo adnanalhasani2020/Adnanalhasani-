@@ -1,4 +1,12 @@
 -- Account-scoped custom units and transactional catalog authoring APIs.
+-- Distinguish manually supplied translations from reviewed or official translations.
+ALTER TABLE public.commercial_global_entity_translations
+  DROP CONSTRAINT IF EXISTS commercial_global_entity_translations_translation_status_check;
+ALTER TABLE public.commercial_global_entity_translations
+  ADD CONSTRAINT commercial_global_entity_translations_translation_status_check
+  CHECK (translation_status IN ('machine_draft','human_authored','human_authored','official'));
+
+
 ALTER TABLE public.commercial_global_units
   ADD COLUMN IF NOT EXISTS owner_organization_id uuid REFERENCES public.commercial_organizations(id) ON DELETE RESTRICT,
   ADD COLUMN IF NOT EXISTS created_by uuid REFERENCES auth.users(id);
@@ -57,8 +65,8 @@ BEGIN
   INSERT INTO public.commercial_global_entity_translations(
     entity_type,entity_key,locale_code,field_key,translated_value,translation_status,source_language,owner_organization_id,created_by
   ) VALUES
-    ('catalog_category',v_code,'ar','name',btrim(p_name_ar),'human_reviewed','ar',p_organization_id,auth.uid()),
-    ('catalog_category',v_code,'en','name',btrim(p_name_en),'human_reviewed','en',p_organization_id,auth.uid())
+    ('catalog_category',v_code,'ar','name',btrim(p_name_ar),'human_authored','ar',p_organization_id,auth.uid()),
+    ('catalog_category',v_code,'en','name',btrim(p_name_en),'human_authored','en',p_organization_id,auth.uid())
   ON CONFLICT (entity_type,entity_key,locale_code,field_key) DO UPDATE
     SET translated_value=EXCLUDED.translated_value,owner_organization_id=EXCLUDED.owner_organization_id;
   RETURN jsonb_build_object('category_code',v_code,'parent_code',p_parent_code);
@@ -108,8 +116,8 @@ BEGIN
   INSERT INTO public.commercial_global_entity_translations(
     entity_type,entity_key,locale_code,field_key,translated_value,translation_status,source_language,owner_organization_id,created_by
   ) VALUES
-    ('unit',v_code,'ar','name',btrim(p_name_ar),'human_reviewed','ar',p_organization_id,auth.uid()),
-    ('unit',v_code,'en','name',btrim(p_name_en),'human_reviewed','en',p_organization_id,auth.uid())
+    ('unit',v_code,'ar','name',btrim(p_name_ar),'human_authored','ar',p_organization_id,auth.uid()),
+    ('unit',v_code,'en','name',btrim(p_name_en),'human_authored','en',p_organization_id,auth.uid())
   ON CONFLICT (entity_type,entity_key,locale_code,field_key) DO UPDATE
     SET translated_value=EXCLUDED.translated_value,owner_organization_id=EXCLUDED.owner_organization_id;
   RETURN jsonb_build_object('unit_code',v_code,'base_unit_code',p_base_unit_code,'dimension',p_dimension);
@@ -193,8 +201,8 @@ BEGIN
   INSERT INTO public.commercial_global_entity_translations(
     entity_type,entity_key,locale_code,field_key,translated_value,translation_status,source_language,owner_organization_id,created_by
   ) VALUES
-    ('catalog_item',v_code,'ar','name',btrim(p_product->>'name_ar'),'human_reviewed','ar',p_organization_id,auth.uid()),
-    ('catalog_item',v_code,'en','name',btrim(p_product->>'name_en'),'human_reviewed','en',p_organization_id,auth.uid())
+    ('catalog_item',v_code,'ar','name',btrim(p_product->>'name_ar'),'human_authored','ar',p_organization_id,auth.uid()),
+    ('catalog_item',v_code,'en','name',btrim(p_product->>'name_en'),'human_authored','en',p_organization_id,auth.uid())
   ON CONFLICT (entity_type,entity_key,locale_code,field_key) DO UPDATE
     SET translated_value=EXCLUDED.translated_value,owner_organization_id=EXCLUDED.owner_organization_id;
 
@@ -210,7 +218,7 @@ BEGIN
     INSERT INTO public.commercial_global_entity_translations(
       entity_type,entity_key,locale_code,field_key,translated_value,translation_status,source_language,owner_organization_id,created_by
     ) VALUES ('catalog_item',v_code,lower(btrim(v_translation->>'locale_code')),lower(btrim(v_translation->>'field_key')),
-      btrim(v_translation->>'translated_value'),COALESCE(nullif(v_translation->>'translation_status',''),'machine_draft'),
+      btrim(v_translation->>'translated_value'),COALESCE(nullif(v_translation->>'translation_status',''),'human_authored'),
       nullif(v_translation->>'source_language',''),p_organization_id,auth.uid())
     ON CONFLICT (entity_type,entity_key,locale_code,field_key) DO UPDATE
       SET translated_value=EXCLUDED.translated_value,translation_status=EXCLUDED.translation_status,
