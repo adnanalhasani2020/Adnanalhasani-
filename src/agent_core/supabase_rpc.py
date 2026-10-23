@@ -82,6 +82,35 @@ class SupabaseRPCClient:
             raise SupabaseRPCError("Unexpected storefront-creation response; verify the result before retrying.")
         return result
 
+    def upload_object(self, *, bucket: str, object_path: str, content: bytes, content_type: str,
+                      public: bool = False) -> str:
+        from urllib.parse import quote
+        if bucket not in {"commercial-brand-assets", "commercial-owner-identities"}:
+            raise ValueError("Unsupported storage bucket.")
+        if not object_path or any(part in {"", ".", ".."} for part in object_path.split("/")):
+            raise ValueError("Invalid storage object path.")
+        if not content or len(content) > 5_000_000:
+            raise SupabaseRPCError("Image/document size must be between 1 byte and 5 MB.")
+        encoded_path = quote(object_path, safe="/")
+        request = Request(
+            f"{self.url}/storage/v1/object/{bucket}/{encoded_path}",
+            data=content, method="POST",
+            headers={"apikey": self.anon_key, "Authorization": f"Bearer {self.access_token}",
+                     "Content-Type": content_type, "x-upsert": "false", "Cache-Control": "no-store"},
+        )
+        try:
+            with urlopen(request, timeout=self.timeout) as response:
+                response.read(65536)
+        except HTTPError as exc:
+            if exc.code in (400, 401, 403, 409, 413):
+                raise SupabaseRPCError(f"Supabase Storage rejected the upload (HTTP {exc.code}).") from None
+            raise SupabaseRPCError(f"Supabase Storage upload failed (HTTP {exc.code}).") from None
+        except (URLError, TimeoutError, OSError):
+            raise SupabaseRPCError("Storage upload failed; verify the file before retrying.") from None
+        if public:
+            return f"{self.url}/storage/v1/object/public/{bucket}/{encoded_path}"
+        return object_path
+
     def create_activity_profile(self, *, organization_name: str, organization_slug: str, activity_name: str,
                                 activity_type: str, business_level: str, commercial_registration_number: str,
                                 opened_on: str, owner_full_name: str, legal_name: str | None,
