@@ -108,7 +108,7 @@ CREATE INDEX IF NOT EXISTS ix_commercial_catalog_product_units_product ON public
 -- Sector/region targeting is data-driven; no hard-coded activity list or level limit.
 CREATE TABLE IF NOT EXISTS public.commercial_catalog_product_sectors (
   product_id uuid NOT NULL REFERENCES public.commercial_catalog_products(id) ON DELETE CASCADE,
-  sector_code text NOT NULL CHECK (sector_code IN ('all','hospital','pharmacy','grocery','supermarket','restaurant','hotel','general_company','mobile_company','automotive','heavy_equipment','manufacturing','wholesale','retail','clinic','laboratory','construction','agriculture','education','office','beauty','electronics','other')),
+  sector_code text NOT NULL CHECK (length(btrim(sector_code)) BETWEEN 1 AND 80),
   is_excluded boolean NOT NULL DEFAULT false,
   PRIMARY KEY (product_id, sector_code)
 );
