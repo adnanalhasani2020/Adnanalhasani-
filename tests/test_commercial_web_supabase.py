@@ -56,3 +56,40 @@ def test_supabase_onboarding_calls_atomic_rpc_with_user_token():
         currency_code="YER", timezone="Asia/Aden", locale="ar",
         country_code="YE", module_keys=["core_operations"],
     )
+
+
+def test_supabase_catalog_requires_session_cookie():
+    app = CommercialWebApplication()
+    environ = {
+        "REQUEST_METHOD": "GET", "PATH_INFO": "/api/supabase/catalog",
+        "wsgi.url_scheme": "https", "HTTP_HOST": "example.test",
+        "HTTP_COOKIE": "", "CONTENT_LENGTH": "0", "wsgi.input": io.BytesIO(b""),
+    }
+    captured = {}
+    def start_response(status, headers):
+        captured["status"] = status
+    result = b"".join(app(environ, start_response))
+    assert captured["status"] == "401 Unauthorized"
+    assert "Supabase" in json.loads(result.decode("utf-8"))["error"]
+
+
+def test_supabase_catalog_validates_session_and_uses_user_token():
+    app = CommercialWebApplication()
+    environ = {
+        "REQUEST_METHOD": "GET", "PATH_INFO": "/api/supabase/catalog",
+        "wsgi.url_scheme": "https", "HTTP_HOST": "example.test",
+        "HTTP_COOKIE": "supabase_access=access-token; supabase_refresh=refresh-token",
+        "CONTENT_LENGTH": "0", "wsgi.input": io.BytesIO(b""),
+    }
+    captured = {}
+    def start_response(status, headers):
+        captured["status"], captured["headers"] = status, headers
+    with patch("agent_core.commercial_web.SupabaseAuthClient") as auth_class, \
+         patch("agent_core.commercial_web.SupabaseRPCClient") as rpc_class:
+        auth_class.return_value.get_user.return_value = {"id": "user-1", "email": "user@example.test"}
+        rpc_class.return_value.catalog.return_value = [{"offering_id": "offer-1"}]
+        result = b"".join(app(environ, start_response))
+    assert captured["status"] == "200 OK"
+    assert json.loads(result.decode("utf-8")) == {"items": [{"offering_id": "offer-1"}]}
+    auth_class.return_value.get_user.assert_called_once_with("access-token")
+    rpc_class.assert_called_once_with("access-token")
