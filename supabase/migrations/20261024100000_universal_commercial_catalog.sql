@@ -2,30 +2,6 @@
 -- Product images are external HTTPS URLs only; no Supabase Storage uploads.
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
-CREATE TABLE IF NOT EXISTS public.commercial_catalog_units (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  owner_organization_id uuid REFERENCES public.commercial_organizations(id) ON DELETE CASCADE,
-  code text NOT NULL,
-  dimension text NOT NULL CHECK (dimension IN ('count','mass','volume','length','area','time','temperature','energy','pressure','data','package','other')),
-  base_unit_id uuid REFERENCES public.commercial_catalog_units(id),
-  factor_to_base numeric(30,12) NOT NULL DEFAULT 1 CHECK (factor_to_base > 0),
-  decimal_places smallint NOT NULL DEFAULT 3 CHECK (decimal_places BETWEEN 0 AND 9),
-  is_active boolean NOT NULL DEFAULT true,
-  created_by uuid REFERENCES auth.users(id),
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE NULLS NOT DISTINCT (owner_organization_id, code)
-);
-
-CREATE TABLE IF NOT EXISTS public.commercial_catalog_unit_translations (
-  unit_id uuid NOT NULL REFERENCES public.commercial_catalog_units(id) ON DELETE CASCADE,
-  locale_code text NOT NULL,
-  name text NOT NULL CHECK (length(btrim(name)) BETWEEN 1 AND 120),
-  symbol text,
-  description text,
-  PRIMARY KEY (unit_id, locale_code)
-);
-
 CREATE TABLE IF NOT EXISTS public.commercial_catalog_categories (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   owner_organization_id uuid REFERENCES public.commercial_organizations(id) ON DELETE CASCADE,
@@ -109,14 +85,14 @@ CREATE TABLE IF NOT EXISTS public.commercial_catalog_product_translations (
 CREATE TABLE IF NOT EXISTS public.commercial_catalog_product_units (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   product_id uuid NOT NULL REFERENCES public.commercial_catalog_products(id) ON DELETE CASCADE,
-  unit_id uuid NOT NULL REFERENCES public.commercial_catalog_units(id) ON DELETE RESTRICT,
+  unit_code text NOT NULL REFERENCES public.commercial_global_units(code) ON DELETE RESTRICT,
   unit_role text NOT NULL DEFAULT 'sale' CHECK (unit_role IN ('base','purchase','sale','stock','recipe','shipping','consumption','other')),
   quantity_in_base numeric(30,12) NOT NULL DEFAULT 1 CHECK (quantity_in_base > 0),
   barcode text,
   sku text,
   package_name text,
   net_quantity numeric(30,12) CHECK (net_quantity IS NULL OR net_quantity > 0),
-  net_unit_id uuid REFERENCES public.commercial_catalog_units(id) ON DELETE RESTRICT,
+  net_unit_code text REFERENCES public.commercial_global_units(code) ON DELETE RESTRICT,
   image_url text CHECK (image_url IS NULL OR (length(image_url) <= 1000 AND image_url ~* '^https://[^[:space:]]+$')),
   is_default boolean NOT NULL DEFAULT false,
   is_active boolean NOT NULL DEFAULT true,
@@ -154,7 +130,7 @@ CREATE TABLE IF NOT EXISTS public.commercial_catalog_product_recipes (
   recipe_name text NOT NULL,
   instructions text,
   yield_quantity numeric(30,12) CHECK (yield_quantity IS NULL OR yield_quantity > 0),
-  yield_unit_id uuid REFERENCES public.commercial_catalog_units(id),
+  yield_unit_code text REFERENCES public.commercial_global_units(code),
   preparation_minutes integer CHECK (preparation_minutes IS NULL OR preparation_minutes >= 0),
   cooking_minutes integer CHECK (cooking_minutes IS NULL OR cooking_minutes >= 0),
   allergen_notes text,
@@ -169,7 +145,7 @@ CREATE TABLE IF NOT EXISTS public.commercial_catalog_recipe_ingredients (
   ingredient_product_id uuid REFERENCES public.commercial_catalog_products(id) ON DELETE RESTRICT,
   ingredient_name text,
   quantity numeric(30,12) NOT NULL CHECK (quantity > 0),
-  unit_id uuid NOT NULL REFERENCES public.commercial_catalog_units(id) ON DELETE RESTRICT,
+  unit_code text NOT NULL REFERENCES public.commercial_global_units(code) ON DELETE RESTRICT,
   preparation_note text,
   CHECK (ingredient_product_id IS NOT NULL OR nullif(btrim(ingredient_name),'') IS NOT NULL)
 );
@@ -306,8 +282,7 @@ DO $$
 DECLARE t text;
 BEGIN
   FOREACH t IN ARRAY ARRAY[
-    'commercial_catalog_units','commercial_catalog_unit_translations',
-    'commercial_catalog_categories','commercial_catalog_category_translations',
+        'commercial_catalog_categories','commercial_catalog_category_translations',
     'commercial_catalog_products','commercial_catalog_product_translations',
     'commercial_catalog_product_units','commercial_catalog_product_sectors',
     'commercial_catalog_product_regions','commercial_catalog_product_recipes',
@@ -319,17 +294,6 @@ BEGIN
     EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON public.%I TO authenticated',t);
   END LOOP;
 END $$;
-
-CREATE POLICY catalog_units_read ON public.commercial_catalog_units FOR SELECT TO authenticated
-USING (owner_organization_id IS NULL OR public.commercial_catalog_member_of(owner_organization_id, ARRAY['owner','admin','manager','staff']::text[]));
-CREATE POLICY catalog_units_write ON public.commercial_catalog_units FOR ALL TO authenticated
-USING (owner_organization_id IS NOT NULL AND public.commercial_catalog_member_of(owner_organization_id, ARRAY['owner','admin']::text[]))
-WITH CHECK (owner_organization_id IS NOT NULL AND public.commercial_catalog_member_of(owner_organization_id, ARRAY['owner','admin']::text[]));
-CREATE POLICY catalog_unit_translations_read ON public.commercial_catalog_unit_translations FOR SELECT TO authenticated
-USING (EXISTS (SELECT 1 FROM public.commercial_catalog_units u WHERE u.id=unit_id AND (u.owner_organization_id IS NULL OR public.commercial_catalog_member_of(u.owner_organization_id, ARRAY['owner','admin','manager','staff']::text[]))));
-CREATE POLICY catalog_unit_translations_write ON public.commercial_catalog_unit_translations FOR ALL TO authenticated
-USING (EXISTS (SELECT 1 FROM public.commercial_catalog_units u WHERE u.id=unit_id AND u.owner_organization_id IS NOT NULL AND public.commercial_catalog_member_of(u.owner_organization_id, ARRAY['owner','admin']::text[])))
-WITH CHECK (EXISTS (SELECT 1 FROM public.commercial_catalog_units u WHERE u.id=unit_id AND u.owner_organization_id IS NOT NULL AND public.commercial_catalog_member_of(u.owner_organization_id, ARRAY['owner','admin']::text[])));
 
 CREATE POLICY catalog_categories_read ON public.commercial_catalog_categories FOR SELECT TO authenticated
 USING (owner_organization_id IS NULL OR public.commercial_catalog_member_of(owner_organization_id, ARRAY['owner','admin','manager','staff']::text[]));
@@ -377,39 +341,40 @@ WITH CHECK (public.commercial_catalog_member_of(organization_id, ARRAY['owner','
 CREATE POLICY catalog_transfers_read ON public.commercial_catalog_transfers FOR SELECT TO authenticated
 USING (public.commercial_catalog_member_of(source_organization_id, ARRAY['owner','admin']::text[]) OR public.commercial_catalog_member_of(destination_organization_id, ARRAY['owner','admin']::text[]));
 
--- Seed broadly useful units; no business is forced to use a fixed unit set.
-INSERT INTO public.commercial_catalog_units(code,dimension,factor_to_base,decimal_places)
+-- Seed broad, cross-industry units in the existing canonical global unit directory.
+-- Existing unit tables are reused; this migration intentionally does not create a duplicate unit catalog.
+INSERT INTO public.commercial_global_units
+  (code, name_ar, name_en, dimension, factor_to_base, base_unit_code, decimal_places, is_active, version)
 VALUES
- ('EA','count',1,0),('DOZ','count',12,0),('PAIR','count',2,0),('SET','count',1,0),
- ('MG','mass',0.000001,3),('G','mass',0.001,3),('KG','mass',1,3),('TONNE','mass',1000,3),
- ('ML','volume',0.001,3),('L','volume',1,3),('M3','volume',1000,3),
- ('MM','length',0.001,3),('CM','length',0.01,3),('M','length',1,3),('KM','length',1000,3),
- ('CM2','area',0.0001,3),('M2','area',1,3),('HA','area',10000,3),
- ('SEC','time',1,0),('MIN','time',60,2),('HOUR','time',3600,2),('DAY','time',86400,2),
- ('PACK','package',1,0),('BOX','package',1,0),('CARTON','package',1,0),('PALLET','package',1,0),
- ('KWH','energy',1,3),('GB','data',1,2)
-ON CONFLICT (owner_organization_id,code) DO NOTHING;
-
-INSERT INTO public.commercial_catalog_unit_translations(unit_id,locale_code,name,symbol)
-SELECT u.id, v.locale_code, v.name, v.symbol
-FROM public.commercial_catalog_units u
-JOIN (VALUES
- ('EA','ar','قطعة','قطعة'),('EA','en','Each','ea'),('DOZ','ar','دزينة','دزينة'),('DOZ','en','Dozen','doz'),
- ('PAIR','ar','زوج','زوج'),('PAIR','en','Pair','pr'),('SET','ar','طقم','طقم'),('SET','en','Set','set'),
- ('MG','ar','مليغرام','mg'),('MG','en','Milligram','mg'),('G','ar','غرام','غ'),('G','en','Gram','g'),
- ('KG','ar','كيلوغرام','كغ'),('KG','en','Kilogram','kg'),('TONNE','ar','طن متري','طن'),('TONNE','en','Metric tonne','t'),
- ('ML','ar','مليلتر','مل'),('ML','en','Millilitre','mL'),('L','ar','لتر','ل'),('L','en','Litre','L'),
- ('M3','ar','متر مكعب','م³'),('M3','en','Cubic metre','m³'),('MM','ar','مليمتر','مم'),('MM','en','Millimetre','mm'),
- ('CM','ar','سنتيمتر','سم'),('CM','en','Centimetre','cm'),('M','ar','متر','م'),('M','en','Metre','m'),
- ('KM','ar','كيلومتر','كم'),('KM','en','Kilometre','km'),('CM2','ar','سنتيمتر مربع','سم²'),('CM2','en','Square centimetre','cm²'),
- ('M2','ar','متر مربع','م²'),('M2','en','Square metre','m²'),('HA','ar','هكتار','هكتار'),('HA','en','Hectare','ha'),
- ('SEC','ar','ثانية','ث'),('SEC','en','Second','s'),('MIN','ar','دقيقة','د'),('MIN','en','Minute','min'),
- ('HOUR','ar','ساعة','س'),('HOUR','en','Hour','h'),('DAY','ar','يوم','يوم'),('DAY','en','Day','d'),
- ('PACK','ar','عبوة','عبوة'),('PACK','en','Pack','pack'),('BOX','ar','صندوق','صندوق'),('BOX','en','Box','box'),
- ('CARTON','ar','كرتون','كرتون'),('CARTON','en','Carton','ctn'),('PALLET','ar','منصة تحميل','منصة'),('PALLET','en','Pallet','plt'),
- ('KWH','ar','كيلوواط ساعة','ك.و.س'),('KWH','en','Kilowatt-hour','kWh'),('GB','ar','غيغابايت','GB'),('GB','en','Gigabyte','GB')
-) AS v(code,locale_code,name,symbol) ON v.code=u.code
-ON CONFLICT (unit_id,locale_code) DO NOTHING;
+ ('EA','قطعة','Each','count',1,'EA',0,true,1),
+ ('DOZ','دزينة','Dozen','count',12,'EA',0,true,1),
+ ('PAIR','زوج','Pair','count',2,'EA',0,true,1),
+ ('SET','طقم','Set','count',1,'EA',0,true,1),
+ ('MG','مليغرام','Milligram','mass',0.000001,'KG',3,true,1),
+ ('G','غرام','Gram','mass',0.001,'KG',3,true,1),
+ ('KG','كيلوغرام','Kilogram','mass',1,'KG',3,true,1),
+ ('TONNE','طن متري','Metric tonne','mass',1000,'KG',3,true,1),
+ ('ML','مليلتر','Millilitre','volume',0.001,'L',3,true,1),
+ ('L','لتر','Litre','volume',1,'L',3,true,1),
+ ('M3','متر مكعب','Cubic metre','volume',1000,'L',3,true,1),
+ ('MM','مليمتر','Millimetre','length',0.001,'M',3,true,1),
+ ('CM','سنتيمتر','Centimetre','length',0.01,'M',3,true,1),
+ ('M','متر','Metre','length',1,'M',3,true,1),
+ ('KM','كيلومتر','Kilometre','length',1000,'M',3,true,1),
+ ('CM2','سنتيمتر مربع','Square centimetre','area',0.0001,'M2',3,true,1),
+ ('M2','متر مربع','Square metre','area',1,'M2',3,true,1),
+ ('HA','هكتار','Hectare','area',10000,'M2',3,true,1),
+ ('SEC','ثانية','Second','time',1,'SEC',0,true,1),
+ ('MIN','دقيقة','Minute','time',60,'SEC',2,true,1),
+ ('HOUR','ساعة','Hour','time',3600,'SEC',2,true,1),
+ ('DAY','يوم','Day','time',86400,'SEC',2,true,1),
+ ('PACK','عبوة','Pack','package',1,'PACK',0,true,1),
+ ('BOX','صندوق','Box','package',1,'BOX',0,true,1),
+ ('CARTON','كرتون','Carton','package',1,'CARTON',0,true,1),
+ ('PALLET','منصة تحميل','Pallet','package',1,'PALLET',0,true,1),
+ ('KWH','كيلوواط ساعة','Kilowatt-hour','energy',1,'KWH',3,true,1),
+ ('GB','غيغابايت','Gigabyte','data',1,'GB',2,true,1)
+ON CONFLICT (code) DO NOTHING;
 
 COMMENT ON TABLE public.commercial_catalog_categories IS 'Unlimited-depth shared or organization-owned product category tree; localized labels are stored separately.';
 COMMENT ON TABLE public.commercial_catalog_products IS 'Universal product master with multilingual descriptions, ingredients, specifications, expiry/lot controls and external image URLs.';
