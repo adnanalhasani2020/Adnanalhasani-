@@ -118,6 +118,8 @@ class CommercialWebApplication:
         )
         self.identity = CommercialIdentityApplication()
         self.checkout = CommercialCheckoutApplication()
+        # Keep Supabase access tokens server-side, keyed by the HttpOnly local session token.
+        self._supabase_tokens = {}
 
     @staticmethod
     def _cookies(environ):
@@ -278,6 +280,7 @@ class CommercialWebApplication:
                         db, provider_user_id=str(user["id"]),
                         email=user.get("email") or body.get("email"),
                     )
+                    self._supabase_tokens[result["session_token"]] = session_data["access_token"]
                 else:
                     if path == "/api/register":
                         self.identity.register(db, username=body.get("username"), password=body.get("password"))
@@ -290,8 +293,40 @@ class CommercialWebApplication:
                                    "expires_at": result["expires_at"]},
                                   [("Set-Cookie", cookie)])
 
+            if method == "POST" and path in {"/api/supabase/storefronts", "/api/supabase/store-items"}:
+                access_token = self._supabase_tokens.get(token) if token else None
+                if not access_token or self.identity.resolve_session(db, token) is None:
+                    return self._json(start_response, "401 Unauthorized", {
+                        "error": "أعد تسجيل الدخول إلى Supabase قبل متابعة إعداد المتجر."
+                    })
+                body = self._body(environ)
+                client = SupabaseRPCClient(access_token)
+                if path == "/api/supabase/storefronts":
+                    result = client.create_storefront(
+                        organization_name=body.get("organization_name"), organization_slug=body.get("organization_slug"),
+                        activity_name=body.get("activity_name"), product_name=body.get("product_name"),
+                        unit_name=body.get("unit_name"), price_minor=body.get("price_minor"),
+                        currency_code=body.get("currency_code"), location_name=body.get("location_name"),
+                        initial_quantity=body.get("initial_quantity"), country_code=body.get("country_code"),
+                        timezone=body.get("timezone"), locale=body.get("locale"), public_phone=body.get("public_phone"),
+                        public_email=body.get("public_email"), website_url=body.get("website_url"),
+                        public_description=body.get("public_description"), city=body.get("city"),
+                        district=body.get("district"), street=body.get("street"), landmark=body.get("landmark"),
+                        public_listing=body.get("public_listing", False),
+                    )
+                else:
+                    result = client.add_store_item(
+                        organization_id=body.get("organization_id"), activity_id=body.get("activity_id"),
+                        location_id=body.get("location_id"), product_name=body.get("product_name"),
+                        unit_name=body.get("unit_name"), price_minor=body.get("price_minor"),
+                        initial_quantity=body.get("initial_quantity"),
+                    )
+                return self._json(start_response, "201 Created", result)
+
             if method == "POST" and path == "/api/logout":
                 self.identity.logout(db, token)
+                if token:
+                    self._supabase_tokens.pop(token, None)
                 secure = "; Secure" if secure_cookie else ""
                 return self._json(start_response, "200 OK", {"ok": True},
                                   [("Set-Cookie", "commercial_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0" + secure)])
@@ -309,7 +344,7 @@ class CommercialWebApplication:
                 ).fetchone()
                 if row is None:
                     return self._json(start_response, "401 Unauthorized", {"error": "الحساب غير متاح."})
-                return self._json(start_response, "200 OK", {"person_id": person_id, "username": row[0]})
+                return self._json(start_response, "200 OK", {"person_id": person_id, "username": row[0], "supabase_auth_enabled": self._supabase_auth_enabled(), "supabase_session_available": bool(token and token in self._supabase_tokens)})
 
             if method == "GET" and path == "/api/catalog":
                 now = __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
