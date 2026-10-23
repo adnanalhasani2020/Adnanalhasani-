@@ -151,13 +151,13 @@ BEGIN
 
   INSERT INTO public.commercial_organizations
     (name, slug, default_currency_code, default_timezone, created_by, organization_type, size_tier,
-     country_code, default_locale, legal_name, tax_identifier, commercial_registration_number,
+     country_code, default_locale, legal_name, commercial_registration_number,
      opened_on, owner_full_name, logo_url, cover_image_url, public_description, public_phone,
      public_email, website_url, metadata, public_listing)
   VALUES
     (btrim(p_organization_name), lower(btrim(p_organization_slug)), p_currency_code, p_timezone, v_uid,
      v_org_type, v_size_tier, p_country_code, p_locale, nullif(btrim(p_legal_name), ''),
-     btrim(p_commercial_registration_number), btrim(p_commercial_registration_number), p_opened_on,
+     btrim(p_commercial_registration_number), p_opened_on,
      btrim(p_owner_full_name), nullif(btrim(p_logo_url), ''), nullif(btrim(p_cover_image_url), ''),
      nullif(btrim(p_public_description), ''), nullif(btrim(p_public_phone), ''),
      nullif(lower(btrim(p_public_email)), ''), nullif(btrim(p_website_url), ''),
