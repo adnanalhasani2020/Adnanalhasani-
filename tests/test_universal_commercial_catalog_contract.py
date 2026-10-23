@@ -30,6 +30,9 @@ class UniversalCommercialCatalogContractTests(unittest.TestCase):
         self.assertIn("commercial_catalog_item_category_owner_guard", self.schema)
         self.assertIn("owner_organization_id", self.schema)
         self.assertIn("commercial_catalog_member_of", self.schema)
+        self.assertIn("DROP POLICY IF EXISTS commercial_global_catalog_read_active", self.schema)
+        self.assertIn("commercial_global_catalog_public_read", self.schema)
+        self.assertIn("commercial_global_entity_translations_public_read", self.schema)
 
     def test_product_units_and_external_images_are_supported(self):
         self.assertIn("commercial_catalog_product_units", self.schema)
@@ -55,6 +58,9 @@ class UniversalCommercialCatalogContractTests(unittest.TestCase):
         self.assertIn("ingredients", self.management)
         self.assertIn("material_composition", self.management)
         self.assertIn("commercial_catalog_product_rulings", self.management)
+        self.assertIn("commercial_catalog_product_recipes", self.management)
+        self.assertIn("commercial_catalog_recipe_ingredients", self.management)
+        self.assertIn("human_authored", self.management)
         self.assertIn("religion_code", self.management)
         self.assertIn("product_unit_dimension_mismatch", self.management)
 
@@ -81,6 +87,8 @@ class UniversalCommercialCatalogContractTests(unittest.TestCase):
         self.assertIn("MANUF-BOLT", self.seed)
         self.assertIn("catalog_template", self.seed)
         self.assertIn("commercial_global_entity_translations", self.seed)
+        self.assertIn("commercial_catalog_product_units", self.seed)
+        self.assertIn("commercial_catalog_product_business_levels", self.seed)
 
 
 if __name__ == "__main__":
