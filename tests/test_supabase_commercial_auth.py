@@ -136,3 +136,59 @@ def test_supabase_auth_ui_uses_email_fields_when_configured(monkeypatch):
     assert 'id="loginEmail" name="email" type="email"' in page
     assert 'id="registerEmail" name="email" type="email"' in page
     assert 'id="loginUsername"' not in page
+
+
+def test_storefront_api_requires_authenticated_supabase_session(tmp_path, monkeypatch):
+    enable_supabase(monkeypatch)
+    app = CommercialWebApplication(tmp_path / "commerce.sqlite")
+    response, payload = request(app, "/api/supabase/storefronts", method="POST",
+                                body={"organization_name": "متجر النور"})
+    assert response["status"] == "401 Unauthorized"
+    assert "Supabase" in payload["error"]
+
+
+def test_storefront_api_uses_server_side_supabase_token(tmp_path, monkeypatch):
+    enable_supabase(monkeypatch)
+    app = CommercialWebApplication(tmp_path / "commerce.sqlite")
+    user = {"id": "store-owner-001", "email": "owner@example.com"}
+    with patch("agent_core.commercial_web.SupabaseAuthClient") as auth_class:
+        auth_class.return_value.sign_in_with_password.return_value = {
+            "user": user, "access_token": "server-only-user-token",
+        }
+        login_response, _ = request(app, "/api/login", method="POST",
+                                    body={"email": user["email"], "password": "correct horse battery staple"})
+    session_cookie = cookie_from(login_response)
+    expected = {"organization_id": "org-1", "activity_id": "activity-1",
+                "location_id": "location-1", "product_id": "product-1",
+                "offering_id": "offering-1", "initial_quantity": 7, "currency_code": "YER"}
+    with patch("agent_core.commercial_web.SupabaseRPCClient") as client_class:
+        client_class.return_value.create_storefront.return_value = expected
+        response, payload = request(
+            app, "/api/supabase/storefronts", method="POST", cookie=session_cookie,
+            body={"organization_name": "متجر النور", "organization_slug": "alnoor-store",
+                  "activity_name": "مواد غذائية", "product_name": "أرز", "unit_name": "كيس",
+                  "price_minor": 500, "currency_code": "YER", "location_name": "الفرع الرئيسي",
+                  "initial_quantity": 7, "country_code": "YE", "timezone": "Asia/Aden",
+                  "locale": "ar", "public_listing": False},
+        )
+    assert response["status"] == "201 Created"
+    assert payload == expected
+    client_class.assert_called_once_with("server-only-user-token")
+    assert "server-only-user-token" not in json.dumps(payload)
+
+
+def test_logout_clears_server_side_supabase_token(tmp_path, monkeypatch):
+    enable_supabase(monkeypatch)
+    app = CommercialWebApplication(tmp_path / "commerce.sqlite")
+    with patch("agent_core.commercial_web.SupabaseAuthClient") as auth_class:
+        auth_class.return_value.sign_in_with_password.return_value = {
+            "user": {"id": "store-owner-002", "email": "owner2@example.com"},
+            "access_token": "logout-token",
+        }
+        response, _ = request(app, "/api/login", method="POST",
+                               body={"email": "owner2@example.com", "password": "correct horse battery staple"})
+    cookie = cookie_from(response)
+    session = cookie.removeprefix("commercial_session=")
+    assert session in app._supabase_tokens
+    request(app, "/api/logout", method="POST", cookie=cookie)
+    assert session not in app._supabase_tokens
