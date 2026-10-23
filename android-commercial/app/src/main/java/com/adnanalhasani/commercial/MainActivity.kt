@@ -22,6 +22,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -405,10 +408,15 @@ private fun InventoryScreen(products: List<Product>, query: String, onQuery: (St
 @Composable
 private fun ProductRow(product: Product, onClick: () -> Unit = {}) {
     val warning = product.stock <= 9
+    val displayImage = product.imageUrl.ifBlank { runCatching { val units = JSONArray(product.unitVariantsJson); (0 until units.length()).map { units.getJSONObject(it) }.firstOrNull { it.optBoolean("isDefault") && it.optString("imageUrl").startsWith("https://", true) }?.optString("imageUrl").orEmpty() }.getOrDefault("") }
     Card(onClick = onClick, colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, Border), modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(45.dp).background(if (warning) Color(0xFFFFF1DF) else Mint, RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
-                Icon(if (warning) Icons.Default.WarningAmber else Icons.Default.Inventory2, null, tint = if (warning) Color(0xFFB96A14) else Green)
+            if (displayImage.startsWith("https://", true)) {
+                AsyncImage(model=displayImage,contentDescription=product.name,modifier=Modifier.size(45.dp).clip(RoundedCornerShape(14.dp)),contentScale=ContentScale.Crop)
+            } else {
+                Box(Modifier.size(45.dp).background(if (warning) Color(0xFFFFF1DF) else Mint, RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
+                    Icon(if (warning) Icons.Default.WarningAmber else Icons.Default.Inventory2, null, tint = if (warning) Color(0xFFB96A14) else Green)
+                }
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
