@@ -226,6 +226,23 @@ CREATE TRIGGER commercial_catalog_category_cycle_guard
 BEFORE INSERT OR UPDATE OF parent_code, owner_organization_id ON public.commercial_global_catalog_categories
 FOR EACH ROW EXECUTE FUNCTION public.commercial_catalog_category_cycle_guard();
 
+CREATE OR REPLACE FUNCTION public.commercial_catalog_item_category_owner_guard()
+RETURNS trigger LANGUAGE plpgsql SET search_path = pg_catalog, public AS $
+DECLARE v_category_owner uuid;
+BEGIN
+  SELECT owner_organization_id INTO v_category_owner
+  FROM public.commercial_global_catalog_categories WHERE code=NEW.category_code;
+  IF v_category_owner IS NOT NULL AND v_category_owner IS DISTINCT FROM NEW.owner_organization_id THEN
+    RAISE EXCEPTION 'catalog_item_category_owner_mismatch';
+  END IF;
+  RETURN NEW;
+END $;
+DROP TRIGGER IF EXISTS commercial_catalog_item_category_owner_guard ON public.commercial_global_catalog_items;
+CREATE TRIGGER commercial_catalog_item_category_owner_guard
+BEFORE INSERT OR UPDATE OF category_code, owner_organization_id
+ON public.commercial_global_catalog_items
+FOR EACH ROW EXECUTE FUNCTION public.commercial_catalog_item_category_owner_guard();
+
 -- Restrictive tenant guards are ANDed with existing catalog policies, so active global templates remain public to authenticated users.
 CREATE POLICY commercial_catalog_items_tenant_guard
 ON public.commercial_global_catalog_items AS RESTRICTIVE FOR ALL TO authenticated
@@ -419,8 +436,12 @@ BEGIN
     organization_id,global_item_id,merchant_sku,merchant_display_name,merchant_description,
     price_minor,currency_code,is_available,metadata,created_by,source_organization_id,imported_at,is_favorite
   )
-  SELECT p_destination_organization_id, i.global_item_id, i.merchant_sku, i.merchant_display_name,
-    i.merchant_description, i.price_minor, i.currency_code, i.is_available, i.metadata,
+  SELECT p_destination_organization_id, i.global_item_id,
+    CASE WHEN i.merchant_sku IS NULL OR NOT EXISTS (
+      SELECT 1 FROM public.commercial_organization_catalog_items d
+      WHERE d.organization_id=p_destination_organization_id AND d.merchant_sku=i.merchant_sku
+    ) THEN i.merchant_sku ELSE NULL END,
+    i.merchant_display_name, i.merchant_description, i.price_minor, i.currency_code, i.is_available, i.metadata,
     auth.uid(), p_source_organization_id, now(), i.is_favorite
   FROM public.commercial_organization_catalog_items i
   WHERE i.organization_id=p_source_organization_id
