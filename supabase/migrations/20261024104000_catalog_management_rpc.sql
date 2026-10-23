@@ -4,7 +4,7 @@ ALTER TABLE public.commercial_global_entity_translations
   DROP CONSTRAINT IF EXISTS commercial_global_entity_translations_translation_status_check;
 ALTER TABLE public.commercial_global_entity_translations
   ADD CONSTRAINT commercial_global_entity_translations_translation_status_check
-  CHECK (translation_status IN ('machine_draft','human_authored','human_authored','official'));
+  CHECK (translation_status IN ('machine_draft','human_authored','human_reviewed','official'));
 
 
 ALTER TABLE public.commercial_global_units
