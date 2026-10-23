@@ -147,7 +147,7 @@ BEGIN
           AND (ri.city IS NULL OR lower(ri.city)=lower(p_city))
       )
     )
-  ORDER BY recommendation_score DESC, COALESCE(pt.name,p.default_name), p.id
+  ORDER BY 12 DESC, COALESCE(pt.name,p.default_name), p.id
   LIMIT greatest(1, least(COALESCE(p_limit,50),100));
 END;
 $$;
