@@ -21,7 +21,11 @@ import java.util.concurrent.Executors
 private val profileIo = Executors.newSingleThreadExecutor()
 private val profileMain = Handler(Looper.getMainLooper())
 
-private data class BusinessActivityOption(\n    val code: String, val nameAr: String, val nameEn: String, val pathAr: String, val defaultBusinessLevelCode: String\n)\n\nprivate fun supabaseRequest(path: String, payload: JSONObject, token: String? = null): JSONObject {
+private data class BusinessActivityOption(
+    val code: String, val nameAr: String, val nameEn: String, val pathAr: String, val defaultBusinessLevelCode: String
+)
+
+private fun supabaseRequest(path: String, payload: JSONObject, token: String? = null): JSONObject {
     val base = BuildConfig.SUPABASE_URL.trimEnd('/')
     val anon = BuildConfig.SUPABASE_ANON_KEY
     require(base.startsWith("https://") && anon.isNotBlank()) {
