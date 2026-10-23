@@ -200,7 +200,7 @@ REVOKE ALL ON FUNCTION public.commercial_catalog_member_of(uuid,text[]) FROM PUB
 GRANT EXECUTE ON FUNCTION public.commercial_catalog_member_of(uuid,text[]) TO authenticated;
 
 CREATE OR REPLACE FUNCTION public.commercial_catalog_audit_fields()
-RETURNS trigger LANGUAGE plpgsql SET search_path = pg_catalog, public AS $
+RETURNS trigger LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
 BEGIN
   IF auth.uid() IS NOT NULL THEN
     IF TG_OP='INSERT' THEN NEW.created_by := auth.uid(); END IF;
@@ -208,7 +208,7 @@ BEGIN
   END IF;
   NEW.updated_at := now();
   RETURN NEW;
-END $;
+END $$;
 DROP TRIGGER IF EXISTS commercial_catalog_items_audit ON public.commercial_global_catalog_items;
 CREATE TRIGGER commercial_catalog_items_audit
 BEFORE INSERT OR UPDATE ON public.commercial_global_catalog_items
@@ -246,7 +246,7 @@ BEFORE INSERT OR UPDATE OF parent_code, owner_organization_id ON public.commerci
 FOR EACH ROW EXECUTE FUNCTION public.commercial_catalog_category_cycle_guard();
 
 CREATE OR REPLACE FUNCTION public.commercial_catalog_item_category_owner_guard()
-RETURNS trigger LANGUAGE plpgsql SET search_path = pg_catalog, public AS $
+RETURNS trigger LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
 DECLARE v_category_owner uuid;
 BEGIN
   SELECT owner_organization_id INTO v_category_owner
@@ -255,7 +255,7 @@ BEGIN
     RAISE EXCEPTION 'catalog_item_category_owner_mismatch';
   END IF;
   RETURN NEW;
-END $;
+END $$;
 DROP TRIGGER IF EXISTS commercial_catalog_item_category_owner_guard ON public.commercial_global_catalog_items;
 CREATE TRIGGER commercial_catalog_item_category_owner_guard
 BEFORE INSERT OR UPDATE OF category_code, owner_organization_id
