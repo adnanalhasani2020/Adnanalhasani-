@@ -37,7 +37,8 @@ internal data class CatalogProduct(
     val availableUnits: List<CatalogUnit> = emptyList(), val createdBy: String = "", val createdAt: String = "", val importedBy: String = "", val attributesSchema: String = "", val modelNumber: String = "", val partNumber: String = "", val imageAlt: String = "", val materialComposition: String = "", val ingredients: String = "", val recipe: String = "", val specifications: String = "", val allergens: String = "", val storageInstructions: String = "", val usageInstructions: String = "", val warnings: String = "", val shelfLifeDays: Int? = null, val requiresExpiryDate: Boolean = false, val isBatchTracked: Boolean = false, val isSerialTracked: Boolean = false, val rulings: List<CatalogRuling> = emptyList()
 )
 private data class CatalogCategory(val code: String, val parentCode: String, val nameAr: String, val nameEn: String, val localizedName: String = "", val descriptionAr: String = "", val descriptionEn: String = "", val localizedDescription: String = "")
-private data class DirectoryUnit(val code: String, val nameAr: String, val nameEn: String, val dimension: String, val baseCode: String, val factor: String, val owner: String, val localizedName: String = "")\nprivate data class PendingTransfer(val id: String, val source: String, val destination: String, val itemCount: Int, val createdAt: String)
+private data class DirectoryUnit(val code: String, val nameAr: String, val nameEn: String, val dimension: String, val baseCode: String, val factor: String, val owner: String, val localizedName: String = "")
+private data class PendingTransfer(val id: String, val source: String, val destination: String, val itemCount: Int, val createdAt: String)
 
 private val catalogIo = Executors.newSingleThreadExecutor()
 private val catalogMain = Handler(Looper.getMainLooper())
