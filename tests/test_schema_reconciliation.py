@@ -7,6 +7,7 @@ import pytest
 
 from agent_core.schema_reconciliation import (
     compare_schemas,
+    compare_mapped_tables,
     load_supabase_snapshot,
     sqlite_schema,
 )
