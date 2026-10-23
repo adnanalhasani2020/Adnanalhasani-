@@ -2,7 +2,7 @@
 -- Product images are HTTPS URLs only; image bytes are hosted outside Supabase Storage.
 
 ALTER TABLE public.commercial_global_catalog_categories
-  ADD COLUMN IF NOT EXISTS owner_organization_id uuid REFERENCES public.commercial_organizations(id) ON DELETE CASCADE,
+  ADD COLUMN IF NOT EXISTS owner_organization_id uuid REFERENCES public.commercial_organizations(id) ON DELETE RESTRICT,
   ADD COLUMN IF NOT EXISTS created_by uuid REFERENCES auth.users(id),
   ADD COLUMN IF NOT EXISTS updated_by uuid REFERENCES auth.users(id);
 
