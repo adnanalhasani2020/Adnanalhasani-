@@ -104,9 +104,9 @@ class SupabaseAuthClient:
     @staticmethod
     def _validate_credentials(email: str, password: str) -> tuple[str, str]:
         if not isinstance(email, str) or not email.strip() or len(email) > 320 or "@" not in email:
-            raise SupabaseRPCError("أدخل بريدًا إلكترونيًا صالحًا.")
+            raise SupabaseAuthError("أدخل بريدًا إلكترونيًا صالحًا.")
         if not isinstance(password, str) or not 12 <= len(password) <= 1024:
-            raise SupabaseRPCError("يجب أن تتكون كلمة المرور من 12 إلى 1024 حرفًا.")
+            raise SupabaseAuthError("يجب أن تتكون كلمة المرور من 12 إلى 1024 حرفًا.")
         return email.strip().lower(), password
 
     def sign_up(self, *, email: str, password: str) -> dict:
