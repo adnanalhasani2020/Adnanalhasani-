@@ -1,3 +1,40 @@
+-- Private identity files are never publicly readable; branding files are public after upload.
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES ('commercial-brand-assets','commercial-brand-assets',true,5242880,ARRAY['image/png','image/jpeg','image/webp']),
+       ('commercial-owner-identities','commercial-owner-identities',false,5242880,ARRAY['image/png','image/jpeg','image/webp','application/pdf'])
+ON CONFLICT (id) DO UPDATE SET
+  public = EXCLUDED.public,
+  file_size_limit = EXCLUDED.file_size_limit,
+  allowed_mime_types = EXCLUDED.allowed_mime_types;
+
+DROP POLICY IF EXISTS commercial_brand_assets_owner_insert ON storage.objects;
+CREATE POLICY commercial_brand_assets_owner_insert ON storage.objects
+  FOR INSERT TO authenticated WITH CHECK (
+    bucket_id = 'commercial-brand-assets' AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+DROP POLICY IF EXISTS commercial_brand_assets_owner_update ON storage.objects;
+CREATE POLICY commercial_brand_assets_owner_update ON storage.objects
+  FOR UPDATE TO authenticated USING (
+    bucket_id = 'commercial-brand-assets' AND (storage.foldername(name))[1] = auth.uid()::text
+  ) WITH CHECK (
+    bucket_id = 'commercial-brand-assets' AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+DROP POLICY IF EXISTS commercial_owner_identity_insert ON storage.objects;
+CREATE POLICY commercial_owner_identity_insert ON storage.objects
+  FOR INSERT TO authenticated WITH CHECK (
+    bucket_id = 'commercial-owner-identities' AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+DROP POLICY IF EXISTS commercial_owner_identity_read ON storage.objects;
+CREATE POLICY commercial_owner_identity_read ON storage.objects
+  FOR SELECT TO authenticated USING (
+    bucket_id = 'commercial-owner-identities' AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+DROP POLICY IF EXISTS commercial_owner_identity_delete ON storage.objects;
+CREATE POLICY commercial_owner_identity_delete ON storage.objects
+  FOR DELETE TO authenticated USING (
+    bucket_id = 'commercial-owner-identities' AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+
 -- Store profile is separate from inventory and sales. Existing product workflows remain untouched.
 ALTER TABLE public.commercial_organizations
   ADD COLUMN IF NOT EXISTS commercial_registration_number text,
@@ -34,6 +71,8 @@ CREATE OR REPLACE FUNCTION public.commercial_create_activity_profile(
   p_landmark text DEFAULT NULL,
   p_logo_url text DEFAULT NULL,
   p_cover_image_url text DEFAULT NULL,
+  p_owner_identity_front_path text DEFAULT NULL,
+  p_owner_identity_back_path text DEFAULT NULL,
   p_locations jsonb DEFAULT '[]'::jsonb
 ) RETURNS jsonb
 LANGUAGE plpgsql
@@ -122,7 +161,9 @@ BEGIN
      btrim(p_owner_full_name), nullif(btrim(p_logo_url), ''), nullif(btrim(p_cover_image_url), ''),
      nullif(btrim(p_public_description), ''), nullif(btrim(p_public_phone), ''),
      nullif(lower(btrim(p_public_email)), ''), nullif(btrim(p_website_url), ''),
-     jsonb_build_object('business_level',p_business_level), false)
+     jsonb_build_object('business_level',p_business_level,
+       'owner_identity_front_path',nullif(btrim(p_owner_identity_front_path),''),
+       'owner_identity_back_path',nullif(btrim(p_owner_identity_back_path),'')), false)
   RETURNING id INTO v_org_id;
 
   INSERT INTO public.commercial_organization_members (organization_id,user_id,role,state,joined_at)
@@ -162,5 +203,5 @@ BEGIN
 END;
 $function$;
 
-REVOKE ALL ON FUNCTION public.commercial_create_activity_profile(text,text,text,text,text,text,date,text,text,text,text,text,text,text,text,text,text,text,text,text,text,text,text,jsonb) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.commercial_create_activity_profile(text,text,text,text,text,text,date,text,text,text,text,text,text,text,text,text,text,text,text,text,text,text,text,jsonb) TO authenticated;
+REVOKE ALL ON FUNCTION public.commercial_create_activity_profile(text,text,text,text,text,text,date,text,text,text,text,text,text,text,text,text,text,text,text,text,text,text,text,text,text,jsonb) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.commercial_create_activity_profile(text,text,text,text,text,text,date,text,text,text,text,text,text,text,text,text,text,text,text,text,text,text,text,text,text,jsonb) TO authenticated;
