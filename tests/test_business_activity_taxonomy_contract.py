@@ -19,6 +19,26 @@ class BusinessActivityTaxonomyContractTests(unittest.TestCase):
         cls.alias_guard = (MIGRATIONS / "20261023231649_business_activity_alias_global_uniqueness.sql").read_text(encoding="utf-8")
         cls.depth_fix = (MIGRATIONS / "20261023231736_business_activity_unbounded_api_depth.sql").read_text(encoding="utf-8")
 
+    def test_migration_filenames_match_versions_recorded_by_supabase(self):
+        applied_versions = [
+            "20261023231027_universal_commercial_catalog.sql",
+            "20261023231040_seed_universal_catalog_templates.sql",
+            "20261023231045_catalog_discovery_rpc.sql",
+            "20261023231049_catalog_management_rpc.sql",
+            "20261023231054_catalog_update_rpc.sql",
+            "20261023231152_business_activity_taxonomy.sql",
+            "20261023231322_business_activity_taxonomy_expansion.sql",
+            "20261023231436_catalog_policy_deduplication.sql",
+            "20261023231525_catalog_integrity_performance.sql",
+            "20261023231649_business_activity_alias_global_uniqueness.sql",
+            "20261023231736_business_activity_unbounded_api_depth.sql",
+        ]
+        for filename in applied_versions:
+            with self.subTest(filename=filename):
+                self.assertTrue((MIGRATIONS / filename).is_file())
+        self.assertFalse(any(MIGRATIONS.glob("2026102410*.sql")))
+        self.assertFalse(any(MIGRATIONS.glob("2026102411*.sql")))
+
     def test_activity_taxonomy_does_not_duplicate_product_or_unit_masters(self):
         self.assertIn("commercial_global_business_activity_nodes", self.taxonomy)
         self.assertIn("commercial_global_catalog_categories", self.catalog_schema)
