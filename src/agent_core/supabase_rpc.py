@@ -59,6 +59,40 @@ class SupabaseRPCClient:
             raise SupabaseRPCError("Unexpected organization-creation response; verify before retrying.")
         return result
 
+    def create_storefront(self, *, organization_name: str, organization_slug: str,
+                          activity_name: str, product_name: str, unit_name: str,
+                          price_minor: int, currency_code: str, location_name: str,
+                          initial_quantity: int, country_code: str = "YE",
+                          timezone: str = "Asia/Aden", locale: str = "ar",
+                          public_phone: str | None = None, public_email: str | None = None,
+                          website_url: str | None = None, public_description: str | None = None,
+                          city: str | None = None, district: str | None = None,
+                          street: str | None = None, landmark: str | None = None,
+                          public_listing: bool = False) -> dict:
+        result = self.rpc("commercial_create_storefront_profiled", {
+            "p_organization_name": organization_name, "p_organization_slug": organization_slug,
+            "p_activity_name": activity_name, "p_product_name": product_name, "p_unit_name": unit_name,
+            "p_price_minor": price_minor, "p_currency_code": currency_code, "p_location_name": location_name,
+            "p_initial_quantity": initial_quantity, "p_country_code": country_code, "p_timezone": timezone,
+            "p_locale": locale, "p_public_phone": public_phone, "p_public_email": public_email,
+            "p_website_url": website_url, "p_public_description": public_description, "p_city": city,
+            "p_district": district, "p_street": street, "p_landmark": landmark, "p_public_listing": public_listing,
+        })
+        if not isinstance(result, dict) or not result.get("organization_id"):
+            raise SupabaseRPCError("Unexpected storefront-creation response; verify the result before retrying.")
+        return result
+
+    def add_store_item(self, *, organization_id: str, activity_id: str, location_id: str,
+                       product_name: str, unit_name: str, price_minor: int, initial_quantity: int) -> dict:
+        result = self.rpc("commercial_add_store_item", {
+            "p_organization_id": organization_id, "p_activity_id": activity_id, "p_location_id": location_id,
+            "p_product_name": product_name, "p_unit_name": unit_name, "p_price_minor": price_minor,
+            "p_initial_quantity": initial_quantity,
+        })
+        if not isinstance(result, dict) or not result.get("product_id"):
+            raise SupabaseRPCError("Unexpected product-creation response; verify the result before retrying.")
+        return result
+
 class SupabaseAuthError(SupabaseRPCError):
     """Supabase Auth rejected user-provided credentials or signup details."""
 
