@@ -296,6 +296,23 @@ ON public.commercial_global_entity_translations AS RESTRICTIVE FOR ALL TO authen
 USING (
   owner_organization_id IS NULL
   OR public.commercial_catalog_member_of(owner_organization_id, ARRAY['owner','admin','manager','staff']::text[])
+  OR (
+    entity_type='catalog_item' AND EXISTS (
+      SELECT 1 FROM public.commercial_global_catalog_items p
+      JOIN public.commercial_organization_catalog_items oi ON oi.global_item_id=p.id
+      WHERE p.catalog_code=entity_key
+        AND public.commercial_catalog_member_of(oi.organization_id, ARRAY['owner','admin','manager','staff']::text[])
+    )
+  )
+  OR (
+    entity_type='catalog_category' AND EXISTS (
+      SELECT 1 FROM public.commercial_global_catalog_categories c
+      JOIN public.commercial_global_catalog_items p ON p.category_code=c.code
+      JOIN public.commercial_organization_catalog_items oi ON oi.global_item_id=p.id
+      WHERE c.code=entity_key
+        AND public.commercial_catalog_member_of(oi.organization_id, ARRAY['owner','admin','manager','staff']::text[])
+    )
+  )
 )
 WITH CHECK (
   owner_organization_id IS NULL
