@@ -487,6 +487,7 @@ private fun SaleRow(title: String, subtitle: String, amount: String, credit: Boo
 }
 
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SaleEntryDialog(
     inventory: List<Product>,
