@@ -30,17 +30,17 @@ These additive migrations extend the existing global catalog, organization catal
 RLS is enabled on every table added here. Global reference/product rows are readable by authenticated users; organization-owned records and writes are limited by active organization membership. The transfer RPC verifies owner/admin membership in both organizations.
 
 ## Migration order
-1. `20261024100000_universal_commercial_catalog.sql` — additive catalog fields, unit variants, targeting, recipes, rulings, ownership/RLS guards, and safe public-vs-tenant read policies.
-2. `20261024102000_seed_universal_catalog_templates.sql` — bilingual starter categories/templates, canonical unit links, sector targeting and business-level recommendation weights. Generic templates do not invent manufacturer identities, GTINs, pack conversions or medical/religious outcomes.
-3. `20261024103000_catalog_discovery_rpc.sql` — authenticated activity/level/region-aware search with barcode lookup, localized product details, unit names and sourced rulings.
-4. `20261024104000_catalog_management_rpc.sql` — category/unit/product authoring, extra-locale translations, measured recipe ingredients, region/sector rules, separate ruling-review action, and two-phase account transfer.
-5. `20261024105000_catalog_update_rpc.sql` — owner/admin-only editing of organization-owned product details, with audit fields and preservation of linked units, recipes, targeting and rulings.
-6. `20261024110000_business_activity_taxonomy.sql` — separate unbounded-depth business activity tree, aliases, external-code mappings, safe activity linkage and read RPC.
-7. `20261024112000_business_activity_taxonomy_expansion.sql` — broader cross-sector activity coverage, unique alias guard, and explicit ROUH-owned provenance for unmapped starter nodes.
-8. `20261024113000_catalog_policy_deduplication.sql` — removes overlapping SELECT policies and replaces broad `FOR ALL` catalog writes with separate insert/update/delete policies.
-9. `20261024114000_catalog_integrity_performance.sql` — removes the obsolete one-phase transfer RPC, adds missing FK indexes, and adds stable row identity to region rules.
-10. `20261024115000_business_activity_alias_global_uniqueness.sql` — replaces per-locale alias uniqueness with global normalized-alias uniqueness so an alias can never resolve to different nodes.
-11. `20261024116000_business_activity_unbounded_api_depth.sql` — removes the arbitrary API traversal depth cap and uses cycle-safe recursion.
+1. `20261023231027_universal_commercial_catalog.sql` — additive catalog fields, unit variants, targeting, recipes, rulings, ownership/RLS guards, and safe public-vs-tenant read policies.
+2. `20261023231040_seed_universal_catalog_templates.sql` — bilingual starter categories/templates, canonical unit links, sector targeting and business-level recommendation weights. Generic templates do not invent manufacturer identities, GTINs, pack conversions or medical/religious outcomes.
+3. `20261023231045_catalog_discovery_rpc.sql` — authenticated activity/level/region-aware search with barcode lookup, localized product details, unit names and sourced rulings.
+4. `20261023231049_catalog_management_rpc.sql` — category/unit/product authoring, extra-locale translations, measured recipe ingredients, region/sector rules, separate ruling-review action, and two-phase account transfer.
+5. `20261023231054_catalog_update_rpc.sql` — owner/admin-only editing of organization-owned product details, with audit fields and preservation of linked units, recipes, targeting and rulings.
+6. `20261023231152_business_activity_taxonomy.sql` — separate unbounded-depth business activity tree, aliases, external-code mappings, safe activity linkage and read RPC.
+7. `20261023231322_business_activity_taxonomy_expansion.sql` — broader cross-sector activity coverage, unique alias guard, and explicit ROUH-owned provenance for unmapped starter nodes.
+8. `20261023231436_catalog_policy_deduplication.sql` — removes overlapping SELECT policies and replaces broad `FOR ALL` catalog writes with separate insert/update/delete policies.
+9. `20261023231525_catalog_integrity_performance.sql` — removes the obsolete one-phase transfer RPC, adds missing FK indexes, and adds stable row identity to region rules.
+10. `20261023231649_business_activity_alias_global_uniqueness.sql` — replaces per-locale alias uniqueness with global normalized-alias uniqueness so an alias can never resolve to different nodes.
+11. `20261023231736_business_activity_unbounded_api_depth.sql` — removes the arbitrary API traversal depth cap and uses cycle-safe recursion.
 
 The product discovery response includes the full product detail payload and the source-attributed rulings, not just a product name. Additional locale values use the existing translation directory; the UI accepts one field translation per line in `locale|field|value` form. For package variants, the UI accepts `unit_code|role|qty_in_base|barcode|package_name|image_url` lines. For multiple region rules, it accepts `country|region|city|include-or-exclude` lines.
 

@@ -35,7 +35,7 @@
 - ترحيلات الكتالوج والأنشطة أُطبقت على مشروع Supabase المرتبط بتاريخ 2026-10-24؛ فحوصات سلامة أولية لم تجد تكرارًا في رموز الأصناف أو باركود الوحدات أو مرادفات الأنشطة ولا سجلات يتيمة. لا يعني ذلك اكتمال اختبار مصفوفة الصلاحيات أو اعتماد إصدار Android قبل اجتياز CI.
 - نقل الدليل بين الحسابات يتم بطلب من الحساب المصدر وموافقة صريحة من مالك/مدير الحساب الوجهة. استيراد صنف إلى Android يظل محليًا ولا يعني مزامنة المخزون والمبيعات.
 - التفاصيل وحدود التطبيق: `docs/universal-commercial-catalog.md`.
-- ترحيلات دليل الأنشطة وتكامل الكتالوج: `20261024110000_business_activity_taxonomy.sql`, `20261024112000_business_activity_taxonomy_expansion.sql`, `20261024113000_catalog_policy_deduplication.sql`, `20261024114000_catalog_integrity_performance.sql`, `20261024115000_business_activity_alias_global_uniqueness.sql`, `20261024116000_business_activity_unbounded_api_depth.sql` ضمن `supabase/migrations/`.
+- ترحيلات دليل الأنشطة وتكامل الكتالوج: `20261023231152_business_activity_taxonomy.sql`, `20261023231322_business_activity_taxonomy_expansion.sql`, `20261023231436_catalog_policy_deduplication.sql`, `20261023231525_catalog_integrity_performance.sql`, `20261023231649_business_activity_alias_global_uniqueness.sql`, `20261023231736_business_activity_unbounded_api_depth.sql` ضمن `supabase/migrations/`.
 
 ### المبيعات والمخزون في Android
 - بيانات المبيعات والمخزون والعملاء والتسديدات والمصروفات في تطبيق «متجري» ما زالت محلية على الجهاز.
