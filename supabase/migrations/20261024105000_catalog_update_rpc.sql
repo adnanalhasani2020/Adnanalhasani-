@@ -23,6 +23,8 @@ BEGIN
      OR nullif(btrim(p_product->>'name_ar'),'') IS NULL
      OR nullif(btrim(p_product->>'name_en'),'') IS NULL
      OR (p_product ? 'attributes_schema' AND jsonb_typeof(p_product->'attributes_schema')<>'object')
+     OR (p_product ? 'specifications' AND jsonb_typeof(p_product->'specifications')<>'object')
+     OR (nullif(p_product->>'shelf_life_days','') IS NOT NULL AND (p_product->>'shelf_life_days')::integer<0)
      OR (p_product ? 'material_composition' AND jsonb_typeof(p_product->'material_composition')<>'array')
      OR (p_product ? 'ingredients' AND jsonb_typeof(p_product->'ingredients')<>'array')
      OR (p_product ? 'allergens' AND jsonb_typeof(p_product->'allergens')<>'array') THEN
