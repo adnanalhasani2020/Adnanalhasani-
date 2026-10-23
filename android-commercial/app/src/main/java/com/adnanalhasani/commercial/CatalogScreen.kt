@@ -451,7 +451,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                                         }) { Text("فتح المصدر") }
                                         if(ruling.effectiveFrom.isNotBlank() || ruling.effectiveTo.isNotBlank()) Text("فترة السريان: ${ruling.effectiveFrom.ifBlank { "غير محدد" }} — ${ruling.effectiveTo.ifBlank { "مفتوح" }}",style=MaterialTheme.typography.labelSmall)
                                         if(ruling.reviewedAt.isNotBlank()) Text("تاريخ المراجعة: ${ruling.reviewedAt}",style=MaterialTheme.typography.labelSmall)
-                                        if(ruling.confidence!="reviewed" && ruling.sourceTitle.isNotBlank() && ruling.sourceUrl.startsWith("https://",true)) {
+                                        if((ruling.confidence=="unverified" || ruling.confidence=="reported") && ruling.sourceTitle.isNotBlank() && ruling.sourceUrl.startsWith("https://",true)) {
                                             OutlinedButton(onClick={reviewRuling(ruling.id)},enabled=!busy,modifier=Modifier.fillMaxWidth()) { Text("تسجيل مراجعة المصدر (مالك/مدير)") }
                                         }
                                     }
