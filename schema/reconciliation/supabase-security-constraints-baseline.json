@@ -1,0 +1,17 @@
+{
+  "captured_at": "2026-10-23",
+  "project_id": "dukeigbrzvpxzkbmdbeh",
+  "schema": "public",
+  "public_table_count": 56,
+  "public_column_count": 644,
+  "public_constraint_count": 961,
+  "public_policy_count": 67,
+  "tables_without_rls": [],
+  "tables_without_policy": [],
+  "scope": "Metadata-only live inventory. No application rows were read or changed.",
+  "interpretation": [
+    "Every public table reported by pg_tables has RLS enabled.",
+    "Every public table has at least one policy, but this does not prove that the policy is correct or that all required operations are permitted.",
+    "Column equality does not establish semantic equivalence or safe cross-store identity."
+  ]
+}
