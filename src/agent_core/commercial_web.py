@@ -369,8 +369,8 @@ class CommercialWebApplication:
                     public_description=body.get("public_description"), city=body.get("city"), district=body.get("district"),
                     street=body.get("street"), landmark=body.get("landmark"), logo_url=body.get("logo_url"),
                     cover_image_url=body.get("cover_image_url"),
-                    owner_identity_front_path=body.get("owner_identity_front_path"),
-                    owner_identity_back_path=body.get("owner_identity_back_path"), locations=body.get("locations") or [],
+                    owner_identity_front_url=body.get("owner_identity_front_url"),
+                    owner_identity_back_url=body.get("owner_identity_back_url"), locations=body.get("locations") or [],
                 )
                 return self._json(start_response, "201 Created", result)
 
