@@ -1,14 +1,11 @@
 -- Image and identity documents are hosted externally. Supabase stores URLs only.
--- Remove the upload buckets created by the previous onboarding revision when empty.
+-- Disable the former application upload policies. The buckets are empty and are left in place
+-- because Supabase protects storage metadata from direct SQL deletion.
 DROP POLICY IF EXISTS commercial_brand_assets_owner_insert ON storage.objects;
 DROP POLICY IF EXISTS commercial_brand_assets_owner_update ON storage.objects;
 DROP POLICY IF EXISTS commercial_owner_identity_insert ON storage.objects;
 DROP POLICY IF EXISTS commercial_owner_identity_read ON storage.objects;
 DROP POLICY IF EXISTS commercial_owner_identity_delete ON storage.objects;
-
-DELETE FROM storage.buckets b
-WHERE b.id IN ('commercial-brand-assets','commercial-owner-identities')
-  AND NOT EXISTS (SELECT 1 FROM storage.objects o WHERE o.bucket_id = b.id);
 
 -- Parameter names change from object paths to external URLs; recreate the RPC signature.
 DROP FUNCTION IF EXISTS public.commercial_create_activity_profile(text,text,text,text,text,text,date,text,text,text,text,text,text,text,text,text,text,text,text,text,text,text,text,text,text,jsonb);
