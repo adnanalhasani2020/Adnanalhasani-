@@ -71,6 +71,24 @@ class SupabaseAuthClient:
             {"email": email.strip().lower(), "password": password},
         )
 
+    def refresh_session(self, refresh_token: str) -> dict:
+        """Exchange a Supabase refresh token for a new session token pair."""
+        if not isinstance(refresh_token, str) or not refresh_token or len(refresh_token) > 16_384:
+            raise SupabaseAuthError("A valid Supabase refresh token is required.")
+        result = self._request(
+            "/auth/v1/token?grant_type=refresh_token",
+            {"refresh_token": refresh_token},
+        )
+        if (
+            not isinstance(result, dict)
+            or not isinstance(result.get("access_token"), str)
+            or not result.get("access_token")
+            or not isinstance(result.get("refresh_token"), str)
+            or not result.get("refresh_token")
+        ):
+            raise SupabaseAuthError("Supabase did not return a valid refreshed session.")
+        return result
+
     def get_user(self, access_token: str) -> dict:
         if not isinstance(access_token, str) or not access_token or len(access_token) > 16_384:
             raise SupabaseAuthError("A valid Supabase session is required.")
