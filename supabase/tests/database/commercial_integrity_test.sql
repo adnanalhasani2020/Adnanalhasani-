@@ -1,7 +1,7 @@
 -- Run with Supabase CLI / pgTAP in a disposable local or staging database.
 -- These are schema regression tests; they do not replace authenticated-session integration tests.
 BEGIN;
-SELECT plan(20);
+SELECT plan(21);
 
 SELECT has_table('public', 'commercial_audit_events',
   'append-only audit event table exists');
@@ -28,7 +28,6 @@ SELECT has_check('public', 'commercial_journal_lines',
 SELECT has_index('public', 'commercial_journal_lines',
   'commercial_journal_lines_journal_entry_id_line_number_key',
   'journal line numbers are unique within an entry');
-
 
 SELECT ok(
   (SELECT c.relrowsecurity
@@ -65,7 +64,7 @@ SELECT ok(
      )
      AND p.prosecdef
      AND coalesce(p.proconfig, ARRAY[]::text[]) @> ARRAY['search_path=pg_catalog, public']),
-  'all seven exposed security-definer functions pin their search_path');
+  'all seven existing exposed security-definer functions pin their search_path');
 
 SELECT ok(
   (SELECT count(*) = 0
@@ -79,7 +78,8 @@ SELECT ok(
        'commercial_inspect_sale_return_item',
        'commercial_post_journal_entry',
        'commercial_request_sale_return',
-       'commercial_restock_approved_sale_return'
+       'commercial_restock_approved_sale_return',
+       'commercial_create_organization'
      )
      AND has_function_privilege('anon', p.oid, 'EXECUTE')),
   'anonymous users cannot execute sensitive commercial functions');
@@ -92,7 +92,6 @@ SELECT has_index('public', 'commercial_inventory',
   'commercial_inventory_offering_id_key',
   'personal inventory has one row per offering');
 
-
 SELECT ok(
   position('p_items IS NULL' in pg_get_functiondef(
     'public.commercial_request_sale_return(uuid,text,text,jsonb,text)'::regprocedure
@@ -101,7 +100,6 @@ SELECT ok(
     'public.commercial_request_sale_return(uuid,text,text,jsonb,text)'::regprocedure
   )) > 0,
   'return RPC rejects null item arrays and duplicate sale lines in one request');
-
 
 SELECT has_index('public', 'commercial_party_accounts',
   'commercial_party_accounts_one_active_personal_per_user_key',
@@ -132,6 +130,19 @@ SELECT ok(
        SELECT 1 FROM pg_policy pol WHERE pol.polrelid = c.oid
      ))),
   'every public table has RLS enabled and at least one policy');
+
+SELECT ok(
+  (SELECT p.prosecdef
+          AND coalesce(p.proconfig, ARRAY[]::text[]) @> ARRAY['search_path=pg_catalog, public']
+          AND NOT has_function_privilege('anon', p.oid, 'EXECUTE')
+          AND has_function_privilege('authenticated', p.oid, 'EXECUTE')
+   FROM pg_proc p
+   JOIN pg_namespace n ON n.oid = p.pronamespace
+   WHERE n.nspname = 'public'
+     AND p.proname = 'commercial_create_organization'
+     AND pg_get_function_identity_arguments(p.oid) =
+       'p_name text, p_slug text, p_organization_type text, p_currency_code text, p_timezone text, p_locale text, p_country_code text, p_module_keys text[]'),
+  'organization onboarding RPC is hardened and restricted to authenticated users');
 
 SELECT * FROM finish();
 ROLLBACK;
