@@ -211,15 +211,16 @@ AS $$
       t.path_ar || ' ← ' || c.name_ar,t.path_en || ' > ' || c.name_en
     FROM public.commercial_global_business_activity_nodes c
     JOIN tree t ON c.parent_code=t.code
-    WHERE c.status='active' AND t.depth < 30
+    WHERE c.status='active'
   )
+  CYCLE code SET is_cycle USING cycle_path
   SELECT jsonb_build_object('nodes',COALESCE(jsonb_agg(jsonb_build_object(
     'id',id,'code',code,'parent_code',parent_code,'name_ar',name_ar,'name_en',name_en,
     'description_ar',description_ar,'description_en',description_en,'node_kind',node_kind,
     'is_selectable',is_selectable,'default_business_level_code',default_business_level_code,
     'depth',depth,'path_ar',path_ar,'path_en',path_en
   ) ORDER BY path_ar),'[]'::jsonb))
-  FROM tree WHERE is_selectable;
+  FROM tree WHERE is_selectable AND NOT is_cycle;
 $$;
 REVOKE ALL ON FUNCTION public.commercial_list_business_activity_nodes() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.commercial_list_business_activity_nodes() TO anon, authenticated;
