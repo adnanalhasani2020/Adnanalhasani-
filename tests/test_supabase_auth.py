@@ -39,7 +39,8 @@ def test_sign_in_uses_password_grant_and_never_puts_credentials_in_url(monkeypat
     monkeypatch.setattr("agent_core.supabase_auth.urlopen", fake_urlopen)
     result = auth.sign_in(" A@Example.com ", "a long password")
     assert seen["url"].endswith("/auth/v1/token?grant_type=password")
-    assert "password" not in seen["url"]
+    assert "a long password" not in seen["url"]
+    assert "a@example.com" not in seen["url"]
     assert seen["body"] == {"email": "a@example.com", "password": "a long password"}
     assert seen["headers"]["Apikey"] == "public-test-key"
     assert result["access_token"] == "test-token"
