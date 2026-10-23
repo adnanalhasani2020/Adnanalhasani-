@@ -192,10 +192,32 @@ def test_web_session_can_buy_sellable_product_and_receive_result(tmp_path):
             "offering_id": item["offering_id"], "activity_id": activity,
             "quantity": 3, "scope_key": "store-A", "location_ref": "front",
             "idempotency_key": "web-checkout-002", "sale_id": uid(),
+            "payment_method": "credit", "initial_paid_minor": 1000,
         },
     )
     assert final_checkout["status"] == "200 OK"
     assert final_checkout["body"]["quantity_remaining"] == 0
+    assert final_checkout["body"]["payment_method"] == "credit"
+    assert final_checkout["body"]["paid_minor"] == 1000
+    assert final_checkout["body"]["balance_remaining_minor"] == 1970
+
+    debts = request(app, "/api/debts", cookie=session_cookie)
+    assert debts["status"] == "200 OK"
+    assert len(debts["body"]["items"]) == 1
+    assert debts["body"]["items"][0]["sale_id"] == final_checkout["body"]["sale_id"]
+    assert debts["body"]["items"][0]["balance_remaining_minor"] == 1970
+
+    payment_body = {
+        "sale_id": final_checkout["body"]["sale_id"], "amount_minor": 500,
+        "idempotency_key": "web-payment-partial-001",
+    }
+    payment = request(app, "/api/payments", method="POST", cookie=session_cookie, body=payment_body)
+    assert payment["status"] == "200 OK"
+    assert payment["body"]["balance_remaining_minor"] == 1470
+    replay = request(app, "/api/payments", method="POST", cookie=session_cookie, body=payment_body)
+    assert replay["body"] == payment["body"]
+    assert request(app, "/api/debts", cookie=session_cookie)["body"]["items"][0]["balance_remaining_minor"] == 1470
+
     sold_out_catalog = request(app, "/api/catalog", cookie=session_cookie)
     assert sold_out_catalog["status"] == "200 OK"
     assert sold_out_catalog["body"]["items"] == []
