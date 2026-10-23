@@ -295,7 +295,7 @@ BEGIN
     IF (SELECT count(*) FROM jsonb_array_elements(p_units) x WHERE COALESCE((x->>'is_default')::boolean,false))<>1
        OR NOT EXISTS (
          SELECT 1 FROM jsonb_array_elements(p_units) x
-         WHERE x->>'unit_code'=v_unit_code AND COALESCE(x->>'unit_role','base')='base'
+         WHERE x->>'unit_code'=v_unit_code AND COALESCE(x->>'unit_role','sale')='base'
            AND COALESCE(nullif(x->>'quantity_in_base','')::numeric,1)=1
            AND COALESCE((x->>'is_default')::boolean,false)
        ) THEN
