@@ -320,6 +320,11 @@ BEGIN
 
   IF nullif(btrim(p_product->'recipe'->>'instructions'),'') IS NOT NULL
      OR jsonb_array_length(COALESCE(p_product->'recipe'->'ingredients','[]'::jsonb))>0 THEN
+    IF nullif(btrim(p_product->'recipe'->>'yield_unit_code'),'') IS NOT NULL AND NOT EXISTS (
+      SELECT 1 FROM public.commercial_global_units u
+      WHERE u.code=p_product->'recipe'->>'yield_unit_code' AND u.is_active
+        AND (u.owner_organization_id IS NULL OR u.owner_organization_id=p_organization_id)
+    ) THEN RAISE EXCEPTION 'invalid_recipe_yield_unit' USING ERRCODE='22023'; END IF;
     INSERT INTO public.commercial_catalog_product_recipes(
       product_id,locale_code,recipe_name,instructions,yield_quantity,yield_unit_code,
       preparation_minutes,cooking_minutes,allergen_notes,source_reference,created_by
