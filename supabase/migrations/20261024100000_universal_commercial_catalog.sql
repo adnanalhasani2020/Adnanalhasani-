@@ -319,6 +319,12 @@ WITH CHECK (
   OR public.commercial_catalog_member_of(owner_organization_id, ARRAY['owner','admin']::text[])
 );
 
+CREATE POLICY commercial_catalog_items_org_select
+ON public.commercial_global_catalog_items FOR SELECT TO authenticated
+USING (
+  owner_organization_id IS NOT NULL
+  AND public.commercial_catalog_member_of(owner_organization_id, ARRAY['owner','admin','manager','staff']::text[])
+);
 CREATE POLICY commercial_catalog_items_org_insert
 ON public.commercial_global_catalog_items FOR INSERT TO authenticated
 WITH CHECK (owner_organization_id IS NOT NULL AND public.commercial_catalog_member_of(owner_organization_id, ARRAY['owner','admin']::text[]));
@@ -330,6 +336,12 @@ CREATE POLICY commercial_catalog_items_org_delete
 ON public.commercial_global_catalog_items FOR DELETE TO authenticated
 USING (owner_organization_id IS NOT NULL AND public.commercial_catalog_member_of(owner_organization_id, ARRAY['owner','admin']::text[]));
 
+CREATE POLICY commercial_catalog_categories_org_select
+ON public.commercial_global_catalog_categories FOR SELECT TO authenticated
+USING (
+  owner_organization_id IS NOT NULL
+  AND public.commercial_catalog_member_of(owner_organization_id, ARRAY['owner','admin','manager','staff']::text[])
+);
 CREATE POLICY commercial_catalog_categories_org_insert
 ON public.commercial_global_catalog_categories FOR INSERT TO authenticated
 WITH CHECK (owner_organization_id IS NOT NULL AND public.commercial_catalog_member_of(owner_organization_id, ARRAY['owner','admin']::text[]));
