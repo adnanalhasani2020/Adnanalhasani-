@@ -46,6 +46,67 @@ class SupabaseRPCClient:
         except (URLError, TimeoutError, OSError, UnicodeDecodeError, json.JSONDecodeError):
             raise SupabaseRPCError("Supabase connection or response failed; verify operation before retrying.") from None
 
+    def catalog(self) -> list[dict]:
+        """Return currently sellable catalog rows visible to this JWT under RLS."""
+        from datetime import datetime, timezone
+        from urllib.error import HTTPError
+        from urllib.parse import urlencode
+
+        query = {
+            "select": "id,activity_id,product_id,price_minor,currency_code,scope_key,location_ref,valid_from,valid_to,product:commercial_products(id,name,unit_name,state),inventory:commercial_inventory(quantity_on_hand)",
+            "state": "eq.active", "order": "created_at.desc", "limit": "500",
+        }
+        request = Request(
+            f"{self.url}/rest/v1/commercial_offerings?{urlencode(query)}",
+            method="GET",
+            headers={"apikey": self.anon_key, "Authorization": f"Bearer {self.access_token}",
+                     "Accept": "application/json", "Cache-Control": "no-store"},
+        )
+        try:
+            with urlopen(request, timeout=self.timeout) as response:
+                raw = response.read(2_000_001)
+                if len(raw) > 2_000_000:
+                    raise SupabaseRPCError("Supabase catalog response exceeded the size limit.")
+                rows = json.loads(raw.decode("utf-8")) if raw else []
+        except HTTPError as exc:
+            if exc.code in (400, 401, 403):
+                raise SupabaseRPCError(f"Supabase rejected catalog access (HTTP {exc.code}).") from None
+            raise SupabaseRPCError(f"Supabase catalog request failed (HTTP {exc.code}).") from None
+        except (URLError, TimeoutError, OSError, UnicodeDecodeError, json.JSONDecodeError):
+            raise SupabaseRPCError("Supabase catalog connection or response failed.") from None
+
+        if not isinstance(rows, list):
+            raise SupabaseRPCError("Unexpected Supabase catalog response.")
+        now, items = datetime.now(timezone.utc), []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            product, inventory = row.get("product"), row.get("inventory")
+            if isinstance(product, list):
+                product = product[0] if product else None
+            if isinstance(inventory, list):
+                inventory = inventory[0] if inventory else None
+            if not isinstance(product, dict) or product.get("state") != "active" or not isinstance(inventory, dict):
+                continue
+            try:
+                available = int(inventory.get("quantity_on_hand", 0))
+                price = int(row["price_minor"])
+                starts = datetime.fromisoformat(str(row["valid_from"]).replace("Z", "+00:00"))
+                ends_raw = row.get("valid_to")
+                ends = datetime.fromisoformat(str(ends_raw).replace("Z", "+00:00")) if ends_raw else None
+            except (KeyError, TypeError, ValueError, OverflowError):
+                continue
+            if available < 1 or starts > now or (ends is not None and ends <= now):
+                continue
+            items.append({
+                "offering_id": row.get("id"), "activity_id": row.get("activity_id"),
+                "product_id": row.get("product_id"), "product_name": product.get("name"),
+                "unit_name": product.get("unit_name"), "unit_price_minor": price,
+                "currency_code": row.get("currency_code"), "scope_key": row.get("scope_key"),
+                "location_ref": row.get("location_ref"), "available_quantity": available,
+            })
+        return items
+
     def create_organization(self, *, name: str, slug: str, organization_type: str,
                             currency_code: str, timezone: str, locale: str,
                             country_code: str | None = None,
