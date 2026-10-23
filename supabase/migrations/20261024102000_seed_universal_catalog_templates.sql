@@ -36,7 +36,7 @@ VALUES
  ('MANUFACTURING-PACKAGING','MANUFACTURING-GROUP','مواد التغليف الصناعي','Industrial Packaging','مواد تغليف عامة','Generic industrial packaging',702,true,1),
  ('MANUFACTURING-SAFETY','MANUFACTURING-GROUP','سلامة العاملين','Manufacturing Safety','معدات وقاية عامة','Generic worker safety equipment',703,true,1),
  ('OFFICE-PRINTING','OFFICE','الطباعة وأحبارها','Printing & Toner','تحقق من توافق الطابعة والطراز','Verify printer model compatibility',31,true,1),
- ('ELECTRONICS-ACCESSORIES','ELECTRICAL-GROUP','ملحقات الإلكترونيات','Electronics Accessories','ملحقات عامة دون تحديد علامة تجارية','Generic accessories without brand assumptions',52,true,1)
+ ('ELECTRONICS-ACCESSORIES','ELECTRICAL','ملحقات الإلكترونيات','Electronics Accessories','ملحقات عامة دون تحديد علامة تجارية','Generic accessories without brand assumptions',52,true,1)
 ON CONFLICT (code) DO NOTHING;
 
 INSERT INTO public.commercial_global_entity_translations
