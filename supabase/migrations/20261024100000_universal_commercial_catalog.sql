@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS public.commercial_catalog_categories (
   created_by uuid REFERENCES auth.users(id),
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (owner_organization_id, code),
+  UNIQUE NULLS NOT DISTINCT (owner_organization_id, code),
   CHECK (parent_id IS NULL OR parent_id <> id)
 );
 CREATE INDEX IF NOT EXISTS ix_commercial_catalog_categories_parent ON public.commercial_catalog_categories(parent_id);
