@@ -7,7 +7,7 @@ plugins {
 android {
     namespace = "com.adnanalhasani.commercial"
     compileSdk = 35
-    val supabaseUrl = (project.findProperty("SUPABASE_URL") as String?) ?: System.getenv("SUPABASE_URL") ?: ""
+    val supabaseUrl = (project.findProperty("SUPABASE_URL") as String?) ?: System.getenv("SUPABASE_URL") ?: "https://dukeigbrzvpxzkbmdbeh.supabase.co"
     val supabaseAnonKey = (project.findProperty("SUPABASE_ANON_KEY") as String?) ?: System.getenv("SUPABASE_ANON_KEY") ?: ""
     defaultConfig {
         applicationId = "com.adnanalhasani.commercial"
