@@ -78,3 +78,40 @@ def test_provider_errors_do_not_leak_response_body(monkeypatch):
         auth.sign_in("a@example.com", "a long password")
     assert "password" not in str(exc.value).lower()
     assert "token" not in str(exc.value).lower()
+
+
+def test_refresh_session_rotates_tokens_without_putting_refresh_token_in_url(monkeypatch):
+    auth = client(monkeypatch)
+    seen = {}
+
+    class Response:
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+        def read(self, size):
+            return b'{"access_token":"new-access","refresh_token":"new-refresh","token_type":"bearer"}'
+
+    def fake_urlopen(request, timeout):
+        seen["url"] = request.full_url
+        seen["body"] = json.loads(request.data.decode())
+        return Response()
+
+    monkeypatch.setattr("agent_core.supabase_auth.urlopen", fake_urlopen)
+    result = auth.refresh_session("old-refresh-token")
+    assert seen["url"].endswith("/auth/v1/token?grant_type=refresh_token")
+    assert "old-refresh-token" not in seen["url"]
+    assert seen["body"] == {"refresh_token": "old-refresh-token"}
+    assert result["access_token"] == "new-access"
+    assert result["refresh_token"] == "new-refresh"
+
+
+def test_refresh_session_rejects_malformed_provider_response(monkeypatch):
+    auth = client(monkeypatch)
+
+    class Response:
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+        def read(self, size): return b'{"access_token":"new-access"}'
+
+    monkeypatch.setattr("agent_core.supabase_auth.urlopen", lambda request, timeout: Response())
+    with pytest.raises(SupabaseAuthError):
+        auth.refresh_session("old-refresh-token")
