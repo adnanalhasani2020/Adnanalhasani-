@@ -57,3 +57,22 @@ The goal is **union of useful capabilities**, not declaring one database univers
 ## Current release boundary
 
 No automatic table/column cloning or bulk data copy has been run against the live databases as part of this inventory. The live Supabase project has business-sensitive, financial, identity, audit, and potentially health-related tables; schema shape alone is insufficient to decide that a column or table can be safely copied. The next implementation step is to generate a machine-readable full drift report from the actual SQLite database path and the live Supabase metadata, then apply reviewed additive migrations in small batches.
+
+
+## Live metadata capture (2026-10-23)
+
+A machine-readable Supabase public-schema snapshot has now been committed at
+`schema/reconciliation/supabase-public-schema-snapshot.json`. It contains 56
+public tables and 644 columns and can be consumed by the schema reconciliation
+utility. A separate security/constraint baseline is recorded in
+`schema/reconciliation/supabase-security-constraints-baseline.json`:
+961 table constraints, 67 public policies, no public tables reported without
+RLS, and no public tables reported without a policy.
+
+These checks establish coverage only, not policy correctness. The actual local
+SQLite file selected by `APP_DB_PATH` / `COMMERCIAL_DB_PATH` still must be
+inspected in the deployment environment before claiming a complete live
+cross-database drift report. Candidate pairs with different names are now
+compared by the utility when `--mapping schema/reconciliation/table-mapping.json`
+is supplied; the report does not assume that the candidates are equivalent.
+
