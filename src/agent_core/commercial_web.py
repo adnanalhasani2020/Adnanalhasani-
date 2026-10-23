@@ -351,6 +351,27 @@ class CommercialWebApplication:
                                    "expires_at": result["expires_at"]},
                                   [("Set-Cookie", cookie)])
 
+            if method == "POST" and path == "/api/supabase/store-profiles":
+                access_token = self._supabase_tokens.get(token) if token else None
+                if not access_token or self.identity.resolve_session(db, token) is None:
+                    return self._json(start_response, "401 Unauthorized", {"error": "أعد تسجيل الدخول إلى Supabase قبل حفظ ملف النشاط."})
+                body = self._body(environ)
+                client = SupabaseRPCClient(access_token)
+                result = client.create_activity_profile(
+                    organization_name=body.get("organization_name"), organization_slug=body.get("organization_slug"),
+                    activity_name=body.get("activity_name"), activity_type=body.get("activity_type"),
+                    business_level=body.get("business_level"),
+                    commercial_registration_number=body.get("commercial_registration_number"), opened_on=body.get("opened_on"),
+                    owner_full_name=body.get("owner_full_name"), legal_name=body.get("legal_name"),
+                    country_code=body.get("country_code"), timezone=body.get("timezone"), locale=body.get("locale"),
+                    currency_code=body.get("currency_code") or "YER", public_phone=body.get("public_phone"),
+                    public_email=body.get("public_email"), website_url=body.get("website_url"),
+                    public_description=body.get("public_description"), city=body.get("city"), district=body.get("district"),
+                    street=body.get("street"), landmark=body.get("landmark"), logo_url=body.get("logo_url"),
+                    cover_image_url=body.get("cover_image_url"), locations=body.get("locations") or [],
+                )
+                return self._json(start_response, "201 Created", result)
+
             if method == "POST" and path in {"/api/supabase/storefronts", "/api/supabase/store-items"}:
                 access_token = self._supabase_tokens.get(token) if token else None
                 if not access_token or self.identity.resolve_session(db, token) is None:
