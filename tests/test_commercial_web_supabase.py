@@ -226,3 +226,34 @@ def test_supabase_storefront_setup_requires_auth_and_calls_atomic_rpc():
         price_minor=1500, currency_code="YER", location_name="الفرع الرئيسي",
         initial_quantity=12,
     )
+
+
+def test_supabase_add_store_item_requires_auth_and_uses_catalog_context():
+    app = CommercialWebApplication()
+    body = {
+        "organization_id": "org-uuid", "activity_id": "activity-uuid",
+        "location_id": "location-uuid", "product_name": "Water",
+        "unit_name": "bottle", "price_minor": 1500, "initial_quantity": 8,
+    }
+    raw = json.dumps(body).encode()
+    environ = {
+        "REQUEST_METHOD": "POST", "PATH_INFO": "/api/supabase/store-items",
+        "wsgi.url_scheme": "https", "HTTP_HOST": "example.test",
+        "HTTP_COOKIE": "supabase_access=access-token", "CONTENT_TYPE": "application/json",
+        "CONTENT_LENGTH": str(len(raw)), "wsgi.input": io.BytesIO(raw),
+    }
+    captured = {}
+    def start_response(status, headers):
+        captured["status"] = status
+    with patch("agent_core.commercial_web.SupabaseAuthClient") as auth_class, \
+         patch("agent_core.commercial_web.SupabaseRPCClient") as rpc_class:
+        auth_class.return_value.get_user.return_value = {"id": "user-1"}
+        rpc_class.return_value.add_store_item.return_value = {"offering_id": "offer-uuid"}
+        result = b"".join(app(environ, start_response))
+    assert captured["status"] == "201 Created"
+    assert json.loads(result.decode())["offering_id"] == "offer-uuid"
+    rpc_class.return_value.add_store_item.assert_called_once_with(
+        organization_id="org-uuid", activity_id="activity-uuid",
+        location_id="location-uuid", product_name="Water", unit_name="bottle",
+        price_minor=1500, initial_quantity=8,
+    )

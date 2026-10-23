@@ -123,6 +123,26 @@ class SupabaseRPCClient:
                 })
         return items
 
+    def add_store_item(self, *, organization_id: str, activity_id: str, location_id: str,
+                       product_name: str, unit_name: str, price_minor: int,
+                       initial_quantity: int) -> dict:
+        if not isinstance(price_minor, int) or isinstance(price_minor, bool) or price_minor < 0:
+            raise ValueError("price_minor must be a non-negative integer")
+        if not isinstance(initial_quantity, int) or isinstance(initial_quantity, bool) or not 1 <= initial_quantity <= 100000000:
+            raise ValueError("initial_quantity must be an integer between 1 and 100000000")
+        result = self.rpc("commercial_add_store_item", {
+            "p_organization_id": organization_id,
+            "p_activity_id": activity_id,
+            "p_location_id": location_id,
+            "p_product_name": product_name,
+            "p_unit_name": unit_name,
+            "p_price_minor": price_minor,
+            "p_initial_quantity": initial_quantity,
+        })
+        if not isinstance(result, dict) or not isinstance(result.get("offering_id"), str):
+            raise SupabaseRPCError("Unexpected product creation response; verify before retrying.")
+        return result
+
     def create_storefront(self, *, organization_name: str, organization_slug: str,
                           activity_name: str, product_name: str, unit_name: str,
                           price_minor: int, currency_code: str, location_name: str,

@@ -198,3 +198,28 @@ def test_create_storefront_rejects_invalid_quantity(monkeypatch):
             price_minor=100, currency_code="YER", location_name="Main",
             initial_quantity=0,
         )
+
+
+def test_add_store_item_calls_authorized_rpc(monkeypatch):
+    rpc = client(monkeypatch)
+    expected = {"offering_id": "offer-uuid", "currency_code": "YER"}
+    with patch.object(rpc, "rpc", return_value=expected) as call:
+        result = rpc.add_store_item(
+            organization_id="org-uuid", activity_id="activity-uuid",
+            location_id="location-uuid", product_name="Water",
+            unit_name="bottle", price_minor=1500, initial_quantity=8,
+        )
+    assert result == expected
+    assert call.call_args.args[0] == "commercial_add_store_item"
+    assert call.call_args.args[1]["p_organization_id"] == "org-uuid"
+    assert call.call_args.args[1]["p_initial_quantity"] == 8
+
+
+def test_add_store_item_rejects_zero_stock(monkeypatch):
+    rpc = client(monkeypatch)
+    with pytest.raises(ValueError):
+        rpc.add_store_item(
+            organization_id="org-uuid", activity_id="activity-uuid",
+            location_id="location-uuid", product_name="Water",
+            unit_name="bottle", price_minor=1500, initial_quantity=0,
+        )
