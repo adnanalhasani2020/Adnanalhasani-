@@ -212,3 +212,40 @@ JOIN (VALUES
  ('OFFICE-TONER-CARTRIDGE','office'),('OFFICE-TONER-CARTRIDGE','education'),('OFFICE-TONER-CARTRIDGE','retail'),('OFFICE-FILE-FOLDER','office'),('OFFICE-FILE-FOLDER','education'),('OFFICE-FILE-FOLDER','retail'),('OFFICE-STAPLER','office'),('OFFICE-STAPLER','education'),('OFFICE-STAPLER','retail')
 ) AS s(catalog_code,sector_code) ON s.catalog_code=i.catalog_code
 ON CONFLICT (product_id,sector_code) DO NOTHING;
+
+
+-- Business-level recommendation weights complement sector targeting without hard-coding the schema to a fixed business list.
+INSERT INTO public.commercial_catalog_product_business_levels(product_id,business_level_code,recommendation_weight)
+SELECT i.id,v.level_code,v.weight
+FROM public.commercial_global_catalog_items i
+JOIN (VALUES
+ ('MEDICAL-CONSUMABLES','clinic',25),('MEDICAL-CONSUMABLES','institution',20),('MEDICAL-CONSUMABLES','company',10),
+ ('MEDICAL-PPE','clinic',25),('MEDICAL-PPE','institution',20),('MEDICAL-PPE','company',10),
+ ('WOUND-CARE','clinic',25),('WOUND-CARE','institution',20),('WOUND-CARE','shop',10),
+ ('DIAGNOSTIC-SUPPLIES','clinic',25),('DIAGNOSTIC-SUPPLIES','institution',20),
+ ('LAB-SUPPLIES','clinic',20),('LAB-SUPPLIES','institution',25),('LAB-SUPPLIES','company',15),
+ ('PHARMACY-SUPPLIES','shop',20),('PHARMACY-SUPPLIES','company',15),('PHARMACY-SUPPLIES','institution',10),
+ ('HOSPITAL-LINEN','institution',25),('HOSPITAL-LINEN','company',15),
+ ('MOBILE-DEVICES','shop',25),('MOBILE-DEVICES','company',15),('MOBILE-DEVICES','supermarket',10),
+ ('MOBILE-ACCESSORIES','shop',25),('MOBILE-ACCESSORIES','supermarket',15),('MOBILE-ACCESSORIES','company',10),
+ ('NETWORK-EQUIPMENT','company',25),('NETWORK-EQUIPMENT','office',20),('NETWORK-EQUIPMENT','institution',15),
+ ('AUTO-FILTERS','company',25),('AUTO-FILTERS','shop',20),('AUTO-FILTERS','factory',10),
+ ('AUTO-FLUIDS','company',20),('AUTO-FLUIDS','shop',20),('AUTO-FLUIDS','grocery',5),
+ ('AUTO-REPAIR-PARTS','company',25),('AUTO-REPAIR-PARTS','shop',20),('AUTO-REPAIR-PARTS','factory',10),
+ ('HEAVY-SPARES','company',25),('HEAVY-SPARES','factory',20),('HEAVY-SPARES','institution',10),
+ ('HEAVY-HYDRAULICS','company',25),('HEAVY-HYDRAULICS','factory',20),
+ ('HEAVY-SAFETY','company',20),('HEAVY-SAFETY','factory',20),('HEAVY-SAFETY','institution',10),
+ ('HOTEL-AMENITIES','company',25),('HOTEL-AMENITIES','institution',10),('HOTEL-AMENITIES','shop',10),
+ ('HOTEL-LINEN','company',25),('HOTEL-LINEN','institution',20),
+ ('RESTAURANT-PACKAGING','company',25),('RESTAURANT-PACKAGING','shop',10),('RESTAURANT-PACKAGING','grocery',10),
+ ('RESTAURANT-KITCHEN','company',25),('RESTAURANT-KITCHEN','institution',15),
+ ('AGRI-IRRIGATION','company',20),('AGRI-IRRIGATION','shop',15),('AGRI-IRRIGATION','factory',10),
+ ('AGRI-TOOLS','company',20),('AGRI-TOOLS','shop',20),('AGRI-TOOLS','grocery',5),
+ ('MANUFACTURING-FASTENERS','factory',25),('MANUFACTURING-FASTENERS','company',20),
+ ('MANUFACTURING-PACKAGING','factory',25),('MANUFACTURING-PACKAGING','company',20),('MANUFACTURING-PACKAGING','shop',10),
+ ('MANUFACTURING-SAFETY','factory',25),('MANUFACTURING-SAFETY','company',20),('MANUFACTURING-SAFETY','institution',10),
+ ('OFFICE-PRINTING','office',25),('OFFICE-PRINTING','company',15),('OFFICE-PRINTING','institution',15),
+ ('OFFICE-SUPPLIES','office',25),('OFFICE-SUPPLIES','company',15),('OFFICE-SUPPLIES','institution',15),('OFFICE-SUPPLIES','shop',10)
+) AS v(category_code,level_code,weight) ON v.category_code=i.category_code
+WHERE i.owner_organization_id IS NULL AND i.attributes_schema->>'catalog_template'='true'
+ON CONFLICT (product_id,business_level_code) DO NOTHING;
