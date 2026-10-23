@@ -19,7 +19,16 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
-    buildFeatures { compose = true }
+    val supabaseUrl = (project.findProperty("SUPABASE_URL") as String?) ?: System.getenv("SUPABASE_URL") ?: ""
+    val supabaseAnonKey = (project.findProperty("SUPABASE_ANON_KEY") as String?) ?: System.getenv("SUPABASE_ANON_KEY") ?: ""
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
+    defaultConfig {
+        buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseAnonKey\"")
+    }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
 }
 
