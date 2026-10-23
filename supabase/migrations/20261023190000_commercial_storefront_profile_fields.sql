@@ -109,5 +109,6 @@ REVOKE ALL ON FUNCTION public.commercial_create_storefront_profiled(
   text, text, text, text, text, text, text, text, text, text, text, boolean
 ) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.commercial_create_storefront_profiled(
-  text, text, text, text, text, bigint, text, text, text, text, text, text, text, text, text, text, text, text, text, text, boolean
+  text, text, text, text, text, bigint, text, text, integer,
+  text, text, text, text, text, text, text, text, text, text, text, boolean
 ) TO authenticated;
