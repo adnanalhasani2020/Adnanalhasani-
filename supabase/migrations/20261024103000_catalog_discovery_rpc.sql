@@ -1,4 +1,4 @@
--- Secure catalog discovery endpoint used by activity-aware product pickers and recommendations.
+-- Activity-, business-level-, locale- and region-aware discovery over the existing catalog master.
 CREATE OR REPLACE FUNCTION public.commercial_catalog_discover_products(
   p_organization_id uuid,
   p_sector_code text DEFAULT NULL,
@@ -13,9 +13,9 @@ CREATE OR REPLACE FUNCTION public.commercial_catalog_discover_products(
   product_id uuid,
   product_name text,
   short_description text,
-  category_id uuid,
+  category_code text,
   category_name text,
-  product_code text,
+  catalog_code text,
   brand text,
   manufacturer_name text,
   country_of_manufacture text,
@@ -43,11 +43,14 @@ BEGIN
   RETURN QUERY
   SELECT
     p.id,
-    COALESCE(pt.name, p.default_name),
-    COALESCE(pt.short_description, p.short_description),
-    p.category_id,
-    COALESCE(ct.name, c.default_name),
-    p.product_code,
+    COALESCE(oname.translated_value, gtname.translated_value,
+      CASE WHEN p_locale_code LIKE 'en%' THEN p.name_en ELSE p.name_ar END),
+    COALESCE(odesc.translated_value, gtdesc.translated_value,
+      CASE WHEN p_locale_code LIKE 'en%' THEN p.description_en ELSE p.description_ar END),
+    p.category_code,
+    COALESCE(ct.translated_value,
+      CASE WHEN p_locale_code LIKE 'en%' THEN c.name_en ELSE c.name_ar END),
+    p.catalog_code,
     p.brand,
     p.manufacturer_name,
     p.country_of_manufacture,
@@ -56,39 +59,56 @@ BEGIN
     COALESCE((
       SELECT max(bl.recommendation_weight)::integer
       FROM public.commercial_catalog_product_business_levels bl
-      WHERE bl.product_id = p.id
-        AND p_business_level_code IS NOT NULL
-        AND bl.business_level_code = p_business_level_code
-        AND NOT bl.is_excluded
-    ), 0)
+      WHERE bl.product_id=p.id AND p_business_level_code IS NOT NULL
+        AND bl.business_level_code=p_business_level_code AND NOT bl.is_excluded
+    ),0)
     + CASE WHEN p_sector_code IS NOT NULL AND EXISTS (
-        SELECT 1 FROM public.commercial_catalog_product_sectors s
-        WHERE s.product_id=p.id AND NOT s.is_excluded
-          AND s.sector_code IN ('all', p_sector_code)
-      ) THEN 20 ELSE 0 END
-  FROM public.commercial_catalog_products p
-  LEFT JOIN public.commercial_catalog_product_translations pt
-    ON pt.product_id=p.id AND pt.locale_code=p_locale_code
-  LEFT JOIN public.commercial_catalog_categories c ON c.id=p.category_id
-  LEFT JOIN public.commercial_catalog_category_translations ct
-    ON ct.category_id=c.id AND ct.locale_code=p_locale_code
+      SELECT 1 FROM public.commercial_catalog_product_sectors s
+      WHERE s.product_id=p.id AND NOT s.is_excluded
+        AND s.sector_code IN ('all',p_sector_code)
+    ) THEN 20 ELSE 0 END
+  FROM public.commercial_global_catalog_items p
+  LEFT JOIN public.commercial_global_catalog_categories c ON c.code=p.category_code
+  LEFT JOIN public.commercial_global_entity_translations gtname
+    ON gtname.entity_type='catalog_item' AND gtname.entity_key=p.catalog_code
+    AND gtname.field_key='name' AND gtname.locale_code=p_locale_code
+    AND gtname.owner_organization_id IS NOT DISTINCT FROM p.owner_organization_id
+  LEFT JOIN public.commercial_global_entity_translations gtdesc
+    ON gtdesc.entity_type='catalog_item' AND gtdesc.entity_key=p.catalog_code
+    AND gtdesc.field_key='description' AND gtdesc.locale_code=p_locale_code
+    AND gtdesc.owner_organization_id IS NOT DISTINCT FROM p.owner_organization_id
+  LEFT JOIN public.commercial_organization_entity_translations oname
+    ON oname.organization_id=p_organization_id AND oname.entity_type='catalog_item'
+    AND oname.entity_id=p.id AND oname.field_key='name' AND oname.locale_code=p_locale_code
+  LEFT JOIN public.commercial_organization_entity_translations odesc
+    ON odesc.organization_id=p_organization_id AND odesc.entity_type='catalog_item'
+    AND odesc.entity_id=p.id AND odesc.field_key='description' AND odesc.locale_code=p_locale_code
+  LEFT JOIN public.commercial_global_entity_translations ct
+    ON ct.entity_type='catalog_category' AND ct.entity_key=c.code
+    AND ct.field_key='name' AND ct.locale_code=p_locale_code
+    AND ct.owner_organization_id IS NOT DISTINCT FROM c.owner_organization_id
   WHERE p.is_active
     AND NOT EXISTS (
       SELECT 1 FROM public.commercial_organization_catalog_items disabled_item
       WHERE disabled_item.organization_id=p_organization_id
-        AND disabled_item.product_id=p.id AND NOT disabled_item.is_enabled
+        AND disabled_item.global_item_id=p.id AND NOT disabled_item.is_enabled
     )
-    AND (p.owner_organization_id IS NULL OR p.owner_organization_id=p_organization_id
+    AND (
+      p.owner_organization_id IS NULL
+      OR p.owner_organization_id=p_organization_id
       OR EXISTS (
         SELECT 1 FROM public.commercial_organization_catalog_items oi
-        WHERE oi.organization_id=p_organization_id AND oi.product_id=p.id AND oi.is_enabled
-      ))
+        WHERE oi.organization_id=p_organization_id AND oi.global_item_id=p.id AND oi.is_enabled
+      )
+    )
     AND (
       p_query IS NULL OR btrim(p_query)='' OR
-      COALESCE(pt.name,p.default_name) ILIKE '%' || btrim(p_query) || '%' OR
-      COALESCE(pt.short_description,p.short_description,'') ILIKE '%' || btrim(p_query) || '%' OR
-      COALESCE(p.product_code,'') ILIKE '%' || btrim(p_query) || '%' OR
-      COALESCE(p.brand,'') ILIKE '%' || btrim(p_query) || '%' OR
+      COALESCE(oname.translated_value,gtname.translated_value,
+        CASE WHEN p_locale_code LIKE 'en%' THEN p.name_en ELSE p.name_ar END) ILIKE '%'||btrim(p_query)||'%' OR
+      COALESCE(odesc.translated_value,gtdesc.translated_value,p.description_ar,'') ILIKE '%'||btrim(p_query)||'%' OR
+      p.catalog_code ILIKE '%'||btrim(p_query)||'%' OR
+      COALESCE(p.brand,'') ILIKE '%'||btrim(p_query)||'%' OR
+      p.barcode_gtin=btrim(p_query) OR
       EXISTS (
         SELECT 1 FROM public.commercial_catalog_product_units pu
         WHERE pu.product_id=p.id AND pu.is_active AND pu.barcode=btrim(p_query)
@@ -100,15 +120,11 @@ BEGIN
         AND (sx.sector_code='all' OR (p_sector_code IS NOT NULL AND sx.sector_code=p_sector_code))
     )
     AND (
-      NOT EXISTS (
-        SELECT 1 FROM public.commercial_catalog_product_sectors si
+      NOT EXISTS (SELECT 1 FROM public.commercial_catalog_product_sectors si
+        WHERE si.product_id=p.id AND NOT si.is_excluded)
+      OR EXISTS (SELECT 1 FROM public.commercial_catalog_product_sectors si
         WHERE si.product_id=p.id AND NOT si.is_excluded
-      )
-      OR EXISTS (
-        SELECT 1 FROM public.commercial_catalog_product_sectors si
-        WHERE si.product_id=p.id AND NOT si.is_excluded
-          AND (si.sector_code='all' OR (p_sector_code IS NOT NULL AND si.sector_code=p_sector_code))
-      )
+          AND (si.sector_code='all' OR (p_sector_code IS NOT NULL AND si.sector_code=p_sector_code)))
     )
     AND NOT EXISTS (
       SELECT 1 FROM public.commercial_catalog_product_business_levels bx
@@ -116,16 +132,11 @@ BEGIN
         AND p_business_level_code IS NOT NULL AND bx.business_level_code=p_business_level_code
     )
     AND (
-      NOT EXISTS (
-        SELECT 1 FROM public.commercial_catalog_product_business_levels bi
+      NOT EXISTS (SELECT 1 FROM public.commercial_catalog_product_business_levels bi
+        WHERE bi.product_id=p.id AND NOT bi.is_excluded)
+      OR EXISTS (SELECT 1 FROM public.commercial_catalog_product_business_levels bi
         WHERE bi.product_id=p.id AND NOT bi.is_excluded
-      )
-      OR EXISTS (
-        SELECT 1 FROM public.commercial_catalog_product_business_levels bi
-        WHERE bi.product_id=p.id AND NOT bi.is_excluded
-          AND p_business_level_code IS NOT NULL
-          AND bi.business_level_code=p_business_level_code
-      )
+          AND p_business_level_code IS NOT NULL AND bi.business_level_code=p_business_level_code)
     )
     AND NOT EXISTS (
       SELECT 1 FROM public.commercial_catalog_product_regions rx
@@ -135,20 +146,16 @@ BEGIN
         AND (rx.city IS NULL OR lower(rx.city)=lower(p_city))
     )
     AND (
-      NOT EXISTS (
-        SELECT 1 FROM public.commercial_catalog_product_regions ri
-        WHERE ri.product_id=p.id AND NOT ri.is_excluded
-      )
-      OR EXISTS (
-        SELECT 1 FROM public.commercial_catalog_product_regions ri
+      NOT EXISTS (SELECT 1 FROM public.commercial_catalog_product_regions ri
+        WHERE ri.product_id=p.id AND NOT ri.is_excluded)
+      OR EXISTS (SELECT 1 FROM public.commercial_catalog_product_regions ri
         WHERE ri.product_id=p.id AND NOT ri.is_excluded
           AND (ri.country_code IS NULL OR ri.country_code=upper(p_country_code))
           AND (ri.region_code IS NULL OR ri.region_code=p_region_code)
-          AND (ri.city IS NULL OR lower(ri.city)=lower(p_city))
-      )
+          AND (ri.city IS NULL OR lower(ri.city)=lower(p_city)))
     )
-  ORDER BY 12 DESC, COALESCE(pt.name,p.default_name), p.id
-  LIMIT greatest(1, least(COALESCE(p_limit,50),100));
+  ORDER BY 12 DESC, COALESCE(oname.translated_value,gtname.translated_value,p.name_ar), p.id
+  LIMIT greatest(1,least(COALESCE(p_limit,50),100));
 END;
 $$;
 
@@ -156,4 +163,4 @@ REVOKE ALL ON FUNCTION public.commercial_catalog_discover_products(uuid,text,tex
 GRANT EXECUTE ON FUNCTION public.commercial_catalog_discover_products(uuid,text,text,text,text,text,text,text,integer) TO authenticated;
 
 COMMENT ON FUNCTION public.commercial_catalog_discover_products(uuid,text,text,text,text,text,text,text,integer) IS
-'Searches shared and organization-linked products by text/barcode, locale, sector, business level and region; requires active organization membership and returns relevance-ranked candidates.';
+'Searches the existing global catalog by text/barcode and filters by activity, business level and region. Locale fallbacks use the existing global and organization translation tables.';
