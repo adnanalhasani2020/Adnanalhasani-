@@ -56,7 +56,6 @@ internal fun ActivityProfileScreen(onBack: () -> Unit) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var accessToken by remember { mutableStateOf<String?>(null) }
-    var authUserId by remember { mutableStateOf<String?>(null) }
     var isRegister by remember { mutableStateOf(false) }
     var organizationName by remember { mutableStateOf("") }
     var organizationSlug by remember { mutableStateOf("") }
@@ -119,9 +118,7 @@ internal fun ActivityProfileScreen(onBack: () -> Unit) {
                             if (isRegister) throw IllegalStateException("تم إرسال طلب التسجيل. أكّد بريدك الإلكتروني ثم سجّل الدخول.")
                             throw IllegalStateException("لم تُرجع خدمة المصادقة جلسة صالحة.")
                         }
-                        val user = result.optJSONObject("user") ?: session.optJSONObject("user") ?: result
                         accessToken = token
-                        authUserId = user.optString("id").ifBlank { null }
                         "تم تسجيل الدخول"
                     }, { feedback = it })
                 },
