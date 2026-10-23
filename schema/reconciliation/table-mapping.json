@@ -61,6 +61,48 @@
       "supabase_table": "commercial_audit_events",
       "status": "partial_overlap",
       "reason": "Both are audit-related, but payload, actor identity, target identity, retention and immutability rules differ."
+    },
+    {
+      "sqlite_table": "persons",
+      "supabase_table": "commercial_customers",
+      "status": "unresolved",
+      "reason": "Person identity is broader than a commercial customer record; do not merge identity, contact, or customer records without a verified identity-link contract."
+    },
+    {
+      "sqlite_table": "services",
+      "supabase_table": "commercial_service_orders",
+      "status": "unresolved",
+      "reason": "A service catalog/domain entity is not the same as a service order instance."
+    },
+    {
+      "sqlite_table": "workflows",
+      "supabase_table": "commercial_work_items",
+      "status": "unresolved",
+      "reason": "Workflow definitions and work-item records have different lifecycle and relationship semantics."
+    },
+    {
+      "sqlite_table": "workflow_events",
+      "supabase_table": "commercial_work_item_events",
+      "status": "unresolved",
+      "reason": "Generic workflow event history may not share the work-item event lifecycle, actor model, or retention contract."
+    },
+    {
+      "sqlite_table": "measurements_units",
+      "supabase_table": "commercial_unit_of_measure",
+      "status": "unresolved",
+      "reason": "The SQLite table name may not exist in the current schema; verify against all SQLite migrations before treating this as a mapping."
+    },
+    {
+      "sqlite_table": "messages",
+      "supabase_table": "commercial_user_notifications",
+      "status": "unresolved",
+      "reason": "Conversation messages and user notifications are distinct communication concepts."
+    },
+    {
+      "sqlite_table": "instruments",
+      "supabase_table": "commercial_ledger_accounts",
+      "status": "unresolved",
+      "reason": "Financial instruments and ledger accounts are different entities despite possible finance-related naming."
     }
   ]
 }
