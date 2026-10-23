@@ -253,7 +253,8 @@ class CommercialWebApplication:
                         if path == "/api/register":
                             auth_result = auth.sign_up(email=body.get("email"), password=body.get("password"))
                             # Supabase may require email confirmation before it issues a session.
-                            if not auth_result.get("access_token"):
+                            session_data = auth_result.get("session") if isinstance(auth_result.get("session"), dict) else auth_result
+                            if not session_data.get("access_token"):
                                 return self._json(start_response, "202 Accepted", {
                                     "needs_email_confirmation": True,
                                     "message": "تم إرسال طلب إنشاء الحساب. تحقق من بريدك الإلكتروني لتأكيد الحساب، ثم سجّل الدخول."
@@ -262,11 +263,14 @@ class CommercialWebApplication:
                             auth_result = auth.sign_in_with_password(
                                 email=body.get("email"), password=body.get("password")
                             )
+                            session_data = auth_result.get("session") if isinstance(auth_result.get("session"), dict) else auth_result
                     except SupabaseAuthError as exc:
                         status = "401 Unauthorized" if path == "/api/login" else "400 Bad Request"
                         return self._json(start_response, status, {"error": str(exc)})
                     user = auth_result.get("user")
-                    if not isinstance(user, dict) or not user.get("id") or not auth_result.get("access_token"):
+                    if not isinstance(user, dict) and auth_result.get("id"):
+                        user = auth_result
+                    if not isinstance(user, dict) or not user.get("id") or not session_data.get("access_token"):
                         return self._json(start_response, "502 Bad Gateway", {
                             "error": "لم تُرجع خدمة Supabase جلسة مستخدم صالحة."
                         })
