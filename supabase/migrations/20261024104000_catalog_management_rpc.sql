@@ -36,10 +36,11 @@ CREATE OR REPLACE FUNCTION public.commercial_catalog_create_category(
   p_name_en text,
   p_description_ar text DEFAULT NULL,
   p_description_en text DEFAULT NULL,
-  p_sort_order integer DEFAULT 100
+  p_sort_order integer DEFAULT 100,
+  p_translations jsonb DEFAULT '[]'::jsonb
 ) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
-DECLARE v_code text;
+DECLARE v_code text; v_translation jsonb;
 BEGIN
   IF auth.uid() IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
   IF NOT public.commercial_catalog_member_of(p_organization_id, ARRAY['owner','admin']::text[]) THEN
@@ -69,10 +70,27 @@ BEGIN
     ('catalog_category',v_code,'en','name',btrim(p_name_en),'human_authored','en',p_organization_id,auth.uid())
   ON CONFLICT (entity_type,entity_key,locale_code,field_key) DO UPDATE
     SET translated_value=EXCLUDED.translated_value,owner_organization_id=EXCLUDED.owner_organization_id;
+  IF jsonb_typeof(COALESCE(p_translations,'[]'::jsonb))<>'array' THEN
+    RAISE EXCEPTION 'invalid_category_translations' USING ERRCODE='22023';
+  END IF;
+  FOR v_translation IN SELECT value FROM jsonb_array_elements(COALESCE(p_translations,'[]'::jsonb)) LOOP
+    IF nullif(btrim(v_translation->>'locale_code'),'') IS NULL
+       OR nullif(btrim(v_translation->>'field_key'),'') IS NULL
+       OR nullif(btrim(v_translation->>'translated_value'),'') IS NULL THEN
+      RAISE EXCEPTION 'invalid_category_translation_fields' USING ERRCODE='22023';
+    END IF;
+    INSERT INTO public.commercial_global_entity_translations(
+      entity_type,entity_key,locale_code,field_key,translated_value,translation_status,source_language,owner_organization_id,created_by
+    ) VALUES ('catalog_category',v_code,lower(btrim(v_translation->>'locale_code')),lower(btrim(v_translation->>'field_key')),
+      btrim(v_translation->>'translated_value'),'human_authored',nullif(v_translation->>'source_language',''),p_organization_id,auth.uid())
+    ON CONFLICT (entity_type,entity_key,locale_code,field_key) DO UPDATE
+      SET translated_value=EXCLUDED.translated_value,translation_status=EXCLUDED.translation_status,
+          source_language=EXCLUDED.source_language,owner_organization_id=EXCLUDED.owner_organization_id;
+  END LOOP;
   RETURN jsonb_build_object('category_code',v_code,'parent_code',p_parent_code);
 END $$;
-REVOKE ALL ON FUNCTION public.commercial_catalog_create_category(uuid,text,text,text,text,text,text,integer) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.commercial_catalog_create_category(uuid,text,text,text,text,text,text,integer) TO authenticated;
+REVOKE ALL ON FUNCTION public.commercial_catalog_create_category(uuid,text,text,text,text,text,text,integer,jsonb) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.commercial_catalog_create_category(uuid,text,text,text,text,text,text,integer,jsonb) TO authenticated;
 
 CREATE OR REPLACE FUNCTION public.commercial_catalog_create_unit(
   p_organization_id uuid,
@@ -82,10 +100,11 @@ CREATE OR REPLACE FUNCTION public.commercial_catalog_create_unit(
   p_dimension text,
   p_factor_to_base numeric,
   p_base_unit_code text,
-  p_decimal_places smallint DEFAULT 3
+  p_decimal_places smallint DEFAULT 3,
+  p_translations jsonb DEFAULT '[]'::jsonb
 ) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
-DECLARE v_code text; v_dimension text; v_owner uuid;
+DECLARE v_code text; v_dimension text; v_owner uuid; v_translation jsonb;
 BEGIN
   IF auth.uid() IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
   IF NOT public.commercial_catalog_member_of(p_organization_id, ARRAY['owner','admin']::text[]) THEN
@@ -120,10 +139,27 @@ BEGIN
     ('unit',v_code,'en','name',btrim(p_name_en),'human_authored','en',p_organization_id,auth.uid())
   ON CONFLICT (entity_type,entity_key,locale_code,field_key) DO UPDATE
     SET translated_value=EXCLUDED.translated_value,owner_organization_id=EXCLUDED.owner_organization_id;
+  IF jsonb_typeof(COALESCE(p_translations,'[]'::jsonb))<>'array' THEN
+    RAISE EXCEPTION 'invalid_unit_translations' USING ERRCODE='22023';
+  END IF;
+  FOR v_translation IN SELECT value FROM jsonb_array_elements(COALESCE(p_translations,'[]'::jsonb)) LOOP
+    IF nullif(btrim(v_translation->>'locale_code'),'') IS NULL
+       OR nullif(btrim(v_translation->>'field_key'),'') IS NULL
+       OR nullif(btrim(v_translation->>'translated_value'),'') IS NULL THEN
+      RAISE EXCEPTION 'invalid_unit_translation_fields' USING ERRCODE='22023';
+    END IF;
+    INSERT INTO public.commercial_global_entity_translations(
+      entity_type,entity_key,locale_code,field_key,translated_value,translation_status,source_language,owner_organization_id,created_by
+    ) VALUES ('unit',v_code,lower(btrim(v_translation->>'locale_code')),lower(btrim(v_translation->>'field_key')),
+      btrim(v_translation->>'translated_value'),'human_authored',nullif(v_translation->>'source_language',''),p_organization_id,auth.uid())
+    ON CONFLICT (entity_type,entity_key,locale_code,field_key) DO UPDATE
+      SET translated_value=EXCLUDED.translated_value,translation_status=EXCLUDED.translation_status,
+          source_language=EXCLUDED.source_language,owner_organization_id=EXCLUDED.owner_organization_id;
+  END LOOP;
   RETURN jsonb_build_object('unit_code',v_code,'base_unit_code',p_base_unit_code,'dimension',p_dimension);
 END $$;
-REVOKE ALL ON FUNCTION public.commercial_catalog_create_unit(uuid,text,text,text,text,numeric,text,smallint) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.commercial_catalog_create_unit(uuid,text,text,text,text,numeric,text,smallint) TO authenticated;
+REVOKE ALL ON FUNCTION public.commercial_catalog_create_unit(uuid,text,text,text,text,numeric,text,smallint,jsonb) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.commercial_catalog_create_unit(uuid,text,text,text,text,numeric,text,smallint,jsonb) TO authenticated;
 
 CREATE OR REPLACE FUNCTION public.commercial_catalog_create_product(
   p_organization_id uuid,
