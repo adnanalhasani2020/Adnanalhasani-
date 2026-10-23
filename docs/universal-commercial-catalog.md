@@ -9,7 +9,7 @@ This migration introduces the database foundation for a shared, multilingual, cr
 - Product-level data includes identifiers, descriptions, brand, manufacturer/country, model/part number, ingredients/materials/recipe/specifications, storage/use/warnings, expiry/lot/serial tracking and HTTPS image URL.
 - Translations are normalized by locale for categories, products and units. Do not assume only Arabic/English.
 - Product units support separate sale/purchase/stock/recipe/shipping/consumption roles, conversion to base quantity, packaging labels, SKU, barcode, net quantity and per-package image URL.
-- Sector and geographic targeting are explicit include/exclude rules. The sector list starts with hospital, pharmacy, grocery, restaurant, hotel, general/mobile/automotive/heavy-equipment companies, wholesale and other domains; it can be extended by migration.
+- Sector and geographic targeting are explicit include/exclude rules. Common sector codes include hospital, pharmacy, grocery, restaurant, hotel, general/mobile/automotive/heavy-equipment companies, wholesale and retail. Sector codes are data-driven rather than restricted to this starter list, so new business specializations do not require a schema migration.
 - Recipe ingredients reference either another catalog product or a free-text ingredient.
 - Religious, medical, regulatory and dietary statements are source-attributed, jurisdiction-aware, time-scoped and carry review/confidence metadata. These records are not universal religious rulings or a substitute for clinician/regulator advice.
 - Organization catalog links can be transferred by an owner/admin who has rights to both source and destination organizations. Transfer is idempotent and does not overwrite existing destination links.
