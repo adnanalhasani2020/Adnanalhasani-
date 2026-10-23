@@ -21,7 +21,7 @@ from agent_core.commerce_checkout import CommercialCheckoutApplication
 from agent_core.commercial_identity import CommercialIdentityApplication
 from agent_core.persistence import connect_database
 from agent_core.shared import ValidationError
-from agent_core.supabase_rpc import SupabaseAuthClient, SupabaseRPCClient, SupabaseRPCError
+from agent_core.supabase_rpc import SupabaseAuthClient, SupabaseAuthError, SupabaseRPCClient, SupabaseRPCError
 
 
 PAGE = r"""<!doctype html>
@@ -248,18 +248,22 @@ class CommercialWebApplication:
                 body = self._body(environ)
                 if self._supabase_auth_enabled():
                     auth = SupabaseAuthClient()
-                    if path == "/api/register":
-                        auth_result = auth.sign_up(email=body.get("email"), password=body.get("password"))
-                        # Supabase may require email confirmation before it issues a session.
-                        if not auth_result.get("access_token"):
-                            return self._json(start_response, "202 Accepted", {
-                                "needs_email_confirmation": True,
-                                "message": "تم إرسال طلب إنشاء الحساب. تحقق من بريدك الإلكتروني لتأكيد الحساب، ثم سجّل الدخول."
-                            })
-                    else:
-                        auth_result = auth.sign_in_with_password(
-                            email=body.get("email"), password=body.get("password")
-                        )
+                    try:
+                        if path == "/api/register":
+                            auth_result = auth.sign_up(email=body.get("email"), password=body.get("password"))
+                            # Supabase may require email confirmation before it issues a session.
+                            if not auth_result.get("access_token"):
+                                return self._json(start_response, "202 Accepted", {
+                                    "needs_email_confirmation": True,
+                                    "message": "تم إرسال طلب إنشاء الحساب. تحقق من بريدك الإلكتروني لتأكيد الحساب، ثم سجّل الدخول."
+                                })
+                        else:
+                            auth_result = auth.sign_in_with_password(
+                                email=body.get("email"), password=body.get("password")
+                            )
+                    except SupabaseAuthError as exc:
+                        status = "401 Unauthorized" if path == "/api/login" else "400 Bad Request"
+                        return self._json(start_response, status, {"error": str(exc)})
                     user = auth_result.get("user")
                     if not isinstance(user, dict) or not user.get("id") or not auth_result.get("access_token"):
                         return self._json(start_response, "502 Bad Gateway", {
