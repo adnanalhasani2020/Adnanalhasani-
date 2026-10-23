@@ -493,6 +493,15 @@ private fun SaleEntryDialog(
     onDismiss: () -> Unit,
     onSave: (Int, String, Int, Boolean, Int, String, Int, String) -> Unit
 ) {
+    if (inventory.isEmpty()) {
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text("لا توجد أصناف") },
+            text = { Text("أضف صنفًا إلى المخزون أو استورد صنفًا من دليل الأصناف قبل إنشاء فاتورة.") },
+            confirmButton = { Button(onClick = onDismiss) { Text("حسنًا") } }
+        )
+        return
+    }
     var selected by remember { mutableIntStateOf(0) }
     var selectedUnitIndex by remember(selected) { mutableIntStateOf(-1) }
     var quantityText by remember { mutableStateOf("1") }
@@ -550,6 +559,9 @@ private fun SaleEntryDialog(
                             )
                         }
                     }
+                }
+                if (selectedUnit.imageUrl.startsWith("https://", true)) {
+                    AsyncImage(model=selectedUnit.imageUrl,contentDescription=selectedUnit.label,modifier=Modifier.fillMaxWidth().heightIn(max=130.dp),contentScale=ContentScale.Fit)
                 }
                 OutlinedTextField(
                     value = quantityText,
