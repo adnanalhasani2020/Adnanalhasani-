@@ -14,6 +14,8 @@ class BusinessActivityTaxonomyContractTests(unittest.TestCase):
         cls.expansion = (MIGRATIONS / "20261024112000_business_activity_taxonomy_expansion.sql").read_text(encoding="utf-8")
         cls.catalog_schema = (MIGRATIONS / "20261024100000_universal_commercial_catalog.sql").read_text(encoding="utf-8")
         cls.profile_screen = (ANDROID / "ActivityProfileScreen.kt").read_text(encoding="utf-8")
+        cls.policy_fix = (MIGRATIONS / "20261024113000_catalog_policy_deduplication.sql").read_text(encoding="utf-8")
+        cls.integrity_fix = (MIGRATIONS / "20261024114000_catalog_integrity_performance.sql").read_text(encoding="utf-8")
 
     def test_activity_taxonomy_does_not_duplicate_product_or_unit_masters(self):
         self.assertIn("commercial_global_business_activity_nodes", self.taxonomy)
@@ -56,6 +58,19 @@ class BusinessActivityTaxonomyContractTests(unittest.TestCase):
         self.assertIn("external_version", self.taxonomy)
         self.assertIn("source_system='ROUH_ACTIVITY'", self.expansion)
         self.assertIn("ux_business_activity_alias_locale_normalized", self.expansion)
+
+    def test_catalog_policies_do_not_use_overlapping_for_all_write_policies(self):
+        self.assertIn("DROP POLICY IF EXISTS commercial_catalog_items_org_select", self.policy_fix)
+        self.assertIn("FOR INSERT TO authenticated", self.policy_fix)
+        self.assertIn("FOR UPDATE TO authenticated", self.policy_fix)
+        self.assertIn("FOR DELETE TO authenticated", self.policy_fix)
+        self.assertNotIn("CREATE POLICY commercial_catalog_product_units_write", self.policy_fix)
+
+    def test_obsolete_one_phase_transfer_is_removed_and_foreign_keys_indexed(self):
+        self.assertIn("DROP FUNCTION IF EXISTS public.commercial_catalog_transfer", self.integrity_fix)
+        self.assertIn("ix_catalog_recipes_product", self.integrity_fix)
+        self.assertIn("ix_catalog_transfers_source", self.integrity_fix)
+        self.assertIn("commercial_catalog_product_regions_pkey", self.integrity_fix)
 
     def test_android_loads_and_selects_the_server_activity_directory(self):
         self.assertIn("commercial_list_business_activity_nodes", self.profile_screen)
