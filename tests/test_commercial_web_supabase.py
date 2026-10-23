@@ -93,3 +93,54 @@ def test_supabase_catalog_validates_session_and_uses_user_token():
     assert json.loads(result.decode("utf-8")) == {"items": [{"offering_id": "offer-1"}]}
     auth_class.return_value.get_user.assert_called_once_with("access-token")
     rpc_class.assert_called_once_with("access-token")
+
+
+def test_supabase_checkout_requires_auth_and_calls_atomic_rpc():
+    app = CommercialWebApplication()
+    body = {"offering_id": "offer-uuid", "location_id": "location-uuid",
+            "quantity": 2, "idempotency_key": "checkout-key-123"}
+    raw = json.dumps(body).encode()
+    environ = {
+        "REQUEST_METHOD": "POST", "PATH_INFO": "/api/supabase/checkout",
+        "wsgi.url_scheme": "https", "HTTP_HOST": "example.test",
+        "HTTP_COOKIE": "supabase_access=access-token; supabase_refresh=refresh-token",
+        "CONTENT_TYPE": "application/json", "CONTENT_LENGTH": str(len(raw)),
+        "wsgi.input": io.BytesIO(raw),
+    }
+    captured = {}
+    def start_response(status, headers):
+        captured["status"], captured["headers"] = status, headers
+    with patch("agent_core.commercial_web.SupabaseAuthClient") as auth_class, \
+         patch("agent_core.commercial_web.SupabaseRPCClient") as rpc_class:
+        auth_class.return_value.get_user.return_value = {"id": "user-1"}
+        rpc_class.return_value.checkout.return_value = {
+            "sale_id": "sale-uuid", "total_minor": 2500, "idempotent_replay": False
+        }
+        result = b"".join(app(environ, start_response))
+    assert captured["status"] == "201 Created"
+    assert json.loads(result.decode())["sale_id"] == "sale-uuid"
+    rpc_class.assert_called_once_with("access-token")
+    rpc_class.return_value.checkout.assert_called_once_with(
+        offering_id="offer-uuid", location_id="location-uuid",
+        quantity=2, idempotency_key="checkout-key-123",
+    )
+
+
+def test_supabase_receipts_requires_auth_and_returns_owned_rows():
+    app = CommercialWebApplication()
+    environ = {
+        "REQUEST_METHOD": "GET", "PATH_INFO": "/api/supabase/receipts",
+        "wsgi.url_scheme": "https", "HTTP_HOST": "example.test",
+        "HTTP_COOKIE": "supabase_access=access-token", "CONTENT_LENGTH": "0",
+        "wsgi.input": io.BytesIO(b""),
+    }
+    captured = {}
+    def start_response(status, headers):
+        captured["status"] = status
+    with patch("agent_core.commercial_web.SupabaseAuthClient") as auth_class, \
+         patch("agent_core.commercial_web.SupabaseRPCClient") as rpc_class:
+        auth_class.return_value.get_user.return_value = {"id": "user-1"}
+        rpc_class.return_value.receipts.return_value = [{"sale_id": "sale-uuid"}]
+        result = b"".join(app(environ, start_response))
+    assert captured["status"] == "200 OK"
+    assert json.loads(result.decode()) == {"items": [{"sale_id": "sale-uuid"}]}

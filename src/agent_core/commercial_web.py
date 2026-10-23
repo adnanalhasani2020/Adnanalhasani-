@@ -268,6 +268,48 @@ class CommercialWebApplication:
                 items = SupabaseRPCClient(access_token).catalog()
                 return self._json(start_response, "200 OK", {"items": items}, headers)
 
+            if path in {"/api/supabase/checkout", "/api/supabase/receipts"} or path.startswith("/api/supabase/receipts/"):
+                auth = SupabaseAuthClient()
+                access_token, refresh_token = self._supabase_cookies(environ)
+                if not access_token:
+                    return self._json(start_response, "401 Unauthorized", {
+                        "error": "سجّل الدخول بحساب Supabase للمتابعة."
+                    })
+                try:
+                    auth.get_user(access_token)
+                    headers = []
+                except SupabaseAuthError:
+                    if not refresh_token:
+                        raise
+                    session = auth.refresh_session(refresh_token)
+                    access_token = session["access_token"]
+                    auth.get_user(access_token)
+                    headers = self._supabase_cookie_headers(session, secure_cookie)
+                client = SupabaseRPCClient(access_token)
+                if method == "POST" and path == "/api/supabase/checkout":
+                    body = self._body(environ)
+                    missing = [key for key in ("offering_id", "location_id", "quantity", "idempotency_key")
+                               if key not in body]
+                    if missing:
+                        raise ValidationError("Missing checkout fields: " + ", ".join(missing))
+                    result = client.checkout(
+                        offering_id=body["offering_id"], location_id=body["location_id"],
+                        quantity=body["quantity"], idempotency_key=body["idempotency_key"],
+                    )
+                    status = "200 OK" if result.get("idempotent_replay") else "201 Created"
+                    return self._json(start_response, status, result, headers)
+                if method == "GET" and path == "/api/supabase/receipts":
+                    return self._json(start_response, "200 OK", {"items": client.receipts()}, headers)
+                if method == "GET" and path.startswith("/api/supabase/receipts/"):
+                    sale_id = path.removeprefix("/api/supabase/receipts/").strip()
+                    if not sale_id or "/" in sale_id:
+                        return self._json(start_response, "404 Not Found", {"error": "إيصال البيع غير موجود."})
+                    items = client.receipts(sale_id=sale_id)
+                    if not items:
+                        return self._json(start_response, "404 Not Found", {"error": "إيصال البيع غير موجود."}, headers)
+                    return self._json(start_response, "200 OK", items[0], headers)
+                return self._json(start_response, "404 Not Found", {"error": "المسار غير موجود."})
+
             # Supabase Auth uses its own HttpOnly cookies and never falls through to
             # the legacy SQLite identity. Commercial APIs remain separately authorized.
             if path.startswith("/api/supabase/auth/"):
@@ -496,7 +538,7 @@ button{{font:inherit;padding:.6rem 1rem;cursor:pointer}}dt{{font-weight:700}}dd{
             logging.warning("Supabase Auth request failed: %s", str(exc))
             return self._json(start_response, "401 Unauthorized", {"error": str(exc)})
         except SupabaseRPCError as exc:
-            logging.warning("Supabase organization onboarding request failed: %s", str(exc))
+            logging.warning("Supabase commercial request failed: %s", str(exc))
             return self._json(start_response, "502 Bad Gateway", {"error": str(exc)})
         except ValidationError as exc:
             return self._json(start_response, "400 Bad Request", {"error": str(exc)})

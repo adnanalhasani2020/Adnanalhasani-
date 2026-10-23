@@ -118,3 +118,56 @@ def test_catalog_uses_user_jwt_and_filters_inactive_or_unavailable_rows(monkeypa
     assert result[0]["available_quantity"] == 4
     assert result[0]["location_ref"] == "loc-1"
     assert result[0]["organization_id"] == "org-1"
+
+
+def test_checkout_calls_atomic_rpc_and_validates_response(monkeypatch):
+    rpc = client(monkeypatch)
+    expected = {"sale_id": "sale-uuid", "total_minor": 2500}
+    with patch.object(rpc, "rpc", return_value=expected) as call:
+        result = rpc.checkout(
+            offering_id="offer-uuid", location_id="location-uuid",
+            quantity=2, idempotency_key="checkout-key-123",
+        )
+    assert result == expected
+    assert call.call_args.args[0] == "commercial_checkout_sale"
+    assert call.call_args.args[1] == {
+        "p_offering_id": "offer-uuid", "p_location_id": "location-uuid",
+        "p_quantity": 2, "p_idempotency_key": "checkout-key-123",
+    }
+
+
+def test_checkout_rejects_invalid_quantity(monkeypatch):
+    rpc = client(monkeypatch)
+    with pytest.raises(ValueError):
+        rpc.checkout(
+            offering_id="offer-uuid", location_id="location-uuid",
+            quantity=True, idempotency_key="checkout-key-123",
+        )
+
+
+def test_receipts_uses_user_jwt_and_normalizes_sale_items(monkeypatch):
+    rpc = client(monkeypatch)
+    payload = [{
+        "id": "sale-uuid", "receipt_number": 17, "activity_id": "activity-uuid",
+        "organization_id": "org-uuid", "currency_code": "YER", "total_minor": 2500,
+        "status": "completed", "payment_status": "paid",
+        "created_at": "2026-10-23T10:00:00Z",
+        "items": [{"quantity": 2, "unit_price_minor": 1250,
+                   "product_name_snapshot": "Tea", "line_total_minor": 2500,
+                   "offering_id": "offer-uuid"}],
+    }]
+    class Response:
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            return False
+        def read(self, _limit):
+            return json.dumps(payload).encode()
+    with patch("agent_core.supabase_rpc.urlopen", return_value=Response()) as open_url:
+        result = rpc.receipts()
+    request = open_url.call_args.args[0]
+    assert request.full_url.startswith("https://example.supabase.co/rest/v1/commercial_sales?")
+    assert request.get_header("Authorization") == "Bearer signed-in-user-token"
+    assert result[0]["sale_id"] == "sale-uuid"
+    assert result[0]["product_name"] == "Tea"
+    assert result[0]["total_minor"] == 2500

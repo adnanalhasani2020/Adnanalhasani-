@@ -123,6 +123,73 @@ class SupabaseRPCClient:
                 })
         return items
 
+    def checkout(self, *, offering_id: str, location_id: str, quantity: int,
+                 idempotency_key: str) -> dict:
+        if not isinstance(quantity, int) or isinstance(quantity, bool) or not 1 <= quantity <= 100000:
+            raise ValueError("quantity must be an integer between 1 and 100000")
+        result = self.rpc("commercial_checkout_sale", {
+            "p_offering_id": offering_id,
+            "p_location_id": location_id,
+            "p_quantity": quantity,
+            "p_idempotency_key": idempotency_key,
+        })
+        if not isinstance(result, dict) or not isinstance(result.get("sale_id"), str):
+            raise SupabaseRPCError("Unexpected checkout response; verify the sale before retrying.")
+        return result
+
+    def receipts(self, *, sale_id: str | None = None) -> list[dict]:
+        from urllib.parse import urlencode
+        query = {
+            "select": "id,receipt_number,activity_id,organization_id,currency_code,total_minor,status,payment_status,created_at,items:commercial_sale_items(quantity,unit_price_minor,product_name_snapshot,line_total_minor,offering_id)",
+            "order": "created_at.desc",
+            "limit": "20",
+        }
+        if sale_id is not None:
+            query["id"] = "eq." + sale_id
+        request = Request(
+            f"{self.url}/rest/v1/commercial_sales?{urlencode(query)}",
+            method="GET",
+            headers={"apikey": self.anon_key, "Authorization": f"Bearer {self.access_token}",
+                     "Accept": "application/json", "Cache-Control": "no-store"},
+        )
+        try:
+            with urlopen(request, timeout=self.timeout) as response:
+                raw = response.read(2_000_001)
+                if len(raw) > 2_000_000:
+                    raise SupabaseRPCError("Supabase receipts response exceeded the size limit.")
+                rows = json.loads(raw.decode("utf-8")) if raw else []
+        except HTTPError as exc:
+            if exc.code in (400, 401, 403):
+                raise SupabaseRPCError(f"Supabase rejected receipt access (HTTP {exc.code}).") from None
+            raise SupabaseRPCError(f"Supabase receipts request failed (HTTP {exc.code}).") from None
+        except (URLError, TimeoutError, OSError, UnicodeDecodeError, json.JSONDecodeError):
+            raise SupabaseRPCError("Supabase receipts connection or response failed.") from None
+        if not isinstance(rows, list):
+            raise SupabaseRPCError("Unexpected Supabase receipts response.")
+        results = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            items = row.get("items") or []
+            item = items[0] if isinstance(items, list) and items and isinstance(items[0], dict) else {}
+            results.append({
+                "sale_id": row.get("id"),
+                "receipt_number": row.get("receipt_number"),
+                "activity_id": row.get("activity_id"),
+                "organization_id": row.get("organization_id"),
+                "state": row.get("status"),
+                "payment_status": row.get("payment_status"),
+                "quantity": item.get("quantity"),
+                "product_name": item.get("product_name_snapshot"),
+                "product_id": None,
+                "offering_id": item.get("offering_id"),
+                "unit_price_minor": item.get("unit_price_minor"),
+                "total_minor": row.get("total_minor"),
+                "currency_code": row.get("currency_code"),
+                "occurred_at": row.get("created_at"),
+            })
+        return results
+
     def create_organization(self, *, name: str, slug: str, organization_type: str,
                             currency_code: str, timezone: str, locale: str,
                             country_code: str | None = None,
