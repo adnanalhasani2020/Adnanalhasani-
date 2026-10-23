@@ -24,7 +24,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.Executors
 
-internal data class CatalogUnit(val unitCode: String, val role: String, val quantityInBase: String, val barcode: String, val packageName: String, val imageUrl: String, val isDefault: Boolean)
+internal data class CatalogUnit(val unitCode: String, val role: String, val quantityInBase: String, val barcode: String, val packageName: String, val imageUrl: String, val isDefault: Boolean, val unitName: String = "")
 internal data class CatalogRuling(val id: String, val domain: String, val authority: String, val religion: String, val jurisdiction: String, val outcome: String, val rationale: String, val sourceTitle: String, val sourceUrl: String, val confidence: String, val effectiveFrom: String, val effectiveTo: String, val reviewedAt: String)
 internal data class CatalogProduct(
     val id: String, val catalogCode: String, val name: String, val description: String,
@@ -157,7 +157,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                     imageUrl=row.optString("image_url"),prescriptionOnly=row.optBoolean("is_prescription_only",false),
                     recommendationScore=row.optInt("recommendation_score"),barcode=row.optString("barcode"),unitCode=row.optString("unit_code").ifBlank { "EA" },
                     availableUnits=row.optJSONArray("available_units")?.let { arr -> List(arr.length()) { j ->
-                        val u=arr.getJSONObject(j); CatalogUnit(u.optString("unit_code"),u.optString("unit_role"),u.optString("quantity_in_base","1"),u.optString("barcode"),u.optString("package_name"),u.optString("image_url"),u.optBoolean("is_default"))
+                        val u=arr.getJSONObject(j); CatalogUnit(u.optString("unit_code"),u.optString("unit_role"),u.optString("quantity_in_base","1"),u.optString("barcode"),u.optString("package_name").takeUnless { it == "null" }.orEmpty(),u.optString("image_url").takeUnless { it == "null" }.orEmpty(),u.optBoolean("is_default"),u.optString("unit_name").takeUnless { it == "null" }.orEmpty())
                     } } ?: emptyList(),createdBy=row.optString("created_by"),createdAt=row.optString("created_at"),importedBy=signedInUserId,
                     attributesSchema=row.optJSONObject("attributes_schema")?.toString().orEmpty(),modelNumber=row.optString("model_number").takeUnless { it == "null" }.orEmpty(),partNumber=row.optString("part_number").takeUnless { it == "null" }.orEmpty(),imageAlt=row.optString("image_alt").takeUnless { it == "null" }.orEmpty(),
                     materialComposition=row.optJSONArray("material_composition")?.let { arr -> List(arr.length()) { arr.get(it).toString() }.joinToString(", ") }.orEmpty(),
@@ -256,7 +256,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                 .put("requires_expiry_date",expiryRequired).put("is_batch_tracked",batchTracked)
                 .put("is_serial_tracked",serialTracked).put("is_prescription_only",prescriptionOnly).put("currency_code",currencyCode.ifBlank { "YER" })
             val unitRows=JSONArray().put(JSONObject().put("unit_code",unitCode.trim()).put("unit_role","base").put("quantity_in_base",1)
-                .put("barcode",barcode.ifBlank { JSONObject.NULL }).put("package_name","الوحدة الأساسية").put("image_url",imageUrl.ifBlank { JSONObject.NULL }).put("is_default",true))
+                .put("barcode",barcode.ifBlank { JSONObject.NULL }).put("package_name",JSONObject.NULL).put("image_url",imageUrl.ifBlank { JSONObject.NULL }).put("is_default",true))
             if(extraUnitCode.isNotBlank()) unitRows.put(JSONObject().put("unit_code",extraUnitCode.trim()).put("unit_role","sale")
                 .put("quantity_in_base",extraUnitQty.toBigDecimalOrNull()?.toPlainString() ?: throw IllegalArgumentException("معامل تحويل العبوة غير صحيح."))
                 .put("barcode",extraUnitBarcode.ifBlank { JSONObject.NULL }).put("package_name",extraUnitPackage.ifBlank { JSONObject.NULL })
@@ -406,7 +406,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                                         item.imageAlt.takeIf{it.isNotBlank()}?.let{"وصف الصورة: $it"},
                                         item.barcode.takeIf{it.isNotBlank()}?.let{"الباركود الأساسي: $it"},
                                         "وحدة الأساس/البيع: ${item.unitCode}",
-                                        item.availableUnits.takeIf{it.isNotEmpty()}?.joinToString("، "){u->"${u.packageName.ifBlank{u.unitCode}} × ${u.quantityInBase}${if(u.barcode.isNotBlank()) " (باركود ${u.barcode})" else ""}"}?.let{"العبوات: $it"},
+                                        item.availableUnits.takeIf{it.isNotEmpty()}?.joinToString("، "){u->"${u.packageName.ifBlank{u.unitName.ifBlank{u.unitCode}}} × ${u.quantityInBase}${if(u.barcode.isNotBlank()) " (باركود ${u.barcode})" else ""}"}?.let{"العبوات: $it"},
                                         item.createdAt.takeIf{it.isNotBlank()}?.let{"تاريخ إدخال سجل الدليل: $it"},
                                         item.createdBy.takeIf{it.isNotBlank()}?.let{"معرّف مدخل سجل الدليل: $it"},
                                         item.imageUrl.takeIf{it.isNotBlank()}?.let{"رابط الصورة الخارجية: $it"},
