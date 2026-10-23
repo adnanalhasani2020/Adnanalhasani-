@@ -77,6 +77,9 @@ internal fun ActivityProfileScreen(onBack: () -> Unit) {
     var city by remember { mutableStateOf("") }
     var district by remember { mutableStateOf("") }
     var street by remember { mutableStateOf("") }
+    val branchNames = remember { mutableStateListOf<String>() }
+    val branchTypes = remember { mutableStateListOf<String>() }
+    val branchParents = remember { mutableStateListOf<Int>() }
     var busy by remember { mutableStateOf(false) }
     var feedback by remember { mutableStateOf("") }
     var created by remember { mutableStateOf(false) }
@@ -150,6 +153,20 @@ internal fun ActivityProfileScreen(onBack: () -> Unit) {
             ProfileField("الحي", district) { district = it }
             ProfileField("الشارع والعنوان", street) { street = it }
             ProfileField("وصف النشاط", description) { description = it }
+            Text("الفروع والمواقع التابعة", style = MaterialTheme.typography.titleMedium)
+            Text("يُنشأ المقر الرئيسي تلقائيًا. يمكنك إضافة فروع أو مخازن أو أقسام وربط كل واحد بالمقر أو بفرع سابق.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            branchNames.indices.forEach { index ->
+                Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("موقع تابع #${index + 1}", fontWeight = FontWeight.SemiBold)
+                        ProfileField("اسم الفرع / القسم", branchNames[index]) { branchNames[index] = it }
+                        ProfileChoice("نوع الموقع", branchTypes[index], listOf("branch" to "فرع", "store" to "متجر", "office" to "مكتب", "department" to "قسم", "warehouse" to "مخزن", "factory" to "مصنع", "other" to "أخرى")) { branchTypes[index] = it }
+                        ProfileChoice("يتبع", branchParents[index].toString(), listOf(-1 to "المقر الرئيسي").map { it.first.toString() to it.second } + (0 until index).map { it.toString() to "موقع #${it + 1}" }) { branchParents[index] = it.toIntOrNull() ?: -1 }
+                        TextButton(onClick = { branchNames.removeAt(index); branchTypes.removeAt(index); branchParents.removeAt(index); for (i in branchParents.indices) if (branchParents[i] >= index) branchParents[i] = if (branchParents[i] == index) -1 else branchParents[i] - 1 }) { Text("حذف الموقع") }
+                    }
+                }
+            }
+            OutlinedButton(onClick = { branchNames.add(""); branchTypes.add("branch"); branchParents.add(-1) }, modifier = Modifier.fillMaxWidth()) { Text("+ إضافة فرع / موقع") }
             Text("لن يتم إنشاء منتجات أو مخزون في هذه الخطوة. تُحفظ بيانات الملف في Supabase عبر دالة RPC محمية بجلسة المستخدم.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Button(
                 enabled = !busy && organizationName.length >= 2 && organizationSlug.matches(Regex("[a-z0-9][a-z0-9-]{1,62}[a-z0-9]")) && activityName.isNotBlank() && registrationNumber.isNotBlank() && ownerName.length >= 2 && runCatching { LocalDate.parse(openedOn); true }.getOrDefault(false),
@@ -182,7 +199,11 @@ internal fun ActivityProfileScreen(onBack: () -> Unit) {
                             .put("p_cover_image_url", JSONObject.NULL)
                             .put("p_owner_identity_front_path", JSONObject.NULL)
                             .put("p_owner_identity_back_path", JSONObject.NULL)
-                            .put("p_locations", JSONArray())
+                        val locations = JSONArray()
+                        branchNames.forEachIndexed { index, name ->
+                            if (name.isNotBlank()) locations.put(JSONObject().put("name", name.trim()).put("location_type", branchTypes[index]).put("parent_index", branchParents[index]))
+                        }
+                        payload.put("p_locations", locations)
                         val result = supabaseRequest("/rest/v1/rpc/commercial_create_activity_profile", payload, token)
                         if (result.optString("organization_id").isBlank()) throw IllegalStateException("استجابة قاعدة البيانات غير مكتملة.")
                         "تم حفظ ملف النشاط في قاعدة البيانات بنجاح."
