@@ -170,8 +170,8 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             JSONObject().put("categories",JSONArray(catRaw)).put("units",JSONArray(unitRaw)).toString()
         }, { raw ->
             val result=JSONObject(raw); val cats=result.getJSONArray("categories"); val units=result.getJSONArray("units")
-            categories=List(cats.length()) { i -> val v=cats.getJSONObject(i); CatalogCategory(v.optString("code"),v.optString("parent_code"),v.optString("name_ar"),v.optString("name_en")) }
-            directoryUnits=List(units.length()) { i -> val v=units.getJSONObject(i); DirectoryUnit(v.optString("code"),v.optString("name_ar"),v.optString("name_en"),v.optString("dimension"),v.optString("base_unit_code"),v.optString("factor_to_base"),v.optString("owner_organization_id")) }
+            categories=List(cats.length()) { i -> val v=cats.getJSONObject(i); CatalogCategory(v.optString("code"),v.optString("parent_code").takeUnless { it == "null" }.orEmpty(),v.optString("name_ar"),v.optString("name_en")) }
+            directoryUnits=List(units.length()) { i -> val v=units.getJSONObject(i); DirectoryUnit(v.optString("code"),v.optString("name_ar"),v.optString("name_en"),v.optString("dimension"),v.optString("base_unit_code").takeUnless { it == "null" }.orEmpty(),v.optString("factor_to_base"),v.optString("owner_organization_id").takeUnless { it == "null" }.orEmpty()) }
             feedback="تم تحميل ${categories.size} تصنيفًا و${directoryUnits.size} وحدة قياس."
         })
     }
