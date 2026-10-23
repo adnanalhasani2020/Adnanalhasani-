@@ -199,6 +199,25 @@ $$;
 REVOKE ALL ON FUNCTION public.commercial_catalog_member_of(uuid,text[]) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.commercial_catalog_member_of(uuid,text[]) TO authenticated;
 
+CREATE OR REPLACE FUNCTION public.commercial_catalog_audit_fields()
+RETURNS trigger LANGUAGE plpgsql SET search_path = pg_catalog, public AS $
+BEGIN
+  IF auth.uid() IS NOT NULL THEN
+    IF TG_OP='INSERT' THEN NEW.created_by := auth.uid(); END IF;
+    NEW.updated_by := auth.uid();
+  END IF;
+  NEW.updated_at := now();
+  RETURN NEW;
+END $;
+DROP TRIGGER IF EXISTS commercial_catalog_items_audit ON public.commercial_global_catalog_items;
+CREATE TRIGGER commercial_catalog_items_audit
+BEFORE INSERT OR UPDATE ON public.commercial_global_catalog_items
+FOR EACH ROW EXECUTE FUNCTION public.commercial_catalog_audit_fields();
+DROP TRIGGER IF EXISTS commercial_catalog_categories_audit ON public.commercial_global_catalog_categories;
+CREATE TRIGGER commercial_catalog_categories_audit
+BEFORE INSERT OR UPDATE ON public.commercial_global_catalog_categories
+FOR EACH ROW EXECUTE FUNCTION public.commercial_catalog_audit_fields();
+
 -- Category parent_code already exists; guard it against cycles and cross-tenant parent changes.
 CREATE OR REPLACE FUNCTION public.commercial_catalog_category_cycle_guard()
 RETURNS trigger LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
