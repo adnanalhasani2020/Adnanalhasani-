@@ -26,7 +26,21 @@ CREATE OR REPLACE FUNCTION public.commercial_catalog_discover_products(
   unit_code text,
   available_units jsonb,
   created_by uuid,
-  created_at timestamptz
+  created_at timestamptz,
+  attributes_schema jsonb,
+  material_composition jsonb,
+  ingredients jsonb,
+  recipe jsonb,
+  specifications jsonb,
+  allergens jsonb,
+  storage_instructions text,
+  usage_instructions text,
+  warnings text,
+  shelf_life_days integer,
+  requires_expiry_date boolean,
+  is_batch_tracked boolean,
+  is_serial_tracked boolean,
+  rulings jsonb
 )
 LANGUAGE plpgsql
 SECURITY INVOKER
@@ -76,7 +90,21 @@ BEGIN
     COALESCE(default_unit.unit_code,p.unit_code,'EA'),
     COALESCE(unit_list.units,'[]'::jsonb),
     p.created_by,
-    p.created_at
+    p.created_at,
+    p.attributes_schema,
+    p.material_composition,
+    p.ingredients,
+    p.recipe,
+    p.specifications,
+    p.allergens,
+    p.storage_instructions,
+    p.usage_instructions,
+    p.warnings,
+    p.shelf_life_days,
+    p.requires_expiry_date,
+    p.is_batch_tracked,
+    p.is_serial_tracked,
+    COALESCE(ruling_list.rulings,'[]'::jsonb)
   FROM public.commercial_global_catalog_items p
   LEFT JOIN LATERAL (
     SELECT pu.unit_code
@@ -95,6 +123,17 @@ BEGIN
     FROM public.commercial_catalog_product_units pu
     WHERE pu.product_id=p.id AND pu.is_active
   ) unit_list ON true
+  LEFT JOIN LATERAL (
+    SELECT jsonb_agg(jsonb_build_object(
+      'ruling_id',r.id,'ruling_domain',r.ruling_domain,'authority_code',r.authority_code,
+      'religion_code',r.religion_code,'jurisdiction_code',r.jurisdiction_code,'outcome',r.outcome,
+      'rationale',r.rationale,'source_title',r.source_title,'source_url',r.source_url,
+      'effective_from',r.effective_from,'effective_to',r.effective_to,'confidence',r.confidence,
+      'reviewed_by',r.reviewed_by,'reviewed_at',r.reviewed_at
+    ) ORDER BY r.ruling_domain,r.religion_code,r.authority_code) AS rulings
+    FROM public.commercial_catalog_product_rulings r
+    WHERE r.product_id=p.id
+  ) ruling_list ON true
   LEFT JOIN public.commercial_global_catalog_categories c ON c.code=p.category_code
   LEFT JOIN public.commercial_global_entity_translations gtname
     ON gtname.entity_type='catalog_item' AND gtname.entity_key=p.catalog_code
