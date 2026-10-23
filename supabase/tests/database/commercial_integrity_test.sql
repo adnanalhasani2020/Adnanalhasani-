@@ -1,7 +1,7 @@
 -- Run with Supabase CLI / pgTAP in a disposable local or staging database.
 -- These are schema regression tests; they do not replace authenticated-session integration tests.
 BEGIN;
-SELECT plan(7);
+SELECT plan(15);
 
 SELECT has_table('public', 'commercial_audit_events',
   'append-only audit event table exists');
@@ -28,6 +28,69 @@ SELECT has_check('public', 'commercial_journal_lines',
 SELECT has_index('public', 'commercial_journal_lines',
   'commercial_journal_lines_journal_entry_id_line_number_key',
   'journal line numbers are unique within an entry');
+
+
+SELECT ok(
+  (SELECT c.relrowsecurity
+   FROM pg_class c
+   JOIN pg_namespace n ON n.oid = c.relnamespace
+   WHERE n.nspname = 'public' AND c.relname = 'commercial_audit_events'),
+  'audit events table has row-level security enabled');
+
+SELECT ok(
+  NOT has_table_privilege('authenticated', 'public.commercial_audit_events', 'INSERT'),
+  'authenticated users cannot directly insert audit events');
+
+SELECT ok(
+  NOT has_table_privilege('authenticated', 'public.commercial_audit_events', 'UPDATE'),
+  'authenticated users cannot directly update audit events');
+
+SELECT ok(
+  NOT has_table_privilege('authenticated', 'public.commercial_audit_events', 'DELETE'),
+  'authenticated users cannot directly delete audit events');
+
+SELECT ok(
+  (SELECT count(*) = 7
+   FROM pg_proc p
+   JOIN pg_namespace n ON n.oid = p.pronamespace
+   WHERE n.nspname = 'public'
+     AND p.proname IN (
+       'commercial_add_global_item_to_organization',
+       'commercial_create_personal_account',
+       'commercial_decide_sale_return',
+       'commercial_inspect_sale_return_item',
+       'commercial_post_journal_entry',
+       'commercial_request_sale_return',
+       'commercial_restock_approved_sale_return'
+     )
+     AND p.prosecdef
+     AND coalesce(p.proconfig, ARRAY[]::text[]) @> ARRAY['search_path=pg_catalog, public']),
+  'all seven exposed security-definer functions pin their search_path');
+
+SELECT ok(
+  (SELECT count(*) = 0
+   FROM pg_proc p
+   JOIN pg_namespace n ON n.oid = p.pronamespace
+   WHERE n.nspname = 'public'
+     AND p.proname IN (
+       'commercial_add_global_item_to_organization',
+       'commercial_create_personal_account',
+       'commercial_decide_sale_return',
+       'commercial_inspect_sale_return_item',
+       'commercial_post_journal_entry',
+       'commercial_request_sale_return',
+       'commercial_restock_approved_sale_return'
+     )
+     AND has_function_privilege('anon', p.oid, 'EXECUTE')),
+  'anonymous users cannot execute sensitive commercial functions');
+
+SELECT has_index('public', 'commercial_sales_returns',
+  'commercial_sales_returns_sale_id_idempotency_key_key',
+  'sale return requests have a unique sale/idempotency key');
+
+SELECT has_index('public', 'commercial_inventory',
+  'commercial_inventory_offering_id_key',
+  'personal inventory has one row per offering');
 
 SELECT * FROM finish();
 ROLLBACK;
