@@ -50,6 +50,7 @@ internal data class Product(val name: String, val category: String, val stock: I
 
 private data class LocalSaleUnit(
     val code: String,
+    val role: String,
     val label: String,
     val quantityInBase: Double,
     val barcode: String,
@@ -64,6 +65,7 @@ private fun localSaleUnits(product: Product): List<LocalSaleUnit> {
             val item = json.getJSONObject(index)
             LocalSaleUnit(
                 code = item.optString("unitCode", product.unitCode).ifBlank { product.unitCode },
+                role = item.optString("role", "base").ifBlank { "base" },
                 label = item.optString("packageName").takeUnless { it.isNullOrBlank() || it == "null" }
                     ?: item.optString("unitName").takeUnless { it.isNullOrBlank() || it == "null" }
                     ?: item.optString("unitCode", product.unitCode).ifBlank { product.unitCode },
@@ -72,10 +74,10 @@ private fun localSaleUnits(product: Product): List<LocalSaleUnit> {
                 imageUrl = item.optString("imageUrl").takeUnless { it == "null" }.orEmpty(),
                 isDefault = item.optBoolean("isDefault", false)
             )
-        }.filter { it.code.isNotBlank() }
+        }.filter { it.code.isNotBlank() && it.role in setOf("base", "sale") }
     }.getOrDefault(emptyList())
     return parsed.ifEmpty {
-        listOf(LocalSaleUnit(product.unitCode.ifBlank { "EA" }, product.unitCode.ifBlank { "EA" }, 1.0, product.barcode, product.imageUrl, true))
+        listOf(LocalSaleUnit(product.unitCode.ifBlank { "EA" }, "base", product.unitCode.ifBlank { "EA" }, 1.0, product.barcode, product.imageUrl, true))
     }
 }
 internal data class SaleRecord(val number: Int, val product: String, val quantity: Int, val total: Int, val credit: Boolean, val customer: String = "", val paid: Int = 0, val createdAt: Long = System.currentTimeMillis(), val unitCost: Int = 0, val unitCode: String = "EA", val baseQuantitySold: Int = quantity)
