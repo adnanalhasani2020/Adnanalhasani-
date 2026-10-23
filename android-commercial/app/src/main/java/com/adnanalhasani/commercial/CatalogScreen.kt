@@ -106,7 +106,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var origin by remember { mutableStateOf("") }; var model by remember { mutableStateOf("") }; var partNumber by remember { mutableStateOf("") }
     var imageUrl by remember { mutableStateOf("") }; var imageAlt by remember { mutableStateOf("") }
     var ingredients by remember { mutableStateOf("") }; var materialComposition by remember { mutableStateOf("") }
-    var recipe by remember { mutableStateOf("") }; var recipeIngredientsText by remember { mutableStateOf("") }; var recipeYieldQty by remember { mutableStateOf("") }; var recipeYieldUnit by remember { mutableStateOf("EA") }; var recipePrepMinutes by remember { mutableStateOf("") }; var recipeCookMinutes by remember { mutableStateOf("") }; var recipeSource by remember { mutableStateOf("") }; var recipeAllergenNotes by remember { mutableStateOf("") }; var specifications by remember { mutableStateOf("") }
+    var recipe by remember { mutableStateOf("") }; var recipeIngredientsText by remember { mutableStateOf("") }; var recipeYieldQty by remember { mutableStateOf("") }; var recipeYieldUnit by remember { mutableStateOf("EA") }; var recipePrepMinutes by remember { mutableStateOf("") }; var recipeCookMinutes by remember { mutableStateOf("") }; var recipeSource by remember { mutableStateOf("") }; var recipeAllergenNotes by remember { mutableStateOf("") }; var specifications by remember { mutableStateOf("") }; var customAttributesJson by remember { mutableStateOf("{}") }
     var allergens by remember { mutableStateOf("") }; var storage by remember { mutableStateOf("") }
     var usage by remember { mutableStateOf("") }; var warnings by remember { mutableStateOf("") }
     var shelfLife by remember { mutableStateOf("") }; var expiryRequired by remember { mutableStateOf(false) }
@@ -589,6 +589,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                     item { OutlinedTextField(recipeAllergenNotes,{recipeAllergenNotes=it},Modifier.fillMaxWidth(),label={Text("ملاحظات الحساسية للوصفة")}) }
                     item { OutlinedTextField(recipeSource,{recipeSource=it},Modifier.fillMaxWidth(),label={Text("مصدر الوصفة / المرجع")},singleLine=true) }
                     item { OutlinedTextField(specifications,{specifications=it},Modifier.fillMaxWidth(),label={Text("المواصفات الإضافية")}) }
+                    item { OutlinedTextField(customAttributesJson,{customAttributesJson=it},Modifier.fillMaxWidth().heightIn(min=90.dp),label={Text("حقول مخصصة إضافية (JSON object)")},placeholder={Text("{\"color\":\"black\",\"model\":\"X1\"}")}) }
                     item { OutlinedTextField(allergens,{allergens=it},Modifier.fillMaxWidth(),label={Text("مسببات الحساسية مفصولة بفواصل")}) }
                     item { OutlinedTextField(storage,{storage=it},Modifier.fillMaxWidth(),label={Text("تعليمات التخزين")}) }
                     item { OutlinedTextField(usage,{usage=it},Modifier.fillMaxWidth(),label={Text("تعليمات الاستخدام")}) }
