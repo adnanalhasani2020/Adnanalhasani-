@@ -248,6 +248,15 @@ class CommercialWebApplication:
                     "organization_id": organization_id
                 })
 
+            if method == "GET" and path == "/api/supabase/catalog":
+                access_token, _refresh_token = self._supabase_cookies(environ)
+                if not access_token:
+                    return self._json(start_response, "401 Unauthorized", {
+                        "error": "سجّل الدخول بحساب Supabase لعرض كتالوجك."
+                    })
+                items = SupabaseRPCClient(access_token).catalog()
+                return self._json(start_response, "200 OK", {"items": items})
+
             # Supabase Auth uses its own HttpOnly cookies and never falls through to
             # the legacy SQLite identity. Commercial APIs remain separately authorized.
             if path.startswith("/api/supabase/auth/"):

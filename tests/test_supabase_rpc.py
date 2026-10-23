@@ -70,3 +70,42 @@ def test_create_organization_rejects_unexpected_response(monkeypatch):
                 name="Demo Org", slug="demo-org", organization_type="business",
                 currency_code="YER", timezone="Asia/Aden", locale="ar",
             )
+
+
+def test_catalog_uses_user_jwt_and_filters_inactive_or_unavailable_rows(monkeypatch):
+    rpc = client(monkeypatch)
+    payload = [{
+        "id": "offer-1", "activity_id": "activity-1", "product_id": "product-1",
+        "price_minor": 1250, "currency_code": "YER", "scope_key": "retail",
+        "location_ref": "main", "valid_from": "2020-01-01T00:00:00Z", "valid_to": None,
+        "product": {"id": "product-1", "name": "Tea", "unit_name": "box", "state": "active"},
+        "inventory": {"quantity_on_hand": 4},
+    }, {
+        "id": "offer-2", "activity_id": "activity-1", "product_id": "product-2",
+        "price_minor": 100, "currency_code": "YER", "scope_key": "retail",
+        "location_ref": "main", "valid_from": "2020-01-01T00:00:00Z", "valid_to": None,
+        "product": {"id": "product-2", "name": "Inactive", "unit_name": "piece", "state": "inactive"},
+        "inventory": {"quantity_on_hand": 9},
+    }, {
+        "id": "offer-3", "activity_id": "activity-1", "product_id": "product-3",
+        "price_minor": 200, "currency_code": "YER", "scope_key": "retail",
+        "location_ref": "main", "valid_from": "2020-01-01T00:00:00Z", "valid_to": None,
+        "product": {"id": "product-3", "name": "Empty", "unit_name": "piece", "state": "active"},
+        "inventory": {"quantity_on_hand": 0},
+    }]
+    class Response:
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            return False
+        def read(self, _limit):
+            return json.dumps(payload).encode()
+    with patch("agent_core.supabase_rpc.urlopen", return_value=Response()) as open_url:
+        result = rpc.catalog()
+    request = open_url.call_args.args[0]
+    assert request.full_url.startswith("https://example.supabase.co/rest/v1/commercial_offerings?")
+    assert request.get_header("Authorization") == "Bearer signed-in-user-token"
+    assert request.get_header("Apikey") == "public-test-key"
+    assert len(result) == 1
+    assert result[0]["offering_id"] == "offer-1"
+    assert result[0]["available_quantity"] == 4
