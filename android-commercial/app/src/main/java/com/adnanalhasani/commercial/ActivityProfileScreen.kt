@@ -169,7 +169,7 @@ internal fun ActivityProfileScreen(onBack: () -> Unit) {
             OutlinedButton(onClick = { branchNames.add(""); branchTypes.add("branch"); branchParents.add(-1) }, modifier = Modifier.fillMaxWidth()) { Text("+ إضافة فرع / موقع") }
             Text("لن يتم إنشاء منتجات أو مخزون في هذه الخطوة. تُحفظ بيانات الملف في Supabase عبر دالة RPC محمية بجلسة المستخدم.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Button(
-                enabled = !busy && organizationName.length >= 2 && organizationSlug.matches(Regex("[a-z0-9][a-z0-9-]{1,62}[a-z0-9]")) && activityName.isNotBlank() && registrationNumber.isNotBlank() && ownerName.length >= 2 && runCatching { LocalDate.parse(openedOn); true }.getOrDefault(false),
+                enabled = !busy && organizationName.length >= 2 && organizationSlug.matches(Regex("[a-z0-9][a-z0-9-]{1,62}[a-z0-9]")) && activityName.isNotBlank() && registrationNumber.isNotBlank() && ownerName.length >= 2 && branchNames.all { it.isNotBlank() } && runCatching { LocalDate.parse(openedOn); true }.getOrDefault(false),
                 onClick = {
                     val token = accessToken ?: return@Button
                     runRequest({
