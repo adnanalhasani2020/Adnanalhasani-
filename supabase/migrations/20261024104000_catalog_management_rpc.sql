@@ -83,11 +83,11 @@ BEGIN
   IF NOT public.commercial_catalog_member_of(p_organization_id, ARRAY['owner','admin']::text[]) THEN
     RAISE EXCEPTION 'catalog_unit_create_forbidden' USING ERRCODE='42501';
   END IF;
-  v_code := 'ORG' || upper(substr(replace(p_organization_id::text,'-',''),1,8)) || '-' ||
-    upper(regexp_replace(btrim(COALESCE(p_code,'')), '[^A-Za-z0-9_-]+', '-', 'g'));
+  v_code := 'O' || upper(substr(replace(p_organization_id::text,'-',''),1,8)) || '_' ||
+    substr(upper(regexp_replace(btrim(COALESCE(p_code,'')), '[^A-Za-z0-9_]+', '_', 'g')),1,6);
   IF length(v_code) > 80 OR length(btrim(COALESCE(p_name_ar,'')))=0 OR length(btrim(COALESCE(p_name_en,'')))=0
      OR length(btrim(COALESCE(p_dimension,'')))=0 OR COALESCE(p_factor_to_base,0)<=0
-     OR COALESCE(p_decimal_places,0)<0 OR COALESCE(p_decimal_places,0)>12 THEN
+     OR COALESCE(p_decimal_places,0)<0 OR COALESCE(p_decimal_places,0)>6 THEN
     RAISE EXCEPTION 'invalid_unit_fields' USING ERRCODE='22023';
   END IF;
   SELECT u.dimension,u.owner_organization_id INTO v_dimension,v_owner
