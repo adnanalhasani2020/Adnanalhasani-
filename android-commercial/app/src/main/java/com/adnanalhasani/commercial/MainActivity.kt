@@ -279,11 +279,12 @@ private fun StoreApp(context: Context) {
     if (newSale && inventory.isNotEmpty()) SaleEntryDialog(
         inventory = inventory,
         onDismiss = { newSale = false },
-        onSave = { productIndex, product, quantity, credit, unitPrice, customer ->
+        onSave = { productIndex, product, quantity, credit, unitPrice, customer, baseQuantity, unitCode ->
             val currentProduct = inventory[productIndex]
-            inventory[productIndex] = currentProduct.copy(stock = currentProduct.stock - quantity)
+            inventory[productIndex] = currentProduct.copy(stock = currentProduct.stock - baseQuantity)
             saveProducts(context, inventory)
-            sales.add(0, SaleRecord(nextInvoice, product, quantity, quantity * unitPrice, credit, customer, 0, System.currentTimeMillis(), currentProduct.costPrice))
+            val soldUnitCost = if (quantity > 0) kotlin.math.round(currentProduct.costPrice.toDouble() * baseQuantity / quantity).toInt() else currentProduct.costPrice
+            sales.add(0, SaleRecord(nextInvoice, product, quantity, quantity * unitPrice, credit, customer, 0, System.currentTimeMillis(), soldUnitCost, unitCode, baseQuantity))
             saveSales(context, sales)
             nextInvoice = maxOf(nextInvoice + 1, (sales.maxOfOrNull { it.number } ?: 1048) + 1)
             newSale = false
@@ -369,7 +370,7 @@ private fun Dashboard(products: List<Product>, sales: List<SaleRecord>, onNewSal
         }
         items(products.filter { it.stock <= 9 }.take(3)) { ProductRow(it) }
         item { Heading("آخر المبيعات", "أحدث الفواتير المسجلة") }
-        items(sales.take(3)) { sale -> SaleRow("فاتورة #${sale.number}", "${sale.product} · ${sale.quantity} قطعة", money(sale.total), sale.credit) }
+        items(sales.take(3)) { sale -> SaleRow("فاتورة #${sale.number}", "${sale.product} · ${sale.quantity} ${sale.unitCode}", money(sale.total), sale.credit) }
         
     }
 }
