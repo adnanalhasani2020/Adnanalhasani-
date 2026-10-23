@@ -92,7 +92,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var items by remember { mutableStateOf<List<CatalogProduct>>(emptyList()) }
     var categories by remember { mutableStateOf<List<CatalogCategory>>(emptyList()) }
     var directoryUnits by remember { mutableStateOf<List<DirectoryUnit>>(emptyList()) }; var pendingTransfers by remember { mutableStateOf<List<PendingTransfer>>(emptyList()) }
-    var busy by remember { mutableStateOf(false) }; var feedback by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }; var feedback by remember { mutableStateOf("") }; var editingProduct by remember { mutableStateOf<CatalogProduct?>(null) }
 
     var categoryCode by remember { mutableStateOf("") }; var parentCode by remember { mutableStateOf("") }
     var categoryNameAr by remember { mutableStateOf("") }; var categoryNameEn by remember { mutableStateOf("") }
@@ -369,6 +369,14 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                 .put("p_organization_id",orgId).put("p_ruling_id",rulingId),active)
         }, { feedback="تم تسجيل مراجعة المصدر: $it"; loadCatalog() })
     }
+    fun updateProductDetails(item: CatalogProduct, payload: JSONObject) {
+        val active=token ?: return
+        val orgId=org() ?: run { feedback="أدخل معرّف المؤسسة UUID أولًا."; return }
+        request({
+            catalogHttp("/rest/v1/rpc/commercial_catalog_update_product_details",JSONObject()
+                .put("p_organization_id",orgId).put("p_product_id",item.id).put("p_product",payload),active)
+        }, { feedback="تم تحديث تفاصيل الصنف ${item.catalogCode} مع الحفاظ على وحداته واستهدافه وأحكامه."; editingProduct=null; loadCatalog() })
+    }
 
     Column(Modifier.fillMaxSize().padding(horizontal=14.dp)) {
         Row(verticalAlignment=Alignment.CenterVertically) {
@@ -487,6 +495,9 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                                     }
                                     Text("معرّف الصنف: ${item.id}",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                                     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.End) { TextButton(onClick={onAddToInventory(item)}) { Icon(Icons.Default.Add,null); Text("إضافة إلى المخزون المحلي") } }
+                    if(item.ownerOrganizationId.isNotBlank() && item.ownerOrganizationId==organizationId.trim()) {
+                        OutlinedButton(onClick={editingProduct=item},enabled=!busy,modifier=Modifier.fillMaxWidth()) { Text("تعديل بيانات الصنف") }
+                    }
                                 }
                             }
                         }
@@ -657,5 +668,8 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                 }
             }
         }
+    }
+    editingProduct?.let { item ->
+        CatalogProductEditDialog(item=item,busy=busy,onDismiss={editingProduct=null},onSave={payload -> updateProductDetails(item,payload)})
     }
 }
