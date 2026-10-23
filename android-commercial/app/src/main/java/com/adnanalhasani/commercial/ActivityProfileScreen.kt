@@ -225,6 +225,7 @@ private fun ProfileField(label: String, value: String, onValueChange: (String) -
     OutlinedTextField(value, onValueChange, Modifier.fillMaxWidth(), label = { Text(label) }, singleLine = true)
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ProfileChoice(label: String, selected: String, options: List<Pair<String, String>>, onSelected: (String) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
