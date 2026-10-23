@@ -87,7 +87,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
 
     var categoryCode by remember { mutableStateOf("") }; var parentCode by remember { mutableStateOf("") }
     var categoryNameAr by remember { mutableStateOf("") }; var categoryNameEn by remember { mutableStateOf("") }
-    var categoryDescriptionAr by remember { mutableStateOf("") }; var categoryDescriptionEn by remember { mutableStateOf("") }
+    var categoryDescriptionAr by remember { mutableStateOf("") }; var categoryDescriptionEn by remember { mutableStateOf("") }; var categoryTranslations by remember { mutableStateOf("") }
 
     var nameAr by remember { mutableStateOf("") }; var nameEn by remember { mutableStateOf("") }
     var descriptionAr by remember { mutableStateOf("") }; var descriptionEn by remember { mutableStateOf("") }; var extraTranslations by remember { mutableStateOf("") }
@@ -104,21 +104,21 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var batchTracked by remember { mutableStateOf(false) }; var serialTracked by remember { mutableStateOf(false) }
     var prescriptionOnly by remember { mutableStateOf(false) }
     var extraUnitCode by remember { mutableStateOf("") }; var extraUnitQty by remember { mutableStateOf("1") }
-    var extraUnitBarcode by remember { mutableStateOf("") }; var extraUnitPackage by remember { mutableStateOf("") }
+    var extraUnitBarcode by remember { mutableStateOf("") }; var extraUnitPackage by remember { mutableStateOf("") }; var extraUnitsText by remember { mutableStateOf("") }
     var currencyCode by remember { mutableStateOf("YER") }; var sectors by remember { mutableStateOf("retail") }
     var levels by remember { mutableStateOf("shop") }; var regionCountry by remember { mutableStateOf("") }
     var regionCode by remember { mutableStateOf("") }; var regionCity by remember { mutableStateOf("") }
-    var regionExcluded by remember { mutableStateOf(false) }
+    var regionExcluded by remember { mutableStateOf(false) }; var extraRegionRules by remember { mutableStateOf("") }
     var rulingDomain by remember { mutableStateOf("religious") }; var authority by remember { mutableStateOf("") }
     var religion by remember { mutableStateOf("") }; var jurisdiction by remember { mutableStateOf("") }
     var rulingOutcome by remember { mutableStateOf("unknown") }; var rulingRationale by remember { mutableStateOf("") }
     var rulingSourceTitle by remember { mutableStateOf("") }; var rulingSourceUrl by remember { mutableStateOf("") }
-    var rulingConfidence by remember { mutableStateOf("unverified") }
+    var rulingConfidence by remember { mutableStateOf("unverified") }; var extraRulingsText by remember { mutableStateOf("") }
 
     var unitShortCode by remember { mutableStateOf("") }; var unitNameAr by remember { mutableStateOf("") }
     var unitNameEn by remember { mutableStateOf("") }; var unitDimension by remember { mutableStateOf("count") }
     var unitFactor by remember { mutableStateOf("1") }; var unitBaseCode by remember { mutableStateOf("EA") }
-    var unitDecimals by remember { mutableStateOf("0") }
+    var unitDecimals by remember { mutableStateOf("0") }; var unitTranslations by remember { mutableStateOf("") }
     var transferSource by remember { mutableStateOf("") }; var transferDestination by remember { mutableStateOf("") }
     var transferIds by remember { mutableStateOf("") }
 
@@ -180,7 +180,8 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                 .put("p_organization_id",orgId).put("p_code",categoryCode).put("p_parent_code",parentCode.ifBlank { JSONObject.NULL })
                 .put("p_name_ar",categoryNameAr).put("p_name_en",categoryNameEn)
                 .put("p_description_ar",categoryDescriptionAr.ifBlank { JSONObject.NULL })
-                .put("p_description_en",categoryDescriptionEn.ifBlank { JSONObject.NULL }).put("p_sort_order",100),active)
+                .put("p_description_en",categoryDescriptionEn.ifBlank { JSONObject.NULL }).put("p_sort_order",100)
+                .put("p_translations",JSONArray().also { rows -> categoryTranslations.lineSequence().map { it.trim() }.filter { it.isNotBlank() }.forEach { line -> val parts=line.split("|",limit=3); if(parts.size==3 && parts.all { it.isNotBlank() }) rows.put(JSONObject().put("locale_code",parts[0].trim().lowercase()).put("field_key",parts[1].trim().lowercase()).put("translated_value",parts[2].trim()).put("source_language","ar")) } }),active)
         }, { feedback="تم إنشاء التصنيف: $it"; loadDirectories() })
     }
     fun createUnit() {
@@ -189,7 +190,8 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             catalogHttp("/rest/v1/rpc/commercial_catalog_create_unit",JSONObject()
                 .put("p_organization_id",orgId).put("p_code",unitShortCode).put("p_name_ar",unitNameAr).put("p_name_en",unitNameEn)
                 .put("p_dimension",unitDimension).put("p_factor_to_base",unitFactor.toBigDecimalOrNull()?.toPlainString() ?: throw IllegalArgumentException("معامل التحويل غير صحيح."))
-                .put("p_base_unit_code",unitBaseCode).put("p_decimal_places",unitDecimals.toIntOrNull() ?: 0),active)
+                .put("p_base_unit_code",unitBaseCode).put("p_decimal_places",unitDecimals.toIntOrNull() ?: 0)
+                .put("p_translations",JSONArray().also { rows -> unitTranslations.lineSequence().map { it.trim() }.filter { it.isNotBlank() }.forEach { line -> val parts=line.split("|",limit=3); if(parts.size==3 && parts.all { it.isNotBlank() }) rows.put(JSONObject().put("locale_code",parts[0].trim().lowercase()).put("field_key",parts[1].trim().lowercase()).put("translated_value",parts[2].trim()).put("source_language","ar")) } }),active)
         }, { feedback="تم إنشاء وحدة الحساب الخاصة بالمؤسسة: $it"; loadDirectories() })
     }
     fun createProduct() {
@@ -218,18 +220,43 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             if(extraUnitCode.isNotBlank()) unitRows.put(JSONObject().put("unit_code",extraUnitCode.trim()).put("unit_role","sale")
                 .put("quantity_in_base",extraUnitQty.toBigDecimalOrNull()?.toPlainString() ?: throw IllegalArgumentException("معامل تحويل العبوة غير صحيح."))
                 .put("barcode",extraUnitBarcode.ifBlank { JSONObject.NULL }).put("package_name",extraUnitPackage.ifBlank { JSONObject.NULL })
-                .put("image_url",imageUrl.ifBlank { JSONObject.NULL }).put("is_default",false))
+                .put("image_url",imageUrl.ifBlank { JSONObject.NULL }).put("is_default",false)
+            extraUnitsText.lineSequence().map { it.trim() }.filter { it.isNotBlank() }.forEach { line ->
+                val p=line.split("|",limit=6)
+                if(p.size<3 || p[0].isBlank() || p[1].isBlank() || p[2].isBlank()) throw IllegalArgumentException("صيغة الوحدة الإضافية: unit_code|role|qty_in_base|barcode|package_name|image_url")
+                unitRows.put(JSONObject().put("unit_code",p[0].trim().uppercase()).put("unit_role",p[1].trim().lowercase())
+                    .put("quantity_in_base",p[2].trim().toBigDecimalOrNull()?.toPlainString() ?: throw IllegalArgumentException("معامل تحويل العبوة غير صحيح."))
+                    .put("barcode",p.getOrNull(3)?.trim()?.ifBlank { JSONObject.NULL } ?: JSONObject.NULL)
+                    .put("package_name",p.getOrNull(4)?.trim()?.ifBlank { JSONObject.NULL } ?: JSONObject.NULL)
+                    .put("image_url",p.getOrNull(5)?.trim()?.ifBlank { JSONObject.NULL } ?: JSONObject.NULL).put("is_default",false))
+            })
             val levelRows=JSONArray(); levels.split(",").map { it.trim().lowercase() }.filter { it.isNotBlank() }.forEach { levelRows.put(JSONObject().put("code",it).put("weight",10)) }
             val regionRows=JSONArray()
             if(regionCountry.isNotBlank() || regionCode.isNotBlank() || regionCity.isNotBlank()) regionRows.put(JSONObject()
                 .put("country_code",regionCountry.ifBlank { JSONObject.NULL }).put("region_code",regionCode.ifBlank { JSONObject.NULL })
                 .put("city",regionCity.ifBlank { JSONObject.NULL }).put("excluded",regionExcluded))
+            extraRegionRules.lineSequence().map { it.trim() }.filter { it.isNotBlank() }.forEach { line ->
+                val p=line.split("|",limit=4)
+                if(p.size<3) throw IllegalArgumentException("صيغة نطاق الظهور: country|region|city|include أو exclude")
+                regionRows.put(JSONObject().put("country_code",p[0].trim().ifBlank { JSONObject.NULL })
+                    .put("region_code",p[1].trim().ifBlank { JSONObject.NULL }).put("city",p[2].trim().ifBlank { JSONObject.NULL })
+                    .put("excluded",p.getOrNull(3)?.trim()?.equals("exclude",true) ?: false))
+            }
             val rulingRows=JSONArray()
             if(authority.isNotBlank()) rulingRows.put(JSONObject().put("ruling_domain",rulingDomain).put("authority_code",authority.trim())
                 .put("religion_code",if(rulingDomain=="religious") religion.ifBlank { JSONObject.NULL } else JSONObject.NULL)
                 .put("jurisdiction_code",jurisdiction.ifBlank { JSONObject.NULL }).put("outcome",rulingOutcome)
                 .put("rationale",rulingRationale.ifBlank { JSONObject.NULL }).put("source_title",rulingSourceTitle.ifBlank { JSONObject.NULL })
                 .put("source_url",rulingSourceUrl.ifBlank { JSONObject.NULL }).put("confidence",rulingConfidence))
+            extraRulingsText.lineSequence().map { it.trim() }.filter { it.isNotBlank() }.forEach { line ->
+                val p=line.split("|",limit=9)
+                if(p.size<8) throw IllegalArgumentException("صيغة الحكم: domain|authority|religion|jurisdiction|outcome|source_title|source_url|confidence|rationale")
+                rulingRows.put(JSONObject().put("ruling_domain",p[0].trim()).put("authority_code",p[1].trim())
+                    .put("religion_code",p[2].trim().ifBlank { JSONObject.NULL }).put("jurisdiction_code",p[3].trim().ifBlank { JSONObject.NULL })
+                    .put("outcome",p[4].trim()).put("source_title",p[5].trim().ifBlank { JSONObject.NULL })
+                    .put("source_url",p[6].trim().ifBlank { JSONObject.NULL }).put("confidence",p[7].trim())
+                    .put("rationale",p.getOrNull(8)?.trim()?.ifBlank { JSONObject.NULL } ?: JSONObject.NULL))
+            })
             val sectorArray=JSONArray(); sectors.split(",").map { it.trim().lowercase() }.filter { it.isNotBlank() }.forEach { sectorArray.put(it) }
             catalogHttp("/rest/v1/rpc/commercial_catalog_create_product",JSONObject().put("p_organization_id",orgId).put("p_product",product)
                 .put("p_units",unitRows).put("p_sectors",sectorArray).put("p_business_levels",levelRows).put("p_regions",regionRows).put("p_rulings",rulingRows),active)
@@ -351,6 +378,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                     item { OutlinedTextField(categoryNameEn,{categoryNameEn=it},Modifier.fillMaxWidth(),label={Text("Name in English")},singleLine=true) }
                     item { OutlinedTextField(categoryDescriptionAr,{categoryDescriptionAr=it},Modifier.fillMaxWidth(),label={Text("الوصف العربي")}) }
                     item { OutlinedTextField(categoryDescriptionEn,{categoryDescriptionEn=it},Modifier.fillMaxWidth(),label={Text("English description")}) }
+                    item { OutlinedTextField(categoryTranslations,{categoryTranslations=it},Modifier.fillMaxWidth().heightIn(min=80.dp),label={Text("ترجمات إضافية: locale|field|value")}) }
                     item { Button(onClick={createCategory()},enabled=!busy && categoryCode.isNotBlank() && categoryNameAr.isNotBlank() && categoryNameEn.isNotBlank(),modifier=Modifier.fillMaxWidth()) { Text("حفظ التصنيف") } }
                     item { OutlinedButton(onClick={loadDirectories()},enabled=!busy,modifier=Modifier.fillMaxWidth()) { Text("تحميل التصنيفات والوحدات") } }
                     items(categories,key={it.code}) { cat -> Text("${cat.code}  •  ${cat.nameAr} / ${cat.nameEn}${if(cat.parentCode.isNotBlank()) "  ←  ${cat.parentCode}" else "  •  جذر"}",style=MaterialTheme.typography.bodySmall) }
@@ -364,6 +392,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                     item { OutlinedTextField(unitBaseCode,{unitBaseCode=it.uppercase()},Modifier.fillMaxWidth(),label={Text("رمز وحدة الأساس")},singleLine=true) }
                     item { OutlinedTextField(unitFactor,{unitFactor=it},Modifier.fillMaxWidth(),label={Text("كم تساوي وحدة الأساس؟")},singleLine=true) }
                     item { OutlinedTextField(unitDecimals,{unitDecimals=it.filter(Char::isDigit)},Modifier.fillMaxWidth(),label={Text("عدد المنازل العشرية (0–6)")},singleLine=true) }
+                    item { OutlinedTextField(unitTranslations,{unitTranslations=it},Modifier.fillMaxWidth().heightIn(min=80.dp),label={Text("ترجمات إضافية: locale|field|value")}) }
                     item { Button(onClick={createUnit()},enabled=!busy && unitShortCode.isNotBlank() && unitNameAr.isNotBlank() && unitNameEn.isNotBlank(),modifier=Modifier.fillMaxWidth()) { Text("حفظ وحدة القياس") } }
                     item { OutlinedButton(onClick={loadDirectories()},enabled=!busy,modifier=Modifier.fillMaxWidth()) { Text("تحديث دليل الوحدات") } }
                     items(directoryUnits,key={it.code}) { u -> Text("${u.code} • ${u.nameAr} / ${u.nameEn} • ${u.dimension} • ${u.factor} ${u.baseCode}${if(u.owner.isNotBlank()) " • وحدة مؤسسة" else ""}",style=MaterialTheme.typography.bodySmall) }
@@ -384,6 +413,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                     item { OutlinedTextField(extraUnitQty,{extraUnitQty=it},Modifier.fillMaxWidth(),label={Text("كم وحدة أساس داخل العبوة")},singleLine=true) }
                     item { OutlinedTextField(extraUnitPackage,{extraUnitPackage=it},Modifier.fillMaxWidth(),label={Text("اسم العبوة (كرتون/علبة/شريط)")},singleLine=true) }
                     item { OutlinedTextField(extraUnitBarcode,{extraUnitBarcode=it},Modifier.fillMaxWidth(),label={Text("باركود العبوة الإضافية")},singleLine=true) }
+                    item { OutlinedTextField(extraUnitsText,{extraUnitsText=it},Modifier.fillMaxWidth().heightIn(min=80.dp),label={Text("عبوات إضافية متعددة — سطر: unit_code|role|qty_in_base|barcode|package_name|image_url")}) }
                     item { Text("العلامة والمصنع والمواصفات",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold) }
                     item { OutlinedTextField(brand,{brand=it},Modifier.fillMaxWidth(),label={Text("العلامة التجارية")},singleLine=true) }
                     item { OutlinedTextField(manufacturer,{manufacturer=it},Modifier.fillMaxWidth(),label={Text("الشركة المصنعة")},singleLine=true) }
@@ -413,6 +443,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                     item { OutlinedTextField(regionCode,{regionCode=it},Modifier.fillMaxWidth(),label={Text("رمز المنطقة / المحافظة")},singleLine=true) }
                     item { OutlinedTextField(regionCity,{regionCity=it},Modifier.fillMaxWidth(),label={Text("المدينة")},singleLine=true) }
                     item { Row(verticalAlignment=Alignment.CenterVertically) { Checkbox(regionExcluded,{regionExcluded=it}); Text("استثناء هذه المنطقة بدل تضمينها") } }
+                    item { OutlinedTextField(extraRegionRules,{extraRegionRules=it},Modifier.fillMaxWidth().heightIn(min=80.dp),label={Text("مناطق إضافية متعددة — سطر: country|region|city|include أو exclude")}) }
                     item { Text("الحكم الديني / الطبي / التنظيمي (اختياري، لا يُعد فتوى أو تشخيصًا)",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold) }
                     item { OutlinedTextField(rulingDomain,{rulingDomain=it},Modifier.fillMaxWidth(),label={Text("النطاق: religious / medical / regulatory / dietary")},singleLine=true) }
                     item { OutlinedTextField(authority,{authority=it},Modifier.fillMaxWidth(),label={Text("رمز الجهة أو المرجع (مطلوب لتسجيل الحكم)")},singleLine=true) }
@@ -423,6 +454,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                     item { OutlinedTextField(rulingSourceTitle,{rulingSourceTitle=it},Modifier.fillMaxWidth(),label={Text("عنوان المصدر")},singleLine=true) }
                     item { OutlinedTextField(rulingSourceUrl,{rulingSourceUrl=it},Modifier.fillMaxWidth(),label={Text("رابط المصدر HTTPS")},singleLine=true) }
                     item { OutlinedTextField(rulingConfidence,{rulingConfidence=it},Modifier.fillMaxWidth(),label={Text("درجة التوثيق: unverified/reported/reviewed/official")},singleLine=true) }
+                    item { OutlinedTextField(extraRulingsText,{extraRulingsText=it},Modifier.fillMaxWidth().heightIn(min=90.dp),label={Text("أحكام إضافية متعددة — domain|authority|religion|jurisdiction|outcome|source_title|source_url|confidence|rationale")}) }
                     item { Button(onClick={createProduct()},enabled=!busy && nameAr.isNotBlank() && nameEn.isNotBlank() && productCategory.isNotBlank() && unitCode.isNotBlank(),modifier=Modifier.fillMaxWidth()) { Text("حفظ الصنف وكل تفاصيله") } }
                     item { Text("يُحفظ سجل الصنف والوحدات والاستهداف والأحكام في معاملة واحدة. لا يُعتمد أي حكم طبي أو ديني تلقائيًا؛ ارفع الثقة بعد مراجعة مصدر موثوق.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
                 }
