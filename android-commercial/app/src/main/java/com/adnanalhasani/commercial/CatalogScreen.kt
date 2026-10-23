@@ -150,6 +150,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             val json=JSONArray(raw)
             items=List(json.length()) { i ->
                 val row=json.getJSONObject(i)
+                val localized=row.optJSONObject("localized_details") ?: JSONObject()
                 CatalogProduct(
                     id=row.optString("product_id"),catalogCode=row.optString("catalog_code"),name=row.optString("product_name"),
                     description=row.optString("short_description"),categoryCode=row.optString("category_code"),category=row.optString("category_name"),
@@ -159,19 +160,19 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                     availableUnits=row.optJSONArray("available_units")?.let { arr -> List(arr.length()) { j ->
                         val u=arr.getJSONObject(j); CatalogUnit(u.optString("unit_code"),u.optString("unit_role"),u.optString("quantity_in_base","1"),u.optString("barcode"),u.optString("package_name").takeUnless { it == "null" }.orEmpty(),u.optString("image_url").takeUnless { it == "null" }.orEmpty(),u.optBoolean("is_default"),u.optString("unit_name").takeUnless { it == "null" }.orEmpty())
                     } } ?: emptyList(),createdBy=row.optString("created_by"),createdAt=row.optString("created_at"),importedBy=signedInUserId,
-                    attributesSchema=row.optJSONObject("attributes_schema")?.toString().orEmpty(),modelNumber=row.optString("model_number").takeUnless { it == "null" }.orEmpty(),partNumber=row.optString("part_number").takeUnless { it == "null" }.orEmpty(),imageAlt=row.optString("image_alt").takeUnless { it == "null" }.orEmpty(),
-                    materialComposition=row.optJSONArray("material_composition")?.let { arr -> List(arr.length()) { arr.get(it).toString() }.joinToString(", ") }.orEmpty(),
-                    ingredients=row.optJSONArray("ingredients")?.let { arr -> List(arr.length()) { arr.get(it).toString() }.joinToString(", ") }.orEmpty(),
-                    recipe=row.optJSONObject("recipe")?.let { rec ->
+                    attributesSchema=row.optJSONObject("attributes_schema")?.toString().orEmpty(),modelNumber=row.optString("model_number").takeUnless { it == "null" }.orEmpty(),partNumber=row.optString("part_number").takeUnless { it == "null" }.orEmpty(),imageAlt=localized.optString("image_alt").takeUnless { it.isBlank() || it == "null" } ?: row.optString("image_alt").takeUnless { it == "null" }.orEmpty(),
+                    materialComposition=localized.optString("material_composition").takeUnless { it.isBlank() || it == "null" } ?: row.optJSONArray("material_composition")?.let { arr -> List(arr.length()) { arr.get(it).toString() }.joinToString(", ") }.orEmpty(),
+                    ingredients=localized.optString("ingredients").takeUnless { it.isBlank() || it == "null" } ?: row.optJSONArray("ingredients")?.let { arr -> List(arr.length()) { arr.get(it).toString() }.joinToString(", ") }.orEmpty(),
+                    recipe=localized.optString("recipe").takeUnless { it.isBlank() || it == "null" } ?: row.optJSONObject("recipe")?.let { rec ->
                         listOf(rec.optString("instructions").takeUnless { it == "null" || it.isBlank() },
                             rec.optJSONArray("ingredients")?.let { ing -> List(ing.length()) { ingredientIndex -> val ingredient=ing.getJSONObject(ingredientIndex); "${ingredient.optString("ingredient_name")} ${ingredient.optString("quantity")} ${ingredient.optString("unit_code")}" }.joinToString(", ") })
                             .filterNotNull().joinToString(" • ")
                     }.orEmpty(),
-                    specifications=row.optJSONObject("specifications")?.toString().orEmpty(),
-                    allergens=row.optJSONArray("allergens")?.let { arr -> List(arr.length()) { arr.get(it).toString() }.joinToString(", ") }.orEmpty(),
-                    storageInstructions=row.optString("storage_instructions").takeUnless { it == "null" }.orEmpty(),
-                    usageInstructions=row.optString("usage_instructions").takeUnless { it == "null" }.orEmpty(),
-                    warnings=row.optString("warnings").takeUnless { it == "null" }.orEmpty(),
+                    specifications=localized.optString("specifications").takeUnless { it.isBlank() || it == "null" } ?: row.optJSONObject("specifications")?.toString().orEmpty(),
+                    allergens=localized.optString("allergens").takeUnless { it.isBlank() || it == "null" } ?: row.optJSONArray("allergens")?.let { arr -> List(arr.length()) { arr.get(it).toString() }.joinToString(", ") }.orEmpty(),
+                    storageInstructions=localized.optString("storage_instructions").takeUnless { it.isBlank() || it == "null" } ?: row.optString("storage_instructions").takeUnless { it == "null" }.orEmpty(),
+                    usageInstructions=localized.optString("usage_instructions").takeUnless { it.isBlank() || it == "null" } ?: row.optString("usage_instructions").takeUnless { it == "null" }.orEmpty(),
+                    warnings=localized.optString("warnings").takeUnless { it.isBlank() || it == "null" } ?: row.optString("warnings").takeUnless { it == "null" }.orEmpty(),
                     shelfLifeDays=if(row.isNull("shelf_life_days")) null else row.optInt("shelf_life_days"),
                     requiresExpiryDate=row.optBoolean("requires_expiry_date",false),isBatchTracked=row.optBoolean("is_batch_tracked",false),
                     isSerialTracked=row.optBoolean("is_serial_tracked",false),
