@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS public.commercial_catalog_units (
   created_by uuid REFERENCES auth.users(id),
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (owner_organization_id, code)
+  UNIQUE NULLS NOT DISTINCT (owner_organization_id, code)
 );
 
 CREATE TABLE IF NOT EXISTS public.commercial_catalog_unit_translations (
@@ -222,7 +222,7 @@ CREATE TABLE IF NOT EXISTS public.commercial_catalog_transfers (
   destination_organization_id uuid NOT NULL REFERENCES public.commercial_organizations(id) ON DELETE CASCADE,
   transferred_by uuid NOT NULL REFERENCES auth.users(id),
   item_count integer NOT NULL DEFAULT 0,
-  transfer_mode text NOT NULL DEFAULT 'link' CHECK (transfer_mode IN ('link','copy')),
+  transfer_mode text NOT NULL DEFAULT 'link' CHECK (transfer_mode = 'link'),
   status text NOT NULL DEFAULT 'completed' CHECK (status IN ('completed','failed')),
   created_at timestamptz NOT NULL DEFAULT now(),
   CHECK (source_organization_id <> destination_organization_id)
@@ -275,7 +275,7 @@ DECLARE v_transfer_id uuid; v_count integer;
 BEGIN
   IF auth.uid() IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
   IF p_source_organization_id = p_destination_organization_id THEN RAISE EXCEPTION 'same_organization'; END IF;
-  IF p_transfer_mode NOT IN ('link','copy') THEN RAISE EXCEPTION 'invalid_transfer_mode'; END IF;
+  IF p_transfer_mode <> 'link' THEN RAISE EXCEPTION 'invalid_transfer_mode'; END IF;
   IF NOT public.commercial_catalog_member_of(p_source_organization_id, ARRAY['owner','admin'])
      OR NOT public.commercial_catalog_member_of(p_destination_organization_id, ARRAY['owner','admin']) THEN
     RAISE EXCEPTION 'catalog_transfer_forbidden' USING ERRCODE='42501';
@@ -316,7 +316,7 @@ BEGIN
   ] LOOP
     EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY',t);
     EXECUTE format('REVOKE ALL ON public.%I FROM anon',t);
-    EXECUTE format('GRANT SELECT ON public.%I TO authenticated',t);
+    EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON public.%I TO authenticated',t);
   END LOOP;
 END $$;
 
@@ -343,13 +343,13 @@ USING (EXISTS (SELECT 1 FROM public.commercial_catalog_categories c WHERE c.id=c
 WITH CHECK (EXISTS (SELECT 1 FROM public.commercial_catalog_categories c WHERE c.id=category_id AND c.owner_organization_id IS NOT NULL AND public.commercial_catalog_member_of(c.owner_organization_id, ARRAY['owner','admin']::text[])));
 
 CREATE POLICY catalog_products_read ON public.commercial_catalog_products FOR SELECT TO authenticated
-USING (owner_organization_id IS NULL OR public.commercial_catalog_member_of(owner_organization_id, ARRAY['owner','admin','manager','staff']::text[]));
+USING (owner_organization_id IS NULL OR public.commercial_catalog_member_of(owner_organization_id, ARRAY['owner','admin','manager','staff']::text[]) OR EXISTS (SELECT 1 FROM public.commercial_organization_catalog_items oi WHERE oi.product_id=id AND public.commercial_catalog_member_of(oi.organization_id, ARRAY['owner','admin','manager','staff']::text[])));
 CREATE POLICY catalog_products_write ON public.commercial_catalog_products FOR ALL TO authenticated
 USING (owner_organization_id IS NOT NULL AND public.commercial_catalog_member_of(owner_organization_id, ARRAY['owner','admin']::text[]))
 WITH CHECK (owner_organization_id IS NOT NULL AND public.commercial_catalog_member_of(owner_organization_id, ARRAY['owner','admin']::text[]));
 
 CREATE POLICY catalog_product_translations_read ON public.commercial_catalog_product_translations FOR SELECT TO authenticated
-USING (EXISTS (SELECT 1 FROM public.commercial_catalog_products p WHERE p.id=product_id AND (p.owner_organization_id IS NULL OR public.commercial_catalog_member_of(p.owner_organization_id, ARRAY['owner','admin','manager','staff']::text[]))));
+USING (EXISTS (SELECT 1 FROM public.commercial_catalog_products p WHERE p.id=product_id AND (p.owner_organization_id IS NULL OR public.commercial_catalog_member_of(p.owner_organization_id, ARRAY['owner','admin','manager','staff']::text[]) OR EXISTS (SELECT 1 FROM public.commercial_organization_catalog_items oi WHERE oi.product_id=p.id AND public.commercial_catalog_member_of(oi.organization_id, ARRAY['owner','admin','manager','staff']::text[])))));
 CREATE POLICY catalog_product_translations_write ON public.commercial_catalog_product_translations FOR ALL TO authenticated
 USING (EXISTS (SELECT 1 FROM public.commercial_catalog_products p WHERE p.id=product_id AND p.owner_organization_id IS NOT NULL AND public.commercial_catalog_member_of(p.owner_organization_id, ARRAY['owner','admin']::text[])))
 WITH CHECK (EXISTS (SELECT 1 FROM public.commercial_catalog_products p WHERE p.id=product_id AND p.owner_organization_id IS NOT NULL AND public.commercial_catalog_member_of(p.owner_organization_id, ARRAY['owner','admin']::text[])));
@@ -359,7 +359,7 @@ DO $$
 DECLARE t text;
 BEGIN
   FOREACH t IN ARRAY ARRAY['commercial_catalog_product_units','commercial_catalog_product_sectors','commercial_catalog_product_regions','commercial_catalog_product_recipes','commercial_catalog_product_rulings'] LOOP
-    EXECUTE format('CREATE POLICY %I ON public.%I FOR SELECT TO authenticated USING (EXISTS (SELECT 1 FROM public.commercial_catalog_products p WHERE p.id=product_id AND (p.owner_organization_id IS NULL OR public.commercial_catalog_member_of(p.owner_organization_id, ARRAY[''owner'',''admin'',''manager'',''staff'']::text[]))))',t||'_read',t);
+    EXECUTE format('CREATE POLICY %I ON public.%I FOR SELECT TO authenticated USING (EXISTS (SELECT 1 FROM public.commercial_catalog_products p WHERE p.id=product_id AND (p.owner_organization_id IS NULL OR public.commercial_catalog_member_of(p.owner_organization_id, ARRAY[''owner'',''admin'',''manager'',''staff'']::text[]) OR EXISTS (SELECT 1 FROM public.commercial_organization_catalog_items oi WHERE oi.product_id=p.id AND public.commercial_catalog_member_of(oi.organization_id, ARRAY[''owner'',''admin'',''manager'',''staff'']::text[])))))',t||'_read',t);
     EXECUTE format('CREATE POLICY %I ON public.%I FOR ALL TO authenticated USING (EXISTS (SELECT 1 FROM public.commercial_catalog_products p WHERE p.id=product_id AND p.owner_organization_id IS NOT NULL AND public.commercial_catalog_member_of(p.owner_organization_id, ARRAY[''owner'',''admin'']::text[]))) WITH CHECK (EXISTS (SELECT 1 FROM public.commercial_catalog_products p WHERE p.id=product_id AND p.owner_organization_id IS NOT NULL AND public.commercial_catalog_member_of(p.owner_organization_id, ARRAY[''owner'',''admin'']::text[])))',t||'_write',t);
   END LOOP;
 END $$;
