@@ -1,0 +1,418 @@
+-- Universal, multilingual commercial catalog foundation.
+-- Product images are external HTTPS URLs only; no Supabase Storage uploads.
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+CREATE TABLE IF NOT EXISTS public.commercial_catalog_units (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  owner_organization_id uuid REFERENCES public.commercial_organizations(id) ON DELETE CASCADE,
+  code text NOT NULL,
+  dimension text NOT NULL CHECK (dimension IN ('count','mass','volume','length','area','time','temperature','energy','pressure','data','package','other')),
+  base_unit_id uuid REFERENCES public.commercial_catalog_units(id),
+  factor_to_base numeric(30,12) NOT NULL DEFAULT 1 CHECK (factor_to_base > 0),
+  decimal_places smallint NOT NULL DEFAULT 3 CHECK (decimal_places BETWEEN 0 AND 9),
+  is_active boolean NOT NULL DEFAULT true,
+  created_by uuid REFERENCES auth.users(id),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (owner_organization_id, code)
+);
+
+CREATE TABLE IF NOT EXISTS public.commercial_catalog_unit_translations (
+  unit_id uuid NOT NULL REFERENCES public.commercial_catalog_units(id) ON DELETE CASCADE,
+  locale_code text NOT NULL,
+  name text NOT NULL CHECK (length(btrim(name)) BETWEEN 1 AND 120),
+  symbol text,
+  description text,
+  PRIMARY KEY (unit_id, locale_code)
+);
+
+CREATE TABLE IF NOT EXISTS public.commercial_catalog_categories (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  owner_organization_id uuid REFERENCES public.commercial_organizations(id) ON DELETE CASCADE,
+  parent_id uuid REFERENCES public.commercial_catalog_categories(id) ON DELETE RESTRICT,
+  code text NOT NULL,
+  slug text NOT NULL,
+  default_name text NOT NULL CHECK (length(btrim(default_name)) BETWEEN 1 AND 160),
+  description text,
+  sort_order integer NOT NULL DEFAULT 0,
+  is_active boolean NOT NULL DEFAULT true,
+  created_by uuid REFERENCES auth.users(id),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (owner_organization_id, code),
+  CHECK (parent_id IS NULL OR parent_id <> id)
+);
+CREATE INDEX IF NOT EXISTS ix_commercial_catalog_categories_parent ON public.commercial_catalog_categories(parent_id);
+CREATE INDEX IF NOT EXISTS ix_commercial_catalog_categories_owner ON public.commercial_catalog_categories(owner_organization_id);
+
+CREATE TABLE IF NOT EXISTS public.commercial_catalog_category_translations (
+  category_id uuid NOT NULL REFERENCES public.commercial_catalog_categories(id) ON DELETE CASCADE,
+  locale_code text NOT NULL,
+  name text NOT NULL CHECK (length(btrim(name)) BETWEEN 1 AND 160),
+  description text,
+  PRIMARY KEY (category_id, locale_code)
+);
+
+CREATE TABLE IF NOT EXISTS public.commercial_catalog_products (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  owner_organization_id uuid REFERENCES public.commercial_organizations(id) ON DELETE CASCADE,
+  category_id uuid REFERENCES public.commercial_catalog_categories(id) ON DELETE SET NULL,
+  product_code text,
+  default_name text NOT NULL CHECK (length(btrim(default_name)) BETWEEN 1 AND 240),
+  short_description text,
+  full_description text,
+  brand text,
+  manufacturer_name text,
+  country_of_manufacture text,
+  model_number text,
+  part_number text,
+  material_composition jsonb NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(material_composition) = 'array'),
+  ingredients jsonb NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(ingredients) = 'array'),
+  recipe jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(recipe) = 'object'),
+  specifications jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(specifications) = 'object'),
+  storage_instructions text,
+  usage_instructions text,
+  warnings text,
+  shelf_life_days integer CHECK (shelf_life_days IS NULL OR shelf_life_days >= 0),
+  requires_expiry_date boolean NOT NULL DEFAULT false,
+  is_batch_tracked boolean NOT NULL DEFAULT false,
+  is_serial_tracked boolean NOT NULL DEFAULT false,
+  is_prescription_only boolean NOT NULL DEFAULT false,
+  is_active boolean NOT NULL DEFAULT true,
+  image_url text CHECK (image_url IS NULL OR (length(image_url) <= 1000 AND image_url ~* '^https://[^[:space:]]+$')),
+  image_alt text,
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(metadata) = 'object'),
+  created_by uuid REFERENCES auth.users(id),
+  updated_by uuid REFERENCES auth.users(id),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CHECK (owner_organization_id IS NOT NULL OR created_by IS NULL),
+  CHECK (product_code IS NULL OR length(product_code) <= 100)
+);
+CREATE INDEX IF NOT EXISTS ix_commercial_catalog_products_category ON public.commercial_catalog_products(category_id);
+CREATE INDEX IF NOT EXISTS ix_commercial_catalog_products_owner ON public.commercial_catalog_products(owner_organization_id);
+CREATE INDEX IF NOT EXISTS ix_commercial_catalog_products_name ON public.commercial_catalog_products USING gin (to_tsvector('simple', default_name));
+
+CREATE TABLE IF NOT EXISTS public.commercial_catalog_product_translations (
+  product_id uuid NOT NULL REFERENCES public.commercial_catalog_products(id) ON DELETE CASCADE,
+  locale_code text NOT NULL,
+  name text NOT NULL CHECK (length(btrim(name)) BETWEEN 1 AND 240),
+  short_description text,
+  full_description text,
+  usage_instructions text,
+  warnings text,
+  image_alt text,
+  PRIMARY KEY (product_id, locale_code)
+);
+
+-- Each package/sale/purchase unit can have its own barcode and image URL.
+CREATE TABLE IF NOT EXISTS public.commercial_catalog_product_units (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  product_id uuid NOT NULL REFERENCES public.commercial_catalog_products(id) ON DELETE CASCADE,
+  unit_id uuid NOT NULL REFERENCES public.commercial_catalog_units(id) ON DELETE RESTRICT,
+  unit_role text NOT NULL DEFAULT 'sale' CHECK (unit_role IN ('base','purchase','sale','stock','recipe','shipping','consumption','other')),
+  quantity_in_base numeric(30,12) NOT NULL DEFAULT 1 CHECK (quantity_in_base > 0),
+  barcode text,
+  sku text,
+  package_name text,
+  net_quantity numeric(30,12) CHECK (net_quantity IS NULL OR net_quantity > 0),
+  net_unit_id uuid REFERENCES public.commercial_catalog_units(id) ON DELETE RESTRICT,
+  image_url text CHECK (image_url IS NULL OR (length(image_url) <= 1000 AND image_url ~* '^https://[^[:space:]]+$')),
+  is_default boolean NOT NULL DEFAULT false,
+  is_active boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (product_id, unit_id, unit_role),
+  CHECK (barcode IS NULL OR length(btrim(barcode)) BETWEEN 3 AND 128),
+  CHECK (sku IS NULL OR length(btrim(sku)) <= 100)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_commercial_catalog_barcode ON public.commercial_catalog_product_units(barcode) WHERE barcode IS NOT NULL AND is_active;
+CREATE INDEX IF NOT EXISTS ix_commercial_catalog_product_units_product ON public.commercial_catalog_product_units(product_id);
+
+-- Sector/region targeting is data-driven; no hard-coded activity list or level limit.
+CREATE TABLE IF NOT EXISTS public.commercial_catalog_product_sectors (
+  product_id uuid NOT NULL REFERENCES public.commercial_catalog_products(id) ON DELETE CASCADE,
+  sector_code text NOT NULL CHECK (sector_code IN ('all','hospital','pharmacy','grocery','supermarket','restaurant','hotel','general_company','mobile_company','automotive','heavy_equipment','manufacturing','wholesale','retail','clinic','laboratory','construction','agriculture','education','office','beauty','electronics','other')),
+  is_excluded boolean NOT NULL DEFAULT false,
+  PRIMARY KEY (product_id, sector_code)
+);
+CREATE TABLE IF NOT EXISTS public.commercial_catalog_product_regions (
+  product_id uuid NOT NULL REFERENCES public.commercial_catalog_products(id) ON DELETE CASCADE,
+  country_code text,
+  region_code text,
+  city text,
+  is_excluded boolean NOT NULL DEFAULT false,
+  CHECK (country_code IS NULL OR country_code ~ '^[A-Z]{2}$'),
+  CHECK (country_code IS NOT NULL OR region_code IS NOT NULL OR city IS NOT NULL),
+  UNIQUE NULLS NOT DISTINCT (product_id, country_code, region_code, city)
+);
+
+CREATE TABLE IF NOT EXISTS public.commercial_catalog_product_recipes (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  product_id uuid NOT NULL REFERENCES public.commercial_catalog_products(id) ON DELETE CASCADE,
+  locale_code text NOT NULL DEFAULT 'ar',
+  recipe_name text NOT NULL,
+  instructions text,
+  yield_quantity numeric(30,12) CHECK (yield_quantity IS NULL OR yield_quantity > 0),
+  yield_unit_id uuid REFERENCES public.commercial_catalog_units(id),
+  preparation_minutes integer CHECK (preparation_minutes IS NULL OR preparation_minutes >= 0),
+  cooking_minutes integer CHECK (cooking_minutes IS NULL OR cooking_minutes >= 0),
+  allergen_notes text,
+  source_reference text,
+  reviewed_by uuid REFERENCES auth.users(id),
+  reviewed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS public.commercial_catalog_recipe_ingredients (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  recipe_id uuid NOT NULL REFERENCES public.commercial_catalog_product_recipes(id) ON DELETE CASCADE,
+  ingredient_product_id uuid REFERENCES public.commercial_catalog_products(id) ON DELETE RESTRICT,
+  ingredient_name text,
+  quantity numeric(30,12) NOT NULL CHECK (quantity > 0),
+  unit_id uuid NOT NULL REFERENCES public.commercial_catalog_units(id) ON DELETE RESTRICT,
+  preparation_note text,
+  CHECK (ingredient_product_id IS NOT NULL OR nullif(btrim(ingredient_name),'') IS NOT NULL)
+);
+
+-- Claims are sourced, dated, and attributable; they are not presented as universal religious/medical rulings.
+CREATE TABLE IF NOT EXISTS public.commercial_catalog_product_rulings (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  product_id uuid NOT NULL REFERENCES public.commercial_catalog_products(id) ON DELETE CASCADE,
+  ruling_domain text NOT NULL CHECK (ruling_domain IN ('religious','medical','regulatory','dietary')),
+  authority_code text NOT NULL,
+  jurisdiction_code text,
+  outcome text NOT NULL CHECK (outcome IN ('permitted','prohibited','conditional','unknown','safe_with_conditions','caution','contraindicated','not_assessed')),
+  rationale text,
+  source_title text,
+  source_url text CHECK (source_url IS NULL OR (length(source_url) <= 1000 AND source_url ~* '^https://[^[:space:]]+$')),
+  effective_from date,
+  effective_to date,
+  confidence text NOT NULL DEFAULT 'unverified' CHECK (confidence IN ('unverified','reported','reviewed','official')),
+  reviewed_by uuid REFERENCES auth.users(id),
+  reviewed_at timestamptz,
+  created_by uuid REFERENCES auth.users(id),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CHECK (effective_to IS NULL OR effective_from IS NULL OR effective_to >= effective_from)
+);
+CREATE INDEX IF NOT EXISTS ix_commercial_catalog_rulings_product ON public.commercial_catalog_product_rulings(product_id, ruling_domain);
+
+-- A business has its own catalog choices, pricing-independent overrides and availability scope.
+CREATE TABLE IF NOT EXISTS public.commercial_organization_catalog_items (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id uuid NOT NULL REFERENCES public.commercial_organizations(id) ON DELETE CASCADE,
+  product_id uuid NOT NULL REFERENCES public.commercial_catalog_products(id) ON DELETE RESTRICT,
+  local_code text,
+  local_name text,
+  local_description text,
+  is_enabled boolean NOT NULL DEFAULT true,
+  is_favorite boolean NOT NULL DEFAULT false,
+  source_organization_id uuid REFERENCES public.commercial_organizations(id) ON DELETE SET NULL,
+  imported_at timestamptz,
+  created_by uuid REFERENCES auth.users(id),
+  updated_by uuid REFERENCES auth.users(id),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (organization_id, product_id)
+);
+CREATE INDEX IF NOT EXISTS ix_commercial_org_catalog_items_org ON public.commercial_organization_catalog_items(organization_id, is_enabled);
+
+CREATE TABLE IF NOT EXISTS public.commercial_catalog_transfers (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  source_organization_id uuid NOT NULL REFERENCES public.commercial_organizations(id) ON DELETE CASCADE,
+  destination_organization_id uuid NOT NULL REFERENCES public.commercial_organizations(id) ON DELETE CASCADE,
+  transferred_by uuid NOT NULL REFERENCES auth.users(id),
+  item_count integer NOT NULL DEFAULT 0,
+  transfer_mode text NOT NULL DEFAULT 'link' CHECK (transfer_mode IN ('link','copy')),
+  status text NOT NULL DEFAULT 'completed' CHECK (status IN ('completed','failed')),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CHECK (source_organization_id <> destination_organization_id)
+);
+
+-- Hierarchy is unbounded. Reject cycles even when a category is moved after creation.
+CREATE OR REPLACE FUNCTION public.commercial_catalog_category_cycle_guard()
+RETURNS trigger LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
+BEGIN
+  IF NEW.parent_id IS NULL THEN RETURN NEW; END IF;
+  IF NEW.parent_id = NEW.id THEN RAISE EXCEPTION 'catalog_category_cycle'; END IF;
+  IF EXISTS (
+    WITH RECURSIVE ancestors(id, parent_id) AS (
+      SELECT c.id, c.parent_id FROM public.commercial_catalog_categories c WHERE c.id = NEW.parent_id
+      UNION ALL
+      SELECT p.id, p.parent_id FROM public.commercial_catalog_categories p
+      JOIN ancestors a ON p.id = a.parent_id
+    ) SELECT 1 FROM ancestors WHERE id = NEW.id
+  ) THEN RAISE EXCEPTION 'catalog_category_cycle'; END IF;
+  IF (SELECT owner_organization_id FROM public.commercial_catalog_categories WHERE id = NEW.parent_id)
+     IS DISTINCT FROM NEW.owner_organization_id THEN
+    RAISE EXCEPTION 'catalog_category_owner_mismatch';
+  END IF;
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS commercial_catalog_category_cycle_guard ON public.commercial_catalog_categories;
+CREATE TRIGGER commercial_catalog_category_cycle_guard
+BEFORE INSERT OR UPDATE OF parent_id, owner_organization_id ON public.commercial_catalog_categories
+FOR EACH ROW EXECUTE FUNCTION public.commercial_catalog_category_cycle_guard();
+
+CREATE OR REPLACE FUNCTION public.commercial_catalog_member_of(p_org_id uuid, p_roles text[] DEFAULT ARRAY['owner','admin']::text[])
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.commercial_organization_members m
+    WHERE m.organization_id = p_org_id AND m.user_id = auth.uid()
+      AND m.state = 'active' AND m.role = ANY(p_roles)
+  );
+$$;
+REVOKE ALL ON FUNCTION public.commercial_catalog_member_of(uuid,text[]) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.commercial_catalog_member_of(uuid,text[]) TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.commercial_catalog_transfer(
+  p_source_organization_id uuid,
+  p_destination_organization_id uuid,
+  p_product_ids uuid[] DEFAULT NULL,
+  p_transfer_mode text DEFAULT 'link'
+) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+DECLARE v_transfer_id uuid; v_count integer;
+BEGIN
+  IF auth.uid() IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
+  IF p_source_organization_id = p_destination_organization_id THEN RAISE EXCEPTION 'same_organization'; END IF;
+  IF p_transfer_mode NOT IN ('link','copy') THEN RAISE EXCEPTION 'invalid_transfer_mode'; END IF;
+  IF NOT public.commercial_catalog_member_of(p_source_organization_id, ARRAY['owner','admin'])
+     OR NOT public.commercial_catalog_member_of(p_destination_organization_id, ARRAY['owner','admin']) THEN
+    RAISE EXCEPTION 'catalog_transfer_forbidden' USING ERRCODE='42501';
+  END IF;
+  INSERT INTO public.commercial_catalog_transfers(source_organization_id,destination_organization_id,transferred_by,transfer_mode)
+  VALUES(p_source_organization_id,p_destination_organization_id,auth.uid(),p_transfer_mode)
+  RETURNING id INTO v_transfer_id;
+
+  INSERT INTO public.commercial_organization_catalog_items(
+    organization_id,product_id,local_code,local_name,local_description,is_enabled,is_favorite,
+    source_organization_id,imported_at,created_by,updated_by
+  )
+  SELECT p_destination_organization_id, i.product_id, i.local_code, i.local_name, i.local_description,
+         i.is_enabled, i.is_favorite, p_source_organization_id, now(), auth.uid(), auth.uid()
+  FROM public.commercial_organization_catalog_items i
+  WHERE i.organization_id=p_source_organization_id
+    AND (p_product_ids IS NULL OR i.product_id=ANY(p_product_ids))
+  ON CONFLICT (organization_id,product_id) DO NOTHING;
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  UPDATE public.commercial_catalog_transfers SET item_count=v_count WHERE id=v_transfer_id;
+  RETURN jsonb_build_object('transfer_id',v_transfer_id,'items_transferred',v_count,'mode',p_transfer_mode);
+END $$;
+REVOKE ALL ON FUNCTION public.commercial_catalog_transfer(uuid,uuid,uuid[],text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.commercial_catalog_transfer(uuid,uuid,uuid[],text) TO authenticated;
+
+-- Enable RLS on every new table. Global reference rows are readable; org-owned rows are member-scoped.
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY[
+    'commercial_catalog_units','commercial_catalog_unit_translations',
+    'commercial_catalog_categories','commercial_catalog_category_translations',
+    'commercial_catalog_products','commercial_catalog_product_translations',
+    'commercial_catalog_product_units','commercial_catalog_product_sectors',
+    'commercial_catalog_product_regions','commercial_catalog_product_recipes',
+    'commercial_catalog_recipe_ingredients','commercial_catalog_product_rulings',
+    'commercial_organization_catalog_items','commercial_catalog_transfers'
+  ] LOOP
+    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY',t);
+    EXECUTE format('REVOKE ALL ON public.%I FROM anon',t);
+    EXECUTE format('GRANT SELECT ON public.%I TO authenticated',t);
+  END LOOP;
+END $$;
+
+CREATE POLICY catalog_units_read ON public.commercial_catalog_units FOR SELECT TO authenticated
+USING (owner_organization_id IS NULL OR public.commercial_catalog_member_of(owner_organization_id, ARRAY['owner','admin','manager','staff']::text[]));
+CREATE POLICY catalog_units_write ON public.commercial_catalog_units FOR ALL TO authenticated
+USING (owner_organization_id IS NOT NULL AND public.commercial_catalog_member_of(owner_organization_id, ARRAY['owner','admin']::text[]))
+WITH CHECK (owner_organization_id IS NOT NULL AND public.commercial_catalog_member_of(owner_organization_id, ARRAY['owner','admin']::text[]));
+CREATE POLICY catalog_unit_translations_read ON public.commercial_catalog_unit_translations FOR SELECT TO authenticated
+USING (EXISTS (SELECT 1 FROM public.commercial_catalog_units u WHERE u.id=unit_id AND (u.owner_organization_id IS NULL OR public.commercial_catalog_member_of(u.owner_organization_id, ARRAY['owner','admin','manager','staff']::text[]))));
+CREATE POLICY catalog_unit_translations_write ON public.commercial_catalog_unit_translations FOR ALL TO authenticated
+USING (EXISTS (SELECT 1 FROM public.commercial_catalog_units u WHERE u.id=unit_id AND u.owner_organization_id IS NOT NULL AND public.commercial_catalog_member_of(u.owner_organization_id, ARRAY['owner','admin']::text[])))
+WITH CHECK (EXISTS (SELECT 1 FROM public.commercial_catalog_units u WHERE u.id=unit_id AND u.owner_organization_id IS NOT NULL AND public.commercial_catalog_member_of(u.owner_organization_id, ARRAY['owner','admin']::text[])));
+
+CREATE POLICY catalog_categories_read ON public.commercial_catalog_categories FOR SELECT TO authenticated
+USING (owner_organization_id IS NULL OR public.commercial_catalog_member_of(owner_organization_id, ARRAY['owner','admin','manager','staff']::text[]));
+CREATE POLICY catalog_categories_write ON public.commercial_catalog_categories FOR ALL TO authenticated
+USING (owner_organization_id IS NOT NULL AND public.commercial_catalog_member_of(owner_organization_id, ARRAY['owner','admin']::text[]))
+WITH CHECK (owner_organization_id IS NOT NULL AND public.commercial_catalog_member_of(owner_organization_id, ARRAY['owner','admin']::text[]));
+CREATE POLICY catalog_category_translations_read ON public.commercial_catalog_category_translations FOR SELECT TO authenticated
+USING (EXISTS (SELECT 1 FROM public.commercial_catalog_categories c WHERE c.id=category_id AND (c.owner_organization_id IS NULL OR public.commercial_catalog_member_of(c.owner_organization_id, ARRAY['owner','admin','manager','staff']::text[]))));
+CREATE POLICY catalog_category_translations_write ON public.commercial_catalog_category_translations FOR ALL TO authenticated
+USING (EXISTS (SELECT 1 FROM public.commercial_catalog_categories c WHERE c.id=category_id AND c.owner_organization_id IS NOT NULL AND public.commercial_catalog_member_of(c.owner_organization_id, ARRAY['owner','admin']::text[])))
+WITH CHECK (EXISTS (SELECT 1 FROM public.commercial_catalog_categories c WHERE c.id=category_id AND c.owner_organization_id IS NOT NULL AND public.commercial_catalog_member_of(c.owner_organization_id, ARRAY['owner','admin']::text[])));
+
+CREATE POLICY catalog_products_read ON public.commercial_catalog_products FOR SELECT TO authenticated
+USING (owner_organization_id IS NULL OR public.commercial_catalog_member_of(owner_organization_id, ARRAY['owner','admin','manager','staff']::text[]));
+CREATE POLICY catalog_products_write ON public.commercial_catalog_products FOR ALL TO authenticated
+USING (owner_organization_id IS NOT NULL AND public.commercial_catalog_member_of(owner_organization_id, ARRAY['owner','admin']::text[]))
+WITH CHECK (owner_organization_id IS NOT NULL AND public.commercial_catalog_member_of(owner_organization_id, ARRAY['owner','admin']::text[]));
+
+CREATE POLICY catalog_product_translations_read ON public.commercial_catalog_product_translations FOR SELECT TO authenticated
+USING (EXISTS (SELECT 1 FROM public.commercial_catalog_products p WHERE p.id=product_id AND (p.owner_organization_id IS NULL OR public.commercial_catalog_member_of(p.owner_organization_id, ARRAY['owner','admin','manager','staff']::text[]))));
+CREATE POLICY catalog_product_translations_write ON public.commercial_catalog_product_translations FOR ALL TO authenticated
+USING (EXISTS (SELECT 1 FROM public.commercial_catalog_products p WHERE p.id=product_id AND p.owner_organization_id IS NOT NULL AND public.commercial_catalog_member_of(p.owner_organization_id, ARRAY['owner','admin']::text[])))
+WITH CHECK (EXISTS (SELECT 1 FROM public.commercial_catalog_products p WHERE p.id=product_id AND p.owner_organization_id IS NOT NULL AND public.commercial_catalog_member_of(p.owner_organization_id, ARRAY['owner','admin']::text[])));
+
+-- Product child records inherit product-level visibility and write authorization.
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['commercial_catalog_product_units','commercial_catalog_product_sectors','commercial_catalog_product_regions','commercial_catalog_product_recipes','commercial_catalog_product_rulings'] LOOP
+    EXECUTE format('CREATE POLICY %I ON public.%I FOR SELECT TO authenticated USING (EXISTS (SELECT 1 FROM public.commercial_catalog_products p WHERE p.id=product_id AND (p.owner_organization_id IS NULL OR public.commercial_catalog_member_of(p.owner_organization_id, ARRAY[''owner'',''admin'',''manager'',''staff'']::text[]))))',t||'_read',t);
+    EXECUTE format('CREATE POLICY %I ON public.%I FOR ALL TO authenticated USING (EXISTS (SELECT 1 FROM public.commercial_catalog_products p WHERE p.id=product_id AND p.owner_organization_id IS NOT NULL AND public.commercial_catalog_member_of(p.owner_organization_id, ARRAY[''owner'',''admin'']::text[]))) WITH CHECK (EXISTS (SELECT 1 FROM public.commercial_catalog_products p WHERE p.id=product_id AND p.owner_organization_id IS NOT NULL AND public.commercial_catalog_member_of(p.owner_organization_id, ARRAY[''owner'',''admin'']::text[])))',t||'_write',t);
+  END LOOP;
+END $$;
+CREATE POLICY catalog_recipe_ingredients_read ON public.commercial_catalog_recipe_ingredients FOR SELECT TO authenticated
+USING (EXISTS (SELECT 1 FROM public.commercial_catalog_product_recipes r JOIN public.commercial_catalog_products p ON p.id=r.product_id WHERE r.id=recipe_id AND (p.owner_organization_id IS NULL OR public.commercial_catalog_member_of(p.owner_organization_id, ARRAY['owner','admin','manager','staff']::text[]))));
+CREATE POLICY catalog_recipe_ingredients_write ON public.commercial_catalog_recipe_ingredients FOR ALL TO authenticated
+USING (EXISTS (SELECT 1 FROM public.commercial_catalog_product_recipes r JOIN public.commercial_catalog_products p ON p.id=r.product_id WHERE r.id=recipe_id AND p.owner_organization_id IS NOT NULL AND public.commercial_catalog_member_of(p.owner_organization_id, ARRAY['owner','admin']::text[])))
+WITH CHECK (EXISTS (SELECT 1 FROM public.commercial_catalog_product_recipes r JOIN public.commercial_catalog_products p ON p.id=r.product_id WHERE r.id=recipe_id AND p.owner_organization_id IS NOT NULL AND public.commercial_catalog_member_of(p.owner_organization_id, ARRAY['owner','admin']::text[])));
+
+CREATE POLICY catalog_org_items_read ON public.commercial_organization_catalog_items FOR SELECT TO authenticated
+USING (public.commercial_catalog_member_of(organization_id, ARRAY['owner','admin','manager','staff']::text[]));
+CREATE POLICY catalog_org_items_write ON public.commercial_organization_catalog_items FOR ALL TO authenticated
+USING (public.commercial_catalog_member_of(organization_id, ARRAY['owner','admin']::text[]))
+WITH CHECK (public.commercial_catalog_member_of(organization_id, ARRAY['owner','admin']::text[]));
+CREATE POLICY catalog_transfers_read ON public.commercial_catalog_transfers FOR SELECT TO authenticated
+USING (public.commercial_catalog_member_of(source_organization_id, ARRAY['owner','admin']::text[]) OR public.commercial_catalog_member_of(destination_organization_id, ARRAY['owner','admin']::text[]));
+
+-- Seed broadly useful units; no business is forced to use a fixed unit set.
+INSERT INTO public.commercial_catalog_units(code,dimension,factor_to_base,decimal_places)
+VALUES
+ ('EA','count',1,0),('DOZ','count',12,0),('PAIR','count',2,0),('SET','count',1,0),
+ ('MG','mass',0.000001,3),('G','mass',0.001,3),('KG','mass',1,3),('TONNE','mass',1000,3),
+ ('ML','volume',0.001,3),('L','volume',1,3),('M3','volume',1000,3),
+ ('MM','length',0.001,3),('CM','length',0.01,3),('M','length',1,3),('KM','length',1000,3),
+ ('CM2','area',0.0001,3),('M2','area',1,3),('HA','area',10000,3),
+ ('SEC','time',1,0),('MIN','time',60,2),('HOUR','time',3600,2),('DAY','time',86400,2),
+ ('PACK','package',1,0),('BOX','package',1,0),('CARTON','package',1,0),('PALLET','package',1,0),
+ ('KWH','energy',1,3),('GB','data',1,2)
+ON CONFLICT (owner_organization_id,code) DO NOTHING;
+
+INSERT INTO public.commercial_catalog_unit_translations(unit_id,locale_code,name,symbol)
+SELECT u.id, v.locale_code, v.name, v.symbol
+FROM public.commercial_catalog_units u
+JOIN (VALUES
+ ('EA','ar','قطعة','قطعة'),('EA','en','Each','ea'),('DOZ','ar','دزينة','دزينة'),('DOZ','en','Dozen','doz'),
+ ('PAIR','ar','زوج','زوج'),('PAIR','en','Pair','pr'),('SET','ar','طقم','طقم'),('SET','en','Set','set'),
+ ('MG','ar','مليغرام','mg'),('MG','en','Milligram','mg'),('G','ar','غرام','غ'),('G','en','Gram','g'),
+ ('KG','ar','كيلوغرام','كغ'),('KG','en','Kilogram','kg'),('TONNE','ar','طن متري','طن'),('TONNE','en','Metric tonne','t'),
+ ('ML','ar','مليلتر','مل'),('ML','en','Millilitre','mL'),('L','ar','لتر','ل'),('L','en','Litre','L'),
+ ('M3','ar','متر مكعب','م³'),('M3','en','Cubic metre','m³'),('MM','ar','مليمتر','مم'),('MM','en','Millimetre','mm'),
+ ('CM','ar','سنتيمتر','سم'),('CM','en','Centimetre','cm'),('M','ar','متر','م'),('M','en','Metre','m'),
+ ('KM','ar','كيلومتر','كم'),('KM','en','Kilometre','km'),('CM2','ar','سنتيمتر مربع','سم²'),('CM2','en','Square centimetre','cm²'),
+ ('M2','ar','متر مربع','م²'),('M2','en','Square metre','m²'),('HA','ar','هكتار','هكتار'),('HA','en','Hectare','ha'),
+ ('SEC','ar','ثانية','ث'),('SEC','en','Second','s'),('MIN','ar','دقيقة','د'),('MIN','en','Minute','min'),
+ ('HOUR','ar','ساعة','س'),('HOUR','en','Hour','h'),('DAY','ar','يوم','يوم'),('DAY','en','Day','d'),
+ ('PACK','ar','عبوة','عبوة'),('PACK','en','Pack','pack'),('BOX','ar','صندوق','صندوق'),('BOX','en','Box','box'),
+ ('CARTON','ar','كرتون','كرتون'),('CARTON','en','Carton','ctn'),('PALLET','ar','منصة تحميل','منصة'),('PALLET','en','Pallet','plt'),
+ ('KWH','ar','كيلوواط ساعة','ك.و.س'),('KWH','en','Kilowatt-hour','kWh'),('GB','ar','غيغابايت','GB'),('GB','en','Gigabyte','GB')
+) AS v(code,locale_code,name,symbol) ON v.code=u.code
+ON CONFLICT (unit_id,locale_code) DO NOTHING;
+
+COMMENT ON TABLE public.commercial_catalog_categories IS 'Unlimited-depth shared or organization-owned product category tree; localized labels are stored separately.';
+COMMENT ON TABLE public.commercial_catalog_products IS 'Universal product master with multilingual descriptions, ingredients, specifications, expiry/lot controls and external image URLs.';
+COMMENT ON TABLE public.commercial_catalog_product_units IS 'Product packaging and selling/purchasing units; barcode and image may vary by package.';
+COMMENT ON TABLE public.commercial_catalog_product_rulings IS 'Attributed, time-scoped religious/medical/regulatory claims; confidence and sources are mandatory context, not universal rulings.';
+COMMENT ON FUNCTION public.commercial_catalog_transfer(uuid,uuid,uuid[],text) IS 'Copies catalog links between organizations only when the caller is owner/admin of both organizations.';
