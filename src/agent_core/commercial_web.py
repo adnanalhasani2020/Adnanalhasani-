@@ -47,13 +47,13 @@ PAGE = r"""<!doctype html>
 <h2 id="authTitle">مرحبًا بعودتك</h2><p id="authSubtitle" class="muted">سجّل الدخول للمتابعة إلى متجرك.</p>
 <div class="auth-tabs" role="tablist" aria-label="نوع الحساب"><button type="button" id="loginTab" role="tab" aria-selected="true" aria-controls="login">تسجيل الدخول</button><button type="button" id="registerTab" role="tab" aria-selected="false" aria-controls="register">حساب جديد</button></div>
 <form id="login" class="auth-form">
-<label for="loginUsername">اسم المستخدم</label><input id="loginUsername" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="مثال: ahmed" required minlength="3" maxlength="80">
+<label for="loginEmail">البريد الإلكتروني</label><input id="loginEmail" name="email" type="email" autocomplete="email" autocapitalize="none" spellcheck="false" placeholder="name@example.com" required maxlength="254">
 <label for="loginPassword">كلمة المرور</label><input id="loginPassword" name="password" type="password" autocomplete="current-password" placeholder="أدخل كلمة المرور" required minlength="12" maxlength="1024">
 <p class="field-hint">استخدم كلمة المرور التي أنشأت بها حسابك.</p>
 <button class="primary" type="submit">دخول إلى حسابي <span aria-hidden="true">←</span></button>
 </form>
 <form id="register" class="auth-form hidden">
-<label for="registerUsername">اسم المستخدم</label><input id="registerUsername" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="اختر اسم مستخدم" required minlength="3" maxlength="80" pattern="[A-Za-z0-9._-]{3,80}" title="3 إلى 80 حرفًا إنجليزيًا أو رقمًا أو نقطة أو شرطة">
+<label for="registerEmail">البريد الإلكتروني</label><input id="registerEmail" name="email" type="email" autocomplete="email" autocapitalize="none" spellcheck="false" placeholder="name@example.com" required maxlength="254">
 <label for="registerPassword">كلمة المرور</label><input id="registerPassword" name="password" type="password" autocomplete="new-password" placeholder="12 حرفًا على الأقل" required minlength="12" maxlength="1024">
 <p class="field-hint">استخدم 12 حرفًا على الأقل. لا تستخدم كلمة مرور حساب آخر.</p>
 <button class="primary" type="submit">إنشاء الحساب والمتابعة <span aria-hidden="true">←</span></button>
@@ -86,20 +86,20 @@ const $=id=>document.getElementById(id);
 const message=text=>{$('message').textContent=text};
 async function api(path,opts={}){const r=await fetch(path,{credentials:'same-origin',...opts,headers:{'Content-Type':'application/json',...(opts.headers||{})}});let data={};try{data=await r.json()}catch{}if(!r.ok)throw Error(data.error||'تعذر تنفيذ الطلب');return data}
 function formData(form){return Object.fromEntries(new FormData(form).entries())}
-function setAuthMode(mode){const registering=mode==='register';$('login').classList.toggle('hidden',registering);$('register').classList.toggle('hidden',!registering);$('loginTab').setAttribute('aria-selected',String(!registering));$('registerTab').setAttribute('aria-selected',String(registering));$('authTitle').textContent=registering?'أنشئ حسابك':'مرحبًا بعودتك';$('authSubtitle').textContent=registering?'أنشئ حسابًا محليًا للبدء.':'سجّل الدخول للمتابعة إلى متجرك.';$('authFeedback').textContent='';message('');(registering?$('registerUsername'):$('loginUsername')).focus()}
+function setAuthMode(mode){const registering=mode==='register';$('login').classList.toggle('hidden',registering);$('register').classList.toggle('hidden',!registering);$('loginTab').setAttribute('aria-selected',String(!registering));$('registerTab').setAttribute('aria-selected',String(registering));$('authTitle').textContent=registering?'أنشئ حسابك':'مرحبًا بعودتك';$('authSubtitle').textContent=registering?'أنشئ حسابًا بالبريد الإلكتروني للبدء.':'سجّل الدخول للمتابعة إلى متجرك.';$('authFeedback').textContent='';message('');(registering?$('registerEmail'):$('loginEmail')).focus()}
 $('loginTab').addEventListener('click',()=>setAuthMode('login'));$('registerTab').addEventListener('click',()=>setAuthMode('register'));
 function reportSettingsKey(personId){return 'commercial-report-settings:'+String(personId)}
 function readReportSettings(){return {reportAudience:$('reportAudience').value,reportScope:$('reportScope').value,reportExport:$('reportExport').value,reportAudit:$('reportAudit').value}}
 function applyReportSettings(settings){for(const key of ['reportAudience','reportScope','reportExport','reportAudit'])if(typeof settings[key]==='string'&&Array.from($(key).options).some(option=>option.value===settings[key]))$(key).value=settings[key]}
 function loadReportSettings(personId){const key=reportSettingsKey(personId);try{const saved=JSON.parse(localStorage.getItem(key)||'null');if(saved&&typeof saved==='object')applyReportSettings(saved);$('reportSettingsStatus').textContent='الاختيارات الحالية تخص هذا المتصفح والحساب فقط؛ لا تغيّر صلاحيات الخادم.'}catch{$('reportSettingsStatus').textContent='تعذر قراءة الاختيارات المحلية؛ يمكنك اختيارها وحفظها من جديد.'} $('saveReportSettings').onclick=()=>{try{localStorage.setItem(key,JSON.stringify(readReportSettings()));$('reportSettingsStatus').textContent='حُفظت اختياراتك محليًا. لم تُرسل للخادم ولم تمنح صلاحية تقرير.'}catch{$('reportSettingsStatus').textContent='تعذر الحفظ المحلي في هذا المتصفح.'}};$('resetReportSettings').onclick=()=>{for(const id of ['reportAudience','reportScope','reportExport','reportAudit'])$(id).selectedIndex=0;try{localStorage.removeItem(key)}catch{}$('reportSettingsStatus').textContent='أُعيد ضبط الاختيارات المحلية. لا تزال صلاحية التقرير محجوبة.'}}
-async function loadMe(){try{const me=await api('/api/me');$('auth').classList.add('hidden');$('shop').classList.remove('hidden');$('who').textContent='أهلاً، '+me.username;loadReportSettings(me.person_id);$('catalog').replaceChildren();await loadCatalog();await loadRecentReceipts()}catch{$('auth').classList.remove('hidden');$('shop').classList.add('hidden')}}
-async function loadRecentReceipts(){const root=$('receipts');root.replaceChildren();try{const data=await api('/api/receipts');if(!data.items.length){root.textContent='لا توجد عمليات بيع سابقة لهذا الحساب.';return}for(const receipt of data.items){const card=document.createElement('article');card.className='card';const title=document.createElement('h3');title.textContent='عملية '+receipt.sale_id;const detail=document.createElement('p');detail.textContent='الحالة: '+receipt.state+' — الكمية: '+receipt.quantity+' — الإجمالي: '+receipt.total_minor+' '+receipt.currency_code;const remaining=document.createElement('p');remaining.textContent='المتبقي عند البيع: '+receipt.quantity_remaining+' — الوقت: '+receipt.occurred_at;const invoice=document.createElement('a');invoice.href='/receipts/'+encodeURIComponent(receipt.sale_id);invoice.target='_blank';invoice.rel='noopener noreferrer';invoice.textContent='عرض إيصال البيع للطباعة';card.append(title,detail,remaining,invoice);root.append(card)}}catch(e){root.textContent=e.message}}
-async function loadCatalog(){message('جارٍ قراءة المنتجات والمخزون الفعلي...');try{const data=await api('/api/catalog');const root=$('catalog');root.replaceChildren();for(const item of data.items){const card=document.createElement('article');card.className='card';const title=document.createElement('h3');title.textContent=item.product_name;const detail=document.createElement('p');detail.textContent='السعر: '+item.unit_price_minor+' '+item.currency_code+' (وحدات نقدية صغرى)';const stock=document.createElement('p');stock.textContent='المتاح فعلياً: '+item.available_quantity;const context=document.createElement('p');context.className='muted';context.textContent='النشاط: '+item.activity_id+' — الموقع: '+(item.location_ref||'غير محدد')+' — النطاق: '+item.scope_key;const qty=document.createElement('input');qty.type='number';qty.min='1';qty.max=String(item.available_quantity);qty.value='1';qty.setAttribute('aria-label','الكمية');const total=document.createElement('p');total.setAttribute('aria-live','polite');const updateTotal=()=>{const count=Number(qty.value);const amount=count*item.unit_price_minor;if(!Number.isSafeInteger(count)||count<1||count>item.available_quantity||!Number.isSafeInteger(amount)||amount<0){total.textContent='أدخل كمية صحيحة ضمن المتاح لعرض الإجمالي.';return}total.textContent='الإجمالي قبل التأكيد: '+amount+' '+item.currency_code+' (وحدات نقدية صغرى)'};qty.addEventListener('input',updateTotal);updateTotal();const buy=document.createElement('button');buy.textContent='شراء';buy.onclick=async()=>{const quantity=Number(qty.value);if(!Number.isSafeInteger(quantity)||quantity<1||quantity>item.available_quantity){message('الكمية يجب أن تكون عدداً صحيحاً ضمن المخزون المتاح.');return}const keyName='checkout:'+item.offering_id+':'+item.scope_key+':'+(item.location_ref||'');let pending;try{pending=JSON.parse(sessionStorage.getItem(keyName)||'null')}catch{}if(pending&&pending.quantity!==quantity){message('توجد عملية شراء معلقة بكمية مختلفة. أعد المحاولة بالكمية نفسها حتى تتأكد من نتيجتها، ولا تبدأ عملية جديدة قبل حسمها.');return}buy.disabled=true;if(!pending){pending={idempotency_key:crypto.randomUUID(),sale_id:crypto.randomUUID(),quantity};sessionStorage.setItem(keyName,JSON.stringify(pending))}try{const receipt=await api('/api/checkout',{method:'POST',body:JSON.stringify({offering_id:item.offering_id,activity_id:item.activity_id,quantity,scope_key:item.scope_key,location_ref:item.location_ref,idempotency_key:pending.idempotency_key,sale_id:pending.sale_id})});sessionStorage.removeItem(keyName);message('تم البيع بنجاح\nرقم العملية: '+receipt.sale_id+'\nالحالة: '+receipt.state+'\nالكمية: '+receipt.quantity+'\nالإجمالي: '+receipt.total_minor+' '+receipt.currency_code+'\nالمتبقي: '+receipt.quantity_remaining);await loadCatalog();await loadRecentReceipts()}catch(e){message(e.message+'\nيمكن إعادة المحاولة بنفس المفتاح إذا انقطع الاتصال.')}finally{buy.disabled=false}};card.append(title,detail,stock,context,qty,total,buy);root.append(card)}message(data.items.length?'المنتجات المتاحة محدثة من قاعدة البيانات.':'لا توجد حالياً منتجات يمكن إثبات توفرها للبيع.')}catch(e){message(e.message)}}
-$('login').onsubmit=async e=>{e.preventDefault();try{const data=await api('/api/login',{method:'POST',body:JSON.stringify(formData(e.target))});$('authFeedback').textContent='تم تسجيل الدخول بنجاح.';$('authFeedback').className='muted form-success';e.target.reset();await loadMe()}catch(err){$('authFeedback').textContent=err.message;$('authFeedback').className='form-error'}};
-$('register').onsubmit=async e=>{e.preventDefault();try{await api('/api/register',{method:'POST',body:JSON.stringify(formData(e.target))});$('authFeedback').textContent='تم إنشاء الحساب وتسجيل الدخول.';$('authFeedback').className='muted form-success';e.target.reset();await loadMe()}catch(err){$('authFeedback').textContent=err.message;$('authFeedback').className='form-error'}};
+async function loadMe(){try{const me=await api('/api/supabase/auth/me');$('auth').classList.add('hidden');$('shop').classList.remove('hidden');$('who').textContent='أهلاً، '+me.user.email;loadReportSettings(me.user.id);$('catalog').replaceChildren();await loadCatalog();await loadRecentReceipts()}catch{$('auth').classList.remove('hidden');$('shop').classList.add('hidden')}}
+async function loadRecentReceipts(){const root=$('receipts');root.replaceChildren();try{const data=await api('/api/supabase/receipts');if(!data.items.length){root.textContent='لا توجد عمليات بيع سابقة لهذا الحساب.';return}for(const receipt of data.items){const card=document.createElement('article');card.className='card';const title=document.createElement('h3');title.textContent='عملية '+receipt.sale_id;const detail=document.createElement('p');detail.textContent='المنتج: '+(receipt.product_name||'منتج')+' — الحالة: '+receipt.state+' — الكمية: '+receipt.quantity+' — الإجمالي: '+receipt.total_minor+' '+receipt.currency_code;const stamp=document.createElement('p');stamp.textContent='رقم الإيصال: '+receipt.receipt_number+' — الوقت: '+receipt.occurred_at;const invoice=document.createElement('a');invoice.href='/supabase/receipts/'+encodeURIComponent(receipt.sale_id);invoice.target='_blank';invoice.rel='noopener noreferrer';invoice.textContent='عرض إيصال البيع للطباعة';card.append(title,detail,stamp,invoice);root.append(card)}}catch(e){root.textContent=e.message}}
+async function loadCatalog(){message('جارٍ قراءة المنتجات والمخزون الفعلي...');try{const data=await api('/api/supabase/catalog');const root=$('catalog');root.replaceChildren();for(const item of data.items){const card=document.createElement('article');card.className='card';const title=document.createElement('h3');title.textContent=item.product_name;const detail=document.createElement('p');detail.textContent='السعر: '+item.unit_price_minor+' '+item.currency_code+' (وحدات نقدية صغرى)';const stock=document.createElement('p');stock.textContent='المتاح فعلياً: '+item.available_quantity;const context=document.createElement('p');context.className='muted';context.textContent='النشاط: '+item.activity_id+' — الموقع: '+(item.location_ref||'غير محدد')+' — النطاق: '+item.scope_key;const qty=document.createElement('input');qty.type='number';qty.min='1';qty.max=String(item.available_quantity);qty.value='1';qty.setAttribute('aria-label','الكمية');const total=document.createElement('p');total.setAttribute('aria-live','polite');const updateTotal=()=>{const count=Number(qty.value);const amount=count*item.unit_price_minor;if(!Number.isSafeInteger(count)||count<1||count>item.available_quantity||!Number.isSafeInteger(amount)||amount<0){total.textContent='أدخل كمية صحيحة ضمن المتاح لعرض الإجمالي.';return}total.textContent='الإجمالي قبل التأكيد: '+amount+' '+item.currency_code+' (وحدات نقدية صغرى)'};qty.addEventListener('input',updateTotal);updateTotal();const buy=document.createElement('button');buy.textContent='شراء';buy.onclick=async()=>{const quantity=Number(qty.value);if(!Number.isSafeInteger(quantity)||quantity<1||quantity>item.available_quantity){message('الكمية يجب أن تكون عدداً صحيحاً ضمن المخزون المتاح.');return}const keyName='checkout:'+item.organization_id+':'+item.offering_id+':'+item.scope_key+':'+(item.location_ref||'');let pending;try{pending=JSON.parse(sessionStorage.getItem(keyName)||'null')}catch{}if(pending&&pending.quantity!==quantity){message('توجد عملية شراء معلقة بكمية مختلفة. أعد المحاولة بالكمية نفسها حتى تتأكد من نتيجتها، ولا تبدأ عملية جديدة قبل حسمها.');return}buy.disabled=true;if(!pending){pending={idempotency_key:crypto.randomUUID(),sale_id:crypto.randomUUID(),quantity};sessionStorage.setItem(keyName,JSON.stringify(pending))}try{const receipt=await api('/api/supabase/checkout',{method:'POST',body:JSON.stringify({offering_id:item.offering_id,location_id:item.location_ref,quantity,idempotency_key:pending.idempotency_key})});sessionStorage.removeItem(keyName);message('تم البيع بنجاح\nرقم الإيصال: '+receipt.receipt_number+'\nرقم العملية: '+receipt.sale_id+'\nالكمية: '+receipt.quantity+'\nالإجمالي: '+receipt.total_minor+' '+receipt.currency_code);await loadCatalog();await loadRecentReceipts()}catch(e){message(e.message+'\nيمكن إعادة المحاولة بنفس المفتاح إذا انقطع الاتصال.')}finally{buy.disabled=false}};card.append(title,detail,stock,context,qty,total,buy);root.append(card)}message(data.items.length?'المنتجات المتاحة محدثة من قاعدة البيانات.':'لا توجد حالياً منتجات يمكن إثبات توفرها للبيع.')}catch(e){message(e.message)}}
+$('login').onsubmit=async e=>{e.preventDefault();try{const data=await api('/api/supabase/auth/login',{method:'POST',body:JSON.stringify(formData(e.target))});$('authFeedback').textContent='تم تسجيل الدخول بنجاح.';$('authFeedback').className='muted form-success';e.target.reset();await loadMe()}catch(err){$('authFeedback').textContent=err.message;$('authFeedback').className='form-error'}};
+$('register').onsubmit=async e=>{e.preventDefault();try{const data=await api('/api/supabase/auth/signup',{method:'POST',body:JSON.stringify(formData(e.target))});if(data.confirmation_required){$('authFeedback').textContent=data.message||'تحقق من بريدك الإلكتروني ثم سجّل الدخول.';$('authFeedback').className='muted form-success';e.target.reset();setAuthMode('login');return}$('authFeedback').textContent='تم إنشاء الحساب وتسجيل الدخول.';$('authFeedback').className='muted form-success';e.target.reset();await loadMe()}catch(err){$('authFeedback').textContent=err.message;$('authFeedback').className='form-error'}};
 $('refresh').onclick=loadCatalog;
 $('refreshReceipts').onclick=loadRecentReceipts;
-$('logout').onclick=async()=>{try{await api('/api/logout',{method:'POST',body:'{}'})}catch{}await loadMe();message('تم تسجيل الخروج')};
+$('logout').onclick=async()=>{try{await api('/api/supabase/auth/logout',{method:'POST',body:'{}'})}catch{}await loadMe();message('تم تسجيل الخروج')};
 loadMe();
 </script></body></html>"""
 
@@ -223,6 +223,49 @@ class CommercialWebApplication:
             if method == "POST":
                 self._validate_same_origin(environ)
 
+            if method == "GET" and path.startswith("/supabase/receipts/"):
+                sale_id = path.removeprefix("/supabase/receipts/").strip()
+                if not sale_id or "/" in sale_id:
+                    return self._json(start_response, "404 Not Found", {"error": "إيصال البيع غير موجود."})
+                access_token, refresh_token = self._supabase_cookies(environ)
+                if not access_token:
+                    return self._json(start_response, "401 Unauthorized", {"error": "سجّل الدخول لعرض الإيصال."})
+                auth = SupabaseAuthClient()
+                headers = []
+                try:
+                    auth.get_user(access_token)
+                except SupabaseAuthError:
+                    if not refresh_token:
+                        raise
+                    session = auth.refresh_session(refresh_token)
+                    access_token = session["access_token"]
+                    auth.get_user(access_token)
+                    headers = self._supabase_cookie_headers(session, secure_cookie)
+                receipts = SupabaseRPCClient(access_token).receipts(sale_id=sale_id)
+                if not receipts:
+                    return self._json(start_response, "404 Not Found", {"error": "إيصال البيع غير موجود."})
+                receipt = receipts[0]
+                esc = lambda value: html.escape(str(value if value is not None else ""), quote=True)
+                amount = f"{int(receipt.get('total_minor') or 0):,} {esc(receipt.get('currency_code'))}"
+                unit = f"{int(receipt.get('unit_price_minor') or 0):,} {esc(receipt.get('currency_code'))}"
+                page = f"""<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>إيصال بيع {esc(receipt.get('receipt_number'))}</title>
+<style>body{{font-family:system-ui,sans-serif;max-width:760px;margin:2rem auto;padding:1rem;color:#172033}}header,section,footer{{border:1px solid #d8dee8;border-radius:10px;padding:1rem;margin:.8rem 0}}.muted{{color:#596579}}.total{{font-size:1.3rem;font-weight:700}}button{{font:inherit;padding:.6rem 1rem;cursor:pointer}}dt{{font-weight:700}}dd{{margin:0 0 .7rem}}@media print{{button{{display:none}}body{{margin:0;max-width:none}}}}</style></head><body>
+<header><h1>إيصال بيع</h1><p class="muted">إثبات عملية بيع مسجلة في النظام — ليس فاتورة ضريبية.</p></header>
+<section><dl><dt>رقم الإيصال</dt><dd>{esc(receipt.get('receipt_number'))}</dd><dt>رقم العملية</dt><dd>{esc(receipt.get('sale_id'))}</dd>
+<dt>التاريخ</dt><dd>{esc(receipt.get('occurred_at'))}</dd><dt>الحالة</dt><dd>{esc(receipt.get('state'))}</dd>
+<dt>المنتج</dt><dd>{esc(receipt.get('product_name'))}</dd><dt>الكمية</dt><dd>{esc(receipt.get('quantity'))}</dd>
+<dt>سعر الوحدة</dt><dd>{unit}</dd></dl><p class="total">الإجمالي: {amount}</p></section>
+<footer><button type="button" onclick="window.print()">طباعة / حفظ PDF</button></footer></body></html>"""
+                encoded = page.encode("utf-8")
+                start_response("200 OK", [
+                    ("Content-Type", "text/html; charset=utf-8"), ("Content-Length", str(len(encoded))),
+                    ("Cache-Control", "no-store"),
+                    ("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'"),
+                    ("X-Content-Type-Options", "nosniff"), ("Referrer-Policy", "same-origin"),
+                ])
+                return [encoded]
+
             # Supabase onboarding is a separate authenticated path. It deliberately
             # does not reuse the local SQLite session or SQLite person identifier.
             if method == "POST" and path == "/api/supabase/organizations":
@@ -249,12 +292,12 @@ class CommercialWebApplication:
                 })
 
             if method == "GET" and path == "/api/supabase/catalog":
-                auth = SupabaseAuthClient()
                 access_token, refresh_token = self._supabase_cookies(environ)
                 if not access_token:
                     return self._json(start_response, "401 Unauthorized", {
                         "error": "سجّل الدخول بحساب Supabase لعرض كتالوجك."
                     })
+                auth = SupabaseAuthClient()
                 try:
                     auth.get_user(access_token)
                     headers = []
@@ -269,12 +312,12 @@ class CommercialWebApplication:
                 return self._json(start_response, "200 OK", {"items": items}, headers)
 
             if path in {"/api/supabase/checkout", "/api/supabase/receipts"} or path.startswith("/api/supabase/receipts/"):
-                auth = SupabaseAuthClient()
                 access_token, refresh_token = self._supabase_cookies(environ)
                 if not access_token:
                     return self._json(start_response, "401 Unauthorized", {
                         "error": "سجّل الدخول بحساب Supabase للمتابعة."
                     })
+                auth = SupabaseAuthClient()
                 try:
                     auth.get_user(access_token)
                     headers = []

@@ -144,3 +144,50 @@ def test_supabase_receipts_requires_auth_and_returns_owned_rows():
         result = b"".join(app(environ, start_response))
     assert captured["status"] == "200 OK"
     assert json.loads(result.decode()) == {"items": [{"sale_id": "sale-uuid"}]}
+
+
+def test_commercial_page_uses_supabase_email_auth_and_commerce_routes():
+    page = CommercialWebApplication()
+    environ = {"REQUEST_METHOD": "GET", "PATH_INFO": "/", "wsgi.url_scheme": "https",
+               "HTTP_HOST": "example.test"}
+    captured = {}
+    def start_response(status, headers):
+        captured["status"], captured["headers"] = status, headers
+    body = b"".join(page(environ, start_response)).decode("utf-8")
+    assert captured["status"] == "200 OK"
+    assert 'id="loginEmail" name="email" type="email"' in body
+    assert 'id="registerEmail" name="email" type="email"' in body
+    assert "/api/supabase/auth/login" in body
+    assert "/api/supabase/auth/signup" in body
+    assert "/api/supabase/catalog" in body
+    assert "/api/supabase/checkout" in body
+    assert "/api/supabase/receipts" in body
+    assert "api('/api/login'" not in body
+    assert "api('/api/register'" not in body
+
+
+def test_supabase_printable_receipt_uses_authenticated_sale_data_and_escapes_html():
+    app = CommercialWebApplication()
+    environ = {
+        "REQUEST_METHOD": "GET", "PATH_INFO": "/supabase/receipts/sale-uuid",
+        "wsgi.url_scheme": "https", "HTTP_HOST": "example.test",
+        "HTTP_COOKIE": "supabase_access=access-token", "CONTENT_LENGTH": "0",
+        "wsgi.input": io.BytesIO(b""),
+    }
+    captured = {}
+    def start_response(status, headers):
+        captured["status"], captured["headers"] = status, headers
+    with patch("agent_core.commercial_web.SupabaseAuthClient") as auth_class, \
+         patch("agent_core.commercial_web.SupabaseRPCClient") as rpc_class:
+        auth_class.return_value.get_user.return_value = {"id": "user-1"}
+        rpc_class.return_value.receipts.return_value = [{
+            "sale_id": "sale-uuid", "receipt_number": 42, "product_name": "<script>alert(1)</script>",
+            "quantity": 2, "unit_price_minor": 100, "total_minor": 200, "currency_code": "YER",
+            "state": "completed", "occurred_at": "2026-10-23T10:00:00Z",
+        }]
+        body = b"".join(app(environ, start_response)).decode("utf-8")
+    assert captured["status"] == "200 OK"
+    assert "إيصال بيع" in body
+    assert "&lt;script&gt;" in body
+    assert "<script>alert(1)</script>" not in body
+    assert "window.print()" in body
