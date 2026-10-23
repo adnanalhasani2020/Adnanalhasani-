@@ -69,40 +69,35 @@ PAGE = r"""<!doctype html>
 </div><p id="portalStatus" class="muted" role="status" aria-live="polite"></p>
 </section>
 <section id="storeSetup" class="hidden" aria-labelledby="storeSetupTitle">
-<div class="section-heading"><span class="eyebrow">إعداد المتجر</span><h1 id="storeSetupTitle">بيانات المتجر</h1><p>الحقول ذات النجمة مطلوبة لإنشاء المتجر وأول منتج. معلومات التواصل والعنوان التفصيلي اختيارية.</p></div>
+<div class="section-heading"><span class="eyebrow">بيانات النشاط</span><h1 id="storeSetupTitle">إنشاء ملف النشاط التجاري</h1><p>هذه الشاشة لتعريف النشاط ومالكه وفروعه فقط. المنتجات والمخزون منفصلة عن إعداد الملف.</p></div>
 <form id="storeSetupForm" class="auth-form"><div class="setup-grid">
-<div><label for="storeName">اسم المتجر *</label><input id="storeName" name="organization_name" required minlength="2" maxlength="160"></div>
-<div><label for="storeSlug">الرابط المختصر *</label><input id="storeSlug" name="organization_slug" required minlength="3" maxlength="64" pattern="[a-z0-9][a-z0-9-]{1,62}[a-z0-9]" placeholder="alnoor-store"></div>
-<div><label for="activityName">النشاط التجاري *</label><input id="activityName" name="activity_name" required maxlength="160" placeholder="بيع مواد غذائية"></div>
-<div><label for="storeLocationName">اسم الموقع الرئيسي *</label><input id="storeLocationName" name="location_name" required maxlength="160" value="المتجر الرئيسي"></div>
-<div><label for="firstProductName">أول منتج *</label><input id="firstProductName" name="product_name" required maxlength="180"></div>
-<div><label for="firstProductUnit">وحدة المنتج *</label><input id="firstProductUnit" name="unit_name" required maxlength="40" value="قطعة"></div>
-<div><label for="storeCurrency">العملة *</label><select id="storeCurrency" name="currency_code"><option value="YER">الريال اليمني</option><option value="SAR">الريال السعودي</option><option value="USD">الدولار الأمريكي</option><option value="AED">الدرهم الإماراتي</option></select></div>
-<div><label for="firstProductPrice">سعر الوحدة *</label><input id="firstProductPrice" name="price" type="number" min="0" step="1" required value="0"><p id="priceHint" class="field-hint">أدخل السعر بالريال اليمني دون كسور.</p></div>
-<div><label for="initialQuantity">الكمية الافتتاحية *</label><input id="initialQuantity" name="initial_quantity" type="number" min="0" max="100000000" step="1" required value="0"></div>
+<div><label for="storeName">اسم النشاط *</label><input id="storeName" name="organization_name" required minlength="2" maxlength="160"></div>
+<div><label for="storeSlug">الرابط المختصر *</label><input id="storeSlug" name="organization_slug" required minlength="3" maxlength="64" pattern="[a-z0-9][a-z0-9-]{1,62}[a-z0-9]" placeholder="alnoor-business"></div>
+<div><label for="activityName">اسم النشاط بالتفصيل *</label><input id="activityName" name="activity_name" required maxlength="160"></div>
+<div><label for="activityType">نوع النشاط *</label><select id="activityType" name="activity_type"><option value="commercial">تجاري</option><option value="service">خدمي</option><option value="production">إنتاجي</option></select></div>
+<div><label for="businessLevel">المستوى / شكل النشاط *</label><select id="businessLevel" name="business_level"><option value="company">شركة</option><option value="institution">مؤسسة</option><option value="supermarket">سوبر ماركت</option><option value="grocery">بقالة</option><option value="stall">بسطة</option><option value="shop">محل تجاري</option><option value="office">مكتب</option><option value="factory">مصنع</option><option value="clinic">عيادة</option><option value="independent">نشاط فردي</option><option value="other">أخرى</option></select></div>
+<div><label for="registrationNumber">رقم السجل التجاري *</label><input id="registrationNumber" name="commercial_registration_number" required maxlength="100"></div>
+<div><label for="openingDate">تاريخ الافتتاح *</label><input id="openingDate" name="opened_on" type="date" required></div>
+<div><label for="ownerName">اسم مالك النشاط *</label><input id="ownerName" name="owner_full_name" required maxlength="160" autocomplete="name"></div>
+<div><label for="legalName">الاسم القانوني (إن اختلف)</label><input id="legalName" name="legal_name" maxlength="200"></div>
 <div><label for="storeCountry">الدولة *</label><select id="storeCountry" name="country_code"><option value="YE">اليمن</option><option value="SA">السعودية</option><option value="AE">الإمارات</option><option value="EG">مصر</option></select></div>
-<div><label for="storeTimezone">المنطقة الزمنية *</label><select id="storeTimezone" name="timezone"><option value="Asia/Aden">عدن</option><option value="Asia/Riyadh">الرياض</option><option value="Asia/Dubai">دبي</option><option value="Africa/Cairo">القاهرة</option><option value="UTC">UTC</option></select></div>
-<div><label for="storeLocale">اللغة *</label><select id="storeLocale" name="locale"><option value="ar">العربية</option><option value="en">English</option></select></div>
-<div><label for="storePhone">هاتف التواصل (اختياري)</label><input id="storePhone" name="public_phone" type="tel" maxlength="40"></div>
-<div><label for="storeEmail">بريد التواصل (اختياري)</label><input id="storeEmail" name="public_email" type="email" maxlength="320"></div>
-<div><label for="storeWebsite">الموقع الإلكتروني (اختياري)</label><input id="storeWebsite" name="website_url" type="url" maxlength="500" placeholder="https://example.com"></div>
-<div><label for="storeCity">المدينة (اختياري)</label><input id="storeCity" name="city" maxlength="240"></div>
-<div><label for="storeDistrict">الحي (اختياري)</label><input id="storeDistrict" name="district" maxlength="240"></div>
-<div><label for="storeStreet">الشارع (اختياري)</label><input id="storeStreet" name="street" maxlength="240"></div>
-<div><label for="storeLandmark">علامة مميزة (اختياري)</label><input id="storeLandmark" name="landmark" maxlength="240"></div>
-</div><label for="storeDescription">وصف المتجر (اختياري)</label><textarea id="storeDescription" name="public_description" rows="3" maxlength="2000"></textarea>
-<label class="check-row" for="publicListing"><input id="publicListing" name="public_listing" type="checkbox"> السماح بإظهار المتجر في دليل المتاجر عند توفره.</label>
-<div class="row"><button id="createStoreButton" type="submit">إنشاء المتجر</button><button id="cancelStoreSetup" type="button">رجوع</button></div><p id="storeSetupStatus" class="muted" role="status" aria-live="polite"></p></form>
+<div><label for="storeTimezone">المنطقة الزمنية *</label><select id="storeTimezone" name="timezone"><option value="Asia/Aden">اليمن — عدن</option><option value="Asia/Riyadh">السعودية — الرياض</option><option value="Asia/Dubai">الإمارات — دبي</option><option value="Africa/Cairo">مصر — القاهرة</option><option value="UTC">UTC</option></select></div>
+<div><label for="storeLocale">لغة الحساب *</label><select id="storeLocale" name="locale"><option value="ar">العربية</option><option value="en">English</option></select></div>
+<div><label for="storePhone">هاتف النشاط</label><input id="storePhone" name="public_phone" type="tel" maxlength="40"></div>
+<div><label for="storeEmail">بريد النشاط</label><input id="storeEmail" name="public_email" type="email" maxlength="320"></div>
+<div><label for="storeWebsite">الموقع الإلكتروني</label><input id="storeWebsite" name="website_url" type="url" maxlength="500" placeholder="https://example.com"></div>
+<div><label for="storeCity">المدينة</label><input id="storeCity" name="city" maxlength="240"></div>
+<div><label for="storeDistrict">الحي</label><input id="storeDistrict" name="district" maxlength="240"></div>
+<div><label for="storeStreet">الشارع والعنوان</label><input id="storeStreet" name="street" maxlength="240"></div>
+<div><label for="storeLandmark">علامة مميزة</label><input id="storeLandmark" name="landmark" maxlength="240"></div>
+<div><label for="storeLogo">شعار / أيقونة الحساب (رابط الصورة)</label><input id="storeLogo" name="logo_url" type="url" maxlength="500" placeholder="https://..."></div>
+<div><label for="storeCover">صورة غلاف الحساب (رابط الصورة)</label><input id="storeCover" name="cover_image_url" type="url" maxlength="500" placeholder="https://..."></div>
+</div><label for="storeDescription">وصف النشاط</label><textarea id="storeDescription" name="public_description" rows="3" maxlength="2000"></textarea>
+<h2>الفروع والقنوات والأقسام</h2><p class="muted">أضف المواقع بالترتيب واختر الموقع الأب لإنشاء هيكل هرمي. اترك القائمة فارغة إذا كان للنشاط موقع واحد فقط.</p>
+<div id="locationRows"></div><div class="row"><button id="addLocationRow" type="button">+ إضافة فرع / قناة / قسم</button></div>
+<div class="row"><button id="createStoreButton" type="submit">حفظ ملف النشاط</button><button id="cancelStoreSetup" type="button">رجوع</button></div><p id="storeSetupStatus" class="muted" role="status" aria-live="polite"></p></form>
 </section>
-<section id="storeReady" class="hidden" aria-labelledby="storeReadyTitle">
-<div class="section-heading"><span class="eyebrow">تم الإنشاء</span><h1 id="storeReadyTitle">متجرك جاهز كبداية</h1><p id="storeReadyDetails"></p><p class="muted">تم حفظ المتجر والنشاط والموقع وأول منتج والمخزون الافتتاحي في Supabase بعملية واحدة.</p></div>
-<div class="card"><h2>إضافة منتج آخر</h2><form id="addStoreItemForm" class="auth-form"><div class="setup-grid">
-<div><label for="nextProductName">اسم المنتج *</label><input id="nextProductName" name="product_name" required maxlength="180"></div>
-<div><label for="nextProductUnit">الوحدة *</label><input id="nextProductUnit" name="unit_name" required maxlength="40" value="قطعة"></div>
-<div><label for="nextProductPrice">سعر الوحدة *</label><input id="nextProductPrice" name="price" type="number" min="0" step="1" required value="0"></div>
-<div><label for="nextProductQuantity">الكمية *</label><input id="nextProductQuantity" name="initial_quantity" type="number" min="1" max="100000000" step="1" required value="1"></div>
-</div><div class="row"><button id="addStoreItemButton" type="submit">حفظ المنتج والمخزون</button><button id="returnPortal" type="button">خيارات الحساب</button></div><p id="addStoreItemStatus" class="muted" role="status" aria-live="polite"></p></form></div>
-</section>
+<section id="storeReady" class="hidden" aria-labelledby="storeReadyTitle"><div class="section-heading"><span class="eyebrow">تم الحفظ</span><h1 id="storeReadyTitle">تم إنشاء ملف النشاط</h1><p id="storeReadyDetails"></p><p class="muted">حُفظت بيانات النشاط والمالك والسجل التجاري والمواقع في Supabase دون إنشاء منتجات أو مخزون.</p></div><div class="row"><button id="returnPortal" type="button">العودة إلى خيارات الحساب</button></div></section>
 <section id="shop" class="hidden">
 <div class="row"><strong id="who"></strong><button id="refresh">تحديث المنتجات</button><button id="logout">تسجيل الخروج</button></div>
 <div id="catalog"></div>
