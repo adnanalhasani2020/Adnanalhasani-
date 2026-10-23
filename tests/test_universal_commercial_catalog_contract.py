@@ -71,7 +71,11 @@ class UniversalCommercialCatalogContractTests(unittest.TestCase):
         self.assertIn("human_authored", self.management)
         self.assertIn("religion_code", self.management)
         self.assertIn("commercial_catalog_review_ruling", self.management)
+        self.assertIn("commercial_catalog_update_product_details", self.management)
+        self.assertIn("owner_organization_id=p_organization_id", self.management)
         self.assertIn("reviewRuling", self.android)
+        self.assertIn("CatalogProductEditDialog", self.android)
+        self.assertIn("تعديل بيانات الصنف", self.android)
         self.assertIn("product_unit_dimension_mismatch", self.management)
 
     def test_cross_account_transfer_requires_destination_acceptance(self):
