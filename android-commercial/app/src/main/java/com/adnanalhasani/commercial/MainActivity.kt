@@ -416,7 +416,7 @@ private fun SalesScreen(sales: List<SaleRecord>, onNewSale: () -> Unit) {
 
 @Composable
 private fun InventoryScreen(products: List<Product>, query: String, onQuery: (String) -> Unit, onAddProduct: () -> Unit, onEditProduct: (Int) -> Unit) {
-    val filtered = products.filter { it.name.contains(query, true) || it.category.contains(query, true) || it.barcode.contains(query, true) || it.catalogCode.contains(query, true) }
+    val filtered = products.filter { it.name.contains(query, true) || it.category.contains(query, true) || it.barcode.contains(query, true) || it.catalogCode.contains(query, true) || it.unitVariantsJson.contains(query, true) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
         item { Heading("المخزون والمنتجات", "إدارة الأصناف والكميات والأسعار") }
         item {
