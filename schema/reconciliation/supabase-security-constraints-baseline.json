@@ -8,10 +8,30 @@
   "public_policy_count": 67,
   "tables_without_rls": [],
   "tables_without_policy": [],
-  "scope": "Metadata-only live inventory. No application rows were read or changed.",
+  "scope": "Live metadata-only inventory; no application rows were read, copied, or changed. Table grants were hardened on 2026-10-23.",
   "interpretation": [
     "Every public table reported by pg_tables has RLS enabled.",
     "Every public table has at least one policy, but this does not prove that the policy is correct or that all required operations are permitted.",
     "Column equality does not establish semantic equivalence or safe cross-store identity."
-  ]
+  ],
+  "last_security_review_at": "2026-10-23",
+  "security_hardening": {
+    "applied": true,
+    "changes": [
+      "Revoked INSERT, UPDATE, DELETE, and TRUNCATE from anon on all current public-schema tables.",
+      "Revoked TRUNCATE from authenticated on all current public-schema tables.",
+      "Revoked direct INSERT, UPDATE, DELETE from authenticated on commercial_module_catalog, commercial_sales_returns, and commercial_sale_return_items.",
+      "Revoked DELETE from authenticated on commercial_profiles."
+    ],
+    "verification": {
+      "anon_write_or_truncate_grants_remaining": 0,
+      "authenticated_truncate_grants_remaining": 0,
+      "authenticated_direct_dml_tables_remaining": [
+        "commercial_organization_entity_translations",
+        "commercial_profiles",
+        "commercial_user_locale_preferences"
+      ]
+    },
+    "note": "The remaining authenticated DML grants correspond to existing user/organization-scoped RLS policies. Review default privileges for future tables separately."
+  }
 }
