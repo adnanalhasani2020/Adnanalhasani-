@@ -21,7 +21,7 @@ import java.util.concurrent.Executors
 private val profileIo = Executors.newSingleThreadExecutor()
 private val profileMain = Handler(Looper.getMainLooper())
 
-private fun supabaseRequest(path: String, payload: JSONObject, token: String? = null): JSONObject {
+private data class BusinessActivityOption(\n    val code: String, val nameAr: String, val nameEn: String, val pathAr: String, val defaultBusinessLevelCode: String\n)\n\nprivate fun supabaseRequest(path: String, payload: JSONObject, token: String? = null): JSONObject {
     val base = BuildConfig.SUPABASE_URL.trimEnd('/')
     val anon = BuildConfig.SUPABASE_ANON_KEY
     require(base.startsWith("https://") && anon.isNotBlank()) {
@@ -101,6 +101,42 @@ internal fun ActivityProfileScreen(onBack: () -> Unit) {
         }
     }
 
+    LaunchedEffect(accessToken) {
+        val token = accessToken ?: return@LaunchedEffect
+        activityDirectoryLoaded = false
+        profileIo.execute {
+            val result = runCatching {
+                supabaseRequest("/rest/v1/rpc/commercial_list_business_activity_nodes", JSONObject(), token)
+            }
+            profileMain.post {
+                result.onSuccess { response ->
+                    val nodes = response.optJSONArray("nodes") ?: JSONArray()
+                    val loaded = buildList {
+                        for (index in 0 until nodes.length()) {
+                            val node = nodes.optJSONObject(index) ?: continue
+                            val code = node.optString("code")
+                            if (code.isBlank()) continue
+                            add(BusinessActivityOption(
+                                code = code,
+                                nameAr = node.optString("name_ar"),
+                                nameEn = node.optString("name_en"),
+                                pathAr = node.optString("path_ar", node.optString("name_ar")),
+                                defaultBusinessLevelCode = node.optString("default_business_level_code")
+                            ))
+                        }
+                    }
+                    activityOptions.clear()
+                    activityOptions.addAll(loaded)
+                    activityDirectoryLoaded = true
+                    activityDirectoryError = if (loaded.isEmpty()) "دليل الأنشطة فارغ؛ تحقق من ترحيل دليل الأنشطة." else ""
+                }.onFailure {
+                    activityDirectoryLoaded = true
+                    activityDirectoryError = "تعذر تحميل دليل الأنشطة من الخادم. يمكنك إدخال الاسم يدويًا مؤقتًا."
+                }
+            }
+        }
+    }
+
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -138,7 +174,24 @@ internal fun ActivityProfileScreen(onBack: () -> Unit) {
             Text("بيانات النشاط والمالك", style = MaterialTheme.typography.titleMedium)
             ProfileField("اسم النشاط *", organizationName) { organizationName = it; if (organizationSlug.isBlank()) organizationSlug = it.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-') }
             ProfileField("الرابط المختصر بالإنجليزية *", organizationSlug) { organizationSlug = it.lowercase().trim() }
-            ProfileField("الاسم التفصيلي للنشاط *", activityName) { activityName = it }
+            if (activityOptions.isNotEmpty()) {
+                ProfileChoice("النشاط التجاري من الدليل *", activityCode,
+                    activityOptions.map { it.code to "${it.pathAr} • ${it.code}" }) { selectedCode ->
+                    activityCode = selectedCode
+                    activityOptions.firstOrNull { it.code == selectedCode }?.let { selected ->
+                        activityName = selected.nameAr
+                        if (selected.defaultBusinessLevelCode in setOf("company","institution","supermarket","grocery","stall","shop","office","factory","clinic","independent","other")) {
+                            businessLevel = selected.defaultBusinessLevelCode
+                        }
+                    }
+                }
+                activityOptions.firstOrNull { it.code == activityCode }?.let { selected ->
+                    Text("المسار: ${selected.pathAr}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                }
+            } else {
+                ProfileField("الاسم التفصيلي للنشاط *", activityName) { activityName = it }
+                if (activityDirectoryError.isNotBlank()) Text(activityDirectoryError, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
             ProfileChoice("نوع النشاط", activityType, listOf("commercial" to "تجاري", "service" to "خدمي", "production" to "إنتاجي")) { activityType = it }
             ProfileChoice("شكل النشاط", businessLevel, listOf("company" to "شركة", "institution" to "مؤسسة", "supermarket" to "سوبر ماركت", "grocery" to "بقالة", "stall" to "بسطة", "shop" to "محل تجاري", "office" to "مكتب", "factory" to "مصنع", "clinic" to "عيادة", "independent" to "نشاط فردي", "other" to "أخرى")) { businessLevel = it }
             ProfileField("رقم السجل التجاري *", registrationNumber) { registrationNumber = it }
@@ -179,7 +232,7 @@ internal fun ActivityProfileScreen(onBack: () -> Unit) {
             OutlinedButton(onClick = { branchNames.add(""); branchTypes.add("branch"); branchParents.add(-1) }, modifier = Modifier.fillMaxWidth()) { Text("+ إضافة فرع / موقع") }
             Text("لن يتم إنشاء منتجات أو مخزون في هذه الخطوة. تُحفظ بيانات الملف في Supabase عبر دالة RPC محمية بجلسة المستخدم.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Button(
-                enabled = !busy && organizationName.length >= 2 && organizationSlug.matches(Regex("[a-z0-9][a-z0-9-]{1,62}[a-z0-9]")) && activityName.isNotBlank() && registrationNumber.isNotBlank() && ownerName.length >= 2 && branchNames.all { it.isNotBlank() } && listOf(logoUrl, coverImageUrl, identityFrontUrl, identityBackUrl).all(::validOptionalHttpsUrl) && runCatching { LocalDate.parse(openedOn); true }.getOrDefault(false),
+                enabled = !busy && organizationName.length >= 2 && organizationSlug.matches(Regex("[a-z0-9][a-z0-9-]{1,62}[a-z0-9]")) && activityName.isNotBlank() && (activityOptions.isEmpty() || activityCode.isNotBlank()) && registrationNumber.isNotBlank() && ownerName.length >= 2 && branchNames.all { it.isNotBlank() } && listOf(logoUrl, coverImageUrl, identityFrontUrl, identityBackUrl).all(::validOptionalHttpsUrl) && runCatching { LocalDate.parse(openedOn); true }.getOrDefault(false),
                 onClick = {
                     val token = accessToken ?: return@Button
                     runRequest({
