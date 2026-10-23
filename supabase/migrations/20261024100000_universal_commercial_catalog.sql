@@ -364,16 +364,16 @@ VALUES
  ('CM2','سنتيمتر مربع','Square centimetre','area',0.0001,'M2',3,true,1),
  ('M2','متر مربع','Square metre','area',1,'M2',3,true,1),
  ('HA','هكتار','Hectare','area',10000,'M2',3,true,1),
- ('SEC','ثانية','Second','time',1,'SEC',0,true,1),
- ('MIN','دقيقة','Minute','time',60,'SEC',2,true,1),
+ ('SEC','ثانية','Second','time',0.000277777778,'HOUR',3,true,1),
+ ('MIN','دقيقة','Minute','time',0.016666666667,'HOUR',3,true,1),
  ('HOUR','ساعة','Hour','time',3600,'SEC',2,true,1),
- ('DAY','يوم','Day','time',86400,'SEC',2,true,1),
- ('PACK','عبوة','Pack','package',1,'PACK',0,true,1),
- ('BOX','صندوق','Box','package',1,'BOX',0,true,1),
- ('CARTON','كرتون','Carton','package',1,'CARTON',0,true,1),
- ('PALLET','منصة تحميل','Pallet','package',1,'PALLET',0,true,1),
- ('KWH','كيلوواط ساعة','Kilowatt-hour','energy',1,'KWH',3,true,1),
- ('GB','غيغابايت','Gigabyte','data',1,'GB',2,true,1)
+ ('DAY','يوم','Day','time',24,'HOUR',2,true,1),
+ ('PACK','عبوة','Pack','count',1,'EA',0,true,1),
+ ('BOX','صندوق','Box','count',1,'EA',0,true,1),
+ ('CARTON','كرتون','Carton','count',1,'EA',0,true,1),
+ ('PALLET','منصة تحميل','Pallet','count',1,'EA',0,true,1),
+ ('KWH','كيلوواط ساعة','Kilowatt-hour','other',1,NULL,3,true,1),
+ ('GB','غيغابايت','Gigabyte','other',1,NULL,2,true,1)
 ON CONFLICT (code) DO NOTHING;
 
 COMMENT ON TABLE public.commercial_catalog_categories IS 'Unlimited-depth shared or organization-owned product category tree; localized labels are stored separately.';
