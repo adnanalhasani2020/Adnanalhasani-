@@ -640,7 +640,12 @@ button{{font:inherit;padding:.6rem 1rem;cursor:pointer}}dt{{font-weight:700}}dd{
             return self._json(start_response, "401 Unauthorized", {"error": str(exc)})
         except SupabaseRPCError as exc:
             logging.warning("Supabase commercial request failed: %s", str(exc))
-            return self._json(start_response, "502 Bad Gateway", {"error": str(exc)})
+            status = {
+                400: "400 Bad Request", 401: "401 Unauthorized",
+                403: "403 Forbidden", 404: "404 Not Found",
+                409: "409 Conflict",
+            }.get(getattr(exc, "http_status", None), "502 Bad Gateway")
+            return self._json(start_response, status, {"error": str(exc)})
         except ValidationError as exc:
             return self._json(start_response, "400 Bad Request", {"error": str(exc)})
         except sqlite3.IntegrityError:
