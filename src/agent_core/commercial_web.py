@@ -5,12 +5,14 @@ Bind to loopback by default. Put a TLS reverse proxy in front before public expo
 """
 from __future__ import annotations
 
+import base64
 import html
 import json
 import logging
 import os
 import secrets
 import sqlite3
+import uuid
 from http.cookies import SimpleCookie
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
@@ -30,7 +32,7 @@ PAGE = r"""<!doctype html>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>المتجر — النسخة التجارية الأولى</title>
 <style>
-:root{color-scheme:light;--ink:#15243b;--muted:#66758b;--line:#dce4ef;--brand:#2458a6;--brand-dark:#173b73;--wash:#f3f6fb;--good:#16794b}*{box-sizing:border-box}body{font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;margin:0;min-height:100vh;background:radial-gradient(ellipse at top right,#e3edff 0,transparent 48%),var(--wash);color:var(--ink)}button,input,select{font:inherit}button{cursor:pointer;border:0;border-radius:12px;background:var(--brand);color:#fff;padding:.82rem 1.1rem;font-weight:650;transition:background .15s,transform .15s}button:hover{background:var(--brand-dark)}button:active{transform:translateY(1px)}button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #92b7f8;outline-offset:2px}button:disabled{opacity:.55;cursor:wait}input,select{width:100%;min-width:0;border:1px solid #cbd6e5;border-radius:11px;padding:.82rem .9rem;background:#fff;color:var(--ink)}label{display:block;font-weight:650;margin:.75rem 0 .35rem}.shell{width:min(1120px,100%);margin:0 auto;padding:clamp(1rem,4vw,3rem)}.topline{display:flex;align-items:center;gap:.8rem;margin-bottom:1.4rem}.brandmark{display:grid;place-items:center;width:46px;height:46px;border-radius:15px;background:var(--brand);color:white;font-size:1.35rem;font-weight:800}.brandname{font-weight:800;font-size:1.15rem;letter-spacing:-.02em}.brandhint{font-size:.85rem;color:var(--muted)}main{background:#fff;padding:clamp(1.2rem,4vw,2.4rem);border:1px solid #e7edf5;border-radius:24px;box-shadow:0 22px 65px #1a35540e}.auth-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(290px,.82fr);gap:clamp(1.5rem,5vw,4rem);align-items:center;min-height:480px}.auth-copy{padding:1rem 0}.eyebrow{display:inline-flex;align-items:center;gap:.5rem;color:var(--brand);font-weight:750;font-size:.88rem;background:#edf4ff;padding:.45rem .75rem;border-radius:999px}.auth-copy h1{font-size:clamp(2rem,5vw,3.25rem);line-height:1.15;letter-spacing:-.045em;margin:1.1rem 0}.auth-copy p{color:var(--muted);font-size:1.04rem;line-height:1.9;max-width:42ch}.trust-note{display:flex;gap:.65rem;align-items:flex-start;color:var(--muted);font-size:.86rem;line-height:1.7;margin-top:2rem}.auth-panel{border:1px solid var(--line);border-radius:20px;padding:clamp(1rem,3vw,1.6rem);background:linear-gradient(180deg,#fbfdff,#fff)}.auth-panel h2{margin:.15rem 0 .4rem;font-size:1.4rem}.muted{color:var(--muted)}.auth-tabs{display:grid;grid-template-columns:1fr 1fr;gap:.35rem;padding:.3rem;background:#edf2f8;border-radius:13px;margin:1.2rem 0}.auth-tabs button{background:transparent;color:var(--muted);padding:.65rem}.auth-tabs button[aria-selected=true]{background:#fff;color:var(--brand-dark);box-shadow:0 2px 8px #173b7310}.auth-form{display:grid;gap:.8rem}.auth-form .primary{width:100%;margin-top:.35rem}.field-hint{font-size:.8rem;color:var(--muted);margin:.3rem 0 0}.form-error{color:#a62d36;background:#fff1f1;border:1px solid #ffd9dc;border-radius:10px;padding:.7rem;font-size:.9rem}.form-success{color:var(--good)}.row{display:flex;gap:.6rem;flex-wrap:wrap;margin:.7rem 0}.card{border:1px solid var(--line);border-radius:14px;padding:1rem;margin:.7rem 0}.hidden{display:none!important}#message{white-space:pre-wrap;padding:.6rem}#catalog{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:.8rem}@media(max-width:760px){.shell{padding:1rem}.auth-layout{grid-template-columns:1fr;gap:1rem;min-height:0}.auth-copy{padding:.4rem 0}.auth-copy h1{font-size:2.15rem}.auth-copy p{font-size:.98rem}.trust-note{margin-top:1rem}.auth-panel{padding:1.1rem}main{border-radius:18px}}
+:root{color-scheme:light;--ink:#15243b;--muted:#66758b;--line:#dce4ef;--brand:#2458a6;--brand-dark:#173b73;--wash:#f3f6fb;--good:#16794b}*{box-sizing:border-box}body{font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;margin:0;min-height:100vh;background:radial-gradient(ellipse at top right,#e3edff 0,transparent 48%),var(--wash);color:var(--ink)}button,input,select,textarea{font:inherit}textarea{width:100%;min-width:0;border:1px solid #cbd6e5;border-radius:11px;padding:.82rem .9rem;background:#fff;color:var(--ink);resize:vertical}button{cursor:pointer;border:0;border-radius:12px;background:var(--brand);color:#fff;padding:.82rem 1.1rem;font-weight:650;transition:background .15s,transform .15s}button:hover{background:var(--brand-dark)}button:active{transform:translateY(1px)}button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #92b7f8;outline-offset:2px}button:disabled{opacity:.55;cursor:wait}input,select{width:100%;min-width:0;border:1px solid #cbd6e5;border-radius:11px;padding:.82rem .9rem;background:#fff;color:var(--ink)}label{display:block;font-weight:650;margin:.75rem 0 .35rem}.shell{width:min(1120px,100%);margin:0 auto;padding:clamp(1rem,4vw,3rem)}.topline{display:flex;align-items:center;gap:.8rem;margin-bottom:1.4rem}.brandmark{display:grid;place-items:center;width:46px;height:46px;border-radius:15px;background:var(--brand);color:white;font-size:1.35rem;font-weight:800}.brandname{font-weight:800;font-size:1.15rem;letter-spacing:-.02em}.brandhint{font-size:.85rem;color:var(--muted)}main{background:#fff;padding:clamp(1.2rem,4vw,2.4rem);border:1px solid #e7edf5;border-radius:24px;box-shadow:0 22px 65px #1a35540e}.auth-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(290px,.82fr);gap:clamp(1.5rem,5vw,4rem);align-items:center;min-height:480px}.auth-copy{padding:1rem 0}.eyebrow{display:inline-flex;align-items:center;gap:.5rem;color:var(--brand);font-weight:750;font-size:.88rem;background:#edf4ff;padding:.45rem .75rem;border-radius:999px}.auth-copy h1{font-size:clamp(2rem,5vw,3.25rem);line-height:1.15;letter-spacing:-.045em;margin:1.1rem 0}.auth-copy p{color:var(--muted);font-size:1.04rem;line-height:1.9;max-width:42ch}.trust-note{display:flex;gap:.65rem;align-items:flex-start;color:var(--muted);font-size:.86rem;line-height:1.7;margin-top:2rem}.auth-panel{border:1px solid var(--line);border-radius:20px;padding:clamp(1rem,3vw,1.6rem);background:linear-gradient(180deg,#fbfdff,#fff)}.auth-panel h2{margin:.15rem 0 .4rem;font-size:1.4rem}.muted{color:var(--muted)}.auth-tabs{display:grid;grid-template-columns:1fr 1fr;gap:.35rem;padding:.3rem;background:#edf2f8;border-radius:13px;margin:1.2rem 0}.auth-tabs button{background:transparent;color:var(--muted);padding:.65rem}.auth-tabs button[aria-selected=true]{background:#fff;color:var(--brand-dark);box-shadow:0 2px 8px #173b7310}.auth-form{display:grid;gap:.8rem}.auth-form .primary{width:100%;margin-top:.35rem}.field-hint{font-size:.8rem;color:var(--muted);margin:.3rem 0 0}.form-error{color:#a62d36;background:#fff1f1;border:1px solid #ffd9dc;border-radius:10px;padding:.7rem;font-size:.9rem}.form-success{color:var(--good)}.row{display:flex;gap:.6rem;flex-wrap:wrap;margin:.7rem 0}.role-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1rem;margin:1.2rem 0}.role-card{border:1px solid var(--line);border-radius:16px;padding:1.2rem;background:#fbfdff}.role-card p{color:var(--muted);line-height:1.8}.setup-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:.3rem 1rem}.section-heading{margin-bottom:1.2rem}.section-heading p{color:var(--muted);line-height:1.8}.check-row{display:flex;align-items:center;gap:.6rem;margin:1rem 0}.check-row input{width:auto}.card{border:1px solid var(--line);border-radius:14px;padding:1rem;margin:.7rem 0}.hidden{display:none!important}#message{white-space:pre-wrap;padding:.6rem}#catalog{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:.8rem}@media(max-width:760px){.shell{padding:1rem}.auth-layout{grid-template-columns:1fr;gap:1rem;min-height:0}.auth-copy{padding:.4rem 0}.auth-copy h1{font-size:2.15rem}.auth-copy p{font-size:.98rem}.trust-note{margin-top:1rem}.auth-panel{padding:1.1rem}main{border-radius:18px}}
 </style></head>
 <body><div class="shell">
 <div class="topline"><div class="brandmark" aria-hidden="true">ر</div><div><div class="brandname">رُوح <span class="muted">| التجارة</span></div><div class="brandhint">مساحة بسيطة لإدارة البيع اليومي</div></div></div>
@@ -60,6 +62,46 @@ PAGE = r"""<!doctype html>
 <p id="authFeedback" class="muted" role="status" aria-live="polite"></p>
 </div>
 </section>
+<section id="portal" class="hidden" aria-labelledby="portalTitle">
+<div class="section-heading"><span class="eyebrow">مساحتك في رُوح</span><h1 id="portalTitle">كيف تريد استخدام رُوح؟</h1><p>اختر المسار الذي يناسبك الآن.</p><p id="portalWho" class="muted"></p></div>
+<div class="role-grid">
+<article class="role-card"><h3>فتح متجر</h3><p>أنشئ بيانات المتجر والنشاط والموقع، ثم أضف أول منتج وسعره ومخزونه الافتتاحي.</p><button id="openStoreSetup" type="button">ابدأ فتح المتجر</button></article>
+<article class="role-card"><h3>المواطن / الزبون</h3><p>هذا مسار مستقل عن إدارة المتجر، وسيبقى منفصلًا حتى تكتمل وظائفه.</p><button id="customerPath" type="button">اختيار هذا المسار</button></article>
+<article class="role-card"><h3>واجهة البيع الحالية</h3><p>الوصول إلى شاشة البيع الموجودة دون حذفها أو خلط بياناتها المحلية مع Supabase.</p><button id="openSales" type="button">فتح واجهة البيع</button></article>
+</div><p id="portalStatus" class="muted" role="status" aria-live="polite"></p>
+</section>
+<section id="storeSetup" class="hidden" aria-labelledby="storeSetupTitle">
+<div class="section-heading"><span class="eyebrow">بيانات النشاط</span><h1 id="storeSetupTitle">إنشاء ملف النشاط التجاري</h1><p>هذه الشاشة لتعريف النشاط ومالكه وفروعه فقط. المنتجات والمخزون منفصلة عن إعداد الملف.</p></div>
+<form id="storeSetupForm" class="auth-form"><div class="setup-grid">
+<div><label for="storeName">اسم النشاط *</label><input id="storeName" name="organization_name" required minlength="2" maxlength="160"></div>
+<div><label for="storeSlug">الرابط المختصر *</label><input id="storeSlug" name="organization_slug" required minlength="3" maxlength="64" pattern="[a-z0-9][a-z0-9-]{1,62}[a-z0-9]" placeholder="alnoor-business"></div>
+<div><label for="activityName">اسم النشاط بالتفصيل *</label><input id="activityName" name="activity_name" required maxlength="160"></div>
+<div><label for="activityType">نوع النشاط *</label><select id="activityType" name="activity_type"><option value="commercial">تجاري</option><option value="service">خدمي</option><option value="production">إنتاجي</option></select></div>
+<div><label for="businessLevel">المستوى / شكل النشاط *</label><select id="businessLevel" name="business_level"><option value="company">شركة</option><option value="institution">مؤسسة</option><option value="supermarket">سوبر ماركت</option><option value="grocery">بقالة</option><option value="stall">بسطة</option><option value="shop">محل تجاري</option><option value="office">مكتب</option><option value="factory">مصنع</option><option value="clinic">عيادة</option><option value="independent">نشاط فردي</option><option value="other">أخرى</option></select></div>
+<div><label for="registrationNumber">رقم السجل التجاري *</label><input id="registrationNumber" name="commercial_registration_number" required maxlength="100"></div>
+<div><label for="openingDate">تاريخ الافتتاح *</label><input id="openingDate" name="opened_on" type="date" required></div>
+<div><label for="ownerName">اسم مالك النشاط *</label><input id="ownerName" name="owner_full_name" required maxlength="160" autocomplete="name"></div>
+<div><label for="legalName">الاسم القانوني (إن اختلف)</label><input id="legalName" name="legal_name" maxlength="200"></div>
+<div><label for="storeCountry">الدولة *</label><select id="storeCountry" name="country_code"><option value="YE">اليمن</option><option value="SA">السعودية</option><option value="AE">الإمارات</option><option value="EG">مصر</option></select></div>
+<div><label for="storeTimezone">المنطقة الزمنية *</label><select id="storeTimezone" name="timezone"><option value="Asia/Aden">اليمن — عدن</option><option value="Asia/Riyadh">السعودية — الرياض</option><option value="Asia/Dubai">الإمارات — دبي</option><option value="Africa/Cairo">مصر — القاهرة</option><option value="UTC">UTC</option></select></div>
+<div><label for="storeLocale">لغة الحساب *</label><select id="storeLocale" name="locale"><option value="ar">العربية</option><option value="en">English</option></select></div>
+<div><label for="storePhone">هاتف النشاط</label><input id="storePhone" name="public_phone" type="tel" maxlength="40"></div>
+<div><label for="storeEmail">بريد النشاط</label><input id="storeEmail" name="public_email" type="email" maxlength="320"></div>
+<div><label for="storeWebsite">الموقع الإلكتروني</label><input id="storeWebsite" name="website_url" type="url" maxlength="500" placeholder="https://example.com"></div>
+<div><label for="storeCity">المدينة</label><input id="storeCity" name="city" maxlength="240"></div>
+<div><label for="storeDistrict">الحي</label><input id="storeDistrict" name="district" maxlength="240"></div>
+<div><label for="storeStreet">الشارع والعنوان</label><input id="storeStreet" name="street" maxlength="240"></div>
+<div><label for="storeLandmark">علامة مميزة</label><input id="storeLandmark" name="landmark" maxlength="240"></div>
+<div><label for="storeLogo">شعار / أيقونة الحساب</label><input id="storeLogo" type="file" accept="image/png,image/jpeg,image/webp"></div>
+<div><label for="storeCover">صورة غلاف الحساب</label><input id="storeCover" type="file" accept="image/png,image/jpeg,image/webp"></div>
+<div><label for="ownerIdentityFront">صورة الهوية — الوجه الأمامي (خاص)</label><input id="ownerIdentityFront" type="file" accept="image/png,image/jpeg,image/webp,application/pdf"></div>
+<div><label for="ownerIdentityBack">صورة الهوية — الوجه الخلفي (خاص)</label><input id="ownerIdentityBack" type="file" accept="image/png,image/jpeg,image/webp,application/pdf"></div>
+</div><label for="storeDescription">وصف النشاط</label><textarea id="storeDescription" name="public_description" rows="3" maxlength="2000"></textarea>
+<h2>الفروع والقنوات والأقسام</h2><p class="muted">أضف المواقع بالترتيب واختر الموقع الأب لإنشاء هيكل هرمي. اترك القائمة فارغة إذا كان للنشاط موقع واحد فقط.</p>
+<div id="locationRows"></div><div class="row"><button id="addLocationRow" type="button">+ إضافة فرع / قناة / قسم</button></div>
+<div class="row"><button id="createStoreButton" type="submit">حفظ ملف النشاط</button><button id="cancelStoreSetup" type="button">رجوع</button></div><p id="storeSetupStatus" class="muted" role="status" aria-live="polite"></p></form>
+</section>
+<section id="storeReady" class="hidden" aria-labelledby="storeReadyTitle"><div class="section-heading"><span class="eyebrow">تم الحفظ</span><h1 id="storeReadyTitle">تم إنشاء ملف النشاط</h1><p id="storeReadyDetails"></p><p class="muted">حُفظت بيانات النشاط والمالك والسجل التجاري والمواقع في Supabase دون إنشاء منتجات أو مخزون.</p></div><div class="row"><button id="returnPortal" type="button">العودة إلى خيارات الحساب</button></div></section>
 <section id="shop" class="hidden">
 <div class="row"><strong id="who"></strong><button id="refresh">تحديث المنتجات</button><button id="logout">تسجيل الخروج</button></div>
 <div id="catalog"></div>
@@ -83,6 +125,8 @@ PAGE = r"""<!doctype html>
 <script>
 const $=id=>document.getElementById(id);
 const message=text=>{$('message').textContent=text};
+let currentStore=null;
+try{currentStore=JSON.parse(sessionStorage.getItem('ruh-current-store')||'null')}catch{currentStore=null}
 async function api(path,opts={}){const r=await fetch(path,{credentials:'same-origin',...opts,headers:{'Content-Type':'application/json',...(opts.headers||{})}});let data={};try{data=await r.json()}catch{}if(!r.ok)throw Error(data.error||'تعذر تنفيذ الطلب');return data}
 function formData(form){return Object.fromEntries(new FormData(form).entries())}
 function setAuthMode(mode){const registering=mode==='register';$('login').classList.toggle('hidden',registering);$('register').classList.toggle('hidden',!registering);$('loginTab').setAttribute('aria-selected',String(!registering));$('registerTab').setAttribute('aria-selected',String(registering));$('authTitle').textContent=registering?'أنشئ حسابك':'مرحبًا بعودتك';$('authSubtitle').textContent=registering?'أنشئ حسابًا محليًا للبدء.':'سجّل الدخول للمتابعة إلى متجرك.';$('authFeedback').textContent='';message('');(registering?$('registerUsername'):$('loginUsername')).focus()}
@@ -91,14 +135,26 @@ function reportSettingsKey(personId){return 'commercial-report-settings:'+String
 function readReportSettings(){return {reportAudience:$('reportAudience').value,reportScope:$('reportScope').value,reportExport:$('reportExport').value,reportAudit:$('reportAudit').value}}
 function applyReportSettings(settings){for(const key of ['reportAudience','reportScope','reportExport','reportAudit'])if(typeof settings[key]==='string'&&Array.from($(key).options).some(option=>option.value===settings[key]))$(key).value=settings[key]}
 function loadReportSettings(personId){const key=reportSettingsKey(personId);try{const saved=JSON.parse(localStorage.getItem(key)||'null');if(saved&&typeof saved==='object')applyReportSettings(saved);$('reportSettingsStatus').textContent='الاختيارات الحالية تخص هذا المتصفح والحساب فقط؛ لا تغيّر صلاحيات الخادم.'}catch{$('reportSettingsStatus').textContent='تعذر قراءة الاختيارات المحلية؛ يمكنك اختيارها وحفظها من جديد.'} $('saveReportSettings').onclick=()=>{try{localStorage.setItem(key,JSON.stringify(readReportSettings()));$('reportSettingsStatus').textContent='حُفظت اختياراتك محليًا. لم تُرسل للخادم ولم تمنح صلاحية تقرير.'}catch{$('reportSettingsStatus').textContent='تعذر الحفظ المحلي في هذا المتصفح.'}};$('resetReportSettings').onclick=()=>{for(const id of ['reportAudience','reportScope','reportExport','reportAudit'])$(id).selectedIndex=0;try{localStorage.removeItem(key)}catch{}$('reportSettingsStatus').textContent='أُعيد ضبط الاختيارات المحلية. لا تزال صلاحية التقرير محجوبة.'}}
-async function loadMe(){try{const me=await api('/api/me');$('auth').classList.add('hidden');$('shop').classList.remove('hidden');$('who').textContent='أهلاً، '+me.username;loadReportSettings(me.person_id);$('catalog').replaceChildren();await loadCatalog();await loadRecentReceipts()}catch{$('auth').classList.remove('hidden');$('shop').classList.add('hidden')}}
+function hideAccountSections(){for(const id of ['portal','storeSetup','storeReady','shop'])$(id).classList.add('hidden')}
+function showPortal(){hideAccountSections();$('portal').classList.remove('hidden');$('portalStatus').textContent=''}
+function showAccountSection(id){hideAccountSections();$(id).classList.remove('hidden')}
+async function loadMe(){try{const me=await api('/api/me');if(me.supabase_auth_enabled&&!me.supabase_session_available){hideAccountSections();$('auth').classList.remove('hidden');$('authFeedback').textContent='أعد تسجيل الدخول للمتابعة؛ نحتاج جلسة Supabase فعالة قبل إنشاء المتجر.';$('authFeedback').className='muted';return}$('auth').classList.add('hidden');$('portalWho').textContent='أهلاً، '+me.username;$('who').textContent='أهلاً، '+me.username;showPortal()}catch{hideAccountSections();$('auth').classList.remove('hidden')}}
 async function loadRecentReceipts(){const root=$('receipts');root.replaceChildren();try{const data=await api('/api/receipts');if(!data.items.length){root.textContent='لا توجد عمليات بيع سابقة لهذا الحساب.';return}for(const receipt of data.items){const card=document.createElement('article');card.className='card';const title=document.createElement('h3');title.textContent='عملية '+receipt.sale_id;const detail=document.createElement('p');detail.textContent='الحالة: '+receipt.state+' — الكمية: '+receipt.quantity+' — الإجمالي: '+receipt.total_minor+' '+receipt.currency_code;const remaining=document.createElement('p');remaining.textContent='المتبقي عند البيع: '+receipt.quantity_remaining+' — الوقت: '+receipt.occurred_at;const invoice=document.createElement('a');invoice.href='/receipts/'+encodeURIComponent(receipt.sale_id);invoice.target='_blank';invoice.rel='noopener noreferrer';invoice.textContent='عرض إيصال البيع للطباعة';card.append(title,detail,remaining,invoice);root.append(card)}}catch(e){root.textContent=e.message}}
 async function loadCatalog(){message('جارٍ قراءة المنتجات والمخزون الفعلي...');try{const data=await api('/api/catalog');const root=$('catalog');root.replaceChildren();for(const item of data.items){const card=document.createElement('article');card.className='card';const title=document.createElement('h3');title.textContent=item.product_name;const detail=document.createElement('p');detail.textContent='السعر: '+item.unit_price_minor+' '+item.currency_code+' (وحدات نقدية صغرى)';const stock=document.createElement('p');stock.textContent='المتاح فعلياً: '+item.available_quantity;const context=document.createElement('p');context.className='muted';context.textContent='النشاط: '+item.activity_id+' — الموقع: '+(item.location_ref||'غير محدد')+' — النطاق: '+item.scope_key;const qty=document.createElement('input');qty.type='number';qty.min='1';qty.max=String(item.available_quantity);qty.value='1';qty.setAttribute('aria-label','الكمية');const total=document.createElement('p');total.setAttribute('aria-live','polite');const updateTotal=()=>{const count=Number(qty.value);const amount=count*item.unit_price_minor;if(!Number.isSafeInteger(count)||count<1||count>item.available_quantity||!Number.isSafeInteger(amount)||amount<0){total.textContent='أدخل كمية صحيحة ضمن المتاح لعرض الإجمالي.';return}total.textContent='الإجمالي قبل التأكيد: '+amount+' '+item.currency_code+' (وحدات نقدية صغرى)'};qty.addEventListener('input',updateTotal);updateTotal();const buy=document.createElement('button');buy.textContent='شراء';buy.onclick=async()=>{const quantity=Number(qty.value);if(!Number.isSafeInteger(quantity)||quantity<1||quantity>item.available_quantity){message('الكمية يجب أن تكون عدداً صحيحاً ضمن المخزون المتاح.');return}const keyName='checkout:'+item.offering_id+':'+item.scope_key+':'+(item.location_ref||'');let pending;try{pending=JSON.parse(sessionStorage.getItem(keyName)||'null')}catch{}if(pending&&pending.quantity!==quantity){message('توجد عملية شراء معلقة بكمية مختلفة. أعد المحاولة بالكمية نفسها حتى تتأكد من نتيجتها، ولا تبدأ عملية جديدة قبل حسمها.');return}buy.disabled=true;if(!pending){pending={idempotency_key:crypto.randomUUID(),sale_id:crypto.randomUUID(),quantity};sessionStorage.setItem(keyName,JSON.stringify(pending))}try{const receipt=await api('/api/checkout',{method:'POST',body:JSON.stringify({offering_id:item.offering_id,activity_id:item.activity_id,quantity,scope_key:item.scope_key,location_ref:item.location_ref,idempotency_key:pending.idempotency_key,sale_id:pending.sale_id})});sessionStorage.removeItem(keyName);message('تم البيع بنجاح\nرقم العملية: '+receipt.sale_id+'\nالحالة: '+receipt.state+'\nالكمية: '+receipt.quantity+'\nالإجمالي: '+receipt.total_minor+' '+receipt.currency_code+'\nالمتبقي: '+receipt.quantity_remaining);await loadCatalog();await loadRecentReceipts()}catch(e){message(e.message+'\nيمكن إعادة المحاولة بنفس المفتاح إذا انقطع الاتصال.')}finally{buy.disabled=false}};card.append(title,detail,stock,context,qty,total,buy);root.append(card)}message(data.items.length?'المنتجات المتاحة محدثة من قاعدة البيانات.':'لا توجد حالياً منتجات يمكن إثبات توفرها للبيع.')}catch(e){message(e.message)}}
 $('login').onsubmit=async e=>{e.preventDefault();try{const data=await api('/api/login',{method:'POST',body:JSON.stringify(formData(e.target))});$('authFeedback').textContent='تم تسجيل الدخول بنجاح.';$('authFeedback').className='muted form-success';e.target.reset();await loadMe()}catch(err){$('authFeedback').textContent=err.message;$('authFeedback').className='form-error'}};
 $('register').onsubmit=async e=>{e.preventDefault();try{const data=await api('/api/register',{method:'POST',body:JSON.stringify(formData(e.target))});e.target.reset();if(data.needs_email_confirmation){setAuthMode('login');$('authFeedback').textContent=data.message||'تحقق من بريدك الإلكتروني لتأكيد الحساب ثم سجّل الدخول.';$('authFeedback').className='muted form-success';return}$('authFeedback').textContent='تم إنشاء الحساب وتسجيل الدخول.';$('authFeedback').className='muted form-success';await loadMe()}catch(err){$('authFeedback').textContent=err.message;$('authFeedback').className='form-error'}};
+let locationRowCount=0;
+function addLocationRow(){const index=locationRowCount++;const row=document.createElement('div');row.className='card';row.dataset.locationIndex=String(index);row.innerHTML='<div class="setup-grid"><div><label>اسم الفرع / القناة / القسم *</label><input name="location_name" required maxlength="160"></div><div><label>نوع الموقع *</label><select name="location_type"><option value="branch">فرع</option><option value="store">متجر</option><option value="office">مكتب / قناة</option><option value="department">قسم</option><option value="warehouse">مستودع</option><option value="factory">مصنع</option><option value="other">أخرى</option></select></div><div><label>يتبع الموقع *</label><select name="parent_index"><option value="-1">الموقع الرئيسي</option></select></div><div class="row"><button type="button" data-remove-location>حذف هذا الموقع</button></div></div>';row.querySelector('[data-remove-location]').onclick=()=>{row.remove();rebuildLocationParentOptions()};row.querySelector('[name="location_name"]').addEventListener('input',rebuildLocationParentOptions);$('locationRows').appendChild(row);rebuildLocationParentOptions()}
+function rebuildLocationParentOptions(){const rows=[...$('locationRows').querySelectorAll('[data-location-index]')];rows.forEach((row,pos)=>{const select=row.querySelector('[name="parent_index"]');const old=select.value;select.innerHTML='<option value="-1">الموقع الرئيسي</option>'+rows.slice(0,pos).map(r=>'<option value="'+r.dataset.locationIndex+'">'+(r.querySelector('[name="location_name"]').value||'موقع').replace(/[&<>"]/g,'')+'</option>').join('');if([...select.options].some(o=>o.value===old))select.value=old})}
+$('addLocationRow').onclick=addLocationRow;
+$('cancelStoreSetup').onclick=showPortal;$('returnPortal').onclick=showPortal;
+$('customerPath').onclick=()=>{$('portalStatus').textContent='مسار المواطن/الزبون منفصل ويحتاج استكمال وظائفه.'};
+$('openSales').onclick=async()=>{showAccountSection('shop');try{const me=await api('/api/me');loadReportSettings(me.person_id);await loadCatalog();await loadRecentReceipts()}catch(err){message(err.message)}};
+$('openStoreSetup').onclick=()=>{if(currentStore){$('storeReadyDetails').textContent='تم حفظ ملف النشاط في هذه الجلسة.';showAccountSection('storeReady')}else{showAccountSection('storeSetup');$('storeSetupStatus').textContent=''}};
+$('storeSetupForm').onsubmit=async e=>{e.preventDefault();const fields=formData(e.target);const rows=[...$('locationRows').querySelectorAll('[data-location-index]')];const submittedIndex=new Map(rows.map((row,index)=>[Number(row.dataset.locationIndex),index]));const locations=rows.map((row,index)=>{const parentOriginal=Number(row.querySelector('[name="parent_index"]').value);const parentIndex=parentOriginal<0?-1:submittedIndex.get(parentOriginal);if(parentOriginal>=0&&(parentIndex===undefined||parentIndex>=index))throw new Error('ترتيب الفروع غير صالح؛ اختر موقعًا أبًا موجودًا قبله.');return{name:row.querySelector('[name="location_name"]').value.trim(),location_type:row.querySelector('[name="location_type"]').value,parent_index:parentIndex}});const payload={...fields,locations};for(const key of ['storeLogo','storeCover','ownerIdentityFront','ownerIdentityBack'])delete payload[key];const uploadProfileAsset=async(inputId,assetType)=>{const file=$(inputId).files[0];if(!file)return null;if(file.size>5_000_000)throw new Error('حجم كل صورة يجب ألا يتجاوز 5 ميجابايت.');const dataUrl=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result));reader.onerror=()=>reject(new Error('تعذر قراءة الملف.'));reader.readAsDataURL(file)});const dataBase64=dataUrl.split(',')[1];const result=await api('/api/supabase/profile-assets',{method:'POST',body:JSON.stringify({asset_type:assetType,content_type:file.type,data_base64:dataBase64})});return result.path};const button=$('createStoreButton');button.disabled=true;$('storeSetupStatus').textContent='جارٍ حفظ ملف النشاط وهيكله في Supabase...';try{payload.logo_url=await uploadProfileAsset('storeLogo','logo');payload.cover_image_url=await uploadProfileAsset('storeCover','cover');payload.owner_identity_front_path=await uploadProfileAsset('ownerIdentityFront','identity_front');payload.owner_identity_back_path=await uploadProfileAsset('ownerIdentityBack','identity_back');const data=await api('/api/supabase/store-profiles',{method:'POST',body:JSON.stringify(payload)});currentStore={...data};try{sessionStorage.setItem('ruh-current-store',JSON.stringify(currentStore))}catch{}$('storeReadyDetails').textContent='النشاط: '+fields.organization_name+' — النوع: '+fields.activity_type+' — المستوى: '+fields.business_level+' — المالك: '+fields.owner_full_name+' — السجل التجاري: '+fields.commercial_registration_number+' — عدد المواقع: '+(data.location_count||1);showAccountSection('storeReady')}catch(err){$('storeSetupStatus').textContent=err.message}finally{button.disabled=false}};
 $('refresh').onclick=loadCatalog;
 $('refreshReceipts').onclick=loadRecentReceipts;
-$('logout').onclick=async()=>{try{await api('/api/logout',{method:'POST',body:'{}'})}catch{}await loadMe();message('تم تسجيل الخروج')};
+$('logout').onclick=async()=>{currentStore=null;try{sessionStorage.removeItem('ruh-current-store')}catch{}try{await api('/api/logout',{method:'POST',body:'{}'})}catch{}await loadMe();message('تم تسجيل الخروج')};
 loadMe();
 </script></body></html>"""
 
@@ -118,6 +174,9 @@ class CommercialWebApplication:
         )
         self.identity = CommercialIdentityApplication()
         self.checkout = CommercialCheckoutApplication()
+        # Keep Supabase access tokens server-side, keyed by the HttpOnly local session token.
+        self._supabase_tokens = {}
+        self._supabase_user_ids = {}
 
     @staticmethod
     def _cookies(environ):
@@ -158,12 +217,12 @@ class CommercialWebApplication:
             raise ValidationError("Cross-origin request rejected")
 
     @staticmethod
-    def _body(environ):
+    def _body(environ, *, max_bytes=65_536):
         try:
             length = int(environ.get("CONTENT_LENGTH") or "0")
         except ValueError as exc:
             raise ValidationError("Invalid request body length") from exc
-        if length < 0 or length > 65536:
+        if length < 0 or length > max_bytes:
             raise ValidationError("Request body is too large")
         content_type = environ.get("CONTENT_TYPE", "").split(";", 1)[0].strip().lower()
         if content_type != "application/json":
@@ -278,6 +337,8 @@ class CommercialWebApplication:
                         db, provider_user_id=str(user["id"]),
                         email=user.get("email") or body.get("email"),
                     )
+                    self._supabase_tokens[result["session_token"]] = session_data["access_token"]
+                    self._supabase_user_ids[result["session_token"]] = str(user["id"])
                 else:
                     if path == "/api/register":
                         self.identity.register(db, username=body.get("username"), password=body.get("password"))
@@ -290,8 +351,95 @@ class CommercialWebApplication:
                                    "expires_at": result["expires_at"]},
                                   [("Set-Cookie", cookie)])
 
+            if method == "POST" and path == "/api/supabase/profile-assets":
+                access_token = self._supabase_tokens.get(token) if token else None
+                user_id = self._supabase_user_ids.get(token) if token else None
+                if not access_token or not user_id or self.identity.resolve_session(db, token) is None:
+                    return self._json(start_response, "401 Unauthorized", {"error": "أعد تسجيل الدخول قبل رفع الملفات."})
+                body = self._body(environ, max_bytes=7_000_000)
+                asset_type = body.get("asset_type")
+                allowed = {
+                    "logo": ("commercial-brand-assets", {"image/png", "image/jpeg", "image/webp"}, True),
+                    "cover": ("commercial-brand-assets", {"image/png", "image/jpeg", "image/webp"}, True),
+                    "identity_front": ("commercial-owner-identities", {"image/png", "image/jpeg", "image/webp", "application/pdf"}, False),
+                    "identity_back": ("commercial-owner-identities", {"image/png", "image/jpeg", "image/webp", "application/pdf"}, False),
+                }
+                if asset_type not in allowed:
+                    return self._json(start_response, "400 Bad Request", {"error": "نوع الملف غير مدعوم."})
+                bucket, mime_types, is_public = allowed[asset_type]
+                content_type = str(body.get("content_type") or "").lower()
+                if content_type not in mime_types:
+                    return self._json(start_response, "400 Bad Request", {"error": "نوع الملف غير مسموح."})
+                try:
+                    raw = base64.b64decode(body.get("data_base64", ""), validate=True)
+                except (ValueError, TypeError):
+                    return self._json(start_response, "400 Bad Request", {"error": "محتوى الملف غير صالح."})
+                if not raw or len(raw) > 5_000_000:
+                    return self._json(start_response, "413 Payload Too Large", {"error": "الحد الأقصى لحجم الملف 5 ميجابايت."})
+                ext = {"image/png":"png","image/jpeg":"jpg","image/webp":"webp","application/pdf":"pdf"}[content_type]
+                object_path = f"{user_id}/{uuid.uuid4().hex}.{ext}"
+                client = SupabaseRPCClient(access_token)
+                uploaded_path = client.upload_object(bucket=bucket, object_path=object_path, content=raw, content_type=content_type, public=is_public)
+                return self._json(start_response, "201 Created", {"asset_type": asset_type, "path": uploaded_path})
+
+            if method == "POST" and path == "/api/supabase/store-profiles":
+                access_token = self._supabase_tokens.get(token) if token else None
+                if not access_token or self.identity.resolve_session(db, token) is None:
+                    return self._json(start_response, "401 Unauthorized", {"error": "أعد تسجيل الدخول إلى Supabase قبل حفظ ملف النشاط."})
+                body = self._body(environ)
+                client = SupabaseRPCClient(access_token)
+                result = client.create_activity_profile(
+                    organization_name=body.get("organization_name"), organization_slug=body.get("organization_slug"),
+                    activity_name=body.get("activity_name"), activity_type=body.get("activity_type"),
+                    business_level=body.get("business_level"),
+                    commercial_registration_number=body.get("commercial_registration_number"), opened_on=body.get("opened_on"),
+                    owner_full_name=body.get("owner_full_name"), legal_name=body.get("legal_name"),
+                    country_code=body.get("country_code"), timezone=body.get("timezone"), locale=body.get("locale"),
+                    currency_code=body.get("currency_code") or "YER", public_phone=body.get("public_phone"),
+                    public_email=body.get("public_email"), website_url=body.get("website_url"),
+                    public_description=body.get("public_description"), city=body.get("city"), district=body.get("district"),
+                    street=body.get("street"), landmark=body.get("landmark"), logo_url=body.get("logo_url"),
+                    cover_image_url=body.get("cover_image_url"),
+                    owner_identity_front_path=body.get("owner_identity_front_path"),
+                    owner_identity_back_path=body.get("owner_identity_back_path"), locations=body.get("locations") or [],
+                )
+                return self._json(start_response, "201 Created", result)
+
+            if method == "POST" and path in {"/api/supabase/storefronts", "/api/supabase/store-items"}:
+                access_token = self._supabase_tokens.get(token) if token else None
+                if not access_token or self.identity.resolve_session(db, token) is None:
+                    return self._json(start_response, "401 Unauthorized", {
+                        "error": "أعد تسجيل الدخول إلى Supabase قبل متابعة إعداد المتجر."
+                    })
+                body = self._body(environ)
+                client = SupabaseRPCClient(access_token)
+                if path == "/api/supabase/storefronts":
+                    result = client.create_storefront(
+                        organization_name=body.get("organization_name"), organization_slug=body.get("organization_slug"),
+                        activity_name=body.get("activity_name"), product_name=body.get("product_name"),
+                        unit_name=body.get("unit_name"), price_minor=body.get("price_minor"),
+                        currency_code=body.get("currency_code"), location_name=body.get("location_name"),
+                        initial_quantity=body.get("initial_quantity"), country_code=body.get("country_code"),
+                        timezone=body.get("timezone"), locale=body.get("locale"), public_phone=body.get("public_phone"),
+                        public_email=body.get("public_email"), website_url=body.get("website_url"),
+                        public_description=body.get("public_description"), city=body.get("city"),
+                        district=body.get("district"), street=body.get("street"), landmark=body.get("landmark"),
+                        public_listing=body.get("public_listing", False),
+                    )
+                else:
+                    result = client.add_store_item(
+                        organization_id=body.get("organization_id"), activity_id=body.get("activity_id"),
+                        location_id=body.get("location_id"), product_name=body.get("product_name"),
+                        unit_name=body.get("unit_name"), price_minor=body.get("price_minor"),
+                        initial_quantity=body.get("initial_quantity"),
+                    )
+                return self._json(start_response, "201 Created", result)
+
             if method == "POST" and path == "/api/logout":
                 self.identity.logout(db, token)
+                if token:
+                    self._supabase_tokens.pop(token, None)
+                    self._supabase_user_ids.pop(token, None)
                 secure = "; Secure" if secure_cookie else ""
                 return self._json(start_response, "200 OK", {"ok": True},
                                   [("Set-Cookie", "commercial_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0" + secure)])
@@ -309,7 +457,7 @@ class CommercialWebApplication:
                 ).fetchone()
                 if row is None:
                     return self._json(start_response, "401 Unauthorized", {"error": "الحساب غير متاح."})
-                return self._json(start_response, "200 OK", {"person_id": person_id, "username": row[0]})
+                return self._json(start_response, "200 OK", {"person_id": person_id, "username": row[0], "supabase_auth_enabled": self._supabase_auth_enabled(), "supabase_session_available": bool(token and token in self._supabase_tokens)})
 
             if method == "GET" and path == "/api/catalog":
                 now = __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
