@@ -470,7 +470,7 @@ BEGIN
 
   INSERT INTO public.commercial_organization_catalog_items(
     organization_id,global_item_id,merchant_sku,merchant_display_name,merchant_description,
-    price_minor,currency_code,is_available,metadata,created_by,source_organization_id,imported_at,is_favorite
+    price_minor,currency_code,is_available,metadata,created_by,source_organization_id,imported_at,is_favorite,is_enabled
   )
   SELECT p_destination_organization_id, i.global_item_id,
     CASE WHEN i.merchant_sku IS NULL OR NOT EXISTS (
@@ -478,7 +478,7 @@ BEGIN
       WHERE d.organization_id=p_destination_organization_id AND d.merchant_sku=i.merchant_sku
     ) THEN i.merchant_sku ELSE NULL END,
     i.merchant_display_name, i.merchant_description, i.price_minor, i.currency_code, i.is_available, i.metadata,
-    auth.uid(), p_source_organization_id, now(), i.is_favorite
+    auth.uid(), p_source_organization_id, now(), i.is_favorite, i.is_enabled
   FROM public.commercial_organization_catalog_items i
   WHERE i.organization_id=p_source_organization_id
     AND (p_global_item_ids IS NULL OR i.global_item_id=ANY(p_global_item_ids))
