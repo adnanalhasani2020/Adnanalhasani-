@@ -21,6 +21,7 @@ from agent_core.commerce_checkout import CommercialCheckoutApplication
 from agent_core.commercial_identity import CommercialIdentityApplication
 from agent_core.persistence import connect_database
 from agent_core.shared import ValidationError
+from agent_core.supabase_auth import SupabaseAuthClient, SupabaseAuthError
 from agent_core.supabase_rpc import SupabaseRPCClient, SupabaseRPCError
 
 
@@ -127,6 +128,30 @@ class CommercialWebApplication:
         return morsel.value if morsel else None
 
     @staticmethod
+    def _supabase_cookies(environ):
+        cookie = SimpleCookie()
+        cookie.load(environ.get("HTTP_COOKIE", ""))
+        access = cookie.get("supabase_access")
+        refresh = cookie.get("supabase_refresh")
+        return (access.value if access else None, refresh.value if refresh else None)
+
+    @staticmethod
+    def _supabase_cookie_headers(session, secure_cookie):
+        secure = "; Secure" if secure_cookie else ""
+        common = "; Path=/; HttpOnly; SameSite=Lax; Max-Age="
+        return [
+            ("Set-Cookie", "supabase_access=" + session["access_token"] + common + "3600" + secure),
+            ("Set-Cookie", "supabase_refresh=" + session["refresh_token"] + common + "2592000" + secure),
+        ]
+
+    @staticmethod
+    def _clear_supabase_cookie_headers(secure_cookie):
+        secure = "; Secure" if secure_cookie else ""
+        common = "; Path=/; HttpOnly; SameSite=Lax; Max-Age=0" + secure
+        return [("Set-Cookie", "supabase_access=" + common),
+                ("Set-Cookie", "supabase_refresh=" + common)]
+
+    @staticmethod
     def _json(start_response, status, body, extra_headers=()):
         encoded = json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         headers = [("Content-Type", "application/json; charset=utf-8"),
@@ -222,6 +247,57 @@ class CommercialWebApplication:
                 return self._json(start_response, "201 Created", {
                     "organization_id": organization_id
                 })
+
+            # Supabase Auth uses its own HttpOnly cookies and never falls through to
+            # the legacy SQLite identity. Commercial APIs remain separately authorized.
+            if path.startswith("/api/supabase/auth/"):
+                auth = SupabaseAuthClient()
+                access_token, refresh_token = self._supabase_cookies(environ)
+                if method == "POST" and path == "/api/supabase/auth/signup":
+                    body = self._body(environ)
+                    result = auth.sign_up(body.get("email"), body.get("password"))
+                    if isinstance(result, dict) and isinstance(result.get("access_token"), str):
+                        session = auth._validate_session(result)
+                        headers = self._supabase_cookie_headers(session, secure_cookie)
+                        return self._json(start_response, "201 Created", {
+                            "user": {"id": session["user"]["id"], "email": session["user"]["email"]},
+                            "session": True,
+                        }, headers)
+                    return self._json(start_response, "202 Accepted", {
+                        "confirmation_required": True,
+                        "message": "تحقق من بريدك الإلكتروني لتأكيد الحساب ثم سجّل الدخول.",
+                    })
+                if method == "POST" and path == "/api/supabase/auth/login":
+                    body = self._body(environ)
+                    session = auth.sign_in(body.get("email"), body.get("password"))
+                    headers = self._supabase_cookie_headers(session, secure_cookie)
+                    return self._json(start_response, "200 OK", {
+                        "user": {"id": session["user"]["id"], "email": session["user"]["email"]},
+                    }, headers)
+                if method == "GET" and path == "/api/supabase/auth/me":
+                    if not access_token:
+                        return self._json(start_response, "401 Unauthorized", {"error": "سجّل الدخول بحساب Supabase."})
+                    try:
+                        user = auth.get_user(access_token)
+                        headers = []
+                    except SupabaseAuthError:
+                        if not refresh_token:
+                            raise
+                        session = auth.refresh_session(refresh_token)
+                        user = auth.get_user(session["access_token"])
+                        headers = self._supabase_cookie_headers(session, secure_cookie)
+                    return self._json(start_response, "200 OK", {
+                        "user": {"id": user["id"], "email": user["email"]},
+                    }, headers)
+                if method == "POST" and path == "/api/supabase/auth/logout":
+                    headers = self._clear_supabase_cookie_headers(secure_cookie)
+                    if access_token:
+                        try:
+                            auth.sign_out(access_token)
+                        except SupabaseAuthError:
+                            logging.warning("Supabase sign-out could not be confirmed")
+                    return self._json(start_response, "200 OK", {"ok": True}, headers)
+                return self._json(start_response, "404 Not Found", {"error": "مسار مصادقة Supabase غير موجود."})
 
             db = connect_database(self.database_path)
             token = self._cookies(environ)
@@ -396,6 +472,9 @@ button{{font:inherit;padding:.6rem 1rem;cursor:pointer}}dt{{font-weight:700}}dd{
                 return self._json(start_response, "200 OK", receipt)
 
             return self._json(start_response, "404 Not Found", {"error": "المسار غير موجود."})
+        except SupabaseAuthError as exc:
+            logging.warning("Supabase Auth request failed: %s", str(exc))
+            return self._json(start_response, "401 Unauthorized", {"error": str(exc)})
         except SupabaseRPCError as exc:
             logging.warning("Supabase organization onboarding request failed: %s", str(exc))
             return self._json(start_response, "502 Bad Gateway", {"error": str(exc)})
