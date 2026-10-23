@@ -10,14 +10,14 @@ ANDROID = ROOT / "android-commercial" / "app" / "src" / "main" / "java" / "com" 
 class BusinessActivityTaxonomyContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.taxonomy = (MIGRATIONS / "20261024110000_business_activity_taxonomy.sql").read_text(encoding="utf-8")
-        cls.expansion = (MIGRATIONS / "20261024112000_business_activity_taxonomy_expansion.sql").read_text(encoding="utf-8")
-        cls.catalog_schema = (MIGRATIONS / "20261024100000_universal_commercial_catalog.sql").read_text(encoding="utf-8")
+        cls.taxonomy = (MIGRATIONS / "20261023231152_business_activity_taxonomy.sql").read_text(encoding="utf-8")
+        cls.expansion = (MIGRATIONS / "20261023231322_business_activity_taxonomy_expansion.sql").read_text(encoding="utf-8")
+        cls.catalog_schema = (MIGRATIONS / "20261023231027_universal_commercial_catalog.sql").read_text(encoding="utf-8")
         cls.profile_screen = (ANDROID / "ActivityProfileScreen.kt").read_text(encoding="utf-8")
-        cls.policy_fix = (MIGRATIONS / "20261024113000_catalog_policy_deduplication.sql").read_text(encoding="utf-8")
-        cls.integrity_fix = (MIGRATIONS / "20261024114000_catalog_integrity_performance.sql").read_text(encoding="utf-8")
-        cls.alias_guard = (MIGRATIONS / "20261024115000_business_activity_alias_global_uniqueness.sql").read_text(encoding="utf-8")
-        cls.depth_fix = (MIGRATIONS / "20261024116000_business_activity_unbounded_api_depth.sql").read_text(encoding="utf-8")
+        cls.policy_fix = (MIGRATIONS / "20261023231436_catalog_policy_deduplication.sql").read_text(encoding="utf-8")
+        cls.integrity_fix = (MIGRATIONS / "20261023231525_catalog_integrity_performance.sql").read_text(encoding="utf-8")
+        cls.alias_guard = (MIGRATIONS / "20261023231649_business_activity_alias_global_uniqueness.sql").read_text(encoding="utf-8")
+        cls.depth_fix = (MIGRATIONS / "20261023231736_business_activity_unbounded_api_depth.sql").read_text(encoding="utf-8")
 
     def test_activity_taxonomy_does_not_duplicate_product_or_unit_masters(self):
         self.assertIn("commercial_global_business_activity_nodes", self.taxonomy)
