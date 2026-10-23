@@ -7,7 +7,7 @@ ALTER TABLE public.commercial_global_catalog_categories
   ADD COLUMN IF NOT EXISTS updated_by uuid REFERENCES auth.users(id);
 
 ALTER TABLE public.commercial_global_catalog_items
-  ADD COLUMN IF NOT EXISTS owner_organization_id uuid REFERENCES public.commercial_organizations(id) ON DELETE CASCADE,
+  ADD COLUMN IF NOT EXISTS owner_organization_id uuid REFERENCES public.commercial_organizations(id) ON DELETE RESTRICT,
   ADD COLUMN IF NOT EXISTS brand text,
   ADD COLUMN IF NOT EXISTS manufacturer_name text,
   ADD COLUMN IF NOT EXISTS country_of_manufacture text,
