@@ -409,7 +409,7 @@ private fun SalesScreen(sales: List<SaleRecord>, onNewSale: () -> Unit) {
         }
         item { Button(onClick = onNewSale, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(8.dp)); Text("فاتورة بيع جديدة") } }
         item { Heading("أحدث الفواتير", "الفواتير المحفوظة على هذا الجهاز") }
-        items(sales) { sale -> SaleRow("فاتورة #${sale.number}", "${sale.product} · ${sale.quantity} قطعة", money(sale.total), sale.credit) }
+        items(sales) { sale -> SaleRow("فاتورة #${sale.number}", "${sale.product} · ${sale.quantity} ${sale.unitCode}", money(sale.total), sale.credit) }
         
     }
 }
@@ -494,7 +494,7 @@ private fun SaleEntryDialog(
     var selected by remember { mutableIntStateOf(0) }
     var selectedUnitIndex by remember(selected) { mutableIntStateOf(-1) }
     var quantityText by remember { mutableStateOf("1") }
-    var priceOverrideText by remember { mutableStateOf("") }
+    var priceOverrideText by remember(selected, selectedUnitIndex) { mutableStateOf("") }
     var credit by remember { mutableStateOf(false) }
     var customer by remember { mutableStateOf("") }
     var unitExpanded by remember { mutableStateOf(false) }
@@ -985,7 +985,7 @@ private fun DebtScreen(sales: List<SaleRecord>, settlements: List<SettlementReco
             Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, Border), modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                     Text(sale.customer.ifBlank { "عميل غير محدد" }, color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    Text("فاتورة #${sale.number} • ${sale.product} × ${sale.quantity}", color = Muted, fontSize = 12.sp)
+                    Text("فاتورة #${sale.number} • ${sale.product} × ${sale.quantity} ${sale.unitCode}", color = Muted, fontSize = 12.sp)
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("قيمة الفاتورة: ${money(sale.total)}", color = Muted, fontSize = 12.sp)
                         Text("المسدّد: ${money(sale.paid)}", color = Green, fontSize = 12.sp)
