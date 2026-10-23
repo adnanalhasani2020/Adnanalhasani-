@@ -30,7 +30,7 @@ internal data class CatalogProduct(
     val categoryCode: String, val category: String, val brand: String, val manufacturer: String,
     val countryOfManufacture: String, val imageUrl: String, val prescriptionOnly: Boolean,
     val recommendationScore: Int, val barcode: String = "", val unitCode: String = "EA",
-    val availableUnits: List<CatalogUnit> = emptyList(), val createdBy: String = "", val createdAt: String = ""
+    val availableUnits: List<CatalogUnit> = emptyList(), val createdBy: String = "", val createdAt: String = "", val importedBy: String = ""
 )
 private data class CatalogCategory(val code: String, val parentCode: String, val nameAr: String, val nameEn: String)
 private data class DirectoryUnit(val code: String, val nameAr: String, val nameEn: String, val dimension: String, val baseCode: String, val factor: String, val owner: String)\nprivate data class PendingTransfer(val id: String, val source: String, val destination: String, val itemCount: Int, val createdAt: String)
@@ -77,7 +77,7 @@ private fun catalogGet(path: String, token: String): String {
 @Composable
 internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct) -> Unit) {
     var email by remember { mutableStateOf("") }; var password by remember { mutableStateOf("") }
-    var token by remember { mutableStateOf<String?>(null) }; var organizationId by remember { mutableStateOf("") }
+    var token by remember { mutableStateOf<String?>(null) }; var signedInUserId by remember { mutableStateOf("") }; var organizationId by remember { mutableStateOf("") }
     var section by remember { mutableStateOf("browse") }
     var sector by remember { mutableStateOf("retail") }; var businessLevel by remember { mutableStateOf("shop") }
     var country by remember { mutableStateOf("YE") }; var region by remember { mutableStateOf("") }; var city by remember { mutableStateOf("") }
@@ -156,7 +156,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                     recommendationScore=row.optInt("recommendation_score"),barcode=row.optString("barcode"),unitCode=row.optString("unit_code").ifBlank { "EA" },
                     availableUnits=row.optJSONArray("available_units")?.let { arr -> List(arr.length()) { j ->
                         val u=arr.getJSONObject(j); CatalogUnit(u.optString("unit_code"),u.optString("unit_role"),u.optString("quantity_in_base","1"),u.optString("barcode"),u.optString("package_name"),u.optString("image_url"),u.optBoolean("is_default"))
-                    } } ?: emptyList(),createdBy=row.optString("created_by"),createdAt=row.optString("created_at")
+                    } } ?: emptyList(),createdBy=row.optString("created_by"),createdAt=row.optString("created_at"),importedBy=signedInUserId
                 )
             }
             feedback="تم جلب ${items.size} صنفًا. راجع بيانات القوالب العامة قبل اعتمادها."
@@ -320,8 +320,9 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                 item { OutlinedTextField(password,{password=it},Modifier.fillMaxWidth(),label={Text("كلمة المرور")},singleLine=true) }
                 item { Button(onClick={request({
                     val raw=catalogHttp("/auth/v1/token?grant_type=password",JSONObject().put("email",email).put("password",password))
-                    val access=JSONObject(raw).optString("access_token"); if(access.isBlank()) throw IllegalStateException("لم تُرجع خدمة المصادقة جلسة صالحة."); access
-                },{token=it;feedback="تم تسجيل الدخول. أدخل معرّف المؤسسة للمتابعة."})},enabled=!busy && email.contains("@") && password.isNotBlank(),modifier=Modifier.fillMaxWidth()) { Text(if(busy) "جارٍ تسجيل الدخول..." else "تسجيل الدخول") } }
+                    val session=JSONObject(raw); val access=session.optString("access_token"); if(access.isBlank()) throw IllegalStateException("لم تُرجع خدمة المصادقة جلسة صالحة.")
+                    "${access}|${session.optJSONObject("user")?.optString("id").orEmpty()}"
+                },{sessionValue -> val parts=sessionValue.split("|",limit=2); token=parts[0]; signedInUserId=parts.getOrNull(1).orEmpty(); feedback="تم تسجيل الدخول. أدخل معرّف المؤسسة للمتابعة."})},enabled=!busy && email.contains("@") && password.isNotBlank(),modifier=Modifier.fillMaxWidth()) { Text(if(busy) "جارٍ تسجيل الدخول..." else "تسجيل الدخول") } }
                 item { Text("تُستخدم الجلسة داخل هذه الشاشة فقط ولا تُحفظ كلمة المرور. لا تستخدم مفتاح service_role في التطبيق.",color=MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.bodySmall) }
             }
         } else {
