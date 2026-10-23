@@ -21,7 +21,12 @@ CREATE OR REPLACE FUNCTION public.commercial_catalog_discover_products(
   country_of_manufacture text,
   image_url text,
   is_prescription_only boolean,
-  recommendation_score integer
+  recommendation_score integer,
+  barcode text,
+  unit_code text,
+  available_units jsonb,
+  created_by uuid,
+  created_at timestamptz
 )
 LANGUAGE plpgsql
 SECURITY INVOKER
@@ -66,8 +71,30 @@ BEGIN
       SELECT 1 FROM public.commercial_catalog_product_sectors s
       WHERE s.product_id=p.id AND NOT s.is_excluded
         AND s.sector_code IN ('all',p_sector_code)
-    ) THEN 20 ELSE 0 END
+    ) THEN 20 ELSE 0 END,
+    p.barcode_gtin,
+    COALESCE(default_unit.unit_code,p.unit_code,'EA'),
+    COALESCE(unit_list.units,'[]'::jsonb),
+    p.created_by,
+    p.created_at
   FROM public.commercial_global_catalog_items p
+  LEFT JOIN LATERAL (
+    SELECT pu.unit_code
+    FROM public.commercial_catalog_product_units pu
+    WHERE pu.product_id=p.id AND pu.is_active
+    ORDER BY pu.is_default DESC, CASE pu.unit_role WHEN 'base' THEN 0 WHEN 'sale' THEN 1 ELSE 2 END, pu.created_at
+    LIMIT 1
+  ) default_unit ON true
+  LEFT JOIN LATERAL (
+    SELECT jsonb_agg(jsonb_build_object(
+      'unit_code',pu.unit_code,'unit_role',pu.unit_role,'quantity_in_base',pu.quantity_in_base,
+      'barcode',pu.barcode,'sku',pu.sku,'package_name',pu.package_name,
+      'net_quantity',pu.net_quantity,'net_unit_code',pu.net_unit_code,'image_url',pu.image_url,
+      'is_default',pu.is_default
+    ) ORDER BY pu.is_default DESC, pu.unit_role, pu.unit_code) AS units
+    FROM public.commercial_catalog_product_units pu
+    WHERE pu.product_id=p.id AND pu.is_active
+  ) unit_list ON true
   LEFT JOIN public.commercial_global_catalog_categories c ON c.code=p.category_code
   LEFT JOIN public.commercial_global_entity_translations gtname
     ON gtname.entity_type='catalog_item' AND gtname.entity_key=p.catalog_code
