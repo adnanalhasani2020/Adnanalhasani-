@@ -179,8 +179,9 @@ class CommercialWebApplication:
 
     @staticmethod
     def _supabase_auth_enabled() -> bool:
-        return (os.environ.get("SUPABASE_URL", "").startswith("https://")
-                and bool(os.environ.get("SUPABASE_ANON_KEY", "")))
+        # If either setting is supplied, select Supabase and fail closed on bad config;
+        # never silently downgrade a partially configured deployment to local passwords.
+        return bool(os.environ.get("SUPABASE_URL") or os.environ.get("SUPABASE_ANON_KEY"))
 
     def __call__(self, environ, start_response):
         method, path = environ.get("REQUEST_METHOD", "GET"), environ.get("PATH_INFO", "/")
