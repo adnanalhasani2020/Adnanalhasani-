@@ -156,9 +156,8 @@ BEGIN
   );
 
   INSERT INTO public.commercial_audit_events (
-    id, organization_id, actor_user_id, action, entity_type, entity_id, metadata
+    organization_id, actor_user_id, action, entity_type, entity_id, metadata
   ) VALUES (
-    nextval('public.commercial_audit_events_id_seq'::regclass),
     v_org_id, v_uid, 'sale.completed', 'sale', v_sale_id::text,
     jsonb_build_object('receipt_number', v_receipt_number, 'offering_id', p_offering_id,
                        'location_id', p_location_id, 'quantity', p_quantity,
