@@ -142,10 +142,12 @@ def test_supabase_auth_ui_uses_email_fields_when_configured(monkeypatch):
     assert 'name="commercial_registration_number"' in page
     assert 'name="owner_full_name"' in page
     assert 'name="opened_on"' in page
-    assert 'id="storeLogo"' in page
-    assert 'id="storeCover"' in page
-    assert 'id="ownerIdentityFront"' in page
-    assert 'id="ownerIdentityBack"' in page
+    assert 'id="storeLogoUrl" name="logo_url" type="url"' in page
+    assert 'id="storeCoverUrl" name="cover_image_url" type="url"' in page
+    assert 'id="ownerIdentityFrontUrl" name="owner_identity_front_url" type="url"' in page
+    assert 'id="ownerIdentityBackUrl" name="owner_identity_back_url" type="url"' in page
+    assert 'type="file"' not in page
+    assert "/api/supabase/profile-assets" not in page
     assert 'id="locationRows"' in page
     assert 'firstProductName' not in page
     assert 'initialQuantity' not in page
@@ -237,8 +239,10 @@ def test_profile_api_persists_activity_owner_registration_and_hierarchy(tmp_path
                   "commercial_registration_number": "CR-001", "opened_on": "2024-05-10",
                   "owner_full_name": "مالك النشاط", "legal_name": "مؤسسة النور",
                   "country_code": "YE", "timezone": "Asia/Aden", "locale": "ar",
-                  "currency_code": "YER", "logo_url": "https://example.com/logo.png",
-                  "cover_image_url": "https://example.com/cover.png",
+                  "currency_code": "YER", "logo_url": "https://images.example.com/logo.png",
+                  "cover_image_url": "https://images.example.com/cover.png",
+                  "owner_identity_front_url": "https://images.example.com/front.png",
+                  "owner_identity_back_url": "https://images.example.com/back.png",
                   "locations": [
                       {"name": "القناة الأولى", "location_type": "office", "parent_index": -1},
                       {"name": "فرع القناة الأولى", "location_type": "branch", "parent_index": 0},
@@ -250,4 +254,8 @@ def test_profile_api_persists_activity_owner_registration_and_hierarchy(tmp_path
     args = client_class.return_value.create_activity_profile.call_args.kwargs
     assert args["commercial_registration_number"] == "CR-001"
     assert args["opened_on"] == "2024-05-10"
+    assert args["logo_url"] == "https://images.example.com/logo.png"
+    assert args["cover_image_url"] == "https://images.example.com/cover.png"
+    assert args["owner_identity_front_url"] == "https://images.example.com/front.png"
+    assert args["owner_identity_back_url"] == "https://images.example.com/back.png"
     assert args["locations"][1]["parent_index"] == 0
