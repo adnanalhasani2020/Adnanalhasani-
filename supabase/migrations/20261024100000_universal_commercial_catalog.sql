@@ -517,6 +517,30 @@ SELECT 'unit',u.code,'en','name',u.name_en,'en'
 FROM public.commercial_global_units u WHERE u.code IN ('PAIR','SET','M3','CM2','HA','SEC','MIN','CARTON','PALLET','KWH','GB')
 ON CONFLICT DO NOTHING;
 
+-- Seed activity targeting for the existing starter catalog; future activity codes remain unrestricted.
+INSERT INTO public.commercial_catalog_product_sectors(product_id,sector_code)
+SELECT i.id, s.sector_code
+FROM public.commercial_global_catalog_items i
+JOIN (VALUES
+ ('FOOD-GRAINS','retail'),('FOOD-GRAINS','healthcare'),('FOOD-GRAINS','general'),('FOOD-GRAINS','manufacturing'),
+ ('FOOD-SWEETENERS','retail'),('FOOD-SWEETENERS','healthcare'),('FOOD-SWEETENERS','general'),('FOOD-SWEETENERS','manufacturing'),
+ ('FOOD-OILS','retail'),('FOOD-OILS','healthcare'),('FOOD-OILS','general'),('FOOD-OILS','manufacturing'),
+ ('FOOD-DRINKS','retail'),('FOOD-DRINKS','healthcare'),('FOOD-DRINKS','general'),('FOOD-DRINKS','services'),
+ ('FOOD-DAIRY','retail'),('FOOD-DAIRY','healthcare'),('FOOD-DAIRY','general'),('FOOD-DAIRY','manufacturing'),
+ ('FOOD-BAKERY','retail'),('FOOD-BAKERY','healthcare'),('FOOD-BAKERY','general'),('FOOD-BAKERY','services'),
+ ('HOUSEHOLD-CLEANING','retail'),('HOUSEHOLD-CLEANING','healthcare'),('HOUSEHOLD-CLEANING','general'),('HOUSEHOLD-CLEANING','services'),
+ ('OFFICE-SUPPLIES','retail'),('OFFICE-SUPPLIES','education'),('OFFICE-SUPPLIES','general'),('OFFICE-SUPPLIES','services'),
+ ('CONSTRUCTION','manufacturing'),('CONSTRUCTION','logistics'),('CONSTRUCTION','general'),
+ ('ELECTRICAL','manufacturing'),('ELECTRICAL','logistics'),('ELECTRICAL','retail'),('ELECTRICAL','services'),
+ ('TEXTILES','retail'),('TEXTILES','manufacturing'),('TEXTILES','healthcare'),('TEXTILES','services'),
+ ('ASSETS-EQUIPMENT','logistics'),('ASSETS-EQUIPMENT','manufacturing'),('ASSETS-EQUIPMENT','general'),('ASSETS-EQUIPMENT','healthcare'),
+ ('DIGITAL-SERVICES','services'),('DIGITAL-SERVICES','general'),('DIGITAL-SERVICES','retail'),
+ ('PROFESSIONAL-SERVICES','services'),('PROFESSIONAL-SERVICES','general'),('PROFESSIONAL-SERVICES','healthcare'),
+ ('MAINTENANCE','services'),('MAINTENANCE','general'),('MAINTENANCE','manufacturing'),('MAINTENANCE','logistics')
+) AS s(category_code,sector_code) ON s.category_code=i.category_code
+WHERE i.owner_organization_id IS NULL AND i.is_active
+ON CONFLICT (product_id,sector_code) DO NOTHING;
+
 COMMENT ON TABLE public.commercial_global_catalog_items IS
 'Canonical universal product master, extended additively with manufacturing, recipe, safety, tracking and external image metadata.';
 COMMENT ON TABLE public.commercial_global_catalog_categories IS
