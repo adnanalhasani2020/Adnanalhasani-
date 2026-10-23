@@ -40,7 +40,10 @@ CREATE OR REPLACE FUNCTION public.commercial_catalog_discover_products(
   requires_expiry_date boolean,
   is_batch_tracked boolean,
   is_serial_tracked boolean,
-  rulings jsonb
+  rulings jsonb,
+  model_number text,
+  part_number text,
+  image_alt text
 )
 LANGUAGE plpgsql
 SECURITY INVOKER
@@ -104,7 +107,10 @@ BEGIN
     p.requires_expiry_date,
     p.is_batch_tracked,
     p.is_serial_tracked,
-    COALESCE(ruling_list.rulings,'[]'::jsonb)
+    COALESCE(ruling_list.rulings,'[]'::jsonb),
+    p.model_number,
+    p.part_number,
+    p.image_alt
   FROM public.commercial_global_catalog_items p
   LEFT JOIN LATERAL (
     SELECT pu.unit_code
