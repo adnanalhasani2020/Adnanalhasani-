@@ -57,8 +57,8 @@ BEGIN
   INSERT INTO public.commercial_global_entity_translations(
     entity_type,entity_key,locale_code,field_key,translated_value,translation_status,source_language,owner_organization_id,created_by
   ) VALUES
-    ('catalog_category',v_code,'ar','name',btrim(p_name_ar),'reviewed','ar',p_organization_id,auth.uid()),
-    ('catalog_category',v_code,'en','name',btrim(p_name_en),'reviewed','en',p_organization_id,auth.uid())
+    ('catalog_category',v_code,'ar','name',btrim(p_name_ar),'human_reviewed','ar',p_organization_id,auth.uid()),
+    ('catalog_category',v_code,'en','name',btrim(p_name_en),'human_reviewed','en',p_organization_id,auth.uid())
   ON CONFLICT (entity_type,entity_key,locale_code,field_key) DO UPDATE
     SET translated_value=EXCLUDED.translated_value,owner_organization_id=EXCLUDED.owner_organization_id;
   RETURN jsonb_build_object('category_code',v_code,'parent_code',p_parent_code);
@@ -106,8 +106,8 @@ BEGIN
   INSERT INTO public.commercial_global_entity_translations(
     entity_type,entity_key,locale_code,field_key,translated_value,translation_status,source_language,owner_organization_id,created_by
   ) VALUES
-    ('unit',v_code,'ar','name',btrim(p_name_ar),'reviewed','ar',p_organization_id,auth.uid()),
-    ('unit',v_code,'en','name',btrim(p_name_en),'reviewed','en',p_organization_id,auth.uid())
+    ('unit',v_code,'ar','name',btrim(p_name_ar),'human_reviewed','ar',p_organization_id,auth.uid()),
+    ('unit',v_code,'en','name',btrim(p_name_en),'human_reviewed','en',p_organization_id,auth.uid())
   ON CONFLICT (entity_type,entity_key,locale_code,field_key) DO UPDATE
     SET translated_value=EXCLUDED.translated_value,owner_organization_id=EXCLUDED.owner_organization_id;
   RETURN jsonb_build_object('unit_code',v_code,'base_unit_code',p_base_unit_code,'dimension',p_dimension);
@@ -191,8 +191,8 @@ BEGIN
   INSERT INTO public.commercial_global_entity_translations(
     entity_type,entity_key,locale_code,field_key,translated_value,translation_status,source_language,owner_organization_id,created_by
   ) VALUES
-    ('catalog_item',v_code,'ar','name',btrim(p_product->>'name_ar'),'reviewed','ar',p_organization_id,auth.uid()),
-    ('catalog_item',v_code,'en','name',btrim(p_product->>'name_en'),'reviewed','en',p_organization_id,auth.uid())
+    ('catalog_item',v_code,'ar','name',btrim(p_product->>'name_ar'),'human_reviewed','ar',p_organization_id,auth.uid()),
+    ('catalog_item',v_code,'en','name',btrim(p_product->>'name_en'),'human_reviewed','en',p_organization_id,auth.uid())
   ON CONFLICT (entity_type,entity_key,locale_code,field_key) DO UPDATE
     SET translated_value=EXCLUDED.translated_value,owner_organization_id=EXCLUDED.owner_organization_id;
 
