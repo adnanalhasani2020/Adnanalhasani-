@@ -45,7 +45,7 @@ class MainActivity : ComponentActivity() {
 }
 
 internal data class Product(val name: String, val category: String, val stock: Int, val price: String, val costPrice: Int = 0, val catalogCode: String = "", val barcode: String = "", val unitCode: String = "EA", val imageUrl: String = "", val description: String = "", val brand: String = "", val manufacturer: String = "", val countryOfManufacture: String = "", val createdAt: Long = System.currentTimeMillis(), val createdBy: String = "", val unitVariantsJson: String = "[]")
-internal data class SaleRecord(val number: Int, val product: String, val quantity: Int, val total: Int, val credit: Boolean, val customer: String = "", val paid: Int = 0, val createdAt: Long = System.currentTimeMillis(), val unitCost: Int = 0)
+internal data class SaleRecord(val number: Int, val product: String, val quantity: Int, val total: Int, val credit: Boolean, val customer: String = "", val paid: Int = 0, val createdAt: Long = System.currentTimeMillis(), val unitCost: Int = 0, val unitCode: String = "EA", val baseQuantitySold: Int = quantity)
 internal data class SettlementRecord(val invoiceNumber: Int, val customer: String, val amount: Int, val timestamp: Long = System.currentTimeMillis())
 internal data class ExpenseRecord(val id: Long, val category: String, val amount: Int, val note: String, val timestamp: Long = System.currentTimeMillis())
 private fun money(value: Int): String = String.format(Locale.US, "%,d ر.ي", value)
@@ -84,7 +84,7 @@ private fun loadSales(context: Context): List<SaleRecord> {
         List(json.length()) { i ->
             val item = json.getJSONObject(i)
             SaleRecord(item.getInt("number"), item.getString("product"), item.getInt("quantity"),
-                item.getInt("total"), item.getBoolean("credit"), item.optString("customer", ""), item.optInt("paid", 0), item.optLong("createdAt", 0L), item.optInt("unitCost", 0))
+                item.getInt("total"), item.getBoolean("credit"), item.optString("customer", ""), item.optInt("paid", 0), item.optLong("createdAt", 0L), item.optInt("unitCost", 0), item.optString("unitCode", "EA"), item.optInt("baseQuantitySold", item.optInt("quantity", 1)))
         }
     }.getOrElse { emptyList() }
 }
@@ -135,7 +135,7 @@ private fun saveSales(context: Context, items: List<SaleRecord>) {
     items.forEach { item ->
         json.put(JSONObject().put("number", item.number).put("product", item.product)
             .put("quantity", item.quantity).put("total", item.total).put("credit", item.credit)
-            .put("customer", item.customer).put("paid", item.paid).put("createdAt", item.createdAt).put("unitCost", item.unitCost))
+            .put("customer", item.customer).put("paid", item.paid).put("createdAt", item.createdAt).put("unitCost", item.unitCost).put("unitCode", item.unitCode).put("baseQuantitySold", item.baseQuantitySold))
     }
     context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).edit().putString(SALES_KEY, json.toString()).apply()
 }
@@ -458,16 +458,28 @@ private fun SaleRow(title: String, subtitle: String, amount: String, credit: Boo
 private fun SaleEntryDialog(
     inventory: List<Product>,
     onDismiss: () -> Unit,
-    onSave: (Int, String, Int, Boolean, Int, String) -> Unit
+    onSave: (Int, String, Int, Boolean, Int, String, Int, String) -> Unit
 ) {
     var selected by remember { mutableIntStateOf(0) }
+    var selectedUnitIndex by remember(selected) { mutableIntStateOf(-1) }
     var quantityText by remember { mutableStateOf("1") }
+    var priceOverrideText by remember { mutableStateOf("") }
     var credit by remember { mutableStateOf(false) }
     var customer by remember { mutableStateOf("") }
+    var unitExpanded by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val product = inventory[selected.coerceIn(0, inventory.lastIndex)]
+    val saleUnits = localSaleUnits(product)
+    val defaultUnitIndex = saleUnits.indexOfFirst { it.isDefault }.takeIf { it >= 0 } ?: 0
+    val effectiveUnitIndex = selectedUnitIndex.takeIf { it in saleUnits.indices } ?: defaultUnitIndex
+    val selectedUnit = saleUnits[effectiveUnitIndex]
+    val basePrice = product.price.replace(",", "").replace(" ر.ي", "").toIntOrNull() ?: 0
+    val suggestedUnitPrice = (basePrice * selectedUnit.quantityInBase).toInt()
     val quantity = quantityText.toIntOrNull()
-    val unitPrice = product.price.replace(",", "").replace(" ر.ي", "").toIntOrNull() ?: 0
+    val unitPrice = priceOverrideText.toIntOrNull() ?: suggestedUnitPrice
+    val baseQuantityExact = (quantity ?: 0) * selectedUnit.quantityInBase
+    val baseQuantity = kotlin.math.round(baseQuantityExact).toInt()
+    val quantityIsWholeBaseUnits = kotlin.math.abs(baseQuantityExact - baseQuantity) < 0.000001
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("فاتورة بيع جديدة", fontWeight = FontWeight.Bold, color = Ink) },
