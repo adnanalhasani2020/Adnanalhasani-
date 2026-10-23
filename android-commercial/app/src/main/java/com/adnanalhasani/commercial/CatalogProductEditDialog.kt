@@ -47,21 +47,21 @@ internal fun CatalogProductEditDialog(
     var nameEn by remember(item.id) { mutableStateOf(item.nameEn) }
     var descriptionAr by remember(item.id) { mutableStateOf(item.descriptionAr) }
     var descriptionEn by remember(item.id) { mutableStateOf(item.descriptionEn) }
-    var brand by remember(item.id) { mutableStateOf(item.brand) }
-    var manufacturer by remember(item.id) { mutableStateOf(item.manufacturer) }
-    var country by remember(item.id) { mutableStateOf(item.countryOfManufacture) }
-    var model by remember(item.id) { mutableStateOf(item.modelNumber) }
-    var part by remember(item.id) { mutableStateOf(item.partNumber) }
+    var brand by remember(item.id) { mutableStateOf(item.rawBrand) }
+    var manufacturer by remember(item.id) { mutableStateOf(item.rawManufacturer) }
+    var country by remember(item.id) { mutableStateOf(item.rawCountryOfManufacture) }
+    var model by remember(item.id) { mutableStateOf(item.rawModelNumber) }
+    var part by remember(item.id) { mutableStateOf(item.rawPartNumber) }
     var barcode by remember(item.id) { mutableStateOf(item.barcodeGtin) }
     var imageUrl by remember(item.id) { mutableStateOf(item.imageUrl) }
-    var imageAlt by remember(item.id) { mutableStateOf(item.imageAlt) }
+    var imageAlt by remember(item.id) { mutableStateOf(item.rawImageAlt) }
     var material by remember(item.id) { mutableStateOf(jsonArrayLines(item.rawMaterialComposition)) }
     var ingredients by remember(item.id) { mutableStateOf(jsonArrayLines(item.rawIngredients)) }
     var specificationsJson by remember(item.id) { mutableStateOf(item.rawSpecifications.ifBlank { "{}" }) }
     var allergens by remember(item.id) { mutableStateOf(jsonArrayLines(item.rawAllergens)) }
-    var storage by remember(item.id) { mutableStateOf(item.storageInstructions) }
-    var usage by remember(item.id) { mutableStateOf(item.usageInstructions) }
-    var warnings by remember(item.id) { mutableStateOf(item.warnings) }
+    var storage by remember(item.id) { mutableStateOf(item.rawStorageInstructions) }
+    var usage by remember(item.id) { mutableStateOf(item.rawUsageInstructions) }
+    var warnings by remember(item.id) { mutableStateOf(item.rawWarnings) }
     var shelfLife by remember(item.id) { mutableStateOf(item.shelfLifeDays?.toString().orEmpty()) }
     var attributesJson by remember(item.id) { mutableStateOf(item.rawAttributesSchema.ifBlank { "{}" }) }
     var requiresExpiry by remember(item.id) { mutableStateOf(item.requiresExpiryDate) }
