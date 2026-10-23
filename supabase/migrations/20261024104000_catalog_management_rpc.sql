@@ -599,15 +599,8 @@ BEGIN
     ));
   IF NOT FOUND THEN RAISE EXCEPTION 'catalog_ruling_not_found' USING ERRCODE='22023'; END IF;
   IF v_confidence='official' THEN RAISE EXCEPTION 'official_ruling_cannot_be_downgraded' USING ERRCODE='22023'; END IF;
-  IF nullif(btrim(v_source_title),'') IS NULL OR v_source_url IS NULL OR v_source_url !~* '^https://[^[:space:]]+$' THEN
-  SET confidence='reviewed',reviewed_by=auth.uid(),reviewed_at=now(),
-      rationale=COALESCE(nullif(btrim(p_review_note),''),rationale)
-  WHERE id=p_ruling_id;
-  RETURN jsonb_build_object('ruling_id',p_ruling_id,'product_id',v_product_id,'confidence','reviewed','reviewed_by',auth.uid());
-END $$;
-REVOKE ALL ON FUNCTION public.commercial_catalog_review_ruling(uuid,uuid,text) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.commercial_catalog_review_ruling(uuid,uuid,text) TO authenticated;
- THEN
+  IF nullif(btrim(v_source_title),'') IS NULL OR v_source_url IS NULL
+     OR left(v_source_url,8)<>'https://' OR v_source_url ~ '[[:space:]]' THEN
     RAISE EXCEPTION 'ruling_requires_verifiable_https_source' USING ERRCODE='22023';
   END IF;
   UPDATE public.commercial_catalog_product_rulings
