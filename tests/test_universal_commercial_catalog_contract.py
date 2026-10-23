@@ -76,6 +76,9 @@ class UniversalCommercialCatalogContractTests(unittest.TestCase):
         for field in ("catalogCode", "barcode", "unitCode", "imageUrl", "manufacturer", "countryOfManufacture"):
             self.assertIn(field, self.main)
         self.assertIn("إضافة إلى المخزون المحلي", self.android)
+        self.assertIn("quantityIsWholeBaseUnits", self.main)
+        self.assertIn("baseQuantitySold", self.main)
+        self.assertIn("commercial_catalog_product_units", self.main)
         self.assertIn("commercial_catalog_create_product", self.android)
         self.assertIn("commercial_catalog_send_transfer", self.android)
 
