@@ -82,35 +82,6 @@ class SupabaseRPCClient:
             raise SupabaseRPCError("Unexpected storefront-creation response; verify the result before retrying.")
         return result
 
-    def upload_object(self, *, bucket: str, object_path: str, content: bytes, content_type: str,
-                      public: bool = False) -> str:
-        from urllib.parse import quote
-        if bucket not in {"commercial-brand-assets", "commercial-owner-identities"}:
-            raise ValueError("Unsupported storage bucket.")
-        if not object_path or any(part in {"", ".", ".."} for part in object_path.split("/")):
-            raise ValueError("Invalid storage object path.")
-        if not content or len(content) > 5_000_000:
-            raise SupabaseRPCError("Image/document size must be between 1 byte and 5 MB.")
-        encoded_path = quote(object_path, safe="/")
-        request = Request(
-            f"{self.url}/storage/v1/object/{bucket}/{encoded_path}",
-            data=content, method="POST",
-            headers={"apikey": self.anon_key, "Authorization": f"Bearer {self.access_token}",
-                     "Content-Type": content_type, "x-upsert": "false", "Cache-Control": "no-store"},
-        )
-        try:
-            with urlopen(request, timeout=self.timeout) as response:
-                response.read(65536)
-        except HTTPError as exc:
-            if exc.code in (400, 401, 403, 409, 413):
-                raise SupabaseRPCError(f"Supabase Storage rejected the upload (HTTP {exc.code}).") from None
-            raise SupabaseRPCError(f"Supabase Storage upload failed (HTTP {exc.code}).") from None
-        except (URLError, TimeoutError, OSError):
-            raise SupabaseRPCError("Storage upload failed; verify the file before retrying.") from None
-        if public:
-            return f"{self.url}/storage/v1/object/public/{bucket}/{encoded_path}"
-        return object_path
-
     def create_activity_profile(self, *, organization_name: str, organization_slug: str, activity_name: str,
                                 activity_type: str, business_level: str, commercial_registration_number: str,
                                 opened_on: str, owner_full_name: str, legal_name: str | None,
@@ -121,8 +92,8 @@ class SupabaseRPCClient:
                                 street: str | None = None, landmark: str | None = None,
                                 logo_url: str | None = None, cover_image_url: str | None = None,
                                 locations: list | None = None,
-                                owner_identity_front_path: str | None = None,
-                                owner_identity_back_path: str | None = None) -> dict:
+                                owner_identity_front_url: str | None = None,
+                                owner_identity_back_url: str | None = None) -> dict:
         result = self.rpc("commercial_create_activity_profile", {
             "p_organization_name": organization_name, "p_organization_slug": organization_slug,
             "p_activity_name": activity_name, "p_activity_type": activity_type,
@@ -133,8 +104,8 @@ class SupabaseRPCClient:
             "p_website_url": website_url, "p_public_description": public_description, "p_city": city,
             "p_district": district, "p_street": street, "p_landmark": landmark,
             "p_logo_url": logo_url, "p_cover_image_url": cover_image_url,
-            "p_owner_identity_front_path": owner_identity_front_path,
-            "p_owner_identity_back_path": owner_identity_back_path, "p_locations": locations or [],
+            "p_owner_identity_front_url": owner_identity_front_url,
+            "p_owner_identity_back_url": owner_identity_back_url, "p_locations": locations or [],
         })
         if not isinstance(result, dict) or not result.get("organization_id") or not result.get("activity_id"):
             raise SupabaseRPCError("Unexpected activity profile response; verify the result before retrying.")
