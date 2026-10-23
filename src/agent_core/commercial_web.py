@@ -92,10 +92,10 @@ PAGE = r"""<!doctype html>
 <div><label for="storeDistrict">الحي</label><input id="storeDistrict" name="district" maxlength="240"></div>
 <div><label for="storeStreet">الشارع والعنوان</label><input id="storeStreet" name="street" maxlength="240"></div>
 <div><label for="storeLandmark">علامة مميزة</label><input id="storeLandmark" name="landmark" maxlength="240"></div>
-<div><label for="storeLogo">شعار / أيقونة الحساب</label><input id="storeLogo" type="file" accept="image/png,image/jpeg,image/webp"></div>
-<div><label for="storeCover">صورة غلاف الحساب</label><input id="storeCover" type="file" accept="image/png,image/jpeg,image/webp"></div>
-<div><label for="ownerIdentityFront">صورة الهوية — الوجه الأمامي (خاص)</label><input id="ownerIdentityFront" type="file" accept="image/png,image/jpeg,image/webp,application/pdf"></div>
-<div><label for="ownerIdentityBack">صورة الهوية — الوجه الخلفي (خاص)</label><input id="ownerIdentityBack" type="file" accept="image/png,image/jpeg,image/webp,application/pdf"></div>
+<div><label for="storeLogoUrl">رابط الشعار الخارجي (HTTPS)</label><input id="storeLogoUrl" name="logo_url" type="url" maxlength="500" placeholder="https://..."></div>
+<div><label for="storeCoverUrl">رابط صورة الغلاف الخارجية (HTTPS)</label><input id="storeCoverUrl" name="cover_image_url" type="url" maxlength="500" placeholder="https://..."></div>
+<div><label for="ownerIdentityFrontUrl">رابط الهوية الأمامية (HTTPS خاص)</label><input id="ownerIdentityFrontUrl" name="owner_identity_front_url" type="url" maxlength="500" placeholder="https://..."></div>
+<div><label for="ownerIdentityBackUrl">رابط الهوية الخلفية (HTTPS خاص)</label><input id="ownerIdentityBackUrl" name="owner_identity_back_url" type="url" maxlength="500" placeholder="https://..."></div>
 </div><label for="storeDescription">وصف النشاط</label><textarea id="storeDescription" name="public_description" rows="3" maxlength="2000"></textarea>
 <h2>الفروع والقنوات والأقسام</h2><p class="muted">أضف المواقع بالترتيب واختر الموقع الأب لإنشاء هيكل هرمي. اترك القائمة فارغة إذا كان للنشاط موقع واحد فقط.</p>
 <div id="locationRows"></div><div class="row"><button id="addLocationRow" type="button">+ إضافة فرع / قناة / قسم</button></div>
@@ -151,7 +151,7 @@ $('cancelStoreSetup').onclick=showPortal;$('returnPortal').onclick=showPortal;
 $('customerPath').onclick=()=>{$('portalStatus').textContent='مسار المواطن/الزبون منفصل ويحتاج استكمال وظائفه.'};
 $('openSales').onclick=async()=>{showAccountSection('shop');try{const me=await api('/api/me');loadReportSettings(me.person_id);await loadCatalog();await loadRecentReceipts()}catch(err){message(err.message)}};
 $('openStoreSetup').onclick=()=>{if(currentStore){$('storeReadyDetails').textContent='تم حفظ ملف النشاط في هذه الجلسة.';showAccountSection('storeReady')}else{showAccountSection('storeSetup');$('storeSetupStatus').textContent=''}};
-$('storeSetupForm').onsubmit=async e=>{e.preventDefault();const fields=formData(e.target);const rows=[...$('locationRows').querySelectorAll('[data-location-index]')];const submittedIndex=new Map(rows.map((row,index)=>[Number(row.dataset.locationIndex),index]));const locations=rows.map((row,index)=>{const parentOriginal=Number(row.querySelector('[name="parent_index"]').value);const parentIndex=parentOriginal<0?-1:submittedIndex.get(parentOriginal);if(parentOriginal>=0&&(parentIndex===undefined||parentIndex>=index))throw new Error('ترتيب الفروع غير صالح؛ اختر موقعًا أبًا موجودًا قبله.');return{name:row.querySelector('[name="location_name"]').value.trim(),location_type:row.querySelector('[name="location_type"]').value,parent_index:parentIndex}});const payload={...fields,locations};for(const key of ['storeLogo','storeCover','ownerIdentityFront','ownerIdentityBack'])delete payload[key];const uploadProfileAsset=async(inputId,assetType)=>{const file=$(inputId).files[0];if(!file)return null;if(file.size>5_000_000)throw new Error('حجم كل صورة يجب ألا يتجاوز 5 ميجابايت.');const dataUrl=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result));reader.onerror=()=>reject(new Error('تعذر قراءة الملف.'));reader.readAsDataURL(file)});const dataBase64=dataUrl.split(',')[1];const result=await api('/api/supabase/profile-assets',{method:'POST',body:JSON.stringify({asset_type:assetType,content_type:file.type,data_base64:dataBase64})});return result.path};const button=$('createStoreButton');button.disabled=true;$('storeSetupStatus').textContent='جارٍ حفظ ملف النشاط وهيكله في Supabase...';try{payload.logo_url=await uploadProfileAsset('storeLogo','logo');payload.cover_image_url=await uploadProfileAsset('storeCover','cover');payload.owner_identity_front_path=await uploadProfileAsset('ownerIdentityFront','identity_front');payload.owner_identity_back_path=await uploadProfileAsset('ownerIdentityBack','identity_back');const data=await api('/api/supabase/store-profiles',{method:'POST',body:JSON.stringify(payload)});currentStore={...data};try{sessionStorage.setItem('ruh-current-store',JSON.stringify(currentStore))}catch{}$('storeReadyDetails').textContent='النشاط: '+fields.organization_name+' — النوع: '+fields.activity_type+' — المستوى: '+fields.business_level+' — المالك: '+fields.owner_full_name+' — السجل التجاري: '+fields.commercial_registration_number+' — عدد المواقع: '+(data.location_count||1);showAccountSection('storeReady')}catch(err){$('storeSetupStatus').textContent=err.message}finally{button.disabled=false}};
+$('storeSetupForm').onsubmit=async e=>{e.preventDefault();const fields=formData(e.target);const rows=[...$('locationRows').querySelectorAll('[data-location-index]')];const submittedIndex=new Map(rows.map((row,index)=>[Number(row.dataset.locationIndex),index]));const locations=rows.map((row,index)=>{const parentOriginal=Number(row.querySelector('[name="parent_index"]').value);const parentIndex=parentOriginal<0?-1:submittedIndex.get(parentOriginal);if(parentOriginal>=0&&(parentIndex===undefined||parentIndex>=index))throw new Error('ترتيب الفروع غير صالح؛ اختر موقعًا أبًا موجودًا قبله.');return{name:row.querySelector('[name="location_name"]').value.trim(),location_type:row.querySelector('[name="location_type"]').value,parent_index:parentIndex}});const payload={...fields,locations};for(const key of ['logo_url','cover_image_url','owner_identity_front_url','owner_identity_back_url']){const value=String(payload[key]||'').trim();if(value&&(!value.startsWith('https://')||value.length>500))throw new Error('روابط الصور يجب أن تبدأ بـ HTTPS وألا تتجاوز 500 حرف.');payload[key]=value||null}const button=$('createStoreButton');button.disabled=true;$('storeSetupStatus').textContent='جارٍ حفظ ملف النشاط وروابط الصور فقط...';try{const data=await api('/api/supabase/store-profiles',{method:'POST',body:JSON.stringify(payload)});currentStore={...data};try{sessionStorage.setItem('ruh-current-store',JSON.stringify(currentStore))}catch{}$('storeReadyDetails').textContent='النشاط: '+fields.organization_name+' — النوع: '+fields.activity_type+' — المستوى: '+fields.business_level+' — المالك: '+fields.owner_full_name+' — السجل التجاري: '+fields.commercial_registration_number+' — عدد المواقع: '+(data.location_count||1);showAccountSection('storeReady')}catch(err){$('storeSetupStatus').textContent=err.message}finally{button.disabled=false}};
 $('refresh').onclick=loadCatalog;
 $('refreshReceipts').onclick=loadRecentReceipts;
 $('logout').onclick=async()=>{currentStore=null;try{sessionStorage.removeItem('ruh-current-store')}catch{}try{await api('/api/logout',{method:'POST',body:'{}'})}catch{}await loadMe();message('تم تسجيل الخروج')};
@@ -350,37 +350,6 @@ class CommercialWebApplication:
                                   {"person_id": result["person_id"], "username": result["username"],
                                    "expires_at": result["expires_at"]},
                                   [("Set-Cookie", cookie)])
-
-            if method == "POST" and path == "/api/supabase/profile-assets":
-                access_token = self._supabase_tokens.get(token) if token else None
-                user_id = self._supabase_user_ids.get(token) if token else None
-                if not access_token or not user_id or self.identity.resolve_session(db, token) is None:
-                    return self._json(start_response, "401 Unauthorized", {"error": "أعد تسجيل الدخول قبل رفع الملفات."})
-                body = self._body(environ, max_bytes=7_000_000)
-                asset_type = body.get("asset_type")
-                allowed = {
-                    "logo": ("commercial-brand-assets", {"image/png", "image/jpeg", "image/webp"}, True),
-                    "cover": ("commercial-brand-assets", {"image/png", "image/jpeg", "image/webp"}, True),
-                    "identity_front": ("commercial-owner-identities", {"image/png", "image/jpeg", "image/webp", "application/pdf"}, False),
-                    "identity_back": ("commercial-owner-identities", {"image/png", "image/jpeg", "image/webp", "application/pdf"}, False),
-                }
-                if asset_type not in allowed:
-                    return self._json(start_response, "400 Bad Request", {"error": "نوع الملف غير مدعوم."})
-                bucket, mime_types, is_public = allowed[asset_type]
-                content_type = str(body.get("content_type") or "").lower()
-                if content_type not in mime_types:
-                    return self._json(start_response, "400 Bad Request", {"error": "نوع الملف غير مسموح."})
-                try:
-                    raw = base64.b64decode(body.get("data_base64", ""), validate=True)
-                except (ValueError, TypeError):
-                    return self._json(start_response, "400 Bad Request", {"error": "محتوى الملف غير صالح."})
-                if not raw or len(raw) > 5_000_000:
-                    return self._json(start_response, "413 Payload Too Large", {"error": "الحد الأقصى لحجم الملف 5 ميجابايت."})
-                ext = {"image/png":"png","image/jpeg":"jpg","image/webp":"webp","application/pdf":"pdf"}[content_type]
-                object_path = f"{user_id}/{uuid.uuid4().hex}.{ext}"
-                client = SupabaseRPCClient(access_token)
-                uploaded_path = client.upload_object(bucket=bucket, object_path=object_path, content=raw, content_type=content_type, public=is_public)
-                return self._json(start_response, "201 Created", {"asset_type": asset_type, "path": uploaded_path})
 
             if method == "POST" and path == "/api/supabase/store-profiles":
                 access_token = self._supabase_tokens.get(token) if token else None
