@@ -82,6 +82,31 @@ class SupabaseRPCClient:
             raise SupabaseRPCError("Unexpected storefront-creation response; verify the result before retrying.")
         return result
 
+    def create_activity_profile(self, *, organization_name: str, organization_slug: str, activity_name: str,
+                                activity_type: str, business_level: str, commercial_registration_number: str,
+                                opened_on: str, owner_full_name: str, legal_name: str | None,
+                                country_code: str, timezone: str, locale: str, currency_code: str,
+                                public_phone: str | None = None, public_email: str | None = None,
+                                website_url: str | None = None, public_description: str | None = None,
+                                city: str | None = None, district: str | None = None,
+                                street: str | None = None, landmark: str | None = None,
+                                logo_url: str | None = None, cover_image_url: str | None = None,
+                                locations: list | None = None) -> dict:
+        result = self.rpc("commercial_create_activity_profile", {
+            "p_organization_name": organization_name, "p_organization_slug": organization_slug,
+            "p_activity_name": activity_name, "p_activity_type": activity_type,
+            "p_business_level": business_level, "p_commercial_registration_number": commercial_registration_number,
+            "p_opened_on": opened_on, "p_owner_full_name": owner_full_name, "p_legal_name": legal_name,
+            "p_country_code": country_code, "p_timezone": timezone, "p_locale": locale,
+            "p_currency_code": currency_code, "p_public_phone": public_phone, "p_public_email": public_email,
+            "p_website_url": website_url, "p_public_description": public_description, "p_city": city,
+            "p_district": district, "p_street": street, "p_landmark": landmark,
+            "p_logo_url": logo_url, "p_cover_image_url": cover_image_url, "p_locations": locations or [],
+        })
+        if not isinstance(result, dict) or not result.get("organization_id") or not result.get("activity_id"):
+            raise SupabaseRPCError("Unexpected activity profile response; verify the result before retrying.")
+        return result
+
     def add_store_item(self, *, organization_id: str, activity_id: str, location_id: str,
                        product_name: str, unit_name: str, price_minor: int, initial_quantity: int) -> dict:
         result = self.rpc("commercial_add_store_item", {
