@@ -17,6 +17,7 @@ class UniversalCommercialCatalogContractTests(unittest.TestCase):
         cls.update_rpc = (MIGRATIONS / "20261024105000_catalog_update_rpc.sql").read_text(encoding="utf-8")
         cls.android = (ANDROID / "CatalogScreen.kt").read_text(encoding="utf-8")
         cls.main = (ANDROID / "MainActivity.kt").read_text(encoding="utf-8")
+        cls.edit_dialog = (ANDROID / "CatalogProductEditDialog.kt").read_text(encoding="utf-8")
 
     def test_extends_existing_masters_without_parallel_product_or_unit_masters(self):
         self.assertIn("ALTER TABLE public.commercial_global_catalog_items", self.schema)
@@ -96,6 +97,12 @@ class UniversalCommercialCatalogContractTests(unittest.TestCase):
         self.assertIn("unitVariantsJson", self.main)
         self.assertIn("commercial_catalog_create_product", self.android)
         self.assertIn("commercial_catalog_send_transfer", self.android)
+
+    def test_product_editor_round_trips_structured_json_arrays(self):
+        self.assertIn("val structured: Any?", self.edit_dialog)
+        self.assertIn("runCatching { JSONObject(line) }", self.edit_dialog)
+        self.assertIn("runCatching { JSONArray(line) }", self.edit_dialog)
+        self.assertIn("put(structured ?: line)", self.edit_dialog)
 
     def test_cross_industry_starter_templates_are_bilingual_and_unbranded(self):
         self.assertIn("PHONE-SMARTPHONE", self.seed)
