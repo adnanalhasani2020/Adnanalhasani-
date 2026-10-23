@@ -73,6 +73,11 @@ BEGIN
   LEFT JOIN public.commercial_catalog_category_translations ct
     ON ct.category_id=c.id AND ct.locale_code=p_locale_code
   WHERE p.is_active
+    AND NOT EXISTS (
+      SELECT 1 FROM public.commercial_organization_catalog_items disabled_item
+      WHERE disabled_item.organization_id=p_organization_id
+        AND disabled_item.product_id=p.id AND NOT disabled_item.is_enabled
+    )
     AND (p.owner_organization_id IS NULL OR p.owner_organization_id=p_organization_id
       OR EXISTS (
         SELECT 1 FROM public.commercial_organization_catalog_items oi
@@ -111,14 +116,14 @@ BEGIN
         AND p_business_level_code IS NOT NULL AND bx.business_level_code=p_business_level_code
     )
     AND (
-      p_business_level_code IS NULL
-      OR NOT EXISTS (
+      NOT EXISTS (
         SELECT 1 FROM public.commercial_catalog_product_business_levels bi
         WHERE bi.product_id=p.id AND NOT bi.is_excluded
       )
       OR EXISTS (
         SELECT 1 FROM public.commercial_catalog_product_business_levels bi
         WHERE bi.product_id=p.id AND NOT bi.is_excluded
+          AND p_business_level_code IS NOT NULL
           AND bi.business_level_code=p_business_level_code
       )
     )
