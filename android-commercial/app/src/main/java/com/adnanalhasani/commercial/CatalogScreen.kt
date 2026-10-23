@@ -99,7 +99,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var origin by remember { mutableStateOf("") }; var model by remember { mutableStateOf("") }; var partNumber by remember { mutableStateOf("") }
     var imageUrl by remember { mutableStateOf("") }; var imageAlt by remember { mutableStateOf("") }
     var ingredients by remember { mutableStateOf("") }; var materialComposition by remember { mutableStateOf("") }
-    var recipe by remember { mutableStateOf("") }; var specifications by remember { mutableStateOf("") }
+    var recipe by remember { mutableStateOf("") }; var recipeIngredientsText by remember { mutableStateOf("") }; var recipeYieldQty by remember { mutableStateOf("") }; var recipeYieldUnit by remember { mutableStateOf("EA") }; var recipePrepMinutes by remember { mutableStateOf("") }; var recipeCookMinutes by remember { mutableStateOf("") }; var recipeSource by remember { mutableStateOf("") }; var recipeAllergenNotes by remember { mutableStateOf("") }; var specifications by remember { mutableStateOf("") }
     var allergens by remember { mutableStateOf("") }; var storage by remember { mutableStateOf("") }
     var usage by remember { mutableStateOf("") }; var warnings by remember { mutableStateOf("") }
     var shelfLife by remember { mutableStateOf("") }; var expiryRequired by remember { mutableStateOf(false) }
@@ -210,7 +210,20 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                 .put("image_url",imageUrl.ifBlank { JSONObject.NULL }).put("image_alt",imageAlt.ifBlank { JSONObject.NULL })
                 .put("ingredients",JSONArray(ingredients.split(",").map { it.trim() }.filter { it.isNotBlank() }))
                 .put("material_composition",JSONArray(materialComposition.split(",").map { it.trim() }.filter { it.isNotBlank() }))
-                .put("recipe",JSONObject().put("instructions",recipe.ifBlank { JSONObject.NULL }))
+                .put("recipe",JSONObject().put("instructions",recipe.ifBlank { JSONObject.NULL })
+                    .put("recipe_name",nameAr.trim()).put("locale_code","ar")
+                    .put("ingredients",JSONArray().also { rows -> recipeIngredientsText.lineSequence().map { it.trim() }.filter { it.isNotBlank() }.forEach { line ->
+                        val p=line.split("|",limit=4)
+                        if(p.size<3 || p[0].isBlank() || p[1].isBlank() || p[2].isBlank()) throw IllegalArgumentException("صيغة مكونات الوصفة: name|quantity|unit_code|note")
+                        rows.put(JSONObject().put("ingredient_name",p[0].trim()).put("quantity",p[1].trim().toBigDecimalOrNull()?.toPlainString() ?: throw IllegalArgumentException("كمية المكون غير صحيحة."))
+                            .put("unit_code",p[2].trim().uppercase()).put("preparation_note",p.getOrNull(3)?.trim()?.ifBlank { JSONObject.NULL } ?: JSONObject.NULL))
+                    }})
+                    .put("yield_quantity",recipeYieldQty.toBigDecimalOrNull()?.toPlainString() ?: JSONObject.NULL)
+                    .put("yield_unit_code",recipeYieldUnit.ifBlank { JSONObject.NULL })
+                    .put("preparation_minutes",recipePrepMinutes.toIntOrNull() ?: JSONObject.NULL)
+                    .put("cooking_minutes",recipeCookMinutes.toIntOrNull() ?: JSONObject.NULL)
+                    .put("source_reference",recipeSource.ifBlank { JSONObject.NULL })
+                    .put("allergen_notes",recipeAllergenNotes.ifBlank { JSONObject.NULL }))
                 .put("specifications",JSONObject().put("notes",specifications.ifBlank { JSONObject.NULL }))
                 .put("allergens",JSONArray(allergens.split(",").map { it.trim() }.filter { it.isNotBlank() }))
                 .put("storage_instructions",storage.ifBlank { JSONObject.NULL }).put("usage_instructions",usage.ifBlank { JSONObject.NULL })
@@ -437,6 +450,12 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                     item { OutlinedTextField(ingredients,{ingredients=it},Modifier.fillMaxWidth(),label={Text("المكونات مفصولة بفواصل")}) }
                     item { OutlinedTextField(materialComposition,{materialComposition=it},Modifier.fillMaxWidth(),label={Text("تركيب المواد مفصول بفواصل")}) }
                     item { OutlinedTextField(recipe,{recipe=it},Modifier.fillMaxWidth(),label={Text("الوصفة / طريقة التحضير")}) }
+                    item { OutlinedTextField(recipeIngredientsText,{recipeIngredientsText=it},Modifier.fillMaxWidth().heightIn(min=90.dp),label={Text("مكونات الوصفة — سطر: name|quantity|unit_code|note")}) }
+                    item { OutlinedTextField(recipeYieldQty,{recipeYieldQty=it},Modifier.fillMaxWidth(),label={Text("كمية الناتج من الوصفة")},singleLine=true) }
+                    item { OutlinedTextField(recipeYieldUnit,{recipeYieldUnit=it.uppercase()},Modifier.fillMaxWidth(),label={Text("وحدة الناتج")},singleLine=true) }
+                    item { Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) { OutlinedTextField(recipePrepMinutes,{recipePrepMinutes=it.filter(Char::isDigit)},Modifier.weight(1f),label={Text("دقائق التحضير")},singleLine=true); OutlinedTextField(recipeCookMinutes,{recipeCookMinutes=it.filter(Char::isDigit)},Modifier.weight(1f),label={Text("دقائق الطبخ")},singleLine=true) } }
+                    item { OutlinedTextField(recipeAllergenNotes,{recipeAllergenNotes=it},Modifier.fillMaxWidth(),label={Text("ملاحظات الحساسية للوصفة")}) }
+                    item { OutlinedTextField(recipeSource,{recipeSource=it},Modifier.fillMaxWidth(),label={Text("مصدر الوصفة / المرجع")},singleLine=true) }
                     item { OutlinedTextField(specifications,{specifications=it},Modifier.fillMaxWidth(),label={Text("المواصفات الإضافية")}) }
                     item { OutlinedTextField(allergens,{allergens=it},Modifier.fillMaxWidth(),label={Text("مسببات الحساسية مفصولة بفواصل")}) }
                     item { OutlinedTextField(storage,{storage=it},Modifier.fillMaxWidth(),label={Text("تعليمات التخزين")}) }
