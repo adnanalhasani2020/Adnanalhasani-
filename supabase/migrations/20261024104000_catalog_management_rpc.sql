@@ -23,6 +23,13 @@ USING (
   is_active AND (
     owner_organization_id IS NULL
     OR public.commercial_catalog_member_of(owner_organization_id, ARRAY['owner','admin','manager','staff']::text[])
+    OR EXISTS (
+      SELECT 1 FROM public.commercial_catalog_product_units pu
+      JOIN public.commercial_global_catalog_items p ON p.id=pu.product_id
+      JOIN public.commercial_organization_catalog_items oi ON oi.global_item_id=p.id
+      WHERE pu.unit_code=code
+        AND public.commercial_catalog_member_of(oi.organization_id, ARRAY['owner','admin','manager','staff']::text[])
+    )
   )
 );
 CREATE INDEX IF NOT EXISTS ix_commercial_global_units_owner
