@@ -15,12 +15,14 @@ import sqlite3
 import uuid
 from http.cookies import SimpleCookie
 from pathlib import Path
+from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlsplit
 from wsgiref.simple_server import WSGIServer, make_server, WSGIRequestHandler
 from socketserver import ThreadingMixIn
 
 from agent_core.commerce_checkout import CommercialCheckoutApplication
 from agent_core.commercial_identity import CommercialIdentityApplication
+from agent_core.commercial_payments import CommercialPaymentsApplication
 from agent_core.persistence import connect_database
 from agent_core.shared import ValidationError
 from agent_core.supabase_rpc import SupabaseAuthClient, SupabaseAuthError, SupabaseRPCClient, SupabaseRPCError
@@ -174,6 +176,7 @@ class CommercialWebApplication:
         )
         self.identity = CommercialIdentityApplication()
         self.checkout = CommercialCheckoutApplication()
+        self.payments = CommercialPaymentsApplication()
         # Keep Supabase access tokens server-side, keyed by the HttpOnly local session token.
         self._supabase_tokens = {}
         self._supabase_user_ids = {}
@@ -460,7 +463,25 @@ class CommercialWebApplication:
                     offering_id=body["offering_id"], quantity=body["quantity"],
                     scope_key=body["scope_key"], location_ref=body.get("location_ref"),
                     idempotency_key=body["idempotency_key"], sale_id=body["sale_id"],
-                    session_token=token,
+                    session_token=token, payment_method=body.get("payment_method", "cash"),
+                    initial_paid_minor=body.get("initial_paid_minor"),
+                )
+                return self._json(start_response, "200 OK", result)
+
+            if method == "GET" and path == "/api/debts":
+                items = self.payments.list_debts(db, buyer_person_id=person_id)
+                return self._json(start_response, "200 OK", {"items": items})
+
+            if method == "POST" and path == "/api/payments":
+                body = self._body(environ)
+                required = ("sale_id", "amount_minor", "idempotency_key")
+                missing = [key for key in required if key not in body]
+                if missing:
+                    raise ValidationError("Missing payment fields: " + ", ".join(missing))
+                result = self.payments.record_payment(
+                    db, buyer_person_id=person_id, sale_id=body["sale_id"],
+                    amount_minor=body["amount_minor"], idempotency_key=body["idempotency_key"],
+                    now=datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
                 )
                 return self._json(start_response, "200 OK", result)
 
