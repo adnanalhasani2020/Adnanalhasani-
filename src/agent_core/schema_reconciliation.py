@@ -95,10 +95,56 @@ def _types_compatible(sqlite_type: str, supabase_type: str) -> bool:
     return False
 
 
+
+def compare_mapped_tables(
+    sqlite_tables: dict[str, dict[str, str]],
+    supabase_tables: dict[str, dict[str, str]],
+    mappings: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Compare differently named candidate table pairs without assuming equivalence."""
+    results: list[dict[str, Any]] = []
+    for mapping in mappings:
+        local_name = mapping.get("sqlite_table")
+        remote_name = mapping.get("supabase_table")
+        if not isinstance(local_name, str) or not isinstance(remote_name, str):
+            raise ValueError("Each mapping needs sqlite_table and supabase_table strings.")
+        local = sqlite_tables.get(local_name)
+        remote = supabase_tables.get(remote_name)
+        entry: dict[str, Any] = {
+            "sqlite_table": local_name,
+            "supabase_table": remote_name,
+            "mapping_status": mapping.get("status", "unresolved"),
+            "reason": mapping.get("reason", ""),
+            "sqlite_table_exists": local is not None,
+            "supabase_table_exists": remote is not None,
+            "columns_missing_in_supabase": [],
+            "columns_missing_in_sqlite": [],
+            "type_differences": [],
+            "automatic_equivalence_assumed": False,
+        }
+        if local is not None and remote is not None:
+            entry["columns_missing_in_supabase"] = [
+                {"column": name, "sqlite_type": local[name]}
+                for name in sorted(set(local) - set(remote))
+            ]
+            entry["columns_missing_in_sqlite"] = [
+                {"column": name, "supabase_type": remote[name]}
+                for name in sorted(set(remote) - set(local))
+            ]
+            entry["type_differences"] = [
+                {"column": name, "sqlite_type": local[name], "supabase_type": remote[name]}
+                for name in sorted(set(local) & set(remote))
+                if not _types_compatible(local[name], remote[name])
+            ]
+        results.append(entry)
+    return results
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--sqlite", required=True, help="Path to the existing SQLite database file.")
     parser.add_argument("--supabase-snapshot", required=True, help="JSON exported from Supabase information_schema.")
+    parser.add_argument("--mapping", help="Optional JSON mapping registry for differently named candidate tables.")
     parser.add_argument("--output", help="Write JSON report to this path instead of stdout.")
     args = parser.parse_args()
     database_path = Path(args.sqlite)
@@ -107,7 +153,15 @@ def main() -> int:
     with sqlite3.connect(f"file:{database_path.resolve()}?mode=ro", uri=True) as connection:
         local_schema = sqlite_schema(connection)
     remote_schema = load_supabase_snapshot(args.supabase_snapshot)
-    report = json.dumps(compare_schemas(local_schema, remote_schema), ensure_ascii=False, indent=2)
+    report_data = compare_schemas(local_schema, remote_schema)
+    if args.mapping:
+        mapping_payload = json.loads(Path(args.mapping).read_text(encoding="utf-8"))
+        if not isinstance(mapping_payload, dict) or not isinstance(mapping_payload.get("mappings"), list):
+            parser.error("Mapping file must contain a top-level 'mappings' array.")
+        report_data["mapped_table_comparisons"] = compare_mapped_tables(
+            local_schema, remote_schema, mapping_payload["mappings"]
+        )
+    report = json.dumps(report_data, ensure_ascii=False, indent=2)
     if args.output:
         Path(args.output).write_text(report + "\n", encoding="utf-8")
     else:
