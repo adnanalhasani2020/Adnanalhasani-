@@ -21,7 +21,7 @@ from agent_core.commerce_checkout import CommercialCheckoutApplication
 from agent_core.commercial_identity import CommercialIdentityApplication
 from agent_core.persistence import connect_database
 from agent_core.shared import ValidationError
-from agent_core.supabase_rpc import SupabaseRPCClient, SupabaseRPCError
+from agent_core.supabase_rpc import SupabaseAuthClient, SupabaseRPCClient, SupabaseRPCError
 
 
 PAGE = r"""<!doctype html>
@@ -95,7 +95,7 @@ async function loadMe(){try{const me=await api('/api/me');$('auth').classList.ad
 async function loadRecentReceipts(){const root=$('receipts');root.replaceChildren();try{const data=await api('/api/receipts');if(!data.items.length){root.textContent='لا توجد عمليات بيع سابقة لهذا الحساب.';return}for(const receipt of data.items){const card=document.createElement('article');card.className='card';const title=document.createElement('h3');title.textContent='عملية '+receipt.sale_id;const detail=document.createElement('p');detail.textContent='الحالة: '+receipt.state+' — الكمية: '+receipt.quantity+' — الإجمالي: '+receipt.total_minor+' '+receipt.currency_code;const remaining=document.createElement('p');remaining.textContent='المتبقي عند البيع: '+receipt.quantity_remaining+' — الوقت: '+receipt.occurred_at;const invoice=document.createElement('a');invoice.href='/receipts/'+encodeURIComponent(receipt.sale_id);invoice.target='_blank';invoice.rel='noopener noreferrer';invoice.textContent='عرض إيصال البيع للطباعة';card.append(title,detail,remaining,invoice);root.append(card)}}catch(e){root.textContent=e.message}}
 async function loadCatalog(){message('جارٍ قراءة المنتجات والمخزون الفعلي...');try{const data=await api('/api/catalog');const root=$('catalog');root.replaceChildren();for(const item of data.items){const card=document.createElement('article');card.className='card';const title=document.createElement('h3');title.textContent=item.product_name;const detail=document.createElement('p');detail.textContent='السعر: '+item.unit_price_minor+' '+item.currency_code+' (وحدات نقدية صغرى)';const stock=document.createElement('p');stock.textContent='المتاح فعلياً: '+item.available_quantity;const context=document.createElement('p');context.className='muted';context.textContent='النشاط: '+item.activity_id+' — الموقع: '+(item.location_ref||'غير محدد')+' — النطاق: '+item.scope_key;const qty=document.createElement('input');qty.type='number';qty.min='1';qty.max=String(item.available_quantity);qty.value='1';qty.setAttribute('aria-label','الكمية');const total=document.createElement('p');total.setAttribute('aria-live','polite');const updateTotal=()=>{const count=Number(qty.value);const amount=count*item.unit_price_minor;if(!Number.isSafeInteger(count)||count<1||count>item.available_quantity||!Number.isSafeInteger(amount)||amount<0){total.textContent='أدخل كمية صحيحة ضمن المتاح لعرض الإجمالي.';return}total.textContent='الإجمالي قبل التأكيد: '+amount+' '+item.currency_code+' (وحدات نقدية صغرى)'};qty.addEventListener('input',updateTotal);updateTotal();const buy=document.createElement('button');buy.textContent='شراء';buy.onclick=async()=>{const quantity=Number(qty.value);if(!Number.isSafeInteger(quantity)||quantity<1||quantity>item.available_quantity){message('الكمية يجب أن تكون عدداً صحيحاً ضمن المخزون المتاح.');return}const keyName='checkout:'+item.offering_id+':'+item.scope_key+':'+(item.location_ref||'');let pending;try{pending=JSON.parse(sessionStorage.getItem(keyName)||'null')}catch{}if(pending&&pending.quantity!==quantity){message('توجد عملية شراء معلقة بكمية مختلفة. أعد المحاولة بالكمية نفسها حتى تتأكد من نتيجتها، ولا تبدأ عملية جديدة قبل حسمها.');return}buy.disabled=true;if(!pending){pending={idempotency_key:crypto.randomUUID(),sale_id:crypto.randomUUID(),quantity};sessionStorage.setItem(keyName,JSON.stringify(pending))}try{const receipt=await api('/api/checkout',{method:'POST',body:JSON.stringify({offering_id:item.offering_id,activity_id:item.activity_id,quantity,scope_key:item.scope_key,location_ref:item.location_ref,idempotency_key:pending.idempotency_key,sale_id:pending.sale_id})});sessionStorage.removeItem(keyName);message('تم البيع بنجاح\nرقم العملية: '+receipt.sale_id+'\nالحالة: '+receipt.state+'\nالكمية: '+receipt.quantity+'\nالإجمالي: '+receipt.total_minor+' '+receipt.currency_code+'\nالمتبقي: '+receipt.quantity_remaining);await loadCatalog();await loadRecentReceipts()}catch(e){message(e.message+'\nيمكن إعادة المحاولة بنفس المفتاح إذا انقطع الاتصال.')}finally{buy.disabled=false}};card.append(title,detail,stock,context,qty,total,buy);root.append(card)}message(data.items.length?'المنتجات المتاحة محدثة من قاعدة البيانات.':'لا توجد حالياً منتجات يمكن إثبات توفرها للبيع.')}catch(e){message(e.message)}}
 $('login').onsubmit=async e=>{e.preventDefault();try{const data=await api('/api/login',{method:'POST',body:JSON.stringify(formData(e.target))});$('authFeedback').textContent='تم تسجيل الدخول بنجاح.';$('authFeedback').className='muted form-success';e.target.reset();await loadMe()}catch(err){$('authFeedback').textContent=err.message;$('authFeedback').className='form-error'}};
-$('register').onsubmit=async e=>{e.preventDefault();try{await api('/api/register',{method:'POST',body:JSON.stringify(formData(e.target))});$('authFeedback').textContent='تم إنشاء الحساب وتسجيل الدخول.';$('authFeedback').className='muted form-success';e.target.reset();await loadMe()}catch(err){$('authFeedback').textContent=err.message;$('authFeedback').className='form-error'}};
+$('register').onsubmit=async e=>{e.preventDefault();try{const data=await api('/api/register',{method:'POST',body:JSON.stringify(formData(e.target))});e.target.reset();if(data.needs_email_confirmation){setAuthMode('login');$('authFeedback').textContent=data.message||'تحقق من بريدك الإلكتروني لتأكيد الحساب ثم سجّل الدخول.';$('authFeedback').className='muted form-success';return}$('authFeedback').textContent='تم إنشاء الحساب وتسجيل الدخول.';$('authFeedback').className='muted form-success';await loadMe()}catch(err){$('authFeedback').textContent=err.message;$('authFeedback').className='form-error'}};
 $('refresh').onclick=loadCatalog;
 $('refreshReceipts').onclick=loadRecentReceipts;
 $('logout').onclick=async()=>{try{await api('/api/logout',{method:'POST',body:'{}'})}catch{}await loadMe();message('تم تسجيل الخروج')};
@@ -177,6 +177,11 @@ class CommercialWebApplication:
             raise ValidationError("Request body must be a JSON object")
         return body
 
+    @staticmethod
+    def _supabase_auth_enabled() -> bool:
+        return (os.environ.get("SUPABASE_URL", "").startswith("https://")
+                and bool(os.environ.get("SUPABASE_ANON_KEY", "")))
+
     def __call__(self, environ, start_response):
         method, path = environ.get("REQUEST_METHOD", "GET"), environ.get("PATH_INFO", "/")
         secure_cookie = (
@@ -184,7 +189,21 @@ class CommercialWebApplication:
             or environ.get("wsgi.url_scheme", "http").lower() == "https"
         )
         if method == "GET" and path == "/":
-            encoded = PAGE.encode("utf-8")
+            page = PAGE
+            if self._supabase_auth_enabled():
+                page = page.replace(
+                    '<label for="loginUsername">اسم المستخدم</label><input id="loginUsername" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="مثال: ahmed" required minlength="3" maxlength="80">',
+                    '<label for="loginEmail">البريد الإلكتروني</label><input id="loginEmail" name="email" type="email" autocomplete="email" autocapitalize="none" spellcheck="false" placeholder="name@example.com" required maxlength="320">'
+                )
+                page = page.replace(
+                    '<label for="registerUsername">اسم المستخدم</label><input id="registerUsername" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="اختر اسم مستخدم" required minlength="3" maxlength="80" pattern="[A-Za-z0-9._-]{3,80}" title="3 إلى 80 حرفًا إنجليزيًا أو رقمًا أو نقطة أو شرطة">',
+                    '<label for="registerEmail">البريد الإلكتروني</label><input id="registerEmail" name="email" type="email" autocomplete="email" autocapitalize="none" spellcheck="false" placeholder="name@example.com" required maxlength="320">'
+                )
+                page = page.replace("$('loginUsername')", "$('loginEmail')").replace("$('registerUsername')", "$('registerEmail')")
+                page = page.replace("أنشئ حسابًا محليًا للبدء.", "أنشئ حسابك باستخدام البريد الإلكتروني.")
+                page = page.replace("استخدم كلمة المرور التي أنشأت بها حسابك.", "أدخل كلمة مرور حسابك في Supabase.")
+                page = page.replace("استخدم 12 حرفًا على الأقل. لا تستخدم كلمة مرور حساب آخر.", "يجب أن تتكون كلمة المرور من 12 حرفًا على الأقل.")
+            encoded = page.encode("utf-8")
             start_response("200 OK", [("Content-Type", "text/html; charset=utf-8"),
                                       ("Content-Length", str(len(encoded))),
                                       ("Cache-Control", "no-store"),
@@ -227,9 +246,33 @@ class CommercialWebApplication:
             token = self._cookies(environ)
             if method == "POST" and path in {"/api/register", "/api/login"}:
                 body = self._body(environ)
-                if path == "/api/register":
-                    self.identity.register(db, username=body.get("username"), password=body.get("password"))
-                result = self.identity.login(db, username=body.get("username"), password=body.get("password"))
+                if self._supabase_auth_enabled():
+                    auth = SupabaseAuthClient()
+                    if path == "/api/register":
+                        auth_result = auth.sign_up(email=body.get("email"), password=body.get("password"))
+                        # Supabase may require email confirmation before it issues a session.
+                        if not auth_result.get("access_token"):
+                            return self._json(start_response, "202 Accepted", {
+                                "needs_email_confirmation": True,
+                                "message": "تم إرسال طلب إنشاء الحساب. تحقق من بريدك الإلكتروني لتأكيد الحساب، ثم سجّل الدخول."
+                            })
+                    else:
+                        auth_result = auth.sign_in_with_password(
+                            email=body.get("email"), password=body.get("password")
+                        )
+                    user = auth_result.get("user")
+                    if not isinstance(user, dict) or not user.get("id") or not auth_result.get("access_token"):
+                        return self._json(start_response, "502 Bad Gateway", {
+                            "error": "لم تُرجع خدمة Supabase جلسة مستخدم صالحة."
+                        })
+                    result = self.identity.login_external(
+                        db, provider_user_id=str(user["id"]),
+                        email=user.get("email") or body.get("email"),
+                    )
+                else:
+                    if path == "/api/register":
+                        self.identity.register(db, username=body.get("username"), password=body.get("password"))
+                    result = self.identity.login(db, username=body.get("username"), password=body.get("password"))
                 secure = "; Secure" if secure_cookie else ""
                 cookie = ("commercial_session=" + result["session_token"] +
                           "; Path=/; HttpOnly; SameSite=Lax; Max-Age=28800" + secure)
@@ -249,7 +292,12 @@ class CommercialWebApplication:
                 return self._json(start_response, "401 Unauthorized", {"error": "سجّل الدخول للمتابعة."})
 
             if method == "GET" and path == "/api/me":
-                row = db.execute("SELECT username FROM commercial_credentials WHERE person_id=?", (person_id,)).fetchone()
+                row = db.execute(
+                    """SELECT COALESCE(i.email,c.username)
+                       FROM commercial_credentials c
+                       LEFT JOIN commercial_supabase_identities i ON i.person_id=c.person_id
+                       WHERE c.person_id=?""", (person_id,),
+                ).fetchone()
                 if row is None:
                     return self._json(start_response, "401 Unauthorized", {"error": "الحساب غير متاح."})
                 return self._json(start_response, "200 OK", {"person_id": person_id, "username": row[0]})
