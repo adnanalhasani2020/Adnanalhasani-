@@ -17,6 +17,7 @@ class BusinessActivityTaxonomyContractTests(unittest.TestCase):
         cls.policy_fix = (MIGRATIONS / "20261024113000_catalog_policy_deduplication.sql").read_text(encoding="utf-8")
         cls.integrity_fix = (MIGRATIONS / "20261024114000_catalog_integrity_performance.sql").read_text(encoding="utf-8")
         cls.alias_guard = (MIGRATIONS / "20261024115000_business_activity_alias_global_uniqueness.sql").read_text(encoding="utf-8")
+        cls.depth_fix = (MIGRATIONS / "20261024116000_business_activity_unbounded_api_depth.sql").read_text(encoding="utf-8")
 
     def test_activity_taxonomy_does_not_duplicate_product_or_unit_masters(self):
         self.assertIn("commercial_global_business_activity_nodes", self.taxonomy)
@@ -52,6 +53,9 @@ class BusinessActivityTaxonomyContractTests(unittest.TestCase):
         self.assertIn("'path_ar',path_ar", self.taxonomy)
         self.assertIn("'path_en',path_en", self.taxonomy)
         self.assertIn("WHERE is_selectable", self.taxonomy)
+        self.assertIn("CYCLE code SET is_cycle USING cycle_path", self.taxonomy)
+        self.assertNotIn("t.depth < 30", self.taxonomy)
+        self.assertIn("CYCLE code SET is_cycle USING cycle_path", self.depth_fix)
 
     def test_external_codes_are_explicit_and_seed_provenance_is_not_misrepresented(self):
         self.assertIn("commercial_global_business_activity_codes", self.taxonomy)
