@@ -303,12 +303,12 @@ BEGIN
 END $$;
 
 CREATE POLICY catalog_categories_read ON public.commercial_catalog_categories FOR SELECT TO authenticated
-USING (owner_organization_id IS NULL OR public.commercial_catalog_member_of(owner_organization_id, ARRAY['owner','admin','manager','staff']::text[]));
+USING (owner_organization_id IS NULL OR public.commercial_catalog_member_of(owner_organization_id, ARRAY['owner','admin','manager','staff']::text[]) OR EXISTS (SELECT 1 FROM public.commercial_catalog_products p WHERE p.category_id=id));
 CREATE POLICY catalog_categories_write ON public.commercial_catalog_categories FOR ALL TO authenticated
 USING (owner_organization_id IS NOT NULL AND public.commercial_catalog_member_of(owner_organization_id, ARRAY['owner','admin']::text[]))
 WITH CHECK (owner_organization_id IS NOT NULL AND public.commercial_catalog_member_of(owner_organization_id, ARRAY['owner','admin']::text[]));
 CREATE POLICY catalog_category_translations_read ON public.commercial_catalog_category_translations FOR SELECT TO authenticated
-USING (EXISTS (SELECT 1 FROM public.commercial_catalog_categories c WHERE c.id=category_id AND (c.owner_organization_id IS NULL OR public.commercial_catalog_member_of(c.owner_organization_id, ARRAY['owner','admin','manager','staff']::text[]))));
+USING (EXISTS (SELECT 1 FROM public.commercial_catalog_categories c WHERE c.id=category_id AND (c.owner_organization_id IS NULL OR public.commercial_catalog_member_of(c.owner_organization_id, ARRAY['owner','admin','manager','staff']::text[]) OR EXISTS (SELECT 1 FROM public.commercial_catalog_products p WHERE p.category_id=c.id))));
 CREATE POLICY catalog_category_translations_write ON public.commercial_catalog_category_translations FOR ALL TO authenticated
 USING (EXISTS (SELECT 1 FROM public.commercial_catalog_categories c WHERE c.id=category_id AND c.owner_organization_id IS NOT NULL AND public.commercial_catalog_member_of(c.owner_organization_id, ARRAY['owner','admin']::text[])))
 WITH CHECK (EXISTS (SELECT 1 FROM public.commercial_catalog_categories c WHERE c.id=category_id AND c.owner_organization_id IS NOT NULL AND public.commercial_catalog_member_of(c.owner_organization_id, ARRAY['owner','admin']::text[])));
