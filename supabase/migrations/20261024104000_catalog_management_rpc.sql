@@ -270,7 +270,7 @@ BEGIN
     INSERT INTO public.commercial_global_entity_translations(
       entity_type,entity_key,locale_code,field_key,translated_value,translation_status,source_language,owner_organization_id,created_by
     ) VALUES ('catalog_item',v_code,lower(btrim(v_translation->>'locale_code')),lower(btrim(v_translation->>'field_key')),
-      btrim(v_translation->>'translated_value'),COALESCE(nullif(v_translation->>'translation_status',''),'human_authored'),
+      btrim(v_translation->>'translated_value'),'human_authored',
       nullif(v_translation->>'source_language',''),p_organization_id,auth.uid())
     ON CONFLICT (entity_type,entity_key,locale_code,field_key) DO UPDATE
       SET translated_value=EXCLUDED.translated_value,translation_status=EXCLUDED.translation_status,
