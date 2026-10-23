@@ -8,7 +8,7 @@
   "public_policy_count": 67,
   "tables_without_rls": [],
   "tables_without_policy": [],
-  "scope": "Live metadata-only inventory; no application rows were read, copied, or changed. Table grants were hardened on 2026-10-23.",
+  "scope": "Live metadata-only inventory; no application rows were read, copied, or changed. Existing-table grants and postgres-created future-table defaults were hardened on 2026-10-23; supabase_admin future-table defaults remain pending.",
   "interpretation": [
     "Every public table reported by pg_tables has RLS enabled.",
     "Every public table has at least one policy, but this does not prove that the policy is correct or that all required operations are permitted.",
@@ -34,10 +34,17 @@
     },
     "note": "The remaining authenticated DML grants correspond to existing user/organization-scoped RLS policies. Review default privileges for future tables separately.",
     "default_privileges": {
-      "status": "pending_owner_level_change",
-      "observed": "Default ACLs for postgres and supabase_admin grant broad table privileges to anon and authenticated for future public tables.",
-      "attempted": "ALTER DEFAULT PRIVILEGES revocations were rejected with permission denied.",
-      "required_follow_up": "Apply the default-privilege revocations through a database-owner-controlled migration or administrative session; current-table grants are already hardened."
+      "status": "partially_applied_owner_admin_pending",
+      "observed": "Default ACLs for postgres and supabase_admin initially granted broad privileges on future public tables.",
+      "applied_to_postgres": [
+        "Revoked INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, and MAINTAIN on future public tables from anon and authenticated."
+      ],
+      "pending_for_supabase_admin": [
+        "Revoke INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, and MAINTAIN on future public tables from anon and authenticated."
+      ],
+      "verification": "Live pg_default_acl inspection confirms the postgres table ACL now retains SELECT for anon/authenticated, while the supabase_admin table ACL remains broad.",
+      "blocker": "The current database connection receives permission denied when changing default privileges for role supabase_admin.",
+      "migration": "supabase/migrations/20261023_harden_postgres_default_table_privileges.sql"
     }
   }
 }
