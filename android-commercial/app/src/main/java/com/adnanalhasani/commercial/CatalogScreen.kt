@@ -31,7 +31,7 @@ internal data class CatalogProduct(
     val availableUnits: List<CatalogUnit> = emptyList(), val createdBy: String = "", val createdAt: String = ""
 )
 private data class CatalogCategory(val code: String, val parentCode: String, val nameAr: String, val nameEn: String)
-private data class DirectoryUnit(val code: String, val nameAr: String, val nameEn: String, val dimension: String, val baseCode: String, val factor: String, val owner: String)
+private data class DirectoryUnit(val code: String, val nameAr: String, val nameEn: String, val dimension: String, val baseCode: String, val factor: String, val owner: String)\nprivate data class PendingTransfer(val id: String, val source: String, val destination: String, val itemCount: Int, val createdAt: String)
 
 private val catalogIo = Executors.newSingleThreadExecutor()
 private val catalogMain = Handler(Looper.getMainLooper())
@@ -82,7 +82,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var locale by remember { mutableStateOf("ar") }; var query by remember { mutableStateOf("") }
     var items by remember { mutableStateOf<List<CatalogProduct>>(emptyList()) }
     var categories by remember { mutableStateOf<List<CatalogCategory>>(emptyList()) }
-    var directoryUnits by remember { mutableStateOf<List<DirectoryUnit>>(emptyList()) }
+    var directoryUnits by remember { mutableStateOf<List<DirectoryUnit>>(emptyList()) }; var pendingTransfers by remember { mutableStateOf<List<PendingTransfer>>(emptyList()) }
     var busy by remember { mutableStateOf(false) }; var feedback by remember { mutableStateOf("") }
 
     var categoryCode by remember { mutableStateOf("") }; var parentCode by remember { mutableStateOf("") }
@@ -240,9 +240,27 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         if(transferSource.isBlank() || transferDestination.isBlank()) { feedback="أدخل معرّف الحساب المصدر والوجهة."; return }
         request({
             val ids=JSONArray(); transferIds.split(",").map { it.trim() }.filter { it.isNotBlank() }.forEach { ids.put(it) }
-            catalogHttp("/rest/v1/rpc/commercial_catalog_transfer",JSONObject().put("p_source_organization_id",transferSource.trim())
+            catalogHttp("/rest/v1/rpc/commercial_catalog_send_transfer",JSONObject().put("p_source_organization_id",transferSource.trim())
                 .put("p_destination_organization_id",transferDestination.trim()).put("p_global_item_ids",if(ids.length()==0) JSONObject.NULL else ids),active)
         }, { feedback="اكتملت عملية نقل روابط الدليل: $it" })
+    }
+    fun loadPendingTransfers() {
+        val active=token ?: return
+        val orgId=org() ?: run { feedback="أدخل معرّف المؤسسة المستقبلة في الحقل العلوي أولًا."; return }
+        request({
+            catalogGet("/rest/v1/commercial_catalog_transfers?select=id,source_organization_id,destination_organization_id,item_count,status,created_at&destination_organization_id=eq.$orgId&status=eq.pending&order=created_at.desc",active)
+        }, { raw ->
+            val json=JSONArray(raw)
+            pendingTransfers=List(json.length()) { i -> val v=json.getJSONObject(i); PendingTransfer(v.optString("id"),v.optString("source_organization_id"),v.optString("destination_organization_id"),v.optInt("item_count"),v.optString("created_at")) }
+            feedback="طلبات النقل الواردة: ${pendingTransfers.size}"
+        })
+    }
+    fun respondToTransfer(id: String, accept: Boolean) {
+        val active=token ?: return
+        request({
+            catalogHttp("/rest/v1/rpc/${if(accept) "commercial_catalog_accept_transfer" else "commercial_catalog_reject_transfer"}",
+                JSONObject().put("p_transfer_id",id),active)
+        }, { feedback=if(accept) "تم قبول طلب النقل: $it" else "تم رفض طلب النقل: $it"; loadPendingTransfers() })
     }
 
     Column(Modifier.fillMaxSize().padding(horizontal=14.dp)) {
@@ -413,7 +431,22 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                     item { OutlinedTextField(transferSource,{transferSource=it.trim()},Modifier.fillMaxWidth(),label={Text("معرّف الحساب المصدر UUID")},singleLine=true) }
                     item { OutlinedTextField(transferDestination,{transferDestination=it.trim()},Modifier.fillMaxWidth(),label={Text("معرّف الحساب الوجهة UUID")},singleLine=true) }
                     item { OutlinedTextField(transferIds,{transferIds=it},Modifier.fillMaxWidth(),label={Text("معرّفات الأصناف UUID مفصولة بفواصل (اختياري)")}) }
-                    item { Button(onClick={transferCatalog()},enabled=!busy && transferSource.isNotBlank() && transferDestination.isNotBlank(),modifier=Modifier.fillMaxWidth()) { Text("نقل دليل الأصناف") } }
+                    item { Button(onClick={transferCatalog()},enabled=!busy && transferSource.isNotBlank() && transferDestination.isNotBlank(),modifier=Modifier.fillMaxWidth()) { Text("إرسال طلب نقل الدليل") } }
+                    item { OutlinedButton(onClick={loadPendingTransfers()},enabled=!busy,modifier=Modifier.fillMaxWidth()) { Text("تحميل طلبات النقل الواردة لهذا الحساب") } }
+                    items(pendingTransfers,key={it.id}) { transfer ->
+                        Card(border=BorderStroke(1.dp,MaterialTheme.colorScheme.outlineVariant)) {
+                            Column(Modifier.fillMaxWidth().padding(12.dp),verticalArrangement=Arrangement.spacedBy(5.dp)) {
+                                Text("طلب نقل • ${transfer.itemCount} صنف",fontWeight=FontWeight.SemiBold)
+                                Text("المصدر: ${transfer.source}",style=MaterialTheme.typography.bodySmall)
+                                Text("رقم الطلب: ${transfer.id}",style=MaterialTheme.typography.bodySmall)
+                                Text("تاريخ الطلب: ${transfer.createdAt}",style=MaterialTheme.typography.bodySmall)
+                                Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                                    Button(onClick={respondToTransfer(transfer.id,true)},enabled=!busy,modifier=Modifier.weight(1f)) { Text("قبول النقل") }
+                                    OutlinedButton(onClick={respondToTransfer(transfer.id,false)},enabled=!busy,modifier=Modifier.weight(1f)) { Text("رفض") }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
