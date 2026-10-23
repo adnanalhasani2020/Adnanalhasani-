@@ -33,8 +33,8 @@ internal data class CatalogProduct(
     val recommendationScore: Int, val barcode: String = "", val unitCode: String = "EA",
     val availableUnits: List<CatalogUnit> = emptyList(), val createdBy: String = "", val createdAt: String = "", val importedBy: String = "", val attributesSchema: String = "", val modelNumber: String = "", val partNumber: String = "", val imageAlt: String = "", val materialComposition: String = "", val ingredients: String = "", val recipe: String = "", val specifications: String = "", val allergens: String = "", val storageInstructions: String = "", val usageInstructions: String = "", val warnings: String = "", val shelfLifeDays: Int? = null, val requiresExpiryDate: Boolean = false, val isBatchTracked: Boolean = false, val isSerialTracked: Boolean = false, val rulings: List<CatalogRuling> = emptyList()
 )
-private data class CatalogCategory(val code: String, val parentCode: String, val nameAr: String, val nameEn: String)
-private data class DirectoryUnit(val code: String, val nameAr: String, val nameEn: String, val dimension: String, val baseCode: String, val factor: String, val owner: String)\nprivate data class PendingTransfer(val id: String, val source: String, val destination: String, val itemCount: Int, val createdAt: String)
+private data class CatalogCategory(val code: String, val parentCode: String, val nameAr: String, val nameEn: String, val localizedName: String = "")
+private data class DirectoryUnit(val code: String, val nameAr: String, val nameEn: String, val dimension: String, val baseCode: String, val factor: String, val owner: String, val localizedName: String = "")\nprivate data class PendingTransfer(val id: String, val source: String, val destination: String, val itemCount: Int, val createdAt: String)
 
 private val catalogIo = Executors.newSingleThreadExecutor()
 private val catalogMain = Handler(Looper.getMainLooper())
@@ -193,11 +193,17 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         request({
             val catRaw=catalogGet("/rest/v1/commercial_global_catalog_categories?select=code,parent_code,name_ar,name_en&is_active=eq.true&order=parent_code.asc,sort_order.asc,code.asc",active)
             val unitRaw=catalogGet("/rest/v1/commercial_global_units?select=code,name_ar,name_en,dimension,base_unit_code,factor_to_base,owner_organization_id&is_active=eq.true&order=dimension.asc,code.asc",active)
-            JSONObject().put("categories",JSONArray(catRaw)).put("units",JSONArray(unitRaw)).toString()
+            val categoryTranslationRaw=catalogGet("/rest/v1/commercial_global_entity_translations?select=entity_key,translated_value&entity_type=eq.catalog_category&field_key=eq.name&locale_code=eq.${locale.trim().ifBlank { "ar" }}",active)
+            val unitTranslationRaw=catalogGet("/rest/v1/commercial_global_entity_translations?select=entity_key,translated_value&entity_type=eq.unit&field_key=eq.name&locale_code=eq.${locale.trim().ifBlank { "ar" }}",active)
+            JSONObject().put("categories",JSONArray(catRaw)).put("units",JSONArray(unitRaw))
+                .put("categoryTranslations",JSONArray(categoryTranslationRaw)).put("unitTranslations",JSONArray(unitTranslationRaw)).toString()
         }, { raw ->
             val result=JSONObject(raw); val cats=result.getJSONArray("categories"); val units=result.getJSONArray("units")
-            categories=List(cats.length()) { i -> val v=cats.getJSONObject(i); CatalogCategory(v.optString("code"),v.optString("parent_code").takeUnless { it == "null" }.orEmpty(),v.optString("name_ar"),v.optString("name_en")) }
-            directoryUnits=List(units.length()) { i -> val v=units.getJSONObject(i); DirectoryUnit(v.optString("code"),v.optString("name_ar"),v.optString("name_en"),v.optString("dimension"),v.optString("base_unit_code").takeUnless { it == "null" }.orEmpty(),v.optString("factor_to_base"),v.optString("owner_organization_id").takeUnless { it == "null" }.orEmpty()) }
+            val catTr=result.getJSONArray("categoryTranslations"); val unitTr=result.getJSONArray("unitTranslations")
+            val categoryNames=buildMap { for(i in 0 until catTr.length()) { val v=catTr.getJSONObject(i); put(v.optString("entity_key"),v.optString("translated_value")) } }
+            val unitNames=buildMap { for(i in 0 until unitTr.length()) { val v=unitTr.getJSONObject(i); put(v.optString("entity_key"),v.optString("translated_value")) } }
+            categories=List(cats.length()) { i -> val v=cats.getJSONObject(i); val code=v.optString("code"); CatalogCategory(code,v.optString("parent_code").takeUnless { it == "null" }.orEmpty(),v.optString("name_ar"),v.optString("name_en"),categoryNames[code].orEmpty()) }
+            directoryUnits=List(units.length()) { i -> val v=units.getJSONObject(i); val code=v.optString("code"); DirectoryUnit(code,v.optString("name_ar"),v.optString("name_en"),v.optString("dimension"),v.optString("base_unit_code").takeUnless { it == "null" }.orEmpty(),v.optString("factor_to_base").takeUnless { it == "null" }.orEmpty(),v.optString("owner_organization_id").takeUnless { it == "null" }.orEmpty(),unitNames[code].orEmpty()) }
             feedback="تم تحميل ${categories.size} تصنيفًا و${directoryUnits.size} وحدة قياس."
         })
     }
@@ -485,11 +491,11 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                         else {
                             var expanded by remember { mutableStateOf(false) }
                             ExposedDropdownMenuBox(expanded=expanded,onExpandedChange={expanded=it}) {
-                                OutlinedTextField(value=canonicalUnits.firstOrNull{it.code==unitBaseCode}?.let{"${it.code} — ${it.nameAr}"} ?: unitBaseCode,
+                                OutlinedTextField(value=canonicalUnits.firstOrNull{it.code==unitBaseCode}?.let{"${it.code} — ${it.localizedName.ifBlank { it.nameAr }}"} ?: unitBaseCode,
                                     onValueChange={},readOnly=true,label={Text("وحدة الأساس القياسية")},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expanded=expanded)},
                                     modifier=Modifier.fillMaxWidth().menuAnchor())
                                 ExposedDropdownMenu(expanded=expanded,onDismissRequest={expanded=false}) {
-                                    canonicalUnits.forEach { unit -> DropdownMenuItem(text={Text("${unit.code} — ${unit.nameAr} (${unit.dimension})")},onClick={unitBaseCode=unit.code;unitDimension=unit.dimension;expanded=false}) }
+                                    canonicalUnits.forEach { unit -> DropdownMenuItem(text={Text("${unit.code} — ${unit.localizedName.ifBlank { unit.nameAr }} (${unit.dimension})")},onClick={unitBaseCode=unit.code;unitDimension=unit.dimension;expanded=false}) }
                                 }
                             }
                         }
@@ -514,7 +520,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                                     onValueChange={},readOnly=true,label={Text("التصنيف *")},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expanded=expanded)},
                                     modifier=Modifier.fillMaxWidth().menuAnchor())
                                 ExposedDropdownMenu(expanded=expanded,onDismissRequest={expanded=false}) {
-                                    categories.forEach { cat -> DropdownMenuItem(text={Text("${cat.code} — ${cat.nameAr}")},onClick={productCategory=cat.code;expanded=false}) }
+                                    categories.forEach { cat -> DropdownMenuItem(text={Text("${cat.code} — ${cat.localizedName.ifBlank { cat.nameAr }}")},onClick={productCategory=cat.code;expanded=false}) }
                                 }
                             }
                         }
