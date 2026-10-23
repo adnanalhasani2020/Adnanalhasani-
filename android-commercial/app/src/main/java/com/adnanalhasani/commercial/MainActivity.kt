@@ -5,6 +5,8 @@ import android.os.Bundle
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
+import java.util.Date
+import java.text.SimpleDateFormat
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.BorderStroke
@@ -22,6 +24,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -41,8 +46,52 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-internal data class Product(val name: String, val category: String, val stock: Int, val price: String, val costPrice: Int = 0)
-internal data class SaleRecord(val number: Int, val product: String, val quantity: Int, val total: Int, val credit: Boolean, val customer: String = "", val paid: Int = 0, val createdAt: Long = System.currentTimeMillis(), val unitCost: Int = 0)
+internal data class Product(val name: String, val category: String, val stock: Int, val price: String, val costPrice: Int = 0, val catalogCode: String = "", val barcode: String = "", val unitCode: String = "EA", val imageUrl: String = "", val description: String = "", val brand: String = "", val manufacturer: String = "", val countryOfManufacture: String = "", val createdAt: Long = System.currentTimeMillis(), val createdBy: String = "", val unitVariantsJson: String = "[]")
+
+private data class LocalSaleUnit(
+    val code: String,
+    val role: String,
+    val label: String,
+    val quantityInBase: Double,
+    val barcode: String,
+    val imageUrl: String,
+    val isDefault: Boolean
+)
+
+private fun productMatchesUnitQuery(product: Product, query: String): Boolean {
+    if (query.isBlank()) return false
+    return runCatching {
+        val units = JSONArray(product.unitVariantsJson)
+        (0 until units.length()).any { index ->
+            val unit = units.getJSONObject(index)
+            listOf("barcode","unitCode","sku").any { key -> unit.optString(key).contains(query,true) }
+        }
+    }.getOrDefault(false)
+}
+
+private fun localSaleUnits(product: Product): List<LocalSaleUnit> {
+    val parsed = runCatching {
+        val json = JSONArray(product.unitVariantsJson)
+        List(json.length()) { index ->
+            val item = json.getJSONObject(index)
+            LocalSaleUnit(
+                code = item.optString("unitCode", product.unitCode).ifBlank { product.unitCode },
+                role = item.optString("role", "base").ifBlank { "base" },
+                label = item.optString("packageName").takeUnless { it.isNullOrBlank() || it == "null" }
+                    ?: item.optString("unitName").takeUnless { it.isNullOrBlank() || it == "null" }
+                    ?: item.optString("unitCode", product.unitCode).ifBlank { product.unitCode },
+                quantityInBase = item.optString("quantityInBase", "1").toDoubleOrNull()?.takeIf { it > 0 } ?: 1.0,
+                barcode = item.optString("barcode").takeUnless { it == "null" }.orEmpty(),
+                imageUrl = item.optString("imageUrl").takeUnless { it == "null" }.orEmpty(),
+                isDefault = item.optBoolean("isDefault", false)
+            )
+        }.filter { it.code.isNotBlank() && it.role in setOf("base", "sale") }
+    }.getOrDefault(emptyList())
+    return parsed.ifEmpty {
+        listOf(LocalSaleUnit(product.unitCode.ifBlank { "EA" }, "base", product.unitCode.ifBlank { "EA" }, 1.0, product.barcode, product.imageUrl, true))
+    }
+}
+internal data class SaleRecord(val number: Int, val product: String, val quantity: Int, val total: Int, val credit: Boolean, val customer: String = "", val paid: Int = 0, val createdAt: Long = System.currentTimeMillis(), val unitCost: Int = 0, val unitCode: String = "EA", val baseQuantitySold: Int = quantity)
 internal data class SettlementRecord(val invoiceNumber: Int, val customer: String, val amount: Int, val timestamp: Long = System.currentTimeMillis())
 internal data class ExpenseRecord(val id: Long, val category: String, val amount: Int, val note: String, val timestamp: Long = System.currentTimeMillis())
 private fun money(value: Int): String = String.format(Locale.US, "%,d ر.ي", value)
@@ -60,7 +109,7 @@ private fun loadProducts(context: Context): List<Product> {
         val json = JSONArray(saved)
         List(json.length()) { i ->
             val item = json.getJSONObject(i)
-            Product(item.getString("name"), item.getString("category"), item.getInt("stock"), item.getString("price"), item.optInt("costPrice", 0))
+            Product(item.getString("name"), item.getString("category"), item.getInt("stock"), item.getString("price"), item.optInt("costPrice", 0), item.optString("catalogCode", ""), item.optString("barcode", ""), item.optString("unitCode", "EA"), item.optString("imageUrl", ""), item.optString("description", ""), item.optString("brand", ""), item.optString("manufacturer", ""), item.optString("countryOfManufacture", ""), item.optLong("createdAt", System.currentTimeMillis()), item.optString("createdBy", ""), item.optString("unitVariantsJson", "[]"))
         }
     }.getOrElse { products }
 }
@@ -69,7 +118,7 @@ private fun saveProducts(context: Context, items: List<Product>) {
     val json = JSONArray()
     items.forEach { item ->
         json.put(JSONObject().put("name", item.name).put("category", item.category)
-            .put("stock", item.stock).put("price", item.price).put("costPrice", item.costPrice))
+            .put("stock", item.stock).put("price", item.price).put("costPrice", item.costPrice).put("catalogCode", item.catalogCode).put("barcode", item.barcode).put("unitCode", item.unitCode).put("imageUrl", item.imageUrl).put("description", item.description).put("brand", item.brand).put("manufacturer", item.manufacturer).put("countryOfManufacture", item.countryOfManufacture).put("createdAt", item.createdAt).put("createdBy", item.createdBy).put("unitVariantsJson", item.unitVariantsJson))
     }
     context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).edit().putString(PRODUCTS_KEY, json.toString()).apply()
 }
@@ -81,7 +130,7 @@ private fun loadSales(context: Context): List<SaleRecord> {
         List(json.length()) { i ->
             val item = json.getJSONObject(i)
             SaleRecord(item.getInt("number"), item.getString("product"), item.getInt("quantity"),
-                item.getInt("total"), item.getBoolean("credit"), item.optString("customer", ""), item.optInt("paid", 0), item.optLong("createdAt", 0L), item.optInt("unitCost", 0))
+                item.getInt("total"), item.getBoolean("credit"), item.optString("customer", ""), item.optInt("paid", 0), item.optLong("createdAt", 0L), item.optInt("unitCost", 0), item.optString("unitCode", "EA"), item.optInt("baseQuantitySold", item.optInt("quantity", 1)))
         }
     }.getOrElse { emptyList() }
 }
@@ -132,7 +181,7 @@ private fun saveSales(context: Context, items: List<SaleRecord>) {
     items.forEach { item ->
         json.put(JSONObject().put("number", item.number).put("product", item.product)
             .put("quantity", item.quantity).put("total", item.total).put("credit", item.credit)
-            .put("customer", item.customer).put("paid", item.paid).put("createdAt", item.createdAt).put("unitCost", item.unitCost))
+            .put("customer", item.customer).put("paid", item.paid).put("createdAt", item.createdAt).put("unitCost", item.unitCost).put("unitCode", item.unitCode).put("baseQuantitySold", item.baseQuantitySold))
     }
     context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).edit().putString(SALES_KEY, json.toString()).apply()
 }
@@ -156,6 +205,7 @@ private fun StoreApp(context: Context) {
     var showReports by remember { mutableStateOf(false) }
     var showExpenses by remember { mutableStateOf(false) }
     var showActivityProfile by remember { mutableStateOf(false) }
+    var showCatalog by remember { mutableStateOf(false) }
     var settlingSaleNumber by remember { mutableIntStateOf(-1) }
     val sales = remember { mutableStateListOf<SaleRecord>().apply { addAll(loadSales(context)) } }
     val settlements = remember { mutableStateListOf<SettlementRecord>().apply { addAll(loadSettlements(context)) } }
@@ -203,10 +253,19 @@ private fun StoreApp(context: Context) {
                 1 -> SalesScreen(sales = sales, onNewSale = { newSale = true })
                 2 -> InventoryScreen(inventory, query, { query = it }, { addProduct = true }, { editingProductIndex = it })
                 else -> when {
+                    showCatalog -> CatalogScreen(onBack = { showCatalog = false }, onAddToInventory = { catalogItem ->
+                        val existing = inventory.indexOfFirst { it.catalogCode.isNotBlank() && it.catalogCode == catalogItem.catalogCode }
+                        val mapped = Product(name = catalogItem.name, category = catalogItem.category, stock = 0, price = "0 ر.ي", catalogCode = catalogItem.catalogCode, barcode = catalogItem.barcode.ifBlank { catalogItem.availableUnits.firstOrNull { it.isDefault && it.barcode.isNotBlank() }?.barcode.orEmpty() }, unitCode = catalogItem.unitCode, imageUrl = catalogItem.imageUrl, description = catalogItem.description, brand = catalogItem.brand, manufacturer = catalogItem.manufacturer, countryOfManufacture = catalogItem.countryOfManufacture, createdBy = catalogItem.importedBy, unitVariantsJson = JSONArray().also { rows -> catalogItem.availableUnits.forEach { unit -> rows.put(JSONObject().put("unitCode",unit.unitCode).put("unitName",unit.unitName).put("role",unit.role).put("quantityInBase",unit.quantityInBase).put("barcode",unit.barcode).put("sku",unit.sku).put("netQuantity",unit.netQuantity).put("netUnitCode",unit.netUnitCode).put("packageName",unit.packageName).put("imageUrl",unit.imageUrl).put("isDefault",unit.isDefault)) } }.toString())
+                        if (existing >= 0) inventory[existing] = inventory[existing].copy(name = mapped.name, category = mapped.category, catalogCode = mapped.catalogCode, barcode = mapped.barcode, unitCode = mapped.unitCode, imageUrl = mapped.imageUrl, description = mapped.description, brand = mapped.brand, manufacturer = mapped.manufacturer, countryOfManufacture = mapped.countryOfManufacture, unitVariantsJson = mapped.unitVariantsJson)
+                        else inventory.add(mapped)
+                        saveProducts(context, inventory)
+                        showCatalog = false
+                        tab = 2
+                    })
                     showDebts -> DebtScreen(sales = sales, settlements = settlements, onBack = { showDebts = false }, onSettle = { settlingSaleNumber = it.number })
                     showReports -> ReportsScreen(sales = sales, settlements = settlements, expenses = expenses, onBack = { showReports = false })
                     showExpenses -> ExpensesScreen(expenses = expenses, onBack = { showExpenses = false }, onAdd = { expenseDialog = true })
-                    else -> if (showActivityProfile) ActivityProfileScreen(onBack = { showActivityProfile = false }) else MoreScreen(onCustomers = { showDebts = true }, onReports = { showReports = true }, onExpenses = { showExpenses = true }, onActivityProfile = { showActivityProfile = true })
+                    else -> if (showActivityProfile) ActivityProfileScreen(onBack = { showActivityProfile = false }) else MoreScreen(onCustomers = { showDebts = true }, onReports = { showReports = true }, onExpenses = { showExpenses = true }, onActivityProfile = { showActivityProfile = true }, onCatalog = { showCatalog = true })
                 }
             }
         }
@@ -236,11 +295,12 @@ private fun StoreApp(context: Context) {
     if (newSale && inventory.isNotEmpty()) SaleEntryDialog(
         inventory = inventory,
         onDismiss = { newSale = false },
-        onSave = { productIndex, product, quantity, credit, unitPrice, customer ->
+        onSave = { productIndex, product, quantity, credit, unitPrice, customer, baseQuantity, unitCode ->
             val currentProduct = inventory[productIndex]
-            inventory[productIndex] = currentProduct.copy(stock = currentProduct.stock - quantity)
+            inventory[productIndex] = currentProduct.copy(stock = currentProduct.stock - baseQuantity)
             saveProducts(context, inventory)
-            sales.add(0, SaleRecord(nextInvoice, product, quantity, quantity * unitPrice, credit, customer, 0, System.currentTimeMillis(), currentProduct.costPrice))
+            val soldUnitCost = if (quantity > 0) kotlin.math.round(currentProduct.costPrice.toDouble() * baseQuantity / quantity).toInt() else currentProduct.costPrice
+            sales.add(0, SaleRecord(nextInvoice, product, quantity, quantity * unitPrice, credit, customer, 0, System.currentTimeMillis(), soldUnitCost, unitCode, baseQuantity))
             saveSales(context, sales)
             nextInvoice = maxOf(nextInvoice + 1, (sales.maxOfOrNull { it.number } ?: 1048) + 1)
             newSale = false
@@ -326,7 +386,7 @@ private fun Dashboard(products: List<Product>, sales: List<SaleRecord>, onNewSal
         }
         items(products.filter { it.stock <= 9 }.take(3)) { ProductRow(it) }
         item { Heading("آخر المبيعات", "أحدث الفواتير المسجلة") }
-        items(sales.take(3)) { sale -> SaleRow("فاتورة #${sale.number}", "${sale.product} · ${sale.quantity} قطعة", money(sale.total), sale.credit) }
+        items(sales.take(3)) { sale -> SaleRow("فاتورة #${sale.number}", "${sale.product} · ${sale.quantity} ${sale.unitCode}", money(sale.total), sale.credit) }
         
     }
 }
@@ -365,14 +425,14 @@ private fun SalesScreen(sales: List<SaleRecord>, onNewSale: () -> Unit) {
         }
         item { Button(onClick = onNewSale, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(8.dp)); Text("فاتورة بيع جديدة") } }
         item { Heading("أحدث الفواتير", "الفواتير المحفوظة على هذا الجهاز") }
-        items(sales) { sale -> SaleRow("فاتورة #${sale.number}", "${sale.product} · ${sale.quantity} قطعة", money(sale.total), sale.credit) }
+        items(sales) { sale -> SaleRow("فاتورة #${sale.number}", "${sale.product} · ${sale.quantity} ${sale.unitCode}", money(sale.total), sale.credit) }
         
     }
 }
 
 @Composable
 private fun InventoryScreen(products: List<Product>, query: String, onQuery: (String) -> Unit, onAddProduct: () -> Unit, onEditProduct: (Int) -> Unit) {
-    val filtered = products.filter { it.name.contains(query, true) || it.category.contains(query, true) }
+    val filtered = products.filter { it.name.contains(query, true) || it.category.contains(query, true) || it.barcode.contains(query, true) || it.catalogCode.contains(query, true) || productMatchesUnitQuery(it, query) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
         item { Heading("المخزون والمنتجات", "إدارة الأصناف والكميات والأسعار") }
         item {
@@ -395,16 +455,24 @@ private fun InventoryScreen(products: List<Product>, query: String, onQuery: (St
 @Composable
 private fun ProductRow(product: Product, onClick: () -> Unit = {}) {
     val warning = product.stock <= 9
+    val displayImage = product.imageUrl.ifBlank { runCatching { val units = JSONArray(product.unitVariantsJson); (0 until units.length()).map { units.getJSONObject(it) }.firstOrNull { it.optBoolean("isDefault") && it.optString("imageUrl").startsWith("https://", true) }?.optString("imageUrl").orEmpty() }.getOrDefault("") }
     Card(onClick = onClick, colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, Border), modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(45.dp).background(if (warning) Color(0xFFFFF1DF) else Mint, RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
-                Icon(if (warning) Icons.Default.WarningAmber else Icons.Default.Inventory2, null, tint = if (warning) Color(0xFFB96A14) else Green)
+            if (displayImage.startsWith("https://", true)) {
+                AsyncImage(model=displayImage,contentDescription=product.name,modifier=Modifier.size(45.dp).clip(RoundedCornerShape(14.dp)),contentScale=ContentScale.Crop)
+            } else {
+                Box(Modifier.size(45.dp).background(if (warning) Color(0xFFFFF1DF) else Mint, RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
+                    Icon(if (warning) Icons.Default.WarningAmber else Icons.Default.Inventory2, null, tint = if (warning) Color(0xFFB96A14) else Green)
+                }
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(product.name, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                 Text(product.category, color = Muted, fontSize = 12.sp)
-                Text("المتوفر: " + product.stock + " قطع", color = if (warning) Color(0xFFB96A14) else Muted, fontSize = 11.sp)
+                Text("المتوفر: ${product.stock} ${product.unitCode.ifBlank { "EA" }}", color = if (warning) Color(0xFFB96A14) else Muted, fontSize = 11.sp)
+                if (product.barcode.isNotBlank() || product.catalogCode.isNotBlank()) Text(listOf(product.barcode, product.catalogCode).filter { it.isNotBlank() }.joinToString(" · "), color = Muted, fontSize = 10.sp)
+                val unitCount = runCatching { JSONArray(product.unitVariantsJson).length() }.getOrDefault(0)
+                if (unitCount > 1) Text("$unitCount وحدات/عبوات مرتبطة", color = Muted, fontSize = 10.sp)
             }
             Spacer(Modifier.width(6.dp))
             Text(product.price, color = Green, fontWeight = FontWeight.Bold, fontSize = 12.sp)
@@ -433,20 +501,42 @@ private fun SaleRow(title: String, subtitle: String, amount: String, credit: Boo
 }
 
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SaleEntryDialog(
     inventory: List<Product>,
     onDismiss: () -> Unit,
-    onSave: (Int, String, Int, Boolean, Int, String) -> Unit
+    onSave: (Int, String, Int, Boolean, Int, String, Int, String) -> Unit
 ) {
+    if (inventory.isEmpty()) {
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text("لا توجد أصناف") },
+            text = { Text("أضف صنفًا إلى المخزون أو استورد صنفًا من دليل الأصناف قبل إنشاء فاتورة.") },
+            confirmButton = { Button(onClick = onDismiss) { Text("حسنًا") } }
+        )
+        return
+    }
     var selected by remember { mutableIntStateOf(0) }
+    var selectedUnitIndex by remember(selected) { mutableIntStateOf(-1) }
     var quantityText by remember { mutableStateOf("1") }
+    var priceOverrideText by remember(selected, selectedUnitIndex) { mutableStateOf("") }
     var credit by remember { mutableStateOf(false) }
     var customer by remember { mutableStateOf("") }
+    var unitExpanded by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val product = inventory[selected.coerceIn(0, inventory.lastIndex)]
+    val saleUnits = localSaleUnits(product)
+    val defaultUnitIndex = saleUnits.indexOfFirst { it.isDefault }.takeIf { it >= 0 } ?: 0
+    val effectiveUnitIndex = selectedUnitIndex.takeIf { it in saleUnits.indices } ?: defaultUnitIndex
+    val selectedUnit = saleUnits[effectiveUnitIndex]
+    val basePrice = product.price.replace(",", "").replace(" ر.ي", "").toIntOrNull() ?: 0
+    val suggestedUnitPrice = kotlin.math.round(basePrice.toDouble() * selectedUnit.quantityInBase).toInt()
     val quantity = quantityText.toIntOrNull()
-    val unitPrice = product.price.replace(",", "").replace(" ر.ي", "").toIntOrNull() ?: 0
+    val unitPrice = priceOverrideText.toIntOrNull() ?: suggestedUnitPrice
+    val baseQuantityExact = (quantity ?: 0) * selectedUnit.quantityInBase
+    val baseQuantity = kotlin.math.round(baseQuantityExact).toInt()
+    val quantityIsWholeBaseUnits = kotlin.math.abs(baseQuantityExact - baseQuantity) < 0.000001
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("فاتورة بيع جديدة", fontWeight = FontWeight.Bold, color = Ink) },
@@ -469,10 +559,36 @@ private fun SaleEntryDialog(
                         }
                     }
                 }
+                ExposedDropdownMenuBox(expanded = unitExpanded, onExpandedChange = { unitExpanded = it }) {
+                    OutlinedTextField(
+                        value = "${selectedUnit.label} × ${selectedUnit.quantityInBase} ${product.unitCode} • ${selectedUnit.barcode.ifBlank { "بدون باركود" }}",
+                        onValueChange = {}, readOnly = true, label = { Text("وحدة البيع / العبوة") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = unitExpanded) },
+                        modifier = Modifier.fillMaxWidth().menuAnchor()
+                    )
+                    ExposedDropdownMenu(expanded = unitExpanded, onDismissRequest = { unitExpanded = false }) {
+                        saleUnits.forEachIndexed { index, unit ->
+                            DropdownMenuItem(
+                                text = { Text("${unit.label} × ${unit.quantityInBase} ${product.unitCode}${if (unit.barcode.isNotBlank()) " • ${unit.barcode}" else ""}") },
+                                onClick = { selectedUnitIndex = index; priceOverrideText = ""; unitExpanded = false; error = null }
+                            )
+                        }
+                    }
+                }
+                if (selectedUnit.imageUrl.startsWith("https://", true)) {
+                    AsyncImage(model=selectedUnit.imageUrl,contentDescription=selectedUnit.label,modifier=Modifier.fillMaxWidth().heightIn(max=130.dp),contentScale=ContentScale.Fit)
+                }
                 OutlinedTextField(
                     value = quantityText,
                     onValueChange = { quantityText = it.filter(Char::isDigit).take(4); error = null },
-                    label = { Text("الكمية") },
+                    label = { Text("الكمية بوحدة البيع المختارة") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = priceOverrideText.ifBlank { suggestedUnitPrice.toString() },
+                    onValueChange = { priceOverrideText = it.filter(Char::isDigit).take(9); error = null },
+                    label = { Text("سعر الوحدة/العبوة (اقتراح نسبي، عدّله حسب سعرك)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -498,12 +614,16 @@ private fun SaleEntryDialog(
             Button(onClick = {
                 if (quantity == null || quantity <= 0) {
                     error = "أدخل كمية صحيحة أكبر من صفر."
-                } else if (quantity > product.stock) {
-                    error = "الكمية المطلوبة أكبر من المخزون المتاح (${product.stock})."
+                } else if (!quantityIsWholeBaseUnits) {
+                    error = "تحويل هذه العبوة ينتج كمية كسرية، والمخزون المحلي الحالي يدعم الكميات الصحيحة فقط."
+                } else if (baseQuantity > product.stock) {
+                    error = "الكمية المطلوبة تعادل $baseQuantity من وحدة الأساس، والمتاح ${product.stock}."
+                } else if (unitPrice <= 0) {
+                    error = "أدخل سعر بيع أكبر من صفر."
                 } else if (credit && customer.isBlank()) {
                     error = "أدخل اسم العميل للبيع الآجل."
                 } else {
-                    onSave(selected, product.name, quantity, credit, unitPrice, if (credit) customer.trim() else "")
+                    onSave(selected, product.name, quantity, credit, unitPrice, if (credit) customer.trim() else "", baseQuantity, selectedUnit.code)
                 }
             }) { Text("حفظ الفاتورة") }
         },
@@ -530,6 +650,7 @@ private fun EditProductDialog(
         title = { Text("تعديل المنتج", color = Ink, fontWeight = FontWeight.Bold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                Text("تاريخ الإدخال: ${SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(product.createdAt))} • الموظف/المستخدم: ${product.createdBy.ifBlank { "محلي / غير محدد" }}", color = Muted, fontSize = 11.sp)
                 OutlinedTextField(name, { name = it; error = null }, label = { Text("اسم المنتج") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(category, { category = it; error = null }, label = { Text("التصنيف") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(stockText, { stockText = it.filter(Char::isDigit).take(7); error = null }, label = { Text("الكمية الحالية") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -618,12 +739,12 @@ private fun AddProductDialog(
 }
 
 @Composable
-private fun MoreScreen(onCustomers: () -> Unit, onReports: () -> Unit, onExpenses: () -> Unit, onActivityProfile: () -> Unit) {
-    val options = listOf("العملاء والمديونيات", "الموردون والمشتريات", "التقارير والأرباح", "المصروفات", "إعدادات المتجر", "النسخ الاحتياطي")
+private fun MoreScreen(onCustomers: () -> Unit, onReports: () -> Unit, onExpenses: () -> Unit, onActivityProfile: () -> Unit, onCatalog: () -> Unit) {
+    val options = listOf("دليل الأصناف العالمي", "العملاء والمديونيات", "الموردون والمشتريات", "التقارير والأرباح", "المصروفات", "إعدادات المتجر", "النسخ الاحتياطي")
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Heading("إدارة المتجر", "الأدوات والإعدادات") }
         items(options) { label ->
-            Card(onClick = { when (label) { "العملاء والمديونيات" -> onCustomers(); "التقارير والأرباح" -> onReports(); "المصروفات" -> onExpenses(); "إعدادات المتجر" -> onActivityProfile() } }, colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Border)) {
+            Card(onClick = { when (label) { "العملاء والمديونيات" -> onCustomers(); "التقارير والأرباح" -> onReports(); "المصروفات" -> onExpenses(); "إعدادات المتجر" -> onActivityProfile(); "دليل الأصناف العالمي" -> onCatalog() } }, colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Border)) {
                 Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(38.dp).background(Mint, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) { Icon(Icons.Default.Settings, null, tint = Green) }
                     Spacer(Modifier.width(12.dp))
@@ -894,7 +1015,7 @@ private fun DebtScreen(sales: List<SaleRecord>, settlements: List<SettlementReco
             Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, Border), modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                     Text(sale.customer.ifBlank { "عميل غير محدد" }, color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    Text("فاتورة #${sale.number} • ${sale.product} × ${sale.quantity}", color = Muted, fontSize = 12.sp)
+                    Text("فاتورة #${sale.number} • ${sale.product} × ${sale.quantity} ${sale.unitCode}", color = Muted, fontSize = 12.sp)
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("قيمة الفاتورة: ${money(sale.total)}", color = Muted, fontSize = 12.sp)
                         Text("المسدّد: ${money(sale.paid)}", color = Green, fontSize = 12.sp)
