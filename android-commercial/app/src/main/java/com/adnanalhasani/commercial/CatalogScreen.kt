@@ -154,7 +154,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var items by remember { mutableStateOf<List<CatalogProduct>>(emptyList()) }
     var categories by remember { mutableStateOf<List<CatalogCategory>>(emptyList()) }
     var directoryUnits by remember { mutableStateOf<List<DirectoryUnit>>(emptyList()) }; var pendingTransfers by remember { mutableStateOf<List<PendingTransfer>>(emptyList()) }
-    var busy by remember { mutableStateOf(false) }; var feedback by remember { mutableStateOf("") }; var editingProduct by remember { mutableStateOf<CatalogProduct?>(null) }
+    var busy by remember { mutableStateOf(false) }; var restoringSession by remember { mutableStateOf(true) }; var feedback by remember { mutableStateOf("") }; var editingProduct by remember { mutableStateOf<CatalogProduct?>(null) }
 
     var categoryCode by remember { mutableStateOf("") }; var parentCode by remember { mutableStateOf("") }
     var categoryNameAr by remember { mutableStateOf("") }; var categoryNameEn by remember { mutableStateOf("") }
@@ -198,7 +198,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         busy = true; feedback = ""
         catalogIo.execute {
             val result = runCatching(action)
-            catalogMain.post { busy = false; result.onSuccess(onSuccess).onFailure { feedback = it.message ?: "تعذر إكمال العملية." } }
+            catalogMain.post { busy = false; result.onSuccess(onSuccess).onFailure { feedback = it.message ?: "تعذر إكمال العملية."; restoringSession = false } }
         }
     }
     LaunchedEffect(Unit) {
@@ -217,7 +217,10 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                 catalogSessionPreferences(context).edit().putString("refresh_token", parts.getOrNull(1).orEmpty()).apply()
                 signedInUserId = parts.getOrNull(2).orEmpty()
                 feedback = "تم استعادة جلستك السابقة."
+                restoringSession = false
             })
+        } else {
+            restoringSession = false
         }
     }
 
@@ -481,7 +484,9 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                 token = null; signedInUserId = ""; organizationId = ""; feedback = "تم تسجيل الخروج."
             }) { Text("تسجيل الخروج") }
         }
-        if(token==null) {
+        if (restoringSession) {
+            Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+        } else if(token==null) {
             LazyColumn(verticalArrangement=Arrangement.spacedBy(10.dp),contentPadding=PaddingValues(bottom=18.dp)) {
                 item { Text("تسجيل الدخول إلى حساب Supabase",style=MaterialTheme.typography.titleMedium) }
                 item { OutlinedTextField(email,{email=it.trim()},Modifier.fillMaxWidth(),label={Text("البريد الإلكتروني")},singleLine=true) }
