@@ -47,3 +47,27 @@ def test_snapshot_loader_validates_structure(tmp_path):
     snapshot.write_text(json.dumps({"tables": {"items": {"columns": ["id"]}}}))
     with pytest.raises(ValueError):
         load_supabase_snapshot(snapshot)
+
+
+
+def test_mapped_tables_compare_different_names_without_assuming_equivalence():
+    report = compare_mapped_tables(
+        {"sales": {"id": "TEXT", "legacy_note": "TEXT"}},
+        {"commercial_sales": {"id": "UUID", "organization_id": "UUID"}},
+        [{
+            "sqlite_table": "sales",
+            "supabase_table": "commercial_sales",
+            "status": "partial_overlap",
+            "reason": "Different identity models",
+        }],
+    )
+    assert report[0]["columns_missing_in_supabase"] == [
+        {"column": "legacy_note", "sqlite_type": "TEXT"}
+    ]
+    assert report[0]["columns_missing_in_sqlite"] == [
+        {"column": "organization_id", "supabase_type": "UUID"}
+    ]
+    assert report[0]["type_differences"] == [
+        {"column": "id", "sqlite_type": "TEXT", "supabase_type": "UUID"}
+    ]
+    assert report[0]["automatic_equivalence_assumed"] is False
