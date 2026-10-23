@@ -112,6 +112,13 @@ CREATE TABLE IF NOT EXISTS public.commercial_catalog_product_sectors (
   is_excluded boolean NOT NULL DEFAULT false,
   PRIMARY KEY (product_id, sector_code)
 );
+CREATE TABLE IF NOT EXISTS public.commercial_catalog_product_business_levels (
+  product_id uuid NOT NULL REFERENCES public.commercial_catalog_products(id) ON DELETE CASCADE,
+  business_level_code text NOT NULL CHECK (length(btrim(business_level_code)) BETWEEN 1 AND 80),
+  is_excluded boolean NOT NULL DEFAULT false,
+  recommendation_weight smallint NOT NULL DEFAULT 0 CHECK (recommendation_weight BETWEEN -100 AND 100),
+  PRIMARY KEY (product_id, business_level_code)
+);
 CREATE TABLE IF NOT EXISTS public.commercial_catalog_product_regions (
   product_id uuid NOT NULL REFERENCES public.commercial_catalog_products(id) ON DELETE CASCADE,
   country_code text,
@@ -284,7 +291,7 @@ BEGIN
   FOREACH t IN ARRAY ARRAY[
         'commercial_catalog_categories','commercial_catalog_category_translations',
     'commercial_catalog_products','commercial_catalog_product_translations',
-    'commercial_catalog_product_units','commercial_catalog_product_sectors',
+    'commercial_catalog_product_units','commercial_catalog_product_sectors','commercial_catalog_product_business_levels',
     'commercial_catalog_product_regions','commercial_catalog_product_recipes',
     'commercial_catalog_recipe_ingredients','commercial_catalog_product_rulings',
     'commercial_organization_catalog_items','commercial_catalog_transfers'
