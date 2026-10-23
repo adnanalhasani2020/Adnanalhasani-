@@ -21,6 +21,7 @@ from agent_core.commerce_checkout import CommercialCheckoutApplication
 from agent_core.commercial_identity import CommercialIdentityApplication
 from agent_core.persistence import connect_database
 from agent_core.shared import ValidationError
+from agent_core.supabase_rpc import SupabaseRPCClient, SupabaseRPCError
 
 
 PAGE = r"""<!doctype html>
@@ -175,6 +176,32 @@ class CommercialWebApplication:
         try:
             if method == "POST":
                 self._validate_same_origin(environ)
+
+            # Supabase onboarding is a separate authenticated path. It deliberately
+            # does not reuse the local SQLite session or SQLite person identifier.
+            if method == "POST" and path == "/api/supabase/organizations":
+                authorization = environ.get("HTTP_AUTHORIZATION", "")
+                scheme, separator, access_token = authorization.partition(" ")
+                if not separator or scheme.lower() != "bearer" or not access_token.strip():
+                    return self._json(start_response, "401 Unauthorized", {
+                        "error": "أرسل رمز وصول صالحًا لجلسة Supabase في ترويسة Authorization."
+                    })
+                body = self._body(environ)
+                client = SupabaseRPCClient(access_token.strip())
+                organization_id = client.create_organization(
+                    name=body.get("name"),
+                    slug=body.get("slug"),
+                    organization_type=body.get("organization_type"),
+                    currency_code=body.get("currency_code"),
+                    timezone=body.get("timezone"),
+                    locale=body.get("locale"),
+                    country_code=body.get("country_code"),
+                    module_keys=body.get("module_keys"),
+                )
+                return self._json(start_response, "201 Created", {
+                    "organization_id": organization_id
+                })
+
             db = connect_database(self.database_path)
             token = self._cookies(environ)
             if method == "POST" and path in {"/api/register", "/api/login"}:
@@ -348,6 +375,9 @@ button{{font:inherit;padding:.6rem 1rem;cursor:pointer}}dt{{font-weight:700}}dd{
                 return self._json(start_response, "200 OK", receipt)
 
             return self._json(start_response, "404 Not Found", {"error": "المسار غير موجود."})
+        except SupabaseRPCError as exc:
+            logging.warning("Supabase organization onboarding request failed: %s", str(exc))
+            return self._json(start_response, "502 Bad Gateway", {"error": str(exc)})
         except ValidationError as exc:
             return self._json(start_response, "400 Bad Request", {"error": str(exc)})
         except sqlite3.IntegrityError:
