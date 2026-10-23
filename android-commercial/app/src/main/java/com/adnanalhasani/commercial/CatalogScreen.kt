@@ -23,6 +23,8 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.Executors
 
+internal data class CatalogUnit(val unitCode: String, val role: String, val quantityInBase: String, val barcode: String, val packageName: String, val imageUrl: String, val isDefault: Boolean)
+
 internal data class CatalogProduct(
     val id: String,
     val catalogCode: String,
@@ -38,7 +40,9 @@ internal data class CatalogProduct(
     val recommendationScore: Int,
     val barcode: String = "",
     val unitCode: String = "EA",
-    val createdBy: String = ""
+    val availableUnits: List<CatalogUnit> = emptyList(),
+    val createdBy: String = "",
+    val createdAt: String = ""
 )
 
 private val catalogIo = Executors.newSingleThreadExecutor()
@@ -140,7 +144,25 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                     countryOfManufacture = row.optString("country_of_manufacture"),
                     imageUrl = row.optString("image_url"),
                     prescriptionOnly = row.optBoolean("is_prescription_only", false),
-                    recommendationScore = row.optInt("recommendation_score")
+                    recommendationScore = row.optInt("recommendation_score"),
+                    barcode = row.optString("barcode"),
+                    unitCode = row.optString("unit_code").ifBlank { "EA" },
+                    availableUnits = row.optJSONArray("available_units")?.let { units ->
+                        List(units.length()) { unitIndex ->
+                            val unit = units.getJSONObject(unitIndex)
+                            CatalogUnit(
+                                unitCode = unit.optString("unit_code"),
+                                role = unit.optString("unit_role"),
+                                quantityInBase = unit.optString("quantity_in_base", "1"),
+                                barcode = unit.optString("barcode"),
+                                packageName = unit.optString("package_name"),
+                                imageUrl = unit.optString("image_url"),
+                                isDefault = unit.optBoolean("is_default", false)
+                            )
+                        }
+                    } ?: emptyList(),
+                    createdBy = row.optString("created_by"),
+                    createdAt = row.optString("created_at")
                 )
             }
             feedback = "تم جلب ${items.size} صنفًا. القوالب العامة تحتاج إلى مراجعة بيانات المنتج قبل الاستخدام التجاري."
@@ -209,6 +231,11 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                                 item.brand.takeIf { it.isNotBlank() }?.let { "العلامة: $it" },
                                 item.manufacturer.takeIf { it.isNotBlank() }?.let { "المصنّع: $it" },
                                 item.countryOfManufacture.takeIf { it.isNotBlank() }?.let { "بلد الصناعة: $it" },
+                                item.barcode.takeIf { it.isNotBlank() }?.let { "الباركود الأساسي: $it" },
+                                "وحدة الأساس/البيع: ${item.unitCode}",
+                                item.availableUnits.takeIf { it.isNotEmpty() }?.joinToString("، ") { unit -> "${unit.packageName.ifBlank { unit.unitCode }} × ${unit.quantityInBase}${if (unit.barcode.isNotBlank()) " (باركود ${unit.barcode})" else ""}" }?.let { "الوحدات والعبوات: $it" },
+                                item.createdAt.takeIf { it.isNotBlank() }?.let { "تاريخ إدخال سجل الدليل: $it" },
+                                item.createdBy.takeIf { it.isNotBlank() }?.let { "معرّف مدخل سجل الدليل: $it" },
                                 item.imageUrl.takeIf { it.isNotBlank() }?.let { "رابط الصورة: $it" },
                                 if (item.prescriptionOnly) "صنف يتطلب وصفة طبية — تحقق من التصنيف المحلي" else null
                             ).filterNotNull()
