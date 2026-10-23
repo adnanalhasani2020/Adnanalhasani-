@@ -322,7 +322,14 @@ BEGIN
          OR COALESCE(nullif(v_ingredient->>'quantity','')::numeric,0)<=0
          OR nullif(btrim(v_ingredient->>'unit_code'),'') IS NULL
          OR NOT EXISTS (SELECT 1 FROM public.commercial_global_units u WHERE u.code=v_ingredient->>'unit_code' AND u.is_active
-           AND (u.owner_organization_id IS NULL OR u.owner_organization_id=p_organization_id)) THEN
+           AND (u.owner_organization_id IS NULL OR u.owner_organization_id=p_organization_id))
+         OR (nullif(v_ingredient->>'ingredient_product_id','') IS NOT NULL AND NOT EXISTS (
+           SELECT 1 FROM public.commercial_global_catalog_items ip
+           WHERE ip.id=(v_ingredient->>'ingredient_product_id')::uuid
+             AND (ip.owner_organization_id IS NULL OR ip.owner_organization_id=p_organization_id
+               OR EXISTS (SELECT 1 FROM public.commercial_organization_catalog_items oi
+                 WHERE oi.organization_id=p_organization_id AND oi.global_item_id=ip.id))
+         )) THEN
         RAISE EXCEPTION 'invalid_recipe_ingredient' USING ERRCODE='22023';
       END IF;
       INSERT INTO public.commercial_catalog_recipe_ingredients(
