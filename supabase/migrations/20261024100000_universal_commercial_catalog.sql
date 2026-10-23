@@ -364,7 +364,7 @@ BEGIN
   END LOOP;
 END $$;
 CREATE POLICY catalog_recipe_ingredients_read ON public.commercial_catalog_recipe_ingredients FOR SELECT TO authenticated
-USING (EXISTS (SELECT 1 FROM public.commercial_catalog_product_recipes r JOIN public.commercial_catalog_products p ON p.id=r.product_id WHERE r.id=recipe_id AND (p.owner_organization_id IS NULL OR public.commercial_catalog_member_of(p.owner_organization_id, ARRAY['owner','admin','manager','staff']::text[]))));
+USING (EXISTS (SELECT 1 FROM public.commercial_catalog_product_recipes r JOIN public.commercial_catalog_products p ON p.id=r.product_id WHERE r.id=recipe_id AND (p.owner_organization_id IS NULL OR public.commercial_catalog_member_of(p.owner_organization_id, ARRAY['owner','admin','manager','staff']::text[]) OR EXISTS (SELECT 1 FROM public.commercial_organization_catalog_items oi WHERE oi.product_id=p.id AND public.commercial_catalog_member_of(oi.organization_id, ARRAY['owner','admin','manager','staff']::text[])))));
 CREATE POLICY catalog_recipe_ingredients_write ON public.commercial_catalog_recipe_ingredients FOR ALL TO authenticated
 USING (EXISTS (SELECT 1 FROM public.commercial_catalog_product_recipes r JOIN public.commercial_catalog_products p ON p.id=r.product_id WHERE r.id=recipe_id AND p.owner_organization_id IS NOT NULL AND public.commercial_catalog_member_of(p.owner_organization_id, ARRAY['owner','admin']::text[])))
 WITH CHECK (EXISTS (SELECT 1 FROM public.commercial_catalog_product_recipes r JOIN public.commercial_catalog_products p ON p.id=r.product_id WHERE r.id=recipe_id AND p.owner_organization_id IS NOT NULL AND public.commercial_catalog_member_of(p.owner_organization_id, ARRAY['owner','admin']::text[])));
