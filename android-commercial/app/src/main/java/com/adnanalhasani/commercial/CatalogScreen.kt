@@ -74,6 +74,7 @@ private fun catalogGet(path: String, token: String): String {
     } finally { connection.disconnect() }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct) -> Unit) {
     var email by remember { mutableStateOf("") }; var password by remember { mutableStateOf("") }
