@@ -532,10 +532,33 @@ private fun SaleEntryDialog(
                         }
                     }
                 }
+                ExposedDropdownMenuBox(expanded = unitExpanded, onExpandedChange = { unitExpanded = it }) {
+                    OutlinedTextField(
+                        value = "${selectedUnit.label} × ${selectedUnit.quantityInBase} ${product.unitCode} • ${selectedUnit.barcode.ifBlank { "بدون باركود" }}",
+                        onValueChange = {}, readOnly = true, label = { Text("وحدة البيع / العبوة") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = unitExpanded) },
+                        modifier = Modifier.fillMaxWidth().menuAnchor()
+                    )
+                    ExposedDropdownMenu(expanded = unitExpanded, onDismissRequest = { unitExpanded = false }) {
+                        saleUnits.forEachIndexed { index, unit ->
+                            DropdownMenuItem(
+                                text = { Text("${unit.label} × ${unit.quantityInBase} ${product.unitCode}${if (unit.barcode.isNotBlank()) " • ${unit.barcode}" else ""}") },
+                                onClick = { selectedUnitIndex = index; priceOverrideText = ""; unitExpanded = false; error = null }
+                            )
+                        }
+                    }
+                }
                 OutlinedTextField(
                     value = quantityText,
                     onValueChange = { quantityText = it.filter(Char::isDigit).take(4); error = null },
-                    label = { Text("الكمية") },
+                    label = { Text("الكمية بوحدة البيع المختارة") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = priceOverrideText.ifBlank { suggestedUnitPrice.toString() },
+                    onValueChange = { priceOverrideText = it.filter(Char::isDigit).take(9); error = null },
+                    label = { Text("سعر الوحدة/العبوة (اقتراح نسبي، عدّله حسب سعرك)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -561,12 +584,16 @@ private fun SaleEntryDialog(
             Button(onClick = {
                 if (quantity == null || quantity <= 0) {
                     error = "أدخل كمية صحيحة أكبر من صفر."
-                } else if (quantity > product.stock) {
-                    error = "الكمية المطلوبة أكبر من المخزون المتاح (${product.stock})."
+                } else if (!quantityIsWholeBaseUnits) {
+                    error = "تحويل هذه العبوة ينتج كمية كسرية، والمخزون المحلي الحالي يدعم الكميات الصحيحة فقط."
+                } else if (baseQuantity > product.stock) {
+                    error = "الكمية المطلوبة تعادل $baseQuantity من وحدة الأساس، والمتاح ${product.stock}."
+                } else if (unitPrice <= 0) {
+                    error = "أدخل سعر بيع أكبر من صفر."
                 } else if (credit && customer.isBlank()) {
                     error = "أدخل اسم العميل للبيع الآجل."
                 } else {
-                    onSave(selected, product.name, quantity, credit, unitPrice, if (credit) customer.trim() else "")
+                    onSave(selected, product.name, quantity, credit, unitPrice, if (credit) customer.trim() else "", baseQuantity, selectedUnit.code)
                 }
             }) { Text("حفظ الفاتورة") }
         },
