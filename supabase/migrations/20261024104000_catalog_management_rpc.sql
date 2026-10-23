@@ -375,7 +375,7 @@ BEGIN
       nullif(btrim(v_ruling->>'jurisdiction_code'),''),v_ruling->>'outcome',nullif(btrim(v_ruling->>'rationale'),''),
       nullif(btrim(v_ruling->>'source_title'),''),nullif(btrim(v_ruling->>'source_url'),''),
       nullif(v_ruling->>'effective_from','')::date,nullif(v_ruling->>'effective_to','')::date,
-      COALESCE(nullif(v_ruling->>'confidence',''),'unverified'),NULL,NULL,auth.uid()
+      CASE WHEN v_ruling->>'confidence'='reported' THEN 'reported' ELSE 'unverified' END,NULL,NULL,auth.uid()
     );
   END LOOP;
 
@@ -562,3 +562,39 @@ BEGIN
 END $$;
 REVOKE ALL ON FUNCTION public.commercial_catalog_reject_transfer(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.commercial_catalog_reject_transfer(uuid) TO authenticated;
+
+
+-- Only a separate owner/admin review action may mark a ruling as reviewed; authoring never grants itself reviewed status.
+CREATE OR REPLACE FUNCTION public.commercial_catalog_review_ruling(
+  p_organization_id uuid,
+  p_ruling_id uuid,
+  p_review_note text DEFAULT NULL
+) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+DECLARE v_product_id uuid; v_confidence text; v_source_url text; v_source_title text;
+BEGIN
+  IF auth.uid() IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
+  IF NOT public.commercial_catalog_member_of(p_organization_id,ARRAY['owner','admin']::text[]) THEN
+    RAISE EXCEPTION 'catalog_ruling_review_forbidden' USING ERRCODE='42501';
+  END IF;
+  SELECT r.product_id,r.confidence,r.source_url,r.source_title
+  INTO v_product_id,v_confidence,v_source_url,v_source_title
+  FROM public.commercial_catalog_product_rulings r
+  JOIN public.commercial_global_catalog_items p ON p.id=r.product_id
+  WHERE r.id=p_ruling_id
+    AND (p.owner_organization_id=p_organization_id OR EXISTS (
+      SELECT 1 FROM public.commercial_organization_catalog_items oi
+      WHERE oi.organization_id=p_organization_id AND oi.global_item_id=p.id
+    ));
+  IF NOT FOUND THEN RAISE EXCEPTION 'catalog_ruling_not_found' USING ERRCODE='22023'; END IF;
+  IF nullif(btrim(v_source_title),'') IS NULL OR v_source_url IS NULL OR v_source_url !~* '^https://[^[:space:]]+$' THEN
+    RAISE EXCEPTION 'ruling_requires_verifiable_https_source' USING ERRCODE='22023';
+  END IF;
+  UPDATE public.commercial_catalog_product_rulings
+  SET confidence='reviewed',reviewed_by=auth.uid(),reviewed_at=now(),
+      rationale=COALESCE(nullif(btrim(p_review_note),''),rationale)
+  WHERE id=p_ruling_id;
+  RETURN jsonb_build_object('ruling_id',p_ruling_id,'product_id',v_product_id,'confidence','reviewed','reviewed_by',auth.uid());
+END $$;
+REVOKE ALL ON FUNCTION public.commercial_catalog_review_ruling(uuid,uuid,text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.commercial_catalog_review_ruling(uuid,uuid,text) TO authenticated;
