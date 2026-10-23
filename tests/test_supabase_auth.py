@@ -27,7 +27,7 @@ def test_sign_in_uses_password_grant_and_never_puts_credentials_in_url(monkeypat
     class Response:
         def __enter__(self): return self
         def __exit__(self, *args): return False
-        def read(self, size): return b'{"access_token":"test-token","user":{"id":"user-1","email":"a@example.com"}}'
+        def read(self, size): return b'{"access_token":"test-token","refresh_token":"test-refresh","token_type":"bearer","user":{"id":"user-1","email":"a@example.com"}}'
 
     def fake_urlopen(request, timeout):
         seen["url"] = request.full_url
