@@ -1,5 +1,8 @@
 package com.adnanalhasani.commercial
 
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.ui.platform.LocalContext
 import android.os.Handler
 import android.os.Looper
 import androidx.compose.foundation.BorderStroke
@@ -78,6 +81,7 @@ private fun catalogGet(path: String, token: String): String {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct) -> Unit) {
+    val context = LocalContext.current
     var email by remember { mutableStateOf("") }; var password by remember { mutableStateOf("") }
     var token by remember { mutableStateOf<String?>(null) }; var signedInUserId by remember { mutableStateOf("") }; var organizationId by remember { mutableStateOf("") }
     var section by remember { mutableStateOf("browse") }
@@ -441,6 +445,10 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                                         if(ruling.rationale.isNotBlank()) Text(ruling.rationale,style=MaterialTheme.typography.bodySmall)
                                         if(ruling.sourceTitle.isNotBlank()) Text("المصدر: ${ruling.sourceTitle}",style=MaterialTheme.typography.bodySmall)
                                         if(ruling.sourceUrl.isNotBlank()) Text("رابط المصدر: ${ruling.sourceUrl}",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.primary)
+                                        if(ruling.sourceUrl.startsWith("https://",true)) TextButton(onClick={
+                                            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(ruling.sourceUrl))) }
+                                                .onFailure { feedback="تعذر فتح رابط المصدر: ${it.message.orEmpty()}" }
+                                        }) { Text("فتح المصدر") }
                                         if(ruling.effectiveFrom.isNotBlank() || ruling.effectiveTo.isNotBlank()) Text("فترة السريان: ${ruling.effectiveFrom.ifBlank { "غير محدد" }} — ${ruling.effectiveTo.ifBlank { "مفتوح" }}",style=MaterialTheme.typography.labelSmall)
                                         if(ruling.reviewedAt.isNotBlank()) Text("تاريخ المراجعة: ${ruling.reviewedAt}",style=MaterialTheme.typography.labelSmall)
                                         if(ruling.confidence!="reviewed" && ruling.sourceTitle.isNotBlank() && ruling.sourceUrl.startsWith("https://",true)) {
