@@ -599,7 +599,7 @@ BEGIN
     ));
   IF NOT FOUND THEN RAISE EXCEPTION 'catalog_ruling_not_found' USING ERRCODE='22023'; END IF;
   IF v_confidence='official' THEN RAISE EXCEPTION 'official_ruling_cannot_be_downgraded' USING ERRCODE='22023'; END IF;
-  IF nullif(btrim(v_source_title),'') IS NULL OR v_source_url IS NULL OR v_source_url !~* '^https://[^[:space:]]+
+  IF nullif(btrim(v_source_title),'') IS NULL OR v_source_url IS NULL OR v_source_url !~* '^https://[^[:space:]]+$' THEN
   SET confidence='reviewed',reviewed_by=auth.uid(),reviewed_at=now(),
       rationale=COALESCE(nullif(btrim(p_review_note),''),rationale)
   WHERE id=p_ruling_id;
