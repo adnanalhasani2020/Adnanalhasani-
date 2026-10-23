@@ -249,3 +249,37 @@ JOIN (VALUES
 ) AS v(category_code,level_code,weight) ON v.category_code=i.category_code
 WHERE i.owner_organization_id IS NULL AND i.attributes_schema->>'catalog_template'='true'
 ON CONFLICT (product_id,business_level_code) DO NOTHING;
+
+
+-- Extend existing grocery/household/office catalog templates to grocery, supermarket, hospitality and wholesale activity codes.
+INSERT INTO public.commercial_catalog_product_sectors(product_id,sector_code)
+SELECT i.id,v.sector_code
+FROM public.commercial_global_catalog_items i
+JOIN (VALUES
+ ('FOOD-GRAINS','grocery'),('FOOD-GRAINS','supermarket'),('FOOD-GRAINS','restaurant'),('FOOD-GRAINS','hotel'),('FOOD-GRAINS','wholesale'),
+ ('FOOD-SWEETENERS','grocery'),('FOOD-SWEETENERS','supermarket'),('FOOD-SWEETENERS','restaurant'),('FOOD-SWEETENERS','hotel'),('FOOD-SWEETENERS','wholesale'),
+ ('FOOD-OILS','grocery'),('FOOD-OILS','supermarket'),('FOOD-OILS','restaurant'),('FOOD-OILS','hotel'),('FOOD-OILS','wholesale'),
+ ('FOOD-DRINKS','grocery'),('FOOD-DRINKS','supermarket'),('FOOD-DRINKS','restaurant'),('FOOD-DRINKS','hotel'),('FOOD-DRINKS','wholesale'),
+ ('FOOD-DAIRY','grocery'),('FOOD-DAIRY','supermarket'),('FOOD-DAIRY','restaurant'),('FOOD-DAIRY','hotel'),('FOOD-DAIRY','wholesale'),
+ ('FOOD-BAKERY','grocery'),('FOOD-BAKERY','supermarket'),('FOOD-BAKERY','restaurant'),('FOOD-BAKERY','hotel'),('FOOD-BAKERY','wholesale'),
+ ('HOUSEHOLD-CLEANING','grocery'),('HOUSEHOLD-CLEANING','supermarket'),('HOUSEHOLD-CLEANING','hotel'),('HOUSEHOLD-CLEANING','restaurant'),('HOUSEHOLD-CLEANING','wholesale'),
+ ('OFFICE-SUPPLIES','office'),('OFFICE-SUPPLIES','supermarket'),('OFFICE-SUPPLIES','wholesale')
+) AS v(category_code,sector_code) ON v.category_code=i.category_code
+WHERE i.owner_organization_id IS NULL AND i.is_active
+ON CONFLICT (product_id,sector_code) DO NOTHING;
+
+INSERT INTO public.commercial_catalog_product_business_levels(product_id,business_level_code,recommendation_weight)
+SELECT i.id,v.level_code,v.weight
+FROM public.commercial_global_catalog_items i
+JOIN (VALUES
+ ('FOOD-GRAINS','shop',20),('FOOD-GRAINS','grocery',25),('FOOD-GRAINS','supermarket',25),('FOOD-GRAINS','company',15),
+ ('FOOD-SWEETENERS','shop',20),('FOOD-SWEETENERS','grocery',25),('FOOD-SWEETENERS','supermarket',25),('FOOD-SWEETENERS','company',15),
+ ('FOOD-OILS','shop',20),('FOOD-OILS','grocery',25),('FOOD-OILS','supermarket',25),('FOOD-OILS','company',15),
+ ('FOOD-DRINKS','shop',20),('FOOD-DRINKS','grocery',25),('FOOD-DRINKS','supermarket',25),('FOOD-DRINKS','company',15),
+ ('FOOD-DAIRY','shop',20),('FOOD-DAIRY','grocery',25),('FOOD-DAIRY','supermarket',25),('FOOD-DAIRY','company',15),
+ ('FOOD-BAKERY','shop',20),('FOOD-BAKERY','grocery',25),('FOOD-BAKERY','supermarket',25),('FOOD-BAKERY','company',15),
+ ('HOUSEHOLD-CLEANING','shop',20),('HOUSEHOLD-CLEANING','grocery',25),('HOUSEHOLD-CLEANING','supermarket',25),('HOUSEHOLD-CLEANING','company',15),
+ ('OFFICE-SUPPLIES','office',25),('OFFICE-SUPPLIES','company',15),('OFFICE-SUPPLIES','shop',10)
+) AS v(category_code,level_code,weight) ON v.category_code=i.category_code
+WHERE i.owner_organization_id IS NULL AND i.is_active
+ON CONFLICT (product_id,business_level_code) DO NOTHING;
