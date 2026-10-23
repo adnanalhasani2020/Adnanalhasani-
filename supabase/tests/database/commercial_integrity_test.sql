@@ -15,8 +15,7 @@ SELECT has_trigger('public', 'commercial_journal_lines',
   'journal lines have a posting immutability guard');
 
 SELECT has_check('public', 'commercial_journal_lines',
-  'commercial_journal_lines_one_sided_positive_amount_ck',
-  'journal lines must contain one positive debit or credit');
+  'journal lines enforce amount integrity with a check constraint');
 
 SELECT has_index('public', 'commercial_journal_lines',
   'commercial_journal_lines_journal_entry_id_line_number_key',
