@@ -315,6 +315,14 @@ USING (
     WHERE c.code=entity_key
       AND public.commercial_catalog_member_of(oi.organization_id,ARRAY['owner','admin','manager','staff']::text[])
   ))
+  OR (entity_type='unit' AND EXISTS (
+    SELECT 1 FROM public.commercial_global_units u
+    JOIN public.commercial_catalog_product_units pu ON pu.unit_code=u.code
+    JOIN public.commercial_global_catalog_items p ON p.id=pu.product_id
+    JOIN public.commercial_organization_catalog_items oi ON oi.global_item_id=p.id
+    WHERE u.code=entity_key
+      AND public.commercial_catalog_member_of(oi.organization_id,ARRAY['owner','admin','manager','staff']::text[])
+  ))
 );
 
 -- Restrictive tenant guards are ANDed with existing catalog policies, so active global templates remain public to authenticated users.
@@ -365,6 +373,16 @@ USING (
       JOIN public.commercial_global_catalog_items p ON p.category_code=c.code
       JOIN public.commercial_organization_catalog_items oi ON oi.global_item_id=p.id
       WHERE c.code=entity_key
+        AND public.commercial_catalog_member_of(oi.organization_id, ARRAY['owner','admin','manager','staff']::text[])
+    )
+  )
+  OR (
+    entity_type='unit' AND EXISTS (
+      SELECT 1 FROM public.commercial_global_units u
+      JOIN public.commercial_catalog_product_units pu ON pu.unit_code=u.code
+      JOIN public.commercial_global_catalog_items p ON p.id=pu.product_id
+      JOIN public.commercial_organization_catalog_items oi ON oi.global_item_id=p.id
+      WHERE u.code=entity_key
         AND public.commercial_catalog_member_of(oi.organization_id, ARRAY['owner','admin','manager','staff']::text[])
     )
   )
