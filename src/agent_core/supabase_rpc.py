@@ -58,3 +58,45 @@ class SupabaseRPCClient:
         if not isinstance(result, str) or not result:
             raise SupabaseRPCError("Unexpected organization-creation response; verify before retrying.")
         return result
+
+    def _auth_request(self, path: str, payload: dict) -> dict:
+        if not isinstance(payload, dict):
+            raise ValueError("Invalid Supabase Auth request.")
+        request = Request(
+            f"{self.url}/auth/v1/{path}",
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            method="POST",
+            headers={"apikey": self.anon_key, "Content-Type": "application/json",
+                     "Cache-Control": "no-store"},
+        )
+        try:
+            with urlopen(request, timeout=self.timeout) as response:
+                raw = response.read(1_000_001)
+                if len(raw) > 1_000_000:
+                    raise SupabaseRPCError("Supabase Auth response exceeded the size limit.")
+                result = json.loads(raw.decode("utf-8")) if raw else {}
+                if not isinstance(result, dict):
+                    raise SupabaseRPCError("Unexpected Supabase Auth response.")
+                return result
+        except HTTPError as exc:
+            # Do not relay provider response bodies, which may contain sensitive details.
+            if exc.code in (400, 401, 403, 409, 422):
+                raise SupabaseRPCError("تعذر التحقق من بيانات الحساب عبر Supabase؛ راجع البريد وكلمة المرور أو حالة الحساب.") from None
+            raise SupabaseRPCError(f"Supabase Auth failed (HTTP {exc.code}).") from None
+        except (URLError, TimeoutError, OSError, UnicodeDecodeError, json.JSONDecodeError):
+            raise SupabaseRPCError("تعذر الاتصال بخدمة تسجيل الدخول الخارجية. حاول مرة أخرى.") from None
+
+    def sign_up(self, *, email: str, password: str) -> dict:
+        if not isinstance(email, str) or not email.strip() or len(email) > 320:
+            raise SupabaseRPCError("أدخل بريدًا إلكترونيًا صالحًا.")
+        if not isinstance(password, str) or not 12 <= len(password) <= 1024:
+            raise SupabaseRPCError("يجب أن تتكون كلمة المرور من 12 حرفًا على الأقل.")
+        return self._auth_request("signup", {"email": email.strip().lower(), "password": password})
+
+    def sign_in_with_password(self, *, email: str, password: str) -> dict:
+        if not isinstance(email, str) or not email.strip() or len(email) > 320:
+            raise SupabaseRPCError("أدخل بريدًا إلكترونيًا صالحًا.")
+        if not isinstance(password, str) or not 12 <= len(password) <= 1024:
+            raise SupabaseRPCError("البريد الإلكتروني أو كلمة المرور غير صحيحة.")
+        return self._auth_request("token?grant_type=password",
+                                  {"email": email.strip().lower(), "password": password})
