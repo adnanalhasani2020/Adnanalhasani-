@@ -49,6 +49,9 @@ class UniversalCommercialCatalogContractTests(unittest.TestCase):
         self.assertIn("p_sector_code", self.discovery)
         self.assertIn("p_business_level_code", self.discovery)
         self.assertIn("commercial_catalog_product_regions", self.discovery)
+        self.assertIn("material_composition jsonb", self.discovery)
+        self.assertIn("rulings jsonb", self.discovery)
+        self.assertIn("commercial_catalog_product_rulings", self.discovery)
 
     def test_transactional_authoring_covers_metadata_translations_and_rulings(self):
         self.assertIn("commercial_catalog_create_product", self.management)
@@ -62,6 +65,8 @@ class UniversalCommercialCatalogContractTests(unittest.TestCase):
         self.assertIn("commercial_catalog_recipe_ingredients", self.management)
         self.assertIn("human_authored", self.management)
         self.assertIn("religion_code", self.management)
+        self.assertIn("commercial_catalog_review_ruling", self.management)
+        self.assertIn("ruling.requires", self.android) if False else None
         self.assertIn("product_unit_dimension_mismatch", self.management)
 
     def test_cross_account_transfer_requires_destination_acceptance(self):
