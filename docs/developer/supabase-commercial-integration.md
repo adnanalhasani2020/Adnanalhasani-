@@ -33,9 +33,28 @@ organization_id = client.create_organization(
 
 العميل يستدعي `commercial_create_organization` عبر PostgREST باستخدام JWT المستخدم؛ صلاحيات RPC وRLS في قاعدة البيانات تبقى المرجع. `module_keys=None` يترك اختيار الوحدات الافتراضية للدالة. لا تعتمد على قيمة UUID المعادة إذا انقطع الاتصال قبل وصول الاستجابة؛ تحقق من الحالة قبل إعادة المحاولة.
 
+## نقطة API المتاحة
+
+أضيف المسار `POST /api/supabase/organizations` إلى `commercial_web`. يتطلب ترويسة `Authorization: Bearer <Supabase user access token>` وجسم JSON يحتوي `name`, `slug`, `organization_type`, `currency_code`, `timezone`, `locale`، ويمكن أن يحتوي `country_code` و`module_keys`. يستدعي المسار RPC الذرية ويعيد `201` مع `organization_id` عند نجاح الاستدعاء. إذا كان التوكن مفقودًا يعيد `401`.
+
+مثال جسم الطلب:
+
+```json
+{
+  "name": "مؤسستي",
+  "slug": "my-organization",
+  "organization_type": "business",
+  "currency_code": "YER",
+  "timezone": "Asia/Aden",
+  "locale": "ar",
+  "country_code": "YE",
+  "module_keys": null
+}
+```
+
 ## ما لم يُربط بعد
 
-- واجهة `commercial_web` لا تصدر حاليًا جلسات Supabase؛ تسجيل الدخول فيها خاص بـSQLite. لذلك لا تمرر رمز جلسة SQLite إلى هذا العميل.
+- واجهة `commercial_web` لا تصدر حاليًا جلسات Supabase؛ تسجيل الدخول فيها خاص بـSQLite. لذلك لا تمرر رمز جلسة SQLite إلى هذا العميل. يجب أن يأتي التوكن من تسجيل دخول Supabase حقيقي في العميل أو موفر هوية معتمد.
 - لا توجد مزامنة تلقائية بين SQLite وSupabase، ولا ينبغي افتراض أن المبيعات المحلية تظهر في جداول Supabase.
 - لا تُحوّل مسارات البيع والمخزون والمرتجعات أو الحسابات المالية إلى Supabase قبل إضافة مصادقة موحدة، وتحديد مصدر الحقيقة، وتغطية اختبارات العزل بين المؤسسات.
 - اختبارات `tests/test_supabase_rpc.py` وحدات محلية بمكالمات HTTP وهمية؛ لا تثبت الاتصال الحي أو نجاح onboarding في جلسة فعلية.
