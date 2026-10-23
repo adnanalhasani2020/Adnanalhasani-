@@ -74,6 +74,10 @@ internal fun ActivityProfileScreen(onBack: () -> Unit) {
     var publicEmail by remember { mutableStateOf("") }
     var website by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
+    var logoUrl by remember { mutableStateOf("") }
+    var coverImageUrl by remember { mutableStateOf("") }
+    var identityFrontUrl by remember { mutableStateOf("") }
+    var identityBackUrl by remember { mutableStateOf("") }
     var city by remember { mutableStateOf("") }
     var district by remember { mutableStateOf("") }
     var street by remember { mutableStateOf("") }
@@ -153,6 +157,12 @@ internal fun ActivityProfileScreen(onBack: () -> Unit) {
             ProfileField("الحي", district) { district = it }
             ProfileField("الشارع والعنوان", street) { street = it }
             ProfileField("وصف النشاط", description) { description = it }
+            Text("روابط الصور الخارجية", style = MaterialTheme.typography.titleMedium)
+            Text("لا يتم رفع الصور أو الملفات إلى Supabase. ضع الصور في استضافتك الخارجية وأدخل روابط HTTPS فقط.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            ProfileField("رابط الشعار (HTTPS)", logoUrl) { logoUrl = it.trim() }
+            ProfileField("رابط صورة الغلاف (HTTPS)", coverImageUrl) { coverImageUrl = it.trim() }
+            ProfileField("رابط صورة الهوية الأمامية (HTTPS خاص)", identityFrontUrl) { identityFrontUrl = it.trim() }
+            ProfileField("رابط صورة الهوية الخلفية (HTTPS خاص)", identityBackUrl) { identityBackUrl = it.trim() }
             Text("الفروع والمواقع التابعة", style = MaterialTheme.typography.titleMedium)
             Text("يُنشأ المقر الرئيسي تلقائيًا. يمكنك إضافة فروع أو مخازن أو أقسام وربط كل واحد بالمقر أو بفرع سابق.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             branchNames.indices.forEach { index ->
@@ -169,7 +179,7 @@ internal fun ActivityProfileScreen(onBack: () -> Unit) {
             OutlinedButton(onClick = { branchNames.add(""); branchTypes.add("branch"); branchParents.add(-1) }, modifier = Modifier.fillMaxWidth()) { Text("+ إضافة فرع / موقع") }
             Text("لن يتم إنشاء منتجات أو مخزون في هذه الخطوة. تُحفظ بيانات الملف في Supabase عبر دالة RPC محمية بجلسة المستخدم.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Button(
-                enabled = !busy && organizationName.length >= 2 && organizationSlug.matches(Regex("[a-z0-9][a-z0-9-]{1,62}[a-z0-9]")) && activityName.isNotBlank() && registrationNumber.isNotBlank() && ownerName.length >= 2 && branchNames.all { it.isNotBlank() } && runCatching { LocalDate.parse(openedOn); true }.getOrDefault(false),
+                enabled = !busy && organizationName.length >= 2 && organizationSlug.matches(Regex("[a-z0-9][a-z0-9-]{1,62}[a-z0-9]")) && activityName.isNotBlank() && registrationNumber.isNotBlank() && ownerName.length >= 2 && branchNames.all { it.isNotBlank() } && listOf(logoUrl, coverImageUrl, identityFrontUrl, identityBackUrl).all(::validOptionalHttpsUrl) && runCatching { LocalDate.parse(openedOn); true }.getOrDefault(false),
                 onClick = {
                     val token = accessToken ?: return@Button
                     runRequest({
@@ -195,10 +205,10 @@ internal fun ActivityProfileScreen(onBack: () -> Unit) {
                             .put("p_district", district.ifBlank { JSONObject.NULL })
                             .put("p_street", street.ifBlank { JSONObject.NULL })
                             .put("p_landmark", JSONObject.NULL)
-                            .put("p_logo_url", JSONObject.NULL)
-                            .put("p_cover_image_url", JSONObject.NULL)
-                            .put("p_owner_identity_front_path", JSONObject.NULL)
-                            .put("p_owner_identity_back_path", JSONObject.NULL)
+                            .put("p_logo_url", logoUrl.trim().ifBlank { JSONObject.NULL })
+                            .put("p_cover_image_url", coverImageUrl.trim().ifBlank { JSONObject.NULL })
+                            .put("p_owner_identity_front_url", identityFrontUrl.trim().ifBlank { JSONObject.NULL })
+                            .put("p_owner_identity_back_url", identityBackUrl.trim().ifBlank { JSONObject.NULL })
                         val locations = JSONArray()
                         branchNames.forEachIndexed { index, name ->
                             if (name.isNotBlank()) locations.put(JSONObject().put("name", name.trim()).put("location_type", branchTypes[index]).put("parent_index", branchParents[index]))
@@ -242,4 +252,9 @@ private fun ProfileChoice(label: String, selected: String, options: List<Pair<St
             }
         }
     }
+}
+
+private fun validOptionalHttpsUrl(value: String): Boolean {
+    val trimmed = value.trim()
+    return trimmed.isEmpty() || (trimmed.startsWith("https://", ignoreCase = true) && Patterns.WEB_URL.matcher(trimmed).matches() && trimmed.length <= 500)
 }
