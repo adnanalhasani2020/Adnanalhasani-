@@ -6,7 +6,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Search
@@ -24,26 +23,15 @@ import java.net.URL
 import java.util.concurrent.Executors
 
 internal data class CatalogUnit(val unitCode: String, val role: String, val quantityInBase: String, val barcode: String, val packageName: String, val imageUrl: String, val isDefault: Boolean)
-
 internal data class CatalogProduct(
-    val id: String,
-    val catalogCode: String,
-    val name: String,
-    val description: String,
-    val categoryCode: String,
-    val category: String,
-    val brand: String,
-    val manufacturer: String,
-    val countryOfManufacture: String,
-    val imageUrl: String,
-    val prescriptionOnly: Boolean,
-    val recommendationScore: Int,
-    val barcode: String = "",
-    val unitCode: String = "EA",
-    val availableUnits: List<CatalogUnit> = emptyList(),
-    val createdBy: String = "",
-    val createdAt: String = ""
+    val id: String, val catalogCode: String, val name: String, val description: String,
+    val categoryCode: String, val category: String, val brand: String, val manufacturer: String,
+    val countryOfManufacture: String, val imageUrl: String, val prescriptionOnly: Boolean,
+    val recommendationScore: Int, val barcode: String = "", val unitCode: String = "EA",
+    val availableUnits: List<CatalogUnit> = emptyList(), val createdBy: String = "", val createdAt: String = ""
 )
+private data class CatalogCategory(val code: String, val parentCode: String, val nameAr: String, val nameEn: String)
+private data class DirectoryUnit(val code: String, val nameAr: String, val nameEn: String, val dimension: String, val baseCode: String, val factor: String, val owner: String)
 
 private val catalogIo = Executors.newSingleThreadExecutor()
 private val catalogMain = Handler(Looper.getMainLooper())
@@ -51,204 +39,381 @@ private val catalogMain = Handler(Looper.getMainLooper())
 private fun catalogHttp(path: String, payload: JSONObject, token: String? = null): String {
     val base = BuildConfig.SUPABASE_URL.trimEnd('/')
     val anon = BuildConfig.SUPABASE_ANON_KEY
-    require(base.startsWith("https://") && anon.isNotBlank()) {
-        "تحقق من إعداد SUPABASE_URL وSUPABASE_ANON_KEY."
-    }
+    require(base.startsWith("https://") && anon.isNotBlank()) { "تحقق من إعداد SUPABASE_URL وSUPABASE_ANON_KEY." }
     val connection = (URL("$base$path").openConnection() as HttpURLConnection).apply {
-        requestMethod = "POST"
-        connectTimeout = 15000
-        readTimeout = 25000
-        doOutput = true
-        setRequestProperty("apikey", anon)
-        setRequestProperty("Content-Type", "application/json")
-        setRequestProperty("Accept", "application/json")
+        requestMethod = "POST"; connectTimeout = 15000; readTimeout = 25000; doOutput = true
+        setRequestProperty("apikey", anon); setRequestProperty("Content-Type", "application/json"); setRequestProperty("Accept", "application/json")
         if (token != null) setRequestProperty("Authorization", "Bearer $token")
     }
     return try {
         connection.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
         val code = connection.responseCode
-        val stream = if (code in 200..299) connection.inputStream else connection.errorStream
-        val raw = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+        val raw = (if (code in 200..299) connection.inputStream else connection.errorStream)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
         if (code !in 200..299) {
-            val message = runCatching { JSONObject(raw).optString("message") }.getOrDefault("")
-            val hint = runCatching { JSONObject(raw).optString("hint") }.getOrDefault("")
-            throw IllegalStateException(listOf(message, hint).filter { it.isNotBlank() }.joinToString(" — ").ifBlank { "فشل الطلب إلى Supabase (HTTP $code)." })
+            val error = runCatching { JSONObject(raw) }.getOrNull()
+            throw IllegalStateException(listOf(error?.optString("message"), error?.optString("hint")).filter { !it.isNullOrBlank() && it != "null" }.joinToString(" — ").ifBlank { "فشل الطلب إلى Supabase (HTTP $code)." })
         }
         raw
-    } finally {
-        connection.disconnect()
+    } finally { connection.disconnect() }
+}
+
+private fun catalogGet(path: String, token: String): String {
+    val base = BuildConfig.SUPABASE_URL.trimEnd('/')
+    val connection = (URL("$base$path").openConnection() as HttpURLConnection).apply {
+        requestMethod = "GET"; connectTimeout = 15000; readTimeout = 25000
+        setRequestProperty("apikey", BuildConfig.SUPABASE_ANON_KEY)
+        setRequestProperty("Authorization", "Bearer $token"); setRequestProperty("Accept", "application/json")
     }
+    return try {
+        val code = connection.responseCode
+        val raw = (if (code in 200..299) connection.inputStream else connection.errorStream)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+        if (code !in 200..299) throw IllegalStateException(runCatching { JSONObject(raw).optString("message") }.getOrDefault("").ifBlank { "تعذر تحميل الدليل (HTTP $code)." })
+        raw
+    } finally { connection.disconnect() }
 }
 
 @Composable
 internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct) -> Unit) {
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var token by remember { mutableStateOf<String?>(null) }
-    var organizationId by remember { mutableStateOf("") }
-    var sector by remember { mutableStateOf("retail") }
-    var businessLevel by remember { mutableStateOf("shop") }
-    var country by remember { mutableStateOf("YE") }
-    var region by remember { mutableStateOf("") }
-    var city by remember { mutableStateOf("") }
-    var locale by remember { mutableStateOf("ar") }
-    var query by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }; var password by remember { mutableStateOf("") }
+    var token by remember { mutableStateOf<String?>(null) }; var organizationId by remember { mutableStateOf("") }
+    var section by remember { mutableStateOf("browse") }
+    var sector by remember { mutableStateOf("retail") }; var businessLevel by remember { mutableStateOf("shop") }
+    var country by remember { mutableStateOf("YE") }; var region by remember { mutableStateOf("") }; var city by remember { mutableStateOf("") }
+    var locale by remember { mutableStateOf("ar") }; var query by remember { mutableStateOf("") }
     var items by remember { mutableStateOf<List<CatalogProduct>>(emptyList()) }
-    var busy by remember { mutableStateOf(false) }
-    var feedback by remember { mutableStateOf("") }
+    var categories by remember { mutableStateOf<List<CatalogCategory>>(emptyList()) }
+    var directoryUnits by remember { mutableStateOf<List<DirectoryUnit>>(emptyList()) }
+    var busy by remember { mutableStateOf(false) }; var feedback by remember { mutableStateOf("") }
+
+    var categoryCode by remember { mutableStateOf("") }; var parentCode by remember { mutableStateOf("") }
+    var categoryNameAr by remember { mutableStateOf("") }; var categoryNameEn by remember { mutableStateOf("") }
+    var categoryDescriptionAr by remember { mutableStateOf("") }; var categoryDescriptionEn by remember { mutableStateOf("") }
+
+    var nameAr by remember { mutableStateOf("") }; var nameEn by remember { mutableStateOf("") }
+    var descriptionAr by remember { mutableStateOf("") }; var descriptionEn by remember { mutableStateOf("") }
+    var productCategory by remember { mutableStateOf("") }; var itemType by remember { mutableStateOf("product") }
+    var unitCode by remember { mutableStateOf("EA") }; var barcode by remember { mutableStateOf("") }
+    var brand by remember { mutableStateOf("") }; var manufacturer by remember { mutableStateOf("") }
+    var origin by remember { mutableStateOf("") }; var model by remember { mutableStateOf("") }; var partNumber by remember { mutableStateOf("") }
+    var imageUrl by remember { mutableStateOf("") }; var imageAlt by remember { mutableStateOf("") }
+    var ingredients by remember { mutableStateOf("") }; var materialComposition by remember { mutableStateOf("") }
+    var recipe by remember { mutableStateOf("") }; var specifications by remember { mutableStateOf("") }
+    var allergens by remember { mutableStateOf("") }; var storage by remember { mutableStateOf("") }
+    var usage by remember { mutableStateOf("") }; var warnings by remember { mutableStateOf("") }
+    var shelfLife by remember { mutableStateOf("") }; var expiryRequired by remember { mutableStateOf(false) }
+    var batchTracked by remember { mutableStateOf(false) }; var serialTracked by remember { mutableStateOf(false) }
+    var prescriptionOnly by remember { mutableStateOf(false) }
+    var extraUnitCode by remember { mutableStateOf("") }; var extraUnitQty by remember { mutableStateOf("1") }
+    var extraUnitBarcode by remember { mutableStateOf("") }; var extraUnitPackage by remember { mutableStateOf("") }
+    var currencyCode by remember { mutableStateOf("YER") }; var sectors by remember { mutableStateOf("retail") }
+    var levels by remember { mutableStateOf("shop") }; var regionCountry by remember { mutableStateOf("") }
+    var regionCode by remember { mutableStateOf("") }; var regionCity by remember { mutableStateOf("") }
+    var regionExcluded by remember { mutableStateOf(false) }
+    var rulingDomain by remember { mutableStateOf("religious") }; var authority by remember { mutableStateOf("") }
+    var religion by remember { mutableStateOf("") }; var jurisdiction by remember { mutableStateOf("") }
+    var rulingOutcome by remember { mutableStateOf("unknown") }; var rulingRationale by remember { mutableStateOf("") }
+    var rulingSourceTitle by remember { mutableStateOf("") }; var rulingSourceUrl by remember { mutableStateOf("") }
+    var rulingConfidence by remember { mutableStateOf("unverified") }
+
+    var unitShortCode by remember { mutableStateOf("") }; var unitNameAr by remember { mutableStateOf("") }
+    var unitNameEn by remember { mutableStateOf("") }; var unitDimension by remember { mutableStateOf("count") }
+    var unitFactor by remember { mutableStateOf("1") }; var unitBaseCode by remember { mutableStateOf("EA") }
+    var unitDecimals by remember { mutableStateOf("0") }
+    var transferSource by remember { mutableStateOf("") }; var transferDestination by remember { mutableStateOf("") }
+    var transferIds by remember { mutableStateOf("") }
 
     fun request(action: () -> String, onSuccess: (String) -> Unit) {
         if (busy) return
-        busy = true
-        feedback = ""
+        busy = true; feedback = ""
         catalogIo.execute {
             val result = runCatching(action)
-            catalogMain.post {
-                busy = false
-                result.onSuccess(onSuccess).onFailure { feedback = it.message ?: "تعذر إكمال العملية." }
-            }
+            catalogMain.post { busy = false; result.onSuccess(onSuccess).onFailure { feedback = it.message ?: "تعذر إكمال العملية." } }
         }
     }
-
-    fun searchCatalog() {
-        val activeToken = token ?: return
-        if (organizationId.isBlank()) {
-            feedback = "أدخل معرّف المؤسسة (UUID) التي تريد استعراض الدليل لها."
-            return
-        }
+    fun org(): String? = organizationId.trim().takeIf { it.isNotBlank() }
+    fun loadCatalog() {
+        val active = token ?: return
+        val orgId = org() ?: run { feedback = "أدخل معرّف المؤسسة UUID أولًا."; return }
         request({
-            val payload = JSONObject()
-                .put("p_organization_id", organizationId.trim())
-                .put("p_sector_code", sector.trim().ifBlank { JSONObject.NULL })
-                .put("p_business_level_code", businessLevel.trim().ifBlank { JSONObject.NULL })
-                .put("p_country_code", country.trim().ifBlank { JSONObject.NULL })
-                .put("p_region_code", region.trim().ifBlank { JSONObject.NULL })
-                .put("p_city", city.trim().ifBlank { JSONObject.NULL })
-                .put("p_locale_code", locale.trim().ifBlank { "ar" })
-                .put("p_query", query.trim().ifBlank { JSONObject.NULL })
-                .put("p_limit", 100)
-            catalogHttp("/rest/v1/rpc/commercial_catalog_discover_products", payload, activeToken)
+            val payload = JSONObject().put("p_organization_id",orgId)
+                .put("p_sector_code",sector.trim().ifBlank { JSONObject.NULL })
+                .put("p_business_level_code",businessLevel.trim().ifBlank { JSONObject.NULL })
+                .put("p_country_code",country.trim().ifBlank { JSONObject.NULL })
+                .put("p_region_code",region.trim().ifBlank { JSONObject.NULL }).put("p_city",city.trim().ifBlank { JSONObject.NULL })
+                .put("p_locale_code",locale.trim().ifBlank { "ar" }).put("p_query",query.trim().ifBlank { JSONObject.NULL }).put("p_limit",100)
+            catalogHttp("/rest/v1/rpc/commercial_catalog_discover_products",payload,active)
         }, { raw ->
-            val json = JSONArray(raw)
-            items = List(json.length()) { i ->
-                val row = json.getJSONObject(i)
+            val json=JSONArray(raw)
+            items=List(json.length()) { i ->
+                val row=json.getJSONObject(i)
                 CatalogProduct(
-                    id = row.optString("product_id"),
-                    catalogCode = row.optString("catalog_code"),
-                    name = row.optString("product_name"),
-                    description = row.optString("short_description"),
-                    categoryCode = row.optString("category_code"),
-                    category = row.optString("category_name"),
-                    brand = row.optString("brand"),
-                    manufacturer = row.optString("manufacturer_name"),
-                    countryOfManufacture = row.optString("country_of_manufacture"),
-                    imageUrl = row.optString("image_url"),
-                    prescriptionOnly = row.optBoolean("is_prescription_only", false),
-                    recommendationScore = row.optInt("recommendation_score"),
-                    barcode = row.optString("barcode"),
-                    unitCode = row.optString("unit_code").ifBlank { "EA" },
-                    availableUnits = row.optJSONArray("available_units")?.let { units ->
-                        List(units.length()) { unitIndex ->
-                            val unit = units.getJSONObject(unitIndex)
-                            CatalogUnit(
-                                unitCode = unit.optString("unit_code"),
-                                role = unit.optString("unit_role"),
-                                quantityInBase = unit.optString("quantity_in_base", "1"),
-                                barcode = unit.optString("barcode"),
-                                packageName = unit.optString("package_name"),
-                                imageUrl = unit.optString("image_url"),
-                                isDefault = unit.optBoolean("is_default", false)
-                            )
-                        }
-                    } ?: emptyList(),
-                    createdBy = row.optString("created_by"),
-                    createdAt = row.optString("created_at")
+                    id=row.optString("product_id"),catalogCode=row.optString("catalog_code"),name=row.optString("product_name"),
+                    description=row.optString("short_description"),categoryCode=row.optString("category_code"),category=row.optString("category_name"),
+                    brand=row.optString("brand"),manufacturer=row.optString("manufacturer_name"),countryOfManufacture=row.optString("country_of_manufacture"),
+                    imageUrl=row.optString("image_url"),prescriptionOnly=row.optBoolean("is_prescription_only",false),
+                    recommendationScore=row.optInt("recommendation_score"),barcode=row.optString("barcode"),unitCode=row.optString("unit_code").ifBlank { "EA" },
+                    availableUnits=row.optJSONArray("available_units")?.let { arr -> List(arr.length()) { j ->
+                        val u=arr.getJSONObject(j); CatalogUnit(u.optString("unit_code"),u.optString("unit_role"),u.optString("quantity_in_base","1"),u.optString("barcode"),u.optString("package_name"),u.optString("image_url"),u.optBoolean("is_default"))
+                    } } ?: emptyList(),createdBy=row.optString("created_by"),createdAt=row.optString("created_at")
                 )
             }
-            feedback = "تم جلب ${items.size} صنفًا. القوالب العامة تحتاج إلى مراجعة بيانات المنتج قبل الاستخدام التجاري."
+            feedback="تم جلب ${items.size} صنفًا. راجع بيانات القوالب العامة قبل اعتمادها."
         })
     }
+    fun loadDirectories() {
+        val active=token ?: return
+        request({
+            val catRaw=catalogGet("/rest/v1/commercial_global_catalog_categories?select=code,parent_code,name_ar,name_en&is_active=eq.true&order=parent_code.asc,sort_order.asc,code.asc",active)
+            val unitRaw=catalogGet("/rest/v1/commercial_global_units?select=code,name_ar,name_en,dimension,base_unit_code,factor_to_base,owner_organization_id&is_active=eq.true&order=dimension.asc,code.asc",active)
+            JSONObject().put("categories",JSONArray(catRaw)).put("units",JSONArray(unitRaw)).toString()
+        }, { raw ->
+            val result=JSONObject(raw); val cats=result.getJSONArray("categories"); val units=result.getJSONArray("units")
+            categories=List(cats.length()) { i -> val v=cats.getJSONObject(i); CatalogCategory(v.optString("code"),v.optString("parent_code"),v.optString("name_ar"),v.optString("name_en")) }
+            directoryUnits=List(units.length()) { i -> val v=units.getJSONObject(i); DirectoryUnit(v.optString("code"),v.optString("name_ar"),v.optString("name_en"),v.optString("dimension"),v.optString("base_unit_code"),v.optString("factor_to_base"),v.optString("owner_organization_id")) }
+            feedback="تم تحميل ${categories.size} تصنيفًا و${directoryUnits.size} وحدة قياس."
+        })
+    }
+    fun createCategory() {
+        val active=token ?: return; val orgId=org() ?: run { feedback="أدخل معرّف المؤسسة UUID أولًا."; return }
+        request({
+            catalogHttp("/rest/v1/rpc/commercial_catalog_create_category",JSONObject()
+                .put("p_organization_id",orgId).put("p_code",categoryCode).put("p_parent_code",parentCode.ifBlank { JSONObject.NULL })
+                .put("p_name_ar",categoryNameAr).put("p_name_en",categoryNameEn)
+                .put("p_description_ar",categoryDescriptionAr.ifBlank { JSONObject.NULL })
+                .put("p_description_en",categoryDescriptionEn.ifBlank { JSONObject.NULL }).put("p_sort_order",100),active)
+        }, { feedback="تم إنشاء التصنيف: $it"; loadDirectories() })
+    }
+    fun createUnit() {
+        val active=token ?: return; val orgId=org() ?: run { feedback="أدخل معرّف المؤسسة UUID أولًا."; return }
+        request({
+            catalogHttp("/rest/v1/rpc/commercial_catalog_create_unit",JSONObject()
+                .put("p_organization_id",orgId).put("p_code",unitShortCode).put("p_name_ar",unitNameAr).put("p_name_en",unitNameEn)
+                .put("p_dimension",unitDimension).put("p_factor_to_base",unitFactor.toBigDecimalOrNull()?.toPlainString() ?: throw IllegalArgumentException("معامل التحويل غير صحيح."))
+                .put("p_base_unit_code",unitBaseCode).put("p_decimal_places",unitDecimals.toIntOrNull() ?: 0),active)
+        }, { feedback="تم إنشاء وحدة الحساب الخاصة بالمؤسسة: $it"; loadDirectories() })
+    }
+    fun createProduct() {
+        val active=token ?: return; val orgId=org() ?: run { feedback="أدخل معرّف المؤسسة UUID أولًا."; return }
+        if(nameAr.isBlank() || nameEn.isBlank() || productCategory.isBlank() || unitCode.isBlank()) { feedback="أكمل الاسم العربي والإنجليزي والتصنيف ووحدة القياس."; return }
+        request({
+            val product=JSONObject().put("name_ar",nameAr.trim()).put("name_en",nameEn.trim())
+                .put("description_ar",descriptionAr.ifBlank { JSONObject.NULL }).put("description_en",descriptionEn.ifBlank { JSONObject.NULL })
+                .put("category_code",productCategory.trim()).put("item_type",itemType).put("unit_code",unitCode.trim())
+                .put("barcode_gtin",barcode.ifBlank { JSONObject.NULL }).put("brand",brand.ifBlank { JSONObject.NULL })
+                .put("manufacturer_name",manufacturer.ifBlank { JSONObject.NULL }).put("country_of_manufacture",origin.ifBlank { JSONObject.NULL })
+                .put("model_number",model.ifBlank { JSONObject.NULL }).put("part_number",partNumber.ifBlank { JSONObject.NULL })
+                .put("image_url",imageUrl.ifBlank { JSONObject.NULL }).put("image_alt",imageAlt.ifBlank { JSONObject.NULL })
+                .put("ingredients",JSONArray(ingredients.split(",").map { it.trim() }.filter { it.isNotBlank() }))
+                .put("material_composition",JSONArray(materialComposition.split(",").map { it.trim() }.filter { it.isNotBlank() }))
+                .put("recipe",JSONObject().put("instructions",recipe.ifBlank { JSONObject.NULL }))
+                .put("specifications",JSONObject().put("notes",specifications.ifBlank { JSONObject.NULL }))
+                .put("allergens",JSONArray(allergens.split(",").map { it.trim() }.filter { it.isNotBlank() }))
+                .put("storage_instructions",storage.ifBlank { JSONObject.NULL }).put("usage_instructions",usage.ifBlank { JSONObject.NULL })
+                .put("warnings",warnings.ifBlank { JSONObject.NULL }).put("shelf_life_days",shelfLife.toIntOrNull() ?: JSONObject.NULL)
+                .put("requires_expiry_date",expiryRequired).put("is_batch_tracked",batchTracked)
+                .put("is_serial_tracked",serialTracked).put("is_prescription_only",prescriptionOnly).put("currency_code",currencyCode.ifBlank { "YER" })
+            val unitRows=JSONArray().put(JSONObject().put("unit_code",unitCode.trim()).put("unit_role","base").put("quantity_in_base",1)
+                .put("barcode",barcode.ifBlank { JSONObject.NULL }).put("package_name","الوحدة الأساسية").put("image_url",imageUrl.ifBlank { JSONObject.NULL }).put("is_default",true))
+            if(extraUnitCode.isNotBlank()) unitRows.put(JSONObject().put("unit_code",extraUnitCode.trim()).put("unit_role","sale")
+                .put("quantity_in_base",extraUnitQty.toBigDecimalOrNull()?.toPlainString() ?: throw IllegalArgumentException("معامل تحويل العبوة غير صحيح."))
+                .put("barcode",extraUnitBarcode.ifBlank { JSONObject.NULL }).put("package_name",extraUnitPackage.ifBlank { JSONObject.NULL })
+                .put("image_url",imageUrl.ifBlank { JSONObject.NULL }).put("is_default",false))
+            val levelRows=JSONArray(); levels.split(",").map { it.trim().lowercase() }.filter { it.isNotBlank() }.forEach { levelRows.put(JSONObject().put("code",it).put("weight",10)) }
+            val regionRows=JSONArray()
+            if(regionCountry.isNotBlank() || regionCode.isNotBlank() || regionCity.isNotBlank()) regionRows.put(JSONObject()
+                .put("country_code",regionCountry.ifBlank { JSONObject.NULL }).put("region_code",regionCode.ifBlank { JSONObject.NULL })
+                .put("city",regionCity.ifBlank { JSONObject.NULL }).put("excluded",regionExcluded))
+            val rulingRows=JSONArray()
+            if(authority.isNotBlank()) rulingRows.put(JSONObject().put("ruling_domain",rulingDomain).put("authority_code",authority.trim())
+                .put("religion_code",if(rulingDomain=="religious") religion.ifBlank { JSONObject.NULL } else JSONObject.NULL)
+                .put("jurisdiction_code",jurisdiction.ifBlank { JSONObject.NULL }).put("outcome",rulingOutcome)
+                .put("rationale",rulingRationale.ifBlank { JSONObject.NULL }).put("source_title",rulingSourceTitle.ifBlank { JSONObject.NULL })
+                .put("source_url",rulingSourceUrl.ifBlank { JSONObject.NULL }).put("confidence",rulingConfidence))
+            val sectorArray=JSONArray(); sectors.split(",").map { it.trim().lowercase() }.filter { it.isNotBlank() }.forEach { sectorArray.put(it) }
+            catalogHttp("/rest/v1/rpc/commercial_catalog_create_product",JSONObject().put("p_organization_id",orgId).put("p_product",product)
+                .put("p_units",unitRows).put("p_sectors",sectorArray).put("p_business_levels",levelRows).put("p_regions",regionRows).put("p_rulings",rulingRows),active)
+        }, { feedback="تم حفظ الصنف وتفاصيل وحداته ونطاق ظهوره ومعلومات الحكم المرتبطة به: $it"; section="browse"; loadCatalog() })
+    }
+    fun transferCatalog() {
+        val active=token ?: return
+        if(transferSource.isBlank() || transferDestination.isBlank()) { feedback="أدخل معرّف الحساب المصدر والوجهة."; return }
+        request({
+            val ids=JSONArray(); transferIds.split(",").map { it.trim() }.filter { it.isNotBlank() }.forEach { ids.put(it) }
+            catalogHttp("/rest/v1/rpc/commercial_catalog_transfer",JSONObject().put("p_source_organization_id",transferSource.trim())
+                .put("p_destination_organization_id",transferDestination.trim()).put("p_global_item_ids",if(ids.length()==0) JSONObject.NULL else ids),active)
+        }, { feedback="اكتملت عملية نقل روابط الدليل: $it" })
+    }
 
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "رجوع") }
+    Column(Modifier.fillMaxSize().padding(horizontal=14.dp)) {
+        Row(verticalAlignment=Alignment.CenterVertically) {
+            IconButton(onClick=onBack) { Icon(Icons.Default.ArrowBack,contentDescription="رجوع") }
             Column(Modifier.weight(1f)) {
-                Text("دليل الأصناف العالمي", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text("بحث متعدد الأنشطة والوحدات والمناطق", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                Text("دليل الأصناف والوحدات",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold)
+                Text("دليل متعدد الأنشطة والمستويات والمناطق",color=MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.bodySmall)
             }
         }
-        if (token == null) {
-            Text("تسجيل الدخول إلى حساب Supabase", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(email, { email = it.trim() }, Modifier.fillMaxWidth(), label = { Text("البريد الإلكتروني") }, singleLine = true)
-            OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text("كلمة المرور") }, singleLine = true)
-            Button(
-                onClick = {
-                    request({
-                        val raw = catalogHttp("/auth/v1/token?grant_type=password", JSONObject().put("email", email).put("password", password))
-                        val session = JSONObject(raw)
-                        val access = session.optString("access_token")
-                        if (access.isBlank()) throw IllegalStateException("لم تُرجع خدمة المصادقة جلسة صالحة.")
-                        access
-                    }, { access -> token = access; feedback = "تم تسجيل الدخول. أدخل معرّف المؤسسة للبحث." })
-                },
-                enabled = !busy && email.contains("@") && password.isNotBlank(),
-                modifier = Modifier.fillMaxWidth()
-            ) { Text(if (busy) "جارٍ تسجيل الدخول..." else "تسجيل الدخول") }
-            Text("تُستخدم جلسة تسجيل الدخول في هذه الشاشة فقط، ولا تُحفظ كلمة المرور.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+        if(token==null) {
+            LazyColumn(verticalArrangement=Arrangement.spacedBy(10.dp),contentPadding=PaddingValues(bottom=18.dp)) {
+                item { Text("تسجيل الدخول إلى حساب Supabase",style=MaterialTheme.typography.titleMedium) }
+                item { OutlinedTextField(email,{email=it.trim()},Modifier.fillMaxWidth(),label={Text("البريد الإلكتروني")},singleLine=true) }
+                item { OutlinedTextField(password,{password=it},Modifier.fillMaxWidth(),label={Text("كلمة المرور")},singleLine=true) }
+                item { Button(onClick={request({
+                    val raw=catalogHttp("/auth/v1/token?grant_type=password",JSONObject().put("email",email).put("password",password))
+                    val access=JSONObject(raw).optString("access_token"); if(access.isBlank()) throw IllegalStateException("لم تُرجع خدمة المصادقة جلسة صالحة."); access
+                },{token=it;feedback="تم تسجيل الدخول. أدخل معرّف المؤسسة للمتابعة."})},enabled=!busy && email.contains("@") && password.isNotBlank(),modifier=Modifier.fillMaxWidth()) { Text(if(busy) "جارٍ تسجيل الدخول..." else "تسجيل الدخول") } }
+                item { Text("تُستخدم الجلسة داخل هذه الشاشة فقط ولا تُحفظ كلمة المرور. لا تستخدم مفتاح service_role في التطبيق.",color=MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.bodySmall) }
+            }
         } else {
-            OutlinedTextField(organizationId, { organizationId = it.trim() }, Modifier.fillMaxWidth(), label = { Text("معرّف المؤسسة UUID") }, singleLine = true)
-            OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), label = { Text("بحث بالاسم أو الوصف أو الباركود أو الكود") }, singleLine = true)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(sector, { sector = it }, Modifier.weight(1f), label = { Text("النشاط / القطاع") }, singleLine = true)
-                OutlinedTextField(businessLevel, { businessLevel = it }, Modifier.weight(1f), label = { Text("مستوى النشاط") }, singleLine = true)
+            OutlinedTextField(organizationId,{organizationId=it.trim()},Modifier.fillMaxWidth(),label={Text("معرّف المؤسسة UUID")},singleLine=true)
+            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(4.dp)) {
+                listOf("browse" to "بحث", "product" to "صنف جديد", "category" to "تصنيف", "unit" to "وحدة", "transfer" to "نقل").forEach { (key,label) ->
+                    FilterChip(selected=section==key,onClick={section=key},label={Text(label,style=MaterialTheme.typography.labelSmall)})
+                }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(country, { country = it.uppercase() }, Modifier.weight(1f), label = { Text("الدولة") }, singleLine = true)
-                OutlinedTextField(region, { region = it }, Modifier.weight(1f), label = { Text("المنطقة") }, singleLine = true)
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(city, { city = it }, Modifier.weight(1f), label = { Text("المدينة") }, singleLine = true)
-                OutlinedTextField(locale, { locale = it }, Modifier.width(95.dp), label = { Text("اللغة") }, singleLine = true)
-                Button(onClick = { searchCatalog() }, enabled = !busy) { Icon(Icons.Default.Search, null); Spacer(Modifier.width(4.dp)); Text("بحث") }
-            }
-            Spacer(Modifier.height(8.dp))
-            if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-            if (feedback.isNotBlank()) Text(feedback, color = if (feedback.startsWith("تم")) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 8.dp)) {
-                items(items, key = { it.id }) { item ->
-                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
-                        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Row(verticalAlignment = Alignment.Top) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(item.name.ifBlank { item.catalogCode }, fontWeight = FontWeight.SemiBold)
-                                    Text("${item.category} • ${item.catalogCode}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            if(busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+            if(feedback.isNotBlank()) Text(feedback,color=if(feedback.startsWith("تم")||feedback.startsWith("اكتملت")) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,style=MaterialTheme.typography.bodySmall)
+            when(section) {
+                "browse" -> {
+                    LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(bottom=20.dp)) {
+                        item { OutlinedTextField(query,{query=it},Modifier.fillMaxWidth(),label={Text("بحث بالاسم أو الوصف أو الباركود أو الكود")},singleLine=true) }
+                        item { Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(sector,{sector=it},Modifier.weight(1f),label={Text("النشاط")},singleLine=true)
+                            OutlinedTextField(businessLevel,{businessLevel=it},Modifier.weight(1f),label={Text("مستوى النشاط")},singleLine=true)
+                        } }
+                        item { Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(country,{country=it.uppercase()},Modifier.weight(1f),label={Text("الدولة")},singleLine=true)
+                            OutlinedTextField(region,{region=it},Modifier.weight(1f),label={Text("المنطقة")},singleLine=true)
+                            OutlinedTextField(city,{city=it},Modifier.weight(1f),label={Text("المدينة")},singleLine=true)
+                        } }
+                        item { Row(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.CenterVertically) {
+                            OutlinedTextField(locale,{locale=it},Modifier.weight(1f),label={Text("اللغة")},singleLine=true)
+                            Button(onClick={loadCatalog()},enabled=!busy) { Icon(Icons.Default.Search,null); Text("بحث") }
+                            OutlinedButton(onClick={loadDirectories()},enabled=!busy) { Text("تحديث الأدلة") }
+                        } }
+                        items(items,key={it.id}) { item ->
+                            Card(colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface),border=BorderStroke(1.dp,MaterialTheme.colorScheme.outlineVariant)) {
+                                Column(Modifier.fillMaxWidth().padding(12.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                                    Row(verticalAlignment=Alignment.Top) {
+                                        Column(Modifier.weight(1f)) {
+                                            Text(item.name.ifBlank { item.catalogCode },fontWeight=FontWeight.SemiBold)
+                                            Text("${item.category} • ${item.catalogCode}",color=MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.bodySmall)
+                                        }
+                                        if(item.recommendationScore>0) AssistChip(onClick={},label={Text("مقترح +${item.recommendationScore}")})
+                                    }
+                                    if(item.description.isNotBlank()) Text(item.description,style=MaterialTheme.typography.bodySmall)
+                                    val facts=listOf(
+                                        item.brand.takeIf{it.isNotBlank()}?.let{"العلامة: $it"},
+                                        item.manufacturer.takeIf{it.isNotBlank()}?.let{"المصنّع: $it"},
+                                        item.countryOfManufacture.takeIf{it.isNotBlank()}?.let{"بلد الصناعة: $it"},
+                                        item.barcode.takeIf{it.isNotBlank()}?.let{"الباركود الأساسي: $it"},
+                                        "وحدة الأساس/البيع: ${item.unitCode}",
+                                        item.availableUnits.takeIf{it.isNotEmpty()}?.joinToString("، "){u->"${u.packageName.ifBlank{u.unitCode}} × ${u.quantityInBase}${if(u.barcode.isNotBlank()) " (باركود ${u.barcode})" else ""}"}?.let{"العبوات: $it"},
+                                        item.createdAt.takeIf{it.isNotBlank()}?.let{"تاريخ إدخال سجل الدليل: $it"},
+                                        item.createdBy.takeIf{it.isNotBlank()}?.let{"معرّف مدخل سجل الدليل: $it"},
+                                        item.imageUrl.takeIf{it.isNotBlank()}?.let{"رابط الصورة الخارجية: $it"},
+                                        if(item.prescriptionOnly) "صنف يتطلب وصفة طبية — تحقق من التصنيف المحلي" else null
+                                    ).filterNotNull()
+                                    facts.forEach{Text(it,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
+                                    Text("معرّف الصنف: ${item.id}",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.End) { TextButton(onClick={onAddToInventory(item)}) { Icon(Icons.Default.Add,null); Text("إضافة إلى المخزون المحلي") } }
                                 }
-                                if (item.recommendationScore > 0) AssistChip(onClick = {}, label = { Text("مقترح للنشاط +${item.recommendationScore}") })
-                            }
-                            if (item.description.isNotBlank()) Text(item.description, style = MaterialTheme.typography.bodySmall)
-                            val facts = listOf(
-                                item.brand.takeIf { it.isNotBlank() }?.let { "العلامة: $it" },
-                                item.manufacturer.takeIf { it.isNotBlank() }?.let { "المصنّع: $it" },
-                                item.countryOfManufacture.takeIf { it.isNotBlank() }?.let { "بلد الصناعة: $it" },
-                                item.barcode.takeIf { it.isNotBlank() }?.let { "الباركود الأساسي: $it" },
-                                "وحدة الأساس/البيع: ${item.unitCode}",
-                                item.availableUnits.takeIf { it.isNotEmpty() }?.joinToString("، ") { unit -> "${unit.packageName.ifBlank { unit.unitCode }} × ${unit.quantityInBase}${if (unit.barcode.isNotBlank()) " (باركود ${unit.barcode})" else ""}" }?.let { "الوحدات والعبوات: $it" },
-                                item.createdAt.takeIf { it.isNotBlank() }?.let { "تاريخ إدخال سجل الدليل: $it" },
-                                item.createdBy.takeIf { it.isNotBlank() }?.let { "معرّف مدخل سجل الدليل: $it" },
-                                item.imageUrl.takeIf { it.isNotBlank() }?.let { "رابط الصورة: $it" },
-                                if (item.prescriptionOnly) "صنف يتطلب وصفة طبية — تحقق من التصنيف المحلي" else null
-                            ).filterNotNull()
-                            facts.forEach { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                                TextButton(onClick = { onAddToInventory(item) }) { Icon(Icons.Default.Add, null); Text("إضافة إلى المخزون المحلي") }
                             }
                         }
+                        if(items.isEmpty()) item { Text("ابحث عن أصناف أو اضغط تحديث الأدلة لعرض التصنيفات والوحدات المتاحة.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
+                        if(categories.isNotEmpty()) item { Text("دليل التصنيفات: ${categories.size} تصنيفًا محمّلًا",style=MaterialTheme.typography.bodySmall) }
+                        if(directoryUnits.isNotEmpty()) item { Text("دليل الوحدات: ${directoryUnits.size} وحدة محمّلة",style=MaterialTheme.typography.bodySmall) }
                     }
+                }
+                "category" -> LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(bottom=20.dp)) {
+                    item { Text("إضافة مستوى تصنيف جديد — اترك التصنيف الأب فارغًا لإنشاء جذر.",style=MaterialTheme.typography.bodySmall) }
+                    item { OutlinedTextField(categoryCode,{categoryCode=it.uppercase()},Modifier.fillMaxWidth(),label={Text("كود التصنيف")},singleLine=true) }
+                    item { OutlinedTextField(parentCode,{parentCode=it.uppercase()},Modifier.fillMaxWidth(),label={Text("كود التصنيف الأب (اختياري)")},singleLine=true) }
+                    item { OutlinedTextField(categoryNameAr,{categoryNameAr=it},Modifier.fillMaxWidth(),label={Text("الاسم بالعربية")},singleLine=true) }
+                    item { OutlinedTextField(categoryNameEn,{categoryNameEn=it},Modifier.fillMaxWidth(),label={Text("Name in English")},singleLine=true) }
+                    item { OutlinedTextField(categoryDescriptionAr,{categoryDescriptionAr=it},Modifier.fillMaxWidth(),label={Text("الوصف العربي")}) }
+                    item { OutlinedTextField(categoryDescriptionEn,{categoryDescriptionEn=it},Modifier.fillMaxWidth(),label={Text("English description")}) }
+                    item { Button(onClick={createCategory()},enabled=!busy && categoryCode.isNotBlank() && categoryNameAr.isNotBlank() && categoryNameEn.isNotBlank(),modifier=Modifier.fillMaxWidth()) { Text("حفظ التصنيف") } }
+                    item { OutlinedButton(onClick={loadDirectories()},enabled=!busy,modifier=Modifier.fillMaxWidth()) { Text("تحميل التصنيفات والوحدات") } }
+                    items(categories,key={it.code}) { cat -> Text("${cat.code}  •  ${cat.nameAr} / ${cat.nameEn}${if(cat.parentCode.isNotBlank()) "  ←  ${cat.parentCode}" else "  •  جذر"}",style=MaterialTheme.typography.bodySmall) }
+                }
+                "unit" -> LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(bottom=20.dp)) {
+                    item { Text("إنشاء وحدة خاصة بالمؤسسة. رمز الوحدة سيُسبق تلقائيًا برمز المؤسسة لمنع تعارض الرموز عالميًا.",style=MaterialTheme.typography.bodySmall) }
+                    item { OutlinedTextField(unitShortCode,{unitShortCode=it.uppercase()},Modifier.fillMaxWidth(),label={Text("الرمز المختصر")},singleLine=true) }
+                    item { OutlinedTextField(unitNameAr,{unitNameAr=it},Modifier.fillMaxWidth(),label={Text("اسم الوحدة بالعربية")},singleLine=true) }
+                    item { OutlinedTextField(unitNameEn,{unitNameEn=it},Modifier.fillMaxWidth(),label={Text("Unit name in English")},singleLine=true) }
+                    item { OutlinedTextField(unitDimension,{unitDimension=it.lowercase()},Modifier.fillMaxWidth(),label={Text("البعد (مثل count, mass, length, volume, area)")},singleLine=true) }
+                    item { OutlinedTextField(unitBaseCode,{unitBaseCode=it.uppercase()},Modifier.fillMaxWidth(),label={Text("رمز وحدة الأساس")},singleLine=true) }
+                    item { OutlinedTextField(unitFactor,{unitFactor=it},Modifier.fillMaxWidth(),label={Text("كم تساوي وحدة الأساس؟")},singleLine=true) }
+                    item { OutlinedTextField(unitDecimals,{unitDecimals=it.filter(Char::isDigit)},Modifier.fillMaxWidth(),label={Text("عدد المنازل العشرية (0–12)")},singleLine=true) }
+                    item { Button(onClick={createUnit()},enabled=!busy && unitShortCode.isNotBlank() && unitNameAr.isNotBlank() && unitNameEn.isNotBlank(),modifier=Modifier.fillMaxWidth()) { Text("حفظ وحدة القياس") } }
+                    item { OutlinedButton(onClick={loadDirectories()},enabled=!busy,modifier=Modifier.fillMaxWidth()) { Text("تحديث دليل الوحدات") } }
+                    items(directoryUnits,key={it.code}) { u -> Text("${u.code} • ${u.nameAr} / ${u.nameEn} • ${u.dimension} • ${u.factor} ${u.baseCode}${if(u.owner.isNotBlank()) " • وحدة مؤسسة" else ""}",style=MaterialTheme.typography.bodySmall) }
+                }
+                "product" -> LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(bottom=20.dp)) {
+                    item { Text("بيانات الصنف الأساسية",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold) }
+                    item { OutlinedTextField(nameAr,{nameAr=it},Modifier.fillMaxWidth(),label={Text("اسم الصنف بالعربية *")},singleLine=true) }
+                    item { OutlinedTextField(nameEn,{nameEn=it},Modifier.fillMaxWidth(),label={Text("Product name in English *")},singleLine=true) }
+                    item { OutlinedTextField(productCategory,{productCategory=it.uppercase()},Modifier.fillMaxWidth(),label={Text("كود التصنيف *")},singleLine=true) }
+                    item { OutlinedTextField(itemType,{itemType=it},Modifier.fillMaxWidth(),label={Text("نوع العنصر: product/service/digital/material/asset")},singleLine=true) }
+                    item { OutlinedTextField(descriptionAr,{descriptionAr=it},Modifier.fillMaxWidth(),label={Text("الوصف العربي")}) }
+                    item { OutlinedTextField(descriptionEn,{descriptionEn=it},Modifier.fillMaxWidth(),label={Text("English description")}) }
+                    item { Text("الباركود والوحدات والعبوات",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold) }
+                    item { OutlinedTextField(unitCode,{unitCode=it.uppercase()},Modifier.fillMaxWidth(),label={Text("وحدة الأساس * (كود موجود في دليل الوحدات)")},singleLine=true) }
+                    item { OutlinedTextField(barcode,{barcode=it.filter(Char::isDigit).take(14)},Modifier.fillMaxWidth(),label={Text("GTIN / الباركود الأساسي (8–14 رقمًا)")},singleLine=true) }
+                    item { OutlinedTextField(extraUnitCode,{extraUnitCode=it.uppercase()},Modifier.fillMaxWidth(),label={Text("وحدة عبوة إضافية (اختياري)")},singleLine=true) }
+                    item { OutlinedTextField(extraUnitQty,{extraUnitQty=it},Modifier.fillMaxWidth(),label={Text("كم وحدة أساس داخل العبوة")},singleLine=true) }
+                    item { OutlinedTextField(extraUnitPackage,{extraUnitPackage=it},Modifier.fillMaxWidth(),label={Text("اسم العبوة (كرتون/علبة/شريط)")},singleLine=true) }
+                    item { OutlinedTextField(extraUnitBarcode,{extraUnitBarcode=it},Modifier.fillMaxWidth(),label={Text("باركود العبوة الإضافية")},singleLine=true) }
+                    item { Text("العلامة والمصنع والمواصفات",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold) }
+                    item { OutlinedTextField(brand,{brand=it},Modifier.fillMaxWidth(),label={Text("العلامة التجارية")},singleLine=true) }
+                    item { OutlinedTextField(manufacturer,{manufacturer=it},Modifier.fillMaxWidth(),label={Text("الشركة المصنعة")},singleLine=true) }
+                    item { OutlinedTextField(origin,{origin=it},Modifier.fillMaxWidth(),label={Text("بلد الصناعة")},singleLine=true) }
+                    item { OutlinedTextField(model,{model=it},Modifier.fillMaxWidth(),label={Text("رقم الطراز")},singleLine=true) }
+                    item { OutlinedTextField(partNumber,{partNumber=it},Modifier.fillMaxWidth(),label={Text("رقم القطعة")},singleLine=true) }
+                    item { OutlinedTextField(imageUrl,{imageUrl=it},Modifier.fillMaxWidth(),label={Text("رابط صورة HTTPS خارجي")},singleLine=true) }
+                    item { OutlinedTextField(imageAlt,{imageAlt=it},Modifier.fillMaxWidth(),label={Text("وصف الصورة")},singleLine=true) }
+                    item { OutlinedTextField(ingredients,{ingredients=it},Modifier.fillMaxWidth(),label={Text("المكونات مفصولة بفواصل")}) }
+                    item { OutlinedTextField(materialComposition,{materialComposition=it},Modifier.fillMaxWidth(),label={Text("تركيب المواد مفصول بفواصل")}) }
+                    item { OutlinedTextField(recipe,{recipe=it},Modifier.fillMaxWidth(),label={Text("الوصفة / طريقة التحضير")}) }
+                    item { OutlinedTextField(specifications,{specifications=it},Modifier.fillMaxWidth(),label={Text("المواصفات الإضافية")}) }
+                    item { OutlinedTextField(allergens,{allergens=it},Modifier.fillMaxWidth(),label={Text("مسببات الحساسية مفصولة بفواصل")}) }
+                    item { OutlinedTextField(storage,{storage=it},Modifier.fillMaxWidth(),label={Text("تعليمات التخزين")}) }
+                    item { OutlinedTextField(usage,{usage=it},Modifier.fillMaxWidth(),label={Text("تعليمات الاستخدام")}) }
+                    item { OutlinedTextField(warnings,{warnings=it},Modifier.fillMaxWidth(),label={Text("التحذيرات")}) }
+                    item { OutlinedTextField(shelfLife,{shelfLife=it.filter(Char::isDigit).take(6)},Modifier.fillMaxWidth(),label={Text("مدة الصلاحية بالأيام")},singleLine=true) }
+                    item { Row(verticalAlignment=Alignment.CenterVertically) { Checkbox(expiryRequired,{expiryRequired=it}); Text("يتطلب تاريخ صلاحية") } }
+                    item { Row(verticalAlignment=Alignment.CenterVertically) { Checkbox(batchTracked,{batchTracked=it}); Text("تتبع رقم التشغيلة") } }
+                    item { Row(verticalAlignment=Alignment.CenterVertically) { Checkbox(serialTracked,{serialTracked=it}); Text("تتبع الرقم التسلسلي") } }
+                    item { Row(verticalAlignment=Alignment.CenterVertically) { Checkbox(prescriptionOnly,{prescriptionOnly=it}); Text("يتطلب وصفة طبية (بعد التحقق)") } }
+                    item { OutlinedTextField(currencyCode,{currencyCode=it.uppercase()},Modifier.fillMaxWidth(),label={Text("رمز العملة لحساب المؤسسة")},singleLine=true) }
+                    item { Text("القطاعات ومستويات النشاط والمناطق",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold) }
+                    item { OutlinedTextField(sectors,{sectors=it},Modifier.fillMaxWidth(),label={Text("القطاعات مفصولة بفواصل (فارغ = عام)")}) }
+                    item { OutlinedTextField(levels,{levels=it},Modifier.fillMaxWidth(),label={Text("مستويات النشاط مفصولة بفواصل (فارغ = عام)")}) }
+                    item { OutlinedTextField(regionCountry,{regionCountry=it.uppercase()},Modifier.fillMaxWidth(),label={Text("دولة الإظهار (اختياري)")},singleLine=true) }
+                    item { OutlinedTextField(regionCode,{regionCode=it},Modifier.fillMaxWidth(),label={Text("رمز المنطقة / المحافظة")},singleLine=true) }
+                    item { OutlinedTextField(regionCity,{regionCity=it},Modifier.fillMaxWidth(),label={Text("المدينة")},singleLine=true) }
+                    item { Row(verticalAlignment=Alignment.CenterVertically) { Checkbox(regionExcluded,{regionExcluded=it}); Text("استثناء هذه المنطقة بدل تضمينها") } }
+                    item { Text("الحكم الديني / الطبي / التنظيمي (اختياري، لا يُعد فتوى أو تشخيصًا)",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold) }
+                    item { OutlinedTextField(rulingDomain,{rulingDomain=it},Modifier.fillMaxWidth(),label={Text("النطاق: religious / medical / regulatory / dietary")},singleLine=true) }
+                    item { OutlinedTextField(authority,{authority=it},Modifier.fillMaxWidth(),label={Text("رمز الجهة أو المرجع (مطلوب لتسجيل الحكم)")},singleLine=true) }
+                    item { OutlinedTextField(religion,{religion=it},Modifier.fillMaxWidth(),label={Text("رمز الدين عند الحكم الديني")},singleLine=true) }
+                    item { OutlinedTextField(jurisdiction,{jurisdiction=it},Modifier.fillMaxWidth(),label={Text("الدولة / الاختصاص القضائي")},singleLine=true) }
+                    item { OutlinedTextField(rulingOutcome,{rulingOutcome=it},Modifier.fillMaxWidth(),label={Text("النتيجة: permitted/prohibited/conditional/unknown/...")},singleLine=true) }
+                    item { OutlinedTextField(rulingRationale,{rulingRationale=it},Modifier.fillMaxWidth(),label={Text("التعليل / الشروط")}) }
+                    item { OutlinedTextField(rulingSourceTitle,{rulingSourceTitle=it},Modifier.fillMaxWidth(),label={Text("عنوان المصدر")},singleLine=true) }
+                    item { OutlinedTextField(rulingSourceUrl,{rulingSourceUrl=it},Modifier.fillMaxWidth(),label={Text("رابط المصدر HTTPS")},singleLine=true) }
+                    item { OutlinedTextField(rulingConfidence,{rulingConfidence=it},Modifier.fillMaxWidth(),label={Text("درجة التوثيق: unverified/reported/reviewed/official")},singleLine=true) }
+                    item { Button(onClick={createProduct()},enabled=!busy && nameAr.isNotBlank() && nameEn.isNotBlank() && productCategory.isNotBlank() && unitCode.isNotBlank(),modifier=Modifier.fillMaxWidth()) { Text("حفظ الصنف وكل تفاصيله") } }
+                    item { Text("يُحفظ سجل الصنف والوحدات والاستهداف والأحكام في معاملة واحدة. لا يُعتمد أي حكم طبي أو ديني تلقائيًا؛ ارفع الثقة بعد مراجعة مصدر موثوق.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
+                }
+                "transfer" -> LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(bottom=20.dp)) {
+                    item { Text("النقل متاح فقط إذا كنت مالكًا أو مديرًا في الحساب المصدر والوجهة. اترك قائمة UUID فارغة لنقل كل روابط الدليل.",style=MaterialTheme.typography.bodySmall) }
+                    item { OutlinedTextField(transferSource,{transferSource=it.trim()},Modifier.fillMaxWidth(),label={Text("معرّف الحساب المصدر UUID")},singleLine=true) }
+                    item { OutlinedTextField(transferDestination,{transferDestination=it.trim()},Modifier.fillMaxWidth(),label={Text("معرّف الحساب الوجهة UUID")},singleLine=true) }
+                    item { OutlinedTextField(transferIds,{transferIds=it},Modifier.fillMaxWidth(),label={Text("معرّفات الأصناف UUID مفصولة بفواصل (اختياري)")}) }
+                    item { Button(onClick={transferCatalog()},enabled=!busy && transferSource.isNotBlank() && transferDestination.isNotBlank(),modifier=Modifier.fillMaxWidth()) { Text("نقل دليل الأصناف") } }
                 }
             }
         }
-        if (busy && token == null) LinearProgressIndicator(Modifier.fillMaxWidth())
-        if (feedback.isNotBlank() && token == null) Text(feedback, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
     }
 }
