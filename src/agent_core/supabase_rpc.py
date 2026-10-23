@@ -123,6 +123,29 @@ class SupabaseRPCClient:
                 })
         return items
 
+    def create_storefront(self, *, organization_name: str, organization_slug: str,
+                          activity_name: str, product_name: str, unit_name: str,
+                          price_minor: int, currency_code: str, location_name: str,
+                          initial_quantity: int) -> dict:
+        if not isinstance(price_minor, int) or isinstance(price_minor, bool) or price_minor < 0:
+            raise ValueError("price_minor must be a non-negative integer")
+        if not isinstance(initial_quantity, int) or isinstance(initial_quantity, bool) or not 1 <= initial_quantity <= 100000000:
+            raise ValueError("initial_quantity must be an integer between 1 and 100000000")
+        result = self.rpc("commercial_create_storefront", {
+            "p_organization_name": organization_name,
+            "p_organization_slug": organization_slug,
+            "p_activity_name": activity_name,
+            "p_product_name": product_name,
+            "p_unit_name": unit_name,
+            "p_price_minor": price_minor,
+            "p_currency_code": currency_code,
+            "p_location_name": location_name,
+            "p_initial_quantity": initial_quantity,
+        })
+        if not isinstance(result, dict) or not isinstance(result.get("organization_id"), str) or not isinstance(result.get("offering_id"), str):
+            raise SupabaseRPCError("Unexpected storefront setup response; verify the setup before retrying.")
+        return result
+
     def checkout(self, *, offering_id: str, location_id: str, quantity: int,
                  idempotency_key: str) -> dict:
         if not isinstance(quantity, int) or isinstance(quantity, bool) or not 1 <= quantity <= 100000:

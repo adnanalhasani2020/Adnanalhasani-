@@ -191,3 +191,38 @@ def test_supabase_printable_receipt_uses_authenticated_sale_data_and_escapes_htm
     assert "&lt;script&gt;" in body
     assert "<script>alert(1)</script>" not in body
     assert "window.print()" in body
+
+
+def test_supabase_storefront_setup_requires_auth_and_calls_atomic_rpc():
+    app = CommercialWebApplication()
+    body = {
+        "organization_name": "متجر الروح", "organization_slug": "rooh-store",
+        "activity_name": "المتجر الرئيسي", "product_name": "ماء",
+        "unit_name": "عبوة", "price_minor": 1500, "currency_code": "YER",
+        "location_name": "الفرع الرئيسي", "initial_quantity": 12,
+    }
+    raw = json.dumps(body).encode()
+    environ = {
+        "REQUEST_METHOD": "POST", "PATH_INFO": "/api/supabase/storefront",
+        "wsgi.url_scheme": "https", "HTTP_HOST": "example.test",
+        "HTTP_COOKIE": "supabase_access=access-token", "CONTENT_TYPE": "application/json",
+        "CONTENT_LENGTH": str(len(raw)), "wsgi.input": io.BytesIO(raw),
+    }
+    captured = {}
+    def start_response(status, headers):
+        captured["status"] = status
+    with patch("agent_core.commercial_web.SupabaseAuthClient") as auth_class, \
+         patch("agent_core.commercial_web.SupabaseRPCClient") as rpc_class:
+        auth_class.return_value.get_user.return_value = {"id": "user-1"}
+        rpc_class.return_value.create_storefront.return_value = {
+            "organization_id": "org-uuid", "offering_id": "offer-uuid"
+        }
+        result = b"".join(app(environ, start_response))
+    assert captured["status"] == "201 Created"
+    assert json.loads(result.decode())["organization_id"] == "org-uuid"
+    rpc_class.return_value.create_storefront.assert_called_once_with(
+        organization_name="متجر الروح", organization_slug="rooh-store",
+        activity_name="المتجر الرئيسي", product_name="ماء", unit_name="عبوة",
+        price_minor=1500, currency_code="YER", location_name="الفرع الرئيسي",
+        initial_quantity=12,
+    )

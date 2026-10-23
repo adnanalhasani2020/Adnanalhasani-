@@ -171,3 +171,30 @@ def test_receipts_uses_user_jwt_and_normalizes_sale_items(monkeypatch):
     assert result[0]["sale_id"] == "sale-uuid"
     assert result[0]["product_name"] == "Tea"
     assert result[0]["total_minor"] == 2500
+
+
+def test_create_storefront_calls_atomic_setup_rpc(monkeypatch):
+    rpc = client(monkeypatch)
+    expected = {"organization_id": "org-uuid", "offering_id": "offer-uuid"}
+    with patch.object(rpc, "rpc", return_value=expected) as call:
+        result = rpc.create_storefront(
+            organization_name="متجر الروح", organization_slug="rooh-store",
+            activity_name="المتجر الرئيسي", product_name="ماء",
+            unit_name="عبوة", price_minor=1500, currency_code="YER",
+            location_name="الفرع الرئيسي", initial_quantity=12,
+        )
+    assert result == expected
+    assert call.call_args.args[0] == "commercial_create_storefront"
+    assert call.call_args.args[1]["p_initial_quantity"] == 12
+    assert call.call_args.args[1]["p_organization_slug"] == "rooh-store"
+
+
+def test_create_storefront_rejects_invalid_quantity(monkeypatch):
+    rpc = client(monkeypatch)
+    with pytest.raises(ValueError):
+        rpc.create_storefront(
+            organization_name="Store", organization_slug="test-store",
+            activity_name="Main", product_name="Water", unit_name="bottle",
+            price_minor=100, currency_code="YER", location_name="Main",
+            initial_quantity=0,
+        )
