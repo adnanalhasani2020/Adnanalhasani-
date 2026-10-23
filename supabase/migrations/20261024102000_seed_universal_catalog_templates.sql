@@ -283,3 +283,12 @@ JOIN (VALUES
 ) AS v(category_code,level_code,weight) ON v.category_code=i.category_code
 WHERE i.owner_organization_id IS NULL AND i.is_active
 ON CONFLICT (product_id,business_level_code) DO NOTHING;
+
+
+-- Pharmacy owners often run the business at shop-level; ensure common medical and pharmacy supplies remain discoverable there.
+INSERT INTO public.commercial_catalog_product_business_levels(product_id,business_level_code,recommendation_weight)
+SELECT i.id,'shop',20
+FROM public.commercial_global_catalog_items i
+WHERE i.owner_organization_id IS NULL AND i.is_active
+  AND i.category_code IN ('MEDICAL-CONSUMABLES','MEDICAL-PPE','WOUND-CARE','DIAGNOSTIC-SUPPLIES','LAB-SUPPLIES','PHARMACY-SUPPLIES')
+ON CONFLICT (product_id,business_level_code) DO NOTHING;
