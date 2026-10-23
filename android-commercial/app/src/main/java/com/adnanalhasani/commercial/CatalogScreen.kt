@@ -3,6 +3,8 @@ package com.adnanalhasani.commercial
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.ui.platform.LocalContext
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import android.os.Handler
 import android.os.Looper
 import androidx.compose.foundation.BorderStroke
@@ -94,6 +96,14 @@ private data class PendingTransfer(val id: String, val source: String, val desti
 
 private val catalogIo = Executors.newSingleThreadExecutor()
 private val catalogMain = Handler(Looper.getMainLooper())
+
+private fun catalogSessionPreferences(context: android.content.Context) = EncryptedSharedPreferences.create(
+    context,
+    "ruh_catalog_auth_session",
+    MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
+    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+)
 
 private fun catalogHttp(path: String, payload: JSONObject, token: String? = null): String {
     val base = BuildConfig.SUPABASE_URL.trimEnd('/')
@@ -191,6 +201,26 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             catalogMain.post { busy = false; result.onSuccess(onSuccess).onFailure { feedback = it.message ?: "تعذر إكمال العملية." } }
         }
     }
+    LaunchedEffect(Unit) {
+        val savedRefresh = runCatching { catalogSessionPreferences(context).getString("refresh_token", null) }.getOrNull()
+        if (!savedRefresh.isNullOrBlank()) {
+            request({
+                val raw = catalogHttp("/auth/v1/token?grant_type=refresh_token", JSONObject().put("refresh_token", savedRefresh))
+                val session = JSONObject(raw)
+                val access = session.optString("access_token")
+                val refresh = session.optString("refresh_token").ifBlank { savedRefresh }
+                if (access.isBlank()) throw IllegalStateException("انتهت الجلسة؛ سجّل الدخول مجددًا.")
+                "${access}|${refresh}|${session.optJSONObject("user")?.optString("id").orEmpty()}"
+            }, { sessionValue ->
+                val parts = sessionValue.split("|", limit = 3)
+                token = parts[0]
+                catalogSessionPreferences(context).edit().putString("refresh_token", parts.getOrNull(1).orEmpty()).apply()
+                signedInUserId = parts.getOrNull(2).orEmpty()
+                feedback = "تم استعادة جلستك السابقة."
+            })
+        }
+    }
+
     fun org(): String? = organizationId.trim().takeIf { it.isNotBlank() }
     fun loadCatalog() {
         val active = token ?: return
@@ -446,6 +476,10 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                 Text("دليل الأصناف والوحدات",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold)
                 Text("دليل متعدد الأنشطة والمستويات والمناطق",color=MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.bodySmall)
             }
+            if (token != null) TextButton(onClick = {
+                runCatching { catalogSessionPreferences(context).edit().clear().apply() }
+                token = null; signedInUserId = ""; organizationId = ""; feedback = "تم تسجيل الخروج."
+            }) { Text("تسجيل الخروج") }
         }
         if(token==null) {
             LazyColumn(verticalArrangement=Arrangement.spacedBy(10.dp),contentPadding=PaddingValues(bottom=18.dp)) {
@@ -454,10 +488,10 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                 item { OutlinedTextField(password,{password=it},Modifier.fillMaxWidth(),label={Text("كلمة المرور")},singleLine=true) }
                 item { Button(onClick={request({
                     val raw=catalogHttp("/auth/v1/token?grant_type=password",JSONObject().put("email",email).put("password",password))
-                    val session=JSONObject(raw); val access=session.optString("access_token"); if(access.isBlank()) throw IllegalStateException("لم تُرجع خدمة المصادقة جلسة صالحة.")
-                    "${access}|${session.optJSONObject("user")?.optString("id").orEmpty()}"
-                },{sessionValue -> val parts=sessionValue.split("|",limit=2); token=parts[0]; signedInUserId=parts.getOrNull(1).orEmpty(); feedback="تم تسجيل الدخول. أدخل معرّف المؤسسة للمتابعة."})},enabled=!busy && email.contains("@") && password.isNotBlank(),modifier=Modifier.fillMaxWidth()) { Text(if(busy) "جارٍ تسجيل الدخول..." else "تسجيل الدخول") } }
-                item { Text("تُستخدم الجلسة داخل هذه الشاشة فقط ولا تُحفظ كلمة المرور. لا تستخدم مفتاح service_role في التطبيق.",color=MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.bodySmall) }
+                    val session=JSONObject(raw); val access=session.optString("access_token"); val refresh=session.optString("refresh_token"); if(access.isBlank() || refresh.isBlank()) throw IllegalStateException("لم تُرجع خدمة المصادقة جلسة صالحة.")
+                    "${access}|${refresh}|${session.optJSONObject("user")?.optString("id").orEmpty()}"
+                },{sessionValue -> val parts=sessionValue.split("|",limit=3); token=parts[0]; catalogSessionPreferences(context).edit().putString("refresh_token",parts.getOrNull(1).orEmpty()).apply(); signedInUserId=parts.getOrNull(2).orEmpty(); password=""; feedback="تم تسجيل الدخول. ستُستعاد الجلسة تلقائيًا عند فتح الدليل لاحقًا."})},enabled=!busy && email.contains("@") && password.isNotBlank(),modifier=Modifier.fillMaxWidth()) { Text(if(busy) "جارٍ تسجيل الدخول..." else "تسجيل الدخول") } }
+                item { Text("تُحفظ بيانات تجديد الجلسة مشفرة على الجهاز، ولا تُحفظ كلمة المرور. لا تستخدم مفتاح service_role في التطبيق.",color=MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.bodySmall) }
             }
         } else {
             OutlinedTextField(organizationId,{organizationId=it.trim()},Modifier.fillMaxWidth(),label={Text("معرّف المؤسسة UUID")},singleLine=true)
