@@ -64,6 +64,10 @@ internal fun ActivityProfileScreen(onBack: () -> Unit) {
     var organizationName by remember { mutableStateOf("") }
     var organizationSlug by remember { mutableStateOf("") }
     var activityName by remember { mutableStateOf("") }
+    var activityCode by remember { mutableStateOf("") }
+    val activityOptions = remember { mutableStateListOf<BusinessActivityOption>() }
+    var activityDirectoryLoaded by remember { mutableStateOf(false) }
+    var activityDirectoryError by remember { mutableStateOf("") }
     var activityType by remember { mutableStateOf("commercial") }
     var businessLevel by remember { mutableStateOf("shop") }
     var registrationNumber by remember { mutableStateOf("") }

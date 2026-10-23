@@ -100,6 +100,9 @@ class BusinessActivityTaxonomyContractTests(unittest.TestCase):
 
     def test_android_loads_and_selects_the_server_activity_directory(self):
         self.assertIn("commercial_list_business_activity_nodes", self.profile_screen)
+        self.assertIn("var activityCode by remember", self.profile_screen)
+        self.assertIn("mutableStateListOf<BusinessActivityOption>()", self.profile_screen)
+        self.assertIn("var activityDirectoryLoaded by remember", self.profile_screen)
         self.assertIn("النشاط التجاري من الدليل *", self.profile_screen)
         self.assertIn("pathAr", self.profile_screen)
         self.assertIn("activityCode.isNotBlank()", self.profile_screen)
