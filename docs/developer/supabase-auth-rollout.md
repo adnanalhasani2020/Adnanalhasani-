@@ -2,10 +2,10 @@
 
 ## Implemented in this branch
 
-- Added `agent_core.supabase_auth.SupabaseAuthClient` for Supabase email/password sign-up and sign-in, server-side `/auth/v1/user` session verification, and sign-out.
+- Added `agent_core.supabase_auth.SupabaseAuthClient` for Supabase email/password sign-up and sign-in, refresh-token exchange, server-side `/auth/v1/user` session verification, and sign-out.
 - Uses only `SUPABASE_URL` and `SUPABASE_ANON_KEY`; it does not require or accept a service-role key.
 - Avoids including credentials in URLs and avoids forwarding provider error bodies to callers.
-- Added mocked unit tests for request shape, session verification, HTTPS configuration, and safe error handling.
+- Added mocked unit tests for request shape, refresh-token rotation/response validation, session verification, HTTPS configuration, and safe error handling.
 
 ## Not yet integrated
 
@@ -21,4 +21,4 @@ The existing `commercial_web` login and the catalog/checkout/receipt endpoints s
 
 ## Validation status
 
-The new tests are committed but have not been executed in this environment. No live sign-in was attempted and no Supabase database policies or production settings were changed.
+The preceding revision passed both GitHub Actions workflows (Python tests and Stage 7 automated tests). The latest refresh-token change requires a fresh CI run before it can be considered validated. No live sign-in was attempted and no Supabase database policies or production settings were changed.
