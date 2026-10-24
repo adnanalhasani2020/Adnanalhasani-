@@ -202,9 +202,14 @@ internal fun getOrCreateCommercialCloudSaleKey(context: Context, offeringId: Str
     // A retry key belongs to one exact operation and tenant/location context.
     // Reusing it after switching organizations or warehouses can collide with
     // a different server-side request or retry an unintended sale.
-    if (storedOffering == offeringId && storedQuantity == quantity &&
-        storedOrganization == organizationId && storedActivity == activityId &&
-        storedLocation == locationId && storedKey.isNotBlank()) return storedKey
+    if (storedKey.isNotBlank()) {
+        require(storedOffering == offeringId && storedQuantity == quantity &&
+            storedOrganization == organizationId && storedActivity == activityId &&
+            storedLocation == locationId) {
+            "توجد عملية بيع معلّقة لم تُحسم بعد. أعد المحاولة بنفس البيانات قبل بدء بيع آخر."
+        }
+        return storedKey
+    }
 
     val key = UUID.randomUUID().toString()
     check(prefs.edit()
@@ -771,11 +776,15 @@ internal fun requestCommercialCloudSaleReturn(
         .put("items", normalizedItems)
         .toString()
     val prefs = context.getSharedPreferences("commercial_cloud_pending_return_v1", Context.MODE_PRIVATE)
-    val key = if (prefs.getString("request_fingerprint", null) == fingerprint &&
-        prefs.getString("organization_id", null) == organizationId) {
-        prefs.getString("idempotency_key", null).orEmpty()
-    } else ""
-    val idempotencyKey = key.ifBlank { UUID.randomUUID().toString() }
+    val storedReturnKey = prefs.getString("idempotency_key", null).orEmpty()
+    val storedFingerprint = prefs.getString("request_fingerprint", null).orEmpty()
+    if (storedReturnKey.isNotBlank()) {
+        require(storedFingerprint == fingerprint &&
+            prefs.getString("organization_id", null) == organizationId) {
+            "يوجد طلب مرتجع معلّق. أعد المحاولة بنفس تفاصيل الطلب قبل إنشاء طلب آخر."
+        }
+    }
+    val idempotencyKey = storedReturnKey.ifBlank { UUID.randomUUID().toString() }
     if (key.isBlank()) {
         check(prefs.edit().clear()
             .putString("request_fingerprint", fingerprint)
@@ -1042,13 +1051,17 @@ internal fun getOrCreateCommercialCloudCreditSaleKey(
     val location = saved.getString("location_id", null).orEmpty()
     require(org.isNotBlank() && activity.isNotBlank() && location.isNotBlank())
     val existing = prefs.getString("idempotency_key", null).orEmpty()
-    if (existing.isNotBlank() &&
-        prefs.getString("offering_id", null) == offeringId &&
-        prefs.getInt("quantity", -1) == quantity &&
-        prefs.getString("customer_id", null) == customerId &&
-        prefs.getString("organization_id", null) == org &&
-        prefs.getString("activity_id", null) == activity &&
-        prefs.getString("location_id", null) == location) return existing
+    if (existing.isNotBlank()) {
+        require(prefs.getString("offering_id", null) == offeringId &&
+            prefs.getInt("quantity", -1) == quantity &&
+            prefs.getString("customer_id", null) == customerId &&
+            prefs.getString("organization_id", null) == org &&
+            prefs.getString("activity_id", null) == activity &&
+            prefs.getString("location_id", null) == location) {
+            "توجد عملية بيع آجل معلّقة. أعد المحاولة بنفس الفاتورة قبل بدء عملية أخرى."
+        }
+        return existing
+    }
     val key = UUID.randomUUID().toString()
     check(prefs.edit().clear()
         .putString("idempotency_key", key)
