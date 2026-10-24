@@ -1,4 +1,8 @@
--- Atomic multi-line cash checkout. No credit, discount, tax or GL behavior is implied.
+-- Atomic multi-line cash/credit checkout. Discounts, tax and GL posting remain out of scope.
+DROP FUNCTION IF EXISTS public.commercial_checkout_sale_multi(jsonb,uuid,text,uuid);
+DROP FUNCTION IF EXISTS public.commercial_checkout_sale_multi(jsonb,uuid,text);
+DROP FUNCTION IF EXISTS commercial_private.commercial_checkout_sale_multi(jsonb,uuid,text,uuid);
+DROP FUNCTION IF EXISTS commercial_private.commercial_checkout_sale_multi(jsonb,uuid,text);
 CREATE OR REPLACE FUNCTION commercial_private.commercial_checkout_sale_multi(
   p_lines jsonb, p_location_id uuid, p_idempotency_key text, p_customer_id uuid DEFAULT NULL,
   p_payment_mode text DEFAULT 'cash', p_initial_payment_minor bigint DEFAULT NULL
@@ -85,7 +89,7 @@ BEGIN
     RETURN jsonb_build_object('sale_id',v_sale,'receipt_number',v_receipt,'organization_id',v_org,
       'activity_id',v_activity,'currency_code',v_currency,'total_minor',v_total,
       'line_count',(SELECT count(*) FROM public.commercial_sale_items i WHERE i.sale_id=v_sale),
-      'payment_recorded',v_total>0,'state','completed','payment_status',v_payment_status,'idempotent_replay',true);
+      'payment_recorded',v_payment_status IN ('paid','partially_paid'),'state','completed','payment_status',v_payment_status,'idempotent_replay',true);
   END IF;
 
   SELECT a.id, a.organization_id INTO v_activity, v_org
