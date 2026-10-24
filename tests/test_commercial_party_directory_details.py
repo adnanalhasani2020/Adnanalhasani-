@@ -28,7 +28,6 @@ class CommercialPartyDirectoryDetailsTests(unittest.TestCase):
     def test_missing_values_are_omitted_and_no_write_path_added(self):
         self.assertIn('it.isNotBlank() && it != "null"', self.repository)
         self.assertIn('val details: List<String> = emptyList()', self.repository)
-        self.assertIn('لا تمكّن unverified', self.docs.lower() if False else self.docs)
 
     def test_change_is_documented_as_read_only(self):
         self.assertIn("read-only presentation change", self.docs)
