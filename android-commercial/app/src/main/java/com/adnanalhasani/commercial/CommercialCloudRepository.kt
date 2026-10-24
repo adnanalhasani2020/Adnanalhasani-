@@ -191,3 +191,52 @@ internal fun checkoutCommercialCloudSale(
     ))
     return result
 }
+
+
+internal fun loadCommercialCloudSales(context: Context): List<SaleRecord> {
+    val savedContext = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+    val orgId = savedContext.getString("organization_id", null).orEmpty()
+    val activityId = savedContext.getString("activity_id", null).orEmpty()
+    require(orgId.isNotBlank() && activityId.isNotBlank()) { "بيانات المؤسسة والنشاط غير محفوظة." }
+    val sessionPrefs = commercialCloudSessionPreferences(context)
+    val savedRefresh = sessionPrefs.getString("refresh_token", null).orEmpty()
+    require(savedRefresh.isNotBlank()) { "سجّل الدخول إلى حساب Supabase أولًا." }
+    val session = JSONObject(commercialCloudRequest(
+        "/auth/v1/token?grant_type=refresh_token", "POST",
+        JSONObject().put("refresh_token", savedRefresh)
+    ))
+    val access = session.optString("access_token")
+    require(access.isNotBlank()) { "انتهت جلسة الحساب؛ سجّل الدخول مجددًا." }
+    sessionPrefs.edit().putString("refresh_token", session.optString("refresh_token").ifBlank { savedRefresh }).apply()
+
+    val path = "/rest/v1/commercial_sales" +
+        "?select=id,receipt_number,total_minor,payment_status,created_at,customer:commercial_customers(display_name),items:commercial_sale_items(product_name_snapshot,quantity,line_total_minor,unit_price_minor)" +
+        "&organization_id=eq.$orgId&activity_id=eq.$activityId&order=created_at.desc&limit=200"
+    val rows = JSONArray(commercialCloudRequest(path, "GET", token = access))
+    return buildList {
+        for (index in 0 until rows.length()) {
+            val row = rows.optJSONObject(index) ?: continue
+            val items = row.optJSONArray("items")
+            val firstItem = items?.optJSONObject(0)
+            val total = row.optLong("total_minor", 0L).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
+            val paymentStatus = row.optString("payment_status").lowercase(Locale.ROOT)
+            val isCredit = paymentStatus in setOf("unpaid", "partial", "pending", "due", "credit")
+            val customerObject = row.optJSONObject("customer")
+            val createdAt = runCatching {
+                java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
+                    .parse(row.optString("created_at").take(19))?.time
+            }.getOrNull() ?: System.currentTimeMillis()
+            add(SaleRecord(
+                number = row.optLong("receipt_number", 0L).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt(),
+                product = firstItem?.optString("product_name_snapshot")?.ifBlank { "فاتورة بيع" } ?: "فاتورة بيع",
+                quantity = firstItem?.optDouble("quantity", 1.0)?.toInt()?.coerceAtLeast(1) ?: 1,
+                total = total,
+                credit = isCredit,
+                customer = customerObject?.optString("display_name").orEmpty(),
+                paid = if (!isCredit) total else 0,
+                createdAt = createdAt,
+                unitCode = "قطعة"
+            ))
+        }
+    }
+}
