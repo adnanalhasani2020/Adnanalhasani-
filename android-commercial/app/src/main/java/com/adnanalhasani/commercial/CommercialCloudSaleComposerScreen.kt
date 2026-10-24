@@ -221,7 +221,7 @@ internal fun CommercialCloudSaleComposerScreen(
                                 CloudComposerMain.post {
                                     submitting = false
                                     result.onSuccess { (receipt, paymentRecorded, clearError) ->
-                                        quantities = emptyMap()
+                                        if (clearError == null) quantities = emptyMap()
                                         notice = if (clearError == null) {
                                             "تم تأكيد الفاتورة رقم $receipt على الخادم. ${if (paymentRecorded) "سُجلت دفعة نقدية واحدة." else "الإجمالي صفر؛ لا يلزم إنشاء دفعة."}"
                                         } else {
