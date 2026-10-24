@@ -293,6 +293,21 @@ internal data class CommercialCloudCheckoutLine(
     val quantity: Int
 )
 
+/** Merge repeated offering IDs before idempotency fingerprinting and checkout. */
+internal fun aggregateCommercialCheckoutLines(
+    lines: List<CommercialCloudCheckoutLine>
+): List<CommercialCloudCheckoutLine> {
+    require(lines.isNotEmpty() && lines.size <= 200) { "أضف صنفًا واحدًا على الأقل إلى الفاتورة." }
+    val totals = linkedMapOf<String, Int>()
+    lines.forEach { line ->
+        require(line.offeringId.isNotBlank() && line.quantity in 1..100000) { "تحقق من الأصناف والكميات." }
+        val total = Math.addExact(totals[line.offeringId] ?: 0, line.quantity)
+        require(total <= 100000) { "إجمالي كمية الصنف يتجاوز الحد المسموح." }
+        totals[line.offeringId] = total
+    }
+    return totals.entries.sortedBy { it.key }.map { CommercialCloudCheckoutLine(it.key, it.value) }
+}
+
 internal fun getOrCreateCommercialCloudMultiSaleKey(
     context: Context,
     lines: List<CommercialCloudCheckoutLine>,
@@ -300,11 +315,9 @@ internal fun getOrCreateCommercialCloudMultiSaleKey(
     paymentMode: String = "cash",
     initialPaymentMinor: Long = 0L
 ): String {
-    require(lines.isNotEmpty() && lines.size <= 200) { "أضف صنفًا واحدًا على الأقل إلى الفاتورة." }
-    require(lines.all { it.offeringId.isNotBlank() && it.quantity in 1..100000 }) { "تحقق من الأصناف والكميات." }
-    require(lines.map { it.offeringId }.distinct().size == lines.size) { "ادمج كميات الصنف المكرر في سطر واحد." }
+    val normalizedLines = aggregateCommercialCheckoutLines(lines)
     val canonical = JSONArray()
-    lines.sortedBy { it.offeringId }.forEach { line ->
+    normalizedLines.forEach { line ->
         canonical.put(JSONObject().put("offering_id", line.offeringId).put("quantity", line.quantity))
     }
     val payload = JSONObject().put("customer_id", customerId ?: JSONObject.NULL)
@@ -353,16 +366,14 @@ internal fun checkoutCommercialCloudSaleMulti(
     paymentMode: String = "cash",
     initialPaymentMinor: Long = 0L
 ): JSONObject {
-    require(lines.isNotEmpty() && lines.size <= 200) { "عدد بنود الفاتورة غير صالح." }
+    val normalizedLines = aggregateCommercialCheckoutLines(lines)
     val savedContext = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
     val locationId = savedContext.getString("location_id", null).orEmpty()
     require(locationId.isNotBlank()) { "معرّف موقع المخزون غير محفوظ." }
     val payload = JSONArray()
-    lines.sortedBy { it.offeringId }.forEach { line ->
-        require(line.offeringId.isNotBlank() && line.quantity in 1..100000) { "تحقق من الصنف والكمية." }
+    normalizedLines.forEach { line ->
         payload.put(JSONObject().put("offering_id", line.offeringId).put("quantity", line.quantity))
     }
-    require(lines.map { it.offeringId }.distinct().size == lines.size) { "ادمج كميات الصنف المكرر في سطر واحد." }
     val sessionPrefs = commercialCloudSessionPreferences(context)
     val savedRefresh = sessionPrefs.getString("refresh_token", null).orEmpty()
     require(savedRefresh.isNotBlank()) { "سجّل الدخول إلى حساب Supabase أولًا." }

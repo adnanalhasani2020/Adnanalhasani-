@@ -163,7 +163,8 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
     def test_multi_line_checkout_guards_duplicate_lines_and_uses_stable_retry_key(self):
         self.assertIn("commercial_checkout_sale_multi", self.repository)
         self.assertIn("getOrCreateCommercialCloudMultiSaleKey", self.repository)
-        self.assertIn("lines.map { it.offeringId }.distinct().size == lines.size", self.repository)
+        self.assertIn("aggregateCommercialCheckoutLines(lines)", self.repository)
+        self.assertIn("Math.addExact(totals[line.offeringId] ?: 0, line.quantity)", self.repository)
         self.assertIn("prefs.getString(\"payload\", null) == payload", self.repository)
         migration = (ROOT / "supabase/migrations/20261024200000_commercial_multiline_cash_checkout.sql").read_text(encoding="utf-8")
         self.assertIn("FOR UPDATE", migration)
