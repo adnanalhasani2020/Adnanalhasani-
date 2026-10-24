@@ -143,7 +143,8 @@ internal fun createCommercialCloudInventoryItem(
     priceMinor: Long,
     initialQuantity: Int,
     reorderPoint: Double = 0.0,
-    categoryId: String = ""
+    categoryId: String = "",
+    unitCode: String = "each"
 ): String {
     val savedContext = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
     val orgId = savedContext.getString("organization_id", null).orEmpty()
@@ -174,7 +175,8 @@ internal fun createCommercialCloudInventoryItem(
         .put("p_initial_quantity", initialQuantity)
         .put("p_reorder_point", reorderPoint.coerceAtLeast(0.0))
         .put("p_category_id", if (categoryId.isNotBlank()) categoryId else JSONObject.NULL)
-    return commercialCloudRequest("/rest/v1/rpc/commercial_create_inventory_item_with_category", "POST", payload, access)
+        .put("p_unit_code", unitCode.ifBlank { "each" })
+    return commercialCloudRequest("/rest/v1/rpc/commercial_create_inventory_item_with_category_and_unit", "POST", payload, access)
 }
 
 
@@ -287,6 +289,31 @@ internal data class CommercialMasterDataRow(
     val parentId: String = "",
     val warehouseId: String = ""
 )
+
+internal data class CommercialUnitOption(
+    val code: String,
+    val label: String,
+    val dimension: String,
+    val decimalPlaces: Int
+)
+
+internal fun loadCommercialUnitsOfMeasure(context: Context): List<CommercialUnitOption> {
+    val (_, access) = commercialMasterDataAccess(context)
+    val rows = JSONArray(commercialCloudRequest(
+        "/rest/v1/commercial_unit_of_measure?select=code,display_name,dimension,decimal_places&is_active=eq.true&order=dimension.asc,code.asc",
+        "GET", token = access
+    ))
+    return buildList {
+        for (i in 0 until rows.length()) {
+            val row = rows.optJSONObject(i) ?: continue
+            val code = row.optString("code").trim()
+            val label = row.optString("display_name").trim()
+            if (code.isNotBlank() && label.isNotBlank()) add(
+                CommercialUnitOption(code, label, row.optString("dimension"), row.optInt("decimal_places", 0).coerceIn(0, 6))
+            )
+        }
+    }
+}
 
 private fun commercialMasterDataAccess(context: Context): Pair<String, String> {
     val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
