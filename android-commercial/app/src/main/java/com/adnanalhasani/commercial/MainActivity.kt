@@ -50,7 +50,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-internal data class Product(val name: String, val category: String, val stock: Int, val price: String, val costPrice: Int = 0, val catalogCode: String = "", val barcode: String = "", val unitCode: String = "EA", val imageUrl: String = "", val description: String = "", val brand: String = "", val manufacturer: String = "", val countryOfManufacture: String = "", val createdAt: Long = System.currentTimeMillis(), val createdBy: String = "", val unitVariantsJson: String = "[]", val cloudOfferingId: String = "")
+internal data class Product(val name: String, val category: String, val stock: Int, val price: String, val costPrice: Int = 0, val catalogCode: String = "", val barcode: String = "", val unitCode: String = "EA", val imageUrl: String = "", val description: String = "", val brand: String = "", val manufacturer: String = "", val countryOfManufacture: String = "", val createdAt: Long = System.currentTimeMillis(), val createdBy: String = "", val unitVariantsJson: String = "[]", val cloudOfferingId: String = "", val reorderPoint: Int = -1)
 
 private data class LocalSaleUnit(
     val code: String,
@@ -119,7 +119,7 @@ private fun loadProducts(context: Context): List<Product> {
         val json = JSONArray(saved)
         List(json.length()) { i ->
             val item = json.getJSONObject(i)
-            Product(item.getString("name"), item.getString("category"), item.getInt("stock"), item.getString("price"), item.optInt("costPrice", 0), item.optString("catalogCode", ""), item.optString("barcode", ""), item.optString("unitCode", "EA"), item.optString("imageUrl", ""), item.optString("description", ""), item.optString("brand", ""), item.optString("manufacturer", ""), item.optString("countryOfManufacture", ""), item.optLong("createdAt", System.currentTimeMillis()), item.optString("createdBy", ""), item.optString("unitVariantsJson", "[]"))
+            Product(item.getString("name"), item.getString("category"), item.getInt("stock"), item.getString("price"), item.optInt("costPrice", 0), item.optString("catalogCode", ""), item.optString("barcode", ""), item.optString("unitCode", "EA"), item.optString("imageUrl", ""), item.optString("description", ""), item.optString("brand", ""), item.optString("manufacturer", ""), item.optString("countryOfManufacture", ""), item.optLong("createdAt", System.currentTimeMillis()), item.optString("createdBy", ""), item.optString("unitVariantsJson", "[]"), reorderPoint = item.optInt("reorderPoint", -1))
         }
     }.getOrElse { products }
 }
@@ -128,7 +128,7 @@ private fun saveProducts(context: Context, items: List<Product>) {
     val json = JSONArray()
     items.forEach { item ->
         json.put(JSONObject().put("name", item.name).put("category", item.category)
-            .put("stock", item.stock).put("price", item.price).put("costPrice", item.costPrice).put("catalogCode", item.catalogCode).put("barcode", item.barcode).put("unitCode", item.unitCode).put("imageUrl", item.imageUrl).put("description", item.description).put("brand", item.brand).put("manufacturer", item.manufacturer).put("countryOfManufacture", item.countryOfManufacture).put("createdAt", item.createdAt).put("createdBy", item.createdBy).put("unitVariantsJson", item.unitVariantsJson))
+            .put("stock", item.stock).put("price", item.price).put("costPrice", item.costPrice).put("catalogCode", item.catalogCode).put("barcode", item.barcode).put("unitCode", item.unitCode).put("imageUrl", item.imageUrl).put("description", item.description).put("brand", item.brand).put("manufacturer", item.manufacturer).put("countryOfManufacture", item.countryOfManufacture).put("createdAt", item.createdAt).put("createdBy", item.createdBy).put("unitVariantsJson", item.unitVariantsJson).put("reorderPoint", item.reorderPoint))
     }
     context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).edit().putString(scopedStoreKey(context, PRODUCTS_KEY), json.toString()).apply()
 }
@@ -600,7 +600,7 @@ private fun InventoryScreen(products: List<Product>, query: String, onQuery: (St
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Metric("إجمالي الأصناف", products.size.toString(), "صنف", Icons.Default.Inventory2, Modifier.weight(1f))
-                Metric("مخزون منخفض", products.count { it.stock <= 9 }.toString(), "أصناف", Icons.Default.WarningAmber, Modifier.weight(1f))
+                Metric("مخزون منخفض", products.count { it.stock <= (it.reorderPoint.takeIf { threshold -> threshold >= 0 } ?: 9) }.toString(), "حسب حد التنبيه", Icons.Default.WarningAmber, Modifier.weight(1f))
             }
         }
         item { Button(onClick = onAddProduct, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(8.dp)); Text("إضافة منتج") } }
@@ -612,7 +612,8 @@ private fun InventoryScreen(products: List<Product>, query: String, onQuery: (St
 
 @Composable
 private fun ProductRow(product: Product, onClick: () -> Unit = {}) {
-    val warning = product.stock <= 9
+    val warningThreshold = product.reorderPoint.takeIf { it >= 0 } ?: 9
+    val warning = product.stock <= warningThreshold
     val displayImage = product.imageUrl.ifBlank { runCatching { val units = JSONArray(product.unitVariantsJson); (0 until units.length()).map { units.getJSONObject(it) }.firstOrNull { it.optBoolean("isDefault") && it.optString("imageUrl").startsWith("https://", true) }?.optString("imageUrl").orEmpty() }.getOrDefault("") }
     Card(onClick = onClick, colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, Border), modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -628,6 +629,7 @@ private fun ProductRow(product: Product, onClick: () -> Unit = {}) {
                 Text(product.name, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                 Text(product.category, color = Muted, fontSize = 12.sp)
                 Text("المتوفر: ${product.stock} ${product.unitCode.ifBlank { "EA" }}", color = if (warning) Color(0xFFB96A14) else Muted, fontSize = 11.sp)
+                Text("حد التنبيه: ${if (product.reorderPoint >= 0) product.reorderPoint else 9}", color = Muted, fontSize = 10.sp)
                 if (product.barcode.isNotBlank() || product.catalogCode.isNotBlank()) Text(listOf(product.barcode, product.catalogCode).filter { it.isNotBlank() }.joinToString(" · "), color = Muted, fontSize = 10.sp)
                 val unitCount = runCatching { JSONArray(product.unitVariantsJson).length() }.getOrDefault(0)
                 if (unitCount > 1) Text("$unitCount وحدات/عبوات مرتبطة", color = Muted, fontSize = 10.sp)
