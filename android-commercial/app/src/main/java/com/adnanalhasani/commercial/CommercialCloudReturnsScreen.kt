@@ -154,8 +154,8 @@ internal fun CommercialCloudReturnsScreen(context: Context, onBack: () -> Unit) 
                             Button(enabled=!busy,modifier=Modifier.fillMaxWidth(),onClick={decisionTarget=selected;approve=true;amount=selected.requestedRefundMinor.toString();note=""},colors=ButtonDefaults.buttonColors(containerColor=ReturnGreen)) { Text("مراجعة والموافقة") }
                             OutlinedButton(enabled=!busy,modifier=Modifier.fillMaxWidth(),onClick={decisionTarget=selected;approve=false;amount="0";note=""}) { Text("رفض الطلب") }
                         }
-                        if(selected.status=="approved" && selected.items.isNotEmpty() && selected.items.all {!it.restock || it.restockedQuantity>=it.quantity || it.conditionCode in setOf("damaged","written_off") || (it.conditionCode=="uninspected" && !it.restock)} && selected.restockStatus!="completed") {
-                            Button(enabled=!busy,modifier=Modifier.fillMaxWidth(),onClick={executeAction({restockCommercialCloudSaleReturn(context,selected.id)},"تم إرسال إعادة المخزون إلى قاعدة البيانات.")},colors=ButtonDefaults.buttonColors(containerColor=ReturnGreen)) { Text("اعتماد إعادة المخزون") }
+                        if(selected.status=="approved" && selected.restockStatus!="restocked" && selected.restockStatus!="not_required") {
+                            Text("إعادة المخزون للمؤسسات متوقفة آليًا حتى ربط المرتجع بموقع مخزون محدد؛ لن يتم تعديل الكميات دون هذا الربط.",color=Color(0xFF925500),fontSize=12.sp)
                         }
                         if(selected.refundStatus=="pending") Text("رد المبلغ ما زال معلقًا؛ الموافقة لا تنفذ تحويلًا ماليًا. يلزم مسار استرداد مالي معتمد.",color=Color(0xFF925500),fontSize=12.sp)
                     }
