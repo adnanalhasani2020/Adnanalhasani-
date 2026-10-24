@@ -1,5 +1,6 @@
 package com.adnanalhasani.commercial
 
+import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.util.Patterns
@@ -8,6 +9,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -17,6 +21,14 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.time.LocalDate
 import java.util.concurrent.Executors
+
+private fun profileSessionPreferences(context: Context) = EncryptedSharedPreferences.create(
+    context,
+    "ruh_catalog_auth_session",
+    MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
+    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+)
 
 private val profileIo = Executors.newSingleThreadExecutor()
 private val profileMain = Handler(Looper.getMainLooper())
@@ -57,6 +69,7 @@ private fun supabaseRequest(path: String, payload: JSONObject, token: String? = 
 
 @Composable
 internal fun ActivityProfileScreen(onBack: () -> Unit) {
+    val context = LocalContext.current
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var accessToken by remember { mutableStateOf<String?>(null) }
@@ -169,6 +182,10 @@ internal fun ActivityProfileScreen(onBack: () -> Unit) {
                             if (isRegister) throw IllegalStateException("تم إرسال طلب التسجيل. أكّد بريدك الإلكتروني ثم سجّل الدخول.")
                             throw IllegalStateException("لم تُرجع خدمة المصادقة جلسة صالحة.")
                         }
+                        val refreshToken = session.optString("refresh_token")
+                        if (refreshToken.isNotBlank()) {
+                            profileSessionPreferences(context).edit().putString("refresh_token", refreshToken).apply()
+                        }
                         accessToken = token
                         "تم تسجيل الدخول"
                     }, { feedback = it })
@@ -278,8 +295,20 @@ internal fun ActivityProfileScreen(onBack: () -> Unit) {
                         }
                         payload.put("p_locations", locations)
                         val result = supabaseRequest("/rest/v1/rpc/commercial_create_activity_profile", payload, token)
-                        if (result.optString("organization_id").isBlank()) throw IllegalStateException("استجابة قاعدة البيانات غير مكتملة.")
-                        "تم حفظ ملف النشاط في قاعدة البيانات بنجاح."
+                        val organizationId = result.optString("organization_id")
+                        val activityId = result.optString("activity_id")
+                        val locationId = result.optString("location_id")
+                        if (organizationId.isBlank() || activityId.isBlank() || locationId.isBlank()) {
+                            throw IllegalStateException("استجابة قاعدة البيانات لا تحتوي معرّفات المؤسسة والنشاط والموقع.")
+                        }
+                        context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE).edit()
+                            .putString("organization_id", organizationId)
+                            .putString("activity_id", activityId)
+                            .putString("location_id", locationId)
+                            .putString("currency_code", currency)
+                            .putString("country_code", country)
+                            .apply()
+                        "تم حفظ ملف النشاط ومعرّفاته في قاعدة البيانات بنجاح."
                     }, { feedback = it; created = it.startsWith("تم حفظ") })
                 },
                 modifier = Modifier.fillMaxWidth()
