@@ -61,7 +61,7 @@ internal fun CommercialCloudReturnsScreen(context: Context, onBack: () -> Unit) 
     }
     val filtered = rows.filter { r -> query.isBlank() || listOf(r.receiptNumber,r.customerName,r.reasonCode,r.status,r.refundStatus,r.restockStatus,r.id).any { it.contains(query.trim(), true) } }
     val selected = rows.firstOrNull { it.id == selectedId }
-    fun executeAction(action: () -> String, success: String) {
+    fun executeAction(action: () -> Unit, success: String) {
         busy = true
         error = ""
         ReturnIo.execute {
