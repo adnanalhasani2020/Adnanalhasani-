@@ -17,6 +17,8 @@ DECLARE
   v_payment_id uuid;
   v_existing_sale uuid;
   v_existing_amount bigint;
+  v_existing_provider text;
+  v_existing_status text;
 BEGIN
   IF v_uid IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
   IF p_sale_id IS NULL OR p_amount_minor IS NULL OR p_amount_minor <= 0
@@ -28,18 +30,23 @@ BEGIN
   SELECT s.organization_id INTO v_org FROM public.commercial_sales s WHERE s.id=p_sale_id;
   IF NOT FOUND OR v_org IS NULL THEN RAISE EXCEPTION 'sale_not_found' USING ERRCODE='P0002'; END IF;
   IF NOT EXISTS (
+    SELECT 1 FROM public.commercial_organizations o
+    WHERE o.id=v_org AND o.state='active' AND o.deleted_at IS NULL
+  ) THEN RAISE EXCEPTION 'organization_inactive' USING ERRCODE='42501'; END IF;
+  IF NOT EXISTS (
     SELECT 1 FROM public.commercial_organization_members m
     WHERE m.organization_id=v_org AND m.user_id=v_uid AND m.state='active'
   ) THEN RAISE EXCEPTION 'organization_access_denied' USING ERRCODE='42501'; END IF;
 
   PERFORM pg_advisory_xact_lock(hashtext(v_org::text), hashtext(p_idempotency_key));
 
-  SELECT p.sale_id, p.amount_minor, p.id
-    INTO v_existing_sale, v_existing_amount, v_payment_id
+  SELECT p.sale_id, p.amount_minor, p.id, p.provider, p.status
+    INTO v_existing_sale, v_existing_amount, v_payment_id, v_existing_provider, v_existing_status
   FROM public.commercial_payments p
   WHERE p.organization_id=v_org AND p.idempotency_key=p_idempotency_key;
   IF FOUND THEN
-    IF v_existing_sale IS DISTINCT FROM p_sale_id OR v_existing_amount IS DISTINCT FROM p_amount_minor THEN
+    IF v_existing_sale IS DISTINCT FROM p_sale_id OR v_existing_amount IS DISTINCT FROM p_amount_minor
+       OR v_existing_provider IS DISTINCT FROM 'ruh_cash_collection' OR v_existing_status IS DISTINCT FROM 'succeeded' THEN
       RAISE EXCEPTION 'idempotency_key_reused_with_different_request' USING ERRCODE='23505';
     END IF;
     RETURN jsonb_build_object('sale_id',p_sale_id,'payment_id',v_payment_id,
