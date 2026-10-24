@@ -853,18 +853,57 @@ private fun SaleEntryDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-                if (!cloudMode && credit) OutlinedTextField(value = customer, onValueChange = { customer = it; error = null }, label = { Text("اسم العميل المدين") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                if (!cloudMode) {
-                    Text("طريقة الدفع", color = Muted, fontSize = 12.sp)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(selected = !credit, onClick = { credit = false })
-                        Text("نقدي", color = Ink)
-                        Spacer(Modifier.width(12.dp))
-                        RadioButton(selected = credit, onClick = { credit = true })
-                        Text("آجل", color = Ink)
+                if (cloudMode && credit) {
+                    val selectedCustomer = cloudCustomers.firstOrNull { it.id == customer }
+                    ExposedDropdownMenuBox(
+                        expanded = customerExpanded,
+                        onExpandedChange = { customerExpanded = it }
+                    ) {
+                        OutlinedTextField(
+                            value = selectedCustomer?.label.orEmpty(),
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("العميل الآجل من قاعدة البيانات") },
+                            placeholder = { Text("اختر العميل") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = customerExpanded) },
+                            modifier = Modifier.fillMaxWidth().menuAnchor()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = customerExpanded,
+                            onDismissRequest = { customerExpanded = false }
+                        ) {
+                            cloudCustomers.forEach { item ->
+                                DropdownMenuItem(
+                                    text = { Text(item.label) },
+                                    onClick = {
+                                        customer = item.id
+                                        customerExpanded = false
+                                        error = null
+                                    }
+                                )
+                            }
+                        }
                     }
-                } else {
-                    Text("البيع السحابي نقدي حاليًا؛ السعر يُقرأ من العرض المحفوظ على الخادم.", color = Muted, fontSize = 12.sp)
+                    if (cloudCustomers.isEmpty()) {
+                        Text("لا يوجد عملاء سحابيون نشطون؛ أضف العميل أو حدّث القائمة قبل البيع الآجل.", color = Orange, fontSize = 12.sp)
+                    }
+                } else if (!cloudMode && credit) {
+                    OutlinedTextField(value = customer, onValueChange = { customer = it; error = null }, label = { Text("اسم العميل المدين") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                }
+                Text("طريقة الدفع", color = Muted, fontSize = 12.sp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = !credit, onClick = { credit = false; customer = ""; error = null })
+                    Text("نقدي", color = Ink)
+                    Spacer(Modifier.width(12.dp))
+                    RadioButton(selected = credit, onClick = { credit = true; error = null })
+                    Text("آجل", color = Ink)
+                }
+                if (cloudMode) {
+                    Text(
+                        if (credit) "سيُربط البيع الآجل بمعرّف العميل السحابي ويُسجّل الخادم الدين." else "السعر والمخزون والدفع النقدي تُعتمد من قاعدة البيانات.",
+                        color = Muted,
+                        fontSize = 12.sp
+                    )
                 }
                 HorizontalDivider(color = Border)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -888,7 +927,11 @@ private fun SaleEntryDialog(
                 } else if (cloudMode && unitPrice != suggestedUnitPrice) {
                     error = "سعر العبوة لا يطابق السعر النسبي المعتمد من الخادم."
                 } else if (credit && customer.isBlank()) {
-                    error = "أدخل اسم العميل للبيع الآجل."
+                    error = if (cloudMode) "اختر عميلًا سحابيًا للبيع الآجل." else "أدخل اسم العميل للبيع الآجل."
+                } else if (cloudMode && credit && cloudCustomers.none { it.id == customer }) {
+                    error = "العميل المحدد غير موجود ضمن العملاء السحابيين النشطين. حدّث القائمة واختر عميلًا صحيحًا."
+                } else if (cloudMode && credit && cloudCustomers.isEmpty()) {
+                    error = "لا يمكن إنشاء بيع آجل قبل تحميل العملاء السحابيين."
                 } else {
                     onSave(selected, product.name, quantity, credit, unitPrice, if (credit) customer.trim() else "", baseQuantity, selectedUnit.code)
                 }
