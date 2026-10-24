@@ -308,7 +308,8 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
                             }
                         }
                         if (document.saleStatus.equals("completed", ignoreCase = true) &&
-                            document.paymentStatus in setOf("pending", "partially_paid")) {
+                            document.paymentStatus in setOf("pending", "partially_paid") &&
+                            document.totalMinor > confirmedPaidMinor) {
                             Button(
                                 onClick = {
                                     collectionTarget = document
