@@ -10,6 +10,7 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
+import java.util.UUID
 import java.util.concurrent.Executors
 
 internal data class CommercialCloudContext(
@@ -163,6 +164,29 @@ internal fun createCommercialCloudInventoryItem(
     commercialCloudRequest("/rest/v1/rpc/commercial_create_inventory_item", "POST", payload, access)
 }
 
+
+
+internal fun getOrCreateCommercialCloudSaleKey(context: Context, offeringId: String, quantity: Int): String {
+    require(offeringId.isNotBlank() && quantity > 0) { "بيانات البيع غير صحيحة." }
+    val prefs = context.getSharedPreferences("commercial_cloud_pending_sale_v1", Context.MODE_PRIVATE)
+    val storedOffering = prefs.getString("offering_id", null).orEmpty()
+    val storedQuantity = prefs.getInt("quantity", -1)
+    val storedKey = prefs.getString("idempotency_key", null).orEmpty()
+    if (storedOffering == offeringId && storedQuantity == quantity && storedKey.isNotBlank()) return storedKey
+    val key = UUID.randomUUID().toString()
+    prefs.edit()
+        .putString("offering_id", offeringId)
+        .putInt("quantity", quantity)
+        .putString("idempotency_key", key)
+        .apply()
+    return key
+}
+
+internal fun clearCommercialCloudSaleKey(context: Context, idempotencyKey: String) {
+    val prefs = context.getSharedPreferences("commercial_cloud_pending_sale_v1", Context.MODE_PRIVATE)
+    if (prefs.getString("idempotency_key", null) == idempotencyKey) prefs.edit().clear().apply()
+}
+
 internal fun checkoutCommercialCloudSale(
     context: Context,
     offeringId: String,
@@ -224,8 +248,7 @@ internal fun loadCommercialCloudSales(context: Context): List<SaleRecord> {
             val isCredit = paymentStatus in setOf("unpaid", "partial", "pending", "due", "credit")
             val customerObject = row.optJSONObject("customer")
             val createdAt = runCatching {
-                java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
-                    .parse(row.optString("created_at").take(19))?.time
+                java.time.Instant.parse(row.optString("created_at")).toEpochMilli()
             }.getOrNull() ?: System.currentTimeMillis()
             add(SaleRecord(
                 number = row.optLong("receipt_number", 0L).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt(),
