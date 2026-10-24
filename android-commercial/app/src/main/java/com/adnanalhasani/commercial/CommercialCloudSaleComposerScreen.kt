@@ -244,6 +244,7 @@ internal fun CommercialCloudSaleComposerScreen(
                             submitting = true
                             notice = "جارٍ التحقق من الأصناف والمخزون وتسجيل فاتورة واحدة على الخادم..."
                             val requestLines = selectedLines.map { CommercialCloudCheckoutLine(it.first.cloudOfferingId, it.second) }
+                            val customerId = selectedCustomer?.id
                             CloudComposerWorker.execute {
                                 val result = runCatching {
                                     val key = getOrCreateCommercialCloudMultiSaleKey(context, requestLines, customerId)
