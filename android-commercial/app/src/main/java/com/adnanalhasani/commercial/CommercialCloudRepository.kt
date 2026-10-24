@@ -163,7 +163,7 @@ internal fun createCommercialCloudInventoryItem(
         .put("p_currency_code", currency)
         .put("p_initial_quantity", initialQuantity)
         .put("p_reorder_point", reorderPoint.coerceAtLeast(0.0))
-    commercialCloudRequest("/rest/v1/rpc/commercial_create_inventory_item", "POST", payload, access)
+    return commercialCloudRequest("/rest/v1/rpc/commercial_create_inventory_item", "POST", payload, access)
 }
 
 
