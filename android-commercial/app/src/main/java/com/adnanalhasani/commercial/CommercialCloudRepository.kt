@@ -336,6 +336,11 @@ internal fun createCommercialMasterData(
     }
     require(code.trim().isNotEmpty() && name.trim().isNotEmpty()) { "أدخل الرمز والاسم." }
     val (orgId, access) = commercialMasterDataAccess(context)
+    val duplicate = loadCommercialMasterData(context, table).any { row ->
+        row.code.trim().equals(code.trim(), ignoreCase = true) &&
+            (table != "commercial_storage_locations" || row.warehouseId == warehouseId)
+    }
+    require(!duplicate) { "هذا الرمز مستخدم بالفعل في هذا الدليل." }
     val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
     val payload = JSONObject().put("organization_id", orgId).put("code", code.trim())
     if (table == "commercial_warehouses") {
