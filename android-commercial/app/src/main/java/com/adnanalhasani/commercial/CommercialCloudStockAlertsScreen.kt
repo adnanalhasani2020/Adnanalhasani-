@@ -78,7 +78,7 @@ internal fun CommercialCloudStockAlertsScreen(context: Context, onBack: () -> Un
         }
     }
 
-    val lowStockCount = products.count { it.stock > 0 && it.availableQuantity > 0.0 && it.availableQuantity <= it.reorderPoint }
+    val lowStockCount = products.count { it.availableQuantity > 0.0 && it.availableQuantity <= it.reorderPoint }
     val outOfStockCount = products.count { it.availableQuantity <= 0.0 }
     val filtered = products.filter { product ->
         val matchesSearch = search.isBlank() ||
