@@ -8,6 +8,7 @@ SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commerci
 PURCHASES = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudPurchasesScreen.kt"
 MAIN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt"
 CASH_PAYMENT_MIGRATION = ROOT / "supabase/migrations/20261024193000_commercial_checkout_cash_payment_atomic.sql"
+MULTILINE_CHECKOUT_MIGRATION = ROOT / "supabase/migrations/20261024200000_commercial_multiline_cash_checkout.sql"
 
 
 class CommercialCloudSalesScreenContractTests(unittest.TestCase):
@@ -18,6 +19,7 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         cls.purchases = PURCHASES.read_text(encoding="utf-8")
         cls.main = MAIN.read_text(encoding="utf-8")
         cls.cash_payment_migration = CASH_PAYMENT_MIGRATION.read_text(encoding="utf-8")
+        cls.multiline_checkout_migration = MULTILINE_CHECKOUT_MIGRATION.read_text(encoding="utf-8")
 
     def test_invoice_projection_uses_existing_tables_and_columns(self):
         self.assertIn("internal fun loadCommercialCloudSaleDocuments", self.repository)
@@ -120,6 +122,24 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         self.assertIn("'payment_recorded', v_total > 0", self.cash_payment_migration)
         self.assertIn('totalMinor == 0L && paymentStatusFromServer.equals("paid", ignoreCase = true) -> "paid"', self.repository)
         self.assertIn("commercial_private.commercial_checkout_sale(", self.cash_payment_migration)
+
+
+    def test_multiline_checkout_is_single_transactional_rpc_with_stock_and_payment(self):
+        sql = self.multiline_checkout_migration
+        self.assertIn("commercial_private.commercial_checkout_sale_multi(", sql)
+        self.assertIn("CREATE OR REPLACE FUNCTION public.commercial_checkout_sale_multi(", sql)
+        self.assertIn("SECURITY DEFINER", sql)
+        self.assertIn("SECURITY INVOKER", sql)
+        self.assertIn("pg_advisory_xact_lock", sql)
+        self.assertIn("FOR UPDATE OF b", sql)
+        self.assertIn("INSERT INTO public.commercial_sales(", sql)
+        self.assertIn("INSERT INTO public.commercial_sale_items(", sql)
+        self.assertIn("INSERT INTO public.commercial_stock_movements(", sql)
+        self.assertIn("INSERT INTO public.commercial_payments(", sql)
+        self.assertIn("ON CONFLICT(organization_id,idempotency_key) DO NOTHING", sql)
+        self.assertIn("mixed_currency_invoice_not_supported", sql)
+        self.assertIn("insufficient_available_stock", sql)
+        self.assertIn("duplicate_offering_lines_not_allowed", sql)
 
 if __name__ == "__main__":
     unittest.main()
