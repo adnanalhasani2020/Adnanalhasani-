@@ -107,7 +107,12 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
 
     def test_cash_checkout_creates_one_idempotent_payment_in_same_transaction(self):
         self.assertIn("CREATE OR REPLACE FUNCTION public.commercial_checkout_sale(", self.cash_payment_migration)
+        self.assertIn("CREATE OR REPLACE FUNCTION commercial_private.commercial_checkout_sale_with_cash_payment(", self.cash_payment_migration)
+        self.assertIn("SECURITY INVOKER", self.cash_payment_migration)
+        self.assertIn("SECURITY DEFINER", self.cash_payment_migration)
+        self.assertIn("commercial_private.commercial_checkout_sale_with_cash_payment(", self.cash_payment_migration)
         self.assertIn("INSERT INTO public.commercial_payments", self.cash_payment_migration)
+        self.assertNotIn("INSERT INTO public.commercial_payments", self.cash_payment_migration.split("CREATE OR REPLACE FUNCTION public.commercial_checkout_sale(", 1)[1])
         self.assertIn("'sale:' || v_sale_id::text || ':cash'", self.cash_payment_migration)
         self.assertIn("ON CONFLICT (organization_id, idempotency_key) DO NOTHING", self.cash_payment_migration)
         self.assertIn("'succeeded', 'cash'", self.cash_payment_migration)
