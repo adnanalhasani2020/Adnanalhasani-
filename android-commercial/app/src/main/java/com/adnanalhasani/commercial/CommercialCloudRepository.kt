@@ -296,7 +296,9 @@ internal data class CommercialCloudCheckoutLine(
 internal fun getOrCreateCommercialCloudMultiSaleKey(
     context: Context,
     lines: List<CommercialCloudCheckoutLine>,
-    customerId: String? = null
+    customerId: String? = null,
+    paymentMode: String = "cash",
+    initialPaymentMinor: Long = 0L
 ): String {
     require(lines.isNotEmpty() && lines.size <= 200) { "أضف صنفًا واحدًا على الأقل إلى الفاتورة." }
     require(lines.all { it.offeringId.isNotBlank() && it.quantity in 1..100000 }) { "تحقق من الأصناف والكميات." }
@@ -305,7 +307,10 @@ internal fun getOrCreateCommercialCloudMultiSaleKey(
     lines.sortedBy { it.offeringId }.forEach { line ->
         canonical.put(JSONObject().put("offering_id", line.offeringId).put("quantity", line.quantity))
     }
-    val payload = JSONObject().put("customer_id", customerId ?: JSONObject.NULL).put("lines", canonical).toString()
+    val payload = JSONObject().put("customer_id", customerId ?: JSONObject.NULL)
+        .put("payment_mode", paymentMode)
+        .put("initial_payment_minor", if (paymentMode == "cash") JSONObject.NULL else initialPaymentMinor)
+        .put("lines", canonical).toString()
     val prefs = context.getSharedPreferences("commercial_cloud_pending_multi_sale_v1", Context.MODE_PRIVATE)
     val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
     val organizationId = saved.getString("organization_id", null).orEmpty()
