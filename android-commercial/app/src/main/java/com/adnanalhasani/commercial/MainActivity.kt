@@ -517,7 +517,7 @@ private fun StoreApp(context: Context) {
                     }
                     newSale = false
                 }
-            }            } else {
+            } else {
                 inventory[productIndex] = currentProduct.copy(stock = currentProduct.stock - baseQuantity)
                 saveProducts(context, inventory)
                 val soldUnitCost = if (quantity > 0) kotlin.math.round(currentProduct.costPrice.toDouble() * baseQuantity / quantity).toInt() else currentProduct.costPrice
