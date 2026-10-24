@@ -44,6 +44,14 @@ BEGIN
   FOR UPDATE;
 
   IF FOUND THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM public.commercial_organization_members m
+      WHERE m.organization_id = v_existing.organization_id
+        AND m.user_id = v_uid AND m.state = 'active'
+        AND m.role IN ('owner','admin','manager')
+    ) THEN
+      RAISE EXCEPTION 'accounting_permission_required' USING ERRCODE = '42501';
+    END IF;
     v_fingerprint := md5(concat_ws('|', v_existing.sale_id::text,
       v_existing.amount_minor::text, v_existing.currency_code,
       v_existing.payment_method_type));
