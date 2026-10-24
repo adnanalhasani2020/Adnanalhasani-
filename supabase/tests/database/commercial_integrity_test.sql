@@ -1,7 +1,7 @@
 -- Run with Supabase CLI / pgTAP in a disposable local or staging database.
 -- These are schema regression tests; they do not replace authenticated-session integration tests.
 BEGIN;
-SELECT plan(24);
+SELECT plan(27);
 
 SELECT has_table('public', 'commercial_audit_events',
   'append-only audit event table exists');
@@ -188,6 +188,27 @@ SELECT ok(
     'public.commercial_stock_movements'::regclass
   )) > 0,
   'only active organization members can read sale-linked stock movements');
+
+SELECT ok(
+  (SELECT polcmd = 'r' AND polroles @> ARRAY[(SELECT oid FROM pg_roles WHERE rolname = 'authenticated')::oid]
+   FROM pg_policy
+   WHERE polrelid = 'public.commercial_sales'::regclass
+     AND polname = 'users read own or organization sales'),
+  'organization sales policy grants authenticated SELECT only');
+
+SELECT ok(
+  (SELECT polcmd = 'r' AND polroles @> ARRAY[(SELECT oid FROM pg_roles WHERE rolname = 'authenticated')::oid]
+   FROM pg_policy
+   WHERE polrelid = 'public.commercial_sale_items'::regclass
+     AND polname = 'users read own or organization sale items'),
+  'organization sale-item policy grants authenticated SELECT only');
+
+SELECT ok(
+  (SELECT polcmd = 'r' AND polroles @> ARRAY[(SELECT oid FROM pg_roles WHERE rolname = 'authenticated')::oid]
+   FROM pg_policy
+   WHERE polrelid = 'public.commercial_stock_movements'::regclass
+     AND polname = 'users read own or organization stock movements'),
+  'organization stock-movement policy grants authenticated SELECT only');
 
 SELECT * FROM finish();
 ROLLBACK;
