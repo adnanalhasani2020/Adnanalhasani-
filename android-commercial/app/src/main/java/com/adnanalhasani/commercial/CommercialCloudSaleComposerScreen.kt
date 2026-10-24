@@ -68,6 +68,9 @@ internal fun CommercialCloudSaleComposerScreen(
     onCompleted: () -> Unit
 ) {
     var products by remember { mutableStateOf<List<Product>>(emptyList()) }
+    var customers by remember { mutableStateOf<List<CommercialCloudCustomer>>(emptyList()) }
+    var customerSearch by remember { mutableStateOf("") }
+    var selectedCustomer by remember { mutableStateOf<CommercialCloudCustomer?>(null) }
     var quantities by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var search by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
@@ -84,9 +87,9 @@ internal fun CommercialCloudSaleComposerScreen(
         loading = true
         error = ""
         CloudComposerWorker.execute {
-            val result = runCatching { loadCommercialCloudInventory(context) }
+            val result = runCatching { Pair(loadCommercialCloudInventory(context), loadCommercialCloudCustomers(context)) }
             CloudComposerMain.post {
-                result.onSuccess { products = it.products }
+                result.onSuccess { (inventory, customerRows) -> products = inventory.products; customers = customerRows }
                     .onFailure { error = it.message ?: "تعذر تحميل الأصناف السحابية." }
                 loading = false
             }
@@ -156,6 +159,26 @@ internal fun CommercialCloudSaleComposerScreen(
                 Text("لا توجد أصناف مرتبطة بمخزون الموقع الحالي.", color = CloudComposerMuted)
             }
             item {
+                Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(15.dp)) {
+                    Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("ربط الفاتورة بالعميل", color = CloudComposerInk, fontWeight = FontWeight.Bold)
+                        Text(selectedCustomer?.label ?: "لم يتم اختيار عميل — ستُسجل الفاتورة كبيع نقدي عام", color = CloudComposerMuted, fontSize = 12.sp)
+                        OutlinedTextField(value = customerSearch, onValueChange = { customerSearch = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("ابحث عن عميل بالاسم أو الهاتف أو البريد") })
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(onClick = { selectedCustomer = null; customerSearch = "" }, enabled = !submitting) { Text("بيع دون عميل") }
+                            OutlinedButton(onClick = { reloadToken++ }, enabled = !loading && !submitting) { Text("تحديث العملاء") }
+                        }
+                        customers.filter { customerSearch.isBlank() || it.label.contains(customerSearch, ignoreCase = true) }
+                            .take(12).forEach { customer ->
+                                OutlinedButton(onClick = { selectedCustomer = customer; customerSearch = customer.displayName }, modifier = Modifier.fillMaxWidth(), enabled = !submitting) {
+                                    Text(if (selectedCustomer?.id == customer.id) "✓ ${customer.label}" else customer.label, maxLines = 2)
+                                }
+                            }
+                        if (customers.isEmpty() && !loading) Text("لا يوجد عملاء نشطون متاحون في المؤسسة الحالية.", color = CloudComposerMuted, fontSize = 11.sp)
+                    }
+                }
+            }
+            item {
                 OutlinedTextField(
                     value = search,
                     onValueChange = { search = it },
@@ -223,8 +246,8 @@ internal fun CommercialCloudSaleComposerScreen(
                             val requestLines = selectedLines.map { CommercialCloudCheckoutLine(it.first.cloudOfferingId, it.second) }
                             CloudComposerWorker.execute {
                                 val result = runCatching {
-                                    val key = getOrCreateCommercialCloudMultiSaleKey(context, requestLines)
-                                    val sale = checkoutCommercialCloudSaleMulti(context, requestLines, key)
+                                    val key = getOrCreateCommercialCloudMultiSaleKey(context, requestLines, customerId)
+                                    val sale = checkoutCommercialCloudSaleMulti(context, requestLines, key, customerId)
                                     val clearResult = runCatching { clearCommercialCloudMultiSaleKey(context, key) }
                                     val receipt = sale.optString("receipt_number", "—")
                                     val paymentRecorded = sale.optBoolean("payment_recorded", false)
