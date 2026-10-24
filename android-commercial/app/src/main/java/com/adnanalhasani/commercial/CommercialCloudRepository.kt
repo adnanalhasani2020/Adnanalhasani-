@@ -257,6 +257,37 @@ internal fun checkoutCommercialCloudSale(
 }
 
 
+internal data class CommercialCloudCustomer(
+    val id: String,
+    val displayName: String,
+    val phone: String,
+    val email: String
+) {
+    val label: String get() = buildList {
+        add(displayName)
+        if (phone.isNotBlank()) add(phone)
+        if (email.isNotBlank()) add(email)
+    }.joinToString(" · ")
+}
+
+internal fun loadCommercialCloudCustomers(context: Context): List<CommercialCloudCustomer> {
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val path = "/rest/v1/commercial_customers" +
+        "?select=id,display_name,phone,email,state&organization_id=eq.$orgId&state=eq.active&order=display_name.asc,id.asc&limit=200"
+    val rows = commercialCloudPagedGet(path, access)
+    return buildList {
+        for (index in 0 until rows.length()) {
+            val row = rows.optJSONObject(index) ?: continue
+            val id = row.optString("id").takeUnless { it == "null" }.orEmpty()
+            val name = row.optString("display_name").takeUnless { it == "null" }.orEmpty().trim()
+            if (id.isBlank() || name.isBlank()) continue
+            add(CommercialCloudCustomer(id, name,
+                row.optString("phone").takeUnless { it == "null" }.orEmpty(),
+                row.optString("email").takeUnless { it == "null" }.orEmpty()))
+        }
+    }
+}
+
 internal data class CommercialCloudCheckoutLine(
     val offeringId: String,
     val quantity: Int
@@ -264,7 +295,8 @@ internal data class CommercialCloudCheckoutLine(
 
 internal fun getOrCreateCommercialCloudMultiSaleKey(
     context: Context,
-    lines: List<CommercialCloudCheckoutLine>
+    lines: List<CommercialCloudCheckoutLine>,
+    customerId: String? = null
 ): String {
     require(lines.isNotEmpty() && lines.size <= 200) { "أضف صنفًا واحدًا على الأقل إلى الفاتورة." }
     require(lines.all { it.offeringId.isNotBlank() && it.quantity in 1..100000 }) { "تحقق من الأصناف والكميات." }
@@ -273,7 +305,7 @@ internal fun getOrCreateCommercialCloudMultiSaleKey(
     lines.sortedBy { it.offeringId }.forEach { line ->
         canonical.put(JSONObject().put("offering_id", line.offeringId).put("quantity", line.quantity))
     }
-    val payload = canonical.toString()
+    val payload = JSONObject().put("customer_id", customerId ?: JSONObject.NULL).put("lines", canonical).toString()
     val prefs = context.getSharedPreferences("commercial_cloud_pending_multi_sale_v1", Context.MODE_PRIVATE)
     val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
     val organizationId = saved.getString("organization_id", null).orEmpty()
@@ -311,7 +343,8 @@ internal fun clearCommercialCloudMultiSaleKey(context: Context, idempotencyKey: 
 internal fun checkoutCommercialCloudSaleMulti(
     context: Context,
     lines: List<CommercialCloudCheckoutLine>,
-    idempotencyKey: String
+    idempotencyKey: String,
+    customerId: String? = null
 ): JSONObject {
     require(lines.isNotEmpty() && lines.size <= 200) { "عدد بنود الفاتورة غير صالح." }
     val savedContext = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
@@ -336,7 +369,8 @@ internal fun checkoutCommercialCloudSaleMulti(
     return JSONObject(commercialCloudRequest(
         "/rest/v1/rpc/commercial_checkout_sale_multi", "POST",
         JSONObject().put("p_lines", payload).put("p_location_id", locationId)
-            .put("p_idempotency_key", idempotencyKey),
+            .put("p_idempotency_key", idempotencyKey)
+            .put("p_customer_id", customerId ?: JSONObject.NULL),
         access
     ))
 }
