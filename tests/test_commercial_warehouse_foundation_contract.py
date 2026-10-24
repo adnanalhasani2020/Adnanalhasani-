@@ -49,6 +49,12 @@ class CommercialWarehouseFoundationContractTests(unittest.TestCase):
         self.assertIn('row.optString("name_en")', repository)
         self.assertIn('ifBlank { row.optString("name_en")', repository)
 
+    def test_inventory_category_labels_ignore_null_arabic_values_and_fall_back_to_english(self):
+        repository = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt").read_text(encoding="utf-8")
+        self.assertIn('category.optString("name_ar").takeUnless { it == "null" }.orEmpty()', repository)
+        self.assertIn('category.optString("name_en").takeUnless { it == "null" }.orEmpty()', repository)
+        self.assertIn('ifBlank { category.optString("name_en")', repository)
+
     def test_does_not_change_existing_stock_balances_or_checkout(self):
         self.assertNotIn("UPDATE public.commercial_inventory_balances", self.sql)
         self.assertNotIn("DELETE FROM public.commercial_inventory_balances", self.sql)

@@ -111,7 +111,7 @@ internal fun loadCommercialCloudInventory(context: Context): CommercialCloudInve
                 .mapNotNull { categoryRows?.optJSONObject(it) }
                 .sortedByDescending { it.optBoolean("is_primary", false) }
                 .mapNotNull { it.optJSONObject("category") }
-                .map { it.optString("name_ar").ifBlank { it.optString("name_en") } }
+                .map { category -> category.optString("name_ar").takeUnless { it == "null" }.orEmpty().ifBlank { category.optString("name_en").takeUnless { it == "null" }.orEmpty() } }
                 .firstOrNull { it.isNotBlank() && it != "null" }
                 ?: "غير مصنف"
             val quantity = (row.optDouble("quantity_on_hand", 0.0) - row.optDouble("quantity_reserved", 0.0)).coerceAtLeast(0.0).toInt()
