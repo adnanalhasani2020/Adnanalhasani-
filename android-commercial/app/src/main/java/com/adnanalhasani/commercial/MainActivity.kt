@@ -223,7 +223,7 @@ private fun StoreApp(context: Context) {
             !saved.getString("activity_id", null).isNullOrBlank() &&
             !saved.getString("location_id", null).isNullOrBlank()
     }
-    val sales = remember { mutableStateListOf<SaleRecord>().apply { addAll(loadSales(context)) } }
+    val sales = remember { mutableStateListOf<SaleRecord>().apply { if (!cloudContextExists) addAll(loadSales(context)) } }
     val settlements = remember { mutableStateListOf<SettlementRecord>().apply { addAll(loadSettlements(context)) } }
     val expenses = remember { mutableStateListOf<ExpenseRecord>().apply { addAll(loadExpenses(context)) } }
     var expenseDialog by remember { mutableStateOf(false) }
@@ -266,7 +266,8 @@ private fun StoreApp(context: Context) {
                     sales.addAll(serverSales)
                     nextInvoice = maxOf(nextInvoice, (serverSales.maxOfOrNull { it.number } ?: 0) + 1)
                 }.onFailure {
-                    cloudNotice = "تعذر تحميل سجل المبيعات من الخادم: " + (it.message ?: "خطأ غير معروف")
+                    sales.clear()
+                    cloudNotice = "تعذر تحميل سجل المبيعات من الخادم؛ أخفينا البيانات المحلية حتى لا تختلط بسجلات المؤسسة: " + (it.message ?: "خطأ غير معروف")
                 }
             }
         }
@@ -340,7 +341,7 @@ private fun StoreApp(context: Context) {
                         }
                         showCatalog = false
                     })
-                    showDebts -> DebtScreen(sales = sales, settlements = settlements, allowSettlement = !cloudMode, onBack = { showDebts = false }, onSettle = { settlingSaleNumber = it.number })
+                    showDebts -> DebtScreen(sales = sales, settlements = if (cloudMode) emptyList() else settlements, allowSettlement = !cloudMode, onBack = { showDebts = false }, onSettle = { settlingSaleNumber = it.number })
                     showReports -> ReportsScreen(sales = sales, settlements = settlements, expenses = expenses, allowLocalData = !cloudMode, onBack = { showReports = false })
                     showExpenses -> ExpensesScreen(expenses = expenses, allowLocalData = !cloudMode, onBack = { showExpenses = false }, onAdd = { expenseDialog = true })
                     else -> if (showActivityProfile) ActivityProfileScreen(onBack = { showActivityProfile = false }) else MoreScreen(onCustomers = { showDebts = true }, onReports = { showReports = true }, onExpenses = { showExpenses = true }, onActivityProfile = { showActivityProfile = true }, onCatalog = { showCatalog = true }, onMasterData = { showMasterData = true })
