@@ -26,7 +26,10 @@ class CommercialSaleIntegrityContractTests(unittest.TestCase):
 
     def test_cloud_credit_sale_uses_selected_customer_and_server_rpc(self):
         self.assertIn("loadCommercialCloudCustomers(context)", self.main)
+        self.assertIn("cloudCustomers.forEach { item ->", self.main)
+        self.assertIn('label = { Text("العميل الآجل من قاعدة البيانات") }', self.main)
         self.assertIn("cloudCustomers.none { it.id == customer }", self.main)
+        self.assertIn("اختر عميلًا سحابيًا للبيع الآجل.", self.main)
         self.assertIn("checkoutCommercialCloudSaleOnAccount(context", self.main)
         self.assertIn("/rest/v1/rpc/commercial_checkout_sale_on_account", self.repository)
         self.assertIn("p_customer_id", self.repository)
