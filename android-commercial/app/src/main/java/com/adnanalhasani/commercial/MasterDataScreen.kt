@@ -234,7 +234,14 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
                                 val warehouseLabel = warehouseRows.firstOrNull { it.id == row.warehouseId }?.label ?: "مستودع غير معروف"
                                 Text("المستودع: $warehouseLabel", color = Color(0xFF71817B), fontSize = 12.sp)
                                 val parentLabel = rows.firstOrNull { it.id == row.parentId }?.label
+                                Text("المستوى: ${if (parentLabel == null) "جذري" else "فرعي"}", color = Color(0xFF71817B), fontSize = 12.sp)
                                 if (parentLabel != null) Text("الموقع الأب: $parentLabel", color = Color(0xFF71817B), fontSize = 12.sp)
+                            } else if (selected.second == "commercial_product_categories" || selected.second == "commercial_departments") {
+                                val parentLabel = rows.firstOrNull { it.id == row.parentId }?.label
+                                Text("المستوى: ${if (parentLabel == null) "جذري" else "فرعي"}", color = Color(0xFF71817B), fontSize = 12.sp)
+                                if (parentLabel != null) {
+                                    Text(if (selected.second == "commercial_product_categories") "التصنيف الأب: $parentLabel" else "القسم الأب: $parentLabel", color = Color(0xFF71817B), fontSize = 12.sp)
+                                }
                             }
                         }
                     }
