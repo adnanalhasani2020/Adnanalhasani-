@@ -24,12 +24,36 @@ Existing trusted database functions include `commercial_checkout_sale`, `commerc
 
 ## Important implementation boundaries found
 
-1. The Android app's documented cloud sale path currently supports cash checkout only. It reads a sales history, but the invoice composer is a basic single-item dialog rather than a complete multi-line document editor.
+1. The Android app's existing local sale dialog remains single-item. A dedicated cloud invoice composer has now been added and wired to a multi-line cash-checkout RPC on this review branch; it persists an idempotency key before sending, validates visible stock locally, and relies on the server for authoritative price/stock validation. CI and authenticated end-to-end verification are still required before release.
 2. The app README explicitly marks cloud credit sales, settlements, expenses, and customer debt workflows as incomplete/local-only. Do not present those local records as cloud accounting.
 3. The existing sales-return tables have protected write policies and RPC-based lifecycle. The client must call the authorized workflow, not write directly to the return tables.
 4. Purchase-order tables exist, but their presence alone does not prove that purchase invoices, receiving, supplier settlement, or stock posting are integrated end-to-end.
 5. The journal tables enforce posted-line immutability. Financially posted documents must be reversed with a traceable compensating entry rather than edited or deleted.
 6. Warehouse and storage-location masters exist, but stock movement into individual storage locations is not yet wired. Continue preserving current site-level inventory until a safe migration path is verified.
+
+## Verified implementation update — 2026-10-24
+
+The Android cloud invoice projection has been expanded to read the existing invoice status, customer contact fields, payment records, and sales-return status/refund/restock summaries alongside the invoice lines. Invoice payment status is now derived from confirmed `succeeded` payment rows rather than trusting a sale row that says `paid` when no payment record exists. This prevents the UI from showing an unpaid invoice as paid; it does not create the missing server-side payment. These are still display-only projections and do not imply that payment allocation, refunds, or accounting posting are implemented.
+
+The app now avoids creating a synthetic device-local invoice when a cloud checkout succeeds but refreshing the cloud history fails. In cloud mode, local-only debt settlement, expense entry, and mixed local-finance reports are blocked with an explicit message rather than presenting local writes as cloud-confirmed balances.
+
+Still not complete and must remain gated:
+- An additive multi-line cash-checkout RPC has now been drafted on this review branch. It validates the invoice lines, rejects duplicate offerings and mixed currencies, locks inventory in stable offering order, writes one sale with multiple sale items and stock movements, and creates one idempotent successful cash payment in the same transaction. It is connected to the new Android cloud invoice composer on this review branch, but is not yet applied to the live database or verified by completed CI/live authenticated tests. Do not call it production-ready until those gates pass. Calling the existing single-item RPC repeatedly remains unacceptable.
+- Cloud credit sales and collections require server-side customer linkage, payment records and allocation semantics, party balances, idempotency, authorization, and journal posting/reversal behavior.
+- Existing checkout currently updates stock and writes a stock movement, but the audited function body does not create a `commercial_payments` row or a journal entry. Therefore do not claim the full cash/accounting lifecycle is complete until this gap is addressed in a schema-grounded migration and verified against current constraints and policies.
+- Payment allocation currently references `order_id`; do not assume it can be allocated directly to `commercial_sales` without checking the intended order/sale relationship and enforcing no-over-allocation.
+- CI/build and live authenticated end-to-end tests are still release gates. No APK should be described as tested until the Android build and focused tests pass.
+### Outstanding-sale collection — 2026-10-24
+
+A guarded collection RPC and invoice-screen action have been added on the review branch. The RPC serializes updates to the sale, enforces an idempotency key, rejects over-collection, updates the invoice payment state, and records the successful payment and audit event atomically. It conservatively blocks collection when a return/refund needs reconciliation. The UI persists a pending request key and only refreshes its cloud invoice projection after the server confirms the collection.
+
+This does not yet create a customer debt ledger or a general-ledger journal entry, and it does not enable new credit sales. The new RPC migration has not been applied to the live database and requires CI plus authenticated end-to-end validation.
+
+### Cash checkout hardening — 2026-10-24
+
+An additive migration now wraps the existing authorized single-item checkout RPC and writes one `commercial_payments` row with status `succeeded` in the same database transaction as the sale and stock movement. A second additive migration drafts the corresponding one-transaction multi-line cash checkout. The payment idempotency key is derived from the server-generated sale UUID, and the unique organization/key constraint prevents duplicate cash payment rows on retries. The wrapper retains the existing public invoker boundary and delegates sale authorization and inventory locking to the existing private function.
+
+This migration is committed to the review branch but has **not** been applied to the live database. Apply only after migration review and CI validation. It closes the missing cash-payment-record gap for the existing single-item flow; it does not complete multi-line checkout, customer collections, credit sales, refunds, or general-ledger posting. Do not manufacture a journal entry until the organization's ledger accounts and posting policy are configured and verified.
 
 ## Target document workflows
 

@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -50,7 +51,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-internal data class Product(val name: String, val category: String, val stock: Int, val price: String, val costPrice: Int = 0, val catalogCode: String = "", val barcode: String = "", val unitCode: String = "EA", val imageUrl: String = "", val description: String = "", val brand: String = "", val manufacturer: String = "", val countryOfManufacture: String = "", val createdAt: Long = System.currentTimeMillis(), val createdBy: String = "", val unitVariantsJson: String = "[]", val cloudOfferingId: String = "", val reorderPoint: Int = -1)
+internal data class Product(val name: String, val category: String, val stock: Int, val price: String, val costPrice: Int = 0, val catalogCode: String = "", val barcode: String = "", val unitCode: String = "EA", val imageUrl: String = "", val description: String = "", val brand: String = "", val manufacturer: String = "", val countryOfManufacture: String = "", val createdAt: Long = System.currentTimeMillis(), val createdBy: String = "", val unitVariantsJson: String = "[]", val cloudOfferingId: String = "", val cloudPriceMinor: Long = 0L, val reorderPoint: Int = -1)
 
 private data class LocalSaleUnit(
     val code: String,
@@ -218,6 +219,7 @@ private fun StoreApp(context: Context) {
     var showMasterData by remember { mutableStateOf(false) }
     var cloudOperationalPage by remember { mutableStateOf("") }
     var cloudSalesPage by remember { mutableStateOf(false) }
+    var cloudSaleComposerPage by remember { mutableStateOf(false) }
     var cloudPurchasesPage by remember { mutableStateOf(false) }
     var cloudStockAlertsPage by remember { mutableStateOf(false) }
     var cloudUnitsPage by remember { mutableStateOf(false) }
@@ -305,15 +307,35 @@ private fun StoreApp(context: Context) {
             }
         },
         floatingActionButton = {
-            if (tab == 1) FloatingActionButton(onClick = { newSale = true }, containerColor = Green, contentColor = Color.White) {
+            if (tab == 1) FloatingActionButton(onClick = { if (cloudMode) cloudSaleComposerPage = true else newSale = true }, containerColor = Green, contentColor = Color.White) {
                 Icon(Icons.Default.Add, "فاتورة جديدة")
             }
         }
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
-            when (tab) {
-                0 -> Dashboard(products = inventory, sales = sales, cloudMode = cloudMode, onNewSale = { newSale = true }, onInventory = { tab = 2 })
-                1 -> SalesScreen(sales = sales, onNewSale = { newSale = true })
+            if (cloudSaleComposerPage) {
+                CommercialCloudSaleComposerScreen(
+                    context = context,
+                    onBack = { cloudSaleComposerPage = false },
+                    onCompleted = {
+                        storeCloudIo.execute {
+                            val snapshot = runCatching { loadCommercialCloudInventory(context) }.getOrNull()
+                            val history = runCatching { loadCommercialCloudSales(context) }.getOrNull()
+                            storeCloudMain.post {
+                                snapshot?.let { inventory.clear(); inventory.addAll(it.products) }
+                                history?.let { sales.clear(); sales.addAll(it) }
+                            }
+                        }
+                    }
+                )
+            } else when (tab) {
+                0 -> Dashboard(products = inventory, sales = sales, cloudMode = cloudMode, onNewSale = { if (cloudMode) cloudSaleComposerPage = true else newSale = true }, onInventory = { tab = 2 })
+                1 -> SalesScreen(
+                    sales = sales,
+                    cloudMode = cloudMode,
+                    onNewSale = { if (cloudMode) cloudSaleComposerPage = true else newSale = true },
+                    onCloudInvoices = { cloudSalesPage = true }
+                )
                 2 -> InventoryScreen(inventory, query, { query = it }, {
                     addProduct = true
                     if (cloudMode) storeCloudIo.execute {
@@ -351,9 +373,18 @@ private fun StoreApp(context: Context) {
                         }
                         showCatalog = false
                     })
-                    showDebts -> DebtScreen(sales = sales, settlements = settlements, onBack = { showDebts = false }, onSettle = { settlingSaleNumber = it.number })
-                    showReports -> ReportsScreen(sales = sales, settlements = settlements, expenses = expenses, onBack = { showReports = false })
-                    showExpenses -> ExpensesScreen(expenses = expenses, onBack = { showExpenses = false }, onAdd = { expenseDialog = true })
+                    showDebts -> if (cloudMode) {
+                        cloudNotice = "المديونيات والتحصيلات السحابية لم تُربط بعد بجدول المدفوعات وتخصيصها؛ لم نعرض الأرصدة المحلية على أنها أرصدة خادم."
+                        showDebts = false
+                    } else DebtScreen(sales = sales, settlements = settlements, onBack = { showDebts = false }, onSettle = { settlingSaleNumber = it.number })
+                    showReports -> if (cloudMode) {
+                        cloudNotice = "التقرير المالي الموحد غير جاهز بعد؛ المصروفات والتسديدات محلية، لذلك لن نخلطها مع فواتير السحابة في تقرير واحد."
+                        showReports = false
+                    } else ReportsScreen(sales = sales, settlements = settlements, expenses = expenses, onBack = { showReports = false })
+                    showExpenses -> if (cloudMode) {
+                        cloudNotice = "المصروفات السحابية لم تُربط بدفتر الحسابات بعد؛ لم يتم تسجيل أي مصروف محلي على أنه سحابي."
+                        showExpenses = false
+                    } else ExpensesScreen(expenses = expenses, onBack = { showExpenses = false }, onAdd = { expenseDialog = true })
                     else -> if (showActivityProfile) ActivityProfileScreen(onBack = { showActivityProfile = false }) else MoreScreen(onCustomers = { showDebts = true }, onReports = { showReports = true }, onExpenses = { showExpenses = true }, onActivityProfile = { showActivityProfile = true }, onCatalog = { showCatalog = true }, onMasterData = { showMasterData = true }, onCloudOperational = { cloudOperationalPage = it }, onCloudSales = { cloudSalesPage = true }, onCloudPurchases = { cloudPurchasesPage = true }, onCloudStockAlerts = { cloudStockAlertsPage = true }, onUnitsDirectory = { cloudUnitsPage = true })
                 }
             }
@@ -455,13 +486,14 @@ private fun StoreApp(context: Context) {
                                 if (serverSales != null) {
                                     sales.clear()
                                     sales.addAll(serverSales)
-                                } else {
-                                    sales.add(0, SaleRecord(receipt, product, quantity, total, false, "", total, System.currentTimeMillis(), currentProduct.costPrice, unitCode, baseQuantity))
-                                    saveSales(context, sales)
                                 }
                                 nextInvoice = maxOf(nextInvoice + 1, receipt + 1)
                                 cloudInventoryError = ""
-                                cloudNotice = if (serverSales != null) "تم تسجيل الفاتورة رقم $receipt وتحديث السجل من قاعدة البيانات." else "تم تسجيل الفاتورة رقم $receipt على الخادم؛ تعذر تحديث سجل المبيعات، فتم الاحتفاظ بملخص مؤقت على الجهاز."
+                                cloudNotice = if (serverSales != null) {
+                                    "تم تسجيل الفاتورة رقم $receipt وتحديث السجل من قاعدة البيانات."
+                                } else {
+                                    "تم تأكيد الفاتورة رقم $receipt على الخادم، لكن تعذر تحديث قائمة المبيعات. افتح «فواتير المبيعات السحابية» أو أعد المحاولة؛ لم يتم إنشاء سجل محلي بديل."
+                                }
                             }.onFailure {
                                 cloudInventoryError = it.message ?: "فشل تسجيل البيع على الخادم."
                                 cloudNotice = cloudInventoryError
@@ -481,7 +513,10 @@ private fun StoreApp(context: Context) {
             }
         }
     )
-    if (settlingSaleNumber >= 0) {
+    if (settlingSaleNumber >= 0 && cloudMode) {
+        cloudNotice = "تسجيل التحصيل السحابي غير مفعّل بعد؛ لم يتم تغيير رصيد الفاتورة محليًا."
+        settlingSaleNumber = -1
+    } else if (settlingSaleNumber >= 0) {
         val saleIndex = sales.indexOfFirst { it.number == settlingSaleNumber }
         if (saleIndex >= 0) SettlementDialog(
             sale = sales[saleIndex],
@@ -607,9 +642,14 @@ private fun Heading(title: String, subtitle: String) {
 }
 
 @Composable
-private fun SalesScreen(sales: List<SaleRecord>, onNewSale: () -> Unit) {
+private fun SalesScreen(
+    sales: List<SaleRecord>,
+    cloudMode: Boolean,
+    onNewSale: () -> Unit,
+    onCloudInvoices: () -> Unit
+) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        item { Heading("المبيعات والفواتير", "تابع عمليات البيع والتحصيل") }
+        item { Heading("المبيعات والفواتير", if (cloudMode) "ملخص المبيعات المحمّلة من الخادم" else "تابع عمليات البيع والتحصيل") }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Metric("إجمالي المبيعات", money(sales.sumOf { it.total }), "الفواتير المحفوظة", Icons.Default.AttachMoney, Modifier.weight(1f))
@@ -617,7 +657,14 @@ private fun SalesScreen(sales: List<SaleRecord>, onNewSale: () -> Unit) {
             }
         }
         item { Button(onClick = onNewSale, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(8.dp)); Text("فاتورة بيع جديدة") } }
-        item { Heading("أحدث الفواتير", "الفواتير المحفوظة على هذا الجهاز") }
+        if (cloudMode) item {
+            OutlinedButton(onClick = onCloudInvoices, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Default.ReceiptLong, null)
+                Spacer(Modifier.width(8.dp))
+                Text("عرض تفاصيل الفواتير السحابية")
+            }
+        }
+        item { Heading("أحدث الفواتير", if (cloudMode) "ملخص من قاعدة البيانات؛ التفاصيل من شاشة الفواتير السحابية" else "الفواتير المحفوظة على هذا الجهاز") }
         items(sales) { sale -> SaleRow("فاتورة #${sale.number}", "${sale.product} · ${sale.quantity} ${sale.unitCode}", money(sale.total), sale.credit) }
         
     }

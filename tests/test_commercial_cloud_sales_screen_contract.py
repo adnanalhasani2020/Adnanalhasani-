@@ -7,6 +7,10 @@ REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/comm
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudSalesScreen.kt"
 PURCHASES = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudPurchasesScreen.kt"
 MAIN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt"
+CASH_PAYMENT_MIGRATION = ROOT / "supabase/migrations/20261024193000_commercial_checkout_cash_payment_atomic.sql"
+MULTILINE_CHECKOUT_MIGRATION = ROOT / "supabase/migrations/20261024200000_commercial_multiline_cash_checkout.sql"
+COMPOSER = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudSaleComposerScreen.kt"
+COLLECTION_MIGRATION = ROOT / "supabase/migrations/20261024210000_commercial_sale_collection_rpc.sql"
 
 
 class CommercialCloudSalesScreenContractTests(unittest.TestCase):
@@ -16,13 +20,19 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         cls.screen = SCREEN.read_text(encoding="utf-8")
         cls.purchases = PURCHASES.read_text(encoding="utf-8")
         cls.main = MAIN.read_text(encoding="utf-8")
+        cls.cash_payment_migration = CASH_PAYMENT_MIGRATION.read_text(encoding="utf-8")
+        cls.multiline_checkout_migration = MULTILINE_CHECKOUT_MIGRATION.read_text(encoding="utf-8")
+        cls.composer = COMPOSER.read_text(encoding="utf-8")
+        cls.collection_migration = COLLECTION_MIGRATION.read_text(encoding="utf-8")
 
     def test_invoice_projection_uses_existing_tables_and_columns(self):
         self.assertIn("internal fun loadCommercialCloudSaleDocuments", self.repository)
         for field in (
-            "receipt_number", "total_minor", "payment_status", "currency_code",
-            "commercial_customers(display_name)",
+            "receipt_number", "total_minor", "status,payment_status", "currency_code",
+            "commercial_customers(display_name,phone,email)",
             "commercial_sale_items(product_name_snapshot,quantity,line_total_minor,unit_price_minor)",
+            "commercial_payments(amount_minor,status,payment_method_type,created_at)",
+            "commercial_sales_returns(status,refund_status,restock_status,requested_refund_minor,approved_refund_minor,created_at)",
         ):
             with self.subTest(field=field):
                 self.assertIn(field, self.repository)
@@ -61,7 +71,10 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
                 self.assertIn(marker, self.screen)
 
     def test_invoice_details_show_unit_price_line_total_and_formatted_timestamp(self):
-        for marker in ("سعر الوحدة:", "الإجمالي:", "formatInvoiceTimestamp", "formatMinorAmount"):
+        for marker in ("سعر الوحدة:", "الإجمالي:", "formatInvoiceTimestamp", "formatMinorAmount",
+                       "document.customerPhone", "document.customerEmail", "document.payments",
+                       "document.returns", "document.saleStatus", "confirmedPaidMinor",
+                       "المدفوعات الناجحة فقط", "المتبقي قبل احتساب المرتجعات"):
             with self.subTest(marker=marker):
                 self.assertIn(marker, self.screen)
 
@@ -71,6 +84,95 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         self.assertIn("إعادة المحاولة", self.screen)
         self.assertIn("بنود الفاتورة", self.screen)
 
+
+    def test_cloud_sale_refresh_failure_does_not_create_fake_local_invoice(self):
+        cloud_sale_flow = self.main.split("if (newSale && inventory.isNotEmpty()) SaleEntryDialog", 1)[1].split(
+            "if (settlingSaleNumber", 1
+        )[0]
+        cloud_checkout = cloud_sale_flow.split("            } else {\n                inventory[productIndex]", 1)[0]
+        self.assertIn("لم يتم إنشاء سجل محلي بديل", cloud_checkout)
+        self.assertNotIn("saveSales(context, sales)", cloud_checkout)
+        self.assertIn("sales.addAll(serverSales)", cloud_checkout)
+
+    def test_cloud_mode_blocks_local_only_settlements_and_finance_screens(self):
+        self.assertIn("if (settlingSaleNumber >= 0 && cloudMode)", self.main)
+        self.assertIn("تسجيل التحصيل السحابي غير مفعّل بعد", self.main)
+        self.assertIn("المديونيات والتحصيلات السحابية لم تُربط بعد", self.main)
+        self.assertIn("المصروفات السحابية لم تُربط بدفتر الحسابات بعد", self.main)
+
+    def test_sales_tab_links_to_cloud_invoice_details(self):
+        self.assertIn("onCloudInvoices = { cloudSalesPage = true }", self.main)
+        self.assertIn("عرض تفاصيل الفواتير السحابية", self.main)
+    def test_invoice_payment_state_requires_confirmed_payment_records(self):
+        self.assertIn("successfulPaymentMinor = payments", self.repository)
+        self.assertIn('it.status.equals("succeeded", ignoreCase = true)', self.repository)
+        self.assertIn('successfulPaymentMinor >= totalMinor -> "paid"', self.repository)
+        self.assertIn('successfulPaymentMinor > 0L -> "partially_paid"', self.repository)
+        self.assertIn('else -> "pending"', self.repository)
+
+
+    def test_cash_checkout_creates_one_idempotent_payment_in_same_transaction(self):
+        self.assertIn("CREATE OR REPLACE FUNCTION public.commercial_checkout_sale(", self.cash_payment_migration)
+        self.assertIn("CREATE OR REPLACE FUNCTION commercial_private.commercial_checkout_sale_with_cash_payment(", self.cash_payment_migration)
+        self.assertIn("SECURITY INVOKER", self.cash_payment_migration)
+        self.assertIn("SECURITY DEFINER", self.cash_payment_migration)
+        self.assertIn("commercial_private.commercial_checkout_sale_with_cash_payment(", self.cash_payment_migration)
+        self.assertIn("INSERT INTO public.commercial_payments", self.cash_payment_migration)
+        self.assertNotIn("INSERT INTO public.commercial_payments", self.cash_payment_migration.split("CREATE OR REPLACE FUNCTION public.commercial_checkout_sale(", 1)[1])
+        self.assertIn("'sale:' || v_sale_id::text || ':cash'", self.cash_payment_migration)
+        self.assertIn("ON CONFLICT (organization_id, idempotency_key) DO NOTHING", self.cash_payment_migration)
+        self.assertIn("'succeeded', 'cash'", self.cash_payment_migration)
+        self.assertIn("RETURN v_result || jsonb_build_object(", self.cash_payment_migration)
+        self.assertIn("'payment_recorded', v_total > 0", self.cash_payment_migration)
+        self.assertIn('totalMinor == 0L && paymentStatusFromServer.equals("paid", ignoreCase = true) -> "paid"', self.repository)
+        self.assertIn("commercial_private.commercial_checkout_sale(", self.cash_payment_migration)
+
+
+    def test_multiline_checkout_is_single_transactional_rpc_with_stock_and_payment(self):
+        sql = self.multiline_checkout_migration
+        self.assertIn("commercial_private.commercial_checkout_sale_multi(", sql)
+        self.assertIn("CREATE OR REPLACE FUNCTION public.commercial_checkout_sale_multi(", sql)
+        self.assertIn("SECURITY DEFINER", sql)
+        self.assertIn("SECURITY INVOKER", sql)
+        self.assertIn("pg_advisory_xact_lock", sql)
+        self.assertIn("FOR UPDATE OF b", sql)
+        self.assertIn("INSERT INTO public.commercial_sales(", sql)
+        self.assertIn("INSERT INTO public.commercial_sale_items(", sql)
+        self.assertIn("INSERT INTO public.commercial_stock_movements(", sql)
+        self.assertIn("INSERT INTO public.commercial_payments(", sql)
+        self.assertIn("ON CONFLICT(organization_id,idempotency_key) DO NOTHING", sql)
+        self.assertIn("mixed_currency_invoice_not_supported", sql)
+        self.assertIn("insufficient_available_stock", sql)
+        self.assertIn("duplicate_offering_lines_not_allowed", sql)
+
+
+    def test_multiline_invoice_composer_uses_cloud_rpc_and_retry_key(self):
+        self.assertIn("CommercialCloudSaleComposerScreen(", self.main)
+        self.assertIn("checkoutCommercialCloudSaleMulti(context, requestLines, key)", self.composer)
+        self.assertIn("getOrCreateCommercialCloudMultiSaleKey(context, requestLines)", self.composer)
+        self.assertIn("clearCommercialCloudMultiSaleKey(context, key)", self.composer)
+        self.assertIn("onCompleted()", self.composer)
+        self.assertIn("cloudPriceMinor", self.composer)
+        self.assertIn("السعر والمخزون يُتحقق منهما مجددًا على الخادم", self.composer)
+        self.assertIn("val payload = JSONArray()", self.repository)
+        self.assertIn("/rest/v1/rpc/commercial_checkout_sale_multi", self.repository)
+
+
+    def test_collection_rpc_enforces_outstanding_balance_and_idempotency(self):
+        sql = self.collection_migration
+        self.assertIn("commercial_private.commercial_record_sale_collection(", sql)
+        self.assertIn("CREATE OR REPLACE FUNCTION public.commercial_record_sale_collection(", sql)
+        self.assertIn("pg_advisory_xact_lock", sql)
+        self.assertIn("FOR UPDATE", sql)
+        self.assertIn("collection_exceeds_outstanding_balance", sql)
+        self.assertIn("sale_return_reconciliation_required", sql)
+        self.assertIn("idempotency_key_reused_with_different_request", sql)
+        self.assertIn("SET payment_status=CASE", sql)
+        self.assertIn("INSERT INTO public.commercial_payments", sql)
+        self.assertIn("sale.payment_collected", sql)
+        self.assertIn("/rest/v1/rpc/commercial_record_sale_collection", self.repository)
+        self.assertIn("تسجيل تحصيل سحابي", self.screen)
+        self.assertIn("getOrCreateCommercialCloudCollectionKey(context, target.id, amount)", self.screen)
 
 if __name__ == "__main__":
     unittest.main()
