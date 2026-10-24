@@ -1,0 +1,2 @@
+-- Additive migration for transactional multi-line cash checkout.
+-- Full function implementation will be added after schema and auth review.
