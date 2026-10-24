@@ -508,7 +508,7 @@ internal fun loadCommercialMasterData(context: Context, table: String): List<Com
             add(CommercialMasterDataRow(
                 id = row.optString("id"),
                 code = row.optString("code"),
-                label = row.optString("name").ifBlank { row.optString("name_ar") },
+                label = row.optString("name").takeUnless { it == "null" }.orEmpty().ifBlank { row.optString("name_ar").takeUnless { it == "null" }.orEmpty() }.ifBlank { row.optString("name_en").takeUnless { it == "null" }.orEmpty() },
                 kind = row.optString(when (table) { "commercial_storage_locations" -> "location_type"; "commercial_warehouses" -> "warehouse_type"; else -> "state" }).ifBlank { table.removePrefix("commercial_") },
                 parentId = row.optString(if (table == "commercial_storage_locations") "parent_location_id" else "parent_id").takeUnless { it == "null" }.orEmpty(),
                 warehouseId = row.optString("warehouse_id").takeUnless { it == "null" }.orEmpty(),
