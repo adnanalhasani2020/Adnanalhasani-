@@ -329,7 +329,7 @@ private fun StoreApp(context: Context) {
     if (editingProductIndex in inventory.indices) EditProductDialog(
         product = inventory[editingProductIndex],
         onDismiss = { editingProductIndex = -1 },
-        onSave = { name, category, unitName, stock, price, costPrice, reorderPoint ->
+        onSave = { name, category, stock, price, costPrice ->
             if (cloudMode) {
                 cloudNotice = "تعديل الصنف أو رصيده محجوب مؤقتًا حتى نوصل عملية التعديل إلى سجل حركات المخزون على الخادم. لم تُحفظ تغييرات محلية."
             } else {
