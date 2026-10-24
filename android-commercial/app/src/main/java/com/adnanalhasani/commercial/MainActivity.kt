@@ -455,13 +455,14 @@ private fun StoreApp(context: Context) {
                                 if (serverSales != null) {
                                     sales.clear()
                                     sales.addAll(serverSales)
+                                    cloudNotice = "تم تسجيل الفاتورة رقم $receipt وتحديث السجل من قاعدة البيانات."
                                 } else {
-                                    sales.add(0, SaleRecord(receipt, product, quantity, total, false, "", total, System.currentTimeMillis(), currentProduct.costPrice, unitCode, baseQuantity))
-                                    saveSales(context, sales)
+                                    // Never mirror a cloud-confirmed sale into the local sales store:
+                                    // that would make a partial cache look like the authoritative ledger.
+                                    cloudNotice = "أكد الخادم الفاتورة رقم $receipt، لكن تعذر تحديث سجل المبيعات. أعد تحميل السجل قبل متابعة أي تحصيل."
                                 }
                                 nextInvoice = maxOf(nextInvoice + 1, receipt + 1)
                                 cloudInventoryError = ""
-                                cloudNotice = if (serverSales != null) "تم تسجيل الفاتورة رقم $receipt وتحديث السجل من قاعدة البيانات." else "تم تسجيل الفاتورة رقم $receipt على الخادم؛ تعذر تحديث سجل المبيعات، فتم الاحتفاظ بملخص مؤقت على الجهاز."
                             }.onFailure {
                                 cloudInventoryError = it.message ?: "فشل تسجيل البيع على الخادم."
                                 cloudNotice = cloudInventoryError
@@ -481,7 +482,12 @@ private fun StoreApp(context: Context) {
             }
         }
     )
-    if (settlingSaleNumber >= 0) {
+    if (settlingSaleNumber >= 0 && cloudMode) {
+        // Local settlement records are not cloud payments or allocations.
+        cloudNotice = "التحصيل السحابي غير مفعّل في هذا المسار؛ لم تُسجّل أي دفعة. لا يمكن تعديل رصيد فاتورة سحابية محليًا."
+        settlingSaleNumber = -1
+    }
+    if (settlingSaleNumber >= 0 && !cloudMode) {
         val saleIndex = sales.indexOfFirst { it.number == settlingSaleNumber }
         if (saleIndex >= 0) SettlementDialog(
             sale = sales[saleIndex],
