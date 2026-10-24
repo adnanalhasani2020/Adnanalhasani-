@@ -80,9 +80,10 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         cloud_sale_flow = self.main.split("if (newSale && inventory.isNotEmpty()) SaleEntryDialog", 1)[1].split(
             "if (settlingSaleNumber", 1
         )[0]
-        self.assertIn("تم إنشاء سجل محلي بديل", cloud_sale_flow)
-        self.assertNotIn("saveSales(context, sales)", cloud_sale_flow)
-        self.assertIn("sales.addAll(serverSales)", cloud_sale_flow)
+        cloud_checkout = cloud_sale_flow.split("            } else {\n                inventory[productIndex]", 1)[0]
+        self.assertIn("لم يتم إنشاء سجل محلي بديل", cloud_checkout)
+        self.assertNotIn("saveSales(context, sales)", cloud_checkout)
+        self.assertIn("sales.addAll(serverSales)", cloud_checkout)
 
     def test_cloud_mode_blocks_local_only_settlements_and_finance_screens(self):
         self.assertIn("if (settlingSaleNumber >= 0 && cloudMode)", self.main)
