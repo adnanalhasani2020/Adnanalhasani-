@@ -144,6 +144,12 @@ internal fun CommercialCloudOperationalScreen(
                                 Text(row.status, modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp), color = Color(0xFF183B35), fontSize = 11.sp)
                             }
                         }
+                        if (row.details.isNotEmpty()) {
+                            HorizontalDivider(color = Color(0xFFE8EEEB))
+                            row.details.forEach { detail ->
+                                Text(detail, color = Color(0xFF52665F), fontSize = 12.sp)
+                            }
+                        }
                         if (row.amountMinor > 0L) Text("المبلغ: " + String.format(Locale.US, "%,d", row.amountMinor) + " وحدة نقدية صغرى" , color = Color(0xFF167D63), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                         if (row.createdAt.isNotBlank()) Text(row.createdAt.replace('T', ' ').take(19), color = Color(0xFF71817B), fontSize = 10.sp)
                         Text("مرجع: " + row.id.take(8), color = Color(0xFF71817B), fontSize = 10.sp)
