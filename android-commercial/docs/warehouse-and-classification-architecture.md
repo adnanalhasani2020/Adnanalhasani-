@@ -1,6 +1,6 @@
 # Warehouse, Department, Category, and Product Architecture
 
-Status: Phase 1 additive migration applied to the live Supabase project. Android now has a cloud-backed screen for listing/creating warehouses, category trees, and departments. These masters are not yet connected to stock posting, item editing, storage-location movement, or transfer workflows.
+Status: Phase 1 additive migration applied to the live Supabase project. Android now supports listing/creating warehouses, nested storage locations (including validated location types), category trees, and departments. Client-side duplicate-code checks improve feedback, while database constraints remain authoritative. Storage locations are intentionally not connected to balance mutation, stock posting, or transfers until an audited, atomic movement RPC and reconciliation path are implemented.
 
 ## Research basis
 
