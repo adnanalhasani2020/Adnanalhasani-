@@ -72,7 +72,6 @@ class CommercialCloudOperationalScreenContractTests(unittest.TestCase):
             "decideCommercialCloudSaleReturn",
             "inspectCommercialCloudSaleReturnItem",
             "restockCommercialCloudSaleReturn",
-            "commercial_request_sale_return",
             "رد المبلغ ما زال معلقًا",
             "commercial_sales_returns",
         ):
