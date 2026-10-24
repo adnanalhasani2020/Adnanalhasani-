@@ -785,7 +785,7 @@ internal fun requestCommercialCloudSaleReturn(
         }
     }
     val idempotencyKey = storedReturnKey.ifBlank { UUID.randomUUID().toString() }
-    if (key.isBlank()) {
+    if (storedReturnKey.isBlank()) {
         check(prefs.edit().clear()
             .putString("request_fingerprint", fingerprint)
             .putString("organization_id", organizationId)
