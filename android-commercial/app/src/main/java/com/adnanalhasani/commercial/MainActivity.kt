@@ -238,11 +238,12 @@ private fun StoreApp(context: Context) {
         if (!cloudContextExists) return@LaunchedEffect
         cloudInventoryBusy = true
         storeCloudIo.execute {
-            val result = runCatching { loadCommercialCloudInventory(context) }
+            val inventoryResult = runCatching { loadCommercialCloudInventory(context) }
+            val salesResult = runCatching { loadCommercialCloudSales(context) }
             storeCloudMain.post {
                 cloudInventoryBusy = false
                 cloudInventoryLoaded = true
-                result.onSuccess { snapshot ->
+                inventoryResult.onSuccess { snapshot ->
                     inventory.clear()
                     inventory.addAll(snapshot.products)
                     cloudMode = true
@@ -250,6 +251,13 @@ private fun StoreApp(context: Context) {
                 }.onFailure {
                     inventory.clear()
                     cloudInventoryError = it.message ?: "تعذر تحميل المخزون من قاعدة البيانات."
+                }
+                salesResult.onSuccess { serverSales ->
+                    sales.clear()
+                    sales.addAll(serverSales)
+                    nextInvoice = maxOf(nextInvoice, (serverSales.maxOfOrNull { it.number } ?: 0) + 1)
+                }.onFailure {
+                    cloudNotice = "تم تحميل المخزون، لكن تعذر تحميل سجل المبيعات من الخادم: " + (it.message ?: "خطأ غير معروف")
                 }
             }
         }
@@ -292,7 +300,10 @@ private fun StoreApp(context: Context) {
             when (tab) {
                 0 -> Dashboard(products = inventory, sales = sales, onNewSale = { newSale = true }, onInventory = { tab = 2 })
                 1 -> SalesScreen(sales = sales, onNewSale = { newSale = true })
-                2 -> InventoryScreen(inventory, query, { query = it }, { addProduct = true }, { editingProductIndex = it })
+                2 -> InventoryScreen(inventory, query, { query = it }, { addProduct = true }, { index ->
+                    if (cloudMode) cloudNotice = "تعديل الصنف غير متاح حتى يكتمل ربط تحديث السعر وحركة المخزون على الخادم."
+                    else editingProductIndex = index
+                })
                 else -> when {
                     showCatalog -> CatalogScreen(onBack = { showCatalog = false }, onAddToInventory = { catalogItem ->
                         val existing = inventory.indexOfFirst { it.catalogCode.isNotBlank() && it.catalogCode == catalogItem.catalogCode }
@@ -338,6 +349,7 @@ private fun StoreApp(context: Context) {
         }
     )
     if (addProduct) AddProductDialog(
+        cloudMode = cloudMode,
         onDismiss = { addProduct = false },
         onSave = { name, category, stock, price, costPrice ->
             if (cloudMode) {
@@ -388,22 +400,31 @@ private fun StoreApp(context: Context) {
                     storeCloudIo.execute {
                         val result = runCatching {
                             val sale = checkoutCommercialCloudSale(context, currentProduct.cloudOfferingId, baseQuantity, idempotencyKey)
-                            val snapshot = loadCommercialCloudInventory(context)
-                            sale to snapshot
+                            val snapshot = runCatching { loadCommercialCloudInventory(context) }.getOrNull()
+                            val history = runCatching { loadCommercialCloudSales(context) }.getOrNull()
+                            Triple(sale, snapshot, history)
                         }
                         storeCloudMain.post {
                             cloudInventoryBusy = false
                             result.onSuccess { pair ->
                                 val sale = pair.first
-                                inventory.clear()
-                                inventory.addAll(pair.second.products)
+                                pair.second?.let { snapshot ->
+                                    inventory.clear()
+                                    inventory.addAll(snapshot.products)
+                                }
                                 val receipt = sale.optLong("receipt_number", nextInvoice.toLong()).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
                                 val total = sale.optLong("total_minor", (quantity * unitPrice).toLong()).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
-                                sales.add(0, SaleRecord(receipt, product, quantity, total, false, customer, total, System.currentTimeMillis(), currentProduct.costPrice, unitCode, baseQuantity))
-                                saveSales(context, sales)
+                                val serverSales = pair.third
+                                if (serverSales != null) {
+                                    sales.clear()
+                                    sales.addAll(serverSales)
+                                } else {
+                                    sales.add(0, SaleRecord(receipt, product, quantity, total, false, "", total, System.currentTimeMillis(), currentProduct.costPrice, unitCode, baseQuantity))
+                                    saveSales(context, sales)
+                                }
                                 nextInvoice = maxOf(nextInvoice + 1, receipt + 1)
                                 cloudInventoryError = ""
-                                cloudNotice = "تم تسجيل الفاتورة رقم $receipt وتحديث المخزون في قاعدة البيانات."
+                                cloudNotice = if (serverSales != null) "تم تسجيل الفاتورة رقم $receipt وتحديث السجل من قاعدة البيانات." else "تم تسجيل الفاتورة رقم $receipt على الخادم؛ تعذر تحديث سجل المبيعات، فتم الاحتفاظ بملخص مؤقت على الجهاز."
                             }.onFailure {
                                 cloudInventoryError = it.message ?: "فشل تسجيل البيع على الخادم."
                                 cloudNotice = cloudInventoryError
@@ -801,11 +822,11 @@ private fun EditProductDialog(
                 val cost = costText.toIntOrNull()
                 when {
                     name.isBlank() -> error = "أدخل اسم المنتج."
-                    category.isBlank() -> error = "أدخل تصنيف المنتج."
+                    !cloudMode && category.isBlank() -> error = "أدخل تصنيف المنتج."
                     stock == null || stock < 0 -> error = "أدخل كمية صحيحة."
                     price == null || price <= 0 -> error = "أدخل سعر بيع أكبر من صفر."
-                    cost == null || cost < 0 -> error = "أدخل تكلفة شراء صحيحة (يمكن أن تكون صفرًا)."
-                    else -> onSave(name.trim(), category.trim(), stock, price, cost)
+                    !cloudMode && (cost == null || cost < 0) -> error = "أدخل تكلفة شراء صحيحة (يمكن أن تكون صفرًا)."
+                    else -> onSave(name.trim(), category.trim(), stock, price, cost ?: 0)
                 }
             }) { Text("حفظ التعديلات") }
         },
@@ -831,6 +852,7 @@ private fun EditProductDialog(
 
 @Composable
 private fun AddProductDialog(
+    cloudMode: Boolean = false,
     onDismiss: () -> Unit,
     onSave: (String, String, Int, Int, Int) -> Unit
 ) {
@@ -847,10 +869,11 @@ private fun AddProductDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(name, { name = it; error = null }, label = { Text("اسم المنتج") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(category, { category = it; error = null }, label = { Text("التصنيف") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(stockText, { stockText = it.filter(Char::isDigit).take(7); error = null }, label = { Text("الكمية الافتتاحية") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                if (!cloudMode) OutlinedTextField(category, { category = it; error = null }, label = { Text("التصنيف المحلي") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(stockText, { stockText = it.filter(Char::isDigit).take(7); error = null }, label = { Text(if (cloudMode) "الكمية الافتتاحية (وحدات)" else "الكمية الافتتاحية") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(priceText, { priceText = it.filter(Char::isDigit).take(7); error = null }, label = { Text("سعر البيع للوحدة (ر.ي)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(costText, { costText = it.filter(Char::isDigit).take(7); error = null }, label = { Text("تكلفة شراء الوحدة (ر.ي)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                if (!cloudMode) OutlinedTextField(costText, { costText = it.filter(Char::isDigit).take(7); error = null }, label = { Text("تكلفة شراء الوحدة (ر.ي)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                if (cloudMode) Text("سيُحفظ الاسم والوحدة والسعر والكمية الافتتاحية في قاعدة البيانات. التصنيف وتكلفة الشراء غير مربوطين بعملية الإنشاء السحابية الحالية.", color = Muted, fontSize = 11.sp)
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
             }
         },
