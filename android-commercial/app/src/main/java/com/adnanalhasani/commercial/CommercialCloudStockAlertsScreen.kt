@@ -58,7 +58,7 @@ private val StockAlertsMain = Handler(Looper.getMainLooper())
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun CommercialCloudStockAlertsScreen(context: Context, onBack: () -> Unit) {
-    var products by remember { mutableStateOf<List<Product>>(emptyList()) }
+    var products by remember { mutableStateOf<List<CommercialCloudStockAlert>>(emptyList()) }
     var search by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf("all") }
     var loading by remember { mutableStateOf(false) }
@@ -69,7 +69,7 @@ internal fun CommercialCloudStockAlertsScreen(context: Context, onBack: () -> Un
         loading = true
         error = ""
         StockAlertsWorker.execute {
-            val result = runCatching { loadCommercialCloudInventory(context).products }
+            val result = runCatching { loadCommercialCloudStockAlerts(context) }
             StockAlertsMain.post {
                 result.onSuccess { products = it }
                     .onFailure { error = it.message ?: "تعذر تحميل المخزون السحابي." }
@@ -78,20 +78,19 @@ internal fun CommercialCloudStockAlertsScreen(context: Context, onBack: () -> Un
         }
     }
 
-    val lowStockCount = products.count { it.stock > 0 && it.reorderPoint >= 0 && it.stock <= it.reorderPoint }
-    val outOfStockCount = products.count { it.stock <= 0 }
+    val lowStockCount = products.count { it.stock > 0 && it.availableQuantity > 0.0 && it.availableQuantity <= it.reorderPoint }
+    val outOfStockCount = products.count { it.availableQuantity <= 0.0 }
     val filtered = products.filter { product ->
         val matchesSearch = search.isBlank() ||
-            product.name.contains(search.trim(), ignoreCase = true) ||
-            product.category.contains(search.trim(), ignoreCase = true) ||
-            product.barcode.contains(search.trim(), ignoreCase = true)
+            product.productName.contains(search.trim(), ignoreCase = true) ||
+            product.categoryName.contains(search.trim(), ignoreCase = true)
         val matchesFilter = when (filter) {
-            "low" -> product.stock > 0 && product.reorderPoint >= 0 && product.stock <= product.reorderPoint
-            "out" -> product.stock <= 0
+            "low" -> product.availableQuantity > 0.0 && product.availableQuantity <= product.reorderPoint
+            "out" -> product.availableQuantity <= 0.0
             else -> true
         }
         matchesSearch && matchesFilter
-    }.sortedWith(compareBy<Product> { if (it.stock <= 0) 0 else if (it.stock <= it.reorderPoint) 1 else 2 }.thenBy { it.name.lowercase() })
+    }.sortedWith(compareBy<CommercialCloudStockAlert> { if (it.availableQuantity <= 0.0) 0 else if (it.availableQuantity <= it.reorderPoint) 1 else 2 }.thenBy { it.productName.lowercase() })
 
     Scaffold(
         topBar = {
@@ -162,9 +161,9 @@ internal fun CommercialCloudStockAlertsScreen(context: Context, onBack: () -> Un
                     modifier = Modifier.padding(8.dp)
                 )
             }
-            items(filtered, key = { it.cloudOfferingId.ifBlank { it.name } }) { product ->
-                val out = product.stock <= 0
-                val low = !out && product.stock <= product.reorderPoint
+            items(filtered, key = { it.offeringId }) { product ->
+                val out = product.availableQuantity <= 0.0
+                val low = !out && product.availableQuantity <= product.reorderPoint
                 val accent = if (out) Color(0xFFB3261E) else if (low) Color(0xFFB36B00) else StockAlertsGreen
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -176,8 +175,8 @@ internal fun CommercialCloudStockAlertsScreen(context: Context, onBack: () -> Un
                             Icon(Icons.Default.Inventory2, contentDescription = null, tint = accent, modifier = Modifier.size(25.dp))
                             Spacer(Modifier.width(10.dp))
                             Column(Modifier.weight(1f)) {
-                                Text(product.name, color = StockAlertsInk, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                                Text(product.category.ifBlank { "غير مصنف" }, color = StockAlertsMuted, fontSize = 11.sp)
+                                Text(product.productName, color = StockAlertsInk, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                Text(product.categoryName.ifBlank { "غير مصنف" }, color = StockAlertsMuted, fontSize = 11.sp)
                             }
                             Text(
                                 when { out -> "نفد"; low -> "إعادة طلب"; else -> "متوفر" },
@@ -187,14 +186,13 @@ internal fun CommercialCloudStockAlertsScreen(context: Context, onBack: () -> Un
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                             Column(Modifier.weight(1f)) {
                                 Text("المتاح للبيع", color = StockAlertsMuted, fontSize = 10.sp)
-                                Text("${product.stock} ${product.unitCode}", color = accent, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                                Text("${formatStockQuantity(product.availableQuantity)} ${product.unitName}", color = accent, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                             }
                             Column(Modifier.weight(1f)) {
                                 Text("حد إعادة الطلب", color = StockAlertsMuted, fontSize = 10.sp)
-                                Text("${product.reorderPoint.coerceAtLeast(0)} ${product.unitCode}", color = StockAlertsInk, fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                                Text("${formatStockQuantity(product.reorderPoint)} ${product.unitName}", color = StockAlertsInk, fontWeight = FontWeight.Medium, fontSize = 14.sp)
                             }
                         }
-                        if (product.barcode.isNotBlank()) Text("الباركود: ${product.barcode}", color = StockAlertsMuted, fontSize = 10.sp)
                     }
                 }
             }
@@ -222,3 +220,5 @@ private fun MetricCard(label: String, value: String, modifier: Modifier = Modifi
         }
     }
 }
+
+private fun formatStockQuantity(value: Double): String = java.text.DecimalFormat("0.######").format(value)
