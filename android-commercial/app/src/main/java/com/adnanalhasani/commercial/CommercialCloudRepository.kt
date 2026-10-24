@@ -592,8 +592,11 @@ internal fun loadCommercialDepartmentWarehouseAssignments(context: Context): Lis
 internal fun assignCommercialDepartmentToWarehouse(context: Context, departmentId: String, warehouseId: String) {
     require(departmentId.isNotBlank() && warehouseId.isNotBlank()) { "اختر القسم والمستودع." }
     val (orgId, access) = commercialMasterDataAccess(context)
-    val existing = loadCommercialDepartmentWarehouseAssignments(context)
-    if (existing.any { it.departmentId == departmentId && it.warehouseId == warehouseId }) return
+    val existingRows = JSONArray(commercialCloudRequest(
+        "/rest/v1/commercial_department_warehouse_assignments?select=department_id,warehouse_id&organization_id=eq.$orgId&department_id=eq.$departmentId&warehouse_id=eq.$warehouseId&limit=1",
+        "GET", token = access
+    ))
+    if (existingRows.length() > 0) return
     val payload = JSONObject()
         .put("organization_id", orgId)
         .put("department_id", departmentId)
