@@ -275,7 +275,9 @@ private fun statusLabel(value: String): String = when (value.lowercase()) {
     "paid", "completed", "succeeded" -> "مدفوعة"
     "partially_paid", "partial" -> "مدفوعة جزئيًا"
     "unpaid", "due", "pending", "credit" -> "مستحقة"
-    "failed", "cancelled", "canceled" -> "فشل / ملغاة"
+    "refunded" -> "مستردة"
+    "partially_refunded" -> "مستردة جزئيًا"
+    "failed", "cancelled", "canceled" -> "ملغاة / فاشلة"
     else -> value.ifBlank { "غير محدد" }
 }
 
@@ -283,6 +285,7 @@ private fun statusColor(value: String): Color = when (value.lowercase()) {
     "paid", "completed", "succeeded" -> Color(0xFF167D63)
     "partially_paid", "partial" -> Color(0xFFB36B00)
     "unpaid", "due", "pending", "credit" -> Color(0xFFB36B00)
+    "refunded", "partially_refunded" -> Color(0xFF5B5BC7)
     "failed", "cancelled", "canceled" -> Color(0xFFB3261E)
     else -> CloudSalesMuted
 }
