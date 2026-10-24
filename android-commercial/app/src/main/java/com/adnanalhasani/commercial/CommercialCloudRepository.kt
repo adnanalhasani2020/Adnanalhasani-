@@ -263,15 +263,36 @@ internal data class CommercialCloudSaleLine(
     val lineTotalMinor: Long
 )
 
+internal data class CommercialCloudPaymentSummary(
+    val amountMinor: Long,
+    val status: String,
+    val methodType: String,
+    val createdAt: String
+)
+
+internal data class CommercialCloudReturnSummary(
+    val status: String,
+    val refundStatus: String,
+    val restockStatus: String,
+    val requestedRefundMinor: Long,
+    val approvedRefundMinor: Long?,
+    val createdAt: String
+)
+
 internal data class CommercialCloudSaleDocument(
     val id: String,
     val receiptNumber: String,
     val customerName: String,
+    val customerPhone: String,
+    val customerEmail: String,
     val totalMinor: Long,
+    val saleStatus: String,
     val paymentStatus: String,
     val createdAt: String,
     val currencyCode: String,
-    val lines: List<CommercialCloudSaleLine>
+    val lines: List<CommercialCloudSaleLine>,
+    val payments: List<CommercialCloudPaymentSummary>,
+    val returns: List<CommercialCloudReturnSummary>
 )
 
 /** Detailed, read-only invoice projection for the cloud sales history screen. */
@@ -281,7 +302,7 @@ internal fun loadCommercialCloudSaleDocuments(context: Context): List<Commercial
     require(activityId.isNotBlank()) { "ملف النشاط غير محفوظ." }
     val (orgId, access) = commercialMasterDataAccess(context)
     val path = "/rest/v1/commercial_sales" +
-        "?select=id,receipt_number,total_minor,payment_status,created_at,currency_code,customer:commercial_customers(display_name),items:commercial_sale_items(product_name_snapshot,quantity,line_total_minor,unit_price_minor)" +
+        "?select=id,receipt_number,total_minor,status,payment_status,created_at,currency_code,customer:commercial_customers(display_name,phone,email),items:commercial_sale_items(product_name_snapshot,quantity,line_total_minor,unit_price_minor),payments:commercial_payments(amount_minor,status,payment_method_type,created_at),returns:commercial_sales_returns(status,refund_status,restock_status,requested_refund_minor,approved_refund_minor,created_at)" +
         "&organization_id=eq.$orgId&activity_id=eq.$activityId&order=created_at.desc,id.asc"
     val rows = commercialCloudPagedGet(path, access)
     return buildList {
@@ -300,15 +321,46 @@ internal fun loadCommercialCloudSaleDocuments(context: Context): List<Commercial
                     ))
                 }
             }
+            val paymentRows = row.optJSONArray("payments")
+            val payments = buildList {
+                for (paymentIndex in 0 until (paymentRows?.length() ?: 0)) {
+                    val payment = paymentRows?.optJSONObject(paymentIndex) ?: continue
+                    add(CommercialCloudPaymentSummary(
+                        amountMinor = payment.optLong("amount_minor", 0L),
+                        status = payment.optString("status").ifBlank { "غير محدد" },
+                        methodType = payment.optString("payment_method_type").takeUnless { it == "null" }.orEmpty(),
+                        createdAt = payment.optString("created_at").takeUnless { it == "null" }.orEmpty()
+                    ))
+                }
+            }
+            val returnRows = row.optJSONArray("returns")
+            val returns = buildList {
+                for (returnIndex in 0 until (returnRows?.length() ?: 0)) {
+                    val item = returnRows?.optJSONObject(returnIndex) ?: continue
+                    add(CommercialCloudReturnSummary(
+                        status = item.optString("status").ifBlank { "غير محدد" },
+                        refundStatus = item.optString("refund_status").ifBlank { "غير محدد" },
+                        restockStatus = item.optString("restock_status").ifBlank { "غير محدد" },
+                        requestedRefundMinor = item.optLong("requested_refund_minor", 0L),
+                        approvedRefundMinor = if (item.isNull("approved_refund_minor")) null else item.optLong("approved_refund_minor"),
+                        createdAt = item.optString("created_at").takeUnless { it == "null" }.orEmpty()
+                    ))
+                }
+            }
             add(CommercialCloudSaleDocument(
                 id = row.optString("id"),
                 receiptNumber = row.optString("receipt_number").ifBlank { "—" },
                 customerName = customer?.optString("display_name").orEmpty().takeUnless { it == "null" }.orEmpty().ifBlank { "عميل نقدي / غير محدد" },
+                customerPhone = customer?.optString("phone").orEmpty().takeUnless { it == "null" }.orEmpty(),
+                customerEmail = customer?.optString("email").orEmpty().takeUnless { it == "null" }.orEmpty(),
                 totalMinor = row.optLong("total_minor", 0L),
+                saleStatus = row.optString("status").ifBlank { "غير محدد" },
                 paymentStatus = row.optString("payment_status").ifBlank { "غير محدد" },
                 createdAt = row.optString("created_at").takeUnless { it == "null" }.orEmpty(),
                 currencyCode = row.optString("currency_code").takeUnless { it == "null" }.orEmpty(),
-                lines = lines
+                lines = lines,
+                payments = payments,
+                returns = returns
             ))
         }
     }
