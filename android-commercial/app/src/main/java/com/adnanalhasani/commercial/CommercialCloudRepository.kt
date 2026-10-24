@@ -202,9 +202,14 @@ internal fun getOrCreateCommercialCloudSaleKey(context: Context, offeringId: Str
     // A retry key belongs to one exact operation and tenant/location context.
     // Reusing it after switching organizations or warehouses can collide with
     // a different server-side request or retry an unintended sale.
-    if (storedOffering == offeringId && storedQuantity == quantity &&
-        storedOrganization == organizationId && storedActivity == activityId &&
-        storedLocation == locationId && storedKey.isNotBlank()) return storedKey
+    if (storedKey.isNotBlank()) {
+        require(storedOffering == offeringId && storedQuantity == quantity &&
+            storedOrganization == organizationId && storedActivity == activityId &&
+            storedLocation == locationId) {
+            "توجد عملية بيع معلّقة لم تُحسم بعد. أعد المحاولة بنفس البيانات قبل بدء بيع آخر."
+        }
+        return storedKey
+    }
 
     val key = UUID.randomUUID().toString()
     check(prefs.edit()
@@ -757,13 +762,45 @@ internal fun requestCommercialCloudSaleReturn(
         items.put(JSONObject().put("sale_item_id", saleItemId).put("quantity", quantity).put("restock", true))
     }
     val (_, access) = commercialMasterDataAccess(context)
+    val savedContext = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+    val organizationId = savedContext.getString("organization_id", null).orEmpty()
+    require(organizationId.isNotBlank()) { "معرّف المؤسسة غير محفوظ." }
+    val normalizedItems = JSONArray()
+    selected.toSortedMap().forEach { (saleItemId, quantity) ->
+        normalizedItems.put(JSONObject().put("sale_item_id", saleItemId).put("quantity", quantity).put("restock", true))
+    }
+    val fingerprint = JSONObject()
+        .put("sale_id", saleId)
+        .put("reason_code", reasonCode)
+        .put("reason_note", reasonNote.trim())
+        .put("items", normalizedItems)
+        .toString()
+    val prefs = context.getSharedPreferences("commercial_cloud_pending_return_v1", Context.MODE_PRIVATE)
+    val storedReturnKey = prefs.getString("idempotency_key", null).orEmpty()
+    val storedFingerprint = prefs.getString("request_fingerprint", null).orEmpty()
+    if (storedReturnKey.isNotBlank()) {
+        require(storedFingerprint == fingerprint &&
+            prefs.getString("organization_id", null) == organizationId) {
+            "يوجد طلب مرتجع معلّق. أعد المحاولة بنفس تفاصيل الطلب قبل إنشاء طلب آخر."
+        }
+    }
+    val idempotencyKey = storedReturnKey.ifBlank { UUID.randomUUID().toString() }
+    if (storedReturnKey.isBlank()) {
+        check(prefs.edit().clear()
+            .putString("request_fingerprint", fingerprint)
+            .putString("organization_id", organizationId)
+            .putString("idempotency_key", idempotencyKey)
+            .commit()) { "تعذر حفظ مفتاح طلب المرتجع قبل الإرسال." }
+    }
     val payload = JSONObject()
         .put("p_sale_id", saleId)
-        .put("p_idempotency_key", UUID.randomUUID().toString())
+        .put("p_idempotency_key", idempotencyKey)
         .put("p_reason_code", reasonCode)
-        .put("p_items", items)
+        .put("p_items", normalizedItems)
         .put("p_reason_note", reasonNote.trim().ifBlank { JSONObject.NULL })
-    return commercialCloudRequest("/rest/v1/rpc/commercial_request_sale_return", "POST", payload, access)
+    val response = commercialCloudRequest("/rest/v1/rpc/commercial_request_sale_return", "POST", payload, access)
+    check(prefs.edit().clear().commit()) { "تم إرسال المرتجع لكن تعذر تنظيف مفتاح إعادة المحاولة." }
+    return response
 }
 
 internal data class CommercialCloudReturnItem(
@@ -959,4 +996,177 @@ internal fun loadCommercialCloudRecords(context: Context, screenKey: String): Li
             add(CommercialCloudRecord(id, title, subtitle, status, amount, row.optString("created_at").takeUnless { it == "null" }.orEmpty(), details))
         }
     }
+}
+
+
+internal data class CommercialCloudCustomer(val id: String, val displayName: String)
+
+internal fun loadCommercialCloudCustomers(context: Context): List<CommercialCloudCustomer> {
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val rows = commercialCloudPagedGet(
+        "/rest/v1/commercial_customers?select=id,display_name&organization_id=eq.$orgId&state=eq.active&order=display_name.asc,id.asc",
+        access
+    )
+    return buildList {
+        for (i in 0 until rows.length()) {
+            val row = rows.optJSONObject(i) ?: continue
+            val id = row.optString("id").takeUnless { it == "null" }.orEmpty()
+            val name = row.optString("display_name").trim()
+            if (id.isNotBlank() && name.isNotBlank()) add(CommercialCloudCustomer(id, name))
+        }
+    }
+}
+
+internal fun checkoutCommercialCloudSaleOnAccount(
+    context: Context,
+    offeringId: String,
+    quantity: Int,
+    customerId: String,
+    idempotencyKey: String
+): JSONObject {
+    require(offeringId.isNotBlank() && customerId.isNotBlank() && quantity > 0)
+    val locationId = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+        .getString("location_id", null).orEmpty()
+    require(locationId.isNotBlank()) { "معرّف موقع المخزون غير محفوظ." }
+    val (_, access) = commercialMasterDataAccess(context)
+    return JSONObject(commercialCloudRequest(
+        "/rest/v1/rpc/commercial_checkout_sale_on_account", "POST",
+        JSONObject().put("p_offering_id", offeringId)
+            .put("p_location_id", locationId)
+            .put("p_quantity", quantity)
+            .put("p_customer_id", customerId)
+            .put("p_idempotency_key", idempotencyKey),
+        access
+    ))
+}
+
+internal fun getOrCreateCommercialCloudCreditSaleKey(
+    context: Context, offeringId: String, quantity: Int, customerId: String
+): String {
+    require(offeringId.isNotBlank() && customerId.isNotBlank() && quantity > 0)
+    val prefs = context.getSharedPreferences("commercial_cloud_pending_credit_sale_v1", Context.MODE_PRIVATE)
+    val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+    val org = saved.getString("organization_id", null).orEmpty()
+    val activity = saved.getString("activity_id", null).orEmpty()
+    val location = saved.getString("location_id", null).orEmpty()
+    require(org.isNotBlank() && activity.isNotBlank() && location.isNotBlank())
+    val existing = prefs.getString("idempotency_key", null).orEmpty()
+    if (existing.isNotBlank()) {
+        require(prefs.getString("offering_id", null) == offeringId &&
+            prefs.getInt("quantity", -1) == quantity &&
+            prefs.getString("customer_id", null) == customerId &&
+            prefs.getString("organization_id", null) == org &&
+            prefs.getString("activity_id", null) == activity &&
+            prefs.getString("location_id", null) == location) {
+            "توجد عملية بيع آجل معلّقة. أعد المحاولة بنفس الفاتورة قبل بدء عملية أخرى."
+        }
+        return existing
+    }
+    val key = UUID.randomUUID().toString()
+    check(prefs.edit().clear()
+        .putString("idempotency_key", key)
+        .putString("offering_id", offeringId)
+        .putInt("quantity", quantity)
+        .putString("customer_id", customerId)
+        .putString("organization_id", org)
+        .putString("activity_id", activity)
+        .putString("location_id", location)
+        .commit()) { "تعذر حفظ مفتاح البيع الآجل قبل الإرسال." }
+    return key
+}
+
+internal fun clearCommercialCloudCreditSaleKey(context: Context, idempotencyKey: String) {
+    val prefs = context.getSharedPreferences("commercial_cloud_pending_credit_sale_v1", Context.MODE_PRIVATE)
+    if (prefs.getString("idempotency_key", null) == idempotencyKey) {
+        check(prefs.edit().clear().commit()) { "تعذر تنظيف مفتاح البيع الآجل بعد تأكيد الخادم." }
+    }
+}
+
+
+internal data class CommercialCloudReceivable(
+    val saleId: String,
+    val receiptNumber: String,
+    val customerId: String,
+    val customerName: String,
+    val totalMinor: Long,
+    val paidMinor: Long,
+    val currencyCode: String,
+    val createdAt: String
+) {
+    val dueMinor: Long get() = (totalMinor - paidMinor).coerceAtLeast(0L)
+}
+
+internal fun loadCommercialCloudReceivables(context: Context): List<CommercialCloudReceivable> {
+    val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+    val activityId = saved.getString("activity_id", null).orEmpty()
+    require(activityId.isNotBlank()) { "ملف النشاط غير محفوظ." }
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val path = "/rest/v1/commercial_sales" +
+        "?select=id,receipt_number,customer_id,total_minor,currency_code,created_at,payment_status,customer:commercial_customers(display_name),payments:commercial_payments(amount_minor,status)" +
+        "&organization_id=eq.$orgId&activity_id=eq.$activityId&status=eq.completed&customer_id=not.is.null&order=created_at.desc,id.asc"
+    val rows = commercialCloudPagedGet(path, access)
+    return buildList {
+        for (i in 0 until rows.length()) {
+            val row = rows.optJSONObject(i) ?: continue
+            val customer = row.optJSONObject("customer")
+            val customerId = row.optString("customer_id").takeUnless { it == "null" }.orEmpty()
+            val customerName = customer?.optString("display_name").orEmpty()
+            if (customerId.isBlank() || customerName.isBlank()) continue
+            val payments = row.optJSONArray("payments")
+            var paid = 0L
+            for (j in 0 until (payments?.length() ?: 0)) {
+                val payment = payments?.optJSONObject(j) ?: continue
+                if (payment.optString("status") == "succeeded") {
+                    paid = Math.addExact(paid, payment.optLong("amount_minor", 0L).coerceAtLeast(0L))
+                }
+            }
+            val total = row.optLong("total_minor", 0L).coerceAtLeast(0L)
+            if (paid < total) add(CommercialCloudReceivable(
+                saleId = row.optString("id"),
+                receiptNumber = row.optString("receipt_number"),
+                customerId = customerId,
+                customerName = customerName,
+                totalMinor = total,
+                paidMinor = paid,
+                currencyCode = row.optString("currency_code"),
+                createdAt = row.optString("created_at")
+            ))
+        }
+    }
+}
+
+internal fun recordCommercialCloudCustomerPayment(
+    context: Context,
+    saleId: String,
+    amountMinor: Long,
+    method: String
+): JSONObject {
+    require(saleId.isNotBlank() && amountMinor > 0L)
+    require(method in setOf("cash", "bank_transfer", "card", "other"))
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val fingerprint = listOf(orgId, saleId, amountMinor.toString(), method).joinToString("|")
+    val prefs = context.getSharedPreferences("commercial_cloud_pending_collection_v1", Context.MODE_PRIVATE)
+    val storedKey = prefs.getString("idempotency_key", null).orEmpty()
+    if (storedKey.isNotBlank()) {
+        require(prefs.getString("fingerprint", null) == fingerprint) {
+            "يوجد تحصيل معلّق لم يُحسم بعد. أعد المحاولة بنفس بيانات التحصيل."
+        }
+    }
+    val idempotencyKey = storedKey.ifBlank { UUID.randomUUID().toString() }
+    if (storedKey.isBlank()) {
+        check(prefs.edit().clear().putString("fingerprint", fingerprint)
+            .putString("idempotency_key", idempotencyKey).commit()) {
+            "تعذر حفظ مفتاح التحصيل قبل الإرسال."
+        }
+    }
+    val result = JSONObject(commercialCloudRequest(
+        "/rest/v1/rpc/commercial_record_customer_payment", "POST",
+        JSONObject().put("p_sale_id", saleId)
+            .put("p_amount_minor", amountMinor)
+            .put("p_payment_method_type", method)
+            .put("p_idempotency_key", idempotencyKey),
+        access
+    ))
+    check(prefs.edit().clear().commit()) { "تم تأكيد التحصيل لكن تعذر تنظيف مفتاح إعادة المحاولة." }
+    return result
 }
