@@ -1,6 +1,6 @@
 # Warehouse, Department, Category, and Product Architecture
 
-Status: researched design proposal; no production schema has been changed by this document.
+Status: design and additive Phase 1 migration committed. The migration defines master-data tables and tenant guards, but has not been applied to the live Supabase project and is not yet wired into Android stock posting.
 
 ## Research basis
 
@@ -47,7 +47,12 @@ Product data
 - Product category tree: independent, organization-scoped, unlimited depth, one parent per node; a product/offering has one primary category initially, with an optional many-to-many classification extension later.
 - Department: an organizational responsibility/cost/reporting dimension, not a stock location or product category. A department can be parent/child and can own categories, employees, or expense allocations without owning inventory implicitly.
 
-## Data model proposal (to implement in migrations)
+## Data model proposal and implementation status
+
+Migration committed: `supabase/migrations/20261024001000_commercial_warehouse_category_department_foundation.sql`.
+It adds organization-scoped warehouse, nested storage-location, product-category, department, offering-category, and department-warehouse tables with RLS, hierarchy cycle checks, and cross-organization relationship guards. It intentionally does not modify current inventory balances or checkout behavior. The migration must be reviewed and applied through the project's normal migration process before the app can use these tables.
+
+## Remaining data-model work
 
 1. `commercial_warehouses`
    - id, organization_id, activity_id nullable where existing authorization model allows, branch_location_id, code, name, warehouse_type, state, address/metadata, created_by, timestamps.
