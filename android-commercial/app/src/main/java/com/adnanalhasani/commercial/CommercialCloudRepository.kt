@@ -256,6 +256,90 @@ internal fun checkoutCommercialCloudSale(
 }
 
 
+internal data class CommercialCloudCheckoutLine(
+    val offeringId: String,
+    val quantity: Int
+)
+
+internal fun getOrCreateCommercialCloudMultiSaleKey(
+    context: Context,
+    lines: List<CommercialCloudCheckoutLine>
+): String {
+    require(lines.isNotEmpty() && lines.size <= 200) { "أضف صنفًا واحدًا على الأقل إلى الفاتورة." }
+    require(lines.all { it.offeringId.isNotBlank() && it.quantity in 1..100000 }) { "تحقق من الأصناف والكميات." }
+    require(lines.map { it.offeringId }.distinct().size == lines.size) { "ادمج كميات الصنف المكرر في سطر واحد." }
+    val canonical = JSONArray()
+    lines.sortedBy { it.offeringId }.forEach { line ->
+        canonical.put(JSONObject().put("offering_id", line.offeringId).put("quantity", line.quantity))
+    }
+    val payload = canonical.toString()
+    val prefs = context.getSharedPreferences("commercial_cloud_pending_multi_sale_v1", Context.MODE_PRIVATE)
+    val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+    val organizationId = saved.getString("organization_id", null).orEmpty()
+    val activityId = saved.getString("activity_id", null).orEmpty()
+    val locationId = saved.getString("location_id", null).orEmpty()
+    require(organizationId.isNotBlank() && activityId.isNotBlank() && locationId.isNotBlank()) {
+        "ملف النشاط وموقع المخزون مطلوبان قبل إنشاء الفاتورة."
+    }
+    val oldKey = prefs.getString("idempotency_key", null).orEmpty()
+    if (oldKey.isNotBlank()) {
+        require(prefs.getString("payload", null) == payload &&
+            prefs.getString("organization_id", null) == organizationId &&
+            prefs.getString("activity_id", null) == activityId &&
+            prefs.getString("location_id", null) == locationId) {
+            "توجد فاتورة سحابية معلقة ببيانات مختلفة؛ أعد المحاولة أو أكمل العملية السابقة أولًا."
+        }
+        return oldKey
+    }
+    val key = UUID.randomUUID().toString()
+    check(prefs.edit().putString("payload", payload).putString("organization_id", organizationId)
+        .putString("activity_id", activityId).putString("location_id", locationId)
+        .putString("idempotency_key", key).commit()) {
+        "تعذر حفظ مفتاح الفاتورة قبل الإرسال؛ لم يتم إرسال البيع."
+    }
+    return key
+}
+
+internal fun clearCommercialCloudMultiSaleKey(context: Context, idempotencyKey: String) {
+    val prefs = context.getSharedPreferences("commercial_cloud_pending_multi_sale_v1", Context.MODE_PRIVATE)
+    if (prefs.getString("idempotency_key", null) == idempotencyKey) {
+        check(prefs.edit().clear().commit()) { "تعذر تنظيف حالة الفاتورة بعد تأكيد الخادم." }
+    }
+}
+
+internal fun checkoutCommercialCloudSaleMulti(
+    context: Context,
+    lines: List<CommercialCloudCheckoutLine>,
+    idempotencyKey: String
+): JSONObject {
+    require(lines.isNotEmpty() && lines.size <= 200) { "عدد بنود الفاتورة غير صالح." }
+    val savedContext = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+    val locationId = savedContext.getString("location_id", null).orEmpty()
+    require(locationId.isNotBlank()) { "معرّف موقع المخزون غير محفوظ." }
+    val payload = JSONArray()
+    lines.sortedBy { it.offeringId }.forEach { line ->
+        require(line.offeringId.isNotBlank() && line.quantity in 1..100000) { "تحقق من الصنف والكمية." }
+        payload.put(JSONObject().put("offering_id", line.offeringId).put("quantity", line.quantity))
+    }
+    require(lines.map { it.offeringId }.distinct().size == lines.size) { "ادمج كميات الصنف المكرر في سطر واحد." }
+    val sessionPrefs = commercialCloudSessionPreferences(context)
+    val savedRefresh = sessionPrefs.getString("refresh_token", null).orEmpty()
+    require(savedRefresh.isNotBlank()) { "سجّل الدخول إلى حساب Supabase أولًا." }
+    val session = JSONObject(commercialCloudRequest(
+        "/auth/v1/token?grant_type=refresh_token", "POST",
+        JSONObject().put("refresh_token", savedRefresh)
+    ))
+    val access = session.optString("access_token")
+    require(access.isNotBlank()) { "انتهت جلسة الحساب؛ سجّل الدخول مجددًا." }
+    sessionPrefs.edit().putString("refresh_token", session.optString("refresh_token").ifBlank { savedRefresh }).apply()
+    return JSONObject(commercialCloudRequest(
+        "/rest/v1/rpc/commercial_checkout_sale_multi", "POST",
+        JSONObject().put("p_lines", payload).put("p_location_id", locationId)
+            .put("p_idempotency_key", idempotencyKey),
+        access
+    ))
+}
+
 internal data class CommercialCloudSaleLine(
     val productName: String,
     val quantity: String,
