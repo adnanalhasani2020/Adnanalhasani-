@@ -1,0 +1,50 @@
+from pathlib import Path
+import unittest
+
+
+ROOT = Path(__file__).resolve().parents[1]
+REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt"
+SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudSalesScreen.kt"
+MAIN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt"
+
+
+class CommercialCloudSalesScreenContractTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.repository = REPOSITORY.read_text(encoding="utf-8")
+        cls.screen = SCREEN.read_text(encoding="utf-8")
+        cls.main = MAIN.read_text(encoding="utf-8")
+
+    def test_invoice_projection_uses_existing_tables_and_columns(self):
+        self.assertIn("internal fun loadCommercialCloudSaleDocuments", self.repository)
+        for field in (
+            "receipt_number", "total_minor", "payment_status", "currency_code",
+            "commercial_customers(display_name)",
+            "commercial_sale_items(product_name_snapshot,quantity,line_total_minor,unit_price_minor)",
+        ):
+            with self.subTest(field=field):
+                self.assertIn(field, self.repository)
+
+    def test_invoice_projection_is_scoped_to_current_organization_and_activity(self):
+        projection = self.repository.split(
+            "internal fun loadCommercialCloudSaleDocuments", 1
+        )[1].split("internal fun loadCommercialCloudSales", 1)[0]
+        self.assertIn("organization_id=eq.$orgId", projection)
+        self.assertIn("activity_id=eq.$activityId", projection)
+        self.assertIn('"GET", token = access', projection)
+        self.assertNotIn('"/rest/v1/commercial_sales", "POST"', projection)
+
+    def test_invoice_screen_is_reachable_from_more_menu(self):
+        self.assertIn('"فواتير المبيعات السحابية" -> onCloudSales()', self.main)
+        self.assertIn("cloudSalesPage -> CommercialCloudSalesScreen", self.main)
+        self.assertIn('onCloudSales = { cloudSalesPage = true }', self.main)
+
+    def test_invoice_screen_discloses_read_only_and_minor_units(self):
+        self.assertIn("عرض فقط", self.screen)
+        self.assertIn("بوحدة الصرف الصغرى", self.screen)
+        self.assertIn("إعادة المحاولة", self.screen)
+        self.assertIn("بنود الفاتورة", self.screen)
+
+
+if __name__ == "__main__":
+    unittest.main()
