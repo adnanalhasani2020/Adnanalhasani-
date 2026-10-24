@@ -247,7 +247,7 @@ internal fun loadCommercialCloudSales(context: Context): List<SaleRecord> {
             val firstItem = items?.optJSONObject(0)
             val total = row.optLong("total_minor", 0L).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
             val paymentStatus = row.optString("payment_status").lowercase(Locale.ROOT)
-            val isCredit = paymentStatus in setOf("unpaid", "partially_paid", "partial", "pending", "due", "credit")
+            val isCredit = paymentStatus in setOf("unpaid", "partially_paid", "partial", "pending", "due", "credit", "failed")
             val customerObject = row.optJSONObject("customer")
             val createdAt = runCatching {
                 java.time.Instant.parse(row.optString("created_at")).toEpochMilli()
@@ -259,7 +259,7 @@ internal fun loadCommercialCloudSales(context: Context): List<SaleRecord> {
                 total = total,
                 credit = isCredit,
                 customer = customerObject?.optString("display_name").orEmpty(),
-                paid = if (!isCredit) total else 0,
+                paid = if (paymentStatus == "paid") total else 0,
                 createdAt = createdAt,
                 unitCode = "قطعة"
             ))
