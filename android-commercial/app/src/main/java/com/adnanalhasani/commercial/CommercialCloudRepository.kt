@@ -452,10 +452,20 @@ internal data class CommercialUnitOption(
 
 internal fun loadCommercialUnitsOfMeasure(context: Context): List<CommercialUnitOption> {
     val (_, access) = commercialMasterDataAccess(context)
-    val rows = JSONArray(commercialCloudRequest(
-        "/rest/v1/commercial_unit_of_measure?select=code,display_name,dimension,decimal_places&is_active=eq.true&order=dimension.asc,code.asc",
-        "GET", token = access
-    ))
+    // Units are shared reference data and can grow as the universal catalog expands.
+    // Paginate with deterministic ordering to avoid silently truncating the selector.
+    val rows = JSONArray()
+    val pageSize = 500
+    var offset = 0
+    while (true) {
+        val page = JSONArray(commercialCloudRequest(
+            "/rest/v1/commercial_unit_of_measure?select=code,display_name,dimension,decimal_places&is_active=eq.true&order=dimension.asc,code.asc&limit=$pageSize&offset=$offset",
+            "GET", token = access
+        ))
+        for (index in 0 until page.length()) rows.put(page.getJSONObject(index))
+        if (page.length() < pageSize) break
+        offset += pageSize
+    }
     return buildList {
         for (i in 0 until rows.length()) {
             val row = rows.optJSONObject(i) ?: continue
