@@ -313,7 +313,12 @@ private fun StoreApp(context: Context) {
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (tab) {
                 0 -> Dashboard(products = inventory, sales = sales, cloudMode = cloudMode, onNewSale = { newSale = true }, onInventory = { tab = 2 })
-                1 -> SalesScreen(sales = sales, onNewSale = { newSale = true })
+                1 -> SalesScreen(
+                    sales = sales,
+                    cloudMode = cloudMode,
+                    onNewSale = { newSale = true },
+                    onCloudInvoices = { cloudSalesPage = true }
+                )
                 2 -> InventoryScreen(inventory, query, { query = it }, {
                     addProduct = true
                     if (cloudMode) storeCloudIo.execute {
