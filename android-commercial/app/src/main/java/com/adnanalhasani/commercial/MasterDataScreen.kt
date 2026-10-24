@@ -64,7 +64,7 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
             masterMain.post {
                 if (selected.second == table) {
                     loading = false
-                    result.onSuccess { rows = it.first; warehouseRows = it.second; if (warehouseId.isBlank() && it.second.isNotEmpty()) warehouseId = it.second.first().id; error = "" }
+                    result.onSuccess { rows = it.first; warehouseRows = it.second; if (it.second.isNotEmpty() && it.second.none { warehouse -> warehouse.id == warehouseId }) warehouseId = it.second.first().id; error = "" }
                         .onFailure { error = it.message ?: "تعذر تحميل البيانات." }
                 }
             }
@@ -75,7 +75,7 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("المستودعات والمجموعات والأقسام", fontWeight = FontWeight.Bold) },
+                title = { Text("المستودعات ومواقع التخزين والتصنيفات", fontWeight = FontWeight.Bold) },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "رجوع") } },
                 actions = { IconButton(onClick = { reload() }, enabled = !loading) { Icon(Icons.Default.Refresh, "تحديث") } }
             )
@@ -229,7 +229,7 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
                             }
                         }
                     }
-                }, enabled = code.isNotBlank() && name.isNotBlank() && (selected.second != "commercial_storage_locations" || warehouseId.isNotBlank())) { Text("حفظ") }
+                }, enabled = code.isNotBlank() && name.isNotBlank() && (selected.second != "commercial_storage_locations" || (warehouseId.isNotBlank() && warehouseRows.any { it.id == warehouseId }))) { Text("حفظ") }
             },
             dismissButton = { TextButton(onClick = { showCreate = false }) { Text("إلغاء") } }
         )
