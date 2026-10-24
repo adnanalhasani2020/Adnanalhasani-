@@ -65,6 +65,23 @@ class CommercialCloudOperationalScreenContractTests(unittest.TestCase):
                 self.assertIn(text, self.screen)
         self.assertIn("لم يتم إنشاء بيانات تجريبية تلقائيًا", self.screen)
 
+    def test_sales_returns_use_dedicated_schema_backed_workflow(self):
+        returns_screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudReturnsScreen.kt").read_text(encoding="utf-8")
+        for token in (
+            "loadCommercialCloudSaleReturns(context)",
+            "decideCommercialCloudSaleReturn",
+            "inspectCommercialCloudSaleReturnItem",
+            "restockCommercialCloudSaleReturn",
+            "commercial_request_sale_return",
+            "رد المبلغ ما زال معلقًا",
+            "commercial_sales_returns",
+        ):
+            with self.subTest(token=token):
+                self.assertIn(token, returns_screen + self.repository)
+        self.assertIn('cloudOperationalPage == "returns" -> CommercialCloudReturnsScreen', self.main)
+        self.assertIn("commercial_sale_return_items", self.repository)
+        self.assertIn("commercial_sales!inner(receipt_number,customer:commercial_customers(display_name))", self.repository)
+
     def test_projection_columns_are_not_built_from_user_input(self):
         function = self.repository.split(
             "internal fun loadCommercialCloudRecords", 1
