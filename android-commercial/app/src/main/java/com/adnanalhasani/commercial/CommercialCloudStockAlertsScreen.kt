@@ -78,7 +78,7 @@ internal fun CommercialCloudStockAlertsScreen(context: Context, onBack: () -> Un
         }
     }
 
-    val lowStockCount = products.count { it.reorderPoint >= 0 && it.stock <= it.reorderPoint }
+    val lowStockCount = products.count { it.stock > 0 && it.reorderPoint >= 0 && it.stock <= it.reorderPoint }
     val outOfStockCount = products.count { it.stock <= 0 }
     val filtered = products.filter { product ->
         val matchesSearch = search.isBlank() ||
@@ -86,7 +86,7 @@ internal fun CommercialCloudStockAlertsScreen(context: Context, onBack: () -> Un
             product.category.contains(search.trim(), ignoreCase = true) ||
             product.barcode.contains(search.trim(), ignoreCase = true)
         val matchesFilter = when (filter) {
-            "low" -> product.reorderPoint >= 0 && product.stock <= product.reorderPoint
+            "low" -> product.stock > 0 && product.reorderPoint >= 0 && product.stock <= product.reorderPoint
             "out" -> product.stock <= 0
             else -> true
         }
