@@ -39,7 +39,8 @@ class CommercialCloudOperationalScreenContractTests(unittest.TestCase):
             "internal fun loadCommercialCloudRecords", 1
         )[1]
         self.assertIn('organization_id=eq.$orgId', function)
-        self.assertIn('"GET", token = access', function)
+        self.assertIn('commercialCloudPagedGet(', function)
+        self.assertIn('organization_id=eq.$orgId', function)
         self.assertNotIn('"POST"', function)
         self.assertNotIn('"PATCH"', function)
         self.assertNotIn('"DELETE"', function)
