@@ -71,6 +71,8 @@ internal fun CommercialCloudSaleComposerScreen(
     var customers by remember { mutableStateOf<List<CommercialCloudCustomer>>(emptyList()) }
     var customerSearch by remember { mutableStateOf("") }
     var selectedCustomer by remember { mutableStateOf<CommercialCloudCustomer?>(null) }
+    var paymentMode by remember { mutableStateOf("cash") }
+    var initialPaymentText by remember { mutableStateOf("0") }
     var quantities by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var search by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
@@ -135,8 +137,7 @@ internal fun CommercialCloudSaleComposerScreen(
                 Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(15.dp)) {
                     Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                         Text("اختر الأصناف والكميات", color = CloudComposerInk, fontWeight = FontWeight.Bold)
-                        Text("السعر والمخزون يُتحقق منهما مجددًا على الخادم عند الحفظ. لا يتم تسجيل فاتورة محلية بديلة.", color = CloudComposerMuted, fontSize = 11.sp)
-                        Text("البيع الآجل والتحصيل الجزئي غير متاحين حتى اكتمال ربط الأرصدة.", color = Color(0xFF9A5B00), fontSize = 11.sp)
+                        Text("السعر والمخزون والتحصيل والدين تُسجل على الخادم ضمن معاملة واحدة.", color = CloudComposerMuted, fontSize = 11.sp)
                     }
                 }
             }
@@ -157,6 +158,21 @@ internal fun CommercialCloudSaleComposerScreen(
             }
             if (!loading && error.isBlank() && products.isEmpty()) item {
                 Text("لا توجد أصناف مرتبطة بمخزون الموقع الحالي.", color = CloudComposerMuted)
+            }
+            item {
+                Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(15.dp)) {
+                    Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("طريقة الدفع", color = CloudComposerInk, fontWeight = FontWeight.Bold)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(onClick = { paymentMode = "cash"; initialPaymentText = "0" }, enabled = !submitting) { Text(if (paymentMode == "cash") "✓ نقدي كامل" else "نقدي كامل") }
+                            OutlinedButton(onClick = { paymentMode = "credit" }, enabled = !submitting) { Text(if (paymentMode == "credit") "✓ آجل / دين" else "آجل / دين") }
+                        }
+                        if (paymentMode == "credit") {
+                            OutlinedTextField(value = initialPaymentText, onValueChange = { initialPaymentText = it.filter(Char::isDigit).take(15) }, modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("المبلغ المدفوع الآن (بالوحدة الصغرى للعملة)") })
+                            Text("يجب اختيار عميل. يُسجل المتبقي كرصيد مستحق على الفاتورة، ويمكن تحصيله لاحقًا.", color = CloudComposerMuted, fontSize = 11.sp)
+                        }
+                    }
+                }
             }
             item {
                 Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(15.dp)) {
@@ -245,18 +261,23 @@ internal fun CommercialCloudSaleComposerScreen(
                             notice = "جارٍ التحقق من الأصناف والمخزون وتسجيل فاتورة واحدة على الخادم..."
                             val requestLines = selectedLines.map { CommercialCloudCheckoutLine(it.first.cloudOfferingId, it.second) }
                             val customerId = selectedCustomer?.id
+                            val paymentModeForRequest = paymentMode
+                            val initialPaymentMinor = initialPaymentText.toLongOrNull()
                             CloudComposerWorker.execute {
                                 val result = runCatching {
+                                    require(paymentModeForRequest != "credit" || !customerId.isNullOrBlank()) { "اختر العميل قبل تسجيل البيع الآجل." }
+                                    require(paymentModeForRequest != "credit" || initialPaymentMinor != null) { "أدخل مبلغًا صحيحًا للدفعة الأولى." }
                                     val key = getOrCreateCommercialCloudMultiSaleKey(context, requestLines, customerId)
-                                    val sale = checkoutCommercialCloudSaleMulti(context, requestLines, key, customerId)
+                                    val sale = checkoutCommercialCloudSaleMulti(context, requestLines, key, customerId, paymentModeForRequest, initialPaymentMinor ?: 0L)
                                     val clearResult = runCatching { clearCommercialCloudMultiSaleKey(context, key) }
                                     val receipt = sale.optString("receipt_number", "—")
                                     val paymentRecorded = sale.optBoolean("payment_recorded", false)
-                                    Triple(receipt, paymentRecorded, clearResult.exceptionOrNull())
+                                    val outstanding = sale.optLong("outstanding_minor", 0L)
+                                    Triple(receipt, paymentRecorded, clearResult.exceptionOrNull(), outstanding, sale.optString("payment_status"))
                                 }
                                 CloudComposerMain.post {
                                     submitting = false
-                                    result.onSuccess { (receipt, paymentRecorded, clearError) ->
+                                    result.onSuccess { (receipt, paymentRecorded, clearError, outstanding, paymentStatus) ->
                                         if (clearError == null) quantities = emptyMap()
                                         notice = if (clearError == null) {
                                             "تم تأكيد الفاتورة رقم $receipt على الخادم. ${if (paymentRecorded) "سُجلت دفعة نقدية واحدة." else "الإجمالي صفر؛ لا يلزم إنشاء دفعة."}"
