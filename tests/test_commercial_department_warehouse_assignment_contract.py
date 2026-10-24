@@ -21,7 +21,8 @@ class DepartmentWarehouseAssignmentContractTests(unittest.TestCase):
         )[0]
         self.assertIn("commercial_department_warehouse_assignments", function)
         self.assertIn("organization_id=eq.$orgId", function)
-        self.assertIn('"GET", token = access', function)
+        self.assertIn('commercialCloudPagedGet(', function)
+        self.assertIn('organization_id=eq.$orgId', function)
 
     def test_assignment_writes_use_existing_table_and_tenant_scope(self):
         function = self.repository.split("internal fun assignCommercialDepartmentToWarehouse", 1)[1].split(
