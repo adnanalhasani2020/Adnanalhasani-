@@ -393,8 +393,8 @@ internal fun loadCommercialCloudSales(context: Context): List<SaleRecord> {
 
     val path = "/rest/v1/commercial_sales" +
         "?select=id,receipt_number,total_minor,payment_status,created_at,customer:commercial_customers(display_name),items:commercial_sale_items(product_name_snapshot,quantity,line_total_minor,unit_price_minor)" +
-        "&organization_id=eq.$orgId&activity_id=eq.$activityId&order=created_at.desc&limit=200"
-    val rows = JSONArray(commercialCloudRequest(path, "GET", token = access))
+        "&organization_id=eq.$orgId&activity_id=eq.$activityId&order=created_at.desc,id.asc"
+    val rows = commercialCloudPagedGet(path, access)
     return buildList {
         for (index in 0 until rows.length()) {
             val row = rows.optJSONObject(index) ?: continue
