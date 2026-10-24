@@ -56,3 +56,8 @@ The warehouse/category/department/storage-location create dialog disables repeat
 ## Dedicated unit-of-measure directory screen
 
 The More menu now exposes a dedicated read-only screen for the existing active `commercial_unit_of_measure` directory. It supports search by code/name/dimension, dimension filters, refresh, loading/error/empty states, and displays decimal precision. It intentionally does not create or edit global units and does not imply product-specific case/carton conversion factors; those require a separate, validated per-product conversion contract.
+
+
+## Customer and supplier directory details
+
+Customer and supplier cards now expose the contact and master-data fields already returned by the organization-scoped Supabase queries: email, phone, supplier code, payment terms, and current state when present. Missing fields are omitted instead of displaying literal `null` values. This is a read-only presentation change: it adds no schema, does not estimate customer balances, and does not enable unverified customer/supplier writes.
