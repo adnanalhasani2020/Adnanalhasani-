@@ -309,7 +309,7 @@ private fun StoreApp(context: Context) {
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (tab) {
                 0 -> Dashboard(products = inventory, sales = sales, cloudMode = cloudMode, onNewSale = { newSale = true }, onInventory = { tab = 2 })
-                1 -> SalesScreen(sales = sales, onNewSale = { newSale = true })
+                1 -> SalesScreen(sales = sales, cloudMode = cloudMode, onNewSale = { newSale = true })
                 2 -> InventoryScreen(inventory, query, { query = it }, {
                     addProduct = true
                     if (cloudMode) storeCloudIo.execute {
@@ -597,9 +597,9 @@ private fun Heading(title: String, subtitle: String) {
 }
 
 @Composable
-private fun SalesScreen(sales: List<SaleRecord>, onNewSale: () -> Unit) {
+private fun SalesScreen(sales: List<SaleRecord>, cloudMode: Boolean, onNewSale: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        item { Heading("المبيعات والفواتير", "تابع عمليات البيع والتحصيل") }
+        item { Heading("المبيعات والفواتير", if (cloudMode) "الفواتير المحمّلة من قاعدة بيانات المؤسسة" else "تابع عمليات البيع والتحصيل") }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Metric("إجمالي المبيعات", money(sales.sumOf { it.total }), "الفواتير المحفوظة", Icons.Default.AttachMoney, Modifier.weight(1f))
@@ -607,7 +607,7 @@ private fun SalesScreen(sales: List<SaleRecord>, onNewSale: () -> Unit) {
             }
         }
         item { Button(onClick = onNewSale, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(8.dp)); Text("فاتورة بيع جديدة") } }
-        item { Heading("أحدث الفواتير", "الفواتير المحفوظة على هذا الجهاز") }
+        item { Heading("أحدث الفواتير", if (cloudMode) "أحدث الفواتير المحمّلة من الخادم" else "الفواتير المحفوظة على هذا الجهاز") }
         items(sales) { sale -> SaleRow("فاتورة #${sale.number}", "${sale.product} · ${sale.quantity} ${sale.unitCode}", money(sale.total), sale.credit) }
         
     }
