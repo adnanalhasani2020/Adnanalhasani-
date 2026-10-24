@@ -22,6 +22,12 @@ The live Supabase schema already contains these relevant objects; do not create 
 
 Existing trusted database functions include `commercial_checkout_sale`, `commercial_request_sale_return`, `commercial_decide_sale_return`, `commercial_inspect_sale_return_item`, `commercial_restock_approved_sale_return`, and `commercial_post_journal_entry`. Confirm each function's exact contract and authorization before integrating it; never infer parameters or bypass its guards.
 
+## Shared-organization read access
+
+- Organization-scoped sales, sale lines, and sale-linked stock movements should be readable by any active member of the same organization, while personal records remain visible to their owner.
+- This read scope does not grant write access. Financially sensitive payment rows and return approval/inspection actions retain their stricter policies and authorized RPC workflows.
+- The proposed migration `20261024170000_organization_sales_read_policies.sql` and its pgTAP assertions are in PR #538; they are not live until reviewed, merged, and applied.
+
 ## Important implementation boundaries found
 
 1. The Android app's documented cloud sale path currently supports cash checkout only. It reads a sales history, but the invoice composer is a basic single-item dialog rather than a complete multi-line document editor.
