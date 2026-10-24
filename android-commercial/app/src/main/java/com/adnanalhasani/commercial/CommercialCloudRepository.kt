@@ -671,6 +671,114 @@ internal fun loadCommercialCloudStockAlerts(context: Context): List<CommercialCl
     }
 }
 
+internal data class CommercialCloudReturnItem(
+    val id: String,
+    val saleItemId: String,
+    val productName: String,
+    val quantity: Int,
+    val refundAmountMinor: Long,
+    val restock: Boolean,
+    val restockedQuantity: Int,
+    val conditionCode: String,
+    val note: String
+)
+
+internal data class CommercialCloudSaleReturn(
+    val id: String,
+    val saleId: String,
+    val receiptNumber: String,
+    val customerName: String,
+    val reasonCode: String,
+    val reasonNote: String,
+    val status: String,
+    val refundStatus: String,
+    val restockStatus: String,
+    val currencyCode: String,
+    val requestedRefundMinor: Long,
+    val approvedRefundMinor: Long?,
+    val createdAt: String,
+    val decisionNote: String,
+    val items: List<CommercialCloudReturnItem>
+)
+
+internal fun loadCommercialCloudSaleReturns(context: Context): List<CommercialCloudSaleReturn> {
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val path = "/rest/v1/commercial_sales_returns?select=id,sale_id,reason_code,reason_note,status,refund_status,restock_status,currency_code,requested_refund_minor,approved_refund_minor,created_at,decision_note,sale:commercial_sales!inner(receipt_number,customer:commercial_customers(display_name)),items:commercial_sale_return_items(id,sale_item_id,quantity,refund_amount_minor,restock,restocked_quantity,condition_code,note,sale_item:commercial_sale_items(product_name_snapshot))&organization_id=eq.$orgId&order=created_at.desc,id.asc"
+    val rows = commercialCloudPagedGet(path, access)
+    return buildList {
+        for (i in 0 until rows.length()) {
+            val row = rows.optJSONObject(i) ?: continue
+            val sale = row.optJSONObject("sale")
+            val customer = sale?.optJSONObject("customer")
+            val itemRows = row.optJSONArray("items")
+            val items = buildList {
+                for (j in 0 until (itemRows?.length() ?: 0)) {
+                    val item = itemRows?.optJSONObject(j) ?: continue
+                    val saleItem = item.optJSONObject("sale_item")
+                    add(CommercialCloudReturnItem(
+                        id = item.optString("id").takeUnless { it == "null" }.orEmpty(),
+                        saleItemId = item.optString("sale_item_id").takeUnless { it == "null" }.orEmpty(),
+                        productName = saleItem?.optString("product_name_snapshot").takeUnless { it == null || it == "null" || it.isBlank() } ?: "صنف غير معروف",
+                        quantity = item.optInt("quantity", 0),
+                        refundAmountMinor = item.optLong("refund_amount_minor", 0L),
+                        restock = item.optBoolean("restock", false),
+                        restockedQuantity = item.optInt("restocked_quantity", 0),
+                        conditionCode = item.optString("condition_code").takeUnless { it == "null" }.orEmpty(),
+                        note = item.optString("note").takeUnless { it == "null" }.orEmpty()
+                    ))
+                }
+            }
+            add(CommercialCloudSaleReturn(
+                id = row.optString("id").takeUnless { it == "null" }.orEmpty(),
+                saleId = row.optString("sale_id").takeUnless { it == "null" }.orEmpty(),
+                receiptNumber = sale?.optString("receipt_number").takeUnless { it == null || it == "null" }.orEmpty(),
+                customerName = customer?.optString("display_name").takeUnless { it == null || it == "null" || it.isBlank() } ?: "عميل نقدي / غير محدد",
+                reasonCode = row.optString("reason_code").takeUnless { it == "null" }.orEmpty(),
+                reasonNote = row.optString("reason_note").takeUnless { it == "null" }.orEmpty(),
+                status = row.optString("status").takeUnless { it == "null" }.orEmpty(),
+                refundStatus = row.optString("refund_status").takeUnless { it == "null" }.orEmpty(),
+                restockStatus = row.optString("restock_status").takeUnless { it == "null" }.orEmpty(),
+                currencyCode = row.optString("currency_code").takeUnless { it == "null" }.orEmpty(),
+                requestedRefundMinor = row.optLong("requested_refund_minor", 0L),
+                approvedRefundMinor = if (row.isNull("approved_refund_minor")) null else row.optLong("approved_refund_minor"),
+                createdAt = row.optString("created_at").takeUnless { it == "null" }.orEmpty(),
+                decisionNote = row.optString("decision_note").takeUnless { it == "null" }.orEmpty(),
+                items = items
+            ))
+        }
+    }
+}
+
+internal fun decideCommercialCloudSaleReturn(context: Context, returnId: String, decision: String, approvedRefundMinor: Long, note: String) {
+    require(decision == "approve" || decision == "reject") { "قرار المرتجع غير صالح." }
+    val (_, access) = commercialMasterDataAccess(context)
+    val payload = JSONObject()
+        .put("p_return_id", returnId)
+        .put("p_decision", decision)
+        .put("p_approved_refund_minor", if (decision == "approve") approvedRefundMinor else JSONObject.NULL)
+        .put("p_decision_note", note.trim().ifBlank { JSONObject.NULL })
+    commercialCloudRequest("/rest/v1/rpc/commercial_decide_sale_return", "POST", payload, access)
+}
+
+internal fun inspectCommercialCloudSaleReturnItem(context: Context, itemId: String, condition: String, restock: Boolean, note: String) {
+    require(condition in setOf("resellable", "damaged", "written_off", "uninspected")) { "حالة الصنف غير صالحة." }
+    val (_, access) = commercialMasterDataAccess(context)
+    val payload = JSONObject()
+        .put("p_return_item_id", itemId)
+        .put("p_condition_code", condition)
+        .put("p_restock", restock)
+        .put("p_note", note.trim().ifBlank { JSONObject.NULL })
+    commercialCloudRequest("/rest/v1/rpc/commercial_inspect_sale_return_item", "POST", payload, access)
+}
+
+internal fun restockCommercialCloudSaleReturn(context: Context, returnId: String): String {
+    val (_, access) = commercialMasterDataAccess(context)
+    return commercialCloudRequest(
+        "/rest/v1/rpc/commercial_restock_approved_sale_return", "POST",
+        JSONObject().put("p_return_id", returnId), access
+    )
+}
+
 internal data class CommercialCloudRecord(
     val id: String, val title: String, val subtitle: String, val status: String,
     val amountMinor: Long = 0L, val createdAt: String = ""
