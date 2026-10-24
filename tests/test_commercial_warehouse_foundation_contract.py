@@ -43,6 +43,12 @@ class CommercialWarehouseFoundationContractTests(unittest.TestCase):
         self.assertIn("department_warehouse_scope_mismatch", self.sql)
         self.assertIn("FROM anon", self.sql)
 
+    def test_master_data_label_falls_back_to_english_when_arabic_is_missing(self):
+        repository = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt").read_text(encoding="utf-8")
+        self.assertIn('row.optString("name_ar")', repository)
+        self.assertIn('row.optString("name_en")', repository)
+        self.assertIn('ifBlank { row.optString("name_en")', repository)
+
     def test_does_not_change_existing_stock_balances_or_checkout(self):
         self.assertNotIn("UPDATE public.commercial_inventory_balances", self.sql)
         self.assertNotIn("DELETE FROM public.commercial_inventory_balances", self.sql)
