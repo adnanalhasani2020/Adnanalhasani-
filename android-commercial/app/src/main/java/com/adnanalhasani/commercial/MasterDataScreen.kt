@@ -59,6 +59,16 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
     var selectedCategoryId by remember { mutableStateOf("") }
     var assignmentProductMenuExpanded by remember { mutableStateOf(false) }
     var assignmentCategoryMenuExpanded by remember { mutableStateOf(false) }
+    var showDepartmentWarehouseDialog by remember { mutableStateOf(false) }
+    var departmentWarehouseLoading by remember { mutableStateOf(false) }
+    var departmentWarehouseSaving by remember { mutableStateOf(false) }
+    var departmentWarehouseDepartments by remember { mutableStateOf<List<CommercialMasterDataRow>>(emptyList()) }
+    var departmentWarehouseWarehouses by remember { mutableStateOf<List<CommercialMasterDataRow>>(emptyList()) }
+    var departmentWarehouseAssignments by remember { mutableStateOf<List<CommercialDepartmentWarehouseAssignment>>(emptyList()) }
+    var selectedDepartmentId by remember { mutableStateOf("") }
+    var selectedDepartmentWarehouseId by remember { mutableStateOf("") }
+    var departmentMenuExpanded by remember { mutableStateOf(false) }
+    var departmentWarehouseMenuExpanded by remember { mutableStateOf(false) }
 
     fun reload() {
         val table = selected.second
@@ -123,6 +133,34 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
                 },
                 enabled = !assignmentLoading
             ) { Text(if (assignmentLoading) "جارٍ تحميل الأصناف..." else "تصنيف الأصناف الموجودة") }
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = {
+                    departmentWarehouseLoading = true
+                    error = ""
+                    masterIo.execute {
+                        val result = runCatching {
+                            val departments = loadCommercialMasterData(context, "commercial_departments").filter { it.kind != "inactive" && it.kind != "archived" }
+                            val warehouses = loadCommercialMasterData(context, "commercial_warehouses").filter { it.kind != "inactive" && it.kind != "archived" }
+                            val assignments = loadCommercialDepartmentWarehouseAssignments(context)
+                            Triple(departments, warehouses, assignments)
+                        }
+                        masterMain.post {
+                            departmentWarehouseLoading = false
+                            result.onSuccess { (departments, warehouses, assignments) ->
+                                departmentWarehouseDepartments = departments
+                                departmentWarehouseWarehouses = warehouses
+                                departmentWarehouseAssignments = assignments
+                                selectedDepartmentId = departments.firstOrNull()?.id.orEmpty()
+                                selectedDepartmentWarehouseId = warehouses.firstOrNull()?.id.orEmpty()
+                                showDepartmentWarehouseDialog = true
+                                error = ""
+                            }.onFailure { error = it.message ?: "تعذر تحميل ربط الأقسام بالمستودعات." }
+                        }
+                    }
+                },
+                enabled = !departmentWarehouseLoading
+            ) { Text(if (departmentWarehouseLoading) "جارٍ تحميل الروابط..." else "ربط الأقسام بالمستودعات") }
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 options.forEach { option ->
@@ -248,6 +286,89 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
                 ) { Text(if (assignmentSaving) "جارٍ الحفظ..." else "حفظ الربط") }
             },
             dismissButton = { TextButton(onClick = { if (!assignmentSaving) showAssignDialog = false }) { Text("إلغاء") } }
+        )
+    }
+
+    if (showDepartmentWarehouseDialog) {
+        val chosenDepartment = departmentWarehouseDepartments.firstOrNull { it.id == selectedDepartmentId }
+        val chosenWarehouse = departmentWarehouseWarehouses.firstOrNull { it.id == selectedDepartmentWarehouseId }
+        val visibleAssignments = departmentWarehouseAssignments.mapNotNull { assignment ->
+            val department = departmentWarehouseDepartments.firstOrNull { it.id == assignment.departmentId }
+            val warehouse = departmentWarehouseWarehouses.firstOrNull { it.id == assignment.warehouseId }
+            if (department == null || warehouse == null) null else department to warehouse
+        }
+        AlertDialog(
+            onDismissRequest = { if (!departmentWarehouseSaving) showDepartmentWarehouseDialog = false },
+            title = { Text("ربط الأقسام بالمستودعات") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (departmentWarehouseDepartments.isEmpty()) {
+                        Text("لا توجد أقسام نشطة. أنشئ قسمًا أولًا.")
+                    } else {
+                        Box {
+                            OutlinedButton(onClick = { departmentMenuExpanded = true }, modifier = Modifier.fillMaxWidth()) {
+                                Text(chosenDepartment?.let { "${it.code} — ${it.label}" } ?: "اختر القسم")
+                            }
+                            DropdownMenu(expanded = departmentMenuExpanded, onDismissRequest = { departmentMenuExpanded = false }) {
+                                departmentWarehouseDepartments.forEach { department ->
+                                    DropdownMenuItem(text = { Text("${department.code} — ${department.label}") }, onClick = {
+                                        selectedDepartmentId = department.id
+                                        departmentMenuExpanded = false
+                                    })
+                                }
+                            }
+                        }
+                    }
+                    if (departmentWarehouseWarehouses.isEmpty()) {
+                        Text("لا توجد مستودعات نشطة. أنشئ مستودعًا أولًا.")
+                    } else {
+                        Box {
+                            OutlinedButton(onClick = { departmentWarehouseMenuExpanded = true }, modifier = Modifier.fillMaxWidth()) {
+                                Text(chosenWarehouse?.let { "${it.code} — ${it.label}" } ?: "اختر المستودع")
+                            }
+                            DropdownMenu(expanded = departmentWarehouseMenuExpanded, onDismissRequest = { departmentWarehouseMenuExpanded = false }) {
+                                departmentWarehouseWarehouses.forEach { warehouse ->
+                                    DropdownMenuItem(text = { Text("${warehouse.code} — ${warehouse.label}") }, onClick = {
+                                        selectedDepartmentWarehouseId = warehouse.id
+                                        departmentWarehouseMenuExpanded = false
+                                    })
+                                }
+                            }
+                        }
+                    }
+                    Text("الروابط الحالية: ${visibleAssignments.size}", fontWeight = FontWeight.SemiBold)
+                    visibleAssignments.take(8).forEach { (department, warehouse) ->
+                        Text("${department.label} ← ${warehouse.label}", color = Color(0xFF71817B), fontSize = 12.sp)
+                    }
+                    if (visibleAssignments.size > 8) Text("و${visibleAssignments.size - 8} روابط أخرى", color = Color(0xFF71817B), fontSize = 12.sp)
+                    Text("يُحفظ الربط داخل المؤسسة الحالية، وتتحقق قاعدة البيانات من تطابق نطاق القسم والمستودع. لا تتغير أرصدة المخزون.", color = Color(0xFF71817B), fontSize = 12.sp)
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !departmentWarehouseSaving && chosenDepartment != null && chosenWarehouse != null,
+                    onClick = {
+                        val departmentId = selectedDepartmentId
+                        val warehouseId = selectedDepartmentWarehouseId
+                        departmentWarehouseSaving = true
+                        masterIo.execute {
+                            val result = runCatching {
+                                assignCommercialDepartmentToWarehouse(context, departmentId, warehouseId)
+                                loadCommercialDepartmentWarehouseAssignments(context)
+                            }
+                            masterMain.post {
+                                departmentWarehouseSaving = false
+                                result.onSuccess { assignments ->
+                                    departmentWarehouseAssignments = assignments
+                                    notice = "تم حفظ ربط القسم بالمستودع أو كان الربط موجودًا بالفعل."
+                                    error = ""
+                                }.onFailure { error = it.message ?: "تعذر حفظ الربط." }
+                            }
+                        }
+                    }
+                ) { Text(if (departmentWarehouseSaving) "جارٍ الحفظ..." else "حفظ الربط") }
+            },
+            dismissButton = { TextButton(onClick = { if (!departmentWarehouseSaving) showDepartmentWarehouseDialog = false }) { Text("إغلاق") } }
         )
     }
 
