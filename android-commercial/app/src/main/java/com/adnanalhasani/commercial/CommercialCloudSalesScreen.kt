@@ -157,22 +157,24 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
             }
             item {
                 Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp)) {
-                    Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(42.dp).background(Color(0xFFE8F5EF), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = CloudSalesGreen)
+                    Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(42.dp).background(Color(0xFFE8F5EF), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = CloudSalesGreen)
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text("الفواتير المحمّلة", color = CloudSalesMuted, fontSize = 12.sp)
+                                Text(documents.size.toString(), color = CloudSalesInk, fontWeight = FontWeight.Bold, fontSize = 23.sp)
+                            }
+                            Text("النتائج: ${filtered.size}", color = CloudSalesMuted, fontSize = 11.sp)
                         }
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text("الفواتير المحمّلة", color = CloudSalesMuted, fontSize = 12.sp)
-                            Text(documents.size.toString(), color = CloudSalesInk, fontWeight = FontWeight.Bold, fontSize = 23.sp)
-                        }
-                        Text("النتائج: ${filtered.size}", color = CloudSalesMuted, fontSize = 11.sp)
-                    }
-                    if (totalsByCurrency.isNotEmpty()) {
-                        Spacer(Modifier.height(10.dp))
-                        Text("إجمالي النتائج حسب العملة (بوحدة الصرف الصغرى)", color = CloudSalesMuted, fontSize = 11.sp)
-                        totalsByCurrency.forEach { (currency, total) ->
-                            Text("$currency: ${String.format(java.util.Locale.US, "%,d", total)}", color = CloudSalesInk, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                        if (totalsByCurrency.isNotEmpty()) {
+                            Spacer(Modifier.height(10.dp))
+                            Text("إجمالي النتائج حسب العملة (بوحدة الصرف الصغرى)", color = CloudSalesMuted, fontSize = 11.sp)
+                            totalsByCurrency.forEach { (currency, total) ->
+                                Text("$currency: ${String.format(java.util.Locale.US, "%,d", total)}", color = CloudSalesInk, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                            }
                         }
                     }
                 }
