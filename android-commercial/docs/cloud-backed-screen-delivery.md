@@ -43,3 +43,8 @@ The Android debug APK build and both repository pytest workflows passed on PR #5
 ## Master-data status filtering
 
 The master-data screen now displays each record's current status and provides `All`, `Active`, and `Inactive` filters alongside search. Filtering is local and read-only; it does not activate, deactivate, or otherwise mutate warehouse, category, department, or storage-location records. The displayed record count distinguishes the total loaded rows from the filtered count.
+
+
+## Active hierarchy options
+
+When creating a storage location, the form offers only active warehouses and active parent locations within the selected warehouse. Category and department hierarchy selectors likewise offer active parent records only. The root-level option remains available. This is a UI guard for clearer data entry; database constraints and authorization remain authoritative.
