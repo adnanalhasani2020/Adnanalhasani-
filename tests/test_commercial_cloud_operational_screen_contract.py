@@ -62,7 +62,7 @@ class CommercialCloudOperationalScreenContractTests(unittest.TestCase):
         for text in ("قراءة فقط", "تعذر تحميل بيانات السحابة", "إعادة المحاولة"):
             with self.subTest(text=text):
                 self.assertIn(text, self.screen)
-        self.assertIn("لا يتم إنشاء بيانات تجريبية تلقائيًا", self.screen)
+        self.assertIn("لم يتم إنشاء بيانات تجريبية تلقائيًا", self.screen)
 
     def test_projection_columns_are_not_built_from_user_input(self):
         function = self.repository.split(
