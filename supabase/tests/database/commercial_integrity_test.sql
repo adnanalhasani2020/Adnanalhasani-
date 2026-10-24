@@ -1,7 +1,7 @@
 -- Run with Supabase CLI / pgTAP in a disposable local or staging database.
 -- These are schema regression tests; they do not replace authenticated-session integration tests.
 BEGIN;
-SELECT plan(23);
+SELECT plan(25);
 
 SELECT has_table('public', 'commercial_audit_events',
   'append-only audit event table exists');
@@ -172,6 +172,30 @@ SELECT ok(
       AND position('manager' in pg_get_expr(p.polqual, p.polrelid)) > 0
   ),
   'organization managers can read sale lines only through sales in their organization'
+);
+
+SELECT ok(
+  (SELECT p.prosecdef
+          AND coalesce(p.proconfig, ARRAY[]::text[]) @> ARRAY['search_path=pg_catalog, public, commercial_private']
+          AND NOT has_function_privilege('anon', p.oid, 'EXECUTE')
+          AND has_function_privilege('authenticated', p.oid, 'EXECUTE')
+   FROM pg_proc p
+   JOIN pg_namespace n ON n.oid = p.pronamespace
+   WHERE n.nspname = 'public'
+     AND p.proname = 'commercial_record_customer_payment'
+     AND pg_get_function_identity_arguments(p.oid) =
+       'p_sale_id uuid, p_amount_minor bigint, p_payment_method_type text, p_idempotency_key text'),
+  'customer collection RPC is security-definer, search-path pinned and authenticated-only'
+);
+
+SELECT ok(
+  position('commercial_gl_post_payment(v_payment.id)' in pg_get_functiondef(
+    'public.commercial_record_customer_payment(uuid,bigint,text,text)'::regprocedure
+  )) > 0
+  AND position('idempotency_key_reused_with_different_request' in pg_get_functiondef(
+    'public.commercial_record_customer_payment(uuid,bigint,text,text)'::regprocedure
+  )) > 0,
+  'customer collection is idempotent and posts its journal entry in the same transaction'
 );
 
 SELECT * FROM finish();
