@@ -58,21 +58,26 @@ BEGIN
   v_org_id := (v_result->>'organization_id')::uuid;
   v_currency := v_result->>'currency_code';
 
-  IF v_sale_id IS NULL OR v_total IS NULL OR v_total <= 0
+  IF v_sale_id IS NULL OR v_total IS NULL OR v_total < 0
      OR v_org_id IS NULL OR v_currency IS NULL THEN
     RAISE EXCEPTION 'checkout_result_missing_payment_fields' USING ERRCODE = '22023';
   END IF;
 
-  INSERT INTO public.commercial_payments (
-    organization_id, sale_id, provider, idempotency_key, amount_minor,
-    currency_code, status, payment_method_type
-  ) VALUES (
-    v_org_id, v_sale_id, 'ruh_cash_checkout', 'sale:' || v_sale_id::text || ':cash',
-    v_total, v_currency, 'succeeded', 'cash'
-  )
-  ON CONFLICT (organization_id, idempotency_key) DO NOTHING;
+  IF v_total > 0 THEN
+    INSERT INTO public.commercial_payments (
+      organization_id, sale_id, provider, idempotency_key, amount_minor,
+      currency_code, status, payment_method_type
+    ) VALUES (
+      v_org_id, v_sale_id, 'ruh_cash_checkout', 'sale:' || v_sale_id::text || ':cash',
+      v_total, v_currency, 'succeeded', 'cash'
+    )
+    ON CONFLICT (organization_id, idempotency_key) DO NOTHING;
+  END IF;
 
-  RETURN v_result || jsonb_build_object('payment_recorded', true, 'payment_status', 'paid');
+  RETURN v_result || jsonb_build_object(
+    'payment_recorded', v_total > 0,
+    'payment_status', CASE WHEN v_total = 0 THEN 'paid' ELSE 'paid' END
+  );
 END;
 $function$;
 
