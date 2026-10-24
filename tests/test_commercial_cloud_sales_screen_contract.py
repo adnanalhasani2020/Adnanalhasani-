@@ -119,5 +119,15 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         self.assertIn('"refunded", "partially_refunded"', self.screen)
 
 
+    def test_sales_summary_uses_confirmed_cloud_payments_for_partial_balances(self):
+        sales_projection = self.repository.split(
+            "internal fun loadCommercialCloudSales", 1
+        )[1].split("internal data class CommercialMasterDataRow", 1)[0]
+        self.assertIn("payments:commercial_payments(amount_minor,status)", sales_projection)
+        self.assertIn('it.optString("status").equals("succeeded", ignoreCase = true)', sales_projection)
+        self.assertIn("paid = paidMinor.coerceAtMost(total)", sales_projection)
+        self.assertIn('saleStatus == "completed"', sales_projection)
+        self.assertIn("total > paidMinor", sales_projection)
+
 if __name__ == "__main__":
     unittest.main()
