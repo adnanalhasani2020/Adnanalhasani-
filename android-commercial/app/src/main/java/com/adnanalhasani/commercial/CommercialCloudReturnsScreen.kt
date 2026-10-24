@@ -127,7 +127,7 @@ internal fun CommercialCloudReturnsScreen(context: Context, onBack: () -> Unit) 
                             Button(enabled=!busy,modifier=Modifier.fillMaxWidth(),onClick={decisionTarget=selected;approve=true;amount=selected.requestedRefundMinor.toString();note=""},colors=ButtonDefaults.buttonColors(containerColor=ReturnGreen)) { Text("مراجعة والموافقة") }
                             OutlinedButton(enabled=!busy,modifier=Modifier.fillMaxWidth(),onClick={decisionTarget=selected;approve=false;amount="0";note=""}) { Text("رفض الطلب") }
                         }
-                        if(selected.status=="approved" && selected.items.isNotEmpty() && selected.items.all {!it.restock || it.restockedQuantity>=it.quantity || it.conditionCode in setOf("damaged","written_off","uninspected")} && selected.restockStatus!="completed") {
+                        if(selected.status=="approved" && selected.items.isNotEmpty() && selected.items.all {!it.restock || it.restockedQuantity>=it.quantity || it.conditionCode in setOf("damaged","written_off") || (it.conditionCode=="uninspected" && !it.restock)} && selected.restockStatus!="completed") {
                             Button(enabled=!busy,modifier=Modifier.fillMaxWidth(),onClick={executeAction({restockCommercialCloudSaleReturn(context,selected.id)},"تم إرسال إعادة المخزون إلى قاعدة البيانات.")},colors=ButtonDefaults.buttonColors(containerColor=ReturnGreen)) { Text("اعتماد إعادة المخزون") }
                         }
                         if(selected.refundStatus=="pending") Text("رد المبلغ ما زال معلقًا؛ الموافقة لا تنفذ تحويلًا ماليًا. يلزم مسار استرداد مالي معتمد.",color=Color(0xFF925500),fontSize=12.sp)
@@ -145,7 +145,7 @@ internal fun CommercialCloudReturnsScreen(context: Context, onBack: () -> Unit) 
         }
     },confirmButton={Button(enabled=!busy&&(!approve||(amount.toLongOrNull()?.let{it>=0&&it<=decisionTarget!!.requestedRefundMinor}==true)),onClick={
         val target=decisionTarget!!
-        runReturnAction({decideCommercialCloudSaleReturn(context,target.id,if(approve)"approve" else "reject",amount.toLongOrNull()?:0L,note)} ,if(approve)"تم اعتماد الطلب؛ حالة رد المبلغ منفصلة." else "تم رفض الطلب.")
+        executeAction({decideCommercialCloudSaleReturn(context,target.id,if(approve)"approve" else "reject",amount.toLongOrNull()?:0L,note)} ,if(approve)"تم اعتماد الطلب؛ حالة رد المبلغ منفصلة." else "تم رفض الطلب.")
         decisionTarget=null
     }){Text("تأكيد")}},dismissButton={TextButton(onClick={decisionTarget=null}){Text("إلغاء")}})
 
@@ -158,7 +158,7 @@ internal fun CommercialCloudReturnsScreen(context: Context, onBack: () -> Unit) 
         }
     },confirmButton={Button(enabled=!busy,onClick={
         val target=inspectionTarget!!
-        runReturnAction({inspectCommercialCloudSaleReturnItem(context,target.id,condition,restock,inspectionNote)},"تم حفظ الفحص.")
+        executeAction({inspectCommercialCloudSaleReturnItem(context,target.id,condition,restock,inspectionNote)},"تم حفظ الفحص.")
         inspectionTarget=null
     }){Text("حفظ الفحص")}},dismissButton={TextButton(onClick={inspectionTarget=null}){Text("إلغاء")}})
 }
