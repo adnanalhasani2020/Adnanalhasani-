@@ -76,7 +76,7 @@ BEGIN
 
   RETURN v_result || jsonb_build_object(
     'payment_recorded', v_total > 0,
-    'payment_status', CASE WHEN v_total = 0 THEN 'paid' ELSE 'paid' END
+    'payment_status', 'paid'
   );
 END;
 $function$;
