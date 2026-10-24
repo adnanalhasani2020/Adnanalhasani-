@@ -42,6 +42,11 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         self.assertIn("cloudSalesPage -> CommercialCloudSalesScreen", self.main)
         self.assertIn('onCloudSales = { cloudSalesPage = true }', self.main)
 
+    def test_sales_tab_links_to_detailed_cloud_invoice_history(self):
+        self.assertIn("onCloudInvoices = { cloudSalesPage = true }", self.main)
+        self.assertIn("عرض تفاصيل الفواتير السحابية", self.main)
+        self.assertIn('if (cloudMode) "ملخص الفواتير المحمّلة من قاعدة البيانات"', self.main)
+
     def test_purchase_order_projection_uses_existing_org_scoped_tables(self):
         self.assertIn("loadCommercialCloudPurchaseDocuments", self.repository)
         for field in ("commercial_purchase_order_items(", "commercial_suppliers(display_name)", "quantity_ordered", "quantity_received", "unit_cost_minor", "organization_id=eq.$orgId"):
