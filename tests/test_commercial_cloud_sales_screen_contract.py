@@ -91,6 +91,13 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
             with self.subTest(marker=marker):
                 self.assertIn(marker, self.screen)
 
+
+    def test_invoice_list_supports_expandable_details_and_invoice_id_search(self):
+        self.assertIn("expandedInvoiceIds", self.screen)
+        self.assertIn("عرض التفاصيل", self.screen)
+        self.assertIn("doc.id.contains(search, true)", self.screen)
+        self.assertIn("معرّف الفاتورة:", self.screen)
+
     def test_invoice_details_show_unit_price_line_total_and_formatted_timestamp(self):
         for marker in ("سعر الوحدة:", "الإجمالي:", "formatInvoiceTimestamp", "formatMinorAmount"):
             with self.subTest(marker=marker):
