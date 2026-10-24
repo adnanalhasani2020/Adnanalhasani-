@@ -171,8 +171,7 @@ internal fun createCommercialCloudInventoryItem(
         .put("p_currency_code", currency)
         .put("p_initial_quantity", initialQuantity)
         .put("p_reorder_point", reorderPoint.coerceAtLeast(0.0))
-        .put("p_category_id", categoryId.takeIf { it.isNotBlank() }?.let { org.json.JSONObject.NULL } ?: org.json.JSONObject.NULL)
-    if (categoryId.isNotBlank()) payload.put("p_category_id", categoryId) else payload.put("p_category_id", JSONObject.NULL)
+        .put("p_category_id", if (categoryId.isNotBlank()) categoryId else JSONObject.NULL)
     return commercialCloudRequest("/rest/v1/rpc/commercial_create_inventory_item_with_category", "POST", payload, access)
 }
 
