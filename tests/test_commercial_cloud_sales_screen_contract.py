@@ -27,6 +27,17 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
             with self.subTest(field=field):
                 self.assertIn(field, self.repository)
 
+    def test_multiline_checkout_links_customer_atomically_and_scopes_validation(self):
+        migration = (ROOT / "supabase/migrations/20261024200000_commercial_multiline_cash_checkout.sql").read_text()
+        self.assertIn("p_customer_id uuid DEFAULT NULL", migration)
+        self.assertIn("c.id = v_customer AND c.organization_id = v_org AND c.state = 'active'", migration)
+        self.assertIn("organization_id,customer_id,idempotency_key", migration)
+        self.assertIn("'customer_id', p_customer_id", migration)
+        self.assertIn("loadCommercialCloudCustomers(context)", self.repository)
+        self.assertIn("p_customer_id", self.repository)
+        self.assertIn("ربط الفاتورة بالعميل", self.composer)
+        self.assertIn("checkoutCommercialCloudSaleMulti(context, requestLines, key, customerId)", self.composer)
+
     def test_invoice_projection_is_scoped_to_current_organization_and_activity(self):
         projection = self.repository.split(
             "internal fun loadCommercialCloudSaleDocuments", 1
