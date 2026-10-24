@@ -43,6 +43,7 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
     var error by remember { mutableStateOf("") }
     var notice by remember { mutableStateOf("") }
     var search by remember { mutableStateOf("") }
+    var statusFilter by remember { mutableStateOf("all") }
     var showCreate by remember { mutableStateOf(false) }
     var code by remember { mutableStateOf("") }
     var name by remember { mutableStateOf("") }
@@ -180,14 +181,32 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(Modifier.height(6.dp))
-            Text("عدد السجلات: ${rows.size}", color = Color(0xFF71817B), fontSize = 12.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("all" to "الكل", "active" to "نشط", "inactive" to "غير نشط").forEach { (value, label) ->
+                    FilterChip(
+                        selected = statusFilter == value,
+                        onClick = { statusFilter = value },
+                        label = { Text(label) }
+                    )
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            Text("عدد السجلات: ${rows.size} · المعروض: ${rows.count { row ->
+                (statusFilter == "all" || (statusFilter == "active" && row.state == "active") || (statusFilter == "inactive" && row.state != "active")) &&
+                    (search.isBlank() || row.label.contains(search.trim(), ignoreCase = true) || row.code.contains(search.trim(), ignoreCase = true) || row.kind.contains(search.trim(), ignoreCase = true))
+            }}", color = Color(0xFF71817B), fontSize = 12.sp)
             if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
             if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(vertical = 10.dp))
             if (notice.isNotBlank()) Text(notice, color = Color(0xFF167D63), modifier = Modifier.padding(vertical = 8.dp))
             val filteredRows = rows.filter { row ->
-                search.isBlank() || row.label.contains(search.trim(), ignoreCase = true) ||
-                    row.code.contains(search.trim(), ignoreCase = true) ||
-                    row.kind.contains(search.trim(), ignoreCase = true)
+                val matchesStatus = statusFilter == "all" ||
+                    (statusFilter == "active" && row.state == "active") ||
+                    (statusFilter == "inactive" && row.state != "active")
+                val query = search.trim()
+                matchesStatus && (query.isBlank() || row.label.contains(query, ignoreCase = true) ||
+                    row.code.contains(query, ignoreCase = true) ||
+                    row.kind.contains(query, ignoreCase = true) ||
+                    row.state.contains(query, ignoreCase = true))
             }
             if (!loading && error.isBlank() && rows.isEmpty()) {
                 Text("لا توجد سجلات بعد. استخدم زر الإضافة لإنشاء أول سجل.", modifier = Modifier.padding(top = 24.dp))
@@ -206,6 +225,11 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
                             Spacer(Modifier.height(3.dp))
                             Text("الرمز: ${row.code}", color = Color(0xFF71817B), fontSize = 12.sp)
                             if (row.kind.isNotBlank()) Text("النوع: ${row.kind}", color = Color(0xFF71817B), fontSize = 12.sp)
+                            Text(
+                                if (row.state == "active") "الحالة: نشط" else "الحالة: غير نشط (${row.state})",
+                                color = if (row.state == "active") Color(0xFF167D63) else MaterialTheme.colorScheme.error,
+                                fontSize = 12.sp
+                            )
                             if (selected.second == "commercial_storage_locations") {
                                 val warehouseLabel = warehouseRows.firstOrNull { it.id == row.warehouseId }?.label ?: "مستودع غير معروف"
                                 Text("المستودع: $warehouseLabel", color = Color(0xFF71817B), fontSize = 12.sp)
