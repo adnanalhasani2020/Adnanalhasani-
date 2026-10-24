@@ -119,7 +119,7 @@ BEGIN
       'unit_price_minor',v_price,'product_name',v_name,'line_total_minor',v_line_total::bigint,'currency_code',v_currency));
   END LOOP;
 
-  IF v_total > 0 AND (SELECT count(DISTINCT r->>'currency_code') FROM jsonb_array_elements(v_rows) r) <> 1 THEN
+  IF (SELECT count(DISTINCT r->>'currency_code') FROM jsonb_array_elements(v_rows) r) <> 1 THEN
     RAISE EXCEPTION 'mixed_currency_invoice_not_supported' USING ERRCODE='22023';
   END IF;
   SELECT r->>'currency_code' INTO v_currency FROM jsonb_array_elements(v_rows) r LIMIT 1;
