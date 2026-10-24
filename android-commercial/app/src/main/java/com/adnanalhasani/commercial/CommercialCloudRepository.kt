@@ -349,7 +349,7 @@ internal fun createCommercialMasterData(
     } else if (table == "commercial_storage_locations") {
         require(warehouseId.isNotBlank()) { "اختر المستودع أولًا." }
         payload.put("warehouse_id", warehouseId).put("name", name.trim())
-            .put("location_type", "storage").put("state", "active")
+            .put("location_type", "internal").put("state", "active")
         if (parentId.isNotBlank()) payload.put("parent_location_id", parentId)
     } else {
         payload.put("name_ar", name.trim())
