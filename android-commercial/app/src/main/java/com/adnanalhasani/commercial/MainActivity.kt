@@ -218,6 +218,7 @@ private fun StoreApp(context: Context) {
     var showMasterData by remember { mutableStateOf(false) }
     var cloudOperationalPage by remember { mutableStateOf("") }
     var cloudSalesPage by remember { mutableStateOf(false) }
+    var cloudDebtsPage by remember { mutableStateOf(false) }
     var cloudPurchasesPage by remember { mutableStateOf(false) }
     var cloudStockAlertsPage by remember { mutableStateOf(false) }
     var cloudUnitsPage by remember { mutableStateOf(false) }
@@ -340,6 +341,7 @@ private fun StoreApp(context: Context) {
                     else editingProductIndex = index
                 })
                 else -> when {
+                    cloudDebtsPage -> CommercialCloudDebtScreen(context = context, onBack = { cloudDebtsPage = false })
                     cloudSalesPage -> CommercialCloudSalesScreen(context = context, onBack = { cloudSalesPage = false })
                     cloudPurchasesPage -> CommercialCloudPurchasesScreen(context = context, onBack = { cloudPurchasesPage = false })
                     cloudStockAlertsPage -> CommercialCloudStockAlertsScreen(context = context, onBack = { cloudStockAlertsPage = false })
@@ -364,7 +366,7 @@ private fun StoreApp(context: Context) {
                     showReports -> ReportsScreen(sales = sales, settlements = settlements, expenses = expenses, onBack = { showReports = false })
                     showExpenses -> ExpensesScreen(expenses = expenses, onBack = { showExpenses = false }, onAdd = { expenseDialog = true })
                     else -> if (showActivityProfile) ActivityProfileScreen(onBack = { showActivityProfile = false }) else MoreScreen(onCustomers = {
-                    if (cloudMode) cloudNotice = "كشف ديون العملاء والتحصيلات السحابية غير مكتملين؛ لم نعرض الأرصدة المحلية على أنها أرصدة مؤكدة من الخادم."
+                    if (cloudMode) cloudDebtsPage = true
                     else showDebts = true
                 }, onReports = { showReports = true }, onExpenses = { showExpenses = true }, onActivityProfile = { showActivityProfile = true }, onCatalog = { showCatalog = true }, onMasterData = { showMasterData = true }, onCloudOperational = { cloudOperationalPage = it }, onCloudSales = { cloudSalesPage = true }, onCloudPurchases = { cloudPurchasesPage = true }, onCloudStockAlerts = { cloudStockAlertsPage = true }, onUnitsDirectory = { cloudUnitsPage = true })
                 }
