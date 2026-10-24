@@ -215,6 +215,7 @@ private fun StoreApp(context: Context) {
     var showExpenses by remember { mutableStateOf(false) }
     var showActivityProfile by remember { mutableStateOf(false) }
     var showCatalog by remember { mutableStateOf(false) }
+    var showMasterData by remember { mutableStateOf(false) }
     var settlingSaleNumber by remember { mutableIntStateOf(-1) }
     val cloudContextExists = remember {
         val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
@@ -305,6 +306,7 @@ private fun StoreApp(context: Context) {
                     else editingProductIndex = index
                 })
                 else -> when {
+                    showMasterData -> MasterDataScreen(context = context, onBack = { showMasterData = false })
                     showCatalog -> CatalogScreen(onBack = { showCatalog = false }, onAddToInventory = { catalogItem ->
                         val existing = inventory.indexOfFirst { it.catalogCode.isNotBlank() && it.catalogCode == catalogItem.catalogCode }
                         val mapped = Product(name = catalogItem.name, category = catalogItem.category, stock = 0, price = "0 ر.ي", catalogCode = catalogItem.catalogCode, barcode = catalogItem.barcode.ifBlank { catalogItem.availableUnits.firstOrNull { it.isDefault && it.barcode.isNotBlank() }?.barcode.orEmpty() }, unitCode = catalogItem.unitCode, imageUrl = catalogItem.imageUrl, description = catalogItem.description, brand = catalogItem.brand, manufacturer = catalogItem.manufacturer, countryOfManufacture = catalogItem.countryOfManufacture, createdBy = catalogItem.importedBy, unitVariantsJson = JSONArray().also { rows -> catalogItem.availableUnits.forEach { unit -> rows.put(JSONObject().put("unitCode",unit.unitCode).put("unitName",unit.unitName).put("role",unit.role).put("quantityInBase",unit.quantityInBase).put("barcode",unit.barcode).put("sku",unit.sku).put("netQuantity",unit.netQuantity).put("netUnitCode",unit.netUnitCode).put("packageName",unit.packageName).put("imageUrl",unit.imageUrl).put("isDefault",unit.isDefault)) } }.toString())
@@ -321,7 +323,7 @@ private fun StoreApp(context: Context) {
                     showDebts -> DebtScreen(sales = sales, settlements = settlements, onBack = { showDebts = false }, onSettle = { settlingSaleNumber = it.number })
                     showReports -> ReportsScreen(sales = sales, settlements = settlements, expenses = expenses, onBack = { showReports = false })
                     showExpenses -> ExpensesScreen(expenses = expenses, onBack = { showExpenses = false }, onAdd = { expenseDialog = true })
-                    else -> if (showActivityProfile) ActivityProfileScreen(onBack = { showActivityProfile = false }) else MoreScreen(onCustomers = { showDebts = true }, onReports = { showReports = true }, onExpenses = { showExpenses = true }, onActivityProfile = { showActivityProfile = true }, onCatalog = { showCatalog = true })
+                    else -> if (showActivityProfile) ActivityProfileScreen(onBack = { showActivityProfile = false }) else MoreScreen(onCustomers = { showDebts = true }, onReports = { showReports = true }, onExpenses = { showExpenses = true }, onActivityProfile = { showActivityProfile = true }, onCatalog = { showCatalog = true }, onMasterData = { showMasterData = true })
                 }
             }
         }
@@ -916,12 +918,12 @@ private fun AddProductDialog(
 }
 
 @Composable
-private fun MoreScreen(onCustomers: () -> Unit, onReports: () -> Unit, onExpenses: () -> Unit, onActivityProfile: () -> Unit, onCatalog: () -> Unit) {
-    val options = listOf("دليل الأصناف العالمي", "العملاء والمديونيات", "الموردون والمشتريات", "التقارير والأرباح", "المصروفات", "إعدادات المتجر", "النسخ الاحتياطي")
+private fun MoreScreen(onCustomers: () -> Unit, onReports: () -> Unit, onExpenses: () -> Unit, onActivityProfile: () -> Unit, onCatalog: () -> Unit, onMasterData: () -> Unit) {
+    val options = listOf("دليل الأصناف العالمي", "المستودعات والمجموعات والأقسام", "العملاء والمديونيات", "الموردون والمشتريات", "التقارير والأرباح", "المصروفات", "إعدادات المتجر", "النسخ الاحتياطي")
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Heading("إدارة المتجر", "الأدوات والإعدادات") }
         items(options) { label ->
-            Card(onClick = { when (label) { "العملاء والمديونيات" -> onCustomers(); "التقارير والأرباح" -> onReports(); "المصروفات" -> onExpenses(); "إعدادات المتجر" -> onActivityProfile(); "دليل الأصناف العالمي" -> onCatalog() } }, colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Border)) {
+            Card(onClick = { when (label) { "العملاء والمديونيات" -> onCustomers(); "التقارير والأرباح" -> onReports(); "المصروفات" -> onExpenses(); "إعدادات المتجر" -> onActivityProfile(); "دليل الأصناف العالمي" -> onCatalog(); "المستودعات والمجموعات والأقسام" -> onMasterData() } }, colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Border)) {
                 Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(38.dp).background(Mint, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) { Icon(Icons.Default.Settings, null, tint = Green) }
                     Spacer(Modifier.width(12.dp))
