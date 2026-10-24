@@ -45,6 +45,8 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
     var search by remember { mutableStateOf("") }
     var statusFilter by remember { mutableStateOf("all") }
     var showCreate by remember { mutableStateOf(false) }
+    var createSaving by remember { mutableStateOf(false) }
+    var createError by remember { mutableStateOf("") }
     var code by remember { mutableStateOf("") }
     var name by remember { mutableStateOf("") }
     var warehouseType by remember { mutableStateOf("main") }
@@ -101,7 +103,7 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { code = ""; name = ""; locationType = "internal"; parentId = ""; showCreate = true }, containerColor = Color(0xFF167D63)) {
+            FloatingActionButton(onClick = { code = ""; name = ""; locationType = "internal"; parentId = ""; createSaving = false; createError = ""; showCreate = true }, containerColor = Color(0xFF167D63)) {
                 Icon(Icons.Default.Add, "إضافة", tint = Color.White)
             }
         }
@@ -405,7 +407,7 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
 
     if (showCreate) {
         AlertDialog(
-            onDismissRequest = { showCreate = false },
+            onDismissRequest = { if (!createSaving) showCreate = false },
             title = { Text("إضافة إلى ${selected.first}") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -430,6 +432,9 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
                                 parentRows.forEach { parent -> DropdownMenuItem(text = { Text("${parent.code} — ${parent.label}") }, onClick = { parentId = parent.id; parentMenuExpanded = false }) }
                             }
                         }
+                    }
+                    if (createError.isNotBlank()) {
+                        Text(createError, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
                     }
                     if (selected.second == "commercial_storage_locations") {
                         Text("نوع موقع التخزين")
@@ -466,13 +471,14 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
             confirmButton = {
                 TextButton(onClick = {
                     val table = selected.second
-                    val submittedCode = code
-                    val submittedName = name
+                    val submittedCode = code.trim()
+                    val submittedName = name.trim()
                     val submittedParentId = parentId
                     val submittedWarehouseType = warehouseType
                     val submittedWarehouseId = warehouseId
                     val submittedLocationType = locationType
-                    showCreate = false
+                    createSaving = true
+                    createError = ""
                     notice = ""
                     masterIo.execute {
                         val result = runCatching {
@@ -480,15 +486,24 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
                             loadCommercialMasterData(context, table)
                         }
                         masterMain.post {
+                            createSaving = false
                             if (selected.second == table) {
-                                result.onSuccess { rows = it; notice = "تم الحفظ في قاعدة البيانات السحابية."; error = "" }
-                                    .onFailure { error = it.message ?: "تعذر الحفظ."; notice = "" }
+                                result.onSuccess {
+                                    rows = it
+                                    showCreate = false
+                                    notice = "تم الحفظ في قاعدة البيانات السحابية."
+                                    error = ""
+                                }.onFailure {
+                                    createError = it.message ?: "تعذر الحفظ."
+                                    error = ""
+                                    notice = ""
+                                }
                             }
                         }
                     }
-                }, enabled = code.isNotBlank() && name.isNotBlank() && (selected.second != "commercial_storage_locations" || (warehouseId.isNotBlank() && warehouseRows.any { it.id == warehouseId }))) { Text("حفظ") }
+                }, enabled = !createSaving && code.isNotBlank() && name.isNotBlank() && (selected.second != "commercial_storage_locations" || (warehouseId.isNotBlank() && warehouseRows.any { it.id == warehouseId }))) { Text(if (createSaving) "جارٍ الحفظ..." else "حفظ") }
             },
-            dismissButton = { TextButton(onClick = { showCreate = false }) { Text("إلغاء") } }
+            dismissButton = { TextButton(onClick = { if (!createSaving) showCreate = false }, enabled = !createSaving) { Text("إلغاء") } }
         )
     }
 }
