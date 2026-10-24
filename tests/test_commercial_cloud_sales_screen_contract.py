@@ -116,7 +116,9 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         self.assertIn("'sale:' || v_sale_id::text || ':cash'", self.cash_payment_migration)
         self.assertIn("ON CONFLICT (organization_id, idempotency_key) DO NOTHING", self.cash_payment_migration)
         self.assertIn("'succeeded', 'cash'", self.cash_payment_migration)
-        self.assertIn("RETURN v_result || jsonb_build_object('payment_recorded', true", self.cash_payment_migration)
+        self.assertIn("RETURN v_result || jsonb_build_object(", self.cash_payment_migration)
+        self.assertIn("'payment_recorded', v_total > 0", self.cash_payment_migration)
+        self.assertIn('totalMinor == 0L && paymentStatusFromServer.equals("paid", ignoreCase = true) -> "paid"', self.repository)
         self.assertIn("commercial_private.commercial_checkout_sale(", self.cash_payment_migration)
 
 if __name__ == "__main__":
