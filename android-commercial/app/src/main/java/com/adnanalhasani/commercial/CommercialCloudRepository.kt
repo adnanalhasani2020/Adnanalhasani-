@@ -1146,10 +1146,14 @@ internal fun recordCommercialCloudCustomerPayment(
     val (orgId, access) = commercialMasterDataAccess(context)
     val fingerprint = listOf(orgId, saleId, amountMinor.toString(), method).joinToString("|")
     val prefs = context.getSharedPreferences("commercial_cloud_pending_collection_v1", Context.MODE_PRIVATE)
-    val key = if (prefs.getString("fingerprint", null) == fingerprint)
-        prefs.getString("idempotency_key", null).orEmpty() else ""
-    val idempotencyKey = key.ifBlank { UUID.randomUUID().toString() }
-    if (key.isBlank()) {
+    val storedKey = prefs.getString("idempotency_key", null).orEmpty()
+    if (storedKey.isNotBlank()) {
+        require(prefs.getString("fingerprint", null) == fingerprint) {
+            "يوجد تحصيل معلّق لم يُحسم بعد. أعد المحاولة بنفس بيانات التحصيل."
+        }
+    }
+    val idempotencyKey = storedKey.ifBlank { UUID.randomUUID().toString() }
+    if (storedKey.isBlank()) {
         check(prefs.edit().clear().putString("fingerprint", fingerprint)
             .putString("idempotency_key", idempotencyKey).commit()) {
             "تعذر حفظ مفتاح التحصيل قبل الإرسال."
