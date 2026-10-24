@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS public.commercial_warehouses (
   created_by uuid REFERENCES auth.users(id),
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (organization_id, code),
+  UNIQUE (organization_id, code)
   -- activity_id is optional; its organization scope is enforced by the trigger.
 );
 CREATE INDEX IF NOT EXISTS ix_commercial_warehouses_branch
