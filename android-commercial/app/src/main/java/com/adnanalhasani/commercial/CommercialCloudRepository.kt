@@ -484,10 +484,23 @@ internal fun loadCommercialMasterData(context: Context, table: String): List<Com
         "commercial_storage_locations" -> "id,warehouse_id,parent_location_id,code,name,location_type,state"
         else -> "id,code,name_ar,name_en,state,parent_id"
     }
-    val rows = JSONArray(commercialCloudRequest(
-        "/rest/v1/$table?select=$fields&organization_id=eq.$orgId&order=code.asc",
-        "GET", token = access
-    ))
+    // PostgREST commonly caps a response at 1,000 rows. Page explicitly so
+    // large organization directories are not silently truncated; use a stable
+    // secondary key to avoid offset pagination skipping rows with equal codes.
+    val rows = JSONArray()
+    val pageSize = 500
+    var offset = 0
+    while (true) {
+        val page = JSONArray(commercialCloudRequest(
+            "/rest/v1/$table?select=$fields&organization_id=eq.$orgId&order=code.asc,id.asc&limit=$pageSize&offset=$offset",
+            "GET", token = access
+        ))
+        for (index in 0 until page.length()) {
+            rows.put(page.getJSONObject(index))
+        }
+        if (page.length() < pageSize) break
+        offset += pageSize
+    }
     return buildList {
         for (i in 0 until rows.length()) {
             val row = rows.optJSONObject(i) ?: continue
