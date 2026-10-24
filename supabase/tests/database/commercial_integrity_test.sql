@@ -150,8 +150,14 @@ SELECT ok(
      WHERE polrelid = 'public.commercial_sales'::regclass
        AND polname = 'users read own or organization sales'),
     'public.commercial_sales'::regclass
+  )) > 0
+  AND position('active' in pg_get_expr(
+    (SELECT polqual FROM pg_policy
+     WHERE polrelid = 'public.commercial_sales'::regclass
+       AND polname = 'users read own or organization sales'),
+    'public.commercial_sales'::regclass
   )) > 0,
-  'active organization members can read organization sales');
+  'only active organization members can read organization sales');
 
 SELECT ok(
   position('commercial_organization_members' in pg_get_expr(
@@ -159,8 +165,14 @@ SELECT ok(
      WHERE polrelid = 'public.commercial_sale_items'::regclass
        AND polname = 'users read own or organization sale items'),
     'public.commercial_sale_items'::regclass
+  )) > 0
+  AND position('active' in pg_get_expr(
+    (SELECT polqual FROM pg_policy
+     WHERE polrelid = 'public.commercial_sale_items'::regclass
+       AND polname = 'users read own or organization sale items'),
+    'public.commercial_sale_items'::regclass
   )) > 0,
-  'active organization members can read organization sale lines');
+  'only active organization members can read organization sale lines');
 
 SELECT ok(
   position('commercial_organization_members' in pg_get_expr(
@@ -168,8 +180,14 @@ SELECT ok(
      WHERE polrelid = 'public.commercial_stock_movements'::regclass
        AND polname = 'users read own or organization stock movements'),
     'public.commercial_stock_movements'::regclass
+  )) > 0
+  AND position('active' in pg_get_expr(
+    (SELECT polqual FROM pg_policy
+     WHERE polrelid = 'public.commercial_stock_movements'::regclass
+       AND polname = 'users read own or organization stock movements'),
+    'public.commercial_stock_movements'::regclass
   )) > 0,
-  'active organization members can read sale-linked stock movements');
+  'only active organization members can read sale-linked stock movements');
 
 SELECT * FROM finish();
 ROLLBACK;
