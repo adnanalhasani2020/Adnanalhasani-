@@ -446,8 +446,7 @@ private fun StoreApp(context: Context) {
                         }
                         addProduct = false
                     }
-                }
-            } else {
+                } else {
                 inventory.add(Product(name, category, stock, money(price), costPrice, unitCode = unitName))
                 saveProducts(context, inventory)
                 addProduct = false
