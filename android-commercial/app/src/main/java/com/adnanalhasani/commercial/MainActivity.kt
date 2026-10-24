@@ -2,11 +2,15 @@ package com.adnanalhasani.commercial
 
 import android.content.Context
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
 import java.util.Date
 import java.text.SimpleDateFormat
+import java.util.UUID
+import java.util.concurrent.Executors
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.BorderStroke
@@ -46,7 +50,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-internal data class Product(val name: String, val category: String, val stock: Int, val price: String, val costPrice: Int = 0, val catalogCode: String = "", val barcode: String = "", val unitCode: String = "EA", val imageUrl: String = "", val description: String = "", val brand: String = "", val manufacturer: String = "", val countryOfManufacture: String = "", val createdAt: Long = System.currentTimeMillis(), val createdBy: String = "", val unitVariantsJson: String = "[]")
+internal data class Product(val name: String, val category: String, val stock: Int, val price: String, val costPrice: Int = 0, val catalogCode: String = "", val barcode: String = "", val unitCode: String = "EA", val imageUrl: String = "", val description: String = "", val brand: String = "", val manufacturer: String = "", val countryOfManufacture: String = "", val createdAt: Long = System.currentTimeMillis(), val createdBy: String = "", val unitVariantsJson: String = "[]", val cloudOfferingId: String = "")
 
 private data class LocalSaleUnit(
     val code: String,
@@ -185,6 +189,9 @@ private fun saveSales(context: Context, items: List<SaleRecord>) {
     }
     context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).edit().putString(SALES_KEY, json.toString()).apply()
 }
+private val storeCloudIo = Executors.newSingleThreadExecutor()
+private val storeCloudMain = Handler(Looper.getMainLooper())
+
 private val products = listOf(
     Product("قهوة عربية فاخرة", "مشروبات", 18, "3,500 ر.ي"),
     Product("سكر أبيض 1 كجم", "مواد غذائية", 7, "1,200 ر.ي"),
@@ -207,12 +214,44 @@ private fun StoreApp(context: Context) {
     var showActivityProfile by remember { mutableStateOf(false) }
     var showCatalog by remember { mutableStateOf(false) }
     var settlingSaleNumber by remember { mutableIntStateOf(-1) }
-    val sales = remember { mutableStateListOf<SaleRecord>().apply { addAll(loadSales(context)) } }
-    val settlements = remember { mutableStateListOf<SettlementRecord>().apply { addAll(loadSettlements(context)) } }
-    val expenses = remember { mutableStateListOf<ExpenseRecord>().apply { addAll(loadExpenses(context)) } }
+    val cloudContextExists = remember {
+        val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+        !saved.getString("organization_id", null).isNullOrBlank() &&
+            !saved.getString("activity_id", null).isNullOrBlank() &&
+            !saved.getString("location_id", null).isNullOrBlank()
+    }
+    val sales = remember { mutableStateListOf<SaleRecord>().apply { if (!cloudContextExists) addAll(loadSales(context)) } }
+    val settlements = remember { mutableStateListOf<SettlementRecord>().apply { if (!cloudContextExists) addAll(loadSettlements(context)) } }
+    val expenses = remember { mutableStateListOf<ExpenseRecord>().apply { if (!cloudContextExists) addAll(loadExpenses(context)) } }
     var expenseDialog by remember { mutableStateOf(false) }
-    val inventory = remember { mutableStateListOf<Product>().apply { addAll(loadProducts(context)) } }
+    val inventory = remember { mutableStateListOf<Product>().apply { if (!cloudContextExists) addAll(loadProducts(context)) } }
+    var cloudInventoryLoaded by remember { mutableStateOf(!cloudContextExists) }
+    var cloudInventoryBusy by remember { mutableStateOf(false) }
+    var cloudInventoryError by remember { mutableStateOf("") }
+    var cloudNotice by remember { mutableStateOf("") }
+    var cloudMode by remember { mutableStateOf(cloudContextExists) }
     var nextInvoice by remember { mutableIntStateOf((sales.maxOfOrNull { it.number } ?: 1048) + 1) }
+
+    LaunchedEffect(cloudContextExists) {
+        if (!cloudContextExists) return@LaunchedEffect
+        cloudInventoryBusy = true
+        storeCloudIo.execute {
+            val result = runCatching { loadCommercialCloudInventory(context) }
+            storeCloudMain.post {
+                cloudInventoryBusy = false
+                cloudInventoryLoaded = true
+                result.onSuccess { snapshot ->
+                    inventory.clear()
+                    inventory.addAll(snapshot.products)
+                    cloudMode = true
+                    cloudInventoryError = ""
+                }.onFailure {
+                    inventory.clear()
+                    cloudInventoryError = it.message ?: "تعذر تحميل المخزون من قاعدة البيانات."
+                }
+            }
+        }
+    }
     Scaffold(
         containerColor = Canvas,
         topBar = {
@@ -256,11 +295,15 @@ private fun StoreApp(context: Context) {
                     showCatalog -> CatalogScreen(onBack = { showCatalog = false }, onAddToInventory = { catalogItem ->
                         val existing = inventory.indexOfFirst { it.catalogCode.isNotBlank() && it.catalogCode == catalogItem.catalogCode }
                         val mapped = Product(name = catalogItem.name, category = catalogItem.category, stock = 0, price = "0 ر.ي", catalogCode = catalogItem.catalogCode, barcode = catalogItem.barcode.ifBlank { catalogItem.availableUnits.firstOrNull { it.isDefault && it.barcode.isNotBlank() }?.barcode.orEmpty() }, unitCode = catalogItem.unitCode, imageUrl = catalogItem.imageUrl, description = catalogItem.description, brand = catalogItem.brand, manufacturer = catalogItem.manufacturer, countryOfManufacture = catalogItem.countryOfManufacture, createdBy = catalogItem.importedBy, unitVariantsJson = JSONArray().also { rows -> catalogItem.availableUnits.forEach { unit -> rows.put(JSONObject().put("unitCode",unit.unitCode).put("unitName",unit.unitName).put("role",unit.role).put("quantityInBase",unit.quantityInBase).put("barcode",unit.barcode).put("sku",unit.sku).put("netQuantity",unit.netQuantity).put("netUnitCode",unit.netUnitCode).put("packageName",unit.packageName).put("imageUrl",unit.imageUrl).put("isDefault",unit.isDefault)) } }.toString())
-                        if (existing >= 0) inventory[existing] = inventory[existing].copy(name = mapped.name, category = mapped.category, catalogCode = mapped.catalogCode, barcode = mapped.barcode, unitCode = mapped.unitCode, imageUrl = mapped.imageUrl, description = mapped.description, brand = mapped.brand, manufacturer = mapped.manufacturer, countryOfManufacture = mapped.countryOfManufacture, unitVariantsJson = mapped.unitVariantsJson)
-                        else inventory.add(mapped)
-                        saveProducts(context, inventory)
+                        if (cloudMode) {
+                            cloudNotice = "تم اختيار قالب الدليل. لإضافته للمخزون السحابي أنشئ الصنف مع سعره وكميته من شاشة المخزون؛ لن يتم حفظ نسخة محلية مضللة."
+                        } else {
+                            if (existing >= 0) inventory[existing] = inventory[existing].copy(name = mapped.name, category = mapped.category, catalogCode = mapped.catalogCode, barcode = mapped.barcode, unitCode = mapped.unitCode, imageUrl = mapped.imageUrl, description = mapped.description, brand = mapped.brand, manufacturer = mapped.manufacturer, countryOfManufacture = mapped.countryOfManufacture, unitVariantsJson = mapped.unitVariantsJson)
+                            else inventory.add(mapped)
+                            saveProducts(context, inventory)
+                            tab = 2
+                        }
                         showCatalog = false
-                        tab = 2
                     })
                     showDebts -> DebtScreen(sales = sales, settlements = settlements, onBack = { showDebts = false }, onSettle = { settlingSaleNumber = it.number })
                     showReports -> ReportsScreen(sales = sales, settlements = settlements, expenses = expenses, onBack = { showReports = false })
@@ -274,22 +317,54 @@ private fun StoreApp(context: Context) {
         product = inventory[editingProductIndex],
         onDismiss = { editingProductIndex = -1 },
         onSave = { name, category, stock, price, costPrice ->
-            inventory[editingProductIndex] = inventory[editingProductIndex].copy(name = name, category = category, stock = stock, price = money(price), costPrice = costPrice)
-            saveProducts(context, inventory)
+            if (cloudMode) {
+                cloudNotice = "تعديل الصنف أو رصيده محجوب مؤقتًا حتى نوصل عملية التعديل إلى سجل حركات المخزون على الخادم. لم تُحفظ تغييرات محلية."
+            } else {
+                inventory[editingProductIndex] = inventory[editingProductIndex].copy(name = name, category = category, stock = stock, price = money(price), costPrice = costPrice)
+                saveProducts(context, inventory)
+            }
             editingProductIndex = -1
         },
         onDelete = {
-            inventory.removeAt(editingProductIndex)
-            saveProducts(context, inventory)
+            if (cloudMode) {
+                cloudNotice = "حذف الأصناف السحابية يحتاج إيقاف العرض وحفظ أثر تدقيقي؛ لم يتم حذف أي بيانات."
+            } else {
+                inventory.removeAt(editingProductIndex)
+                saveProducts(context, inventory)
+            }
             editingProductIndex = -1
         }
     )
     if (addProduct) AddProductDialog(
         onDismiss = { addProduct = false },
         onSave = { name, category, stock, price, costPrice ->
-            inventory.add(Product(name, category, stock, money(price), costPrice))
-            saveProducts(context, inventory)
-            addProduct = false
+            if (cloudMode) {
+                cloudInventoryBusy = true
+                cloudNotice = "جارٍ حفظ الصنف في قاعدة البيانات..."
+                storeCloudIo.execute {
+                    val result = runCatching {
+                        createCommercialCloudInventoryItem(context, name, "قطعة", price.toLong(), stock)
+                        loadCommercialCloudInventory(context)
+                    }
+                    storeCloudMain.post {
+                        cloudInventoryBusy = false
+                        result.onSuccess { snapshot ->
+                            inventory.clear()
+                            inventory.addAll(snapshot.products)
+                            cloudInventoryError = ""
+                            cloudNotice = "تم حفظ الصنف والمخزون في قاعدة البيانات."
+                        }.onFailure {
+                            cloudInventoryError = it.message ?: "تعذر حفظ الصنف في قاعدة البيانات."
+                            cloudNotice = cloudInventoryError
+                        }
+                        addProduct = false
+                    }
+                }
+            } else {
+                inventory.add(Product(name, category, stock, money(price), costPrice))
+                saveProducts(context, inventory)
+                addProduct = false
+            }
         }
     )
     if (newSale && inventory.isNotEmpty()) SaleEntryDialog(
@@ -297,13 +372,53 @@ private fun StoreApp(context: Context) {
         onDismiss = { newSale = false },
         onSave = { productIndex, product, quantity, credit, unitPrice, customer, baseQuantity, unitCode ->
             val currentProduct = inventory[productIndex]
-            inventory[productIndex] = currentProduct.copy(stock = currentProduct.stock - baseQuantity)
-            saveProducts(context, inventory)
-            val soldUnitCost = if (quantity > 0) kotlin.math.round(currentProduct.costPrice.toDouble() * baseQuantity / quantity).toInt() else currentProduct.costPrice
-            sales.add(0, SaleRecord(nextInvoice, product, quantity, quantity * unitPrice, credit, customer, 0, System.currentTimeMillis(), soldUnitCost, unitCode, baseQuantity))
-            saveSales(context, sales)
-            nextInvoice = maxOf(nextInvoice + 1, (sales.maxOfOrNull { it.number } ?: 1048) + 1)
-            newSale = false
+            if (cloudMode) {
+                if (credit) {
+                    cloudNotice = "البيع الآجل غير مفعّل على الخادم بعد؛ لم تُسجّل أي فاتورة."
+                    newSale = false
+                } else if (currentProduct.cloudOfferingId.isBlank()) {
+                    cloudNotice = "هذا الصنف غير مرتبط بمعرّف عرض في قاعدة البيانات؛ لم تُسجّل أي فاتورة."
+                    newSale = false
+                } else {
+                    cloudInventoryBusy = true
+                    cloudNotice = "جارٍ تسجيل البيع وتحديث المخزون في قاعدة البيانات..."
+                    val idempotencyKey = UUID.randomUUID().toString()
+                    storeCloudIo.execute {
+                        val result = runCatching {
+                            val sale = checkoutCommercialCloudSale(context, currentProduct.cloudOfferingId, baseQuantity, idempotencyKey)
+                            val snapshot = loadCommercialCloudInventory(context)
+                            sale to snapshot
+                        }
+                        storeCloudMain.post {
+                            cloudInventoryBusy = false
+                            result.onSuccess { pair ->
+                                val sale = pair.first
+                                inventory.clear()
+                                inventory.addAll(pair.second.products)
+                                val receipt = sale.optLong("receipt_number", nextInvoice.toLong()).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                                val total = sale.optLong("total_minor", (quantity * unitPrice).toLong()).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
+                                sales.add(0, SaleRecord(receipt, product, quantity, total, false, customer, total, System.currentTimeMillis(), currentProduct.costPrice, unitCode, baseQuantity))
+                                saveSales(context, sales)
+                                nextInvoice = maxOf(nextInvoice + 1, receipt + 1)
+                                cloudInventoryError = ""
+                                cloudNotice = "تم تسجيل الفاتورة رقم $receipt وتحديث المخزون في قاعدة البيانات."
+                            }.onFailure {
+                                cloudInventoryError = it.message ?: "فشل تسجيل البيع على الخادم."
+                                cloudNotice = cloudInventoryError
+                            }
+                        }
+                    }
+                    newSale = false
+                }
+            } else {
+                inventory[productIndex] = currentProduct.copy(stock = currentProduct.stock - baseQuantity)
+                saveProducts(context, inventory)
+                val soldUnitCost = if (quantity > 0) kotlin.math.round(currentProduct.costPrice.toDouble() * baseQuantity / quantity).toInt() else currentProduct.costPrice
+                sales.add(0, SaleRecord(nextInvoice, product, quantity, quantity * unitPrice, credit, customer, 0, System.currentTimeMillis(), soldUnitCost, unitCode, baseQuantity))
+                saveSales(context, sales)
+                nextInvoice = maxOf(nextInvoice + 1, (sales.maxOfOrNull { it.number } ?: 1048) + 1)
+                newSale = false
+            }
         }
     )
     if (settlingSaleNumber >= 0) {
@@ -326,6 +441,24 @@ private fun StoreApp(context: Context) {
         saveExpenses(context, expenses)
         expenseDialog = false
     })
+    if (cloudMode && cloudNotice.isNotBlank()) AlertDialog(
+        onDismissRequest = { cloudNotice = "" },
+        title = { Text("حالة قاعدة البيانات") },
+        text = { Text(cloudNotice) },
+        confirmButton = { TextButton(onClick = { cloudNotice = "" }) { Text("حسنًا") } }
+    )
+    if (cloudContextExists && cloudInventoryError.isNotBlank() && cloudNotice.isBlank()) AlertDialog(
+        onDismissRequest = { cloudInventoryError = "" },
+        title = { Text("تعذر الاتصال بالمخزون السحابي") },
+        text = { Text(cloudInventoryError) },
+        confirmButton = { TextButton(onClick = { cloudInventoryError = "" }) { Text("إغلاق") } }
+    )
+    if (cloudMode && cloudInventoryBusy) AlertDialog(
+        onDismissRequest = { },
+        title = { Text("جارٍ الاتصال بقاعدة البيانات") },
+        text = { Column { CircularProgressIndicator(); Spacer(Modifier.height(8.dp)); Text("يتم تنفيذ العملية على الخادم. لا تغلق التطبيق.") } },
+        confirmButton = {}
+    )
     if (newSale && inventory.isEmpty()) AlertDialog(
         onDismissRequest = { newSale = false },
         title = { Text("لا توجد منتجات") },
