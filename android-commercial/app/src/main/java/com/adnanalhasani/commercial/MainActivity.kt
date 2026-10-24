@@ -238,6 +238,7 @@ private fun StoreApp(context: Context) {
     var cloudInventoryError by remember { mutableStateOf("") }
     var cloudNotice by remember { mutableStateOf("") }
     var cloudCategories by remember { mutableStateOf<List<CommercialMasterDataRow>>(emptyList()) }
+    var cloudCustomers by remember { mutableStateOf<List<CommercialCloudCustomer>>(emptyList()) }
     var cloudUnits by remember { mutableStateOf<List<CommercialUnitOption>>(emptyList()) }
     var cloudMode by remember { mutableStateOf(cloudContextExists) }
     var nextInvoice by remember { mutableIntStateOf((sales.maxOfOrNull { it.number } ?: 1048) + 1) }
@@ -250,6 +251,7 @@ private fun StoreApp(context: Context) {
             val salesResult = runCatching { loadCommercialCloudSales(context) }
             val categoriesResult = runCatching { loadCommercialMasterData(context, "commercial_product_categories") }
             val unitsResult = runCatching { loadCommercialUnitsOfMeasure(context) }
+            val customersResult = runCatching { loadCommercialCloudCustomers(context) }
             storeCloudMain.post {
                 cloudInventoryBusy = false
                 cloudInventoryLoaded = true
@@ -266,6 +268,8 @@ private fun StoreApp(context: Context) {
                     .onFailure { cloudNotice = "تعذر تحميل تصنيفات الأصناف: " + (it.message ?: "خطأ غير معروف") }
                 unitsResult.onSuccess { cloudUnits = it }
                     .onFailure { cloudNotice = "تعذر تحميل دليل وحدات القياس: " + (it.message ?: "خطأ غير معروف") }
+                customersResult.onSuccess { cloudCustomers = it }
+                    .onFailure { cloudNotice = "تعذر تحميل دليل العملاء: " + (it.message ?: "خطأ غير معروف") }
                 salesResult.onSuccess { serverSales ->
                     sales.clear()
                     sales.addAll(serverSales)
@@ -427,46 +431,55 @@ private fun StoreApp(context: Context) {
     if (newSale && inventory.isNotEmpty()) SaleEntryDialog(
         inventory = inventory,
         cloudMode = cloudMode,
+        cloudCustomers = cloudCustomers,
         onDismiss = { newSale = false },
         onSave = { productIndex, product, quantity, credit, unitPrice, customer, baseQuantity, unitCode ->
             val currentProduct = inventory[productIndex]
             if (cloudMode) {
-                if (credit) {
-                    cloudNotice = "البيع الآجل غير مفعّل على الخادم بعد؛ لم تُسجّل أي فاتورة."
-                    newSale = false
-                } else if (currentProduct.cloudOfferingId.isBlank()) {
+                if (currentProduct.cloudOfferingId.isBlank()) {
                     cloudNotice = "هذا الصنف غير مرتبط بمعرّف عرض في قاعدة البيانات؛ لم تُسجّل أي فاتورة."
+                    newSale = false
+                } else if (credit && cloudCustomers.none { it.id == customer }) {
+                    cloudNotice = "اختر عميلًا نشطًا من دليل المؤسسة للبيع الآجل."
                     newSale = false
                 } else {
                     cloudInventoryBusy = true
-                    cloudNotice = "جارٍ تسجيل البيع وتحديث المخزون في قاعدة البيانات..."
+                    cloudNotice = "جارٍ التحقق من الكمية وتسجيل الفاتورة في قاعدة البيانات..."
                     storeCloudIo.execute {
                         val result = runCatching {
-                            val idempotencyKey = getOrCreateCommercialCloudSaleKey(context, currentProduct.cloudOfferingId, baseQuantity)
-                            val sale = checkoutCommercialCloudSale(context, currentProduct.cloudOfferingId, baseQuantity, idempotencyKey)
-                            clearCommercialCloudSaleKey(context, idempotencyKey)
+                            val requested = aggregateSaleQuantities(listOf(currentProduct.cloudOfferingId to baseQuantity))
+                            validateAvailableStock(requested, inventory.associate { it.cloudOfferingId to it.stock }.filterKeys { it.isNotBlank() })
+                            val key = if (credit) {
+                                getOrCreateCommercialCloudCreditSaleKey(context, currentProduct.cloudOfferingId, baseQuantity, customer)
+                            } else {
+                                getOrCreateCommercialCloudSaleKey(context, currentProduct.cloudOfferingId, baseQuantity)
+                            }
+                            val sale = if (credit) {
+                                checkoutCommercialCloudSaleOnAccount(context, currentProduct.cloudOfferingId, baseQuantity, customer, key)
+                            } else {
+                                checkoutCommercialCloudSale(context, currentProduct.cloudOfferingId, baseQuantity, key)
+                            }
+                            if (credit) clearCommercialCloudCreditSaleKey(context, key) else clearCommercialCloudSaleKey(context, key)
                             val snapshot = runCatching { loadCommercialCloudInventory(context) }.getOrNull()
                             val history = runCatching { loadCommercialCloudSales(context) }.getOrNull()
                             Triple(sale, snapshot, history)
                         }
                         storeCloudMain.post {
                             cloudInventoryBusy = false
-                            result.onSuccess { pair ->
-                                val sale = pair.first
-                                pair.second?.let { snapshot ->
+                            result.onSuccess { outcome ->
+                                val sale = outcome.first
+                                outcome.second?.let { snapshot ->
                                     inventory.clear()
                                     inventory.addAll(snapshot.products)
                                 }
                                 val receipt = sale.optLong("receipt_number", nextInvoice.toLong()).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
-                                val total = sale.optLong("total_minor", (quantity * unitPrice).toLong()).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
-                                val serverSales = pair.third
+                                val serverSales = outcome.third
                                 if (serverSales != null) {
                                     sales.clear()
                                     sales.addAll(serverSales)
-                                    cloudNotice = "تم تسجيل الفاتورة رقم $receipt وتحديث السجل من قاعدة البيانات."
+                                    cloudNotice = if (credit) "تم تسجيل الفاتورة الآجلة رقم $receipt وربطها بالعميل وتحديث السجل من قاعدة البيانات."
+                                        else "تم تسجيل الفاتورة رقم $receipt وتحديث السجل من قاعدة البيانات."
                                 } else {
-                                    // Never mirror a cloud-confirmed sale into the local sales store:
-                                    // that would make a partial cache look like the authoritative ledger.
                                     cloudNotice = "أكد الخادم الفاتورة رقم $receipt، لكن تعذر تحديث سجل المبيعات. أعد تحميل السجل قبل متابعة أي تحصيل."
                                 }
                                 nextInvoice = maxOf(nextInvoice + 1, receipt + 1)
@@ -480,12 +493,16 @@ private fun StoreApp(context: Context) {
                     newSale = false
                 }
             } else {
-                inventory[productIndex] = currentProduct.copy(stock = currentProduct.stock - baseQuantity)
-                saveProducts(context, inventory)
-                val soldUnitCost = if (quantity > 0) kotlin.math.round(currentProduct.costPrice.toDouble() * baseQuantity / quantity).toInt() else currentProduct.costPrice
-                sales.add(0, SaleRecord(nextInvoice, product, quantity, quantity * unitPrice, credit, customer, 0, System.currentTimeMillis(), soldUnitCost, unitCode, baseQuantity))
-                saveSales(context, sales)
-                nextInvoice = maxOf(nextInvoice + 1, (sales.maxOfOrNull { it.number } ?: 1048) + 1)
+                if (baseQuantity > currentProduct.stock) {
+                    cloudNotice = "الكمية المطلوبة تتجاوز المخزون المتاح."
+                } else {
+                    inventory[productIndex] = currentProduct.copy(stock = currentProduct.stock - baseQuantity)
+                    saveProducts(context, inventory)
+                    val soldUnitCost = if (quantity > 0) kotlin.math.round(currentProduct.costPrice.toDouble() * baseQuantity / quantity).toInt() else currentProduct.costPrice
+                    sales.add(0, SaleRecord(nextInvoice, product, quantity, quantity * unitPrice, credit, customer, 0, System.currentTimeMillis(), soldUnitCost, unitCode, baseQuantity))
+                    saveSales(context, sales)
+                    nextInvoice = maxOf(nextInvoice + 1, (sales.maxOfOrNull { it.number } ?: 1048) + 1)
+                }
                 newSale = false
             }
         }
@@ -729,6 +746,7 @@ private fun SaleRow(title: String, subtitle: String, amount: String, credit: Boo
 private fun SaleEntryDialog(
     inventory: List<Product>,
     cloudMode: Boolean = false,
+    cloudCustomers: List<CommercialCloudCustomer> = emptyList(),
     onDismiss: () -> Unit,
     onSave: (Int, String, Int, Boolean, Int, String, Int, String) -> Unit
 ) {
@@ -747,6 +765,7 @@ private fun SaleEntryDialog(
     var priceOverrideText by remember(selected, selectedUnitIndex) { mutableStateOf("") }
     var credit by remember { mutableStateOf(false) }
     var customer by remember { mutableStateOf("") }
+    var customerExpanded by remember { mutableStateOf(false) }
     var unitExpanded by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val product = inventory[selected.coerceIn(0, inventory.lastIndex)]
@@ -817,25 +836,44 @@ private fun SaleEntryDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-                if (!cloudMode && credit) OutlinedTextField(value = customer, onValueChange = { customer = it; error = null }, label = { Text("اسم العميل المدين") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                if (!cloudMode) {
-                    Text("طريقة الدفع", color = Muted, fontSize = 12.sp)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(selected = !credit, onClick = { credit = false })
-                        Text("نقدي", color = Ink)
-                        Spacer(Modifier.width(12.dp))
-                        RadioButton(selected = credit, onClick = { credit = true })
-                        Text("آجل", color = Ink)
+                if (credit && cloudMode) {
+                    ExposedDropdownMenuBox(expanded = customerExpanded, onExpandedChange = { customerExpanded = it }) {
+                        OutlinedTextField(
+                            value = cloudCustomers.firstOrNull { it.id == customer }?.displayName.orEmpty(),
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("العميل الآجل (من دليل المؤسسة)") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = customerExpanded) },
+                            modifier = Modifier.fillMaxWidth().menuAnchor()
+                        )
+                        ExposedDropdownMenu(expanded = customerExpanded, onDismissRequest = { customerExpanded = false }) {
+                            cloudCustomers.forEach { item ->
+                                DropdownMenuItem(
+                                    text = { Text(item.displayName) },
+                                    onClick = { customer = item.id; customerExpanded = false; error = null }
+                                )
+                            }
+                        }
                     }
-                } else {
-                    Text("البيع السحابي نقدي حاليًا؛ السعر يُقرأ من العرض المحفوظ على الخادم.", color = Muted, fontSize = 12.sp)
+                    if (cloudCustomers.isEmpty()) Text("لا يوجد عملاء نشطون محمّلون. حدّث دليل العملاء قبل البيع الآجل.", color = Orange, fontSize = 11.sp)
+                } else if (credit) {
+                    OutlinedTextField(value = customer, onValueChange = { customer = it; error = null }, label = { Text("اسم العميل المدين") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 }
+                Text("طريقة الدفع", color = Muted, fontSize = 12.sp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = !credit, onClick = { credit = false; customer = "" })
+                    Text("نقدي", color = Ink)
+                    Spacer(Modifier.width(12.dp))
+                    RadioButton(selected = credit, onClick = { credit = true })
+                    Text("آجل", color = Ink)
+                }
+                if (cloudMode) Text("السعر والرصيد المخزني يُتحقق منهما على الخادم قبل اعتماد الفاتورة.", color = Muted, fontSize = 12.sp)
                 HorizontalDivider(color = Border)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("الإجمالي", color = Muted)
                     Text(if (quantity != null && quantity > 0) money(quantity * unitPrice) else "—", color = Green, fontWeight = FontWeight.Bold)
                 }
-                if (credit) Text("سيُسجّل المبلغ كبيع آجل (تجريبي).", color = Orange, fontSize = 12.sp)
+                if (credit) Text(if (cloudMode) "سيُربط الدين بالعميل المختار على الخادم." else "سيُسجّل المبلغ كبيع آجل محلي.", color = Orange, fontSize = 12.sp)
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
             }
         },
@@ -851,8 +889,8 @@ private fun SaleEntryDialog(
                     error = "أدخل سعر بيع أكبر من صفر."
                 } else if (cloudMode && unitPrice != suggestedUnitPrice) {
                     error = "سعر العبوة لا يطابق السعر النسبي المعتمد من الخادم."
-                } else if (credit && customer.isBlank()) {
-                    error = "أدخل اسم العميل للبيع الآجل."
+                } else if (credit && (if (cloudMode) cloudCustomers.none { it.id == customer } else customer.isBlank())) {
+                    error = if (cloudMode) "اختر عميلًا نشطًا للبيع الآجل." else "أدخل اسم العميل للبيع الآجل."
                 } else {
                     onSave(selected, product.name, quantity, credit, unitPrice, if (credit) customer.trim() else "", baseQuantity, selectedUnit.code)
                 }
