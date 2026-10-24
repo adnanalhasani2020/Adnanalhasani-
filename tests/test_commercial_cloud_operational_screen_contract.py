@@ -69,6 +69,12 @@ class CommercialCloudOperationalScreenContractTests(unittest.TestCase):
         returns_screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudReturnsScreen.kt").read_text(encoding="utf-8")
         for token in (
             "loadCommercialCloudSaleReturns(context)",
+            "loadCommercialCloudReturnableSales(context)",
+            "requestCommercialCloudSaleReturn(context",
+            "commercial_request_sale_return",
+            "إنشاء طلب مرتجع من فاتورة مكتملة",
+            "التحقق النهائي من الكميات المرتجعة يتم في قاعدة البيانات",
+            "إعادة المخزون للمؤسسات متوقفة آليًا",
             "decideCommercialCloudSaleReturn",
             "inspectCommercialCloudSaleReturnItem",
             "restockCommercialCloudSaleReturn",
