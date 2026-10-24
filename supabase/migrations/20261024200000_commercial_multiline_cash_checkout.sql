@@ -28,8 +28,13 @@ DECLARE
   v_rows jsonb := '[]'::jsonb;
 BEGIN
   IF v_uid IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
-  IF p_location_id IS NULL OR p_lines IS NULL OR jsonb_typeof(p_lines) <> 'array'
-     OR jsonb_array_length(p_lines) < 1 OR jsonb_array_length(p_lines) > 200 THEN
+  IF p_location_id IS NULL OR p_lines IS NULL THEN
+    RAISE EXCEPTION 'invalid_invoice_lines_or_location' USING ERRCODE='22023';
+  END IF;
+  IF jsonb_typeof(p_lines) <> 'array' THEN
+    RAISE EXCEPTION 'invalid_invoice_lines_or_location' USING ERRCODE='22023';
+  END IF;
+  IF jsonb_array_length(p_lines) < 1 OR jsonb_array_length(p_lines) > 200 THEN
     RAISE EXCEPTION 'invalid_invoice_lines_or_location' USING ERRCODE='22023';
   END IF;
   IF p_idempotency_key IS NULL OR length(btrim(p_idempotency_key)) < 8
