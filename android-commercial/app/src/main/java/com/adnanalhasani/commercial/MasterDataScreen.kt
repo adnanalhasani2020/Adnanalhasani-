@@ -38,6 +38,7 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
     var notice by remember { mutableStateOf("") }
+    var search by remember { mutableStateOf("") }
     var showCreate by remember { mutableStateOf(false) }
     var code by remember { mutableStateOf("") }
     var name by remember { mutableStateOf("") }
@@ -85,14 +86,31 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
                     )
                 }
             }
+            Spacer(Modifier.height(10.dp))
+            OutlinedTextField(
+                value = search,
+                onValueChange = { search = it },
+                label = { Text("بحث بالاسم أو الرمز أو النوع") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(Modifier.height(6.dp))
+            Text("عدد السجلات: ${rows.size}", color = Color(0xFF71817B), fontSize = 12.sp)
             if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
             if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(vertical = 10.dp))
             if (notice.isNotBlank()) Text(notice, color = Color(0xFF167D63), modifier = Modifier.padding(vertical = 8.dp))
+            val filteredRows = rows.filter { row ->
+                search.isBlank() || row.label.contains(search.trim(), ignoreCase = true) ||
+                    row.code.contains(search.trim(), ignoreCase = true) ||
+                    row.kind.contains(search.trim(), ignoreCase = true)
+            }
             if (!loading && error.isBlank() && rows.isEmpty()) {
                 Text("لا توجد سجلات بعد. استخدم زر الإضافة لإنشاء أول سجل.", modifier = Modifier.padding(top = 24.dp))
+            } else if (!loading && error.isBlank() && filteredRows.isEmpty()) {
+                Text("لا توجد نتائج تطابق البحث.", modifier = Modifier.padding(top = 24.dp))
             }
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(rows, key = { it.id }) { row ->
+                items(filteredRows, key = { it.id }) { row ->
                     Card(
                         colors = CardDefaults.cardColors(containerColor = Color.White),
                         border = BorderStroke(1.dp, Color(0xFFE5EBE8)),
