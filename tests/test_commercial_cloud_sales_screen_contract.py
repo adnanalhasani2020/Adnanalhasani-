@@ -40,6 +40,16 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         self.assertIn("ربط الفاتورة بالعميل", self.composer)
         self.assertIn("checkoutCommercialCloudSaleMulti(context, requestLines, key, customerId)", self.composer)
 
+    def test_credit_checkout_requires_customer_and_tracks_outstanding(self):
+        migration = (ROOT / "supabase/migrations/20261024200000_commercial_multiline_cash_checkout.sql").read_text()
+        self.assertIn("p_payment_mode text DEFAULT 'cash'", migration)
+        self.assertIn("customer_required_for_credit_sale", migration)
+        self.assertIn("initial_payment_exceeds_invoice_total", migration)
+        self.assertIn("'outstanding_minor',(v_total-v_initial_payment)::bigint", migration)
+        self.assertIn("p_payment_mode", self.repository)
+        self.assertIn("آجل / دين", self.composer)
+        self.assertIn("اختر العميل قبل تسجيل البيع الآجل", self.composer)
+
     def test_invoice_projection_is_scoped_to_current_organization_and_activity(self):
         projection = self.repository.split(
             "internal fun loadCommercialCloudSaleDocuments", 1
