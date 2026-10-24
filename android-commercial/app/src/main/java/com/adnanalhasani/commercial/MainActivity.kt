@@ -628,7 +628,7 @@ private fun ProductRow(product: Product, onClick: () -> Unit = {}) {
             Column(Modifier.weight(1f)) {
                 Text(product.name, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                 Text(product.description.ifBlank { product.category }, color = Muted, fontSize = 12.sp)
-                Text("المتوفر: ${product.stock} ${product.unitCode.ifBlank { "EA" }}", color = if (warning) Color(0xFFB96A14) else Muted, fontSize = 11.sp)
+                Text("المتاح للبيع: ${product.stock} ${product.unitCode.ifBlank { "EA" }}", color = if (warning) Color(0xFFB96A14) else Muted, fontSize = 11.sp)
                 Text("حد التنبيه: ${if (product.reorderPoint >= 0) product.reorderPoint else 9}", color = Muted, fontSize = 10.sp)
                 if (product.barcode.isNotBlank() || product.catalogCode.isNotBlank()) Text(listOf(product.barcode, product.catalogCode).filter { it.isNotBlank() }.joinToString(" · "), color = Muted, fontSize = 10.sp)
                 val unitCount = runCatching { JSONArray(product.unitVariantsJson).length() }.getOrDefault(0)
