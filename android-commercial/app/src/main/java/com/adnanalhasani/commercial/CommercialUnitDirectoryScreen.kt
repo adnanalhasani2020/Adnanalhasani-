@@ -6,6 +6,7 @@ import android.os.Looper
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -105,9 +106,9 @@ internal fun CommercialUnitDirectoryScreen(context: Context, onBack: () -> Unit)
                 )
             }
             item {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(selected = selectedDimension == "all", onClick = { selectedDimension = "all" }, label = { Text("الكل") })
-                    dimensions.take(5).forEach { dimension ->
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    item { FilterChip(selected = selectedDimension == "all", onClick = { selectedDimension = "all" }, label = { Text("الكل") }) }
+                    items(dimensions.take(5)) { dimension ->
                         FilterChip(selected = selectedDimension == dimension, onClick = { selectedDimension = dimension }, label = { Text(dimension) })
                     }
                 }
