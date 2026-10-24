@@ -305,7 +305,16 @@ private fun StoreApp(context: Context) {
             when (tab) {
                 0 -> Dashboard(products = inventory, sales = sales, cloudMode = cloudMode, onNewSale = { newSale = true }, onInventory = { tab = 2 })
                 1 -> SalesScreen(sales = sales, onNewSale = { newSale = true })
-                2 -> InventoryScreen(inventory, query, { query = it }, { addProduct = true }, { index ->
+                2 -> InventoryScreen(inventory, query, { query = it }, {
+                    addProduct = true
+                    if (cloudMode) storeCloudIo.execute {
+                        val categoriesResult = runCatching { loadCommercialMasterData(context, "commercial_product_categories") }
+                        storeCloudMain.post {
+                            categoriesResult.onSuccess { cloudCategories = it }
+                                .onFailure { cloudInventoryError = it.message ?: "تعذر تحديث تصنيفات الأصناف." }
+                        }
+                    }
+                }, { index ->
                     if (cloudMode) cloudNotice = "تعديل الصنف غير متاح حتى يكتمل ربط تحديث السعر وحركة المخزون على الخادم."
                     else editingProductIndex = index
                 })
