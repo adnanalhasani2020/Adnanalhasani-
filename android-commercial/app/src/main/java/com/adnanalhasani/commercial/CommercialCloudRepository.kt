@@ -266,3 +266,85 @@ internal fun loadCommercialCloudSales(context: Context): List<SaleRecord> {
         }
     }
 }
+
+
+internal data class CommercialMasterDataRow(
+    val id: String,
+    val code: String,
+    val label: String,
+    val kind: String,
+    val parentId: String = ""
+)
+
+private fun commercialMasterDataAccess(context: Context): Pair<String, String> {
+    val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+    val orgId = saved.getString("organization_id", null).orEmpty()
+    require(orgId.isNotBlank()) { "ملف المؤسسة غير محفوظ." }
+    val sessionPrefs = commercialCloudSessionPreferences(context)
+    val refresh = sessionPrefs.getString("refresh_token", null).orEmpty()
+    require(refresh.isNotBlank()) { "سجّل الدخول إلى الحساب أولًا." }
+    val session = JSONObject(commercialCloudRequest(
+        "/auth/v1/token?grant_type=refresh_token", "POST", JSONObject().put("refresh_token", refresh)
+    ))
+    val access = session.optString("access_token")
+    require(access.isNotBlank()) { "انتهت جلسة الحساب؛ سجّل الدخول مجددًا." }
+    sessionPrefs.edit().putString("refresh_token", session.optString("refresh_token").ifBlank { refresh }).apply()
+    return orgId to access
+}
+
+internal fun loadCommercialMasterData(context: Context, table: String): List<CommercialMasterDataRow> {
+    require(table in setOf("commercial_warehouses", "commercial_product_categories", "commercial_departments")) {
+        "نوع الدليل غير مدعوم."
+    }
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val fields = when (table) {
+        "commercial_warehouses" -> "id,code,name,warehouse_type,state"
+        else -> "id,code,name_ar,name_en,state,parent_id"
+    }
+    val rows = JSONArray(commercialCloudRequest(
+        "/rest/v1/$table?select=$fields&organization_id=eq.$orgId&order=code.asc",
+        "GET", token = access
+    ))
+    return buildList {
+        for (i in 0 until rows.length()) {
+            val row = rows.optJSONObject(i) ?: continue
+            add(CommercialMasterDataRow(
+                id = row.optString("id"),
+                code = row.optString("code"),
+                label = row.optString("name").ifBlank { row.optString("name_ar") },
+                kind = row.optString("warehouse_type").ifBlank { table.removePrefix("commercial_") },
+                parentId = row.optString("parent_id").takeUnless { it == "null" }.orEmpty()
+            ))
+        }
+    }
+}
+
+internal fun createCommercialMasterData(
+    context: Context,
+    table: String,
+    code: String,
+    name: String,
+    parentId: String = "",
+    warehouseType: String = "main"
+) {
+    require(table in setOf("commercial_warehouses", "commercial_product_categories", "commercial_departments")) {
+        "نوع الدليل غير مدعوم."
+    }
+    require(code.trim().isNotEmpty() && name.trim().isNotEmpty()) { "أدخل الرمز والاسم." }
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+    val payload = JSONObject().put("organization_id", orgId).put("code", code.trim())
+    if (table == "commercial_warehouses") {
+        val branchId = saved.getString("location_id", null).orEmpty()
+        val activityId = saved.getString("activity_id", null).orEmpty()
+        require(branchId.isNotBlank()) { "الموقع/الفرع غير محفوظ." }
+        payload.put("branch_location_id", branchId)
+            .put("activity_id", activityId.ifBlank { JSONObject.NULL })
+            .put("name", name.trim()).put("warehouse_type", warehouseType)
+            .put("created_by", JSONObject.NULL)
+    } else {
+        payload.put("name_ar", name.trim())
+        if (parentId.isNotBlank()) payload.put("parent_id", parentId)
+    }
+    commercialCloudRequest("/rest/v1/$table", "POST", payload, access)
+}
