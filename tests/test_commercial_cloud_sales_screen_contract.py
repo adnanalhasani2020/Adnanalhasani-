@@ -55,6 +55,11 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         self.assertIn("لم يتم تفعيل إنشاء الطلب أو اعتماد الاستلام", self.purchases)
         self.assertIn("إعادة المحاولة", self.purchases)
 
+    def test_invoice_screen_supports_status_filters_and_currency_safe_totals(self):
+        for marker in ('selectedStatus', '"paid" to "مدفوعة"', '"partial" to "مدفوعة جزئيًا"', '"due" to "مستحقة"', 'groupBy { it.currencyCode', 'بوحدة الصرف الصغرى'):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, self.screen)
+
     def test_invoice_screen_discloses_read_only_and_minor_units(self):
         self.assertIn("عرض فقط", self.screen)
         self.assertIn("بوحدة الصرف الصغرى", self.screen)

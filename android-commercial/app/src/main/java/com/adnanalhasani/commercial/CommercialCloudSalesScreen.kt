@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,6 +30,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -63,6 +66,7 @@ private val CloudSalesMain = Handler(Looper.getMainLooper())
 internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
     var documents by remember { mutableStateOf<List<CommercialCloudSaleDocument>>(emptyList()) }
     var search by remember { mutableStateOf("") }
+    var selectedStatus by remember { mutableStateOf("all") }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
     var reloadToken by remember { mutableIntStateOf(0) }
@@ -81,11 +85,24 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
     }
 
     val filtered = documents.filter { doc ->
-        doc.receiptNumber.contains(search, true) ||
+        val matchesSearch = search.isBlank() ||
+            doc.receiptNumber.contains(search, true) ||
             doc.customerName.contains(search, true) ||
             doc.paymentStatus.contains(search, true) ||
             doc.lines.any { it.productName.contains(search, true) }
+        val status = doc.paymentStatus.lowercase()
+        val matchesStatus = when (selectedStatus) {
+            "paid" -> status in setOf("paid", "completed", "succeeded")
+            "partial" -> status in setOf("partially_paid", "partial")
+            "due" -> status in setOf("unpaid", "due", "pending", "credit")
+            "cancelled" -> status in setOf("failed", "cancelled", "canceled")
+            else -> true
+        }
+        matchesSearch && matchesStatus
     }
+    val totalsByCurrency = filtered.groupBy { it.currencyCode.ifBlank { "غير محدد" } }
+        .mapValues { (_, rows) -> rows.sumOf { it.totalMinor } }
+        .toSortedMap()
     Scaffold(
         topBar = {
             TopAppBar(
@@ -119,17 +136,46 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
                 )
             }
             item {
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf(
+                        "all" to "الكل",
+                        "paid" to "مدفوعة",
+                        "partial" to "مدفوعة جزئيًا",
+                        "due" to "مستحقة",
+                        "cancelled" to "فشل / ملغاة"
+                    ).forEach { (key, label) ->
+                        FilterChip(
+                            selected = selectedStatus == key,
+                            onClick = { selectedStatus = key },
+                            label = { Text(label, fontSize = 12.sp) }
+                        )
+                    }
+                }
+            }
+            item {
                 Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp)) {
-                    Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(42.dp).background(Color(0xFFE8F5EF), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = CloudSalesGreen)
+                    Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(42.dp).background(Color(0xFFE8F5EF), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = CloudSalesGreen)
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text("الفواتير المحمّلة", color = CloudSalesMuted, fontSize = 12.sp)
+                                Text(documents.size.toString(), color = CloudSalesInk, fontWeight = FontWeight.Bold, fontSize = 23.sp)
+                            }
+                            Text("النتائج: ${filtered.size}", color = CloudSalesMuted, fontSize = 11.sp)
                         }
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text("الفواتير المحمّلة", color = CloudSalesMuted, fontSize = 12.sp)
-                            Text(documents.size.toString(), color = CloudSalesInk, fontWeight = FontWeight.Bold, fontSize = 23.sp)
+                        if (totalsByCurrency.isNotEmpty()) {
+                            Spacer(Modifier.height(10.dp))
+                            Text("إجمالي النتائج حسب العملة (بوحدة الصرف الصغرى)", color = CloudSalesMuted, fontSize = 11.sp)
+                            totalsByCurrency.forEach { (currency, total) ->
+                                Text("$currency: ${String.format(java.util.Locale.US, "%,d", total)}", color = CloudSalesInk, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                            }
                         }
-                        Text("النتائج: ${filtered.size}", color = CloudSalesMuted, fontSize = 11.sp)
                     }
                 }
             }
