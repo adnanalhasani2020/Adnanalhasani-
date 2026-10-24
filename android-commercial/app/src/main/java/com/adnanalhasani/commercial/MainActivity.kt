@@ -383,6 +383,7 @@ private fun StoreApp(context: Context) {
     )
     if (newSale && inventory.isNotEmpty()) SaleEntryDialog(
         inventory = inventory,
+        cloudMode = cloudMode,
         onDismiss = { newSale = false },
         onSave = { productIndex, product, quantity, credit, unitPrice, customer, baseQuantity, unitCode ->
             val currentProduct = inventory[productIndex]
@@ -396,10 +397,11 @@ private fun StoreApp(context: Context) {
                 } else {
                     cloudInventoryBusy = true
                     cloudNotice = "جارٍ تسجيل البيع وتحديث المخزون في قاعدة البيانات..."
-                    val idempotencyKey = UUID.randomUUID().toString()
                     storeCloudIo.execute {
                         val result = runCatching {
+                            val idempotencyKey = getOrCreateCommercialCloudSaleKey(context, currentProduct.cloudOfferingId, baseQuantity)
                             val sale = checkoutCommercialCloudSale(context, currentProduct.cloudOfferingId, baseQuantity, idempotencyKey)
+                            clearCommercialCloudSaleKey(context, idempotencyKey)
                             val snapshot = runCatching { loadCommercialCloudInventory(context) }.getOrNull()
                             val history = runCatching { loadCommercialCloudSales(context) }.getOrNull()
                             Triple(sale, snapshot, history)
@@ -661,6 +663,7 @@ private fun SaleRow(title: String, subtitle: String, amount: String, credit: Boo
 @Composable
 private fun SaleEntryDialog(
     inventory: List<Product>,
+    cloudMode: Boolean = false,
     onDismiss: () -> Unit,
     onSave: (Int, String, Int, Boolean, Int, String, Int, String) -> Unit
 ) {
@@ -743,19 +746,24 @@ private fun SaleEntryDialog(
                 )
                 OutlinedTextField(
                     value = priceOverrideText.ifBlank { suggestedUnitPrice.toString() },
-                    onValueChange = { priceOverrideText = it.filter(Char::isDigit).take(9); error = null },
-                    label = { Text("سعر الوحدة/العبوة (اقتراح نسبي، عدّله حسب سعرك)") },
+                    onValueChange = { if (!cloudMode) priceOverrideText = it.filter(Char::isDigit).take(9); error = null },
+                    readOnly = cloudMode,
+                    label = { Text(if (cloudMode) "سعر البيع المعتمد من قاعدة البيانات" else "سعر الوحدة/العبوة (اقتراح نسبي، عدّله حسب سعرك)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-                if (credit) OutlinedTextField(value = customer, onValueChange = { customer = it; error = null }, label = { Text("اسم العميل المدين") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                Text("طريقة الدفع", color = Muted, fontSize = 12.sp)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(selected = !credit, onClick = { credit = false })
-                    Text("نقدي", color = Ink)
-                    Spacer(Modifier.width(12.dp))
-                    RadioButton(selected = credit, onClick = { credit = true })
-                    Text("آجل", color = Ink)
+                if (!cloudMode && credit) OutlinedTextField(value = customer, onValueChange = { customer = it; error = null }, label = { Text("اسم العميل المدين") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                if (!cloudMode) {
+                    Text("طريقة الدفع", color = Muted, fontSize = 12.sp)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = !credit, onClick = { credit = false })
+                        Text("نقدي", color = Ink)
+                        Spacer(Modifier.width(12.dp))
+                        RadioButton(selected = credit, onClick = { credit = true })
+                        Text("آجل", color = Ink)
+                    }
+                } else {
+                    Text("البيع السحابي نقدي حاليًا؛ السعر يُقرأ من العرض المحفوظ على الخادم.", color = Muted, fontSize = 12.sp)
                 }
                 HorizontalDivider(color = Border)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -776,6 +784,8 @@ private fun SaleEntryDialog(
                     error = "الكمية المطلوبة تعادل $baseQuantity من وحدة الأساس، والمتاح ${product.stock}."
                 } else if (unitPrice <= 0) {
                     error = "أدخل سعر بيع أكبر من صفر."
+                } else if (cloudMode && unitPrice != suggestedUnitPrice) {
+                    error = "سعر العبوة لا يطابق السعر النسبي المعتمد من الخادم."
                 } else if (credit && customer.isBlank()) {
                     error = "أدخل اسم العميل للبيع الآجل."
                 } else {
