@@ -34,6 +34,27 @@ class CommercialUnitDirectoryScreenTests(unittest.TestCase):
         self.assertNotIn('commercialCloudRequest(', self.screen)
         self.assertIn('معاملًا خاصًا بكل صنف', self.screen)
 
+    def test_unit_directory_fetches_all_pages_in_stable_order(self):
+        function = self.repository.split("internal fun loadCommercialUnitsOfMeasure", 1)[1].split(
+            "private fun commercialMasterDataAccess", 1
+        )[0]
+        self.assertIn("val pageSize = 500", function)
+        self.assertIn("limit=$pageSize&offset=$offset", function)
+        self.assertIn("order=dimension.asc,code.asc", function)
+        self.assertIn("if (page.length() < pageSize) break", function)
+
+    def test_master_data_and_department_links_are_paginated(self):
+        master_data = self.repository.split("internal fun loadCommercialMasterData", 1)[1].split(
+            "internal fun assignCommercialCloudOfferingCategory", 1
+        )[0]
+        assignments = self.repository.split("internal fun loadCommercialDepartmentWarehouseAssignments", 1)[1].split(
+            "internal fun assignCommercialDepartmentToWarehouse", 1
+        )[0]
+        self.assertIn("limit=$pageSize&offset=$offset", master_data)
+        self.assertIn("order=code.asc,id.asc", master_data)
+        self.assertIn("limit=$pageSize&offset=$offset", assignments)
+        self.assertIn("order=department_id.asc,warehouse_id.asc", assignments)
+
 
 if __name__ == "__main__":
     unittest.main()
