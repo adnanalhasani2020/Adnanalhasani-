@@ -374,8 +374,7 @@ private fun StoreApp(context: Context) {
                         showCatalog = false
                     })
                     showDebts -> if (cloudMode) {
-                        cloudNotice = "المديونيات والتحصيلات السحابية لم تُربط بعد بجدول المدفوعات وتخصيصها؛ لم نعرض الأرصدة المحلية على أنها أرصدة خادم."
-                        showDebts = false
+                        CommercialCloudDebtScreen(context = context, onBack = { showDebts = false })
                     } else DebtScreen(sales = sales, settlements = settlements, onBack = { showDebts = false }, onSettle = { settlingSaleNumber = it.number })
                     showReports -> if (cloudMode) {
                         cloudNotice = "التقرير المالي الموحد غير جاهز بعد؛ المصروفات والتسديدات محلية، لذلك لن نخلطها مع فواتير السحابة في تقرير واحد."
@@ -386,8 +385,7 @@ private fun StoreApp(context: Context) {
                         showExpenses = false
                     } else ExpensesScreen(expenses = expenses, onBack = { showExpenses = false }, onAdd = { expenseDialog = true })
                     else -> if (showActivityProfile) ActivityProfileScreen(onBack = { showActivityProfile = false }) else MoreScreen(onCustomers = {
-                    if (cloudMode) cloudNotice = "كشف ديون العملاء والتحصيلات السحابية غير مكتملين؛ لم نعرض الأرصدة المحلية على أنها أرصدة مؤكدة من الخادم."
-                    else showDebts = true
+                    showDebts = true
                 }, onReports = { showReports = true }, onExpenses = { showExpenses = true }, onActivityProfile = { showActivityProfile = true }, onCatalog = { showCatalog = true }, onMasterData = { showMasterData = true }, onCloudOperational = { cloudOperationalPage = it }, onCloudSales = { cloudSalesPage = true }, onCloudPurchases = { cloudPurchasesPage = true }, onCloudStockAlerts = { cloudStockAlertsPage = true }, onUnitsDirectory = { cloudUnitsPage = true })
                 }
             }
