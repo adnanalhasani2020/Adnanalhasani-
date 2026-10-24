@@ -96,7 +96,7 @@ internal fun loadCommercialCloudInventory(context: Context): CommercialCloudInve
     sessionPrefs.edit().putString("refresh_token", rotatedRefresh).apply()
 
     val query = "/rest/v1/commercial_inventory_balances" +
-        "?select=offering_id,quantity_on_hand,quantity_reserved,reorder_point,offering:commercial_offerings!inner(id,price_minor,currency_code,activity_id,product:commercial_products!inner(name,description,unit_name,state),categories:commercial_offering_categories(category:commercial_product_categories(name_ar,name_en)))" +
+        "?select=offering_id,quantity_on_hand,quantity_reserved,reorder_point,offering:commercial_offerings!inner(id,price_minor,currency_code,activity_id,product:commercial_products!inner(name,description,unit_name,state),categories:commercial_offering_categories(is_primary,category:commercial_product_categories(name_ar,name_en)))" +
         "&organization_id=eq.$orgId&location_id=eq.$locationId&offering.activity_id=eq.$activityId&order=updated_at.desc"
     val rows = JSONArray(commercialCloudRequest(query, "GET", token = access))
     val products = buildList {
@@ -108,7 +108,9 @@ internal fun loadCommercialCloudInventory(context: Context): CommercialCloudInve
             val categoryRows = offering.optJSONArray("categories")
             val categoryName = (0 until (categoryRows?.length() ?: 0))
                 .asSequence()
-                .mapNotNull { categoryRows?.optJSONObject(it)?.optJSONObject("category") }
+                .mapNotNull { categoryRows?.optJSONObject(it) }
+                .sortedByDescending { it.optBoolean("is_primary", false) }
+                .mapNotNull { it.optJSONObject("category") }
                 .map { it.optString("name_ar").ifBlank { it.optString("name_en") } }
                 .firstOrNull { it.isNotBlank() && it != "null" }
                 ?: "غير مصنف"
