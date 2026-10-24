@@ -1,6 +1,6 @@
 -- Atomic multi-line cash checkout. No credit, discount, tax or GL behavior is implied.
 CREATE OR REPLACE FUNCTION commercial_private.commercial_checkout_sale_multi(
-  p_lines jsonb, p_location_id uuid, p_idempotency_key text
+  p_lines jsonb, p_location_id uuid, p_idempotency_key text, p_customer_id uuid DEFAULT NULL
 ) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER
 SET search_path TO 'pg_catalog', 'public', 'commercial_private'
@@ -8,6 +8,7 @@ AS $function$
 DECLARE
   v_uid uuid := auth.uid();
   v_org uuid;
+  v_customer uuid := p_customer_id;
   v_activity uuid;
   v_currency text;
   v_line jsonb;
@@ -57,6 +58,7 @@ BEGIN
 
   v_fingerprint := md5(jsonb_build_object(
     'location_id', p_location_id,
+    'customer_id', p_customer_id,
     'lines', (SELECT jsonb_agg(jsonb_build_object('offering_id', e->>'offering_id', 'quantity', (e->>'quantity')::integer)
       ORDER BY (e->>'offering_id')::uuid) FROM jsonb_array_elements(p_lines) e)
   )::text);
@@ -91,6 +93,11 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM public.commercial_organization_members m WHERE m.organization_id=v_org AND m.user_id=v_uid AND m.state='active') THEN
     RAISE EXCEPTION 'organization_access_denied' USING ERRCODE='42501';
   END IF;
+  IF v_customer IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM public.commercial_customers c
+    WHERE c.id = v_customer AND c.organization_id = v_org AND c.state = 'active'
+  ) THEN RAISE EXCEPTION 'customer_not_active_in_organization' USING ERRCODE='22023'; END IF;
+
   IF EXISTS (
     SELECT 1 FROM jsonb_array_elements(p_lines) e
     JOIN public.commercial_offerings o ON o.id=(e->>'offering_id')::uuid
@@ -129,9 +136,9 @@ BEGIN
     RAISE EXCEPTION 'mixed_currency_invoice_not_supported' USING ERRCODE='22023';
   END IF;
   SELECT r->>'currency_code' INTO v_currency FROM jsonb_array_elements(v_rows) r LIMIT 1;
-  INSERT INTO public.commercial_sales(receipt_number,user_id,activity_id,organization_id,idempotency_key,
+  INSERT INTO public.commercial_sales(receipt_number,user_id,activity_id,organization_id,customer_id,idempotency_key,
     request_fingerprint,status,currency_code,total_minor,payment_status,channel)
-  VALUES(nextval('public.commercial_sales_receipt_number_seq'::regclass),v_uid,v_activity,v_org,p_idempotency_key,
+  VALUES(nextval('public.commercial_sales_receipt_number_seq'::regclass),v_uid,v_activity,v_org,v_customer,p_idempotency_key,
     v_fingerprint,'completed',v_currency,v_total::bigint,'paid','in_person')
   RETURNING id,receipt_number,created_at INTO v_sale,v_receipt,v_created;
 
@@ -164,18 +171,18 @@ END;
 $function$;
 
 CREATE OR REPLACE FUNCTION public.commercial_checkout_sale_multi(
-  p_lines jsonb, p_location_id uuid, p_idempotency_key text
+  p_lines jsonb, p_location_id uuid, p_idempotency_key text, p_customer_id uuid DEFAULT NULL
 ) RETURNS jsonb
 LANGUAGE plpgsql SECURITY INVOKER
 SET search_path TO 'pg_catalog', 'public', 'commercial_private'
 AS $function$
 BEGIN
   IF auth.uid() IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
-  RETURN commercial_private.commercial_checkout_sale_multi(p_lines,p_location_id,p_idempotency_key);
+  RETURN commercial_private.commercial_checkout_sale_multi(p_lines,p_location_id,p_idempotency_key,p_customer_id);
 END;
 $function$;
 
-REVOKE ALL ON FUNCTION commercial_private.commercial_checkout_sale_multi(jsonb,uuid,text) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION commercial_private.commercial_checkout_sale_multi(jsonb,uuid,text) TO authenticated;
-REVOKE ALL ON FUNCTION public.commercial_checkout_sale_multi(jsonb,uuid,text) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.commercial_checkout_sale_multi(jsonb,uuid,text) TO authenticated;
+REVOKE ALL ON FUNCTION commercial_private.commercial_checkout_sale_multi(jsonb,uuid,text,uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION commercial_private.commercial_checkout_sale_multi(jsonb,uuid,text,uuid) TO authenticated;
+REVOKE ALL ON FUNCTION public.commercial_checkout_sale_multi(jsonb,uuid,text,uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.commercial_checkout_sale_multi(jsonb,uuid,text,uuid) TO authenticated;
