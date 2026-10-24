@@ -1,6 +1,6 @@
 # Warehouse, Department, Category, and Product Architecture
 
-Status: design and additive Phase 1 migration committed. The migration defines master-data tables and tenant guards, but has not been applied to the live Supabase project and is not yet wired into Android stock posting.
+Status: Phase 1 additive migration applied to the live Supabase project. Android now has a cloud-backed screen for listing/creating warehouses, category trees, and departments. These masters are not yet connected to stock posting, item editing, storage-location movement, or transfer workflows.
 
 ## Research basis
 
@@ -50,7 +50,7 @@ Product data
 ## Data model proposal and implementation status
 
 Migration committed: `supabase/migrations/20261024001000_commercial_warehouse_category_department_foundation.sql`.
-It adds organization-scoped warehouse, nested storage-location, product-category, department, offering-category, and department-warehouse tables with RLS, hierarchy cycle checks, and cross-organization relationship guards. It intentionally does not modify current inventory balances or checkout behavior. The migration must be reviewed and applied through the project's normal migration process before the app can use these tables.
+It adds organization-scoped warehouse, nested storage-location, product-category, department, offering-category, and department-warehouse tables with RLS, hierarchy cycle checks, and cross-organization relationship guards. It intentionally does not modify current inventory balances or checkout behavior. The migration was applied through the Supabase migration tool and verified in the live schema. It does not modify existing balances or checkout behavior. The Android screen can create root and nested category/department nodes and warehouses; storage locations and offering/category assignments remain backend foundations for the next phase.
 
 ## Remaining data-model work
 
