@@ -340,7 +340,7 @@ private fun StoreApp(context: Context) {
                         }
                         showCatalog = false
                     })
-                    showDebts -> DebtScreen(sales = sales, settlements = settlements, onBack = { showDebts = false }, onSettle = { settlingSaleNumber = it.number })
+                    showDebts -> DebtScreen(sales = sales, settlements = settlements, allowSettlement = !cloudMode, onBack = { showDebts = false }, onSettle = { settlingSaleNumber = it.number })
                     showReports -> ReportsScreen(sales = sales, settlements = settlements, expenses = expenses, onBack = { showReports = false })
                     showExpenses -> ExpensesScreen(expenses = expenses, onBack = { showExpenses = false }, onAdd = { expenseDialog = true })
                     else -> if (showActivityProfile) ActivityProfileScreen(onBack = { showActivityProfile = false }) else MoreScreen(onCustomers = { showDebts = true }, onReports = { showReports = true }, onExpenses = { showExpenses = true }, onActivityProfile = { showActivityProfile = true }, onCatalog = { showCatalog = true }, onMasterData = { showMasterData = true })
@@ -1197,7 +1197,7 @@ private fun ReportsScreen(sales: List<SaleRecord>, settlements: List<SettlementR
 }
 
 @Composable
-private fun DebtScreen(sales: List<SaleRecord>, settlements: List<SettlementRecord>, onBack: () -> Unit, onSettle: (SaleRecord) -> Unit) {
+private fun DebtScreen(sales: List<SaleRecord>, settlements: List<SettlementRecord>, allowSettlement: Boolean, onBack: () -> Unit, onSettle: (SaleRecord) -> Unit) {
     var customerQuery by remember { mutableStateOf("") }
     val allDebts = sales.filter { it.credit && it.total > it.paid }
     val debts = allDebts.filter {
@@ -1223,6 +1223,11 @@ private fun DebtScreen(sales: List<SaleRecord>, settlements: List<SettlementReco
                 label = { Text("ابحث باسم العميل أو المنتج أو رقم الفاتورة") },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) }
             )
+        }
+        if (!allowSettlement) item {
+            Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3D6)), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+                Text("التحصيلات السحابية غير مكتملة بعد. الأرصدة المعروضة قد لا تعكس الدفعات الجزئية؛ تم تعطيل تسجيل التسديد هنا حتى لا يُحفظ محليًا فقط.", modifier = Modifier.padding(14.dp), color = Color(0xFF805400), fontSize = 13.sp)
+            }
         }
         item {
             Card(colors = CardDefaults.cardColors(containerColor = Ink), shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
@@ -1259,7 +1264,7 @@ private fun DebtScreen(sales: List<SaleRecord>, settlements: List<SettlementReco
                         Text("المسدّد: ${money(sale.paid)}", color = Green, fontSize = 12.sp)
                     }
                     Text("المتبقي: ${money((sale.total - sale.paid).coerceAtLeast(0))}", color = Orange, fontWeight = FontWeight.Bold)
-                    Button(onClick = { onSettle(sale) }, modifier = Modifier.fillMaxWidth()) { Text("تسجيل تسديد") }
+                    if (allowSettlement) Button(onClick = { onSettle(sale) }, modifier = Modifier.fillMaxWidth()) { Text("تسجيل تسديد") }
                 }
             }
         }
