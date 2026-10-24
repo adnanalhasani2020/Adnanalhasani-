@@ -9,3 +9,7 @@ internal fun aggregateSaleQuantities(lines: List<Pair<String, Int>>): Map<String
     }
     return totals
 }
+
+internal fun validateAvailableStock(requested: Map<String, Int>, available: Map<String, Int>) {
+    requested.forEach { (id, qty) -> require(qty > 0 && available[id] != null && qty <= available.getValue(id)) }
+}
