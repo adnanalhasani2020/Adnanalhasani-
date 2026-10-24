@@ -97,8 +97,8 @@ internal fun loadCommercialCloudInventory(context: Context): CommercialCloudInve
 
     val query = "/rest/v1/commercial_inventory_balances" +
         "?select=offering_id,quantity_on_hand,quantity_reserved,reorder_point,offering:commercial_offerings!inner(id,price_minor,currency_code,activity_id,product:commercial_products!inner(name,description,unit_name,state),categories:commercial_offering_categories(is_primary,category:commercial_product_categories(name_ar,name_en)))" +
-        "&organization_id=eq.$orgId&location_id=eq.$locationId&offering.activity_id=eq.$activityId&order=updated_at.desc"
-    val rows = commercialCloudPagedGet("$query&order=updated_at.desc,offering_id.asc", access)
+        "&organization_id=eq.$orgId&location_id=eq.$locationId&offering.activity_id=eq.$activityId&order=updated_at.desc,offering_id.asc"
+    val rows = commercialCloudPagedGet(query, access)
     val products = buildList {
         for (index in 0 until rows.length()) {
             val row = rows.optJSONObject(index) ?: continue
