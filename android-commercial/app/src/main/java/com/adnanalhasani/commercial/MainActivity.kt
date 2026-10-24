@@ -535,7 +535,7 @@ private fun Dashboard(products: List<Product>, sales: List<SaleRecord>, cloudMod
                         }
                     }
                     Spacer(Modifier.height(22.dp))
-                    Text("إجمالي المبيعات المسجلة", color = Color(0xFFBFD9D0), fontSize = 13.sp)
+                    Text(if (cloudMode) "إجمالي الفواتير المحمّلة (آخر 200)" else "إجمالي المبيعات المسجلة", color = Color(0xFFBFD9D0), fontSize = 13.sp)
                     Text(money(sales.sumOf { it.total }), color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 29.sp)
                     Spacer(Modifier.height(5.dp))
                     Text(if (cloudMode) "${sales.size} فاتورة محمّلة من قاعدة البيانات" else "${sales.size} فاتورة محفوظة على هذا الجهاز", color = Color(0xFF8DE0B8), fontSize = 12.sp)
@@ -548,7 +548,7 @@ private fun Dashboard(products: List<Product>, sales: List<SaleRecord>, cloudMod
                 }
             }
         }
-        item { Heading("ملخص المبيعات", "إحصاءات الفواتير المحفوظة محليًا") }
+        item { Heading("ملخص المبيعات", if (cloudMode) "ملخص آخر الفواتير المحمّلة من الخادم (حتى 200 فاتورة)" else "إحصاءات الفواتير المحفوظة محليًا") }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Metric("الفواتير", sales.size.toString(), "فاتورة محفوظة", Icons.Default.PointOfSale, Modifier.weight(1f))
@@ -602,7 +602,7 @@ private fun SalesScreen(sales: List<SaleRecord>, cloudMode: Boolean, onNewSale: 
         item { Heading("المبيعات والفواتير", if (cloudMode) "الفواتير المحمّلة من قاعدة بيانات المؤسسة" else "تابع عمليات البيع والتحصيل") }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Metric("إجمالي المبيعات", money(sales.sumOf { it.total }), "الفواتير المحفوظة", Icons.Default.AttachMoney, Modifier.weight(1f))
+                Metric(if (cloudMode) "مبيعات آخر 200 فاتورة" else "إجمالي المبيعات", money(sales.sumOf { it.total }), if (cloudMode) "الفواتير المحمّلة" else "الفواتير المحفوظة", Icons.Default.AttachMoney, Modifier.weight(1f))
                 Metric("عدد الفواتير", sales.size.toString(), "فاتورة", Icons.Default.PointOfSale, Modifier.weight(1f))
             }
         }
