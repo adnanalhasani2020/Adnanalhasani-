@@ -31,6 +31,8 @@ gradle -p android-commercial assembleDebug -PSUPABASE_ANON_KEY=<publishable-or-a
 
 التفاصيل التقنية: [دليل ملف النشاط التجاري وSupabase](../docs/commercial-profile-supabase.md).
 
+خطة المستندات التجارية المتكاملة (الفواتير متعددة البنود، المشتريات، المرتجعات، السندات، والربط المالي والمخزني): [عقد التنفيذ وسير العمل](docs/commercial-documents-implementation-plan.md).
+
 تصميم التطوير للمستودعات ومواقع التخزين والمجموعات والأقسام وربطها بالأصناف: [هندسة المستودعات والتصنيف](docs/warehouse-and-classification-architecture.md). يوضح النموذج المقترح وما هو موجود بالفعل في قاعدة البيانات، وخطة ترحيل تدريجية تمنع تكرار الكيانات أو تصفير الأرصدة.
 
 ## حدود النسخة الحالية
