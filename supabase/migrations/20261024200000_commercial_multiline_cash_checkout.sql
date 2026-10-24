@@ -73,7 +73,8 @@ BEGIN
     END IF;
     RETURN jsonb_build_object('sale_id',v_sale,'receipt_number',v_receipt,'organization_id',v_org,
       'activity_id',v_activity,'currency_code',v_currency,'total_minor',v_total,
-      'state','completed','payment_status','paid','idempotent_replay',true);
+      'line_count',(SELECT count(*) FROM public.commercial_sale_items i WHERE i.sale_id=v_sale),
+      'payment_recorded',v_total>0,'state','completed','payment_status','paid','idempotent_replay',true);
   END IF;
 
   SELECT a.id, a.organization_id INTO v_activity, v_org
