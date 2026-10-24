@@ -43,6 +43,12 @@ Still not complete and must remain gated:
 - Existing checkout currently updates stock and writes a stock movement, but the audited function body does not create a `commercial_payments` row or a journal entry. Therefore do not claim the full cash/accounting lifecycle is complete until this gap is addressed in a schema-grounded migration and verified against current constraints and policies.
 - Payment allocation currently references `order_id`; do not assume it can be allocated directly to `commercial_sales` without checking the intended order/sale relationship and enforcing no-over-allocation.
 - CI/build and live authenticated end-to-end tests are still release gates. No APK should be described as tested until the Android build and focused tests pass.
+### Cash checkout hardening — 2026-10-24
+
+An additive migration now wraps the existing authorized single-item checkout RPC and writes one `commercial_payments` row with status `succeeded` in the same database transaction as the sale and stock movement. The payment idempotency key is derived from the server-generated sale UUID, and the unique organization/key constraint prevents duplicate cash payment rows on retries. The wrapper retains the existing public invoker boundary and delegates sale authorization and inventory locking to the existing private function.
+
+This migration is committed to the review branch but has **not** been applied to the live database. Apply only after migration review and CI validation. It closes the missing cash-payment-record gap for the existing single-item flow; it does not complete multi-line checkout, customer collections, credit sales, refunds, or general-ledger posting. Do not manufacture a journal entry until the organization's ledger accounts and posting policy are configured and verified.
+
 ## Target document workflows
 
 ### Sales
