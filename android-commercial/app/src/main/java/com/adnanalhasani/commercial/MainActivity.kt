@@ -257,7 +257,7 @@ private fun StoreApp(context: Context) {
                     sales.addAll(serverSales)
                     nextInvoice = maxOf(nextInvoice, (serverSales.maxOfOrNull { it.number } ?: 0) + 1)
                 }.onFailure {
-                    cloudNotice = "تم تحميل المخزون، لكن تعذر تحميل سجل المبيعات من الخادم: " + (it.message ?: "خطأ غير معروف")
+                    cloudNotice = "تعذر تحميل سجل المبيعات من الخادم: " + (it.message ?: "خطأ غير معروف")
                 }
             }
         }
