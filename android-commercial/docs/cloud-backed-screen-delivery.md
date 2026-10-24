@@ -32,4 +32,4 @@ The purchase list currently displays the supplier ID rather than a joined suppli
 
 ## Validation boundary
 
-A successful code review or schema read does not prove the Android app builds or that RLS permits every intended role. Run the Gradle build and authenticated staging smoke tests before release. No production records were created or modified by these read-only screens.
+The Android debug APK build and both repository pytest workflows passed on PR #540 (commit `ffc86eba7d506e76af4a2e0a0842fbbd01263325`). Static contract tests now guard the query allow-list, organization scoping, read-only behavior, route coverage, and error/read-only UI labels. CI success does not prove RLS permits every intended role; authenticated staging smoke tests are still required before release. No production records were created or modified by these read-only screens.
