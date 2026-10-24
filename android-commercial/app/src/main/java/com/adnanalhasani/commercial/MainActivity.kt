@@ -106,8 +106,14 @@ private const val SALES_KEY = "sales_json"
 private const val SETTLEMENTS_KEY = "settlements_json"
 private const val EXPENSES_KEY = "expenses_json"
 
+private fun scopedStoreKey(context: Context, key: String): String {
+    val organizationId = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+        .getString("organization_id", null).orEmpty()
+    return if (organizationId.isBlank()) key else "${key}_${organizationId}"
+}
+
 private fun loadProducts(context: Context): List<Product> {
-    val saved = context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).getString(PRODUCTS_KEY, null)
+    val saved = context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).getString(scopedStoreKey(context, PRODUCTS_KEY), null)
         ?: return products
     return runCatching {
         val json = JSONArray(saved)
@@ -124,11 +130,11 @@ private fun saveProducts(context: Context, items: List<Product>) {
         json.put(JSONObject().put("name", item.name).put("category", item.category)
             .put("stock", item.stock).put("price", item.price).put("costPrice", item.costPrice).put("catalogCode", item.catalogCode).put("barcode", item.barcode).put("unitCode", item.unitCode).put("imageUrl", item.imageUrl).put("description", item.description).put("brand", item.brand).put("manufacturer", item.manufacturer).put("countryOfManufacture", item.countryOfManufacture).put("createdAt", item.createdAt).put("createdBy", item.createdBy).put("unitVariantsJson", item.unitVariantsJson))
     }
-    context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).edit().putString(PRODUCTS_KEY, json.toString()).apply()
+    context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).edit().putString(scopedStoreKey(context, PRODUCTS_KEY), json.toString()).apply()
 }
 
 private fun loadSales(context: Context): List<SaleRecord> {
-    val saved = context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).getString(SALES_KEY, null) ?: return emptyList()
+    val saved = context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).getString(scopedStoreKey(context, SALES_KEY), null) ?: return emptyList()
     return runCatching {
         val json = JSONArray(saved)
         List(json.length()) { i ->
@@ -140,7 +146,7 @@ private fun loadSales(context: Context): List<SaleRecord> {
 }
 
 private fun loadSettlements(context: Context): List<SettlementRecord> {
-    val saved = context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).getString(SETTLEMENTS_KEY, null) ?: return emptyList()
+    val saved = context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).getString(scopedStoreKey(context, SETTLEMENTS_KEY), null) ?: return emptyList()
     return runCatching {
         val json = JSONArray(saved)
         List(json.length()) { i ->
@@ -151,7 +157,7 @@ private fun loadSettlements(context: Context): List<SettlementRecord> {
 }
 
 private fun loadExpenses(context: Context): List<ExpenseRecord> {
-    val saved = context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).getString(EXPENSES_KEY, null) ?: return emptyList()
+    val saved = context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).getString(scopedStoreKey(context, EXPENSES_KEY), null) ?: return emptyList()
     return runCatching {
         val json = JSONArray(saved)
         List(json.length()) { i ->
@@ -168,7 +174,7 @@ private fun saveExpenses(context: Context, items: List<ExpenseRecord>) {
         json.put(JSONObject().put("id", item.id).put("category", item.category)
             .put("amount", item.amount).put("note", item.note).put("timestamp", item.timestamp))
     }
-    context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).edit().putString(EXPENSES_KEY, json.toString()).apply()
+    context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).edit().putString(scopedStoreKey(context, EXPENSES_KEY), json.toString()).apply()
 }
 
 private fun saveSettlements(context: Context, items: List<SettlementRecord>) {
@@ -177,7 +183,7 @@ private fun saveSettlements(context: Context, items: List<SettlementRecord>) {
         json.put(JSONObject().put("invoiceNumber", item.invoiceNumber).put("customer", item.customer)
             .put("amount", item.amount).put("timestamp", item.timestamp))
     }
-    context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).edit().putString(SETTLEMENTS_KEY, json.toString()).apply()
+    context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).edit().putString(scopedStoreKey(context, SETTLEMENTS_KEY), json.toString()).apply()
 }
 
 private fun saveSales(context: Context, items: List<SaleRecord>) {
@@ -187,7 +193,7 @@ private fun saveSales(context: Context, items: List<SaleRecord>) {
             .put("quantity", item.quantity).put("total", item.total).put("credit", item.credit)
             .put("customer", item.customer).put("paid", item.paid).put("createdAt", item.createdAt).put("unitCost", item.unitCost).put("unitCode", item.unitCode).put("baseQuantitySold", item.baseQuantitySold))
     }
-    context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).edit().putString(SALES_KEY, json.toString()).apply()
+    context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).edit().putString(scopedStoreKey(context, SALES_KEY), json.toString()).apply()
 }
 private val storeCloudIo = Executors.newSingleThreadExecutor()
 private val storeCloudMain = Handler(Looper.getMainLooper())
@@ -220,9 +226,9 @@ private fun StoreApp(context: Context) {
             !saved.getString("activity_id", null).isNullOrBlank() &&
             !saved.getString("location_id", null).isNullOrBlank()
     }
-    val sales = remember { mutableStateListOf<SaleRecord>().apply { if (!cloudContextExists) addAll(loadSales(context)) } }
-    val settlements = remember { mutableStateListOf<SettlementRecord>().apply { if (!cloudContextExists) addAll(loadSettlements(context)) } }
-    val expenses = remember { mutableStateListOf<ExpenseRecord>().apply { if (!cloudContextExists) addAll(loadExpenses(context)) } }
+    val sales = remember { mutableStateListOf<SaleRecord>().apply { addAll(loadSales(context)) } }
+    val settlements = remember { mutableStateListOf<SettlementRecord>().apply { addAll(loadSettlements(context)) } }
+    val expenses = remember { mutableStateListOf<ExpenseRecord>().apply { addAll(loadExpenses(context)) } }
     var expenseDialog by remember { mutableStateOf(false) }
     val inventory = remember { mutableStateListOf<Product>().apply { if (!cloudContextExists) addAll(loadProducts(context)) } }
     var cloudInventoryLoaded by remember { mutableStateOf(!cloudContextExists) }
