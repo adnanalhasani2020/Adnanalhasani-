@@ -1,0 +1,34 @@
+# Cloud-backed commercial screens — delivery note
+
+## Added in this slice
+
+The Android “More” menu now links to dedicated, Arabic-first, RTL list screens for:
+
+- Cloud customer directory
+- Supplier directory
+- Purchase orders
+- Payment records
+- Sales returns
+- Journal entries
+- Ledger accounts
+
+The screens provide search, refresh, loading/error/empty states, status badges, source references, and a read-only indicator. Their queries use an explicit allow-list of existing tables and columns from the reconciled schema and filter by the saved organization ID. Session refresh uses the existing encrypted Supabase refresh-token storage.
+
+## Important correctness boundary
+
+These are cloud-backed read-only views, not full create/edit/posting workflows. No UI action writes directly to payment, return, journal, or ledger tables. This is intentional: purchasing, customer debt, supplier settlement, refunds/restocking, and journal posting must use the exact existing guarded RPC contracts and transactional behavior. Do not label local-only debt/expense records as cloud-confirmed.
+
+The purchase list currently displays the supplier ID rather than a joined supplier name, and monetary values are shown in minor units because the UI must not guess currency precision. These should be refined only after a schema-grounded join and currency-format contract are confirmed.
+
+## Next UI slices
+
+1. Replace the single-item sale dialog with a multi-line invoice editor only after a single atomic server operation can accept and validate all lines, units, pricing, stock, idempotency, and the resulting document.
+2. Add customer/supplier create/edit forms through approved server-side contracts.
+3. Complete purchase order items, receiving, and supplier settlement as separate state-aware screens.
+4. Wire returns through request → decision → inspection → refund/restock using the existing guarded RPCs.
+5. Add receipt allocation and statements only when authoritative cloud allocation APIs are confirmed.
+6. Add trial balance/income statement/balance sheet only after the canonical posted double-entry model and account classification rules are proven.
+
+## Validation boundary
+
+A successful code review or schema read does not prove the Android app builds or that RLS permits every intended role. Run the Gradle build and authenticated staging smoke tests before release. No production records were created or modified by these read-only screens.

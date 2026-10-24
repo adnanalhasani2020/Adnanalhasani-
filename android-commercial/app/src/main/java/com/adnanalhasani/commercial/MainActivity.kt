@@ -216,6 +216,7 @@ private fun StoreApp(context: Context) {
     var showActivityProfile by remember { mutableStateOf(false) }
     var showCatalog by remember { mutableStateOf(false) }
     var showMasterData by remember { mutableStateOf(false) }
+    var cloudOperationalPage by remember { mutableStateOf("") }
     var settlingSaleNumber by remember { mutableIntStateOf(-1) }
     val cloudContextExists = remember {
         val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
@@ -326,6 +327,7 @@ private fun StoreApp(context: Context) {
                     else editingProductIndex = index
                 })
                 else -> when {
+                    cloudOperationalPage.isNotBlank() -> CommercialCloudOperationalScreen(context = context, screenKey = cloudOperationalPage, onBack = { cloudOperationalPage = "" })
                     showMasterData -> MasterDataScreen(context = context, onBack = { showMasterData = false })
                     showCatalog -> CatalogScreen(onBack = { showCatalog = false }, onAddToInventory = { catalogItem ->
                         val existing = inventory.indexOfFirst { it.catalogCode.isNotBlank() && it.catalogCode == catalogItem.catalogCode }
@@ -343,7 +345,7 @@ private fun StoreApp(context: Context) {
                     showDebts -> DebtScreen(sales = sales, settlements = settlements, onBack = { showDebts = false }, onSettle = { settlingSaleNumber = it.number })
                     showReports -> ReportsScreen(sales = sales, settlements = settlements, expenses = expenses, onBack = { showReports = false })
                     showExpenses -> ExpensesScreen(expenses = expenses, onBack = { showExpenses = false }, onAdd = { expenseDialog = true })
-                    else -> if (showActivityProfile) ActivityProfileScreen(onBack = { showActivityProfile = false }) else MoreScreen(onCustomers = { showDebts = true }, onReports = { showReports = true }, onExpenses = { showExpenses = true }, onActivityProfile = { showActivityProfile = true }, onCatalog = { showCatalog = true }, onMasterData = { showMasterData = true })
+                    else -> if (showActivityProfile) ActivityProfileScreen(onBack = { showActivityProfile = false }) else MoreScreen(onCustomers = { showDebts = true }, onReports = { showReports = true }, onExpenses = { showExpenses = true }, onActivityProfile = { showActivityProfile = true }, onCatalog = { showCatalog = true }, onMasterData = { showMasterData = true }, onCloudOperational = { cloudOperationalPage = it })
                 }
             }
         }
@@ -977,12 +979,12 @@ private fun AddProductDialog(
 }
 
 @Composable
-private fun MoreScreen(onCustomers: () -> Unit, onReports: () -> Unit, onExpenses: () -> Unit, onActivityProfile: () -> Unit, onCatalog: () -> Unit, onMasterData: () -> Unit) {
-    val options = listOf("دليل الأصناف العالمي", "المستودعات والمجموعات والأقسام", "العملاء والمديونيات", "الموردون والمشتريات", "التقارير والأرباح", "المصروفات", "إعدادات المتجر", "النسخ الاحتياطي")
+private fun MoreScreen(onCustomers: () -> Unit, onReports: () -> Unit, onExpenses: () -> Unit, onActivityProfile: () -> Unit, onCatalog: () -> Unit, onMasterData: () -> Unit, onCloudOperational: (String) -> Unit) {
+    val options = listOf("دليل الأصناف العالمي", "المستودعات والمجموعات والأقسام", "العملاء والمديونيات", "دليل العملاء السحابي", "دليل الموردين", "أوامر الشراء", "السندات والمدفوعات", "مرتجعات المبيعات", "القيود المحاسبية", "دليل الحسابات", "التقارير والأرباح", "المصروفات", "إعدادات المتجر", "النسخ الاحتياطي")
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Heading("إدارة المتجر", "الأدوات والإعدادات") }
         items(options) { label ->
-            Card(onClick = { when (label) { "العملاء والمديونيات" -> onCustomers(); "التقارير والأرباح" -> onReports(); "المصروفات" -> onExpenses(); "إعدادات المتجر" -> onActivityProfile(); "دليل الأصناف العالمي" -> onCatalog(); "المستودعات والمجموعات والأقسام" -> onMasterData() } }, colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Border)) {
+            Card(onClick = { when (label) { "العملاء والمديونيات" -> onCustomers(); "التقارير والأرباح" -> onReports(); "المصروفات" -> onExpenses(); "إعدادات المتجر" -> onActivityProfile(); "دليل الأصناف العالمي" -> onCatalog(); "المستودعات والمجموعات والأقسام" -> onMasterData(); "دليل العملاء السحابي" -> onCloudOperational("customers"); "دليل الموردين" -> onCloudOperational("suppliers"); "أوامر الشراء" -> onCloudOperational("purchases"); "السندات والمدفوعات" -> onCloudOperational("payments"); "مرتجعات المبيعات" -> onCloudOperational("returns"); "القيود المحاسبية" -> onCloudOperational("journals"); "دليل الحسابات" -> onCloudOperational("accounts") } }, colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Border)) {
                 Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(38.dp).background(Mint, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) { Icon(Icons.Default.Settings, null, tint = Green) }
                     Spacer(Modifier.width(12.dp))
@@ -991,7 +993,7 @@ private fun MoreScreen(onCustomers: () -> Unit, onReports: () -> Unit, onExpense
                 }
             }
         }
-        item { Text("نسخة واجهات أولية • البيانات المعروضة تجريبية", color = Muted, fontSize = 11.sp, modifier = Modifier.padding(vertical = 12.dp)) }
+        item { Text("الشاشات السحابية تعرض السجلات الفعلية المسموح بها من Supabase؛ بعض العمليات الكتابية ما زالت محجوبة حتى اعتماد إجراءاتها الآمنة.", color = Muted, fontSize = 11.sp, modifier = Modifier.padding(vertical = 12.dp)) }
     }
 }
 
