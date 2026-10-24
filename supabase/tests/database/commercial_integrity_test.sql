@@ -1,7 +1,7 @@
 -- Run with Supabase CLI / pgTAP in a disposable local or staging database.
 -- These are schema regression tests; they do not replace authenticated-session integration tests.
 BEGIN;
-SELECT plan(21);
+SELECT plan(24);
 
 SELECT has_table('public', 'commercial_audit_events',
   'append-only audit event table exists');
@@ -143,6 +143,36 @@ SELECT ok(
      AND pg_get_function_identity_arguments(p.oid) =
        'p_name text, p_slug text, p_organization_type text, p_currency_code text, p_timezone text, p_locale text, p_country_code text, p_module_keys text[]'),
   'organization onboarding RPC is hardened and restricted to authenticated users');
+
+SELECT ok(
+  position('a.currency_code IS DISTINCT FROM l.currency_code' in pg_get_functiondef(
+    'public.commercial_post_journal_entry(uuid)'::regprocedure
+  )) > 0,
+  'journal posting rejects account/line currency mismatches');
+
+SELECT ok(
+  position('a.is_active IS DISTINCT FROM true' in pg_get_functiondef(
+    'public.commercial_post_journal_entry(uuid)'::regprocedure
+  )) > 0,
+  'journal posting rejects inactive ledger accounts');
+
+SELECT ok(
+  (SELECT count(*) = 7
+   FROM pg_proc p
+   JOIN pg_namespace n ON n.oid = p.pronamespace
+   WHERE n.nspname = 'public'
+     AND p.proname IN (
+       'commercial_add_global_item_to_organization',
+       'commercial_create_personal_account',
+       'commercial_decide_sale_return',
+       'commercial_inspect_sale_return_item',
+       'commercial_post_journal_entry',
+       'commercial_request_sale_return',
+       'commercial_restock_approved_sale_return'
+     )
+     AND p.prosecdef
+     AND has_function_privilege('authenticated', p.oid, 'EXECUTE')),
+  'all seven protected commercial RPCs remain callable by authenticated users');
 
 SELECT * FROM finish();
 ROLLBACK;
