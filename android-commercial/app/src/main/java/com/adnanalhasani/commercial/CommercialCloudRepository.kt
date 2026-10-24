@@ -183,23 +183,46 @@ internal fun createCommercialCloudInventoryItem(
 
 internal fun getOrCreateCommercialCloudSaleKey(context: Context, offeringId: String, quantity: Int): String {
     require(offeringId.isNotBlank() && quantity > 0) { "بيانات البيع غير صحيحة." }
+    val cloudContext = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+    val organizationId = cloudContext.getString("organization_id", null).orEmpty()
+    val activityId = cloudContext.getString("activity_id", null).orEmpty()
+    val locationId = cloudContext.getString("location_id", null).orEmpty()
+    require(organizationId.isNotBlank() && activityId.isNotBlank() && locationId.isNotBlank()) {
+        "بيانات المؤسسة والنشاط والموقع غير مكتملة."
+    }
+
     val prefs = context.getSharedPreferences("commercial_cloud_pending_sale_v1", Context.MODE_PRIVATE)
     val storedOffering = prefs.getString("offering_id", null).orEmpty()
     val storedQuantity = prefs.getInt("quantity", -1)
+    val storedOrganization = prefs.getString("organization_id", null).orEmpty()
+    val storedActivity = prefs.getString("activity_id", null).orEmpty()
+    val storedLocation = prefs.getString("location_id", null).orEmpty()
     val storedKey = prefs.getString("idempotency_key", null).orEmpty()
-    if (storedOffering == offeringId && storedQuantity == quantity && storedKey.isNotBlank()) return storedKey
+
+    // A retry key belongs to one exact operation and tenant/location context.
+    // Reusing it after switching organizations or warehouses can collide with
+    // a different server-side request or retry an unintended sale.
+    if (storedOffering == offeringId && storedQuantity == quantity &&
+        storedOrganization == organizationId && storedActivity == activityId &&
+        storedLocation == locationId && storedKey.isNotBlank()) return storedKey
+
     val key = UUID.randomUUID().toString()
-    prefs.edit()
+    check(prefs.edit()
+        .putString("organization_id", organizationId)
+        .putString("activity_id", activityId)
+        .putString("location_id", locationId)
         .putString("offering_id", offeringId)
         .putInt("quantity", quantity)
         .putString("idempotency_key", key)
-        .apply()
+        .commit()) { "تعذر حفظ مفتاح عملية البيع قبل الإرسال؛ لم يتم إرسال البيع." }
     return key
 }
 
 internal fun clearCommercialCloudSaleKey(context: Context, idempotencyKey: String) {
     val prefs = context.getSharedPreferences("commercial_cloud_pending_sale_v1", Context.MODE_PRIVATE)
-    if (prefs.getString("idempotency_key", null) == idempotencyKey) prefs.edit().clear().apply()
+    if (prefs.getString("idempotency_key", null) == idempotencyKey) {
+        check(prefs.edit().clear().commit()) { "تعذر تنظيف حالة البيع بعد تأكيد الخادم." }
+    }
 }
 
 internal fun checkoutCommercialCloudSale(
