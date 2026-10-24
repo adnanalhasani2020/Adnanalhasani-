@@ -223,7 +223,7 @@ private fun StoreApp(context: Context) {
             !saved.getString("activity_id", null).isNullOrBlank() &&
             !saved.getString("location_id", null).isNullOrBlank()
     }
-    val sales = remember { mutableStateListOf<SaleRecord>().apply { addAll(loadSales(context)) } }
+    val sales = remember { mutableStateListOf<SaleRecord>().apply { if (!cloudContextExists) addAll(loadSales(context)) } }
     val settlements = remember { mutableStateListOf<SettlementRecord>().apply { addAll(loadSettlements(context)) } }
     val expenses = remember { mutableStateListOf<ExpenseRecord>().apply { addAll(loadExpenses(context)) } }
     var expenseDialog by remember { mutableStateOf(false) }
@@ -266,7 +266,8 @@ private fun StoreApp(context: Context) {
                     sales.addAll(serverSales)
                     nextInvoice = maxOf(nextInvoice, (serverSales.maxOfOrNull { it.number } ?: 0) + 1)
                 }.onFailure {
-                    cloudNotice = "تعذر تحميل سجل المبيعات من الخادم: " + (it.message ?: "خطأ غير معروف")
+                    sales.clear()
+                    cloudNotice = "تعذر تحميل سجل المبيعات من الخادم؛ أخفينا البيانات المحلية حتى لا تختلط بسجلات المؤسسة: " + (it.message ?: "خطأ غير معروف")
                 }
             }
         }
@@ -308,7 +309,7 @@ private fun StoreApp(context: Context) {
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (tab) {
                 0 -> Dashboard(products = inventory, sales = sales, cloudMode = cloudMode, onNewSale = { newSale = true }, onInventory = { tab = 2 })
-                1 -> SalesScreen(sales = sales, onNewSale = { newSale = true })
+                1 -> SalesScreen(sales = sales, cloudMode = cloudMode, onNewSale = { newSale = true })
                 2 -> InventoryScreen(inventory, query, { query = it }, {
                     addProduct = true
                     if (cloudMode) storeCloudIo.execute {
@@ -340,9 +341,9 @@ private fun StoreApp(context: Context) {
                         }
                         showCatalog = false
                     })
-                    showDebts -> DebtScreen(sales = sales, settlements = settlements, onBack = { showDebts = false }, onSettle = { settlingSaleNumber = it.number })
-                    showReports -> ReportsScreen(sales = sales, settlements = settlements, expenses = expenses, onBack = { showReports = false })
-                    showExpenses -> ExpensesScreen(expenses = expenses, onBack = { showExpenses = false }, onAdd = { expenseDialog = true })
+                    showDebts -> DebtScreen(sales = sales, settlements = if (cloudMode) emptyList() else settlements, allowSettlement = !cloudMode, onBack = { showDebts = false }, onSettle = { settlingSaleNumber = it.number })
+                    showReports -> ReportsScreen(sales = sales, settlements = settlements, expenses = expenses, allowLocalData = !cloudMode, onBack = { showReports = false })
+                    showExpenses -> ExpensesScreen(expenses = expenses, allowLocalData = !cloudMode, onBack = { showExpenses = false }, onAdd = { expenseDialog = true })
                     else -> if (showActivityProfile) ActivityProfileScreen(onBack = { showActivityProfile = false }) else MoreScreen(onCustomers = { showDebts = true }, onReports = { showReports = true }, onExpenses = { showExpenses = true }, onActivityProfile = { showActivityProfile = true }, onCatalog = { showCatalog = true }, onMasterData = { showMasterData = true })
                 }
             }
@@ -534,7 +535,7 @@ private fun Dashboard(products: List<Product>, sales: List<SaleRecord>, cloudMod
                         }
                     }
                     Spacer(Modifier.height(22.dp))
-                    Text("إجمالي المبيعات المسجلة", color = Color(0xFFBFD9D0), fontSize = 13.sp)
+                    Text(if (cloudMode) "إجمالي الفواتير المحمّلة (آخر 200)" else "إجمالي المبيعات المسجلة", color = Color(0xFFBFD9D0), fontSize = 13.sp)
                     Text(money(sales.sumOf { it.total }), color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 29.sp)
                     Spacer(Modifier.height(5.dp))
                     Text(if (cloudMode) "${sales.size} فاتورة محمّلة من قاعدة البيانات" else "${sales.size} فاتورة محفوظة على هذا الجهاز", color = Color(0xFF8DE0B8), fontSize = 12.sp)
@@ -547,7 +548,7 @@ private fun Dashboard(products: List<Product>, sales: List<SaleRecord>, cloudMod
                 }
             }
         }
-        item { Heading("ملخص المبيعات", "إحصاءات الفواتير المحفوظة محليًا") }
+        item { Heading("ملخص المبيعات", if (cloudMode) "ملخص آخر الفواتير المحمّلة من الخادم (حتى 200 فاتورة)" else "إحصاءات الفواتير المحفوظة محليًا") }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Metric("الفواتير", sales.size.toString(), "فاتورة محفوظة", Icons.Default.PointOfSale, Modifier.weight(1f))
@@ -596,17 +597,17 @@ private fun Heading(title: String, subtitle: String) {
 }
 
 @Composable
-private fun SalesScreen(sales: List<SaleRecord>, onNewSale: () -> Unit) {
+private fun SalesScreen(sales: List<SaleRecord>, cloudMode: Boolean, onNewSale: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        item { Heading("المبيعات والفواتير", "تابع عمليات البيع والتحصيل") }
+        item { Heading("المبيعات والفواتير", if (cloudMode) "الفواتير المحمّلة من قاعدة بيانات المؤسسة" else "تابع عمليات البيع والتحصيل") }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Metric("إجمالي المبيعات", money(sales.sumOf { it.total }), "الفواتير المحفوظة", Icons.Default.AttachMoney, Modifier.weight(1f))
+                Metric(if (cloudMode) "مبيعات آخر 200 فاتورة" else "إجمالي المبيعات", money(sales.sumOf { it.total }), if (cloudMode) "الفواتير المحمّلة" else "الفواتير المحفوظة", Icons.Default.AttachMoney, Modifier.weight(1f))
                 Metric("عدد الفواتير", sales.size.toString(), "فاتورة", Icons.Default.PointOfSale, Modifier.weight(1f))
             }
         }
         item { Button(onClick = onNewSale, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(8.dp)); Text("فاتورة بيع جديدة") } }
-        item { Heading("أحدث الفواتير", "الفواتير المحفوظة على هذا الجهاز") }
+        item { Heading("أحدث الفواتير", if (cloudMode) "أحدث الفواتير المحمّلة من الخادم" else "الفواتير المحفوظة على هذا الجهاز") }
         items(sales) { sale -> SaleRow("فاتورة #${sale.number}", "${sale.product} · ${sale.quantity} ${sale.unitCode}", money(sale.total), sale.credit) }
         
     }
@@ -996,7 +997,14 @@ private fun MoreScreen(onCustomers: () -> Unit, onReports: () -> Unit, onExpense
 }
 
 @Composable
-private fun ExpensesScreen(expenses: List<ExpenseRecord>, onBack: () -> Unit, onAdd: () -> Unit) {
+private fun ExpensesScreen(expenses: List<ExpenseRecord>, allowLocalData: Boolean, onBack: () -> Unit, onAdd: () -> Unit) {
+    if (!allowLocalData) {
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
+            item { Row(verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "رجوع") }; Heading("المصروفات", "التسجيل السحابي غير متاح بعد") } }
+            item { Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3D6)), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) { Text("تم تعطيل عرض المصروفات المحلية وإضافة مصروف في وضع السحابة؛ لا توجد عملية خادم تحفظ المصروفات وتزامنها بين أجهزة المؤسسة حتى الآن.", modifier = Modifier.padding(14.dp), color = Color(0xFF805400), fontSize = 13.sp) } }
+        }
+        return
+    }
     val calendar = java.util.Calendar.getInstance()
     calendar.set(java.util.Calendar.HOUR_OF_DAY, 0); calendar.set(java.util.Calendar.MINUTE, 0)
     calendar.set(java.util.Calendar.SECOND, 0); calendar.set(java.util.Calendar.MILLISECOND, 0)
@@ -1074,7 +1082,14 @@ private fun ExpenseEntryDialog(onDismiss: () -> Unit, onSave: (String, Int, Stri
 }
 
 @Composable
-private fun ReportsScreen(sales: List<SaleRecord>, settlements: List<SettlementRecord>, expenses: List<ExpenseRecord>, onBack: () -> Unit) {
+private fun ReportsScreen(sales: List<SaleRecord>, settlements: List<SettlementRecord>, expenses: List<ExpenseRecord>, allowLocalData: Boolean, onBack: () -> Unit) {
+    if (!allowLocalData) {
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
+            item { Row(verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "رجوع") }; Heading("التقارير", "بيانات المؤسسة السحابية") } }
+            item { Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3D6)), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) { Text("التقارير المالية السحابية غير مكتملة. المبيعات تأتي من الخادم، لكن التحصيلات والمصروفات وبعض أرصدة العملاء محلية أو غير مكتملة؛ أخفينا النتائج المجمعة حتى لا تظهر أرقام مضللة.", modifier = Modifier.padding(14.dp), color = Color(0xFF805400), fontSize = 13.sp) } }
+        }
+        return
+    }
     val calendar = java.util.Calendar.getInstance()
     calendar.set(java.util.Calendar.HOUR_OF_DAY, 0)
     calendar.set(java.util.Calendar.MINUTE, 0)
@@ -1197,7 +1212,7 @@ private fun ReportsScreen(sales: List<SaleRecord>, settlements: List<SettlementR
 }
 
 @Composable
-private fun DebtScreen(sales: List<SaleRecord>, settlements: List<SettlementRecord>, onBack: () -> Unit, onSettle: (SaleRecord) -> Unit) {
+private fun DebtScreen(sales: List<SaleRecord>, settlements: List<SettlementRecord>, allowSettlement: Boolean, onBack: () -> Unit, onSettle: (SaleRecord) -> Unit) {
     var customerQuery by remember { mutableStateOf("") }
     val allDebts = sales.filter { it.credit && it.total > it.paid }
     val debts = allDebts.filter {
@@ -1223,6 +1238,11 @@ private fun DebtScreen(sales: List<SaleRecord>, settlements: List<SettlementReco
                 label = { Text("ابحث باسم العميل أو المنتج أو رقم الفاتورة") },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) }
             )
+        }
+        if (!allowSettlement) item {
+            Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3D6)), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+                Text("التحصيلات السحابية غير مكتملة بعد. الأرصدة المعروضة قد لا تعكس الدفعات الجزئية؛ تم تعطيل تسجيل التسديد هنا حتى لا يُحفظ محليًا فقط.", modifier = Modifier.padding(14.dp), color = Color(0xFF805400), fontSize = 13.sp)
+            }
         }
         item {
             Card(colors = CardDefaults.cardColors(containerColor = Ink), shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
@@ -1259,7 +1279,7 @@ private fun DebtScreen(sales: List<SaleRecord>, settlements: List<SettlementReco
                         Text("المسدّد: ${money(sale.paid)}", color = Green, fontSize = 12.sp)
                     }
                     Text("المتبقي: ${money((sale.total - sale.paid).coerceAtLeast(0))}", color = Orange, fontWeight = FontWeight.Bold)
-                    Button(onClick = { onSettle(sale) }, modifier = Modifier.fillMaxWidth()) { Text("تسجيل تسديد") }
+                    if (allowSettlement) Button(onClick = { onSettle(sale) }, modifier = Modifier.fillMaxWidth()) { Text("تسجيل تسديد") }
                 }
             }
         }

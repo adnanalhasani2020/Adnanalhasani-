@@ -22,10 +22,17 @@ The live Supabase schema already contains these relevant objects; do not create 
 
 Existing trusted database functions include `commercial_checkout_sale`, `commercial_request_sale_return`, `commercial_decide_sale_return`, `commercial_inspect_sale_return_item`, `commercial_restock_approved_sale_return`, and `commercial_post_journal_entry`. Confirm each function's exact contract and authorization before integrating it; never infer parameters or bypass its guards.
 
+## Shared-organization read access
+
+- Organization-scoped sales, sale lines, and sale-linked stock movements should be readable by any active member of the same organization, while personal records remain visible to their owner.
+- This read scope does not grant write access. Financially sensitive payment rows and return approval/inspection actions retain their stricter policies and authorized RPC workflows.
+- The proposed migration `20261024170000_organization_sales_read_policies.sql` and its pgTAP assertions are in PR #538; they are not live until reviewed, merged, and applied.
+
 ## Important implementation boundaries found
 
 1. The Android app's documented cloud sale path currently supports cash checkout only. It reads a sales history, but the invoice composer is a basic single-item dialog rather than a complete multi-line document editor.
 2. The app README explicitly marks cloud credit sales, settlements, expenses, and customer debt workflows as incomplete/local-only. Do not present those local records as cloud accounting.
+3. **Confirmed Android debt-display risk (from `CommercialCloudRepository.kt` and `MainActivity.kt`):** the cloud sales mapper sets `paid = total` only when `payment_status = paid`, and sets `paid = 0` for every other status. A `partially_paid` invoice therefore displays a zero paid amount and an overstated outstanding balance. The debt screen's settlement action also updates local preferences and the local settlement list, not a server payment/allocation workflow. The Android app now avoids seeding the cloud sales list from local preferences, clears sales if the cloud history request fails, and hides local settlement history in cloud mode so records from this device are not presented as organization-wide records. The debt screen also hides the local-only settlement action and warns that partial-payment balances may be inaccurate. The cloud-mode reports screen also hides financial aggregates because cloud collections and expenses are not complete, and the expenses screen blocks local-only entries while cloud mode is active. These are safety guards, not completed cloud collections/reporting workflows: partially paid/pending balances still require an authorized server-side aggregate/payment contract before they can be presented as authoritative.
 3. The existing sales-return tables have protected write policies and RPC-based lifecycle. The client must call the authorized workflow, not write directly to the return tables.
 4. Purchase-order tables exist, but their presence alone does not prove that purchase invoices, receiving, supplier settlement, or stock posting are integrated end-to-end.
 5. The journal tables enforce posted-line immutability. Financially posted documents must be reversed with a traceable compensating entry rather than edited or deleted.
