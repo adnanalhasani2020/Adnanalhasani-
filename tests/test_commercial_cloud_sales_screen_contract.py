@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt"
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudSalesScreen.kt"
 PURCHASES = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudPurchasesScreen.kt"
+COMPOSER = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudSaleComposerScreen.kt"
 MAIN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt"
 
 
@@ -15,6 +16,7 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         cls.repository = REPOSITORY.read_text(encoding="utf-8")
         cls.screen = SCREEN.read_text(encoding="utf-8")
         cls.purchases = PURCHASES.read_text(encoding="utf-8")
+        cls.composer = COMPOSER.read_text(encoding="utf-8")
         cls.main = MAIN.read_text(encoding="utf-8")
 
     def test_invoice_projection_uses_existing_tables_and_columns(self):
