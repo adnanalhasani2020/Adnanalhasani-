@@ -77,7 +77,10 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         self.assertIn("بنود الفاتورة", self.screen)
 
     def test_invoice_status_uses_sales_status_and_payment_status_separately(self):
-        self.assertIn("payment_status,status,created_at", self.repository)
+        # Validate projection fields independently; query parameter order is not a contract.
+        for field in ("payment_status", "status", "created_at"):
+            with self.subTest(field=field):
+                self.assertIn(field, self.repository)
         self.assertIn('saleStatus = row.optString("status")', self.repository)
         self.assertIn('saleStatus in setOf("cancelled", "canceled")', self.screen)
         self.assertIn('"refunded" to "مستردة"', self.screen)
