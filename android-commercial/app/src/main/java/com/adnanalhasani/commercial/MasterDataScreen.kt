@@ -133,6 +133,12 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
                             Spacer(Modifier.height(3.dp))
                             Text("الرمز: ${row.code}", color = Color(0xFF71817B), fontSize = 12.sp)
                             if (row.kind.isNotBlank()) Text("النوع: ${row.kind}", color = Color(0xFF71817B), fontSize = 12.sp)
+                            if (selected.second == "commercial_storage_locations") {
+                                val warehouseLabel = warehouseRows.firstOrNull { it.id == row.warehouseId }?.label ?: "مستودع غير معروف"
+                                Text("المستودع: $warehouseLabel", color = Color(0xFF71817B), fontSize = 12.sp)
+                                val parentLabel = rows.firstOrNull { it.id == row.parentId }?.label
+                                if (parentLabel != null) Text("الموقع الأب: $parentLabel", color = Color(0xFF71817B), fontSize = 12.sp)
+                            }
                         }
                     }
                 }
