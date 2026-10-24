@@ -5,6 +5,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt"
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudSalesScreen.kt"
+PURCHASES = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudPurchasesScreen.kt"
 MAIN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt"
 
 
@@ -13,6 +14,7 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
     def setUpClass(cls):
         cls.repository = REPOSITORY.read_text(encoding="utf-8")
         cls.screen = SCREEN.read_text(encoding="utf-8")
+        cls.purchases = PURCHASES.read_text(encoding="utf-8")
         cls.main = MAIN.read_text(encoding="utf-8")
 
     def test_invoice_projection_uses_existing_tables_and_columns(self):
@@ -38,6 +40,19 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         self.assertIn('"فواتير المبيعات السحابية" -> onCloudSales()', self.main)
         self.assertIn("cloudSalesPage -> CommercialCloudSalesScreen", self.main)
         self.assertIn('onCloudSales = { cloudSalesPage = true }', self.main)
+
+    def test_purchase_order_projection_uses_existing_org_scoped_tables(self):
+        self.assertIn("loadCommercialCloudPurchaseDocuments", self.repository)
+        for field in ("commercial_purchase_order_items(", "commercial_suppliers(display_name)", "quantity_ordered", "quantity_received", "unit_cost_minor", "organization_id=eq.$orgId"):
+            with self.subTest(field=field):
+                self.assertIn(field, self.repository)
+        self.assertIn("cloudPurchasesPage -> CommercialCloudPurchasesScreen", self.main)
+        self.assertIn('"أوامر الشراء" -> onCloudPurchases()', self.main)
+
+    def test_purchase_screen_discloses_read_only_receiving_boundary(self):
+        self.assertIn("عرض فقط", self.purchases)
+        self.assertIn("لم يتم تفعيل إنشاء الطلب أو اعتماد الاستلام", self.purchases)
+        self.assertIn("إعادة المحاولة", self.purchases)
 
     def test_invoice_screen_discloses_read_only_and_minor_units(self):
         self.assertIn("عرض فقط", self.screen)
