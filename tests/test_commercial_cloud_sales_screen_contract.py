@@ -7,6 +7,7 @@ REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/comm
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudSalesScreen.kt"
 PURCHASES = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudPurchasesScreen.kt"
 MAIN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt"
+CASH_PAYMENT_MIGRATION = ROOT / "supabase/migrations/20261024193000_commercial_checkout_cash_payment_atomic.sql"
 
 
 class CommercialCloudSalesScreenContractTests(unittest.TestCase):
@@ -16,6 +17,7 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         cls.screen = SCREEN.read_text(encoding="utf-8")
         cls.purchases = PURCHASES.read_text(encoding="utf-8")
         cls.main = MAIN.read_text(encoding="utf-8")
+        cls.cash_payment_migration = CASH_PAYMENT_MIGRATION.read_text(encoding="utf-8")
 
     def test_invoice_projection_uses_existing_tables_and_columns(self):
         self.assertIn("internal fun loadCommercialCloudSaleDocuments", self.repository)
@@ -101,6 +103,16 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         self.assertIn('successfulPaymentMinor >= totalMinor -> "paid"', self.repository)
         self.assertIn('successfulPaymentMinor > 0L -> "partially_paid"', self.repository)
         self.assertIn('else -> "pending"', self.repository)
+
+
+    def test_cash_checkout_creates_one_idempotent_payment_in_same_transaction(self):
+        self.assertIn("CREATE OR REPLACE FUNCTION public.commercial_checkout_sale(", self.cash_payment_migration)
+        self.assertIn("INSERT INTO public.commercial_payments", self.cash_payment_migration)
+        self.assertIn("'sale:' || v_sale_id::text || ':cash'", self.cash_payment_migration)
+        self.assertIn("ON CONFLICT (organization_id, idempotency_key) DO NOTHING", self.cash_payment_migration)
+        self.assertIn("'succeeded', 'cash'", self.cash_payment_migration)
+        self.assertIn("RETURN v_result || jsonb_build_object('payment_recorded', true", self.cash_payment_migration)
+        self.assertIn("commercial_private.commercial_checkout_sale(", self.cash_payment_migration)
 
 if __name__ == "__main__":
     unittest.main()
