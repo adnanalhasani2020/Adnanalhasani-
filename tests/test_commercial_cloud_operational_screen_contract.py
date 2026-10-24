@@ -37,7 +37,7 @@ class CommercialCloudOperationalScreenContractTests(unittest.TestCase):
     def test_queries_are_organization_scoped_and_read_only(self):
         function = self.repository.split(
             "internal fun loadCommercialCloudRecords", 1
-        )[1]
+        )[1].split("\ninternal fun ", 1)[0]
         self.assertIn('organization_id=eq.$orgId', function)
         self.assertIn('commercialCloudPagedGet(', function)
         self.assertIn('organization_id=eq.$orgId', function)

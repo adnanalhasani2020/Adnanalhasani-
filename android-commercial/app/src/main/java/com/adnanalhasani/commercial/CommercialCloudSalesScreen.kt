@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -37,6 +38,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -73,6 +75,10 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
     var reloadToken by remember { mutableIntStateOf(0) }
+    var collectionTarget by remember { mutableStateOf<CommercialCloudSaleDocument?>(null) }
+    var collectionAmountText by remember { mutableStateOf("") }
+    var collectionBusy by remember { mutableStateOf(false) }
+    var collectionError by remember { mutableStateOf("") }
 
     LaunchedEffect(reloadToken) {
         loading = true
@@ -93,15 +99,18 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
             doc.customerName.contains(search, true) ||
             doc.paymentStatus.contains(search, true) ||
             doc.saleStatus.contains(search, true) ||
+            doc.payments.any { it.status.contains(search, true) || it.methodType.contains(search, true) } ||
+            doc.returns.any { it.status.contains(search, true) || it.refundStatus.contains(search, true) || it.restockStatus.contains(search, true) } ||
             doc.lines.any { it.productName.contains(search, true) }
-        val paymentStatus = doc.paymentStatus.lowercase(Locale.ROOT)
-        val saleStatus = doc.saleStatus.lowercase(Locale.ROOT)
+        val status = doc.paymentStatus.lowercase()
+        val saleStatus = doc.saleStatus.lowercase()
         val matchesStatus = when (selectedStatus) {
-            "paid" -> paymentStatus in setOf("paid", "completed", "succeeded")
-            "partial" -> paymentStatus in setOf("partially_paid", "partial")
-            "due" -> paymentStatus in setOf("unpaid", "due", "pending", "credit")
-            "refunded" -> paymentStatus in setOf("refunded", "partially_refunded")
-            "cancelled" -> saleStatus in setOf("cancelled", "canceled") || paymentStatus in setOf("failed", "cancelled", "canceled")
+            "paid" -> status == "paid"
+            "partial" -> status in setOf("partially_paid", "partial")
+            "due" -> status in setOf("unpaid", "due", "pending", "credit")
+            "cancelled" -> saleStatus in setOf("cancelled", "canceled") || status in setOf("failed", "cancelled", "canceled")
+            "refunded" -> status in setOf("refunded", "partially_refunded") ||
+                doc.returns.any { it.refundStatus.lowercase() in setOf("refunded", "partially_refunded") }
             else -> true
         }
         matchesSearch && matchesStatus
@@ -151,8 +160,8 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
                         "paid" to "مدفوعة",
                         "partial" to "مدفوعة جزئيًا",
                         "due" to "مستحقة",
-                        "refunded" to "مستردة",
-                        "cancelled" to "ملغاة / فاشلة"
+                        "cancelled" to "ملغاة / فاشلة",
+                        "refunded" to "مستردة"
                     ).forEach { (key, label) ->
                         FilterChip(
                             selected = selectedStatus == key,
@@ -218,10 +227,16 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
                             Column(Modifier.weight(1f)) {
                                 Text("فاتورة #${document.receiptNumber}", color = CloudSalesInk, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                                 Text(document.customerName, color = CloudSalesMuted, fontSize = 12.sp)
+                                if (document.customerPhone.isNotBlank()) Text("هاتف: ${document.customerPhone}", color = CloudSalesMuted, fontSize = 11.sp)
+                                if (document.customerEmail.isNotBlank()) Text(document.customerEmail, color = CloudSalesMuted, fontSize = 11.sp)
                             }
-                            val displayStatus = if (document.saleStatus.lowercase(Locale.ROOT) in setOf("cancelled", "canceled")) "cancelled" else document.paymentStatus
-                            Surface(color = statusColor(displayStatus).copy(alpha = 0.12f), shape = RoundedCornerShape(10.dp)) {
-                                Text(statusLabel(displayStatus), color = statusColor(displayStatus), fontSize = 11.sp, modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp))
+                            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Surface(color = statusColor(document.saleStatus).copy(alpha = 0.12f), shape = RoundedCornerShape(10.dp)) {
+                                    Text("الفاتورة: ${statusLabel(document.saleStatus)}", color = statusColor(document.saleStatus), fontSize = 10.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp))
+                                }
+                                Surface(color = statusColor(document.paymentStatus).copy(alpha = 0.12f), shape = RoundedCornerShape(10.dp)) {
+                                    Text("الدفع: ${statusLabel(document.paymentStatus)}", color = statusColor(document.paymentStatus), fontSize = 10.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp))
+                                }
                             }
                         }
                         Text(
@@ -248,7 +263,66 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
                                 }
                             }
                         }
-                        Text("مرجع: ${document.id.take(8)} · عرض فقط", color = CloudSalesMuted, fontSize = 10.sp)
+                        val confirmedPaidMinor = document.payments
+                            .filter { it.status.equals("succeeded", ignoreCase = true) }
+                            .sumOf { it.amountMinor }
+                        Surface(color = Color(0xFFF3F8F5), shape = RoundedCornerShape(10.dp)) {
+                            Column(Modifier.fillMaxWidth().padding(11.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("إجمالي الفاتورة", color = CloudSalesMuted, fontSize = 11.sp)
+                                    Text("${formatMinorAmount(document.totalMinor)} ${document.currencyCode}", color = CloudSalesInk, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
+                                }
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("المدفوعات الناجحة فقط", color = CloudSalesMuted, fontSize = 11.sp)
+                                    Text("${formatMinorAmount(confirmedPaidMinor)} ${document.currencyCode}", color = CloudSalesInk, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
+                                }
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("المتبقي قبل احتساب المرتجعات", color = CloudSalesMuted, fontSize = 11.sp)
+                                    Text("${formatMinorAmount((document.totalMinor - confirmedPaidMinor).coerceAtLeast(0L))} ${document.currencyCode}", color = CloudSalesInk, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                }
+                            }
+                        }
+                        if (document.payments.isNotEmpty()) {
+                            Text("المدفوعات المسجلة", color = CloudSalesInk, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                            document.payments.forEach { payment ->
+                                Surface(color = Color(0xFFF7F9F8), shape = RoundedCornerShape(9.dp)) {
+                                    Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                        Text("${statusLabel(payment.status)} · ${formatMinorAmount(payment.amountMinor)} ${document.currencyCode}", color = CloudSalesInk, fontWeight = FontWeight.Medium, fontSize = 11.sp)
+                                        if (payment.methodType.isNotBlank()) Text("الطريقة: ${payment.methodType}", color = CloudSalesMuted, fontSize = 10.sp)
+                                        if (payment.createdAt.isNotBlank()) Text(formatInvoiceTimestamp(payment.createdAt), color = CloudSalesMuted, fontSize = 10.sp)
+                                    }
+                                }
+                            }
+                        }
+                        if (document.returns.isNotEmpty()) {
+                            Text("المرتجعات المرتبطة", color = CloudSalesInk, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                            document.returns.forEach { returned ->
+                                Surface(color = Color(0xFFFFF7E8), shape = RoundedCornerShape(9.dp)) {
+                                    Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                        Text("الطلب: ${statusLabel(returned.status)} · الاسترداد: ${statusLabel(returned.refundStatus)}", color = CloudSalesInk, fontWeight = FontWeight.Medium, fontSize = 11.sp)
+                                        Text("إعادة المخزون: ${statusLabel(returned.restockStatus)}", color = CloudSalesMuted, fontSize = 10.sp)
+                                        Text("المبلغ المطلوب: ${formatMinorAmount(returned.requestedRefundMinor)} ${document.currencyCode}" +
+                                            (returned.approvedRefundMinor?.let { " · المعتمد: ${formatMinorAmount(it)}" } ?: ""), color = CloudSalesMuted, fontSize = 10.sp)
+                                    }
+                                }
+                            }
+                        }
+                        if (document.saleStatus.equals("completed", ignoreCase = true) &&
+                            document.paymentStatus in setOf("pending", "partially_paid", "failed") &&
+                            document.totalMinor > confirmedPaidMinor) {
+                            Button(
+                                onClick = {
+                                    collectionTarget = document
+                                    collectionAmountText = ""
+                                    collectionError = ""
+                                },
+                                enabled = !collectionBusy,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("تسجيل تحصيل سحابي")
+                            }
+                        }
+                        Text("مرجع: ${document.id.take(8)} · تفاصيل من الخادم، عرض فقط", color = CloudSalesMuted, fontSize = 10.sp)
                     }
                 }
             }
@@ -260,32 +334,121 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
             }
         }
     }
+
+    val target = collectionTarget
+    if (target != null) {
+        val paidMinor = target.payments.filter { it.status.equals("succeeded", ignoreCase = true) }
+            .sumOf { it.amountMinor.coerceAtLeast(0L) }
+        val outstandingMinor = (target.totalMinor - paidMinor).coerceAtLeast(0L)
+        AlertDialog(
+            onDismissRequest = { if (!collectionBusy) collectionTarget = null },
+            title = { Text("تسجيل تحصيل · فاتورة #${target.receiptNumber}") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("المتبقي قبل المرتجعات: ${formatMinorAmount(outstandingMinor)} ${target.currencyCode}", color = CloudSalesMuted, fontSize = 12.sp)
+                    OutlinedTextField(
+                        value = collectionAmountText,
+                        onValueChange = { collectionAmountText = it.filter(Char::isDigit).take(18); collectionError = "" },
+                        enabled = !collectionBusy,
+                        singleLine = true,
+                        label = { Text("مبلغ التحصيل بوحدة الصرف الصغرى") }
+                    )
+                    Text("يسجل التحصيل على الخادم فقط. تُمنع الزيادة عن المتبقي، ويُوقف التحصيل عند وجود مرتجع يحتاج إلى تسوية.", color = CloudSalesMuted, fontSize = 11.sp)
+                    if (collectionError.isNotBlank()) Text(collectionError, color = Color(0xFFB3261E), fontSize = 12.sp)
+                }
+            },
+            confirmButton = {
+                Button(
+                    enabled = !collectionBusy,
+                    onClick = {
+                        val amount = collectionAmountText.toLongOrNull()
+                        if (amount == null || amount <= 0L) {
+                            collectionError = "أدخل مبلغًا صحيحًا أكبر من صفر."
+                        } else if (amount > outstandingMinor) {
+                            collectionError = "المبلغ يتجاوز المتبقي الظاهر؛ حدّث الفاتورة قبل المتابعة."
+                        } else {
+                            collectionBusy = true
+                            collectionError = ""
+                            CloudSalesWorker.execute {
+                                val result = runCatching {
+                                    val key = getOrCreateCommercialCloudCollectionKey(context, target.id, amount)
+                                    val response = recordCommercialCloudSaleCollection(context, target.id, amount, key)
+                                    val clearError = runCatching { clearCommercialCloudCollectionKey(context, key) }.exceptionOrNull()
+                                    response to clearError
+                                }
+                                CloudSalesMain.post {
+                                    collectionBusy = false
+                                    result.onSuccess { (_, clearError) ->
+                                        reloadToken++
+                                        if (clearError == null) {
+                                            collectionTarget = null
+                                            collectionAmountText = ""
+                                            collectionError = ""
+                                        } else {
+                                            collectionError = "أكد الخادم التحصيل، لكن تعذر تنظيف مفتاح المحاولة. اضغط التأكيد مرة أخرى بالمبلغ نفسه لإكمال التنظيف بأمان."
+                                        }
+                                    }.onFailure {
+                                        collectionError = it.message ?: "تعذر تأكيد التحصيل؛ لم يتم عرضه كتحصيل ناجح."
+                                    }
+                                }
+                            }
+                        }
+                    }
+                ) {
+                    if (collectionBusy) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    else Text("تأكيد التحصيل")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { if (!collectionBusy) collectionTarget = null }, enabled = !collectionBusy) {
+                    Text("إلغاء")
+                }
+            }
+        )
+    }
 }
 
 private fun formatMinorAmount(value: Long): String = String.format(Locale.US, "%,d", value)
 
 private fun formatInvoiceTimestamp(value: String): String {
-    val normalized = value.replace('T', ' ').take(19)
-    val parsed = runCatching { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).parse(normalized) }.getOrNull()
-        ?: return normalized
-    return SimpleDateFormat("yyyy/MM/dd · HH:mm", Locale.getDefault()).format(parsed)
+    // Supabase timestamps are ISO-8601 and commonly include Z or an explicit UTC offset.
+    // Parse the instant first so the displayed local time is correct across time zones.
+    val instant = runCatching { java.time.Instant.parse(value) }.getOrNull()
+        ?: runCatching {
+            val normalized = value.replace('T', ' ').take(19)
+            SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).parse(normalized)?.toInstant()
+        }.getOrNull()
+        ?: return value.take(19).replace('T', ' ')
+    return java.time.format.DateTimeFormatter.ofPattern("yyyy/MM/dd · HH:mm", Locale.getDefault())
+        .withZone(java.time.ZoneId.systemDefault())
+        .format(instant)
 }
 
 private fun statusLabel(value: String): String = when (value.lowercase()) {
-    "paid", "completed", "succeeded" -> "مدفوعة"
+    "paid", "succeeded" -> "مدفوعة"
+    "completed" -> "مكتملة"
     "partially_paid", "partial" -> "مدفوعة جزئيًا"
-    "unpaid", "due", "pending", "credit" -> "مستحقة"
+    "unpaid", "due", "pending", "requested" -> "قيد الانتظار"
+    "approved" -> "مقبول"
+    "rejected" -> "مرفوض"
+    "cancelled", "canceled" -> "ملغاة"
+    "failed" -> "فاشلة"
     "refunded" -> "مستردة"
     "partially_refunded" -> "مستردة جزئيًا"
-    "failed", "cancelled", "canceled" -> "ملغاة / فاشلة"
+    "not_started" -> "لم تبدأ"
+    "not_required" -> "غير مطلوب"
+    "restocked" -> "أعيد للمخزون"
+    "partially_restocked" -> "أعيد جزئيًا"
+    "blocked" -> "محظور"
+    "authorized" -> "مصرح"
+    "draft" -> "مسودة"
     else -> value.ifBlank { "غير محدد" }
 }
 
 private fun statusColor(value: String): Color = when (value.lowercase()) {
-    "paid", "completed", "succeeded" -> Color(0xFF167D63)
-    "partially_paid", "partial" -> Color(0xFFB36B00)
-    "unpaid", "due", "pending", "credit" -> Color(0xFFB36B00)
-    "refunded", "partially_refunded" -> Color(0xFF5B5BC7)
-    "failed", "cancelled", "canceled" -> Color(0xFFB3261E)
+    "paid", "completed", "succeeded", "approved", "refunded", "restocked" -> Color(0xFF167D63)
+    "partially_paid", "partial", "partially_refunded", "partially_restocked", "pending", "requested", "authorized" -> Color(0xFFB36B00)
+    "unpaid", "due", "credit", "not_started", "not_required", "draft" -> Color(0xFFB36B00)
+    "failed", "cancelled", "canceled", "rejected", "blocked" -> Color(0xFFB3261E)
     else -> CloudSalesMuted
 }
