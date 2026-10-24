@@ -48,7 +48,7 @@ class CommercialCloudOperationalScreenContractTests(unittest.TestCase):
         expected_routes = {
             '"دليل العملاء السحابي" -> onCloudOperational("customers")',
             '"دليل الموردين" -> onCloudOperational("suppliers")',
-            '"أوامر الشراء" -> onCloudOperational("purchases")',
+            '"أوامر الشراء" -> onCloudPurchases()',
             '"السندات والمدفوعات" -> onCloudOperational("payments")',
             '"مرتجعات المبيعات" -> onCloudOperational("returns")',
             '"القيود المحاسبية" -> onCloudOperational("journals")',
