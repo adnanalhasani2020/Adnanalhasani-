@@ -360,6 +360,24 @@ internal fun loadCommercialMasterData(context: Context, table: String): List<Com
     }
 }
 
+internal fun assignCommercialCloudOfferingCategory(
+    context: Context,
+    offeringId: String,
+    categoryId: String
+) {
+    require(offeringId.isNotBlank() && categoryId.isNotBlank()) { "اختر الصنف والتصنيف." }
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+    val activityId = saved.getString("activity_id", null).orEmpty()
+    require(activityId.isNotBlank()) { "النشاط التجاري غير محفوظ." }
+    val payload = JSONObject()
+        .put("p_organization_id", orgId)
+        .put("p_activity_id", activityId)
+        .put("p_offering_id", offeringId)
+        .put("p_category_id", categoryId)
+    commercialCloudRequest("/rest/v1/rpc/commercial_assign_offering_category", "POST", payload, access)
+}
+
 internal fun createCommercialMasterData(
     context: Context,
     table: String,
