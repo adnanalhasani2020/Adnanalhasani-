@@ -38,3 +38,8 @@ Department-to-warehouse links are managed from the existing master-data screen. 
 ## Validation boundary
 
 The Android debug APK build and both repository pytest workflows passed on PR #540 (commit `ffc86eba7d506e76af4a2e0a0842fbbd01263325`). Static contract tests now guard the query allow-list, organization scoping, read-only behavior, route coverage, and error/read-only UI labels. CI success does not prove RLS permits every intended role; authenticated staging smoke tests are still required before release. No production records were created or modified by these read-only screens.
+
+
+## Master-data status filtering
+
+The master-data screen now displays each record's current status and provides `All`, `Active`, and `Inactive` filters alongside search. Filtering is local and read-only; it does not activate, deactivate, or otherwise mutate warehouse, category, department, or storage-location records. The displayed record count distinguishes the total loaded rows from the filtered count.
