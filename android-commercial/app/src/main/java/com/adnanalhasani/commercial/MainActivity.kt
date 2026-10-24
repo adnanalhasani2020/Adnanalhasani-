@@ -335,6 +335,7 @@ private fun StoreApp(context: Context) {
                     cloudPurchasesPage -> CommercialCloudPurchasesScreen(context = context, onBack = { cloudPurchasesPage = false })
                     cloudStockAlertsPage -> CommercialCloudStockAlertsScreen(context = context, onBack = { cloudStockAlertsPage = false })
                     cloudUnitsPage -> CommercialUnitDirectoryScreen(context = context, onBack = { cloudUnitsPage = false })
+                    cloudOperationalPage == "returns" -> CommercialCloudReturnsScreen(context = context, onBack = { cloudOperationalPage = "" })
                     cloudOperationalPage.isNotBlank() -> CommercialCloudOperationalScreen(context = context, screenKey = cloudOperationalPage, onBack = { cloudOperationalPage = "" })
                     showMasterData -> MasterDataScreen(context = context, onBack = { showMasterData = false })
                     showCatalog -> CatalogScreen(onBack = { showCatalog = false }, onAddToInventory = { catalogItem ->
