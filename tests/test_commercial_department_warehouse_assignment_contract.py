@@ -31,7 +31,7 @@ class DepartmentWarehouseAssignmentContractTests(unittest.TestCase):
         self.assertIn('.put("department_id", departmentId)', function)
         self.assertIn('.put("warehouse_id", warehouseId)', function)
         self.assertIn("commercial_department_warehouse_assignments", function)
-        self.assertIn("existing.any", function)
+        self.assertIn("existingRows.length() > 0", function)
         self.assertIn("department_warehouse_scope_mismatch", self.migration)
 
     def test_ui_exposes_assignment_and_prevents_empty_selection(self):
