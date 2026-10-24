@@ -50,6 +50,15 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
     var locationType by remember { mutableStateOf("internal") }
     var parentId by remember { mutableStateOf("") }
     var parentMenuExpanded by remember { mutableStateOf(false) }
+    var showAssignDialog by remember { mutableStateOf(false) }
+    var assignmentLoading by remember { mutableStateOf(false) }
+    var assignmentSaving by remember { mutableStateOf(false) }
+    var assignmentProducts by remember { mutableStateOf<List<Product>>(emptyList()) }
+    var assignmentCategories by remember { mutableStateOf<List<CommercialMasterDataRow>>(emptyList()) }
+    var selectedOfferingId by remember { mutableStateOf("") }
+    var selectedCategoryId by remember { mutableStateOf("") }
+    var assignmentProductMenuExpanded by remember { mutableStateOf(false) }
+    var assignmentCategoryMenuExpanded by remember { mutableStateOf(false) }
 
     fun reload() {
         val table = selected.second
@@ -88,7 +97,33 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
             Text(if (selected.second == "commercial_storage_locations") "مواقع تخزين مرتبطة بمستودع؛ لا تغيّر أرصدة المخزون من هذه الشاشة." else "بيانات محفوظة في المؤسسة السحابية، وليست بيانات محلية.", color = Color(0xFF71817B), fontSize = 12.sp)
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = {
+                    assignmentLoading = true
+                    error = ""
+                    masterIo.execute {
+                        val result = runCatching {
+                            val products = loadCommercialCloudInventory(context).products
+                            val categories = loadCommercialMasterData(context, "commercial_product_categories").filter { it.kind == "active" }
+                            products to categories
+                        }
+                        masterMain.post {
+                            assignmentLoading = false
+                            result.onSuccess { (products, categories) ->
+                                assignmentProducts = products
+                                assignmentCategories = categories
+                                selectedOfferingId = products.firstOrNull()?.cloudOfferingId.orEmpty()
+                                selectedCategoryId = categories.firstOrNull()?.id.orEmpty()
+                                showAssignDialog = true
+                                error = ""
+                            }.onFailure { error = it.message ?: "تعذر تحميل الأصناف والتصنيفات." }
+                        }
+                    }
+                },
+                enabled = !assignmentLoading
+            ) { Text(if (assignmentLoading) "جارٍ تحميل الأصناف..." else "تصنيف الأصناف الموجودة") }
+            Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 options.forEach { option ->
                     FilterChip(
@@ -144,6 +179,76 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
                 }
             }
         }
+    }
+
+    if (showAssignDialog) {
+        val selectedProduct = assignmentProducts.firstOrNull { it.cloudOfferingId == selectedOfferingId }
+        val selectedCategory = assignmentCategories.firstOrNull { it.id == selectedCategoryId }
+        AlertDialog(
+            onDismissRequest = { if (!assignmentSaving) showAssignDialog = false },
+            title = { Text("ربط تصنيف بصنف موجود") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (assignmentProducts.isEmpty()) {
+                        Text("لا توجد أصناف سحابية نشطة في الموقع الحالي.")
+                    } else {
+                        Box {
+                            OutlinedButton(onClick = { assignmentProductMenuExpanded = true }, modifier = Modifier.fillMaxWidth()) {
+                                Text(selectedProduct?.name ?: "اختر الصنف")
+                            }
+                            DropdownMenu(expanded = assignmentProductMenuExpanded, onDismissRequest = { assignmentProductMenuExpanded = false }) {
+                                assignmentProducts.filter { it.cloudOfferingId.isNotBlank() }.forEach { product ->
+                                    DropdownMenuItem(
+                                        text = { Text("${product.name} · ${product.category}") },
+                                        onClick = { selectedOfferingId = product.cloudOfferingId; assignmentProductMenuExpanded = false }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    if (assignmentCategories.isEmpty()) {
+                        Text("لا توجد تصنيفات نشطة. أنشئ تصنيفًا أولًا من دليل مجموعات الأصناف.")
+                    } else {
+                        Box {
+                            OutlinedButton(onClick = { assignmentCategoryMenuExpanded = true }, modifier = Modifier.fillMaxWidth()) {
+                                Text(selectedCategory?.let { "${it.code} — ${it.label}" } ?: "اختر التصنيف")
+                            }
+                            DropdownMenu(expanded = assignmentCategoryMenuExpanded, onDismissRequest = { assignmentCategoryMenuExpanded = false }) {
+                                assignmentCategories.forEach { category ->
+                                    DropdownMenuItem(
+                                        text = { Text("${category.code} — ${category.label}") },
+                                        onClick = { selectedCategoryId = category.id; assignmentCategoryMenuExpanded = false }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Text("سيصبح التصنيف المختار هو التصنيف الأساسي. لا تتغير الكمية أو السعر أو حركة المخزون.", color = Color(0xFF71817B), fontSize = 12.sp)
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !assignmentSaving && selectedProduct != null && selectedCategory != null,
+                    onClick = {
+                        val offeringId = selectedOfferingId
+                        val categoryId = selectedCategoryId
+                        assignmentSaving = true
+                        masterIo.execute {
+                            val result = runCatching { assignCommercialCloudOfferingCategory(context, offeringId, categoryId) }
+                            masterMain.post {
+                                assignmentSaving = false
+                                result.onSuccess {
+                                    showAssignDialog = false
+                                    notice = "تم ربط التصنيف بالصنف وتسجيل العملية في سجل التدقيق."
+                                    error = ""
+                                }.onFailure { error = it.message ?: "تعذر ربط التصنيف." }
+                            }
+                        }
+                    }
+                ) { Text(if (assignmentSaving) "جارٍ الحفظ..." else "حفظ الربط") }
+            },
+            dismissButton = { TextButton(onClick = { if (!assignmentSaving) showAssignDialog = false }) { Text("إلغاء") } }
+        )
     }
 
     if (showCreate) {
