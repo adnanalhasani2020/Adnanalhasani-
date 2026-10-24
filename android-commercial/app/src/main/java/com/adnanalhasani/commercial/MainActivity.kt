@@ -391,7 +391,7 @@ private fun StoreApp(context: Context) {
                         showExpenses = false
                     } else ExpensesScreen(expenses = expenses, onBack = { showExpenses = false }, onAdd = { expenseDialog = true })
                     else -> if (showActivityProfile) ActivityProfileScreen(onBack = { showActivityProfile = false }) else MoreScreen(onCustomers = {
-                    showDebts = true
+                    if (cloudMode) cloudDebtsPage = true else showDebts = true
                 }, onReports = { showReports = true }, onExpenses = { showExpenses = true }, onActivityProfile = { showActivityProfile = true }, onCatalog = { showCatalog = true }, onMasterData = { showMasterData = true }, onCloudOperational = { cloudOperationalPage = it }, onCloudSales = { cloudSalesPage = true }, onCloudPurchases = { cloudPurchasesPage = true }, onCloudStockAlerts = { cloudStockAlertsPage = true }, onUnitsDirectory = { cloudUnitsPage = true })
                 }
             }
