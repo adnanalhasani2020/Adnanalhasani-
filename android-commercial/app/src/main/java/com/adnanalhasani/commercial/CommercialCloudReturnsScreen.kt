@@ -229,13 +229,13 @@ internal fun CommercialCloudReturnsScreen(context: Context, onBack: () -> Unit) 
                 requestTarget!!.items.forEach { saleItem ->
                     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         Text(saleItem.productName, color = ReturnInk, fontWeight = FontWeight.SemiBold)
-                        Text("المباع: ${saleItem.soldQuantity} · قيمة السطر: ${money(saleItem.lineTotalMinor, requestTarget!!.currencyCode)}", color = ReturnMuted, fontSize = 11.sp)
+                        Text("المباع: ${saleItem.soldQuantity} · المتبقي للإرجاع: ${saleItem.remainingQuantity} · قيمة السطر: ${money(saleItem.lineTotalMinor, requestTarget!!.currencyCode)}", color = ReturnMuted, fontSize = 11.sp)
                         OutlinedTextField(
                             value = requestedQuantities[saleItem.id] ?: "0",
                             onValueChange = { value ->
                                 requestedQuantities[saleItem.id] = value.filter(Char::isDigit).take(9)
                             },
-                            label = { Text("الكمية المراد إرجاعها (0 إلى ${saleItem.soldQuantity})") },
+                            label = { Text("الكمية المراد إرجاعها (0 إلى ${saleItem.remainingQuantity})") },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true
                         )
@@ -245,7 +245,7 @@ internal fun CommercialCloudReturnsScreen(context: Context, onBack: () -> Unit) 
         },
         confirmButton = {
             Button(enabled = !busy && requestTarget != null &&
-                requestTarget!!.items.all { (requestedQuantities[it.id]?.toIntOrNull() ?: 0) <= it.soldQuantity } &&
+                requestTarget!!.items.all { (requestedQuantities[it.id]?.toIntOrNull() ?: 0) <= it.remainingQuantity } &&
                 requestTarget!!.items.any { (requestedQuantities[it.id]?.toIntOrNull() ?: 0) > 0 },
                 onClick = {
                     val target = requestTarget!!
