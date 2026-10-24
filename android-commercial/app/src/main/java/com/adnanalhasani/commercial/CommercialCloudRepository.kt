@@ -314,7 +314,7 @@ internal fun loadCommercialMasterData(context: Context, table: String): List<Com
                 id = row.optString("id"),
                 code = row.optString("code"),
                 label = row.optString("name").ifBlank { row.optString("name_ar") },
-                kind = row.optString("warehouse_type").ifBlank { table.removePrefix("commercial_") },
+                kind = row.optString(when (table) { "commercial_storage_locations" -> "location_type"; "commercial_warehouses" -> "warehouse_type"; else -> "state" }).ifBlank { table.removePrefix("commercial_") },
                 parentId = row.optString(if (table == "commercial_storage_locations") "parent_location_id" else "parent_id").takeUnless { it == "null" }.orEmpty(),
                 warehouseId = row.optString("warehouse_id").takeUnless { it == "null" }.orEmpty()
             ))
@@ -329,7 +329,8 @@ internal fun createCommercialMasterData(
     name: String,
     parentId: String = "",
     warehouseType: String = "main",
-    warehouseId: String = ""
+    warehouseId: String = "",
+    locationType: String = "internal"
 ) {
     require(table in setOf("commercial_warehouses", "commercial_product_categories", "commercial_departments", "commercial_storage_locations")) {
         "نوع الدليل غير مدعوم."
@@ -353,8 +354,9 @@ internal fun createCommercialMasterData(
             .put("created_by", JSONObject.NULL)
     } else if (table == "commercial_storage_locations") {
         require(warehouseId.isNotBlank()) { "اختر المستودع أولًا." }
+        require(locationType in setOf("view", "internal", "receiving", "packing", "quality", "quarantine", "transit", "customer", "supplier", "scrap")) { "نوع موقع التخزين غير صالح." }
         payload.put("warehouse_id", warehouseId).put("name", name.trim())
-            .put("location_type", "internal").put("state", "active")
+            .put("location_type", locationType).put("state", "active")
         if (parentId.isNotBlank()) payload.put("parent_location_id", parentId)
     } else {
         payload.put("name_ar", name.trim())
