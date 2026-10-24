@@ -129,5 +129,39 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         self.assertIn('saleStatus == "completed"', sales_projection)
         self.assertIn("total > paidMinor", sales_projection)
 
+
+    def test_cloud_customer_debts_use_server_projection_and_collection_rpc(self):
+        self.assertIn("CommercialCloudDebtScreen(context = context", self.main)
+        self.assertIn("showDebts = true", self.main)
+        self.assertIn("internal fun loadCommercialCloudReceivables", self.repository)
+        self.assertIn("payments:commercial_payments(amount_minor,status)", self.repository)
+        self.assertIn('payment.optString("status").equals("succeeded", ignoreCase = true)', self.repository)
+        self.assertIn("internal fun recordCommercialCloudCustomerPayment", self.repository)
+        self.assertIn("/rest/v1/rpc/commercial_record_customer_payment", self.repository)
+        self.assertIn("getSharedPreferences(\"commercial_cloud_pending_collection_v1\"", self.repository)
+
+    def test_customer_collection_migration_is_atomic_authorized_and_idempotent(self):
+        migration = (ROOT / "supabase/migrations/20261024220000_commercial_customer_collection_rpc.sql").read_text(encoding="utf-8")
+        for marker in (
+            "CREATE OR REPLACE FUNCTION public.commercial_record_customer_payment",
+            "pg_advisory_xact_lock",
+            "idempotency_key_reused_with_different_request",
+            "accounting_permission_required",
+            "commercial_gl_post_payment(v_payment.id)",
+            "GRANT EXECUTE ON FUNCTION public.commercial_record_customer_payment",
+        ):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, migration)
+
+    def test_multi_line_checkout_guards_duplicate_lines_and_uses_stable_retry_key(self):
+        self.assertIn("commercial_checkout_sale_multi", self.repository)
+        self.assertIn("getOrCreateCommercialCloudMultiSaleKey", self.repository)
+        self.assertIn("lines.map { it.offeringId }.distinct().size == lines.size", self.repository)
+        self.assertIn("prefs.getString(\"payload\", null) == payload", self.repository)
+        migration = (ROOT / "supabase/migrations/20261024200000_commercial_multiline_cash_checkout.sql").read_text(encoding="utf-8")
+        self.assertIn("FOR UPDATE", migration)
+        self.assertIn("p_idempotency_key", migration)
+        self.assertIn("commercial_inventory_balances", migration)
+
 if __name__ == "__main__":
     unittest.main()
