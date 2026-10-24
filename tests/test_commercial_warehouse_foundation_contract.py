@@ -23,6 +23,8 @@ class CommercialWarehouseFoundationContractTests(unittest.TestCase):
             self.assertIn(f"CREATE TABLE IF NOT EXISTS public.{table}", self.sql)
         self.assertIn("REFERENCES public.commercial_organization_locations(id)", self.sql)
         self.assertIn("REFERENCES public.commercial_offerings(id)", self.sql)
+        self.assertIn("activity_id is optional", self.sql)
+        self.assertNotIn("CHECK (activity_id IS NULL OR activity_id IS NOT NULL)", self.sql)
         self.assertNotIn("CREATE TABLE IF NOT EXISTS public.commercial_products", self.sql)
         self.assertNotIn("CREATE TABLE IF NOT EXISTS public.commercial_global_catalog_items", self.sql)
 
