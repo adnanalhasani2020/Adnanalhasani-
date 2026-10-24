@@ -148,6 +148,10 @@ SELECT * FROM finish();
 ROLLBACK;
 
 
+SELECT * FROM finish();
+ROLLBACK;
+
+
 SELECT ok(
   EXISTS (
     SELECT 1 FROM pg_policy p
