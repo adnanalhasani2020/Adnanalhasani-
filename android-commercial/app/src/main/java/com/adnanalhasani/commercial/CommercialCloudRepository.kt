@@ -273,7 +273,8 @@ internal data class CommercialMasterDataRow(
     val code: String,
     val label: String,
     val kind: String,
-    val parentId: String = ""
+    val parentId: String = "",
+    val warehouseId: String = ""
 )
 
 private fun commercialMasterDataAccess(context: Context): Pair<String, String> {
@@ -293,12 +294,13 @@ private fun commercialMasterDataAccess(context: Context): Pair<String, String> {
 }
 
 internal fun loadCommercialMasterData(context: Context, table: String): List<CommercialMasterDataRow> {
-    require(table in setOf("commercial_warehouses", "commercial_product_categories", "commercial_departments")) {
+    require(table in setOf("commercial_warehouses", "commercial_product_categories", "commercial_departments", "commercial_storage_locations")) {
         "نوع الدليل غير مدعوم."
     }
     val (orgId, access) = commercialMasterDataAccess(context)
     val fields = when (table) {
         "commercial_warehouses" -> "id,code,name,warehouse_type,state"
+        "commercial_storage_locations" -> "id,warehouse_id,parent_location_id,code,name,location_type,state"
         else -> "id,code,name_ar,name_en,state,parent_id"
     }
     val rows = JSONArray(commercialCloudRequest(
@@ -313,7 +315,8 @@ internal fun loadCommercialMasterData(context: Context, table: String): List<Com
                 code = row.optString("code"),
                 label = row.optString("name").ifBlank { row.optString("name_ar") },
                 kind = row.optString("warehouse_type").ifBlank { table.removePrefix("commercial_") },
-                parentId = row.optString("parent_id").takeUnless { it == "null" }.orEmpty()
+                parentId = row.optString(if (table == "commercial_storage_locations") "parent_location_id" else "parent_id").takeUnless { it == "null" }.orEmpty(),
+                warehouseId = row.optString("warehouse_id").takeUnless { it == "null" }.orEmpty()
             ))
         }
     }
@@ -325,9 +328,10 @@ internal fun createCommercialMasterData(
     code: String,
     name: String,
     parentId: String = "",
-    warehouseType: String = "main"
+    warehouseType: String = "main",
+    warehouseId: String = ""
 ) {
-    require(table in setOf("commercial_warehouses", "commercial_product_categories", "commercial_departments")) {
+    require(table in setOf("commercial_warehouses", "commercial_product_categories", "commercial_departments", "commercial_storage_locations")) {
         "نوع الدليل غير مدعوم."
     }
     require(code.trim().isNotEmpty() && name.trim().isNotEmpty()) { "أدخل الرمز والاسم." }
@@ -342,6 +346,11 @@ internal fun createCommercialMasterData(
             .put("activity_id", activityId.ifBlank { JSONObject.NULL })
             .put("name", name.trim()).put("warehouse_type", warehouseType)
             .put("created_by", JSONObject.NULL)
+    } else if (table == "commercial_storage_locations") {
+        require(warehouseId.isNotBlank()) { "اختر المستودع أولًا." }
+        payload.put("warehouse_id", warehouseId).put("name", name.trim())
+            .put("location_type", "storage").put("state", "active")
+        if (parentId.isNotBlank()) payload.put("parent_location_id", parentId)
     } else {
         payload.put("name_ar", name.trim())
         if (parentId.isNotBlank()) payload.put("parent_id", parentId)
