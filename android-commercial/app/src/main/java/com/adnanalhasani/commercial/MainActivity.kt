@@ -329,7 +329,7 @@ private fun StoreApp(context: Context) {
     if (editingProductIndex in inventory.indices) EditProductDialog(
         product = inventory[editingProductIndex],
         onDismiss = { editingProductIndex = -1 },
-        onSave = { name, category, stock, price, costPrice ->
+        onSave = { name, category, unitName, stock, price, costPrice, reorderPoint ->
             if (cloudMode) {
                 cloudNotice = "تعديل الصنف أو رصيده محجوب مؤقتًا حتى نوصل عملية التعديل إلى سجل حركات المخزون على الخادم. لم تُحفظ تغييرات محلية."
             } else {
@@ -357,7 +357,7 @@ private fun StoreApp(context: Context) {
                 cloudNotice = "جارٍ حفظ الصنف في قاعدة البيانات..."
                 storeCloudIo.execute {
                     val result = runCatching {
-                        createCommercialCloudInventoryItem(context, name, "قطعة", price.toLong(), stock)
+                        createCommercialCloudInventoryItem(context, name, unitName, price.toLong(), stock, reorderPoint.toDouble())
                         loadCommercialCloudInventory(context)
                     }
                     storeCloudMain.post {
@@ -375,7 +375,7 @@ private fun StoreApp(context: Context) {
                     }
                 }
             } else {
-                inventory.add(Product(name, category, stock, money(price), costPrice))
+                inventory.add(Product(name, category, stock, money(price), costPrice, unitCode = unitName))
                 saveProducts(context, inventory)
                 addProduct = false
             }
@@ -823,10 +823,11 @@ private fun EditProductDialog(
                 when {
                     name.isBlank() -> error = "أدخل اسم المنتج."
                     !cloudMode && category.isBlank() -> error = "أدخل تصنيف المنتج."
+                    unitName.isBlank() -> error = "أدخل اسم الوحدة."
                     stock == null || stock < 0 -> error = "أدخل كمية صحيحة."
                     price == null || price <= 0 -> error = "أدخل سعر بيع أكبر من صفر."
                     !cloudMode && (cost == null || cost < 0) -> error = "أدخل تكلفة شراء صحيحة (يمكن أن تكون صفرًا)."
-                    else -> onSave(name.trim(), category.trim(), stock, price, cost ?: 0)
+                    else -> onSave(name.trim(), category.trim(), unitName.trim(), stock, price, cost ?: 0, reorderPointText.toIntOrNull() ?: 0)
                 }
             }) { Text("حفظ التعديلات") }
         },
@@ -854,10 +855,12 @@ private fun EditProductDialog(
 private fun AddProductDialog(
     cloudMode: Boolean = false,
     onDismiss: () -> Unit,
-    onSave: (String, String, Int, Int, Int) -> Unit
+    onSave: (String, String, String, Int, Int, Int, Int) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
     var category by remember { mutableStateOf("") }
+    var unitName by remember { mutableStateOf("قطعة") }
+    var reorderPointText by remember { mutableStateOf("0") }
     var stockText by remember { mutableStateOf("0") }
     var priceText by remember { mutableStateOf("") }
     var costText by remember { mutableStateOf("") }
@@ -870,7 +873,9 @@ private fun AddProductDialog(
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(name, { name = it; error = null }, label = { Text("اسم المنتج") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 if (!cloudMode) OutlinedTextField(category, { category = it; error = null }, label = { Text("التصنيف المحلي") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(stockText, { stockText = it.filter(Char::isDigit).take(7); error = null }, label = { Text(if (cloudMode) "الكمية الافتتاحية (وحدات)" else "الكمية الافتتاحية") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(unitName, { unitName = it; error = null }, label = { Text(if (cloudMode) "اسم الوحدة الأساسية" else "الوحدة") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                if (cloudMode) OutlinedTextField(reorderPointText, { reorderPointText = it.filter(Char::isDigit).take(7); error = null }, label = { Text("حد التنبيه للمخزون المنخفض") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(stockText, { stockText = it.filter(Char::isDigit).take(7); error = null }, label = { Text(if (cloudMode) "الكمية الافتتاحية (بوحدة الأساس)" else "الكمية الافتتاحية") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(priceText, { priceText = it.filter(Char::isDigit).take(7); error = null }, label = { Text("سعر البيع للوحدة (ر.ي)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 if (!cloudMode) OutlinedTextField(costText, { costText = it.filter(Char::isDigit).take(7); error = null }, label = { Text("تكلفة شراء الوحدة (ر.ي)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 if (cloudMode) Text("سيُحفظ الاسم والوحدة والسعر والكمية الافتتاحية في قاعدة البيانات. التصنيف وتكلفة الشراء غير مربوطين بعملية الإنشاء السحابية الحالية.", color = Muted, fontSize = 11.sp)
