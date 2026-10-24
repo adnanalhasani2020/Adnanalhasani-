@@ -21,8 +21,9 @@ class CommercialCloudStockAlertsContractTests(unittest.TestCase):
         self.assertIn('"تنبيهات المخزون السحابي"', self.main)
 
     def test_screen_uses_existing_cloud_inventory_projection(self):
-        self.assertIn("loadCommercialCloudInventory(context).products", self.screen)
-        self.assertIn("internal fun loadCommercialCloudInventory", self.repository)
+        self.assertIn("loadCommercialCloudStockAlerts(context)", self.screen)
+        self.assertIn("internal fun loadCommercialCloudStockAlerts", self.repository)
+        self.assertIn("availableQuantity = (onHand - reserved).coerceAtLeast(0.0)", self.repository)
         self.assertIn("organization_id=eq.$orgId", self.repository)
         self.assertIn("location_id=eq.$locationId", self.repository)
         self.assertIn("offering.activity_id=eq.$activityId", self.repository)
