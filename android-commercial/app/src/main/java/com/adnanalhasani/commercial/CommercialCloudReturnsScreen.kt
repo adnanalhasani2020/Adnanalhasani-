@@ -7,6 +7,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -47,6 +49,12 @@ internal fun CommercialCloudReturnsScreen(context: Context, onBack: () -> Unit) 
     var condition by remember { mutableStateOf("resellable") }
     var restock by remember { mutableStateOf(true) }
     var inspectionNote by remember { mutableStateOf("") }
+    var returnableSales by remember { mutableStateOf<List<CommercialCloudReturnableSale>>(emptyList()) }
+    var salePickerOpen by remember { mutableStateOf(false) }
+    var requestTarget by remember { mutableStateOf<CommercialCloudReturnableSale?>(null) }
+    var requestReason by remember { mutableStateOf("customer_request") }
+    var requestNote by remember { mutableStateOf("") }
+    val requestedQuantities = remember { mutableStateMapOf<String, String>() }
 
     LaunchedEffect(refresh) {
         busy = true; error = ""
@@ -95,6 +103,25 @@ internal fun CommercialCloudReturnsScreen(context: Context, onBack: () -> Unit) 
                 }
             }
             item { OutlinedTextField(value=query,onValueChange={query=it},modifier=Modifier.fillMaxWidth(),singleLine=true,label={Text("ابحث بالفاتورة أو العميل أو الحالة")},leadingIcon={Icon(Icons.Default.Search,null)},shape=RoundedCornerShape(14.dp)) }
+            item {
+                Button(
+                    onClick = {
+                        busy = true; error = ""; message = ""
+                        ReturnIo.execute {
+                            val result = runCatching { loadCommercialCloudReturnableSales(context) }
+                            ReturnMain.post {
+                                busy = false
+                                result.onSuccess { returnableSales = it; salePickerOpen = true }
+                                    .onFailure { error = it.message ?: "تعذر تحميل فواتير البيع المكتملة." }
+                            }
+                        }
+                    },
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = ReturnGreen),
+                    shape = RoundedCornerShape(14.dp)
+                ) { Text("إنشاء طلب مرتجع من فاتورة مكتملة") }
+            }
             if (busy) item { LinearProgressIndicator(Modifier.fillMaxWidth(), color=ReturnGreen) }
             if (error.isNotBlank()) item { Card(colors=CardDefaults.cardColors(containerColor=Color(0xFFFFEFEC)),shape=RoundedCornerShape(14.dp)) { Column(Modifier.padding(14.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) { Text("تعذر تحميل المرتجعات",fontWeight=FontWeight.Bold,color=Color(0xFF9C3028)); Text(error,color=Color(0xFF7B3933),fontSize=12.sp); OutlinedButton(onClick={refresh++}) { Text("إعادة المحاولة") } } } }
             if (message.isNotBlank()) item { Text(message,color=ReturnGreen,fontSize=12.sp) }
@@ -137,6 +164,105 @@ internal fun CommercialCloudReturnsScreen(context: Context, onBack: () -> Unit) 
             item { Text("تُنفذ القرارات والفحص وإعادة المخزون عبر RPCs المعتمدة في Supabase. لا يتم تسجيل رد مالي على أنه مكتمل دون مسار دفع فعلي.",color=ReturnMuted,fontSize=11.sp) }
         }
     }
+
+
+    if (salePickerOpen) AlertDialog(
+        onDismissRequest = { if (!busy) salePickerOpen = false },
+        title = { Text("اختر فاتورة مكتملة") },
+        text = {
+            if (returnableSales.isEmpty()) Text("لا توجد فواتير مكتملة تحتوي على أصناف قابلة للاختيار.")
+            else LazyColumn(Modifier.heightIn(max = 420.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(returnableSales, key = { it.id }) { sale ->
+                    OutlinedButton(
+                        onClick = {
+                            requestTarget = sale
+                            requestedQuantities.clear()
+                            sale.items.forEach { requestedQuantities[it.id] = "0" }
+                            requestReason = "customer_request"
+                            requestNote = ""
+                            salePickerOpen = false
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(Modifier.fillMaxWidth()) {
+                            Text("فاتورة #${sale.receiptNumber.ifBlank { "—" }}", fontWeight = FontWeight.Bold)
+                            Text("${sale.customerName} · ${sale.items.size} صنف", fontSize = 11.sp)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { salePickerOpen = false }) { Text("إغلاق") } }
+    )
+
+    if (requestTarget != null) AlertDialog(
+        onDismissRequest = { if (!busy) requestTarget = null },
+        title = { Text("طلب مرتجع جديد") },
+        text = {
+            Column(
+                Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("الفاتورة #${requestTarget!!.receiptNumber} · ${requestTarget!!.customerName}", fontWeight = FontWeight.SemiBold)
+                Text("اختر سبب المرتجع وحدد كمية كل صنف. التحقق النهائي من الكميات المرتجعة يتم في قاعدة البيانات.", color = ReturnMuted, fontSize = 11.sp)
+                listOf(
+                    "customer_request" to "طلب العميل",
+                    "damaged" to "تلف",
+                    "wrong_item" to "صنف غير صحيح",
+                    "not_as_described" to "غير مطابق للوصف",
+                    "duplicate_charge" to "خصم مكرر",
+                    "other" to "أخرى"
+                ).forEach { (value, label) ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = requestReason == value, onClick = { requestReason = value })
+                        Text(label)
+                    }
+                }
+                OutlinedTextField(
+                    value = requestNote,
+                    onValueChange = { requestNote = it.take(2000) },
+                    label = { Text("تفاصيل إضافية (اختياري)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2
+                )
+                Divider()
+                requestTarget!!.items.forEach { saleItem ->
+                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(saleItem.productName, color = ReturnInk, fontWeight = FontWeight.SemiBold)
+                        Text("المباع: ${saleItem.soldQuantity} · قيمة السطر: ${money(saleItem.lineTotalMinor, requestTarget!!.currencyCode)}", color = ReturnMuted, fontSize = 11.sp)
+                        OutlinedTextField(
+                            value = requestedQuantities[saleItem.id] ?: "0",
+                            onValueChange = { value ->
+                                requestedQuantities[saleItem.id] = value.filter(Char::isDigit).take(9)
+                            },
+                            label = { Text("الكمية المراد إرجاعها (0 إلى ${saleItem.soldQuantity})") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(enabled = !busy && requestTarget != null &&
+                requestTarget!!.items.all { (requestedQuantities[it.id]?.toIntOrNull() ?: 0) <= it.soldQuantity } &&
+                requestTarget!!.items.any { (requestedQuantities[it.id]?.toIntOrNull() ?: 0) > 0 },
+                onClick = {
+                    val target = requestTarget!!
+                    val quantities = requestedQuantities.mapNotNull { (id, raw) ->
+                        val qty = raw.toIntOrNull() ?: 0
+                        if (qty > 0) id to qty else null
+                    }.toMap()
+                    executeAction({
+                        requestCommercialCloudSaleReturn(context, target.id, requestReason, requestNote, quantities)
+                    }, "تم إنشاء طلب المرتجع في قاعدة البيانات، وهو بانتظار المراجعة.")
+                    requestTarget = null
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = ReturnGreen)
+            ) { Text("إرسال الطلب") }
+        },
+        dismissButton = { TextButton(onClick = { if (!busy) requestTarget = null }) { Text("إلغاء") } }
+    )
 
     if(decisionTarget!=null) AlertDialog(onDismissRequest={if(!busy)decisionTarget=null},title={Text(if(approve)"اعتماد المرتجع" else "رفض المرتجع")},text={
         Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
