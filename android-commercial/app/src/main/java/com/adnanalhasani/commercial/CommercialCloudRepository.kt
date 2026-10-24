@@ -96,7 +96,7 @@ internal fun loadCommercialCloudInventory(context: Context): CommercialCloudInve
     sessionPrefs.edit().putString("refresh_token", rotatedRefresh).apply()
 
     val query = "/rest/v1/commercial_inventory_balances" +
-        "?select=offering_id,quantity_on_hand,reorder_point,offering:commercial_offerings!inner(id,price_minor,currency_code,activity_id,product:commercial_products!inner(name,description,unit_name,state))" +
+        "?select=offering_id,quantity_on_hand,quantity_reserved,reorder_point,offering:commercial_offerings!inner(id,price_minor,currency_code,activity_id,product:commercial_products!inner(name,description,unit_name,state))" +
         "&organization_id=eq.$orgId&location_id=eq.$locationId&order=updated_at.desc"
     val rows = JSONArray(commercialCloudRequest(query, "GET", token = access))
     val products = buildList {
@@ -105,7 +105,7 @@ internal fun loadCommercialCloudInventory(context: Context): CommercialCloudInve
             val offering = row.optJSONObject("offering") ?: continue
             val product = offering.optJSONObject("product") ?: continue
             if (product.optString("state") != "active") continue
-            val quantity = row.optDouble("quantity_on_hand", 0.0).toInt()
+            val quantity = (row.optDouble("quantity_on_hand", 0.0) - row.optDouble("quantity_reserved", 0.0)).coerceAtLeast(0.0).toInt()
             val price = offering.optLong("price_minor", 0L).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
             add(Product(
                 name = product.optString("name"),
