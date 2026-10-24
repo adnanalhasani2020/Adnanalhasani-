@@ -564,6 +564,44 @@ internal fun createCommercialMasterData(
 }
 
 
+internal data class CommercialDepartmentWarehouseAssignment(
+    val departmentId: String,
+    val warehouseId: String
+)
+
+/** Read the existing organization-scoped department/warehouse links. */
+internal fun loadCommercialDepartmentWarehouseAssignments(context: Context): List<CommercialDepartmentWarehouseAssignment> {
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val rows = JSONArray(commercialCloudRequest(
+        "/rest/v1/commercial_department_warehouse_assignments?select=department_id,warehouse_id&organization_id=eq.$orgId&order=created_at.desc",
+        "GET", token = access
+    ))
+    return buildList {
+        for (index in 0 until rows.length()) {
+            val row = rows.optJSONObject(index) ?: continue
+            val departmentId = row.optString("department_id").takeUnless { it == "null" }.orEmpty()
+            val warehouseId = row.optString("warehouse_id").takeUnless { it == "null" }.orEmpty()
+            if (departmentId.isNotBlank() && warehouseId.isNotBlank()) {
+                add(CommercialDepartmentWarehouseAssignment(departmentId, warehouseId))
+            }
+        }
+    }
+}
+
+/** Add one validated department/warehouse link; database RLS and scope triggers remain authoritative. */
+internal fun assignCommercialDepartmentToWarehouse(context: Context, departmentId: String, warehouseId: String) {
+    require(departmentId.isNotBlank() && warehouseId.isNotBlank()) { "اختر القسم والمستودع." }
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val existing = loadCommercialDepartmentWarehouseAssignments(context)
+    if (existing.any { it.departmentId == departmentId && it.warehouseId == warehouseId }) return
+    val payload = JSONObject()
+        .put("organization_id", orgId)
+        .put("department_id", departmentId)
+        .put("warehouse_id", warehouseId)
+        .put("created_by", JSONObject.NULL)
+    commercialCloudRequest("/rest/v1/commercial_department_warehouse_assignments", "POST", payload, access)
+}
+
 internal data class CommercialCloudStockAlert(
     val offeringId: String,
     val productName: String,
