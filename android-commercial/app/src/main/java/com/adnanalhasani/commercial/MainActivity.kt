@@ -351,7 +351,7 @@ private fun StoreApp(context: Context) {
     if (addProduct) AddProductDialog(
         cloudMode = cloudMode,
         onDismiss = { addProduct = false },
-        onSave = { name, category, stock, price, costPrice ->
+        onSave = { name, category, unitName, stock, price, costPrice, reorderPoint ->
             if (cloudMode) {
                 cloudInventoryBusy = true
                 cloudNotice = "جارٍ حفظ الصنف في قاعدة البيانات..."
