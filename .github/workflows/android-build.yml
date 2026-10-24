@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "android-hospital/**"
+      - "android-commercial/**"
       - ".github/workflows/android-build.yml"
   push:
     branches:
@@ -12,6 +13,7 @@ on:
       - feature/native-reception-doctor-workflow-v2
     paths:
       - "android-hospital/**"
+      - "android-commercial/**"
       - ".github/workflows/android-build.yml"
   workflow_dispatch:
 
@@ -41,11 +43,19 @@ jobs:
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
       - name: Run unit tests
         run: gradle -p android-hospital --no-daemon testDebugUnitTest
-      - name: Build debug APK
+      - name: Build hospital debug APK
         run: gradle -p android-hospital --no-daemon assembleDebug
-      - name: Upload debug APK
+      - name: Upload hospital debug APK
         uses: actions/upload-artifact@v4
         with:
           name: hospital-debug-apk
           path: android-hospital/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+      - name: Build commercial debug APK
+        run: gradle -p android-commercial --no-daemon assembleDebug
+      - name: Upload commercial debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ruh-commercial-debug-apk
+          path: android-commercial/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
