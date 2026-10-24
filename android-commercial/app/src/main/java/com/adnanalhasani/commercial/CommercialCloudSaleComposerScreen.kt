@@ -69,6 +69,7 @@ internal fun CommercialCloudSaleComposerScreen(
 ) {
     var products by remember { mutableStateOf<List<Product>>(emptyList()) }
     var quantities by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var search by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var submitting by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
@@ -92,6 +93,7 @@ internal fun CommercialCloudSaleComposerScreen(
         }
     }
 
+    val visibleProducts = products.filter { it.name.contains(search, ignoreCase = true) || it.category.contains(search, ignoreCase = true) || it.barcode.contains(search, ignoreCase = true) }
     val selectedLines = products.mapNotNull { product ->
         val quantity = quantities[product.cloudOfferingId]?.toIntOrNull()
         if (product.cloudOfferingId.isBlank() || quantity == null || quantity <= 0) null else product to quantity
@@ -153,7 +155,17 @@ internal fun CommercialCloudSaleComposerScreen(
             if (!loading && error.isBlank() && products.isEmpty()) item {
                 Text("لا توجد أصناف مرتبطة بمخزون الموقع الحالي.", color = CloudComposerMuted)
             }
-            items(products, key = { it.cloudOfferingId }) { product ->
+            item {
+                OutlinedTextField(
+                    value = search,
+                    onValueChange = { search = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text("بحث عن صنف") },
+                    placeholder = { Text("الاسم أو التصنيف أو الباركود") }
+                )
+            }
+            items(visibleProducts, key = { it.cloudOfferingId }) { product ->
                 var quantityText = quantities[product.cloudOfferingId].orEmpty()
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Color.White),
