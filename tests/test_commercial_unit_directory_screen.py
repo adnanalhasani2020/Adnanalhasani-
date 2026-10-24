@@ -43,7 +43,7 @@ class CommercialUnitDirectoryScreenTests(unittest.TestCase):
         pager = self.repository.split("private fun commercialCloudPagedGet", 1)[1].split(
             "private fun commercialMasterDataAccess", 1
         )[0]
-        self.assertIn("val pageSize = 500", pager)
+        self.assertIn("pageSize: Int = 500", pager)
         self.assertIn("limit=$pageSize&offset=$offset", pager)
         self.assertIn("if (page.length() < pageSize) break", pager)
 
