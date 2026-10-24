@@ -341,8 +341,8 @@ private fun StoreApp(context: Context) {
                         showCatalog = false
                     })
                     showDebts -> DebtScreen(sales = sales, settlements = settlements, allowSettlement = !cloudMode, onBack = { showDebts = false }, onSettle = { settlingSaleNumber = it.number })
-                    showReports -> ReportsScreen(sales = sales, settlements = settlements, expenses = expenses, onBack = { showReports = false })
-                    showExpenses -> ExpensesScreen(expenses = expenses, onBack = { showExpenses = false }, onAdd = { expenseDialog = true })
+                    showReports -> ReportsScreen(sales = sales, settlements = settlements, expenses = expenses, allowLocalData = !cloudMode, onBack = { showReports = false })
+                    showExpenses -> ExpensesScreen(expenses = expenses, allowLocalData = !cloudMode, onBack = { showExpenses = false }, onAdd = { expenseDialog = true })
                     else -> if (showActivityProfile) ActivityProfileScreen(onBack = { showActivityProfile = false }) else MoreScreen(onCustomers = { showDebts = true }, onReports = { showReports = true }, onExpenses = { showExpenses = true }, onActivityProfile = { showActivityProfile = true }, onCatalog = { showCatalog = true }, onMasterData = { showMasterData = true })
                 }
             }
@@ -996,7 +996,14 @@ private fun MoreScreen(onCustomers: () -> Unit, onReports: () -> Unit, onExpense
 }
 
 @Composable
-private fun ExpensesScreen(expenses: List<ExpenseRecord>, onBack: () -> Unit, onAdd: () -> Unit) {
+private fun ExpensesScreen(expenses: List<ExpenseRecord>, allowLocalData: Boolean, onBack: () -> Unit, onAdd: () -> Unit) {
+    if (!allowLocalData) {
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
+            item { Row(verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "رجوع") }; Heading("المصروفات", "التسجيل السحابي غير متاح بعد") } }
+            item { Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3D6)), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) { Text("تم تعطيل عرض المصروفات المحلية وإضافة مصروف في وضع السحابة؛ لا توجد عملية خادم تحفظ المصروفات وتزامنها بين أجهزة المؤسسة حتى الآن.", modifier = Modifier.padding(14.dp), color = Color(0xFF805400), fontSize = 13.sp) } }
+        }
+        return
+    }
     val calendar = java.util.Calendar.getInstance()
     calendar.set(java.util.Calendar.HOUR_OF_DAY, 0); calendar.set(java.util.Calendar.MINUTE, 0)
     calendar.set(java.util.Calendar.SECOND, 0); calendar.set(java.util.Calendar.MILLISECOND, 0)
@@ -1074,7 +1081,14 @@ private fun ExpenseEntryDialog(onDismiss: () -> Unit, onSave: (String, Int, Stri
 }
 
 @Composable
-private fun ReportsScreen(sales: List<SaleRecord>, settlements: List<SettlementRecord>, expenses: List<ExpenseRecord>, onBack: () -> Unit) {
+private fun ReportsScreen(sales: List<SaleRecord>, settlements: List<SettlementRecord>, expenses: List<ExpenseRecord>, allowLocalData: Boolean, onBack: () -> Unit) {
+    if (!allowLocalData) {
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
+            item { Row(verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "رجوع") }; Heading("التقارير", "بيانات المؤسسة السحابية") } }
+            item { Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3D6)), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) { Text("التقارير المالية السحابية غير مكتملة. المبيعات تأتي من الخادم، لكن التحصيلات والمصروفات وبعض أرصدة العملاء محلية أو غير مكتملة؛ أخفينا النتائج المجمعة حتى لا تظهر أرقام مضللة.", modifier = Modifier.padding(14.dp), color = Color(0xFF805400), fontSize = 13.sp) } }
+        }
+        return
+    }
     val calendar = java.util.Calendar.getInstance()
     calendar.set(java.util.Calendar.HOUR_OF_DAY, 0)
     calendar.set(java.util.Calendar.MINUTE, 0)
