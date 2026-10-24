@@ -219,6 +219,7 @@ private fun StoreApp(context: Context) {
     var showMasterData by remember { mutableStateOf(false) }
     var cloudOperationalPage by remember { mutableStateOf("") }
     var cloudSalesPage by remember { mutableStateOf(false) }
+    var cloudSaleComposerPage by remember { mutableStateOf(false) }
     var cloudPurchasesPage by remember { mutableStateOf(false) }
     var cloudStockAlertsPage by remember { mutableStateOf(false) }
     var cloudUnitsPage by remember { mutableStateOf(false) }
@@ -306,18 +307,33 @@ private fun StoreApp(context: Context) {
             }
         },
         floatingActionButton = {
-            if (tab == 1) FloatingActionButton(onClick = { newSale = true }, containerColor = Green, contentColor = Color.White) {
+            if (tab == 1) FloatingActionButton(onClick = { if (cloudMode) cloudSaleComposerPage = true else newSale = true }, containerColor = Green, contentColor = Color.White) {
                 Icon(Icons.Default.Add, "فاتورة جديدة")
             }
         }
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
-            when (tab) {
-                0 -> Dashboard(products = inventory, sales = sales, cloudMode = cloudMode, onNewSale = { newSale = true }, onInventory = { tab = 2 })
+            if (cloudSaleComposerPage) {
+                CommercialCloudSaleComposerScreen(
+                    context = context,
+                    onBack = { cloudSaleComposerPage = false },
+                    onCompleted = {
+                        storeCloudIo.execute {
+                            val snapshot = runCatching { loadCommercialCloudInventory(context) }.getOrNull()
+                            val history = runCatching { loadCommercialCloudSales(context) }.getOrNull()
+                            storeCloudMain.post {
+                                snapshot?.let { inventory.clear(); inventory.addAll(it.products) }
+                                history?.let { sales.clear(); sales.addAll(it) }
+                            }
+                        }
+                    }
+                )
+            } else when (tab) {
+                0 -> Dashboard(products = inventory, sales = sales, cloudMode = cloudMode, onNewSale = { if (cloudMode) cloudSaleComposerPage = true else newSale = true }, onInventory = { tab = 2 })
                 1 -> SalesScreen(
                     sales = sales,
                     cloudMode = cloudMode,
-                    onNewSale = { newSale = true },
+                    onNewSale = { if (cloudMode) cloudSaleComposerPage = true else newSale = true },
                     onCloudInvoices = { cloudSalesPage = true }
                 )
                 2 -> InventoryScreen(inventory, query, { query = it }, {
