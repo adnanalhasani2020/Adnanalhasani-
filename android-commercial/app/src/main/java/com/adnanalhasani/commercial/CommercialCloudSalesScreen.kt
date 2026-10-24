@@ -411,10 +411,17 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
 private fun formatMinorAmount(value: Long): String = String.format(Locale.US, "%,d", value)
 
 private fun formatInvoiceTimestamp(value: String): String {
-    val normalized = value.replace('T', ' ').take(19)
-    val parsed = runCatching { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).parse(normalized) }.getOrNull()
-        ?: return normalized
-    return SimpleDateFormat("yyyy/MM/dd · HH:mm", Locale.getDefault()).format(parsed)
+    // Supabase timestamps are ISO-8601 and commonly include Z or an explicit UTC offset.
+    // Parse the instant first so the displayed local time is correct across time zones.
+    val instant = runCatching { java.time.Instant.parse(value) }.getOrNull()
+        ?: runCatching {
+            val normalized = value.replace('T', ' ').take(19)
+            SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).parse(normalized)?.toInstant()
+        }.getOrNull()
+        ?: return value.take(19).replace('T', ' ')
+    return java.time.format.DateTimeFormatter.ofPattern("yyyy/MM/dd · HH:mm", Locale.getDefault())
+        .withZone(java.time.ZoneId.systemDefault())
+        .format(instant)
 }
 
 private fun statusLabel(value: String): String = when (value.lowercase()) {
