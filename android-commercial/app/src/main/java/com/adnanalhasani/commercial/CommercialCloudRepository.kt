@@ -333,6 +333,20 @@ internal fun loadCommercialCloudSaleDocuments(context: Context): List<Commercial
                     ))
                 }
             }
+            val totalMinor = row.optLong("total_minor", 0L).coerceAtLeast(0L)
+            val successfulPaymentMinor = payments
+                .filter { it.status.equals("succeeded", ignoreCase = true) }
+                .sumOf { it.amountMinor.coerceAtLeast(0L) }
+            val paymentStatusFromServer = row.optString("payment_status").ifBlank { "غير محدد" }
+            val derivedPaymentStatus = when {
+                paymentStatusFromServer.equals("refunded", ignoreCase = true) ||
+                    payments.any { it.status.equals("refunded", ignoreCase = true) } -> "refunded"
+                payments.any { it.status.equals("partially_refunded", ignoreCase = true) } -> "partially_refunded"
+                totalMinor > 0L && successfulPaymentMinor >= totalMinor -> "paid"
+                successfulPaymentMinor > 0L -> "partially_paid"
+                paymentStatusFromServer.equals("failed", ignoreCase = true) -> "failed"
+                else -> "pending"
+            }
             val returnRows = row.optJSONArray("returns")
             val returns = buildList {
                 for (returnIndex in 0 until (returnRows?.length() ?: 0)) {
@@ -353,9 +367,9 @@ internal fun loadCommercialCloudSaleDocuments(context: Context): List<Commercial
                 customerName = customer?.optString("display_name").orEmpty().takeUnless { it == "null" }.orEmpty().ifBlank { "عميل نقدي / غير محدد" },
                 customerPhone = customer?.optString("phone").orEmpty().takeUnless { it == "null" }.orEmpty(),
                 customerEmail = customer?.optString("email").orEmpty().takeUnless { it == "null" }.orEmpty(),
-                totalMinor = row.optLong("total_minor", 0L),
+                totalMinor = totalMinor,
                 saleStatus = row.optString("status").ifBlank { "غير محدد" },
-                paymentStatus = row.optString("payment_status").ifBlank { "غير محدد" },
+                paymentStatus = derivedPaymentStatus,
                 createdAt = row.optString("created_at").takeUnless { it == "null" }.orEmpty(),
                 currencyCode = row.optString("currency_code").takeUnless { it == "null" }.orEmpty(),
                 lines = lines,
