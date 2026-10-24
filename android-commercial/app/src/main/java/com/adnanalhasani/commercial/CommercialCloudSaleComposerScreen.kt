@@ -114,7 +114,7 @@ internal fun CommercialCloudSaleComposerScreen(
                 title = {
                     Column {
                         Text("فاتورة بيع جديدة", color = CloudComposerInk, fontWeight = FontWeight.Bold)
-                        Text("فاتورة سحابية متعددة الأصناف · نقدي", color = CloudComposerMuted, fontSize = 11.sp)
+                        Text(if (paymentMode == "credit") "فاتورة سحابية · بيع آجل" else "فاتورة سحابية متعددة الأصناف · نقدي", color = CloudComposerMuted, fontSize = 11.sp)
                     }
                 },
                 navigationIcon = { IconButton(onClick = onBack, enabled = !submitting) { Icon(Icons.Default.ArrowBack, contentDescription = "رجوع") } },
@@ -282,7 +282,7 @@ internal fun CommercialCloudSaleComposerScreen(
                                         val (outstanding, paymentStatus) = debt
                                         if (clearError == null) quantities = emptyMap()
                                         notice = if (clearError == null) {
-                                            "تم تأكيد الفاتورة رقم $receipt على الخادم. ${if (paymentRecorded) "سُجلت دفعة نقدية واحدة." else "الإجمالي صفر؛ لا يلزم إنشاء دفعة."}"
+                                            "تم تأكيد الفاتورة رقم $receipt على الخادم. الحالة: $paymentStatus. ${if (paymentRecorded) "سُجلت الدفعة الأولى." else "لم يُسجل دفع بعد."} المتبقي على الفاتورة: $outstanding وحدة صغرى من العملة."
                                         } else {
                                             "تم تأكيد الفاتورة رقم $receipt على الخادم، لكن تعذر تنظيف مفتاح المحاولة. لا تنشئ فاتورة جديدة؛ أعد المحاولة بنفس الطلب."
                                         }
