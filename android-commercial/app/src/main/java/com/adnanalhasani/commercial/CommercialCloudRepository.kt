@@ -256,6 +256,125 @@ internal fun checkoutCommercialCloudSale(
 }
 
 
+internal data class CommercialCloudSaleLine(
+    val productName: String,
+    val quantity: String,
+    val unitPriceMinor: Long,
+    val lineTotalMinor: Long
+)
+
+internal data class CommercialCloudSaleDocument(
+    val id: String,
+    val receiptNumber: String,
+    val customerName: String,
+    val totalMinor: Long,
+    val paymentStatus: String,
+    val createdAt: String,
+    val currencyCode: String,
+    val lines: List<CommercialCloudSaleLine>
+)
+
+/** Detailed, read-only invoice projection for the cloud sales history screen. */
+internal fun loadCommercialCloudSaleDocuments(context: Context): List<CommercialCloudSaleDocument> {
+    val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+    val activityId = saved.getString("activity_id", null).orEmpty()
+    require(activityId.isNotBlank()) { "ملف النشاط غير محفوظ." }
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val path = "/rest/v1/commercial_sales" +
+        "?select=id,receipt_number,total_minor,payment_status,created_at,currency_code,customer:commercial_customers(display_name),items:commercial_sale_items(product_name_snapshot,quantity,line_total_minor,unit_price_minor)" +
+        "&organization_id=eq.$orgId&activity_id=eq.$activityId&order=created_at.desc&limit=200"
+    val rows = JSONArray(commercialCloudRequest(path, "GET", token = access))
+    return buildList {
+        for (index in 0 until rows.length()) {
+            val row = rows.optJSONObject(index) ?: continue
+            val customer = row.optJSONObject("customer")
+            val items = row.optJSONArray("items")
+            val lines = buildList {
+                for (lineIndex in 0 until (items?.length() ?: 0)) {
+                    val item = items?.optJSONObject(lineIndex) ?: continue
+                    add(CommercialCloudSaleLine(
+                        productName = item.optString("product_name_snapshot").ifBlank { "صنف بدون اسم" },
+                        quantity = item.optString("quantity").takeUnless { it == "null" }.orEmpty(),
+                        unitPriceMinor = item.optLong("unit_price_minor", 0L),
+                        lineTotalMinor = item.optLong("line_total_minor", 0L)
+                    ))
+                }
+            }
+            add(CommercialCloudSaleDocument(
+                id = row.optString("id"),
+                receiptNumber = row.optString("receipt_number").ifBlank { "—" },
+                customerName = customer?.optString("display_name").orEmpty().takeUnless { it == "null" }.orEmpty().ifBlank { "عميل نقدي / غير محدد" },
+                totalMinor = row.optLong("total_minor", 0L),
+                paymentStatus = row.optString("payment_status").ifBlank { "غير محدد" },
+                createdAt = row.optString("created_at").takeUnless { it == "null" }.orEmpty(),
+                currencyCode = row.optString("currency_code").takeUnless { it == "null" }.orEmpty(),
+                lines = lines
+            ))
+        }
+    }
+}
+
+
+internal data class CommercialCloudPurchaseLine(
+    val lineNumber: Int,
+    val description: String,
+    val quantityOrdered: String,
+    val quantityReceived: String,
+    val unitCostMinor: Long
+)
+
+internal data class CommercialCloudPurchaseDocument(
+    val id: String,
+    val orderNumber: String,
+    val supplierName: String,
+    val status: String,
+    val orderedAt: String,
+    val expectedAt: String,
+    val currencyCode: String,
+    val notes: String,
+    val lines: List<CommercialCloudPurchaseLine>
+)
+
+/** Read-only purchase order detail projection using the existing order/item/supplier tables. */
+internal fun loadCommercialCloudPurchaseDocuments(context: Context): List<CommercialCloudPurchaseDocument> {
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val path = "/rest/v1/commercial_purchase_orders" +
+        "?select=id,order_number,status,ordered_at,expected_at,currency_code,notes,supplier:commercial_suppliers(display_name),items:commercial_purchase_order_items(line_number,item_description,quantity_ordered,quantity_received,unit_cost_minor)" +
+        "&organization_id=eq.$orgId&order=created_at.desc.nullslast&limit=200"
+    val rows = JSONArray(commercialCloudRequest(path, "GET", token = access))
+    return buildList {
+        for (index in 0 until rows.length()) {
+            val row = rows.optJSONObject(index) ?: continue
+            val supplier = row.optJSONObject("supplier")
+            val items = row.optJSONArray("items")
+            val lines = buildList {
+                for (lineIndex in 0 until (items?.length() ?: 0)) {
+                    val item = items?.optJSONObject(lineIndex) ?: continue
+                    add(CommercialCloudPurchaseLine(
+                        lineNumber = item.optInt("line_number", lineIndex + 1),
+                        description = item.optString("item_description").ifBlank { "بند بدون وصف" },
+                        quantityOrdered = item.optString("quantity_ordered").takeUnless { it == "null" }.orEmpty(),
+                        quantityReceived = item.optString("quantity_received").takeUnless { it == "null" }.orEmpty(),
+                        unitCostMinor = item.optLong("unit_cost_minor", 0L)
+                    ))
+                }
+            }.sortedBy { it.lineNumber }
+            add(CommercialCloudPurchaseDocument(
+                id = row.optString("id"),
+                orderNumber = row.optString("order_number").ifBlank { "—" },
+                supplierName = supplier?.optString("display_name").orEmpty().takeUnless { it == "null" }.orEmpty().ifBlank { "مورد غير محدد" },
+                status = row.optString("status").ifBlank { "غير محدد" },
+                orderedAt = row.optString("ordered_at").takeUnless { it == "null" }.orEmpty(),
+                expectedAt = row.optString("expected_at").takeUnless { it == "null" }.orEmpty(),
+                currencyCode = row.optString("currency_code").takeUnless { it == "null" }.orEmpty(),
+                notes = row.optString("notes").takeUnless { it == "null" }.orEmpty(),
+                lines = lines
+            ))
+        }
+    }
+}
+
+
 internal fun loadCommercialCloudSales(context: Context): List<SaleRecord> {
     val savedContext = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
     val orgId = savedContext.getString("organization_id", null).orEmpty()
