@@ -140,7 +140,8 @@ internal fun createCommercialCloudInventoryItem(
     unitName: String,
     priceMinor: Long,
     initialQuantity: Int,
-    reorderPoint: Double = 0.0
+    reorderPoint: Double = 0.0,
+    categoryId: String = ""
 ): String {
     val savedContext = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
     val orgId = savedContext.getString("organization_id", null).orEmpty()
@@ -170,7 +171,9 @@ internal fun createCommercialCloudInventoryItem(
         .put("p_currency_code", currency)
         .put("p_initial_quantity", initialQuantity)
         .put("p_reorder_point", reorderPoint.coerceAtLeast(0.0))
-    return commercialCloudRequest("/rest/v1/rpc/commercial_create_inventory_item", "POST", payload, access)
+        .put("p_category_id", categoryId.takeIf { it.isNotBlank() }?.let { org.json.JSONObject.NULL } ?: org.json.JSONObject.NULL)
+    if (categoryId.isNotBlank()) payload.put("p_category_id", categoryId) else payload.put("p_category_id", JSONObject.NULL)
+    return commercialCloudRequest("/rest/v1/rpc/commercial_create_inventory_item_with_category", "POST", payload, access)
 }
 
 
