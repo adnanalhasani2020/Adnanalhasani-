@@ -71,6 +71,12 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         self.assertIn("إعادة المحاولة", self.screen)
         self.assertIn("بنود الفاتورة", self.screen)
 
+    def test_invoice_timestamps_parse_iso8601_offsets_before_local_display(self):
+        self.assertIn("java.time.Instant.parse(value)", self.screen)
+        self.assertIn("java.time.ZoneId.systemDefault()", self.screen)
+        self.assertIn("explicit UTC offset", self.screen)
+        self.assertIn("yyyy-MM-dd HH:mm:ss", self.screen)  # legacy fallback remains supported
+
 
 if __name__ == "__main__":
     unittest.main()
