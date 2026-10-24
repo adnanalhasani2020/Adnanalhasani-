@@ -33,7 +33,7 @@ Existing trusted database functions include `commercial_checkout_sale`, `commerc
 
 ## Verified implementation update — 2026-10-24
 
-The Android cloud invoice projection has been expanded to read the existing invoice status, customer contact fields, payment records, and sales-return status/refund/restock summaries alongside the invoice lines. These are display-only projections; they do not imply that payment capture, payment allocation, refunds, or accounting posting are implemented.
+The Android cloud invoice projection has been expanded to read the existing invoice status, customer contact fields, payment records, and sales-return status/refund/restock summaries alongside the invoice lines. Invoice payment status is now derived from confirmed `succeeded` payment rows rather than trusting a sale row that says `paid` when no payment record exists. This prevents the UI from showing an unpaid invoice as paid; it does not create the missing server-side payment. These are still display-only projections and do not imply that payment allocation, refunds, or accounting posting are implemented.
 
 The app now avoids creating a synthetic device-local invoice when a cloud checkout succeeds but refreshing the cloud history fails. In cloud mode, local-only debt settlement, expense entry, and mixed local-finance reports are blocked with an explicit message rather than presenting local writes as cloud-confirmed balances.
 
