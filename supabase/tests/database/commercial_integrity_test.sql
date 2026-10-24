@@ -1,7 +1,7 @@
 -- Run with Supabase CLI / pgTAP in a disposable local or staging database.
 -- These are schema regression tests; they do not replace authenticated-session integration tests.
 BEGIN;
-SELECT plan(21);
+SELECT plan(23);
 
 SELECT has_table('public', 'commercial_audit_events',
   'append-only audit event table exists');
@@ -146,3 +146,34 @@ SELECT ok(
 
 SELECT * FROM finish();
 ROLLBACK;
+
+
+SELECT ok(
+  EXISTS (
+    SELECT 1 FROM pg_policy p
+    JOIN pg_class c ON c.oid = p.polrelid
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public'
+      AND c.relname = 'commercial_sales'
+      AND p.polname = 'organization managers read sales'
+      AND p.polcmd = 'r'
+      AND position('owner' in pg_get_expr(p.polqual, p.polrelid)) > 0
+      AND position('manager' in pg_get_expr(p.polqual, p.polrelid)) > 0
+  ),
+  'organization owners, admins and managers have a read policy for organization sales'
+);
+
+SELECT ok(
+  EXISTS (
+    SELECT 1 FROM pg_policy p
+    JOIN pg_class c ON c.oid = p.polrelid
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public'
+      AND c.relname = 'commercial_sale_items'
+      AND p.polname = 'organization managers read sale items'
+      AND p.polcmd = 'r'
+      AND position('commercial_sales' in pg_get_expr(p.polqual, p.polrelid)) > 0
+      AND position('manager' in pg_get_expr(p.polqual, p.polrelid)) > 0
+  ),
+  'organization managers can read sale lines only through sales in their organization'
+);
