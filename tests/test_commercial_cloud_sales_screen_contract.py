@@ -96,6 +96,12 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
             with self.subTest(marker=marker):
                 self.assertIn(marker, self.screen)
 
+    def test_invoice_timestamps_parse_iso8601_offsets_before_local_display(self):
+        self.assertIn("java.time.Instant.parse(value)", self.screen)
+        self.assertIn("java.time.ZoneId.systemDefault()", self.screen)
+        self.assertIn("explicit UTC offset", self.screen)
+        self.assertIn("yyyy-MM-dd HH:mm:ss", self.screen)  # legacy fallback remains supported
+
     def test_invoice_screen_discloses_read_only_and_minor_units(self):
         self.assertIn("عرض فقط", self.screen)
         self.assertIn("بوحدة الصرف الصغرى", self.screen)
