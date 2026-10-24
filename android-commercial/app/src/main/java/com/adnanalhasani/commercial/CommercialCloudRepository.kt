@@ -757,13 +757,41 @@ internal fun requestCommercialCloudSaleReturn(
         items.put(JSONObject().put("sale_item_id", saleItemId).put("quantity", quantity).put("restock", true))
     }
     val (_, access) = commercialMasterDataAccess(context)
+    val savedContext = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+    val organizationId = savedContext.getString("organization_id", null).orEmpty()
+    require(organizationId.isNotBlank()) { "معرّف المؤسسة غير محفوظ." }
+    val normalizedItems = JSONArray()
+    selected.toSortedMap().forEach { (saleItemId, quantity) ->
+        normalizedItems.put(JSONObject().put("sale_item_id", saleItemId).put("quantity", quantity).put("restock", true))
+    }
+    val fingerprint = JSONObject()
+        .put("sale_id", saleId)
+        .put("reason_code", reasonCode)
+        .put("reason_note", reasonNote.trim())
+        .put("items", normalizedItems)
+        .toString()
+    val prefs = context.getSharedPreferences("commercial_cloud_pending_return_v1", Context.MODE_PRIVATE)
+    val key = if (prefs.getString("request_fingerprint", null) == fingerprint &&
+        prefs.getString("organization_id", null) == organizationId) {
+        prefs.getString("idempotency_key", null).orEmpty()
+    } else ""
+    val idempotencyKey = key.ifBlank { UUID.randomUUID().toString() }
+    if (key.isBlank()) {
+        check(prefs.edit().clear()
+            .putString("request_fingerprint", fingerprint)
+            .putString("organization_id", organizationId)
+            .putString("idempotency_key", idempotencyKey)
+            .commit()) { "تعذر حفظ مفتاح طلب المرتجع قبل الإرسال." }
+    }
     val payload = JSONObject()
         .put("p_sale_id", saleId)
-        .put("p_idempotency_key", UUID.randomUUID().toString())
+        .put("p_idempotency_key", idempotencyKey)
         .put("p_reason_code", reasonCode)
-        .put("p_items", items)
+        .put("p_items", normalizedItems)
         .put("p_reason_note", reasonNote.trim().ifBlank { JSONObject.NULL })
-    return commercialCloudRequest("/rest/v1/rpc/commercial_request_sale_return", "POST", payload, access)
+    val response = commercialCloudRequest("/rest/v1/rpc/commercial_request_sale_return", "POST", payload, access)
+    check(prefs.edit().clear().commit()) { "تم إرسال المرتجع لكن تعذر تنظيف مفتاح إعادة المحاولة." }
+    return response
 }
 
 internal data class CommercialCloudReturnItem(
