@@ -344,7 +344,9 @@ internal fun checkoutCommercialCloudSaleMulti(
     context: Context,
     lines: List<CommercialCloudCheckoutLine>,
     idempotencyKey: String,
-    customerId: String? = null
+    customerId: String? = null,
+    paymentMode: String = "cash",
+    initialPaymentMinor: Long = 0L
 ): JSONObject {
     require(lines.isNotEmpty() && lines.size <= 200) { "عدد بنود الفاتورة غير صالح." }
     val savedContext = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
@@ -370,7 +372,9 @@ internal fun checkoutCommercialCloudSaleMulti(
         "/rest/v1/rpc/commercial_checkout_sale_multi", "POST",
         JSONObject().put("p_lines", payload).put("p_location_id", locationId)
             .put("p_idempotency_key", idempotencyKey)
-            .put("p_customer_id", customerId ?: JSONObject.NULL),
+            .put("p_customer_id", customerId ?: JSONObject.NULL)
+            .put("p_payment_mode", paymentMode)
+            .put("p_initial_payment_minor", if (paymentMode == "cash") JSONObject.NULL else initialPaymentMinor),
         access
     ))
 }
