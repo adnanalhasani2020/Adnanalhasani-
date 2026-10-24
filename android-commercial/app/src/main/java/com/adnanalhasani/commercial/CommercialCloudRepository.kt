@@ -114,7 +114,8 @@ internal fun loadCommercialCloudInventory(context: Context): CommercialCloudInve
                 price = String.format(Locale.US, "%,d ر.ي", price),
                 cloudOfferingId = offering.optString("id"),
                 unitCode = product.optString("unit_name").ifBlank { "قطعة" },
-                createdBy = orgId
+                createdBy = orgId,
+                reorderPoint = row.optDouble("reorder_point", 0.0).toInt().coerceAtLeast(0)
             ))
         }
     }
