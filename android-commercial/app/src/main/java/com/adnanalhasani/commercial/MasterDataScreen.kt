@@ -42,6 +42,8 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
     var code by remember { mutableStateOf("") }
     var name by remember { mutableStateOf("") }
     var warehouseType by remember { mutableStateOf("main") }
+    var parentId by remember { mutableStateOf("") }
+    var parentMenuExpanded by remember { mutableStateOf(false) }
 
     fun reload() {
         loading = true
@@ -55,7 +57,7 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
             }
         }
     }
-    LaunchedEffect(selected) { reload() }
+    LaunchedEffect(selected) { parentId = ""; reload() }
 
     Scaffold(
         topBar = {
@@ -116,7 +118,7 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedTextField(value = code, onValueChange = { code = it }, label = { Text("الرمز") }, singleLine = true)
                     OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("الاسم") }, singleLine = true)
-                    if (selected.second == "commercial_warehouses") {
+                    if (selected.second != "commercial_warehouses" && rows.isNotEmpty()) {\n                        val parentLabel = rows.firstOrNull { it.id == parentId }?.let { "${it.code} — ${it.label}" } ?: "جذر رئيسي (بلا أب)"\n                        Box {\n                            OutlinedButton(onClick = { parentMenuExpanded = true }, modifier = Modifier.fillMaxWidth()) { Text("المستوى الأعلى: $parentLabel") }\n                            DropdownMenu(expanded = parentMenuExpanded, onDismissRequest = { parentMenuExpanded = false }) {\n                                DropdownMenuItem(text = { Text("جذر رئيسي (بلا أب)") }, onClick = { parentId = ""; parentMenuExpanded = false })\n                                rows.forEach { parent -> DropdownMenuItem(text = { Text("${parent.code} — ${parent.label}") }, onClick = { parentId = parent.id; parentMenuExpanded = false }) }\n                            }\n                        }\n                    }\n                    if (selected.second == "commercial_warehouses") {
                         Text("نوع المستودع")
                         Column {
                             listOf("main" to "رئيسي", "retail" to "تجزئة", "distribution" to "توزيع", "returns" to "مرتجعات", "quarantine" to "حجر", "virtual" to "افتراضي").forEach { item ->
@@ -127,7 +129,7 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
                             }
                         }
                     } else {
-                        Text("يمكن إضافة المستويات الفرعية لاحقًا؛ هذه النسخة تنشئ عقدة جذرية بأمان.", fontSize = 12.sp, color = Color(0xFF71817B))
+                        Text("يمكن بناء مستويات فرعية متعددة بلا حد ثابت عبر اختيار المستوى الأعلى.", fontSize = 12.sp, color = Color(0xFF71817B))
                     }
                 }
             },
@@ -137,7 +139,7 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
                     notice = ""
                     masterIo.execute {
                         val result = runCatching {
-                            createCommercialMasterData(context, selected.second, code, name, warehouseType = warehouseType)
+                            createCommercialMasterData(context, selected.second, code, name, parentId = parentId, warehouseType = warehouseType)
                             loadCommercialMasterData(context, selected.second)
                         }
                         masterMain.post {
