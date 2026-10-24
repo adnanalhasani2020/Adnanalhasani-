@@ -135,7 +135,7 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         self.assertIn("showDebts = true", self.main)
         self.assertIn("internal fun loadCommercialCloudReceivables", self.repository)
         self.assertIn("payments:commercial_payments(amount_minor,status)", self.repository)
-        self.assertIn('payment.optString("status").equals("succeeded", ignoreCase = true)', self.repository)
+        self.assertIn('payment.optString("status") == "succeeded"', self.repository)
         self.assertIn("internal fun recordCommercialCloudCustomerPayment", self.repository)
         self.assertIn("/rest/v1/rpc/commercial_record_customer_payment", self.repository)
         self.assertIn("getSharedPreferences(\"commercial_cloud_pending_collection_v1\"", self.repository)
