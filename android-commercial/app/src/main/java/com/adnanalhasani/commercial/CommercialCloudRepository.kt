@@ -442,8 +442,9 @@ internal data class CommercialUnitOption(
 
 internal fun loadCommercialUnitsOfMeasure(context: Context): List<CommercialUnitOption> {
     val (_, access) = commercialMasterDataAccess(context)
-    val rows = JSONArray(commercialCloudRequest(
-        "/rest/v1/commercial_unit_of_measure?select=code,display_name,dimension,decimal_places&is_active=eq.true&order=dimension.asc,code.asc", access
+    val rows = commercialCloudPagedGet(
+        "/rest/v1/commercial_unit_of_measure?select=code,display_name,dimension,decimal_places&is_active=eq.true&order=dimension.asc,code.asc",
+        access
     )
     return buildList {
         for (i in 0 until rows.length()) {
