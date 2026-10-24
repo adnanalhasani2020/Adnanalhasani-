@@ -409,11 +409,11 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
                         Box {
                             OutlinedButton(onClick = { warehouseMenuExpanded = true }, modifier = Modifier.fillMaxWidth()) { Text("المستودع: $warehouseLabel") }
                             DropdownMenu(expanded = warehouseMenuExpanded, onDismissRequest = { warehouseMenuExpanded = false }) {
-                                warehouseRows.forEach { warehouse -> DropdownMenuItem(text = { Text("${warehouse.code} — ${warehouse.label}") }, onClick = { warehouseId = warehouse.id; parentId = ""; warehouseMenuExpanded = false }) }
+                                warehouseRows.filter { it.state == "active" }.forEach { warehouse -> DropdownMenuItem(text = { Text("${warehouse.code} — ${warehouse.label}") }, onClick = { warehouseId = warehouse.id; parentId = ""; warehouseMenuExpanded = false }) }
                             }
                         }
                     }
-                    val parentRows = if (selected.second == "commercial_storage_locations") rows.filter { it.warehouseId == warehouseId } else rows
+                    val parentRows = if (selected.second == "commercial_storage_locations") rows.filter { it.warehouseId == warehouseId && it.state == "active" } else rows.filter { it.state == "active" }
                     if (selected.second != "commercial_warehouses" && parentRows.isNotEmpty()) {
                         val parentLabel = parentRows.firstOrNull { it.id == parentId }?.let { "${it.code} — ${it.label}" } ?: "جذر رئيسي (بلا أب)"
                         Box {
