@@ -342,6 +342,7 @@ internal fun loadCommercialCloudSaleDocuments(context: Context): List<Commercial
                 paymentStatusFromServer.equals("refunded", ignoreCase = true) ||
                     payments.any { it.status.equals("refunded", ignoreCase = true) } -> "refunded"
                 payments.any { it.status.equals("partially_refunded", ignoreCase = true) } -> "partially_refunded"
+                totalMinor == 0L && paymentStatusFromServer.equals("paid", ignoreCase = true) -> "paid"
                 totalMinor > 0L && successfulPaymentMinor >= totalMinor -> "paid"
                 successfulPaymentMinor > 0L -> "partially_paid"
                 paymentStatusFromServer.equals("failed", ignoreCase = true) -> "failed"
