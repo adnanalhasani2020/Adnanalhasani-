@@ -822,12 +822,11 @@ private fun EditProductDialog(
                 val cost = costText.toIntOrNull()
                 when {
                     name.isBlank() -> error = "أدخل اسم المنتج."
-                    !cloudMode && category.isBlank() -> error = "أدخل تصنيف المنتج."
-                    unitName.isBlank() -> error = "أدخل اسم الوحدة."
+                    category.isBlank() -> error = "أدخل تصنيف المنتج."
                     stock == null || stock < 0 -> error = "أدخل كمية صحيحة."
                     price == null || price <= 0 -> error = "أدخل سعر بيع أكبر من صفر."
-                    !cloudMode && (cost == null || cost < 0) -> error = "أدخل تكلفة شراء صحيحة (يمكن أن تكون صفرًا)."
-                    else -> onSave(name.trim(), category.trim(), unitName.trim(), stock, price, cost ?: 0, reorderPointText.toIntOrNull() ?: 0)
+                    cost == null || cost < 0 -> error = "أدخل تكلفة شراء صحيحة (يمكن أن تكون صفرًا)."
+                    else -> onSave(name.trim(), category.trim(), stock, price, cost)
                 }
             }) { Text("حفظ التعديلات") }
         },
@@ -878,7 +877,7 @@ private fun AddProductDialog(
                 OutlinedTextField(stockText, { stockText = it.filter(Char::isDigit).take(7); error = null }, label = { Text(if (cloudMode) "الكمية الافتتاحية (بوحدة الأساس)" else "الكمية الافتتاحية") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(priceText, { priceText = it.filter(Char::isDigit).take(7); error = null }, label = { Text("سعر البيع للوحدة (ر.ي)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 if (!cloudMode) OutlinedTextField(costText, { costText = it.filter(Char::isDigit).take(7); error = null }, label = { Text("تكلفة شراء الوحدة (ر.ي)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                if (cloudMode) Text("سيُحفظ الاسم والوحدة والسعر والكمية الافتتاحية في قاعدة البيانات. التصنيف وتكلفة الشراء غير مربوطين بعملية الإنشاء السحابية الحالية.", color = Muted, fontSize = 11.sp)
+                if (cloudMode) Text("سيُحفظ الاسم والوحدة والسعر والكمية الافتتاحية وحد التنبيه في قاعدة البيانات. التصنيف وتكلفة الشراء غير مربوطين بعملية الإنشاء السحابية الحالية.", color = Muted, fontSize = 11.sp)
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
             }
         },
@@ -887,13 +886,16 @@ private fun AddProductDialog(
                 val stock = stockText.toIntOrNull()
                 val price = priceText.toIntOrNull()
                 val cost = costText.toIntOrNull()
+                val reorderPoint = reorderPointText.toIntOrNull()
                 when {
                     name.isBlank() -> error = "أدخل اسم المنتج."
-                    category.isBlank() -> error = "أدخل تصنيف المنتج."
+                    !cloudMode && category.isBlank() -> error = "أدخل تصنيف المنتج."
+                    unitName.isBlank() -> error = "أدخل اسم الوحدة."
                     stock == null || stock < 0 -> error = "أدخل كمية صحيحة."
                     price == null || price <= 0 -> error = "أدخل سعر بيع أكبر من صفر."
-                    cost == null || cost < 0 -> error = "أدخل تكلفة شراء صحيحة (يمكن أن تكون صفرًا)."
-                    else -> onSave(name.trim(), category.trim(), stock, price, cost)
+                    !cloudMode && (cost == null || cost < 0) -> error = "أدخل تكلفة شراء صحيحة (يمكن أن تكون صفرًا)."
+                    cloudMode && (reorderPoint == null || reorderPoint < 0) -> error = "أدخل حد تنبيه صحيحًا."
+                    else -> onSave(name.trim(), category.trim(), unitName.trim(), stock, price, cost ?: 0, reorderPoint ?: 0)
                 }
             }) { Text("حفظ المنتج") }
         },
