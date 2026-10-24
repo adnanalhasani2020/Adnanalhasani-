@@ -298,7 +298,7 @@ private fun StoreApp(context: Context) {
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (tab) {
-                0 -> Dashboard(products = inventory, sales = sales, onNewSale = { newSale = true }, onInventory = { tab = 2 })
+                0 -> Dashboard(products = inventory, sales = sales, cloudMode = cloudMode, onNewSale = { newSale = true }, onInventory = { tab = 2 })
                 1 -> SalesScreen(sales = sales, onNewSale = { newSale = true })
                 2 -> InventoryScreen(inventory, query, { query = it }, { addProduct = true }, { index ->
                     if (cloudMode) cloudNotice = "تعديل الصنف غير متاح حتى يكتمل ربط تحديث السعر وحركة المخزون على الخادم."
@@ -492,7 +492,7 @@ private fun StoreApp(context: Context) {
 }
 
 @Composable
-private fun Dashboard(products: List<Product>, sales: List<SaleRecord>, onNewSale: () -> Unit, onInventory: () -> Unit) {
+private fun Dashboard(products: List<Product>, sales: List<SaleRecord>, cloudMode: Boolean, onNewSale: () -> Unit, onInventory: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(15.dp)) {
         item {
             Card(colors = CardDefaults.cardColors(containerColor = Ink), shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth()) {
@@ -511,7 +511,7 @@ private fun Dashboard(products: List<Product>, sales: List<SaleRecord>, onNewSal
                     Text("إجمالي المبيعات المسجلة", color = Color(0xFFBFD9D0), fontSize = 13.sp)
                     Text(money(sales.sumOf { it.total }), color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 29.sp)
                     Spacer(Modifier.height(5.dp))
-                    Text("${sales.size} فاتورة محفوظة على هذا الجهاز", color = Color(0xFF8DE0B8), fontSize = 12.sp)
+                    Text(if (cloudMode) "${sales.size} فاتورة محمّلة من قاعدة البيانات" else "${sales.size} فاتورة محفوظة على هذا الجهاز", color = Color(0xFF8DE0B8), fontSize = 12.sp)
                     Spacer(Modifier.height(17.dp))
                     Button(onClick = onNewSale, modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Default.Add, null)
