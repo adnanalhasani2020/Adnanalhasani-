@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -50,7 +51,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-internal data class Product(val name: String, val category: String, val stock: Int, val price: String, val costPrice: Int = 0, val catalogCode: String = "", val barcode: String = "", val unitCode: String = "EA", val imageUrl: String = "", val description: String = "", val brand: String = "", val manufacturer: String = "", val countryOfManufacture: String = "", val createdAt: Long = System.currentTimeMillis(), val createdBy: String = "", val unitVariantsJson: String = "[]", val cloudOfferingId: String = "", val reorderPoint: Int = -1)
+internal data class Product(val name: String, val category: String, val stock: Int, val price: String, val costPrice: Int = 0, val catalogCode: String = "", val barcode: String = "", val unitCode: String = "EA", val imageUrl: String = "", val description: String = "", val brand: String = "", val manufacturer: String = "", val countryOfManufacture: String = "", val createdAt: Long = System.currentTimeMillis(), val createdBy: String = "", val unitVariantsJson: String = "[]", val cloudOfferingId: String = "", val cloudPriceMinor: Long = 0L, val reorderPoint: Int = -1)
 
 private data class LocalSaleUnit(
     val code: String,
@@ -219,6 +220,7 @@ private fun StoreApp(context: Context) {
     var cloudOperationalPage by remember { mutableStateOf("") }
     var cloudSalesPage by remember { mutableStateOf(false) }
     var cloudDebtsPage by remember { mutableStateOf(false) }
+    var cloudSaleComposerPage by remember { mutableStateOf(false) }
     var cloudPurchasesPage by remember { mutableStateOf(false) }
     var cloudStockAlertsPage by remember { mutableStateOf(false) }
     var cloudUnitsPage by remember { mutableStateOf(false) }
@@ -310,18 +312,33 @@ private fun StoreApp(context: Context) {
             }
         },
         floatingActionButton = {
-            if (tab == 1) FloatingActionButton(onClick = { newSale = true }, containerColor = Green, contentColor = Color.White) {
+            if (tab == 1) FloatingActionButton(onClick = { if (cloudMode) cloudSaleComposerPage = true else newSale = true }, containerColor = Green, contentColor = Color.White) {
                 Icon(Icons.Default.Add, "فاتورة جديدة")
             }
         }
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
-            when (tab) {
-                0 -> Dashboard(products = inventory, sales = sales, cloudMode = cloudMode, onNewSale = { newSale = true }, onInventory = { tab = 2 })
+            if (cloudSaleComposerPage) {
+                CommercialCloudSaleComposerScreen(
+                    context = context,
+                    onBack = { cloudSaleComposerPage = false },
+                    onCompleted = {
+                        storeCloudIo.execute {
+                            val snapshot = runCatching { loadCommercialCloudInventory(context) }.getOrNull()
+                            val history = runCatching { loadCommercialCloudSales(context) }.getOrNull()
+                            storeCloudMain.post {
+                                snapshot?.let { inventory.clear(); inventory.addAll(it.products) }
+                                history?.let { sales.clear(); sales.addAll(it) }
+                            }
+                        }
+                    }
+                )
+            } else when (tab) {
+                0 -> Dashboard(products = inventory, sales = sales, cloudMode = cloudMode, onNewSale = { if (cloudMode) cloudSaleComposerPage = true else newSale = true }, onInventory = { tab = 2 })
                 1 -> SalesScreen(
                     sales = sales,
                     cloudMode = cloudMode,
-                    onNewSale = { newSale = true },
+                    onNewSale = { if (cloudMode) cloudSaleComposerPage = true else newSale = true },
                     onCloudInvoices = { cloudSalesPage = true }
                 )
                 2 -> InventoryScreen(inventory, query, { query = it }, {
@@ -362,12 +379,19 @@ private fun StoreApp(context: Context) {
                         }
                         showCatalog = false
                     })
-                    showDebts -> DebtScreen(sales = sales, settlements = settlements, onBack = { showDebts = false }, onSettle = { settlingSaleNumber = it.number })
-                    showReports -> ReportsScreen(sales = sales, settlements = settlements, expenses = expenses, onBack = { showReports = false })
-                    showExpenses -> ExpensesScreen(expenses = expenses, onBack = { showExpenses = false }, onAdd = { expenseDialog = true })
+                    showDebts -> if (cloudMode) {
+                        CommercialCloudDebtScreen(context = context, onBack = { showDebts = false })
+                    } else DebtScreen(sales = sales, settlements = settlements, onBack = { showDebts = false }, onSettle = { settlingSaleNumber = it.number })
+                    showReports -> if (cloudMode) {
+                        cloudNotice = "التقرير المالي الموحد غير جاهز بعد؛ المصروفات والتسديدات محلية، لذلك لن نخلطها مع فواتير السحابة في تقرير واحد."
+                        showReports = false
+                    } else ReportsScreen(sales = sales, settlements = settlements, expenses = expenses, onBack = { showReports = false })
+                    showExpenses -> if (cloudMode) {
+                        cloudNotice = "المصروفات السحابية لم تُربط بدفتر الحسابات بعد؛ لم يتم تسجيل أي مصروف محلي على أنه سحابي."
+                        showExpenses = false
+                    } else ExpensesScreen(expenses = expenses, onBack = { showExpenses = false }, onAdd = { expenseDialog = true })
                     else -> if (showActivityProfile) ActivityProfileScreen(onBack = { showActivityProfile = false }) else MoreScreen(onCustomers = {
-                    if (cloudMode) cloudDebtsPage = true
-                    else showDebts = true
+                    showDebts = true
                 }, onReports = { showReports = true }, onExpenses = { showExpenses = true }, onActivityProfile = { showActivityProfile = true }, onCatalog = { showCatalog = true }, onMasterData = { showMasterData = true }, onCloudOperational = { cloudOperationalPage = it }, onCloudSales = { cloudSalesPage = true }, onCloudPurchases = { cloudPurchasesPage = true }, onCloudStockAlerts = { cloudStockAlertsPage = true }, onUnitsDirectory = { cloudUnitsPage = true })
                 }
             }
@@ -438,54 +462,46 @@ private fun StoreApp(context: Context) {
         onSave = { productIndex, product, quantity, credit, unitPrice, customer, baseQuantity, unitCode ->
             val currentProduct = inventory[productIndex]
             if (cloudMode) {
-                if (currentProduct.cloudOfferingId.isBlank()) {
-                    cloudNotice = "هذا الصنف غير مرتبط بمعرّف عرض في قاعدة البيانات؛ لم تُسجّل أي فاتورة."
+                if (credit) {
+                    cloudNotice = "البيع الآجل غير مفعّل على الخادم بعد؛ لم تُسجّل أي فاتورة."
                     newSale = false
-                } else if (credit && cloudCustomers.none { it.id == customer }) {
-                    cloudNotice = "اختر عميلًا نشطًا من دليل المؤسسة للبيع الآجل."
+                } else if (currentProduct.cloudOfferingId.isBlank()) {
+                    cloudNotice = "هذا الصنف غير مرتبط بمعرّف عرض في قاعدة البيانات؛ لم تُسجّل أي فاتورة."
                     newSale = false
                 } else {
                     cloudInventoryBusy = true
-                    cloudNotice = "جارٍ التحقق من الكمية وتسجيل الفاتورة في قاعدة البيانات..."
+                    cloudNotice = "جارٍ تسجيل البيع وتحديث المخزون في قاعدة البيانات..."
                     storeCloudIo.execute {
                         val result = runCatching {
-                            val requested = aggregateSaleQuantities(listOf(currentProduct.cloudOfferingId to baseQuantity))
-                            validateAvailableStock(requested, inventory.associate { it.cloudOfferingId to it.stock }.filterKeys { it.isNotBlank() })
-                            val key = if (credit) {
-                                getOrCreateCommercialCloudCreditSaleKey(context, currentProduct.cloudOfferingId, baseQuantity, customer)
-                            } else {
-                                getOrCreateCommercialCloudSaleKey(context, currentProduct.cloudOfferingId, baseQuantity)
-                            }
-                            val sale = if (credit) {
-                                checkoutCommercialCloudSaleOnAccount(context, currentProduct.cloudOfferingId, baseQuantity, customer, key)
-                            } else {
-                                checkoutCommercialCloudSale(context, currentProduct.cloudOfferingId, baseQuantity, key)
-                            }
-                            if (credit) clearCommercialCloudCreditSaleKey(context, key) else clearCommercialCloudSaleKey(context, key)
+                            val idempotencyKey = getOrCreateCommercialCloudSaleKey(context, currentProduct.cloudOfferingId, baseQuantity)
+                            val sale = checkoutCommercialCloudSale(context, currentProduct.cloudOfferingId, baseQuantity, idempotencyKey)
+                            clearCommercialCloudSaleKey(context, idempotencyKey)
                             val snapshot = runCatching { loadCommercialCloudInventory(context) }.getOrNull()
                             val history = runCatching { loadCommercialCloudSales(context) }.getOrNull()
                             Triple(sale, snapshot, history)
                         }
                         storeCloudMain.post {
                             cloudInventoryBusy = false
-                            result.onSuccess { outcome ->
-                                val sale = outcome.first
-                                outcome.second?.let { snapshot ->
+                            result.onSuccess { pair ->
+                                val sale = pair.first
+                                pair.second?.let { snapshot ->
                                     inventory.clear()
                                     inventory.addAll(snapshot.products)
                                 }
                                 val receipt = sale.optLong("receipt_number", nextInvoice.toLong()).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
-                                val serverSales = outcome.third
+                                val total = sale.optLong("total_minor", (quantity * unitPrice).toLong()).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
+                                val serverSales = pair.third
                                 if (serverSales != null) {
                                     sales.clear()
                                     sales.addAll(serverSales)
-                                    cloudNotice = if (credit) "تم تسجيل الفاتورة الآجلة رقم $receipt وربطها بالعميل وتحديث السجل من قاعدة البيانات."
-                                        else "تم تسجيل الفاتورة رقم $receipt وتحديث السجل من قاعدة البيانات."
-                                } else {
-                                    cloudNotice = "أكد الخادم الفاتورة رقم $receipt، لكن تعذر تحديث سجل المبيعات. أعد تحميل السجل قبل متابعة أي تحصيل."
                                 }
                                 nextInvoice = maxOf(nextInvoice + 1, receipt + 1)
                                 cloudInventoryError = ""
+                                cloudNotice = if (serverSales != null) {
+                                    "تم تسجيل الفاتورة رقم $receipt وتحديث السجل من قاعدة البيانات."
+                                } else {
+                                    "تم تأكيد الفاتورة رقم $receipt على الخادم، لكن تعذر تحديث قائمة المبيعات. افتح «فواتير المبيعات السحابية» أو أعد المحاولة؛ لم يتم إنشاء سجل محلي بديل."
+                                }
                             }.onFailure {
                                 cloudInventoryError = it.message ?: "فشل تسجيل البيع على الخادم."
                                 cloudNotice = cloudInventoryError
@@ -495,26 +511,20 @@ private fun StoreApp(context: Context) {
                     newSale = false
                 }
             } else {
-                if (baseQuantity > currentProduct.stock) {
-                    cloudNotice = "الكمية المطلوبة تتجاوز المخزون المتاح."
-                } else {
-                    inventory[productIndex] = currentProduct.copy(stock = currentProduct.stock - baseQuantity)
-                    saveProducts(context, inventory)
-                    val soldUnitCost = if (quantity > 0) kotlin.math.round(currentProduct.costPrice.toDouble() * baseQuantity / quantity).toInt() else currentProduct.costPrice
-                    sales.add(0, SaleRecord(nextInvoice, product, quantity, quantity * unitPrice, credit, customer, 0, System.currentTimeMillis(), soldUnitCost, unitCode, baseQuantity))
-                    saveSales(context, sales)
-                    nextInvoice = maxOf(nextInvoice + 1, (sales.maxOfOrNull { it.number } ?: 1048) + 1)
-                }
+                inventory[productIndex] = currentProduct.copy(stock = currentProduct.stock - baseQuantity)
+                saveProducts(context, inventory)
+                val soldUnitCost = if (quantity > 0) kotlin.math.round(currentProduct.costPrice.toDouble() * baseQuantity / quantity).toInt() else currentProduct.costPrice
+                sales.add(0, SaleRecord(nextInvoice, product, quantity, quantity * unitPrice, credit, customer, 0, System.currentTimeMillis(), soldUnitCost, unitCode, baseQuantity))
+                saveSales(context, sales)
+                nextInvoice = maxOf(nextInvoice + 1, (sales.maxOfOrNull { it.number } ?: 1048) + 1)
                 newSale = false
             }
         }
     )
     if (settlingSaleNumber >= 0 && cloudMode) {
-        // Local settlement records are not cloud payments or allocations.
-        cloudNotice = "التحصيل السحابي غير مفعّل في هذا المسار؛ لم تُسجّل أي دفعة. لا يمكن تعديل رصيد فاتورة سحابية محليًا."
+        cloudNotice = "تسجيل التحصيل السحابي غير مفعّل بعد؛ لم يتم تغيير رصيد الفاتورة محليًا."
         settlingSaleNumber = -1
-    }
-    if (settlingSaleNumber >= 0 && !cloudMode) {
+    } else if (settlingSaleNumber >= 0) {
         val saleIndex = sales.indexOfFirst { it.number == settlingSaleNumber }
         if (saleIndex >= 0) SettlementDialog(
             sale = sales[saleIndex],
@@ -647,7 +657,7 @@ private fun SalesScreen(
     onCloudInvoices: () -> Unit
 ) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        item { Heading("المبيعات والفواتير", "تابع عمليات البيع والتحصيل") }
+        item { Heading("المبيعات والفواتير", if (cloudMode) "ملخص الفواتير المحمّلة من قاعدة البيانات" else "تابع عمليات البيع والتحصيل") }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Metric("إجمالي المبيعات", money(sales.sumOf { it.total }), "الفواتير المحفوظة", Icons.Default.AttachMoney, Modifier.weight(1f))
@@ -655,16 +665,14 @@ private fun SalesScreen(
             }
         }
         item { Button(onClick = onNewSale, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(8.dp)); Text("فاتورة بيع جديدة") } }
-        if (cloudMode) {
-            item {
-                OutlinedButton(onClick = onCloudInvoices, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Default.ReceiptLong, null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("عرض تفاصيل الفواتير السحابية")
-                }
+        if (cloudMode) item {
+            OutlinedButton(onClick = onCloudInvoices, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Default.ReceiptLong, null)
+                Spacer(Modifier.width(8.dp))
+                Text("عرض تفاصيل الفواتير السحابية")
             }
         }
-        item { Heading("أحدث الفواتير", if (cloudMode) "ملخص الفواتير المحمّلة من قاعدة البيانات" else "الفواتير المحفوظة على هذا الجهاز") }
+        item { Heading("أحدث الفواتير", if (cloudMode) "ملخص من قاعدة البيانات؛ التفاصيل من شاشة الفواتير السحابية" else "الفواتير المحفوظة على هذا الجهاز") }
         items(sales) { sale -> SaleRow("فاتورة #${sale.number}", "${sale.product} · ${sale.quantity} ${sale.unitCode}", money(sale.total), sale.credit) }
         
     }
@@ -838,44 +846,25 @@ private fun SaleEntryDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-                if (credit && cloudMode) {
-                    ExposedDropdownMenuBox(expanded = customerExpanded, onExpandedChange = { customerExpanded = it }) {
-                        OutlinedTextField(
-                            value = cloudCustomers.firstOrNull { it.id == customer }?.displayName.orEmpty(),
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("العميل الآجل (من دليل المؤسسة)") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = customerExpanded) },
-                            modifier = Modifier.fillMaxWidth().menuAnchor()
-                        )
-                        ExposedDropdownMenu(expanded = customerExpanded, onDismissRequest = { customerExpanded = false }) {
-                            cloudCustomers.forEach { item ->
-                                DropdownMenuItem(
-                                    text = { Text(item.displayName) },
-                                    onClick = { customer = item.id; customerExpanded = false; error = null }
-                                )
-                            }
-                        }
+                if (!cloudMode && credit) OutlinedTextField(value = customer, onValueChange = { customer = it; error = null }, label = { Text("اسم العميل المدين") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                if (!cloudMode) {
+                    Text("طريقة الدفع", color = Muted, fontSize = 12.sp)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = !credit, onClick = { credit = false })
+                        Text("نقدي", color = Ink)
+                        Spacer(Modifier.width(12.dp))
+                        RadioButton(selected = credit, onClick = { credit = true })
+                        Text("آجل", color = Ink)
                     }
-                    if (cloudCustomers.isEmpty()) Text("لا يوجد عملاء نشطون محمّلون. حدّث دليل العملاء قبل البيع الآجل.", color = Orange, fontSize = 11.sp)
-                } else if (credit) {
-                    OutlinedTextField(value = customer, onValueChange = { customer = it; error = null }, label = { Text("اسم العميل المدين") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                } else {
+                    Text("البيع السحابي نقدي حاليًا؛ السعر يُقرأ من العرض المحفوظ على الخادم.", color = Muted, fontSize = 12.sp)
                 }
-                Text("طريقة الدفع", color = Muted, fontSize = 12.sp)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(selected = !credit, onClick = { credit = false; customer = "" })
-                    Text("نقدي", color = Ink)
-                    Spacer(Modifier.width(12.dp))
-                    RadioButton(selected = credit, onClick = { credit = true })
-                    Text("آجل", color = Ink)
-                }
-                if (cloudMode) Text("السعر والرصيد المخزني يُتحقق منهما على الخادم قبل اعتماد الفاتورة.", color = Muted, fontSize = 12.sp)
                 HorizontalDivider(color = Border)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("الإجمالي", color = Muted)
                     Text(if (quantity != null && quantity > 0) money(quantity * unitPrice) else "—", color = Green, fontWeight = FontWeight.Bold)
                 }
-                if (credit) Text(if (cloudMode) "سيُربط الدين بالعميل المختار على الخادم." else "سيُسجّل المبلغ كبيع آجل محلي.", color = Orange, fontSize = 12.sp)
+                if (credit) Text("سيُسجّل المبلغ كبيع آجل (تجريبي).", color = Orange, fontSize = 12.sp)
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
             }
         },
@@ -891,8 +880,8 @@ private fun SaleEntryDialog(
                     error = "أدخل سعر بيع أكبر من صفر."
                 } else if (cloudMode && unitPrice != suggestedUnitPrice) {
                     error = "سعر العبوة لا يطابق السعر النسبي المعتمد من الخادم."
-                } else if (credit && (if (cloudMode) cloudCustomers.none { it.id == customer } else customer.isBlank())) {
-                    error = if (cloudMode) "اختر عميلًا نشطًا للبيع الآجل." else "أدخل اسم العميل للبيع الآجل."
+                } else if (credit && customer.isBlank()) {
+                    error = "أدخل اسم العميل للبيع الآجل."
                 } else {
                     onSave(selected, product.name, quantity, credit, unitPrice, if (credit) customer.trim() else "", baseQuantity, selectedUnit.code)
                 }
