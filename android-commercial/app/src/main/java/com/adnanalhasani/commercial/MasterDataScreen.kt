@@ -118,7 +118,17 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedTextField(value = code, onValueChange = { code = it }, label = { Text("الرمز") }, singleLine = true)
                     OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("الاسم") }, singleLine = true)
-                    if (selected.second != "commercial_warehouses" && rows.isNotEmpty()) {\n                        val parentLabel = rows.firstOrNull { it.id == parentId }?.let { "${it.code} — ${it.label}" } ?: "جذر رئيسي (بلا أب)"\n                        Box {\n                            OutlinedButton(onClick = { parentMenuExpanded = true }, modifier = Modifier.fillMaxWidth()) { Text("المستوى الأعلى: $parentLabel") }\n                            DropdownMenu(expanded = parentMenuExpanded, onDismissRequest = { parentMenuExpanded = false }) {\n                                DropdownMenuItem(text = { Text("جذر رئيسي (بلا أب)") }, onClick = { parentId = ""; parentMenuExpanded = false })\n                                rows.forEach { parent -> DropdownMenuItem(text = { Text("${parent.code} — ${parent.label}") }, onClick = { parentId = parent.id; parentMenuExpanded = false }) }\n                            }\n                        }\n                    }\n                    if (selected.second == "commercial_warehouses") {
+                    if (selected.second != "commercial_warehouses" && rows.isNotEmpty()) {
+                        val parentLabel = rows.firstOrNull { it.id == parentId }?.let { "${it.code} — ${it.label}" } ?: "جذر رئيسي (بلا أب)"
+                        Box {
+                            OutlinedButton(onClick = { parentMenuExpanded = true }, modifier = Modifier.fillMaxWidth()) { Text("المستوى الأعلى: $parentLabel") }
+                            DropdownMenu(expanded = parentMenuExpanded, onDismissRequest = { parentMenuExpanded = false }) {
+                                DropdownMenuItem(text = { Text("جذر رئيسي (بلا أب)") }, onClick = { parentId = ""; parentMenuExpanded = false })
+                                rows.forEach { parent -> DropdownMenuItem(text = { Text("${parent.code} — ${parent.label}") }, onClick = { parentId = parent.id; parentMenuExpanded = false }) }
+                            }
+                        }
+                    }
+                    if (selected.second == "commercial_warehouses") {
                         Text("نوع المستودع")
                         Column {
                             listOf("main" to "رئيسي", "retail" to "تجزئة", "distribution" to "توزيع", "returns" to "مرتجعات", "quarantine" to "حجر", "virtual" to "افتراضي").forEach { item ->
