@@ -160,3 +160,33 @@ internal fun createCommercialCloudInventoryItem(
         .put("p_reorder_point", 0)
     commercialCloudRequest("/rest/v1/rpc/commercial_create_inventory_item", "POST", payload, access)
 }
+
+internal fun checkoutCommercialCloudSale(
+    context: Context,
+    offeringId: String,
+    quantity: Int,
+    idempotencyKey: String
+): JSONObject {
+    val savedContext = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+    val locationId = savedContext.getString("location_id", null).orEmpty()
+    require(locationId.isNotBlank()) { "معرّف موقع المخزون غير محفوظ." }
+    val sessionPrefs = commercialCloudSessionPreferences(context)
+    val savedRefresh = sessionPrefs.getString("refresh_token", null).orEmpty()
+    require(savedRefresh.isNotBlank()) { "سجّل الدخول إلى حساب Supabase أولًا." }
+    val session = JSONObject(commercialCloudRequest(
+        "/auth/v1/token?grant_type=refresh_token", "POST",
+        JSONObject().put("refresh_token", savedRefresh)
+    ))
+    val access = session.optString("access_token")
+    require(access.isNotBlank()) { "انتهت جلسة الحساب؛ سجّل الدخول مجددًا." }
+    sessionPrefs.edit().putString("refresh_token", session.optString("refresh_token").ifBlank { savedRefresh }).apply()
+    val result = JSONObject(commercialCloudRequest(
+        "/rest/v1/rpc/commercial_checkout_sale", "POST",
+        JSONObject().put("p_offering_id", offeringId)
+            .put("p_location_id", locationId)
+            .put("p_quantity", quantity)
+            .put("p_idempotency_key", idempotencyKey),
+        access
+    ))
+    return result
+}
