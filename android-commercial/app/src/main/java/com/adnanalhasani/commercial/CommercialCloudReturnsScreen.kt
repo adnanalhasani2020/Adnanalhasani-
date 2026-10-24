@@ -61,6 +61,18 @@ internal fun CommercialCloudReturnsScreen(context: Context, onBack: () -> Unit) 
     }
     val filtered = rows.filter { r -> query.isBlank() || listOf(r.receiptNumber,r.customerName,r.reasonCode,r.status,r.refundStatus,r.restockStatus,r.id).any { it.contains(query.trim(), true) } }
     val selected = rows.firstOrNull { it.id == selectedId }
+    fun executeAction(action: () -> String, success: String) {
+        busy = true
+        error = ""
+        ReturnIo.execute {
+            val result = runCatching { action() }
+            ReturnMain.post {
+                busy = false
+                result.onSuccess { message = success; refresh++ }
+                    .onFailure { error = it.message ?: "تعذر تنفيذ العملية."; message = "" }
+            }
+        }
+    }
 
     Scaffold(containerColor = Color(0xFFF4F7F5), topBar = {
         TopAppBar(title = { Column {
@@ -116,7 +128,7 @@ internal fun CommercialCloudReturnsScreen(context: Context, onBack: () -> Unit) 
                             OutlinedButton(enabled=!busy,modifier=Modifier.fillMaxWidth(),onClick={decisionTarget=selected;approve=false;amount="0";note=""}) { Text("رفض الطلب") }
                         }
                         if(selected.status=="approved" && selected.items.isNotEmpty() && selected.items.all {!it.restock || it.restockedQuantity>=it.quantity || it.conditionCode in setOf("damaged","written_off","uninspected")} && selected.restockStatus!="completed") {
-                            Button(enabled=!busy,modifier=Modifier.fillMaxWidth(),onClick={runReturnAction({restockCommercialCloudSaleReturn(context,selected.id)},"تم إرسال إعادة المخزون إلى قاعدة البيانات.")},colors=ButtonDefaults.buttonColors(containerColor=ReturnGreen)) { Text("اعتماد إعادة المخزون") }
+                            Button(enabled=!busy,modifier=Modifier.fillMaxWidth(),onClick={executeAction({restockCommercialCloudSaleReturn(context,selected.id)},"تم إرسال إعادة المخزون إلى قاعدة البيانات.")},colors=ButtonDefaults.buttonColors(containerColor=ReturnGreen)) { Text("اعتماد إعادة المخزون") }
                         }
                         if(selected.refundStatus=="pending") Text("رد المبلغ ما زال معلقًا؛ الموافقة لا تنفذ تحويلًا ماليًا. يلزم مسار استرداد مالي معتمد.",color=Color(0xFF925500),fontSize=12.sp)
                     }
@@ -151,9 +163,6 @@ internal fun CommercialCloudReturnsScreen(context: Context, onBack: () -> Unit) 
     }){Text("حفظ الفحص")}},dismissButton={TextButton(onClick={inspectionTarget=null}){Text("إلغاء")}})
 }
 
-private fun runReturnAction(action:()->String,success:String) {
-    // Replaced by caller-scoped helper below to keep UI state changes on the main thread.
-}
 private fun reason(v:String)=when(v){"customer_request"->"طلب العميل";"damaged"->"تلف";"wrong_item"->"صنف غير صحيح";"not_as_described"->"غير مطابق للوصف";"duplicate_charge"->"خصم مكرر";"other"->"أخرى";else->v.ifBlank{"غير محدد"}}
 private fun label(v:String)=when(v.lowercase(Locale.ROOT)){"requested"->"بانتظار القرار";"approved"->"موافق عليه";"rejected"->"مرفوض";"pending"->"معلق";"completed"->"مكتمل";"not_required"->"غير مطلوب";"resellable"->"صالح للبيع";"damaged"->"تالف";"written_off"->"مستبعد";"uninspected"->"غير مفحوص";"partial"->"جزئي";else->v.ifBlank{"غير محدد"}}
-private fun money(v:Long,c:String)="${String.format(Locale.US,"% ,d".replace(" ",""),v)} ${c.ifBlank{"—"}}"
+private fun money(v:Long,c:String)="${String.format(Locale.US,"%,d",v)} ${c.ifBlank{"—"}}"
