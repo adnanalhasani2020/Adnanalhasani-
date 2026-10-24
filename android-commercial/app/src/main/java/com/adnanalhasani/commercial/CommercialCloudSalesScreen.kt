@@ -101,7 +101,7 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
         val matchesStatus = when (selectedStatus) {
             "paid" -> status == "paid"
             "partial" -> status in setOf("partially_paid", "partial")
-            "due" -> status in setOf("unpaid", "due", "pending", "credit", "partially_paid")
+            "due" -> status in setOf("unpaid", "due", "pending", "credit")
             "cancelled" -> saleStatus in setOf("cancelled", "canceled") || status in setOf("failed", "cancelled", "canceled")
             "refunded" -> status in setOf("refunded", "partially_refunded") ||
                 doc.returns.any { it.refundStatus.lowercase() in setOf("refunded", "partially_refunded") }
@@ -323,7 +323,6 @@ private fun statusLabel(value: String): String = when (value.lowercase()) {
     "blocked" -> "محظور"
     "authorized" -> "مصرح"
     "draft" -> "مسودة"
-    "completed" -> "مكتملة"
     else -> value.ifBlank { "غير محدد" }
 }
 
