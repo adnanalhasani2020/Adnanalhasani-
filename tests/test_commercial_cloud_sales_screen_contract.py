@@ -10,6 +10,7 @@ MAIN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial
 CASH_PAYMENT_MIGRATION = ROOT / "supabase/migrations/20261024193000_commercial_checkout_cash_payment_atomic.sql"
 MULTILINE_CHECKOUT_MIGRATION = ROOT / "supabase/migrations/20261024200000_commercial_multiline_cash_checkout.sql"
 COMPOSER = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudSaleComposerScreen.kt"
+COLLECTION_MIGRATION = ROOT / "supabase/migrations/20261024210000_commercial_sale_collection_rpc.sql"
 
 
 class CommercialCloudSalesScreenContractTests(unittest.TestCase):
@@ -22,6 +23,7 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         cls.cash_payment_migration = CASH_PAYMENT_MIGRATION.read_text(encoding="utf-8")
         cls.multiline_checkout_migration = MULTILINE_CHECKOUT_MIGRATION.read_text(encoding="utf-8")
         cls.composer = COMPOSER.read_text(encoding="utf-8")
+        cls.collection_migration = COLLECTION_MIGRATION.read_text(encoding="utf-8")
 
     def test_invoice_projection_uses_existing_tables_and_columns(self):
         self.assertIn("internal fun loadCommercialCloudSaleDocuments", self.repository)
@@ -154,6 +156,23 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         self.assertIn("السعر والمخزون يُتحقق منهما مجددًا على الخادم", self.composer)
         self.assertIn("val payload = JSONArray()", self.repository)
         self.assertIn("/rest/v1/rpc/commercial_checkout_sale_multi", self.repository)
+
+
+    def test_collection_rpc_enforces_outstanding_balance_and_idempotency(self):
+        sql = self.collection_migration
+        self.assertIn("commercial_private.commercial_record_sale_collection(", sql)
+        self.assertIn("CREATE OR REPLACE FUNCTION public.commercial_record_sale_collection(", sql)
+        self.assertIn("pg_advisory_xact_lock", sql)
+        self.assertIn("FOR UPDATE", sql)
+        self.assertIn("collection_exceeds_outstanding_balance", sql)
+        self.assertIn("sale_return_reconciliation_required", sql)
+        self.assertIn("idempotency_key_reused_with_different_request", sql)
+        self.assertIn("SET payment_status=CASE", sql)
+        self.assertIn("INSERT INTO public.commercial_payments", sql)
+        self.assertIn("sale.payment_collected", sql)
+        self.assertIn("commercial_private.commercial_record_sale_collection(", self.repository)
+        self.assertIn("تسجيل تحصيل سحابي", self.screen)
+        self.assertIn("getOrCreateCommercialCloudCollectionKey(context, target.id, amount)", self.screen)
 
 if __name__ == "__main__":
     unittest.main()
