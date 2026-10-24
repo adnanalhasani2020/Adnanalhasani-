@@ -874,7 +874,8 @@ internal fun restockCommercialCloudSaleReturn(context: Context, returnId: String
 
 internal data class CommercialCloudRecord(
     val id: String, val title: String, val subtitle: String, val status: String,
-    val amountMinor: Long = 0L, val createdAt: String = ""
+    val amountMinor: Long = 0L, val createdAt: String = "",
+    val details: List<String> = emptyList()
 )
 
 /** Read-only operational projections. Writes must use an approved RPC, never generic POST. */
@@ -938,7 +939,22 @@ internal fun loadCommercialCloudRecords(context: Context, screenKey: String): Li
                     status = if (row.optBoolean("is_active", false)) "نشط" else "غير نشط"; amount = 0L
                 }
             }
-            add(CommercialCloudRecord(id, title, subtitle, status, amount, row.optString("created_at").takeUnless { it == "null" }.orEmpty()))
+            val details = when (screenKey) {
+                "customers" -> listOfNotNull(
+                    row.optString("email").takeIf { it.isNotBlank() && it != "null" }?.let { "البريد الإلكتروني: $it" },
+                    row.optString("phone").takeIf { it.isNotBlank() && it != "null" }?.let { "رقم الهاتف: $it" },
+                    row.optString("state").takeIf { it.isNotBlank() && it != "null" }?.let { "حالة العميل: $it" }
+                ).distinct()
+                "suppliers" -> listOfNotNull(
+                    row.optString("supplier_code").takeIf { it.isNotBlank() && it != "null" }?.let { "رمز المورد: $it" },
+                    row.optString("email").takeIf { it.isNotBlank() && it != "null" }?.let { "البريد الإلكتروني: $it" },
+                    row.optString("phone").takeIf { it.isNotBlank() && it != "null" }?.let { "رقم الهاتف: $it" },
+                    row.optString("payment_terms_days").takeIf { it.isNotBlank() && it != "null" }?.let { "شروط السداد: $it يومًا" },
+                    row.optString("state").takeIf { it.isNotBlank() && it != "null" }?.let { "حالة المورد: $it" }
+                ).distinct()
+                else -> emptyList()
+            }
+            add(CommercialCloudRecord(id, title, subtitle, status, amount, row.optString("created_at").takeUnless { it == "null" }.orEmpty(), details))
         }
     }
 }
