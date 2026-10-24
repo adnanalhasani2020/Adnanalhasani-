@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS public.commercial_warehouses (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (organization_id, code),
-  CHECK (activity_id IS NULL OR activity_id IS NOT NULL)
+  -- activity_id is optional; its organization scope is enforced by the trigger.
 );
 CREATE INDEX IF NOT EXISTS ix_commercial_warehouses_branch
   ON public.commercial_warehouses(organization_id, branch_location_id, state);
