@@ -607,10 +607,18 @@ internal data class CommercialDepartmentWarehouseAssignment(
 /** Read the existing organization-scoped department/warehouse links. */
 internal fun loadCommercialDepartmentWarehouseAssignments(context: Context): List<CommercialDepartmentWarehouseAssignment> {
     val (orgId, access) = commercialMasterDataAccess(context)
-    val rows = JSONArray(commercialCloudRequest(
-        "/rest/v1/commercial_department_warehouse_assignments?select=department_id,warehouse_id&organization_id=eq.$orgId&order=created_at.desc",
-        "GET", token = access
-    ))
+    val rows = JSONArray()
+    val pageSize = 500
+    var offset = 0
+    while (true) {
+        val page = JSONArray(commercialCloudRequest(
+            "/rest/v1/commercial_department_warehouse_assignments?select=department_id,warehouse_id&organization_id=eq.$orgId&order=department_id.asc,warehouse_id.asc&limit=$pageSize&offset=$offset",
+            "GET", token = access
+        ))
+        for (index in 0 until page.length()) rows.put(page.getJSONObject(index))
+        if (page.length() < pageSize) break
+        offset += pageSize
+    }
     return buildList {
         for (index in 0 until rows.length()) {
             val row = rows.optJSONObject(index) ?: continue
