@@ -9,6 +9,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.Locale
 import java.util.concurrent.Executors
 
 internal data class CommercialCloudContext(
@@ -109,7 +110,7 @@ internal fun loadCommercialCloudInventory(context: Context): CommercialCloudInve
                 name = product.optString("name"),
                 category = "عام",
                 stock = quantity,
-                price = money(price),
+                price = String.format(Locale.US, "%,d ر.ي", price),
                 cloudOfferingId = offering.optString("id"),
                 unitCode = product.optString("unit_name").ifBlank { "قطعة" },
                 createdBy = orgId
