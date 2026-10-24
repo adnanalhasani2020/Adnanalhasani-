@@ -52,3 +52,7 @@ When creating a storage location, the form offers only active warehouses and act
 ## Master-data create submission guard
 
 The warehouse/category/department/storage-location create dialog disables repeat saves while a request is in flight, trims the submitted code and name, keeps the form open on failure, and shows the returned error in the dialog. A successful cloud write followed by a successful refresh closes the form. This reduces accidental repeated submissions and prevents a failed request from silently discarding the user's input; database uniqueness and authorization remain authoritative.
+
+## Dedicated unit-of-measure directory screen
+
+The More menu now exposes a dedicated read-only screen for the existing active `commercial_unit_of_measure` directory. It supports search by code/name/dimension, dimension filters, refresh, loading/error/empty states, and displays decimal precision. It intentionally does not create or edit global units and does not imply product-specific case/carton conversion factors; those require a separate, validated per-product conversion contract.
