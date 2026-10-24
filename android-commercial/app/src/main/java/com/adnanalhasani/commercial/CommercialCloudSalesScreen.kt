@@ -72,6 +72,7 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
     var documents by remember { mutableStateOf<List<CommercialCloudSaleDocument>>(emptyList()) }
     var search by remember { mutableStateOf("") }
     var selectedStatus by remember { mutableStateOf("all") }
+    var expandedInvoiceIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
     var reloadToken by remember { mutableIntStateOf(0) }
@@ -98,6 +99,7 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
             doc.receiptNumber.contains(search, true) ||
             doc.customerName.contains(search, true) ||
             doc.paymentStatus.contains(search, true) ||
+            doc.id.contains(search, true) ||
             doc.saleStatus.contains(search, true) ||
             doc.payments.any { it.status.contains(search, true) || it.methodType.contains(search, true) } ||
             doc.returns.any { it.status.contains(search, true) || it.refundStatus.contains(search, true) || it.restockStatus.contains(search, true) } ||
@@ -244,24 +246,34 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
                             color = CloudSalesGreen, fontWeight = FontWeight.Bold, fontSize = 14.sp
                         )
                         if (document.createdAt.isNotBlank()) Text(formatInvoiceTimestamp(document.createdAt), color = CloudSalesMuted, fontSize = 10.sp)
-                        Text("بنود الفاتورة: ${document.lines.size}", color = CloudSalesInk, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
-                        document.lines.forEach { line ->
-                            Surface(color = Color(0xFFF7F9F8), shape = RoundedCornerShape(10.dp)) {
-                                Column(
-                                    Modifier.fillMaxWidth().padding(horizontal = 11.dp, vertical = 9.dp),
-                                    verticalArrangement = Arrangement.spacedBy(5.dp)
-                                ) {
-                                    Row(verticalAlignment = Alignment.Top) {
-                                        Text(line.productName, modifier = Modifier.weight(1f), color = CloudSalesInk, fontWeight = FontWeight.Medium, fontSize = 12.sp)
-                                        Spacer(Modifier.width(8.dp))
-                                        Text("الكمية: ${line.quantity}", color = CloudSalesMuted, fontSize = 11.sp)
-                                    }
-                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                        Text("سعر الوحدة: ${formatMinorAmount(line.unitPriceMinor)}", color = CloudSalesMuted, fontSize = 11.sp)
-                                        Text("الإجمالي: ${formatMinorAmount(line.lineTotalMinor)}", color = CloudSalesInk, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text("بنود الفاتورة: ${document.lines.size}", color = CloudSalesInk, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                            TextButton(onClick = {
+                                expandedInvoiceIds = if (document.id in expandedInvoiceIds) expandedInvoiceIds - document.id else expandedInvoiceIds + document.id
+                            }) {
+                                Text(if (document.id in expandedInvoiceIds) "إخفاء التفاصيل ▲" else "عرض التفاصيل ▼", color = CloudSalesGreen, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                        if (document.id in expandedInvoiceIds) {
+                            document.lines.forEach { line ->
+                                Surface(color = Color(0xFFF7F9F8), shape = RoundedCornerShape(10.dp)) {
+                                    Column(
+                                        Modifier.fillMaxWidth().padding(horizontal = 11.dp, vertical = 9.dp),
+                                        verticalArrangement = Arrangement.spacedBy(5.dp)
+                                    ) {
+                                        Row(verticalAlignment = Alignment.Top) {
+                                            Text(line.productName, modifier = Modifier.weight(1f), color = CloudSalesInk, fontWeight = FontWeight.Medium, fontSize = 12.sp)
+                                            Spacer(Modifier.width(8.dp))
+                                            Text("الكمية: ${line.quantity}", color = CloudSalesMuted, fontSize = 11.sp)
+                                        }
+                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                            Text("سعر الوحدة: ${formatMinorAmount(line.unitPriceMinor)}", color = CloudSalesMuted, fontSize = 11.sp)
+                                            Text("الإجمالي: ${formatMinorAmount(line.lineTotalMinor)}", color = CloudSalesInk, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
+                                        }
                                     }
                                 }
                             }
+                            Text("معرّف الفاتورة: ${document.id}", color = CloudSalesMuted, fontSize = 10.sp)
                         }
                         val confirmedPaidMinor = document.payments
                             .filter { it.status.equals("succeeded", ignoreCase = true) }
