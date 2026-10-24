@@ -257,6 +257,25 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
                                 }
                             }
                         }
+                        val confirmedPaidMinor = document.payments
+                            .filter { it.status.equals("succeeded", ignoreCase = true) }
+                            .sumOf { it.amountMinor }
+                        Surface(color = Color(0xFFF3F8F5), shape = RoundedCornerShape(10.dp)) {
+                            Column(Modifier.fillMaxWidth().padding(11.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("إجمالي الفاتورة", color = CloudSalesMuted, fontSize = 11.sp)
+                                    Text("${formatMinorAmount(document.totalMinor)} ${document.currencyCode}", color = CloudSalesInk, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
+                                }
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("المدفوعات الناجحة فقط", color = CloudSalesMuted, fontSize = 11.sp)
+                                    Text("${formatMinorAmount(confirmedPaidMinor)} ${document.currencyCode}", color = CloudSalesInk, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
+                                }
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("المتبقي قبل احتساب المرتجعات", color = CloudSalesMuted, fontSize = 11.sp)
+                                    Text("${formatMinorAmount((document.totalMinor - confirmedPaidMinor).coerceAtLeast(0L))} ${document.currencyCode}", color = CloudSalesInk, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                }
+                            }
+                        }
                         if (document.payments.isNotEmpty()) {
                             Text("المدفوعات المسجلة", color = CloudSalesInk, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                             document.payments.forEach { payment ->
