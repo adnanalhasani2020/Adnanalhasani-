@@ -443,3 +443,76 @@ internal fun createCommercialMasterData(
     }
     commercialCloudRequest("/rest/v1/$table", "POST", payload, access)
 }
+
+
+internal data class CommercialCloudRecord(
+    val id: String, val title: String, val subtitle: String, val status: String,
+    val amountMinor: Long = 0L, val createdAt: String = ""
+)
+
+/** Read-only operational projections. Writes must use an approved RPC, never generic POST. */
+internal fun loadCommercialCloudRecords(context: Context, screenKey: String): List<CommercialCloudRecord> {
+    val config = when (screenKey) {
+        "customers" -> Triple("commercial_customers", "id,display_name,phone,email,state,created_at", "display_name")
+        "suppliers" -> Triple("commercial_suppliers", "id,display_name,supplier_code,phone,email,state,payment_terms_days,created_at", "display_name")
+        "purchases" -> Triple("commercial_purchase_orders", "id,order_number,status,ordered_at,expected_at,currency_code,supplier_id,created_at", "created_at")
+        "payments" -> Triple("commercial_payments", "id,status,sale_id,amount_minor,currency_code,payment_method_type,created_at", "created_at")
+        "returns" -> Triple("commercial_sales_returns", "id,status,sale_id,reason_code,refund_status,restock_status,requested_refund_minor,currency_code,created_at", "created_at")
+        "journals" -> Triple("commercial_journal_entries", "id,entry_number,status,entry_date,description,source_type,source_id,posted_at,created_at", "entry_date")
+        "accounts" -> Triple("commercial_ledger_accounts", "id,account_code,account_name,account_type,normal_balance,currency_code,is_active,parent_account_id", "account_code")
+        else -> throw IllegalArgumentException("هذه الشاشة غير مدعومة.")
+    }
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val rows = JSONArray(commercialCloudRequest(
+        "/rest/v1/${config.first}?select=${config.second}&organization_id=eq.$orgId&order=${config.third}.desc.nullslast&limit=200",
+        "GET", token = access
+    ))
+    return buildList {
+        for (i in 0 until rows.length()) {
+            val row = rows.optJSONObject(i) ?: continue
+            val id = row.optString("id").takeUnless { it == "null" }.orEmpty()
+            val title: String
+            val subtitle: String
+            val status: String
+            val amount: Long
+            when (screenKey) {
+                "customers" -> {
+                    title = row.optString("display_name").ifBlank { "عميل بدون اسم" }
+                    subtitle = listOf(row.optString("phone"), row.optString("email")).filter { it.isNotBlank() && it != "null" }.joinToString(" • ").ifBlank { "لا توجد بيانات اتصال" }
+                    status = row.optString("state").ifBlank { "غير محدد" }; amount = 0L
+                }
+                "suppliers" -> {
+                    title = row.optString("display_name").ifBlank { "مورد بدون اسم" }
+                    subtitle = listOf(row.optString("supplier_code"), row.optString("phone"), row.optString("payment_terms_days").takeUnless { it == "null" }?.let { "أجل السداد: $it يوم" }).filterNotNull().filter { it.isNotBlank() && it != "null" }.joinToString(" • ").ifBlank { "لا توجد بيانات إضافية" }
+                    status = row.optString("state").ifBlank { "غير محدد" }; amount = 0L
+                }
+                "purchases" -> {
+                    title = row.optString("order_number").takeUnless { it == "null" || it.isBlank() }?.let { "أمر شراء #$it" } ?: "أمر شراء"
+                    subtitle = "المورد: " + row.optString("supplier_id").takeUnless { it == "null" }.orEmpty().ifBlank { "غير محدد" } + " • العملة: " + row.optString("currency_code").ifBlank { "—" }
+                    status = row.optString("status").ifBlank { "غير محدد" }; amount = 0L
+                }
+                "payments" -> {
+                    title = "سند دفع/تحصيل"
+                    subtitle = "المرجع: " + row.optString("sale_id").takeUnless { it == "null" }.orEmpty().ifBlank { "غير مرتبط بفاتورة" } + " • " + row.optString("payment_method_type").ifBlank { "طريقة غير محددة" }
+                    status = row.optString("status").ifBlank { "غير محدد" }; amount = row.optLong("amount_minor", 0L)
+                }
+                "returns" -> {
+                    title = "طلب مرتجع • " + row.optString("reason_code").ifBlank { "بدون سبب محدد" }
+                    subtitle = "الفاتورة: " + row.optString("sale_id").takeUnless { it == "null" }.orEmpty().ifBlank { "غير محددة" } + " • رد المبلغ: " + row.optString("refund_status").ifBlank { "غير محدد" } + " • إعادة المخزون: " + row.optString("restock_status").ifBlank { "غير محدد" }
+                    status = row.optString("status").ifBlank { "غير محدد" }; amount = row.optLong("requested_refund_minor", 0L)
+                }
+                "journals" -> {
+                    title = row.optString("entry_number").takeUnless { it == "null" || it.isBlank() }?.let { "قيد #$it" } ?: "قيد محاسبي"
+                    subtitle = listOf(row.optString("entry_date"), row.optString("source_type"), row.optString("description")).filter { it.isNotBlank() && it != "null" }.joinToString(" • ").ifBlank { "لا يوجد وصف" }
+                    status = row.optString("status").ifBlank { "غير محدد" }; amount = 0L
+                }
+                else -> {
+                    title = listOf(row.optString("account_code"), row.optString("account_name")).filter { it.isNotBlank() && it != "null" }.joinToString(" • ").ifBlank { "حساب دفتر أستاذ" }
+                    subtitle = listOf(row.optString("account_type"), row.optString("normal_balance"), row.optString("currency_code")).filter { it.isNotBlank() && it != "null" }.joinToString(" • ")
+                    status = if (row.optBoolean("is_active", false)) "نشط" else "غير نشط"; amount = 0L
+                }
+            }
+            add(CommercialCloudRecord(id, title, subtitle, status, amount, row.optString("created_at").takeUnless { it == "null" }.orEmpty()))
+        }
+    }
+}
