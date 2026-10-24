@@ -27,6 +27,8 @@ class CommercialUnitDirectoryScreenTests(unittest.TestCase):
     def test_screen_has_search_filter_refresh_and_error_state(self):
         self.assertIn('value = query,', self.screen)
         self.assertIn('selectedDimension', self.screen)
+        self.assertIn("items(dimensions) { dimension ->", self.screen)
+        self.assertNotIn("dimensions.take(5)", self.screen)
         self.assertIn('onClick = { refreshToken++ }', self.screen)
         self.assertIn('تعذر تحميل دليل وحدات القياس', self.screen)
 
