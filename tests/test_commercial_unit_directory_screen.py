@@ -38,10 +38,14 @@ class CommercialUnitDirectoryScreenTests(unittest.TestCase):
         function = self.repository.split("internal fun loadCommercialUnitsOfMeasure", 1)[1].split(
             "private fun commercialMasterDataAccess", 1
         )[0]
-        self.assertIn("val pageSize = 500", function)
-        self.assertIn("limit=$pageSize&offset=$offset", function)
+        self.assertIn("commercialCloudPagedGet(", function)
         self.assertIn("order=dimension.asc,code.asc", function)
-        self.assertIn("if (page.length() < pageSize) break", function)
+        pager = self.repository.split("private fun commercialCloudPagedGet", 1)[1].split(
+            "private fun commercialMasterDataAccess", 1
+        )[0]
+        self.assertIn("val pageSize = 500", pager)
+        self.assertIn("limit=$pageSize&offset=$offset", pager)
+        self.assertIn("if (page.length() < pageSize) break", pager)
 
     def test_master_data_and_department_links_are_paginated(self):
         master_data = self.repository.split("internal fun loadCommercialMasterData", 1)[1].split(
@@ -50,10 +54,22 @@ class CommercialUnitDirectoryScreenTests(unittest.TestCase):
         assignments = self.repository.split("internal fun loadCommercialDepartmentWarehouseAssignments", 1)[1].split(
             "internal fun assignCommercialDepartmentToWarehouse", 1
         )[0]
-        self.assertIn("limit=$pageSize&offset=$offset", master_data)
+        self.assertIn("commercialCloudPagedGet(", master_data)
         self.assertIn("order=code.asc,id.asc", master_data)
-        self.assertIn("limit=$pageSize&offset=$offset", assignments)
+        self.assertIn("commercialCloudPagedGet(", assignments)
         self.assertIn("order=department_id.asc,warehouse_id.asc", assignments)
+
+    def test_sales_and_inventory_alerts_use_complete_stable_pagination(self):
+        sales = self.repository.split("internal fun loadCommercialCloudSales", 1)[1].split(
+            "internal fun loadCommercialCloudSaleDocuments", 1
+        )[0]
+        alerts = self.repository.split("internal fun loadCommercialCloudStockAlerts", 1)[1].split(
+            "internal data class CommercialCloudRecord", 1
+        )[0]
+        self.assertIn("commercialCloudPagedGet(path, access)", sales)
+        self.assertIn("order=created_at.desc,id.asc", sales)
+        self.assertIn("commercialCloudPagedGet(query, access)", alerts)
+        self.assertIn("order=updated_at.desc,offering_id.asc", alerts)
 
 
 if __name__ == "__main__":
