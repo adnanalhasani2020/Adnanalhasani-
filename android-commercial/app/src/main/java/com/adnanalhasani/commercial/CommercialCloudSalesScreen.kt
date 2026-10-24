@@ -92,13 +92,19 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
             doc.receiptNumber.contains(search, true) ||
             doc.customerName.contains(search, true) ||
             doc.paymentStatus.contains(search, true) ||
+            doc.saleStatus.contains(search, true) ||
+            doc.payments.any { it.status.contains(search, true) || it.methodType.contains(search, true) } ||
+            doc.returns.any { it.status.contains(search, true) || it.refundStatus.contains(search, true) || it.restockStatus.contains(search, true) } ||
             doc.lines.any { it.productName.contains(search, true) }
         val status = doc.paymentStatus.lowercase()
+        val saleStatus = doc.saleStatus.lowercase()
         val matchesStatus = when (selectedStatus) {
-            "paid" -> status in setOf("paid", "completed", "succeeded")
+            "paid" -> status == "paid"
             "partial" -> status in setOf("partially_paid", "partial")
-            "due" -> status in setOf("unpaid", "due", "pending", "credit")
-            "cancelled" -> status in setOf("failed", "cancelled", "canceled")
+            "due" -> status in setOf("unpaid", "due", "pending", "credit", "partially_paid")
+            "cancelled" -> saleStatus in setOf("cancelled", "canceled") || status in setOf("failed", "cancelled", "canceled")
+            "refunded" -> status in setOf("refunded", "partially_refunded") ||
+                doc.returns.any { it.refundStatus.lowercase() in setOf("refunded", "partially_refunded") }
             else -> true
         }
         matchesSearch && matchesStatus
@@ -148,7 +154,8 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
                         "paid" to "مدفوعة",
                         "partial" to "مدفوعة جزئيًا",
                         "due" to "مستحقة",
-                        "cancelled" to "فشل / ملغاة"
+                        "cancelled" to "ملغاة / فاشلة",
+                        "refunded" to "مستردة"
                     ).forEach { (key, label) ->
                         FilterChip(
                             selected = selectedStatus == key,
@@ -214,9 +221,16 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
                             Column(Modifier.weight(1f)) {
                                 Text("فاتورة #${document.receiptNumber}", color = CloudSalesInk, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                                 Text(document.customerName, color = CloudSalesMuted, fontSize = 12.sp)
+                                if (document.customerPhone.isNotBlank()) Text("هاتف: ${document.customerPhone}", color = CloudSalesMuted, fontSize = 11.sp)
+                                if (document.customerEmail.isNotBlank()) Text(document.customerEmail, color = CloudSalesMuted, fontSize = 11.sp)
                             }
-                            Surface(color = statusColor(document.paymentStatus).copy(alpha = 0.12f), shape = RoundedCornerShape(10.dp)) {
-                                Text(statusLabel(document.paymentStatus), color = statusColor(document.paymentStatus), fontSize = 11.sp, modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp))
+                            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Surface(color = statusColor(document.saleStatus).copy(alpha = 0.12f), shape = RoundedCornerShape(10.dp)) {
+                                    Text("الفاتورة: ${statusLabel(document.saleStatus)}", color = statusColor(document.saleStatus), fontSize = 10.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp))
+                                }
+                                Surface(color = statusColor(document.paymentStatus).copy(alpha = 0.12f), shape = RoundedCornerShape(10.dp)) {
+                                    Text("الدفع: ${statusLabel(document.paymentStatus)}", color = statusColor(document.paymentStatus), fontSize = 10.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp))
+                                }
                             }
                         }
                         Text(
@@ -243,7 +257,32 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
                                 }
                             }
                         }
-                        Text("مرجع: ${document.id.take(8)} · عرض فقط", color = CloudSalesMuted, fontSize = 10.sp)
+                        if (document.payments.isNotEmpty()) {
+                            Text("المدفوعات المسجلة", color = CloudSalesInk, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                            document.payments.forEach { payment ->
+                                Surface(color = Color(0xFFF7F9F8), shape = RoundedCornerShape(9.dp)) {
+                                    Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                        Text("${statusLabel(payment.status)} · ${formatMinorAmount(payment.amountMinor)} ${document.currencyCode}", color = CloudSalesInk, fontWeight = FontWeight.Medium, fontSize = 11.sp)
+                                        if (payment.methodType.isNotBlank()) Text("الطريقة: ${payment.methodType}", color = CloudSalesMuted, fontSize = 10.sp)
+                                        if (payment.createdAt.isNotBlank()) Text(formatInvoiceTimestamp(payment.createdAt), color = CloudSalesMuted, fontSize = 10.sp)
+                                    }
+                                }
+                            }
+                        }
+                        if (document.returns.isNotEmpty()) {
+                            Text("المرتجعات المرتبطة", color = CloudSalesInk, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                            document.returns.forEach { returned ->
+                                Surface(color = Color(0xFFFFF7E8), shape = RoundedCornerShape(9.dp)) {
+                                    Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                        Text("الطلب: ${statusLabel(returned.status)} · الاسترداد: ${statusLabel(returned.refundStatus)}", color = CloudSalesInk, fontWeight = FontWeight.Medium, fontSize = 11.sp)
+                                        Text("إعادة المخزون: ${statusLabel(returned.restockStatus)}", color = CloudSalesMuted, fontSize = 10.sp)
+                                        Text("المبلغ المطلوب: ${formatMinorAmount(returned.requestedRefundMinor)} ${document.currencyCode}" +
+                                            (returned.approvedRefundMinor?.let { " · المعتمد: ${formatMinorAmount(it)}" } ?: ""), color = CloudSalesMuted, fontSize = 10.sp)
+                                    }
+                                }
+                            }
+                        }
+                        Text("مرجع: ${document.id.take(8)} · تفاصيل من الخادم، عرض فقط", color = CloudSalesMuted, fontSize = 10.sp)
                     }
                 }
             }
@@ -267,17 +306,31 @@ private fun formatInvoiceTimestamp(value: String): String {
 }
 
 private fun statusLabel(value: String): String = when (value.lowercase()) {
-    "paid", "completed", "succeeded" -> "مدفوعة"
+    "paid", "succeeded" -> "مدفوعة"
+    "completed" -> "مكتملة"
     "partially_paid", "partial" -> "مدفوعة جزئيًا"
-    "unpaid", "due", "pending", "credit" -> "مستحقة"
-    "failed", "cancelled", "canceled" -> "فشل / ملغاة"
+    "unpaid", "due", "pending", "requested" -> "قيد الانتظار"
+    "approved" -> "مقبول"
+    "rejected" -> "مرفوض"
+    "cancelled", "canceled" -> "ملغاة"
+    "failed" -> "فاشلة"
+    "refunded" -> "مستردة"
+    "partially_refunded" -> "مستردة جزئيًا"
+    "not_started" -> "لم تبدأ"
+    "not_required" -> "غير مطلوب"
+    "restocked" -> "أعيد للمخزون"
+    "partially_restocked" -> "أعيد جزئيًا"
+    "blocked" -> "محظور"
+    "authorized" -> "مصرح"
+    "draft" -> "مسودة"
+    "completed" -> "مكتملة"
     else -> value.ifBlank { "غير محدد" }
 }
 
 private fun statusColor(value: String): Color = when (value.lowercase()) {
-    "paid", "completed", "succeeded" -> Color(0xFF167D63)
-    "partially_paid", "partial" -> Color(0xFFB36B00)
-    "unpaid", "due", "pending", "credit" -> Color(0xFFB36B00)
-    "failed", "cancelled", "canceled" -> Color(0xFFB3261E)
+    "paid", "completed", "succeeded", "approved", "refunded", "restocked" -> Color(0xFF167D63)
+    "partially_paid", "partial", "partially_refunded", "partially_restocked", "pending", "requested", "authorized" -> Color(0xFFB36B00)
+    "unpaid", "due", "credit", "not_started", "not_required", "draft" -> Color(0xFFB36B00)
+    "failed", "cancelled", "canceled", "rejected", "blocked" -> Color(0xFFB3261E)
     else -> CloudSalesMuted
 }
