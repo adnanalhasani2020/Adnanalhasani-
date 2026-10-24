@@ -20,9 +20,11 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
     def test_invoice_projection_uses_existing_tables_and_columns(self):
         self.assertIn("internal fun loadCommercialCloudSaleDocuments", self.repository)
         for field in (
-            "receipt_number", "total_minor", "payment_status", "currency_code",
-            "commercial_customers(display_name)",
+            "receipt_number", "total_minor", "status,payment_status", "currency_code",
+            "commercial_customers(display_name,phone,email)",
             "commercial_sale_items(product_name_snapshot,quantity,line_total_minor,unit_price_minor)",
+            "commercial_payments(amount_minor,status,payment_method_type,created_at)",
+            "commercial_sales_returns(status,refund_status,restock_status,requested_refund_minor,approved_refund_minor,created_at)",
         ):
             with self.subTest(field=field):
                 self.assertIn(field, self.repository)
@@ -61,7 +63,9 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
                 self.assertIn(marker, self.screen)
 
     def test_invoice_details_show_unit_price_line_total_and_formatted_timestamp(self):
-        for marker in ("سعر الوحدة:", "الإجمالي:", "formatInvoiceTimestamp", "formatMinorAmount"):
+        for marker in ("سعر الوحدة:", "الإجمالي:", "formatInvoiceTimestamp", "formatMinorAmount",
+                       "document.customerPhone", "document.customerEmail", "document.payments",
+                       "document.returns", "document.saleStatus"):
             with self.subTest(marker=marker):
                 self.assertIn(marker, self.screen)
 
@@ -72,5 +76,22 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         self.assertIn("بنود الفاتورة", self.screen)
 
 
+    def test_cloud_sale_refresh_failure_does_not_create_fake_local_invoice(self):
+        cloud_sale_flow = self.main.split("if (newSale && inventory.isNotEmpty()) SaleEntryDialog", 1)[1].split(
+            "if (settlingSaleNumber", 1
+        )[0]
+        self.assertIn("تم إنشاء سجل محلي بديل", cloud_sale_flow)
+        self.assertNotIn("saveSales(context, sales)", cloud_sale_flow)
+        self.assertIn("sales.addAll(serverSales)", cloud_sale_flow)
+
+    def test_cloud_mode_blocks_local_only_settlements_and_finance_screens(self):
+        self.assertIn("if (settlingSaleNumber >= 0 && cloudMode)", self.main)
+        self.assertIn("تسجيل التحصيل السحابي غير مفعّل بعد", self.main)
+        self.assertIn("المديونيات والتحصيلات السحابية لم تُربط بعد", self.main)
+        self.assertIn("المصروفات السحابية لم تُربط بدفتر الحسابات بعد", self.main)
+
+    def test_sales_tab_links_to_cloud_invoice_details(self):
+        self.assertIn("onCloudInvoices = { cloudSalesPage = true }", self.main)
+        self.assertIn("عرض تفاصيل الفواتير السحابية", self.main)
 if __name__ == "__main__":
     unittest.main()
