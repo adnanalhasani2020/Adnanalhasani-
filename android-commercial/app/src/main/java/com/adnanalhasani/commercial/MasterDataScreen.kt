@@ -52,18 +52,21 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
     var parentMenuExpanded by remember { mutableStateOf(false) }
 
     fun reload() {
+        val table = selected.second
         loading = true
         error = ""
         masterIo.execute {
             val result = runCatching {
-                val data = loadCommercialMasterData(context, selected.second)
-                val warehouses = if (selected.second == "commercial_storage_locations") loadCommercialMasterData(context, "commercial_warehouses") else emptyList()
+                val data = loadCommercialMasterData(context, table)
+                val warehouses = if (table == "commercial_storage_locations") loadCommercialMasterData(context, "commercial_warehouses") else emptyList()
                 data to warehouses
             }
             masterMain.post {
-                loading = false
-                result.onSuccess { rows = it.first; warehouseRows = it.second; if (warehouseId.isBlank() && it.second.isNotEmpty()) warehouseId = it.second.first().id; error = "" }
-                    .onFailure { error = it.message ?: "تعذر تحميل البيانات." }
+                if (selected.second == table) {
+                    loading = false
+                    result.onSuccess { rows = it.first; warehouseRows = it.second; if (warehouseId.isBlank() && it.second.isNotEmpty()) warehouseId = it.second.first().id; error = "" }
+                        .onFailure { error = it.message ?: "تعذر تحميل البيانات." }
+                }
             }
         }
     }
@@ -199,16 +202,25 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
             },
             confirmButton = {
                 TextButton(onClick = {
+                    val table = selected.second
+                    val submittedCode = code
+                    val submittedName = name
+                    val submittedParentId = parentId
+                    val submittedWarehouseType = warehouseType
+                    val submittedWarehouseId = warehouseId
+                    val submittedLocationType = locationType
                     showCreate = false
                     notice = ""
                     masterIo.execute {
                         val result = runCatching {
-                            createCommercialMasterData(context, selected.second, code, name, parentId = parentId, warehouseType = warehouseType, warehouseId = warehouseId, locationType = locationType)
-                            loadCommercialMasterData(context, selected.second)
+                            createCommercialMasterData(context, table, submittedCode, submittedName, parentId = submittedParentId, warehouseType = submittedWarehouseType, warehouseId = submittedWarehouseId, locationType = submittedLocationType)
+                            loadCommercialMasterData(context, table)
                         }
                         masterMain.post {
-                            result.onSuccess { rows = it; notice = "تم الحفظ في قاعدة البيانات السحابية."; error = "" }
-                                .onFailure { error = it.message ?: "تعذر الحفظ."; notice = "" }
+                            if (selected.second == table) {
+                                result.onSuccess { rows = it; notice = "تم الحفظ في قاعدة البيانات السحابية."; error = "" }
+                                    .onFailure { error = it.message ?: "تعذر الحفظ."; notice = "" }
+                            }
                         }
                     }
                 }, enabled = code.isNotBlank() && name.isNotBlank() && (selected.second != "commercial_storage_locations" || warehouseId.isNotBlank())) { Text("حفظ") }
