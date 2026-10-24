@@ -232,6 +232,7 @@ private fun StoreApp(context: Context) {
     var cloudInventoryBusy by remember { mutableStateOf(false) }
     var cloudInventoryError by remember { mutableStateOf("") }
     var cloudNotice by remember { mutableStateOf("") }
+    var cloudCategories by remember { mutableStateOf<List<CommercialMasterDataRow>>(emptyList()) }
     var cloudMode by remember { mutableStateOf(cloudContextExists) }
     var nextInvoice by remember { mutableIntStateOf((sales.maxOfOrNull { it.number } ?: 1048) + 1) }
 
@@ -241,6 +242,7 @@ private fun StoreApp(context: Context) {
         storeCloudIo.execute {
             val inventoryResult = runCatching { loadCommercialCloudInventory(context) }
             val salesResult = runCatching { loadCommercialCloudSales(context) }
+            val categoriesResult = runCatching { loadCommercialMasterData(context, "commercial_product_categories") }
             storeCloudMain.post {
                 cloudInventoryBusy = false
                 cloudInventoryLoaded = true
@@ -253,6 +255,8 @@ private fun StoreApp(context: Context) {
                     inventory.clear()
                     cloudInventoryError = it.message ?: "تعذر تحميل المخزون من قاعدة البيانات."
                 }
+                categoriesResult.onSuccess { cloudCategories = it }
+                    .onFailure { cloudNotice = "تعذر تحميل تصنيفات الأصناف: " + (it.message ?: "خطأ غير معروف") }
                 salesResult.onSuccess { serverSales ->
                     sales.clear()
                     sales.addAll(serverSales)
@@ -352,14 +356,15 @@ private fun StoreApp(context: Context) {
     )
     if (addProduct) AddProductDialog(
         cloudMode = cloudMode,
+        cloudCategories = cloudCategories,
         onDismiss = { addProduct = false },
-        onSave = { name, category, unitName, stock, price, costPrice, reorderPoint ->
+        onSave = { name, category, unitName, stock, price, costPrice, reorderPoint, categoryId ->
             if (cloudMode) {
                 cloudInventoryBusy = true
                 cloudNotice = "جارٍ حفظ الصنف في قاعدة البيانات..."
                 storeCloudIo.execute {
                     val result = runCatching {
-                        createCommercialCloudInventoryItem(context, name, unitName, price.toLong(), stock, reorderPoint.toDouble())
+                        createCommercialCloudInventoryItem(context, name, unitName, price.toLong(), stock, reorderPoint.toDouble(), categoryId)
                         loadCommercialCloudInventory(context)
                     }
                     storeCloudMain.post {
@@ -867,11 +872,14 @@ private fun EditProductDialog(
 @Composable
 private fun AddProductDialog(
     cloudMode: Boolean = false,
+    cloudCategories: List<CommercialMasterDataRow> = emptyList(),
     onDismiss: () -> Unit,
-    onSave: (String, String, String, Int, Int, Int, Int) -> Unit
+    onSave: (String, String, String, Int, Int, Int, Int, String) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
     var category by remember { mutableStateOf("") }
+    var categoryId by remember { mutableStateOf("") }
+    var categoryMenuExpanded by remember { mutableStateOf(false) }
     var unitName by remember { mutableStateOf("قطعة") }
     var reorderPointText by remember { mutableStateOf("0") }
     var stockText by remember { mutableStateOf("0") }
@@ -886,12 +894,25 @@ private fun AddProductDialog(
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(name, { name = it; error = null }, label = { Text("اسم المنتج") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 if (!cloudMode) OutlinedTextField(category, { category = it; error = null }, label = { Text("التصنيف المحلي") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                if (cloudMode) {
+                    val categoryLabel = cloudCategories.firstOrNull { it.id == categoryId }?.let { "${it.code} — ${it.label}" } ?: "بدون تصنيف"
+                    Box(Modifier.fillMaxWidth()) {
+                        OutlinedButton(onClick = { categoryMenuExpanded = true }, modifier = Modifier.fillMaxWidth()) { Text("تصنيف الصنف: $categoryLabel") }
+                        DropdownMenu(expanded = categoryMenuExpanded, onDismissRequest = { categoryMenuExpanded = false }) {
+                            DropdownMenuItem(text = { Text("بدون تصنيف") }, onClick = { categoryId = ""; categoryMenuExpanded = false })
+                            cloudCategories.filter { it.kind == "active" }.forEach { item ->
+                                DropdownMenuItem(text = { Text("${item.code} — ${item.label}") }, onClick = { categoryId = item.id; categoryMenuExpanded = false })
+                            }
+                        }
+                    }
+                    if (cloudCategories.none { it.kind == "active" }) Text("لا توجد تصنيفات نشطة. أضف تصنيفًا من دليل المستودعات والمجموعات أولًا.", color = Muted, fontSize = 11.sp)
+                }
                 OutlinedTextField(unitName, { unitName = it; error = null }, label = { Text(if (cloudMode) "اسم الوحدة الأساسية" else "الوحدة") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 if (cloudMode) OutlinedTextField(reorderPointText, { reorderPointText = it.filter(Char::isDigit).take(7); error = null }, label = { Text("حد التنبيه للمخزون المنخفض") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(stockText, { stockText = it.filter(Char::isDigit).take(7); error = null }, label = { Text(if (cloudMode) "الكمية الافتتاحية (بوحدة الأساس)" else "الكمية الافتتاحية") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(priceText, { priceText = it.filter(Char::isDigit).take(7); error = null }, label = { Text("سعر البيع للوحدة (ر.ي)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 if (!cloudMode) OutlinedTextField(costText, { costText = it.filter(Char::isDigit).take(7); error = null }, label = { Text("تكلفة شراء الوحدة (ر.ي)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                if (cloudMode) Text("سيُحفظ الاسم والوحدة والسعر والكمية الافتتاحية وحد التنبيه في قاعدة البيانات. التصنيف وتكلفة الشراء غير مربوطين بعملية الإنشاء السحابية الحالية.", color = Muted, fontSize = 11.sp)
+                if (cloudMode) Text("سيُحفظ الاسم والوحدة والسعر والكمية الافتتاحية وحد التنبيه والتصنيف المختار ضمن عملية ذرية واحدة في قاعدة البيانات.", color = Muted, fontSize = 11.sp)
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
             }
         },
@@ -909,7 +930,8 @@ private fun AddProductDialog(
                     price == null || price <= 0 -> error = "أدخل سعر بيع أكبر من صفر."
                     !cloudMode && (cost == null || cost < 0) -> error = "أدخل تكلفة شراء صحيحة (يمكن أن تكون صفرًا)."
                     cloudMode && (reorderPoint == null || reorderPoint < 0) -> error = "أدخل حد تنبيه صحيحًا."
-                    else -> onSave(name.trim(), category.trim(), unitName.trim(), stock, price, cost ?: 0, reorderPoint ?: 0)
+                    cloudMode && categoryId.isNotBlank() && cloudCategories.none { it.id == categoryId && it.kind == "active" } -> error = "اختر تصنيفًا نشطًا من القائمة."
+                    else -> onSave(name.trim(), category.trim(), unitName.trim(), stock, price, cost ?: 0, reorderPoint ?: 0, if (cloudMode) categoryId else "")
                 }
             }) { Text("حفظ المنتج") }
         },
