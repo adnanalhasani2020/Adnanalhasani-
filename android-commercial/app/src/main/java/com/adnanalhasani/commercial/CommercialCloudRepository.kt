@@ -671,6 +671,82 @@ internal fun loadCommercialCloudStockAlerts(context: Context): List<CommercialCl
     }
 }
 
+internal data class CommercialCloudReturnableSaleItem(
+    val id: String,
+    val productName: String,
+    val soldQuantity: Int,
+    val lineTotalMinor: Long
+)
+
+internal data class CommercialCloudReturnableSale(
+    val id: String,
+    val receiptNumber: String,
+    val customerName: String,
+    val currencyCode: String,
+    val items: List<CommercialCloudReturnableSaleItem>
+)
+
+internal fun loadCommercialCloudReturnableSales(context: Context): List<CommercialCloudReturnableSale> {
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val path = "/rest/v1/commercial_sales?select=id,receipt_number,currency_code,created_at,customer:commercial_customers(display_name),items:commercial_sale_items(id,product_name_snapshot,quantity,line_total_minor)&organization_id=eq.$orgId&status=eq.completed&order=created_at.desc,id.asc"
+    val rows = commercialCloudPagedGet(path, access)
+    return buildList {
+        for (i in 0 until rows.length()) {
+            val row = rows.optJSONObject(i) ?: continue
+            val itemRows = row.optJSONArray("items")
+            val saleItems = buildList {
+                for (j in 0 until (itemRows?.length() ?: 0)) {
+                    val item = itemRows?.optJSONObject(j) ?: continue
+                    val qty = item.optInt("quantity", 0)
+                    if (qty <= 0) continue
+                    add(CommercialCloudReturnableSaleItem(
+                        id = item.optString("id").takeUnless { it == "null" }.orEmpty(),
+                        productName = item.optString("product_name_snapshot").takeUnless { it == "null" || it.isBlank() } ?: "صنف غير معروف",
+                        soldQuantity = qty,
+                        lineTotalMinor = item.optLong("line_total_minor", 0L)
+                    ))
+                }
+            }
+            if (saleItems.isNotEmpty()) {
+                val customer = row.optJSONObject("customer")
+                add(CommercialCloudReturnableSale(
+                    id = row.optString("id"),
+                    receiptNumber = row.optString("receipt_number").takeUnless { it == "null" }.orEmpty(),
+                    customerName = customer?.optString("display_name").takeUnless { it == null || it == "null" || it.isBlank() } ?: "عميل نقدي / غير محدد",
+                    currencyCode = row.optString("currency_code").takeUnless { it == "null" }.orEmpty(),
+                    items = saleItems
+                ))
+            }
+        }
+    }
+}
+
+internal fun requestCommercialCloudSaleReturn(
+    context: Context,
+    saleId: String,
+    reasonCode: String,
+    reasonNote: String,
+    quantities: Map<String, Int>
+): String {
+    require(saleId.isNotBlank()) { "اختر الفاتورة أولًا." }
+    require(reasonCode in setOf("customer_request", "damaged", "wrong_item", "not_as_described", "duplicate_charge", "other")) { "سبب المرتجع غير صالح." }
+    val selected = quantities.filterValues { it > 0 }
+    require(selected.isNotEmpty()) { "أدخل كمية مرتجعة لصنف واحد على الأقل." }
+    val items = JSONArray()
+    selected.forEach { (saleItemId, quantity) ->
+        require(saleItemId.isNotBlank() && quantity > 0) { "كمية المرتجع غير صالحة." }
+        items.put(JSONObject().put("sale_item_id", saleItemId).put("quantity", quantity).put("restock", true))
+    }
+    val (_, access) = commercialMasterDataAccess(context)
+    val payload = JSONObject()
+        .put("p_sale_id", saleId)
+        .put("p_idempotency_key", UUID.randomUUID().toString())
+        .put("p_reason_code", reasonCode)
+        .put("p_items", items)
+        .put("p_reason_note", reasonNote.trim().ifBlank { JSONObject.NULL })
+    return commercialCloudRequest("/rest/v1/rpc/commercial_request_sale_return", "POST", payload, access)
+}
+
 internal data class CommercialCloudReturnItem(
     val id: String,
     val saleItemId: String,
