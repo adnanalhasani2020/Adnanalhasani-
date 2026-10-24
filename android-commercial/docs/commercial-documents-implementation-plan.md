@@ -31,6 +31,18 @@ Existing trusted database functions include `commercial_checkout_sale`, `commerc
 5. The journal tables enforce posted-line immutability. Financially posted documents must be reversed with a traceable compensating entry rather than edited or deleted.
 6. Warehouse and storage-location masters exist, but stock movement into individual storage locations is not yet wired. Continue preserving current site-level inventory until a safe migration path is verified.
 
+## Verified implementation update — 2026-10-24
+
+The Android cloud invoice projection has been expanded to read the existing invoice status, customer contact fields, payment records, and sales-return status/refund/restock summaries alongside the invoice lines. These are display-only projections; they do not imply that payment capture, payment allocation, refunds, or accounting posting are implemented.
+
+The app now avoids creating a synthetic device-local invoice when a cloud checkout succeeds but refreshing the cloud history fails. In cloud mode, local-only debt settlement, expense entry, and mixed local-finance reports are blocked with an explicit message rather than presenting local writes as cloud-confirmed balances.
+
+Still not complete and must remain gated:
+- A multi-line invoice requires one server-side transaction that validates every line, locks inventory consistently, writes one sale with multiple items, and creates exactly-once stock/payment/accounting effects. Calling the existing single-item RPC repeatedly is not an acceptable substitute.
+- Cloud credit sales and collections require server-side customer linkage, payment records and allocation semantics, party balances, idempotency, authorization, and journal posting/reversal behavior.
+- Existing checkout currently updates stock and writes a stock movement, but the audited function body does not create a `commercial_payments` row or a journal entry. Therefore do not claim the full cash/accounting lifecycle is complete until this gap is addressed in a schema-grounded migration and verified against current constraints and policies.
+- Payment allocation currently references `order_id`; do not assume it can be allocated directly to `commercial_sales` without checking the intended order/sale relationship and enforcing no-over-allocation.
+- CI/build and live authenticated end-to-end tests are still release gates. No APK should be described as tested until the Android build and focused tests pass.
 ## Target document workflows
 
 ### Sales
