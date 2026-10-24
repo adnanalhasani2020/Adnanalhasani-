@@ -48,3 +48,7 @@ The master-data screen now displays each record's current status and provides `A
 ## Active hierarchy options
 
 When creating a storage location, the form offers only active warehouses and active parent locations within the selected warehouse. Category and department hierarchy selectors likewise offer active parent records only. The root-level option remains available. This is a UI guard for clearer data entry; database constraints and authorization remain authoritative.
+
+## Master-data create submission guard
+
+The warehouse/category/department/storage-location create dialog disables repeat saves while a request is in flight, trims the submitted code and name, keeps the form open on failure, and shows the returned error in the dialog. A successful cloud write followed by a successful refresh closes the form. This reduces accidental repeated submissions and prevents a failed request from silently discarding the user's input; database uniqueness and authorization remain authoritative.
