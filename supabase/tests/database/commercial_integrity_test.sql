@@ -144,14 +144,6 @@ SELECT ok(
        'p_name text, p_slug text, p_organization_type text, p_currency_code text, p_timezone text, p_locale text, p_country_code text, p_module_keys text[]'),
   'organization onboarding RPC is hardened and restricted to authenticated users');
 
-SELECT * FROM finish();
-ROLLBACK;
-
-
-SELECT * FROM finish();
-ROLLBACK;
-
-
 SELECT ok(
   EXISTS (
     SELECT 1 FROM pg_policy p
@@ -181,3 +173,6 @@ SELECT ok(
   ),
   'organization managers can read sale lines only through sales in their organization'
 );
+
+SELECT * FROM finish();
+ROLLBACK;
