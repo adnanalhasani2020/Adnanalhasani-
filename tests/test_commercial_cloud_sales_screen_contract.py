@@ -65,7 +65,8 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
     def test_invoice_details_show_unit_price_line_total_and_formatted_timestamp(self):
         for marker in ("سعر الوحدة:", "الإجمالي:", "formatInvoiceTimestamp", "formatMinorAmount",
                        "document.customerPhone", "document.customerEmail", "document.payments",
-                       "document.returns", "document.saleStatus"):
+                       "document.returns", "document.saleStatus", "confirmedPaidMinor",
+                       "المدفوعات الناجحة فقط", "المتبقي قبل احتساب المرتجعات"):
             with self.subTest(marker=marker):
                 self.assertIn(marker, self.screen)
 
