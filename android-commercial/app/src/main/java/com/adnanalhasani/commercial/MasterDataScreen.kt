@@ -194,7 +194,7 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
                     if (selected.second == "commercial_warehouses") {
                         Text("نوع المستودع")
                         Column {
-                            listOf("main" to "رئيسي", "retail" to "تجزئة", "distribution" to "توزيع", "returns" to "مرتجعات", "quarantine" to "حجر", "virtual" to "افتراضي").forEach { item ->
+                            listOf("main" to "رئيسي", "retail" to "تجزئة", "distribution" to "توزيع", "production" to "إنتاج", "returns" to "مرتجعات", "quarantine" to "حجر", "virtual" to "افتراضي", "transit" to "عبور").forEach { item ->
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     RadioButton(selected = warehouseType == item.first, onClick = { warehouseType = item.first })
                                     Text(item.second)
