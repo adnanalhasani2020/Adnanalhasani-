@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -37,6 +38,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -73,6 +75,10 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
     var reloadToken by remember { mutableIntStateOf(0) }
+    var collectionTarget by remember { mutableStateOf<CommercialCloudSaleDocument?>(null) }
+    var collectionAmountText by remember { mutableStateOf("") }
+    var collectionBusy by remember { mutableStateOf(false) }
+    var collectionError by remember { mutableStateOf("") }
 
     LaunchedEffect(reloadToken) {
         loading = true
@@ -301,7 +307,21 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
                                 }
                             }
                         }
-                        Text("مرجع: ${document.id.take(8)} · تفاصيل من الخادم، عرض فقط", color = CloudSalesMuted, fontSize = 10.sp)
+                        if (document.saleStatus.equals("completed", ignoreCase = true) &&
+                            document.paymentStatus in setOf("pending", "partially_paid")) {
+                            Button(
+                                onClick = {
+                                    collectionTarget = document
+                                    collectionAmountText = ""
+                                    collectionError = ""
+                                },
+                                enabled = !collectionBusy,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("تسجيل تحصيل سحابي")
+                            }
+                        }
+                        Text("مرجع: ${document.id.take(8)} · تفاصيل من الخادم", color = CloudSalesMuted, fontSize = 10.sp)
                     }
                 }
             }
@@ -312,6 +332,78 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
                 )
             }
         }
+    }
+
+    val target = collectionTarget
+    if (target != null) {
+        val paidMinor = target.payments.filter { it.status.equals("succeeded", ignoreCase = true) }
+            .sumOf { it.amountMinor.coerceAtLeast(0L) }
+        val outstandingMinor = (target.totalMinor - paidMinor).coerceAtLeast(0L)
+        AlertDialog(
+            onDismissRequest = { if (!collectionBusy) collectionTarget = null },
+            title = { Text("تسجيل تحصيل · فاتورة #${target.receiptNumber}") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("المتبقي قبل المرتجعات: ${formatMinorAmount(outstandingMinor)} ${target.currencyCode}", color = CloudSalesMuted, fontSize = 12.sp)
+                    OutlinedTextField(
+                        value = collectionAmountText,
+                        onValueChange = { collectionAmountText = it.filter(Char::isDigit).take(18); collectionError = "" },
+                        enabled = !collectionBusy,
+                        singleLine = true,
+                        label = { Text("مبلغ التحصيل بوحدة الصرف الصغرى") }
+                    )
+                    Text("يسجل التحصيل على الخادم فقط. تُمنع الزيادة عن المتبقي، ويُوقف التحصيل عند وجود مرتجع يحتاج إلى تسوية.", color = CloudSalesMuted, fontSize = 11.sp)
+                    if (collectionError.isNotBlank()) Text(collectionError, color = Color(0xFFB3261E), fontSize = 12.sp)
+                }
+            },
+            confirmButton = {
+                Button(
+                    enabled = !collectionBusy,
+                    onClick = {
+                        val amount = collectionAmountText.toLongOrNull()
+                        if (amount == null || amount <= 0L) {
+                            collectionError = "أدخل مبلغًا صحيحًا أكبر من صفر."
+                        } else if (amount > outstandingMinor) {
+                            collectionError = "المبلغ يتجاوز المتبقي الظاهر؛ حدّث الفاتورة قبل المتابعة."
+                        } else {
+                            collectionBusy = true
+                            collectionError = ""
+                            CloudSalesWorker.execute {
+                                val result = runCatching {
+                                    val key = getOrCreateCommercialCloudCollectionKey(context, target.id, amount)
+                                    val response = recordCommercialCloudSaleCollection(context, target.id, amount, key)
+                                    val clearError = runCatching { clearCommercialCloudCollectionKey(context, key) }.exceptionOrNull()
+                                    response to clearError
+                                }
+                                CloudSalesMain.post {
+                                    collectionBusy = false
+                                    result.onSuccess { (_, clearError) ->
+                                        reloadToken++
+                                        if (clearError == null) {
+                                            collectionTarget = null
+                                            collectionAmountText = ""
+                                            collectionError = ""
+                                        } else {
+                                            collectionError = "أكد الخادم التحصيل، لكن تعذر تنظيف مفتاح المحاولة. اضغط التأكيد مرة أخرى بالمبلغ نفسه لإكمال التنظيف بأمان."
+                                        }
+                                    }.onFailure {
+                                        collectionError = it.message ?: "تعذر تأكيد التحصيل؛ لم يتم عرضه كتحصيل ناجح."
+                                    }
+                                }
+                            }
+                        }
+                    }
+                ) {
+                    if (collectionBusy) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    else Text("تأكيد التحصيل")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { if (!collectionBusy) collectionTarget = null }, enabled = !collectionBusy) {
+                    Text("إلغاء")
+                }
+            }
+        )
     }
 }
 
