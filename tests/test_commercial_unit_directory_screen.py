@@ -44,6 +44,8 @@ class CommercialUnitDirectoryScreenTests(unittest.TestCase):
             "private fun commercialMasterDataAccess", 1
         )[0]
         self.assertIn("pageSize: Int = 500", pager)
+        self.assertIn("require(pageSize in 1..1000)", pager)
+        self.assertIn('!path.contains("limit=") && !path.contains("offset=")', pager)
         self.assertIn("limit=$pageSize&offset=$offset", pager)
         self.assertIn("if (page.length() < pageSize) break", pager)
 
