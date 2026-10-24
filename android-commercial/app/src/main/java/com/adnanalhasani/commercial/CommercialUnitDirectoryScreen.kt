@@ -108,7 +108,7 @@ internal fun CommercialUnitDirectoryScreen(context: Context, onBack: () -> Unit)
             item {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     item { FilterChip(selected = selectedDimension == "all", onClick = { selectedDimension = "all" }, label = { Text("الكل") }) }
-                    items(dimensions.take(5)) { dimension ->
+                    items(dimensions) { dimension ->
                         FilterChip(selected = selectedDimension == dimension, onClick = { selectedDimension = dimension }, label = { Text(dimension) })
                     }
                 }
