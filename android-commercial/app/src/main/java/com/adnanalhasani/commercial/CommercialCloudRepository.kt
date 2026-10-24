@@ -429,7 +429,8 @@ internal data class CommercialMasterDataRow(
     val label: String,
     val kind: String,
     val parentId: String = "",
-    val warehouseId: String = ""
+    val warehouseId: String = "",
+    val state: String = ""
 )
 
 internal data class CommercialUnitOption(
@@ -496,7 +497,8 @@ internal fun loadCommercialMasterData(context: Context, table: String): List<Com
                 label = row.optString("name").ifBlank { row.optString("name_ar") },
                 kind = row.optString(when (table) { "commercial_storage_locations" -> "location_type"; "commercial_warehouses" -> "warehouse_type"; else -> "state" }).ifBlank { table.removePrefix("commercial_") },
                 parentId = row.optString(if (table == "commercial_storage_locations") "parent_location_id" else "parent_id").takeUnless { it == "null" }.orEmpty(),
-                warehouseId = row.optString("warehouse_id").takeUnless { it == "null" }.orEmpty()
+                warehouseId = row.optString("warehouse_id").takeUnless { it == "null" }.orEmpty(),
+                state = row.optString("state").ifBlank { "active" }
             ))
         }
     }
@@ -563,6 +565,47 @@ internal fun createCommercialMasterData(
     commercialCloudRequest("/rest/v1/$table", "POST", payload, access)
 }
 
+
+internal data class CommercialDepartmentWarehouseAssignment(
+    val departmentId: String,
+    val warehouseId: String
+)
+
+/** Read the existing organization-scoped department/warehouse links. */
+internal fun loadCommercialDepartmentWarehouseAssignments(context: Context): List<CommercialDepartmentWarehouseAssignment> {
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val rows = JSONArray(commercialCloudRequest(
+        "/rest/v1/commercial_department_warehouse_assignments?select=department_id,warehouse_id&organization_id=eq.$orgId&order=created_at.desc",
+        "GET", token = access
+    ))
+    return buildList {
+        for (index in 0 until rows.length()) {
+            val row = rows.optJSONObject(index) ?: continue
+            val departmentId = row.optString("department_id").takeUnless { it == "null" }.orEmpty()
+            val warehouseId = row.optString("warehouse_id").takeUnless { it == "null" }.orEmpty()
+            if (departmentId.isNotBlank() && warehouseId.isNotBlank()) {
+                add(CommercialDepartmentWarehouseAssignment(departmentId, warehouseId))
+            }
+        }
+    }
+}
+
+/** Add one validated department/warehouse link; database RLS and scope triggers remain authoritative. */
+internal fun assignCommercialDepartmentToWarehouse(context: Context, departmentId: String, warehouseId: String) {
+    require(departmentId.isNotBlank() && warehouseId.isNotBlank()) { "اختر القسم والمستودع." }
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val existingRows = JSONArray(commercialCloudRequest(
+        "/rest/v1/commercial_department_warehouse_assignments?select=department_id,warehouse_id&organization_id=eq.$orgId&department_id=eq.$departmentId&warehouse_id=eq.$warehouseId&limit=1",
+        "GET", token = access
+    ))
+    if (existingRows.length() > 0) return
+    val payload = JSONObject()
+        .put("organization_id", orgId)
+        .put("department_id", departmentId)
+        .put("warehouse_id", warehouseId)
+        .put("created_by", JSONObject.NULL)
+    commercialCloudRequest("/rest/v1/commercial_department_warehouse_assignments", "POST", payload, access)
+}
 
 internal data class CommercialCloudStockAlert(
     val offeringId: String,
