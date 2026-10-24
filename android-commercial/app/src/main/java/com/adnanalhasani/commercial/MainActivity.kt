@@ -198,13 +198,9 @@ private fun saveSales(context: Context, items: List<SaleRecord>) {
 private val storeCloudIo = Executors.newSingleThreadExecutor()
 private val storeCloudMain = Handler(Looper.getMainLooper())
 
-private val products = listOf(
-    Product("قهوة عربية فاخرة", "مشروبات", 18, "3,500 ر.ي"),
-    Product("سكر أبيض 1 كجم", "مواد غذائية", 7, "1,200 ر.ي"),
-    Product("زيت نباتي 1 لتر", "مواد غذائية", 4, "2,800 ر.ي"),
-    Product("مياه معدنية", "مشروبات", 32, "300 ر.ي"),
-    Product("أرز بسمتي 5 كجم", "مواد غذائية", 9, "6,500 ر.ي")
-)
+// Do not seed fake inventory into a real store. Products must be added by the user
+// or loaded from the authenticated organization's Supabase inventory.
+private val products = emptyList<Product>()
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
