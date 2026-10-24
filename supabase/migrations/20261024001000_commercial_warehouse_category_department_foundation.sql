@@ -207,28 +207,28 @@ BEGIN
     EXECUTE format(
       'CREATE POLICY %I ON public.%I FOR SELECT TO authenticated USING (
         EXISTS (SELECT 1 FROM public.commercial_organization_members m
-          WHERE m.organization_id = organization_id AND m.user_id = auth.uid() AND m.state = ''active'')
-      )', t || '_member_read', t
+          WHERE m.organization_id = %I.organization_id AND m.user_id = auth.uid() AND m.state = ''active'')
+      )', t || '_member_read', t, t
     );
     EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', t || '_manager_insert', t);
     EXECUTE format(
       'CREATE POLICY %I ON public.%I FOR INSERT TO authenticated WITH CHECK (
         EXISTS (SELECT 1 FROM public.commercial_organization_members m
-          WHERE m.organization_id = organization_id AND m.user_id = auth.uid()
+          WHERE m.organization_id = %I.organization_id AND m.user_id = auth.uid()
             AND m.state = ''active'' AND m.role IN (''owner'',''admin'',''manager''))
-      )', t || '_manager_insert', t
+      )', t || '_manager_insert', t, t
     );
     EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', t || '_manager_update', t);
     EXECUTE format(
       'CREATE POLICY %I ON public.%I FOR UPDATE TO authenticated USING (
         EXISTS (SELECT 1 FROM public.commercial_organization_members m
-          WHERE m.organization_id = organization_id AND m.user_id = auth.uid()
+          WHERE m.organization_id = %I.organization_id AND m.user_id = auth.uid()
             AND m.state = ''active'' AND m.role IN (''owner'',''admin'',''manager''))
       ) WITH CHECK (
         EXISTS (SELECT 1 FROM public.commercial_organization_members m
-          WHERE m.organization_id = organization_id AND m.user_id = auth.uid()
+          WHERE m.organization_id = %I.organization_id AND m.user_id = auth.uid()
             AND m.state = ''active'' AND m.role IN (''owner'',''admin'',''manager''))
-      )', t || '_manager_update', t
+      )', t || '_manager_update', t, t, t
     );
   END LOOP;
 END;
