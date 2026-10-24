@@ -11,6 +11,7 @@ The Android “More” menu now links to dedicated, Arabic-first, RTL list scree
 - Sales returns
 - Journal entries
 - Ledger accounts
+- Cloud sales invoice history with customer, payment status, totals, and each invoice line
 
 The screens provide search, refresh, loading/error/empty states, status badges, source references, and a read-only indicator. Their queries use an explicit allow-list of existing tables and columns from the reconciled schema and filter by the saved organization ID. Session refresh uses the existing encrypted Supabase refresh-token storage.
 
@@ -18,7 +19,7 @@ The screens provide search, refresh, loading/error/empty states, status badges, 
 
 These are cloud-backed read-only views, not full create/edit/posting workflows. No UI action writes directly to payment, return, journal, or ledger tables. This is intentional: purchasing, customer debt, supplier settlement, refunds/restocking, and journal posting must use the exact existing guarded RPC contracts and transactional behavior. Do not label local-only debt/expense records as cloud-confirmed.
 
-The purchase list currently displays the supplier ID rather than a joined supplier name, and monetary values are shown in minor units because the UI must not guess currency precision. These should be refined only after a schema-grounded join and currency-format contract are confirmed.
+The purchase list currently displays the supplier ID rather than a joined supplier name, and monetary values are shown in minor units because the UI must not guess currency precision. The cloud invoice history now displays all lines for each sale using the existing sale/customer/item relationships; it remains read-only. These should be refined only after a schema-grounded join and currency-format contract are confirmed.
 
 ## Next UI slices
 
