@@ -267,17 +267,19 @@ internal fun CommercialCloudSaleComposerScreen(
                                 val result = runCatching {
                                     require(paymentModeForRequest != "credit" || !customerId.isNullOrBlank()) { "اختر العميل قبل تسجيل البيع الآجل." }
                                     require(paymentModeForRequest != "credit" || initialPaymentMinor != null) { "أدخل مبلغًا صحيحًا للدفعة الأولى." }
-                                    val key = getOrCreateCommercialCloudMultiSaleKey(context, requestLines, customerId)
+                                    val key = getOrCreateCommercialCloudMultiSaleKey(context, requestLines, customerId, paymentModeForRequest, initialPaymentMinor ?: 0L)
                                     val sale = checkoutCommercialCloudSaleMulti(context, requestLines, key, customerId, paymentModeForRequest, initialPaymentMinor ?: 0L)
                                     val clearResult = runCatching { clearCommercialCloudMultiSaleKey(context, key) }
                                     val receipt = sale.optString("receipt_number", "—")
                                     val paymentRecorded = sale.optBoolean("payment_recorded", false)
                                     val outstanding = sale.optLong("outstanding_minor", 0L)
-                                    Triple(receipt, paymentRecorded, clearResult.exceptionOrNull(), outstanding, sale.optString("payment_status"))
+                                    Pair(Triple(receipt, paymentRecorded, clearResult.exceptionOrNull()), Pair(outstanding, sale.optString("payment_status")))
                                 }
                                 CloudComposerMain.post {
                                     submitting = false
-                                    result.onSuccess { (receipt, paymentRecorded, clearError, outstanding, paymentStatus) ->
+                                    result.onSuccess { (summary, debt) ->
+                                        val (receipt, paymentRecorded, clearError) = summary
+                                        val (outstanding, paymentStatus) = debt
                                         if (clearError == null) quantities = emptyMap()
                                         notice = if (clearError == null) {
                                             "تم تأكيد الفاتورة رقم $receipt على الخادم. ${if (paymentRecorded) "سُجلت دفعة نقدية واحدة." else "الإجمالي صفر؛ لا يلزم إنشاء دفعة."}"
