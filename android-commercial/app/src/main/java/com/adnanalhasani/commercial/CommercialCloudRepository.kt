@@ -675,6 +675,7 @@ internal data class CommercialCloudReturnableSaleItem(
     val id: String,
     val productName: String,
     val soldQuantity: Int,
+    val remainingQuantity: Int,
     val lineTotalMinor: Long
 )
 
@@ -688,21 +689,37 @@ internal data class CommercialCloudReturnableSale(
 
 internal fun loadCommercialCloudReturnableSales(context: Context): List<CommercialCloudReturnableSale> {
     val (orgId, access) = commercialMasterDataAccess(context)
-    val path = "/rest/v1/commercial_sales?select=id,receipt_number,currency_code,created_at,customer:commercial_customers(display_name),items:commercial_sale_items(id,product_name_snapshot,quantity,line_total_minor)&organization_id=eq.$orgId&status=eq.completed&order=created_at.desc,id.asc"
+    val path = "/rest/v1/commercial_sales?select=id,receipt_number,currency_code,created_at,customer:commercial_customers(display_name),items:commercial_sale_items(id,product_name_snapshot,quantity,line_total_minor),returns:commercial_sales_returns(status,items:commercial_sale_return_items(sale_item_id,quantity))&organization_id=eq.$orgId&status=eq.completed&order=created_at.desc,id.asc"
     val rows = commercialCloudPagedGet(path, access)
     return buildList {
         for (i in 0 until rows.length()) {
             val row = rows.optJSONObject(i) ?: continue
+            val priorReturns = row.optJSONArray("returns")
+            val alreadyRequested = mutableMapOf<String, Int>()
+            for (rIndex in 0 until (priorReturns?.length() ?: 0)) {
+                val prior = priorReturns?.optJSONObject(rIndex) ?: continue
+                if (prior.optString("status") in setOf("rejected", "cancelled")) continue
+                val priorItems = prior.optJSONArray("items")
+                for (pIndex in 0 until (priorItems?.length() ?: 0)) {
+                    val priorItem = priorItems?.optJSONObject(pIndex) ?: continue
+                    val itemId = priorItem.optString("sale_item_id").takeUnless { it == "null" }.orEmpty()
+                    if (itemId.isNotBlank()) alreadyRequested[itemId] = (alreadyRequested[itemId] ?: 0) + priorItem.optInt("quantity", 0).coerceAtLeast(0)
+                }
+            }
             val itemRows = row.optJSONArray("items")
             val saleItems = buildList {
                 for (j in 0 until (itemRows?.length() ?: 0)) {
                     val item = itemRows?.optJSONObject(j) ?: continue
                     val qty = item.optInt("quantity", 0)
                     if (qty <= 0) continue
+                    val itemId = item.optString("id").takeUnless { it == "null" }.orEmpty()
+                    val remaining = (qty - (alreadyRequested[itemId] ?: 0)).coerceAtLeast(0)
+                    if (remaining <= 0) continue
                     add(CommercialCloudReturnableSaleItem(
-                        id = item.optString("id").takeUnless { it == "null" }.orEmpty(),
+                        id = itemId,
                         productName = item.optString("product_name_snapshot").takeUnless { it == "null" || it.isBlank() } ?: "صنف غير معروف",
                         soldQuantity = qty,
+                        remainingQuantity = remaining,
                         lineTotalMinor = item.optLong("line_total_minor", 0L)
                     ))
                 }
