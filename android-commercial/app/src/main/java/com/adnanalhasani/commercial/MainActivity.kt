@@ -652,7 +652,7 @@ private fun SalesScreen(
     onCloudInvoices: () -> Unit
 ) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        item { Heading("المبيعات والفواتير", if (cloudMode) "ملخص المبيعات المحمّلة من الخادم" else "تابع عمليات البيع والتحصيل") }
+        item { Heading("المبيعات والفواتير", if (cloudMode) "ملخص الفواتير المحمّلة من قاعدة البيانات" else "تابع عمليات البيع والتحصيل") }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Metric("إجمالي المبيعات", money(sales.sumOf { it.total }), "الفواتير المحفوظة", Icons.Default.AttachMoney, Modifier.weight(1f))
