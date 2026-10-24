@@ -233,6 +233,7 @@ private fun StoreApp(context: Context) {
     var cloudInventoryError by remember { mutableStateOf("") }
     var cloudNotice by remember { mutableStateOf("") }
     var cloudCategories by remember { mutableStateOf<List<CommercialMasterDataRow>>(emptyList()) }
+    var cloudUnits by remember { mutableStateOf<List<CommercialUnitOption>>(emptyList()) }
     var cloudMode by remember { mutableStateOf(cloudContextExists) }
     var nextInvoice by remember { mutableIntStateOf((sales.maxOfOrNull { it.number } ?: 1048) + 1) }
 
@@ -243,6 +244,7 @@ private fun StoreApp(context: Context) {
             val inventoryResult = runCatching { loadCommercialCloudInventory(context) }
             val salesResult = runCatching { loadCommercialCloudSales(context) }
             val categoriesResult = runCatching { loadCommercialMasterData(context, "commercial_product_categories") }
+            val unitsResult = runCatching { loadCommercialUnitsOfMeasure(context) }
             storeCloudMain.post {
                 cloudInventoryBusy = false
                 cloudInventoryLoaded = true
@@ -257,6 +259,8 @@ private fun StoreApp(context: Context) {
                 }
                 categoriesResult.onSuccess { cloudCategories = it }
                     .onFailure { cloudNotice = "تعذر تحميل تصنيفات الأصناف: " + (it.message ?: "خطأ غير معروف") }
+                unitsResult.onSuccess { cloudUnits = it }
+                    .onFailure { cloudNotice = "تعذر تحميل دليل وحدات القياس: " + (it.message ?: "خطأ غير معروف") }
                 salesResult.onSuccess { serverSales ->
                     sales.clear()
                     sales.addAll(serverSales)
@@ -309,9 +313,12 @@ private fun StoreApp(context: Context) {
                     addProduct = true
                     if (cloudMode) storeCloudIo.execute {
                         val categoriesResult = runCatching { loadCommercialMasterData(context, "commercial_product_categories") }
+                        val unitsResult = runCatching { loadCommercialUnitsOfMeasure(context) }
                         storeCloudMain.post {
                             categoriesResult.onSuccess { cloudCategories = it }
                                 .onFailure { cloudInventoryError = it.message ?: "تعذر تحديث تصنيفات الأصناف." }
+                            unitsResult.onSuccess { cloudUnits = it }
+                                .onFailure { cloudInventoryError = it.message ?: "تعذر تحديث دليل وحدات القياس." }
                         }
                     }
                 }, { index ->
@@ -366,14 +373,15 @@ private fun StoreApp(context: Context) {
     if (addProduct) AddProductDialog(
         cloudMode = cloudMode,
         cloudCategories = cloudCategories,
+        cloudUnits = cloudUnits,
         onDismiss = { addProduct = false },
-        onSave = { name, category, unitName, stock, price, costPrice, reorderPoint, categoryId ->
+        onSave = { name, category, unitName, stock, price, costPrice, reorderPoint, categoryId, unitCode ->
             if (cloudMode) {
                 cloudInventoryBusy = true
                 cloudNotice = "جارٍ حفظ الصنف في قاعدة البيانات..."
                 storeCloudIo.execute {
                     val result = runCatching {
-                        createCommercialCloudInventoryItem(context, name, unitName, price.toLong(), stock, reorderPoint.toDouble(), categoryId)
+                        createCommercialCloudInventoryItem(context, name, unitName, price.toLong(), stock, reorderPoint.toDouble(), categoryId, unitCode)
                         loadCommercialCloudInventory(context)
                     }
                     storeCloudMain.post {
@@ -882,13 +890,16 @@ private fun EditProductDialog(
 private fun AddProductDialog(
     cloudMode: Boolean = false,
     cloudCategories: List<CommercialMasterDataRow> = emptyList(),
+    cloudUnits: List<CommercialUnitOption> = emptyList(),
     onDismiss: () -> Unit,
-    onSave: (String, String, String, Int, Int, Int, Int, String) -> Unit
+    onSave: (String, String, String, Int, Int, Int, Int, String, String) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
     var category by remember { mutableStateOf("") }
     var categoryId by remember { mutableStateOf("") }
     var categoryMenuExpanded by remember { mutableStateOf(false) }
+    var unitCode by remember(cloudUnits) { mutableStateOf(cloudUnits.firstOrNull { it.code == "each" }?.code ?: cloudUnits.firstOrNull()?.code.orEmpty()) }
+    var unitMenuExpanded by remember { mutableStateOf(false) }
     var unitName by remember { mutableStateOf("قطعة") }
     var reorderPointText by remember { mutableStateOf("0") }
     var stockText by remember { mutableStateOf("0") }
@@ -916,12 +927,28 @@ private fun AddProductDialog(
                     }
                     if (cloudCategories.none { it.kind == "active" }) Text("لا توجد تصنيفات نشطة. أضف تصنيفًا من دليل المستودعات والمجموعات أولًا.", color = Muted, fontSize = 11.sp)
                 }
-                OutlinedTextField(unitName, { unitName = it; error = null }, label = { Text(if (cloudMode) "اسم الوحدة الأساسية" else "الوحدة") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                if (cloudMode) {
+                    val selectedUnit = cloudUnits.firstOrNull { it.code == unitCode }
+                    Box(Modifier.fillMaxWidth()) {
+                        OutlinedButton(onClick = { unitMenuExpanded = true }, modifier = Modifier.fillMaxWidth()) {
+                            Text("وحدة الأساس: ${selectedUnit?.label ?: "اختر وحدة قياس"}")
+                        }
+                        DropdownMenu(expanded = unitMenuExpanded, onDismissRequest = { unitMenuExpanded = false }) {
+                            cloudUnits.forEach { unit ->
+                                DropdownMenuItem(
+                                    text = { Text("${unit.label} · ${unit.dimension} (${unit.code})") },
+                                    onClick = { unitCode = unit.code; unitName = unit.label; unitMenuExpanded = false; error = null }
+                                )
+                            }
+                        }
+                    }
+                    if (cloudUnits.isEmpty()) Text("تعذر تحميل وحدات القياس النشطة. أعد المحاولة بعد التحقق من الاتصال.", color = Muted, fontSize = 11.sp)
+                } else OutlinedTextField(unitName, { unitName = it; error = null }, label = { Text("الوحدة") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 if (cloudMode) OutlinedTextField(reorderPointText, { reorderPointText = it.filter(Char::isDigit).take(7); error = null }, label = { Text("حد التنبيه للمخزون المنخفض") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(stockText, { stockText = it.filter(Char::isDigit).take(7); error = null }, label = { Text(if (cloudMode) "الكمية الافتتاحية (بوحدة الأساس)" else "الكمية الافتتاحية") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(priceText, { priceText = it.filter(Char::isDigit).take(7); error = null }, label = { Text("سعر البيع للوحدة (ر.ي)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 if (!cloudMode) OutlinedTextField(costText, { costText = it.filter(Char::isDigit).take(7); error = null }, label = { Text("تكلفة شراء الوحدة (ر.ي)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                if (cloudMode) Text("سيُحفظ الاسم والوحدة والسعر والكمية الافتتاحية وحد التنبيه والتصنيف المختار ضمن عملية ذرية واحدة في قاعدة البيانات.", color = Muted, fontSize = 11.sp)
+                if (cloudMode) Text("سيُحفظ الصنف ووحدة القياس المرتبطة ورمزها والتصنيف المختار والكمية الافتتاحية ضمن عملية ذرية واحدة.", color = Muted, fontSize = 11.sp)
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
             }
         },
@@ -939,8 +966,9 @@ private fun AddProductDialog(
                     price == null || price <= 0 -> error = "أدخل سعر بيع أكبر من صفر."
                     !cloudMode && (cost == null || cost < 0) -> error = "أدخل تكلفة شراء صحيحة (يمكن أن تكون صفرًا)."
                     cloudMode && (reorderPoint == null || reorderPoint < 0) -> error = "أدخل حد تنبيه صحيحًا."
+                    cloudMode && cloudUnits.none { it.code == unitCode && unitCode.isNotBlank() } -> error = "اختر وحدة قياس نشطة."
                     cloudMode && categoryId.isNotBlank() && cloudCategories.none { it.id == categoryId && it.kind == "active" } -> error = "اختر تصنيفًا نشطًا من القائمة."
-                    else -> onSave(name.trim(), category.trim(), unitName.trim(), stock, price, cost ?: 0, reorderPoint ?: 0, if (cloudMode) categoryId else "")
+                    else -> onSave(name.trim(), category.trim(), if (cloudMode) cloudUnits.firstOrNull { it.code == unitCode }?.label.orEmpty() else unitName.trim(), stock, price, cost ?: 0, reorderPoint ?: 0, if (cloudMode) categoryId else "", if (cloudMode) unitCode else "")
                 }
             }) { Text("حفظ المنتج") }
         },
