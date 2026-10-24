@@ -95,5 +95,12 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
     def test_sales_tab_links_to_cloud_invoice_details(self):
         self.assertIn("onCloudInvoices = { cloudSalesPage = true }", self.main)
         self.assertIn("عرض تفاصيل الفواتير السحابية", self.main)
+    def test_invoice_payment_state_requires_confirmed_payment_records(self):
+        self.assertIn("successfulPaymentMinor = payments", self.repository)
+        self.assertIn('it.status.equals("succeeded", ignoreCase = true)', self.repository)
+        self.assertIn('successfulPaymentMinor >= totalMinor -> "paid"', self.repository)
+        self.assertIn('successfulPaymentMinor > 0L -> "partially_paid"', self.repository)
+        self.assertIn('else -> "pending"', self.repository)
+
 if __name__ == "__main__":
     unittest.main()
