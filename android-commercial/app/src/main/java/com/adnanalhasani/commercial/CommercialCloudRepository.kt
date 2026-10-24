@@ -255,7 +255,7 @@ internal fun loadCommercialCloudSales(context: Context): List<SaleRecord> {
             add(SaleRecord(
                 number = row.optLong("receipt_number", 0L).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt(),
                 product = firstItem?.optString("product_name_snapshot")?.ifBlank { "فاتورة بيع" } ?: "فاتورة بيع",
-                quantity = firstItem?.optDouble("quantity", 1.0)?.toInt()?.coerceAtLeast(1) ?: 1,
+                quantity = items?.let { itemRows -> (0 until itemRows.length()).sumOf { itemRows.optJSONObject(it)?.optInt("quantity", 0) ?: 0 }.coerceAtLeast(1) } ?: 1,
                 total = total,
                 credit = isCredit,
                 customer = customerObject?.optString("display_name").orEmpty(),
