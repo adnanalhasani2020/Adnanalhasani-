@@ -638,7 +638,7 @@ internal fun loadCommercialCloudSales(context: Context): List<SaleRecord> {
     sessionPrefs.edit().putString("refresh_token", session.optString("refresh_token").ifBlank { savedRefresh }).apply()
 
     val path = "/rest/v1/commercial_sales" +
-        "?select=id,receipt_number,total_minor,payment_status,created_at,customer:commercial_customers(display_name),items:commercial_sale_items(product_name_snapshot,quantity,line_total_minor,unit_price_minor)" +
+        "?select=id,receipt_number,total_minor,payment_status,status,created_at,currency_code,customer:commercial_customers(display_name),items:commercial_sale_items(product_name_snapshot,quantity,line_total_minor,unit_price_minor),payments:commercial_payments(amount_minor,status)" +
         "&organization_id=eq.$orgId&activity_id=eq.$activityId&order=created_at.desc,id.asc"
     val rows = commercialCloudPagedGet(path, access)
     return buildList {
@@ -648,7 +648,17 @@ internal fun loadCommercialCloudSales(context: Context): List<SaleRecord> {
             val firstItem = items?.optJSONObject(0)
             val total = row.optLong("total_minor", 0L).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
             val paymentStatus = row.optString("payment_status").lowercase(Locale.ROOT)
-            val isCredit = paymentStatus in setOf("unpaid", "partially_paid", "partial", "pending", "due", "credit", "failed")
+            val saleStatus = row.optString("status").lowercase(Locale.ROOT)
+            val paymentRows = row.optJSONArray("payments")
+            val paidMinor = (0 until (paymentRows?.length() ?: 0))
+                .mapNotNull { paymentRows?.optJSONObject(it) }
+                .filter { it.optString("status").equals("succeeded", ignoreCase = true) }
+                .sumOf { it.optLong("amount_minor", 0L).coerceAtLeast(0L) }
+                .coerceAtMost(Int.MAX_VALUE.toLong())
+                .toInt()
+            val isCredit = saleStatus == "completed" &&
+                paymentStatus !in setOf("paid", "refunded", "cancelled", "canceled") &&
+                total > paidMinor
             val customerObject = row.optJSONObject("customer")
             val createdAt = runCatching {
                 java.time.Instant.parse(row.optString("created_at")).toEpochMilli()
@@ -660,7 +670,7 @@ internal fun loadCommercialCloudSales(context: Context): List<SaleRecord> {
                 total = total,
                 credit = isCredit,
                 customer = customerObject?.optString("display_name").orEmpty(),
-                paid = if (paymentStatus == "paid") total else 0,
+                paid = paidMinor.coerceAtMost(total),
                 createdAt = createdAt,
                 unitCode = "قطعة"
             ))
