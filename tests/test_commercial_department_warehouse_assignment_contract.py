@@ -39,6 +39,8 @@ class DepartmentWarehouseAssignmentContractTests(unittest.TestCase):
         self.assertIn("assignCommercialDepartmentToWarehouse(context, departmentId, warehouseId)", self.screen)
         self.assertIn("chosenDepartment != null && chosenWarehouse != null", self.screen)
         self.assertIn("لا تتغير أرصدة المخزون", self.screen)
+        self.assertIn('loadCommercialMasterData(context, "commercial_departments").filter { it.state == "active" }', self.screen)
+        self.assertIn('loadCommercialMasterData(context, "commercial_warehouses").filter { it.state == "active" }', self.screen)
 
     def test_no_new_assignment_table_or_stock_mutation_is_introduced(self):
         self.assertNotIn("CREATE TABLE", self.repository)
