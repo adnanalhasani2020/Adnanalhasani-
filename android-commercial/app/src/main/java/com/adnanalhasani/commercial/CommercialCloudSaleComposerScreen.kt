@@ -168,7 +168,7 @@ internal fun CommercialCloudSaleComposerScreen(
                             OutlinedButton(onClick = { paymentMode = "credit" }, enabled = !submitting) { Text(if (paymentMode == "credit") "✓ آجل / دين" else "آجل / دين") }
                         }
                         if (paymentMode == "credit") {
-                            OutlinedTextField(value = initialPaymentText, onValueChange = { initialPaymentText = it.filter(Char::isDigit).take(15) }, modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("المبلغ المدفوع الآن (بالوحدة الصغرى للعملة)") })
+                            OutlinedTextField(value = initialPaymentText, onValueChange = { initialPaymentText = it.filter(Char::isDigit).take(15) }, modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("المبلغ المدفوع الآن ($currency)") })
                             Text("يجب اختيار عميل. يُسجل المتبقي كرصيد مستحق على الفاتورة، ويمكن تحصيله لاحقًا.", color = CloudComposerMuted, fontSize = 11.sp)
                         }
                     }
@@ -282,7 +282,7 @@ internal fun CommercialCloudSaleComposerScreen(
                                         val (outstanding, paymentStatus) = debt
                                         if (clearError == null) quantities = emptyMap()
                                         notice = if (clearError == null) {
-                                            "تم تأكيد الفاتورة رقم $receipt على الخادم. الحالة: $paymentStatus. ${if (paymentRecorded) "سُجلت الدفعة الأولى." else "لم يُسجل دفع بعد."} المتبقي على الفاتورة: $outstanding وحدة صغرى من العملة."
+                                            "تم تأكيد الفاتورة رقم $receipt على الخادم. الحالة: $paymentStatus. ${if (paymentRecorded) "سُجلت الدفعة الأولى." else "لم يُسجل دفع بعد."} المتبقي على الفاتورة: $outstanding $currency."
                                         } else {
                                             "تم تأكيد الفاتورة رقم $receipt على الخادم، لكن تعذر تنظيف مفتاح المحاولة. لا تنشئ فاتورة جديدة؛ أعد المحاولة بنفس الطلب."
                                         }
