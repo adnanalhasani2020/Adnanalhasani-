@@ -40,7 +40,7 @@ class CommercialSaleIntegrityContractTests(unittest.TestCase):
         self.assertIn('put("sale_item_id", saleItemId)', self.repository)
         self.assertIn("commercial_cloud_pending_return_v1", self.repository)
         self.assertIn("request_fingerprint", self.repository)
-        self.assertIn("return_quantity_exceeds_sold_quantity", COLLECTION_MIGRATION.read_text(encoding="utf-8") if False else self.repository)
+        self.assertIn("commercial_request_sale_return", self.repository)
 
     def test_cloud_debt_screen_uses_server_collection_rpc_and_partial_balances(self):
         self.assertIn("loadCommercialCloudReceivables(context)", self.debt_screen)
