@@ -9,6 +9,7 @@ PURCHASES = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/comme
 MAIN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt"
 CASH_PAYMENT_MIGRATION = ROOT / "supabase/migrations/20261024193000_commercial_checkout_cash_payment_atomic.sql"
 MULTILINE_CHECKOUT_MIGRATION = ROOT / "supabase/migrations/20261024200000_commercial_multiline_cash_checkout.sql"
+COMPOSER = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudSaleComposerScreen.kt"
 
 
 class CommercialCloudSalesScreenContractTests(unittest.TestCase):
@@ -20,6 +21,7 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         cls.main = MAIN.read_text(encoding="utf-8")
         cls.cash_payment_migration = CASH_PAYMENT_MIGRATION.read_text(encoding="utf-8")
         cls.multiline_checkout_migration = MULTILINE_CHECKOUT_MIGRATION.read_text(encoding="utf-8")
+        cls.composer = COMPOSER.read_text(encoding="utf-8")
 
     def test_invoice_projection_uses_existing_tables_and_columns(self):
         self.assertIn("internal fun loadCommercialCloudSaleDocuments", self.repository)
@@ -140,6 +142,18 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         self.assertIn("mixed_currency_invoice_not_supported", sql)
         self.assertIn("insufficient_available_stock", sql)
         self.assertIn("duplicate_offering_lines_not_allowed", sql)
+
+
+    def test_multiline_invoice_composer_uses_cloud_rpc_and_retry_key(self):
+        self.assertIn("CommercialCloudSaleComposerScreen(", self.main)
+        self.assertIn("checkoutCommercialCloudSaleMulti(context, requestLines, key)", self.composer)
+        self.assertIn("getOrCreateCommercialCloudMultiSaleKey(context, requestLines)", self.composer)
+        self.assertIn("clearCommercialCloudMultiSaleKey(context, key)", self.composer)
+        self.assertIn("onCompleted()", self.composer)
+        self.assertIn("cloudPriceMinor", self.composer)
+        self.assertIn("السعر والمخزون يُتحقق منهما مجددًا على الخادم", self.composer)
+        self.assertIn("val payload = JSONArray()", self.repository)
+        self.assertIn("/rest/v1/rpc/commercial_checkout_sale_multi", self.repository)
 
 if __name__ == "__main__":
     unittest.main()
