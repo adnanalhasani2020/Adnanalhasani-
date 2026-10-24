@@ -462,55 +462,63 @@ private fun StoreApp(context: Context) {
         onSave = { productIndex, product, quantity, credit, unitPrice, customer, baseQuantity, unitCode ->
             val currentProduct = inventory[productIndex]
             if (cloudMode) {
-                if (credit) {
-                    cloudNotice = "البيع الآجل غير مفعّل على الخادم بعد؛ لم تُسجّل أي فاتورة."
-                    newSale = false
-                } else if (currentProduct.cloudOfferingId.isBlank()) {
+                if (currentProduct.cloudOfferingId.isBlank()) {
                     cloudNotice = "هذا الصنف غير مرتبط بمعرّف عرض في قاعدة البيانات؛ لم تُسجّل أي فاتورة."
+                    newSale = false
+                } else if (credit && cloudCustomers.none { it.id == customer }) {
+                    cloudNotice = "اختر عميلًا نشطًا من دليل المؤسسة للبيع الآجل."
                     newSale = false
                 } else {
                     cloudInventoryBusy = true
-                    cloudNotice = "جارٍ تسجيل البيع وتحديث المخزون في قاعدة البيانات..."
+                    cloudNotice = "جارٍ التحقق من الكمية وتسجيل الفاتورة في قاعدة البيانات..."
                     storeCloudIo.execute {
                         val result = runCatching {
-                            val idempotencyKey = getOrCreateCommercialCloudSaleKey(context, currentProduct.cloudOfferingId, baseQuantity)
-                            val sale = checkoutCommercialCloudSale(context, currentProduct.cloudOfferingId, baseQuantity, idempotencyKey)
-                            clearCommercialCloudSaleKey(context, idempotencyKey)
+                            val requested = aggregateSaleQuantities(listOf(currentProduct.cloudOfferingId to baseQuantity))
+                            validateAvailableStock(requested, inventory.associate { it.cloudOfferingId to it.stock }.filterKeys { it.isNotBlank() })
+                            val key = if (credit) {
+                                getOrCreateCommercialCloudCreditSaleKey(context, currentProduct.cloudOfferingId, baseQuantity, customer)
+                            } else {
+                                getOrCreateCommercialCloudSaleKey(context, currentProduct.cloudOfferingId, baseQuantity)
+                            }
+                            val sale = if (credit) {
+                                checkoutCommercialCloudSaleOnAccount(context, currentProduct.cloudOfferingId, baseQuantity, customer, key)
+                            } else {
+                                checkoutCommercialCloudSale(context, currentProduct.cloudOfferingId, baseQuantity, key)
+                            }
+                            if (credit) clearCommercialCloudCreditSaleKey(context, key) else clearCommercialCloudSaleKey(context, key)
                             val snapshot = runCatching { loadCommercialCloudInventory(context) }.getOrNull()
                             val history = runCatching { loadCommercialCloudSales(context) }.getOrNull()
                             Triple(sale, snapshot, history)
                         }
                         storeCloudMain.post {
                             cloudInventoryBusy = false
-                            result.onSuccess { pair ->
-                                val sale = pair.first
-                                pair.second?.let { snapshot ->
+                            result.onSuccess { outcome ->
+                                val sale = outcome.first
+                                outcome.second?.let { snapshot ->
                                     inventory.clear()
                                     inventory.addAll(snapshot.products)
                                 }
                                 val receipt = sale.optLong("receipt_number", nextInvoice.toLong()).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
-                                val total = sale.optLong("total_minor", (quantity * unitPrice).toLong()).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
-                                val serverSales = pair.third
+                                val serverSales = outcome.third
                                 if (serverSales != null) {
                                     sales.clear()
                                     sales.addAll(serverSales)
+                                    cloudNotice = if (credit) "تم تسجيل الفاتورة الآجلة رقم $receipt وربطها بالعميل وتحديث السجل من قاعدة البيانات."
+                                        else "تم تسجيل الفاتورة رقم $receipt وتحديث السجل من قاعدة البيانات."
+                                } else {
+                                    cloudNotice = "أكد الخادم الفاتورة رقم $receipt، لكن تعذر تحديث سجل المبيعات. أعد تحميل السجل قبل متابعة أي تحصيل."
                                 }
                                 nextInvoice = maxOf(nextInvoice + 1, receipt + 1)
                                 cloudInventoryError = ""
-                                cloudNotice = if (serverSales != null) {
-                                    "تم تسجيل الفاتورة رقم $receipt وتحديث السجل من قاعدة البيانات."
-                                } else {
-                                    "تم تأكيد الفاتورة رقم $receipt على الخادم، لكن تعذر تحديث قائمة المبيعات. افتح «فواتير المبيعات السحابية» أو أعد المحاولة؛ لم يتم إنشاء سجل محلي بديل."
-                                }
                             }.onFailure {
-                                cloudInventoryError = it.message ?: "فشل تسجيل البيع على الخادم."
+                                cloudInventoryError = it.message ?: "تعذر تسجيل البيع على الخادم."
                                 cloudNotice = cloudInventoryError
                             }
                         }
                     }
                     newSale = false
                 }
-            } else {
+            }            } else {
                 inventory[productIndex] = currentProduct.copy(stock = currentProduct.stock - baseQuantity)
                 saveProducts(context, inventory)
                 val soldUnitCost = if (quantity > 0) kotlin.math.round(currentProduct.costPrice.toDouble() * baseQuantity / quantity).toInt() else currentProduct.costPrice
