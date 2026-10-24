@@ -612,7 +612,12 @@ private fun Heading(title: String, subtitle: String) {
 }
 
 @Composable
-private fun SalesScreen(sales: List<SaleRecord>, onNewSale: () -> Unit) {
+private fun SalesScreen(
+    sales: List<SaleRecord>,
+    cloudMode: Boolean,
+    onNewSale: () -> Unit,
+    onCloudInvoices: () -> Unit
+) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item { Heading("المبيعات والفواتير", "تابع عمليات البيع والتحصيل") }
         item {
@@ -622,7 +627,16 @@ private fun SalesScreen(sales: List<SaleRecord>, onNewSale: () -> Unit) {
             }
         }
         item { Button(onClick = onNewSale, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(8.dp)); Text("فاتورة بيع جديدة") } }
-        item { Heading("أحدث الفواتير", "الفواتير المحفوظة على هذا الجهاز") }
+        if (cloudMode) {
+            item {
+                OutlinedButton(onClick = onCloudInvoices, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Default.ReceiptLong, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("عرض تفاصيل الفواتير السحابية")
+                }
+            }
+        }
+        item { Heading("أحدث الفواتير", if (cloudMode) "ملخص الفواتير المحمّلة من قاعدة البيانات" else "الفواتير المحفوظة على هذا الجهاز") }
         items(sales) { sale -> SaleRow("فاتورة #${sale.number}", "${sale.product} · ${sale.quantity} ${sale.unitCode}", money(sale.total), sale.credit) }
         
     }
