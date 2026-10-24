@@ -96,8 +96,8 @@ internal fun loadCommercialCloudInventory(context: Context): CommercialCloudInve
     sessionPrefs.edit().putString("refresh_token", rotatedRefresh).apply()
 
     val query = "/rest/v1/commercial_inventory_balances" +
-        "?select=offering_id,quantity_on_hand,quantity_reserved,reorder_point,offering:commercial_offerings!inner(id,price_minor,currency_code,activity_id,product:commercial_products!inner(name,description,unit_name,state))" +
-        "&organization_id=eq.$orgId&location_id=eq.$locationId&order=updated_at.desc"
+        "?select=offering_id,quantity_on_hand,quantity_reserved,reorder_point,offering:commercial_offerings!inner(id,price_minor,currency_code,activity_id,product:commercial_products!inner(name,description,unit_name,state),categories:commercial_offering_categories(category:commercial_product_categories(name_ar,name_en)))" +
+        "&organization_id=eq.$orgId&location_id=eq.$locationId&offering.activity_id=eq.$activityId&order=updated_at.desc"
     val rows = JSONArray(commercialCloudRequest(query, "GET", token = access))
     val products = buildList {
         for (index in 0 until rows.length()) {
@@ -105,11 +105,18 @@ internal fun loadCommercialCloudInventory(context: Context): CommercialCloudInve
             val offering = row.optJSONObject("offering") ?: continue
             val product = offering.optJSONObject("product") ?: continue
             if (product.optString("state") != "active") continue
+            val categoryRows = offering.optJSONArray("categories")
+            val categoryName = (0 until (categoryRows?.length() ?: 0))
+                .asSequence()
+                .mapNotNull { categoryRows?.optJSONObject(it)?.optJSONObject("category") }
+                .map { it.optString("name_ar").ifBlank { it.optString("name_en") } }
+                .firstOrNull { it.isNotBlank() && it != "null" }
+                ?: "غير مصنف"
             val quantity = (row.optDouble("quantity_on_hand", 0.0) - row.optDouble("quantity_reserved", 0.0)).coerceAtLeast(0.0).toInt()
             val price = offering.optLong("price_minor", 0L).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
             add(Product(
                 name = product.optString("name"),
-                category = "غير مصنف",
+                category = categoryName,
                 description = product.optString("description"),
                 stock = quantity,
                 price = String.format(Locale.US, "%,d ر.ي", price),
