@@ -1,7 +1,7 @@
 -- Run with Supabase CLI / pgTAP in a disposable local or staging database.
 -- These are schema regression tests; they do not replace authenticated-session integration tests.
 BEGIN;
-SELECT plan(21);
+SELECT plan(24);
 
 SELECT has_table('public', 'commercial_audit_events',
   'append-only audit event table exists');
@@ -143,6 +143,33 @@ SELECT ok(
      AND pg_get_function_identity_arguments(p.oid) =
        'p_name text, p_slug text, p_organization_type text, p_currency_code text, p_timezone text, p_locale text, p_country_code text, p_module_keys text[]'),
   'organization onboarding RPC is hardened and restricted to authenticated users');
+
+SELECT ok(
+  position('commercial_organization_members' in pg_get_expr(
+    (SELECT polqual FROM pg_policy
+     WHERE polrelid = 'public.commercial_sales'::regclass
+       AND polname = 'users read own or organization sales'),
+    'public.commercial_sales'::regclass
+  )) > 0,
+  'active organization members can read organization sales');
+
+SELECT ok(
+  position('commercial_organization_members' in pg_get_expr(
+    (SELECT polqual FROM pg_policy
+     WHERE polrelid = 'public.commercial_sale_items'::regclass
+       AND polname = 'users read own or organization sale items'),
+    'public.commercial_sale_items'::regclass
+  )) > 0,
+  'active organization members can read organization sale lines');
+
+SELECT ok(
+  position('commercial_organization_members' in pg_get_expr(
+    (SELECT polqual FROM pg_policy
+     WHERE polrelid = 'public.commercial_stock_movements'::regclass
+       AND polname = 'users read own or organization stock movements'),
+    'public.commercial_stock_movements'::regclass
+  )) > 0,
+  'active organization members can read sale-linked stock movements');
 
 SELECT * FROM finish();
 ROLLBACK;
