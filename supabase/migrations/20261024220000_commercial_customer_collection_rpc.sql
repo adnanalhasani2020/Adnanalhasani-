@@ -15,7 +15,6 @@ DECLARE
   v_uid uuid := auth.uid();
   v_sale public.commercial_sales%ROWTYPE;
   v_payment public.commercial_payments%ROWTYPE;
-  v_fingerprint text;
   v_existing public.commercial_payments%ROWTYPE;
   v_posting jsonb;
 BEGIN
@@ -52,13 +51,9 @@ BEGIN
     ) THEN
       RAISE EXCEPTION 'accounting_permission_required' USING ERRCODE = '42501';
     END IF;
-    v_fingerprint := md5(concat_ws('|', v_existing.sale_id::text,
-      v_existing.amount_minor::text, v_existing.currency_code,
-      v_existing.payment_method_type));
     IF v_existing.sale_id IS DISTINCT FROM p_sale_id
        OR v_existing.amount_minor IS DISTINCT FROM p_amount_minor
-       OR v_existing.payment_method_type IS DISTINCT FROM p_payment_method_type
-       OR v_existing.provider_payment_id IS DISTINCT FROM v_fingerprint THEN
+       OR v_existing.payment_method_type IS DISTINCT FROM p_payment_method_type THEN
       RAISE EXCEPTION 'idempotency_key_reused_with_different_request' USING ERRCODE = '23505';
     END IF;
     IF v_existing.status <> 'succeeded' THEN
@@ -89,14 +84,11 @@ BEGIN
     RAISE EXCEPTION 'accounting_permission_required' USING ERRCODE = '42501';
   END IF;
 
-  v_fingerprint := md5(concat_ws('|', p_sale_id::text, p_amount_minor::text,
-    v_sale.currency_code, p_payment_method_type));
-
   INSERT INTO public.commercial_payments(
     organization_id, sale_id, provider, provider_payment_id, idempotency_key,
     amount_minor, currency_code, status, payment_method_type
   ) VALUES (
-    v_sale.organization_id, v_sale.id, 'manual', v_fingerprint, p_idempotency_key,
+    v_sale.organization_id, v_sale.id, 'manual', 'manual:' || p_idempotency_key, p_idempotency_key,
     p_amount_minor, v_sale.currency_code, 'succeeded', p_payment_method_type
   )
   RETURNING * INTO v_payment;
