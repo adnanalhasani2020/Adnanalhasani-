@@ -92,13 +92,16 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
             doc.receiptNumber.contains(search, true) ||
             doc.customerName.contains(search, true) ||
             doc.paymentStatus.contains(search, true) ||
+            doc.saleStatus.contains(search, true) ||
             doc.lines.any { it.productName.contains(search, true) }
-        val status = doc.paymentStatus.lowercase()
+        val paymentStatus = doc.paymentStatus.lowercase(Locale.ROOT)
+        val saleStatus = doc.saleStatus.lowercase(Locale.ROOT)
         val matchesStatus = when (selectedStatus) {
-            "paid" -> status in setOf("paid", "completed", "succeeded")
-            "partial" -> status in setOf("partially_paid", "partial")
-            "due" -> status in setOf("unpaid", "due", "pending", "credit")
-            "cancelled" -> status in setOf("failed", "cancelled", "canceled")
+            "paid" -> paymentStatus in setOf("paid", "completed", "succeeded")
+            "partial" -> paymentStatus in setOf("partially_paid", "partial")
+            "due" -> paymentStatus in setOf("unpaid", "due", "pending", "credit")
+            "refunded" -> paymentStatus in setOf("refunded", "partially_refunded")
+            "cancelled" -> saleStatus in setOf("cancelled", "canceled") || paymentStatus in setOf("failed", "cancelled", "canceled")
             else -> true
         }
         matchesSearch && matchesStatus
@@ -148,7 +151,8 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
                         "paid" to "مدفوعة",
                         "partial" to "مدفوعة جزئيًا",
                         "due" to "مستحقة",
-                        "cancelled" to "فشل / ملغاة"
+                        "refunded" to "مستردة",
+                        "cancelled" to "ملغاة / فاشلة"
                     ).forEach { (key, label) ->
                         FilterChip(
                             selected = selectedStatus == key,
@@ -215,8 +219,9 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
                                 Text("فاتورة #${document.receiptNumber}", color = CloudSalesInk, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                                 Text(document.customerName, color = CloudSalesMuted, fontSize = 12.sp)
                             }
-                            Surface(color = statusColor(document.paymentStatus).copy(alpha = 0.12f), shape = RoundedCornerShape(10.dp)) {
-                                Text(statusLabel(document.paymentStatus), color = statusColor(document.paymentStatus), fontSize = 11.sp, modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp))
+                            val displayStatus = if (document.saleStatus.lowercase(Locale.ROOT) in setOf("cancelled", "canceled")) "cancelled" else document.paymentStatus
+                            Surface(color = statusColor(displayStatus).copy(alpha = 0.12f), shape = RoundedCornerShape(10.dp)) {
+                                Text(statusLabel(displayStatus), color = statusColor(displayStatus), fontSize = 11.sp, modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp))
                             }
                         }
                         Text(
@@ -270,7 +275,9 @@ private fun statusLabel(value: String): String = when (value.lowercase()) {
     "paid", "completed", "succeeded" -> "مدفوعة"
     "partially_paid", "partial" -> "مدفوعة جزئيًا"
     "unpaid", "due", "pending", "credit" -> "مستحقة"
-    "failed", "cancelled", "canceled" -> "فشل / ملغاة"
+    "refunded" -> "مستردة"
+    "partially_refunded" -> "مستردة جزئيًا"
+    "failed", "cancelled", "canceled" -> "ملغاة / فاشلة"
     else -> value.ifBlank { "غير محدد" }
 }
 
@@ -278,6 +285,7 @@ private fun statusColor(value: String): Color = when (value.lowercase()) {
     "paid", "completed", "succeeded" -> Color(0xFF167D63)
     "partially_paid", "partial" -> Color(0xFFB36B00)
     "unpaid", "due", "pending", "credit" -> Color(0xFFB36B00)
+    "refunded", "partially_refunded" -> Color(0xFF5B5BC7)
     "failed", "cancelled", "canceled" -> Color(0xFFB3261E)
     else -> CloudSalesMuted
 }

@@ -42,6 +42,11 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         self.assertIn("cloudSalesPage -> CommercialCloudSalesScreen", self.main)
         self.assertIn('onCloudSales = { cloudSalesPage = true }', self.main)
 
+    def test_sales_tab_links_to_detailed_cloud_invoice_history(self):
+        self.assertIn("onCloudInvoices = { cloudSalesPage = true }", self.main)
+        self.assertIn("عرض تفاصيل الفواتير السحابية", self.main)
+        self.assertIn('if (cloudMode) "ملخص الفواتير المحمّلة من قاعدة البيانات"', self.main)
+
     def test_purchase_order_projection_uses_existing_org_scoped_tables(self):
         self.assertIn("loadCommercialCloudPurchaseDocuments", self.repository)
         for field in ("commercial_purchase_order_items(", "commercial_suppliers(display_name)", "quantity_ordered", "quantity_received", "unit_cost_minor", "organization_id=eq.$orgId"):
@@ -70,6 +75,13 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         self.assertIn("بوحدة الصرف الصغرى", self.screen)
         self.assertIn("إعادة المحاولة", self.screen)
         self.assertIn("بنود الفاتورة", self.screen)
+
+    def test_invoice_status_uses_sales_status_and_payment_status_separately(self):
+        self.assertIn("payment_status,status,created_at", self.repository)
+        self.assertIn('saleStatus = row.optString("status")', self.repository)
+        self.assertIn('saleStatus in setOf("cancelled", "canceled")', self.screen)
+        self.assertIn('"refunded" to "مستردة"', self.screen)
+        self.assertIn('"refunded", "partially_refunded"', self.screen)
 
 
 if __name__ == "__main__":

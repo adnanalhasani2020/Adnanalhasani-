@@ -269,6 +269,7 @@ internal data class CommercialCloudSaleDocument(
     val customerName: String,
     val totalMinor: Long,
     val paymentStatus: String,
+    val saleStatus: String,
     val createdAt: String,
     val currencyCode: String,
     val lines: List<CommercialCloudSaleLine>
@@ -281,7 +282,7 @@ internal fun loadCommercialCloudSaleDocuments(context: Context): List<Commercial
     require(activityId.isNotBlank()) { "ملف النشاط غير محفوظ." }
     val (orgId, access) = commercialMasterDataAccess(context)
     val path = "/rest/v1/commercial_sales" +
-        "?select=id,receipt_number,total_minor,payment_status,created_at,currency_code,customer:commercial_customers(display_name),items:commercial_sale_items(product_name_snapshot,quantity,line_total_minor,unit_price_minor)" +
+        "?select=id,receipt_number,total_minor,payment_status,status,created_at,currency_code,customer:commercial_customers(display_name),items:commercial_sale_items(product_name_snapshot,quantity,line_total_minor,unit_price_minor)" +
         "&organization_id=eq.$orgId&activity_id=eq.$activityId&order=created_at.desc,id.asc"
     val rows = commercialCloudPagedGet(path, access)
     return buildList {
@@ -306,6 +307,7 @@ internal fun loadCommercialCloudSaleDocuments(context: Context): List<Commercial
                 customerName = customer?.optString("display_name").orEmpty().takeUnless { it == "null" }.orEmpty().ifBlank { "عميل نقدي / غير محدد" },
                 totalMinor = row.optLong("total_minor", 0L),
                 paymentStatus = row.optString("payment_status").ifBlank { "غير محدد" },
+                saleStatus = row.optString("status").ifBlank { "غير محدد" },
                 createdAt = row.optString("created_at").takeUnless { it == "null" }.orEmpty(),
                 currencyCode = row.optString("currency_code").takeUnless { it == "null" }.orEmpty(),
                 lines = lines
