@@ -429,7 +429,8 @@ internal data class CommercialMasterDataRow(
     val label: String,
     val kind: String,
     val parentId: String = "",
-    val warehouseId: String = ""
+    val warehouseId: String = "",
+    val state: String = ""
 )
 
 internal data class CommercialUnitOption(
@@ -496,7 +497,8 @@ internal fun loadCommercialMasterData(context: Context, table: String): List<Com
                 label = row.optString("name").ifBlank { row.optString("name_ar") },
                 kind = row.optString(when (table) { "commercial_storage_locations" -> "location_type"; "commercial_warehouses" -> "warehouse_type"; else -> "state" }).ifBlank { table.removePrefix("commercial_") },
                 parentId = row.optString(if (table == "commercial_storage_locations") "parent_location_id" else "parent_id").takeUnless { it == "null" }.orEmpty(),
-                warehouseId = row.optString("warehouse_id").takeUnless { it == "null" }.orEmpty()
+                warehouseId = row.optString("warehouse_id").takeUnless { it == "null" }.orEmpty(),
+                state = row.optString("state").ifBlank { "active" }
             ))
         }
     }
