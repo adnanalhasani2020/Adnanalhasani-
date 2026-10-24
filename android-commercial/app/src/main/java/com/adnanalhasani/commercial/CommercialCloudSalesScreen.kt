@@ -322,7 +322,7 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
                                 Text("تسجيل تحصيل سحابي")
                             }
                         }
-                        Text("مرجع: ${document.id.take(8)} · تفاصيل من الخادم", color = CloudSalesMuted, fontSize = 10.sp)
+                        Text("مرجع: ${document.id.take(8)} · تفاصيل من الخادم، عرض فقط", color = CloudSalesMuted, fontSize = 10.sp)
                     }
                 }
             }
