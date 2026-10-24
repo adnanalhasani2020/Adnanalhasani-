@@ -31,10 +31,14 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
     val options = listOf(
         "المستودعات" to "commercial_warehouses",
         "مجموعات الأصناف" to "commercial_product_categories",
-        "الأقسام" to "commercial_departments"
+        "الأقسام" to "commercial_departments",
+        "مواقع التخزين" to "commercial_storage_locations"
     )
     var selected by remember { mutableStateOf(options.first()) }
     var rows by remember { mutableStateOf<List<CommercialMasterDataRow>>(emptyList()) }
+    var warehouseRows by remember { mutableStateOf<List<CommercialMasterDataRow>>(emptyList()) }
+    var warehouseId by remember { mutableStateOf("") }
+    var warehouseMenuExpanded by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
     var notice by remember { mutableStateOf("") }
@@ -50,10 +54,14 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
         loading = true
         error = ""
         masterIo.execute {
-            val result = runCatching { loadCommercialMasterData(context, selected.second) }
+            val result = runCatching {
+                val data = loadCommercialMasterData(context, selected.second)
+                val warehouses = if (selected.second == "commercial_storage_locations") loadCommercialMasterData(context, "commercial_warehouses") else emptyList()
+                data to warehouses
+            }
             masterMain.post {
                 loading = false
-                result.onSuccess { rows = it; error = "" }
+                result.onSuccess { rows = it.first; warehouseRows = it.second; if (warehouseId.isBlank() && it.second.isNotEmpty()) warehouseId = it.second.first().id; error = "" }
                     .onFailure { error = it.message ?: "تعذر تحميل البيانات." }
             }
         }
@@ -75,7 +83,7 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
         }
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
-            Text("بيانات محفوظة في المؤسسة السحابية، وليست بيانات محلية.", color = Color(0xFF71817B), fontSize = 12.sp)
+            Text(if (selected.second == "commercial_storage_locations") "مواقع تخزين مرتبطة بمستودع؛ لا تغيّر أرصدة المخزون من هذه الشاشة." else "بيانات محفوظة في المؤسسة السحابية، وليست بيانات محلية.", color = Color(0xFF71817B), fontSize = 12.sp)
             Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 options.forEach { option ->
@@ -136,13 +144,23 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedTextField(value = code, onValueChange = { code = it }, label = { Text("الرمز") }, singleLine = true)
                     OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("الاسم") }, singleLine = true)
-                    if (selected.second != "commercial_warehouses" && rows.isNotEmpty()) {
-                        val parentLabel = rows.firstOrNull { it.id == parentId }?.let { "${it.code} — ${it.label}" } ?: "جذر رئيسي (بلا أب)"
+                    if (selected.second == "commercial_storage_locations") {
+                        val warehouseLabel = warehouseRows.firstOrNull { it.id == warehouseId }?.let { "${it.code} — ${it.label}" } ?: "اختر المستودع"
+                        Box {
+                            OutlinedButton(onClick = { warehouseMenuExpanded = true }, modifier = Modifier.fillMaxWidth()) { Text("المستودع: $warehouseLabel") }
+                            DropdownMenu(expanded = warehouseMenuExpanded, onDismissRequest = { warehouseMenuExpanded = false }) {
+                                warehouseRows.forEach { warehouse -> DropdownMenuItem(text = { Text("${warehouse.code} — ${warehouse.label}") }, onClick = { warehouseId = warehouse.id; parentId = ""; warehouseMenuExpanded = false }) }
+                            }
+                        }
+                    }
+                    val parentRows = if (selected.second == "commercial_storage_locations") rows.filter { it.warehouseId == warehouseId } else rows
+                    if (selected.second != "commercial_warehouses" && parentRows.isNotEmpty()) {
+                        val parentLabel = parentRows.firstOrNull { it.id == parentId }?.let { "${it.code} — ${it.label}" } ?: "جذر رئيسي (بلا أب)"
                         Box {
                             OutlinedButton(onClick = { parentMenuExpanded = true }, modifier = Modifier.fillMaxWidth()) { Text("المستوى الأعلى: $parentLabel") }
                             DropdownMenu(expanded = parentMenuExpanded, onDismissRequest = { parentMenuExpanded = false }) {
                                 DropdownMenuItem(text = { Text("جذر رئيسي (بلا أب)") }, onClick = { parentId = ""; parentMenuExpanded = false })
-                                rows.forEach { parent -> DropdownMenuItem(text = { Text("${parent.code} — ${parent.label}") }, onClick = { parentId = parent.id; parentMenuExpanded = false }) }
+                                parentRows.forEach { parent -> DropdownMenuItem(text = { Text("${parent.code} — ${parent.label}") }, onClick = { parentId = parent.id; parentMenuExpanded = false }) }
                             }
                         }
                     }
@@ -167,7 +185,7 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
                     notice = ""
                     masterIo.execute {
                         val result = runCatching {
-                            createCommercialMasterData(context, selected.second, code, name, parentId = parentId, warehouseType = warehouseType)
+                            createCommercialMasterData(context, selected.second, code, name, parentId = parentId, warehouseType = warehouseType, warehouseId = warehouseId)
                             loadCommercialMasterData(context, selected.second)
                         }
                         masterMain.post {
@@ -175,7 +193,7 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
                                 .onFailure { error = it.message ?: "تعذر الحفظ."; notice = "" }
                         }
                     }
-                }, enabled = code.isNotBlank() && name.isNotBlank()) { Text("حفظ") }
+                }, enabled = code.isNotBlank() && name.isNotBlank() && (selected.second != "commercial_storage_locations" || warehouseId.isNotBlank())) { Text("حفظ") }
             },
             dismissButton = { TextButton(onClick = { showCreate = false }) { Text("إلغاء") } }
         )
