@@ -47,6 +47,7 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
     var code by remember { mutableStateOf("") }
     var name by remember { mutableStateOf("") }
     var warehouseType by remember { mutableStateOf("main") }
+    var locationType by remember { mutableStateOf("internal") }
     var parentId by remember { mutableStateOf("") }
     var parentMenuExpanded by remember { mutableStateOf(false) }
 
@@ -77,7 +78,7 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { code = ""; name = ""; showCreate = true }, containerColor = Color(0xFF167D63)) {
+            FloatingActionButton(onClick = { code = ""; name = ""; locationType = "internal"; parentId = ""; showCreate = true }, containerColor = Color(0xFF167D63)) {
                 Icon(Icons.Default.Add, "إضافة", tint = Color.White)
             }
         }
@@ -164,6 +165,23 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
                             }
                         }
                     }
+                    if (selected.second == "commercial_storage_locations") {
+                        Text("نوع موقع التخزين")
+                        Column {
+                            listOf(
+                                "view" to "عرض/تجميع", "internal" to "تخزين داخلي",
+                                "receiving" to "استلام", "packing" to "تجهيز",
+                                "quality" to "فحص الجودة", "quarantine" to "حجر",
+                                "transit" to "عبور", "customer" to "عميل",
+                                "supplier" to "مورد", "scrap" to "تالف/خردة"
+                            ).forEach { item ->
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    RadioButton(selected = locationType == item.first, onClick = { locationType = item.first })
+                                    Text(item.second)
+                                }
+                            }
+                        }
+                    }
                     if (selected.second == "commercial_warehouses") {
                         Text("نوع المستودع")
                         Column {
@@ -185,7 +203,7 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
                     notice = ""
                     masterIo.execute {
                         val result = runCatching {
-                            createCommercialMasterData(context, selected.second, code, name, parentId = parentId, warehouseType = warehouseType, warehouseId = warehouseId)
+                            createCommercialMasterData(context, selected.second, code, name, parentId = parentId, warehouseType = warehouseType, warehouseId = warehouseId, locationType = locationType)
                             loadCommercialMasterData(context, selected.second)
                         }
                         masterMain.post {
