@@ -140,8 +140,8 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
                     error = ""
                     masterIo.execute {
                         val result = runCatching {
-                            val departments = loadCommercialMasterData(context, "commercial_departments").filter { it.kind != "inactive" && it.kind != "archived" }
-                            val warehouses = loadCommercialMasterData(context, "commercial_warehouses").filter { it.kind != "inactive" && it.kind != "archived" }
+                            val departments = loadCommercialMasterData(context, "commercial_departments").filter { it.state == "active" }
+                            val warehouses = loadCommercialMasterData(context, "commercial_warehouses").filter { it.state == "active" }
                             val assignments = loadCommercialDepartmentWarehouseAssignments(context)
                             Triple(departments, warehouses, assignments)
                         }
