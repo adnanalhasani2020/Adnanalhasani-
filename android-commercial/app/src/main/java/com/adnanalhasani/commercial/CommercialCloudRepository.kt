@@ -564,6 +564,57 @@ internal fun createCommercialMasterData(
 }
 
 
+internal data class CommercialCloudStockAlert(
+    val offeringId: String,
+    val productName: String,
+    val categoryName: String,
+    val unitName: String,
+    val availableQuantity: Double,
+    val reorderPoint: Double
+)
+
+/** Precise read-only quantities for the stock-alert screen; preserve fractional units. */
+internal fun loadCommercialCloudStockAlerts(context: Context): List<CommercialCloudStockAlert> {
+    val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+    val activityId = saved.getString("activity_id", null).orEmpty()
+    val locationId = saved.getString("location_id", null).orEmpty()
+    require(activityId.isNotBlank() && locationId.isNotBlank()) {
+        "بيانات النشاط والموقع غير محفوظة."
+    }
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val query = "/rest/v1/commercial_inventory_balances" +
+        "?select=offering_id,quantity_on_hand,quantity_reserved,reorder_point,offering:commercial_offerings!inner(id,activity_id,product:commercial_products!inner(name,unit_name,state),categories:commercial_offering_categories(is_primary,category:commercial_product_categories(name_ar,name_en)))" +
+        "&organization_id=eq.$orgId&location_id=eq.$locationId&offering.activity_id=eq.$activityId&order=updated_at.desc"
+    val rows = JSONArray(commercialCloudRequest(query, "GET", token = access))
+    return buildList {
+        for (index in 0 until rows.length()) {
+            val row = rows.optJSONObject(index) ?: continue
+            val offering = row.optJSONObject("offering") ?: continue
+            val product = offering.optJSONObject("product") ?: continue
+            if (product.optString("state") != "active") continue
+            val categoryRows = offering.optJSONArray("categories")
+            val categoryName = (0 until (categoryRows?.length() ?: 0))
+                .asSequence()
+                .mapNotNull { categoryRows?.optJSONObject(it) }
+                .sortedByDescending { it.optBoolean("is_primary", false) }
+                .mapNotNull { it.optJSONObject("category") }
+                .map { it.optString("name_ar").ifBlank { it.optString("name_en") } }
+                .firstOrNull { it.isNotBlank() && it != "null" }
+                ?: "غير مصنف"
+            val onHand = row.optDouble("quantity_on_hand", 0.0)
+            val reserved = row.optDouble("quantity_reserved", 0.0)
+            add(CommercialCloudStockAlert(
+                offeringId = offering.optString("id"),
+                productName = product.optString("name").ifBlank { "صنف بدون اسم" },
+                categoryName = categoryName,
+                unitName = product.optString("unit_name").ifBlank { "وحدة" },
+                availableQuantity = (onHand - reserved).coerceAtLeast(0.0),
+                reorderPoint = row.optDouble("reorder_point", 0.0).coerceAtLeast(0.0)
+            ))
+        }
+    }
+}
+
 internal data class CommercialCloudRecord(
     val id: String, val title: String, val subtitle: String, val status: String,
     val amountMinor: Long = 0L, val createdAt: String = ""
