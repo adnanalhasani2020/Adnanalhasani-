@@ -50,6 +50,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.util.concurrent.Executors
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 private val CloudSalesInk = Color(0xFF183B35)
 private val CloudSalesGreen = Color(0xFF167D63)
@@ -174,15 +177,36 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
                             "الإجمالي: ${document.totalMinor} ${document.currencyCode.ifBlank { "وحدة نقدية" }} (بوحدة الصرف الصغرى)",
                             color = CloudSalesGreen, fontWeight = FontWeight.Bold, fontSize = 14.sp
                         )
-                        if (document.createdAt.isNotBlank()) Text(document.createdAt.replace('T', ' ').take(19), color = CloudSalesMuted, fontSize = 10.sp)
+                        if (document.createdAt.isNotBlank()) Text(formatInvoiceTimestamp(document.createdAt), color = CloudSalesMuted, fontSize = 10.sp)
                         Text("بنود الفاتورة: ${document.lines.size}", color = CloudSalesInk, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                         document.lines.forEach { line ->
-                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-                                Text(line.productName, modifier = Modifier.weight(1f), color = CloudSalesInk, fontSize = 12.sp)
-                                Spacer(Modifier.width(8.dp))
-                                Text("× ${line.quantity}", color = CloudSalesMuted, fontSize = 12.sp)
-                                Spacer(Modifier.width(8.dp))
-                                Text(line.lineTotalMinor.toString(), color = CloudSalesInk, fontWeight = FontWeight.Medium, fontSize = 12.sp)
+                            Surface(
+                                color = Color(0xFFF7F9F8),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Column(
+                                    Modifier.fillMaxWidth().padding(horizontal = 11.dp, vertical = 9.dp),
+                                    verticalArrangement = Arrangement.spacedBy(5.dp)
+                                ) {
+                                    Row(verticalAlignment = Alignment.Top) {
+                                        Text(
+                                            line.productName,
+                                            modifier = Modifier.weight(1f),
+                                            color = CloudSalesInk,
+                                            fontWeight = FontWeight.Medium,
+                                            fontSize = 12.sp
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        Text("الكمية: ${line.quantity}", color = CloudSalesMuted, fontSize = 11.sp)
+                                    }
+                                    Row(
+                                        Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text("سعر الوحدة: ${formatMinorAmount(line.unitPriceMinor)}", color = CloudSalesMuted, fontSize = 11.sp)
+                                        Text("الإجمالي: ${formatMinorAmount(line.lineTotalMinor)}", color = CloudSalesInk, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
+                                    }
+                                }
                             }
                         }
                         Text("مرجع: ${document.id.take(8)} · عرض فقط", color = CloudSalesMuted, fontSize = 10.sp)
@@ -197,6 +221,17 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
             }
         }
     }
+}
+
+private fun formatMinorAmount(value: Long): String =
+    String.format(Locale.US, "%,d", value)
+
+private fun formatInvoiceTimestamp(value: String): String {
+    val normalized = value.replace('T', ' ').take(19)
+    val parsed = runCatching {
+        SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).parse(normalized)
+    }.getOrNull() ?: return normalized
+    return SimpleDateFormat("yyyy/MM/dd · HH:mm", Locale.getDefault()).format(parsed)
 }
 
 private fun statusLabel(value: String): String = when (value.lowercase()) {
