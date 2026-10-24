@@ -97,8 +97,8 @@ internal fun loadCommercialCloudInventory(context: Context): CommercialCloudInve
 
     val query = "/rest/v1/commercial_inventory_balances" +
         "?select=offering_id,quantity_on_hand,quantity_reserved,reorder_point,offering:commercial_offerings!inner(id,price_minor,currency_code,activity_id,product:commercial_products!inner(name,description,unit_name,state),categories:commercial_offering_categories(is_primary,category:commercial_product_categories(name_ar,name_en)))" +
-        "&organization_id=eq.$orgId&location_id=eq.$locationId&offering.activity_id=eq.$activityId&order=updated_at.desc"
-    val rows = JSONArray(commercialCloudRequest(query, "GET", token = access))
+        "&organization_id=eq.$orgId&location_id=eq.$locationId&offering.activity_id=eq.$activityId&order=updated_at.desc,offering_id.asc"
+    val rows = commercialCloudPagedGet(query, access)
     val products = buildList {
         for (index in 0 until rows.length()) {
             val row = rows.optJSONObject(index) ?: continue
@@ -282,8 +282,8 @@ internal fun loadCommercialCloudSaleDocuments(context: Context): List<Commercial
     val (orgId, access) = commercialMasterDataAccess(context)
     val path = "/rest/v1/commercial_sales" +
         "?select=id,receipt_number,total_minor,payment_status,created_at,currency_code,customer:commercial_customers(display_name),items:commercial_sale_items(product_name_snapshot,quantity,line_total_minor,unit_price_minor)" +
-        "&organization_id=eq.$orgId&activity_id=eq.$activityId&order=created_at.desc&limit=200"
-    val rows = JSONArray(commercialCloudRequest(path, "GET", token = access))
+        "&organization_id=eq.$orgId&activity_id=eq.$activityId&order=created_at.desc,id.asc"
+    val rows = commercialCloudPagedGet(path, access)
     return buildList {
         for (index in 0 until rows.length()) {
             val row = rows.optJSONObject(index) ?: continue
@@ -340,8 +340,8 @@ internal fun loadCommercialCloudPurchaseDocuments(context: Context): List<Commer
     val (orgId, access) = commercialMasterDataAccess(context)
     val path = "/rest/v1/commercial_purchase_orders" +
         "?select=id,order_number,status,ordered_at,expected_at,currency_code,notes,supplier:commercial_suppliers(display_name),items:commercial_purchase_order_items(line_number,item_description,quantity_ordered,quantity_received,unit_cost_minor)" +
-        "&organization_id=eq.$orgId&order=created_at.desc.nullslast&limit=200"
-    val rows = JSONArray(commercialCloudRequest(path, "GET", token = access))
+        "&organization_id=eq.$orgId&order=created_at.desc.nullslast,id.asc"
+    val rows = commercialCloudPagedGet(path, access)
     return buildList {
         for (index in 0 until rows.length()) {
             val row = rows.optJSONObject(index) ?: continue
@@ -393,8 +393,8 @@ internal fun loadCommercialCloudSales(context: Context): List<SaleRecord> {
 
     val path = "/rest/v1/commercial_sales" +
         "?select=id,receipt_number,total_minor,payment_status,created_at,customer:commercial_customers(display_name),items:commercial_sale_items(product_name_snapshot,quantity,line_total_minor,unit_price_minor)" +
-        "&organization_id=eq.$orgId&activity_id=eq.$activityId&order=created_at.desc&limit=200"
-    val rows = JSONArray(commercialCloudRequest(path, "GET", token = access))
+        "&organization_id=eq.$orgId&activity_id=eq.$activityId&order=created_at.desc,id.asc"
+    val rows = commercialCloudPagedGet(path, access)
     return buildList {
         for (index in 0 until rows.length()) {
             val row = rows.optJSONObject(index) ?: continue
@@ -442,10 +442,10 @@ internal data class CommercialUnitOption(
 
 internal fun loadCommercialUnitsOfMeasure(context: Context): List<CommercialUnitOption> {
     val (_, access) = commercialMasterDataAccess(context)
-    val rows = JSONArray(commercialCloudRequest(
+    val rows = commercialCloudPagedGet(
         "/rest/v1/commercial_unit_of_measure?select=code,display_name,dimension,decimal_places&is_active=eq.true&order=dimension.asc,code.asc",
-        "GET", token = access
-    ))
+        access
+    )
     return buildList {
         for (i in 0 until rows.length()) {
             val row = rows.optJSONObject(i) ?: continue
@@ -456,6 +456,21 @@ internal fun loadCommercialUnitsOfMeasure(context: Context): List<CommercialUnit
             )
         }
     }
+}
+
+/** Fetch a complete PostgREST result in bounded pages with stable caller ordering. */
+private fun commercialCloudPagedGet(path: String, accessToken: String, pageSize: Int = 500): JSONArray {
+    require(pageSize in 1..1000) { "حجم الصفحة غير صالح." }
+    require(path.contains("?") && !path.contains("limit=") && !path.contains("offset=")) { "استعلام الصفحات يحتوي على محددات مسبقة." }
+    val rows = JSONArray()
+    var offset = 0
+    while (true) {
+        val page = JSONArray(commercialCloudRequest("$path&limit=$pageSize&offset=$offset", "GET", token = accessToken))
+        for (index in 0 until page.length()) rows.put(page.getJSONObject(index))
+        if (page.length() < pageSize) break
+        offset += pageSize
+    }
+    return rows
 }
 
 private fun commercialMasterDataAccess(context: Context): Pair<String, String> {
@@ -484,10 +499,9 @@ internal fun loadCommercialMasterData(context: Context, table: String): List<Com
         "commercial_storage_locations" -> "id,warehouse_id,parent_location_id,code,name,location_type,state"
         else -> "id,code,name_ar,name_en,state,parent_id"
     }
-    val rows = JSONArray(commercialCloudRequest(
-        "/rest/v1/$table?select=$fields&organization_id=eq.$orgId&order=code.asc",
-        "GET", token = access
-    ))
+    val rows = commercialCloudPagedGet(
+        "/rest/v1/$table?select=$fields&organization_id=eq.$orgId&order=code.asc,id.asc", access
+    )
     return buildList {
         for (i in 0 until rows.length()) {
             val row = rows.optJSONObject(i) ?: continue
@@ -574,10 +588,9 @@ internal data class CommercialDepartmentWarehouseAssignment(
 /** Read the existing organization-scoped department/warehouse links. */
 internal fun loadCommercialDepartmentWarehouseAssignments(context: Context): List<CommercialDepartmentWarehouseAssignment> {
     val (orgId, access) = commercialMasterDataAccess(context)
-    val rows = JSONArray(commercialCloudRequest(
-        "/rest/v1/commercial_department_warehouse_assignments?select=department_id,warehouse_id&organization_id=eq.$orgId&order=created_at.desc",
-        "GET", token = access
-    ))
+    val rows = commercialCloudPagedGet(
+        "/rest/v1/commercial_department_warehouse_assignments?select=department_id,warehouse_id&organization_id=eq.$orgId&order=department_id.asc,warehouse_id.asc", access
+    )
     return buildList {
         for (index in 0 until rows.length()) {
             val row = rows.optJSONObject(index) ?: continue
@@ -627,8 +640,8 @@ internal fun loadCommercialCloudStockAlerts(context: Context): List<CommercialCl
     val (orgId, access) = commercialMasterDataAccess(context)
     val query = "/rest/v1/commercial_inventory_balances" +
         "?select=offering_id,quantity_on_hand,quantity_reserved,reorder_point,offering:commercial_offerings!inner(id,activity_id,product:commercial_products!inner(name,unit_name,state),categories:commercial_offering_categories(is_primary,category:commercial_product_categories(name_ar,name_en)))" +
-        "&organization_id=eq.$orgId&location_id=eq.$locationId&offering.activity_id=eq.$activityId&order=updated_at.desc"
-    val rows = JSONArray(commercialCloudRequest(query, "GET", token = access))
+        "&organization_id=eq.$orgId&location_id=eq.$locationId&offering.activity_id=eq.$activityId&order=updated_at.desc,offering_id.asc"
+    val rows = commercialCloudPagedGet(query, access)
     return buildList {
         for (index in 0 until rows.length()) {
             val row = rows.optJSONObject(index) ?: continue
@@ -676,10 +689,9 @@ internal fun loadCommercialCloudRecords(context: Context, screenKey: String): Li
         else -> throw IllegalArgumentException("هذه الشاشة غير مدعومة.")
     }
     val (orgId, access) = commercialMasterDataAccess(context)
-    val rows = JSONArray(commercialCloudRequest(
-        "/rest/v1/${config.first}?select=${config.second}&organization_id=eq.$orgId&order=${config.third}.desc.nullslast&limit=200",
-        "GET", token = access
-    ))
+    val rows = commercialCloudPagedGet(
+        "/rest/v1/${config.first}?select=${config.second}&organization_id=eq.$orgId&order=${config.third}.desc.nullslast,id.asc", access
+    )
     return buildList {
         for (i in 0 until rows.length()) {
             val row = rows.optJSONObject(i) ?: continue

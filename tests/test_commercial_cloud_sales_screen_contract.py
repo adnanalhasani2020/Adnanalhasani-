@@ -33,7 +33,8 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         )[1].split("internal fun loadCommercialCloudSales", 1)[0]
         self.assertIn("organization_id=eq.$orgId", projection)
         self.assertIn("activity_id=eq.$activityId", projection)
-        self.assertIn('"GET", token = access', projection)
+        self.assertIn('commercialCloudPagedGet(path, access)', projection)
+        self.assertIn('organization_id=eq.$orgId&activity_id=eq.$activityId', projection)
         self.assertNotIn('"/rest/v1/commercial_sales", "POST"', projection)
 
     def test_invoice_screen_is_reachable_from_more_menu(self):
