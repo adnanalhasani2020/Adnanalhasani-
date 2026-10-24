@@ -152,7 +152,7 @@ BEGIN
   SELECT r->>'currency_code' INTO v_currency FROM jsonb_array_elements(v_rows) r LIMIT 1;
   IF v_payment_mode='cash' THEN v_initial_payment := v_total::bigint; END IF;
   IF v_payment_mode='credit' AND v_initial_payment > v_total THEN RAISE EXCEPTION 'initial_payment_exceeds_invoice_total' USING ERRCODE='22023'; END IF;
-  v_payment_status := CASE WHEN v_initial_payment >= v_total THEN 'paid' WHEN v_initial_payment > 0 THEN 'partially_paid' ELSE 'unpaid' END;
+  v_payment_status := CASE WHEN v_initial_payment >= v_total THEN 'paid' WHEN v_initial_payment > 0 THEN 'partially_paid' ELSE 'pending' END;
 
   INSERT INTO public.commercial_sales(receipt_number,user_id,activity_id,organization_id,customer_id,idempotency_key,
     request_fingerprint,status,currency_code,total_minor,payment_status,channel)
