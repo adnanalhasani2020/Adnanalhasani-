@@ -70,6 +70,23 @@ class CommercialDocumentMathTests(unittest.TestCase):
                            TaxRule("exclusive", Decimal("5"), inclusive=False)),
             )
 
+    def test_zero_and_full_discount_and_total_overflow_boundaries(self):
+        maximum = (1 << 63) - 1
+        zero = calculate_document_totals(line_amounts_minor=[0])
+        self.assertEqual((zero.subtotal_minor, zero.discount_minor, zero.tax_minor, zero.total_minor), (0, 0, 0, 0))
+
+        fully_discounted = calculate_document_totals(
+            line_amounts_minor=[maximum],
+            discount=Discount("percent", Decimal("100")),
+        )
+        self.assertEqual(fully_discounted.total_minor, 0)
+
+        with self.assertRaisesRegex(ValueError, "document total exceeds"):
+            calculate_document_totals(
+                line_amounts_minor=[maximum],
+                tax_rules=(TaxRule("VAT", Decimal("1")),),
+            )
+
     def test_duplicate_active_tax_codes_are_rejected_case_insensitively(self):
         with self.assertRaisesRegex(ValueError, "tax rule codes must be unique"):
             calculate_document_totals(
