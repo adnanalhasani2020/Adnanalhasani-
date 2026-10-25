@@ -1,13 +1,19 @@
 -- Schema-level regression checks for explicit checkout discount/tax amounts.
 -- Run after migrations in a disposable local/staging database with pgTAP installed.
 BEGIN;
-SELECT plan(10);
+SELECT plan(13);
 
 SELECT has_column('public','commercial_sales','subtotal_minor','invoice persists subtotal');
 SELECT has_column('public','commercial_sales','discount_minor','invoice persists discount');
 SELECT has_column('public','commercial_sales','tax_minor','invoice persists tax');
 SELECT has_check('public','commercial_sales','commercial_sales_discount_nonnegative',
-  'invoice amounts are nonnegative and discount cannot exceed subtotal');
+  'discount cannot be negative');
+SELECT has_check('public','commercial_sales','commercial_sales_tax_nonnegative',
+  'tax cannot be negative');
+SELECT has_check('public','commercial_sales','commercial_sales_subtotal_nonnegative',
+  'subtotal cannot be negative');
+SELECT has_check('public','commercial_sales','commercial_sales_discount_within_subtotal',
+  'discount cannot exceed subtotal');
 SELECT has_check('public','commercial_sales','commercial_sales_total_reconciles',
   'invoice total reconciles as subtotal minus discount plus tax');
 SELECT has_function('public','commercial_checkout_sale_multi',
