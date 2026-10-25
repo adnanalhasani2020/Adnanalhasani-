@@ -27,7 +27,7 @@ def test_supplier_invoice_purchase_item_ids_are_projected_for_rpc_lines():
 
     # The dialog sends each selected line ID to the RPC; omitting id from the nested
     # PostgREST select silently produced empty IDs and every save failed server-side.
-    assert "items:commercial_purchase_order_items(id,line_number,item_description,quantity_ordered,quantity_received,unit_cost_minor)" in repository
+    assert "items:commercial_purchase_order_items(id,line_number,item_description,quantity_ordered,quantity_received,unit_cost_minor,offering_id)" in repository
     assert 'id = item.optString("id")' in repository
 
 
