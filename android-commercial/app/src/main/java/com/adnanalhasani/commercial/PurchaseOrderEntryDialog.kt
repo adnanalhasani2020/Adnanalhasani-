@@ -58,7 +58,9 @@ internal fun PurchaseOrderEntryDialog(
     var attempted by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
     val lines = remember { mutableStateListOf(PurchaseOrderDraftLine()) }
-    val idempotencyKey = remember { UUID.randomUUID().toString() }
+    val idempotencyKey = remember(supplierId, orderNumber) {
+        commercialStableIdempotencyKey("purchase-create", listOf(supplierId, orderNumber.trim()))
+    }
 
     LaunchedEffect(Unit) {
         PurchaseOrderWorker.execute {
