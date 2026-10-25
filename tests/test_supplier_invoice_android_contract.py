@@ -29,7 +29,7 @@ def test_supplier_invoice_purchase_item_ids_are_projected_for_rpc_lines():
 
 
 def test_supplier_invoice_rpc_is_atomic_scoped_and_idempotent():
-    migration = (ROOT / "supabase/migrations/20261026090000_commercial_supplier_invoice_capture.sql").read_text()
+    migration = (ROOT / "supabase/migrations/20261025215237_commercial_supplier_invoice_capture.sql").read_text()
 
     for marker in (
         "CREATE TABLE IF NOT EXISTS public.commercial_supplier_invoices",
