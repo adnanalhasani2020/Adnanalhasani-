@@ -45,8 +45,7 @@ def test_purchase_receipt_posts_inventory_and_order_quantities_atomically():
         "pg_advisory_xact_lock",
     ):
         assert marker in receipt
-    assert "scale(v_qty)>6" in receipt
-    assert "v_qty::numeric" in receipt
+    assert "v_qty<>trunc(v_qty)" in receipt
 
 
 def test_supplier_invoice_creates_payable_and_balanced_posted_journal():
