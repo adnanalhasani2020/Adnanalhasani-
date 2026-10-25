@@ -183,14 +183,14 @@ internal fun PurchaseOrderEntryDialog(
                         val validLines = lines.all { line ->
                             val qty = line.quantity.toBigDecimalOrNull()
                             line.offeringId.isNotBlank() && line.description.isNotBlank() && qty != null &&
-                                qty > java.math.BigDecimal.ZERO && qty.stripTrailingZeros().scale() <= 0 &&
+                                qty > java.math.BigDecimal.ZERO && qty.stripTrailingZeros().scale() <= 6 &&
                                 (line.unitCostMinor.toLongOrNull() ?: -1L) >= 0L
                         }
                         when {
                             orderNumber.isBlank() -> error = "أدخل رقم أمر الشراء."
                             supplierId.isBlank() -> error = "اختر المورد."
                             locationId.isBlank() -> error = "اختر موقع الاستلام."
-                            !validLines -> error = "تحقق من عناصر المخزون والكميات الصحيحة وتكلفة الوحدة."
+                            !validLines -> error = "تحقق من عناصر المخزون والكمية الموجبة (حتى 6 خانات عشرية) وتكلفة الوحدة."
                             !currenciesMatch -> error = "يجب أن تكون جميع البنود بعملة واحدة."
                             else -> { attempted = true; error = "" }
                         }
