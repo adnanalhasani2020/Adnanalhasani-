@@ -273,7 +273,7 @@ internal data class CommercialCloudCustomer(
 internal fun loadCommercialCloudCustomers(context: Context): List<CommercialCloudCustomer> {
     val (orgId, access) = commercialMasterDataAccess(context)
     val path = "/rest/v1/commercial_customers" +
-        "?select=id,display_name,phone,email,state&organization_id=eq.$orgId&state=eq.active&order=display_name.asc,id.asc&limit=200"
+        "?select=id,display_name,phone,email,state&organization_id=eq.$orgId&state=eq.active&order=display_name.asc,id.asc"
     val rows = commercialCloudPagedGet(path, access)
     return buildList {
         for (index in 0 until rows.length()) {
