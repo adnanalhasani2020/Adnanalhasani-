@@ -410,7 +410,7 @@ internal fun CommercialCloudSaleComposerScreen(
                                 val result = runCatching {
                                     require(paymentModeForRequest != "credit" || !customerId.isNullOrBlank()) { "اختر العميل قبل تسجيل البيع الآجل أو الدفع الجزئي." }
                                     require(paymentMode != "partial" || initialPaymentMinor != null) { "أدخل مبلغًا صحيحًا للدفع الجزئي." }
-                                    require(paymentMode != "partial" || (initialPaymentMinor!! > 0L && BigInteger.valueOf(initialPaymentMinor) < estimatedTotal)) { "الدفع الجزئي يجب أن يكون أكبر من صفر وأقل من إجمالي الفاتورة؛ اختر النقدي الكامل إذا دفعت الإجمالي." }
+                                    require(paymentMode != "partial" || (initialPaymentMinor != null && initialPaymentMinor > 0L && BigInteger.valueOf(initialPaymentMinor) < estimatedTotal)) { "الدفع الجزئي يجب أن يكون أكبر من صفر وأقل من إجمالي الفاتورة؛ اختر النقدي الكامل إذا دفعت الإجمالي." }
                                     val key = getOrCreateCommercialCloudMultiSaleKey(context, requestLines, customerId, paymentModeForRequest, initialPaymentMinor ?: 0L, discountForRequest, taxForRequest)
                                     val sale = checkoutCommercialCloudSaleMulti(context, requestLines, key, customerId, paymentModeForRequest, initialPaymentMinor ?: 0L, discountForRequest, taxForRequest)
                                     val clearResult = runCatching { clearCommercialCloudMultiSaleKey(context, key) }
