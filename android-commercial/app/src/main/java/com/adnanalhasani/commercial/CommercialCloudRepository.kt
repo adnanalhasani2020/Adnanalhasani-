@@ -13,6 +13,32 @@ import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.Executors
 
+private fun commercialCloudActionableError(raw: String, status: Int): String {
+    val error = runCatching { JSONObject(raw) }.getOrNull()
+    val code = error?.optString("code").orEmpty()
+    val message = listOf(error?.optString("message"), error?.optString("hint"))
+        .filter { !it.isNullOrBlank() && it != "null" }
+        .joinToString(" — ")
+    val detail = message.ifBlank { "HTTP $status" }
+    return when {
+        code == "PGRST202" || message.contains("schema cache", ignoreCase = true) ||
+            message.contains("could not find the function", ignoreCase = true) ->
+            "توقّف الإجراء لأن دالة قاعدة البيانات المطلوبة غير منشورة أو لم تُحدّث بعد. لم يؤكد الخادم تنفيذ العملية. لا تنشئ عملية بديلة بمفتاح جديد؛ أعد المحاولة بنفس العملية بعد إصلاح ترحيلات قاعدة البيانات. التفاصيل: $detail"
+        message.contains("idempotency_key_reused_with_different_request", ignoreCase = true) ->
+            "تم إيقاف العملية لحماية البيانات: مفتاح إعادة المحاولة مرتبط بطلب مختلف. لا تكرر الدفع أو البيع؛ حدّث البيانات وراجع الفاتورة الموجودة. التفاصيل: $detail"
+        message.contains("collection_exceeds_outstanding_balance", ignoreCase = true) ||
+            message.contains("overpayment", ignoreCase = true) ->
+            "رُفض التحصيل لأن المبلغ يتجاوز الرصيد المستحق. حدّث الفاتورة وأدخل المبلغ المتبقي الفعلي. التفاصيل: $detail"
+        message.contains("insufficient_stock", ignoreCase = true) ||
+            message.contains("insufficient_inventory", ignoreCase = true) ||
+            message.contains("stock", ignoreCase = true) && message.contains("available", ignoreCase = true) ->
+            "رُفض البيع لأن الكمية المتاحة غير كافية أو تغيّرت أثناء الحفظ. حدّث المخزون قبل المحاولة مجددًا. التفاصيل: $detail"
+        status == 401 || status == 403 || code == "42501" ->
+            "لم يُسمح بتنفيذ العملية. تحقق من تسجيل الدخول وصلاحيات المؤسسة قبل إعادة المحاولة. التفاصيل: $detail"
+        else -> "تعذر تأكيد العملية من الخادم (HTTP $status). لا تنشئ طلبًا جديدًا بمفتاح مختلف؛ استخدم إعادة المحاولة للعملية نفسها ثم تحقق من الفاتورة/الدفعة في السجل. التفاصيل: $detail"
+    }
+}
+
 internal data class CommercialCloudContext(
     val organizationId: String,
     val activityId: String,
@@ -59,14 +85,19 @@ private fun commercialCloudRequest(path: String, method: String, payload: JSONOb
         val raw = (if (status in 200..299) connection.inputStream else connection.errorStream)
             ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
         if (status !in 200..299) {
-            val error = runCatching { JSONObject(raw) }.getOrNull()
-            throw IllegalStateException(
-                listOf(error?.optString("message"), error?.optString("hint"))
-                    .filter { !it.isNullOrBlank() && it != "null" }
-                    .joinToString(" — ").ifBlank { "فشل الاتصال بقاعدة البيانات (HTTP $status)." }
-            )
+            throw IllegalStateException(commercialCloudActionableError(raw, status))
         }
         raw
+    } catch (e: java.net.SocketTimeoutException) {
+        throw IllegalStateException(
+            "انتهت مهلة الاتصال ولم يتمكن التطبيق من تأكيد النتيجة. إذا كانت العملية بيعًا أو تحصيلًا، لا تبدأ عملية جديدة بمفتاح مختلف؛ أعد المحاولة للعملية المعلّقة نفسها ثم تحقق من سجل الفاتورة/الدفعة.",
+            e
+        )
+    } catch (e: java.io.IOException) {
+        throw IllegalStateException(
+            "انقطع الاتصال قبل تأكيد النتيجة من الخادم. لا تكرر البيع أو التحصيل كعملية جديدة؛ أعد المحاولة للعملية المعلّقة نفسها وتحقق من السجل قبل أي إجراء بديل.",
+            e
+        )
     } finally {
         connection.disconnect()
     }
