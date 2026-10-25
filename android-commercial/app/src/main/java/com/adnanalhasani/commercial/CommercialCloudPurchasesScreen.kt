@@ -94,7 +94,7 @@ internal fun CommercialCloudPurchasesScreen(context: Context, onBack: () -> Unit
                 title = {
                     Column {
                         Text("أوامر الشراء والاستلام", color = CloudPurchasesInk, fontWeight = FontWeight.Bold)
-                        Text("تفاصيل الموردين والبنود والكميات المستلمة", color = CloudPurchasesMuted, fontSize = 11.sp)
+                        Text("تفاصيل الموردين والبنود والكميات المستلمة · الاستلام عرض فقط", color = CloudPurchasesMuted, fontSize = 11.sp)
                     }
                 },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "رجوع") } },
