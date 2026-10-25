@@ -175,16 +175,60 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
             with self.subTest(marker=marker):
                 self.assertIn(marker, screen)
 
+    def test_invoice_discount_and_tax_are_sent_to_server_and_bound_to_retry_key(self):
+        self.assertIn('var discountText by remember { mutableStateOf("0") }', self.composer)
+        self.assertIn('var taxText by remember { mutableStateOf("0") }', self.composer)
+        self.assertIn('p_discount_minor', self.repository)
+        self.assertIn('p_tax_minor', self.repository)
+        self.assertIn('"discount_minor", discountMinor', self.repository)
+        self.assertIn('"tax_minor", taxMinor', self.repository)
+        self.assertIn('discountMinor > estimatedSubtotal.min(BigInteger.valueOf(Long.MAX_VALUE)).toLong()', self.composer)
+        migration = (ROOT / "supabase/migrations/20261025190000_commercial_checkout_discount_tax_snapshots.sql").read_text(encoding="utf-8")
+        for marker in (
+            "discount_exceeds_subtotal",
+            "sales_gl_mappings_incomplete",
+            "'sales_discounts'",
+            "'sales_tax_payable'",
+            "request_fingerprint",
+            "subtotal_minor",
+            "discount_minor",
+            "tax_minor",
+        ):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, migration)
+
     def test_multi_line_checkout_guards_duplicate_lines_and_uses_stable_retry_key(self):
         self.assertIn("commercial_checkout_sale_multi", self.repository)
         self.assertIn("getOrCreateCommercialCloudMultiSaleKey", self.repository)
         self.assertIn("aggregateCommercialCheckoutLines(lines)", self.repository)
         self.assertIn("Math.addExact(totals[line.offeringId] ?: 0, line.quantity)", self.repository)
+        self.assertIn('"unit_code", line.unitCode', self.repository)
+        self.assertIn("configureCommercialCloudSellUnit", self.repository)
+        self.assertIn("sell_units:commercial_offering_sell_units", self.repository)
         self.assertIn("prefs.getString(\"payload\", null) == payload", self.repository)
         migration = (ROOT / "supabase/migrations/20261024200000_commercial_multiline_cash_checkout.sql").read_text(encoding="utf-8")
         self.assertIn("FOR UPDATE", migration)
         self.assertIn("p_idempotency_key", migration)
         self.assertIn("commercial_inventory_balances", migration)
+
+    def test_sell_unit_conversion_covers_checkout_stock_and_returns(self):
+        migration = (ROOT / "supabase/migrations/20261025195000_commercial_sell_unit_conversion.sql").read_text(encoding="utf-8")
+        for marker in (
+            "commercial_offering_sell_units",
+            "quantity_in_stock",
+            "commercial_configure_offering_sell_unit",
+            "commercial_checkout_sale_multi_base_units",
+            "selling_quantity",
+            "quantity_in_stock_units",
+            "commercial_request_sale_return_base_units",
+            "sell_unit_not_configured_for_offering",
+            "return_sell_unit_not_configured",
+        ):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, migration)
+        self.assertIn("DropdownMenu", self.composer)
+        self.assertIn("it.third.factor", self.composer)
+        self.assertIn("configureCommercialCloudSellUnit", self.composer)
 
 if __name__ == "__main__":
     unittest.main()
