@@ -188,13 +188,13 @@ SELECT ok(
 
 
 SELECT ok(
-  position("'paid_minor'" in pg_get_functiondef(
+  position('paid_minor' in pg_get_functiondef(
     'commercial_private.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint)'::regprocedure
   )) > 0,
   'multi-line checkout returns confirmed paid amount on idempotent replay');
 
 SELECT ok(
-  position("'outstanding_minor'" in pg_get_functiondef(
+  position('outstanding_minor' in pg_get_functiondef(
     'commercial_private.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint)'::regprocedure
   )) > 0,
   'multi-line checkout returns outstanding balance on idempotent replay');
