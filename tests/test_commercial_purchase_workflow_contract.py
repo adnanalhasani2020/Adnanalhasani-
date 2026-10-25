@@ -107,6 +107,6 @@ def test_android_purchase_workflow_is_connected_to_server_rpcs():
     assert "createCommercialCloudPurchaseOrder(" in order_dialog
     assert "receiveCommercialCloudPurchaseOrder(" in receipt_dialog
     assert "recordCommercialCloudSupplierPayment(" in payment_dialog
-    assert "UUID.randomUUID()" in payment_dialog
-    assert "UUID.randomUUID()" in order_dialog
-    assert "UUID.randomUUID()" in receipt_dialog
+    assert 'commercialStableIdempotencyKey("supplier-payment"' in payment_dialog
+    assert 'commercialStableIdempotencyKey("purchase-create"' in order_dialog
+    assert 'commercialStableIdempotencyKey("purchase-receipt"' in receipt_dialog
