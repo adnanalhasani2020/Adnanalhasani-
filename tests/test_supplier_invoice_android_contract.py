@@ -36,6 +36,7 @@ def test_supplier_invoice_rpc_is_atomic_scoped_and_idempotent():
         "pg_advisory_xact_lock",
         "idempotency_key_reused_with_different_request",
         "supplier_invoice_quantity_exceeds_uninvoiced_received",
+        "v_status NOT IN ('approved','partially_received','received','closed')",
         "commercial_audit_events",
         "GRANT EXECUTE ON FUNCTION public.commercial_record_supplier_invoice",
     ):
