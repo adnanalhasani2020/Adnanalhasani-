@@ -53,3 +53,12 @@ def test_supplier_invoice_rpc_is_atomic_scoped_and_idempotent():
     assert "INSERT INTO public.commercial_stock_movements" not in migration
     assert "INSERT INTO public.commercial_payments" not in migration
     assert "INSERT INTO public.commercial_journal_entries" not in migration
+
+
+def test_supplier_invoice_minor_unit_rounding_is_consistent_per_line():
+    migration = (ROOT / "supabase/migrations/20261025221026_commercial_supplier_invoice_minor_unit_rounding.sql").read_text()
+
+    # Round each line before adding it to the subtotal so the header total matches
+    # the persisted integer-minor-unit line totals for fractional quantities.
+    assert migration.count("v_line_total := round(v_qty * v_price);") == 2
+    assert "v_subtotal := v_subtotal + v_line_total;" in migration
