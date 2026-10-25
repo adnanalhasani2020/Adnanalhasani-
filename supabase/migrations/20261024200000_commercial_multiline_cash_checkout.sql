@@ -26,6 +26,12 @@ DECLARE
   v_name text;
   v_on_hand numeric;
   v_reserved numeric;
+  v_unit_cost bigint;
+  v_cost_total numeric;
+  v_map record;
+  v_party uuid;
+  v_entry uuid;
+  v_gl_lines jsonb;
   v_total numeric := 0;
   v_line_total numeric;
   v_fingerprint text;
@@ -86,10 +92,15 @@ BEGIN
     IF v_old_fingerprint IS DISTINCT FROM v_fingerprint THEN
       RAISE EXCEPTION 'idempotency_key_reused_with_different_request' USING ERRCODE='23505';
     END IF;
-    RETURN jsonb_build_object('sale_id',v_sale,'receipt_number',v_receipt,'organization_id',v_org,
-      'activity_id',v_activity,'currency_code',v_currency,'total_minor',v_total,
+    SELECT je.id INTO v_entry FROM public.commercial_journal_entries je
+      WHERE je.organization_id=v_org AND je.source_type='sale' AND je.source_id=v_sale AND je.status='posted'
+      ORDER BY je.created_at DESC LIMIT 1;
+    RETURN jsonb_build_object('sale_id',v_sale,'invoice_id',v_sale,'receipt_number',v_receipt,'invoice_number',v_receipt,
+      'organization_id',v_org,'customer_id',v_customer,'activity_id',v_activity,'currency_code',v_currency,'total_minor',v_total,
+      'journal_entry_id',v_entry,
       'line_count',(SELECT count(*) FROM public.commercial_sale_items i WHERE i.sale_id=v_sale),
-      'payment_recorded',v_payment_status IN ('paid','partially_paid'),'state','completed','payment_status',v_payment_status,'idempotent_replay',true);
+      'payment_recorded',EXISTS(SELECT 1 FROM public.commercial_payments p WHERE p.sale_id=v_sale AND p.status='succeeded'),
+      'state','completed','payment_status',(SELECT s.payment_status FROM public.commercial_sales s WHERE s.id=v_sale),'idempotent_replay',true);
   END IF;
 
   SELECT a.id, a.organization_id INTO v_activity, v_org
@@ -132,18 +143,22 @@ BEGIN
     IF EXISTS (SELECT 1 FROM jsonb_array_elements(v_rows) r WHERE r->>'currency_code' IS DISTINCT FROM v_currency) THEN
       RAISE EXCEPTION 'mixed_currency_invoice_not_supported' USING ERRCODE='22023';
     END IF;
-    SELECT b.quantity_on_hand,b.quantity_reserved INTO v_on_hand,v_reserved
+    SELECT b.quantity_on_hand,b.quantity_reserved,b.unit_cost_minor INTO v_on_hand,v_reserved,v_unit_cost
     FROM public.commercial_inventory_balances b
     JOIN public.commercial_organization_locations l ON l.id=b.location_id AND l.organization_id=b.organization_id
     WHERE b.organization_id=v_org AND b.location_id=p_location_id AND b.offering_id=v_offer AND l.state='active'
     FOR UPDATE OF b;
     IF NOT FOUND THEN RAISE EXCEPTION 'inventory_location_not_found' USING ERRCODE='P0002'; END IF;
     IF v_on_hand-v_reserved < v_qty THEN RAISE EXCEPTION 'insufficient_available_stock' USING ERRCODE='22023'; END IF;
+    IF v_unit_cost IS NULL OR v_unit_cost < 0 THEN RAISE EXCEPTION 'inventory_cost_basis_missing_sale_blocked' USING ERRCODE='55000'; END IF;
     v_line_total := v_price::numeric * v_qty::numeric;
+    v_cost_total := v_unit_cost::numeric * v_qty::numeric;
+    IF v_cost_total > 9223372036854775807 THEN RAISE EXCEPTION 'sale_cost_overflow' USING ERRCODE='22003'; END IF;
     v_total := v_total + v_line_total;
     IF v_total > 9223372036854775807 THEN RAISE EXCEPTION 'sale_total_overflow' USING ERRCODE='22003'; END IF;
     v_rows := v_rows || jsonb_build_array(jsonb_build_object('offering_id',v_offer,'quantity',v_qty,
-      'unit_price_minor',v_price,'product_name',v_name,'line_total_minor',v_line_total::bigint,'currency_code',v_currency));
+      'unit_price_minor',v_price,'product_name',v_name,'line_total_minor',v_line_total::bigint,
+      'unit_cost_minor',v_unit_cost,'cost_total_minor',v_cost_total::bigint,'currency_code',v_currency));
   END LOOP;
 
   IF (SELECT count(DISTINCT r->>'currency_code') FROM jsonb_array_elements(v_rows) r) <> 1 THEN
@@ -151,8 +166,10 @@ BEGIN
   END IF;
   SELECT r->>'currency_code' INTO v_currency FROM jsonb_array_elements(v_rows) r LIMIT 1;
   IF v_payment_mode='cash' THEN v_initial_payment := v_total::bigint; END IF;
+  IF v_initial_payment > 0 AND v_customer IS NULL THEN RAISE EXCEPTION 'customer_required_for_payment_ledger' USING ERRCODE='22023'; END IF;
   IF v_payment_mode='credit' AND v_initial_payment > v_total THEN RAISE EXCEPTION 'initial_payment_exceeds_invoice_total' USING ERRCODE='22023'; END IF;
-  v_payment_status := CASE WHEN v_initial_payment >= v_total THEN 'paid' WHEN v_initial_payment > 0 THEN 'partially_paid' ELSE 'pending' END;
+  -- Keep the sale receivable-open until the payment trigger atomically posts the collection.
+  v_payment_status := CASE WHEN v_initial_payment > 0 THEN 'partially_paid' ELSE 'pending' END;
 
   INSERT INTO public.commercial_sales(receipt_number,user_id,activity_id,organization_id,customer_id,idempotency_key,
     request_fingerprint,status,currency_code,total_minor,payment_status,channel)
@@ -164,13 +181,38 @@ BEGIN
     v_offer := (v_line->>'offering_id')::uuid; v_qty := (v_line->>'quantity')::integer;
     v_price := (v_line->>'unit_price_minor')::bigint; v_name := v_line->>'product_name';
     v_line_total := (v_line->>'line_total_minor')::bigint;
-    INSERT INTO public.commercial_sale_items(sale_id,offering_id,product_name_snapshot,quantity,unit_price_minor,line_total_minor)
-    VALUES(v_sale,v_offer,v_name,v_qty,v_price,v_line_total::bigint);
+    INSERT INTO public.commercial_sale_items(sale_id,offering_id,product_name_snapshot,quantity,unit_price_minor,line_total_minor,unit_cost_minor,cost_total_minor)
+    VALUES(v_sale,v_offer,v_name,v_qty,v_price,v_line_total::bigint,(v_line->>'unit_cost_minor')::bigint,(v_line->>'cost_total_minor')::bigint);
     UPDATE public.commercial_inventory_balances SET quantity_on_hand=quantity_on_hand-v_qty,updated_at=now()
     WHERE organization_id=v_org AND location_id=p_location_id AND offering_id=v_offer;
     INSERT INTO public.commercial_stock_movements(offering_id,sale_id,movement_type,quantity_delta,source_ref,created_by)
     VALUES(v_offer,v_sale,'sale',-v_qty,'sale:'||v_sale::text||':offering:'||v_offer::text||':location:'||p_location_id::text,v_uid);
   END LOOP;
+
+  -- One posted invoice entry is the source of truth for the customer subledger and GL AR control account.
+  v_party := commercial_private.commercial_customer_party_account(v_org,v_customer,v_currency);
+  SELECT max(ledger_account_id) FILTER (WHERE mapping_key='accounts_receivable') ar,
+         max(ledger_account_id) FILTER (WHERE mapping_key='sales_revenue') revenue,
+         max(ledger_account_id) FILTER (WHERE mapping_key='inventory') inventory,
+         max(ledger_account_id) FILTER (WHERE mapping_key='cost_of_goods_sold') cogs
+    INTO v_map FROM public.commercial_gl_account_mappings WHERE organization_id=v_org;
+  SELECT coalesce(sum(cost_total_minor::numeric),0) INTO v_cost_total
+    FROM public.commercial_sale_items WHERE sale_id=v_sale;
+  IF v_map.ar IS NULL OR v_map.revenue IS NULL OR (v_cost_total>0 AND (v_map.inventory IS NULL OR v_map.cogs IS NULL)) THEN
+    RAISE EXCEPTION 'sales_gl_mappings_incomplete' USING ERRCODE='55000';
+  END IF;
+  v_gl_lines := jsonb_build_array(
+    jsonb_build_object('ledger_account_id',v_map.ar,'debit_minor',v_total::bigint,'credit_minor',0,'description','Customer receivable','party_account_id',v_party),
+    jsonb_build_object('ledger_account_id',v_map.revenue,'debit_minor',0,'credit_minor',v_total::bigint,'description','Sales revenue')
+  );
+  IF v_cost_total>0 THEN
+    v_gl_lines := v_gl_lines || jsonb_build_array(
+      jsonb_build_object('ledger_account_id',v_map.cogs,'debit_minor',v_cost_total::bigint,'credit_minor',0,'description','Cost of goods sold'),
+      jsonb_build_object('ledger_account_id',v_map.inventory,'debit_minor',0,'credit_minor',v_cost_total::bigint,'description','Inventory relieved')
+    );
+  END IF;
+  v_entry := commercial_private.commercial_gl_post_entry(v_org,'sale:'||v_sale::text,'sale',v_sale,
+    'Sales invoice '||v_receipt,v_currency,v_gl_lines,v_uid,NULL);
 
   IF v_initial_payment > 0 THEN
     INSERT INTO public.commercial_payments(organization_id,sale_id,provider,idempotency_key,amount_minor,currency_code,status,payment_method_type)
@@ -182,10 +224,12 @@ BEGIN
     'line_count',jsonb_array_length(v_rows),'location_id',p_location_id,'total_minor',v_total::bigint,
     'currency_code',v_currency,'payment_recorded',v_initial_payment>0,'payment_mode',v_payment_mode,'outstanding_minor',(v_total-v_initial_payment)::bigint));
 
-  RETURN jsonb_build_object('sale_id',v_sale,'receipt_number',v_receipt,'organization_id',v_org,'activity_id',v_activity,
-    'currency_code',v_currency,'total_minor',v_total::bigint,'line_count',jsonb_array_length(v_rows),
-    'occurred_at',v_created,'state','completed','payment_status',v_payment_status,'payment_recorded',v_initial_payment>0,
-    'paid_minor',v_initial_payment::bigint,'outstanding_minor',(v_total-v_initial_payment)::bigint,'payment_mode',v_payment_mode,'idempotent_replay',false);
+  RETURN jsonb_build_object('sale_id',v_sale,'invoice_id',v_sale,'receipt_number',v_receipt,'invoice_number',v_receipt,
+    'organization_id',v_org,'customer_id',v_customer,'activity_id',v_activity,'currency_code',v_currency,'total_minor',v_total::bigint,
+    'journal_entry_id',v_entry,'line_count',jsonb_array_length(v_rows),'occurred_at',v_created,'state','completed',
+    'payment_status',(SELECT s.payment_status FROM public.commercial_sales s WHERE s.id=v_sale),
+    'payment_recorded',v_initial_payment>0,'paid_minor',v_initial_payment::bigint,
+    'outstanding_minor',greatest(v_total-v_initial_payment,0)::bigint,'payment_mode',v_payment_mode,'idempotent_replay',false);
 END;
 $function$;
 
