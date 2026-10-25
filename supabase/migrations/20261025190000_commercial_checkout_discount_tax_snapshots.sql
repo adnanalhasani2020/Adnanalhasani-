@@ -5,8 +5,22 @@ ALTER TABLE public.commercial_sales
   ADD COLUMN IF NOT EXISTS tax_minor bigint NOT NULL DEFAULT 0;
 
 UPDATE public.commercial_sales
-SET subtotal_minor = total_minor
-WHERE subtotal_minor = 0 AND discount_minor = 0 AND tax_minor = 0 AND total_minor <> 0;
+SET discount_minor = coalesce(discount_minor, 0),
+    tax_minor = coalesce(tax_minor, 0),
+    subtotal_minor = CASE
+      WHEN subtotal_minor IS NULL
+        OR (subtotal_minor = 0 AND coalesce(discount_minor, 0) = 0
+            AND coalesce(tax_minor, 0) = 0 AND total_minor <> 0)
+      THEN total_minor
+      ELSE subtotal_minor
+    END;
+
+ALTER TABLE public.commercial_sales
+  ALTER COLUMN subtotal_minor SET NOT NULL,
+  ALTER COLUMN discount_minor SET DEFAULT 0,
+  ALTER COLUMN discount_minor SET NOT NULL,
+  ALTER COLUMN tax_minor SET DEFAULT 0,
+  ALTER COLUMN tax_minor SET NOT NULL;
 
 DO $constraints$
 BEGIN
