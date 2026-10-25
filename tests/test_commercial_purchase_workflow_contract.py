@@ -151,7 +151,7 @@ def test_android_purchase_workflow_is_connected_to_server_rpcs():
 
 
 def test_fractional_purchase_receiving_preserves_decimal_precision_end_to_end():
-    migration = (ROOT / "supabase/migrations/20261026010000_commercial_fractional_purchase_receiving.sql").read_text(encoding="utf-8")
+    migration = (ROOT / "supabase/migrations/20261025230817_commercial_fractional_purchase_receiving.sql").read_text(encoding="utf-8")
     repository = REPOSITORY.read_text(encoding="utf-8")
     order_dialog = ORDER_DIALOG.read_text(encoding="utf-8")
     receipt_dialog = RECEIPT_DIALOG.read_text(encoding="utf-8")
