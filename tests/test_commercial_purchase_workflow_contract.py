@@ -9,6 +9,7 @@ RECEIPT_DIALOG = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/
 PAYMENT_DIALOG = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/SupplierPaymentEntryDialog.kt"
 MAPPING_DIALOG = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/PurchaseLineOfferingLinkDialog.kt"
 LINE_LINK_MIGRATION = ROOT / "supabase/migrations/20261025223738_commercial_purchase_line_offering_link.sql"
+OFFERING_GUARD = ROOT / "supabase/migrations/20261025223900_commercial_purchase_offering_validity_guard.sql"
 OBLIGATION_INTEGRITY = ROOT / "supabase/migrations/20261025223549_commercial_supplier_obligation_integrity.sql"
 PAYMENT_EVIDENCE = ROOT / "supabase/migrations/20261025223401_commercial_supplier_payment_evidence_uniqueness.sql"
 
@@ -99,8 +100,12 @@ def test_legacy_purchase_lines_require_explicit_inventory_mapping_before_receipt
     assert "purchase_offering_currency_or_scope_mismatch" in sql
     assert "reapproval_required" in sql
     mapping_dialog = MAPPING_DIALOG.read_text(encoding="utf-8")
+    offering_guard = OFFERING_GUARD.read_text(encoding="utf-8")
     assert "linkCommercialCloudPurchaseOrderItemOffering(" in mapping_dialog
     assert "ربط بنود المخزون" in mapping_dialog
+    assert "commercial_guard_purchase_order_item_offering" in offering_guard
+    assert "o.valid_from<=now()" in offering_guard
+    assert "o.valid_to>=now()" in offering_guard
 
 
 def test_android_purchase_workflow_is_connected_to_server_rpcs():
