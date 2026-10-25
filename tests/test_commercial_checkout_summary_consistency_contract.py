@@ -5,6 +5,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = ROOT / "supabase/migrations/20261025161000_commercial_checkout_summary_consistency.sql"
 SOURCE_OF_TRUTH = ROOT / "docs/commerce/operational-invoice-source-of-truth.md"
+TABLE_MAPPING = ROOT / "schema/reconciliation/table-mapping.json"
 MULTILINE_CHECKOUT = ROOT / "supabase/migrations/20261024200000_commercial_multiline_cash_checkout.sql"
 
 
@@ -14,6 +15,7 @@ class CommercialCheckoutSummaryConsistencyContract(unittest.TestCase):
         cls.sql = MIGRATION.read_text(encoding="utf-8")
         cls.checkout = MULTILINE_CHECKOUT.read_text(encoding="utf-8")
         cls.decision = SOURCE_OF_TRUTH.read_text(encoding="utf-8")
+        cls.mapping = TABLE_MAPPING.read_text(encoding="utf-8")
 
     def test_reuses_existing_governed_checkout_and_sale_records(self):
         self.assertIn("commercial_private.commercial_checkout_sale_multi(", self.sql)
@@ -55,6 +57,8 @@ class CommercialCheckoutSummaryConsistencyContract(unittest.TestCase):
         self.assertIn("commercial_payments", self.decision)
         self.assertIn("commercial_documents", self.decision)
         self.assertIn("لا تُنشأ فيه نسخة أخرى", self.decision)
+        self.assertIn('"status": "partial_overlap"', self.mapping)
+        self.assertIn("commercial_sale_items", self.mapping)
 
     def test_migration_dependencies_are_explicitly_gated_by_live_validation(self):
         self.assertIn("commercial_checkout_sale_multi", self.sql)
