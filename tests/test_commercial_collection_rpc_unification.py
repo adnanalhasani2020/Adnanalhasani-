@@ -4,6 +4,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt"
 DEBT_SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudDebtScreen.kt"
+SALES_SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudSalesScreen.kt"
 LEGACY_MIGRATION = ROOT / "supabase/migrations/20261024210000_commercial_sale_collection_rpc.sql"
 UNIFICATION_MIGRATION = ROOT / "supabase/migrations/20261025120000_unify_commercial_collection_rpc.sql"
 CANONICAL_MIGRATION = ROOT / "supabase/migrations/20261024220000_commercial_customer_collection_rpc.sql"
@@ -13,10 +14,13 @@ class CommercialCollectionRpcUnificationTests(unittest.TestCase):
     def test_debt_screen_uses_only_gl_backed_customer_payment_path(self):
         repository = REPOSITORY.read_text(encoding="utf-8")
         screen = DEBT_SCREEN.read_text(encoding="utf-8")
+        sales_screen = SALES_SCREEN.read_text(encoding="utf-8")
         self.assertIn("recordCommercialCloudCustomerPayment(context", screen)
         self.assertIn("/rest/v1/rpc/commercial_record_customer_payment", repository)
         self.assertNotIn("recordCommercialCloudSaleCollection", repository)
         self.assertNotIn("/rest/v1/rpc/commercial_record_sale_collection", repository)
+        self.assertIn('recordCommercialCloudCustomerPayment(context, target.id, amount, "cash")', sales_screen)
+        self.assertNotIn("recordCommercialCloudSaleCollection", sales_screen)
 
     def test_legacy_rpc_is_a_compatibility_shim_to_atomic_gl_path(self):
         legacy = LEGACY_MIGRATION.read_text(encoding="utf-8")
