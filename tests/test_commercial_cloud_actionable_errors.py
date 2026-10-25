@@ -14,6 +14,12 @@ class CommercialCloudActionableErrorTests(unittest.TestCase):
         self.assertIn("دالة قاعدة البيانات المطلوبة غير منشورة", repository)
         self.assertIn("لا تنشئ عملية بديلة بمفتاح جديد", repository)
 
+    def test_ambiguous_network_failure_keeps_retry_safe(self):
+        repository = REPOSITORY.read_text(encoding="utf-8")
+        self.assertIn("انتهت مهلة الاتصال ولم يتمكن التطبيق من تأكيد النتيجة", repository)
+        self.assertIn("لا تبدأ عملية جديدة بمفتاح مختلف", repository)
+        self.assertIn("انقطع الاتصال قبل تأكيد النتيجة من الخادم", repository)
+
     def test_overpayment_and_stock_race_have_specific_user_messages(self):
         repository = REPOSITORY.read_text(encoding="utf-8")
         self.assertIn("collection_exceeds_outstanding_balance", repository)
