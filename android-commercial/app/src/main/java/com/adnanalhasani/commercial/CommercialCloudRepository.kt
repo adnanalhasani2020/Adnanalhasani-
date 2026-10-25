@@ -316,6 +316,10 @@ internal fun getOrCreateCommercialCloudMultiSaleKey(
     initialPaymentMinor: Long = 0L
 ): String {
     val normalizedLines = aggregateCommercialCheckoutLines(lines)
+    require(paymentMode in setOf("cash", "credit")) { "طريقة الدفع غير صالحة." }
+    require(initialPaymentMinor >= 0L) { "مبلغ الدفعة الأولى لا يمكن أن يكون سالبًا." }
+    require(paymentMode != "credit" || !customerId.isNullOrBlank()) { "حدد العميل للبيع الآجل." }
+    require(paymentMode != "cash" || initialPaymentMinor == 0L) { "البيع النقدي لا يقبل مبلغ دفعة أولى منفصلًا." }
     val canonical = JSONArray()
     normalizedLines.forEach { line ->
         canonical.put(JSONObject().put("offering_id", line.offeringId).put("quantity", line.quantity))
@@ -367,12 +371,34 @@ internal fun checkoutCommercialCloudSaleMulti(
     initialPaymentMinor: Long = 0L
 ): JSONObject {
     val normalizedLines = aggregateCommercialCheckoutLines(lines)
+    require(idempotencyKey.isNotBlank()) { "مفتاح إعادة محاولة الفاتورة مطلوب." }
+    require(paymentMode in setOf("cash", "credit")) { "طريقة الدفع غير صالحة." }
+    require(initialPaymentMinor >= 0L) { "مبلغ الدفعة الأولى لا يمكن أن يكون سالبًا." }
+    require(paymentMode != "credit" || !customerId.isNullOrBlank()) { "حدد العميل للبيع الآجل." }
+    require(paymentMode != "cash" || initialPaymentMinor == 0L) { "البيع النقدي لا يقبل مبلغ دفعة أولى منفصلًا." }
     val savedContext = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+    val organizationId = savedContext.getString("organization_id", null).orEmpty()
+    val activityId = savedContext.getString("activity_id", null).orEmpty()
     val locationId = savedContext.getString("location_id", null).orEmpty()
-    require(locationId.isNotBlank()) { "معرّف موقع المخزون غير محفوظ." }
+    require(organizationId.isNotBlank() && activityId.isNotBlank() && locationId.isNotBlank()) {
+        "ملف النشاط وموقع المخزون مطلوبان قبل إنشاء الفاتورة."
+    }
     val payload = JSONArray()
     normalizedLines.forEach { line ->
         payload.put(JSONObject().put("offering_id", line.offeringId).put("quantity", line.quantity))
+    }
+    val requestFingerprint = JSONObject()
+        .put("customer_id", customerId ?: JSONObject.NULL)
+        .put("payment_mode", paymentMode)
+        .put("initial_payment_minor", if (paymentMode == "cash") JSONObject.NULL else initialPaymentMinor)
+        .put("lines", payload).toString()
+    val pendingPrefs = context.getSharedPreferences("commercial_cloud_pending_multi_sale_v1", Context.MODE_PRIVATE)
+    require(pendingPrefs.getString("idempotency_key", null) == idempotencyKey &&
+        pendingPrefs.getString("payload", null) == requestFingerprint &&
+        pendingPrefs.getString("organization_id", null) == organizationId &&
+        pendingPrefs.getString("activity_id", null) == activityId &&
+        pendingPrefs.getString("location_id", null) == locationId) {
+        "مفتاح إعادة المحاولة لا يطابق بيانات الفاتورة المحفوظة؛ أنشئ المفتاح من بيانات الفاتورة نفسها."
     }
     val sessionPrefs = commercialCloudSessionPreferences(context)
     val savedRefresh = sessionPrefs.getString("refresh_token", null).orEmpty()
