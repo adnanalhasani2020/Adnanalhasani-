@@ -341,6 +341,42 @@ internal fun checkoutCommercialCloudSaleMulti(
     ))
 }
 
+internal fun recordCommercialCloudCustomerPayment(
+    context: Context,
+    saleId: String,
+    amountMinor: Long,
+    method: String
+): JSONObject {
+    require(saleId.isNotBlank() && amountMinor > 0L)
+    require(method in setOf("cash", "bank_transfer", "card", "other"))
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val fingerprint = listOf(orgId, saleId, amountMinor.toString(), method).joinToString("|")
+    val prefs = context.getSharedPreferences("commercial_cloud_pending_collection_v1", Context.MODE_PRIVATE)
+    val storedKey = prefs.getString("idempotency_key", null).orEmpty()
+    if (storedKey.isNotBlank()) {
+        require(prefs.getString("fingerprint", null) == fingerprint) {
+            "يوجد تحصيل معلّق لم يُحسم بعد. أعد المحاولة بنفس بيانات التحصيل."
+        }
+    }
+    val idempotencyKey = storedKey.ifBlank { UUID.randomUUID().toString() }
+    if (storedKey.isBlank()) {
+        check(prefs.edit().clear().putString("fingerprint", fingerprint)
+            .putString("idempotency_key", idempotencyKey).commit()) {
+            "تعذر حفظ مفتاح التحصيل قبل الإرسال."
+        }
+    }
+    val result = JSONObject(commercialCloudRequest(
+        "/rest/v1/rpc/commercial_record_customer_payment", "POST",
+        JSONObject().put("p_sale_id", saleId)
+            .put("p_amount_minor", amountMinor)
+            .put("p_payment_method_type", method)
+            .put("p_idempotency_key", idempotencyKey),
+        access
+    ))
+    check(prefs.edit().clear().commit()) { "تم تأكيد التحصيل لكن تعذر تنظيف مفتاح إعادة المحاولة." }
+    return result
+}
+
 internal data class CommercialCloudSaleLine(
     val productName: String,
     val quantity: String,
