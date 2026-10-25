@@ -13,6 +13,13 @@ class CommercialDocumentMathTests(unittest.TestCase):
         self.assertEqual(to_base_quantity("1.25", "1000"), Decimal("1250"))
         self.assertEqual(to_base_quantity("0.75", "1"), Decimal("0.75"))
 
+    def test_large_unit_conversion_does_not_round_to_decimal_context(self):
+        quantity = "123456789012345678901234567890"
+        self.assertEqual(
+            to_base_quantity(quantity, "12"),
+            Decimal("1481481468148148146814814814680"),
+        )
+
     def test_base_unit_precision_rejects_silent_rounding(self):
         self.assertEqual(validate_base_quantity_precision("1.250", 3), Decimal("1.250"))
         self.assertEqual(validate_base_quantity_precision("12", 0), Decimal("12"))
