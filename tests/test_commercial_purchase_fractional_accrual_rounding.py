@@ -12,7 +12,8 @@ def test_receipt_accounting_rounds_cumulative_line_value_not_each_partial_receip
     )[1].split("$function$;", 1)[0]
     assert "round((prior.quantity_before + ri.quantity::numeric) * ri.unit_cost_minor::numeric)" in receipt
     assert "round(prior.quantity_before * ri.unit_cost_minor::numeric)" in receipt
-    assert "(pr.received_at,pr.id) < (NEW.received_at,NEW.id)" in receipt
+    assert "pr.accounting_sequence < NEW.accounting_sequence" in receipt
+    assert "commercial_purchase_receipts_accounting_sequence_uq" in sql
     assert "DEFERRABLE INITIALLY DEFERRED" in sql
 
 
@@ -24,7 +25,8 @@ def test_supplier_invoice_expected_cost_uses_cumulative_partial_invoice_delta():
     )[1].split("$function$;", 1)[0]
     assert "round((prior.quantity_before + si.quantity::numeric) * poi.unit_cost_minor::numeric)" in invoice
     assert "round(prior.quantity_before * poi.unit_cost_minor::numeric)" in invoice
-    assert "(prior_invoice.recorded_at,prior_invoice.id) < (NEW.recorded_at,NEW.id)" in invoice
+    assert "prior_invoice.accounting_sequence < NEW.accounting_sequence" in invoice
+    assert "commercial_supplier_invoices_accounting_sequence_uq" in sql
     assert "prior_invoice.state='recorded'" in invoice
 
 
