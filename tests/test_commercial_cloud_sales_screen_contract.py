@@ -212,7 +212,7 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         self.assertIn("commercial_checkout_sale_multi", self.repository)
         self.assertIn("getOrCreateCommercialCloudMultiSaleKey", self.repository)
         self.assertIn("aggregateCommercialCheckoutLines(lines)", self.repository)
-        self.assertIn("Math.addExact(totals[line.offeringId] ?: 0, line.quantity)", self.repository)
+        self.assertIn("Math.addExact(totals[key] ?: 0, line.quantity)", self.repository)
         self.assertIn('"unit_code", line.unitCode', self.repository)
         self.assertIn("configureCommercialCloudSellUnit", self.repository)
         self.assertIn("sell_units:commercial_offering_sell_units", self.repository)
@@ -243,7 +243,7 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
 
 
     def test_same_offering_can_have_multiple_independent_invoice_lines(self):
-        self.assertIn("val invoiceLines by remember { mutableStateOf<List<ComposerDraftLine>>(emptyList()) }", self.composer)
+        self.assertIn("var invoiceLines by remember { mutableStateOf<List<ComposerDraftLine>>(emptyList()) }", self.composer)
         self.assertIn("invoiceLines.forEachIndexed", self.composer)
         self.assertIn("it.id == draft.id", self.composer)
         self.assertIn("selectedLines.groupBy { it.product.cloudOfferingId }", self.composer)
