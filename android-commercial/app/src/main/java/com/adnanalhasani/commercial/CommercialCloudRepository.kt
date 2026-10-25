@@ -885,7 +885,7 @@ internal fun recordCommercialCloudSupplierInvoice(
         require(line.purchaseOrderItemId.isNotBlank() && line.quantity.isNotBlank()) { "بيانات بند الفاتورة غير مكتملة." }
         val quantity = line.quantity.toBigDecimalOrNull()
             ?: throw IllegalArgumentException("أدخل كمية صحيحة لكل بند.")
-        require(quantity > java.math.BigDecimal.ZERO && quantity.scale().coerceAtLeast(0) <= 6) { "كمية الفاتورة يجب أن تكون موجبة وبحد أقصى 6 منازل عشرية." }
+        require(quantity > java.math.BigDecimal.ZERO && quantity.stripTrailingZeros().scale() <= 6) { "كمية الفاتورة يجب أن تكون موجبة وبحد أقصى 6 منازل عشرية." }
         require(line.unitPriceMinor >= 0) { "سعر الوحدة لا يمكن أن يكون سالبًا." }
         lineArray.put(JSONObject()
             .put("purchase_order_item_id", line.purchaseOrderItemId)
@@ -997,10 +997,10 @@ internal fun receiveCommercialCloudPurchaseOrder(
     lines.forEach { line ->
         val quantity = line.quantity.toBigDecimalOrNull()
             ?: throw IllegalArgumentException("كمية الاستلام غير صالحة.")
-        require(quantity > java.math.BigDecimal.ZERO && quantity.stripTrailingZeros().scale() <= 0) {
-            "الاستلام الحالي يدعم وحدات المخزون الصحيحة فقط."
+        require(quantity > java.math.BigDecimal.ZERO && quantity.stripTrailingZeros().scale() <= 6) {
+            "أدخل كمية موجبة لا تتجاوز ست خانات عشرية."
         }
-        lineArray.put(JSONObject().put("purchase_order_item_id", line.purchaseOrderItemId).put("quantity", quantity.toBigIntegerExact().toString()))
+        lineArray.put(JSONObject().put("purchase_order_item_id", line.purchaseOrderItemId).put("quantity", quantity.stripTrailingZeros().toPlainString()))
     }
     val (orgId, access) = commercialMasterDataAccess(context)
     return JSONObject(commercialCloudRequest(
@@ -1025,7 +1025,7 @@ internal fun createCommercialCloudPurchaseOrder(
         require(line.offeringId.isNotBlank() && line.description.isNotBlank() && quantity > java.math.BigDecimal.ZERO &&
             quantity.stripTrailingZeros().scale() <= 0 && line.unitCostMinor >= 0L) { "بيانات بند أمر الشراء غير صالحة." }
         lineArray.put(JSONObject().put("offering_id", line.offeringId).put("item_description", line.description.trim())
-            .put("quantity_ordered", quantity.toBigIntegerExact().toString()).put("unit_cost_minor", line.unitCostMinor))
+            .put("quantity_ordered", quantity.stripTrailingZeros().toPlainString()).put("unit_cost_minor", line.unitCostMinor))
     }
     val (orgId, access) = commercialMasterDataAccess(context)
     return JSONObject(commercialCloudRequest(
