@@ -25,6 +25,14 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         cls.composer = COMPOSER.read_text(encoding="utf-8")
         cls.collection_migration = COLLECTION_MIGRATION.read_text(encoding="utf-8")
 
+    def test_customer_loader_uses_shared_pagination_without_fixed_limit(self):
+        start = self.repository.index("internal fun loadCommercialCloudCustomers(")
+        end = self.repository.index("internal data class CommercialCloudCheckoutLine", start)
+        loader = self.repository[start:end]
+        self.assertIn("commercialCloudPagedGet(path, access)", loader)
+        self.assertNotIn("limit=", loader)
+        self.assertIn("!path.contains(\\"limit=\\")", self.repository)
+
     def test_invoice_projection_uses_existing_tables_and_columns(self):
         self.assertIn("internal fun loadCommercialCloudSaleDocuments", self.repository)
         for field in (
