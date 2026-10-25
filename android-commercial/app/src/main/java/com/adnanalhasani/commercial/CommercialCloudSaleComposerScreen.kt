@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.math.BigInteger
 import java.util.Locale
+import java.util.UUID
 import java.util.concurrent.Executors
 
 private val CloudComposerInk = Color(0xFF183B35)
@@ -61,6 +62,8 @@ private val CloudComposerGreen = Color(0xFF167D63)
 private val CloudComposerMuted = Color(0xFF71817B)
 private val CloudComposerBorder = Color(0xFFE5EBE8)
 private data class ComposerSellUnit(val code: String, val label: String, val factor: Long, val isDefault: Boolean)
+private data class ComposerDraftLine(val id: String, val offeringId: String, val quantityText: String, val unitCode: String)
+private data class ComposerSelectedLine(val draft: ComposerDraftLine, val product: Product, val quantity: Int, val unit: ComposerSellUnit)
 
 private fun cloudComposerSellUnits(product: Product): List<ComposerSellUnit> {
     val parsed = runCatching {
@@ -96,8 +99,7 @@ internal fun CommercialCloudSaleComposerScreen(
     var initialPaymentText by remember { mutableStateOf("0") }
     var discountText by remember { mutableStateOf("0") }
     var taxText by remember { mutableStateOf("0") }
-    var quantities by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
-    var selectedUnitCodes by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var invoiceLines by remember { mutableStateOf<List<ComposerDraftLine>>(emptyList()) }
     var configureUnitProduct by remember { mutableStateOf<Product?>(null) }
     var newUnitCode by remember { mutableStateOf("carton") }
     var newUnitName by remember { mutableStateOf("كرتون") }
@@ -127,17 +129,19 @@ internal fun CommercialCloudSaleComposerScreen(
     }
 
     val visibleProducts = products.filter { it.name.contains(search, ignoreCase = true) || it.category.contains(search, ignoreCase = true) || it.barcode.contains(search, ignoreCase = true) }
-    val selectedLines = products.mapNotNull { product ->
-        val quantity = quantities[product.cloudOfferingId]?.toIntOrNull()
+    val selectedLines = invoiceLines.mapNotNull { draft ->
+        val product = products.firstOrNull { it.cloudOfferingId == draft.offeringId } ?: return@mapNotNull null
+        val quantity = draft.quantityText.toIntOrNull()
         val units = cloudComposerSellUnits(product)
-        val unit = units.firstOrNull { it.code == selectedUnitCodes[product.cloudOfferingId] }
+        val unit = units.firstOrNull { it.code == draft.unitCode }
             ?: units.firstOrNull { it.isDefault } ?: units.first()
-        if (product.cloudOfferingId.isBlank() || quantity == null || quantity <= 0) null else Triple(product, quantity, unit)
+        if (product.cloudOfferingId.isBlank() || quantity == null || quantity <= 0) null
+        else ComposerSelectedLine(draft, product, quantity, unit)
     }
-    val estimatedSubtotal = selectedLines.fold(BigInteger.ZERO) { sum, entry ->
-        sum + BigInteger.valueOf(entry.first.cloudPriceMinor.coerceAtLeast(0L))
-            .multiply(BigInteger.valueOf(entry.third.factor))
-            .multiply(BigInteger.valueOf(entry.second.toLong()))
+    val estimatedSubtotal = selectedLines.fold(BigInteger.ZERO) { sum, line ->
+        sum + BigInteger.valueOf(line.product.cloudPriceMinor.coerceAtLeast(0L))
+            .multiply(BigInteger.valueOf(line.unit.factor))
+            .multiply(BigInteger.valueOf(line.quantity.toLong()))
     }
     val discountMinor = discountText.toLongOrNull() ?: 0L
     val taxMinor = taxText.toLongOrNull() ?: 0L
@@ -280,59 +284,58 @@ internal fun CommercialCloudSaleComposerScreen(
                     placeholder = { Text("الاسم أو التصنيف أو الباركود") }
                 )
             }
-            items(visibleProducts, key = { it.cloudOfferingId }) { product ->
-                var quantityText = quantities[product.cloudOfferingId].orEmpty()
-                var unitMenuExpanded by remember(product.cloudOfferingId) { mutableStateOf(false) }
+            items(visibleProducts, key = { "catalog-${it.cloudOfferingId}" }) { product ->
                 val availableUnits = cloudComposerSellUnits(product)
-                val selectedUnit = availableUnits.firstOrNull { it.code == selectedUnitCodes[product.cloudOfferingId] }
-                    ?: availableUnits.firstOrNull { it.isDefault } ?: availableUnits.first()
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    shape = RoundedCornerShape(14.dp),
-                    border = BorderStroke(1.dp, CloudComposerBorder)
-                ) {
+                Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(14.dp), border = BorderStroke(1.dp, CloudComposerBorder)) {
                     Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                         Text(product.name, color = CloudComposerInk, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            val sellPrice = BigInteger.valueOf(product.cloudPriceMinor.coerceAtLeast(0L)).multiply(BigInteger.valueOf(selectedUnit.factor))
-                            Text("السعر: ${String.format(Locale.US, "%,d", sellPrice)} $currency / ${selectedUnit.label}", color = CloudComposerGreen, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-                            Text("المتاح: ${product.stock / selectedUnit.factor.coerceAtMost(Int.MAX_VALUE.toLong()).toInt().coerceAtLeast(1)} ${selectedUnit.label}", color = CloudComposerMuted, fontSize = 11.sp)
+                        Text("المخزون المتاح: ${product.stock} ${product.unitCode}", color = CloudComposerMuted, fontSize = 11.sp)
+                        Text("وحدات البيع: " + availableUnits.joinToString("، ") { "${it.label} = ${it.factor} ${product.unitCode}" }, color = CloudComposerMuted, fontSize = 11.sp)
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = {
+                                val defaultUnit = availableUnits.firstOrNull { it.isDefault } ?: availableUnits.first()
+                                invoiceLines = invoiceLines + ComposerDraftLine(UUID.randomUUID().toString(), product.cloudOfferingId, "1", defaultUnit.code)
+                                error = ""; notice = ""
+                            }, enabled = !submitting, modifier = Modifier.weight(1f)) { Text("إضافة سطر للفاتورة") }
+                            OutlinedButton(onClick = { configureUnitProduct = product; newUnitCode = "carton"; newUnitName = "كرتون"; newUnitFactor = "12" }, enabled = !submitting) { Text("إضافة وحدة") }
                         }
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            if (availableUnits.size > 1) {
-                                Box {
-                                OutlinedButton(onClick = { unitMenuExpanded = true }, enabled = !submitting) {
-                                    Text("وحدة البيع: ${selectedUnit.label}")
-                                }
-                                DropdownMenu(expanded = unitMenuExpanded, onDismissRequest = { unitMenuExpanded = false }) {
-                                    availableUnits.forEach { unit ->
-                                        DropdownMenuItem(
-                                            text = { Text("${unit.label} (يساوي ${unit.factor} ${product.unitCode})") },
-                                            onClick = {
-                                                selectedUnitCodes = selectedUnitCodes + (product.cloudOfferingId to unit.code)
-                                                unitMenuExpanded = false
-                                                error = ""
+                    }
+                }
+            }
+            if (invoiceLines.isNotEmpty()) item {
+                Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(15.dp)) {
+                    Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                        Text("سطور الفاتورة (${invoiceLines.size})", color = CloudComposerInk, fontWeight = FontWeight.Bold)
+                        invoiceLines.forEachIndexed { index, draft ->
+                            val product = products.firstOrNull { it.cloudOfferingId == draft.offeringId }
+                            if (product != null) {
+                                val units = cloudComposerSellUnits(product)
+                                val unit = units.firstOrNull { it.code == draft.unitCode } ?: units.firstOrNull { it.isDefault } ?: units.first()
+                                var unitMenuExpanded by remember(draft.id) { mutableStateOf(false) }
+                                Surface(color = Color(0xFFF7F9F8), shape = RoundedCornerShape(11.dp)) {
+                                    Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Column(Modifier.weight(1f)) {
+                                                Text("${index + 1}. ${product.name}", color = CloudComposerInk, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                                                Text("السعر: ${String.format(Locale.US, "%,d", BigInteger.valueOf(product.cloudPriceMinor).multiply(BigInteger.valueOf(unit.factor)))} $currency / ${unit.label}", color = CloudComposerGreen, fontSize = 11.sp)
                                             }
-                                        )
+                                            OutlinedButton(onClick = { invoiceLines = invoiceLines.filterNot { it.id == draft.id }; error = "" }, enabled = !submitting) { Text("حذف") }
+                                        }
+                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                            Box {
+                                                OutlinedButton(onClick = { unitMenuExpanded = true }, enabled = !submitting) { Text(unit.label) }
+                                                DropdownMenu(expanded = unitMenuExpanded, onDismissRequest = { unitMenuExpanded = false }) {
+                                                    units.forEach { option -> DropdownMenuItem(text = { Text("${option.label} (يساوي ${option.factor} ${product.unitCode})") }, onClick = { invoiceLines = invoiceLines.map { if (it.id == draft.id) it.copy(unitCode = option.code) else it }; unitMenuExpanded = false; error = "" }) }
+                                                }
+                                            }
+                                            OutlinedTextField(value = draft.quantityText, onValueChange = { input -> invoiceLines = invoiceLines.map { if (it.id == draft.id) it.copy(quantityText = input.filter(Char::isDigit).take(6)) else it }; error = "" }, modifier = Modifier.weight(1f), singleLine = true, label = { Text("الكمية") })
+                                            Text("= ${String.format(Locale.US, "%,d", BigInteger.valueOf(product.cloudPriceMinor).multiply(BigInteger.valueOf(unit.factor)).multiply(BigInteger.valueOf(draft.quantityText.toLongOrNull() ?: 0L)))}", color = CloudComposerInk, fontSize = 11.sp)
+                                        }
                                     }
                                 }
-                                }
                             }
-                            OutlinedButton(onClick = {
-                                configureUnitProduct = product
-                                newUnitCode = "carton"
-                                newUnitName = "كرتون"
-                                newUnitFactor = "12"
-                            }, enabled = !submitting) { Text("إضافة وحدة") }
                         }
-                        OutlinedTextField(
-                            value = quantityText,
-                            onValueChange = { input -> quantities = quantities + (product.cloudOfferingId to input.filter(Char::isDigit).take(6)); error = "" },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            label = { Text("الكمية المطلوبة") },
-                            placeholder = { Text("اتركه فارغًا إذا لم ترد الصنف") }
-                        )
+                        Text("يمكن تكرار الصنف في أكثر من سطر مع اختيار وحدة وكمية مستقلتين لكل سطر.", color = CloudComposerMuted, fontSize = 11.sp)
                     }
                 }
             }
@@ -340,7 +343,7 @@ internal fun CommercialCloudSaleComposerScreen(
                 Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(15.dp)) {
                     Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("ملخص الفاتورة", color = CloudComposerInk, fontWeight = FontWeight.Bold)
-                        Text("عدد الأصناف: ${selectedLines.size}", color = CloudComposerMuted, fontSize = 12.sp)
+                        Text("عدد سطور الفاتورة: ${selectedLines.size}", color = CloudComposerMuted, fontSize = 12.sp)
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("الإجمالي الفرعي", color = CloudComposerMuted)
                             Text("${String.format(Locale.US, "%,d", estimatedSubtotal)} $currency", color = CloudComposerInk, fontWeight = FontWeight.Medium)
@@ -379,9 +382,13 @@ internal fun CommercialCloudSaleComposerScreen(
                         error = ""
                         if (selectedLines.isEmpty()) {
                             error = "أدخل كمية لصنف واحد على الأقل."
-                        } else if (selectedLines.any { it.second.toLong() * it.third.factor > it.first.stock.toLong() }) {
-                            error = "توجد كمية تتجاوز المخزون المتاح؛ حدّث المخزون وصحح الكميات."
-                        } else if (selectedLines.any { it.first.cloudPriceMinor < 0L }) {
+                        } else if (selectedLines.size != invoiceLines.size) {
+                            error = "صحح الكميات في جميع سطور الفاتورة قبل المتابعة."
+                        } else if (selectedLines.groupBy { it.product.cloudOfferingId }.any { (_, lines) ->
+                            lines.sumOf { it.quantity.toLong() * it.unit.factor } > lines.first().product.stock.toLong()
+                        }) {
+                            error = "مجموع الكميات بوحدة المخزون يتجاوز المتاح لأحد الأصناف؛ حدّث المخزون وصحح السطور."
+                        } else if (selectedLines.any { it.product.cloudPriceMinor < 0L }) {
                             error = "يوجد سعر غير صالح؛ حدّث الأصناف."
                         } else if (discountMinor < 0L || taxMinor < 0L || discountMinor > estimatedSubtotal.min(BigInteger.valueOf(Long.MAX_VALUE)).toLong()) {
                             error = "تحقق من الخصم والضريبة؛ يجب ألا يتجاوز الخصم إجمالي الأصناف."
@@ -390,7 +397,7 @@ internal fun CommercialCloudSaleComposerScreen(
                         } else {
                             submitting = true
                             notice = "جارٍ التحقق من الأصناف والمخزون وتسجيل فاتورة واحدة على الخادم..."
-                            val requestLines = selectedLines.map { CommercialCloudCheckoutLine(it.first.cloudOfferingId, it.second, it.third.code) }
+                            val requestLines = selectedLines.map { CommercialCloudCheckoutLine(it.product.cloudOfferingId, it.quantity, it.unit.code) }
                             val customerId = selectedCustomer?.id
                             val paymentModeForRequest = paymentMode
                             val initialPaymentMinor = initialPaymentText.toLongOrNull()
@@ -413,7 +420,7 @@ internal fun CommercialCloudSaleComposerScreen(
                                     result.onSuccess { (summary, debt) ->
                                         val (receipt, paymentRecorded, clearError) = summary
                                         val (outstanding, paymentStatus) = debt
-                                        if (clearError == null) quantities = emptyMap()
+                                        if (clearError == null) invoiceLines = emptyList()()
                                         notice = if (clearError == null) {
                                             "تم تأكيد الفاتورة رقم $receipt على الخادم. الحالة: $paymentStatus. ${if (paymentRecorded) "سُجلت الدفعة الأولى." else "لم يُسجل دفع بعد."} المتبقي على الفاتورة: $outstanding $currency."
                                         } else {
