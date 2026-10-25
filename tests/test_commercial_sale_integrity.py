@@ -45,6 +45,12 @@ class CommercialSaleIntegrityContractTests(unittest.TestCase):
         self.assertIn("request_fingerprint", self.repository)
         self.assertIn("commercial_request_sale_return", self.repository)
 
+    def test_obsolete_sale_collection_rpc_path_is_removed(self):
+        self.assertNotIn("getOrCreateCommercialCloudCollectionKey", self.repository)
+        self.assertNotIn("clearCommercialCloudCollectionKey", self.repository)
+        self.assertNotIn("recordCommercialCloudSaleCollection", self.repository)
+        self.assertNotIn("/rest/v1/rpc/commercial_record_sale_collection", self.repository)
+
     def test_cloud_debt_screen_uses_server_collection_rpc_and_partial_balances(self):
         self.assertIn("loadCommercialCloudReceivables(context)", self.debt_screen)
         self.assertIn("recordCommercialCloudCustomerPayment(context", self.debt_screen)
