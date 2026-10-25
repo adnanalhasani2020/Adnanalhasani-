@@ -6,6 +6,7 @@ REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/comm
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudPurchasesScreen.kt"
 ORDER_DIALOG = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/PurchaseOrderEntryDialog.kt"
 RECEIPT_DIALOG = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/PurchaseReceiptEntryDialog.kt"
+PAYMENT_DIALOG = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/SupplierPaymentEntryDialog.kt"
 
 
 def test_purchase_order_lifecycle_is_scoped_and_idempotent():
@@ -82,6 +83,7 @@ def test_android_purchase_workflow_is_connected_to_server_rpcs():
     screen = SCREEN.read_text(encoding="utf-8")
     order_dialog = ORDER_DIALOG.read_text(encoding="utf-8")
     receipt_dialog = RECEIPT_DIALOG.read_text(encoding="utf-8")
+    payment_dialog = PAYMENT_DIALOG.read_text(encoding="utf-8")
     for marker in (
         "/rest/v1/rpc/commercial_create_purchase_order",
         "/rest/v1/rpc/commercial_transition_purchase_order",
@@ -97,11 +99,14 @@ def test_android_purchase_workflow_is_connected_to_server_rpcs():
         "إلغاء الأمر",
         "استلام البضاعة",
         "تسجيل فاتورة المورد",
+        "تسجيل دفعة للمورد",
         "PurchaseOrderEntryDialog(",
         "PurchaseReceiptEntryDialog(",
     ):
         assert marker in screen
     assert "createCommercialCloudPurchaseOrder(" in order_dialog
     assert "receiveCommercialCloudPurchaseOrder(" in receipt_dialog
+    assert "recordCommercialCloudSupplierPayment(" in payment_dialog
+    assert "UUID.randomUUID()" in payment_dialog
     assert "UUID.randomUUID()" in order_dialog
     assert "UUID.randomUUID()" in receipt_dialog
