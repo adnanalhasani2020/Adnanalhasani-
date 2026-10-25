@@ -341,57 +341,6 @@ internal fun checkoutCommercialCloudSaleMulti(
     ))
 }
 
-internal fun getOrCreateCommercialCloudCollectionKey(
-    context: Context, saleId: String, amountMinor: Long
-): String {
-    require(saleId.isNotBlank() && amountMinor > 0L) { "حدد الفاتورة ومبلغ تحصيل موجب." }
-    val prefs = context.getSharedPreferences("commercial_cloud_pending_collection_v1", Context.MODE_PRIVATE)
-    val savedSale = prefs.getString("sale_id", null).orEmpty()
-    val savedAmount = prefs.getLong("amount_minor", -1L)
-    val savedKey = prefs.getString("idempotency_key", null).orEmpty()
-    if (savedKey.isNotBlank()) {
-        require(savedSale == saleId && savedAmount == amountMinor) {
-            "يوجد تحصيل معلّق ببيانات مختلفة؛ أعد المحاولة بالمبلغ والفاتورة نفسيهما أولًا."
-        }
-        return savedKey
-    }
-    val key = UUID.randomUUID().toString()
-    check(prefs.edit().putString("sale_id", saleId).putLong("amount_minor", amountMinor)
-        .putString("idempotency_key", key).commit()) {
-        "تعذر حفظ مفتاح التحصيل قبل الإرسال؛ لم يتم إرسال التحصيل."
-    }
-    return key
-}
-
-internal fun clearCommercialCloudCollectionKey(context: Context, idempotencyKey: String) {
-    val prefs = context.getSharedPreferences("commercial_cloud_pending_collection_v1", Context.MODE_PRIVATE)
-    if (prefs.getString("idempotency_key", null) == idempotencyKey) {
-        check(prefs.edit().clear().commit()) { "تعذر تنظيف مفتاح التحصيل بعد تأكيد الخادم." }
-    }
-}
-
-internal fun recordCommercialCloudSaleCollection(
-    context: Context, saleId: String, amountMinor: Long, idempotencyKey: String
-): JSONObject {
-    require(saleId.isNotBlank() && amountMinor > 0L) { "حدد الفاتورة ومبلغ تحصيل موجب." }
-    val sessionPrefs = commercialCloudSessionPreferences(context)
-    val savedRefresh = sessionPrefs.getString("refresh_token", null).orEmpty()
-    require(savedRefresh.isNotBlank()) { "سجّل الدخول إلى حساب Supabase أولًا." }
-    val session = JSONObject(commercialCloudRequest(
-        "/auth/v1/token?grant_type=refresh_token", "POST",
-        JSONObject().put("refresh_token", savedRefresh)
-    ))
-    val access = session.optString("access_token")
-    require(access.isNotBlank()) { "انتهت جلسة الحساب؛ سجّل الدخول مجددًا." }
-    sessionPrefs.edit().putString("refresh_token", session.optString("refresh_token").ifBlank { savedRefresh }).apply()
-    return JSONObject(commercialCloudRequest(
-        "/rest/v1/rpc/commercial_record_sale_collection", "POST",
-        JSONObject().put("p_sale_id", saleId).put("p_amount_minor", amountMinor)
-            .put("p_idempotency_key", idempotencyKey),
-        access
-    ))
-}
-
 internal data class CommercialCloudSaleLine(
     val productName: String,
     val quantity: String,
