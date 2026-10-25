@@ -906,6 +906,50 @@ internal fun recordCommercialCloudSupplierInvoice(
     ))
 }
 
+private fun commercialPurchaseReceiptPendingPreferences(context: Context) =
+    context.getSharedPreferences("commercial_purchase_receipt_pending_v1", Context.MODE_PRIVATE)
+
+internal fun getOrCreateCommercialPurchaseReceiptIdempotencyKey(context: Context, purchaseOrderId: String): String {
+    require(purchaseOrderId.isNotBlank()) { "مرجع أمر الشراء غير صالح." }
+    val preferences = commercialPurchaseReceiptPendingPreferences(context)
+    val preferenceKey = "purchase_order_" + purchaseOrderId
+    val existing = preferences.getString(preferenceKey, null).orEmpty()
+    if (existing.isNotBlank()) return existing
+    val created = UUID.randomUUID().toString()
+    check(preferences.edit().putString(preferenceKey, created).commit()) {
+        "تعذر حفظ مفتاح الاستلام قبل الإرسال؛ لم يتم إرسال الاستلام."
+    }
+    return preferences.getString(preferenceKey, null).orEmpty().also {
+        check(it.isNotBlank()) { "تعذر تأكيد حفظ مفتاح الاستلام؛ لم يتم إرسال الاستلام." }
+    }
+}
+
+internal fun hasPendingCommercialPurchaseReceipt(context: Context, purchaseOrderId: String): Boolean =
+    commercialPurchaseReceiptPendingPreferences(context).getString("purchase_order_" + purchaseOrderId, null).orEmpty().isNotBlank()
+
+internal fun clearCommercialPurchaseReceiptIdempotencyKey(context: Context, purchaseOrderId: String, idempotencyKey: String): Boolean {
+    val preferences = commercialPurchaseReceiptPendingPreferences(context)
+    val preferenceKey = "purchase_order_" + purchaseOrderId
+    if (preferences.getString(preferenceKey, null) != idempotencyKey) return false
+    return preferences.edit().remove(preferenceKey).commit()
+}
+
+/** Resolve an interrupted receipt by asking the server before clearing its persisted key. */
+internal fun resolvePendingCommercialPurchaseReceipt(context: Context, purchaseOrderId: String): Boolean {
+    val preferences = commercialPurchaseReceiptPendingPreferences(context)
+    val preferenceKey = "purchase_order_" + purchaseOrderId
+    val pendingKey = preferences.getString(preferenceKey, null).orEmpty()
+    if (pendingKey.isBlank()) return false
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val path = "/rest/v1/commercial_purchase_receipts?select=id&organization_id=eq.$orgId&idempotency_key=eq.$pendingKey&limit=1"
+    val rows = JSONArray(commercialCloudRequest(path, "GET", null, access))
+    val found = rows.length() > 0
+    check(preferences.getString(preferenceKey, null) != pendingKey || preferences.edit().remove(preferenceKey).commit()) {
+        "تعذر مسح مفتاح الاستلام بعد التحقق من الخادم."
+    }
+    return found
+}
+
 internal data class CommercialPurchaseReceiptLineInput(val purchaseOrderItemId: String, val quantity: String)
 internal data class CommercialPurchaseOrderLineInput(
     val offeringId: String,
