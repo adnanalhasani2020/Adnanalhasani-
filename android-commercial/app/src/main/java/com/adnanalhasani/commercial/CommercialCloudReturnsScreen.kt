@@ -267,7 +267,7 @@ internal fun CommercialCloudReturnsScreen(context: Context, onBack: () -> Unit) 
                             ?: units.firstOrNull { it.code == saleItem.sellingUnitCode }
                             ?: units.first()
                         val remainingInUnit = saleItem.remainingQuantity / selectedUnit.factor
-                        Text("المباع: ${saleItem.soldQuantity} ${saleItem.sellingUnitName} · المتبقي: ${saleItem.remainingQuantity} وحدة مخزون · قيمة السطر: ${money(saleItem.lineTotalMinor, requestTarget!!.currencyCode)}", color = ReturnMuted, fontSize = 11.sp)
+                        Text("المباع: ${saleItem.soldQuantity} ${saleItem.sellingUnitName} · المتبقي للإرجاع: ${saleItem.remainingQuantity} وحدة مخزون · قيمة السطر: ${money(saleItem.lineTotalMinor, requestTarget!!.currencyCode)}", color = ReturnMuted, fontSize = 11.sp)
                         if (units.size > 1) {
                             Box {
                                 OutlinedButton(onClick = { returnUnitMenuItemId = saleItem.id }) { Text("وحدة الإرجاع: ${selectedUnit.label}") }
