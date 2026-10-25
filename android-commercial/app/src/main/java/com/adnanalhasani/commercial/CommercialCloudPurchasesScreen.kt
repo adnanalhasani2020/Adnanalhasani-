@@ -232,7 +232,7 @@ internal fun CommercialCloudPurchasesScreen(context: Context, onBack: () -> Unit
                                     TextButton(onClick = { transitionConfirmation = order to "cancel" }) { Text("إلغاء الأمر") }
                                 }
                                 "partially_received" -> {
-                                    Button(onClick = { receiptOrder = order }, enabled = order.receiveLocationId != null && order.lines.any { it.offeringId != null }) { Text("استلام الباقي") }
+                                    Button(onClick = { receiptOrder = order }, enabled = order.receiveLocationId != null && !purchaseOrderHasUnmappedRemainingLines(order)) { Text("استلام الباقي") }
                                     TextButton(onClick = { transitionConfirmation = order to "close" }) { Text("إغلاق بالنقص") }
                                 }
                                 "received" -> TextButton(onClick = { transitionConfirmation = order to "close" }) { Text("إغلاق الأمر") }
