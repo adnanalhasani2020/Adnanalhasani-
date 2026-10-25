@@ -1,7 +1,7 @@
 -- Run with Supabase CLI / pgTAP in a disposable local or staging database.
 -- These are schema regression tests; they do not replace authenticated-session integration tests.
 BEGIN;
-SELECT plan(25);
+SELECT plan(27);
 
 SELECT has_table('public', 'commercial_audit_events',
   'append-only audit event table exists');
@@ -185,6 +185,19 @@ SELECT ok(
     'public.commercial_post_journal_entry(uuid)'::regprocedure
   )) > 0,
   'journal posting rejects inactive ledger accounts');
+
+
+SELECT ok(
+  position('paid_minor' in pg_get_functiondef(
+    'commercial_private.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint)'::regprocedure
+  )) > 0,
+  'multi-line checkout returns confirmed paid amount on idempotent replay');
+
+SELECT ok(
+  position('outstanding_minor' in pg_get_functiondef(
+    'commercial_private.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint)'::regprocedure
+  )) > 0,
+  'multi-line checkout returns outstanding balance on idempotent replay');
 
 SELECT * FROM finish();
 ROLLBACK;
