@@ -43,7 +43,9 @@ internal fun SupplierPaymentEntryDialog(
     var attempted by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
-    val idempotencyKey = remember(invoice.id) { UUID.randomUUID().toString() }
+    val idempotencyKey = remember(invoice.id, method, evidence.trim()) {
+        commercialStableIdempotencyKey("supplier-payment", listOf(obligation?.id.orEmpty(), method, evidence.trim()))
+    }
     val outstanding = obligation?.let { (it.amountDueMinor - it.amountPaidMinor).coerceAtLeast(0L) } ?: 0L
 
     AlertDialog(
