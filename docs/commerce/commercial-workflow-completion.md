@@ -25,7 +25,7 @@
 - [ ] Do not enable jurisdiction-specific tax invoices until jurisdiction and required issuer/tax fields are configured.
 
 ### B. Units and packaging
-- [x] Add Decimal conversion primitive for piece/carton/kg-style ratios.
+- [x] Add Decimal conversion primitive for piece/carton/kg-style ratios, sizing precision to avoid ambient Decimal-context rounding.
 - [x] Add explicit base-unit precision validation that rejects unsupported fractions rather than silently rounding stock quantities.
 - [ ] Add base-unit and sell/receive-unit definitions with positive factors, dimensional compatibility and precision rules.
 - [ ] Send unit code and decimal quantity through APIs; convert server-side before stock locks and movement posting.
