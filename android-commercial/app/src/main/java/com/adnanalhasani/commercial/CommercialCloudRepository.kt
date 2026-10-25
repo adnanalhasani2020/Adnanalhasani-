@@ -257,23 +257,73 @@ internal fun checkoutCommercialCloudSale(
 }
 
 
+internal data class CommercialCloudCustomer(
+    val id: String,
+    val displayName: String,
+    val phone: String,
+    val email: String
+) {
+    val label: String get() = buildList {
+        add(displayName)
+        if (phone.isNotBlank()) add(phone)
+        if (email.isNotBlank()) add(email)
+    }.joinToString(" · ")
+}
+
+internal fun loadCommercialCloudCustomers(context: Context): List<CommercialCloudCustomer> {
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val path = "/rest/v1/commercial_customers" +
+        "?select=id,display_name,phone,email,state&organization_id=eq.$orgId&state=eq.active&order=display_name.asc,id.asc&limit=200"
+    val rows = commercialCloudPagedGet(path, access)
+    return buildList {
+        for (index in 0 until rows.length()) {
+            val row = rows.optJSONObject(index) ?: continue
+            val id = row.optString("id").takeUnless { it == "null" }.orEmpty()
+            val name = row.optString("display_name").takeUnless { it == "null" }.orEmpty().trim()
+            if (id.isBlank() || name.isBlank()) continue
+            add(CommercialCloudCustomer(id, name,
+                row.optString("phone").takeUnless { it == "null" }.orEmpty(),
+                row.optString("email").takeUnless { it == "null" }.orEmpty()))
+        }
+    }
+}
+
 internal data class CommercialCloudCheckoutLine(
     val offeringId: String,
     val quantity: Int
 )
 
+/** Merge repeated offering IDs before idempotency fingerprinting and checkout. */
+internal fun aggregateCommercialCheckoutLines(
+    lines: List<CommercialCloudCheckoutLine>
+): List<CommercialCloudCheckoutLine> {
+    require(lines.isNotEmpty() && lines.size <= 200) { "أضف صنفًا واحدًا على الأقل إلى الفاتورة." }
+    val totals = linkedMapOf<String, Int>()
+    lines.forEach { line ->
+        require(line.offeringId.isNotBlank() && line.quantity in 1..100000) { "تحقق من الأصناف والكميات." }
+        val total = Math.addExact(totals[line.offeringId] ?: 0, line.quantity)
+        require(total <= 100000) { "إجمالي كمية الصنف يتجاوز الحد المسموح." }
+        totals[line.offeringId] = total
+    }
+    return totals.entries.sortedBy { it.key }.map { CommercialCloudCheckoutLine(it.key, it.value) }
+}
+
 internal fun getOrCreateCommercialCloudMultiSaleKey(
     context: Context,
-    lines: List<CommercialCloudCheckoutLine>
+    lines: List<CommercialCloudCheckoutLine>,
+    customerId: String? = null,
+    paymentMode: String = "cash",
+    initialPaymentMinor: Long = 0L
 ): String {
-    require(lines.isNotEmpty() && lines.size <= 200) { "أضف صنفًا واحدًا على الأقل إلى الفاتورة." }
-    require(lines.all { it.offeringId.isNotBlank() && it.quantity in 1..100000 }) { "تحقق من الأصناف والكميات." }
-    require(lines.map { it.offeringId }.distinct().size == lines.size) { "ادمج كميات الصنف المكرر في سطر واحد." }
+    val normalizedLines = aggregateCommercialCheckoutLines(lines)
     val canonical = JSONArray()
-    lines.sortedBy { it.offeringId }.forEach { line ->
+    normalizedLines.forEach { line ->
         canonical.put(JSONObject().put("offering_id", line.offeringId).put("quantity", line.quantity))
     }
-    val payload = canonical.toString()
+    val payload = JSONObject().put("customer_id", customerId ?: JSONObject.NULL)
+        .put("payment_mode", paymentMode)
+        .put("initial_payment_minor", if (paymentMode == "cash") JSONObject.NULL else initialPaymentMinor)
+        .put("lines", canonical).toString()
     val prefs = context.getSharedPreferences("commercial_cloud_pending_multi_sale_v1", Context.MODE_PRIVATE)
     val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
     val organizationId = saved.getString("organization_id", null).orEmpty()
@@ -311,18 +361,19 @@ internal fun clearCommercialCloudMultiSaleKey(context: Context, idempotencyKey: 
 internal fun checkoutCommercialCloudSaleMulti(
     context: Context,
     lines: List<CommercialCloudCheckoutLine>,
-    idempotencyKey: String
+    idempotencyKey: String,
+    customerId: String? = null,
+    paymentMode: String = "cash",
+    initialPaymentMinor: Long = 0L
 ): JSONObject {
-    require(lines.isNotEmpty() && lines.size <= 200) { "عدد بنود الفاتورة غير صالح." }
+    val normalizedLines = aggregateCommercialCheckoutLines(lines)
     val savedContext = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
     val locationId = savedContext.getString("location_id", null).orEmpty()
     require(locationId.isNotBlank()) { "معرّف موقع المخزون غير محفوظ." }
     val payload = JSONArray()
-    lines.sortedBy { it.offeringId }.forEach { line ->
-        require(line.offeringId.isNotBlank() && line.quantity in 1..100000) { "تحقق من الصنف والكمية." }
+    normalizedLines.forEach { line ->
         payload.put(JSONObject().put("offering_id", line.offeringId).put("quantity", line.quantity))
     }
-    require(lines.map { it.offeringId }.distinct().size == lines.size) { "ادمج كميات الصنف المكرر في سطر واحد." }
     val sessionPrefs = commercialCloudSessionPreferences(context)
     val savedRefresh = sessionPrefs.getString("refresh_token", null).orEmpty()
     require(savedRefresh.isNotBlank()) { "سجّل الدخول إلى حساب Supabase أولًا." }
@@ -336,45 +387,12 @@ internal fun checkoutCommercialCloudSaleMulti(
     return JSONObject(commercialCloudRequest(
         "/rest/v1/rpc/commercial_checkout_sale_multi", "POST",
         JSONObject().put("p_lines", payload).put("p_location_id", locationId)
-            .put("p_idempotency_key", idempotencyKey),
+            .put("p_idempotency_key", idempotencyKey)
+            .put("p_customer_id", customerId ?: JSONObject.NULL)
+            .put("p_payment_mode", paymentMode)
+            .put("p_initial_payment_minor", if (paymentMode == "cash") JSONObject.NULL else initialPaymentMinor),
         access
     ))
-}
-
-internal fun recordCommercialCloudCustomerPayment(
-    context: Context,
-    saleId: String,
-    amountMinor: Long,
-    method: String
-): JSONObject {
-    require(saleId.isNotBlank() && amountMinor > 0L)
-    require(method in setOf("cash", "bank_transfer", "card", "other"))
-    val (orgId, access) = commercialMasterDataAccess(context)
-    val fingerprint = listOf(orgId, saleId, amountMinor.toString(), method).joinToString("|")
-    val prefs = context.getSharedPreferences("commercial_cloud_pending_collection_v1", Context.MODE_PRIVATE)
-    val storedKey = prefs.getString("idempotency_key", null).orEmpty()
-    if (storedKey.isNotBlank()) {
-        require(prefs.getString("fingerprint", null) == fingerprint) {
-            "يوجد تحصيل معلّق لم يُحسم بعد. أعد المحاولة بنفس بيانات التحصيل."
-        }
-    }
-    val idempotencyKey = storedKey.ifBlank { UUID.randomUUID().toString() }
-    if (storedKey.isBlank()) {
-        check(prefs.edit().clear().putString("fingerprint", fingerprint)
-            .putString("idempotency_key", idempotencyKey).commit()) {
-            "تعذر حفظ مفتاح التحصيل قبل الإرسال."
-        }
-    }
-    val result = JSONObject(commercialCloudRequest(
-        "/rest/v1/rpc/commercial_record_customer_payment", "POST",
-        JSONObject().put("p_sale_id", saleId)
-            .put("p_amount_minor", amountMinor)
-            .put("p_payment_method_type", method)
-            .put("p_idempotency_key", idempotencyKey),
-        access
-    ))
-    check(prefs.edit().clear().commit()) { "تم تأكيد التحصيل لكن تعذر تنظيف مفتاح إعادة المحاولة." }
-    return result
 }
 
 internal data class CommercialCloudSaleLine(
@@ -423,7 +441,7 @@ internal fun loadCommercialCloudSaleDocuments(context: Context): List<Commercial
     require(activityId.isNotBlank()) { "ملف النشاط غير محفوظ." }
     val (orgId, access) = commercialMasterDataAccess(context)
     val path = "/rest/v1/commercial_sales" +
-        "?select=id,receipt_number,total_minor,status,payment_status,created_at,currency_code,customer:commercial_customers(display_name,phone,email),items:commercial_sale_items(product_name_snapshot,quantity,line_total_minor,unit_price_minor),payments:commercial_payments(amount_minor,status,payment_method_type,created_at),returns:commercial_sales_returns(status,refund_status,restock_status,requested_refund_minor,approved_refund_minor,created_at)" +
+        "?select=id,receipt_number,total_minor,payment_status,status,created_at,currency_code,customer:commercial_customers(display_name,phone,email),items:commercial_sale_items(product_name_snapshot,quantity,line_total_minor,unit_price_minor),payments:commercial_payments(amount_minor,status,payment_method_type,created_at),returns:commercial_sales_returns(status,refund_status,restock_status,requested_refund_minor,approved_refund_minor,created_at)" +
         "&organization_id=eq.$orgId&activity_id=eq.$activityId&order=created_at.desc,id.asc"
     val rows = commercialCloudPagedGet(path, access)
     return buildList {
@@ -580,7 +598,7 @@ internal fun loadCommercialCloudSales(context: Context): List<SaleRecord> {
     sessionPrefs.edit().putString("refresh_token", session.optString("refresh_token").ifBlank { savedRefresh }).apply()
 
     val path = "/rest/v1/commercial_sales" +
-        "?select=id,receipt_number,total_minor,payment_status,created_at,customer:commercial_customers(display_name),items:commercial_sale_items(product_name_snapshot,quantity,line_total_minor,unit_price_minor)" +
+        "?select=id,receipt_number,total_minor,payment_status,status,created_at,currency_code,customer:commercial_customers(display_name),items:commercial_sale_items(product_name_snapshot,quantity,line_total_minor,unit_price_minor),payments:commercial_payments(amount_minor,status)" +
         "&organization_id=eq.$orgId&activity_id=eq.$activityId&order=created_at.desc,id.asc"
     val rows = commercialCloudPagedGet(path, access)
     return buildList {
@@ -590,7 +608,17 @@ internal fun loadCommercialCloudSales(context: Context): List<SaleRecord> {
             val firstItem = items?.optJSONObject(0)
             val total = row.optLong("total_minor", 0L).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
             val paymentStatus = row.optString("payment_status").lowercase(Locale.ROOT)
-            val isCredit = paymentStatus in setOf("unpaid", "partially_paid", "partial", "pending", "due", "credit", "failed")
+            val saleStatus = row.optString("status").lowercase(Locale.ROOT)
+            val paymentRows = row.optJSONArray("payments")
+            val paidMinor = (0 until (paymentRows?.length() ?: 0))
+                .mapNotNull { paymentRows?.optJSONObject(it) }
+                .filter { it.optString("status").equals("succeeded", ignoreCase = true) }
+                .sumOf { it.optLong("amount_minor", 0L).coerceAtLeast(0L) }
+                .coerceAtMost(Int.MAX_VALUE.toLong())
+                .toInt()
+            val isCredit = saleStatus == "completed" &&
+                paymentStatus !in setOf("paid", "refunded", "cancelled", "canceled") &&
+                total > paidMinor
             val customerObject = row.optJSONObject("customer")
             val createdAt = runCatching {
                 java.time.Instant.parse(row.optString("created_at")).toEpochMilli()
@@ -602,7 +630,7 @@ internal fun loadCommercialCloudSales(context: Context): List<SaleRecord> {
                 total = total,
                 credit = isCredit,
                 customer = customerObject?.optString("display_name").orEmpty(),
-                paid = if (paymentStatus == "paid") total else 0,
+                paid = paidMinor.coerceAtMost(total),
                 createdAt = createdAt,
                 unitCode = "قطعة"
             ))
@@ -1144,5 +1172,158 @@ internal fun loadCommercialCloudRecords(context: Context, screenKey: String): Li
             }
             add(CommercialCloudRecord(id, title, subtitle, status, amount, row.optString("created_at").takeUnless { it == "null" }.orEmpty(), details))
         }
+    }
+}
+
+internal data class CommercialCloudReceivable(
+    val saleId: String,
+    val receiptNumber: String,
+    val customerId: String,
+    val customerName: String,
+    val totalMinor: Long,
+    val paidMinor: Long,
+    val currencyCode: String,
+    val createdAt: String
+) {
+    val dueMinor: Long get() = (totalMinor - paidMinor).coerceAtLeast(0L)
+}
+
+internal fun loadCommercialCloudReceivables(context: Context): List<CommercialCloudReceivable> {
+    val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+    val activityId = saved.getString("activity_id", null).orEmpty()
+    require(activityId.isNotBlank()) { "ملف النشاط غير محفوظ." }
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val path = "/rest/v1/commercial_sales" +
+        "?select=id,receipt_number,customer_id,total_minor,currency_code,created_at,payment_status,customer:commercial_customers(display_name),payments:commercial_payments(amount_minor,status)" +
+        "&organization_id=eq.$orgId&activity_id=eq.$activityId&status=eq.completed&customer_id=not.is.null&order=created_at.desc,id.asc"
+    val rows = commercialCloudPagedGet(path, access)
+    return buildList {
+        for (i in 0 until rows.length()) {
+            val row = rows.optJSONObject(i) ?: continue
+            val customer = row.optJSONObject("customer")
+            val customerId = row.optString("customer_id").takeUnless { it == "null" }.orEmpty()
+            val customerName = customer?.optString("display_name").orEmpty()
+            if (customerId.isBlank() || customerName.isBlank()) continue
+            val payments = row.optJSONArray("payments")
+            var paid = 0L
+            for (j in 0 until (payments?.length() ?: 0)) {
+                val payment = payments?.optJSONObject(j) ?: continue
+                if (payment.optString("status") == "succeeded") {
+                    paid = Math.addExact(paid, payment.optLong("amount_minor", 0L).coerceAtLeast(0L))
+                }
+            }
+            val total = row.optLong("total_minor", 0L).coerceAtLeast(0L)
+            if (paid < total) add(CommercialCloudReceivable(
+                saleId = row.optString("id"),
+                receiptNumber = row.optString("receipt_number"),
+                customerId = customerId,
+                customerName = customerName,
+                totalMinor = total,
+                paidMinor = paid,
+                currencyCode = row.optString("currency_code"),
+                createdAt = row.optString("created_at")
+            ))
+        }
+    }
+}
+
+internal fun recordCommercialCloudCustomerPayment(
+    context: Context,
+    saleId: String,
+    amountMinor: Long,
+    method: String
+): JSONObject {
+    require(saleId.isNotBlank() && amountMinor > 0L)
+    require(method in setOf("cash", "bank_transfer", "card", "other"))
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val fingerprint = listOf(orgId, saleId, amountMinor.toString(), method).joinToString("|")
+    val prefs = context.getSharedPreferences("commercial_cloud_pending_collection_v1", Context.MODE_PRIVATE)
+    val storedKey = prefs.getString("idempotency_key", null).orEmpty()
+    if (storedKey.isNotBlank()) {
+        require(prefs.getString("fingerprint", null) == fingerprint) {
+            "يوجد تحصيل معلّق لم يُحسم بعد. أعد المحاولة بنفس بيانات التحصيل."
+        }
+    }
+    val idempotencyKey = storedKey.ifBlank { UUID.randomUUID().toString() }
+    if (storedKey.isBlank()) {
+        check(prefs.edit().clear().putString("fingerprint", fingerprint)
+            .putString("idempotency_key", idempotencyKey).commit()) {
+            "تعذر حفظ مفتاح التحصيل قبل الإرسال."
+        }
+    }
+    val result = JSONObject(commercialCloudRequest(
+        "/rest/v1/rpc/commercial_record_customer_payment", "POST",
+        JSONObject().put("p_sale_id", saleId)
+            .put("p_amount_minor", amountMinor)
+            .put("p_payment_method_type", method)
+            .put("p_idempotency_key", idempotencyKey),
+        access
+    ))
+    check(prefs.edit().clear().commit()) { "تم تأكيد التحصيل لكن تعذر تنظيف مفتاح إعادة المحاولة." }
+    return result
+}
+
+internal fun checkoutCommercialCloudSaleOnAccount(
+    context: Context,
+    offeringId: String,
+    quantity: Int,
+    customerId: String,
+    idempotencyKey: String
+): JSONObject {
+    require(offeringId.isNotBlank() && customerId.isNotBlank() && quantity > 0)
+    val locationId = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+        .getString("location_id", null).orEmpty()
+    require(locationId.isNotBlank()) { "معرّف موقع المخزون غير محفوظ." }
+    val (_, access) = commercialMasterDataAccess(context)
+    return JSONObject(commercialCloudRequest(
+        "/rest/v1/rpc/commercial_checkout_sale_on_account", "POST",
+        JSONObject().put("p_offering_id", offeringId)
+            .put("p_location_id", locationId)
+            .put("p_quantity", quantity)
+            .put("p_customer_id", customerId)
+            .put("p_idempotency_key", idempotencyKey),
+        access
+    ))
+}
+
+internal fun getOrCreateCommercialCloudCreditSaleKey(
+    context: Context, offeringId: String, quantity: Int, customerId: String
+): String {
+    require(offeringId.isNotBlank() && customerId.isNotBlank() && quantity > 0)
+    val prefs = context.getSharedPreferences("commercial_cloud_pending_credit_sale_v1", Context.MODE_PRIVATE)
+    val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+    val org = saved.getString("organization_id", null).orEmpty()
+    val activity = saved.getString("activity_id", null).orEmpty()
+    val location = saved.getString("location_id", null).orEmpty()
+    require(org.isNotBlank() && activity.isNotBlank() && location.isNotBlank())
+    val existing = prefs.getString("idempotency_key", null).orEmpty()
+    if (existing.isNotBlank()) {
+        require(prefs.getString("offering_id", null) == offeringId &&
+            prefs.getInt("quantity", -1) == quantity &&
+            prefs.getString("customer_id", null) == customerId &&
+            prefs.getString("organization_id", null) == org &&
+            prefs.getString("activity_id", null) == activity &&
+            prefs.getString("location_id", null) == location) {
+            "توجد عملية بيع آجل معلّقة. أعد المحاولة بنفس الفاتورة قبل بدء عملية أخرى."
+        }
+        return existing
+    }
+    val key = UUID.randomUUID().toString()
+    check(prefs.edit().clear()
+        .putString("idempotency_key", key)
+        .putString("offering_id", offeringId)
+        .putInt("quantity", quantity)
+        .putString("customer_id", customerId)
+        .putString("organization_id", org)
+        .putString("activity_id", activity)
+        .putString("location_id", location)
+        .commit()) { "تعذر حفظ مفتاح البيع الآجل قبل الإرسال." }
+    return key
+}
+
+internal fun clearCommercialCloudCreditSaleKey(context: Context, idempotencyKey: String) {
+    val prefs = context.getSharedPreferences("commercial_cloud_pending_credit_sale_v1", Context.MODE_PRIVATE)
+    if (prefs.getString("idempotency_key", null) == idempotencyKey) {
+        check(prefs.edit().clear().commit()) { "تعذر تنظيف مفتاح البيع الآجل بعد تأكيد الخادم." }
     }
 }
