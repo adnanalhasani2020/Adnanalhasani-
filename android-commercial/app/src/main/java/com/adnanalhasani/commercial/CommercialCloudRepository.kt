@@ -885,7 +885,7 @@ internal fun recordCommercialCloudSupplierInvoice(
         require(line.purchaseOrderItemId.isNotBlank() && line.quantity.isNotBlank()) { "بيانات بند الفاتورة غير مكتملة." }
         val quantity = line.quantity.toBigDecimalOrNull()
             ?: throw IllegalArgumentException("أدخل كمية صحيحة لكل بند.")
-        require(quantity > java.math.BigDecimal.ZERO && quantity.scale().coerceAtLeast(0) <= 6) { "كمية الفاتورة يجب أن تكون موجبة وبحد أقصى 6 منازل عشرية." }
+        require(quantity > java.math.BigDecimal.ZERO && quantity.stripTrailingZeros().scale() <= 6) { "كمية الفاتورة يجب أن تكون موجبة وبحد أقصى 6 منازل عشرية." }
         require(line.unitPriceMinor >= 0) { "سعر الوحدة لا يمكن أن يكون سالبًا." }
         lineArray.put(JSONObject()
             .put("purchase_order_item_id", line.purchaseOrderItemId)
