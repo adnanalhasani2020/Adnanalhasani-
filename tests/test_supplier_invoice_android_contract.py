@@ -55,6 +55,19 @@ def test_supplier_invoice_rpc_is_atomic_scoped_and_idempotent():
     assert "INSERT INTO public.commercial_journal_entries" not in migration
 
 
+def test_supplier_invoice_rounding_allocation_reconciles_stored_lines():
+    migration = (ROOT / "supabase/migrations/20261025221631_commercial_supplier_invoice_largest_remainder_rounding.sql").read_text()
+
+    # Round the exact subtotal once, then use deterministic largest-remainder
+    # allocation so line-level bigint values add back to the header subtotal.
+    assert "v_subtotal := round(v_subtotal);" in migration
+    assert "ORDER BY value DESC, ordinality" in migration
+    assert "v_line_totals[v_line_index] := v_line_totals[v_line_index] + 1;" in migration
+    assert "SUM(stored lines) = subtotal_minor" in migration
+    assert "supplier_invoice_rounding_allocation_failed" in migration
+    assert "sum(line_total_minor)" in migration
+
+
 def test_supplier_invoice_minor_unit_rounding_is_consistent_per_line():
     migration = (ROOT / "supabase/migrations/20261025221026_commercial_supplier_invoice_minor_unit_rounding.sql").read_text()
 
