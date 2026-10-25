@@ -81,10 +81,16 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         self.assertIn("cloudPurchasesPage -> CommercialCloudPurchasesScreen", self.main)
         self.assertIn('"أوامر الشراء" -> onCloudPurchases()', self.main)
 
-    def test_purchase_screen_discloses_read_only_receiving_boundary(self):
-        self.assertIn("عرض فقط", self.purchases)
-        self.assertIn("لم يتم تفعيل إنشاء الطلب أو اعتماد الاستلام", self.purchases)
-        self.assertIn("إعادة المحاولة", self.purchases)
+    def test_purchase_screen_exposes_order_lifecycle_receiving_and_supplier_payments(self):
+        for marker in (
+            "إنشاء أمر شراء جديد", "إرسال للاعتماد", "اعتماد الأمر", "إلغاء الأمر",
+            "استلام البضاعة", "تسجيل فاتورة المورد", "تسجيل دفعة للمورد",
+            "PurchaseReceiptEntryDialog(", "PurchaseOrderEntryDialog(",
+        ):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, self.purchases)
+        self.assertIn("commercial_receive_purchase_order", self.repository)
+        self.assertIn("commercial_record_supplier_payment", self.repository)
 
     def test_invoice_screen_supports_status_filters_and_currency_safe_totals(self):
         for marker in ('selectedStatus', '"paid" to "مدفوعة"', '"partial" to "مدفوعة جزئيًا"', '"due" to "مستحقة"', 'groupBy { it.currencyCode', 'بوحدة الصرف الصغرى'):
