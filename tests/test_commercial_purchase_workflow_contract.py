@@ -7,6 +7,8 @@ SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commerci
 ORDER_DIALOG = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/PurchaseOrderEntryDialog.kt"
 RECEIPT_DIALOG = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/PurchaseReceiptEntryDialog.kt"
 PAYMENT_DIALOG = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/SupplierPaymentEntryDialog.kt"
+MAPPING_DIALOG = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/PurchaseLineOfferingLinkDialog.kt"
+LINE_LINK_MIGRATION = ROOT / "supabase/migrations/20261025223738_commercial_purchase_line_offering_link.sql"
 OBLIGATION_INTEGRITY = ROOT / "supabase/migrations/20261025223549_commercial_supplier_obligation_integrity.sql"
 PAYMENT_EVIDENCE = ROOT / "supabase/migrations/20261025223401_commercial_supplier_payment_evidence_uniqueness.sql"
 
@@ -90,6 +92,17 @@ def test_supplier_obligations_and_payment_evidence_are_consistent():
     assert "lower(btrim(evidence_reference))" in evidence
 
 
+def test_legacy_purchase_lines_require_explicit_inventory_mapping_before_receipt():
+    sql = LINE_LINK_MIGRATION.read_text(encoding="utf-8")
+    assert "commercial_link_purchase_order_item_offering" in sql
+    assert "purchase_line_offering_link_after_receipt_or_invoice_forbidden" in sql
+    assert "purchase_offering_currency_or_scope_mismatch" in sql
+    assert "reapproval_required" in sql
+    mapping_dialog = MAPPING_DIALOG.read_text(encoding="utf-8")
+    assert "linkCommercialCloudPurchaseOrderItemOffering(" in mapping_dialog
+    assert "ربط بنود المخزون" in mapping_dialog
+
+
 def test_android_purchase_workflow_is_connected_to_server_rpcs():
     repository = REPOSITORY.read_text(encoding="utf-8")
     screen = SCREEN.read_text(encoding="utf-8")
@@ -101,6 +114,7 @@ def test_android_purchase_workflow_is_connected_to_server_rpcs():
         "/rest/v1/rpc/commercial_transition_purchase_order",
         "/rest/v1/rpc/commercial_receive_purchase_order",
         "/rest/v1/rpc/commercial_record_supplier_payment",
+        "/rest/v1/rpc/commercial_link_purchase_order_item_offering",
         "commercial_purchase_order_items(id,line_number,item_description,quantity_ordered,quantity_received,unit_cost_minor,offering_id)",
     ):
         assert marker in repository
@@ -112,6 +126,7 @@ def test_android_purchase_workflow_is_connected_to_server_rpcs():
         "استلام البضاعة",
         "تسجيل فاتورة المورد",
         "تسجيل دفعة للمورد",
+        "ربط عناصر المخزون للبنود القديمة",
         "PurchaseOrderEntryDialog(",
         "PurchaseReceiptEntryDialog(",
     ):
