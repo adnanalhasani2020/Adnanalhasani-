@@ -67,6 +67,8 @@ internal fun CommercialCloudPurchasesScreen(context: Context, onBack: () -> Unit
     var error by remember { mutableStateOf("") }
     var reloadToken by remember { mutableIntStateOf(0) }
     var invoiceOrder by remember { mutableStateOf<CommercialCloudPurchaseDocument?>(null) }
+    var receiptOrder by remember { mutableStateOf<CommercialCloudPurchaseDocument?>(null) }
+    var transitionConfirmation by remember { mutableStateOf<Pair<CommercialCloudPurchaseDocument, String>?>(null) }
 
     LaunchedEffect(reloadToken) {
         loading = true
@@ -94,7 +96,7 @@ internal fun CommercialCloudPurchasesScreen(context: Context, onBack: () -> Unit
                 title = {
                     Column {
                         Text("أوامر الشراء والاستلام", color = CloudPurchasesInk, fontWeight = FontWeight.Bold)
-                        Text("تفاصيل الموردين والبنود والكميات المستلمة · الاستلام عرض فقط · لم يتم تفعيل إنشاء الطلب أو اعتماد الاستلام", color = CloudPurchasesMuted, fontSize = 11.sp)
+                        Text("تفاصيل الموردين والبنود · اعتماد الحالة والاستلام يحدّثان السجلات التشغيلية الفعلية", color = CloudPurchasesMuted, fontSize = 11.sp)
                     }
                 },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "رجوع") } },
@@ -210,7 +212,22 @@ internal fun CommercialCloudPurchasesScreen(context: Context, onBack: () -> Unit
                             }
                         }
                         if (order.notes.isNotBlank()) Text("ملاحظات: ${order.notes}", color = CloudPurchasesMuted, fontSize = 11.sp)
-                        Button(onClick = { invoiceOrder = order }, enabled = order.lines.isNotEmpty()) { Text("تسجيل فاتورة المورد") }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            when (order.status.lowercase()) {
+                                "draft" -> TextButton(onClick = { transitionConfirmation = order to "submit" }) { Text("إرسال للاعتماد") }
+                                "submitted" -> TextButton(onClick = { transitionConfirmation = order to "approve" }) { Text("اعتماد الأمر") }
+                                "approved" -> {
+                                    Button(onClick = { receiptOrder = order }, enabled = order.receiveLocationId != null && order.lines.any { it.offeringId != null }) { Text("استلام البضاعة") }
+                                    TextButton(onClick = { transitionConfirmation = order to "cancel" }) { Text("إلغاء الأمر") }
+                                }
+                                "partially_received" -> {
+                                    Button(onClick = { receiptOrder = order }, enabled = order.receiveLocationId != null && order.lines.any { it.offeringId != null }) { Text("استلام الباقي") }
+                                    TextButton(onClick = { transitionConfirmation = order to "close" }) { Text("إغلاق بالنقص") }
+                                }
+                                "received" -> TextButton(onClick = { transitionConfirmation = order to "close" }) { Text("إغلاق الأمر") }
+                            }
+                        }
+                        Button(onClick = { invoiceOrder = order }, enabled = order.lines.isNotEmpty() && order.status.lowercase() in setOf("approved", "partially_received", "received", "closed")) { Text("تسجيل فاتورة المورد") }
                         if (invoiceOrder?.id == order.id) {
                             SupplierInvoiceEntryDialog(
                                 context = context,
@@ -225,12 +242,49 @@ internal fun CommercialCloudPurchasesScreen(context: Context, onBack: () -> Unit
             }
             item {
                 Text(
-                    "يمكن تسجيل فاتورة المورد للبنود المستلمة عبر الخادم. حفظ الفاتورة لا ينشئ دفعة أو التزامًا ماليًا ولا يغيّر المخزون أو دفتر الأستاذ تلقائيًا.",
+                    "اعتماد الاستلام يحدّث المخزون وحركة الاستلام وأمر الشراء ذريًا. تسجيل الفاتورة ينشئ رصيد المورد وقيدًا محاسبيًا؛ تسجيل الدفعة يتطلب إثباتًا منفصلًا.",
                     color = CloudPurchasesMuted, fontSize = 11.sp, modifier = Modifier.padding(vertical = 8.dp)
                 )
             }
         }
     }
+ 
+    receiptOrder?.let { order ->
+        PurchaseReceiptEntryDialog(
+            context = context,
+            order = order,
+            onDismiss = { receiptOrder = null },
+            onSaved = { receiptOrder = null; reloadToken++ }
+        )
+    }
+    transitionConfirmation?.let { (order, action) ->
+        val label = when (action) {
+            "submit" -> "إرسال أمر الشراء للاعتماد"
+            "approve" -> "اعتماد أمر الشراء"
+            "cancel" -> "إلغاء أمر الشراء"
+            else -> "إغلاق أمر الشراء"
+        }
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { transitionConfirmation = null },
+            title = { Text(label) },
+            text = { Text("سيُتحقق من الحالة والكميات المستلمة والصلاحيات داخل قاعدة البيانات قبل تنفيذ العملية.") },
+            confirmButton = {
+                Button(onClick = {
+                    val selected = transitionConfirmation ?: return@Button
+                    transitionConfirmation = null
+                    CloudPurchasesWorker.execute {
+                        val result = runCatching { transitionCommercialCloudPurchaseOrder(context, selected.first.id, selected.second) }
+                        CloudPurchasesMain.post {
+                            result.onSuccess { reloadToken++ }
+                                .onFailure { error = it.message ?: "تعذر تحديث حالة أمر الشراء." }
+                        }
+                    }
+                }) { Text("تأكيد") }
+            },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { transitionConfirmation = null }) { Text("رجوع") } }
+        )
+    }
+
 }
 
 private fun purchaseStatusLabel(value: String): String = when (value.lowercase()) {
