@@ -187,6 +187,28 @@ internal fun loadCommercialCloudInventory(context: Context): CommercialCloudInve
     )
 }
 
+internal fun configureCommercialCloudSellUnit(
+    context: Context,
+    offeringId: String,
+    unitCode: String,
+    displayName: String,
+    quantityInStock: Long
+): JSONObject {
+    require(offeringId.isNotBlank() && unitCode.isNotBlank() && displayName.isNotBlank() && quantityInStock in 1L..1_000_000L) {
+        "أدخل رمز وحدة واسمًا ومعامل تحويل صحيحًا."
+    }
+    val (_, access) = commercialMasterDataAccess(context)
+    return JSONObject(commercialCloudRequest(
+        "/rest/v1/rpc/commercial_configure_offering_sell_unit", "POST",
+        JSONObject().put("p_offering_id", offeringId)
+            .put("p_unit_code", unitCode.trim())
+            .put("p_display_name", displayName.trim())
+            .put("p_quantity_in_stock", quantityInStock)
+            .put("p_is_base", false),
+        access
+    ))
+}
+
 internal fun createCommercialCloudInventoryItem(
     context: Context,
     name: String,
