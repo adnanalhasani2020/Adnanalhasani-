@@ -878,19 +878,19 @@ $function$;
 CREATE OR REPLACE FUNCTION public.commercial_create_purchase_order(
   p_organization_id uuid,p_supplier_id uuid,p_order_number text,p_currency_code text,
   p_receive_location_id uuid,p_lines jsonb,p_idempotency_key text,p_expected_at timestamptz DEFAULT NULL,p_notes text DEFAULT NULL
-) RETURNS jsonb LANGUAGE sql SECURITY INVOKER SET search_path TO 'pg_catalog','public','commercial_private'
+) RETURNS jsonb LANGUAGE sql SECURITY DEFINER SET search_path TO 'pg_catalog','public','commercial_private'
 AS $function$ SELECT commercial_private.commercial_create_purchase_order($1,$2,$3,$4,$5,$6,$7,$8,$9) $function$;
 
 CREATE OR REPLACE FUNCTION public.commercial_transition_purchase_order(p_organization_id uuid,p_purchase_order_id uuid,p_action text)
-RETURNS jsonb LANGUAGE sql SECURITY INVOKER SET search_path TO 'pg_catalog','public','commercial_private'
+RETURNS jsonb LANGUAGE sql SECURITY DEFINER SET search_path TO 'pg_catalog','public','commercial_private'
 AS $function$ SELECT commercial_private.commercial_transition_purchase_order($1,$2,$3) $function$;
 
 CREATE OR REPLACE FUNCTION public.commercial_receive_purchase_order(p_organization_id uuid,p_purchase_order_id uuid,p_location_id uuid,p_lines jsonb,p_idempotency_key text)
-RETURNS jsonb LANGUAGE sql SECURITY INVOKER SET search_path TO 'pg_catalog','public','commercial_private'
+RETURNS jsonb LANGUAGE sql SECURITY DEFINER SET search_path TO 'pg_catalog','public','commercial_private'
 AS $function$ SELECT commercial_private.commercial_receive_purchase_order($1,$2,$3,$4,$5) $function$;
 
 CREATE OR REPLACE FUNCTION public.commercial_record_supplier_payment(p_organization_id uuid,p_obligation_id uuid,p_amount_minor bigint,p_currency_code text,p_payment_method text,p_evidence_reference text,p_idempotency_key text)
-RETURNS jsonb LANGUAGE sql SECURITY INVOKER SET search_path TO 'pg_catalog','public','commercial_private'
+RETURNS jsonb LANGUAGE sql SECURITY DEFINER SET search_path TO 'pg_catalog','public','commercial_private'
 AS $function$ SELECT commercial_private.commercial_record_supplier_payment($1,$2,$3,$4,$5,$6,$7) $function$;
 
 REVOKE ALL ON FUNCTION commercial_private.commercial_ensure_supplier_ledger_account(uuid,text,text) FROM PUBLIC,anon,authenticated;
