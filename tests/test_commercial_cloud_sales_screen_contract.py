@@ -182,7 +182,7 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         self.assertIn('p_tax_minor', self.repository)
         self.assertIn('"discount_minor", discountMinor', self.repository)
         self.assertIn('"tax_minor", taxMinor', self.repository)
-        self.assertIn('discountMinor > estimatedSubtotal', self.composer)
+        self.assertIn('discountMinor > estimatedSubtotal.min(BigInteger.valueOf(Long.MAX_VALUE)).toLong()', self.composer)
         migration = (ROOT / "supabase/migrations/20261025190000_commercial_checkout_discount_tax_snapshots.sql").read_text(encoding="utf-8")
         for marker in (
             "discount_exceeds_subtotal",
