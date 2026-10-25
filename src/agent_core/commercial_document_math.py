@@ -38,12 +38,36 @@ def to_base_quantity(quantity, factor_to_base, *, label: str = "quantity") -> De
     return q * factor
 
 
+def validate_base_quantity_precision(quantity, decimal_places: int, *, label: str = "quantity") -> Decimal:
+    """Return a positive base quantity only when it fits the configured precision.
+
+    ``decimal_places=0`` means whole base units; ``3`` allows thousandths.
+    The function never rounds stock quantities silently.
+    """
+    value = _decimal(quantity, label)
+    if value <= 0:
+        raise ValueError(f"{label} must be greater than zero")
+    if type(decimal_places) is not int or decimal_places < 0 or decimal_places > 12:
+        raise ValueError("decimal_places must be an integer between 0 and 12")
+    quantum = Decimal(1).scaleb(-decimal_places)
+    try:
+        quantized = value.quantize(quantum)
+    except InvalidOperation as exc:
+        raise ValueError(f"{label} exceeds supported precision") from exc
+    if quantized != value:
+        raise ValueError(f"{label} exceeds configured base-unit precision")
+    return value
+
+
 def rounded_minor(amount) -> int:
     """Round a currency amount to the nearest minor unit using half-up rounding."""
     value = _decimal(amount, "amount")
     if value < 0:
         raise ValueError("amount cannot be negative")
-    result = value.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    try:
+        result = value.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    except InvalidOperation as exc:
+        raise ValueError("amount exceeds supported currency precision") from exc
     return int(result)
 
 
@@ -118,6 +142,9 @@ def calculate_document_totals(
 
     taxable = subtotal - discount_minor
     active_rules = tuple(rule for rule in tax_rules if rule.enabled)
+    codes = [rule.code.strip().casefold() for rule in active_rules]
+    if len(codes) != len(set(codes)):
+        raise ValueError("active tax rule codes must be unique")
     if len({rule.inclusive for rule in active_rules}) > 1:
         raise ValueError("mixed inclusive and exclusive taxes require an explicit tax policy")
 
