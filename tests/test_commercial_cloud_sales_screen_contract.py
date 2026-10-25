@@ -31,7 +31,7 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         loader = self.repository[start:end]
         self.assertIn("commercialCloudPagedGet(path, access)", loader)
         self.assertNotIn("limit=", loader)
-        self.assertIn("!path.contains(\\"limit=\\")", self.repository)
+        self.assertIn('!path.contains("limit=")', self.repository)
 
     def test_invoice_projection_uses_existing_tables_and_columns(self):
         self.assertIn("internal fun loadCommercialCloudSaleDocuments", self.repository)
