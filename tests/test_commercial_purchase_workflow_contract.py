@@ -132,6 +132,7 @@ def test_android_purchase_workflow_is_connected_to_server_rpcs():
         "تسجيل فاتورة المورد",
         "تسجيل دفعة للمورد",
         "ربط عناصر المخزون للبنود القديمة",
+        "التحقق من الاستلام المعلق",
         "PurchaseOrderEntryDialog(",
         "PurchaseReceiptEntryDialog(",
     ):
@@ -141,4 +142,5 @@ def test_android_purchase_workflow_is_connected_to_server_rpcs():
     assert "recordCommercialCloudSupplierPayment(" in payment_dialog
     assert 'commercialStableIdempotencyKey("supplier-payment"' in payment_dialog
     assert 'commercialStableIdempotencyKey("purchase-create"' in order_dialog
-    assert 'commercialStableIdempotencyKey("purchase-receipt"' in receipt_dialog
+    assert "getOrCreateCommercialPurchaseReceiptIdempotencyKey" in receipt_dialog
+    assert "resolvePendingCommercialPurchaseReceipt" in repository
