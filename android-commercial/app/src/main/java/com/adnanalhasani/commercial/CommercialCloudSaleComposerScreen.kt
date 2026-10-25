@@ -194,7 +194,7 @@ internal fun CommercialCloudSaleComposerScreen(
                 title = {
                     Column {
                         Text("فاتورة بيع جديدة", color = CloudComposerInk, fontWeight = FontWeight.Bold)
-                        Text(if (paymentMode == "credit") "فاتورة سحابية · بيع آجل" else "فاتورة سحابية متعددة الأصناف · نقدي", color = CloudComposerMuted, fontSize = 11.sp)
+                        Text(when (paymentMode) { "credit" -> "فاتورة سحابية · بيع آجل"; "partial" -> "فاتورة سحابية · دفع جزئي"; else -> "فاتورة سحابية متعددة الأصناف · نقدي" }, color = CloudComposerMuted, fontSize = 11.sp)
                     }
                 },
                 navigationIcon = { IconButton(onClick = onBack, enabled = !submitting) { Icon(Icons.Default.ArrowBack, contentDescription = "رجوع") } },
@@ -245,11 +245,14 @@ internal fun CommercialCloudSaleComposerScreen(
                         Text("طريقة الدفع", color = CloudComposerInk, fontWeight = FontWeight.Bold)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton(onClick = { paymentMode = "cash"; initialPaymentText = "0" }, enabled = !submitting) { Text(if (paymentMode == "cash") "✓ نقدي كامل" else "نقدي كامل") }
-                            OutlinedButton(onClick = { paymentMode = "credit" }, enabled = !submitting) { Text(if (paymentMode == "credit") "✓ آجل / دين" else "آجل / دين") }
+                            OutlinedButton(onClick = { paymentMode = "credit"; initialPaymentText = "0" }, enabled = !submitting) { Text(if (paymentMode == "credit") "✓ آجل / دين" else "آجل / دين") }
+                            OutlinedButton(onClick = { paymentMode = "partial"; if (initialPaymentText == "0") initialPaymentText = "" }, enabled = !submitting) { Text(if (paymentMode == "partial") "✓ دفع جزئي" else "دفع جزئي") }
                         }
-                        if (paymentMode == "credit") {
-                            OutlinedTextField(value = initialPaymentText, onValueChange = { initialPaymentText = it.filter(Char::isDigit).take(15) }, modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("المبلغ المدفوع الآن ($currency)") })
-                            Text("يجب اختيار عميل. يُسجل المتبقي كرصيد مستحق على الفاتورة، ويمكن تحصيله لاحقًا.", color = CloudComposerMuted, fontSize = 11.sp)
+                        if (paymentMode == "partial") {
+                            OutlinedTextField(value = initialPaymentText, onValueChange = { initialPaymentText = it.filter(Char::isDigit).take(15); error = "" }, modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("المبلغ المدفوع الآن ($currency)") })
+                            Text("يجب اختيار عميل. يجب أن يكون الدفع أكبر من صفر وأقل من إجمالي الفاتورة؛ ويسجل الخادم المتبقي كرصيد مستحق.", color = CloudComposerMuted, fontSize = 11.sp)
+                        } else if (paymentMode == "credit") {
+                            Text("يجب اختيار عميل. لن تُسجل دفعة عند إصدار الفاتورة، ويظل كامل المبلغ مستحقًا.", color = CloudComposerMuted, fontSize = 11.sp)
                         }
                     }
                 }
@@ -399,14 +402,15 @@ internal fun CommercialCloudSaleComposerScreen(
                             notice = "جارٍ التحقق من الأصناف والمخزون وتسجيل فاتورة واحدة على الخادم..."
                             val requestLines = selectedLines.map { CommercialCloudCheckoutLine(it.product.cloudOfferingId, it.quantity, it.unit.code) }
                             val customerId = selectedCustomer?.id
-                            val paymentModeForRequest = paymentMode
-                            val initialPaymentMinor = initialPaymentText.toLongOrNull()
+                            val paymentModeForRequest = if (paymentMode == "cash") "cash" else "credit"
+                            val initialPaymentMinor = when (paymentMode) { "partial" -> initialPaymentText.toLongOrNull(); else -> 0L }
                             val discountForRequest = discountMinor
                             val taxForRequest = taxMinor
                             CloudComposerWorker.execute {
                                 val result = runCatching {
-                                    require(paymentModeForRequest != "credit" || !customerId.isNullOrBlank()) { "اختر العميل قبل تسجيل البيع الآجل." }
-                                    require(paymentModeForRequest != "credit" || initialPaymentMinor != null) { "أدخل مبلغًا صحيحًا للدفعة الأولى." }
+                                    require(paymentModeForRequest != "credit" || !customerId.isNullOrBlank()) { "اختر العميل قبل تسجيل البيع الآجل أو الدفع الجزئي." }
+                                    require(paymentMode != "partial" || initialPaymentMinor != null) { "أدخل مبلغًا صحيحًا للدفع الجزئي." }
+                                    require(paymentMode != "partial" || (initialPaymentMinor!! > 0L && BigInteger.valueOf(initialPaymentMinor) < estimatedTotal)) { "الدفع الجزئي يجب أن يكون أكبر من صفر وأقل من إجمالي الفاتورة؛ اختر النقدي الكامل إذا دفعت الإجمالي." }
                                     val key = getOrCreateCommercialCloudMultiSaleKey(context, requestLines, customerId, paymentModeForRequest, initialPaymentMinor ?: 0L, discountForRequest, taxForRequest)
                                     val sale = checkoutCommercialCloudSaleMulti(context, requestLines, key, customerId, paymentModeForRequest, initialPaymentMinor ?: 0L, discountForRequest, taxForRequest)
                                     val clearResult = runCatching { clearCommercialCloudMultiSaleKey(context, key) }
