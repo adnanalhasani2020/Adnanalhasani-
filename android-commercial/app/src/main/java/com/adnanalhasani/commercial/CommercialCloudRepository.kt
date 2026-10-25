@@ -775,7 +775,17 @@ internal fun loadCommercialCloudPurchaseDocuments(context: Context): List<Commer
                         totalMinor = invoice.optLong("total_minor", 0L),
                         currencyCode = invoice.optString("currency_code").takeUnless { it == "null" }.orEmpty(),
                         recordedAt = invoice.optString("recorded_at").takeUnless { it == "null" }.orEmpty(),
-                        state = invoice.optString("state").takeUnless { it == "null" }.orEmpty()
+                        state = invoice.optString("state").takeUnless { it == "null" }.orEmpty(),
+                        obligation = invoice.optJSONObject("obligation")?.let { ob ->
+                            val obligationId = ob.optString("id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+                            if (obligationId.isBlank()) null else CommercialCloudSupplierObligationSummary(
+                                id = obligationId,
+                                amountDueMinor = ob.optLong("amount_due_minor", 0L),
+                                amountPaidMinor = ob.optLong("amount_paid_minor", 0L),
+                                state = ob.optString("state").takeUnless { it == "null" }.orEmpty(),
+                                currencyCode = ob.optString("currency_code").takeUnless { it == "null" }.orEmpty()
+                            )
+                        }
                     ))
                 }
             }.sortedBy { it.recordedAt }
