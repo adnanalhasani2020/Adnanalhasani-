@@ -160,6 +160,21 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
             with self.subTest(marker=marker):
                 self.assertIn(marker, migration)
 
+    def test_saved_invoice_has_print_and_share_actions_with_escaped_rtl_rendering(self):
+        screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudSalesScreen.kt").read_text(encoding="utf-8")
+        for marker in (
+            "shareSavedInvoice(context, document, confirmedPaidMinor)",
+            "printSavedInvoice(context, document, confirmedPaidMinor)",
+            "Intent.ACTION_SEND",
+            "PrintManager",
+            'dir="rtl"',
+            'replace("<", "&lt;")',
+            "معرّف السجل المحفوظ",
+            "ليست إقرارًا بالامتثال لمتطلبات فاتورة ضريبية محلية",
+        ):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, screen)
+
     def test_multi_line_checkout_guards_duplicate_lines_and_uses_stable_retry_key(self):
         self.assertIn("commercial_checkout_sale_multi", self.repository)
         self.assertIn("getOrCreateCommercialCloudMultiSaleKey", self.repository)
