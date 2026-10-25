@@ -9,6 +9,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.Executors
@@ -657,6 +659,14 @@ internal fun loadCommercialCloudSaleDocuments(context: Context): List<Commercial
     }
 }
 
+
+internal fun commercialStableIdempotencyKey(prefix: String, parts: List<String>): String {
+    val canonical = parts.joinToString("\u001f")
+    val digest = MessageDigest.getInstance("SHA-256")
+        .digest(canonical.toByteArray(StandardCharsets.UTF_8))
+        .joinToString("") { byte -> "%02x".format(byte) }
+    return prefix + "-" + digest
+}
 
 internal data class CommercialPurchaseSupplierOption(val id: String, val name: String)
 internal data class CommercialPurchaseLocationOption(val id: String, val name: String)
