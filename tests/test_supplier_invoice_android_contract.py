@@ -15,6 +15,15 @@ def test_supplier_invoice_has_an_android_entry_point_and_cloud_rpc():
     assert "/rest/v1/rpc/commercial_record_supplier_invoice" in repository
 
 
+def test_supplier_invoice_purchase_item_ids_are_projected_for_rpc_lines():
+    repository = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt").read_text()
+
+    # The dialog sends each selected line ID to the RPC; omitting id from the nested
+    # PostgREST select silently produced empty IDs and every save failed server-side.
+    assert "items:commercial_purchase_order_items(id,line_number,item_description,quantity_ordered,quantity_received,unit_cost_minor)" in repository
+    assert 'id = item.optString("id")' in repository
+
+
 def test_supplier_invoice_rpc_is_atomic_scoped_and_idempotent():
     migration = (ROOT / "supabase/migrations/20261026090000_commercial_supplier_invoice_capture.sql").read_text()
 
