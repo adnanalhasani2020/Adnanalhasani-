@@ -1,7 +1,7 @@
 -- Run with Supabase CLI / pgTAP in a disposable local or staging database.
 -- These are schema regression tests; they do not replace authenticated-session integration tests.
 BEGIN;
-SELECT plan(29);
+SELECT plan(30);
 
 SELECT has_table('public', 'commercial_audit_events',
   'append-only audit event table exists');
@@ -232,6 +232,17 @@ SELECT ok(
     'commercial_private.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint)'::regprocedure
   )))) > 0,
   'checkout audit event records persisted paid and outstanding amounts'
+);
+
+
+SELECT ok(
+  position('''payment_recorded'',EXISTS(SELECT 1 FROM public.commercial_payments' in pg_get_functiondef(
+    'commercial_private.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint)'::regprocedure
+  )) > 0
+  AND position('''paid_minor'',(SELECT coalesce(sum(p.amount_minor),0)::bigint FROM public.commercial_payments' in pg_get_functiondef(
+    'commercial_private.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint)'::regprocedure
+  )) > 0,
+  'first checkout response derives payment-recorded status and paid amount from persisted successful payment rows'
 );
 
 SELECT * FROM finish();
