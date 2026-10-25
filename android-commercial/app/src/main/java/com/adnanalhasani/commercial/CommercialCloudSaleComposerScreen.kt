@@ -73,6 +73,8 @@ internal fun CommercialCloudSaleComposerScreen(
     var selectedCustomer by remember { mutableStateOf<CommercialCloudCustomer?>(null) }
     var paymentMode by remember { mutableStateOf("cash") }
     var initialPaymentText by remember { mutableStateOf("0") }
+    var discountText by remember { mutableStateOf("0") }
+    var taxText by remember { mutableStateOf("0") }
     var quantities by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var search by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
@@ -103,10 +105,14 @@ internal fun CommercialCloudSaleComposerScreen(
         val quantity = quantities[product.cloudOfferingId]?.toIntOrNull()
         if (product.cloudOfferingId.isBlank() || quantity == null || quantity <= 0) null else product to quantity
     }
-    val estimatedTotal = selectedLines.fold(BigInteger.ZERO) { sum, entry ->
+    val estimatedSubtotal = selectedLines.fold(BigInteger.ZERO) { sum, entry ->
         sum + BigInteger.valueOf(entry.first.cloudPriceMinor.coerceAtLeast(0L))
             .multiply(BigInteger.valueOf(entry.second.toLong()))
     }
+    val discountMinor = discountText.toLongOrNull() ?: 0L
+    val taxMinor = taxText.toLongOrNull() ?: 0L
+    val estimatedTotal = (estimatedSubtotal - BigInteger.valueOf(discountMinor) + BigInteger.valueOf(taxMinor))
+        .coerceAtLeast(BigInteger.ZERO)
 
     Scaffold(
         topBar = {
@@ -234,7 +240,26 @@ internal fun CommercialCloudSaleComposerScreen(
                         Text("ملخص الفاتورة", color = CloudComposerInk, fontWeight = FontWeight.Bold)
                         Text("عدد الأصناف: ${selectedLines.size}", color = CloudComposerMuted, fontSize = 12.sp)
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("الإجمالي التقديري", color = CloudComposerMuted)
+                            Text("الإجمالي الفرعي", color = CloudComposerMuted)
+                            Text("${String.format(Locale.US, "%,d", estimatedSubtotal)} $currency", color = CloudComposerInk, fontWeight = FontWeight.Medium)
+                        }
+                        OutlinedTextField(
+                            value = discountText,
+                            onValueChange = { discountText = it.filter(Char::isDigit).take(15); error = "" },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            label = { Text("خصم الفاتورة بمبلغ ثابت ($currency)") }
+                        )
+                        OutlinedTextField(
+                            value = taxText,
+                            onValueChange = { taxText = it.filter(Char::isDigit).take(15); error = "" },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            label = { Text("ضريبة الفاتورة بمبلغ ثابت ($currency)") }
+                        )
+                        Text("أدخل مبالغ الخصم والضريبة يدويًا بأصغر وحدة نقدية. لا تُستنتج نسبة ضريبية أو ولاية قضائية تلقائيًا.", color = CloudComposerMuted, fontSize = 10.sp)
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("الإجمالي التقديري بعد الخصم والضريبة", color = CloudComposerMuted)
                             Text("${String.format(Locale.US, "%,d", estimatedTotal)} $currency", color = CloudComposerGreen, fontWeight = FontWeight.Bold)
                         }
                         Text("الإجمالي النهائي والسعر المعتمد يحددهما الخادم.", color = CloudComposerMuted, fontSize = 10.sp)
@@ -256,6 +281,10 @@ internal fun CommercialCloudSaleComposerScreen(
                             error = "توجد كمية تتجاوز المخزون المتاح؛ حدّث المخزون وصحح الكميات."
                         } else if (selectedLines.any { it.first.cloudPriceMinor < 0L }) {
                             error = "يوجد سعر غير صالح؛ حدّث الأصناف."
+                        } else if (discountMinor < 0L || taxMinor < 0L || discountMinor > estimatedSubtotal.min(BigInteger.valueOf(Long.MAX_VALUE)).toLong()) {
+                            error = "تحقق من الخصم والضريبة؛ يجب ألا يتجاوز الخصم إجمالي الأصناف."
+                        } else if (estimatedSubtotal > BigInteger.valueOf(Long.MAX_VALUE) || estimatedTotal > BigInteger.valueOf(Long.MAX_VALUE)) {
+                            error = "إجمالي الفاتورة يتجاوز الحد المالي المسموح."
                         } else {
                             submitting = true
                             notice = "جارٍ التحقق من الأصناف والمخزون وتسجيل فاتورة واحدة على الخادم..."
@@ -263,12 +292,14 @@ internal fun CommercialCloudSaleComposerScreen(
                             val customerId = selectedCustomer?.id
                             val paymentModeForRequest = paymentMode
                             val initialPaymentMinor = initialPaymentText.toLongOrNull()
+                            val discountForRequest = discountMinor
+                            val taxForRequest = taxMinor
                             CloudComposerWorker.execute {
                                 val result = runCatching {
                                     require(paymentModeForRequest != "credit" || !customerId.isNullOrBlank()) { "اختر العميل قبل تسجيل البيع الآجل." }
                                     require(paymentModeForRequest != "credit" || initialPaymentMinor != null) { "أدخل مبلغًا صحيحًا للدفعة الأولى." }
-                                    val key = getOrCreateCommercialCloudMultiSaleKey(context, requestLines, customerId, paymentModeForRequest, initialPaymentMinor ?: 0L)
-                                    val sale = checkoutCommercialCloudSaleMulti(context, requestLines, key, customerId, paymentModeForRequest, initialPaymentMinor ?: 0L)
+                                    val key = getOrCreateCommercialCloudMultiSaleKey(context, requestLines, customerId, paymentModeForRequest, initialPaymentMinor ?: 0L, discountForRequest, taxForRequest)
+                                    val sale = checkoutCommercialCloudSaleMulti(context, requestLines, key, customerId, paymentModeForRequest, initialPaymentMinor ?: 0L, discountForRequest, taxForRequest)
                                     val clearResult = runCatching { clearCommercialCloudMultiSaleKey(context, key) }
                                     val receipt = sale.optString("receipt_number", "—")
                                     val paymentRecorded = sale.optBoolean("payment_recorded", false)
