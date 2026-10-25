@@ -193,6 +193,7 @@ internal fun PurchaseOrderEntryDialog(
                             else -> { attempted = true; error = "" }
                         }
                     }
+                    if (attempted) error = ""
                     if (attempted && error.isBlank()) {
                         saving = true
                         val selectedLines = lines.map { line ->
