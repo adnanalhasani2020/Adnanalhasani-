@@ -265,7 +265,7 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         self.assertIn('paymentMode = "partial"', self.composer)
         self.assertIn('"partial" -> "فاتورة سحابية · دفع جزئي"', self.composer)
         self.assertIn('val paymentModeForRequest = if (paymentMode == "cash") "cash" else "credit"', self.composer)
-        self.assertIn('paymentMode != "partial" || (initialPaymentMinor!! > 0L && BigInteger.valueOf(initialPaymentMinor) < estimatedTotal)', self.composer)
+        self.assertIn('paymentMode != "partial" || (initialPaymentMinor != null && initialPaymentMinor > 0L && BigInteger.valueOf(initialPaymentMinor) < estimatedTotal)', self.composer)
         self.assertIn('paymentMode != "credit" || !customerId.isNullOrBlank()', self.composer)
         self.assertIn('.put("p_payment_mode", paymentMode)', self.repository)
         self.assertIn('.put("p_initial_payment_minor", if (paymentMode == "cash") JSONObject.NULL else initialPaymentMinor)', self.repository)
