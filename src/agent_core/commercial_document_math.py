@@ -6,7 +6,7 @@ this module intentionally does not choose a jurisdiction's tax policy.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP, localcontext
 from typing import Literal
 
 
@@ -35,7 +35,13 @@ def to_base_quantity(quantity, factor_to_base, *, label: str = "quantity") -> De
         raise ValueError(f"{label} must be greater than zero")
     if factor <= 0:
         raise ValueError("factor_to_base must be greater than zero")
-    return q * factor
+    # Decimal multiplication otherwise follows the ambient 28-digit context and
+    # can silently round large inventory quantities. Size the local context for
+    # the exact product of both coefficient digit sequences.
+    precision = len(q.as_tuple().digits) + len(factor.as_tuple().digits)
+    with localcontext() as ctx:
+        ctx.prec = max(ctx.prec, precision)
+        return q * factor
 
 
 def validate_base_quantity_precision(quantity, decimal_places: int, *, label: str = "quantity") -> Decimal:
