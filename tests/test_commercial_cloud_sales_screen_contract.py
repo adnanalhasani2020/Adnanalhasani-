@@ -154,6 +154,16 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         self.assertIn("duplicate_offering_lines_not_allowed", sql)
 
 
+    def test_multiline_checkout_validates_saved_idempotency_fingerprint(self):
+        start = self.repository.index("internal fun checkoutCommercialCloudSaleMulti(")
+        end = self.repository.index("internal data class CommercialCloudSaleLine", start)
+        checkout = self.repository[start:end]
+        self.assertIn("pendingPrefs.getString(\\"idempotency_key\\", null) == idempotencyKey", checkout)
+        self.assertIn("pendingPrefs.getString(\\"payload\\", null) == requestFingerprint", checkout)
+        self.assertIn("pendingPrefs.getString(\\"organization_id\\", null) == organizationId", checkout)
+        self.assertIn("paymentMode in setOf(\\"cash\\", \\"credit\\")", checkout)
+        self.assertIn("customerId.isNullOrBlank()", checkout)
+
     def test_multiline_invoice_composer_uses_cloud_rpc_and_retry_key(self):
         self.assertIn("CommercialCloudSaleComposerScreen(", self.main)
         self.assertIn("checkoutCommercialCloudSaleMulti(context, requestLines, key)", self.composer)
