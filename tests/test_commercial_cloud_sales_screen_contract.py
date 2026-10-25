@@ -201,7 +201,7 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         self.assertIn("commercial_checkout_sale_multi", self.repository)
         self.assertIn("getOrCreateCommercialCloudMultiSaleKey", self.repository)
         self.assertIn("aggregateCommercialCheckoutLines(lines)", self.repository)
-        self.assertIn("Math.addExact(previous?.first ?: 0, line.quantity)", self.repository)
+        self.assertIn("Math.addExact(totals[line.offeringId] ?: 0, line.quantity)", self.repository)
         self.assertIn('"unit_code", line.unitCode', self.repository)
         self.assertIn("configureCommercialCloudSellUnit", self.repository)
         self.assertIn("sell_units:commercial_offering_sell_units", self.repository)
