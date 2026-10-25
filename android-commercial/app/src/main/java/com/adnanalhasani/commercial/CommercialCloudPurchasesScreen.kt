@@ -24,7 +24,6 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -36,7 +35,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -69,14 +67,6 @@ internal fun CommercialCloudPurchasesScreen(context: Context, onBack: () -> Unit
     var error by remember { mutableStateOf("") }
     var reloadToken by remember { mutableIntStateOf(0) }
     var invoiceOrder by remember { mutableStateOf<CommercialCloudPurchaseDocument?>(null) }
-    var invoiceNumber by remember { mutableStateOf("") }
-    var invoiceTax by remember { mutableStateOf("0") }
-    var invoiceFreight by remember { mutableStateOf("0") }
-    var invoiceQuantities by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
-    var invoicePrices by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
-    var invoiceKey by remember { mutableStateOf(java.util.UUID.randomUUID().toString()) }
-    var savingInvoice by remember { mutableStateOf(false) }
-    var invoiceError by remember { mutableStateOf("") }
 
     LaunchedEffect(reloadToken) {
         loading = true
@@ -201,13 +191,22 @@ internal fun CommercialCloudPurchasesScreen(context: Context, onBack: () -> Unit
                             }
                         }
                         if (order.notes.isNotBlank()) Text("ملاحظات: ${order.notes}", color = CloudPurchasesMuted, fontSize = 11.sp)
-                        Text("مرجع: ${order.id.take(8)} · عرض فقط", color = CloudPurchasesMuted, fontSize = 10.sp)
+                        Button(onClick = { invoiceOrder = order }, enabled = order.lines.isNotEmpty()) { Text("تسجيل فاتورة المورد") }
+                        if (invoiceOrder?.id == order.id) {
+                            SupplierInvoiceEntryDialog(
+                                context = context,
+                                order = order,
+                                onDismiss = { invoiceOrder = null },
+                                onSaved = { invoiceOrder = null; reloadToken++ }
+                            )
+                        }
+                        Text("مرجع: ${order.id.take(8)} · فاتورة المورد", color = CloudPurchasesMuted, fontSize = 10.sp)
                     }
                 }
             }
             item {
                 Text(
-                    "هذه الشاشة تعرض أوامر الشراء وبنودها من الخادم فقط. لم يتم تفعيل إنشاء الطلب أو اعتماد الاستلام أو تحديث المخزون من هذه الشاشة.",
+                    "يمكن تسجيل فاتورة المورد للبنود المستلمة عبر الخادم. حفظ الفاتورة لا ينشئ دفعة أو التزامًا ماليًا ولا يغيّر المخزون أو دفتر الأستاذ تلقائيًا.",
                     color = CloudPurchasesMuted, fontSize = 11.sp, modifier = Modifier.padding(vertical = 8.dp)
                 )
             }
