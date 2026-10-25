@@ -3,6 +3,7 @@ import unittest
 
 from agent_core.commercial_document_math import (
     Discount, TaxRule, calculate_document_totals, to_base_quantity,
+    validate_base_quantity_precision,
 )
 
 
@@ -11,6 +12,16 @@ class CommercialDocumentMathTests(unittest.TestCase):
         self.assertEqual(to_base_quantity(Decimal("2"), Decimal("12")), Decimal("24"))
         self.assertEqual(to_base_quantity("1.25", "1000"), Decimal("1250"))
         self.assertEqual(to_base_quantity("0.75", "1"), Decimal("0.75"))
+
+    def test_base_unit_precision_rejects_silent_rounding(self):
+        self.assertEqual(validate_base_quantity_precision("1.250", 3), Decimal("1.250"))
+        self.assertEqual(validate_base_quantity_precision("12", 0), Decimal("12"))
+        for quantity, places in (("1.001", 2), ("0.1", 0), (0, 3), ("NaN", 3), ("Infinity", 3)):
+            with self.subTest(quantity=quantity, places=places), self.assertRaises(ValueError):
+                validate_base_quantity_precision(quantity, places)
+        for places in (-1, 13, True, 1.5):
+            with self.subTest(places=places), self.assertRaises(ValueError):
+                validate_base_quantity_precision("1", places)
 
     def test_conversion_rejects_nonpositive_and_nonfinite_inputs(self):
         for quantity, factor in ((0, 12), (-1, 12), (1, 0), (1, -1), ("NaN", 1), (1, "Infinity")):
@@ -58,6 +69,24 @@ class CommercialDocumentMathTests(unittest.TestCase):
                 tax_rules=(TaxRule("inclusive", Decimal("5"), inclusive=True),
                            TaxRule("exclusive", Decimal("5"), inclusive=False)),
             )
+
+    def test_duplicate_active_tax_codes_are_rejected_case_insensitively(self):
+        with self.assertRaisesRegex(ValueError, "tax rule codes must be unique"):
+            calculate_document_totals(
+                line_amounts_minor=[1000],
+                tax_rules=(TaxRule("VAT", Decimal("5")), TaxRule(" vat ", Decimal("5"))),
+            )
+        # Disabled historical/configured rules do not affect the current document.
+        totals = calculate_document_totals(
+            line_amounts_minor=[1000],
+            tax_rules=(TaxRule("VAT", Decimal("5")), TaxRule("vat", Decimal("5"), enabled=False)),
+        )
+        self.assertEqual(totals.tax_minor, 50)
+
+    def test_unrepresentable_currency_amount_fails_with_value_error(self):
+        with self.assertRaises(ValueError):
+            from agent_core.commercial_document_math import rounded_minor
+            rounded_minor(Decimal("1E1000"))
 
     def test_rejects_negative_and_non_integer_minor_amounts(self):
         for amount in (-1, 1.5, True):
