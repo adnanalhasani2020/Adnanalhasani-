@@ -1,6 +1,11 @@
--- Atomic multi-line cash checkout. No credit, discount, tax or GL behavior is implied.
+-- Atomic multi-line cash/credit checkout. Discounts, tax and GL posting remain out of scope.
+DROP FUNCTION IF EXISTS public.commercial_checkout_sale_multi(jsonb,uuid,text,uuid);
+DROP FUNCTION IF EXISTS public.commercial_checkout_sale_multi(jsonb,uuid,text);
+DROP FUNCTION IF EXISTS commercial_private.commercial_checkout_sale_multi(jsonb,uuid,text,uuid);
+DROP FUNCTION IF EXISTS commercial_private.commercial_checkout_sale_multi(jsonb,uuid,text);
 CREATE OR REPLACE FUNCTION commercial_private.commercial_checkout_sale_multi(
-  p_lines jsonb, p_location_id uuid, p_idempotency_key text
+  p_lines jsonb, p_location_id uuid, p_idempotency_key text, p_customer_id uuid DEFAULT NULL,
+  p_payment_mode text DEFAULT 'cash', p_initial_payment_minor bigint DEFAULT NULL
 ) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER
 SET search_path TO 'pg_catalog', 'public', 'commercial_private'
@@ -8,6 +13,10 @@ AS $function$
 DECLARE
   v_uid uuid := auth.uid();
   v_org uuid;
+  v_customer uuid := p_customer_id;
+  v_payment_mode text := coalesce(p_payment_mode, 'cash');
+  v_initial_payment bigint := coalesce(p_initial_payment_minor, 0);
+  v_payment_status text;
   v_activity uuid;
   v_currency text;
   v_line jsonb;
@@ -37,6 +46,9 @@ BEGIN
   IF jsonb_array_length(p_lines) < 1 OR jsonb_array_length(p_lines) > 200 THEN
     RAISE EXCEPTION 'invalid_invoice_lines_or_location' USING ERRCODE='22023';
   END IF;
+  IF v_payment_mode NOT IN ('cash','credit') THEN RAISE EXCEPTION 'invalid_payment_mode' USING ERRCODE='22023'; END IF;
+  IF v_initial_payment < 0 THEN RAISE EXCEPTION 'invalid_initial_payment' USING ERRCODE='22023'; END IF;
+  IF v_payment_mode = 'cash' AND p_initial_payment_minor IS NOT NULL THEN RAISE EXCEPTION 'cash_payment_does_not_accept_initial_amount' USING ERRCODE='22023'; END IF;
   IF p_idempotency_key IS NULL OR length(btrim(p_idempotency_key)) < 8
      OR length(btrim(p_idempotency_key)) > 200 THEN
     RAISE EXCEPTION 'invalid_idempotency_key' USING ERRCODE='22023';
@@ -57,14 +69,17 @@ BEGIN
 
   v_fingerprint := md5(jsonb_build_object(
     'location_id', p_location_id,
+    'customer_id', p_customer_id,
+    'payment_mode', v_payment_mode,
+    'initial_payment_minor', CASE WHEN v_payment_mode='cash' THEN NULL ELSE v_initial_payment END,
     'lines', (SELECT jsonb_agg(jsonb_build_object('offering_id', e->>'offering_id', 'quantity', (e->>'quantity')::integer)
       ORDER BY (e->>'offering_id')::uuid) FROM jsonb_array_elements(p_lines) e)
   )::text);
   PERFORM pg_advisory_xact_lock(hashtext(v_uid::text), hashtext(p_idempotency_key));
 
   SELECT s.id, s.receipt_number, s.created_at, s.request_fingerprint,
-         s.organization_id, s.activity_id, s.currency_code, s.total_minor
-    INTO v_sale, v_receipt, v_created, v_old_fingerprint, v_org, v_activity, v_currency, v_total
+         s.organization_id, s.activity_id, s.currency_code, s.total_minor, s.payment_status
+    INTO v_sale, v_receipt, v_created, v_old_fingerprint, v_org, v_activity, v_currency, v_total, v_payment_status
   FROM public.commercial_sales s
   WHERE s.user_id = v_uid AND s.idempotency_key = p_idempotency_key;
   IF FOUND THEN
@@ -74,7 +89,7 @@ BEGIN
     RETURN jsonb_build_object('sale_id',v_sale,'receipt_number',v_receipt,'organization_id',v_org,
       'activity_id',v_activity,'currency_code',v_currency,'total_minor',v_total,
       'line_count',(SELECT count(*) FROM public.commercial_sale_items i WHERE i.sale_id=v_sale),
-      'payment_recorded',v_total>0,'state','completed','payment_status','paid','idempotent_replay',true);
+      'payment_recorded',v_payment_status IN ('paid','partially_paid'),'state','completed','payment_status',v_payment_status,'idempotent_replay',true);
   END IF;
 
   SELECT a.id, a.organization_id INTO v_activity, v_org
@@ -91,6 +106,12 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM public.commercial_organization_members m WHERE m.organization_id=v_org AND m.user_id=v_uid AND m.state='active') THEN
     RAISE EXCEPTION 'organization_access_denied' USING ERRCODE='42501';
   END IF;
+  IF v_payment_mode = 'credit' AND v_customer IS NULL THEN RAISE EXCEPTION 'customer_required_for_credit_sale' USING ERRCODE='22023'; END IF;
+  IF v_customer IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM public.commercial_customers c
+    WHERE c.id = v_customer AND c.organization_id = v_org AND c.state = 'active'
+  ) THEN RAISE EXCEPTION 'customer_not_active_in_organization' USING ERRCODE='22023'; END IF;
+
   IF EXISTS (
     SELECT 1 FROM jsonb_array_elements(p_lines) e
     JOIN public.commercial_offerings o ON o.id=(e->>'offering_id')::uuid
@@ -129,10 +150,14 @@ BEGIN
     RAISE EXCEPTION 'mixed_currency_invoice_not_supported' USING ERRCODE='22023';
   END IF;
   SELECT r->>'currency_code' INTO v_currency FROM jsonb_array_elements(v_rows) r LIMIT 1;
-  INSERT INTO public.commercial_sales(receipt_number,user_id,activity_id,organization_id,idempotency_key,
+  IF v_payment_mode='cash' THEN v_initial_payment := v_total::bigint; END IF;
+  IF v_payment_mode='credit' AND v_initial_payment > v_total THEN RAISE EXCEPTION 'initial_payment_exceeds_invoice_total' USING ERRCODE='22023'; END IF;
+  v_payment_status := CASE WHEN v_initial_payment >= v_total THEN 'paid' WHEN v_initial_payment > 0 THEN 'partially_paid' ELSE 'pending' END;
+
+  INSERT INTO public.commercial_sales(receipt_number,user_id,activity_id,organization_id,customer_id,idempotency_key,
     request_fingerprint,status,currency_code,total_minor,payment_status,channel)
-  VALUES(nextval('public.commercial_sales_receipt_number_seq'::regclass),v_uid,v_activity,v_org,p_idempotency_key,
-    v_fingerprint,'completed',v_currency,v_total::bigint,'paid','in_person')
+  VALUES(nextval('public.commercial_sales_receipt_number_seq'::regclass),v_uid,v_activity,v_org,v_customer,p_idempotency_key,
+    v_fingerprint,'completed',v_currency,v_total::bigint,v_payment_status,'in_person')
   RETURNING id,receipt_number,created_at INTO v_sale,v_receipt,v_created;
 
   FOR v_line IN SELECT value FROM jsonb_array_elements(v_rows) LOOP
@@ -147,35 +172,37 @@ BEGIN
     VALUES(v_offer,v_sale,'sale',-v_qty,'sale:'||v_sale::text||':offering:'||v_offer::text||':location:'||p_location_id::text,v_uid);
   END LOOP;
 
-  IF v_total > 0 THEN
+  IF v_initial_payment > 0 THEN
     INSERT INTO public.commercial_payments(organization_id,sale_id,provider,idempotency_key,amount_minor,currency_code,status,payment_method_type)
-    VALUES(v_org,v_sale,'ruh_cash_checkout','sale:'||v_sale::text||':cash',v_total::bigint,v_currency,'succeeded','cash')
+    VALUES(v_org,v_sale,'ruh_cash_checkout','sale:'||v_sale::text||':initial',v_initial_payment::bigint,v_currency,'succeeded','cash')
     ON CONFLICT(organization_id,idempotency_key) DO NOTHING;
   END IF;
   INSERT INTO public.commercial_audit_events(organization_id,actor_user_id,action,entity_type,entity_id,metadata)
   VALUES(v_org,v_uid,'sale.completed','sale',v_sale::text,jsonb_build_object('receipt_number',v_receipt,
     'line_count',jsonb_array_length(v_rows),'location_id',p_location_id,'total_minor',v_total::bigint,
-    'currency_code',v_currency,'payment_recorded',v_total>0));
+    'currency_code',v_currency,'payment_recorded',v_initial_payment>0,'payment_mode',v_payment_mode,'outstanding_minor',(v_total-v_initial_payment)::bigint));
 
   RETURN jsonb_build_object('sale_id',v_sale,'receipt_number',v_receipt,'organization_id',v_org,'activity_id',v_activity,
     'currency_code',v_currency,'total_minor',v_total::bigint,'line_count',jsonb_array_length(v_rows),
-    'occurred_at',v_created,'state','completed','payment_status','paid','payment_recorded',v_total>0,'idempotent_replay',false);
+    'occurred_at',v_created,'state','completed','payment_status',v_payment_status,'payment_recorded',v_initial_payment>0,
+    'paid_minor',v_initial_payment::bigint,'outstanding_minor',(v_total-v_initial_payment)::bigint,'payment_mode',v_payment_mode,'idempotent_replay',false);
 END;
 $function$;
 
 CREATE OR REPLACE FUNCTION public.commercial_checkout_sale_multi(
-  p_lines jsonb, p_location_id uuid, p_idempotency_key text
+  p_lines jsonb, p_location_id uuid, p_idempotency_key text, p_customer_id uuid DEFAULT NULL,
+  p_payment_mode text DEFAULT 'cash', p_initial_payment_minor bigint DEFAULT NULL
 ) RETURNS jsonb
 LANGUAGE plpgsql SECURITY INVOKER
 SET search_path TO 'pg_catalog', 'public', 'commercial_private'
 AS $function$
 BEGIN
   IF auth.uid() IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
-  RETURN commercial_private.commercial_checkout_sale_multi(p_lines,p_location_id,p_idempotency_key);
+  RETURN commercial_private.commercial_checkout_sale_multi(p_lines,p_location_id,p_idempotency_key,p_customer_id,p_payment_mode,p_initial_payment_minor);
 END;
 $function$;
 
-REVOKE ALL ON FUNCTION commercial_private.commercial_checkout_sale_multi(jsonb,uuid,text) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION commercial_private.commercial_checkout_sale_multi(jsonb,uuid,text) TO authenticated;
-REVOKE ALL ON FUNCTION public.commercial_checkout_sale_multi(jsonb,uuid,text) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.commercial_checkout_sale_multi(jsonb,uuid,text) TO authenticated;
+REVOKE ALL ON FUNCTION commercial_private.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION commercial_private.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint) TO authenticated;
+REVOKE ALL ON FUNCTION public.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint) TO authenticated;
