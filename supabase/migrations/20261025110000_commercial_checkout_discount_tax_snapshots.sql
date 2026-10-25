@@ -124,8 +124,8 @@ BEGIN
   PERFORM pg_advisory_xact_lock(hashtext(v_uid::text), hashtext(p_idempotency_key));
 
   SELECT s.id, s.receipt_number, s.created_at, s.request_fingerprint,
-         s.organization_id, s.activity_id, s.currency_code, s.total_minor, s.payment_status
-    INTO v_sale, v_receipt, v_created, v_old_fingerprint, v_org, v_activity, v_currency, v_total, v_payment_status
+         s.organization_id, s.activity_id, s.currency_code, s.subtotal_minor, s.discount_minor, s.tax_minor, s.total_minor, s.payment_status
+    INTO v_sale, v_receipt, v_created, v_old_fingerprint, v_org, v_activity, v_currency, v_subtotal, v_discount, v_tax, v_total, v_payment_status
   FROM public.commercial_sales s
   WHERE s.user_id = v_uid AND s.idempotency_key = p_idempotency_key;
   IF FOUND THEN
@@ -136,7 +136,8 @@ BEGIN
       WHERE je.organization_id=v_org AND je.source_type='sale' AND je.source_id=v_sale AND je.status='posted'
       ORDER BY je.created_at DESC LIMIT 1;
     RETURN jsonb_build_object('sale_id',v_sale,'invoice_id',v_sale,'receipt_number',v_receipt,'invoice_number',v_receipt,
-      'organization_id',v_org,'customer_id',v_customer,'activity_id',v_activity,'currency_code',v_currency,'total_minor',v_total,
+      'organization_id',v_org,'customer_id',v_customer,'activity_id',v_activity,'currency_code',v_currency,
+      'subtotal_minor',v_subtotal,'discount_minor',v_discount,'tax_minor',v_tax,'total_minor',v_total,
       'journal_entry_id',v_entry,
       'line_count',(SELECT count(*) FROM public.commercial_sale_items i WHERE i.sale_id=v_sale),
       'payment_recorded',EXISTS(SELECT 1 FROM public.commercial_payments p WHERE p.sale_id=v_sale AND p.status='succeeded'),
@@ -293,9 +294,9 @@ $function$;
 
 
 CREATE OR REPLACE FUNCTION public.commercial_checkout_sale_multi_priced(
-  p_lines jsonb, p_location_id uuid, p_idempotency_key text, p_customer_id uuid DEFAULT NULL,
-  p_payment_mode text DEFAULT 'cash', p_initial_payment_minor bigint DEFAULT NULL,
-  p_discount_minor bigint DEFAULT 0, p_tax_minor bigint DEFAULT 0
+  p_lines jsonb, p_location_id uuid, p_idempotency_key text, p_customer_id uuid,
+  p_payment_mode text, p_initial_payment_minor bigint,
+  p_discount_minor bigint, p_tax_minor bigint
 ) RETURNS jsonb
 LANGUAGE plpgsql SECURITY INVOKER
 SET search_path TO 'pg_catalog', 'public', 'commercial_private'
