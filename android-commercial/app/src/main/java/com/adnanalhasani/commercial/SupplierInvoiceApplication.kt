@@ -183,7 +183,11 @@ class SupplierInvoiceApplication {
             if (baseline.currencyCode != invoice.currencyCode) {
                 invalid("Cannot compare supplier invoice price across currencies")
             }
-            val delta = line.unitPriceMinor - expectedPrice
+            val delta = try {
+                Math.subtractExact(line.unitPriceMinor, expectedPrice)
+            } catch (_: ArithmeticException) {
+                invalid("Supplier invoice unit price variance exceeds integer limits")
+            }
             val totalDelta = try {
                 Math.multiplyExact(delta, line.quantityUnits)
             } catch (_: ArithmeticException) {
