@@ -148,3 +148,25 @@ def test_android_purchase_workflow_is_connected_to_server_rpcs():
     assert 'commercialStableIdempotencyKey("purchase-create"' in order_dialog
     assert "getOrCreateCommercialPurchaseReceiptIdempotencyKey" in receipt_dialog
     assert "resolvePendingCommercialPurchaseReceipt" in repository
+
+
+def test_fractional_purchase_receiving_preserves_decimal_precision_end_to_end():
+    migration = (ROOT / "supabase/migrations/20261025230817_commercial_fractional_purchase_receiving.sql").read_text(encoding="utf-8")
+    repository = REPOSITORY.read_text(encoding="utf-8")
+    order_dialog = ORDER_DIALOG.read_text(encoding="utf-8")
+    receipt_dialog = RECEIPT_DIALOG.read_text(encoding="utf-8")
+    for marker in (
+        "numeric(18,6)",
+        "numeric(20,6)",
+        "commercial_receive_inventory_stock(uuid,uuid,uuid,numeric,bigint,text)",
+        "quantity_delta TYPE numeric(20,6)",
+        "scale(v_qty)>6",
+        "v_qty::numeric",
+    ):
+        assert marker in migration
+    assert "quantity.stripTrailingZeros().scale() <= 6" in repository
+    assert "quantity.stripTrailingZeros().toPlainString()" in repository
+    invoice_repository = repository.split("internal fun recordCommercialCloudSupplierInvoice", 1)[1]
+    invoice_repository = invoice_repository.split("private fun commercialPurchaseReceiptPendingPreferences", 1)[0]
+    assert "quantity.stripTrailingZeros().scale() <= 6" in invoice_repository
+    assert "quantity.stripTrailingZeros().scale() > 6" in receipt_dialog
