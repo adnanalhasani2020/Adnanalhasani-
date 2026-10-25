@@ -28,6 +28,12 @@ class CommercialCollectionRpcUnificationTests(unittest.TestCase):
         self.assertIn("commercial_gl_post_payment(v_payment.id)", canonical)
         self.assertIn("GRANT EXECUTE ON FUNCTION commercial_private.commercial_record_sale_collection", unified)
 
+    def test_idempotent_replay_precedes_return_refund_gate(self):
+        unified = UNIFICATION_MIGRATION.read_text(encoding="utf-8")
+        replay = unified.index("WHERE p.organization_id = v_org AND p.idempotency_key = p_idempotency_key")
+        return_gate = unified.index("sale_return_reconciliation_required")
+        self.assertLess(replay, return_gate)
+
 
 if __name__ == "__main__":
     unittest.main()
