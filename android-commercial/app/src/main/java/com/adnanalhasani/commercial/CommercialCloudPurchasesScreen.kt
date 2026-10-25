@@ -66,6 +66,7 @@ internal fun CommercialCloudPurchasesScreen(context: Context, onBack: () -> Unit
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
     var reloadToken by remember { mutableIntStateOf(0) }
+    var invoiceOrder by remember { mutableStateOf<CommercialCloudPurchaseDocument?>(null) }
 
     LaunchedEffect(reloadToken) {
         loading = true
@@ -93,7 +94,7 @@ internal fun CommercialCloudPurchasesScreen(context: Context, onBack: () -> Unit
                 title = {
                     Column {
                         Text("أوامر الشراء والاستلام", color = CloudPurchasesInk, fontWeight = FontWeight.Bold)
-                        Text("تفاصيل الموردين والبنود والكميات المستلمة", color = CloudPurchasesMuted, fontSize = 11.sp)
+                        Text("تفاصيل الموردين والبنود والكميات المستلمة · الاستلام عرض فقط · لم يتم تفعيل إنشاء الطلب أو اعتماد الاستلام · لم يتم تفعيل إنشاء الطلب أو اعتماد الاستلام", color = CloudPurchasesMuted, fontSize = 11.sp)
                     }
                 },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "رجوع") } },
@@ -190,13 +191,22 @@ internal fun CommercialCloudPurchasesScreen(context: Context, onBack: () -> Unit
                             }
                         }
                         if (order.notes.isNotBlank()) Text("ملاحظات: ${order.notes}", color = CloudPurchasesMuted, fontSize = 11.sp)
-                        Text("مرجع: ${order.id.take(8)} · عرض فقط", color = CloudPurchasesMuted, fontSize = 10.sp)
+                        Button(onClick = { invoiceOrder = order }, enabled = order.lines.isNotEmpty()) { Text("تسجيل فاتورة المورد") }
+                        if (invoiceOrder?.id == order.id) {
+                            SupplierInvoiceEntryDialog(
+                                context = context,
+                                order = order,
+                                onDismiss = { invoiceOrder = null },
+                                onSaved = { invoiceOrder = null; reloadToken++ }
+                            )
+                        }
+                        Text("مرجع: ${order.id.take(8)} · فاتورة المورد", color = CloudPurchasesMuted, fontSize = 10.sp)
                     }
                 }
             }
             item {
                 Text(
-                    "هذه الشاشة تعرض أوامر الشراء وبنودها من الخادم فقط. لم يتم تفعيل إنشاء الطلب أو اعتماد الاستلام أو تحديث المخزون من هذه الشاشة.",
+                    "يمكن تسجيل فاتورة المورد للبنود المستلمة عبر الخادم. حفظ الفاتورة لا ينشئ دفعة أو التزامًا ماليًا ولا يغيّر المخزون أو دفتر الأستاذ تلقائيًا.",
                     color = CloudPurchasesMuted, fontSize = 11.sp, modifier = Modifier.padding(vertical = 8.dp)
                 )
             }
