@@ -103,6 +103,17 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
             with self.subTest(marker=marker):
                 self.assertIn(marker, self.screen)
 
+
+    def test_invoice_unit_price_uses_saved_selling_quantity_and_base_quantity(self):
+        # The historical line total remains untouched; only the displayed unit price
+        # is converted using the immutable per-line quantities saved at checkout.
+        self.assertIn("quantity_in_stock_units)", self.repository)
+        self.assertIn("val sellingQuantity = runCatching { java.math.BigDecimal(sellingQuantityText) }", self.repository)
+        self.assertIn("java.math.BigDecimal.valueOf(stockQuantity)", self.repository)
+        self.assertIn(".divide(sellingQuantity, 0, java.math.RoundingMode.HALF_UP)", self.repository)
+        self.assertIn("unitPriceMinor = sellingUnitPrice", self.repository)
+        self.assertIn('lineTotalMinor = item.optLong("line_total_minor", 0L)', self.repository)
+
     def test_invoice_timestamps_parse_iso8601_offsets_before_local_display(self):
         self.assertIn("java.time.Instant.parse(value)", self.screen)
         self.assertIn("java.time.ZoneId.systemDefault()", self.screen)
