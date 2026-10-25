@@ -221,7 +221,10 @@ BEGIN
   INSERT INTO public.commercial_audit_events(organization_id,actor_user_id,action,entity_type,entity_id,metadata)
   VALUES(v_org,v_uid,'sale.completed','sale',v_sale::text,jsonb_build_object('receipt_number',v_receipt,
     'line_count',jsonb_array_length(v_rows),'location_id',p_location_id,'total_minor',v_total::bigint,
-    'currency_code',v_currency,'payment_recorded',v_initial_payment>0,'payment_mode',v_payment_mode,'outstanding_minor',(v_total-v_initial_payment)::bigint));
+    'currency_code',v_currency,'payment_recorded',EXISTS(SELECT 1 FROM public.commercial_payments p WHERE p.sale_id=v_sale AND p.status='succeeded'),
+    'payment_mode',v_payment_mode,
+    'paid_minor',(SELECT coalesce(sum(p.amount_minor),0)::bigint FROM public.commercial_payments p WHERE p.sale_id=v_sale AND p.status='succeeded'),
+    'outstanding_minor',greatest(v_total::numeric-(SELECT coalesce(sum(p.amount_minor),0)::numeric FROM public.commercial_payments p WHERE p.sale_id=v_sale AND p.status='succeeded'),0)::bigint));
 
   RETURN jsonb_build_object('sale_id',v_sale,'invoice_id',v_sale,'receipt_number',v_receipt,'invoice_number',v_receipt,
     'organization_id',v_org,'customer_id',v_customer,'activity_id',v_activity,'currency_code',v_currency,'total_minor',v_total::bigint,
