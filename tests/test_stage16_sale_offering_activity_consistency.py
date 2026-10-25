@@ -246,6 +246,7 @@ def test_existing_database_migration_preserves_sales_invoices_and_history_on_reo
     expected_versions.append(("0061_sale_line_product_name_snapshot_match_guard",))
     expected_versions.append(("0062_commercial_checkout_receipt_immutable",))
     expected_versions.append(("0063_sale_line_snapshot_error_order",))
+    expected_versions.append(("0064_commercial_cash_credit_settlement",))
     expected_versions.append(("0065_commercial_supabase_identity_links",))
     assert db.execute(
         "SELECT version FROM schema_migrations ORDER BY version"

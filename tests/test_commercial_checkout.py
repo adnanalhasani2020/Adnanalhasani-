@@ -716,3 +716,81 @@ def test_checkout_receipt_is_immutable_and_remains_replayable(tmp_path):
     assert db.execute("SELECT COUNT(*) FROM sale_lines").fetchone()[0] == 1
     assert db.execute("SELECT COUNT(*) FROM inventory_movements").fetchone()[0] == 1
     assert db.execute("SELECT COUNT(*) FROM commercial_checkout_receipts").fetchone()[0] == 1
+
+
+def test_credit_checkout_tracks_partial_and_full_cash_settlement_across_reopen(tmp_path):
+    from agent_core.commercial_payments import CommercialPaymentsApplication
+
+    db, request = setup_checkout(tmp_path)
+    request["payment_method"] = "credit"
+    request["initial_paid_minor"] = 500
+    result = CommercialCheckoutApplication().checkout(db, **request, now=NOW)
+    assert result["total_minor"] == 2500
+    assert result["payment_method"] == "credit"
+    assert result["paid_minor"] == 500
+    assert result["balance_remaining_minor"] == 2000
+    assert db.execute("SELECT COUNT(*) FROM commercial_sale_payments").fetchone()[0] == 1
+
+    path = tmp_path / "checkout.sqlite"
+    db.close()
+    db = connect_database(path)
+    payments = CommercialPaymentsApplication()
+    assert payments.list_debts(db, buyer_person_id=request["actor_person_id"])[0]["balance_remaining_minor"] == 2000
+
+    first = payments.record_payment(
+        db, buyer_person_id=request["actor_person_id"], sale_id=request["sale_id"],
+        amount_minor=1000, idempotency_key="partial-cash-001", now=STAMP,
+    )
+    replay = payments.record_payment(
+        db, buyer_person_id=request["actor_person_id"], sale_id=request["sale_id"],
+        amount_minor=1000, idempotency_key="partial-cash-001", now="2026-10-17T12:01:00Z",
+    )
+    assert replay == first
+    assert first["balance_remaining_minor"] == 1000
+    assert db.execute("SELECT COUNT(*) FROM commercial_sale_payments").fetchone()[0] == 2
+
+    final = payments.record_payment(
+        db, buyer_person_id=request["actor_person_id"], sale_id=request["sale_id"],
+        amount_minor=1000, idempotency_key="final-cash-001", now="2026-10-17T12:02:00Z",
+    )
+    assert final["balance_remaining_minor"] == 0
+    assert payments.list_debts(db, buyer_person_id=request["actor_person_id"]) == ()
+    db.close()
+
+    reopened = connect_database(path)
+    assert reopened.execute(
+        "SELECT SUM(amount_minor) FROM commercial_sale_payments WHERE sale_id=?",
+        (request["sale_id"],),
+    ).fetchone()[0] == 2500
+    assert reopened.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    reopened.close()
+
+
+def test_credit_payment_rejects_overpayment_without_partial_write(tmp_path):
+    from agent_core.commercial_payments import CommercialPaymentsApplication
+    from agent_core.shared import ValidationError
+
+    db, request = setup_checkout(tmp_path)
+    request["payment_method"] = "credit"
+    CommercialCheckoutApplication().checkout(db, **request, now=NOW)
+    payments = CommercialPaymentsApplication()
+    with pytest.raises(ValidationError, match="exceeds the outstanding balance"):
+        payments.record_payment(
+            db, buyer_person_id=request["actor_person_id"], sale_id=request["sale_id"],
+            amount_minor=2501, idempotency_key="overpay-001", now=STAMP,
+        )
+    assert db.execute("SELECT COUNT(*) FROM commercial_sale_payments").fetchone()[0] == 0
+    assert payments.list_debts(db, buyer_person_id=request["actor_person_id"])[0]["balance_remaining_minor"] == 2500
+
+
+def test_cash_checkout_is_fully_paid_and_creates_no_debt(tmp_path):
+    from agent_core.commercial_payments import CommercialPaymentsApplication
+
+    db, request = setup_checkout(tmp_path)
+    result = CommercialCheckoutApplication().checkout(db, **request, now=NOW)
+    assert result["payment_method"] == "cash"
+    assert result["paid_minor"] == result["total_minor"] == 2500
+    assert result["balance_remaining_minor"] == 0
+    assert CommercialPaymentsApplication().list_debts(
+        db, buyer_person_id=request["actor_person_id"]
+    ) == ()
