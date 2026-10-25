@@ -228,7 +228,7 @@ internal fun CommercialCloudPurchasesScreen(context: Context, onBack: () -> Unit
                                 "draft" -> TextButton(onClick = { transitionConfirmation = order to "submit" }) { Text("إرسال للاعتماد") }
                                 "submitted" -> TextButton(onClick = { transitionConfirmation = order to "approve" }) { Text("اعتماد الأمر") }
                                 "approved" -> {
-                                    Button(onClick = { receiptOrder = order }, enabled = order.receiveLocationId != null && order.lines.any { it.offeringId != null }) { Text("استلام البضاعة") }
+                                    Button(onClick = { receiptOrder = order }, enabled = order.receiveLocationId != null && !purchaseOrderHasUnmappedRemainingLines(order)) { Text("استلام البضاعة") }
                                     TextButton(onClick = { transitionConfirmation = order to "cancel" }) { Text("إلغاء الأمر") }
                                 }
                                 "partially_received" -> {
@@ -314,6 +314,13 @@ internal fun CommercialCloudPurchasesScreen(context: Context, onBack: () -> Unit
     }
 
 }
+
+private fun purchaseOrderHasUnmappedRemainingLines(order: CommercialCloudPurchaseDocument): Boolean =
+    order.lines.any { line ->
+        val ordered = line.quantityOrdered.toBigDecimalOrNull() ?: java.math.BigDecimal.ZERO
+        val received = line.quantityReceived.toBigDecimalOrNull() ?: java.math.BigDecimal.ZERO
+        received < ordered && line.offeringId.isNullOrBlank()
+    }
 
 private fun purchaseStatusLabel(value: String): String = when (value.lowercase()) {
     "draft" -> "مسودة"
