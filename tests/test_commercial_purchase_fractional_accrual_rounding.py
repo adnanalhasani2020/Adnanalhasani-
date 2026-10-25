@@ -28,6 +28,8 @@ def test_supplier_invoice_expected_cost_uses_cumulative_partial_invoice_delta():
     assert "prior_invoice.accounting_sequence < NEW.accounting_sequence" in invoice
     assert "commercial_supplier_invoices_accounting_sequence_uq" in sql
     assert "prior_invoice.state='recorded'" in invoice
+    assert "prior_invoice.purchase_order_id=NEW.purchase_order_id" in invoice
+    assert "prior_item.purchase_order_id=si.purchase_order_id" not in invoice
 
 
 def test_zero_value_supplier_invoice_is_balanced_through_price_variance_instead_of_rejected():
