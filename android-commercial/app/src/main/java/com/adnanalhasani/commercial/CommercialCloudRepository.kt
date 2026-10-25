@@ -553,7 +553,7 @@ internal fun loadCommercialCloudSaleDocuments(context: Context): List<Commercial
                         currencyCode = invoice.optString("currency_code").takeUnless { it == "null" }.orEmpty(),
                         recordedAt = invoice.optString("recorded_at").takeUnless { it == "null" }.orEmpty(),
                         state = invoice.optString("state").takeUnless { it == "null" }.orEmpty(),
-                        obligation = invoice.optJSONObject("obligation")?.let { ob ->
+                        obligation = (invoice.optJSONObject("obligation") ?: invoice.optJSONArray("obligation")?.optJSONObject(0))?.let { ob ->
                             val obligationId = ob.optString("id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
                             if (obligationId.isBlank()) null else CommercialCloudSupplierObligationSummary(
                                 id = obligationId,
