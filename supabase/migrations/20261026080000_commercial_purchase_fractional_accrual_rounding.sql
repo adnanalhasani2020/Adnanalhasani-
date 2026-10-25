@@ -96,7 +96,7 @@ BEGIN
         ON prior_invoice.id=prior_item.supplier_invoice_id
        AND prior_invoice.organization_id=prior_item.organization_id
       WHERE prior_item.organization_id=si.organization_id
-        AND prior_item.purchase_order_id=si.purchase_order_id
+        AND prior_invoice.purchase_order_id=NEW.purchase_order_id
         AND prior_item.purchase_order_item_id=si.purchase_order_item_id
         AND prior_invoice.state='recorded'
         AND prior_invoice.accounting_sequence < NEW.accounting_sequence
