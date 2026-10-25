@@ -1,5 +1,18 @@
 -- Correct minor-unit rounding across partial receipts and multiple supplier invoices.
--- No existing rows are rewritten; future accounting postings use cumulative per-line deltas.
+-- Existing rows receive a stable sequence; future rows receive monotonically allocated sequence values.
+-- The purchase-order row lock serializes receipt/invoice writes before these sequence values are assigned,
+-- avoiding timestamp ordering bugs when a transaction waits on a lock (PostgreSQL now() is transaction-start time).
+ALTER TABLE public.commercial_purchase_receipts
+  ADD COLUMN IF NOT EXISTS accounting_sequence bigint GENERATED ALWAYS AS IDENTITY;
+CREATE UNIQUE INDEX IF NOT EXISTS commercial_purchase_receipts_accounting_sequence_uq
+  ON public.commercial_purchase_receipts(accounting_sequence);
+
+ALTER TABLE public.commercial_supplier_invoices
+  ADD COLUMN IF NOT EXISTS accounting_sequence bigint GENERATED ALWAYS AS IDENTITY;
+CREATE UNIQUE INDEX IF NOT EXISTS commercial_supplier_invoices_accounting_sequence_uq
+  ON public.commercial_supplier_invoices(accounting_sequence);
+
+-- No existing journal entries are rewritten; future accounting postings use cumulative per-line deltas.
 CREATE OR REPLACE FUNCTION commercial_private.commercial_post_purchase_receipt_financials()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
 SET search_path TO 'pg_catalog','public','commercial_private'
@@ -25,7 +38,7 @@ BEGIN
       WHERE pri.organization_id=ri.organization_id
         AND pri.purchase_order_id=ri.purchase_order_id
         AND pri.purchase_order_item_id=ri.purchase_order_item_id
-        AND (pr.received_at,pr.id) < (NEW.received_at,NEW.id)
+        AND pr.accounting_sequence < NEW.accounting_sequence
     ) prior
     WHERE ri.organization_id=NEW.organization_id AND ri.receipt_id=NEW.id;
   IF v_total=0 THEN RETURN NEW; END IF;
@@ -86,7 +99,7 @@ BEGIN
         AND prior_item.purchase_order_id=si.purchase_order_id
         AND prior_item.purchase_order_item_id=si.purchase_order_item_id
         AND prior_invoice.state='recorded'
-        AND (prior_invoice.recorded_at,prior_invoice.id) < (NEW.recorded_at,NEW.id)
+        AND prior_invoice.accounting_sequence < NEW.accounting_sequence
     ) prior
     WHERE si.organization_id=NEW.organization_id AND si.supplier_invoice_id=NEW.id;
   SELECT coalesce(sum(line_total_minor),0) INTO v_invoice_subtotal
