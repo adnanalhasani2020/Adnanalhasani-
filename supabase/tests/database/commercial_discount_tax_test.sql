@@ -6,16 +6,16 @@ SELECT plan(10);
 SELECT has_column('public','commercial_sales','subtotal_minor','invoice persists subtotal');
 SELECT has_column('public','commercial_sales','discount_minor','invoice persists discount');
 SELECT has_column('public','commercial_sales','tax_minor','invoice persists tax');
-SELECT has_check('public','commercial_sales','commercial_sales_amounts_nonnegative',
+SELECT has_check('public','commercial_sales','commercial_sales_discount_nonnegative',
   'invoice amounts are nonnegative and discount cannot exceed subtotal');
 SELECT has_check('public','commercial_sales','commercial_sales_total_reconciles',
   'invoice total reconciles as subtotal minus discount plus tax');
-SELECT has_function('public','commercial_checkout_sale_multi_priced',
+SELECT has_function('public','commercial_checkout_sale_multi',
   ARRAY['jsonb','uuid','text','uuid','text','bigint','bigint','bigint'],
   'priced checkout RPC requires explicit discount and tax arguments');
 SELECT ok(
   NOT has_function_privilege('anon',
-    'public.commercial_checkout_sale_multi_priced(jsonb,uuid,text,uuid,text,bigint,bigint,bigint)',
+    'commercial_private.commercial_checkout_sale_multi_priced(jsonb,uuid,text,uuid,text,bigint,bigint,bigint)',
     'EXECUTE'),
   'anonymous users cannot execute priced checkout');
 SELECT ok(
