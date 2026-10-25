@@ -63,6 +63,13 @@
 - Retry/reopen proves invoice totals, payment balance, inventory and supplier balance come from persisted records.
 - CI passes on the exact PR head. Source-contract tests or an APK build alone do not clear integration gates.
 
+## Current verification snapshot (2026-10-25)
+
+- The exact current PR head `7030d1596892aeace56112a534ed46bc106f735e` passed the Python tests and Stage 7 automated tests in GitHub Actions after the traceability inventory was updated. This verifies the current test suite only; it does not verify cloud financial workflows.
+- The production Supabase migration history was read without writes. Its latest applied version is `20261024192725` (`require_return_inspection_before_completion`). The repository's multi-line checkout migration `20261024200000` and return-refund migrations `20261025173000`–`20261025174000` are not applied there. The production database also has no `public.commercial_checkout_sale_multi` RPC at the time of this check.
+- The separate project `ygtagdhjlkpounmujolh` has no applied migrations and no public tables, so it is not a usable integration-test environment yet.
+- Do not apply these migrations to production as a substitute for staging validation. First provision/authorize a compatible disposable test database, run migration and authenticated RLS/RPC integration tests there, then reconcile the production migration sequence deliberately.
+
 ## Current boundary
 
 The cloud checkout migration explicitly excludes discounts and taxes, and the cloud purchase screen documents read-only receiving. UI-only controls or passing contract tests do not complete these workflows; end-to-end wiring and database verification remain mandatory.
