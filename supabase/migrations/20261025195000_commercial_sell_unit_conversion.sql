@@ -18,6 +18,15 @@ CREATE INDEX IF NOT EXISTS commercial_offering_sell_units_active_idx
   ON public.commercial_offering_sell_units(offering_id, is_active);
 ALTER TABLE public.commercial_offering_sell_units ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.commercial_offering_sell_units FROM PUBLIC, anon, authenticated;
+GRANT SELECT ON public.commercial_offering_sell_units TO authenticated;
+CREATE POLICY commercial_offering_sell_units_member_read
+  ON public.commercial_offering_sell_units FOR SELECT TO authenticated
+  USING (EXISTS (
+    SELECT 1 FROM public.commercial_offerings o
+    JOIN public.commercial_activities a ON a.id=o.activity_id
+    JOIN public.commercial_organization_members m ON m.organization_id=a.organization_id
+    WHERE o.id=offering_id AND m.user_id=auth.uid() AND m.state='active'
+  ));
 
 ALTER TABLE public.commercial_sale_items
   ADD COLUMN IF NOT EXISTS selling_unit_code text,
