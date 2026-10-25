@@ -70,6 +70,7 @@ internal fun CommercialCloudPurchasesScreen(context: Context, onBack: () -> Unit
     var invoiceOrder by remember { mutableStateOf<CommercialCloudPurchaseDocument?>(null) }
     var receiptOrder by remember { mutableStateOf<CommercialCloudPurchaseDocument?>(null) }
     var mappingOrder by remember { mutableStateOf<CommercialCloudPurchaseDocument?>(null) }
+    var resolvingReceipt by remember { mutableStateOf(false) }
     var createOrderOpen by remember { mutableStateOf(false) }
     var paymentInvoice by remember { mutableStateOf<CommercialCloudSupplierInvoiceSummary?>(null) }
     var transitionConfirmation by remember { mutableStateOf<Pair<CommercialCloudPurchaseDocument, String>?>(null) }
@@ -224,6 +225,21 @@ internal fun CommercialCloudPurchasesScreen(context: Context, onBack: () -> Unit
                             }
                         }
                         if (order.notes.isNotBlank()) Text("ملاحظات: ${order.notes}", color = CloudPurchasesMuted, fontSize = 11.sp)
+                        if (hasPendingCommercialPurchaseReceipt(context, order.id)) {
+                            Button(enabled = !resolvingReceipt, onClick = {
+                                resolvingReceipt = true
+                                CloudPurchasesWorker.execute {
+                                    val result = runCatching { resolvePendingCommercialPurchaseReceipt(context, order.id) }
+                                    CloudPurchasesMain.post {
+                                        resolvingReceipt = false
+                                        result.onSuccess { found ->
+                                            error = if (found) "تم العثور على استلام محفوظ في الخادم وتأكيده." else "لم يُسجل الاستلام السابق؛ يمكنك بدء استلام جديد."
+                                            reloadToken++
+                                        }.onFailure { error = it.message ?: "تعذر التحقق من نتيجة الاستلام." }
+                                    }
+                                }
+                            }) { Text(if (resolvingReceipt) "جارٍ التحقق..." else "التحقق من الاستلام المعلق") }
+                        }
                         if (order.status.lowercase() in setOf("draft", "submitted", "approved") && purchaseOrderHasUnmappedRemainingLines(order)) {
                             TextButton(onClick = { mappingOrder = order }) { Text("ربط عناصر المخزون للبنود القديمة") }
                         }
@@ -232,11 +248,11 @@ internal fun CommercialCloudPurchasesScreen(context: Context, onBack: () -> Unit
                                 "draft" -> TextButton(onClick = { transitionConfirmation = order to "submit" }) { Text("إرسال للاعتماد") }
                                 "submitted" -> TextButton(onClick = { transitionConfirmation = order to "approve" }) { Text("اعتماد الأمر") }
                                 "approved" -> {
-                                    Button(onClick = { receiptOrder = order }, enabled = order.receiveLocationId != null && !purchaseOrderHasUnmappedRemainingLines(order)) { Text("استلام البضاعة") }
+                                    if (!hasPendingCommercialPurchaseReceipt(context, order.id)) Button(onClick = { receiptOrder = order }, enabled = order.receiveLocationId != null && !purchaseOrderHasUnmappedRemainingLines(order)) { Text("استلام البضاعة") }
                                     TextButton(onClick = { transitionConfirmation = order to "cancel" }) { Text("إلغاء الأمر") }
                                 }
                                 "partially_received" -> {
-                                    Button(onClick = { receiptOrder = order }, enabled = order.receiveLocationId != null && !purchaseOrderHasUnmappedRemainingLines(order)) { Text("استلام الباقي") }
+                                    if (!hasPendingCommercialPurchaseReceipt(context, order.id)) Button(onClick = { receiptOrder = order }, enabled = order.receiveLocationId != null && !purchaseOrderHasUnmappedRemainingLines(order)) { Text("استلام الباقي") }
                                     TextButton(onClick = { transitionConfirmation = order to "close" }) { Text("إغلاق بالنقص") }
                                 }
                                 "received" -> TextButton(onClick = { transitionConfirmation = order to "close" }) { Text("إغلاق الأمر") }
