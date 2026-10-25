@@ -703,7 +703,7 @@ internal fun loadCommercialCloudPurchaseOrderOptions(context: Context): Commerci
         }
     } }
     val offerings = commercialCloudPagedGet(
-        "/rest/v1/commercial_offerings?select=id,currency_code,state,product:commercial_products(name),activity:commercial_activities(organization_id,state)&state=eq.active&order=created_at.desc",
+        "/rest/v1/commercial_offerings?select=id,currency_code,state,product:commercial_products(name,state),activity:commercial_activities(organization_id,state)&state=eq.active&order=created_at.desc",
         access
     ).let { rows -> buildList {
         for (i in 0 until rows.length()) {
@@ -712,7 +712,9 @@ internal fun loadCommercialCloudPurchaseOrderOptions(context: Context): Commerci
             if (activity?.optString("organization_id") != orgId || activity.optString("state") != "active") continue
             val id = row.optString("id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
             val currency = row.optString("currency_code").takeUnless { it.isBlank() || it == "null" }.orEmpty()
-            val productName = row.optJSONObject("product")?.optString("name").orEmpty().ifBlank { "عنصر مخزون" }
+            val product = row.optJSONObject("product")
+            if (product?.optString("state") != "active") continue
+            val productName = product.optString("name").orEmpty().ifBlank { "عنصر مخزون" }
             if (id.isNotBlank() && currency.matches(Regex("^[A-Z]{3}$"))) add(CommercialPurchaseOfferingOption(id, productName, currency))
         }
     } }
