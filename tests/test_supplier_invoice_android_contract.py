@@ -12,6 +12,10 @@ def test_supplier_invoice_has_an_android_entry_point_and_cloud_rpc():
     assert 'Text("تسجيل فاتورة المورد")' in screen
     assert "SupplierInvoiceEntryDialog(" in screen
     assert "recordCommercialCloudSupplierInvoice(" in dialog
+    assert "getOrCreateCommercialSupplierInvoiceIdempotencyKey(context, order.id)" in dialog
+    assert "clearCommercialSupplierInvoiceIdempotencyKey(context, order.id, key)" in dialog
+    assert "UUID.randomUUID()" not in dialog
+    assert "commercial_supplier_invoice_pending_v1" in repository
     assert "/rest/v1/rpc/commercial_record_supplier_invoice" in repository
 
 
