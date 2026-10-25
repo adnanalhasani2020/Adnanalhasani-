@@ -123,7 +123,7 @@ BEGIN
   END IF;
   v_original_lines := (SELECT jsonb_agg(jsonb_build_object(
       'offering_id',e->>'offering_id','quantity',e->>'quantity',
-      'unit_code',coalesce(e->>'unit_code','each')) ORDER BY e->>'offering_id')
+      'unit_code',coalesce(e->>'unit_code','<base>')) ORDER BY e->>'offering_id')
     FROM jsonb_array_elements(p_lines) e);
   v_effective_key := btrim(p_idempotency_key)||'-u-'||substr(md5(v_original_lines::text),1,12);
   IF length(v_effective_key)>200 THEN v_effective_key:=substr(v_effective_key,1,187)||'-u-'||substr(md5(v_original_lines::text),1,12); END IF;
@@ -137,7 +137,8 @@ BEGIN
       INTO v_unit
     FROM public.commercial_offering_sell_units su
     WHERE su.offering_id=(v_line->>'offering_id')::uuid
-      AND su.unit_code=coalesce(nullif(v_line->>'unit_code',''),'each')
+      AND ((nullif(v_line->>'unit_code','') IS NOT NULL AND su.unit_code=v_line->>'unit_code')
+           OR (nullif(v_line->>'unit_code','') IS NULL AND su.is_base=true))
       AND su.is_active=true;
     IF NOT FOUND THEN RAISE EXCEPTION 'sell_unit_not_configured_for_offering' USING ERRCODE='22023'; END IF;
     v_base_qty := (v_line->>'quantity')::bigint * v_unit.quantity_in_stock;
