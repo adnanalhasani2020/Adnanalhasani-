@@ -42,7 +42,7 @@ internal fun PurchaseReceiptEntryDialog(
     var saving by remember { mutableStateOf(false) }
     var attempted by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
-    val idempotencyKey = remember(order.id) { UUID.randomUUID().toString() }
+    var idempotencyKey by remember(order.id) { mutableStateOf("") }
     val eligibleLines = order.lines.filter { it.offeringId != null }
 
     AlertDialog(
@@ -114,6 +114,15 @@ internal fun PurchaseReceiptEntryDialog(
                         } else if (order.receiveLocationId.isNullOrBlank()) {
                             error = "أمر الشراء لا يحدد موقع الاستلام."
                         } else {
+                            if (idempotencyKey.isBlank()) {
+                                val parts = mutableListOf(order.id, order.receiveLocationId.orEmpty())
+                                eligibleLines.forEach { line ->
+                                    parts.add(line.id)
+                                    parts.add(line.quantityReceived)
+                                    parts.add(quantities[line.id].orEmpty().trim())
+                                }
+                                idempotencyKey = commercialStableIdempotencyKey("purchase-receipt", parts)
+                            }
                             attempted = true
                             saving = true
                             error = ""
