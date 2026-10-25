@@ -35,8 +35,8 @@
     {
       "sqlite_table": "invoices",
       "supabase_table": "commercial_documents",
-      "status": "unresolved",
-      "reason": "The Supabase documents table may support multiple document types; invoice equivalence and lifecycle have not been proven."
+      "status": "partial_overlap",
+      "reason": "Do not map invoice rows directly to commercial_documents. The approved operational sales-invoice projection is commercial_sales plus commercial_sale_items, with payment totals derived from succeeded commercial_payments. commercial_documents remains a generic document registry, not a second invoice ledger. Tax/legal invoice lifecycle equivalence remains unresolved until jurisdiction and issuer requirements are approved."
     },
     {
       "sqlite_table": "inventory_positions",
