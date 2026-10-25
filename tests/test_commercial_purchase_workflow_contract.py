@@ -12,6 +12,7 @@ LINE_LINK_MIGRATION = ROOT / "supabase/migrations/20261025223738_commercial_purc
 OFFERING_GUARD = ROOT / "supabase/migrations/20261025223900_commercial_purchase_offering_validity_guard.sql"
 OBLIGATION_INTEGRITY = ROOT / "supabase/migrations/20261025223549_commercial_supplier_obligation_integrity.sql"
 PAYMENT_EVIDENCE = ROOT / "supabase/migrations/20261025223401_commercial_supplier_payment_evidence_uniqueness.sql"
+GLOBAL_PAYMENT_EVIDENCE = ROOT / "supabase/migrations/20261025224128_commercial_supplier_payment_evidence_global_unique.sql"
 
 
 def test_purchase_order_lifecycle_is_scoped_and_idempotent():
@@ -86,11 +87,14 @@ def test_supplier_payments_reduce_outstanding_balance_and_post_journal():
 def test_supplier_obligations_and_payment_evidence_are_consistent():
     integrity = OBLIGATION_INTEGRITY.read_text(encoding="utf-8")
     evidence = PAYMENT_EVIDENCE.read_text(encoding="utf-8")
+    global_evidence = GLOBAL_PAYMENT_EVIDENCE.read_text(encoding="utf-8")
     assert "commercial_supplier_obligation_state_consistency_ck" in integrity
     assert "commercial_supplier_payment_obligation_identity_fk" in integrity
     assert "amount_paid_minor = amount_due_minor" in integrity
     assert "commercial_supplier_payments_evidence_uq" in evidence
     assert "lower(btrim(evidence_reference))" in evidence
+    assert "DROP INDEX IF EXISTS public.commercial_supplier_payments_evidence_uq" in global_evidence
+    assert "ON public.commercial_supplier_payments (organization_id, lower(btrim(evidence_reference)))" in global_evidence
 
 
 def test_legacy_purchase_lines_require_explicit_inventory_mapping_before_receipt():
