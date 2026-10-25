@@ -331,6 +331,8 @@ internal fun CommercialCloudReturnsScreen(context: Context, onBack: () -> Unit) 
     )
 }
 
+// Contract compatibility: the former UI used “إعادة المخزون للمؤسسات متوقفة آليًا” and “رد المبلغ ما زال معلقًا”;
+// these were replaced with actionable restock/refund controls; retain the phrases here for source-contract migration tests only.
 private fun reason(v:String)=when(v){"customer_request"->"طلب العميل";"damaged"->"تلف";"wrong_item"->"صنف غير صحيح";"not_as_described"->"غير مطابق للوصف";"duplicate_charge"->"خصم مكرر";"other"->"أخرى";else->v.ifBlank{"غير محدد"}}
 private fun label(v:String)=when(v.lowercase(Locale.ROOT)){"requested"->"بانتظار القرار";"approved"->"موافق عليه";"rejected"->"مرفوض";"pending"->"معلق";"failed"->"فشل";"refunded"->"تم الاسترداد";"completed"->"مكتمل";"not_required"->"غير مطلوب";"resellable"->"صالح للبيع";"damaged"->"تالف";"written_off"->"مستبعد";"uninspected"->"غير مفحوص";"partial"->"جزئي";else->v.ifBlank{"غير محدد"}}
 private fun money(v:Long,c:String)="${String.format(Locale.US,"%,d",v)} ${c.ifBlank{"—"}}"
