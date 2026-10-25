@@ -56,7 +56,7 @@ def test_supplier_invoice_rpc_is_atomic_scoped_and_idempotent():
 
 
 def test_supplier_invoice_rounding_allocation_reconciles_stored_lines():
-    migration = (ROOT / "supabase/migrations/20261026010000_commercial_supplier_invoice_largest_remainder_rounding.sql").read_text()
+    migration = (ROOT / "supabase/migrations/20261025221631_commercial_supplier_invoice_largest_remainder_rounding.sql").read_text()
 
     # Round the exact subtotal once, then use deterministic largest-remainder
     # allocation so line-level bigint values add back to the header subtotal.
