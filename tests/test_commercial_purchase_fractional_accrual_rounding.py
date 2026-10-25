@@ -61,3 +61,12 @@ def test_partial_rounding_examples_match_postgresql_numeric_rounding_policy():
     assert delta("0", "0.5", "1") + delta("0.5", "0.5", "1") == 1
     # A later quarter-unit tranche gets only the remaining cumulative rounding delta.
     assert delta("0", "0.25", "1") + delta("0.25", "0.25", "1") == 1
+
+
+def test_supplier_payment_journal_uses_the_locked_obligation_row():
+    sql = MIGRATION.read_text(encoding="utf-8")
+    payment = sql.split(
+        "CREATE OR REPLACE FUNCTION commercial_private.commercial_record_supplier_payment(", 1
+    )[1].split("$function$;", 1)[0]
+    assert "v_ob.supplier_invoice_id" in payment
+    assert "p_ob.supplier_invoice_id" not in payment
