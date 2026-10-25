@@ -1,7 +1,7 @@
 -- Run with Supabase CLI / pgTAP in a disposable local or staging database.
 -- These are schema regression tests; they do not replace authenticated-session integration tests.
 BEGIN;
-SELECT plan(28);
+SELECT plan(29);
 
 SELECT has_table('public', 'commercial_audit_events',
   'append-only audit event table exists');
@@ -214,6 +214,24 @@ SELECT ok(
        'commercial_private.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint)'::regprocedure
      )) > 0),
   'first checkout response and idempotent replay derive paid/outstanding balances from persisted successful payments'
+);
+
+
+SELECT ok(
+  position('INSERT INTO public.commercial_audit_events' in pg_get_functiondef(
+    'commercial_private.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint)'::regprocedure
+  )) > 0
+  AND position('paid_minor' in substring(pg_get_functiondef(
+    'commercial_private.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint)'::regprocedure
+  ) from position('INSERT INTO public.commercial_audit_events' in pg_get_functiondef(
+    'commercial_private.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint)'::regprocedure
+  )))) > 0
+  AND position('outstanding_minor' in substring(pg_get_functiondef(
+    'commercial_private.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint)'::regprocedure
+  ) from position('INSERT INTO public.commercial_audit_events' in pg_get_functiondef(
+    'commercial_private.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint)'::regprocedure
+  )))) > 0,
+  'checkout audit event records persisted paid and outstanding amounts'
 );
 
 SELECT * FROM finish();
