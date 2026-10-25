@@ -228,3 +228,5 @@ UNION ALL
     cancellation_issues.sale_id::text AS entity_id,
     '{}'::jsonb AS details
    FROM cancellation_issues;;
+
+GRANT SELECT ON public.commercial_accounting_integrity_checks TO anon, authenticated, service_role;
