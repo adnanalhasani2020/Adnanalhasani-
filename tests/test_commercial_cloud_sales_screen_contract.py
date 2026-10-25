@@ -201,12 +201,34 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         self.assertIn("commercial_checkout_sale_multi", self.repository)
         self.assertIn("getOrCreateCommercialCloudMultiSaleKey", self.repository)
         self.assertIn("aggregateCommercialCheckoutLines(lines)", self.repository)
-        self.assertIn("Math.addExact(totals[line.offeringId] ?: 0, line.quantity)", self.repository)
+        self.assertIn("Math.addExact(previous?.first ?: 0, line.quantity)", self.repository)
+        self.assertIn('"unit_code", line.unitCode', self.repository)
+        self.assertIn("configureCommercialCloudSellUnit", self.repository)
+        self.assertIn("sell_units:commercial_offering_sell_units", self.repository)
         self.assertIn("prefs.getString(\"payload\", null) == payload", self.repository)
         migration = (ROOT / "supabase/migrations/20261024200000_commercial_multiline_cash_checkout.sql").read_text(encoding="utf-8")
         self.assertIn("FOR UPDATE", migration)
         self.assertIn("p_idempotency_key", migration)
         self.assertIn("commercial_inventory_balances", migration)
+
+    def test_sell_unit_conversion_covers_checkout_stock_and_returns(self):
+        migration = (ROOT / "supabase/migrations/20261025195000_commercial_sell_unit_conversion.sql").read_text(encoding="utf-8")
+        for marker in (
+            "commercial_offering_sell_units",
+            "quantity_in_stock",
+            "commercial_configure_offering_sell_unit",
+            "commercial_checkout_sale_multi_base_units",
+            "selling_quantity",
+            "quantity_in_stock_units",
+            "commercial_request_sale_return_base_units",
+            "sell_unit_not_configured_for_offering",
+            "return_sell_unit_not_configured",
+        ):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, migration)
+        self.assertIn("DropdownMenu", self.composer)
+        self.assertIn("it.third.factor", self.composer)
+        self.assertIn("configureCommercialCloudSellUnit", self.composer)
 
 if __name__ == "__main__":
     unittest.main()
