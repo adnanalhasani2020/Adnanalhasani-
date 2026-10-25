@@ -174,6 +174,8 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         self.assertIn("/rest/v1/rpc/commercial_record_customer_payment", self.repository)
         self.assertIn("تسجيل تحصيل سحابي", self.screen)
         self.assertIn('recordCommercialCloudCustomerPayment(context, target.id, amount, "cash")', self.screen)
+        self.assertIn("fun recordCommercialCloudCustomerPayment(", self.repository)
+        self.assertIn("/rest/v1/rpc/commercial_record_customer_payment", self.repository)
         self.assertNotIn("getOrCreateCommercialCloudCollectionKey", self.screen)
         self.assertNotIn("recordCommercialCloudSaleCollection", self.repository)
 
