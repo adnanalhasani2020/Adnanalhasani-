@@ -23,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.util.Locale
+import org.json.JSONArray
 import java.util.concurrent.Executors
 
 private val ReturnInk = Color(0xFF183B35)
@@ -30,6 +31,19 @@ private val ReturnGreen = Color(0xFF167D63)
 private val ReturnMuted = Color(0xFF71817B)
 private val ReturnIo = Executors.newSingleThreadExecutor()
 private val ReturnMain = Handler(Looper.getMainLooper())
+
+private data class ReturnSellUnit(val code: String, val label: String, val factor: Int, val isDefault: Boolean)
+private fun returnSellUnits(item: CommercialCloudReturnableSaleItem): List<ReturnSellUnit> {
+    val parsed = runCatching {
+        val json = JSONArray(item.sellUnitsJson)
+        List(json.length()) { i ->
+            val row = json.getJSONObject(i)
+            ReturnSellUnit(row.optString("unitCode"), row.optString("unitName").ifBlank { row.optString("unitCode") },
+                row.optInt("quantityInBase", 1).coerceAtLeast(1), row.optBoolean("isDefault", false))
+        }.filter { it.code.isNotBlank() }.distinctBy { it.code }
+    }.getOrDefault(emptyList())
+    return parsed.ifEmpty { listOf(ReturnSellUnit(item.sellingUnitCode, item.sellingUnitName, 1, true)) }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -58,6 +72,8 @@ internal fun CommercialCloudReturnsScreen(context: Context, onBack: () -> Unit) 
     var requestReason by remember { mutableStateOf("customer_request") }
     var requestNote by remember { mutableStateOf("") }
     val requestedQuantities = remember { mutableStateMapOf<String, String>() }
+    val requestedUnitCodes = remember { mutableStateMapOf<String, String>() }
+    var returnUnitMenuItemId by remember { mutableStateOf("") }
 
     LaunchedEffect(refresh) {
         busy = true; error = ""
@@ -191,7 +207,10 @@ internal fun CommercialCloudReturnsScreen(context: Context, onBack: () -> Unit) 
                         onClick = {
                             requestTarget = sale
                             requestedQuantities.clear()
-                            sale.items.forEach { requestedQuantities[it.id] = "0" }
+                            sale.items.forEach {
+                                requestedQuantities[it.id] = "0"
+                                requestedUnitCodes[it.id] = it.sellingUnitCode
+                            }
                             requestReason = "customer_request"
                             requestNote = ""
                             salePickerOpen = false
@@ -243,13 +262,35 @@ internal fun CommercialCloudReturnsScreen(context: Context, onBack: () -> Unit) 
                 requestTarget!!.items.forEach { saleItem ->
                     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         Text(saleItem.productName, color = ReturnInk, fontWeight = FontWeight.SemiBold)
-                        Text("المباع: ${saleItem.soldQuantity} · المتبقي للإرجاع: ${saleItem.remainingQuantity} · قيمة السطر: ${money(saleItem.lineTotalMinor, requestTarget!!.currencyCode)}", color = ReturnMuted, fontSize = 11.sp)
+                        val units = returnSellUnits(saleItem)
+                        val selectedUnit = units.firstOrNull { it.code == requestedUnitCodes[saleItem.id] }
+                            ?: units.firstOrNull { it.code == saleItem.sellingUnitCode }
+                            ?: units.first()
+                        val remainingInUnit = saleItem.remainingQuantity / selectedUnit.factor
+                        Text("المباع: ${saleItem.soldQuantity} ${saleItem.sellingUnitName} · المتبقي: ${saleItem.remainingQuantity} وحدة مخزون · قيمة السطر: ${money(saleItem.lineTotalMinor, requestTarget!!.currencyCode)}", color = ReturnMuted, fontSize = 11.sp)
+                        if (units.size > 1) {
+                            Box {
+                                OutlinedButton(onClick = { returnUnitMenuItemId = saleItem.id }) { Text("وحدة الإرجاع: ${selectedUnit.label}") }
+                                DropdownMenu(expanded = returnUnitMenuItemId == saleItem.id, onDismissRequest = { returnUnitMenuItemId = "" }) {
+                                    units.forEach { unit ->
+                                        DropdownMenuItem(
+                                            text = { Text("${unit.label} (يساوي ${unit.factor} وحدة مخزون)") },
+                                            onClick = {
+                                                requestedUnitCodes[saleItem.id] = unit.code
+                                                returnUnitMenuItemId = ""
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        Text("يمكن إرجاع حتى ${remainingInUnit} ${selectedUnit.label} بهذه الوحدة.", color = ReturnMuted, fontSize = 11.sp)
                         OutlinedTextField(
                             value = requestedQuantities[saleItem.id] ?: "0",
                             onValueChange = { value ->
                                 requestedQuantities[saleItem.id] = value.filter(Char::isDigit).take(9)
                             },
-                            label = { Text("الكمية المراد إرجاعها (0 إلى ${saleItem.remainingQuantity})") },
+                            label = { Text("الكمية المراد إرجاعها (0 إلى ${remainingInUnit})") },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true
                         )
@@ -259,7 +300,12 @@ internal fun CommercialCloudReturnsScreen(context: Context, onBack: () -> Unit) 
         },
         confirmButton = {
             Button(enabled = !busy && requestTarget != null &&
-                requestTarget!!.items.all { (requestedQuantities[it.id]?.toIntOrNull() ?: 0) <= it.remainingQuantity } &&
+                requestTarget!!.items.all {
+                    val unit = returnSellUnits(it).firstOrNull { u -> u.code == requestedUnitCodes[it.id] }
+                        ?: returnSellUnits(it).firstOrNull { u -> u.code == it.sellingUnitCode }
+                        ?: returnSellUnits(it).first()
+                    (requestedQuantities[it.id]?.toIntOrNull() ?: 0).toLong() * unit.factor <= it.remainingQuantity
+                } &&
                 requestTarget!!.items.any { (requestedQuantities[it.id]?.toIntOrNull() ?: 0) > 0 },
                 onClick = {
                     val target = requestTarget!!
@@ -268,7 +314,7 @@ internal fun CommercialCloudReturnsScreen(context: Context, onBack: () -> Unit) 
                         if (qty > 0) id to qty else null
                     }.toMap()
                     executeAction({
-                        requestCommercialCloudSaleReturn(context, target.id, requestReason, requestNote, quantities)
+                        requestCommercialCloudSaleReturn(context, target.id, requestReason, requestNote, quantities, requestedUnitCodes.toMap())
                     }, "تم إنشاء طلب المرتجع في قاعدة البيانات، وهو بانتظار المراجعة.")
                     requestTarget = null
                 },
