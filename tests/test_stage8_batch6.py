@@ -201,6 +201,7 @@ def test_reverse_implementation_inventory_has_traceability_owner():
         "commerce_checkout.py": "MVP-only stock-gated Sale checkout with atomic sale line, append-only stock movement, persisted price snapshot, and actor-scoped retry receipt; does not redefine the general Sale API",
         "commercial_demo_seed.py": "guarded opt-in local-only demo catalog bootstrap using existing domain applications; refuses non-empty business databases",
         "commercial_document_math.py": "pure exact monetary totals, discount/tax arithmetic, and Decimal quantity conversion primitives; not wired to cloud checkout or persisted records",
+        "commercial_document_math.py": "pure exact monetary totals, discount/tax arithmetic, and Decimal quantity conversion primitives; not wired to cloud checkout or persisted records",
         "commercial_identity.py": "local commercial MVP username/password authentication with scrypt hashes and revocable hashed sessions; no external identity provider",
         "commercial_web.py": "dependency-free Arabic storefront/API over the commercial MVP; no payment gateway or production TLS termination",
         "offering_price_application.py": "audited effective Offering price windows with actor context and Domain History; no inferred/default price",
