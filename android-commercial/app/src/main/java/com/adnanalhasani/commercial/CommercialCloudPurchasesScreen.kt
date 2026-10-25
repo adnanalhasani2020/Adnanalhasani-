@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -35,6 +36,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -66,6 +68,15 @@ internal fun CommercialCloudPurchasesScreen(context: Context, onBack: () -> Unit
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
     var reloadToken by remember { mutableIntStateOf(0) }
+    var invoiceOrder by remember { mutableStateOf<CommercialCloudPurchaseDocument?>(null) }
+    var invoiceNumber by remember { mutableStateOf("") }
+    var invoiceTax by remember { mutableStateOf("0") }
+    var invoiceFreight by remember { mutableStateOf("0") }
+    var invoiceQuantities by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var invoicePrices by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var invoiceKey by remember { mutableStateOf(java.util.UUID.randomUUID().toString()) }
+    var savingInvoice by remember { mutableStateOf(false) }
+    var invoiceError by remember { mutableStateOf("") }
 
     LaunchedEffect(reloadToken) {
         loading = true
