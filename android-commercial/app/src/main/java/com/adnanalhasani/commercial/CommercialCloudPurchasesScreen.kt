@@ -70,6 +70,7 @@ internal fun CommercialCloudPurchasesScreen(context: Context, onBack: () -> Unit
     var invoiceOrder by remember { mutableStateOf<CommercialCloudPurchaseDocument?>(null) }
     var receiptOrder by remember { mutableStateOf<CommercialCloudPurchaseDocument?>(null) }
     var createOrderOpen by remember { mutableStateOf(false) }
+    var paymentInvoice by remember { mutableStateOf<CommercialCloudSupplierInvoiceSummary?>(null) }
     var transitionConfirmation by remember { mutableStateOf<Pair<CommercialCloudPurchaseDocument, String>?>(null) }
 
     LaunchedEffect(reloadToken) {
@@ -211,6 +212,11 @@ internal fun CommercialCloudPurchasesScreen(context: Context, onBack: () -> Unit
                                             Text("الإجمالي: ${invoice.totalMinor} ${invoice.currencyCode} (وحدة صغرى)", color = CloudPurchasesMuted, fontSize = 11.sp)
                                             Text("الحالة: ${if (invoice.state == "recorded") "مسجلة" else invoice.state.ifBlank { "غير محددة" }}", color = CloudPurchasesMuted, fontSize = 11.sp)
                                             Text("تاريخ التسجيل: ${invoice.recordedAt.replace('T', ' ').take(16).ifBlank { "غير محدد" }}", color = CloudPurchasesMuted, fontSize = 10.sp)
+                                            invoice.obligation?.let { obligation ->
+                                                val outstanding = (obligation.amountDueMinor - obligation.amountPaidMinor).coerceAtLeast(0L)
+                                                Text("المستحق: ${obligation.amountDueMinor} · المدفوع: ${obligation.amountPaidMinor} · المتبقي: $outstanding ${obligation.currencyCode}", color = CloudPurchasesInk, fontSize = 11.sp)
+                                                if (outstanding > 0L) TextButton(onClick = { paymentInvoice = invoice }) { Text("تسجيل دفعة للمورد") }
+                                            }
                                         }
                                     }
                                 }
@@ -295,6 +301,15 @@ internal fun CommercialCloudPurchasesScreen(context: Context, onBack: () -> Unit
             context = context,
             onDismiss = { createOrderOpen = false },
             onSaved = { createOrderOpen = false; reloadToken++ }
+        )
+    }
+
+    paymentInvoice?.let { invoice ->
+        SupplierPaymentEntryDialog(
+            context = context,
+            invoice = invoice,
+            onDismiss = { paymentInvoice = null },
+            onSaved = { paymentInvoice = null; reloadToken++ }
         )
     }
 
