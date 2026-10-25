@@ -408,6 +408,7 @@ internal fun CommercialCloudSaleComposerScreen(
                             val taxForRequest = taxMinor
                             CloudComposerWorker.execute {
                                 val result = runCatching {
+                                    require(paymentMode != "credit" || !customerId.isNullOrBlank()) { "اختر العميل قبل تسجيل البيع الآجل." }
                                     require(paymentModeForRequest != "credit" || !customerId.isNullOrBlank()) { "اختر العميل قبل تسجيل البيع الآجل أو الدفع الجزئي." }
                                     require(paymentMode != "partial" || initialPaymentMinor != null) { "أدخل مبلغًا صحيحًا للدفع الجزئي." }
                                     require(paymentMode != "partial" || (initialPaymentMinor != null && initialPaymentMinor > 0L && BigInteger.valueOf(initialPaymentMinor) < estimatedTotal)) { "الدفع الجزئي يجب أن يكون أكبر من صفر وأقل من إجمالي الفاتورة؛ اختر النقدي الكامل إذا دفعت الإجمالي." }
