@@ -88,6 +88,16 @@ private fun commercialCloudRequest(path: String, method: String, payload: JSONOb
             throw IllegalStateException(commercialCloudActionableError(raw, status))
         }
         raw
+    } catch (e: java.net.SocketTimeoutException) {
+        throw IllegalStateException(
+            "انتهت مهلة الاتصال ولم يتمكن التطبيق من تأكيد النتيجة. إذا كانت العملية بيعًا أو تحصيلًا، لا تبدأ عملية جديدة بمفتاح مختلف؛ أعد المحاولة للعملية المعلّقة نفسها ثم تحقق من سجل الفاتورة/الدفعة.",
+            e
+        )
+    } catch (e: java.io.IOException) {
+        throw IllegalStateException(
+            "انقطع الاتصال قبل تأكيد النتيجة من الخادم. لا تكرر البيع أو التحصيل كعملية جديدة؛ أعد المحاولة للعملية المعلّقة نفسها وتحقق من السجل قبل أي إجراء بديل.",
+            e
+        )
     } finally {
         connection.disconnect()
     }
