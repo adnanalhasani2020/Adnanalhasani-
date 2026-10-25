@@ -173,7 +173,8 @@ internal fun loadCommercialCloudInventory(context: Context): CommercialCloudInve
                 price = String.format(Locale.US, "%,d ر.ي", price),
                 cloudOfferingId = offering.optString("id"),
                 cloudPriceMinor = offering.optLong("price_minor", 0L).coerceAtLeast(0L),
-                unitCode = baseUnitCode,\n                unitVariantsJson = sellUnitsJson.toString(),
+                unitCode = baseUnitCode,
+                unitVariantsJson = sellUnitsJson.toString(),
                 createdBy = orgId,
                 reorderPoint = row.optDouble("reorder_point", 0.0).toInt().coerceAtLeast(0)
             ))
