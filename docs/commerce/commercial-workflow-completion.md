@@ -26,6 +26,7 @@
 
 ### B. Units and packaging
 - [x] Add Decimal conversion primitive for piece/carton/kg-style ratios.
+- [x] Add explicit base-unit precision validation that rejects unsupported fractions rather than silently rounding stock quantities.
 - [ ] Add base-unit and sell/receive-unit definitions with positive factors, dimensional compatibility and precision rules.
 - [ ] Send unit code and decimal quantity through APIs; convert server-side before stock locks and movement posting.
 - [ ] Snapshot entered quantity, selected unit, conversion factor and normalized base quantity on source lines.
