@@ -166,5 +166,7 @@ def test_fractional_purchase_receiving_preserves_decimal_precision_end_to_end():
         assert marker in migration
     assert "quantity.stripTrailingZeros().scale() <= 6" in repository
     assert "quantity.stripTrailingZeros().toPlainString()" in repository
-    assert "qty.stripTrailingZeros().scale() <= 6" in repository
+    invoice_repository = repository.split("internal fun recordCommercialCloudSupplierInvoice", 1)[1]
+    invoice_repository = invoice_repository.split("private fun commercialPurchaseReceiptPendingPreferences", 1)[0]
+    assert "quantity.stripTrailingZeros().scale() <= 6" in invoice_repository
     assert "quantity.stripTrailingZeros().scale() > 6" in receipt_dialog
