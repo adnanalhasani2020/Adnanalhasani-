@@ -914,6 +914,21 @@ internal data class CommercialPurchaseOrderLineInput(
     val unitCostMinor: Long
 )
 
+internal fun linkCommercialCloudPurchaseOrderItemOffering(
+    context: Context, purchaseOrderId: String, purchaseOrderItemId: String, offeringId: String
+): JSONObject {
+    require(purchaseOrderId.isNotBlank() && purchaseOrderItemId.isNotBlank() && offeringId.isNotBlank()) {
+        "مرجع أمر الشراء أو البند أو عنصر المخزون غير صالح."
+    }
+    val (orgId, access) = commercialMasterDataAccess(context)
+    return JSONObject(commercialCloudRequest(
+        "/rest/v1/rpc/commercial_link_purchase_order_item_offering", "POST",
+        JSONObject().put("p_organization_id", orgId).put("p_purchase_order_id", purchaseOrderId)
+            .put("p_purchase_order_item_id", purchaseOrderItemId).put("p_offering_id", offeringId),
+        access
+    ))
+}
+
 internal fun transitionCommercialCloudPurchaseOrder(context: Context, purchaseOrderId: String, action: String): JSONObject {
     require(action in setOf("submit", "approve", "cancel", "close")) { "إجراء أمر الشراء غير صالح." }
     val (orgId, access) = commercialMasterDataAccess(context)
