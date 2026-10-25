@@ -420,7 +420,7 @@ internal fun CommercialCloudSaleComposerScreen(
                                     result.onSuccess { (summary, debt) ->
                                         val (receipt, paymentRecorded, clearError) = summary
                                         val (outstanding, paymentStatus) = debt
-                                        if (clearError == null) invoiceLines = emptyList()()
+                                        if (clearError == null) invoiceLines = emptyList()
                                         notice = if (clearError == null) {
                                             "تم تأكيد الفاتورة رقم $receipt على الخادم. الحالة: $paymentStatus. ${if (paymentRecorded) "سُجلت الدفعة الأولى." else "لم يُسجل دفع بعد."} المتبقي على الفاتورة: $outstanding $currency."
                                         } else {
