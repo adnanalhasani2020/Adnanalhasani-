@@ -18,6 +18,13 @@ DECLARE
   v_sale uuid;
   v_total bigint;
   v_paid bigint;
+  v_initial_paid bigint;
+  v_later_paid bigint;
+  v_customer uuid;
+  v_receipt bigint;
+  v_party uuid;
+  v_ar uuid;
+  v_entry uuid;
   v_lines jsonb;
 BEGIN
   IF auth.uid() IS NULL THEN
@@ -38,8 +45,8 @@ BEGIN
     RAISE EXCEPTION 'checkout_result_missing_sale_id' USING ERRCODE = '22023';
   END IF;
 
-  SELECT s.total_minor
-    INTO v_total
+  SELECT s.total_minor, s.customer_id, s.receipt_number
+    INTO v_total, v_customer, v_receipt
   FROM public.commercial_sales s
   WHERE s.id = v_sale
     AND s.user_id = auth.uid();
@@ -48,12 +55,30 @@ BEGIN
     RAISE EXCEPTION 'checkout_sale_not_visible' USING ERRCODE = '42501';
   END IF;
 
-  SELECT coalesce(sum(p.amount_minor), 0)::bigint
-    INTO v_paid
+  SELECT coalesce(sum(p.amount_minor), 0)::bigint,
+         coalesce(sum(p.amount_minor) FILTER (WHERE p.idempotency_key = 'sale:'||v_sale::text||':initial'), 0)::bigint,
+         coalesce(sum(p.amount_minor) FILTER (WHERE p.idempotency_key IS DISTINCT FROM 'sale:'||v_sale::text||':initial'), 0)::bigint
+    INTO v_paid, v_initial_paid, v_later_paid
   FROM public.commercial_payments p
   WHERE p.sale_id = v_sale
     AND p.organization_id = (v_result->>'organization_id')::uuid
     AND p.status = 'succeeded';
+
+  SELECT cpa.party_account_id INTO v_party
+  FROM public.commercial_customer_party_accounts cpa
+  WHERE cpa.organization_id = (v_result->>'organization_id')::uuid
+    AND cpa.customer_id = v_customer;
+
+  SELECT m.ledger_account_id INTO v_ar
+  FROM public.commercial_gl_account_mappings m
+  WHERE m.organization_id = (v_result->>'organization_id')::uuid
+    AND m.mapping_key = 'accounts_receivable';
+
+  SELECT je.id INTO v_entry
+  FROM public.commercial_journal_entries je
+  WHERE je.organization_id = (v_result->>'organization_id')::uuid
+    AND je.source_type = 'sale' AND je.source_id = v_sale AND je.status = 'posted'
+  ORDER BY je.created_at DESC LIMIT 1;
 
   SELECT coalesce(
     jsonb_agg(
@@ -73,9 +98,17 @@ BEGIN
   WHERE i.sale_id = v_sale;
 
   RETURN v_result || jsonb_build_object(
+    'invoice_id', v_sale,
+    'invoice_number', v_receipt,
+    'customer_id', v_customer,
     'total_minor', v_total,
+    'initial_paid_minor', v_initial_paid,
+    'later_collected_minor', v_later_paid,
     'paid_minor', v_paid,
     'outstanding_minor', greatest(v_total - v_paid, 0),
+    'customer_party_account_id', v_party,
+    'accounts_receivable_account_id', v_ar,
+    'journal_entry_id', v_entry,
     'payment_recorded', v_paid > 0,
     'lines', v_lines
   );
