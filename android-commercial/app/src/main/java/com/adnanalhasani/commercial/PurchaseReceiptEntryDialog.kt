@@ -43,7 +43,16 @@ internal fun PurchaseReceiptEntryDialog(
     var attempted by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
     var idempotencyKey by remember(order.id) { mutableStateOf("") }
-    val eligibleLines = order.lines.filter { it.offeringId != null }
+    val hasUnmappedRemaining = order.lines.any { line ->
+        val ordered = line.quantityOrdered.toBigDecimalOrNull() ?: java.math.BigDecimal.ZERO
+        val received = line.quantityReceived.toBigDecimalOrNull() ?: java.math.BigDecimal.ZERO
+        received < ordered && line.offeringId.isNullOrBlank()
+    }
+    val eligibleLines = if (hasUnmappedRemaining) emptyList() else order.lines.filter { line ->
+        val ordered = line.quantityOrdered.toBigDecimalOrNull() ?: java.math.BigDecimal.ZERO
+        val received = line.quantityReceived.toBigDecimalOrNull() ?: java.math.BigDecimal.ZERO
+        line.offeringId != null && received < ordered
+    }
 
     AlertDialog(
         onDismissRequest = { if (!saving && !attempted) onDismiss() },
@@ -53,7 +62,7 @@ internal fun PurchaseReceiptEntryDialog(
                 Text("سيُحدّث الاستلام رصيد المخزون وسجل الحركة وأمر الشراء في معاملة واحدة.")
                 Text("موقع الاستلام: ${order.receiveLocationId ?: "غير محدد"}")
                 if (eligibleLines.isEmpty()) {
-                    Text("لا يمكن الاستلام: بنود الأمر القديمة غير مربوطة بعناصر مخزون. اربط كل بند بعنصر مخزون أولًا.")
+                    Text(if (hasUnmappedRemaining) "لا يمكن الاستلام بأمان: يوجد بند متبقٍ غير مربوط بعنصر مخزون. اربط كل البنود المتبقية أولًا." else "لا توجد كميات متبقية للاستلام.")
                 } else {
                     LazyColumn(modifier = Modifier.fillMaxWidth().height(300.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(eligibleLines, key = { it.id }) { line ->
