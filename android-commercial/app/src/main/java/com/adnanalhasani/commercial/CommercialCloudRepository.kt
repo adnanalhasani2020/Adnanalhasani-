@@ -539,12 +539,29 @@ internal fun loadCommercialCloudSaleDocuments(context: Context): List<Commercial
             val lines = buildList {
                 for (lineIndex in 0 until (items?.length() ?: 0)) {
                     val item = items?.optJSONObject(lineIndex) ?: continue
+                    val sellingQuantityText = item.optString("selling_quantity")
+                        .takeUnless { it.isBlank() || it == "null" }
+                        ?: item.optString("quantity").takeUnless { it == "null" }.orEmpty()
+                    val sellingQuantity = runCatching { java.math.BigDecimal(sellingQuantityText) }
+                        .getOrNull()?.takeIf { it.signum() > 0 }
+                    val stockQuantity = item.optLong("quantity_in_stock_units", item.optLong("quantity", 0L))
+                        .coerceAtLeast(0L)
+                    val baseUnitPrice = item.optLong("unit_price_minor", 0L).coerceAtLeast(0L)
+                    // Stored unit_price_minor is the base-stock-unit price. Convert it using
+                    // the immutable quantities captured on this sale line, never today's unit setup.
+                    val sellingUnitPrice = if (sellingQuantity != null && stockQuantity > 0L) {
+                        runCatching {
+                            java.math.BigDecimal.valueOf(baseUnitPrice)
+                                .multiply(java.math.BigDecimal.valueOf(stockQuantity))
+                                .divide(sellingQuantity, 0, java.math.RoundingMode.HALF_UP)
+                                .longValueExact()
+                        }.getOrDefault(baseUnitPrice)
+                    } else baseUnitPrice
                     add(CommercialCloudSaleLine(
                         productName = item.optString("product_name_snapshot").ifBlank { "صنف بدون اسم" } +
                             item.optString("selling_unit_name").takeUnless { it.isBlank() || it == "null" }?.let { " ($it)" }.orEmpty(),
-                        quantity = item.optString("selling_quantity").takeUnless { it.isBlank() || it == "null" }
-                            ?: item.optString("quantity").takeUnless { it == "null" }.orEmpty(),
-                        unitPriceMinor = item.optLong("unit_price_minor", 0L),
+                        quantity = sellingQuantityText,
+                        unitPriceMinor = sellingUnitPrice,
                         lineTotalMinor = item.optLong("line_total_minor", 0L)
                     ))
                 }
