@@ -45,7 +45,8 @@ def test_purchase_receipt_posts_inventory_and_order_quantities_atomically():
         "pg_advisory_xact_lock",
     ):
         assert marker in receipt
-    assert "v_qty<>trunc(v_qty)" in receipt
+    assert "scale(v_qty)>6" in receipt
+    assert "v_qty::numeric" in receipt
 
 
 def test_supplier_invoice_creates_payable_and_balanced_posted_journal():
@@ -148,3 +149,23 @@ def test_android_purchase_workflow_is_connected_to_server_rpcs():
     assert 'commercialStableIdempotencyKey("purchase-create"' in order_dialog
     assert "getOrCreateCommercialPurchaseReceiptIdempotencyKey" in receipt_dialog
     assert "resolvePendingCommercialPurchaseReceipt" in repository
+
+
+def test_fractional_purchase_receiving_preserves_decimal_precision_end_to_end():
+    migration = (ROOT / "supabase/migrations/20261026010000_commercial_fractional_purchase_receiving.sql").read_text(encoding="utf-8")
+    repository = REPOSITORY.read_text(encoding="utf-8")
+    order_dialog = ORDER_DIALOG.read_text(encoding="utf-8")
+    receipt_dialog = RECEIPT_DIALOG.read_text(encoding="utf-8")
+    for marker in (
+        "numeric(18,6)",
+        "numeric(20,6)",
+        "commercial_receive_inventory_stock(uuid,uuid,uuid,numeric,bigint,text)",
+        "quantity_delta TYPE numeric(20,6)",
+        "scale(v_qty)>6",
+        "v_qty::numeric",
+    ):
+        assert marker in migration
+    assert "quantity.stripTrailingZeros().scale() <= 6" in repository
+    assert "quantity.stripTrailingZeros().toPlainString()" in repository
+    assert "qty.stripTrailingZeros().scale() <= 6" in repository
+    assert "quantity.stripTrailingZeros().scale() > 6" in receipt_dialog
