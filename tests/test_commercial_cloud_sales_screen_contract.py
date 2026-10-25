@@ -238,8 +238,28 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
             with self.subTest(marker=marker):
                 self.assertIn(marker, migration)
         self.assertIn("DropdownMenu", self.composer)
-        self.assertIn("it.third.factor", self.composer)
+        self.assertIn("line.unit.factor", self.composer)
         self.assertIn("configureCommercialCloudSellUnit", self.composer)
+
+
+    def test_same_offering_can_have_multiple_independent_invoice_lines(self):
+        self.assertIn("val invoiceLines by remember { mutableStateOf<List<ComposerDraftLine>>(emptyList()) }", self.composer)
+        self.assertIn("invoiceLines.forEachIndexed", self.composer)
+        self.assertIn("it.id == draft.id", self.composer)
+        self.assertIn("selectedLines.groupBy { it.product.cloudOfferingId }", self.composer)
+        self.assertIn("val requestLines = selectedLines.map { CommercialCloudCheckoutLine(it.product.cloudOfferingId, it.quantity, it.unit.code) }", self.composer)
+
+    def test_invoice_history_loads_and_displays_discount_and_tax_snapshots(self):
+        projection = self.repository.split("internal fun loadCommercialCloudSaleDocuments", 1)[1].split("internal fun loadCommercialCloudSales", 1)[0]
+        for marker in ("subtotal_minor", "discount_minor", "tax_minor"):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, projection)
+        self.assertIn("val subtotalMinor: Long", self.repository)
+        self.assertIn("val discountMinor: Long", self.repository)
+        self.assertIn("val taxMinor: Long", self.repository)
+        for marker in ("الإجمالي قبل الخصم:", "الخصم:", "الضريبة:"):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, self.screen)
 
 if __name__ == "__main__":
     unittest.main()
