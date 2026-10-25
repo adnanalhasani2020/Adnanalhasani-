@@ -371,16 +371,18 @@ internal fun aggregateCommercialCheckoutLines(
     lines: List<CommercialCloudCheckoutLine>
 ): List<CommercialCloudCheckoutLine> {
     require(lines.isNotEmpty() && lines.size <= 200) { "أضف صنفًا واحدًا على الأقل إلى الفاتورة." }
-    val totals = linkedMapOf<String, Pair<Int, String>>()
+    val totals = linkedMapOf<String, Int>()
+    val unitCodes = linkedMapOf<String, String>()
     lines.forEach { line ->
         require(line.offeringId.isNotBlank() && line.quantity in 1..100000 && line.unitCode.isNotBlank()) { "تحقق من الأصناف والكميات ووحدة البيع." }
-        val previous = totals[line.offeringId]
-        require(previous == null || previous.second == line.unitCode) { "لا يمكن تكرار الصنف بوحدتي بيع مختلفتين في الفاتورة نفسها." }
-        val total = Math.addExact(previous?.first ?: 0, line.quantity)
+        val previousUnit = unitCodes[line.offeringId]
+        require(previousUnit == null || previousUnit == line.unitCode) { "لا يمكن تكرار الصنف بوحدتي بيع مختلفتين في الفاتورة نفسها." }
+        val total = Math.addExact(totals[line.offeringId] ?: 0, line.quantity)
         require(total <= 100000) { "إجمالي كمية الصنف يتجاوز الحد المسموح." }
-        totals[line.offeringId] = total to line.unitCode
+        totals[line.offeringId] = total
+        unitCodes[line.offeringId] = line.unitCode
     }
-    return totals.entries.sortedBy { it.key }.map { CommercialCloudCheckoutLine(it.key, it.value.first, it.value.second) }
+    return totals.entries.sortedBy { it.key }.map { CommercialCloudCheckoutLine(it.key, it.value, unitCodes.getValue(it.key)) }
 }
 
 internal fun getOrCreateCommercialCloudMultiSaleKey(
