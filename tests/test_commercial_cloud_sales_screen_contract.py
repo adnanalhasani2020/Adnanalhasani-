@@ -170,9 +170,12 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         self.assertIn("SET payment_status=CASE", sql)
         self.assertIn("INSERT INTO public.commercial_payments", sql)
         self.assertIn("sale.payment_collected", sql)
-        self.assertIn("/rest/v1/rpc/commercial_record_sale_collection", self.repository)
+        self.assertNotIn("/rest/v1/rpc/commercial_record_sale_collection", self.repository)
+        self.assertIn("/rest/v1/rpc/commercial_record_customer_payment", self.repository)
         self.assertIn("تسجيل تحصيل سحابي", self.screen)
-        self.assertIn("getOrCreateCommercialCloudCollectionKey(context, target.id, amount)", self.screen)
+        self.assertIn('recordCommercialCloudCustomerPayment(context, target.id, amount, "cash")', self.screen)
+        self.assertNotIn("getOrCreateCommercialCloudCollectionKey", self.screen)
+        self.assertNotIn("recordCommercialCloudSaleCollection", self.repository)
 
 if __name__ == "__main__":
     unittest.main()
