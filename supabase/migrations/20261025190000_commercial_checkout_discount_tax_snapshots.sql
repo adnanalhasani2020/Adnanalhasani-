@@ -8,12 +8,26 @@ UPDATE public.commercial_sales
 SET subtotal_minor = total_minor
 WHERE subtotal_minor = 0 AND discount_minor = 0 AND tax_minor = 0 AND total_minor <> 0;
 
-ALTER TABLE public.commercial_sales
-  ADD CONSTRAINT commercial_sales_discount_nonnegative CHECK (discount_minor >= 0),
-  ADD CONSTRAINT commercial_sales_tax_nonnegative CHECK (tax_minor >= 0),
-  ADD CONSTRAINT commercial_sales_subtotal_nonnegative CHECK (subtotal_minor >= 0),
-  ADD CONSTRAINT commercial_sales_discount_within_subtotal CHECK (discount_minor <= subtotal_minor),
-  ADD CONSTRAINT commercial_sales_total_reconciles CHECK (total_minor::numeric = subtotal_minor::numeric - discount_minor::numeric + tax_minor::numeric);
+DO $constraints$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='commercial_sales_discount_nonnegative' AND conrelid='public.commercial_sales'::regclass) THEN
+    ALTER TABLE public.commercial_sales ADD CONSTRAINT commercial_sales_discount_nonnegative CHECK (discount_minor >= 0);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='commercial_sales_tax_nonnegative' AND conrelid='public.commercial_sales'::regclass) THEN
+    ALTER TABLE public.commercial_sales ADD CONSTRAINT commercial_sales_tax_nonnegative CHECK (tax_minor >= 0);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='commercial_sales_subtotal_nonnegative' AND conrelid='public.commercial_sales'::regclass) THEN
+    ALTER TABLE public.commercial_sales ADD CONSTRAINT commercial_sales_subtotal_nonnegative CHECK (subtotal_minor >= 0);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='commercial_sales_discount_within_subtotal' AND conrelid='public.commercial_sales'::regclass) THEN
+    ALTER TABLE public.commercial_sales ADD CONSTRAINT commercial_sales_discount_within_subtotal CHECK (discount_minor <= subtotal_minor);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='commercial_sales_total_reconciles' AND conrelid='public.commercial_sales'::regclass) THEN
+    ALTER TABLE public.commercial_sales ADD CONSTRAINT commercial_sales_total_reconciles
+      CHECK (total_minor::numeric = subtotal_minor::numeric - discount_minor::numeric + tax_minor::numeric);
+  END IF;
+END;
+$constraints$;
 
 CREATE OR REPLACE FUNCTION public.commercial_sales_snapshot_amounts()
 RETURNS trigger LANGUAGE plpgsql
