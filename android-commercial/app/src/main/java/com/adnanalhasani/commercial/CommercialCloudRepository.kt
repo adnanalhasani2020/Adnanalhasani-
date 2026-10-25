@@ -657,7 +657,7 @@ internal data class CommercialCloudPurchaseDocument(
 internal fun loadCommercialCloudPurchaseDocuments(context: Context): List<CommercialCloudPurchaseDocument> {
     val (orgId, access) = commercialMasterDataAccess(context)
     val path = "/rest/v1/commercial_purchase_orders" +
-        "?select=id,order_number,status,ordered_at,expected_at,currency_code,notes,supplier:commercial_suppliers(display_name),items:commercial_purchase_order_items(line_number,item_description,quantity_ordered,quantity_received,unit_cost_minor)" +
+        "?select=id,order_number,status,ordered_at,expected_at,currency_code,notes,supplier:commercial_suppliers(display_name),items:commercial_purchase_order_items(id,line_number,item_description,quantity_ordered,quantity_received,unit_cost_minor)" +
         "&organization_id=eq.$orgId&order=created_at.desc.nullslast,id.asc"
     val rows = commercialCloudPagedGet(path, access)
     return buildList {
@@ -693,6 +693,37 @@ internal fun loadCommercialCloudPurchaseDocuments(context: Context): List<Commer
     }
 }
 
+
+private fun commercialSupplierInvoicePendingPreferences(context: Context) =
+    context.getSharedPreferences("commercial_supplier_invoice_pending_v1", Context.MODE_PRIVATE)
+
+/** Reuse one persisted key per purchase order until the server confirms a successful save. */
+internal fun getOrCreateCommercialSupplierInvoiceIdempotencyKey(context: Context, purchaseOrderId: String): String {
+    require(purchaseOrderId.isNotBlank()) { "مرجع أمر الشراء غير صالح." }
+    val preferences = commercialSupplierInvoicePendingPreferences(context)
+    val preferenceKey = "purchase_order_$purchaseOrderId"
+    val existing = preferences.getString(preferenceKey, null).orEmpty()
+    if (existing.isNotBlank()) return existing
+    val created = UUID.randomUUID().toString()
+    check(preferences.edit().putString(preferenceKey, created).commit()) {
+        "تعذر حفظ مفتاح فاتورة المورد قبل الإرسال؛ لم يتم إرسال الفاتورة."
+    }
+    return preferences.getString(preferenceKey, null).orEmpty().also {
+        check(it.isNotBlank()) { "تعذر تأكيد حفظ مفتاح فاتورة المورد؛ لم يتم إرسال الفاتورة." }
+    }
+}
+
+/** Clear only the confirmed operation key; never erase a newer pending operation. */
+internal fun clearCommercialSupplierInvoiceIdempotencyKey(
+    context: Context,
+    purchaseOrderId: String,
+    idempotencyKey: String
+): Boolean {
+    val preferences = commercialSupplierInvoicePendingPreferences(context)
+    val preferenceKey = "purchase_order_$purchaseOrderId"
+    if (preferences.getString(preferenceKey, null) != idempotencyKey) return false
+    return preferences.edit().remove(preferenceKey).commit()
+}
 
 /** Persist a supplier invoice through the authorized atomic server RPC. */
 internal fun recordCommercialCloudSupplierInvoice(
