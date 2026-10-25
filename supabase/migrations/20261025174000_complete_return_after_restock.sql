@@ -26,7 +26,6 @@ DROP TRIGGER IF EXISTS commercial_return_complete_after_restock
 CREATE TRIGGER commercial_return_complete_after_restock
 AFTER UPDATE OF restock_status ON public.commercial_sales_returns
 FOR EACH ROW
-WHEN (OLD.restock_status IS DISTINCT FROM NEW.restock_status)
 EXECUTE FUNCTION commercial_private.commercial_complete_return_after_restock();
 
 COMMENT ON FUNCTION commercial_private.commercial_complete_return_after_restock() IS
