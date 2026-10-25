@@ -190,6 +190,25 @@ internal fun CommercialCloudPurchasesScreen(context: Context, onBack: () -> Unit
                                 }
                             }
                         }
+                        if (order.supplierInvoices.isNotEmpty()) {
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text("فواتير المورد المسجلة (${order.supplierInvoices.size})", color = CloudPurchasesInk, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                                order.supplierInvoices.forEach { invoice ->
+                                    Surface(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        color = Color(0xFFF5F7F6),
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                            Text("فاتورة المورد #${invoice.invoiceNumber}", color = CloudPurchasesInk, fontWeight = FontWeight.Medium, fontSize = 12.sp)
+                                            Text("الإجمالي: ${invoice.totalMinor} ${invoice.currencyCode} (وحدة صغرى)", color = CloudPurchasesMuted, fontSize = 11.sp)
+                                            Text("الحالة: ${if (invoice.state == "recorded") "مسجلة" else invoice.state.ifBlank { "غير محددة" }}", color = CloudPurchasesMuted, fontSize = 11.sp)
+                                            Text("تاريخ التسجيل: ${invoice.recordedAt.replace('T', ' ').take(16).ifBlank { "غير محدد" }}", color = CloudPurchasesMuted, fontSize = 10.sp)
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         if (order.notes.isNotBlank()) Text("ملاحظات: ${order.notes}", color = CloudPurchasesMuted, fontSize = 11.sp)
                         Button(onClick = { invoiceOrder = order }, enabled = order.lines.isNotEmpty()) { Text("تسجيل فاتورة المورد") }
                         if (invoiceOrder?.id == order.id) {
