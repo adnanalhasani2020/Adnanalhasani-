@@ -251,6 +251,11 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
                             "الإجمالي: ${document.totalMinor} ${document.currencyCode.ifBlank { "وحدة نقدية" }} (بوحدة الصرف الصغرى)",
                             color = CloudSalesGreen, fontWeight = FontWeight.Bold, fontSize = 14.sp
                         )
+                        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Text("الإجمالي قبل الخصم: ${formatMinorAmount(document.subtotalMinor)} ${document.currencyCode}", color = CloudSalesMuted, fontSize = 11.sp)
+                            Text("الخصم: ${formatMinorAmount(document.discountMinor)} ${document.currencyCode}", color = CloudSalesMuted, fontSize = 11.sp)
+                            Text("الضريبة: ${formatMinorAmount(document.taxMinor)} ${document.currencyCode}", color = CloudSalesMuted, fontSize = 11.sp)
+                        }
                         if (document.createdAt.isNotBlank()) Text(formatInvoiceTimestamp(document.createdAt), color = CloudSalesMuted, fontSize = 10.sp)
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Text("بنود الفاتورة: ${document.lines.size}", color = CloudSalesInk, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, modifier = Modifier.weight(1f))
@@ -448,6 +453,9 @@ private fun shareSavedInvoice(
         append("العميل: ${document.customerName}\n")
         append("الحالة: ${statusLabel(document.saleStatus)} / ${statusLabel(document.paymentStatus)}\n\n")
         append("البنود:\n").append(lines).append("\n\n")
+        append("الإجمالي قبل الخصم: ${formatMinorAmount(document.subtotalMinor)} ${document.currencyCode}\n")
+        append("الخصم: ${formatMinorAmount(document.discountMinor)} ${document.currencyCode}\n")
+        append("الضريبة: ${formatMinorAmount(document.taxMinor)} ${document.currencyCode}\n")
         append("الإجمالي: ${formatMinorAmount(document.totalMinor)} ${document.currencyCode}\n")
         append("المدفوع: ${formatMinorAmount(paidMinor)} ${document.currencyCode}\n")
         append("المتبقي: ${formatMinorAmount(outstanding)} ${document.currencyCode}\n\n")
@@ -493,6 +501,9 @@ private fun printSavedInvoice(
         <table><thead><tr><th>الصنف</th><th>الكمية</th><th>سعر الوحدة</th><th>الإجمالي</th></tr></thead>
         <tbody>$rows</tbody></table>
         <div class="totals">
+        <div>الإجمالي قبل الخصم: ${formatMinorAmount(document.subtotalMinor)} ${escape(document.currencyCode)}</div>
+        <div>الخصم: ${formatMinorAmount(document.discountMinor)} ${escape(document.currencyCode)}</div>
+        <div>الضريبة: ${formatMinorAmount(document.taxMinor)} ${escape(document.currencyCode)}</div>
         <div>الإجمالي: <strong>${formatMinorAmount(document.totalMinor)} ${escape(document.currencyCode)}</strong></div>
         <div>المدفوع: ${formatMinorAmount(paidMinor)} ${escape(document.currencyCode)}</div>
         <div>المتبقي: <strong>${formatMinorAmount(outstanding)} ${escape(document.currencyCode)}</strong></div>
