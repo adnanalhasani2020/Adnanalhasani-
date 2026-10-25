@@ -654,7 +654,8 @@ internal data class CommercialCloudPurchaseLine(
     val description: String,
     val quantityOrdered: String,
     val quantityReceived: String,
-    val unitCostMinor: Long
+    val unitCostMinor: Long,
+    val offeringId: String?
 )
 
 internal data class CommercialCloudSupplierInvoiceSummary(
@@ -675,6 +676,7 @@ internal data class CommercialCloudPurchaseDocument(
     val expectedAt: String,
     val currencyCode: String,
     val notes: String,
+    val receiveLocationId: String?,
     val lines: List<CommercialCloudPurchaseLine>,
     val supplierInvoices: List<CommercialCloudSupplierInvoiceSummary>
 )
@@ -683,7 +685,7 @@ internal data class CommercialCloudPurchaseDocument(
 internal fun loadCommercialCloudPurchaseDocuments(context: Context): List<CommercialCloudPurchaseDocument> {
     val (orgId, access) = commercialMasterDataAccess(context)
     val path = "/rest/v1/commercial_purchase_orders" +
-        "?select=id,order_number,status,ordered_at,expected_at,currency_code,notes,supplier:commercial_suppliers(display_name),items:commercial_purchase_order_items(id,line_number,item_description,quantity_ordered,quantity_received,unit_cost_minor),supplier_invoices:commercial_supplier_invoices(id,invoice_number,total_minor,currency_code,recorded_at,state)" +
+        "?select=id,order_number,status,ordered_at,expected_at,currency_code,notes,receive_location_id,supplier:commercial_suppliers(display_name),items:commercial_purchase_order_items(id,line_number,item_description,quantity_ordered,quantity_received,unit_cost_minor,offering_id),supplier_invoices:commercial_supplier_invoices(id,invoice_number,total_minor,currency_code,recorded_at,state)" +
         "&organization_id=eq.$orgId&order=created_at.desc.nullslast,id.asc"
     val rows = commercialCloudPagedGet(path, access)
     return buildList {
@@ -716,7 +718,8 @@ internal fun loadCommercialCloudPurchaseDocuments(context: Context): List<Commer
                         description = item.optString("item_description").ifBlank { "بند بدون وصف" },
                         quantityOrdered = item.optString("quantity_ordered").takeUnless { it == "null" }.orEmpty(),
                         quantityReceived = item.optString("quantity_received").takeUnless { it == "null" }.orEmpty(),
-                        unitCostMinor = item.optLong("unit_cost_minor", 0L)
+                        unitCostMinor = item.optLong("unit_cost_minor", 0L),
+                        offeringId = item.optString("offering_id").takeUnless { it.isBlank() || it == "null" }
                     ))
                 }
             }.sortedBy { it.lineNumber }
@@ -729,6 +732,7 @@ internal fun loadCommercialCloudPurchaseDocuments(context: Context): List<Commer
                 expectedAt = row.optString("expected_at").takeUnless { it == "null" }.orEmpty(),
                 currencyCode = row.optString("currency_code").takeUnless { it == "null" }.orEmpty(),
                 notes = row.optString("notes").takeUnless { it == "null" }.orEmpty(),
+                receiveLocationId = row.optString("receive_location_id").takeUnless { it.isBlank() || it == "null" },
                 lines = lines,
                 supplierInvoices = supplierInvoices
             ))
@@ -807,6 +811,100 @@ internal fun recordCommercialCloudSupplierInvoice(
         .put("p_idempotency_key", idempotencyKey)
     return JSONObject(commercialCloudRequest(
         "/rest/v1/rpc/commercial_record_supplier_invoice", "POST", payload, access
+    ))
+}
+
+internal data class CommercialPurchaseReceiptLineInput(val purchaseOrderItemId: String, val quantity: String)
+internal data class CommercialPurchaseOrderLineInput(
+    val offeringId: String,
+    val description: String,
+    val quantityOrdered: String,
+    val unitCostMinor: Long
+)
+
+internal fun transitionCommercialCloudPurchaseOrder(context: Context, purchaseOrderId: String, action: String): JSONObject {
+    require(action in setOf("submit", "approve", "cancel", "close")) { "إجراء أمر الشراء غير صالح." }
+    val (orgId, access) = commercialMasterDataAccess(context)
+    return JSONObject(commercialCloudRequest(
+        "/rest/v1/rpc/commercial_transition_purchase_order", "POST",
+        JSONObject().put("p_organization_id", orgId).put("p_purchase_order_id", purchaseOrderId).put("p_action", action),
+        access
+    ))
+}
+
+internal fun receiveCommercialCloudPurchaseOrder(
+    context: Context,
+    purchaseOrderId: String,
+    locationId: String,
+    lines: List<CommercialPurchaseReceiptLineInput>,
+    idempotencyKey: String
+): JSONObject {
+    require(purchaseOrderId.isNotBlank() && locationId.isNotBlank()) { "مرجع أمر الشراء أو المستودع غير صالح." }
+    require(lines.isNotEmpty()) { "أدخل كمية استلام واحدة على الأقل." }
+    require(idempotencyKey.length in 8..200) { "مفتاح الاستلام غير صالح." }
+    val lineArray = JSONArray()
+    lines.forEach { line ->
+        val quantity = line.quantity.toBigDecimalOrNull()
+            ?: throw IllegalArgumentException("كمية الاستلام غير صالحة.")
+        require(quantity > java.math.BigDecimal.ZERO && quantity.stripTrailingZeros().scale() <= 0) {
+            "الاستلام الحالي يدعم وحدات المخزون الصحيحة فقط."
+        }
+        lineArray.put(JSONObject().put("purchase_order_item_id", line.purchaseOrderItemId).put("quantity", quantity.toBigIntegerExact().toString()))
+    }
+    val (orgId, access) = commercialMasterDataAccess(context)
+    return JSONObject(commercialCloudRequest(
+        "/rest/v1/rpc/commercial_receive_purchase_order", "POST",
+        JSONObject().put("p_organization_id", orgId).put("p_purchase_order_id", purchaseOrderId)
+            .put("p_location_id", locationId).put("p_lines", lineArray).put("p_idempotency_key", idempotencyKey),
+        access
+    ))
+}
+
+internal fun createCommercialCloudPurchaseOrder(
+    context: Context, supplierId: String, orderNumber: String, currencyCode: String, locationId: String,
+    lines: List<CommercialPurchaseOrderLineInput>, idempotencyKey: String, notes: String = ""
+): JSONObject {
+    require(supplierId.isNotBlank() && orderNumber.isNotBlank() && locationId.isNotBlank()) { "بيانات أمر الشراء غير مكتملة." }
+    require(currencyCode.matches(Regex("^[A-Z]{3}$"))) { "عملة أمر الشراء غير صالحة." }
+    require(lines.isNotEmpty() && idempotencyKey.length in 8..200) { "بنود الأمر أو مفتاح العملية غير صالح." }
+    val lineArray = JSONArray()
+    lines.forEach { line ->
+        val quantity = line.quantityOrdered.toBigDecimalOrNull()
+            ?: throw IllegalArgumentException("كمية الطلب غير صالحة.")
+        require(line.offeringId.isNotBlank() && line.description.isNotBlank() && quantity > java.math.BigDecimal.ZERO &&
+            quantity.stripTrailingZeros().scale() <= 0 && line.unitCostMinor >= 0L) { "بيانات بند أمر الشراء غير صالحة." }
+        lineArray.put(JSONObject().put("offering_id", line.offeringId).put("item_description", line.description.trim())
+            .put("quantity_ordered", quantity.toBigIntegerExact().toString()).put("unit_cost_minor", line.unitCostMinor))
+    }
+    val (orgId, access) = commercialMasterDataAccess(context)
+    return JSONObject(commercialCloudRequest(
+        "/rest/v1/rpc/commercial_create_purchase_order", "POST",
+        JSONObject().put("p_organization_id", orgId).put("p_supplier_id", supplierId)
+            .put("p_order_number", orderNumber.trim()).put("p_currency_code", currencyCode)
+            .put("p_receive_location_id", locationId).put("p_lines", lineArray)
+            .put("p_idempotency_key", idempotencyKey).put("p_notes", notes.trim().takeIf { it.isNotEmpty() }),
+        access
+    ))
+}
+
+internal fun recordCommercialCloudSupplierPayment(
+    context: Context, obligationId: String, amountMinor: Long, currencyCode: String,
+    paymentMethod: String, evidenceReference: String, idempotencyKey: String
+): JSONObject {
+    require(obligationId.isNotBlank() && amountMinor > 0L && evidenceReference.trim().length in 3..200) {
+        "بيانات دفعة المورد غير صالحة."
+    }
+    require(paymentMethod in setOf("cash", "bank_transfer", "check", "other") && idempotencyKey.length in 8..200) {
+        "طريقة الدفع أو مفتاح العملية غير صالح."
+    }
+    val (orgId, access) = commercialMasterDataAccess(context)
+    return JSONObject(commercialCloudRequest(
+        "/rest/v1/rpc/commercial_record_supplier_payment", "POST",
+        JSONObject().put("p_organization_id", orgId).put("p_obligation_id", obligationId)
+            .put("p_amount_minor", amountMinor).put("p_currency_code", currencyCode)
+            .put("p_payment_method", paymentMethod).put("p_evidence_reference", evidenceReference.trim())
+            .put("p_idempotency_key", idempotencyKey),
+        access
     ))
 }
 
