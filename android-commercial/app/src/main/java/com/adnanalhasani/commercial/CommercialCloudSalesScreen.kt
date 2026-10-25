@@ -383,22 +383,15 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
                             collectionError = ""
                             CloudSalesWorker.execute {
                                 val result = runCatching {
-                                    val key = getOrCreateCommercialCloudCollectionKey(context, target.id, amount)
-                                    val response = recordCommercialCloudSaleCollection(context, target.id, amount, key)
-                                    val clearError = runCatching { clearCommercialCloudCollectionKey(context, key) }.exceptionOrNull()
-                                    response to clearError
+                                    recordCommercialCloudCustomerPayment(context, target.id, amount, "cash")
                                 }
                                 CloudSalesMain.post {
                                     collectionBusy = false
-                                    result.onSuccess { (_, clearError) ->
+                                    result.onSuccess {
                                         reloadToken++
-                                        if (clearError == null) {
-                                            collectionTarget = null
-                                            collectionAmountText = ""
-                                            collectionError = ""
-                                        } else {
-                                            collectionError = "أكد الخادم التحصيل، لكن تعذر تنظيف مفتاح المحاولة. اضغط التأكيد مرة أخرى بالمبلغ نفسه لإكمال التنظيف بأمان."
-                                        }
+                                        collectionTarget = null
+                                        collectionAmountText = ""
+                                        collectionError = ""
                                     }.onFailure {
                                         collectionError = it.message ?: "تعذر تأكيد التحصيل؛ لم يتم عرضه كتحصيل ناجح."
                                     }
