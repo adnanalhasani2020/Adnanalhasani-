@@ -1,7 +1,7 @@
 -- Run with Supabase CLI / pgTAP in a disposable local or staging database.
 -- These are schema regression tests; they do not replace authenticated-session integration tests.
 BEGIN;
-SELECT plan(23);
+SELECT plan(25);
 
 SELECT has_table('public', 'commercial_audit_events',
   'append-only audit event table exists');
@@ -173,6 +173,18 @@ SELECT ok(
   ),
   'organization managers can read sale lines only through sales in their organization'
 );
+
+SELECT ok(
+  position('a.currency_code IS DISTINCT FROM l.currency_code' in pg_get_functiondef(
+    'public.commercial_post_journal_entry(uuid)'::regprocedure
+  )) > 0,
+  'journal posting rejects account/line currency mismatches');
+
+SELECT ok(
+  position('a.is_active IS DISTINCT FROM true' in pg_get_functiondef(
+    'public.commercial_post_journal_entry(uuid)'::regprocedure
+  )) > 0,
+  'journal posting rejects inactive ledger accounts');
 
 SELECT * FROM finish();
 ROLLBACK;
