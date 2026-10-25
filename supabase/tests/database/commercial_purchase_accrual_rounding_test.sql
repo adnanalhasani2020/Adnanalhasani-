@@ -1,4 +1,5 @@
 -- Arithmetic regression tests for fractional receipt/invoice accrual allocation.
+CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 -- Run with Supabase CLI/pgTAP after migrations in a disposable local or staging database.
 BEGIN;
 SELECT plan(6);
