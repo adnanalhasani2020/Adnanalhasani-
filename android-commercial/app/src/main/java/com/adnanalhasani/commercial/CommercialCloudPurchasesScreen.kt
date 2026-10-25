@@ -68,6 +68,7 @@ internal fun CommercialCloudPurchasesScreen(context: Context, onBack: () -> Unit
     var reloadToken by remember { mutableIntStateOf(0) }
     var invoiceOrder by remember { mutableStateOf<CommercialCloudPurchaseDocument?>(null) }
     var receiptOrder by remember { mutableStateOf<CommercialCloudPurchaseDocument?>(null) }
+    var createOrderOpen by remember { mutableStateOf(false) }
     var transitionConfirmation by remember { mutableStateOf<Pair<CommercialCloudPurchaseDocument, String>?>(null) }
 
     LaunchedEffect(reloadToken) {
@@ -118,6 +119,9 @@ internal fun CommercialCloudPurchasesScreen(context: Context, onBack: () -> Unit
                     placeholder = { Text("ابحث برقم الأمر أو المورد أو البند") },
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) }
                 )
+            }
+            item {
+                Button(onClick = { createOrderOpen = true }, enabled = !loading) { Text("إنشاء أمر شراء جديد") }
             }
             item {
                 Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp)) {
@@ -282,6 +286,14 @@ internal fun CommercialCloudPurchasesScreen(context: Context, onBack: () -> Unit
                 }) { Text("تأكيد") }
             },
             dismissButton = { androidx.compose.material3.TextButton(onClick = { transitionConfirmation = null }) { Text("رجوع") } }
+        )
+    }
+
+    if (createOrderOpen) {
+        PurchaseOrderEntryDialog(
+            context = context,
+            onDismiss = { createOrderOpen = false },
+            onSaved = { createOrderOpen = false; reloadToken++ }
         )
     }
 
