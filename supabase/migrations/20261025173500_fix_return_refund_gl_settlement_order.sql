@@ -97,8 +97,10 @@ BEGIN
   SET refund_status='refunded',updated_at=now()
   WHERE id=r.id;
 
-  -- Fetch the existing journal/settlement result after the trigger has run.
-  v_journal:=public.commercial_gl_post_sale_return(r.id);
+  -- Do not call the GL posting routine a second time: the refund_status transition
+  -- above fires the settlement trigger in this same transaction. Re-invoking the
+  -- routine here risks duplicate postings if its implementation is not idempotent.
+  -- v_journal intentionally retains the return-entry result from the single call.
 
   INSERT INTO public.commercial_audit_events(
     organization_id,actor_user_id,action,entity_type,entity_id,metadata

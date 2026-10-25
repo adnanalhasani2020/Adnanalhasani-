@@ -1,6 +1,11 @@
 package com.adnanalhasani.commercial
 
 import android.content.Context
+import android.content.Intent
+import android.print.PrintAttributes
+import android.print.PrintManager
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.os.Handler
 import android.os.Looper
 import androidx.compose.foundation.background
@@ -35,6 +40,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -294,6 +300,16 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
                                 }
                             }
                         }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                onClick = { shareSavedInvoice(context, document, confirmedPaidMinor) },
+                                modifier = Modifier.weight(1f)
+                            ) { Text("مشاركة الفاتورة") }
+                            OutlinedButton(
+                                onClick = { printSavedInvoice(context, document, confirmedPaidMinor) },
+                                modifier = Modifier.weight(1f)
+                            ) { Text("طباعة الفاتورة") }
+                        }
                         if (document.payments.isNotEmpty()) {
                             Text("المدفوعات المسجلة", color = CloudSalesInk, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                             document.payments.forEach { payment ->
@@ -412,6 +428,95 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
         )
     }
 }
+
+
+private fun shareSavedInvoice(
+    context: Context,
+    document: CommercialCloudSaleDocument,
+    paidMinor: Long
+) {
+    val outstanding = (document.totalMinor - paidMinor).coerceAtLeast(0L)
+    val lines = document.lines.joinToString("\n") {
+        "• ${it.productName} — ${it.quantity} × ${formatMinorAmount(it.unitPriceMinor)} = ${formatMinorAmount(it.lineTotalMinor)}"
+    }
+    val payments = document.payments.filter { it.status.equals("succeeded", true) }
+        .joinToString("\n") { "• ${formatMinorAmount(it.amountMinor)} ${document.currencyCode} — ${statusLabel(it.status)}" }
+        .ifBlank { "لا توجد دفعات ناجحة مسجلة" }
+    val body = buildString {
+        append("فاتورة تشغيلية رقم #${document.receiptNumber}\n")
+        append("التاريخ: ${formatInvoiceTimestamp(document.createdAt)}\n")
+        append("العميل: ${document.customerName}\n")
+        append("الحالة: ${statusLabel(document.saleStatus)} / ${statusLabel(document.paymentStatus)}\n\n")
+        append("البنود:\n").append(lines).append("\n\n")
+        append("الإجمالي: ${formatMinorAmount(document.totalMinor)} ${document.currencyCode}\n")
+        append("المدفوع: ${formatMinorAmount(paidMinor)} ${document.currencyCode}\n")
+        append("المتبقي: ${formatMinorAmount(outstanding)} ${document.currencyCode}\n\n")
+        append("الدفعات:\n").append(payments).append("\n")
+        append("معرّف السجل المحفوظ: ${document.id}\n")
+        append("هذه نسخة تشغيلية من بيانات الخادم وليست إقرارًا بالامتثال لمتطلبات فاتورة ضريبية محلية.")
+    }
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_SUBJECT, "فاتورة رقم #${document.receiptNumber}")
+        putExtra(Intent.EXTRA_TEXT, body)
+    }
+    context.startActivity(Intent.createChooser(intent, "مشاركة الفاتورة"))
+}
+
+private fun printSavedInvoice(
+    context: Context,
+    document: CommercialCloudSaleDocument,
+    paidMinor: Long
+) {
+    val outstanding = (document.totalMinor - paidMinor).coerceAtLeast(0L)
+    fun escape(value: String): String = value
+        .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        .replace("\"", "&quot;").replace("'", "&#39;")
+    val rows = document.lines.joinToString("") {
+        "<tr><td>${escape(it.productName)}</td><td>${escape(it.quantity.toString())}</td>" +
+            "<td>${formatMinorAmount(it.unitPriceMinor)}</td><td>${formatMinorAmount(it.lineTotalMinor)}</td></tr>"
+    }
+    val html = """
+        <!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+        body{font-family:sans-serif;margin:24px;color:#183b35;direction:rtl}
+        h1{font-size:22px} .muted{color:#596963;font-size:12px}
+        table{width:100%;border-collapse:collapse;margin-top:18px}
+        th,td{border:1px solid #ccd7d2;padding:8px;text-align:right}
+        th{background:#edf4f0} .totals{margin-top:18px;line-height:2}
+        </style></head><body>
+        <h1>فاتورة تشغيلية رقم #${document.receiptNumber}</h1>
+        <p>العميل: ${escape(document.customerName)}</p>
+        <p>التاريخ: ${escape(formatInvoiceTimestamp(document.createdAt))}</p>
+        <p>الحالة: ${escape(statusLabel(document.saleStatus))} — الدفع: ${escape(statusLabel(document.paymentStatus))}</p>
+        <table><thead><tr><th>الصنف</th><th>الكمية</th><th>سعر الوحدة</th><th>الإجمالي</th></tr></thead>
+        <tbody>$rows</tbody></table>
+        <div class="totals">
+        <div>الإجمالي: <strong>${formatMinorAmount(document.totalMinor)} ${escape(document.currencyCode)}</strong></div>
+        <div>المدفوع: ${formatMinorAmount(paidMinor)} ${escape(document.currencyCode)}</div>
+        <div>المتبقي: <strong>${formatMinorAmount(outstanding)} ${escape(document.currencyCode)}</strong></div>
+        </div>
+        <p class="muted">معرّف السجل المحفوظ: ${escape(document.id)}</p>
+        <p class="muted">نسخة تشغيلية مطبوعة من بيانات الخادم؛ لا تُعد إثبات امتثال ضريبي محلي.</p>
+        </body></html>
+    """.trimIndent()
+    val webView = WebView(context)
+    webView.webViewClient = object : WebViewClient() {
+        override fun onPageFinished(view: WebView, url: String?) {
+            val manager = context.getSystemService(Context.PRINT_SERVICE) as PrintManager
+            val adapter = view.createPrintDocumentAdapter("invoice-${document.receiptNumber}")
+            manager.print(
+                "فاتورة-${document.receiptNumber}",
+                adapter,
+                PrintAttributes.Builder().setMediaSize(PrintAttributes.MediaSize.ISO_A4)
+                    .setMinMargins(PrintAttributes.Margins.NO_MARGINS).build()
+            )
+        }
+    }
+    webView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
+}
+
 
 private fun formatMinorAmount(value: Long): String = String.format(Locale.US, "%,d", value)
 
