@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -97,6 +98,10 @@ internal fun CommercialCloudSaleComposerScreen(
     var taxText by remember { mutableStateOf("0") }
     var quantities by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var selectedUnitCodes by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var configureUnitProduct by remember { mutableStateOf<Product?>(null) }
+    var newUnitCode by remember { mutableStateOf("carton") }
+    var newUnitName by remember { mutableStateOf("كرتون") }
+    var newUnitFactor by remember { mutableStateOf("12") }
     var search by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var submitting by remember { mutableStateOf(false) }
@@ -138,6 +143,46 @@ internal fun CommercialCloudSaleComposerScreen(
     val taxMinor = taxText.toLongOrNull() ?: 0L
     val estimatedTotal = (estimatedSubtotal - BigInteger.valueOf(discountMinor) + BigInteger.valueOf(taxMinor))
         .coerceAtLeast(BigInteger.ZERO)
+
+    if (configureUnitProduct != null) {
+        AlertDialog(
+            onDismissRequest = { if (!submitting) configureUnitProduct = null },
+            title = { Text("إضافة وحدة بيع للصنف") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(configureUnitProduct?.name.orEmpty(), color = CloudComposerMuted)
+                    OutlinedTextField(value = newUnitCode, onValueChange = { newUnitCode = it.filter { ch -> ch.isLetterOrDigit() || ch == '_' }.take(32) }, label = { Text("رمز الوحدة (مثال carton)") }, singleLine = true)
+                    OutlinedTextField(value = newUnitName, onValueChange = { newUnitName = it.take(80) }, label = { Text("اسم الوحدة (مثال كرتون)") }, singleLine = true)
+                    OutlinedTextField(value = newUnitFactor, onValueChange = { newUnitFactor = it.filter(Char::isDigit).take(7) }, label = { Text("عدد وحدات المخزون داخلها (مثال 12 حبة)") }, singleLine = true)
+                    Text("السعر يُحسب من سعر وحدة المخزون × معامل التحويل. يجب أن يكون المعامل عددًا صحيحًا.", color = CloudComposerMuted, fontSize = 11.sp)
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    val product = configureUnitProduct ?: return@Button
+                    val factor = newUnitFactor.toLongOrNull()
+                    if (newUnitCode.isBlank() || newUnitName.isBlank() || factor == null || factor !in 2L..1_000_000L) {
+                        error = "أدخل رمزًا واسمًا ومعامل تحويل أكبر من 1."
+                    } else {
+                        submitting = true
+                        CloudComposerWorker.execute {
+                            val result = runCatching { configureCommercialCloudSellUnit(context, product.cloudOfferingId, newUnitCode, newUnitName, factor) }
+                            CloudComposerMain.post {
+                                submitting = false
+                                result.onSuccess {
+                                    configureUnitProduct = null
+                                    selectedUnitCodes = selectedUnitCodes + (product.cloudOfferingId to newUnitCode)
+                                    notice = "تم حفظ وحدة البيع " + newUnitName + " ومعامل التحويل " + factor + "."
+                                    reloadToken++
+                                }.onFailure { error = it.message ?: "تعذر حفظ وحدة البيع." }
+                            }
+                        }
+                    }
+                }, enabled = !submitting) { Text("حفظ الوحدة") }
+            },
+            dismissButton = { OutlinedButton(onClick = { configureUnitProduct = null }, enabled = !submitting) { Text("إلغاء") } }
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -253,8 +298,9 @@ internal fun CommercialCloudSaleComposerScreen(
                             Text("السعر: ${String.format(Locale.US, "%,d", sellPrice)} $currency / ${selectedUnit.label}", color = CloudComposerGreen, fontSize = 12.sp, fontWeight = FontWeight.Medium)
                             Text("المتاح: ${product.stock / selectedUnit.factor.coerceAtMost(Int.MAX_VALUE.toLong()).toInt().coerceAtLeast(1)} ${selectedUnit.label}", color = CloudComposerMuted, fontSize = 11.sp)
                         }
-                        if (availableUnits.size > 1) {
-                            Box {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            if (availableUnits.size > 1) {
+                                Box {
                                 OutlinedButton(onClick = { unitMenuExpanded = true }, enabled = !submitting) {
                                     Text("وحدة البيع: ${selectedUnit.label}")
                                 }
@@ -270,7 +316,14 @@ internal fun CommercialCloudSaleComposerScreen(
                                         )
                                     }
                                 }
+                                }
                             }
+                            OutlinedButton(onClick = {
+                                configureUnitProduct = product
+                                newUnitCode = "carton"
+                                newUnitName = "كرتون"
+                                newUnitFactor = "12"
+                            }, enabled = !submitting) { Text("إضافة وحدة") }
                         }
                         OutlinedTextField(
                             value = quantityText,
