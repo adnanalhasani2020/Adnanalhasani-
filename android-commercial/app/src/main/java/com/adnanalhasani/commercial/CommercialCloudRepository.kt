@@ -127,7 +127,7 @@ internal fun loadCommercialCloudInventory(context: Context): CommercialCloudInve
     sessionPrefs.edit().putString("refresh_token", rotatedRefresh).apply()
 
     val query = "/rest/v1/commercial_inventory_balances" +
-        "?select=offering_id,quantity_on_hand,quantity_reserved,reorder_point,offering:commercial_offerings!inner(id,price_minor,currency_code,activity_id,product:commercial_products!inner(name,description,unit_name,state),categories:commercial_offering_categories(is_primary,category:commercial_product_categories(name_ar,name_en)))" +
+        "?select=offering_id,quantity_on_hand,quantity_reserved,reorder_point,offering:commercial_offerings!inner(id,price_minor,currency_code,activity_id,product:commercial_products!inner(name,description,unit_name,unit_code,state),categories:commercial_offering_categories(is_primary,category:commercial_product_categories(name_ar,name_en)),sell_units:commercial_offering_sell_units(unit_code,display_name,quantity_in_stock,is_base,is_active))" +
         "&organization_id=eq.$orgId&location_id=eq.$locationId&offering.activity_id=eq.$activityId&order=updated_at.desc,offering_id.asc"
     val rows = commercialCloudPagedGet(query, access)
     val products = buildList {
@@ -147,6 +147,24 @@ internal fun loadCommercialCloudInventory(context: Context): CommercialCloudInve
                 ?: "غير مصنف"
             val quantity = (row.optDouble("quantity_on_hand", 0.0) - row.optDouble("quantity_reserved", 0.0)).coerceAtLeast(0.0).toInt()
             val price = offering.optLong("price_minor", 0L).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
+            val sellUnits = offering.optJSONArray("sell_units") ?: JSONArray()
+            val sellUnitsJson = JSONArray()
+            var baseUnitCode = product.optString("unit_code").takeUnless { it.isBlank() || it == "null" } ?: "each"
+            for (unitIndex in 0 until sellUnits.length()) {
+                val unit = sellUnits.optJSONObject(unitIndex) ?: continue
+                if (!unit.optBoolean("is_active", false)) continue
+                if (unit.optBoolean("is_base", false)) baseUnitCode = unit.optString("unit_code", baseUnitCode)
+                sellUnitsJson.put(JSONObject()
+                    .put("unitCode", unit.optString("unit_code"))
+                    .put("unitName", unit.optString("display_name"))
+                    .put("quantityInBase", unit.optLong("quantity_in_stock", 1L))
+                    .put("isDefault", unit.optBoolean("is_base", false)))
+            }
+            if (sellUnitsJson.length() == 0) {
+                sellUnitsJson.put(JSONObject().put("unitCode", baseUnitCode)
+                    .put("unitName", product.optString("unit_name", "حبة"))
+                    .put("quantityInBase", 1).put("isDefault", true))
+            }
             add(Product(
                 name = product.optString("name"),
                 category = categoryName,
@@ -155,7 +173,7 @@ internal fun loadCommercialCloudInventory(context: Context): CommercialCloudInve
                 price = String.format(Locale.US, "%,d ر.ي", price),
                 cloudOfferingId = offering.optString("id"),
                 cloudPriceMinor = offering.optLong("price_minor", 0L).coerceAtLeast(0L),
-                unitCode = product.optString("unit_name").ifBlank { "قطعة" },
+                unitCode = baseUnitCode,\n                unitVariantsJson = sellUnitsJson.toString(),
                 createdBy = orgId,
                 reorderPoint = row.optDouble("reorder_point", 0.0).toInt().coerceAtLeast(0)
             ))
@@ -321,7 +339,8 @@ internal fun loadCommercialCloudCustomers(context: Context): List<CommercialClou
 
 internal data class CommercialCloudCheckoutLine(
     val offeringId: String,
-    val quantity: Int
+    val quantity: Int,
+    val unitCode: String = "each"
 )
 
 /** Merge repeated offering IDs before idempotency fingerprinting and checkout. */
@@ -329,14 +348,16 @@ internal fun aggregateCommercialCheckoutLines(
     lines: List<CommercialCloudCheckoutLine>
 ): List<CommercialCloudCheckoutLine> {
     require(lines.isNotEmpty() && lines.size <= 200) { "أضف صنفًا واحدًا على الأقل إلى الفاتورة." }
-    val totals = linkedMapOf<String, Int>()
+    val totals = linkedMapOf<String, Pair<Int, String>>()
     lines.forEach { line ->
-        require(line.offeringId.isNotBlank() && line.quantity in 1..100000) { "تحقق من الأصناف والكميات." }
-        val total = Math.addExact(totals[line.offeringId] ?: 0, line.quantity)
+        require(line.offeringId.isNotBlank() && line.quantity in 1..100000 && line.unitCode.isNotBlank()) { "تحقق من الأصناف والكميات ووحدة البيع." }
+        val previous = totals[line.offeringId]
+        require(previous == null || previous.second == line.unitCode) { "لا يمكن تكرار الصنف بوحدتي بيع مختلفتين في الفاتورة نفسها." }
+        val total = Math.addExact(previous?.first ?: 0, line.quantity)
         require(total <= 100000) { "إجمالي كمية الصنف يتجاوز الحد المسموح." }
-        totals[line.offeringId] = total
+        totals[line.offeringId] = total to line.unitCode
     }
-    return totals.entries.sortedBy { it.key }.map { CommercialCloudCheckoutLine(it.key, it.value) }
+    return totals.entries.sortedBy { it.key }.map { CommercialCloudCheckoutLine(it.key, it.value.first, it.value.second) }
 }
 
 internal fun getOrCreateCommercialCloudMultiSaleKey(
@@ -352,7 +373,7 @@ internal fun getOrCreateCommercialCloudMultiSaleKey(
     val normalizedLines = aggregateCommercialCheckoutLines(lines)
     val canonical = JSONArray()
     normalizedLines.forEach { line ->
-        canonical.put(JSONObject().put("offering_id", line.offeringId).put("quantity", line.quantity))
+        canonical.put(JSONObject().put("offering_id", line.offeringId).put("quantity", line.quantity).put("unit_code", line.unitCode))
     }
     val payload = JSONObject().put("customer_id", customerId ?: JSONObject.NULL)
         .put("payment_mode", paymentMode)
@@ -411,7 +432,7 @@ internal fun checkoutCommercialCloudSaleMulti(
     require(locationId.isNotBlank()) { "معرّف موقع المخزون غير محفوظ." }
     val payload = JSONArray()
     normalizedLines.forEach { line ->
-        payload.put(JSONObject().put("offering_id", line.offeringId).put("quantity", line.quantity))
+        payload.put(JSONObject().put("offering_id", line.offeringId).put("quantity", line.quantity).put("unit_code", line.unitCode))
     }
     val sessionPrefs = commercialCloudSessionPreferences(context)
     val savedRefresh = sessionPrefs.getString("refresh_token", null).orEmpty()
