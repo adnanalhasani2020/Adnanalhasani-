@@ -137,7 +137,7 @@ BEGIN
   WHERE po.id=p_purchase_order_id AND po.organization_id=p_organization_id
   FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'purchase_order_not_found' USING ERRCODE='P0002'; END IF;
-  IF v_status NOT IN ('approved','open','partially_received','partial','received','completed') THEN
+  IF v_status NOT IN ('approved','partially_received','received','closed') THEN
     RAISE EXCEPTION 'purchase_order_not_ready_for_supplier_invoice' USING ERRCODE='22023';
   END IF;
   IF v_currency IS DISTINCT FROM p_currency_code THEN
