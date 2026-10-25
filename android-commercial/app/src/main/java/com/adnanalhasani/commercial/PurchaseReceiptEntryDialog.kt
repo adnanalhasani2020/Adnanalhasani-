@@ -124,13 +124,7 @@ internal fun PurchaseReceiptEntryDialog(
                             error = "أمر الشراء لا يحدد موقع الاستلام."
                         } else {
                             if (idempotencyKey.isBlank()) {
-                                val parts = mutableListOf(order.id, order.receiveLocationId.orEmpty())
-                                eligibleLines.forEach { line ->
-                                    parts.add(line.id)
-                                    parts.add(line.quantityReceived)
-                                    parts.add(quantities[line.id].orEmpty().trim())
-                                }
-                                idempotencyKey = commercialStableIdempotencyKey("purchase-receipt", parts)
+                                idempotencyKey = getOrCreateCommercialPurchaseReceiptIdempotencyKey(context, order.id)
                             }
                             attempted = true
                             saving = true
@@ -169,7 +163,10 @@ private fun submitPurchaseReceipt(
             receiveCommercialCloudPurchaseOrder(context, order.id, order.receiveLocationId.orEmpty(), lines, idempotencyKey)
         }
         PurchaseReceiptMain.post {
-            result.onSuccess { onSaved() }.onFailure { onFailure(it.message ?: "تعذر تسجيل الاستلام.") }
+            result.onSuccess {
+                clearCommercialPurchaseReceiptIdempotencyKey(context, order.id, idempotencyKey)
+                onSaved()
+            }.onFailure { onFailure(it.message ?: "تعذر تسجيل الاستلام.") }
         }
     }
 }
