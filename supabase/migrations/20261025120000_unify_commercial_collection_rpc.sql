@@ -28,7 +28,19 @@ BEGIN
     RAISE EXCEPTION 'organization_access_denied' USING ERRCODE='42501';
   END IF;
 
-  -- Preserve the legacy endpoint's conservative return/refund reconciliation gate.
+  -- Let a previously committed request replay through the canonical idempotency
+  -- check before evaluating later return/refund state changes.
+  IF EXISTS (
+    SELECT 1 FROM public.commercial_payments p
+    WHERE p.organization_id = v_org AND p.idempotency_key = p_idempotency_key
+  ) THEN
+    RETURN public.commercial_record_customer_payment(
+      p_sale_id, p_amount_minor, 'cash', p_idempotency_key
+    );
+  END IF;
+
+  -- Preserve the legacy endpoint's conservative return/refund reconciliation gate
+  -- for new collections.
   IF EXISTS (
     SELECT 1 FROM public.commercial_payments p
     WHERE p.sale_id = p_sale_id AND p.status IN ('refunded','partially_refunded')
