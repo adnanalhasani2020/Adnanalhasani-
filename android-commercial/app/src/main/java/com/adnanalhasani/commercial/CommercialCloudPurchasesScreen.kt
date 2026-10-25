@@ -69,6 +69,7 @@ internal fun CommercialCloudPurchasesScreen(context: Context, onBack: () -> Unit
     var reloadToken by remember { mutableIntStateOf(0) }
     var invoiceOrder by remember { mutableStateOf<CommercialCloudPurchaseDocument?>(null) }
     var receiptOrder by remember { mutableStateOf<CommercialCloudPurchaseDocument?>(null) }
+    var mappingOrder by remember { mutableStateOf<CommercialCloudPurchaseDocument?>(null) }
     var createOrderOpen by remember { mutableStateOf(false) }
     var paymentInvoice by remember { mutableStateOf<CommercialCloudSupplierInvoiceSummary?>(null) }
     var transitionConfirmation by remember { mutableStateOf<Pair<CommercialCloudPurchaseDocument, String>?>(null) }
@@ -223,6 +224,9 @@ internal fun CommercialCloudPurchasesScreen(context: Context, onBack: () -> Unit
                             }
                         }
                         if (order.notes.isNotBlank()) Text("ملاحظات: ${order.notes}", color = CloudPurchasesMuted, fontSize = 11.sp)
+                        if (order.status.lowercase() in setOf("draft", "submitted", "approved") && purchaseOrderHasUnmappedRemainingLines(order)) {
+                            TextButton(onClick = { mappingOrder = order }) { Text("ربط عناصر المخزون للبنود القديمة") }
+                        }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                             when (order.status.lowercase()) {
                                 "draft" -> TextButton(onClick = { transitionConfirmation = order to "submit" }) { Text("إرسال للاعتماد") }
@@ -260,6 +264,15 @@ internal fun CommercialCloudPurchasesScreen(context: Context, onBack: () -> Unit
         }
     }
  
+    mappingOrder?.let { order ->
+        PurchaseLineOfferingLinkDialog(
+            context = context,
+            order = order,
+            onDismiss = { mappingOrder = null },
+            onSaved = { mappingOrder = null; reloadToken++ }
+        )
+    }
+
     receiptOrder?.let { order ->
         PurchaseReceiptEntryDialog(
             context = context,
