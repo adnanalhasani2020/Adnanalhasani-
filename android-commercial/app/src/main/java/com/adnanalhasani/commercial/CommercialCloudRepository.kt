@@ -633,6 +633,7 @@ internal fun loadCommercialCloudSaleDocuments(context: Context): List<Commercial
 
 
 internal data class CommercialCloudPurchaseLine(
+    val id: String,
     val lineNumber: Int,
     val description: String,
     val quantityOrdered: String,
@@ -668,6 +669,7 @@ internal fun loadCommercialCloudPurchaseDocuments(context: Context): List<Commer
                 for (lineIndex in 0 until (items?.length() ?: 0)) {
                     val item = items?.optJSONObject(lineIndex) ?: continue
                     add(CommercialCloudPurchaseLine(
+                        id = item.optString("id"),
                         lineNumber = item.optInt("line_number", lineIndex + 1),
                         description = item.optString("item_description").ifBlank { "بند بدون وصف" },
                         quantityOrdered = item.optString("quantity_ordered").takeUnless { it == "null" }.orEmpty(),
@@ -690,6 +692,55 @@ internal fun loadCommercialCloudPurchaseDocuments(context: Context): List<Commer
         }
     }
 }
+
+
+/** Persist a supplier invoice through the authorized atomic server RPC. */
+internal fun recordCommercialCloudSupplierInvoice(
+    context: Context,
+    purchaseOrderId: String,
+    invoiceNumber: String,
+    currencyCode: String,
+    lines: List<CommercialSupplierInvoiceLineInput>,
+    taxMinor: Long,
+    freightMinor: Long,
+    idempotencyKey: String
+): JSONObject {
+    require(purchaseOrderId.isNotBlank() && invoiceNumber.trim().isNotEmpty()) { "أدخل رقم فاتورة المورد." }
+    require(lines.isNotEmpty()) { "أدخل كمية مفوترة واحدة على الأقل." }
+    require(taxMinor >= 0 && freightMinor >= 0) { "الضريبة والشحن لا يمكن أن يكونا سالبين." }
+    require(idempotencyKey.length in 8..200) { "مفتاح عملية الفاتورة غير صالح." }
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val lineArray = JSONArray()
+    lines.forEach { line ->
+        require(line.purchaseOrderItemId.isNotBlank() && line.quantity.isNotBlank()) { "بيانات بند الفاتورة غير مكتملة." }
+        val quantity = line.quantity.toBigDecimalOrNull()
+            ?: throw IllegalArgumentException("أدخل كمية صحيحة لكل بند.")
+        require(quantity > java.math.BigDecimal.ZERO && quantity.scale().coerceAtLeast(0) <= 6) { "كمية الفاتورة يجب أن تكون موجبة وبحد أقصى 6 منازل عشرية." }
+        require(line.unitPriceMinor >= 0) { "سعر الوحدة لا يمكن أن يكون سالبًا." }
+        lineArray.put(JSONObject()
+            .put("purchase_order_item_id", line.purchaseOrderItemId)
+            .put("quantity", quantity.stripTrailingZeros().toPlainString())
+            .put("unit_price_minor", line.unitPriceMinor))
+    }
+    val payload = JSONObject()
+        .put("p_organization_id", orgId)
+        .put("p_purchase_order_id", purchaseOrderId)
+        .put("p_invoice_number", invoiceNumber.trim())
+        .put("p_currency_code", currencyCode)
+        .put("p_lines", lineArray)
+        .put("p_tax_minor", taxMinor)
+        .put("p_freight_minor", freightMinor)
+        .put("p_idempotency_key", idempotencyKey)
+    return JSONObject(commercialCloudRequest(
+        "/rest/v1/rpc/commercial_record_supplier_invoice", "POST", payload, access
+    ))
+}
+
+internal data class CommercialSupplierInvoiceLineInput(
+    val purchaseOrderItemId: String,
+    val quantity: String,
+    val unitPriceMinor: Long
+)
 
 
 internal fun loadCommercialCloudSales(context: Context): List<SaleRecord> {
