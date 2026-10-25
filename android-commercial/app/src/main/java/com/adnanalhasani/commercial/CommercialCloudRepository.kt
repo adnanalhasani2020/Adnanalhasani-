@@ -344,8 +344,11 @@ internal fun getOrCreateCommercialCloudMultiSaleKey(
     lines: List<CommercialCloudCheckoutLine>,
     customerId: String? = null,
     paymentMode: String = "cash",
-    initialPaymentMinor: Long = 0L
+    initialPaymentMinor: Long = 0L,
+    discountMinor: Long = 0L,
+    taxMinor: Long = 0L
 ): String {
+    require(discountMinor >= 0L && taxMinor >= 0L) { "قيمة الخصم والضريبة لا يمكن أن تكون سالبة." }
     val normalizedLines = aggregateCommercialCheckoutLines(lines)
     val canonical = JSONArray()
     normalizedLines.forEach { line ->
@@ -354,6 +357,8 @@ internal fun getOrCreateCommercialCloudMultiSaleKey(
     val payload = JSONObject().put("customer_id", customerId ?: JSONObject.NULL)
         .put("payment_mode", paymentMode)
         .put("initial_payment_minor", if (paymentMode == "cash") JSONObject.NULL else initialPaymentMinor)
+        .put("discount_minor", discountMinor)
+        .put("tax_minor", taxMinor)
         .put("lines", canonical).toString()
     val prefs = context.getSharedPreferences("commercial_cloud_pending_multi_sale_v1", Context.MODE_PRIVATE)
     val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
@@ -395,8 +400,11 @@ internal fun checkoutCommercialCloudSaleMulti(
     idempotencyKey: String,
     customerId: String? = null,
     paymentMode: String = "cash",
-    initialPaymentMinor: Long = 0L
+    initialPaymentMinor: Long = 0L,
+    discountMinor: Long = 0L,
+    taxMinor: Long = 0L
 ): JSONObject {
+    require(discountMinor >= 0L && taxMinor >= 0L) { "قيمة الخصم والضريبة لا يمكن أن تكون سالبة." }
     val normalizedLines = aggregateCommercialCheckoutLines(lines)
     val savedContext = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
     val locationId = savedContext.getString("location_id", null).orEmpty()
@@ -421,7 +429,9 @@ internal fun checkoutCommercialCloudSaleMulti(
             .put("p_idempotency_key", idempotencyKey)
             .put("p_customer_id", customerId ?: JSONObject.NULL)
             .put("p_payment_mode", paymentMode)
-            .put("p_initial_payment_minor", if (paymentMode == "cash") JSONObject.NULL else initialPaymentMinor),
+            .put("p_initial_payment_minor", if (paymentMode == "cash") JSONObject.NULL else initialPaymentMinor)
+            .put("p_discount_minor", discountMinor)
+            .put("p_tax_minor", taxMinor),
         access
     ))
 }
