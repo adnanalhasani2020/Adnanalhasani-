@@ -550,7 +550,17 @@ internal fun loadCommercialCloudSaleDocuments(context: Context): List<Commercial
                         totalMinor = invoice.optLong("total_minor", 0L),
                         currencyCode = invoice.optString("currency_code").takeUnless { it == "null" }.orEmpty(),
                         recordedAt = invoice.optString("recorded_at").takeUnless { it == "null" }.orEmpty(),
-                        state = invoice.optString("state").takeUnless { it == "null" }.orEmpty()
+                        state = invoice.optString("state").takeUnless { it == "null" }.orEmpty(),
+                        obligation = invoice.optJSONObject("obligation")?.let { ob ->
+                            val obligationId = ob.optString("id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+                            if (obligationId.isBlank()) null else CommercialCloudSupplierObligationSummary(
+                                id = obligationId,
+                                amountDueMinor = ob.optLong("amount_due_minor", 0L),
+                                amountPaidMinor = ob.optLong("amount_paid_minor", 0L),
+                                state = ob.optString("state").takeUnless { it == "null" }.orEmpty(),
+                                currencyCode = ob.optString("currency_code").takeUnless { it == "null" }.orEmpty()
+                            )
+                        }
                     ))
                 }
             }.sortedBy { it.recordedAt }
@@ -709,13 +719,22 @@ internal data class CommercialCloudPurchaseLine(
     val offeringId: String?
 )
 
+internal data class CommercialCloudSupplierObligationSummary(
+    val id: String,
+    val amountDueMinor: Long,
+    val amountPaidMinor: Long,
+    val state: String,
+    val currencyCode: String
+)
+
 internal data class CommercialCloudSupplierInvoiceSummary(
     val id: String,
     val invoiceNumber: String,
     val totalMinor: Long,
     val currencyCode: String,
     val recordedAt: String,
-    val state: String
+    val state: String,
+    val obligation: CommercialCloudSupplierObligationSummary?
 )
 
 internal data class CommercialCloudPurchaseDocument(
@@ -736,7 +755,7 @@ internal data class CommercialCloudPurchaseDocument(
 internal fun loadCommercialCloudPurchaseDocuments(context: Context): List<CommercialCloudPurchaseDocument> {
     val (orgId, access) = commercialMasterDataAccess(context)
     val path = "/rest/v1/commercial_purchase_orders" +
-        "?select=id,order_number,status,ordered_at,expected_at,currency_code,notes,receive_location_id,supplier:commercial_suppliers(display_name),items:commercial_purchase_order_items(id,line_number,item_description,quantity_ordered,quantity_received,unit_cost_minor,offering_id),supplier_invoices:commercial_supplier_invoices(id,invoice_number,total_minor,currency_code,recorded_at,state)" +
+        "?select=id,order_number,status,ordered_at,expected_at,currency_code,notes,receive_location_id,supplier:commercial_suppliers(display_name),items:commercial_purchase_order_items(id,line_number,item_description,quantity_ordered,quantity_received,unit_cost_minor,offering_id),supplier_invoices:commercial_supplier_invoices(id,invoice_number,total_minor,currency_code,recorded_at,state,obligation:commercial_supplier_obligations(id,amount_due_minor,amount_paid_minor,state,currency_code))" +
         "&organization_id=eq.$orgId&order=created_at.desc.nullslast,id.asc"
     val rows = commercialCloudPagedGet(path, access)
     return buildList {
