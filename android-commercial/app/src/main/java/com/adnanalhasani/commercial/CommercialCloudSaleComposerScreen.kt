@@ -175,8 +175,8 @@ internal fun CommercialCloudSaleComposerScreen(
                                 submitting = false
                                 result.onSuccess {
                                     configureUnitProduct = null
-                                    selectedUnitCodes = selectedUnitCodes + (product.cloudOfferingId to newUnitCode)
-                                    notice = "تم حفظ وحدة البيع " + newUnitName + " ومعامل التحويل " + factor + "."
+                                    invoiceLines = invoiceLines + ComposerDraftLine(UUID.randomUUID().toString(), product.cloudOfferingId, "1", newUnitCode)
+                                    notice = "تم حفظ وحدة البيع " + newUnitName + " ومعامل التحويل " + factor + " وإضافة سطر بها إلى الفاتورة."
                                     reloadToken++
                                 }.onFailure { error = it.message ?: "تعذر حفظ وحدة البيع." }
                             }
