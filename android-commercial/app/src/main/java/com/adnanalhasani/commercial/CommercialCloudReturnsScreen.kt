@@ -49,6 +49,9 @@ internal fun CommercialCloudReturnsScreen(context: Context, onBack: () -> Unit) 
     var condition by remember { mutableStateOf("resellable") }
     var restock by remember { mutableStateOf(true) }
     var inspectionNote by remember { mutableStateOf("") }
+    var refundTarget by remember { mutableStateOf<CommercialCloudSaleReturn?>(null) }
+    var refundMethod by remember { mutableStateOf("cash") }
+    var refundEvidence by remember { mutableStateOf("") }
     var returnableSales by remember { mutableStateOf<List<CommercialCloudReturnableSale>>(emptyList()) }
     var salePickerOpen by remember { mutableStateOf(false) }
     var requestTarget by remember { mutableStateOf<CommercialCloudReturnableSale?>(null) }
@@ -155,9 +158,20 @@ internal fun CommercialCloudReturnsScreen(context: Context, onBack: () -> Unit) 
                             OutlinedButton(enabled=!busy,modifier=Modifier.fillMaxWidth(),onClick={decisionTarget=selected;approve=false;amount="0";note=""}) { Text("رفض الطلب") }
                         }
                         if(selected.status=="approved" && selected.restockStatus!="restocked" && selected.restockStatus!="not_required") {
-                            Text("إعادة المخزون للمؤسسات متوقفة آليًا حتى ربط المرتجع بموقع مخزون محدد؛ لن يتم تعديل الكميات دون هذا الربط.",color=Color(0xFF925500),fontSize=12.sp)
+                            Text("يجب إكمال فحص الأصناف أولًا. سيضيف الإجراء الكميات المؤهلة فقط إلى موقع المخزون المرتبط بالمرتجع.",color=Color(0xFF925500),fontSize=12.sp)
+                            Button(enabled=!busy,onClick={
+                                val target=selected
+                                executeAction({restockCommercialCloudSaleReturn(context,target.id)},"تم تنفيذ إعادة المخزون أو تأكيد تنفيذها دون تكرار.")
+                            },modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=ReturnGreen)) { Text("إعادة الكميات المؤهلة للمخزون") }
                         }
-                        if(selected.refundStatus=="pending") Text("رد المبلغ ما زال معلقًا؛ الموافقة لا تنفذ تحويلًا ماليًا. يلزم مسار استرداد مالي معتمد.",color=Color(0xFF925500),fontSize=12.sp)
+                        if(selected.status=="completed" && selected.refundStatus in setOf("pending","failed") &&
+                            (selected.approvedRefundMinor ?: 0L)>0L &&
+                            selected.restockStatus in setOf("restocked","not_required")) {
+                            Text("قبل التسجيل: نفّذ رد المبلغ للعميل فعليًا بالطريقة المختارة، ثم أدخل مرجع الإثبات. هذا الإجراء يوثّق الدفع ويُنشئ قيد التسوية؛ لا يحوّل الأموال تلقائيًا.",color=Color(0xFF925500),fontSize=12.sp)
+                            Button(enabled=!busy,onClick={refundTarget=selected;refundMethod="cash";refundEvidence=""},modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=ReturnGreen)) { Text("تسجيل استرداد مالي منفّذ") }
+                        } else if(selected.refundStatus=="pending") {
+                            Text("رد المبلغ معلق. يلزم اكتمال القرار وفحص/إعادة المخزون قبل تسجيل الاسترداد.",color=Color(0xFF925500),fontSize=12.sp)
+                        }
                     }
                 }
             }
@@ -287,8 +301,36 @@ internal fun CommercialCloudReturnsScreen(context: Context, onBack: () -> Unit) 
         executeAction({inspectCommercialCloudSaleReturnItem(context,target.id,condition,restock,inspectionNote)},"تم حفظ الفحص.")
         inspectionTarget=null
     }){Text("حفظ الفحص")}},dismissButton={TextButton(onClick={inspectionTarget=null}){Text("إلغاء")}})
+
+    if(refundTarget!=null) AlertDialog(
+        onDismissRequest={if(!busy)refundTarget=null},
+        title={Text("تأكيد تسجيل الاسترداد المالي")},
+        text={
+            Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                Text("المبلغ المعتمد: ${money(refundTarget!!.approvedRefundMinor ?: 0L,refundTarget!!.currencyCode)}",fontWeight=FontWeight.Bold,color=ReturnInk)
+                Text("لا تتابع إلا إذا سلّمت المبلغ فعليًا للعميل أو أكدت الدفع لدى مزود الخدمة. هذا التسجيل لا ينفذ تحويلًا مصرفيًا.",color=Color(0xFF925500),fontSize=12.sp)
+                listOf("cash" to "نقدًا","bank_transfer" to "تحويل بنكي","provider" to "مزود دفع").forEach{(v,l)->
+                    Row(verticalAlignment=Alignment.CenterVertically) {
+                        RadioButton(selected=refundMethod==v,onClick={refundMethod=v})
+                        Text(l)
+                    }
+                }
+                OutlinedTextField(value=refundEvidence,onValueChange={refundEvidence=it.take(200)},label={Text("مرجع إثبات الدفع (إلزامي)")},singleLine=true,modifier=Modifier.fillMaxWidth())
+            }
+        },
+        confirmButton={Button(enabled=!busy && refundEvidence.trim().length>=3,onClick={
+            val target=refundTarget!!
+            val method=refundMethod
+            val evidence=refundEvidence.trim()
+            executeAction({
+                executeCommercialCloudSaleReturnRefund(context,target.id,method,evidence)
+            },"تم توثيق الاسترداد المالي وترحيل القيد المحاسبي.")
+            refundTarget=null
+        },colors=ButtonDefaults.buttonColors(containerColor=ReturnGreen)){Text("تأكيد: تم الدفع فعليًا")}},
+        dismissButton={TextButton(onClick={if(!busy)refundTarget=null}){Text("إلغاء")}}
+    )
 }
 
 private fun reason(v:String)=when(v){"customer_request"->"طلب العميل";"damaged"->"تلف";"wrong_item"->"صنف غير صحيح";"not_as_described"->"غير مطابق للوصف";"duplicate_charge"->"خصم مكرر";"other"->"أخرى";else->v.ifBlank{"غير محدد"}}
-private fun label(v:String)=when(v.lowercase(Locale.ROOT)){"requested"->"بانتظار القرار";"approved"->"موافق عليه";"rejected"->"مرفوض";"pending"->"معلق";"completed"->"مكتمل";"not_required"->"غير مطلوب";"resellable"->"صالح للبيع";"damaged"->"تالف";"written_off"->"مستبعد";"uninspected"->"غير مفحوص";"partial"->"جزئي";else->v.ifBlank{"غير محدد"}}
+private fun label(v:String)=when(v.lowercase(Locale.ROOT)){"requested"->"بانتظار القرار";"approved"->"موافق عليه";"rejected"->"مرفوض";"pending"->"معلق";"failed"->"فشل";"refunded"->"تم الاسترداد";"completed"->"مكتمل";"not_required"->"غير مطلوب";"resellable"->"صالح للبيع";"damaged"->"تالف";"written_off"->"مستبعد";"uninspected"->"غير مفحوص";"partial"->"جزئي";else->v.ifBlank{"غير محدد"}}
 private fun money(v:Long,c:String)="${String.format(Locale.US,"%,d",v)} ${c.ifBlank{"—"}}"
