@@ -1,4 +1,6 @@
 -- Support fractional procurement quantities end-to-end (up to 6 decimal places).
+-- This view depends on stock movement quantity_delta; recreate it around the type change.
+DROP VIEW public.commercial_accounting_integrity_checks;
 ALTER TABLE public.commercial_purchase_order_items ALTER COLUMN quantity_ordered TYPE numeric(18,6) USING quantity_ordered::numeric(18,6), ALTER COLUMN quantity_received TYPE numeric(18,6) USING quantity_received::numeric(18,6);
 ALTER TABLE public.commercial_purchase_receipt_items ALTER COLUMN quantity TYPE numeric(18,6) USING quantity::numeric(18,6);
 ALTER TABLE public.commercial_inventory_receipts ALTER COLUMN quantity TYPE numeric(20,6) USING quantity::numeric(20,6);
@@ -172,3 +174,57 @@ BEGIN
   RETURN jsonb_build_object('receipt_id',v_receipt_id,'purchase_order_id',p_purchase_order_id,'status',v_new_status,'line_count',v_item_count,'idempotent_replay',false);
 END;
 $function$;
+
+-- Restore the integrity view with the same public contract after quantity_delta becomes numeric.
+CREATE VIEW public.commercial_accounting_integrity_checks AS
+ WITH entry_totals AS (
+         SELECT je.organization_id,
+            je.id,
+            je.status,
+            COALESCE(sum(jl.debit_minor::numeric), 0::numeric) AS debits,
+            COALESCE(sum(jl.credit_minor::numeric), 0::numeric) AS credits
+           FROM commercial_journal_entries je
+             LEFT JOIN commercial_journal_lines jl ON jl.journal_entry_id = je.id
+          GROUP BY je.organization_id, je.id, je.status
+        ), restock_issues AS (
+         SELECT r.organization_id,
+            r.id AS return_id,
+            ri.id AS return_item_id
+           FROM commercial_sales_returns r
+             JOIN commercial_sale_return_items ri ON ri.return_id = r.id
+          WHERE r.organization_id IS NOT NULL AND ri.restocked_quantity > 0 AND (NOT (EXISTS ( SELECT 1
+                   FROM commercial_return_restock_postings rp
+                  WHERE rp.return_item_id = ri.id AND rp.return_id = r.id AND rp.quantity = ri.restocked_quantity)) OR NOT (EXISTS ( SELECT 1
+                   FROM commercial_stock_movements sm
+                     JOIN commercial_return_restock_postings rp ON rp.source_ref = sm.source_ref
+                  WHERE rp.return_item_id = ri.id AND sm.movement_type = 'return'::text AND sm.quantity_delta = ri.restocked_quantity)))
+        ), cancellation_issues AS (
+         SELECT s.organization_id,
+            s.id AS sale_id
+           FROM commercial_sales s
+          WHERE s.status = 'cancelled'::text AND s.organization_id IS NOT NULL AND ((EXISTS ( SELECT 1
+                   FROM commercial_journal_entries je
+                  WHERE je.organization_id = s.organization_id AND je.source_type = 'sale'::text AND je.source_id = s.id AND je.status = 'posted'::text)) OR (EXISTS ( SELECT 1
+                   FROM commercial_stock_movements sm
+                  WHERE sm.sale_id = s.id AND sm.movement_type = 'sale'::text AND sm.quantity_delta < 0 AND NOT (EXISTS ( SELECT 1
+                           FROM commercial_stock_movements cm
+                          WHERE cm.source_ref = ((((('sale-cancel:'::text || s.id) || ':'::text) || sm.offering_id) || ':'::text) || "substring"(sm.source_ref, ':location:([0-9a-fA-F-]{36})$'::text)))))))
+        )
+ SELECT 'unbalanced_posted_entry'::text AS issue_type,
+    entry_totals.organization_id,
+    entry_totals.id::text AS entity_id,
+    jsonb_build_object('debits', entry_totals.debits, 'credits', entry_totals.credits, 'difference', entry_totals.debits - entry_totals.credits) AS details
+   FROM entry_totals
+  WHERE entry_totals.status = 'posted'::text AND entry_totals.debits <> entry_totals.credits
+UNION ALL
+ SELECT 'return_restock_mismatch'::text AS issue_type,
+    restock_issues.organization_id,
+    restock_issues.return_item_id::text AS entity_id,
+    jsonb_build_object('return_id', restock_issues.return_id) AS details
+   FROM restock_issues
+UNION ALL
+ SELECT 'cancelled_sale_not_fully_reversed'::text AS issue_type,
+    cancellation_issues.organization_id,
+    cancellation_issues.sale_id::text AS entity_id,
+    '{}'::jsonb AS details
+   FROM cancellation_issues;;
