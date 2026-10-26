@@ -184,7 +184,7 @@ internal fun CustomerOrderFulfillmentScreen(context: Context,onBack:()->Unit) {
    }
   }
  }
- cashTarget?.let{order->AlertDialog(onDismissRequest={cashTarget=null},title={Text("تأكيد استلام المبلغ نقدًا")},text={Text("سيُسجّل البيع والتحصيل وحركة المخزون بقيمة "+customerOrderMoney(order.totalMinor,order.currencyCode)+". تابع فقط إذا استلمت المبلغ كاملًا.")},confirmButton={Button(onClick={cashTarget=null;fulfill(order)},enabled=busy==null&&locationId.isNotBlank()){Text("استلمت المبلغ — إتمام البيع")}},dismissButton={TextButton(onClick={cashTarget=null}){Text("رجوع")}})
+ cashTarget?.let{order->AlertDialog(onDismissRequest={cashTarget=null},title={Text("تأكيد استلام المبلغ نقدًا")},text={Text("سيُسجّل البيع والتحصيل وحركة المخزون بقيمة "+customerOrderMoney(order.totalMinor,order.currencyCode)+". تابع فقط إذا استلمت المبلغ كاملًا.")},confirmButton={Button(onClick={cashTarget=null;fulfill(order)},enabled=busy==null&&locationId.isNotBlank()){Text("استلمت المبلغ — إتمام البيع")}},dismissButton={TextButton(onClick={cashTarget=null}){Text("رجوع")}})}
  decisionTarget?.let{target->
   var reason by remember(target.id,target.reject){mutableStateOf("")}
   AlertDialog(onDismissRequest={if(busy==null)decisionTarget=null},title={Text(if(target.booking){if(target.reject)"رفض الحجز" else "تأكيد الحجز"}else{if(target.reject)"رفض الطلب" else "قبول الطلب"})},
