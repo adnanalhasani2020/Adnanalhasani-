@@ -74,9 +74,10 @@ def test_database_regression_checks_cover_privileges_capacity_and_idempotency():
 
 
 CANCELLATION_MIGRATION = ROOT / "supabase/migrations/20261027210000_atomic_customer_booking_cancellation.sql"
+IDEMPOTENT_CANCELLATION_MIGRATION = ROOT / "supabase/migrations/20261027220000_idempotent_customer_booking_cancellation.sql"
 
 
-def test_booking_cancellation_requires_pending_linked_order():
+def test_booking_cancellation_requires_pending_linked_order_atomically():
     sql = CANCELLATION_MIGRATION.read_text(encoding="utf-8").lower()
     order_lock = sql.index("from public.commercial_customer_orders o", sql.index("create or replace function public.commercial_customer_portal_cancel_booking"))
     order_status_guard = sql.index("if v_order.status is distinct from 'pending' then")
@@ -90,6 +91,28 @@ def test_booking_cancellation_requires_pending_linked_order():
         "booking_cancellation_race_retry",
         "booking_order_cancellation_race_retry",
         "status = 'cancelled'",
+        "from public, anon",
+        "to authenticated",
+    ):
+        assert marker in sql
+
+
+def test_booking_cancellation_retry_is_idempotent_but_checks_linked_order():
+    sql = IDEMPOTENT_CANCELLATION_MIGRATION.read_text(encoding="utf-8").lower()
+    ownership_check = sql.index("if v_account_id is null")
+    booking_lock = sql.index("for update", sql.index("from public.commercial_bookings", ownership_check))
+    already_cancelled = sql.index("if v_booking.status = 'cancelled' then")
+    linked_order_lock = sql.index("from public.commercial_customer_orders o", already_cancelled)
+    idempotent_return = sql.index("'idempotent_replay', true", linked_order_lock)
+    pending_guard = sql.index("if v_order.status is distinct from 'pending' then")
+    first_state_change = sql.index("update public.commercial_bookings", pending_guard)
+    assert ownership_check < booking_lock < already_cancelled < linked_order_lock < idempotent_return < pending_guard < first_state_change
+    for marker in (
+        "cancelled_booking_order_state_inconsistent",
+        "booking_order_cancellation_not_allowed_for_status",
+        "booking_order_cancellation_requires_unpaid_order",
+        "booking_order_cancellation_race_retry",
+        "'idempotent_replay', false",
         "from public, anon",
         "to authenticated",
     ):
