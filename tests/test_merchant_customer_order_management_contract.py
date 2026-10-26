@@ -48,7 +48,7 @@ def test_merchant_android_screen_exposes_search_filters_booking_decisions_hide_a
     screen = SCREEN.read_text(encoding="utf-8")
     repository = REPOSITORY.read_text(encoding="utf-8")
     assert "loadMerchantBookings(context,hidden)" in screen
-    for marker in ("بحث برقم الطلب", "الحجوزات", "إخفاء من القائمة", "إظهار مجددًا", "قبول الطلب", "رفض الطلب", "تأكيد الحجز", "رفض الحجز", "اعتماد وإتمام البيع", "التفاصيل"):
+    for marker in ("بحث برقم الطلب", "تصفية التاريخ", "الحجوزات", "إخفاء من القائمة", "إظهار مجددًا", "قبول الطلب", "رفض الطلب", "تأكيد الحجز", "رفض الحجز", "اعتماد وإتمام البيع", "التفاصيل"):
         assert marker in screen
     for marker in (
         "decideMerchantCustomerOrder(" ,
