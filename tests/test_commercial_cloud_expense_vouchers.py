@@ -47,6 +47,16 @@ class CommercialCloudExpenseVoucherTests(unittest.TestCase):
         self.assertIn("m.role IN ('owner','admin','manager')", role_fix)
         self.assertIn("REVOKE ALL ON TABLE public.commercial_expense_vouchers FROM PUBLIC, anon, authenticated", sql)
 
+    def test_supplier_payments_use_method_specific_accounts_and_invoker_wrapper(self):
+        migration = (ROOT / "supabase/migrations/20261026169000_map_supplier_disbursements_by_method.sql").read_text(encoding="utf-8")
+        self.assertIn("WHEN 'cash' THEN 'cash'", migration)
+        self.assertIn("WHEN 'bank_transfer' THEN 'bank'", migration)
+        self.assertIn("WHEN 'check' THEN 'check_clearing'", migration)
+        self.assertIn("WHEN 'other' THEN 'other_disbursements'", migration)
+        self.assertIn("supplier_payment_account_not_configured_for_currency", migration)
+        self.assertIn("LANGUAGE sql SECURITY INVOKER", migration)
+        self.assertIn("commercial_private.commercial_record_supplier_payment", migration)
+
     def test_financial_rpc_wrappers_are_invokers_and_private_logic_is_guarded(self):
         migration = (ROOT / "supabase/migrations/20261026168000_move_financial_rpc_logic_private.sql").read_text(encoding="utf-8")
         self.assertIn("public.commercial_record_expense", migration)
