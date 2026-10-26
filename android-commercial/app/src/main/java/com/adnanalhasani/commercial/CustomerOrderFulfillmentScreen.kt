@@ -154,6 +154,7 @@ internal fun CustomerOrderFulfillmentScreen(context: Context,onBack:()->Unit) {
          Button(onClick={decisionTarget=MerchantDecision(order.id,false,false)},enabled=busy==null,modifier=Modifier.weight(1f)){Text("قبول الطلب")}
          OutlinedButton(onClick={decisionTarget=MerchantDecision(order.id,false,true)},enabled=busy==null,modifier=Modifier.weight(1f)){Text("رفض الطلب")}
         }
+        }
         if(order.status in setOf("pending","confirmed","in_progress")&&order.fulfillmentSupported)Button(onClick={if(order.paymentStatus=="unpaid")cashTarget=order else fulfill(order)},enabled=busy==null&&locationId.isNotBlank(),modifier=Modifier.fillMaxWidth()){Icon(Icons.Default.ReceiptLong,null);Spacer(Modifier.width(7.dp));Text("اعتماد وإتمام البيع")}
         else if(order.status in setOf("pending","confirmed","in_progress"))Text("الإتمام الآلي غير متاح لهذا النوع؛ لم تُنفذ حركة مالية أو مخزنية.",fontSize=11.sp,color=CustomerOrdersMuted)
        }
