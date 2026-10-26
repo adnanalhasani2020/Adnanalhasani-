@@ -179,18 +179,53 @@ def test_web_session_can_buy_sellable_product_and_receive_result(tmp_path):
     assert checkout["body"]["product_name"] == "Real bottle"
     assert checkout["body"]["total_minor"] == 1980
     assert checkout["body"]["quantity_remaining"] == 3
+    assert checkout["body"]["sale_line_id"]
 
-    # Read the catalog again through the public user flow and prove stock changed.
+    # Returns require a persisted grant; a customer session alone must not create authority.
+    unauthorized_return = request(
+        app, "/api/returns", method="POST", cookie=session_cookie,
+        body={
+            "sale_id": checkout["body"]["sale_id"],
+            "items": [{"sale_line_id": checkout["body"]["sale_line_id"], "quantity": 1}],
+            "idempotency_key": "web-return-denied-001", "reason": "customer return",
+        },
+    )
+    assert unauthorized_return["status"] == "403 Forbidden"
+
+    me = request(app, "/api/me", cookie=session_cookie)
+    return_grant = uid()
+    db = connect_database(db_path)
+    db.execute(
+        "INSERT INTO authorization_grants(authorization_grant_id,subject_person_id,agent_id,action_code,"
+        "scope_ref,context_ref,delegation_id,state,effective_from,effective_to,created_at,updated_at) "
+        "VALUES(?,?,NULL,'return_sale',?,?,NULL,'active',?,NULL,?,?)",
+        (return_grant, me["body"]["person_id"], checkout["body"]["sale_id"], activity, before, before, before),
+    )
+    db.commit()
+    db.close()
+    partial_return = request(
+        app, "/api/returns", method="POST", cookie=session_cookie,
+        body={
+            "sale_id": checkout["body"]["sale_id"],
+            "items": [{"sale_line_id": checkout["body"]["sale_line_id"], "quantity": 1}],
+            "idempotency_key": "web-return-partial-001", "reason": "customer returned one unit",
+        },
+    )
+    assert partial_return["status"] == "200 OK"
+    assert partial_return["body"]["sale_state"] == "fulfilled"
+    assert partial_return["body"]["payment_refund_performed"] is False
+    assert partial_return["body"]["financial_effects"] == "inventory_only"
+
+    # Return restores one unit; the next checkout can sell the remaining four.
     refreshed_catalog = request(app, "/api/catalog", cookie=session_cookie)
     assert refreshed_catalog["status"] == "200 OK"
-    assert refreshed_catalog["body"]["items"][0]["available_quantity"] == 3
+    assert refreshed_catalog["body"]["items"][0]["available_quantity"] == 4
 
-    # Sell the remaining stock; a depleted offering must disappear from the catalog.
     final_checkout = request(
         app, "/api/checkout", method="POST", cookie=session_cookie,
         body={
             "offering_id": item["offering_id"], "activity_id": activity,
-            "quantity": 3, "scope_key": "store-A", "location_ref": "front",
+            "quantity": 4, "scope_key": "store-A", "location_ref": "front",
             "idempotency_key": "web-checkout-002", "sale_id": uid(),
         },
     )
