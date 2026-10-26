@@ -2372,10 +2372,10 @@ internal fun loadCustomerOrderFulfillmentQueue(context: Context): List<CustomerO
 
 internal fun loadCustomerOrderFulfillmentLocations(context: Context): List<CustomerOrderFulfillmentLocation> {
     val (orgId, access) = commercialMasterDataAccess(context)
-    val rows = JSONArray(commercialCloudPagedGet(
+    val rows = commercialCloudPagedGet(
         "/rest/v1/commercial_organization_locations?select=id,name&organization_id=eq.$orgId&state=eq.active&order=name.asc",
         access
-    ))
+    )
     return (0 until rows.length()).map { index ->
         val row = rows.getJSONObject(index)
         CustomerOrderFulfillmentLocation(row.optString("id"), row.optString("name"))
