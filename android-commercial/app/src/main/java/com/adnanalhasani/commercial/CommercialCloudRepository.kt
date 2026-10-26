@@ -33,6 +33,10 @@ private fun commercialCloudActionableError(raw: String, status: Int): String {
             "لم يُحفظ سند الصرف لأن حساب الصندوق/البنك غير مربوط بالعملة المختارة في دليل الحسابات. اضبط الربط أولًا ثم أعد المحاولة؛ لم يُسجل قيد أو سند. التفاصيل: $detail"
         message.contains("customer_payment_journal_not_posted", ignoreCase = true) ->
             "لم يؤكد الخادم ترحيل قيد التحصيل، لذلك رُفضت المعاملة كاملة. لا تنشئ تحصيلًا جديدًا بمفتاح مختلف؛ حدّث السجل وراجع القيد قبل إعادة المحاولة. التفاصيل: $detail"
+        message.contains("receipt_and_ar_mappings_required", ignoreCase = true) ->
+            "لم يُرحّل التحصيل لأن حساب وسيلة القبض أو ذمم العملاء غير مضبوط. راجع دليل الحسابات قبل إعادة المحاولة. التفاصيل: $detail"
+        message.contains("supplier_payment_account_not_configured_for_currency", ignoreCase = true) ->
+            "لم يُسجل تسديد المورد لأن حساب وسيلة الدفع غير مربوط بالعملة المختارة. اضبط ربط الصندوق/البنك/الشيكات أولًا ثم أعد المحاولة. التفاصيل: $detail"
         message.contains("collection_exceeds_outstanding_balance", ignoreCase = true) ||
             message.contains("overpayment", ignoreCase = true) ->
             "رُفض التحصيل لأن المبلغ يتجاوز الرصيد المستحق. حدّث الفاتورة وأدخل المبلغ المتبقي الفعلي. التفاصيل: $detail"
