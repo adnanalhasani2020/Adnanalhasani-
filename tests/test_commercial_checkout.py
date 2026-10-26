@@ -469,6 +469,30 @@ def test_database_rejects_stock_return_while_invoice_is_issued(tmp_path):
     )
     db.commit()
 
+    return_grant = uid()
+    db.execute(
+        "INSERT INTO authorization_grants(authorization_grant_id,subject_person_id,agent_id,action_code,"
+        "scope_ref,context_ref,delegation_id,state,effective_from,effective_to,created_at,updated_at) "
+        "VALUES(?,?,NULL,'return_sale',?,?,NULL,'active',?,NULL,?,?)",
+        (return_grant, request["actor_person_id"], request["sale_id"], request["activity_id"],
+         BEFORE, BEFORE, BEFORE),
+    )
+    db.commit()
+    app_line = db.execute(
+        "SELECT sale_line_id,quantity FROM sale_lines WHERE sale_id=?",
+        (request["sale_id"],),
+    ).fetchone()
+    with pytest.raises(ValidationError, match="Invoice, Obligation, and Payment financial reconciliation"):
+        SaleApplication().return_sale_items(
+            db, request["sale_id"], request["actor_person_id"], return_grant,
+            items=[{"sale_line_id": app_line[0], "quantity": 1}],
+            idempotency_key="return-invoice-block-001", reason="return with invoice",
+            now=datetime(2026, 10, 17, 12, 1, tzinfo=timezone.utc),
+        )
+    assert db.execute(
+        "SELECT COUNT(*) FROM inventory_movements WHERE source_type='sale_return'"
+    ).fetchone()[0] == 0
+
     line_id = db.execute(
         "SELECT sale_line_id,quantity FROM sale_lines WHERE sale_id=?",
         (request["sale_id"],),
