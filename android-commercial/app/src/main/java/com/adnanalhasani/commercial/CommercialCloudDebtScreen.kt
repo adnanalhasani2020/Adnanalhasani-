@@ -1,6 +1,7 @@
 package com.adnanalhasani.commercial
 
 import android.content.Context
+import android.content.Intent
 import android.os.Handler
 import android.os.Looper
 import androidx.compose.foundation.layout.Arrangement
@@ -47,6 +48,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.text.NumberFormat
+import java.util.Currency
 import java.util.Locale
 import java.util.concurrent.Executors
 
@@ -56,8 +58,15 @@ private val DebtMuted = Color(0xFF71817B)
 private val DebtIo = Executors.newSingleThreadExecutor()
 private val DebtMain = Handler(Looper.getMainLooper())
 
-private fun cloudDebtMoney(amount: Long, currency: String): String =
-    NumberFormat.getIntegerInstance(Locale.US).format(amount) + " " + currency
+private fun cloudDebtMoney(amount: Long, currency: String): String {
+    val scale = runCatching { Currency.getInstance(currency).defaultFractionDigits.coerceIn(0, 6) }.getOrDefault(0)
+    val value = java.math.BigDecimal.valueOf(amount).movePointLeft(scale)
+        .setScale(scale, java.math.RoundingMode.UNNECESSARY)
+    return NumberFormat.getNumberInstance(Locale.US).apply {
+        minimumFractionDigits = scale
+        maximumFractionDigits = scale
+    }.format(value) + " " + currency
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -70,6 +79,7 @@ internal fun CommercialCloudDebtScreen(context: Context, onBack: () -> Unit) {
     var refresh by remember { mutableIntStateOf(0) }
     var error by remember { mutableStateOf("") }
     var message by remember { mutableStateOf("") }
+    var receiptText by remember { mutableStateOf("") }
 
     LaunchedEffect(refresh) {
         busy = true
@@ -186,19 +196,56 @@ internal fun CommercialCloudDebtScreen(context: Context, onBack: () -> Unit) {
                     busy = true
                     error = ""
                     DebtIo.execute {
-                        val result = runCatching { recordCommercialCloudCustomerPayment(context, target.saleId, value, method) }
+                        val result = runCatching {
+                            val payment = recordCommercialCloudCustomerPayment(context, target.saleId, value, method)
+                            val paymentId = payment.optString("payment_id")
+                            require(paymentId.isNotBlank()) { "أكد الخادم التحصيل دون إرجاع مرجع الدفعة." }
+                            val receipt = loadCommercialCloudCustomerReceipt(context, paymentId)
+                            val sale = receipt.optJSONObject("sale")
+                            val customer = sale?.optJSONObject("customer")?.optString("display_name").orEmpty().ifBlank { target.customerName }
+                            val saleNumber = sale?.optString("receipt_number").orEmpty().ifBlank { target.receiptNumber }
+                            val receiptNumber = receipt.optLong("receipt_number", 0L)
+                            val paidMinor = receipt.optLong("amount_minor", value)
+                            val currencyCode = receipt.optString("currency_code").ifBlank { target.currencyCode }
+                            val createdAt = receipt.optString("created_at").replace('T', ' ').take(19)
+                            val methodLabel = when (receipt.optString("payment_method_type", method)) {
+                                "cash" -> "نقدي"
+                                "bank_transfer" -> "تحويل بنكي"
+                                "card" -> "بطاقة"
+                                else -> "أخرى"
+                            }
+                            "سند قبض رقم RC-$receiptNumber\nالعميل: $customer\nفاتورة رقم: $saleNumber\nالمبلغ المقبوض: ${cloudDebtMoney(paidMinor, currencyCode)}\nطريقة الدفع: $methodLabel\nالتاريخ: $createdAt\nمرجع الدفعة: $paymentId"
+                        }
                         DebtMain.post {
                             busy = false
-                            result.onSuccess {
+                            result.onSuccess { text ->
                                 selected = null
-                                message = "تم تسجيل التحصيل وربطه بالقيد المحاسبي في قاعدة البيانات."
+                                receiptText = text
+                                message = "تم تسجيل التحصيل وإصدار سند قبض مرقّم مرتبط بالدفعة المحاسبية."
                                 refresh++
-                            }.onFailure { error = it.message ?: "تعذر تسجيل التحصيل." }
+                            }.onFailure { error = "تم إرسال التحصيل؛ تعذر تجهيز نسخة السند للعرض. حدّث السجل وتحقق من الدفعة قبل إعادة المحاولة. التفاصيل: ${it.message ?: "غير متاح"}" }
                         }
                     }
                 }
             ) { Text(if (busy) "جارٍ الحفظ..." else "تأكيد التحصيل") }
         },
         dismissButton = { TextButton(onClick = { if (!busy) selected = null }) { Text("إلغاء") } }
+    )
+
+    if (receiptText.isNotBlank()) AlertDialog(
+        onDismissRequest = { receiptText = "" },
+        title = { Text("سند قبض") },
+        text = { Text(receiptText, color = DebtInk) },
+        confirmButton = {
+            Button(onClick = {
+                val intent = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_SUBJECT, "سند قبض - متجري")
+                    putExtra(Intent.EXTRA_TEXT, receiptText)
+                }
+                context.startActivity(Intent.createChooser(intent, "مشاركة سند القبض").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }) { Text("مشاركة / طباعة") }
+        },
+        dismissButton = { TextButton(onClick = { receiptText = "" }) { Text("إغلاق") } }
     )
 }
