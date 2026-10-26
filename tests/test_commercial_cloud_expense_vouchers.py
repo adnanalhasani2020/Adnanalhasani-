@@ -46,6 +46,13 @@ class CommercialCloudExpenseVoucherTests(unittest.TestCase):
         self.assertIn("m.role IN ('owner','admin','manager','accountant')", sql)
         self.assertIn("REVOKE ALL ON TABLE public.commercial_expense_vouchers FROM PUBLIC, anon, authenticated", sql)
 
+    def test_android_expense_amounts_use_currency_minor_units(self):
+        screen = SCREEN.read_text(encoding="utf-8")
+        self.assertIn("Currency.getInstance(code).defaultFractionDigits", screen)
+        self.assertIn("movePointRight(cloudExpenseCurrencyScale(currency))", screen)
+        self.assertIn("longValueExact()", screen)
+        self.assertIn("formatCloudExpenseMinor(voucher.amountMinor, voucher.currencyCode)", screen)
+
     def test_android_expense_screen_uses_cloud_rpc_and_no_local_fallback(self):
         repository = REPOSITORY.read_text(encoding="utf-8")
         screen = SCREEN.read_text(encoding="utf-8")
