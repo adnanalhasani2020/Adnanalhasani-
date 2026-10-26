@@ -400,6 +400,7 @@ def test_commerce_sale_payment_settlement_and_finance_recognition_are_one_govern
     db.commit()
 
     def perform_financial_return(index, timestamp):
+        instant = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
         return_event = uid()
         credit_number = f"CN-CYCLE-{index:03d}"
         reserved = SaleApplication().request_sale_return_items(
@@ -407,7 +408,7 @@ def test_commerce_sale_payment_settlement_and_finance_recognition_are_one_govern
             items=[{"sale_line_id": sale_line_id, "quantity": 1}],
             idempotency_key=f"settled-return-{index:03d}",
             reason=f"customer returned unit {index}",
-            now=timestamp, return_event_id=return_event,
+            now=instant, return_event_id=return_event,
         )
         assert reserved["status"] == "pending_refund"
         assert reserved["refund_amount_minor"] > 0
@@ -454,7 +455,7 @@ def test_commerce_sale_payment_settlement_and_finance_recognition_are_one_govern
             refund_payment_id=refund_payment, credit_note_number=credit_number,
             financial_account_id=account, finance_context_ref=finance_context,
             finance_authorization_grant_id=finance_grant,
-            finance_agent_action_id=finance_action, now=timestamp,
+            finance_agent_action_id=finance_action, now=instant,
         )
         result.update({
             "finance_context_ref": finance_context,
@@ -478,7 +479,7 @@ def test_commerce_sale_payment_settlement_and_finance_recognition_are_one_govern
         finance_context_ref=first_return["finance_context_ref"],
         finance_authorization_grant_id=first_return["finance_authorization_grant_id"],
         finance_agent_action_id=first_return["finance_agent_action_id"],
-        now="2026-10-18T10:08:00.000000Z",
+        now=datetime(2026, 10, 18, 10, 8, tzinfo=timezone.utc),
     )
     assert first_replay["replayed"] is True
     second_return = perform_financial_return(
