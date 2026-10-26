@@ -294,7 +294,44 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
                 }
             }
             if (!loading && error.isBlank() && filtered.isEmpty()) item {
-                Text(if (documents.isEmpty()) "لا توجد فواتير سحابية متاحة لهذا النشاط." else "لا توجد نتائج مطابقة للبحث.", color = CloudSalesMuted, modifier = Modifier.padding(8.dp))
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    shape = RoundedCornerShape(22.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, CloudSalesBorder)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(9.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier.size(52.dp).background(Color(0xFFE8F5EF), RoundedCornerShape(17.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = CloudSalesGreen, modifier = Modifier.size(27.dp))
+                        }
+                        Text(
+                            if (documents.isEmpty()) "لا توجد فواتير بعد" else "لم نعثر على فواتير مطابقة",
+                            color = CloudSalesInk,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                        Text(
+                            if (documents.isEmpty()) "ستظهر فواتير المبيعات هنا بعد تسجيلها." else "جرّب تغيير عبارة البحث أو حالة الفاتورة.",
+                            color = CloudSalesMuted,
+                            fontSize = 12.sp
+                        )
+                        if (documents.isNotEmpty() && (search.isNotBlank() || selectedStatus != "all")) {
+                            OutlinedButton(onClick = {
+                                search = ""
+                                selectedStatus = "all"
+                            }) {
+                                Text("مسح البحث والفلاتر")
+                            }
+                        }
+                    }
+                }
             }
             items(sortedFiltered, key = { it.id }) { document ->
                 Card(
