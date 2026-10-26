@@ -197,6 +197,37 @@ internal fun CustomerPortalHistoryScreen(context: Context, onBack: () -> Unit) {
             }
         }
     }
+    cancelOrderTarget?.let { order ->
+        AlertDialog(
+            onDismissRequest = { if (!cancellingOrder) cancelOrderTarget = null },
+            title = { Text("إلغاء الطلب المبدئي") },
+            text = { Text("سيُلغى الطلب رقم " + order.orderNumber + " فقط إذا كان لا يزال بانتظار المراجعة وغير مدفوع. لا يمكن من هذه الشاشة إلغاء طلب معتمد أو مدفوع، ولا يؤدي الإلغاء إلى حركة مخزون لأن الطلب المبدئي لا يحجز المخزون.") },
+            confirmButton = {
+                TextButton(enabled = !cancellingOrder, onClick = {
+                    cancellingOrder = true
+                    historyExecutor.execute {
+                        val result = runCatching { cancelCustomerPortalOrder(context, order.id, "Cancelled by customer") }
+                        historyMain.post {
+                            cancellingOrder = false
+                            cancelOrderTarget = null
+                            result.onSuccess {
+                                notice = if (it == "already_cancelled")
+                                    "الطلب رقم " + order.orderNumber + " ملغى بالفعل."
+                                else "تم تأكيد إلغاء الطلب رقم " + order.orderNumber + " من الخادم."
+                                refresh++
+                            }.onFailure {
+                                error = it.message ?: "لم يتأكد إلغاء الطلب. حدّث السجل قبل إعادة المحاولة."
+                            }
+                        }
+                    }
+                }) { Text(if (cancellingOrder) "جارٍ الإلغاء..." else "تأكيد الإلغاء") }
+            },
+            dismissButton = {
+                TextButton(enabled = !cancellingOrder, onClick = { cancelOrderTarget = null }) { Text("رجوع") }
+            }
+        )
+    }
+
     cancelTarget?.let { booking ->
         AlertDialog(
             onDismissRequest = { if (!cancelling) cancelTarget = null },
