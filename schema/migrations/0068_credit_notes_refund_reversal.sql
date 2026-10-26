@@ -224,7 +224,7 @@ WHEN NEW.source_type='sale_return'
       ON p.invoice_id=i.invoice_id
       OR (i.obligation_id IS NOT NULL AND p.obligation_id=i.obligation_id)
     WHERE rl.sale_return_line_id=NEW.source_ref
-      AND (i.state='issued' OR i.obligation_id IS NOT NULL OR p.payment_id IS NOT NULL)
+      AND (i.state IN ('issued','settled') OR i.obligation_id IS NOT NULL OR p.payment_id IS NOT NULL)
       AND NOT EXISTS (
           SELECT 1
           FROM credit_notes cn
