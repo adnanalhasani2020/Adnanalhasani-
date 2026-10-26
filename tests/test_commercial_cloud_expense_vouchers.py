@@ -35,7 +35,7 @@ class CommercialCloudExpenseVoucherTests(unittest.TestCase):
         self.assertIn("customer_payment_journal_not_posted", fix)
         self.assertNotIn("commercial_gl_post_payment(v_payment.id)", fix)
         self.assertIn("customer-payment:'||btrim(p_idempotency_key)", hardening)
-        self.assertIn("Recheck after organization-scoped lock", hardening)
+        self.assertIn("then recheck idempotency", hardening)
         self.assertIn("sale_return_reconciliation_required", hardening)
 
     def test_voucher_reads_are_tenant_and_role_scoped(self):
