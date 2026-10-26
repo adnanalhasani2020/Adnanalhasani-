@@ -1,3 +1,4 @@
+import json
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -586,7 +587,224 @@ class SaleApplication:
         return self.transition_sale(connection, sale_id, actor_context_ref, authorization_grant_id, "cancel", now=now)
 
     def return_sale(self, connection, sale_id, actor_context_ref, authorization_grant_id, *, now=None):
-        return self.transition_sale(connection, sale_id, actor_context_ref, authorization_grant_id, "return", now=now)
+        """Return all remaining units as one idempotent return event.
+
+        Checkout-backed sales use return events/lines so the stock history remains
+        append-only and multiple partial returns can safely precede a final return.
+        """
+        sale_key = str(self._uuid(sale_id, "Sale identifier"))
+        if self.get_sale_state(connection, sale_key) is not SaleState.FULFILLED:
+            raise ValidationError("Invalid Sale transition from returned or non-fulfilled Sale via return")
+        lines = connection.execute(
+            "SELECT sale_line_id, quantity FROM sale_lines WHERE sale_id=? ORDER BY sale_line_id",
+            (sale_key,),
+        ).fetchall()
+        if not lines:
+            # Preserve the historical lifecycle-only path for Sales that never
+            # created checkout stock evidence.
+            return self.transition_sale(
+                connection, sale_key, actor_context_ref, authorization_grant_id, "return", now=now
+            )
+        remaining = []
+        for line_id, sold_quantity in lines:
+            already = connection.execute(
+                "SELECT COALESCE(SUM(rl.quantity),0) FROM sale_return_lines rl "
+                "JOIN sale_return_events re ON re.return_event_id=rl.return_event_id "
+                "WHERE rl.sale_line_id=?",
+                (line_id,),
+            ).fetchone()[0]
+            quantity = sold_quantity - already
+            if quantity > 0:
+                remaining.append({"sale_line_id": line_id, "quantity": quantity})
+        if not remaining:
+            raise ValidationError("Sale has no unreturned quantity remaining")
+        self.return_sale_items(
+            connection, sale_key, actor_context_ref, authorization_grant_id,
+            items=remaining, idempotency_key=f"full-sale-return:{sale_key}",
+            reason="full_sale_return", now=now,
+        )
+        return self.get_sale(connection, sale_key)
+
+    def return_sale_items(
+        self, connection, sale_id, actor_context_ref, authorization_grant_id, *,
+        items, idempotency_key, reason, now=None,
+    ):
+        """Record an authorized partial/multi-line return with idempotent stock compensation.
+
+        This method only performs the Commerce-owned return and inventory effects.
+        It deliberately does not claim to refund Payment or recognize Finance; those
+        remain separate governed operations and require explicit reconciliation.
+        """
+        sale_uuid = self._uuid(sale_id, "Sale identifier")
+        actor_uuid = self._uuid(actor_context_ref, "Actor identifier")
+        sale_key, actor_key = str(sale_uuid), str(actor_uuid)
+        timestamp = self._timestamp(now)
+        if not isinstance(idempotency_key, str) or not 8 <= len(idempotency_key.strip()) <= 200:
+            raise ValidationError("Sale return idempotency key must contain 8 to 200 characters")
+        idempotency_key = idempotency_key.strip()
+        if not isinstance(reason, str) or not 3 <= len(reason.strip()) <= 2000:
+            raise ValidationError("Sale return reason must contain 3 to 2000 characters")
+        reason = reason.strip()
+        if not isinstance(items, (list, tuple)) or not items or len(items) > 100:
+            raise ValidationError("Sale return requires between 1 and 100 item quantities")
+        normalized = []
+        seen = set()
+        for item in items:
+            if not isinstance(item, dict):
+                raise ValidationError("Each Sale return item must be an object")
+            line_key = str(self._uuid(item.get("sale_line_id"), "Sale line identifier"))
+            quantity = item.get("quantity")
+            if type(quantity) is not int or quantity <= 0:
+                raise ValidationError("Sale return quantity must be a positive integer")
+            if line_key in seen:
+                raise ValidationError("A Sale line may appear only once per return event")
+            seen.add(line_key)
+            normalized.append({"sale_line_id": line_key, "quantity": quantity})
+        normalized.sort(key=lambda item: item["sale_line_id"])
+        fingerprint = __import__("hashlib").sha256(
+            json.dumps({"sale_id": sale_key, "reason": reason, "items": normalized},
+                       sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+
+        savepoint = "sale_return_items_operation"
+        connection.execute(f"SAVEPOINT {savepoint}")
+        try:
+            sale, offering_uuid, version_no, previous_ref = self._load_sale(connection, sale_uuid)
+            sale_times = connection.execute(
+                "SELECT created_at,updated_at FROM sales WHERE sale_id=?", (sale_key,)
+            ).fetchone()
+            sale_created = self._grant_instant(sale_times[0], "creation timestamp", owner="Sale")
+            sale_updated = self._grant_instant(sale_times[1], "latest update timestamp", owner="Sale")
+            operation_instant = self._grant_instant(timestamp, "operation timestamp", owner="Sale")
+            if operation_instant < sale_created or operation_instant < sale_updated:
+                raise ValidationError("Sale return timestamp cannot precede the Sale timestamps")
+            self._authorize(
+                connection, authorization_grant_id, actor_key, "return_sale",
+                sale_key, str(sale.activity_id), timestamp,
+            )
+            existing = connection.execute(
+                "SELECT return_event_id,request_fingerprint FROM sale_return_events "
+                "WHERE sale_id=? AND idempotency_key=?",
+                (sale_key, idempotency_key),
+            ).fetchone()
+            if existing is not None:
+                if existing[1] != fingerprint:
+                    raise ValidationError("Sale return idempotency key was reused with a different request")
+                connection.execute(f"RELEASE SAVEPOINT {savepoint}")
+                return {"return_id": existing[0], "sale_id": sale_key, "replayed": True,
+                        "sale_state": self.get_sale_state(connection, sale_key).value}
+            if sale.state is not SaleState.FULFILLED:
+                raise ValidationError("Only a fulfilled Sale with remaining quantity can be returned")
+            if connection.execute(
+                "SELECT 1 FROM invoices WHERE sale_id=? AND state='issued' LIMIT 1", (sale_key,)
+            ).fetchone():
+                raise ValidationError(
+                    "Sale return requires explicit Invoice reconciliation first"
+                )
+
+            sale_lines = {}
+            for item in normalized:
+                line = connection.execute(
+                    "SELECT sale_line_id,offering_id,product_id,quantity FROM sale_lines "
+                    "WHERE sale_line_id=? AND sale_id=?",
+                    (item["sale_line_id"], sale_key),
+                ).fetchone()
+                if line is None:
+                    raise ValidationError("Sale return line does not belong to the requested Sale")
+                prior = connection.execute(
+                    "SELECT COALESCE(SUM(rl.quantity),0) FROM sale_return_lines rl "
+                    "JOIN sale_return_events re ON re.return_event_id=rl.return_event_id "
+                    "WHERE rl.sale_line_id=?",
+                    (item["sale_line_id"],),
+                ).fetchone()[0]
+                if prior + item["quantity"] > line[3]:
+                    raise ValidationError("Cumulative returned quantity exceeds the sold quantity")
+                sale_lines[item["sale_line_id"]] = line
+
+            return_id = str(uuid4())
+            connection.execute(
+                "INSERT INTO sale_return_events(return_event_id,sale_id,idempotency_key,"
+                "request_fingerprint,reason,actor_context_ref,created_at) VALUES(?,?,?,?,?,?,?)",
+                (return_id, sale_key, idempotency_key, fingerprint, reason, actor_key, timestamp),
+            )
+            for item in normalized:
+                line_id, line_offering, line_product, line_quantity = sale_lines[item["sale_line_id"]]
+                original = connection.execute(
+                    "SELECT inventory_position_id,activity_id,product_id,offering_id,location_ref,"
+                    "scope_key,quantity_delta FROM inventory_movements "
+                    "WHERE source_type='sale' AND source_ref=?",
+                    (sale_key,),
+                ).fetchall()
+                matching = [row for row in original if row[3] == line_offering and row[2] == line_product]
+                if len(matching) != 1:
+                    raise ValidationError(
+                        "Sale line and original stock movement cannot be reconciled uniquely"
+                    )
+                movement = matching[0]
+                if (movement[1] != str(sale.activity_id) or movement[3] != line_offering
+                        or movement[2] != line_product or movement[6] != -line_quantity):
+                    raise ValidationError("Sale line and original stock movement disagree")
+                return_line_id = str(uuid4())
+                connection.execute(
+                    "INSERT INTO sale_return_lines(sale_return_line_id,return_event_id,sale_line_id,"
+                    "quantity,created_at) VALUES(?,?,?,?,?)",
+                    (return_line_id, return_id, line_id, item["quantity"], timestamp),
+                )
+                connection.execute(
+                    "INSERT INTO inventory_movements(inventory_movement_id,inventory_position_id,"
+                    "activity_id,product_id,offering_id,location_ref,scope_key,quantity_delta,"
+                    "source_type,source_ref,actor_context_ref,occurred_at,created_at) "
+                    "VALUES(?,?,?,?,?,?,?,?,'sale_return',?,?,?,?)",
+                    (str(uuid4()), movement[0], movement[1], movement[2], movement[3],
+                     movement[4], movement[5], item["quantity"], return_line_id,
+                     actor_key, timestamp, timestamp),
+                )
+
+            all_returned = connection.execute(
+                "SELECT NOT EXISTS (SELECT 1 FROM sale_lines l WHERE l.sale_id=? AND "
+                "COALESCE((SELECT SUM(rl.quantity) FROM sale_return_lines rl "
+                "JOIN sale_return_events re ON re.return_event_id=rl.return_event_id "
+                "WHERE rl.sale_line_id=l.sale_line_id),0) < l.quantity)",
+                (sale_key,),
+            ).fetchone()[0]
+            next_state = sale.state
+            if all_returned:
+                sale.return_sale()
+                next_state = sale.state
+                next_version = version_no + 1
+                current_ref = f"sale-state:{sale.id}:v{next_version}"
+                connection.execute(
+                    "UPDATE sales SET state='returned',updated_at=?,version_no=? "
+                    "WHERE sale_id=? AND version_no=?",
+                    (timestamp, next_version, sale_key, version_no),
+                )
+                if connection.execute("SELECT changes()").fetchone()[0] != 1:
+                    raise ValidationError("Concurrent Sale update detected")
+                connection.execute(
+                    "INSERT INTO domain_history(domain_history_id,owner_domain,target_ref,change_type,"
+                    "historical_at,actor_context_ref,prior_version_ref,current_version_ref,change_payload_ref,created_at) "
+                    "VALUES(?,?,?,?,?,?,?,?,?,?)",
+                    (str(uuid4()), "commerce", sale_key, "sale_state_transition", timestamp,
+                     actor_key, previous_ref, current_ref, "state:returned", timestamp),
+                )
+            connection.execute(
+                "INSERT INTO domain_history(domain_history_id,owner_domain,target_ref,change_type,"
+                "historical_at,actor_context_ref,prior_version_ref,current_version_ref,change_payload_ref,created_at) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?)",
+                (str(uuid4()), "commerce", return_id, "sale_return_event", timestamp,
+                 actor_key, None, None, f"sale:{sale_key};reason:{reason};fingerprint:{fingerprint}", timestamp),
+            )
+            connection.execute(f"RELEASE SAVEPOINT {savepoint}")
+            return {"return_id": return_id, "sale_id": sale_key, "replayed": False,
+                    "sale_state": next_state.value, "items": normalized}
+        except Exception:
+            if connection.in_transaction:
+                try:
+                    connection.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+                    connection.execute(f"RELEASE SAVEPOINT {savepoint}")
+                except Exception:
+                    pass
+            raise
 
     def get_sale_state(self, connection, sale_id) -> SaleState:
         """Read current canonical state, including legacy completed rows with NULL lifecycle_state."""
