@@ -233,6 +233,8 @@ BEGIN
     RAISE EXCEPTION 'duplicate_order_offering' USING ERRCODE='22023';
   END IF;
 
+  IF p_reserved_from IS NOT NULL THEN v_order_type := 'booking'; END IF;
+
   INSERT INTO public.commercial_customer_orders(
     organization_id,buyer_account_id,created_by,order_type,status,payment_status,currency_code,
     subtotal_minor,discount_minor,tax_minor,total_minor,reserved_from,reserved_until,customer_note,idempotency_key
@@ -271,11 +273,88 @@ BEGIN
 END;
 $function$;
 
+CREATE OR REPLACE FUNCTION public.commercial_customer_portal_list_booking_resources(p_organization_id uuid)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $function$
+DECLARE v_uid uuid := auth.uid(); v_result jsonb;
+BEGIN
+ IF v_uid IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
+ IF NOT EXISTS (SELECT 1 FROM public.commercial_customer_party_accounts cpa JOIN public.commercial_customers c ON c.id=cpa.customer_id AND c.organization_id=cpa.organization_id AND c.state='active' JOIN public.commercial_party_accounts a ON a.id=cpa.party_account_id AND a.organization_id=cpa.organization_id AND a.owner_user_id=v_uid AND a.account_type='customer' AND a.status='active' JOIN public.commercial_organizations o ON o.id=cpa.organization_id AND o.state='active' AND o.deleted_at IS NULL WHERE cpa.organization_id=p_organization_id) THEN RAISE EXCEPTION 'customer_not_linked_to_organization' USING ERRCODE='42501'; END IF;
+ SELECT coalesce(jsonb_agg(jsonb_build_object('id',r.id,'name',r.name,'resource_type',r.resource_type,'capacity',r.capacity,'timezone',r.timezone) ORDER BY r.name),'[]'::jsonb)
+ INTO v_result FROM public.commercial_booking_resources r WHERE r.organization_id=p_organization_id AND r.status='active';
+ RETURN v_result;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.commercial_customer_portal_create_booking(
+ p_organization_id uuid,p_offering_id uuid,p_resource_id uuid,p_starts_at timestamptz,p_ends_at timestamptz,
+ p_payment_mode text,p_customer_note text DEFAULT NULL,p_idempotency_key text DEFAULT NULL
+) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $function$
+DECLARE
+ v_uid uuid:=auth.uid(); v_account_id uuid; v_resource public.commercial_booking_resources%ROWTYPE;
+ v_existing public.commercial_bookings%ROWTYPE; v_order jsonb; v_order_id uuid; v_order_total bigint;
+ v_currency text; v_count integer; v_key text:=nullif(btrim(p_idempotency_key),'');
+BEGIN
+ IF v_uid IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
+ IF p_organization_id IS NULL OR p_offering_id IS NULL OR p_resource_id IS NULL THEN RAISE EXCEPTION 'booking_fields_required' USING ERRCODE='22023'; END IF;
+ IF p_starts_at IS NULL OR p_ends_at IS NULL OR p_starts_at<=now() OR p_ends_at<=p_starts_at THEN RAISE EXCEPTION 'invalid_reservation_window' USING ERRCODE='22023'; END IF;
+ IF p_payment_mode IS NULL OR p_payment_mode NOT IN ('cash','credit') THEN RAISE EXCEPTION 'invalid_payment_mode' USING ERRCODE='22023'; END IF;
+ IF v_key IS NULL OR length(v_key)<8 OR length(v_key)>200 THEN RAISE EXCEPTION 'invalid_idempotency_key' USING ERRCODE='22023'; END IF;
+ SELECT a.id,a.currency_code INTO v_account_id,v_currency
+ FROM public.commercial_customer_party_accounts cpa
+ JOIN public.commercial_customers c ON c.id=cpa.customer_id AND c.organization_id=cpa.organization_id AND c.state='active'
+ JOIN public.commercial_party_accounts a ON a.id=cpa.party_account_id AND a.organization_id=cpa.organization_id AND a.owner_user_id=v_uid AND a.account_type='customer' AND a.status='active'
+ JOIN public.commercial_organizations o ON o.id=cpa.organization_id AND o.state='active' AND o.deleted_at IS NULL
+ WHERE cpa.organization_id=p_organization_id LIMIT 1;
+ IF v_account_id IS NULL THEN RAISE EXCEPTION 'customer_not_linked_to_organization' USING ERRCODE='42501'; END IF;
+ IF p_payment_mode='credit' AND NOT EXISTS (SELECT 1 FROM public.commercial_party_accounts a WHERE a.id=v_account_id AND a.allow_credit) THEN RAISE EXCEPTION 'customer_credit_not_authorized' USING ERRCODE='42501'; END IF;
+ PERFORM pg_advisory_xact_lock(hashtextextended(v_account_id::text||':'||v_key,0));
+ SELECT * INTO v_existing FROM public.commercial_bookings WHERE customer_account_id=v_account_id AND idempotency_key=v_key;
+ IF FOUND THEN
+  IF v_existing.organization_id<>p_organization_id OR v_existing.resource_id<>p_resource_id OR v_existing.starts_at<>p_starts_at OR v_existing.ends_at<>p_ends_at THEN
+   RAISE EXCEPTION 'idempotency_key_reused_with_different_request' USING ERRCODE='22023';
+  END IF;
+  RETURN jsonb_build_object('booking_id',v_existing.id,'booking_number',v_existing.booking_number,'order_id',v_existing.order_id,'status',v_existing.status,'price_minor',v_existing.price_minor,'currency_code',v_existing.currency_code,'replayed',true);
+ END IF;
+ SELECT * INTO v_resource FROM public.commercial_booking_resources r WHERE r.id=p_resource_id AND r.organization_id=p_organization_id AND r.status='active' FOR UPDATE;
+ IF NOT FOUND THEN RAISE EXCEPTION 'booking_resource_not_available' USING ERRCODE='22023'; END IF;
+ IF NOT EXISTS (
+   SELECT 1 FROM public.commercial_offerings f
+   JOIN public.commercial_activities a ON a.id=f.activity_id
+   JOIN public.commercial_products p ON p.id=f.product_id
+   WHERE f.id=p_offering_id AND f.state='active' AND f.valid_from<=now() AND (f.valid_to IS NULL OR f.valid_to>now())
+    AND f.currency_code=v_currency AND a.organization_id=p_organization_id AND a.activity_type='service'
+    AND a.state='active' AND a.deleted_at IS NULL AND p.state='active'
+ ) THEN RAISE EXCEPTION 'booking_service_not_available' USING ERRCODE='22023'; END IF;
+ SELECT count(*) INTO v_count FROM public.commercial_bookings b
+ WHERE b.organization_id=p_organization_id AND b.resource_id=p_resource_id
+  AND b.status IN ('requested','confirmed','checked_in')
+  AND b.starts_at<p_ends_at AND b.ends_at>p_starts_at;
+ IF v_count>=v_resource.capacity THEN RAISE EXCEPTION 'booking_resource_capacity_exceeded' USING ERRCODE='22023'; END IF;
+ v_order := public.commercial_customer_portal_create_order(
+  p_organization_id,jsonb_build_array(jsonb_build_object('offering_id',p_offering_id,'quantity',1)),
+  p_payment_mode,p_customer_note,p_starts_at,p_ends_at,v_key
+ );
+ v_order_id := (v_order->>'order_id')::uuid;
+ v_order_total := (v_order->>'total_minor')::bigint;
+ SELECT currency_code INTO v_currency FROM public.commercial_customer_orders WHERE id=v_order_id;
+ INSERT INTO public.commercial_bookings(
+  organization_id,resource_id,customer_account_id,order_id,status,starts_at,ends_at,currency_code,price_minor,paid_minor,created_by,notes,idempotency_key
+ ) VALUES (
+  p_organization_id,p_resource_id,v_account_id,v_order_id,'requested',p_starts_at,p_ends_at,v_currency,v_order_total,0,v_uid,nullif(btrim(p_customer_note),''),v_key
+ ) RETURNING id,booking_number INTO v_existing.id,v_existing.booking_number;
+ RETURN jsonb_build_object('booking_id',v_existing.id,'booking_number',v_existing.booking_number,'order_id',v_order_id,'status','requested','price_minor',v_order_total,'currency_code',v_currency,'replayed',false);
+END;
+$function$;
+
 REVOKE ALL ON FUNCTION public.commercial_customer_portal_list_organizations() FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.commercial_customer_portal_list_offerings(uuid) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.commercial_customer_portal_list_booking_resources(uuid) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.commercial_customer_portal_create_booking(uuid,uuid,uuid,timestamptz,timestamptz,text,text,text) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.commercial_customer_portal_create_order(uuid,jsonb,text,text,timestamptz,timestamptz,text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.commercial_customer_portal_list_organizations() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.commercial_customer_portal_list_offerings(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.commercial_customer_portal_list_booking_resources(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.commercial_customer_portal_create_booking(uuid,uuid,uuid,timestamptz,timestamptz,text,text,text) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.commercial_customer_portal_create_order(uuid,jsonb,text,text,timestamptz,timestamptz,text) TO authenticated;
 
 CREATE INDEX IF NOT EXISTS commercial_customer_party_accounts_customer_id_idx
