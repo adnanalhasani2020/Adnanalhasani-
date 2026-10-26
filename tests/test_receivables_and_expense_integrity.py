@@ -55,5 +55,24 @@ class ReceivablesAndExpenseIntegrityTests(unittest.TestCase):
                 self.assertIn(marker, sql)
 
 
+    def test_customer_and_expense_queries_do_not_predefine_pagination_limits(self):
+        source = REPOSITORY.read_text(encoding="utf-8")
+        customers_start = source.index("internal fun loadCommercialCloudCustomers(")
+        customers_end = source.index("\ninternal fun ", customers_start + 1)
+        customers_block = source[customers_start:customers_end]
+        expenses_start = source.index("internal fun loadCommercialCloudExpenses(")
+        expenses_end = source.index("\ninternal fun ", expenses_start + 1)
+        expenses_block = source[expenses_start:expenses_end]
+        self.assertIn("commercialCloudPagedGet(path, access)", customers_block)
+        self.assertNotIn("limit=", customers_block)
+        self.assertIn("commercialCloudPagedGet(path, access)", expenses_block)
+        self.assertNotIn("limit=", expenses_block)
+
+        paging_start = source.index("private fun commercialCloudPagedGet(")
+        paging_end = source.index("\ninternal fun ", paging_start + 1)
+        paging_block = source[paging_start:paging_end]
+        self.assertIn('!path.contains("limit=")', paging_block)
+        self.assertIn('!path.contains("offset=")', paging_block)
+
 if __name__ == "__main__":
     unittest.main()
