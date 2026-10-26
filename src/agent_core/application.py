@@ -740,7 +740,7 @@ class SaleApplication:
                 "SELECT i.invoice_id,i.state,i.obligation_id,p.payment_id "
                 "FROM invoices i LEFT JOIN payments p "
                 "ON p.invoice_id=i.invoice_id OR (i.obligation_id IS NOT NULL AND p.obligation_id=i.obligation_id) "
-                "WHERE i.sale_id=? AND (i.state='issued' OR i.obligation_id IS NOT NULL OR p.payment_id IS NOT NULL) "
+                "WHERE i.sale_id=? AND (i.state IN ('issued','settled') OR i.obligation_id IS NOT NULL OR p.payment_id IS NOT NULL) "
                 "LIMIT 1",
                 (sale_key,),
             ).fetchone()
@@ -965,7 +965,7 @@ class SaleApplication:
                 raise ValidationError("Only a fulfilled Sale with remaining quantity can be returned")
             financial_link = connection.execute(
                 "SELECT i.invoice_id,i.state,i.obligation_id FROM invoices i "
-                "WHERE i.sale_id=? AND (i.state='issued' OR i.obligation_id IS NOT NULL) LIMIT 1",
+                "WHERE i.sale_id=? AND (i.state IN ('issued','settled') OR i.obligation_id IS NOT NULL) LIMIT 1",
                 (sale_key,),
             ).fetchone()
             if financial_link is None:
