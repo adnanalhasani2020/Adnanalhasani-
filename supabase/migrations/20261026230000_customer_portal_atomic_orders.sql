@@ -341,7 +341,7 @@ BEGIN
  PERFORM pg_advisory_xact_lock(hashtextextended(v_account_id::text||':'||v_key,0));
  SELECT * INTO v_existing FROM public.commercial_bookings WHERE customer_account_id=v_account_id AND idempotency_key=v_key;
  IF FOUND THEN
-  IF v_existing.organization_id<>p_organization_id OR v_existing.resource_id<>p_resource_id OR v_existing.starts_at<>p_starts_at OR v_existing.ends_at<>p_ends_at THEN
+  IF v_existing.organization_id<>p_organization_id OR v_existing.resource_id<>p_resource_id OR v_existing.starts_at<>p_starts_at OR v_existing.ends_at<>p_ends_at OR coalesce(v_existing.notes,'')<>coalesce(nullif(btrim(p_customer_note),''),'') OR NOT EXISTS (SELECT 1 FROM public.commercial_customer_orders o JOIN public.commercial_customer_order_items oi ON oi.order_id=o.id WHERE o.id=v_existing.order_id AND o.payment_status=(CASE WHEN p_payment_mode='credit' THEN 'credit' ELSE 'unpaid' END) AND oi.offering_id=p_offering_id AND oi.quantity=1 AND (SELECT count(*) FROM public.commercial_customer_order_items x WHERE x.order_id=o.id)=1) THEN
    RAISE EXCEPTION 'idempotency_key_reused_with_different_request' USING ERRCODE='22023';
   END IF;
   RETURN jsonb_build_object('booking_id',v_existing.id,'booking_number',v_existing.booking_number,'order_id',v_existing.order_id,'status',v_existing.status,'price_minor',v_existing.price_minor,'currency_code',v_existing.currency_code,'replayed',true);
