@@ -622,6 +622,11 @@ def test_database_rejects_stock_return_while_invoice_is_issued(tmp_path):
         "VALUES(?,?,?,?,?)",
         (return_line_id, event_id, line_id[0], line_id[1], STAMP),
     )
+    db.execute(
+        "INSERT INTO sale_return_completions(return_event_id,completed_at,credit_note_id,state) "
+        "VALUES(?,?,NULL,'completed')",
+        (event_id, STAMP),
+    )
     with pytest.raises(
         sqlite3.IntegrityError,
         match="Sale return requires explicit Invoice reconciliation first",
