@@ -184,10 +184,63 @@ internal fun CommercialCloudExpensesScreen(context: Context, onBack: () -> Unit)
                     }
                     Text("طريقة الصرف: " + (if (voucher.paymentMethod == "cash") "نقدًا" else "تحويل بنكي") + " • الإثبات: " + voucher.evidenceReference, color = CloudExpenseMuted, fontSize = 11.sp)
                     if (voucher.note.isNotBlank()) Text(voucher.note, color = CloudExpenseInk, fontSize = 12.sp)
-                    Text(if (voucher.journalEntryId.isNotBlank()) "قيد محاسبي مرتبط: " + voucher.journalEntryId.take(8) + "…" else "تنبيه: السند غير مرتبط بقيد", color = if (voucher.journalEntryId.isNotBlank()) CloudExpenseGreen else Color(0xFFB42318), fontSize = 11.sp)
+                    Text(if (voucher.journalEntryId.isNotBlank()) "القيد الأصلي: " + voucher.journalEntryId.take(8) + "…" else "تنبيه: السند غير مرتبط بقيد", color = if (voucher.journalEntryId.isNotBlank()) CloudExpenseGreen else Color(0xFFB42318), fontSize = 11.sp)
+                    if (voucher.canceledAt.isNotBlank()) {
+                        Text("ملغى محاسبيًا • " + voucher.canceledAt.replace("T", " ").take(16), color = Color(0xFFB42318), fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                        if (voucher.cancellationReason.isNotBlank()) Text("سبب الإلغاء: " + voucher.cancellationReason, color = CloudExpenseMuted, fontSize = 11.sp)
+                        if (voucher.reversalJournalEntryId.isNotBlank()) Text("قيد العكس: " + voucher.reversalJournalEntryId.take(8) + "…", color = CloudExpenseGreen, fontSize = 11.sp)
+                    } else {
+                        OutlinedButton(
+                            onClick = { cancelTarget = voucher; cancelReason = ""; cancelError = "" },
+                            enabled = !submitting && !loading,
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("إلغاء السند وعكس القيد") }
+                    }
                 }
             }
         }
-        item { Text("لا يُنشأ السند إذا تعذر ترحيل القيد المحاسبي. المبالغ المعروضة مصدرها الخادم.", color = CloudExpenseMuted, fontSize = 11.sp) }
+        item { Text("لا يُنشأ السند إذا تعذر ترحيل القيد المحاسبي. الإلغاء لا يحذف السند؛ ينشئ قيد عكس مرتبطًا.", color = CloudExpenseMuted, fontSize = 11.sp) }
     }
+    val target = cancelTarget
+    if (target != null) AlertDialog(
+        onDismissRequest = { if (!submitting) cancelTarget = null },
+        title = { Text("تأكيد إلغاء سند الصرف") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(target.category + " • " + formatCloudExpenseMinor(target.amountMinor, target.currencyCode), color = CloudExpenseInk)
+                Text("سيبقى السند الأصلي محفوظًا، وسيُنشأ قيد عكسي. لا يمكن التراجع عن هذا الإجراء.", color = CloudExpenseMuted, fontSize = 12.sp)
+                OutlinedTextField(
+                    value = cancelReason,
+                    onValueChange = { cancelReason = it.take(300); cancelError = "" },
+                    label = { Text("سبب الإلغاء (إلزامي)") },
+                    minLines = 2,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (cancelError.isNotBlank()) Text(cancelError, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+            }
+        },
+        confirmButton = {
+            Button(
+                enabled = !submitting && cancelReason.trim().length in 3..300,
+                onClick = {
+                    submitting = true
+                    cancelError = ""
+                    val reason = cancelReason.trim()
+                    CloudExpenseIo.execute {
+                        val result = runCatching { cancelCommercialCloudExpenseVoucher(context, target.id, reason) }
+                        val updated = if (result.isSuccess) runCatching { loadCommercialCloudExpenses(context) } else null
+                        CloudExpenseMain.post {
+                            submitting = false
+                            result.onSuccess {
+                                cancelTarget = null
+                                updated?.onSuccess { expenses.clear(); expenses.addAll(it) }
+                                updated?.onFailure { error = "تم إلغاء السند وعكس القيد؛ تعذر تحديث القائمة. اضغط تحديث." }
+                            }.onFailure { cancelError = it.message ?: "تعذر تأكيد إلغاء السند. أعد المحاولة بالسبب نفسه." }
+                        }
+                    }
+                }
+            ) { Text(if (submitting) "جارٍ عكس القيد..." else "تأكيد الإلغاء") }
+        },
+        dismissButton = { TextButton(onClick = { if (!submitting) cancelTarget = null }) { Text("رجوع") } }
+    )
 }
