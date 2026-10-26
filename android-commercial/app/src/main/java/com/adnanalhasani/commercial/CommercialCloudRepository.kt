@@ -31,6 +31,10 @@ private fun commercialCloudActionableError(raw: String, status: Int): String {
             "تم إيقاف العملية لحماية البيانات: مفتاح إعادة المحاولة مرتبط بطلب مختلف. لا تكرر الدفع أو الصرف؛ راجع السجل الموجود وأعد المحاولة بالبيانات الأصلية فقط. التفاصيل: $detail"
         message.contains("expense_cash_or_bank_account_not_configured_for_currency", ignoreCase = true) ->
             "لم يُحفظ سند الصرف لأن حساب الصندوق/البنك غير مربوط بالعملة المختارة في دليل الحسابات. اضبط الربط أولًا ثم أعد المحاولة؛ لم يُسجل قيد أو سند. التفاصيل: $detail"
+        message.contains("customer_credit_limit_exceeded", ignoreCase = true) ->
+            "رُفض الطلب الآجل لأن إجمالي المديونية والطلبات الآجلة المفتوحة سيتجاوز حد الائتمان المحدد لحسابك. استخدم الدفع النقدي أو اطلب من المؤسسة مراجعة حد الائتمان والرصيد المستحق."
+        message.contains("customer_account_currency_mismatch", ignoreCase = true) ->
+            "عملة حساب العميل لا تطابق عملة الأصناف المختارة. لا يمكن حفظ الطلب حتى تصحيح إعداد العملة في المؤسسة."
         message.contains("customer_payment_journal_not_posted", ignoreCase = true) ->
             "لم يؤكد الخادم ترحيل قيد التحصيل، لذلك رُفضت المعاملة كاملة. لا تنشئ تحصيلًا جديدًا بمفتاح مختلف؛ حدّث السجل وراجع القيد قبل إعادة المحاولة. التفاصيل: $detail"
         message.contains("receipt_and_ar_mappings_required", ignoreCase = true) ->
