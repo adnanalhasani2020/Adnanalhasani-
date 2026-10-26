@@ -66,7 +66,9 @@ internal fun CustomerPortalHistoryScreen(context: Context, onBack: () -> Unit) {
     var refresh by remember { mutableIntStateOf(0) }
     var selectedOrderId by remember { mutableStateOf<String?>(null) }
     var cancelTarget by remember { mutableStateOf<CustomerPortalHistoryBooking?>(null) }
+    var cancelOrderTarget by remember { mutableStateOf<CustomerPortalHistoryOrder?>(null) }
     var cancelling by remember { mutableStateOf(false) }
+    var cancellingOrder by remember { mutableStateOf(false) }
 
     LaunchedEffect(refresh) {
         loading = true; error = ""
@@ -120,6 +122,11 @@ internal fun CustomerPortalHistoryScreen(context: Context, onBack: () -> Unit) {
                         HistoryField("بداية الفترة", historyDate(selected.reservedFrom))
                         HistoryField("نهاية الفترة", historyDate(selected.reservedUntil))
                     }
+                    if (selected.status == "pending" && selected.paymentStatus in setOf("unpaid", "credit") && selected.orderType != "booking") {
+                        OutlinedButton(onClick = { cancelOrderTarget = selected }, enabled = !cancellingOrder && !loading, modifier = Modifier.fillMaxWidth()) {
+                            Text("إلغاء الطلب قبل اعتماد المؤسسة")
+                        }
+                    }
                 } }
                 item { Text("بنود الطلب والأسعار المحفوظة", color = HistoryInk, fontWeight = FontWeight.Bold, fontSize = 17.sp) }
                 if (selected.items.isEmpty()) item { Text("لا توجد بنود مسجلة.", color = HistoryMuted) }
@@ -138,6 +145,10 @@ internal fun CustomerPortalHistoryScreen(context: Context, onBack: () -> Unit) {
                     }
                 } }
                 item { Text("الطلبات", color = HistoryInk, fontWeight = FontWeight.Bold, fontSize = 18.sp) }
+                item { HistoryCard {
+                    Text("حالة الطلب المبدئي", color = HistoryInk, fontWeight = FontWeight.Bold)
+                    Text("إرسال الطلب لا يحجز المخزون ولا يُكمل البيع أو يثبت التحصيل. تبقى الكمية غير مضمونة حتى تراجع المؤسسة الطلب وتؤكد التوفر عبر إجراءات المتجر.", color = HistoryMuted, fontSize = 12.sp)
+                } }
                 if (!loading && error.isBlank() && data?.orders.isNullOrEmpty()) item { Text("لا توجد طلبات سابقة.", color = HistoryMuted) }
                 items(data?.orders.orEmpty(), key = { it.id }) { order ->
                     HistoryCard(modifier = Modifier.clickable { selectedOrderId = order.id }) {
@@ -186,6 +197,37 @@ internal fun CustomerPortalHistoryScreen(context: Context, onBack: () -> Unit) {
             }
         }
     }
+    cancelOrderTarget?.let { order ->
+        AlertDialog(
+            onDismissRequest = { if (!cancellingOrder) cancelOrderTarget = null },
+            title = { Text("إلغاء الطلب المبدئي") },
+            text = { Text("سيُلغى الطلب رقم " + order.orderNumber + " فقط إذا كان لا يزال بانتظار المراجعة وغير مدفوع. لا يمكن من هذه الشاشة إلغاء طلب معتمد أو مدفوع، ولا يؤدي الإلغاء إلى حركة مخزون لأن الطلب المبدئي لا يحجز المخزون.") },
+            confirmButton = {
+                TextButton(enabled = !cancellingOrder, onClick = {
+                    cancellingOrder = true
+                    historyExecutor.execute {
+                        val result = runCatching { cancelCustomerPortalOrder(context, order.id, "Cancelled by customer") }
+                        historyMain.post {
+                            cancellingOrder = false
+                            cancelOrderTarget = null
+                            result.onSuccess {
+                                notice = if (it == "already_cancelled")
+                                    "الطلب رقم " + order.orderNumber + " ملغى بالفعل."
+                                else "تم تأكيد إلغاء الطلب رقم " + order.orderNumber + " من الخادم."
+                                refresh++
+                            }.onFailure {
+                                error = it.message ?: "لم يتأكد إلغاء الطلب. حدّث السجل قبل إعادة المحاولة."
+                            }
+                        }
+                    }
+                }) { Text(if (cancellingOrder) "جارٍ الإلغاء..." else "تأكيد الإلغاء") }
+            },
+            dismissButton = {
+                TextButton(enabled = !cancellingOrder, onClick = { cancelOrderTarget = null }) { Text("رجوع") }
+            }
+        )
+    }
+
     cancelTarget?.let { booking ->
         AlertDialog(
             onDismissRequest = { if (!cancelling) cancelTarget = null },
