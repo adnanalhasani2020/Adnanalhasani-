@@ -47,6 +47,15 @@ class CommercialCloudExpenseVoucherTests(unittest.TestCase):
         self.assertIn("m.role IN ('owner','admin','manager')", role_fix)
         self.assertIn("REVOKE ALL ON TABLE public.commercial_expense_vouchers FROM PUBLIC, anon, authenticated", sql)
 
+    def test_gl_mapping_keys_cover_bank_discount_tax_and_validate_account_types(self):
+        mapping_migration = (ROOT / "supabase/migrations/20261026165000_expand_gl_mapping_keys_and_seed_operating_accounts.sql").read_text(encoding="utf-8")
+        validation = (ROOT / "supabase/migrations/20261026166000_validate_gl_mapping_account_types.sql").read_text(encoding="utf-8")
+        for key in ("'bank'", "'sales_discounts'", "'sales_tax_payable'"):
+            self.assertIn(key, mapping_migration)
+        self.assertIn("a.account_type=x.account_type", validation)
+        self.assertIn("a.normal_balance=x.normal_balance", validation)
+        self.assertIn("commercial_initialize_gl_chart", validation)
+
     def test_internal_refund_postings_remain_unavailable_to_clients(self):
         migration = (ROOT / "supabase/migrations/20261026164000_lock_down_return_refund_postings.sql").read_text(encoding="utf-8")
         self.assertIn("REVOKE ALL ON TABLE public.commercial_return_refund_postings FROM PUBLIC, anon, authenticated", migration)
