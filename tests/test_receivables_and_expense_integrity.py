@@ -97,6 +97,20 @@ class ReceivablesAndExpenseIntegrityTests(unittest.TestCase):
         self.assertIn("collection_exceeds_outstanding_balance_after_returns", sql)
         self.assertLess(sql.index("collection_exceeds_outstanding_balance_after_returns"), sql.index("INSERT INTO public.commercial_payments("))
 
+    def test_expense_voucher_commit_guard_matches_source_amount_and_currency(self):
+        sql = (ROOT / "supabase/migrations/20261026213300_expense_voucher_source_amount_integrity.sql").read_text(encoding="utf-8")
+        for marker in (
+            "expense_voucher_journal_source_mismatch_at_commit",
+            "expense_voucher_journal_currency_mismatch_at_commit",
+            "expense_voucher_journal_amount_mismatch_at_commit",
+            "v_journal_source_type IS DISTINCT FROM 'expense_voucher'",
+            "v_journal_source_id IS DISTINCT FROM v_voucher.id",
+            "v_debit_total <> v_voucher.amount_minor",
+            "v_credit_total <> v_voucher.amount_minor",
+        ):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, sql)
+
     def test_expense_voucher_cannot_commit_without_posted_balanced_journal(self):
         sql = EXPENSE_INVARIANT.read_text(encoding="utf-8")
         for marker in (
