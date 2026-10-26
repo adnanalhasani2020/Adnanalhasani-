@@ -158,6 +158,7 @@ internal fun CustomerPortalHistoryScreen(context: Context, onBack: () -> Unit) {
                 item { Text("الحجوزات", color = HistoryInk, fontWeight = FontWeight.Bold, fontSize = 18.sp) }
                 if (!loading && error.isBlank() && data?.bookings.isNullOrEmpty()) item { Text("لا توجد حجوزات سابقة.", color = HistoryMuted) }
                 items(data?.bookings.orEmpty(), key = { "booking-" + it.id }) { b ->
+                    val serviceName = data?.orders?.firstOrNull { order -> order.id == b.orderId }?.items?.joinToString("، ") { line -> line.name }.orEmpty()
                     HistoryCard {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Event, null, tint = HistoryGreen); Spacer(Modifier.width(8.dp))
@@ -168,6 +169,7 @@ internal fun CustomerPortalHistoryScreen(context: Context, onBack: () -> Unit) {
                             Text(historyMoney(b.priceMinor, b.currencyCode), color = HistoryGreen, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         }
                         HistoryField("الحالة", bookingStatus(b.status))
+                        HistoryField("الخدمة", serviceName.ifBlank { "راجع تفاصيل الطلب المرتبط" })
                         HistoryField("المورد", b.resourceName.ifBlank { "غير محدد" })
                         HistoryField("النوع", b.resourceType.ifBlank { "غير محدد" })
                         HistoryField("البداية (" + b.timezone + ")", historyDate(b.startsAt, b.timezone))
