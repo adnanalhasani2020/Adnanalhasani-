@@ -1917,3 +1917,16 @@ internal fun recordCommercialCloudCustomerPayment(
     check(prefs.edit().clear().commit()) { "تم تأكيد التحصيل لكن تعذر تنظيف مفتاح إعادة المحاولة." }
     return result
 }
+
+
+/** Fetch the server-issued numbered receipt for a confirmed customer payment. */
+internal fun loadCommercialCloudCustomerReceipt(context: Context, paymentId: String): JSONObject {
+    require(paymentId.isNotBlank()) { "مرجع الدفعة غير صالح." }
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val path = "/rest/v1/commercial_payments" +
+        "?select=id,receipt_number,amount_minor,currency_code,payment_method_type,created_at,sale:commercial_sales(receipt_number,customer:commercial_customers(display_name))" +
+        "&organization_id=eq.$orgId&id=eq.$paymentId&limit=1"
+    val rows = JSONArray(commercialCloudRequest(path, "GET", null, access))
+    require(rows.length() == 1) { "لم يُعثر على سند القبض المؤكد لهذه الدفعة." }
+    return rows.getJSONObject(0)
+}

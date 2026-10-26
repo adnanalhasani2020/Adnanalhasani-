@@ -32,6 +32,18 @@ class CommercialCollectionRpcUnificationTests(unittest.TestCase):
         self.assertIn("commercial_gl_post_payment(v_payment.id)", canonical)
         self.assertIn("GRANT EXECUTE ON FUNCTION commercial_private.commercial_record_sale_collection", unified)
 
+    def test_customer_receipt_is_numbered_shared_and_currency_minor_units_are_formatted(self):
+        repository = REPOSITORY.read_text(encoding="utf-8")
+        screen = DEBT_SCREEN.read_text(encoding="utf-8")
+        migration = (ROOT / "supabase/migrations/20261026183000_commercial_customer_receipt_numbers.sql").read_text(encoding="utf-8")
+        self.assertIn("commercial_payments_org_receipt_number_uidx", migration)
+        self.assertIn("commercial_assign_payment_receipt_number", migration)
+        self.assertIn("loadCommercialCloudCustomerReceipt", repository)
+        self.assertIn("receipt_number", repository)
+        self.assertIn("Currency.getInstance(currency).defaultFractionDigits", screen)
+        self.assertIn("Intent.ACTION_SEND", screen)
+        self.assertIn("سند قبض رقم RC-$receiptNumber", screen)
+
     def test_idempotent_replay_precedes_return_refund_gate(self):
         unified = UNIFICATION_MIGRATION.read_text(encoding="utf-8")
         replay = unified.index("WHERE p.organization_id = v_org AND p.idempotency_key = p_idempotency_key")
