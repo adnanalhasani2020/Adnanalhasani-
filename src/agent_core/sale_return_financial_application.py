@@ -184,7 +184,7 @@ class SaleReturnFinancialApplication:
 
         chain = connection.execute(
             "SELECT i.invoice_id,i.issuer_ref,i.state,i.obligation_id,"
-            "s.buyer_person_id,s.state,"
+            "s.state,"
             "o.creditor_person_id,o.debtor_person_id,o.amount_minor,o.currency_code,o.state,"
             "original.payment_id,original.amount_minor,original.currency_code,original.state,"
             "original.payer_person_id,original.payee_person_id,"
@@ -218,7 +218,7 @@ class SaleReturnFinancialApplication:
          refund_payer, refund_payee, refund_invoice, refund_obligation, provider_ref, external_ref) = row
         if sale_state not in {"completed", "fulfilled", "returned"}:
             raise ValidationError("Only a completed Commerce Sale can receive a credit note")
-        if (issuer != creditor or buyer != debtor or original_payer != buyer or original_payee != issuer
+        if (issuer != creditor or original_payer != debtor or original_payee != issuer
                 or original_state != "completed" or original_amount != obligation_amount
                 or original_currency != obligation_currency or obligation_currency != currency
                 or obligation_state != "satisfied" or original_account != account_key
@@ -226,7 +226,7 @@ class SaleReturnFinancialApplication:
                 or original_ft_state != "recognized" or account_owner != issuer or account_state != "active"):
             raise ValidationError("Original Sale/Invoice/Payment/Settlement/Finance chain is inconsistent")
         if (refund_state != "completed" or refund_invoice is not None or refund_obligation is not None
-                or refund_payer != issuer or refund_payee != buyer or refund_amount_actual != refund_amount
+                or refund_payer != issuer or refund_payee != debtor or refund_amount_actual != refund_amount
                 or refund_currency != currency or not str(provider_ref or "").strip()
                 or not str(external_ref or "").strip()):
             raise ValidationError("A completed refund Payment with exact amount, parties, currency, and provider references is required")
