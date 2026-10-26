@@ -17,6 +17,7 @@
 ## Financial vouchers and general-ledger linkage
 
 - Customer collections: the cloud debt/sales flows call the guarded `commercial_record_customer_payment` RPC. It validates the outstanding amount and tenant/role scope, uses an idempotency key, and posts the receipt journal in the same transaction. The app must retain the same pending key after an uncertain network response.
+  Live schema inspection found this RPC missing even though its earlier migration was recorded. The new repair migration restores the endpoint and requires a posted journal entry; a follow-up correction relies on the payment INSERT trigger exactly once, avoiding a second posting attempt after a full collection.
 - Supplier payments: the purchasing screen calls `commercial_record_supplier_payment`. The RPC checks the supplier obligation, currency and remaining balance, requires evidence, posts the balanced payable/cash journal, and updates the paid balance atomically.
 - Operating expenses: `commercial_expense_vouchers` stores server-confirmed vouchers. `commercial_record_expense` creates/validates the expense account, checks the cash/bank mapping, writes a balanced journal entry and voucher atomically, enforces tenant/role scope, and rejects changed payloads reusing an idempotency key. Direct clients cannot write voucher rows.
 - Legacy local expenses are not migrated or shown as cloud-confirmed accounting records. They must be reconciled/imported explicitly before they can be included in cloud financial reports.
