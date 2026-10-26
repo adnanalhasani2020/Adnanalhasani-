@@ -192,6 +192,129 @@ class PersistedSettlementRecognitionApplication:
         if changed != 1:
             raise ValidationError("Hospital recognition correlation changed concurrently; retry safely")
 
+    def settle_and_recognize_commerce_sale(
+        self, connection, *, sale_id, payment_id, obligation_id, settlement_id,
+        financial_account_id, context_ref, authorization_grant_id, agent_action_id,
+        source_event_key=None, now=None, connected=True,
+    ):
+        """Atomically settle and recognize a fully paid, invoice-linked Commerce Sale.
+
+        Invoice issuance and Payment completion remain separately authorized actions;
+        this method verifies their persisted linkage before creating Settlement and
+        Finance ledger rows. It never infers payment from Sale fulfillment.
+        """
+        if connected is not True:
+            raise ValidationError("Finance recognition requires connectivity")
+        sale_key = self._uuid(sale_id, "Sale identifier")
+        payment_key = self._uuid(payment_id, "Payment identifier")
+        obligation_key = self._uuid(obligation_id, "Obligation identifier")
+        settlement_key = self._uuid(settlement_id, "Settlement identifier")
+        account_key = self._uuid(financial_account_id, "Financial Account identifier")
+        timestamp = self._timestamp(
+            now if now is not None else datetime.now(timezone.utc), "Recognition timestamp"
+        )
+
+        with self._atomic(connection):
+            approver = self._authorize(
+                connection, settlement_id=settlement_key, context_ref=context_ref,
+                authorization_grant_id=authorization_grant_id,
+                agent_action_id=agent_action_id, now=timestamp,
+            )
+            row = connection.execute(
+                "SELECT p.invoice_id,p.obligation_id,p.payer_person_id,p.payee_person_id,"
+                "p.amount_minor,p.currency_code,p.state,"
+                "o.creditor_person_id,o.debtor_person_id,o.amount_minor,o.currency_code,o.state,"
+                "i.sale_id,i.obligation_id,i.state,"
+                "s.state,s.lifecycle_state,"
+                "a.person_id,a.state "
+                "FROM payments p "
+                "JOIN obligations o ON o.obligation_id=? "
+                "JOIN invoices i ON i.invoice_id=p.invoice_id "
+                "JOIN sales s ON s.sale_id=i.sale_id "
+                "JOIN financial_accounts a ON a.financial_account_id=? "
+                "WHERE p.payment_id=? AND p.obligation_id=o.obligation_id",
+                (obligation_key, account_key, payment_key),
+            ).fetchone()
+            if row is None:
+                raise ValidationError(
+                    "Commerce Sale, issued Invoice, Payment, Obligation, or Financial Account linkage is missing"
+                )
+            (payment_invoice, payment_obligation, payer, payee, payment_amount, payment_currency,
+             payment_state, creditor, debtor, obligation_amount, obligation_currency, obligation_state,
+             invoice_sale, invoice_obligation, invoice_state, sale_state, sale_lifecycle_state,
+             account_person, account_state) = row
+
+            if invoice_sale != sale_key:
+                raise ValidationError("Payment Invoice does not belong to the requested Commerce Sale")
+            if invoice_obligation != obligation_key or payment_invoice is None or payment_obligation != obligation_key:
+                raise ValidationError("Invoice, Payment, and Obligation must reference the same persisted chain")
+            if invoice_state != "issued":
+                raise ValidationError("Commerce Sale settlement requires an issued Invoice")
+            if sale_state in {"cancelled", "returned"} or sale_lifecycle_state in {"cancelled", "returned"}:
+                raise ValidationError("Cancelled or returned Sale cannot be settled as a new sale")
+            if payment_state != "completed":
+                raise ValidationError("Payment must be completed before settlement")
+            if payer != debtor or payee != creditor:
+                raise ValidationError("Payment parties do not match the Obligation parties")
+            if account_person != creditor or account_state != "active":
+                raise ValidationError("Financial Account must be active and belong to the Invoice issuer/creditor")
+            if type(payment_amount) is not int or type(obligation_amount) is not int:
+                raise ValidationError("Finance amounts must be integer minor units")
+            if payment_amount != obligation_amount:
+                raise ValidationError("Partial or excess settlement is not supported")
+            payment_currency = require_canonical_currency_code(
+                payment_currency, label="Payment currency_code"
+            )
+            obligation_currency = require_canonical_currency_code(
+                obligation_currency, label="Obligation currency_code"
+            )
+            if payment_currency != obligation_currency:
+                raise ValidationError("Payment and Obligation currencies do not match")
+            if obligation_state not in {"open", "due", "overdue", "satisfied"}:
+                raise ValidationError("Obligation is not eligible for settlement")
+
+            by_obligation = connection.execute(
+                "SELECT settlement_id,payment_id,obligation_id,state,settled_at "
+                "FROM settlements WHERE obligation_id=?",
+                (obligation_key,),
+            ).fetchone()
+            if by_obligation is not None:
+                existing_id, existing_payment, existing_obligation, existing_state, existing_settled_at = by_obligation
+                if (existing_id, existing_payment, existing_obligation) != (
+                    settlement_key, payment_key, obligation_key
+                ):
+                    raise ValidationError("Obligation is already linked to a different Settlement")
+                if existing_state != "settled" or not existing_settled_at:
+                    raise ValidationError("Existing Settlement is not final; explicit reconciliation is required")
+            else:
+                if obligation_state == "satisfied":
+                    raise ValidationError("Satisfied Obligation has no matching Settlement; reconciliation is required")
+                connection.execute(
+                    "INSERT INTO settlements(settlement_id,payment_id,obligation_id,state,settled_at,"
+                    "created_at,updated_at,provenance_id,version_no) "
+                    "VALUES(?,?,?,'settled',?,?,?,NULL,1)",
+                    (settlement_key, payment_key, obligation_key, timestamp, timestamp, timestamp),
+                )
+                connection.execute(
+                    "INSERT INTO domain_history(domain_history_id,owner_domain,target_ref,change_type,"
+                    "historical_at,actor_context_ref,prior_version_ref,current_version_ref,"
+                    "change_payload_ref,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                    (str(uuid4()), "finance", settlement_key, "settlement_created", timestamp,
+                     approver, None, f"settlement-state:{settlement_key}:v1",
+                     f"state:settled;payment:{payment_key};obligation:{obligation_key}", timestamp),
+                )
+
+            # The nested savepoint makes settlement creation and final recognition
+            # one atomic unit. Any mapping, approval, currency, or ledger failure rolls
+            # back the new Settlement rather than leaving a false settled record.
+            return self.recognize(
+                connection, settlement_id=settlement_key,
+                financial_account_id=account_key, context_ref=context_ref,
+                authorization_grant_id=authorization_grant_id,
+                agent_action_id=agent_action_id, source_event_key=source_event_key,
+                now=timestamp, connected=True,
+            )
+
     def recognize(self, connection, *, settlement_id, financial_account_id,
                   context_ref, authorization_grant_id, agent_action_id,
                   source_event_key=None, now=None, connected=True):
