@@ -8,6 +8,7 @@ import pytest
 from agent_core.commerce_checkout import CommercialCheckoutApplication
 from agent_core.inventory_read import InventoryQuantityStatus
 from agent_core.persistence import connect_database
+from agent_core.persisted_settlement_recognition_application import PersistedSettlementRecognitionApplication
 from agent_core.shared import ValidationError
 from agent_core.application import ProductApplication, SaleApplication
 from agent_core.offering_application import OfferingApplication
@@ -196,6 +197,108 @@ def test_returning_checkout_sale_restores_stock_atomically_once(tmp_path):
         (request["sale_id"],),
     ).fetchone()[0] == 1
 
+
+
+
+def test_commerce_sale_payment_settlement_and_finance_recognition_are_one_governed_chain(tmp_path):
+    db, request = setup_checkout(tmp_path, quantity=2)
+    checkout = CommercialCheckoutApplication()
+    checkout_result = checkout.checkout(db, **request, now=NOW)
+    sale_id = request["sale_id"]
+    debtor = request["actor_person_id"]
+    creditor, approver, agent, context = [uid() for _ in range(4)]
+    account, obligation, invoice, payment, settlement = [uid() for _ in range(5)]
+    for person in (creditor, approver):
+        db.execute(
+            "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+            (person, STAMP, STAMP),
+        )
+    db.execute(
+        "INSERT INTO financial_accounts(financial_account_id,person_id,account_type,state,created_at,updated_at) "
+        "VALUES(?,?, 'cash','active',?,?)",
+        (account, creditor, STAMP, STAMP),
+    )
+    amount = checkout_result["total_minor"]
+    db.execute(
+        "INSERT INTO obligations(obligation_id,creditor_person_id,debtor_person_id,amount_minor,currency_code,"
+        "state,created_at,updated_at,version_no) VALUES(?,?,?,?,?,'open',?,?,1)",
+        (obligation, creditor, debtor, amount, "SAR", STAMP, STAMP),
+    )
+    db.execute(
+        "INSERT INTO invoices(invoice_id,sale_id,obligation_id,state,issuer_ref,invoice_number,"
+        "issue_at,due_at,created_at,updated_at,provenance_id,version_no) "
+        "VALUES(?,?,?,'issued',?,?,?,NULL,?,?,NULL,1)",
+        (invoice, sale_id, obligation, creditor, "INV-CYCLE-001", STAMP, STAMP, STAMP),
+    )
+    db.execute(
+        "INSERT INTO payments(payment_id,obligation_id,invoice_id,payer_person_id,payee_person_id,"
+        "amount_minor,currency_code,state,created_at,updated_at,version_no) "
+        "VALUES(?,?,?,?,?,?,?,'completed',?,?,1)",
+        (payment, obligation, invoice, debtor, creditor, amount, "SAR", STAMP, STAMP),
+    )
+    db.execute(
+        "INSERT INTO agents(agent_id,owner_person_id,configured_identity_ref,context_ref,state,created_at,updated_at) "
+        "VALUES(?,?,?,?, 'active',?,?)",
+        (agent, approver, "commerce-finance-agent", context, STAMP, STAMP),
+    )
+    db.execute(
+        "INSERT INTO authorization_grants(authorization_grant_id,agent_id,action_code,scope_ref,context_ref,"
+        "state,effective_from,created_at,updated_at) VALUES(?,?,?,?,?,'active',?,?,?)",
+        (uid(), agent, PersistedSettlementRecognitionApplication.ACTION_CODE,
+         settlement, context, "2026-10-01T00:00:00Z", STAMP, STAMP),
+    )
+    grant = db.execute(
+        "SELECT authorization_grant_id FROM authorization_grants WHERE scope_ref=? AND action_code=?",
+        (settlement, PersistedSettlementRecognitionApplication.ACTION_CODE),
+    ).fetchone()[0]
+    action = uid()
+    db.execute(
+        "INSERT INTO agent_actions(agent_action_id,agent_id,action_code,target_ref,context_ref,"
+        "authorization_grant_id,state,created_at,updated_at) VALUES(?,?,?,?,?,?,'approved',?,?)",
+        (action, agent, PersistedSettlementRecognitionApplication.ACTION_CODE,
+         settlement, context, grant, STAMP, STAMP),
+    )
+    db.execute(
+        "INSERT INTO approvals(approval_id,agent_action_id,approval_gate_code,state,approver_person_id,"
+        "decision_at,created_at,updated_at) VALUES(?,?, 'default','APPROVED',?,?,?,?)",
+        (uid(), action, approver, STAMP, STAMP, STAMP),
+    )
+    db.commit()
+
+    result = PersistedSettlementRecognitionApplication().settle_and_recognize_commerce_sale(
+        db, sale_id=sale_id, payment_id=payment, obligation_id=obligation,
+        settlement_id=settlement, financial_account_id=account, context_ref=context,
+        authorization_grant_id=grant, agent_action_id=action, now=STAMP,
+    )
+    assert result.replayed is False
+    assert result.amount_minor == amount
+    assert db.execute(
+        "SELECT payment_id,obligation_id,state,settled_at FROM settlements WHERE settlement_id=?",
+        (settlement,),
+    ).fetchone() == (payment, obligation, "settled", STAMP)
+    assert db.execute(
+        "SELECT state FROM invoices WHERE invoice_id=?", (invoice,)
+    ).fetchone()[0] == "issued"
+    assert db.execute(
+        "SELECT state FROM obligations WHERE obligation_id=?", (obligation,)
+    ).fetchone()[0] == "satisfied"
+    assert db.execute(
+        "SELECT COUNT(*) FROM financial_transactions WHERE settlement_id=? AND state='recognized'",
+        (settlement,),
+    ).fetchone()[0] == 1
+    assert db.execute(
+        "SELECT COUNT(*) FROM ledger_entries WHERE financial_transaction_id=? AND state='posted'",
+        (str(result.financial_transaction_id),),
+    ).fetchone()[0] == 1
+    replay = PersistedSettlementRecognitionApplication().settle_and_recognize_commerce_sale(
+        db, sale_id=sale_id, payment_id=payment, obligation_id=obligation,
+        settlement_id=settlement, financial_account_id=account, context_ref=context,
+        authorization_grant_id=grant, agent_action_id=action, now=STAMP,
+    )
+    assert replay.replayed is True
+    assert db.execute("SELECT COUNT(*) FROM settlements WHERE obligation_id=?", (obligation,)).fetchone()[0] == 1
+    assert db.execute("SELECT COUNT(*) FROM financial_transactions WHERE settlement_id=?", (settlement,)).fetchone()[0] == 1
+    db.close()
 
 
 def test_partial_and_multiple_returns_are_idempotent_and_quantity_bounded(tmp_path):
