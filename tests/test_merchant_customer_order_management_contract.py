@@ -11,6 +11,7 @@ def test_merchant_order_lifecycle_is_server_authorized_atomic_and_audited():
     for marker in (
         "commercial_customer_portal_list_organization_orders_v2",
         "commercial_customer_portal_list_organization_bookings",
+        "'timezone'",
         "commercial_customer_portal_decide_order",
         "commercial_customer_portal_decide_booking",
         "commercial_customer_portal_set_order_hidden",
@@ -48,7 +49,7 @@ def test_merchant_android_screen_exposes_search_filters_booking_decisions_hide_a
     screen = SCREEN.read_text(encoding="utf-8")
     repository = REPOSITORY.read_text(encoding="utf-8")
     assert "loadMerchantBookings(context,hidden)" in screen
-    for marker in ("بحث برقم الطلب", "تصفية التاريخ", "الحجوزات", "إخفاء من القائمة", "إظهار مجددًا", "قبول الطلب", "رفض الطلب", "تأكيد الحجز", "رفض الحجز", "اعتماد وإتمام البيع", "التفاصيل"):
+    for marker in ("بحث برقم الطلب", "تصفية التاريخ", "booking.timezone", "الحجوزات", "إخفاء من القائمة", "إظهار مجددًا", "قبول الطلب", "رفض الطلب", "تأكيد الحجز", "رفض الحجز", "اعتماد وإتمام البيع", "التفاصيل"):
         assert marker in screen
     for marker in (
         "decideMerchantCustomerOrder(" ,
