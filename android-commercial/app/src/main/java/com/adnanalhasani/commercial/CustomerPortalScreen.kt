@@ -305,7 +305,7 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
                                                 result.onSuccess { order ->
                                                     quantities = emptyMap()
                                                     note = ""
-                                                    notice = "تم إرسال الطلب رقم ${order.orderNumber}. الحالة: ${order.status}، الإجمالي المؤكد: ${portalMoney(order.totalMinor, order.currencyCode)}${if (order.replayed) " (استرجاع نتيجة محاولة سابقة)" else ""}."
+                                                    notice = "تم تسجيل الطلب المبدئي رقم ${order.orderNumber} للمراجعة. الإجمالي المسجل: ${portalMoney(order.totalMinor, order.currencyCode)}. لم يُحجز المخزون ولم يكتمل البيع أو التحصيل بعد.${if (order.replayed) " (استرجاع نتيجة محاولة سابقة)" else ""}"
                                                 }.onFailure {
                                                     error = it.message ?: "تعذر تأكيد حفظ الطلب. أعد المحاولة دون تغيير السلة."
                                                     notice = ""
