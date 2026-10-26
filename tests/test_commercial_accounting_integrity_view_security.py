@@ -1,7 +1,7 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-MIGRATION = ROOT / "supabase/migrations/20261026100000_restrict_accounting_integrity_view_access.sql"
+MIGRATION = ROOT / "supabase/migrations/20261026114510_restrict_accounting_integrity_view_access.sql"
 INTEGRITY_TEST = ROOT / "supabase/tests/database/commercial_integrity_test.sql"
 
 
