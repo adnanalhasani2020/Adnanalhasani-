@@ -43,6 +43,8 @@ internal fun CustomerOrderFulfillmentScreen(context: Context,onBack:()->Unit) {
  var orders by remember { mutableStateOf<List<CustomerOrderFulfillmentOrder>>(emptyList()) }
  var bookings by remember { mutableStateOf<List<MerchantBooking>>(emptyList()) }
  var locations by remember { mutableStateOf<List<CustomerOrderFulfillmentLocation>>(emptyList()) }
+ var editableOfferings by remember { mutableStateOf<List<MerchantEditableOffering>>(emptyList()) }
+ var editTarget by remember { mutableStateOf<CustomerOrderFulfillmentOrder?>(null) }
  var locationId by remember { mutableStateOf("") }
  var locationMenu by remember { mutableStateOf(false) }
  var tab by remember { mutableStateOf("orders") }
@@ -81,11 +83,13 @@ internal fun CustomerOrderFulfillmentScreen(context: Context,onBack:()->Unit) {
    val a=runCatching{loadCustomerOrderFulfillmentQueue(context,hidden)}
    val b=runCatching{loadMerchantBookings(context,hidden)}
    val c=runCatching{loadCustomerOrderFulfillmentLocations(context)}
+   val d=runCatching{loadMerchantEditableOfferings(context)}
    customerOrdersMain.post {
     loading=false
     a.onSuccess{orders=it}.onFailure{error=it.message ?: "تعذر تحميل الطلبات."}
     b.onSuccess{bookings=it}.onFailure{if(error.isBlank())error=it.message ?: "تعذر تحميل الحجوزات."}
     c.onSuccess{locations=it;if(it.none{x->x.id==locationId})locationId=it.firstOrNull()?.id.orEmpty()}.onFailure{if(error.isBlank())error=it.message ?: "تعذر تحميل مواقع المخزون."}
+    d.onSuccess{editableOfferings=it}.onFailure{if(error.isBlank())error=it.message ?: "تعذر تحميل قائمة الأصناف."}
    }
   }
  }
@@ -137,7 +141,9 @@ internal fun CustomerOrderFulfillmentScreen(context: Context,onBack:()->Unit) {
         if(order.customerNote.isNotBlank())Text("ملاحظة العميل: "+order.customerNote,fontSize=12.sp)
         if(order.decisionReason.isNotBlank())Text("سبب القرار: "+order.decisionReason,fontSize=12.sp,color=CustomerOrdersMuted)
         order.items.forEach{line->Column{Text(line.name,fontWeight=FontWeight.Medium);Text("الكمية "+line.quantity+" • سعر الوحدة "+customerOrderMoney(line.unitPriceMinor,order.currencyCode)+" • الإجمالي "+customerOrderMoney(line.lineTotalMinor,order.currencyCode),fontSize=11.sp,color=CustomerOrdersMuted)}}
-        if(order.status=="pending")Row(horizontalArrangement=Arrangement.spacedBy(6.dp),modifier=Modifier.fillMaxWidth()){
+        if(order.status=="pending") {
+         if(order.orderType=="purchase") OutlinedButton(onClick={editTarget=order},enabled=busy==null,modifier=Modifier.fillMaxWidth()){Text("تعديل البنود قبل القبول")}
+         Row(horizontalArrangement=Arrangement.spacedBy(6.dp),modifier=Modifier.fillMaxWidth()){
          Button(onClick={decisionTarget=MerchantDecision(order.id,false,false)},enabled=busy==null,modifier=Modifier.weight(1f)){Text("قبول الطلب")}
          OutlinedButton(onClick={decisionTarget=MerchantDecision(order.id,false,true)},enabled=busy==null,modifier=Modifier.weight(1f)){Text("رفض الطلب")}
         }
@@ -184,7 +190,52 @@ internal fun CustomerOrderFulfillmentScreen(context: Context,onBack:()->Unit) {
    confirmButton={Button(enabled=busy==null&&(!target.reject||reason.isNotBlank()),onClick={val d=if(target.reject)"reject" else "accept";action((if(target.booking)"booking:" else "order:")+target.id,{if(target.booking)decideMerchantCustomerBooking(context,target.id,d,reason)else decideMerchantCustomerOrder(context,target.id,d,reason)}){"تم تنفيذ القرار. الحالة الجديدة: "+it.optString("status")};decisionTarget=null}){Text("تأكيد القرار")}},
    dismissButton={TextButton(onClick={decisionTarget=null},enabled=busy==null){Text("رجوع")}})
  }
+ editTarget?.let { order ->
+  MerchantOrderLineEditor(order,editableOfferings,busy!=null,{ if(busy==null)editTarget=null }) { lines,reason ->
+   action("edit-order:"+order.id,{saveMerchantCustomerOrderLines(context,order.id,lines,reason)}) {
+    "حُفظت البنود على الخادم. الإجمالي الجديد: "+customerOrderMoney(it.optLong("total_minor"),it.optString("currency_code",order.currencyCode))
+   }
+   editTarget=null
+  }
+ }
 }
+
 
 private data class MerchantDecision(val id:String,val booking:Boolean,val reject:Boolean)
 @Composable private fun MerchantQueueEmpty(message:String){Card(colors=CardDefaults.cardColors(containerColor=Color.White),border=BorderStroke(1.dp,CustomerOrdersBorder)){Column(Modifier.fillMaxWidth().padding(22.dp),horizontalAlignment=Alignment.CenterHorizontally){Text(message,color=CustomerOrdersMuted);Text("حدّث البيانات أو غيّر المرشحات.",fontSize=11.sp,color=CustomerOrdersMuted)}}}
+
+@Composable
+private fun MerchantOrderLineEditor(
+ order: CustomerOrderFulfillmentOrder,
+ offerings: List<MerchantEditableOffering>,
+ busy: Boolean,
+ onDismiss: () -> Unit,
+ onSave: (List<Pair<String,String>>,String) -> Unit
+) {
+ val quantities=remember(order.id){mutableStateMapOf<String,String>().apply{order.items.forEach{put(it.offeringId,it.quantity)}}}
+ var query by remember{mutableStateOf("")}
+ var reason by remember{mutableStateOf("")}
+ var newQuantity by remember{mutableStateOf("1")}
+ var menu by remember{mutableStateOf(false)}
+ val matches=offerings.filter{it.name.contains(query,true)&&it.currencyCode.equals(order.currencyCode,true)&&it.id !in quantities.keys}.take(25)
+ AlertDialog(onDismissRequest=onDismiss,title={Text("تعديل بنود الطلب "+order.orderNumber)},
+  text={Column(Modifier.fillMaxWidth().heightIn(max=480.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(7.dp)){
+   Text("التعديل متاح قبل قبول الطلب فقط. يتحقق الخادم من الأصناف والأسعار والعملة ويعيد احتساب الإجمالي.",fontSize=12.sp,color=CustomerOrdersMuted)
+   order.items.filter{it.offeringId in quantities.keys}.forEach{line->
+    Column { Text(line.name,fontWeight=FontWeight.SemiBold);Row(verticalAlignment=Alignment.CenterVertically){
+     OutlinedTextField(quantities[line.offeringId].orEmpty(),{quantities[line.offeringId]=it},label={Text("الكمية")},modifier=Modifier.weight(1f),singleLine=true)
+     TextButton(onClick={quantities.remove(line.offeringId)}){Text("حذف")}
+    }}
+   }
+   OutlinedTextField(query,{query=it},label={Text("بحث لإضافة صنف")},modifier=Modifier.fillMaxWidth(),singleLine=true)
+   Box { OutlinedButton(onClick={menu=true},enabled=matches.isNotEmpty(),modifier=Modifier.fillMaxWidth()){Text("إضافة صنف ("+matches.size+")")}
+    DropdownMenu(menu,{menu=false},modifier=Modifier.heightIn(max=240.dp)){matches.forEach{o->DropdownMenuItem(text={Column{Text(o.name);Text(customerOrderMoney(o.priceMinor,o.currencyCode)+" / "+o.unitCode,fontSize=11.sp,color=CustomerOrdersMuted)}},onClick={quantities[o.id]=newQuantity;menu=false;query=""})}}
+   }
+   OutlinedTextField(newQuantity,{newQuantity=it},label={Text("الكمية الافتراضية")},singleLine=true)
+   OutlinedTextField(reason,{if(it.length<=500)reason=it},label={Text("سبب التعديل (اختياري)")},modifier=Modifier.fillMaxWidth())
+   if(quantities.isEmpty())Text("يجب إبقاء بند واحد على الأقل.",color=MaterialTheme.colorScheme.error)
+  }},
+  confirmButton={Button(enabled=!busy&&quantities.isNotEmpty()&&quantities.values.all{it.toBigDecimalOrNull()?.let{q->q>java.math.BigDecimal.ZERO&&q<=java.math.BigDecimal("100000")&&q.stripTrailingZeros().scale()<=0}==true},onClick={onSave(quantities.entries.map{it.key to it.value},reason)}){Text("حفظ وإعادة احتساب")}},
+  dismissButton={TextButton(onClick=onDismiss,enabled=!busy){Text("إلغاء")}}
+ )
+}
