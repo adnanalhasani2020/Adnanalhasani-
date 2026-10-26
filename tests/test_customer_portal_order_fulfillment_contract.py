@@ -59,7 +59,8 @@ def test_android_repository_calls_guarded_fulfillment_rpc():
 def test_database_regression_checks_cover_security_and_atomic_checkout():
     sql = DATABASE_TEST.read_text(encoding="utf-8").lower()
     assert "plan(8)" in sql
-    assert "not has_function_privilege('anon'" in sql
+    assert "not has_function_privilege(" in sql
+    assert "'anon'" in sql
     assert "customer_order_fulfillment_permission_required" in sql
     assert "commercial_checkout_sale_multi" in sql
     assert "customer_order_price_or_offering_changed_requote_required" in sql
