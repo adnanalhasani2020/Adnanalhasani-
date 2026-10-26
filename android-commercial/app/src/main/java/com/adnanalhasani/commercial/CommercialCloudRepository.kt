@@ -2303,6 +2303,29 @@ internal fun cancelCustomerPortalBooking(context: Context, bookingId: String, re
 }
 
 
+
+internal fun fulfillCustomerPortalOrder(
+    context: Context,
+    orderId: String,
+    locationId: String,
+    idempotencyKey: String
+): JSONObject {
+    require(orderId.isNotBlank() && locationId.isNotBlank()) {
+        "مرجع الطلب وموقع المخزون مطلوبان."
+    }
+    require(idempotencyKey.length in 8..200) { "مفتاح إتمام الطلب غير صالح." }
+    val (orgId, access) = commercialMasterDataAccess(context)
+    return JSONObject(commercialCloudRequest(
+        "/rest/v1/rpc/commercial_customer_portal_fulfill_order", "POST",
+        JSONObject()
+            .put("p_organization_id", orgId)
+            .put("p_order_id", orderId)
+            .put("p_location_id", locationId)
+            .put("p_idempotency_key", idempotencyKey),
+        access
+    ))
+}
+
 internal fun cancelCustomerPortalOrder(context: Context, orderId: String, reason: String = ""): String {
     require(orderId.isNotBlank()) { "رقم الطلب غير صالح." }
     val access = customerPortalAccessToken(context)
