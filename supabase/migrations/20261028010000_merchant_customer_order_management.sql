@@ -134,7 +134,7 @@ AS $function$
 DECLARE v_uid uuid:=auth.uid(); v_order public.commercial_customer_orders%ROWTYPE; v_next text; v_reason text:=nullif(btrim(p_reason),'');
 BEGIN
   IF v_uid IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
-  IF p_decision NOT IN ('accept','reject') OR p_order_id IS NULL OR p_organization_id IS NULL
+  IF p_decision IS NULL OR p_decision NOT IN ('accept','reject') OR p_order_id IS NULL OR p_organization_id IS NULL
      OR (v_reason IS NOT NULL AND length(v_reason)>500) THEN RAISE EXCEPTION 'invalid_customer_order_decision' USING ERRCODE='22023'; END IF;
   IF p_decision='reject' AND v_reason IS NULL THEN RAISE EXCEPTION 'rejection_reason_required' USING ERRCODE='22023'; END IF;
   IF NOT EXISTS(SELECT 1 FROM public.commercial_organization_members m WHERE m.organization_id=p_organization_id
@@ -324,7 +324,7 @@ DECLARE v_uid uuid:=auth.uid(); v_booking public.commercial_bookings%ROWTYPE; v_
  v_requested numeric:=0; v_used numeric:=0;
 BEGIN
  IF v_uid IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
- IF p_organization_id IS NULL OR p_booking_id IS NULL OR p_decision NOT IN ('accept','reject')
+ IF p_organization_id IS NULL OR p_booking_id IS NULL OR p_decision IS NULL OR p_decision NOT IN ('accept','reject')
    OR (v_reason IS NOT NULL AND length(v_reason)>500) THEN RAISE EXCEPTION 'invalid_customer_booking_decision' USING ERRCODE='22023'; END IF;
  IF p_decision='reject' AND v_reason IS NULL THEN RAISE EXCEPTION 'rejection_reason_required' USING ERRCODE='22023'; END IF;
  IF NOT EXISTS(SELECT 1 FROM public.commercial_organization_members m WHERE m.organization_id=p_organization_id AND m.user_id=v_uid
