@@ -1868,7 +1868,7 @@ internal fun loadCommercialCloudReceivables(context: Context): List<CommercialCl
     require(activityId.isNotBlank()) { "ملف النشاط غير محفوظ." }
     val (orgId, access) = commercialMasterDataAccess(context)
     val path = "/rest/v1/commercial_sales" +
-        "?select=id,receipt_number,customer_id,total_minor,currency_code,created_at,payment_status,customer:commercial_customers(display_name),payments:commercial_payments(amount_minor,status),returns:commercial_sales_returns(id,status,refund_status,approved_refund_minor)" +
+        "?select=id,receipt_number,customer_id,total_minor,currency_code,created_at,payment_status,customer:commercial_customers(display_name),payments:commercial_payments(amount_minor,status),returns:commercial_sales_returns(id,status,refund_status,approved_refund_minor,refund_postings:commercial_return_refund_postings(amount_minor))" +
         "&organization_id=eq.$orgId&activity_id=eq.$activityId&status=eq.completed&customer_id=not.is.null&order=created_at.desc,id.asc"
     val rows = commercialCloudPagedGet(path, access)
     return buildList {
@@ -1888,14 +1888,23 @@ internal fun loadCommercialCloudReceivables(context: Context): List<CommercialCl
             }
             val returns = row.optJSONArray("returns")
             var credited = 0L
+            var refunded = 0L
             for (j in 0 until (returns?.length() ?: 0)) {
                 val saleReturn = returns?.optJSONObject(j) ?: continue
                 if (saleReturn.optString("status") == "completed") {
                     credited = Math.addExact(credited, saleReturn.optLong("approved_refund_minor", 0L).coerceAtLeast(0L))
                 }
+                // A cash refund reduces the net amount paid, but is not a second
+                // credit note. Keep the two adjustments separate to avoid double counting.
+                val refundPostings = saleReturn.optJSONArray("refund_postings")
+                for (k in 0 until (refundPostings?.length() ?: 0)) {
+                    val refund = refundPostings?.optJSONObject(k) ?: continue
+                    refunded = Math.addExact(refunded, refund.optLong("amount_minor", 0L).coerceAtLeast(0L))
+                }
             }
+            val netPaid = (paid - refunded).coerceAtLeast(0L)
             val total = row.optLong("total_minor", 0L).coerceAtLeast(0L)
-            val due = (total - paid - credited).coerceAtLeast(0L)
+            val due = (total - netPaid - credited).coerceAtLeast(0L)
             if (due > 0L) add(CommercialCloudReceivable(
                 saleId = row.optString("id"),
                 receiptNumber = row.optString("receipt_number"),
