@@ -169,7 +169,7 @@ internal fun CustomerOrderFulfillmentScreen(context: Context,onBack:()->Unit) {
      val open=expanded==booking.id
      Card(colors=CardDefaults.cardColors(containerColor=Color.White),border=BorderStroke(1.dp,CustomerOrdersBorder),shape=RoundedCornerShape(16.dp)){
       Column(Modifier.fillMaxWidth().padding(13.dp),verticalArrangement=Arrangement.spacedBy(7.dp)){
-       Row(verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text("حجز "+booking.bookingNumber,fontWeight=FontWeight.Bold,color=CustomerOrdersInk);Text(booking.customerName+" • "+booking.resourceName,fontSize=12.sp,color=CustomerOrdersMuted);Text(merchantDate(booking.startsAt)+" — "+merchantDate(booking.endsAt),fontSize=11.sp,color=CustomerOrdersMuted)};Text(merchantBookingStatus(booking.status),fontWeight=FontWeight.SemiBold,color=CustomerOrdersGreen)}
+       Row(verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text("حجز "+booking.bookingNumber,fontWeight=FontWeight.Bold,color=CustomerOrdersInk);Text(booking.customerName+" • "+booking.resourceName,fontSize=12.sp,color=CustomerOrdersMuted);Text(merchantDate(booking.startsAt)+" — "+merchantDate(booking.endsAt)+" ("+booking.timezone+")",fontSize=11.sp,color=CustomerOrdersMuted)};Text(merchantBookingStatus(booking.status),fontWeight=FontWeight.SemiBold,color=CustomerOrdersGreen)}
        Row(verticalAlignment=Alignment.CenterVertically){Text("الطلب المرتبط "+booking.orderNumber,Modifier.weight(1f),fontSize=12.sp);Text(customerOrderMoney(booking.totalMinor,booking.currencyCode),fontWeight=FontWeight.Bold)}
        Row {
         TextButton(onClick={expanded=if(open)null else booking.id}){Text(if(open)"إغلاق التفاصيل" else "التفاصيل والبنود")}
