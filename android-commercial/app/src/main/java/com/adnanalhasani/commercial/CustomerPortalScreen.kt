@@ -104,6 +104,9 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
         else Triple(item, text, kotlin.math.round(quantity.toDouble() * item.priceMinor).toLong())
     }
     val estimatedTotal = cart.sumOf { it.third }
+    val unsupportedFractionalProduct = cart.any { (item, text, _) ->
+        item.itemType == "product" && text.toBigDecimalOrNull()?.stripTrailingZeros()?.scale()?.let { it > 0 } == true
+    }
 
     Scaffold(
         topBar = {
@@ -283,6 +286,8 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
                                         }
                                     } else if (cart.isEmpty() || invalid) {
                                         error = "تحقق من الكميات (حتى 3 منازل عشرية) وتأكد من اختيار أصناف بعملة واحدة."
+                                    } else if (unsupportedFractionalProduct) {
+                                        error = "الاستلام والبيع السحابي يدعمان حاليًا الكميات الصحيحة للمنتجات فقط. عدّل كمية المنتج إلى عدد صحيح؛ لن يتم إنشاء طلب غير قابل للإتمام."
                                     } else if (estimatedTotal <= 0L) {
                                         error = "إجمالي الطلب يجب أن يكون أكبر من صفر."
                                     } else {
