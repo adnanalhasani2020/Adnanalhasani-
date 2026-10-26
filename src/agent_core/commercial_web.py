@@ -541,9 +541,14 @@ class CommercialWebApplication:
                 now = datetime.now(timezone.utc)
                 stamp = now.isoformat(timespec="microseconds").replace("+00:00", "Z")
                 if sale[1] not in {"completed", "fulfilled"}:
-                    return self._json(start_response, "409 Conflict", {
-                        "error": "لا يمكن طلب إرجاع لبيع غير مكتمل أو أُرجعت كميته بالكامل."
-                    })
+                    existing_request = db.execute(
+                        "SELECT 1 FROM sale_return_events WHERE sale_id=? AND idempotency_key=?",
+                        (sale_key, body["idempotency_key"]),
+                    ).fetchone()
+                    if existing_request is None:
+                        return self._json(start_response, "409 Conflict", {
+                            "error": "لا يمكن طلب إرجاع لبيع غير مكتمل أو أُرجعت كميته بالكامل."
+                        })
                 grants = db.execute(
                     "SELECT authorization_grant_id FROM authorization_grants "
                     "WHERE subject_person_id=? AND agent_id IS NULL AND action_code='return_sale' "
