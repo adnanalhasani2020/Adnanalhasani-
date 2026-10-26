@@ -37,6 +37,15 @@ class ReceivablesAndExpenseIntegrityTests(unittest.TestCase):
         self.assertIn("UPDATE public.commercial_sales", migration)
         self.assertIn("ELSE 'partially_paid'", migration)
 
+    def test_customer_party_account_rls_migration_scopes_member_and_admin_policies_to_row_tenant(self):
+        migration = (ROOT / "supabase/migrations/20261026213100_fix_customer_party_accounts_rls_scope.sql").read_text(encoding="utf-8")
+        self.assertIn("m.organization_id = commercial_customer_party_accounts.organization_id", migration)
+        self.assertIn("m.user_id = (SELECT auth.uid())", migration)
+        self.assertIn("m.role IN ('owner', 'admin', 'manager')", migration)
+        self.assertIn("WITH CHECK", migration)
+        self.assertNotIn("m.organization_id = m.organization_id", migration)
+        self.assertIn("ENABLE ROW LEVEL SECURITY", migration)
+
     def test_daily_expense_total_uses_organization_timezone_not_device_date(self):
         repository = REPOSITORY.read_text(encoding="utf-8")
         screen = EXPENSE_SCREEN.read_text(encoding="utf-8")
