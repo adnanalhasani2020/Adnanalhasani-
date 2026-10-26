@@ -233,7 +233,7 @@ internal fun CommercialCloudDebtScreen(context: Context, onBack: () -> Unit) {
                                     message = "تم تسجيل التحصيل وإصدار سند قبض مرقّم مرتبط بالدفعة المحاسبية."
                                 }
                                 refresh++
-                            }.onFailure { error = it.message ?: "تعذر تسجيل التحصيل؛ تحقق من السجل قبل إعادة المحاولة." }
+                            }.onFailure { error = it.message ?: "تعذر تسجيل التحصيل." }
                         }
                     }
                 }
