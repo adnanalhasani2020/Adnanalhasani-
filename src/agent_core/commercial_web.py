@@ -13,12 +13,14 @@ import os
 import secrets
 import sqlite3
 import uuid
+from datetime import datetime, timezone
 from http.cookies import SimpleCookie
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 from wsgiref.simple_server import WSGIServer, make_server, WSGIRequestHandler
 from socketserver import ThreadingMixIn
 
+from agent_core.application import SaleApplication
 from agent_core.commerce_checkout import CommercialCheckoutApplication
 from agent_core.commercial_identity import CommercialIdentityApplication
 from agent_core.persistence import connect_database
@@ -461,6 +463,58 @@ class CommercialWebApplication:
                     scope_key=body["scope_key"], location_ref=body.get("location_ref"),
                     idempotency_key=body["idempotency_key"], sale_id=body["sale_id"],
                     session_token=token,
+                    invoice_issuer_ref=body.get("invoice_issuer_ref"),
+                    invoice_number=body.get("invoice_number"),
+                    issue_invoice_grant_id=body.get("issue_invoice_grant_id"),
+                    invoice_due_at=body.get("invoice_due_at"),
+                    invoice_obligation_id=body.get("invoice_obligation_id"),
+                )
+                return self._json(start_response, "200 OK", result)
+
+            if method == "POST" and path == "/api/returns":
+                body = self._body(environ)
+                required = ("sale_id", "items", "idempotency_key", "reason")
+                missing = [key for key in required if key not in body]
+                if missing:
+                    raise ValidationError("Missing Sale return fields: " + ", ".join(missing))
+                sale_key = str(body["sale_id"])
+                sale = db.execute(
+                    "SELECT activity_id,state FROM sales WHERE sale_id=?", (sale_key,)
+                ).fetchone()
+                if sale is None:
+                    return self._json(start_response, "404 Not Found", {"error": "عملية البيع غير موجودة."})
+                now = datetime.now(timezone.utc)
+                stamp = now.isoformat(timespec="microseconds").replace("+00:00", "Z")
+                if sale[1] not in {"completed", "fulfilled"}:
+                    return self._json(start_response, "409 Conflict", {
+                        "error": "لا يمكن إرجاع بيع غير مكتمل أو أُرجعت كميته بالكامل."
+                    })
+                grants = db.execute(
+                    "SELECT authorization_grant_id FROM authorization_grants "
+                    "WHERE subject_person_id=? AND agent_id IS NULL AND action_code='return_sale' "
+                    "AND scope_ref=? AND context_ref=? AND state='active' "
+                    "AND effective_from<=? AND (effective_to IS NULL OR effective_to>?) "
+                    "ORDER BY authorization_grant_id",
+                    (person_id, sale_key, sale[0], stamp, stamp),
+                ).fetchall()
+                if not grants:
+                    return self._json(start_response, "403 Forbidden", {
+                        "error": "لا توجد صلاحية إرجاع معتمدة لهذا البيع. لم يتم تغيير المخزون أو الحسابات."
+                    })
+                if len(grants) != 1:
+                    return self._json(start_response, "409 Conflict", {
+                        "error": "توجد صلاحيات إرجاع متعارضة لهذا البيع؛ يلزم تصحيح الصلاحيات قبل المتابعة."
+                    })
+                result = SaleApplication().return_sale_items(
+                    db, sale_key, person_id, grants[0][0],
+                    items=body["items"], idempotency_key=body["idempotency_key"],
+                    reason=body["reason"], now=now,
+                )
+                result["financial_effects"] = "inventory_only"
+                result["payment_refund_performed"] = False
+                result["notice"] = (
+                    "تم تسجيل حركة إرجاع المخزون فقط. لم يُنفذ رد مالي؛ "
+                    "لا تستخدم هذا المسار لإرجاع فاتورة مرتبطة بالتزام أو دفعة."
                 )
                 return self._json(start_response, "200 OK", result)
 
