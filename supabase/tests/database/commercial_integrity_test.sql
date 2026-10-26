@@ -1,7 +1,7 @@
 -- Run with Supabase CLI / pgTAP in a disposable local or staging database.
 -- These are schema regression tests; they do not replace authenticated-session integration tests.
 BEGIN;
-SELECT plan(30);
+SELECT plan(35);
 
 SELECT has_table('public', 'commercial_audit_events',
   'append-only audit event table exists');
@@ -244,6 +244,46 @@ SELECT ok(
   )) > 0,
   'first checkout response derives payment-recorded status and paid amount from persisted successful payment rows'
 );
+
+
+-- Purchase fractional-quantity and cumulative accounting regressions.
+SELECT ok(
+  position('scale(v_qty)>6' in pg_get_functiondef(
+    'commercial_private.commercial_receive_purchase_order(uuid,uuid,uuid,jsonb,text)'::regprocedure
+  )) > 0
+  AND position('v_qty<>trunc(v_qty)' in pg_get_functiondef(
+    'commercial_private.commercial_receive_purchase_order(uuid,uuid,uuid,jsonb,text)'::regprocedure
+  )) = 0,
+  'effective purchase receipt RPC accepts fractional quantities up to six decimal places'
+);
+
+SELECT ok(
+  position('round((prior.quantity_before + ri.quantity::numeric) * ri.unit_cost_minor::numeric)' in pg_get_functiondef(
+    'commercial_private.commercial_post_purchase_receipt_financials()'::regprocedure
+  )) > 0
+  AND position('pr.accounting_sequence < NEW.accounting_sequence' in pg_get_functiondef(
+    'commercial_private.commercial_post_purchase_receipt_financials()'::regprocedure
+  )) > 0,
+  'purchase receipt posting uses cumulative per-line rounding in accounting sequence order'
+);
+
+SELECT ok(
+  position('round((prior.quantity_before + si.quantity::numeric) * poi.unit_cost_minor::numeric)' in pg_get_functiondef(
+    'commercial_private.commercial_post_supplier_invoice_financials()'::regprocedure
+  )) > 0
+  AND position('prior_invoice.accounting_sequence < NEW.accounting_sequence' in pg_get_functiondef(
+    'commercial_private.commercial_post_supplier_invoice_financials()'::regprocedure
+  )) > 0,
+  'supplier invoice posting uses cumulative per-line rounding in accounting sequence order'
+);
+
+SELECT has_trigger('public', 'commercial_purchase_receipts',
+  'commercial_purchase_receipt_financials_after_insert',
+  'purchase receipt accounting is wired through a deferred constraint trigger');
+
+SELECT has_trigger('public', 'commercial_supplier_invoices',
+  'commercial_supplier_invoice_financials_after_insert',
+  'supplier invoice accounting is wired through a deferred constraint trigger');
 
 SELECT * FROM finish();
 ROLLBACK;
