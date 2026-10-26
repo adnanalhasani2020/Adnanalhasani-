@@ -353,13 +353,14 @@ class CommercialCheckoutApplication:
             if unit_price and quantity > _SQLITE_MAX_INTEGER // unit_price:
                 raise ValidationError("Sale total exceeds the supported integer range")
             line_total = quantity * unit_price
+            sale_line_key = str(uuid4())
             connection.execute(
                 """INSERT INTO sale_lines(
                        sale_line_id, sale_id, offering_id, product_id, quantity,
                        unit_price_minor, currency_code, line_total_minor, created_at,
                        product_name_snapshot
                    ) VALUES(?,?,?,?,?,?,?,?,?,?)""",
-                (str(uuid4()), sale_key, offering, product, quantity,
+                (sale_line_key, sale_key, offering, product, quantity,
                  price["unit_price_minor"], price["currency_code"], line_total, stamp, product_name),
             )
             connection.execute(
@@ -374,7 +375,7 @@ class CommercialCheckoutApplication:
             )
             remaining = stock["available_quantity"] - quantity
             response = {
-                "sale_id": sale_key, "state": "fulfilled", "offering_id": offering,
+                "sale_id": sale_key, "sale_line_id": sale_line_key, "state": "fulfilled", "offering_id": offering,
                 "product_id": product, "product_name": product_name, "quantity": quantity,
                 "unit_price_minor": price["unit_price_minor"], "currency_code": price["currency_code"],
                 "total_minor": line_total, "inventory_position_id": stock["inventory_position_id"],
