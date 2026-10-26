@@ -2,7 +2,7 @@
 
 **Reviewed:** 2026-10-19  
 **Scope:** commercial storefront, stock-gated checkout, sale lifecycle, persisted Commerce invoices, and Finance boundary.  
-**Status:** source-level audit; runtime tests were not executed in this review.
+**Status:** updated implementation audit; see the current PR's CI for executable verification. This is not production or tax-compliance certification.
 
 ## Executive result
 
@@ -10,7 +10,7 @@ The repository has a useful, transaction-oriented checkout path and a separately
 
 The current printable `/invoices/{sale_id}` route is explicitly a backward-compatible alias for a sales receipt; the page correctly states that it is not a tax invoice. Do not rename it or represent it as a legally compliant invoice.
 
-## Lifecycle reviewed
+## Current implementation update (2026-10-26)\n\n- `CommercialCheckoutApplication.checkout` can now issue an operational Commerce Invoice in the same SQLite transaction when the caller supplies an active issuer, unique invoice number, and exact persisted `issue_invoice` grant. Missing/invalid invoice authorization rolls back the sale, stock movement, and checkout receipt; same-key retries replay the saved invoice identity. This is opt-in and does not invent an issuer or grant.\n- `PersistedSettlementRecognitionApplication.settle_and_recognize_commerce_sale` verifies that a completed Payment, issued Invoice, Sale, Obligation, and creditor-owned Financial Account form one persisted chain. It creates the Settlement and recognized FinancialTransaction/LedgerEntry atomically under the existing Finance agent grant and recorded human approval. Any validation or ledger failure rolls back the new Settlement. It does not infer payment from fulfillment and only supports a full single-obligation settlement.\n- These additions connect the explicit invoice and completed-payment records to final Finance recognition, but they do not create a Payment or external payment evidence automatically. Callers must still record/complete Payment through `PaymentApplication`; partial settlement remains unsupported.\n\n## Lifecycle reviewed
 
 1. **Catalog:** only active offerings with one effective price and known positive stock are exposed.
 2. **Checkout:** `CommercialCheckoutApplication.checkout` validates identifiers, quantity, session/grants, and idempotency; uses `BEGIN IMMEDIATE`; snapshots the sale price; writes sale, stock movement, and a persisted receipt in the same transaction.
