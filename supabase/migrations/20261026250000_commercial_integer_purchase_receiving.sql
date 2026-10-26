@@ -167,4 +167,3 @@ END;
 $function$;
 
 REVOKE ALL ON FUNCTION commercial_private.commercial_receive_purchase_order(uuid,uuid,uuid,jsonb,text) FROM PUBLIC,anon,authenticated;
-GRANT EXECUTE ON FUNCTION commercial_private.commercial_receive_purchase_order(uuid,uuid,uuid,jsonb,text) TO authenticated;
