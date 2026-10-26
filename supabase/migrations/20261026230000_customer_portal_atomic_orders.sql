@@ -1,3 +1,30 @@
+ALTER TABLE public.commercial_customers
+  ADD COLUMN IF NOT EXISTS auth_user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS commercial_customers_auth_user_id_idx
+  ON public.commercial_customers(auth_user_id);
+CREATE INDEX IF NOT EXISTS commercial_customers_org_email_idx
+  ON public.commercial_customers(organization_id, lower(email))
+  WHERE email IS NOT NULL;
+
+CREATE OR REPLACE FUNCTION public.commercial_customer_portal_link_verified_email()
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $function$
+DECLARE v_uid uuid := auth.uid(); v_email text;
+BEGIN
+ IF v_uid IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
+ SELECT u.email INTO v_email FROM auth.users u WHERE u.id=v_uid AND u.email_confirmed_at IS NOT NULL;
+ IF v_email IS NULL OR btrim(v_email)='' THEN RETURN; END IF;
+ UPDATE public.commercial_customers c SET auth_user_id=v_uid, updated_at=now()
+ WHERE c.auth_user_id IS NULL AND c.email IS NOT NULL AND lower(btrim(c.email))=lower(btrim(v_email))
+ AND EXISTS (
+  SELECT 1 FROM public.commercial_customer_party_accounts cpa
+  JOIN public.commercial_party_accounts a ON a.id=cpa.party_account_id AND a.organization_id=cpa.organization_id
+    AND a.account_type IN ('business','organization') AND a.status='active'
+  JOIN public.commercial_organizations o ON o.id=cpa.organization_id AND o.state='active' AND o.deleted_at IS NULL
+  WHERE cpa.customer_id=c.id AND cpa.organization_id=c.organization_id
+ );
+END;
+$function$;
+
 -- Customer portal: tenant-scoped discovery and atomic customer orders.
 -- Every RPC derives the caller from auth.uid(); client-provided totals are never trusted.
 
@@ -27,7 +54,7 @@ BEGIN
   INTO v_result
   FROM public.commercial_customer_party_accounts cpa
   JOIN public.commercial_customers c
-    ON c.id = cpa.customer_id AND c.organization_id = cpa.organization_id AND c.state = 'active'
+    ON c.id = cpa.customer_id AND c.organization_id = cpa.organization_id AND c.state = 'active' AND c.auth_user_id = v_uid
   JOIN public.commercial_party_accounts a
     ON a.id = cpa.party_account_id
    AND a.organization_id = cpa.organization_id
@@ -59,10 +86,10 @@ BEGIN
     SELECT 1
     FROM public.commercial_customer_party_accounts cpa
     JOIN public.commercial_customers c
-      ON c.id = cpa.customer_id AND c.organization_id = cpa.organization_id AND c.state = 'active'
+      ON c.id = cpa.customer_id AND c.organization_id = cpa.organization_id AND c.state = 'active' AND c.auth_user_id = v_uid
     JOIN public.commercial_party_accounts a
       ON a.id = cpa.party_account_id AND a.organization_id = cpa.organization_id
-     AND a.owner_user_id = v_uid AND a.account_type = 'customer' AND a.status = 'active'
+     AND a.account_type IN ('business','organization') AND a.status = 'active'
     JOIN public.commercial_organizations o
       ON o.id = cpa.organization_id AND o.state = 'active' AND o.deleted_at IS NULL
     WHERE cpa.organization_id = p_organization_id
@@ -144,10 +171,10 @@ BEGIN
     INTO v_account_id, v_allow_credit
   FROM public.commercial_customer_party_accounts cpa
   JOIN public.commercial_customers c
-    ON c.id = cpa.customer_id AND c.organization_id = cpa.organization_id AND c.state = 'active'
+    ON c.id = cpa.customer_id AND c.organization_id = cpa.organization_id AND c.state = 'active' AND c.auth_user_id = v_uid
   JOIN public.commercial_party_accounts a
     ON a.id = cpa.party_account_id AND a.organization_id = cpa.organization_id
-   AND a.owner_user_id = v_uid AND a.account_type = 'customer' AND a.status = 'active'
+   AND a.account_type IN ('business','organization') AND a.status = 'active'
   JOIN public.commercial_organizations o
     ON o.id = cpa.organization_id AND o.state = 'active' AND o.deleted_at IS NULL
   WHERE cpa.organization_id = p_organization_id
@@ -278,7 +305,7 @@ RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $functio
 DECLARE v_uid uuid := auth.uid(); v_result jsonb;
 BEGIN
  IF v_uid IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
- IF NOT EXISTS (SELECT 1 FROM public.commercial_customer_party_accounts cpa JOIN public.commercial_customers c ON c.id=cpa.customer_id AND c.organization_id=cpa.organization_id AND c.state='active' JOIN public.commercial_party_accounts a ON a.id=cpa.party_account_id AND a.organization_id=cpa.organization_id AND a.owner_user_id=v_uid AND a.account_type='customer' AND a.status='active' JOIN public.commercial_organizations o ON o.id=cpa.organization_id AND o.state='active' AND o.deleted_at IS NULL WHERE cpa.organization_id=p_organization_id) THEN RAISE EXCEPTION 'customer_not_linked_to_organization' USING ERRCODE='42501'; END IF;
+ IF NOT EXISTS (SELECT 1 FROM public.commercial_customer_party_accounts cpa JOIN public.commercial_customers c ON c.id=cpa.customer_id AND c.organization_id=cpa.organization_id AND c.state='active' AND c.auth_user_id=v_uid JOIN public.commercial_party_accounts a ON a.id=cpa.party_account_id AND a.organization_id=cpa.organization_id AND a.account_type IN ('business','organization') AND a.status='active' JOIN public.commercial_organizations o ON o.id=cpa.organization_id AND o.state='active' AND o.deleted_at IS NULL WHERE cpa.organization_id=p_organization_id) THEN RAISE EXCEPTION 'customer_not_linked_to_organization' USING ERRCODE='42501'; END IF;
  SELECT coalesce(jsonb_agg(jsonb_build_object('id',r.id,'name',r.name,'resource_type',r.resource_type,'capacity',r.capacity,'timezone',r.timezone) ORDER BY r.name),'[]'::jsonb)
  INTO v_result FROM public.commercial_booking_resources r WHERE r.organization_id=p_organization_id AND r.status='active';
  RETURN v_result;
@@ -301,8 +328,8 @@ BEGIN
  IF v_key IS NULL OR length(v_key)<8 OR length(v_key)>200 THEN RAISE EXCEPTION 'invalid_idempotency_key' USING ERRCODE='22023'; END IF;
  SELECT a.id,a.currency_code INTO v_account_id,v_currency
  FROM public.commercial_customer_party_accounts cpa
- JOIN public.commercial_customers c ON c.id=cpa.customer_id AND c.organization_id=cpa.organization_id AND c.state='active'
- JOIN public.commercial_party_accounts a ON a.id=cpa.party_account_id AND a.organization_id=cpa.organization_id AND a.owner_user_id=v_uid AND a.account_type='customer' AND a.status='active'
+ JOIN public.commercial_customers c ON c.id=cpa.customer_id AND c.organization_id=cpa.organization_id AND c.state='active' AND c.auth_user_id=v_uid
+ JOIN public.commercial_party_accounts a ON a.id=cpa.party_account_id AND a.organization_id=cpa.organization_id AND a.account_type IN ('business','organization') AND a.status='active'
  JOIN public.commercial_organizations o ON o.id=cpa.organization_id AND o.state='active' AND o.deleted_at IS NULL
  WHERE cpa.organization_id=p_organization_id LIMIT 1;
  IF v_account_id IS NULL THEN RAISE EXCEPTION 'customer_not_linked_to_organization' USING ERRCODE='42501'; END IF;
@@ -346,7 +373,7 @@ BEGIN
 END;
 $function$;
 
-REVOKE ALL ON FUNCTION public.commercial_customer_portal_list_organizations() FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.commercial_customer_portal_link_verified_email() FROM PUBLIC, anon;\nGRANT EXECUTE ON FUNCTION public.commercial_customer_portal_link_verified_email() TO authenticated;\nREVOKE ALL ON FUNCTION public.commercial_customer_portal_list_organizations() FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.commercial_customer_portal_list_offerings(uuid) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.commercial_customer_portal_list_booking_resources(uuid) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.commercial_customer_portal_create_booking(uuid,uuid,uuid,timestamptz,timestamptz,text,text,text) FROM PUBLIC, anon;
