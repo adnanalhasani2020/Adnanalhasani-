@@ -31,6 +31,24 @@ class ReceivablesAndExpenseIntegrityTests(unittest.TestCase):
         self.assertIn(".atZone(reportingTimeZone).toLocalDate()", screen)
         self.assertNotIn('SimpleDateFormat("yyyy-MM-dd", Locale.US).format(java.util.Date())', screen)
 
+    def test_receivable_model_subtracts_executed_refunds_and_approved_return_credit(self):
+        source = REPOSITORY.read_text(encoding="utf-8")
+        start = source.index("data class CommercialCloudReceivable(")
+        end = source.index("\\ninternal fun loadCommercialCloudReceivables(", start)
+        model = source[start:end]
+        self.assertIn("val refundedMinor: Long", model)
+        self.assertIn("val netPaidMinor: Long get() = (paidMinor - refundedMinor).coerceAtLeast(0L)", model)
+        self.assertIn("val dueMinor: Long get() = (totalMinor - netPaidMinor - creditedMinor).coerceAtLeast(0L)", model)
+        self.assertIn("refundedMinor = refunded", source)
+
+    def test_receivables_screen_labels_net_paid_and_return_adjustments(self):
+        screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudDebtScreen.kt").read_text(encoding="utf-8")
+        self.assertIn("row.netPaidMinor", screen)
+        self.assertIn("row.refundedMinor", screen)
+        self.assertIn("row.creditedMinor", screen)
+        self.assertIn("صافي المحصّل بعد الاسترداد", screen)
+        self.assertIn("خصم المرتجعات المعتمدة", screen)
+
     def test_customer_collection_server_guard_accounts_for_credits_and_executed_refunds(self):
         sql = COLLECTION_GUARD.read_text(encoding="utf-8")
         self.assertIn("v_refunded_minor", sql)
