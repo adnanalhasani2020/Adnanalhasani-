@@ -111,7 +111,12 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
         else Triple(service, text, kotlin.math.round(quantity.toDouble() * service.priceMinor).toLong())
     }
     val bookingEstimatedTotal = bookingCart.sumOf { it.third }
-    val bookingQuantitiesValid = bookingCart.all { (_, text, _) ->
+    val bookingQuantitiesValid = offerings.filter { it.itemType == "service" }.all { service ->
+        val raw = quantities[service.id].orEmpty()
+        raw.isBlank() || raw.toBigDecimalOrNull()?.let {
+            it > java.math.BigDecimal.ZERO && it.scale().coerceAtLeast(0) <= 3 && it <= java.math.BigDecimal("100000")
+        } == true
+    } && bookingCart.all { (_, text, _) ->
         text.toBigDecimalOrNull()?.let { it > java.math.BigDecimal.ZERO && it.scale().coerceAtLeast(0) <= 3 && it <= java.math.BigDecimal("100000") } == true
     } && bookingCart.map { it.first.currencyCode }.distinct().size <= 1
     val unsupportedFractionalProduct = cart.any { (item, text, _) ->
