@@ -1,6 +1,6 @@
 -- Manager-only queue for reviewing and fulfilling customer portal product orders.
 CREATE OR REPLACE FUNCTION public.commercial_customer_portal_list_organization_orders(
-  p_limit integer DEFAULT 100
+  p_organization_id uuid, p_limit integer DEFAULT 100
 ) RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -8,19 +8,17 @@ SET search_path = ''
 AS $function$
 DECLARE
   v_uid uuid := auth.uid();
-  v_org_id uuid;
+  v_org_id uuid := p_organization_id;
   v_result jsonb;
 BEGIN
   IF v_uid IS NULL THEN
     RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501';
   END IF;
-  SELECT organization_id INTO v_org_id
-  FROM public.commercial_organization_members
-  WHERE user_id = v_uid AND state = 'active'
-    AND role IN ('owner','admin','manager')
-  ORDER BY created_at
-  LIMIT 1;
-  IF v_org_id IS NULL THEN
+  IF v_org_id IS NULL OR NOT EXISTS (
+    SELECT 1 FROM public.commercial_organization_members
+    WHERE organization_id = v_org_id AND user_id = v_uid AND state = 'active'
+      AND role IN ('owner','admin','manager')
+  ) THEN
     RAISE EXCEPTION 'customer_order_management_permission_required' USING ERRCODE='42501';
   END IF;
   IF p_limit IS NULL OR p_limit < 1 OR p_limit > 200 THEN
@@ -86,5 +84,5 @@ BEGIN
 END;
 $function$;
 
-REVOKE ALL ON FUNCTION public.commercial_customer_portal_list_organization_orders(integer) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.commercial_customer_portal_list_organization_orders(uuid,integer) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.commercial_customer_portal_list_organization_orders(integer) TO authenticated;
