@@ -78,6 +78,7 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
     var documents by remember { mutableStateOf<List<CommercialCloudSaleDocument>>(emptyList()) }
     var search by remember { mutableStateOf("") }
     var selectedStatus by remember { mutableStateOf("all") }
+    var selectedSort by remember { mutableStateOf("newest") }
     var expandedInvoiceIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
@@ -123,6 +124,16 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
         }
         matchesSearch && matchesStatus
     }
+    val sortedFiltered = when (selectedSort) {
+        "highest" -> filtered.sortedByDescending { it.totalMinor }
+        "outstanding" -> filtered.sortedByDescending { doc ->
+            (doc.totalMinor - doc.payments.filter { it.status.equals("succeeded", true) }
+                .sumOf { it.amountMinor.coerceAtLeast(0L) }).coerceAtLeast(0L)
+        }
+        else -> filtered.sortedByDescending { it.createdAt }
+    }
+    val paidCount = documents.count { it.paymentStatus.equals("paid", true) }
+    val dueCount = documents.count { it.paymentStatus.lowercase() in setOf("unpaid", "due", "pending", "credit", "partially_paid", "partial") }
     val totalsByCurrency = filtered.groupBy { it.currencyCode.ifBlank { "غير محدد" } }
         .mapValues { (_, rows) -> rows.sumOf { it.totalMinor } }
         .toSortedMap()
@@ -201,6 +212,23 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
                 }
             }
             item {
+                Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Text("ترتيب الفواتير", color = CloudSalesMuted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Row(
+                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf("newest" to "الأحدث", "highest" to "الأعلى قيمة", "outstanding" to "الأكثر استحقاقًا").forEach { (key, label) ->
+                            FilterChip(
+                                selected = selectedSort == key,
+                                onClick = { selectedSort = key },
+                                label = { Text(label, fontSize = 12.sp) }
+                            )
+                        }
+                    }
+                }
+            }
+            item {
                 Card(
                     colors = CardDefaults.cardColors(containerColor = CloudSalesInk),
                     shape = RoundedCornerShape(22.dp)
@@ -214,6 +242,20 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
                             }
                             Box(Modifier.size(54.dp).background(Color(0xFF2D5A4F), RoundedCornerShape(17.dp)), contentAlignment = Alignment.Center) {
                                 Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = Color.White, modifier = Modifier.size(28.dp))
+                            }
+                        }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                            Surface(modifier = Modifier.weight(1f), color = Color(0xFF24483F), shape = RoundedCornerShape(14.dp)) {
+                                Column(Modifier.padding(11.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text("مدفوعة", color = Color(0xFFD6E8E0), fontSize = 10.sp)
+                                    Text(paidCount.toString(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 19.sp)
+                                }
+                            }
+                            Surface(modifier = Modifier.weight(1f), color = Color(0xFF24483F), shape = RoundedCornerShape(14.dp)) {
+                                Column(Modifier.padding(11.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text("تحتاج تحصيلًا", color = Color(0xFFD6E8E0), fontSize = 10.sp)
+                                    Text(dueCount.toString(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 19.sp)
+                                }
                             }
                         }
                         if (totalsByCurrency.isNotEmpty()) {
@@ -254,7 +296,7 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
             if (!loading && error.isBlank() && filtered.isEmpty()) item {
                 Text(if (documents.isEmpty()) "لا توجد فواتير سحابية متاحة لهذا النشاط." else "لا توجد نتائج مطابقة للبحث.", color = CloudSalesMuted, modifier = Modifier.padding(8.dp))
             }
-            items(filtered, key = { it.id }) { document ->
+            items(sortedFiltered, key = { it.id }) { document ->
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Color.White),
                     shape = RoundedCornerShape(22.dp),
