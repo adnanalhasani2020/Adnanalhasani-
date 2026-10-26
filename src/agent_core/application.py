@@ -695,11 +695,17 @@ class SaleApplication:
                         "sale_state": self.get_sale_state(connection, sale_key).value}
             if sale.state is not SaleState.FULFILLED:
                 raise ValidationError("Only a fulfilled Sale with remaining quantity can be returned")
-            if connection.execute(
-                "SELECT 1 FROM invoices WHERE sale_id=? AND state='issued' LIMIT 1", (sale_key,)
-            ).fetchone():
+            financial_link = connection.execute(
+                "SELECT i.invoice_id,i.state,i.obligation_id,p.payment_id "
+                "FROM invoices i LEFT JOIN payments p "
+                "ON p.invoice_id=i.invoice_id OR (i.obligation_id IS NOT NULL AND p.obligation_id=i.obligation_id) "
+                "WHERE i.sale_id=? AND (i.state='issued' OR i.obligation_id IS NOT NULL OR p.payment_id IS NOT NULL) "
+                "LIMIT 1",
+                (sale_key,),
+            ).fetchone()
+            if financial_link is not None:
                 raise ValidationError(
-                    "Sale return requires explicit Invoice reconciliation first"
+                    "Sale return requires explicit Invoice, Obligation, and Payment financial reconciliation first"
                 )
 
             sale_lines = {}
