@@ -83,6 +83,42 @@ class SaleReturnFinancialApplication:
             raise ValidationError("Finance Agent must be active")
         return approver, context, grant_id, action_id
 
+    def quote_return_amount(self, connection, *, return_event_id):
+        """Return the locked, cumulative minor-unit allocation for a reserved return."""
+        return_key = self._uuid(return_event_id, "Sale return event identifier")
+        event = connection.execute(
+            "SELECT sale_id,created_at FROM sale_return_events WHERE return_event_id=?",
+            (return_key,),
+        ).fetchone()
+        if event is None:
+            raise ValidationError("Sale return request does not exist")
+        lines = connection.execute(
+            "SELECT rl.sale_return_line_id,rl.sale_line_id,rl.quantity,l.quantity,l.line_total_minor,l.currency_code "
+            "FROM sale_return_lines rl JOIN sale_lines l ON l.sale_line_id=rl.sale_line_id "
+            "WHERE rl.return_event_id=? ORDER BY rl.sale_line_id",
+            (return_key,),
+        ).fetchall()
+        if not lines:
+            raise ValidationError("Sale return request has no lines")
+        allocations = []
+        for return_line_id, sale_line_id, return_qty, sold_qty, line_total, line_currency in lines:
+            prior_qty = connection.execute(
+                "SELECT COALESCE(SUM(rl.quantity),0) FROM sale_return_lines rl "
+                "JOIN sale_return_events re ON re.return_event_id=rl.return_event_id "
+                "WHERE rl.sale_line_id=? AND (re.created_at<? OR "
+                "(re.created_at=? AND re.return_event_id<?))",
+                (sale_line_id, event[1], event[1], return_key),
+            ).fetchone()[0]
+            amount = (line_total * (prior_qty + return_qty)) // sold_qty - (line_total * prior_qty) // sold_qty
+            allocations.append({"sale_return_line_id": return_line_id, "quantity": return_qty,
+                                "amount_minor": amount, "currency_code": line_currency})
+        currency_codes = {row["currency_code"] for row in allocations}
+        if len(currency_codes) != 1:
+            raise ValidationError("A single credit note cannot mix currencies")
+        return {"return_event_id": return_key, "sale_id": event[0],
+                "refund_amount_minor": sum(row["amount_minor"] for row in allocations),
+                "currency_code": next(iter(currency_codes)), "lines": allocations}
+
     def record_credit_note_for_return(
         self, connection, *, sale_id, return_event_id, refund_payment_id,
         credit_note_number, financial_account_id, finance_context_ref,
@@ -103,10 +139,11 @@ class SaleReturnFinancialApplication:
         )
 
         event = connection.execute(
-            "SELECT sale_id FROM sale_return_events WHERE return_event_id=?", (return_key,)
+            "SELECT sale_id,created_at FROM sale_return_events WHERE return_event_id=?", (return_key,)
         ).fetchone()
         if event is None or event[0] != sale_key:
             raise ValidationError("Credit note must reference the exact persisted Sale return event")
+        event_created_at = event[1]
 
         # Compute each line's cumulative minor-unit allocation with Python integer
         # arithmetic. Repeated partial returns therefore distribute every minor unit
@@ -124,8 +161,9 @@ class SaleReturnFinancialApplication:
             prior_qty = connection.execute(
                 "SELECT COALESCE(SUM(rl.quantity),0) FROM sale_return_lines rl "
                 "JOIN sale_return_events re ON re.return_event_id=rl.return_event_id "
-                "WHERE rl.sale_line_id=? AND rl.return_event_id<>?",
-                (sale_line_id, return_key),
+                "WHERE rl.sale_line_id=? AND (re.created_at<? OR "
+                "(re.created_at=? AND re.return_event_id<?))",
+                (sale_line_id, event_created_at, event_created_at, return_key),
             ).fetchone()[0]
             if prior_qty + return_qty > sold_qty:
                 raise ValidationError("Cumulative returned quantity exceeds sold quantity")
