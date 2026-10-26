@@ -36,6 +36,12 @@ class ReceivablesAndExpenseIntegrityTests(unittest.TestCase):
         self.assertIn("GREATEST(v_outstanding_minor - p_amount_minor, 0) = 0", migration)
         self.assertIn("UPDATE public.commercial_sales", migration)
         self.assertIn("ELSE 'partially_paid'", migration)
+        self.assertIn("CREATE OR REPLACE FUNCTION public.commercial_gl_post_payment", migration)
+        self.assertIn("payment_exceeds_outstanding_after_returns", migration)
+        self.assertIn("pay.status IN ('succeeded','partially_refunded','refunded')", migration)
+        self.assertIn("pay.id<>p.id", migration)
+        self.assertNotIn("payment_exceeds_sale_total", migration)
+        self.assertIn("v_outstanding:=GREATEST(", migration)
 
     def test_customer_party_account_rls_migration_scopes_member_and_admin_policies_to_row_tenant(self):
         migration = (ROOT / "supabase/migrations/20261026213100_fix_customer_party_accounts_rls_scope.sql").read_text(encoding="utf-8")

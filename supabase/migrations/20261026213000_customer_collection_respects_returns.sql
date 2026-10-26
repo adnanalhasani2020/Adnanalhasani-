@@ -156,6 +156,116 @@ BEGIN
 END;
 $function$;
 
+-- The current public GL routine originally caps collections against gross invoice
+-- value and counts only succeeded payments. That is incompatible with completed
+-- return credits and executed refunds. Keep the same authorization and journal
+-- posting contract, but calculate the outstanding amount from return-adjusted net
+-- payments. The current payment is excluded because it has already been inserted.
+CREATE OR REPLACE FUNCTION public.commercial_gl_post_payment(p_payment_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'pg_catalog', 'public', 'commercial_private'
+AS $function$
+DECLARE
+  p public.commercial_payments%ROWTYPE;
+  s public.commercial_sales%ROWTYPE;
+  m record;
+  v_party uuid;
+  v_entry uuid;
+  v_paid numeric;
+  v_refunded numeric;
+  v_credited numeric;
+  v_outstanding numeric;
+  v_actor uuid;
+  v_receipt_mapping_key text;
+BEGIN
+  IF auth.uid() IS NULL AND pg_trigger_depth()=0 THEN
+    RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501';
+  END IF;
+  SELECT * INTO p FROM public.commercial_payments WHERE id=p_payment_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'payment_not_found' USING ERRCODE='P0002'; END IF;
+  IF p.status<>'succeeded' OR p.sale_id IS NULL THEN
+    RAISE EXCEPTION 'succeeded_payment_with_sale_required' USING ERRCODE='55000';
+  END IF;
+  SELECT * INTO s FROM public.commercial_sales WHERE id=p.sale_id FOR UPDATE;
+  IF NOT FOUND OR s.organization_id IS DISTINCT FROM p.organization_id OR s.currency_code<>p.currency_code THEN
+    RAISE EXCEPTION 'payment_sale_scope_or_currency_mismatch' USING ERRCODE='55000';
+  END IF;
+  IF pg_trigger_depth()=0 AND NOT EXISTS(
+    SELECT 1 FROM public.commercial_organization_members om
+    WHERE om.organization_id=p.organization_id AND om.user_id=auth.uid()
+      AND om.state='active' AND om.role IN ('owner','admin','manager')
+  ) THEN
+    RAISE EXCEPTION 'accounting_permission_required' USING ERRCODE='42501';
+  END IF;
+  IF s.payment_status NOT IN ('pending','partially_paid') THEN
+    RAISE EXCEPTION 'payment_not_applicable_to_paid_or_failed_sale' USING ERRCODE='55000';
+  END IF;
+  IF s.customer_id IS NULL THEN RAISE EXCEPTION 'payment_sale_customer_required' USING ERRCODE='55000'; END IF;
+
+  v_receipt_mapping_key:=CASE p.payment_method_type
+    WHEN 'cash' THEN 'cash'
+    WHEN 'bank_transfer' THEN 'bank'
+    WHEN 'card' THEN 'card_clearing'
+    WHEN 'other' THEN 'other_receipts'
+    ELSE NULL END;
+  v_party:=commercial_private.commercial_customer_party_account(s.organization_id,s.customer_id,s.currency_code);
+  SELECT max(ledger_account_id) FILTER(WHERE mapping_key=v_receipt_mapping_key) receipt_account,
+         max(ledger_account_id) FILTER(WHERE mapping_key='accounts_receivable') ar
+    INTO m FROM public.commercial_gl_account_mappings WHERE organization_id=p.organization_id;
+  IF m.receipt_account IS NULL OR m.ar IS NULL THEN
+    RAISE EXCEPTION 'receipt_and_ar_mappings_required' USING ERRCODE='55000';
+  END IF;
+
+  SELECT COALESCE(sum(pay.amount_minor),0) INTO v_paid
+  FROM public.commercial_payments pay
+  WHERE pay.sale_id=s.id
+    AND pay.organization_id=s.organization_id
+    AND pay.status IN ('succeeded','partially_refunded','refunded')
+    AND pay.id<>p.id;
+
+  SELECT COALESCE(sum(rp.amount_minor),0) INTO v_refunded
+  FROM public.commercial_return_refund_postings rp
+  JOIN public.commercial_sales_returns sr ON sr.id=rp.return_id
+  WHERE sr.sale_id=s.id AND sr.organization_id=s.organization_id;
+
+  SELECT COALESCE(sum(sr.approved_refund_minor),0) INTO v_credited
+  FROM public.commercial_sales_returns sr
+  WHERE sr.sale_id=s.id AND sr.organization_id=s.organization_id
+    AND sr.status='completed' AND sr.approved_refund_minor IS NOT NULL;
+
+  v_outstanding:=GREATEST(
+    s.total_minor-GREATEST(v_paid-v_refunded,0)-v_credited,
+    0
+  );
+  IF p.amount_minor>v_outstanding THEN
+    RAISE EXCEPTION 'payment_exceeds_outstanding_after_returns' USING ERRCODE='22023';
+  END IF;
+
+  v_actor:=COALESCE(auth.uid(),s.user_id);
+  v_entry:=commercial_private.commercial_gl_post_entry(
+    p.organization_id,'payment:'||p.id,'payment',p.id,
+    'Customer collection for receipt '||s.receipt_number,p.currency_code,
+    jsonb_build_array(
+      jsonb_build_object('ledger_account_id',m.receipt_account,'debit_minor',p.amount_minor,'credit_minor',0,
+        'description',CASE v_receipt_mapping_key WHEN 'cash' THEN 'Customer cash collection'
+          WHEN 'bank' THEN 'Customer bank collection' WHEN 'card_clearing' THEN 'Card collection clearing'
+          ELSE 'Other receipt clearing' END),
+      jsonb_build_object('ledger_account_id',m.ar,'debit_minor',0,'credit_minor',p.amount_minor,
+        'description','Reduce customer receivable','party_account_id',v_party)
+    ),v_actor,NULL
+  );
+  UPDATE public.commercial_sales
+  SET payment_status=CASE WHEN GREATEST(v_outstanding-p.amount_minor,0)=0
+    THEN 'paid' ELSE 'partially_paid' END,
+    updated_at=now()
+  WHERE id=s.id;
+  RETURN jsonb_build_object('payment_id',p.id,'journal_entry_id',v_entry,'posted',true,
+    'receipt_mapping_key',v_receipt_mapping_key);
+END;
+$function$;
+
 -- Keep the SECURITY DEFINER implementation in the private schema. The public
 -- SECURITY INVOKER wrapper created by 20261026124237_move_financial_rpc_logic_private.sql
 -- remains the only PostgREST entry point.
