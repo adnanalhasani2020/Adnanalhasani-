@@ -13,6 +13,8 @@ OFFERING_GUARD = ROOT / "supabase/migrations/20261025223900_commercial_purchase_
 OBLIGATION_INTEGRITY = ROOT / "supabase/migrations/20261025223549_commercial_supplier_obligation_integrity.sql"
 PAYMENT_EVIDENCE = ROOT / "supabase/migrations/20261025223401_commercial_supplier_payment_evidence_uniqueness.sql"
 GLOBAL_PAYMENT_EVIDENCE = ROOT / "supabase/migrations/20261025224128_commercial_supplier_payment_evidence_global_unique.sql"
+FRACTIONAL_RECEIVING = ROOT / "supabase/migrations/20261025230817_commercial_fractional_purchase_receiving.sql"
+ACCOUNTING_ROUNDING = ROOT / "supabase/migrations/20261026080000_commercial_purchase_fractional_accrual_rounding.sql"
 
 
 def test_purchase_order_lifecycle_is_scoped_and_idempotent():
@@ -45,7 +47,16 @@ def test_purchase_receipt_posts_inventory_and_order_quantities_atomically():
         "pg_advisory_xact_lock",
     ):
         assert marker in receipt
+    # This is the historical integer-only implementation. A later migration replaces it
+    # with a numeric implementation; also verify the effective implementation.
     assert "v_qty<>trunc(v_qty)" in receipt
+    effective_sql = FRACTIONAL_RECEIVING.read_text(encoding="utf-8")
+    effective_receipt = effective_sql.split(
+        "CREATE OR REPLACE FUNCTION commercial_private.commercial_receive_purchase_order", 1
+    )[1].split("$function$;", 1)[0]
+    assert "scale(v_qty)>6" in effective_receipt
+    assert "v_qty<>trunc(v_qty)" not in effective_receipt
+    assert "quantity_received=quantity_received+v_qty" in effective_receipt
 
 
 def test_supplier_invoice_creates_payable_and_balanced_posted_journal():
@@ -170,3 +181,17 @@ def test_fractional_purchase_receiving_preserves_decimal_precision_end_to_end():
     invoice_repository = invoice_repository.split("private fun commercialPurchaseReceiptPendingPreferences", 1)[0]
     assert "quantity.stripTrailingZeros().scale() <= 6" in invoice_repository
     assert "quantity.stripTrailingZeros().scale() > 6" in receipt_dialog
+
+
+def test_fractional_accrual_rounding_migration_is_present_and_replaces_accounting_triggers():
+    sql = ACCOUNTING_ROUNDING.read_text(encoding="utf-8")
+    assert "CREATE OR REPLACE FUNCTION commercial_private.commercial_post_purchase_receipt_financials()" in sql
+    assert "CREATE OR REPLACE FUNCTION commercial_private.commercial_post_supplier_invoice_financials()" in sql
+    assert "CREATE CONSTRAINT TRIGGER commercial_purchase_receipt_financials_after_insert" in sql
+    assert "CREATE CONSTRAINT TRIGGER commercial_supplier_invoice_financials_after_insert" in sql
+    assert "round((prior.quantity_before + ri.quantity::numeric) * ri.unit_cost_minor::numeric)" in sql
+    assert "round((prior.quantity_before + si.quantity::numeric) * poi.unit_cost_minor::numeric)" in sql
+    assert "pr.accounting_sequence < NEW.accounting_sequence" in sql
+    assert "prior_invoice.accounting_sequence < NEW.accounting_sequence" in sql
+    assert "commercial_purchase_receipts_accounting_sequence_uq" in sql
+    assert "commercial_supplier_invoices_accounting_sequence_uq" in sql
