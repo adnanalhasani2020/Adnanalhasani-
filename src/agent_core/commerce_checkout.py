@@ -184,7 +184,7 @@ class CommercialCheckoutApplication:
         scope_key, location_ref, idempotency_key, sale_id,
         create_sale_grant_id=None, confirm_sale_grant_id=None, fulfill_sale_grant_id=None,
         session_token=None, now=None, invoice_issuer_ref=None, invoice_number=None,
-        issue_invoice_grant_id=None, invoice_due_at=None,
+        issue_invoice_grant_id=None, invoice_due_at=None, invoice_obligation_id=None,
     ) -> dict:
         """Atomically fulfill a sale, snapshot its price, and record its stock movement.
 
@@ -212,8 +212,11 @@ class CommercialCheckoutApplication:
             raise ValidationError(
                 "Invoice issuance requires an explicit issuer, invoice number, and issue_invoice grant"
             )
+        if invoice_obligation_id is not None and invoice_issuer_ref is None:
+            raise ValidationError("Invoice Obligation cannot be supplied when invoice issuance is not requested")
         issuer_key = _uuid(invoice_issuer_ref, "Invoice issuer identifier") if invoice_issuer_ref is not None else None
         invoice_grant_key = _uuid(issue_invoice_grant_id, "Issue Invoice grant") if issue_invoice_grant_id is not None else None
+        invoice_obligation_key = _uuid(invoice_obligation_id, "Invoice Obligation identifier") if invoice_obligation_id is not None else None
         if invoice_number is not None and (not isinstance(invoice_number, str) or not invoice_number.strip()):
             raise ValidationError("Invoice number must be a non-empty string")
         normalized_invoice_number = invoice_number.strip() if invoice_number is not None else None
@@ -230,6 +233,7 @@ class CommercialCheckoutApplication:
             "invoice_issuer_ref": issuer_key,
             "invoice_number": normalized_invoice_number,
             "issue_invoice_grant_id": invoice_grant_key,
+            "invoice_obligation_id": invoice_obligation_key,
             "invoice_due_at": invoice_due_at.isoformat() if isinstance(invoice_due_at, datetime) else invoice_due_at,
         }
         fingerprint = _hash_request(request)
@@ -383,7 +387,7 @@ class CommercialCheckoutApplication:
                     connection, sale_id=sale_key, actor_context_ref=actor,
                     authorization_grant_id=invoice_grant_key, issuer_ref=issuer_key,
                     invoice_number=normalized_invoice_number, issue_at=instant,
-                    due_at=invoice_due_at, now=instant,
+                    due_at=invoice_due_at, obligation_id=invoice_obligation_key, now=instant,
                 )
                 response["invoice_id"] = str(invoice_record.invoice.id)
                 response["invoice_number"] = invoice_record.invoice_number
