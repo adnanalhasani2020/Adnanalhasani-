@@ -53,6 +53,7 @@ internal fun CustomerOrderFulfillmentScreen(context: Context,onBack:()->Unit) {
  var tab by remember { mutableStateOf("orders") }
  var hidden by remember { mutableStateOf(false) }
  var query by remember { mutableStateOf("") }
+ var dateFilter by remember { mutableStateOf("") }
  var filter by remember { mutableStateOf("all") }
  var filterMenu by remember { mutableStateOf(false) }
  var loading by remember { mutableStateOf(false) }
@@ -97,8 +98,8 @@ internal fun CustomerOrderFulfillmentScreen(context: Context,onBack:()->Unit) {
   }
  }
  val q=query.trim()
- val filteredOrders=orders.filter{(filter=="all"||it.status==filter)&&(q.isBlank()||listOf(it.orderNumber,it.customerName,it.id,it.customerNote).any{v->v.contains(q,true)})}
- val filteredBookings=bookings.filter{(filter=="all"||it.status==filter)&&(q.isBlank()||listOf(it.bookingNumber,it.orderNumber,it.customerName,it.resourceName,it.id).any{v->v.contains(q,true)})}
+ val filteredOrders=orders.filter{(filter=="all"||it.status==filter)&&(dateFilter.isBlank()||it.createdAt.startsWith(dateFilter.trim()))&&(q.isBlank()||listOf(it.orderNumber,it.customerName,it.id,it.customerNote).any{v->v.contains(q,true)})}
+ val filteredBookings=bookings.filter{(filter=="all"||it.status==filter)&&(dateFilter.isBlank()||it.startsAt.startsWith(dateFilter.trim()))&&(q.isBlank()||listOf(it.bookingNumber,it.orderNumber,it.customerName,it.resourceName,it.id).any{v->v.contains(q,true)})}
  Scaffold(topBar={TopAppBar(title={Column{Text("إدارة طلبات العملاء والحجوزات",color=CustomerOrdersInk,fontWeight=FontWeight.Bold,fontSize=17.sp);Text("مراجعة آمنة وبيع من الخادم",color=CustomerOrdersMuted,fontSize=11.sp)}},navigationIcon={IconButton(onClick=onBack){Icon(Icons.Default.ArrowBack,"رجوع",tint=CustomerOrdersInk)}},actions={IconButton(onClick={if(!loading&&busy==null)refresh++},enabled=!loading&&busy==null){Icon(Icons.Default.Refresh,"تحديث",tint=CustomerOrdersInk)}})}) { padding ->
   LazyColumn(Modifier.fillMaxSize().padding(padding),contentPadding=PaddingValues(14.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
    item {
@@ -106,6 +107,7 @@ internal fun CustomerOrderFulfillmentScreen(context: Context,onBack:()->Unit) {
      Column(Modifier.fillMaxWidth().padding(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
       Text("الطلب لا يحجز المخزون عند إنشائه. قبول الطلب لا ينشئ فاتورة ولا يخصم المخزون؛ إتمام البيع ينفذ عبر دورة البيع الحالية.",fontSize=12.sp,color=CustomerOrdersMuted)
       OutlinedTextField(query,{query=it},modifier=Modifier.fillMaxWidth(),singleLine=true,label={Text("بحث برقم الطلب أو الحجز أو العميل")},leadingIcon={Icon(Icons.Default.Search,null)})
+      OutlinedTextField(dateFilter,{dateFilter=it.take(10)},modifier=Modifier.fillMaxWidth(),singleLine=true,label={Text("تصفية التاريخ YYYY-MM-DD")})
       Row(horizontalArrangement=Arrangement.spacedBy(5.dp)) {
        FilterChip(tab=="orders",{tab="orders";filter="all"} ,label={Text("الطلبات ("+orders.size+")")})
        FilterChip(tab=="bookings",{tab="bookings";filter="all"},label={Text("الحجوزات ("+bookings.size+")")})
