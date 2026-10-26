@@ -18,6 +18,16 @@ BEGIN
  IF v_email IS NULL OR btrim(v_email)='' THEN RETURN; END IF;
  UPDATE public.commercial_customers c SET auth_user_id=v_uid, updated_at=now()
  WHERE c.auth_user_id IS NULL AND c.email IS NOT NULL AND lower(btrim(c.email))=lower(btrim(v_email))
+ AND (SELECT count(*) FROM public.commercial_customers c2
+      WHERE c2.organization_id=c.organization_id AND c2.auth_user_id IS NULL
+        AND c2.email IS NOT NULL AND lower(btrim(c2.email))=lower(btrim(v_email))
+        AND EXISTS (
+          SELECT 1 FROM public.commercial_customer_party_accounts x
+          JOIN public.commercial_party_accounts xa ON xa.id=x.party_account_id AND xa.organization_id=x.organization_id
+            AND xa.account_type IN ('business','organization') AND xa.status='active'
+          JOIN public.commercial_organizations xo ON xo.id=x.organization_id AND xo.state='active' AND xo.deleted_at IS NULL
+          WHERE x.customer_id=c2.id AND x.organization_id=c2.organization_id
+        )) = 1
  AND EXISTS (
   SELECT 1 FROM public.commercial_customer_party_accounts cpa
   JOIN public.commercial_party_accounts a ON a.id=cpa.party_account_id AND a.organization_id=cpa.organization_id
