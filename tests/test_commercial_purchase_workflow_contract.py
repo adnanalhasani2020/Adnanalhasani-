@@ -15,6 +15,7 @@ PAYMENT_EVIDENCE = ROOT / "supabase/migrations/20261025223401_commercial_supplie
 GLOBAL_PAYMENT_EVIDENCE = ROOT / "supabase/migrations/20261025224128_commercial_supplier_payment_evidence_global_unique.sql"
 FRACTIONAL_RECEIVING = ROOT / "supabase/migrations/20261025230817_commercial_fractional_purchase_receiving.sql"
 ACCOUNTING_ROUNDING = ROOT / "supabase/migrations/20261026080000_commercial_purchase_fractional_accrual_rounding.sql"
+INTEGER_RECEIVING = ROOT / "supabase/migrations/20261026250000_commercial_integer_purchase_receiving.sql"
 
 
 def test_purchase_order_lifecycle_is_scoped_and_idempotent():
@@ -50,12 +51,12 @@ def test_purchase_receipt_posts_inventory_and_order_quantities_atomically():
     # This is the historical integer-only implementation. A later migration replaces it
     # with a numeric implementation; also verify the effective implementation.
     assert "v_qty<>trunc(v_qty)" in receipt
-    effective_sql = FRACTIONAL_RECEIVING.read_text(encoding="utf-8")
+    effective_sql = INTEGER_RECEIVING.read_text(encoding="utf-8")
     effective_receipt = effective_sql.split(
         "CREATE OR REPLACE FUNCTION commercial_private.commercial_receive_purchase_order", 1
     )[1].split("$function$;", 1)[0]
-    assert "scale(v_qty)>6" in effective_receipt
-    assert "v_qty<>trunc(v_qty)" not in effective_receipt
+    assert "v_qty<>trunc(v_qty)" in effective_receipt
+    assert "purchase_receipt_requires_positive_integer_quantity" in effective_receipt
     assert "quantity_received=quantity_received+v_qty" in effective_receipt
 
 
@@ -161,32 +162,41 @@ def test_android_purchase_workflow_is_connected_to_server_rpcs():
     assert "resolvePendingCommercialPurchaseReceipt" in repository
 
 
-def test_fractional_purchase_receiving_preserves_decimal_precision_end_to_end():
-    migration = (ROOT / "supabase/migrations/20261025230817_commercial_fractional_purchase_receiving.sql").read_text(encoding="utf-8")
+def test_purchase_receiving_rejects_fractions_at_android_and_database_boundaries():
+    fractional_migration = FRACTIONAL_RECEIVING.read_text(encoding="utf-8")
+    integer_migration = INTEGER_RECEIVING.read_text(encoding="utf-8")
     repository = REPOSITORY.read_text(encoding="utf-8")
     order_dialog = ORDER_DIALOG.read_text(encoding="utf-8")
     receipt_dialog = RECEIPT_DIALOG.read_text(encoding="utf-8")
-    for marker in (
-        "numeric(18,6)",
-        "numeric(20,6)",
-        "commercial_receive_inventory_stock(uuid,uuid,uuid,numeric,bigint,text)",
-        "quantity_delta TYPE numeric(20,6)",
-        "scale(v_qty)>6",
-        "v_qty::numeric",
-    ):
-        assert marker in migration
-    assert "quantity.stripTrailingZeros().scale() <= 6" in repository
-    assert "quantity.stripTrailingZeros().toPlainString()" in repository
-    purchase_order_repository = repository.split("internal fun createCommercialCloudPurchaseOrder", 1)[1]
-    purchase_order_repository = purchase_order_repository.split("internal fun recordCommercialCloudSupplierPayment", 1)[0]
-    assert "quantity.stripTrailingZeros().scale() <= 6" in purchase_order_repository
-    assert "quantity.stripTrailingZeros().scale() <= 0" not in purchase_order_repository
-    assert "quantity_ordered\", quantity.stripTrailingZeros().toPlainString()" in purchase_order_repository
+
+    # Keep numeric storage for compatibility with existing fractional records, but reject
+    # any new fractional receipt at both the purchase RPC and inventory receipt boundary.
+    for marker in ("numeric(18,6)", "numeric(20,6)", "quantity_delta TYPE numeric(20,6)"):
+        assert marker in fractional_migration
+    receipt_rpc = integer_migration.split(
+        "CREATE OR REPLACE FUNCTION commercial_private.commercial_receive_purchase_order", 1
+    )[1].split("$function$;", 1)[0]
+    inventory_rpc = integer_migration.split(
+        "CREATE OR REPLACE FUNCTION public.commercial_receive_inventory_stock", 1
+    )[1].split("$function$;", 1)[0]
+    assert "v_qty<>trunc(v_qty)" in receipt_rpc
+    assert "p_quantity<>trunc(p_quantity)" in inventory_rpc
+    assert "purchase_receipt_requires_positive_integer_quantity" in receipt_rpc
+    assert "invalid_inventory_receipt_integer_quantity" in inventory_rpc
+
+    receipt_repository = repository.split("internal fun receiveCommercialCloudPurchaseOrder", 1)[1]
+    receipt_repository = receipt_repository.split("internal fun createCommercialCloudPurchaseOrder", 1)[0]
+    assert "quantity.stripTrailingZeros().scale() <= 0" in receipt_repository
+    assert "كمية الاستلام يجب أن تكون عددًا صحيحًا موجبًا دون كسور." in receipt_repository
+    assert "quantity.stripTrailingZeros().scale() > 0" in receipt_dialog
+    assert "كميات صحيحة موجبة بدون كسور" in receipt_dialog
+
+    # Fractional purchase order/invoice quantities remain a separate policy; only receiving
+    # is restricted here, as requested.
+    assert "quantity.stripTrailingZeros().scale() <= 6" in order_dialog
     invoice_repository = repository.split("internal fun recordCommercialCloudSupplierInvoice", 1)[1]
     invoice_repository = invoice_repository.split("private fun commercialPurchaseReceiptPendingPreferences", 1)[0]
     assert "quantity.stripTrailingZeros().scale() <= 6" in invoice_repository
-    assert "quantity.stripTrailingZeros().scale() > 6" in receipt_dialog
-
 
 def test_purchase_order_rpc_accepts_fractional_quantities_with_storage_precision():
     migration = (ROOT / "supabase/migrations/20261026114729_commercial_purchase_order_fractional_quantities.sql").read_text(encoding="utf-8")
