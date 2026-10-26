@@ -631,25 +631,19 @@ def test_database_rejects_stock_return_while_invoice_is_issued(tmp_path):
         "VALUES(?,?,?,?,?)",
         (return_line_id, event_id, line_id[0], line_id[1], STAMP),
     )
-    db.execute(
-        "INSERT INTO sale_return_completions(return_event_id,completed_at,credit_note_id,state) "
-        "VALUES(?,?,NULL,'completed')",
-        (event_id, STAMP),
-    )
     with pytest.raises(
         sqlite3.IntegrityError,
-        match="Sale return requires explicit Invoice reconciliation first",
+        match="Sale return completion requires a valid credit note for financially linked returns",
     ):
         db.execute(
-            "INSERT INTO inventory_movements("
-            "inventory_movement_id,inventory_position_id,activity_id,product_id,offering_id,"
-            "location_ref,scope_key,quantity_delta,source_type,source_ref,actor_context_ref,"
-            "occurred_at,created_at) "
-            "SELECT ?,inventory_position_id,activity_id,product_id,offering_id,location_ref,"
-            "scope_key,?,'sale_return',?,?,?,? "
-            "FROM inventory_movements WHERE source_type='sale' AND source_ref=?",
-            (uid(), line_id[1], return_line_id, request["actor_person_id"], STAMP, STAMP, request["sale_id"]),
+            "INSERT INTO sale_return_completions(return_event_id,completed_at,credit_note_id,state) "
+            "VALUES(?,?,NULL,'completed')",
+            (event_id, STAMP),
         )
+    assert db.execute(
+        "SELECT COUNT(*) FROM inventory_movements WHERE source_type='sale_return' AND source_ref=?",
+        (return_line_id,),
+    ).fetchone()[0] == 0
 
     assert db.execute(
         "SELECT state FROM sales WHERE sale_id=?", (request["sale_id"],)
