@@ -1,6 +1,6 @@
 -- Revalidate customer collections against approved return credits and executed refunds.
 -- Keep the payment row and its journal posting in the same transaction.
-CREATE OR REPLACE FUNCTION public.commercial_record_customer_payment(
+CREATE OR REPLACE FUNCTION commercial_private.commercial_record_customer_payment(
   p_sale_id uuid,
   p_amount_minor bigint,
   p_payment_method_type text,
@@ -145,5 +145,8 @@ BEGIN
 END;
 $function$;
 
-REVOKE ALL ON FUNCTION public.commercial_record_customer_payment(uuid, bigint, text, text) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.commercial_record_customer_payment(uuid, bigint, text, text) TO authenticated;
+-- Keep the SECURITY DEFINER implementation in the private schema. The public
+-- SECURITY INVOKER wrapper created by 20261026124237_move_financial_rpc_logic_private.sql
+-- remains the only PostgREST entry point.
+REVOKE ALL ON FUNCTION commercial_private.commercial_record_customer_payment(uuid, bigint, text, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION commercial_private.commercial_record_customer_payment(uuid, bigint, text, text) TO authenticated;

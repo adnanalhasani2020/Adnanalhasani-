@@ -23,6 +23,17 @@ class ReceivablesAndExpenseIntegrityTests(unittest.TestCase):
         self.assertIn("val due = (total - netPaid - credited).coerceAtLeast(0L)", block)
         self.assertIn("The refund RPC inserts the internal refund posting", block)
 
+    def test_customer_collection_return_guard_keeps_definer_logic_private(self):
+        migration = COLLECTION_GUARD.read_text(encoding="utf-8")
+        self.assertIn("CREATE OR REPLACE FUNCTION commercial_private.commercial_record_customer_payment(", migration)
+        self.assertNotIn("CREATE OR REPLACE FUNCTION public.commercial_record_customer_payment(", migration)
+        self.assertIn("SECURITY DEFINER", migration)
+        self.assertIn("REVOKE ALL ON FUNCTION commercial_private.commercial_record_customer_payment", migration)
+        self.assertIn("GRANT EXECUTE ON FUNCTION commercial_private.commercial_record_customer_payment", migration)
+        self.assertNotIn("GRANT EXECUTE ON FUNCTION public.commercial_record_customer_payment", migration)
+        self.assertIn("collection_exceeds_outstanding_balance_after_returns", migration)
+        self.assertIn("v_outstanding_minor := GREATEST(", migration)
+
     def test_daily_expense_total_uses_organization_timezone_not_device_date(self):
         repository = REPOSITORY.read_text(encoding="utf-8")
         screen = EXPENSE_SCREEN.read_text(encoding="utf-8")
