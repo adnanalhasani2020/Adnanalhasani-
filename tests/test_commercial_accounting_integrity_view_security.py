@@ -7,6 +7,7 @@ INTEGRITY_TEST = ROOT / "supabase/tests/database/commercial_integrity_test.sql"
 
 def test_accounting_integrity_diagnostics_are_not_exposed_to_api_clients():
     sql = MIGRATION.read_text(encoding="utf-8").lower()
+    assert "alter view public.commercial_accounting_integrity_checks set (security_invoker = true)" in sql
     assert "revoke all privileges on table public.commercial_accounting_integrity_checks" in sql
     assert "from public, anon, authenticated" in sql
     assert "grant select on table public.commercial_accounting_integrity_checks to service_role" in sql
