@@ -104,7 +104,7 @@ internal fun CustomerOrderFulfillmentScreen(context: Context,onBack:()->Unit) {
    item {
     Card(colors=CardDefaults.cardColors(containerColor=Color.White),border=BorderStroke(1.dp,CustomerOrdersBorder)) {
      Column(Modifier.fillMaxWidth().padding(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-      Text("قبول الطلب لا ينشئ فاتورة ولا يخصم المخزون. إتمام البيع ينفذ عبر دورة البيع الحالية.",fontSize=12.sp,color=CustomerOrdersMuted)
+      Text("الطلب لا يحجز المخزون عند إنشائه. قبول الطلب لا ينشئ فاتورة ولا يخصم المخزون؛ إتمام البيع ينفذ عبر دورة البيع الحالية.",fontSize=12.sp,color=CustomerOrdersMuted)
       OutlinedTextField(query,{query=it},modifier=Modifier.fillMaxWidth(),singleLine=true,label={Text("بحث برقم الطلب أو الحجز أو العميل")},leadingIcon={Icon(Icons.Default.Search,null)})
       Row(horizontalArrangement=Arrangement.spacedBy(5.dp)) {
        FilterChip(tab=="orders",{tab="orders";filter="all"} ,label={Text("الطلبات ("+orders.size+")")})
