@@ -21,6 +21,7 @@ def test_merchant_order_lifecycle_is_server_authorized_atomic_and_audited():
         "merchant_hidden_at",
         "merchant_reviewed_by",
         "rejection_reason_required",
+        "p_decision is null",
         "booking_resource_capacity_exceeded",
         "customer_booking_order_decision_race_retry",
         "for update",
