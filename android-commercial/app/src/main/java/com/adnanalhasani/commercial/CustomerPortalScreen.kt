@@ -104,6 +104,11 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
         else Triple(item, text, kotlin.math.round(quantity.toDouble() * item.priceMinor).toLong())
     }
     val estimatedTotal = cart.sumOf { it.third }
+    val unsupportedFractionalProduct = cart.any { (item, text, _) ->
+        item.itemType == "product" && text.toBigDecimalOrNull()?.let { quantity ->
+            quantity.stripTrailingZeros().scale() > 0 || quantity > java.math.BigDecimal("100000")
+        } == true
+    }
 
     Scaffold(
         topBar = {
@@ -201,7 +206,10 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
                         }
                     }
                 }
-                if (!bookingMode) items(offerings, key = { it.id }) { item ->
+                if (!bookingMode && offerings.none { it.itemType == "product" }) item {
+                    Text("لا توجد منتجات قابلة للشراء المباشر. استخدم وضع الحجز للخدمات.", color = PortalMuted, fontSize = 12.sp)
+                }
+                if (!bookingMode) items(offerings.filter { it.itemType == "product" }, key = { it.id }) { item ->
                     Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, PortalBorder)) {
                         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -283,6 +291,8 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
                                         }
                                     } else if (cart.isEmpty() || invalid) {
                                         error = "تحقق من الكميات (حتى 3 منازل عشرية) وتأكد من اختيار أصناف بعملة واحدة."
+                                    } else if (unsupportedFractionalProduct) {
+                                        error = "البيع السحابي يدعم حاليًا كميات المنتجات الصحيحة من 1 إلى 100000 فقط. عدّل الكمية؛ لن يتم إنشاء طلب غير قابل للإتمام."
                                     } else if (estimatedTotal <= 0L) {
                                         error = "إجمالي الطلب يجب أن يكون أكبر من صفر."
                                     } else {
