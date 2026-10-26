@@ -40,6 +40,8 @@ def test_fulfillment_fails_closed_for_unsupported_or_changed_orders():
         "customer_order_spans_multiple_activities",
         "customer_order_price_or_offering_changed_requote_required",
         "customer_order_total_mismatch_checkout_rolled_back",
+        "customer_credit_limit_exceeded_at_fulfillment",
+        "commercial_party_accounts",
         "payment_status is distinct from 'unpaid'",
         "payment_status is distinct from 'credit'",
     ):
@@ -73,6 +75,8 @@ def test_manager_queue_and_android_screen_make_fulfillment_operational():
         "customer_order_management_permission_required",
         "p_organization_id",
         "fulfillment_supported",
+        "commercial_guard_customer_order_item_checkout_quantity",
+        "product_order_requires_integer_quantity_for_inventory_checkout",
     ):
         assert marker in queue
     for marker in (
@@ -83,6 +87,8 @@ def test_manager_queue_and_android_screen_make_fulfillment_operational():
         "الطلب لا يحجز المخزون عند إنشائه",
     ):
         assert marker in screen
+    assert "unsupportedFractionalProduct" in PORTAL.read_text(encoding="utf-8")
+    assert "product_order_requires_integer_quantity_for_inventory_checkout" in queue
     assert "CustomerOrderFulfillmentScreen(" in activity
     assert '"طلبات الزبائن"' in activity
     assert "onCustomerOrders = { customerOrderFulfillmentPage = true }" in activity
