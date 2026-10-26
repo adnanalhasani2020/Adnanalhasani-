@@ -43,8 +43,13 @@ class CommercialCloudExpenseVoucherTests(unittest.TestCase):
         self.assertIn("ENABLE ROW LEVEL SECURITY", sql)
         self.assertIn("commercial_expense_vouchers_finance_read", sql)
         self.assertIn("m.organization_id=commercial_expense_vouchers.organization_id", sql)
-        self.assertIn("m.role IN ('owner','admin','manager','accountant')", sql)
+        self.assertIn("m.role IN ('owner','admin','manager')", sql)
         self.assertIn("REVOKE ALL ON TABLE public.commercial_expense_vouchers FROM PUBLIC, anon, authenticated", sql)
+
+    def test_expense_permissions_match_supported_organization_roles(self):
+        migration = (ROOT / "supabase/migrations/20261026163000_fix_expense_role_scope.sql").read_text(encoding="utf-8")
+        self.assertIn("m.role IN ('owner','admin','manager')", migration)
+        self.assertNotIn("'accountant'", migration)
 
     def test_android_expense_amounts_use_currency_minor_units(self):
         screen = SCREEN.read_text(encoding="utf-8")
