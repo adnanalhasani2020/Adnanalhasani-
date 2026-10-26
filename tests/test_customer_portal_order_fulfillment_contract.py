@@ -77,6 +77,7 @@ def test_manager_queue_and_android_screen_make_fulfillment_operational():
         "fulfillment_supported",
         "commercial_guard_customer_order_item_checkout_quantity",
         "product_order_requires_integer_quantity_for_inventory_checkout",
+        "service_orders_require_booking_workflow",
     ):
         assert marker in queue
     for marker in (
@@ -87,7 +88,9 @@ def test_manager_queue_and_android_screen_make_fulfillment_operational():
         "الطلب لا يحجز المخزون عند إنشائه",
     ):
         assert marker in screen
-    assert "unsupportedFractionalProduct" in PORTAL.read_text(encoding="utf-8")
+    portal = PORTAL.read_text(encoding="utf-8")
+    assert "unsupportedFractionalProduct" in portal
+    assert 'offerings.filter { it.itemType == "product" }' in portal
     assert "product_order_requires_integer_quantity_for_inventory_checkout" in queue
     assert "CustomerOrderFulfillmentScreen(" in activity
     assert '"طلبات الزبائن"' in activity
