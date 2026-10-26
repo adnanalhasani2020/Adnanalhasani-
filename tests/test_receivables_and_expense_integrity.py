@@ -20,7 +20,7 @@ class ReceivablesAndExpenseIntegrityTests(unittest.TestCase):
         self.assertIn("refund_postings:commercial_return_refund_postings(amount_minor)", block)
         self.assertIn("val netPaid = (paid - refunded).coerceAtLeast(0L)", block)
         self.assertIn("(totalMinor - paidMinor - creditedMinor).coerceAtLeast(0L)", block)
-        self.assertIn("refund is not a second", block)
+        self.assertIn("but is not a second", block)
 
     def test_daily_expense_total_uses_organization_timezone_not_device_date(self):
         repository = REPOSITORY.read_text(encoding="utf-8")
