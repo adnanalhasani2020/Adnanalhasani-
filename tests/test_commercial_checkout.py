@@ -402,6 +402,13 @@ def test_partial_and_multiple_returns_are_idempotent_and_quantity_bounded(tmp_pa
     )
     assert replay["return_id"] == first["return_id"]
     assert replay["replayed"] is True
+    with pytest.raises(ValidationError, match="idempotency key was reused with a different request"):
+        app.return_sale_items(
+            db, request["sale_id"], request["actor_person_id"], grant_id,
+            items=[{"sale_line_id": sale_line_id, "quantity": 1}],
+            idempotency_key="return-partial-001", reason="changed reason for same key",
+            now=datetime(2026, 10, 17, 12, 3, 30, tzinfo=timezone.utc),
+        )
     with pytest.raises(ValidationError, match="Cumulative returned quantity exceeds"):
         app.return_sale_items(
             db, request["sale_id"], request["actor_person_id"], grant_id,
