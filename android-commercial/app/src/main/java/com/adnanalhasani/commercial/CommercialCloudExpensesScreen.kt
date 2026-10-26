@@ -49,6 +49,9 @@ internal fun CommercialCloudExpensesScreen(context: Context, onBack: () -> Unit)
     var loading by remember { mutableStateOf(false) }
     var submitting by remember { mutableStateOf(false) }
     var showForm by remember { mutableStateOf(false) }
+    var cancelTarget by remember { mutableStateOf<CommercialCloudExpenseVoucher?>(null) }
+    var cancelReason by remember { mutableStateOf("") }
+    var cancelError by remember { mutableStateOf("") }
     var error by remember { mutableStateOf("") }
     var category by remember { mutableStateOf("") }
     var amountText by remember { mutableStateOf("") }
