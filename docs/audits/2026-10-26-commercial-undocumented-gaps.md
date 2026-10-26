@@ -239,3 +239,15 @@
 - `20261026210000_expense_voucher_commit_integrity.sql`: قيد مؤجل يمنع اعتماد سند مصروف إذا كان قيده غير منشور أو ناقصًا أو غير متوازن.
 
 سجل Supabase يؤكد تطبيقها بأسماء `commercial_expense_voucher_cancellation_audit` و`verify_expense_voucher_reversal_integrity` و`expense_voucher_commit_integrity`. كما أظهر فحص الدوال الحية وجود تحقق انعكاس القيد وحارس حقول التدقيق. لا يعني ذلك أن كل سيناريو إنتاجي قد اختُبر؛ ما زال يلزم اختبار قبول فعلي لعملية إنشاء سند وإلغائه على بيانات اختبار.
+
+
+## 21. ثغرتا عزل مؤسسات إضافيتان في RLS — أُصلحتا ونُشرتا
+
+فحص شامل لشروط `pg_policies` في قاعدة Supabase الحية كشف سياستين إضافيتين بهما نفس خطأ المقارنة الذاتية:
+
+- `commercial_inventory_receipts_member_read`: الشرط القديم `m.organization_id = m.organization_id`.
+- `commercial_return_restock_postings_member_read`: الشرط القديم نفسه.
+
+كان الشرطان لا يربطان العضوية بالمؤسسة المالكة للسجل، ما قد يسمح لعضو نشط بقراءة سجلات استلام مخزون أو إعادة تخزين مرتجعات من مؤسسة أخرى. أُضيف الترحيل `20261026213200_fix_inventory_receipt_and_return_restock_rls.sql` ليقارن `m.organization_id` مع `organization_id` للصف، ويستخدم `(SELECT auth.uid())`. أضيف اختبار تعاقدي لكلا السياستين.
+
+**حالة النشر:** بعد نشر الترحيل، يجب إعادة فحص `pg_policies` للتأكد من عدم بقاء المقارنة الذاتية. تم فحص هذه السياسات في قاعدة البيانات الحية قبل الإصلاح؛ لا يُعلن اكتمال الإغلاق إلا بعد تحقق ما بعد النشر.

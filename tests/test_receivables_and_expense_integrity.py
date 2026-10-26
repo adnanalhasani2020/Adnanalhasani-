@@ -44,6 +44,14 @@ class ReceivablesAndExpenseIntegrityTests(unittest.TestCase):
         self.assertNotIn("payment_exceeds_sale_total", migration)
         self.assertIn("v_outstanding:=GREATEST(", migration)
 
+    def test_inventory_receipt_and_return_restock_rls_scope_to_row_organization(self):
+        migration = (ROOT / "supabase/migrations/20261026213200_fix_inventory_receipt_and_return_restock_rls.sql").read_text(encoding="utf-8")
+        self.assertIn("m.organization_id = commercial_inventory_receipts.organization_id", migration)
+        self.assertIn("m.organization_id = commercial_return_restock_postings.organization_id", migration)
+        self.assertEqual(migration.count("m.user_id = (SELECT auth.uid())"), 2)
+        self.assertNotIn("m.organization_id = m.organization_id", migration)
+        self.assertEqual(migration.count("CREATE POLICY"), 2)
+
     def test_customer_party_account_rls_migration_scopes_member_and_admin_policies_to_row_tenant(self):
         migration = (ROOT / "supabase/migrations/20261026213100_fix_customer_party_accounts_rls_scope.sql").read_text(encoding="utf-8")
         self.assertIn("m.organization_id = commercial_customer_party_accounts.organization_id", migration)
