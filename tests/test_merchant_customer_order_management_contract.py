@@ -1,7 +1,7 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-MIGRATION = ROOT / "supabase/migrations/20261027010000_merchant_customer_order_management.sql"
+MIGRATION = ROOT / "supabase/migrations/20261028010000_merchant_customer_order_management.sql"
 REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt"
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CustomerOrderFulfillmentScreen.kt"
 
