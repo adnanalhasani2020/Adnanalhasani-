@@ -86,6 +86,8 @@ def test_manager_queue_and_android_screen_make_fulfillment_operational():
         "fulfillCustomerPortalOrder",
         "اعتماد وإتمام البيع",
         "الطلب لا يحجز المخزون عند إنشائه",
+        "تأكيد استلام المبلغ نقدًا",
+        "استلمت المبلغ — إتمام البيع",
     ):
         assert marker in screen
     portal = PORTAL.read_text(encoding="utf-8")
