@@ -124,14 +124,14 @@ WHEN NOT EXISTS (
                   COALESCE((SELECT SUM(prior.quantity) FROM sale_return_lines prior
                             JOIN sale_return_events prior_event ON prior_event.return_event_id=prior.return_event_id
                             WHERE prior.sale_line_id=l.sale_line_id
-                              AND prior.return_event_id<>re.return_event_id),0)
+                              AND (prior_event.created_at<re.created_at OR (prior_event.created_at=re.created_at AND prior_event.return_event_id<re.return_event_id))),0)
                   + rl.quantity
               ) / l.quantity AS INTEGER)
               - CAST(l.line_total_minor * COALESCE((
                   SELECT SUM(prior.quantity) FROM sale_return_lines prior
                   JOIN sale_return_events prior_event ON prior_event.return_event_id=prior.return_event_id
                   WHERE prior.sale_line_id=l.sale_line_id
-                    AND prior.return_event_id<>re.return_event_id
+                    AND (prior_event.created_at<re.created_at OR (prior_event.created_at=re.created_at AND prior_event.return_event_id<re.return_event_id))
               ),0) / l.quantity AS INTEGER)
           ),0)
           FROM sale_return_lines rl
@@ -164,14 +164,14 @@ WHEN NOT EXISTS (
               COALESCE((SELECT SUM(prior.quantity) FROM sale_return_lines prior
                         JOIN sale_return_events prior_event ON prior_event.return_event_id=prior.return_event_id
                         WHERE prior.sale_line_id=l.sale_line_id
-                          AND prior.return_event_id<>re.return_event_id),0)
+                          AND (prior_event.created_at<re.created_at OR (prior_event.created_at=re.created_at AND prior_event.return_event_id<re.return_event_id))),0)
               + rl.quantity
           ) / l.quantity AS INTEGER)
           - CAST(l.line_total_minor * COALESCE((
               SELECT SUM(prior.quantity) FROM sale_return_lines prior
               JOIN sale_return_events prior_event ON prior_event.return_event_id=prior.return_event_id
               WHERE prior.sale_line_id=l.sale_line_id
-                AND prior.return_event_id<>re.return_event_id
+                AND (prior_event.created_at<re.created_at OR (prior_event.created_at=re.created_at AND prior_event.return_event_id<re.return_event_id))
           ),0) / l.quantity AS INTEGER)
       )
       AND NEW.amount_minor <= l.line_total_minor - COALESCE((
