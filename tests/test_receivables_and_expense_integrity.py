@@ -34,7 +34,7 @@ class ReceivablesAndExpenseIntegrityTests(unittest.TestCase):
     def test_receivable_model_subtracts_executed_refunds_and_approved_return_credit(self):
         source = REPOSITORY.read_text(encoding="utf-8")
         start = source.index("data class CommercialCloudReceivable(")
-        end = source.index("\\ninternal fun loadCommercialCloudReceivables(", start)
+        end = source.index("\ninternal fun loadCommercialCloudReceivables(", start)
         model = source[start:end]
         self.assertIn("val refundedMinor: Long", model)
         self.assertIn("val netPaidMinor: Long get() = (paidMinor - refundedMinor).coerceAtLeast(0L)", model)
