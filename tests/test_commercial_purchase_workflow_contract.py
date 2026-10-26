@@ -188,6 +188,21 @@ def test_fractional_purchase_receiving_preserves_decimal_precision_end_to_end():
     assert "quantity.stripTrailingZeros().scale() > 6" in receipt_dialog
 
 
+def test_purchase_order_rpc_accepts_fractional_quantities_with_storage_precision():
+    migration = (ROOT / "supabase/migrations/20261026120000_commercial_purchase_order_fractional_quantities.sql").read_text(encoding="utf-8")
+    function = migration.split("CREATE OR REPLACE FUNCTION commercial_private.commercial_create_purchase_order", 1)[1]
+    assert "scale(v_qty)>6" in function
+    assert "v_qty>999999999999.999999" in function
+    assert "v_qty<>trunc(v_qty)" not in function
+    for marker in (
+        "purchase_management_permission_required",
+        "purchase_idempotency_key_reused_with_different_request",
+        "purchase_offering_currency_or_scope_mismatch",
+        "commercial_audit_events",
+    ):
+        assert marker in function
+
+
 def test_fractional_accrual_rounding_migration_is_present_and_replaces_accounting_triggers():
     sql = ACCOUNTING_ROUNDING.read_text(encoding="utf-8")
     assert "CREATE OR REPLACE FUNCTION commercial_private.commercial_post_purchase_receipt_financials()" in sql
