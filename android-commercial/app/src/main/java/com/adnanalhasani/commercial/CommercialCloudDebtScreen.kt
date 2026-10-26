@@ -144,8 +144,20 @@ internal fun CommercialCloudDebtScreen(context: Context, onBack: () -> Unit) {
                             Text(cloudDebtMoney(row.totalMinor, row.currencyCode), color = DebtInk, fontWeight = FontWeight.SemiBold)
                         }
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("المحصّل", color = DebtMuted, fontSize = 12.sp)
-                            Text(cloudDebtMoney(row.paidMinor, row.currencyCode), color = DebtGreen)
+                            Text("صافي المحصّل بعد الاسترداد", color = DebtMuted, fontSize = 12.sp)
+                            Text(cloudDebtMoney(row.netPaidMinor, row.currencyCode), color = DebtGreen)
+                        }
+                        if (row.refundedMinor > 0L) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("المبلغ المسترد نقديًا", color = DebtMuted, fontSize = 12.sp)
+                                Text(cloudDebtMoney(row.refundedMinor, row.currencyCode), color = DebtMuted)
+                            }
+                        }
+                        if (row.creditedMinor > 0L) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("خصم المرتجعات المعتمدة", color = DebtMuted, fontSize = 12.sp)
+                                Text(cloudDebtMoney(row.creditedMinor, row.currencyCode), color = DebtGreen)
+                            }
                         }
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("المتبقي", color = DebtMuted, fontSize = 12.sp)
