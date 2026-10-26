@@ -16,8 +16,10 @@ class ReceivablesAndExpenseIntegrityTests(unittest.TestCase):
         self.assertIn("returns:commercial_sales_returns(id,status,refund_status,approved_refund_minor)", block)
         self.assertIn('saleReturn.optString("status") == "completed"', block)
         self.assertIn("creditedMinor = credited", block)
+        self.assertIn("refund_postings:commercial_return_refund_postings(amount_minor)", block)
+        self.assertIn("val netPaid = (paid - refunded).coerceAtLeast(0L)", block)
         self.assertIn("(totalMinor - paidMinor - creditedMinor).coerceAtLeast(0L)", block)
-        self.assertNotIn("commercial_return_refund_postings", block)
+        self.assertIn("refund is not a second", block)
 
     def test_daily_expense_total_uses_organization_timezone_not_device_date(self):
         repository = REPOSITORY.read_text(encoding="utf-8")
