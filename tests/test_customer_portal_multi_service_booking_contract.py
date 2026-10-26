@@ -71,3 +71,26 @@ def test_database_regression_checks_cover_privileges_capacity_and_idempotency():
     assert "booking_resource_capacity_exceeded" in sql
     assert "idempotency_key_reused_with_different_request" in sql
     assert "line_total_minor" in sql
+
+
+CANCELLATION_MIGRATION = ROOT / "supabase/migrations/20261027210000_atomic_customer_booking_cancellation.sql"
+
+
+def test_booking_cancellation_requires_pending_linked_order():
+    sql = CANCELLATION_MIGRATION.read_text(encoding="utf-8").lower()
+    order_lock = sql.index("from public.commercial_customer_orders o", sql.index("create or replace function public.commercial_customer_portal_cancel_booking"))
+    order_status_guard = sql.index("if v_order.status is distinct from 'pending' then")
+    booking_update = sql.index("update public.commercial_bookings", order_status_guard)
+    order_update = sql.index("update public.commercial_customer_orders", booking_update)
+    assert order_lock < order_status_guard < booking_update < order_update
+    for marker in (
+        "for update",
+        "booking_order_cancellation_not_allowed_for_status",
+        "booking_order_cancellation_requires_unpaid_order",
+        "booking_cancellation_race_retry",
+        "booking_order_cancellation_race_retry",
+        "status = 'cancelled'",
+        "from public, anon",
+        "to authenticated",
+    ):
+        assert marker in sql
