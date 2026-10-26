@@ -30,7 +30,6 @@ DECLARE
   v_qty numeric;
   v_count integer := 0;
   v_match_count integer := 0;
-  v_activity_id uuid;
   v_currency text;
   v_result jsonb;
 BEGIN
@@ -167,8 +166,7 @@ BEGIN
 
   FOR v_line IN SELECT value FROM jsonb_array_elements(p_lines)
   LOOP
-    SELECT f.id, f.price_minor, f.currency_code, a.id AS activity_id, a.activity_type,
-           a.organization_id, a.state AS activity_state, a.deleted_at, p.state AS product_state
+    SELECT f.id, f.price_minor, f.currency_code, a.activity_type
       INTO v_offering
     FROM public.commercial_offerings f
     JOIN public.commercial_activities a ON a.id=f.activity_id
@@ -181,11 +179,6 @@ BEGIN
     IF NOT FOUND THEN RAISE EXCEPTION 'booking_service_not_available' USING ERRCODE='22023'; END IF;
     IF v_offering.currency_code <> v_account_currency THEN
       RAISE EXCEPTION 'booking_currency_mismatch' USING ERRCODE='22023';
-    END IF;
-    IF v_activity_id IS NULL THEN
-      v_activity_id := v_offering.activity_id;
-    ELSIF v_activity_id <> v_offering.activity_id THEN
-      RAISE EXCEPTION 'multi_service_booking_requires_same_activity' USING ERRCODE='22023';
     END IF;
     IF v_currency IS NULL THEN v_currency := v_offering.currency_code;
     ELSIF v_currency <> v_offering.currency_code THEN
@@ -208,7 +201,7 @@ BEGIN
   v_order_id := (v_order->>'order_id')::uuid;
   v_order_total := (v_order->>'total_minor')::bigint;
 
-  -- Defense in depth: booking orders may contain service lines only, all within the same activity.
+  -- Defense in depth: booking orders may contain service lines only.
   IF EXISTS (
     SELECT 1 FROM public.commercial_customer_order_items oi
     WHERE oi.order_id=v_order_id AND oi.item_type IS DISTINCT FROM 'service'
