@@ -44,6 +44,7 @@ DECLARE
   v_voucher public.commercial_expense_vouchers%ROWTYPE;
   v_reversal jsonb;
   v_reversal_id uuid;
+  v_original_journal_status text;
 BEGIN
   IF v_uid IS NULL THEN
     RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501';
@@ -83,6 +84,15 @@ BEGIN
 
   IF v_voucher.journal_entry_id IS NULL THEN
     RAISE EXCEPTION 'expense_voucher_has_no_journal_entry' USING ERRCODE='55000';
+  END IF;
+
+  SELECT status INTO v_original_journal_status
+  FROM public.commercial_journal_entries
+  WHERE id = v_voucher.journal_entry_id
+    AND organization_id = v_voucher.organization_id
+  FOR UPDATE;
+  IF NOT FOUND OR v_original_journal_status IS DISTINCT FROM 'posted' THEN
+    RAISE EXCEPTION 'expense_voucher_original_journal_not_posted' USING ERRCODE='55000';
   END IF;
 
   v_reversal := public.commercial_gl_reverse_entry(v_voucher.journal_entry_id, btrim(p_reason));
