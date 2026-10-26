@@ -2,6 +2,9 @@ ALTER TABLE public.commercial_customers
   ADD COLUMN IF NOT EXISTS auth_user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS commercial_customers_auth_user_id_idx
   ON public.commercial_customers(auth_user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS commercial_customers_org_auth_user_uidx
+  ON public.commercial_customers(organization_id, auth_user_id)
+  WHERE auth_user_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS commercial_customers_org_email_idx
   ON public.commercial_customers(organization_id, lower(email))
   WHERE email IS NOT NULL;
