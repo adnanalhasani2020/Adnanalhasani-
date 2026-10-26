@@ -47,6 +47,13 @@ class CommercialCloudExpenseVoucherTests(unittest.TestCase):
         self.assertIn("m.role IN ('owner','admin','manager')", role_fix)
         self.assertIn("REVOKE ALL ON TABLE public.commercial_expense_vouchers FROM PUBLIC, anon, authenticated", sql)
 
+    def test_internal_refund_postings_remain_unavailable_to_clients(self):
+        migration = (ROOT / "supabase/migrations/20261026164000_lock_down_return_refund_postings.sql").read_text(encoding="utf-8")
+        self.assertIn("REVOKE ALL ON TABLE public.commercial_return_refund_postings FROM PUBLIC, anon, authenticated", migration)
+        self.assertIn("FOR ALL TO anon, authenticated", migration)
+        self.assertIn("USING (false)", migration)
+        self.assertIn("WITH CHECK (false)", migration)
+
     def test_expense_permissions_match_supported_organization_roles(self):
         migration = (ROOT / "supabase/migrations/20261026163000_fix_expense_role_scope.sql").read_text(encoding="utf-8")
         self.assertIn("m.role IN ('owner','admin','manager')", migration)
