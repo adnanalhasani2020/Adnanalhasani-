@@ -35,9 +35,12 @@ private val CloudExpenseBorder = Color(0xFFE5EBE8)
 private fun cloudExpenseCurrencyScale(code: String): Int =
     runCatching { Currency.getInstance(code).defaultFractionDigits.coerceIn(0, 6) }.getOrDefault(0)
 
-private fun formatCloudExpenseMinor(amountMinor: Long, code: String): String {
+private fun formatCloudExpenseMinor(amountMinor: Long, code: String): String =
+    formatCloudExpenseMinor(BigDecimal.valueOf(amountMinor), code)
+
+private fun formatCloudExpenseMinor(amountMinor: BigDecimal, code: String): String {
     val scale = cloudExpenseCurrencyScale(code)
-    return BigDecimal.valueOf(amountMinor, scale).setScale(scale, RoundingMode.UNNECESSARY).toPlainString() + " " + code
+    return amountMinor.movePointLeft(scale).setScale(scale, RoundingMode.UNNECESSARY).toPlainString() + " " + code
 }
 
 @Composable
@@ -86,7 +89,7 @@ internal fun CommercialCloudExpensesScreen(context: Context, onBack: () -> Unit)
             Card(colors = CardDefaults.cardColors(containerColor = CloudExpenseInk), shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(18.dp)) {
                     Text("إجمالي مصروفات اليوم المؤكدة", color = Color(0xFFBFD9D0), fontSize = 13.sp)
-                    Text(formatCloudExpenseMinor(todayTotal.toBigInteger().longValueExact(), currency), color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                    Text(formatCloudExpenseMinor(todayTotal, currency), color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
                     Text(today.size.toString() + " سند محفوظ", color = Color(0xFF8DE0B8), fontSize = 12.sp)
                 }
             }
