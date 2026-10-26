@@ -1060,6 +1060,22 @@ internal fun loadCommercialCloudExpenseCurrencyCode(context: Context): String {
     return code
 }
 
+internal fun loadCommercialCloudExpenseReportingTimeZone(context: Context): java.time.ZoneId {
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val rows = commercialCloudPagedGet(
+        "/rest/v1/commercial_organizations?select=default_timezone&id=eq.$orgId",
+        access
+    )
+    require(rows.length() == 1) { "تعذر تحديد المنطقة الزمنية للتقارير من الخادم." }
+    val zoneName = rows.getJSONObject(0).optString("default_timezone").takeUnless { it.isBlank() || it == "null" }
+        ?: throw IllegalStateException("لم تُضبط المنطقة الزمنية المعتمدة للتقارير للمؤسسة.")
+    return try {
+        java.time.ZoneId.of(zoneName)
+    } catch (e: java.time.DateTimeException) {
+        throw IllegalStateException("المنطقة الزمنية المعتمدة للتقارير غير صالحة: $zoneName", e)
+    }
+}
+
 internal data class CommercialCloudExpenseVoucher(
     val id: String,
     val category: String,
@@ -1837,10 +1853,13 @@ internal data class CommercialCloudReceivable(
     val customerName: String,
     val totalMinor: Long,
     val paidMinor: Long,
+    val creditedMinor: Long,
     val currencyCode: String,
     val createdAt: String
 ) {
-    val dueMinor: Long get() = (totalMinor - paidMinor).coerceAtLeast(0L)
+    // Finalized approved returns act as credit notes. Do not also subtract
+    // refund-posting rows: they represent settlement of the credit, not a second credit.
+    val dueMinor: Long get() = (totalMinor - paidMinor - creditedMinor).coerceAtLeast(0L)
 }
 
 internal fun loadCommercialCloudReceivables(context: Context): List<CommercialCloudReceivable> {
@@ -1849,7 +1868,7 @@ internal fun loadCommercialCloudReceivables(context: Context): List<CommercialCl
     require(activityId.isNotBlank()) { "ملف النشاط غير محفوظ." }
     val (orgId, access) = commercialMasterDataAccess(context)
     val path = "/rest/v1/commercial_sales" +
-        "?select=id,receipt_number,customer_id,total_minor,currency_code,created_at,payment_status,customer:commercial_customers(display_name),payments:commercial_payments(amount_minor,status)" +
+        "?select=id,receipt_number,customer_id,total_minor,currency_code,created_at,payment_status,customer:commercial_customers(display_name),payments:commercial_payments(amount_minor,status),returns:commercial_sales_returns(id,status,refund_status,approved_refund_minor,refund_postings:commercial_return_refund_postings(amount_minor))" +
         "&organization_id=eq.$orgId&activity_id=eq.$activityId&status=eq.completed&customer_id=not.is.null&order=created_at.desc,id.asc"
     val rows = commercialCloudPagedGet(path, access)
     return buildList {
@@ -1863,18 +1882,37 @@ internal fun loadCommercialCloudReceivables(context: Context): List<CommercialCl
             var paid = 0L
             for (j in 0 until (payments?.length() ?: 0)) {
                 val payment = payments?.optJSONObject(j) ?: continue
-                if (payment.optString("status") == "succeeded") {
+                if (payment.optString("status") in setOf("succeeded", "partially_refunded", "refunded")) {
                     paid = Math.addExact(paid, payment.optLong("amount_minor", 0L).coerceAtLeast(0L))
                 }
             }
+            val returns = row.optJSONArray("returns")
+            var credited = 0L
+            var refunded = 0L
+            for (j in 0 until (returns?.length() ?: 0)) {
+                val saleReturn = returns?.optJSONObject(j) ?: continue
+                if (saleReturn.optString("status") == "completed") {
+                    credited = Math.addExact(credited, saleReturn.optLong("approved_refund_minor", 0L).coerceAtLeast(0L))
+                }
+                // A cash refund reduces the net amount paid, but is not a second
+                // credit note. Keep the two adjustments separate to avoid double counting.
+                val refundPostings = saleReturn.optJSONArray("refund_postings")
+                for (k in 0 until (refundPostings?.length() ?: 0)) {
+                    val refund = refundPostings?.optJSONObject(k) ?: continue
+                    refunded = Math.addExact(refunded, refund.optLong("amount_minor", 0L).coerceAtLeast(0L))
+                }
+            }
+            val netPaid = (paid - refunded).coerceAtLeast(0L)
             val total = row.optLong("total_minor", 0L).coerceAtLeast(0L)
-            if (paid < total) add(CommercialCloudReceivable(
+            val due = (total - netPaid - credited).coerceAtLeast(0L)
+            if (due > 0L) add(CommercialCloudReceivable(
                 saleId = row.optString("id"),
                 receiptNumber = row.optString("receipt_number"),
                 customerId = customerId,
                 customerName = customerName,
                 totalMinor = total,
                 paidMinor = paid,
+                creditedMinor = credited,
                 currencyCode = row.optString("currency_code"),
                 createdAt = row.optString("created_at")
             ))

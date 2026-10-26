@@ -59,25 +59,38 @@ internal fun CommercialCloudExpensesScreen(context: Context, onBack: () -> Unit)
     var evidence by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
     var currency by remember { mutableStateOf("") }
+    var reportingTimeZone by remember { mutableStateOf(java.time.ZoneId.of("UTC")) }
     fun refresh() {
         if (loading) return
         loading = true
         error = ""
         CloudExpenseIo.execute {
-            val result = runCatching { loadCommercialCloudExpenseCurrencyCode(context) to loadCommercialCloudExpenses(context) }
+            val result = runCatching {
+                Triple(
+                    loadCommercialCloudExpenseCurrencyCode(context),
+                    loadCommercialCloudExpenseReportingTimeZone(context),
+                    loadCommercialCloudExpenses(context)
+                )
+            }
             CloudExpenseMain.post {
                 loading = false
                 result.onSuccess {
                     currency = it.first
+                    reportingTimeZone = it.second
                     expenses.clear()
-                    expenses.addAll(it.second)
+                    expenses.addAll(it.third)
                 }.onFailure { error = it.message ?: "تعذر تحميل سندات الصرف من الخادم." }
             }
         }
     }
     LaunchedEffect(Unit) { refresh() }
-    val todayPrefix = java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US).format(java.util.Date())
-    val today = expenses.filter { it.recordedAt.startsWith(todayPrefix) && it.canceledAt.isBlank() }
+    val reportingDate = java.time.LocalDate.now(reportingTimeZone)
+    val today = expenses.filter { item ->
+        item.canceledAt.isBlank() && runCatching {
+            java.time.OffsetDateTime.parse(item.recordedAt).toInstant()
+                .atZone(reportingTimeZone).toLocalDate() == reportingDate
+        }.getOrDefault(false)
+    }
     val todayTotal = today.fold(BigDecimal.ZERO) { total, item -> total.add(BigDecimal.valueOf(item.amountMinor)) }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
