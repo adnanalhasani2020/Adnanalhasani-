@@ -48,6 +48,13 @@ BEGIN
       'customer_name',coalesce(c.display_name,''),'merchant_hidden',o.merchant_hidden_at IS NOT NULL,
       'merchant_hidden_at',o.merchant_hidden_at,'merchant_reviewed_at',o.merchant_reviewed_at,
       'merchant_decision_reason',coalesce(o.merchant_decision_reason,''),
+      'fulfillment',(
+        SELECT jsonb_build_object('sale_id',f.sale_id,'receipt_number',f.result->'receipt_number',
+          'fulfilled_at',f.fulfilled_at,'fulfilled_by',f.fulfilled_by,'location_id',f.location_id,
+          'paid_minor',f.result->'paid_minor','outstanding_minor',f.result->'outstanding_minor',
+          'journal_entry_id',f.result->'journal_entry_id')
+        FROM public.commercial_customer_order_fulfillments f WHERE f.order_id=o.id
+      ),
       'fulfillment_supported',(
         o.order_type='purchase' AND o.payment_status IN ('unpaid','credit')
         AND NOT EXISTS(SELECT 1 FROM public.commercial_customer_order_items x WHERE x.order_id=o.id
