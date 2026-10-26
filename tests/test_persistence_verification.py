@@ -24,7 +24,7 @@ EXPECTED_DOMAIN_TABLES = {
     "results_reports","prescriptions","pending_operations","conflicts",
     "durable_operation_records","audit_records","provenance_records","domain_history",
     "workflows","workflow_events","activity_invitations","file_attachments","financial_policy_settings",
-    "offering_prices","sale_lines","inventory_movements","sale_return_events","sale_return_lines","credit_notes","credit_note_lines","commercial_checkout_receipts",
+    "offering_prices","sale_lines","inventory_movements","sale_return_events","sale_return_lines","credit_notes","credit_note_lines","sale_return_completions","commercial_checkout_receipts",
     "commercial_credentials","commercial_sessions","commercial_login_attempts","commercial_supabase_identities",
     "external_event_intake","external_event_intake_conflicts","hospital_finance_integration_settings",
 }
@@ -81,7 +81,7 @@ def _financial_fixture(db):
 def test_clean_install_has_exactly_69_domain_tables_plus_migration_bookkeeping():
     db = connect_database()
     assert _tables(db) == EXPECTED_DOMAIN_TABLES | {"schema_migrations"}
-    assert len(EXPECTED_DOMAIN_TABLES) == 73
+    assert len(EXPECTED_DOMAIN_TABLES) == 74
     assert db.execute("PRAGMA foreign_keys").fetchone()[0] == 1
     assert db.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
     versions = [r[0] for r in db.execute("SELECT version FROM schema_migrations ORDER BY version")]
@@ -148,6 +148,7 @@ def test_clean_install_has_exactly_69_domain_tables_plus_migration_bookkeeping()
     expected_versions.append("0066_sale_return_events_partial_multiple")
     expected_versions.append("0067_sale_return_financial_link_guard")
     expected_versions.append("0068_credit_notes_refund_reversal")
+    expected_versions.append("0069_sale_return_completion_gate")
     assert versions == sorted(expected_versions)
 
 
