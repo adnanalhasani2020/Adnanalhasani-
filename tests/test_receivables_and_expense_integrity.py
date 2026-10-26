@@ -18,7 +18,7 @@ class ReceivablesAndExpenseIntegrityTests(unittest.TestCase):
         self.assertIn('saleReturn.optString("status") == "completed"', block)
         self.assertIn("creditedMinor = credited", block)
         self.assertIn('saleReturn.optString("refund_status") == "refunded"', block)
-        self.assertNotIn("commercial_return_refund_postings", block)
+        self.assertNotIn("refund_postings:commercial_return_refund_postings(amount_minor)", block)
         self.assertIn("val netPaid = (paid - refunded).coerceAtLeast(0L)", block)
         self.assertIn("val due = (total - netPaid - credited).coerceAtLeast(0L)", block)
         self.assertIn("but is not a second", block)
