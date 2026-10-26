@@ -223,6 +223,7 @@ private fun StoreApp(context: Context) {
     var cloudPurchasesPage by remember { mutableStateOf(false) }
     var cloudStockAlertsPage by remember { mutableStateOf(false) }
     var cloudUnitsPage by remember { mutableStateOf(false) }
+    var customerPortalPage by remember { mutableStateOf(false) }
     var settlingSaleNumber by remember { mutableIntStateOf(-1) }
     val cloudContextExists = remember {
         val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
@@ -313,7 +314,9 @@ private fun StoreApp(context: Context) {
         }
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
-            if (cloudSaleComposerPage) {
+            if (customerPortalPage) {
+                CustomerPortalScreen(context = context, onBack = { customerPortalPage = false })
+            } else if (cloudSaleComposerPage) {
                 CommercialCloudSaleComposerScreen(
                     context = context,
                     onBack = { cloudSaleComposerPage = false },
@@ -385,7 +388,7 @@ private fun StoreApp(context: Context) {
                     } else ExpensesScreen(expenses = expenses, onBack = { showExpenses = false }, onAdd = { expenseDialog = true })
                     else -> if (showActivityProfile) ActivityProfileScreen(onBack = { showActivityProfile = false }) else MoreScreen(onCustomers = {
                     showDebts = true
-                }, onReports = { showReports = true }, onExpenses = { showExpenses = true }, onActivityProfile = { showActivityProfile = true }, onCatalog = { showCatalog = true }, onMasterData = { showMasterData = true }, onCloudOperational = { cloudOperationalPage = it }, onCloudSales = { cloudSalesPage = true }, onCloudPurchases = { cloudPurchasesPage = true }, onCloudStockAlerts = { cloudStockAlertsPage = true }, onUnitsDirectory = { cloudUnitsPage = true })
+                }, onReports = { showReports = true }, onExpenses = { showExpenses = true }, onActivityProfile = { showActivityProfile = true }, onCatalog = { showCatalog = true }, onMasterData = { showMasterData = true }, onCloudOperational = { cloudOperationalPage = it }, onCloudSales = { cloudSalesPage = true }, onCloudPurchases = { cloudPurchasesPage = true }, onCloudStockAlerts = { cloudStockAlertsPage = true }, onUnitsDirectory = { cloudUnitsPage = true }, onCustomerPortal = { customerPortalPage = true })
                 }
             }
         }
@@ -1035,12 +1038,14 @@ private fun AddProductDialog(
 }
 
 @Composable
-private fun MoreScreen(onCustomers: () -> Unit, onReports: () -> Unit, onExpenses: () -> Unit, onActivityProfile: () -> Unit, onCatalog: () -> Unit, onMasterData: () -> Unit, onCloudOperational: (String) -> Unit, onCloudSales: () -> Unit, onCloudPurchases: () -> Unit, onCloudStockAlerts: () -> Unit, onUnitsDirectory: () -> Unit) {
-    val options = listOf("دليل الأصناف العالمي", "المستودعات والمجموعات والأقسام", "العملاء والمديونيات", "دليل العملاء السحابي", "دليل الموردين", "أوامر الشراء", "السندات والمدفوعات", "مرتجعات المبيعات", "القيود المحاسبية", "دليل الحسابات", "فواتير المبيعات السحابية", "تنبيهات المخزون السحابي", "دليل وحدات القياس", "التقارير والأرباح", "المصروفات", "إعدادات المتجر", "النسخ الاحتياطي")
+private fun MoreScreen(onCustomers: () -> Unit, onReports: () -> Unit, onExpenses: () -> Unit, onActivityProfile: () -> Unit, onCatalog: () -> Unit, onMasterData: () -> Unit, onCloudOperational: (String) -> Unit, onCloudSales: () -> Unit, onCloudPurchases: () -> Unit, onCloudStockAlerts: () -> Unit, onUnitsDirectory: () -> Unit, onCustomerPortal: () -> Unit) {
+    val options = listOf("دليل الأصناف العالمي", "المستودعات والمجموعات والأقسام", "العملاء والمديونيات", "دليل العملاء السحابي", "دليل الموردين", "أوامر الشراء", "السندات والمدفوعات", "مرتجعات المبيعات", "القيود المحاسبية", "دليل الحسابات", "فواتير المبيعات السحابية", "تنبيهات المخزون السحابي", "دليل وحدات القياس", "بوابة الزبون", "التقارير والأرباح", "المصروفات", "إعدادات المتجر", "النسخ الاحتياطي")
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Heading("إدارة المتجر", "الأدوات والإعدادات") }
         items(options) { label ->
-            Card(onClick = { when (label) { "العملاء والمديونيات" -> onCustomers(); "التقارير والأرباح" -> onReports(); "المصروفات" -> onExpenses(); "إعدادات المتجر" -> onActivityProfile(); "دليل الأصناف العالمي" -> onCatalog(); "المستودعات والمجموعات والأقسام" -> onMasterData(); "دليل العملاء السحابي" -> onCloudOperational("customers"); "دليل الموردين" -> onCloudOperational("suppliers"); "أوامر الشراء" -> onCloudPurchases(); "السندات والمدفوعات" -> onCloudOperational("payments"); "مرتجعات المبيعات" -> onCloudOperational("returns"); "القيود المحاسبية" -> onCloudOperational("journals"); "دليل الحسابات" -> onCloudOperational("accounts"); "فواتير المبيعات السحابية" -> onCloudSales(); "تنبيهات المخزون السحابي" -> onCloudStockAlerts(); "دليل وحدات القياس" -> onUnitsDirectory() } }, colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Border)) {
+            Card(onClick = { when (label) { "العملاء والمديونيات" -> onCustomers(); "التقارير والأرباح" -> onReports(); "المصروفات" -> onExpenses(); "إعدادات المتجر" -> onActivityProfile(); "دليل الأصناف العالمي" -> onCatalog(); "المستودعات والمجموعات والأقسام" -> onMasterData(); "دليل العملاء السحابي" -> onCloudOperational("customers"); "دليل الموردين" -> onCloudOperational("suppliers"); "أوامر الشراء" -> onCloudPurchases(); "السندات والمدفوعات" -> onCloudOperational("payments"); "مرتجعات المبيعات" -> onCloudOperational("returns"); "القيود المحاسبية" -> onCloudOperational("journals"); "دليل الحسابات" -> onCloudOperational("accounts"); "فواتير المبيعات السحابية" -> onCloudSales(); "تنبيهات المخزون السحابي" -> onCloudStockAlerts(); "دليل وحدات القياس" -> onUnitsDirectory();
+            "بوابة الزبون" -> onCustomerPortal()
+        } }, colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Border)) {
                 Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(38.dp).background(Mint, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) { Icon(Icons.Default.Settings, null, tint = Green) }
                     Spacer(Modifier.width(12.dp))
