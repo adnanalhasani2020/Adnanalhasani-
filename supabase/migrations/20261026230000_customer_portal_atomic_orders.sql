@@ -167,7 +167,7 @@ BEGIN
        OR coalesce(v_existing.customer_note,'') <> coalesce(nullif(btrim(p_customer_note),''),'')
        OR v_existing.reserved_from IS DISTINCT FROM p_reserved_from
        OR v_existing.reserved_until IS DISTINCT FROM p_reserved_until
-       OR v_existing.payment_status <> CASE WHEN p_payment_mode='credit' THEN 'credit' ELSE 'unpaid' END THEN
+       OR v_existing.payment_status <> (CASE WHEN p_payment_mode='credit' THEN 'credit' ELSE 'unpaid' END) THEN
       RAISE EXCEPTION 'idempotency_key_reused_with_different_request' USING ERRCODE='22023';
     END IF;
     SELECT count(*) INTO v_existing_count FROM public.commercial_customer_order_items WHERE order_id = v_existing.id;
@@ -240,7 +240,7 @@ BEGIN
     subtotal_minor,discount_minor,tax_minor,total_minor,reserved_from,reserved_until,customer_note,idempotency_key
   ) VALUES (
     p_organization_id,v_account_id,v_uid,v_order_type,'pending',
-    CASE WHEN p_payment_mode='credit' THEN 'credit' ELSE 'unpaid' END,
+    (CASE WHEN p_payment_mode='credit' THEN 'credit' ELSE 'unpaid' END),
     v_currency,v_subtotal,0,0,v_subtotal,p_reserved_from,p_reserved_until,
     nullif(btrim(p_customer_note),''),v_key
   ) RETURNING id INTO v_order_id;
