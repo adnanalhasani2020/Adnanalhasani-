@@ -64,6 +64,8 @@ class CommercialCloudExpenseVoucherTests(unittest.TestCase):
         screen = SCREEN.read_text(encoding="utf-8")
         main = MAIN.read_text(encoding="utf-8")
         self.assertIn("/rest/v1/rpc/commercial_record_expense", repository)
+        self.assertIn("loadCommercialCloudExpenseCurrencyCode", repository)
+        self.assertIn("commercial_organizations?select=default_currency_code", repository)
         self.assertIn("commercial_expense_vouchers", repository)
         self.assertIn("recordCommercialCloudExpense", screen)
         self.assertIn("CommercialCloudExpensesScreen(context = context", main)
