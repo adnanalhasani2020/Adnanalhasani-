@@ -46,6 +46,9 @@ DECLARE
   v_order public.commercial_customer_orders%ROWTYPE;
   v_existing public.commercial_customer_order_fulfillments%ROWTYPE;
   v_customer_id uuid;
+  v_credit_limit_minor bigint;
+  v_posted_balance numeric := 0;
+  v_other_open_credit numeric := 0;
   v_payment_mode text;
   v_lines jsonb;
   v_activity_count integer;
@@ -167,6 +170,38 @@ BEGIN
   END IF;
 
   v_payment_mode := CASE WHEN v_order.payment_status = 'credit' THEN 'credit' ELSE 'cash' END;
+  IF v_payment_mode = 'credit' THEN
+    -- Recheck the credit ceiling at fulfillment time; exposure may have changed since order creation.
+    PERFORM pg_advisory_xact_lock(hashtextextended(v_order.buyer_account_id::text || ':credit-limit', 0));
+    SELECT credit_limit_minor INTO v_credit_limit_minor
+    FROM public.commercial_party_accounts
+    WHERE id = v_order.buyer_account_id AND organization_id = p_organization_id
+      AND status = 'active' AND allow_credit IS TRUE
+    FOR UPDATE;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'customer_credit_not_authorized_at_fulfillment' USING ERRCODE='42501';
+    END IF;
+    SELECT coalesce(sum(jl.debit_minor::numeric - jl.credit_minor::numeric), 0)
+    INTO v_posted_balance
+    FROM public.commercial_journal_lines jl
+    JOIN public.commercial_journal_entries je
+      ON je.id = jl.journal_entry_id AND je.organization_id = jl.organization_id
+    WHERE jl.organization_id = p_organization_id
+      AND jl.party_account_id = v_order.buyer_account_id
+      AND je.status = 'posted';
+    SELECT coalesce(sum(o.total_minor::numeric), 0)
+    INTO v_other_open_credit
+    FROM public.commercial_customer_orders o
+    WHERE o.organization_id = p_organization_id
+      AND o.buyer_account_id = v_order.buyer_account_id
+      AND o.id <> v_order.id
+      AND o.payment_status = 'credit'
+      AND o.status IN ('pending','confirmed','in_progress');
+    IF v_credit_limit_minor IS NOT NULL
+       AND greatest(v_posted_balance, 0) + v_other_open_credit + v_order.total_minor > v_credit_limit_minor THEN
+      RAISE EXCEPTION 'customer_credit_limit_exceeded_at_fulfillment' USING ERRCODE='22023';
+    END IF;
+  END IF;
   -- The existing checkout RPC owns stock locks, sale rows, inventory movements, GL posting
   -- and payment/receivable accounting. Its failure aborts this whole transaction.
   v_checkout := public.commercial_checkout_sale_multi(
