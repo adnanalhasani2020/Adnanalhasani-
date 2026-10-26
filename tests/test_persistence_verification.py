@@ -145,6 +145,7 @@ def test_clean_install_has_exactly_69_domain_tables_plus_migration_bookkeeping()
     expected_versions.append("0062_commercial_checkout_receipt_immutable")
     expected_versions.append("0063_sale_line_snapshot_error_order")
     expected_versions.append("0065_commercial_supabase_identity_links")
+    expected_versions.append("0066_sale_return_events_partial_multiple")
     assert versions == sorted(expected_versions)
 
 
