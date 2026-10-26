@@ -206,7 +206,10 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
                         }
                     }
                 }
-                if (!bookingMode) items(offerings, key = { it.id }) { item ->
+                if (!bookingMode && offerings.none { it.itemType == "product" }) item {
+                    Text("لا توجد منتجات قابلة للشراء المباشر. استخدم وضع الحجز للخدمات.", color = PortalMuted, fontSize = 12.sp)
+                }
+                if (!bookingMode) items(offerings.filter { it.itemType == "product" }, key = { it.id }) { item ->
                     Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, PortalBorder)) {
                         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
