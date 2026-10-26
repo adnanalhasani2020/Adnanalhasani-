@@ -8,6 +8,7 @@ import pytest
 from agent_core.commerce_checkout import CommercialCheckoutApplication
 from agent_core.inventory_read import InventoryQuantityStatus
 from agent_core.persistence import connect_database
+from agent_core.persisted_settlement_recognition_application import PersistedSettlementRecognitionApplication
 from agent_core.shared import ValidationError
 from agent_core.application import ProductApplication, SaleApplication
 from agent_core.offering_application import OfferingApplication
@@ -144,13 +145,16 @@ def test_returning_checkout_sale_restores_stock_atomically_once(tmp_path):
 
     movements = db.execute(
         "SELECT source_type, quantity_delta FROM inventory_movements "
-        "WHERE source_ref=? ORDER BY created_at, inventory_movement_id",
-        (request["sale_id"],),
+        "WHERE (source_type='sale' AND source_ref=?) OR "
+        "(source_type='sale_return' AND source_ref IN ("
+        "SELECT rl.sale_return_line_id FROM sale_return_lines rl "
+        "JOIN sale_return_events re ON re.return_event_id=rl.return_event_id WHERE re.sale_id=?)) "
+        "ORDER BY created_at, inventory_movement_id",
+        (request["sale_id"], request["sale_id"]),
     ).fetchall()
     assert sorted(movements) == [("sale", -2), ("sale_return", 2)]
 
-    # The database itself must reject a duplicate compensation even if a caller
-    # bypasses SaleApplication and attempts to write inventory_movements directly.
+    # A repeated movement for the same return line is rejected at the database boundary.
     with pytest.raises(sqlite3.IntegrityError, match="Sale stock has already been returned"):
         db.execute(
             "INSERT INTO inventory_movements("
@@ -159,7 +163,9 @@ def test_returning_checkout_sale_restores_stock_atomically_once(tmp_path):
             "occurred_at,created_at) "
             "SELECT ?,inventory_position_id,activity_id,product_id,offering_id,location_ref,"
             "scope_key,quantity_delta,source_type,source_ref,actor_context_ref,occurred_at,created_at "
-            "FROM inventory_movements WHERE source_type='sale_return' AND source_ref=?",
+            "FROM inventory_movements WHERE source_type='sale_return' AND source_ref IN ("
+            "SELECT rl.sale_return_line_id FROM sale_return_lines rl "
+            "JOIN sale_return_events re ON re.return_event_id=rl.return_event_id WHERE re.sale_id=?)",
             (uid(), request["sale_id"]),
         )
     listed = checkout.list_sellable_offerings(
@@ -185,9 +191,271 @@ def test_returning_checkout_sale_restores_stock_atomically_once(tmp_path):
             now=datetime(2026, 10, 17, 12, 4, tzinfo=timezone.utc),
         )
     assert db.execute(
-        "SELECT COUNT(*) FROM inventory_movements WHERE source_type='sale_return' AND source_ref=?",
+        "SELECT COUNT(*) FROM inventory_movements WHERE source_type='sale_return' AND source_ref IN ("
+        "SELECT rl.sale_return_line_id FROM sale_return_lines rl "
+        "JOIN sale_return_events re ON re.return_event_id=rl.return_event_id WHERE re.sale_id=?)",
         (request["sale_id"],),
     ).fetchone()[0] == 1
+
+
+
+
+
+def test_checkout_can_issue_an_authorized_invoice_atomically(tmp_path):
+    db, request = setup_checkout(tmp_path)
+    invoice_grant = uid()
+    db.execute(
+        """INSERT INTO authorization_grants(
+               authorization_grant_id,subject_person_id,agent_id,action_code,scope_ref,
+               context_ref,delegation_id,state,effective_from,effective_to,created_at,updated_at
+           ) VALUES(?,?,NULL,'issue_invoice',?,?,NULL,'active',?,NULL,?,?)""",
+        (invoice_grant, request["actor_person_id"], request["sale_id"], request["activity_id"],
+         BEFORE, BEFORE, BEFORE),
+    )
+    db.commit()
+    result = CommercialCheckoutApplication().checkout(
+        db, **request, invoice_issuer_ref=request["actor_person_id"],
+        invoice_number="INV-CHECKOUT-001", issue_invoice_grant_id=invoice_grant, now=NOW,
+    )
+    assert result["invoice_number"] == "INV-CHECKOUT-001"
+    assert result["invoice_state"] == "issued"
+    assert db.execute(
+        "SELECT sale_id,state,issuer_ref,invoice_number FROM invoices WHERE invoice_id=?",
+        (result["invoice_id"],),
+    ).fetchone() == (
+        request["sale_id"], "issued", request["actor_person_id"], "INV-CHECKOUT-001",
+    )
+    receipt = db.execute(
+        "SELECT response_json FROM commercial_checkout_receipts WHERE idempotency_key=?",
+        (request["idempotency_key"],),
+    ).fetchone()[0]
+    assert result["invoice_id"] in receipt
+    replay = CommercialCheckoutApplication().checkout(
+        db, **request, invoice_issuer_ref=request["actor_person_id"],
+        invoice_number="INV-CHECKOUT-001", issue_invoice_grant_id=invoice_grant, now=NOW,
+    )
+    assert replay == result
+    assert db.execute("SELECT COUNT(*) FROM invoices WHERE sale_id=?", (request["sale_id"],)).fetchone()[0] == 1
+    db.close()
+
+
+def test_invoice_issuance_failure_rolls_back_checkout_sale_stock_and_receipt(tmp_path):
+    db, request = setup_checkout(tmp_path)
+    wrong_grant = uid()
+    db.execute(
+        """INSERT INTO authorization_grants(
+               authorization_grant_id,subject_person_id,agent_id,action_code,scope_ref,
+               context_ref,delegation_id,state,effective_from,effective_to,created_at,updated_at
+           ) VALUES(?,?,NULL,'confirm_sale',?,?,NULL,'active',?,NULL,?,?)""",
+        (wrong_grant, request["actor_person_id"], request["sale_id"], request["activity_id"],
+         BEFORE, BEFORE, BEFORE),
+    )
+    db.commit()
+    with pytest.raises(ValidationError, match="does not permit action issue_invoice"):
+        CommercialCheckoutApplication().checkout(
+            db, **request, invoice_issuer_ref=request["actor_person_id"],
+            invoice_number="INV-CHECKOUT-FAIL", issue_invoice_grant_id=wrong_grant, now=NOW,
+        )
+    assert db.execute("SELECT COUNT(*) FROM sales WHERE sale_id=?", (request["sale_id"],)).fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM sale_lines WHERE sale_id=?", (request["sale_id"],)).fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM inventory_movements WHERE source_ref=?", (request["sale_id"],)).fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM invoices WHERE sale_id=?", (request["sale_id"],)).fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM commercial_checkout_receipts WHERE idempotency_key=?", (request["idempotency_key"],)).fetchone()[0] == 0
+    db.close()
+
+
+def test_commerce_sale_payment_settlement_and_finance_recognition_are_one_governed_chain(tmp_path):
+    db, request = setup_checkout(tmp_path, quantity=2)
+    sale_id = request["sale_id"]
+    debtor = request["actor_person_id"]
+    creditor, approver, agent, context = [uid() for _ in range(4)]
+    account, obligation, payment, settlement = [uid() for _ in range(4)]
+    for person in (creditor, approver):
+        db.execute(
+            "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
+            (person, BEFORE, BEFORE),
+        )
+    db.execute(
+        "INSERT INTO financial_accounts(financial_account_id,person_id,account_type,state,created_at,updated_at) "
+        "VALUES(?,?, 'cash','active',?,?)",
+        (account, creditor, BEFORE, BEFORE),
+    )
+    price = db.execute(
+        "SELECT unit_price_minor,currency_code FROM offering_prices WHERE offering_id=?",
+        (request["offering_id"],),
+    ).fetchone()
+    amount = price[0] * request["quantity"]
+    db.execute(
+        "INSERT INTO obligations(obligation_id,creditor_person_id,debtor_person_id,amount_minor,currency_code,"
+        "state,created_at,updated_at,version_no) VALUES(?,?,?,?,?,'open',?,?,1)",
+        (obligation, creditor, debtor, amount, price[1], BEFORE, BEFORE),
+    )
+    invoice_grant = uid()
+    db.execute(
+        "INSERT INTO authorization_grants(authorization_grant_id,subject_person_id,agent_id,action_code,scope_ref,"
+        "context_ref,delegation_id,state,effective_from,effective_to,created_at,updated_at) "
+        "VALUES(?,?,NULL,'issue_invoice',?,?,NULL,'active',?,NULL,?,?)",
+        (invoice_grant, debtor, sale_id, request["activity_id"], BEFORE, BEFORE, BEFORE),
+    )
+    db.execute(
+        "INSERT INTO agents(agent_id,owner_person_id,configured_identity_ref,context_ref,state,created_at,updated_at) "
+        "VALUES(?,?,?,?, 'active',?,?)",
+        (agent, approver, "commerce-finance-agent", context, BEFORE, BEFORE),
+    )
+    db.commit()
+
+    checkout_result = CommercialCheckoutApplication().checkout(
+        db, **request, invoice_issuer_ref=creditor,
+        invoice_number="INV-CYCLE-001", issue_invoice_grant_id=invoice_grant,
+        invoice_obligation_id=obligation, now=NOW,
+    )
+    invoice = checkout_result["invoice_id"]
+    assert checkout_result["invoice_state"] == "issued"
+    db.execute(
+        "INSERT INTO payments(payment_id,obligation_id,invoice_id,payer_person_id,payee_person_id,"
+        "amount_minor,currency_code,state,created_at,updated_at,version_no) "
+        "VALUES(?,?,?,?,?,?,?,'completed',?,?,1)",
+        (payment, obligation, invoice, debtor, creditor, amount, price[1], STAMP, STAMP),
+    )
+    db.execute(
+        "INSERT INTO authorization_grants(authorization_grant_id,agent_id,action_code,scope_ref,context_ref,"
+        "state,effective_from,created_at,updated_at) VALUES(?,?,?,?,?,'active',?,?,?)",
+        (uid(), agent, PersistedSettlementRecognitionApplication.ACTION_CODE,
+         settlement, context, "2026-10-01T00:00:00Z", STAMP, STAMP),
+    )
+    grant = db.execute(
+        "SELECT authorization_grant_id FROM authorization_grants WHERE scope_ref=? AND action_code=?",
+        (settlement, PersistedSettlementRecognitionApplication.ACTION_CODE),
+    ).fetchone()[0]
+    action = uid()
+    db.execute(
+        "INSERT INTO agent_actions(agent_action_id,agent_id,action_code,target_ref,context_ref,"
+        "authorization_grant_id,state,created_at,updated_at) VALUES(?,?,?,?,?,?,'approved',?,?)",
+        (action, agent, PersistedSettlementRecognitionApplication.ACTION_CODE,
+         settlement, context, grant, STAMP, STAMP),
+    )
+    db.execute(
+        "INSERT INTO approvals(approval_id,agent_action_id,approval_gate_code,state,approver_person_id,"
+        "decision_at,created_at,updated_at) VALUES(?,?, 'default','APPROVED',?,?,?,?)",
+        (uid(), action, approver, STAMP, STAMP, STAMP),
+    )
+    db.commit()
+
+    result = PersistedSettlementRecognitionApplication().settle_and_recognize_commerce_sale(
+        db, sale_id=sale_id, payment_id=payment, obligation_id=obligation,
+        settlement_id=settlement, financial_account_id=account, context_ref=context,
+        authorization_grant_id=grant, agent_action_id=action, now=STAMP,
+    )
+    assert result.replayed is False
+    assert result.amount_minor == amount
+    assert db.execute(
+        "SELECT payment_id,obligation_id,state,settled_at FROM settlements WHERE settlement_id=?",
+        (settlement,),
+    ).fetchone() == (payment, obligation, "settled", STAMP)
+    assert db.execute(
+        "SELECT sale_id,obligation_id,state,version_no FROM invoices WHERE invoice_id=?", (invoice,)
+    ).fetchone() == (sale_id, obligation, "settled", 2)
+    assert db.execute(
+        "SELECT change_type,prior_version_ref,current_version_ref,change_payload_ref "
+        "FROM domain_history WHERE target_ref=? AND change_type='invoice_state_transition' "
+        "ORDER BY rowid DESC LIMIT 1",
+        (invoice,),
+    ).fetchone() == (
+        "invoice_state_transition", f"invoice-state:{invoice}:v1", f"invoice-state:{invoice}:v2",
+        f"state:settled;settlement:{settlement};transaction:{result.financial_transaction_id};ledger:{result.ledger_entry_id}",
+    )
+    assert db.execute(
+        "SELECT state FROM obligations WHERE obligation_id=?", (obligation,)
+    ).fetchone()[0] == "satisfied"
+    assert db.execute(
+        "SELECT COUNT(*) FROM financial_transactions WHERE settlement_id=? AND state='recognized'",
+        (settlement,),
+    ).fetchone()[0] == 1
+    assert db.execute(
+        "SELECT COUNT(*) FROM ledger_entries WHERE financial_transaction_id=? AND state='posted'",
+        (str(result.financial_transaction_id),),
+    ).fetchone()[0] == 1
+    replay = PersistedSettlementRecognitionApplication().settle_and_recognize_commerce_sale(
+        db, sale_id=sale_id, payment_id=payment, obligation_id=obligation,
+        settlement_id=settlement, financial_account_id=account, context_ref=context,
+        authorization_grant_id=grant, agent_action_id=action, now=STAMP,
+    )
+    assert replay.replayed is True
+    assert db.execute("SELECT COUNT(*) FROM settlements WHERE obligation_id=?", (obligation,)).fetchone()[0] == 1
+    assert db.execute("SELECT COUNT(*) FROM financial_transactions WHERE settlement_id=?", (settlement,)).fetchone()[0] == 1
+    db.close()
+
+
+def test_partial_and_multiple_returns_are_idempotent_and_quantity_bounded(tmp_path):
+    db, request = setup_checkout(tmp_path, quantity=2)
+    CommercialCheckoutApplication().checkout(db, **request, now=NOW)
+    sale_line_id = db.execute(
+        "SELECT sale_line_id FROM sale_lines WHERE sale_id=?", (request["sale_id"],)
+    ).fetchone()[0]
+    grant_id = uid()
+    db.execute(
+        """INSERT INTO authorization_grants(
+               authorization_grant_id,subject_person_id,agent_id,action_code,scope_ref,
+               context_ref,delegation_id,state,effective_from,effective_to,created_at,updated_at
+           ) VALUES(?,?,NULL,'return_sale',?,?,NULL,'active',?,NULL,?,?)""",
+        (grant_id, request["actor_person_id"], request["sale_id"], request["activity_id"],
+         BEFORE, BEFORE, BEFORE),
+    )
+    db.commit()
+    app = SaleApplication()
+    first = app.return_sale_items(
+        db, request["sale_id"], request["actor_person_id"], grant_id,
+        items=[{"sale_line_id": sale_line_id, "quantity": 1}],
+        idempotency_key="return-partial-001", reason="customer returned one unit",
+        now=datetime(2026, 10, 17, 12, 2, tzinfo=timezone.utc),
+    )
+    assert first["replayed"] is False
+    assert first["sale_state"] == "fulfilled"
+    assert db.execute(
+        "SELECT COUNT(*) FROM inventory_movements WHERE source_type='sale_return'"
+    ).fetchone()[0] == 1
+
+    replay = app.return_sale_items(
+        db, request["sale_id"], request["actor_person_id"], grant_id,
+        items=[{"sale_line_id": sale_line_id, "quantity": 1}],
+        idempotency_key="return-partial-001", reason="customer returned one unit",
+        now=datetime(2026, 10, 17, 12, 3, tzinfo=timezone.utc),
+    )
+    assert replay["return_id"] == first["return_id"]
+    assert replay["replayed"] is True
+    with pytest.raises(ValidationError, match="idempotency key was reused with a different request"):
+        app.return_sale_items(
+            db, request["sale_id"], request["actor_person_id"], grant_id,
+            items=[{"sale_line_id": sale_line_id, "quantity": 1}],
+            idempotency_key="return-partial-001", reason="changed reason for same key",
+            now=datetime(2026, 10, 17, 12, 3, 30, tzinfo=timezone.utc),
+        )
+    with pytest.raises(ValidationError, match="Cumulative returned quantity exceeds"):
+        app.return_sale_items(
+            db, request["sale_id"], request["actor_person_id"], grant_id,
+            items=[{"sale_line_id": sale_line_id, "quantity": 2}],
+            idempotency_key="return-overflow-001", reason="attempt over return",
+            now=datetime(2026, 10, 17, 12, 4, tzinfo=timezone.utc),
+        )
+    second = app.return_sale_items(
+        db, request["sale_id"], request["actor_person_id"], grant_id,
+        items=[{"sale_line_id": sale_line_id, "quantity": 1}],
+        idempotency_key="return-partial-002", reason="customer returned remaining unit",
+        now=datetime(2026, 10, 17, 12, 5, tzinfo=timezone.utc),
+    )
+    assert second["replayed"] is False
+    assert second["sale_state"] == "returned"
+    assert SaleApplication().get_sale_state(db, request["sale_id"]).value == "returned"
+    assert db.execute(
+        "SELECT COUNT(*) FROM sale_return_events WHERE sale_id=?", (request["sale_id"],)
+    ).fetchone()[0] == 2
+    assert db.execute(
+        "SELECT SUM(quantity) FROM sale_return_lines rl JOIN sale_return_events re "
+        "ON re.return_event_id=rl.return_event_id WHERE re.sale_id=?", (request["sale_id"],)
+    ).fetchone()[0] == 2
+    assert db.execute(
+        "SELECT SUM(quantity_delta) FROM inventory_movements WHERE source_type='sale_return'"
+    ).fetchone()[0] == 2
 
 
 def test_database_rejects_stock_return_while_invoice_is_issued(tmp_path):
@@ -201,6 +469,22 @@ def test_database_rejects_stock_return_while_invoice_is_issued(tmp_path):
     )
     db.commit()
 
+    line_id = db.execute(
+        "SELECT sale_line_id,quantity FROM sale_lines WHERE sale_id=?",
+        (request["sale_id"],),
+    ).fetchone()
+    event_id = uid()
+    return_line_id = uid()
+    db.execute(
+        "INSERT INTO sale_return_events(return_event_id,sale_id,idempotency_key,request_fingerprint,reason,actor_context_ref,created_at) "
+        "VALUES(?,?,?,'direct-sql-test','test return',?,?)",
+        (event_id, request["sale_id"], "direct-sql-return-001", request["actor_person_id"], STAMP),
+    )
+    db.execute(
+        "INSERT INTO sale_return_lines(sale_return_line_id,return_event_id,sale_line_id,quantity,created_at) "
+        "VALUES(?,?,?,?,?)",
+        (return_line_id, event_id, line_id[0], line_id[1], STAMP),
+    )
     with pytest.raises(
         sqlite3.IntegrityError,
         match="Sale return requires explicit Invoice reconciliation first",
@@ -211,9 +495,9 @@ def test_database_rejects_stock_return_while_invoice_is_issued(tmp_path):
             "location_ref,scope_key,quantity_delta,source_type,source_ref,actor_context_ref,"
             "occurred_at,created_at) "
             "SELECT ?,inventory_position_id,activity_id,product_id,offering_id,location_ref,"
-            "scope_key,-quantity_delta,'sale_return',source_ref,actor_context_ref,?,? "
+            "scope_key,?,'sale_return',?,?,?,? "
             "FROM inventory_movements WHERE source_type='sale' AND source_ref=?",
-            (uid(), STAMP, STAMP, request["sale_id"]),
+            (uid(), line_id[1], return_line_id, request["actor_person_id"], STAMP, STAMP, request["sale_id"]),
         )
 
     assert db.execute(
