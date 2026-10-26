@@ -2377,16 +2377,24 @@ internal data class CustomerOrderFulfillmentOrder(
     val customerNote: String,
     val customerName: String,
     val fulfillmentSupported: Boolean,
-    val items: List<CustomerOrderFulfillmentItem>
+    val items: List<CustomerOrderFulfillmentItem>,
+    val hidden: Boolean = false,
+    val decisionReason: String = "",
+    val reviewedAt: String = "",
+    val receiptNumber: String = "",
+    val saleId: String = "",
+    val fulfilledAt: String = "",
+    val paidMinor: Long = 0L,
+    val outstandingMinor: Long = 0L
 )
 
 internal data class CustomerOrderFulfillmentLocation(val id: String, val name: String)
 
-internal fun loadCustomerOrderFulfillmentQueue(context: Context): List<CustomerOrderFulfillmentOrder> {
+internal fun loadCustomerOrderFulfillmentQueue(context: Context, includeHidden: Boolean = false): List<CustomerOrderFulfillmentOrder> {
     val (orgId, access) = commercialMasterDataAccess(context)
     val rows = JSONArray(commercialCloudRequest(
-        "/rest/v1/rpc/commercial_customer_portal_list_organization_orders", "POST",
-        JSONObject().put("p_organization_id", orgId).put("p_limit", 100), access
+        "/rest/v1/rpc/commercial_customer_portal_list_organization_orders_v2", "POST",
+        JSONObject().put("p_organization_id", orgId).put("p_limit", 200).put("p_include_hidden", includeHidden), access
     ))
     return (0 until rows.length()).map { index ->
         val row = rows.getJSONObject(index)
@@ -2402,6 +2410,7 @@ internal fun loadCustomerOrderFulfillmentQueue(context: Context): List<CustomerO
                 lineTotalMinor = item.optLong("line_total_minor")
             )
         }
+        val fulfillment = row.optJSONObject("fulfillment") ?: JSONObject()
         CustomerOrderFulfillmentOrder(
             id = row.optString("id"),
             organizationId = row.optString("organization_id"),
@@ -2415,7 +2424,15 @@ internal fun loadCustomerOrderFulfillmentQueue(context: Context): List<CustomerO
             customerNote = row.optString("customer_note").takeUnless { it == "null" }.orEmpty(),
             customerName = row.optString("customer_name").takeUnless { it == "null" }.orEmpty(),
             fulfillmentSupported = row.optBoolean("fulfillment_supported"),
-            items = items
+            items = items,
+            hidden = row.optBoolean("merchant_hidden"),
+            decisionReason = row.optString("merchant_decision_reason").takeUnless { it == "null" }.orEmpty(),
+            reviewedAt = row.optString("merchant_reviewed_at").takeUnless { it == "null" }.orEmpty(),
+            receiptNumber = fulfillment.optString("receipt_number").takeUnless { it == "null" }.orEmpty(),
+            saleId = fulfillment.optString("sale_id").takeUnless { it == "null" }.orEmpty(),
+            fulfilledAt = fulfillment.optString("fulfilled_at").takeUnless { it == "null" }.orEmpty(),
+            paidMinor = fulfillment.optLong("paid_minor"),
+            outstandingMinor = fulfillment.optLong("outstanding_minor")
         )
     }
 }
@@ -2468,4 +2485,94 @@ internal fun cancelCustomerPortalOrder(context: Context, orderId: String, reason
         "لم يؤكد الخادم إلغاء الطلب؛ حدّث سجل الطلبات قبل إعادة المحاولة."
     }
     return if (result.optBoolean("already_cancelled")) "already_cancelled" else "cancelled"
+}
+
+
+internal data class MerchantBookingItem(val name: String, val quantity: String, val unitPriceMinor: Long, val lineTotalMinor: Long, val itemType: String)
+internal data class MerchantBooking(
+    val id: String, val organizationId: String, val bookingNumber: String, val orderId: String,
+    val orderNumber: String, val createdAt: String, val startsAt: String, val endsAt: String,
+    val status: String, val currencyCode: String, val totalMinor: Long, val notes: String,
+    val customerName: String, val resourceName: String, val timezone: String, val orderStatus: String, val paymentStatus: String,
+    val hidden: Boolean, val decisionReason: String, val items: List<MerchantBookingItem>
+)
+internal data class MerchantEditableOffering(val id: String, val name: String, val priceMinor: Long, val currencyCode: String, val unitCode: String)
+
+private fun merchantManagementContext(context: Context): Pair<String, String> = commercialMasterDataAccess(context)
+
+internal fun loadMerchantBookings(context: Context, includeHidden: Boolean = false): List<MerchantBooking> {
+    val (orgId, access) = merchantManagementContext(context)
+    val rows = JSONArray(commercialCloudRequest(
+        "/rest/v1/rpc/commercial_customer_portal_list_organization_bookings", "POST",
+        JSONObject().put("p_organization_id", orgId).put("p_limit", 200).put("p_include_hidden", includeHidden), access
+    ))
+    return (0 until rows.length()).map { i ->
+        val row = rows.getJSONObject(i)
+        val itemRows = row.optJSONArray("items") ?: JSONArray()
+        val items = (0 until itemRows.length()).map { n ->
+            val item = itemRows.getJSONObject(n)
+            MerchantBookingItem(item.optString("name"), item.optString("quantity"), item.optLong("unit_price_minor"), item.optLong("line_total_minor"), item.optString("item_type"))
+        }
+        MerchantBooking(
+            id=row.optString("id"), organizationId=row.optString("organization_id"), bookingNumber=row.optString("booking_number"),
+            orderId=row.optString("order_id"), orderNumber=row.optString("order_number"), createdAt=row.optString("created_at"),
+            startsAt=row.optString("starts_at"), endsAt=row.optString("ends_at"), status=row.optString("status"),
+            currencyCode=row.optString("currency_code"), totalMinor=row.optLong("price_minor"), notes=row.optString("notes").takeUnless { it=="null" }.orEmpty(),
+            customerName=row.optString("customer_name"), resourceName=row.optString("resource_name"), timezone=row.optString("timezone","UTC"), orderStatus=row.optString("order_status"),
+            paymentStatus=row.optString("payment_status"), hidden=row.optBoolean("merchant_hidden"),
+            decisionReason=row.optString("merchant_decision_reason").takeUnless { it=="null" }.orEmpty(), items=items
+        )
+    }
+}
+
+internal fun decideMerchantCustomerOrder(context: Context, orderId: String, decision: String, reason: String = ""): JSONObject {
+    require(orderId.isNotBlank() && decision in setOf("accept","reject")) { "قرار الطلب غير صالح." }
+    val (orgId, access)=merchantManagementContext(context)
+    return JSONObject(commercialCloudRequest("/rest/v1/rpc/commercial_customer_portal_decide_order","POST",
+        JSONObject().put("p_organization_id",orgId).put("p_order_id",orderId).put("p_decision",decision).put("p_reason",reason.take(500)),access))
+}
+
+internal fun setMerchantCustomerOrderHidden(context: Context, orderId: String, hidden: Boolean): JSONObject {
+    require(orderId.isNotBlank()) { "رقم الطلب غير صالح." }
+    val (orgId, access)=merchantManagementContext(context)
+    return JSONObject(commercialCloudRequest("/rest/v1/rpc/commercial_customer_portal_set_order_hidden","POST",
+        JSONObject().put("p_organization_id",orgId).put("p_order_id",orderId).put("p_hidden",hidden),access))
+}
+
+internal fun decideMerchantCustomerBooking(context: Context, bookingId: String, decision: String, reason: String = ""): JSONObject {
+    require(bookingId.isNotBlank() && decision in setOf("accept","reject")) { "قرار الحجز غير صالح." }
+    val (orgId, access)=merchantManagementContext(context)
+    return JSONObject(commercialCloudRequest("/rest/v1/rpc/commercial_customer_portal_decide_booking","POST",
+        JSONObject().put("p_organization_id",orgId).put("p_booking_id",bookingId).put("p_decision",decision).put("p_reason",reason.take(500)),access))
+}
+
+internal fun setMerchantCustomerBookingHidden(context: Context, bookingId: String, hidden: Boolean): JSONObject {
+    require(bookingId.isNotBlank()) { "رقم الحجز غير صالح." }
+    val (orgId, access)=merchantManagementContext(context)
+    return JSONObject(commercialCloudRequest("/rest/v1/rpc/commercial_customer_portal_set_booking_hidden","POST",
+        JSONObject().put("p_organization_id",orgId).put("p_booking_id",bookingId).put("p_hidden",hidden),access))
+}
+
+internal fun loadMerchantEditableOfferings(context: Context): List<MerchantEditableOffering> {
+    val (orgId, access)=merchantManagementContext(context)
+    val rows=JSONArray(commercialCloudRequest("/rest/v1/rpc/commercial_customer_portal_list_editable_offerings","POST",
+        JSONObject().put("p_organization_id",orgId),access))
+    return (0 until rows.length()).map { i ->
+        val row=rows.getJSONObject(i)
+        MerchantEditableOffering(row.optString("id"),row.optString("name"),row.optLong("price_minor"),row.optString("currency_code"),row.optString("unit_code","EA"))
+    }
+}
+
+internal fun saveMerchantCustomerOrderLines(context: Context, orderId: String, lines: List<Pair<String, String>>, reason: String): JSONObject {
+    require(orderId.isNotBlank() && lines.isNotEmpty()) { "يجب أن يحتوي الطلب على صنف واحد على الأقل." }
+    val payload=JSONArray()
+    lines.forEach { (offeringId,quantity) ->
+        require(offeringId.isNotBlank() && quantity.toBigDecimalOrNull()?.let { it>java.math.BigDecimal.ZERO && it<=java.math.BigDecimal("100000") && it.stripTrailingZeros().scale()<=0 }==true) {
+            "تحقق من الأصناف والكميات؛ يجب أن تكون كميات المنتجات أعدادًا صحيحة موجبة."
+        }
+        payload.put(JSONObject().put("offering_id",offeringId).put("quantity",quantity))
+    }
+    val (orgId, access)=merchantManagementContext(context)
+    return JSONObject(commercialCloudRequest("/rest/v1/rpc/commercial_customer_portal_edit_order_lines","POST",
+        JSONObject().put("p_organization_id",orgId).put("p_order_id",orderId).put("p_lines",payload).put("p_reason",reason.take(500)),access))
 }
