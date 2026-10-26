@@ -48,7 +48,7 @@
 - [ ] Enforce request → decision → inspection → restock/refund lifecycle and authorized roles.
 - [ ] Restock and refund are independently idempotent, linked to one return, and atomically update stock/finance state.
 - [ ] Require payout evidence for manual refunds; do not claim an external provider was called unless it was.
-- [ ] Test partial/multiple returns, zero-paid credit sale, allocations, duplicate retries, key mismatch, concurrency, rollback and ledger reversals.
+- [x] Add regression tests for partial/multiple returns, same-key replay, changed-key over-return, final Sale state, and atomic rollback.\n- [ ] Add database integration coverage for zero-paid credit sales, partial payment allocations, concurrent refunds, rollback, credit notes, and ledger reversals.
 
 ### D. Purchasing and suppliers
 - [ ] Complete supplier create/edit and purchase order create/approve/cancel with scoped authorization and audit.
