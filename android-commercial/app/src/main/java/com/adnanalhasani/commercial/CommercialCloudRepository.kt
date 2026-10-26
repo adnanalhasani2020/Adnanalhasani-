@@ -2380,7 +2380,12 @@ internal data class CustomerOrderFulfillmentOrder(
     val items: List<CustomerOrderFulfillmentItem>,
     val hidden: Boolean = false,
     val decisionReason: String = "",
-    val reviewedAt: String = ""
+    val reviewedAt: String = "",
+    val receiptNumber: String = "",
+    val saleId: String = "",
+    val fulfilledAt: String = "",
+    val paidMinor: Long = 0L,
+    val outstandingMinor: Long = 0L
 )
 
 internal data class CustomerOrderFulfillmentLocation(val id: String, val name: String)
@@ -2405,6 +2410,7 @@ internal fun loadCustomerOrderFulfillmentQueue(context: Context, includeHidden: 
                 lineTotalMinor = item.optLong("line_total_minor")
             )
         }
+        val fulfillment = row.optJSONObject("fulfillment") ?: JSONObject()
         CustomerOrderFulfillmentOrder(
             id = row.optString("id"),
             organizationId = row.optString("organization_id"),
@@ -2421,7 +2427,12 @@ internal fun loadCustomerOrderFulfillmentQueue(context: Context, includeHidden: 
             items = items,
             hidden = row.optBoolean("merchant_hidden"),
             decisionReason = row.optString("merchant_decision_reason").takeUnless { it == "null" }.orEmpty(),
-            reviewedAt = row.optString("merchant_reviewed_at").takeUnless { it == "null" }.orEmpty()
+            reviewedAt = row.optString("merchant_reviewed_at").takeUnless { it == "null" }.orEmpty(),
+            receiptNumber = fulfillment.optString("receipt_number").takeUnless { it == "null" }.orEmpty(),
+            saleId = fulfillment.optString("sale_id").takeUnless { it == "null" }.orEmpty(),
+            fulfilledAt = fulfillment.optString("fulfilled_at").takeUnless { it == "null" }.orEmpty(),
+            paidMinor = fulfillment.optLong("paid_minor"),
+            outstandingMinor = fulfillment.optLong("outstanding_minor")
         )
     }
 }
