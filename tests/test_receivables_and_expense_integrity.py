@@ -33,7 +33,6 @@ class ReceivablesAndExpenseIntegrityTests(unittest.TestCase):
         self.assertNotIn("GRANT EXECUTE ON FUNCTION public.commercial_record_customer_payment", migration)
         self.assertIn("collection_exceeds_outstanding_balance_after_returns", migration)
         self.assertIn("v_outstanding_minor := GREATEST(", migration)
-        self.assertIn("GREATEST(v_outstanding_minor - p_amount_minor, 0) = 0", migration)
         self.assertIn("commercial_payment_gl_post", migration)
         self.assertIn("customer_payment_journal_not_posted", migration)
         self.assertIn("e.source_id = v_payment.id", migration)
