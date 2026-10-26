@@ -509,13 +509,21 @@ class CommercialWebApplication:
                     db, sale_key, person_id, grants[0][0],
                     items=body["items"], idempotency_key=body["idempotency_key"],
                     reason=body["reason"], now=now,
+                    return_event_id=body.get("return_event_id"),
+                    refund_payment_id=body.get("refund_payment_id"),
+                    credit_note_number=body.get("credit_note_number"),
+                    financial_account_id=body.get("financial_account_id"),
+                    finance_context_ref=body.get("finance_context_ref"),
+                    finance_authorization_grant_id=body.get("finance_authorization_grant_id"),
+                    finance_agent_action_id=body.get("finance_agent_action_id"),
                 )
-                result["financial_effects"] = "inventory_only"
-                result["payment_refund_performed"] = False
-                result["notice"] = (
-                    "تم تسجيل حركة إرجاع المخزون فقط. لم يُنفذ رد مالي؛ "
-                    "لا تستخدم هذا المسار لإرجاع فاتورة مرتبطة بالتزام أو دفعة."
-                )
+                if result.get("financial_effects") == "refund_and_inventory":
+                    result["notice"] = "تم إصدار إشعار دائن وتأكيد رد الدفعة وترحيل عكسها محاسبيًا، ثم إعادة المخزون."
+                else:
+                    result["notice"] = (
+                        "تم تسجيل حركة إرجاع المخزون فقط. لم يُنفذ رد مالي؛ "
+                        "هذا المسار متاح فقط عندما لا توجد فاتورة/مديونية/دفعة مرتبطة."
+                    )
                 return self._json(start_response, "200 OK", result)
 
             if method == "GET" and (path.startswith("/receipts/") or path.startswith("/invoices/")):
