@@ -43,6 +43,12 @@ SELECT ok(
   )) > 0
   AND position('FOR UPDATE' in pg_get_functiondef(
     'public.commercial_customer_portal_create_multi_service_booking(uuid,jsonb,uuid,timestamptz,timestamptz,text,text,text)'::regprocedure
+  )) > 0
+  AND position('v_requested_capacity' in pg_get_functiondef(
+    'public.commercial_customer_portal_create_multi_service_booking(uuid,jsonb,uuid,timestamptz,timestamptz,text,text,text)'::regprocedure
+  )) > 0
+  AND position('v_used_capacity' in pg_get_functiondef(
+    'public.commercial_customer_portal_create_multi_service_booking(uuid,jsonb,uuid,timestamptz,timestamptz,text,text,text)'::regprocedure
   )) > 0,
   'resource capacity is serialized and checked in the database'
 );

@@ -30,6 +30,8 @@ DECLARE
   v_qty numeric;
   v_count integer := 0;
   v_match_count integer := 0;
+  v_requested_capacity numeric := 0;
+  v_used_capacity numeric := 0;
   v_currency text;
   v_result jsonb;
 BEGIN
@@ -186,12 +188,30 @@ BEGIN
     END IF;
   END LOOP;
 
-  SELECT count(*) INTO v_count
-  FROM public.commercial_bookings b
-  WHERE b.organization_id=p_organization_id AND b.resource_id=p_resource_id
-    AND b.status IN ('requested','confirmed','checked_in')
-    AND b.starts_at<p_ends_at AND b.ends_at>p_starts_at;
-  IF v_count >= v_resource.capacity THEN
+  -- Capacity is consumed by requested service units, not merely by booking rows.
+  -- Legacy/other bookings without service order lines conservatively consume one unit.
+  SELECT coalesce(sum((j.value->>'quantity')::numeric), 0)
+    INTO v_requested_capacity
+  FROM jsonb_array_elements(p_lines) AS j(value);
+
+  SELECT coalesce(sum(active_booking.consumed_units), 0)
+    INTO v_used_capacity
+  FROM (
+    SELECT b.id,
+           CASE
+             WHEN count(oi.id) FILTER (WHERE oi.item_type='service') > 0
+               THEN sum(oi.quantity) FILTER (WHERE oi.item_type='service')
+             ELSE 1::numeric
+           END AS consumed_units
+    FROM public.commercial_bookings b
+    LEFT JOIN public.commercial_customer_order_items oi ON oi.order_id=b.order_id
+    WHERE b.organization_id=p_organization_id AND b.resource_id=p_resource_id
+      AND b.status IN ('requested','confirmed','checked_in')
+      AND b.starts_at<p_ends_at AND b.ends_at>p_starts_at
+    GROUP BY b.id
+  ) AS active_booking;
+
+  IF v_used_capacity + v_requested_capacity > v_resource.capacity THEN
     RAISE EXCEPTION 'booking_resource_capacity_exceeded' USING ERRCODE='22023';
   END IF;
 
