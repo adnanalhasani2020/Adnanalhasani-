@@ -14,10 +14,11 @@ class ReceivablesAndExpenseIntegrityTests(unittest.TestCase):
         start = source.index("internal fun loadCommercialCloudReceivables(")
         end = source.index("\ninternal fun recordCommercialCloudCustomerPayment(", start)
         block = source[start:end]
-        self.assertIn("returns:commercial_sales_returns(id,status,refund_status,approved_refund_minor,refund_postings:commercial_return_refund_postings(amount_minor))", block)
+        self.assertIn("returns:commercial_sales_returns(id,status,refund_status,approved_refund_minor)", block)
         self.assertIn('saleReturn.optString("status") == "completed"', block)
         self.assertIn("creditedMinor = credited", block)
-        self.assertIn("refund_postings:commercial_return_refund_postings(amount_minor)", block)
+        self.assertIn('saleReturn.optString("refund_status") == "refunded"', block)
+        self.assertNotIn("commercial_return_refund_postings", block)
         self.assertIn("val netPaid = (paid - refunded).coerceAtLeast(0L)", block)
         self.assertIn("val due = (total - netPaid - credited).coerceAtLeast(0L)", block)
         self.assertIn("but is not a second", block)
