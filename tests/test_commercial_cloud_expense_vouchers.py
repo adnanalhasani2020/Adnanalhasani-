@@ -19,6 +19,16 @@ class CommercialCloudExpenseVoucherTests(unittest.TestCase):
         self.assertIn("REVOKE ALL ON FUNCTION public.commercial_record_expense", sql)
         self.assertIn("GRANT EXECUTE ON FUNCTION public.commercial_record_expense", sql)
 
+    def test_customer_collection_rpc_is_restored_and_posts_once_via_trigger(self):
+        restore = (ROOT / "supabase/migrations/20261026160000_restore_customer_collection_rpc.sql").read_text(encoding="utf-8")
+        fix = (ROOT / "supabase/migrations/20261026161000_fix_customer_collection_double_gl_post.sql").read_text(encoding="utf-8")
+        self.assertIn("CREATE OR REPLACE FUNCTION public.commercial_record_customer_payment", restore)
+        self.assertIn("sale_return_reconciliation_required", restore)
+        self.assertIn("GRANT EXECUTE ON FUNCTION public.commercial_record_customer_payment", fix)
+        self.assertIn("customer_payment_journal_not_posted", fix)
+        self.assertIn("source_type='payment' AND source_id=v_payment.id", fix)
+        self.assertNotIn("commercial_gl_post_payment(v_payment.id)", fix)
+
     def test_voucher_reads_are_tenant_and_role_scoped(self):
         sql = MIGRATION.read_text(encoding="utf-8")
         self.assertIn("ENABLE ROW LEVEL SECURITY", sql)
