@@ -411,6 +411,15 @@ def test_commerce_sale_payment_settlement_and_finance_recognition_are_one_govern
         )
         assert reserved["status"] == "pending_refund"
         assert reserved["refund_amount_minor"] > 0
+        assert db.execute(
+            "SELECT COUNT(*) FROM inventory_movements WHERE source_type='sale_return' "
+            "AND source_ref IN (SELECT sale_return_line_id FROM sale_return_lines WHERE return_event_id=?)",
+            (return_event,),
+        ).fetchone()[0] == 0
+        assert db.execute(
+            "SELECT COUNT(*) FROM sale_return_completions WHERE return_event_id=?",
+            (return_event,),
+        ).fetchone()[0] == 0
         refund_payment = uid()
         finance_context = uid()
         finance_grant = uid()
