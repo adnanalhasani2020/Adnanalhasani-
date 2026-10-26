@@ -1870,7 +1870,7 @@ internal fun loadCommercialCloudReceivables(context: Context): List<CommercialCl
     require(activityId.isNotBlank()) { "ملف النشاط غير محفوظ." }
     val (orgId, access) = commercialMasterDataAccess(context)
     val path = "/rest/v1/commercial_sales" +
-        "?select=id,receipt_number,customer_id,total_minor,currency_code,created_at,payment_status,customer:commercial_customers(display_name),payments:commercial_payments(amount_minor,status),returns:commercial_sales_returns(id,status,refund_status,approved_refund_minor,refund_postings:commercial_return_refund_postings(amount_minor))" +
+        "?select=id,receipt_number,customer_id,total_minor,currency_code,created_at,payment_status,customer:commercial_customers(display_name),payments:commercial_payments(amount_minor,status),returns:commercial_sales_returns(id,status,refund_status,approved_refund_minor)" +
         "&organization_id=eq.$orgId&activity_id=eq.$activityId&status=eq.completed&customer_id=not.is.null&order=created_at.desc,id.asc"
     val rows = commercialCloudPagedGet(path, access)
     return buildList {
@@ -1893,15 +1893,16 @@ internal fun loadCommercialCloudReceivables(context: Context): List<CommercialCl
             var refunded = 0L
             for (j in 0 until (returns?.length() ?: 0)) {
                 val saleReturn = returns?.optJSONObject(j) ?: continue
+                val approvedRefund = saleReturn.optLong("approved_refund_minor", 0L).coerceAtLeast(0L)
                 if (saleReturn.optString("status") == "completed") {
-                    credited = Math.addExact(credited, saleReturn.optLong("approved_refund_minor", 0L).coerceAtLeast(0L))
+                    credited = Math.addExact(credited, approvedRefund)
                 }
-                // A cash refund reduces the net amount paid, but is not a second
-                // credit note. Keep the two adjustments separate to avoid double counting.
-                val refundPostings = saleReturn.optJSONArray("refund_postings")
-                for (k in 0 until (refundPostings?.length() ?: 0)) {
-                    val refund = refundPostings?.optJSONObject(k) ?: continue
-                    refunded = Math.addExact(refunded, refund.optLong("amount_minor", 0L).coerceAtLeast(0L))
+                // The refund RPC inserts the internal refund posting and changes this
+                // status in the same transaction. Its amount equals approved_refund_minor.
+                // Read the status from the client-visible return row instead of embedding
+                // commercial_return_refund_postings, whose table access is intentionally denied.
+                if (saleReturn.optString("refund_status") == "refunded") {
+                    refunded = Math.addExact(refunded, approvedRefund)
                 }
             }
             val netPaid = (paid - refunded).coerceAtLeast(0L)
