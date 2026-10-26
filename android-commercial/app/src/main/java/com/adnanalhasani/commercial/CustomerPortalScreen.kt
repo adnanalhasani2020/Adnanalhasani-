@@ -105,7 +105,9 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
     }
     val estimatedTotal = cart.sumOf { it.third }
     val unsupportedFractionalProduct = cart.any { (item, text, _) ->
-        item.itemType == "product" && text.toBigDecimalOrNull()?.stripTrailingZeros()?.scale()?.let { it > 0 } == true
+        item.itemType == "product" && text.toBigDecimalOrNull()?.let { quantity ->
+            quantity.stripTrailingZeros().scale() > 0 || quantity > java.math.BigDecimal("100000")
+        } == true
     }
 
     Scaffold(
@@ -287,7 +289,7 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
                                     } else if (cart.isEmpty() || invalid) {
                                         error = "تحقق من الكميات (حتى 3 منازل عشرية) وتأكد من اختيار أصناف بعملة واحدة."
                                     } else if (unsupportedFractionalProduct) {
-                                        error = "الاستلام والبيع السحابي يدعمان حاليًا الكميات الصحيحة للمنتجات فقط. عدّل كمية المنتج إلى عدد صحيح؛ لن يتم إنشاء طلب غير قابل للإتمام."
+                                        error = "البيع السحابي يدعم حاليًا كميات المنتجات الصحيحة من 1 إلى 100000 فقط. عدّل الكمية؛ لن يتم إنشاء طلب غير قابل للإتمام."
                                     } else if (estimatedTotal <= 0L) {
                                         error = "إجمالي الطلب يجب أن يكون أكبر من صفر."
                                     } else {
