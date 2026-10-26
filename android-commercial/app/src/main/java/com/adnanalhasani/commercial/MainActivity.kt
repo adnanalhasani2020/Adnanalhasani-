@@ -396,7 +396,7 @@ private fun StoreApp(context: Context) {
                     showExpenses -> if (cloudMode) {
                         CommercialCloudExpensesScreen(context = context, onBack = { showExpenses = false })
                     } else ExpensesScreen(expenses = expenses, onBack = { showExpenses = false }, onAdd = { expenseDialog = true })
-                    else -> if (showActivityProfile) ActivityProfileScreen(onBack = { showActivityProfile = false }) else MoreScreen(onCustomers = {
+                    else -> if (showActivityProfile) ActivityProfileScreen(onBack = { showActivityProfile = false }) else MoreScreen(cloudMode = cloudMode, onCustomers = {
                     showDebts = true
                 }, onReports = { showReports = true }, onExpenses = { showExpenses = true }, onActivityProfile = { showActivityProfile = true }, onCatalog = { showCatalog = true }, onMasterData = { showMasterData = true }, onCloudOperational = { cloudOperationalPage = it }, onCloudSales = { cloudSalesPage = true }, onCloudPurchases = { cloudPurchasesPage = true }, onCloudStockAlerts = { cloudStockAlertsPage = true }, onUnitsDirectory = { cloudUnitsPage = true }, onCustomerPortal = { customerPortalPage = true }, onCustomerOrders = { customerOrderFulfillmentPage = true })
                 }
@@ -1048,8 +1048,8 @@ private fun AddProductDialog(
 }
 
 @Composable
-private fun MoreScreen(onCustomers: () -> Unit, onReports: () -> Unit, onExpenses: () -> Unit, onActivityProfile: () -> Unit, onCatalog: () -> Unit, onMasterData: () -> Unit, onCloudOperational: (String) -> Unit, onCloudSales: () -> Unit, onCloudPurchases: () -> Unit, onCloudStockAlerts: () -> Unit, onUnitsDirectory: () -> Unit, onCustomerPortal: () -> Unit, onCustomerOrders: () -> Unit) {
-    val options = listOf("دليل الأصناف العالمي", "المستودعات والمجموعات والأقسام", "العملاء والمديونيات", "دليل العملاء السحابي", "دليل الموردين", "أوامر الشراء", "السندات والمدفوعات", "مرتجعات المبيعات", "القيود المحاسبية", "دليل الحسابات", "فواتير المبيعات السحابية", "تنبيهات المخزون السحابي", "دليل وحدات القياس", "بوابة الزبون", "طلبات الزبائن", "التقارير والأرباح", "المصروفات", "إعدادات المتجر", "النسخ الاحتياطي")
+private fun MoreScreen(cloudMode: Boolean, onCustomers: () -> Unit, onReports: () -> Unit, onExpenses: () -> Unit, onActivityProfile: () -> Unit, onCatalog: () -> Unit, onMasterData: () -> Unit, onCloudOperational: (String) -> Unit, onCloudSales: () -> Unit, onCloudPurchases: () -> Unit, onCloudStockAlerts: () -> Unit, onUnitsDirectory: () -> Unit, onCustomerPortal: () -> Unit, onCustomerOrders: () -> Unit) {
+    val options = listOf("دليل الأصناف العالمي", "المستودعات والمجموعات والأقسام", "العملاء والمديونيات", "دليل العملاء السحابي", "دليل الموردين", "أوامر الشراء", "السندات والمدفوعات", "مرتجعات المبيعات", "القيود المحاسبية", "دليل الحسابات", "فواتير المبيعات السحابية", "تنبيهات المخزون السحابي", "دليل وحدات القياس", "بوابة الزبون", "طلبات الزبائن", "التقارير والأرباح", "المصروفات", "إعدادات المتجر", "النسخ الاحتياطي").filter { cloudMode || it != "طلبات الزبائن" }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Heading("إدارة المتجر", "الأدوات والإعدادات") }
         items(options) { label ->
