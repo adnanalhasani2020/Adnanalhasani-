@@ -20,6 +20,14 @@ BEGIN
       RAISE EXCEPTION 'product_order_requires_integer_quantity_for_inventory_checkout'
         USING ERRCODE='22023';
     END IF;
+  ELSIF NEW.item_type = 'service' THEN
+    SELECT order_type INTO v_order_type
+    FROM public.commercial_customer_orders
+    WHERE id = NEW.order_id;
+    IF v_order_type = 'service' THEN
+      RAISE EXCEPTION 'service_orders_require_booking_workflow'
+        USING ERRCODE='22023';
+    END IF;
   END IF;
   RETURN NEW;
 END;
