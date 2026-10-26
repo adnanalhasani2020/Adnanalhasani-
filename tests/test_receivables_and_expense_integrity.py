@@ -33,6 +33,9 @@ class ReceivablesAndExpenseIntegrityTests(unittest.TestCase):
         self.assertNotIn("GRANT EXECUTE ON FUNCTION public.commercial_record_customer_payment", migration)
         self.assertIn("collection_exceeds_outstanding_balance_after_returns", migration)
         self.assertIn("v_outstanding_minor := GREATEST(", migration)
+        self.assertIn("GREATEST(v_outstanding_minor - p_amount_minor, 0) = 0", migration)
+        self.assertIn("UPDATE public.commercial_sales", migration)
+        self.assertIn("ELSE 'partially_paid'", migration)
 
     def test_daily_expense_total_uses_organization_timezone_not_device_date(self):
         repository = REPOSITORY.read_text(encoding="utf-8")

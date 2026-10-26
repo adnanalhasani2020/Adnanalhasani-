@@ -133,6 +133,17 @@ BEGIN
   -- the balanced journal entry before updating the sale payment status.
   v_posting := public.commercial_gl_post_payment(v_payment.id);
 
+  -- The generic GL routine derives payment_status from gross invoice value.
+  -- After a return credit, the authoritative status must instead reflect the
+  -- return-adjusted receivable balance used by this RPC.
+  UPDATE public.commercial_sales
+  SET payment_status = CASE
+        WHEN GREATEST(v_outstanding_minor - p_amount_minor, 0) = 0 THEN 'paid'
+        ELSE 'partially_paid'
+      END,
+      updated_at = now()
+  WHERE id = v_sale.id;
+
   RETURN jsonb_build_object(
     'payment_id', v_payment.id,
     'sale_id', v_sale.id,
