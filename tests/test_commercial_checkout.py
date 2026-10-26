@@ -353,8 +353,17 @@ def test_commerce_sale_payment_settlement_and_finance_recognition_are_one_govern
         (settlement,),
     ).fetchone() == (payment, obligation, "settled", STAMP)
     assert db.execute(
-        "SELECT sale_id,obligation_id,state FROM invoices WHERE invoice_id=?", (invoice,)
-    ).fetchone() == (sale_id, obligation, "issued")
+        "SELECT sale_id,obligation_id,state,version_no FROM invoices WHERE invoice_id=?", (invoice,)
+    ).fetchone() == (sale_id, obligation, "settled", 2)
+    assert db.execute(
+        "SELECT change_type,prior_version_ref,current_version_ref,change_payload_ref "
+        "FROM domain_history WHERE target_ref=? AND change_type='invoice_state_transition' "
+        "ORDER BY rowid DESC LIMIT 1",
+        (invoice,),
+    ).fetchone() == (
+        "invoice_state_transition", f"invoice-state:{invoice}:v1", f"invoice-state:{invoice}:v2",
+        f"state:settled;settlement:{settlement};transaction:{result.financial_transaction_id};ledger:{result.ledger_entry_id}",
+    )
     assert db.execute(
         "SELECT state FROM obligations WHERE obligation_id=?", (obligation,)
     ).fetchone()[0] == "satisfied"
