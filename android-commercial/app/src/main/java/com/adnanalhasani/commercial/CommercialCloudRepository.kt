@@ -1023,7 +1023,7 @@ internal fun createCommercialCloudPurchaseOrder(
         val quantity = line.quantityOrdered.toBigDecimalOrNull()
             ?: throw IllegalArgumentException("كمية الطلب غير صالحة.")
         require(line.offeringId.isNotBlank() && line.description.isNotBlank() && quantity > java.math.BigDecimal.ZERO &&
-            quantity.stripTrailingZeros().scale() <= 0 && line.unitCostMinor >= 0L) { "بيانات بند أمر الشراء غير صالحة." }
+            quantity.stripTrailingZeros().scale() <= 6 && line.unitCostMinor >= 0L) { "بيانات بند أمر الشراء غير صالحة." }
         lineArray.put(JSONObject().put("offering_id", line.offeringId).put("item_description", line.description.trim())
             .put("quantity_ordered", quantity.stripTrailingZeros().toPlainString()).put("unit_cost_minor", line.unitCostMinor))
     }
