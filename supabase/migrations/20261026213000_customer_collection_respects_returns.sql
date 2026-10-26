@@ -129,20 +129,22 @@ BEGIN
   )
   RETURNING * INTO v_payment;
 
-  -- This guarded posting validates remaining receivable capacity and writes
-  -- the balanced journal entry before updating the sale payment status.
-  v_posting := public.commercial_gl_post_payment(v_payment.id);
+  -- The AFTER INSERT trigger commercial_payment_gl_post invokes the guarded
+  -- GL routine in this same transaction. Do not call it a second time here:
+  -- the trigger is the single posting path and updates payment_status.
+  SELECT jsonb_build_object('journal_entry_id', e.id, 'posted', true)
+  INTO v_posting
+  FROM public.commercial_journal_entries e
+  WHERE e.organization_id = v_payment.organization_id
+    AND e.source_type = 'payment'
+    AND e.source_id = v_payment.id
+    AND e.status = 'posted'
+  ORDER BY e.created_at DESC
+  LIMIT 1;
 
-  -- The generic GL routine derives payment_status from gross invoice value.
-  -- After a return credit, the authoritative status must instead reflect the
-  -- return-adjusted receivable balance used by this RPC.
-  UPDATE public.commercial_sales
-  SET payment_status = CASE
-        WHEN GREATEST(v_outstanding_minor - p_amount_minor, 0) = 0 THEN 'paid'
-        ELSE 'partially_paid'
-      END,
-      updated_at = now()
-  WHERE id = v_sale.id;
+  IF v_posting IS NULL THEN
+    RAISE EXCEPTION 'customer_payment_journal_not_posted' USING ERRCODE = '55000';
+  END IF;
 
   RETURN jsonb_build_object(
     'payment_id', v_payment.id,
