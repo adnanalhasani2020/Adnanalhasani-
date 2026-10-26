@@ -104,7 +104,7 @@ BEGIN
       'order_id',b.order_id,'order_number',o.order_number,'created_at',b.created_at,
       'starts_at',b.starts_at,'ends_at',b.ends_at,'status',b.status,'currency_code',b.currency_code,
       'price_minor',b.price_minor,'notes',coalesce(b.notes,''),'customer_name',coalesce(c.display_name,''),
-      'resource_name',coalesce(r.name,''),'order_status',coalesce(o.status,'missing'),
+      'resource_name',coalesce(r.name,''),'timezone',coalesce(r.timezone,'UTC'),'order_status',coalesce(o.status,'missing'),
       'payment_status',coalesce(o.payment_status,'unknown'),'merchant_hidden',b.merchant_hidden_at IS NOT NULL,
       'merchant_decision_reason',coalesce(b.merchant_decision_reason,''),
       'items',coalesce((SELECT jsonb_agg(jsonb_build_object(
