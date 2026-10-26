@@ -250,8 +250,8 @@ class PersistedSettlementRecognitionApplication:
                 raise ValidationError("Invoice, Payment, and Obligation must reference the same persisted chain")
             if invoice_state != "issued":
                 raise ValidationError("Commerce Sale settlement requires an issued Invoice")
-            if sale_state in {"cancelled", "returned"} or sale_lifecycle_state in {"cancelled", "returned"}:
-                raise ValidationError("Cancelled or returned Sale cannot be settled as a new sale")
+            if sale_state not in {"completed", "fulfilled"} or sale_lifecycle_state not in {None, "completed", "fulfilled"}:
+                raise ValidationError("Only a fulfilled Commerce Sale can be settled and recognized")
             if payment_state != "completed":
                 raise ValidationError("Payment must be completed before settlement")
             if payer != debtor or payee != creditor:
@@ -270,6 +270,16 @@ class PersistedSettlementRecognitionApplication:
             )
             if payment_currency != obligation_currency:
                 raise ValidationError("Payment and Obligation currencies do not match")
+            sale_total = connection.execute(
+                "SELECT COUNT(*),COUNT(DISTINCT currency_code),MIN(currency_code),SUM(line_total_minor) "
+                "FROM sale_lines WHERE sale_id=?",
+                (sale_key,),
+            ).fetchone()
+            if (sale_total is None or sale_total[0] < 1 or sale_total[1] != 1
+                    or sale_total[2] != payment_currency or sale_total[3] != obligation_amount):
+                raise ValidationError(
+                    "Invoice-linked Obligation and Payment must equal the persisted Sale line total and currency"
+                )
             if obligation_state not in {"open", "due", "overdue", "satisfied"}:
                 raise ValidationError("Obligation is not eligible for settlement")
 
