@@ -224,6 +224,7 @@ private fun StoreApp(context: Context) {
     var cloudStockAlertsPage by remember { mutableStateOf(false) }
     var cloudUnitsPage by remember { mutableStateOf(false) }
     var customerPortalPage by remember { mutableStateOf(false) }
+    var customerPortalHistoryPage by remember { mutableStateOf(false) }
     var settlingSaleNumber by remember { mutableIntStateOf(-1) }
     val cloudContextExists = remember {
         val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
@@ -314,8 +315,14 @@ private fun StoreApp(context: Context) {
         }
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
-            if (customerPortalPage) {
-                CustomerPortalScreen(context = context, onBack = { customerPortalPage = false })
+            if (customerPortalHistoryPage) {
+                CustomerPortalHistoryScreen(context = context, onBack = { customerPortalHistoryPage = false })
+            } else if (customerPortalPage) {
+                CustomerPortalScreen(
+                    context = context,
+                    onBack = { customerPortalPage = false },
+                    onOrders = { customerPortalHistoryPage = true }
+                )
             } else if (cloudSaleComposerPage) {
                 CommercialCloudSaleComposerScreen(
                     context = context,
