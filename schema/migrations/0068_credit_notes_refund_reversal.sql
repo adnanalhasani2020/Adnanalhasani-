@@ -65,7 +65,7 @@ WHEN NOT EXISTS (
       AND i.issuer_ref=NEW.issuer_ref
       AND o.state='satisfied'
       AND o.creditor_person_id=NEW.issuer_ref
-      AND s.buyer_person_id=original.payer_person_id
+      AND o.debtor_person_id=original.payer_person_id
       AND original.payee_person_id=NEW.issuer_ref
       AND original.state='completed'
       AND original.amount_minor=o.amount_minor
@@ -76,7 +76,7 @@ WHEN NOT EXISTS (
       AND refund.invoice_id IS NULL
       AND refund.obligation_id IS NULL
       AND refund.payer_person_id=NEW.issuer_ref
-      AND refund.payee_person_id=s.buyer_person_id
+      AND refund.payee_person_id=o.debtor_person_id
       AND refund.amount_minor=NEW.amount_minor
       AND refund.currency_code=NEW.currency_code
       AND length(trim(COALESCE(refund.provider_ref,'')))>0
