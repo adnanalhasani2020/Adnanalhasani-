@@ -60,7 +60,7 @@ SPEC_TO_TESTS = {
     "SPEC-0005": ["test_batch2.py","test_stage8_batch1.py","test_stage8_batch3.py","test_stage8_batch4.py","test_stage8_batch5.py","test_stage24_sale_operational_context.py"],
     "SPEC-0006": ["test_batch2.py","test_stage8_batch4.py","test_stage8_batch5.py","test_stage24_sale_operational_context.py"],
     "SPEC-0007": ["test_batch3.py","test_stage8_batch2.py","test_stage8_batch4.py","test_stage8_batch5.py"],
-    "SPEC-0008": ["test_batch3.py","test_stage8_batch2.py","test_stage8_batch3.py","test_stage8_batch4.py","test_stage8_batch5.py","test_stage26_payment_application.py"],
+    "SPEC-0008": ["test_batch3.py","test_stage8_batch2.py","test_stage8_batch3.py","test_stage8_batch4.py","test_stage8_batch5.py","test_stage26_payment_application.py","test_commercial_checkout.py"],
     "SPEC-0009": ["test_batch3.py","test_stage8_batch1.py","test_stage8_batch2.py","test_stage8_batch3.py","test_stage8_batch4.py","test_stage8_batch5.py"],
     "SPEC-0010": ["test_batch3.py","test_stage8_batch1.py","test_stage8_batch2.py","test_stage8_batch3.py","test_stage8_batch4.py","test_stage8_batch5.py"],
     "SPEC-0011": ["test_batch4.py","test_stage8_batch2.py","test_stage8_batch4.py","test_stage8_batch5.py"],
