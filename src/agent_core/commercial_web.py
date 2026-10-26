@@ -21,6 +21,8 @@ from wsgiref.simple_server import WSGIServer, make_server, WSGIRequestHandler
 from socketserver import ThreadingMixIn
 
 from agent_core.application import SaleApplication
+from agent_core.payment_application import PaymentApplication
+from agent_core.persisted_settlement_recognition_application import PersistedSettlementRecognitionApplication
 from agent_core.commerce_checkout import CommercialCheckoutApplication
 from agent_core.commercial_identity import CommercialIdentityApplication
 from agent_core.persistence import connect_database
@@ -625,6 +627,98 @@ class CommercialWebApplication:
                 )
                 result["notice"] = "تم اعتماد الإشعار الدائن ورد الدفعة وترحيل عكسها المحاسبي، ثم إتمام حركة المخزون."
                 return self._json(start_response, "200 OK", result)
+
+            if method == "POST" and path == "/api/payments/complete-commerce-sale":
+                body = self._body(environ)
+                required = (
+                    "payment_id", "expected_version", "payment_context_ref",
+                    "payment_authorization_grant_id", "payment_agent_action_id",
+                    "provider_ref", "external_payment_ref", "settlement_id",
+                    "financial_account_id", "finance_context_ref",
+                    "finance_authorization_grant_id", "finance_agent_action_id",
+                    "source_event_key",
+                )
+                missing = [key for key in required if key not in body]
+                if missing:
+                    raise ValidationError("Missing Commerce Payment finalization fields: " + ", ".join(missing))
+                payment_key = str(body["payment_id"])
+                payment = db.execute(
+                    "SELECT p.state,p.version_no,p.provider_ref,p.external_payment_ref,p.invoice_id,p.obligation_id,"
+                    "i.sale_id,i.issuer_ref,i.obligation_id "
+                    "FROM payments p JOIN invoices i ON i.invoice_id=p.invoice_id "
+                    "WHERE p.payment_id=?",
+                    (payment_key,),
+                ).fetchone()
+                if payment is None:
+                    return self._json(start_response, "404 Not Found", {
+                        "error": "لا توجد دفعة مرتبطة بفاتورة بيع لهذا المرجع."
+                    })
+                payment_state, payment_version, provider_ref, external_ref, invoice_id, obligation_id, sale_key, issuer, invoice_obligation = payment
+                if person_id != issuer:
+                    return self._json(start_response, "403 Forbidden", {
+                        "error": "إتمام التسوية المحاسبية متاح لحساب مُصدر الفاتورة فقط."
+                    })
+                if not obligation_id or invoice_obligation != obligation_id:
+                    return self._json(start_response, "409 Conflict", {
+                        "error": "الفاتورة والدفعة غير مرتبطتين بالتزام واحد؛ لم تُنفذ التسوية."
+                    })
+                if (not str(provider_ref or "").strip() or not str(external_ref or "").strip()
+                        or body["provider_ref"] != provider_ref
+                        or body["external_payment_ref"] != external_ref):
+                    return self._json(start_response, "409 Conflict", {
+                        "error": "مرجع مزود الدفع لا يطابق الدليل المحفوظ على الدفعة؛ لم تُنفذ التسوية."
+                    })
+                now = datetime.now(timezone.utc)
+                if payment_state != "completed":
+                    if payment_state not in {"initiated", "pending"}:
+                        return self._json(start_response, "409 Conflict", {
+                            "error": "حالة الدفعة لا تسمح بإتمامها؛ لم تُنفذ التسوية."
+                        })
+                    completed = PaymentApplication().transition_payment(
+                        db, payment_key, "completed",
+                        expected_version=body["expected_version"],
+                        context_ref=body["payment_context_ref"],
+                        authorization_grant_id=body["payment_authorization_grant_id"],
+                        agent_action_id=body["payment_agent_action_id"], now=now,
+                    )
+                    db.commit()
+                    payment_state = completed.state
+                else:
+                    payment_state = "completed"
+                try:
+                    recognition = PersistedSettlementRecognitionApplication().settle_and_recognize_commerce_sale(
+                        db, sale_id=sale_key, payment_id=payment_key, obligation_id=obligation_id,
+                        settlement_id=body["settlement_id"],
+                        financial_account_id=body["financial_account_id"],
+                        context_ref=body["finance_context_ref"],
+                        authorization_grant_id=body["finance_authorization_grant_id"],
+                        agent_action_id=body["finance_agent_action_id"],
+                        source_event_key=body["source_event_key"], now=now,
+                    )
+                    db.commit()
+                except Exception:
+                    # Payment completion is durable provider evidence; do not roll it back
+                    # because Finance authorization or recognition needs remediation.
+                    db.commit()
+                    logging.exception("Commerce Payment completed but Finance recognition is pending")
+                    return self._json(start_response, "202 Accepted", {
+                        "payment_completed": True,
+                        "finance_recognition_pending": True,
+                        "payment_id": payment_key,
+                        "sale_id": sale_key,
+                        "error_code": "finance_recognition_pending",
+                        "message": (
+                            "تم حفظ تأكيد الدفع. لم تكتمل التسوية المحاسبية؛ لا تعِد تنفيذ الدفع. "
+                            "صحّح صلاحية/اعتماد المالية ثم أعد الطلب بنفس مرجع الحدث."
+                        ),
+                    })
+                return self._json(start_response, "200 OK", {
+                    "payment_completed": True,
+                    "finance_recognition_pending": False,
+                    "payment_id": payment_key,
+                    "sale_id": sale_key,
+                    "recognition": recognition,
+                })
 
             if method == "GET" and (path.startswith("/receipts/") or path.startswith("/invoices/")):
                 # /receipts is the truthful route: this document is a sales receipt,
