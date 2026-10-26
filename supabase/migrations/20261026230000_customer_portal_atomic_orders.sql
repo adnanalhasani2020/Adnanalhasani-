@@ -41,6 +41,7 @@ BEGIN
   IF v_uid IS NULL THEN
     RAISE EXCEPTION 'authentication_required' USING ERRCODE = '42501';
   END IF;
+  PERFORM public.commercial_customer_portal_link_verified_email();
 
   SELECT coalesce(jsonb_agg(jsonb_build_object(
     'id', o.id,
@@ -58,8 +59,7 @@ BEGIN
   JOIN public.commercial_party_accounts a
     ON a.id = cpa.party_account_id
    AND a.organization_id = cpa.organization_id
-   AND a.owner_user_id = v_uid
-   AND a.account_type = 'customer'
+   AND a.account_type IN ('business','organization')
    AND a.status = 'active'
   JOIN public.commercial_organizations o
     ON o.id = cpa.organization_id AND o.state = 'active' AND o.deleted_at IS NULL
@@ -82,6 +82,7 @@ BEGIN
   IF v_uid IS NULL THEN
     RAISE EXCEPTION 'authentication_required' USING ERRCODE = '42501';
   END IF;
+  PERFORM public.commercial_customer_portal_link_verified_email();
   IF NOT EXISTS (
     SELECT 1
     FROM public.commercial_customer_party_accounts cpa
@@ -152,6 +153,7 @@ DECLARE
   v_matching_count integer;
 BEGIN
   IF v_uid IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
+  PERFORM public.commercial_customer_portal_link_verified_email();
   IF p_organization_id IS NULL THEN RAISE EXCEPTION 'organization_required' USING ERRCODE='22023'; END IF;
   IF p_payment_mode IS NULL OR p_payment_mode NOT IN ('cash','credit') THEN RAISE EXCEPTION 'invalid_payment_mode' USING ERRCODE='22023'; END IF;
   IF v_key IS NULL OR length(v_key) < 8 OR length(v_key) > 200 THEN RAISE EXCEPTION 'invalid_idempotency_key' USING ERRCODE='22023'; END IF;
@@ -305,6 +307,7 @@ RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $functio
 DECLARE v_uid uuid := auth.uid(); v_result jsonb;
 BEGIN
  IF v_uid IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
+ PERFORM public.commercial_customer_portal_link_verified_email();
  IF NOT EXISTS (SELECT 1 FROM public.commercial_customer_party_accounts cpa JOIN public.commercial_customers c ON c.id=cpa.customer_id AND c.organization_id=cpa.organization_id AND c.state='active' AND c.auth_user_id=v_uid JOIN public.commercial_party_accounts a ON a.id=cpa.party_account_id AND a.organization_id=cpa.organization_id AND a.account_type IN ('business','organization') AND a.status='active' JOIN public.commercial_organizations o ON o.id=cpa.organization_id AND o.state='active' AND o.deleted_at IS NULL WHERE cpa.organization_id=p_organization_id) THEN RAISE EXCEPTION 'customer_not_linked_to_organization' USING ERRCODE='42501'; END IF;
  SELECT coalesce(jsonb_agg(jsonb_build_object('id',r.id,'name',r.name,'resource_type',r.resource_type,'capacity',r.capacity,'timezone',r.timezone) ORDER BY r.name),'[]'::jsonb)
  INTO v_result FROM public.commercial_booking_resources r WHERE r.organization_id=p_organization_id AND r.status='active';
@@ -322,6 +325,7 @@ DECLARE
  v_currency text; v_count integer; v_key text:=nullif(btrim(p_idempotency_key),'');
 BEGIN
  IF v_uid IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
+ PERFORM public.commercial_customer_portal_link_verified_email();
  IF p_organization_id IS NULL OR p_offering_id IS NULL OR p_resource_id IS NULL THEN RAISE EXCEPTION 'booking_fields_required' USING ERRCODE='22023'; END IF;
  IF p_starts_at IS NULL OR p_ends_at IS NULL OR p_starts_at<=now() OR p_ends_at<=p_starts_at THEN RAISE EXCEPTION 'invalid_reservation_window' USING ERRCODE='22023'; END IF;
  IF p_payment_mode IS NULL OR p_payment_mode NOT IN ('cash','credit') THEN RAISE EXCEPTION 'invalid_payment_mode' USING ERRCODE='22023'; END IF;
@@ -373,7 +377,9 @@ BEGIN
 END;
 $function$;
 
-REVOKE ALL ON FUNCTION public.commercial_customer_portal_link_verified_email() FROM PUBLIC, anon;\nGRANT EXECUTE ON FUNCTION public.commercial_customer_portal_link_verified_email() TO authenticated;\nREVOKE ALL ON FUNCTION public.commercial_customer_portal_list_organizations() FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.commercial_customer_portal_link_verified_email() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.commercial_customer_portal_link_verified_email() TO authenticated;
+REVOKE ALL ON FUNCTION public.commercial_customer_portal_list_organizations() FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.commercial_customer_portal_list_offerings(uuid) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.commercial_customer_portal_list_booking_resources(uuid) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.commercial_customer_portal_create_booking(uuid,uuid,uuid,timestamptz,timestamptz,text,text,text) FROM PUBLIC, anon;
