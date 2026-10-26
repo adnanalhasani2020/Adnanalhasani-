@@ -709,6 +709,12 @@ class SaleApplication:
             if existing is not None:
                 if existing[1] != fingerprint:
                     raise ValidationError("Sale return idempotency key was reused with a different request")
+                completion = connection.execute(
+                    "SELECT credit_note_id FROM sale_return_completions WHERE return_event_id=?",
+                    (existing[0],),
+                ).fetchone()
+                if completion is None:
+                    raise ValidationError("Sale return request is pending; use the approved completion workflow")
                 credit = connection.execute(
                     "SELECT credit_note_id,credit_note_number,amount_minor,refund_payment_id,"
                     "financial_transaction_id,ledger_entry_id,currency_code FROM credit_notes "
@@ -722,9 +728,11 @@ class SaleApplication:
                     result.update({"credit_note_id": credit[0], "credit_note_number": credit[1],
                                    "refund_amount_minor": credit[2], "refund_payment_id": credit[3],
                                    "financial_transaction_id": credit[4], "ledger_entry_id": credit[5],
-                                   "currency_code": credit[6], "financial_effects": "refund_and_inventory"})
+                                   "currency_code": credit[6], "financial_effects": "refund_and_inventory",
+                                   "payment_refund_performed": True})
                 else:
                     result["financial_effects"] = "inventory_only"
+                    result["payment_refund_performed"] = False
                 return result
             if sale.state is not SaleState.FULFILLED:
                 raise ValidationError("Only a fulfilled Sale with remaining quantity can be returned")
@@ -737,13 +745,13 @@ class SaleApplication:
                 (sale_key,),
             ).fetchone()
             has_financial_link = financial_link is not None
-            if has_financial_link and (requested_return_id is None or not all(value is not None for value in finance_values)):
+            if has_financial_link:
                 raise ValidationError(
-                    "Financially linked Sale return requires an event ID, completed refund Payment, credit note number, "
-                    "Finance account/context, active grant, and approved Finance action"
+                    "Financially linked Sale returns must first reserve a return request and then complete "
+                    "an approved credit note/refund workflow"
                 )
-            if not has_financial_link and any(value is not None for value in finance_values):
-                raise ValidationError("Financial return evidence was supplied for a Sale without a linked Invoice/Obligation")
+            if any(value is not None for value in finance_values):
+                raise ValidationError("Finance refund fields are accepted only by complete_sale_return")
 
             sale_lines = {}
             for item in normalized:
@@ -796,15 +804,11 @@ class SaleApplication:
                 )
                 return_movements.append((return_line_id, movement, item["quantity"]))
             credit_note = None
-            if has_financial_link:
-                from agent_core.sale_return_financial_application import SaleReturnFinancialApplication
-                credit_note = SaleReturnFinancialApplication().record_credit_note_for_return(
-                    connection, sale_id=sale_key, return_event_id=return_id,
-                    refund_payment_id=refund_key, credit_note_number=credit_note_number,
-                    financial_account_id=account_key, finance_context_ref=finance_context_key,
-                    finance_authorization_grant_id=finance_grant_key,
-                    finance_agent_action_id=finance_action_key, now=timestamp,
-                )
+            connection.execute(
+                "INSERT INTO sale_return_completions(return_event_id,completed_at,credit_note_id,state) "
+                "VALUES(?,?,NULL,'completed')",
+                (return_id, timestamp),
+            )
             for return_line_id, movement, return_quantity in return_movements:
                 connection.execute(
                     "INSERT INTO inventory_movements(inventory_movement_id,inventory_position_id,"
@@ -820,6 +824,7 @@ class SaleApplication:
                 "SELECT NOT EXISTS (SELECT 1 FROM sale_lines l WHERE l.sale_id=? AND "
                 "COALESCE((SELECT SUM(rl.quantity) FROM sale_return_lines rl "
                 "JOIN sale_return_events re ON re.return_event_id=rl.return_event_id "
+                "JOIN sale_return_completions c ON c.return_event_id=rl.return_event_id "
                 "WHERE rl.sale_line_id=l.sale_line_id),0) < l.quantity)",
                 (sale_key,),
             ).fetchone()[0]
