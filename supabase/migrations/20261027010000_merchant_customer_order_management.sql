@@ -270,7 +270,7 @@ BEGIN
     WHERE m.organization_id=p_organization_id AND m.user_id=v_uid AND m.state='active' AND m.role IN ('owner','admin','manager')) THEN
     RAISE EXCEPTION 'customer_order_management_permission_required' USING ERRCODE='42501'; END IF;
   SELECT coalesce(jsonb_agg(jsonb_build_object('id',f.id,'name',p.name,'price_minor',f.price_minor,
-    'currency_code',f.currency_code,'unit_code',coalesce(p.unit_code,'EA')) ORDER BY p.name),'[]'::jsonb)
+    'currency_code',f.currency_code,'unit_code',coalesce(p.unit_name,'EA')) ORDER BY p.name),'[]'::jsonb)
   INTO v_result FROM public.commercial_offerings f
   JOIN public.commercial_activities a ON a.id=f.activity_id
   JOIN public.commercial_products p ON p.id=f.product_id
