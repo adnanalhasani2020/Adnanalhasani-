@@ -2045,9 +2045,9 @@ internal fun loadCustomerPortalOfferings(context: Context, organizationId: Strin
 private fun customerPortalPendingPrefs(context: Context) =
     context.getSharedPreferences("customer_portal_pending_order_v1", Context.MODE_PRIVATE)
 
-internal fun getOrCreateCustomerPortalOrderKey(context: Context, organizationId: String, lines: List<Pair<String, String>>, paymentMode: String, note: String): String {
+internal fun getOrCreateCustomerPortalOrderKey(context: Context, organizationId: String, lines: List<Pair<String, String>>, paymentMode: String, note: String, extra: List<String> = emptyList()): String {
     require(organizationId.isNotBlank() && lines.isNotEmpty()) { "السلة فارغة أو المؤسسة غير محددة." }
-    val canonical = listOf(organizationId, paymentMode, note) + lines.sortedBy { it.first }.flatMap { listOf(it.first, it.second) }
+    val canonical = listOf(organizationId, paymentMode, note) + extra + lines.sortedBy { it.first }.flatMap { listOf(it.first, it.second) }
     val fingerprint = MessageDigest.getInstance("SHA-256")
         .digest(canonical.joinToString("\u001f").toByteArray(StandardCharsets.UTF_8))
         .joinToString("") { "%02x".format(it) }
@@ -2094,4 +2094,54 @@ internal fun submitCustomerPortalOrder(
     require(orderId.isNotBlank()) { "لم يرجع الخادم تأكيدًا صالحًا للطلب؛ لا تنشئ طلبًا جديدًا بمفتاح مختلف." }
     return CustomerPortalOrderResult(orderId, row.optString("order_number"), row.optString("status"),
         row.optString("payment_status"), row.optLong("total_minor", 0L), row.optString("currency_code"), row.optBoolean("replayed"))
+}
+
+
+internal data class CustomerPortalBookingResource(
+    val id: String, val name: String, val resourceType: String, val capacity: Int, val timezone: String
+)
+internal data class CustomerPortalBookingResult(
+    val bookingId: String, val bookingNumber: String, val orderId: String,
+    val status: String, val priceMinor: Long, val currencyCode: String, val replayed: Boolean
+)
+
+internal fun loadCustomerPortalBookingResources(context: Context, organizationId: String): List<CustomerPortalBookingResource> {
+    require(organizationId.isNotBlank()) { "اختر المؤسسة أولًا." }
+    val access = customerPortalAccessToken(context)
+    val rows = JSONArray(commercialCloudRequest(
+        "/rest/v1/rpc/commercial_customer_portal_list_booking_resources", "POST",
+        JSONObject().put("p_organization_id", organizationId), access
+    ))
+    return buildList {
+        for (i in 0 until rows.length()) {
+            val row = rows.optJSONObject(i) ?: continue
+            val id = row.optString("id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+            val name = row.optString("name").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+            if (id.isBlank() || name.isBlank()) continue
+            add(CustomerPortalBookingResource(id, name, row.optString("resource_type"), row.optInt("capacity", 1), row.optString("timezone", "UTC")))
+        }
+    }
+}
+
+internal fun submitCustomerPortalBooking(
+    context: Context, organizationId: String, offeringId: String, resourceId: String,
+    startsAt: String, endsAt: String, paymentMode: String, note: String, idempotencyKey: String
+): CustomerPortalBookingResult {
+    require(organizationId.isNotBlank() && offeringId.isNotBlank() && resourceId.isNotBlank()) { "اختر الخدمة ومورد الحجز." }
+    require(paymentMode == "cash" || paymentMode == "credit") { "طريقة الفاتورة غير صحيحة." }
+    val access = customerPortalAccessToken(context)
+    val payload = JSONObject()
+        .put("p_organization_id", organizationId)
+        .put("p_offering_id", offeringId)
+        .put("p_resource_id", resourceId)
+        .put("p_starts_at", startsAt)
+        .put("p_ends_at", endsAt)
+        .put("p_payment_mode", paymentMode)
+        .put("p_customer_note", note.take(1000))
+        .put("p_idempotency_key", idempotencyKey)
+    val row = JSONObject(commercialCloudRequest("/rest/v1/rpc/commercial_customer_portal_create_booking", "POST", payload, access))
+    val bookingId = row.optString("booking_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+    require(bookingId.isNotBlank()) { "لم يرجع الخادم تأكيدًا صالحًا للحجز؛ لا تنشئ حجزًا جديدًا بمفتاح مختلف." }
+    return CustomerPortalBookingResult(bookingId, row.optString("booking_number"), row.optString("order_id"),
+        row.optString("status"), row.optLong("price_minor", 0L), row.optString("currency_code"), row.optBoolean("replayed"))
 }
