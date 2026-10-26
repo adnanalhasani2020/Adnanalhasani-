@@ -319,6 +319,64 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit) {
                         }
                     }
                 }
+                if (bookingMode) item {
+                    Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, PortalBorder)) {
+                        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text("مراجعة الحجز", color = PortalInk, fontWeight = FontWeight.Bold)
+                            val service = offerings.firstOrNull { it.id == bookingOfferingId && it.itemType == "service" }
+                            if (service != null) {
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text(service.name, color = PortalInk, modifier = Modifier.weight(1f))
+                                    Text(portalMoney(service.priceMinor, service.currencyCode), color = PortalGreen, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                RadioButton(selected = paymentMode == "cash", onClick = { paymentMode = "cash" })
+                                Text("نقدي", color = PortalInk)
+                                Spacer(Modifier.width(14.dp))
+                                RadioButton(selected = paymentMode == "credit", onClick = { paymentMode = "credit" }, enabled = org.allowCredit)
+                                Text("آجل", color = if (org.allowCredit) PortalInk else PortalMuted)
+                            }
+                            OutlinedTextField(value = note, onValueChange = { note = it.take(1000) }, label = { Text("ملاحظة للحجز (اختياري)") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
+                            Button(
+                                onClick = {
+                                    val selectedService = offerings.firstOrNull { it.id == bookingOfferingId && it.itemType == "service" }
+                                    val startsValid = runCatching { java.time.OffsetDateTime.parse(startsAt).toInstant().isAfter(java.time.Instant.now()) }.getOrDefault(false)
+                                    val endsValid = runCatching { java.time.OffsetDateTime.parse(endsAt).toInstant().isAfter(java.time.OffsetDateTime.parse(startsAt).toInstant()) }.getOrDefault(false)
+                                    if (selectedService == null || bookingResourceId.isBlank() || bookingResources.none { it.id == bookingResourceId } || !startsValid || !endsValid) {
+                                        error = "اختر خدمة وموردًا نشطًا وأدخل وقت بداية ونهاية صالحين في المستقبل مع المنطقة الزمنية."
+                                    } else {
+                                        submitting = true; error = ""; notice = "جارٍ التحقق من الموعد والسعة وتسجيل الحجز..."
+                                        val snapshotOrg = org; val snapshotResource = bookingResourceId
+                                        val snapshotStart = startsAt; val snapshotEnd = endsAt; val snapshotPayment = paymentMode; val snapshotNote = note
+                                        portalExecutor.execute {
+                                            val result = runCatching {
+                                                val key = getOrCreateCustomerPortalOrderKey(context, snapshotOrg.id, listOf(selectedService.id to "1"), snapshotPayment, snapshotNote, listOf(snapshotResource, snapshotStart, snapshotEnd))
+                                                val booking = submitCustomerPortalBooking(context, snapshotOrg.id, selectedService.id, snapshotResource, snapshotStart, snapshotEnd, snapshotPayment, snapshotNote, key)
+                                                clearCustomerPortalOrderKey(context, key); booking
+                                            }
+                                            portalMain.post {
+                                                submitting = false
+                                                result.onSuccess { booking ->
+                                                    notice = "تم إرسال طلب الحجز رقم ${booking.bookingNumber}. الحالة: ${booking.status}، القيمة: ${portalMoney(booking.priceMinor, booking.currencyCode)}."
+                                                    error = ""
+                                                }.onFailure {
+                                                    error = it.message ?: "تعذر تأكيد الحجز. أعد المحاولة بالبيانات نفسها."
+                                                    notice = ""
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                enabled = !submitting && !loading && offerings.any { it.id == bookingOfferingId && it.itemType == "service" } && bookingResources.any { it.id == bookingResourceId },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                if (submitting) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                                else Text("إرسال طلب الحجز")
+                            }
+                        }
+                    }
+                }
             } else if (org != null && !loading && error.isBlank()) {
                 item { Text("لا توجد منتجات أو خدمات نشطة متاحة حاليًا لهذه المؤسسة.", color = PortalMuted) }
             }
