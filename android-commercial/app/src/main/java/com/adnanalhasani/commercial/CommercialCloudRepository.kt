@@ -1069,13 +1069,26 @@ internal data class CommercialCloudExpenseVoucher(
     val evidenceReference: String,
     val note: String,
     val journalEntryId: String,
-    val recordedAt: String
+    val recordedAt: String,
+    val canceledAt: String,
+    val cancellationReason: String,
+    val reversalJournalEntryId: String
 )
+
+internal fun cancelCommercialCloudExpenseVoucher(context: Context, voucherId: String, reason: String): JSONObject {
+    require(voucherId.isNotBlank()) { "سند الصرف غير محدد." }
+    require(reason.trim().length in 3..300) { "أدخل سبب إلغاء واضحًا (3 أحرف على الأقل)." }
+    val (_, access) = commercialMasterDataAccess(context)
+    val payload = JSONObject().put("p_voucher_id", voucherId).put("p_reason", reason.trim())
+    return JSONObject(commercialCloudRequest(
+        "/rest/v1/rpc/commercial_cancel_expense_voucher", "POST", payload, access
+    ))
+}
 
 internal fun loadCommercialCloudExpenses(context: Context): List<CommercialCloudExpenseVoucher> {
     val (orgId, access) = commercialMasterDataAccess(context)
     val path = "/rest/v1/commercial_expense_vouchers" +
-        "?select=id,category,amount_minor,currency_code,payment_method,evidence_reference,note,journal_entry_id,recorded_at" +
+        "?select=id,category,amount_minor,currency_code,payment_method,evidence_reference,note,journal_entry_id,recorded_at,canceled_at,cancellation_reason,reversal_journal_entry_id" +
         "&organization_id=eq.$orgId&order=recorded_at.desc,id.desc&limit=100"
     val rows = commercialCloudPagedGet(path, access)
     return buildList {
@@ -1090,7 +1103,10 @@ internal fun loadCommercialCloudExpenses(context: Context): List<CommercialCloud
                 evidenceReference = row.optString("evidence_reference").takeUnless { it == "null" }.orEmpty(),
                 note = row.optString("note").takeUnless { it == "null" }.orEmpty(),
                 journalEntryId = row.optString("journal_entry_id").takeUnless { it == "null" }.orEmpty(),
-                recordedAt = row.optString("recorded_at").takeUnless { it == "null" }.orEmpty()
+                recordedAt = row.optString("recorded_at").takeUnless { it == "null" }.orEmpty(),
+                canceledAt = row.optString("canceled_at").takeUnless { it == "null" }.orEmpty(),
+                cancellationReason = row.optString("cancellation_reason").takeUnless { it == "null" }.orEmpty(),
+                reversalJournalEntryId = row.optString("reversal_journal_entry_id").takeUnless { it == "null" }.orEmpty()
             ))
         }
     }
