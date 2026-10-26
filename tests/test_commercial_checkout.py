@@ -401,12 +401,21 @@ def test_commerce_sale_payment_settlement_and_finance_recognition_are_one_govern
 
     def perform_financial_return(index, timestamp):
         return_event = uid()
+        credit_number = f"CN-CYCLE-{index:03d}"
+        reserved = SaleApplication().request_sale_return_items(
+            db, sale_id, debtor, return_grant,
+            items=[{"sale_line_id": sale_line_id, "quantity": 1}],
+            idempotency_key=f"settled-return-{index:03d}",
+            reason=f"customer returned unit {index}",
+            now=timestamp, return_event_id=return_event,
+        )
+        assert reserved["status"] == "pending_refund"
+        assert reserved["refund_amount_minor"] > 0
         refund_payment = uid()
         finance_context = uid()
         finance_grant = uid()
         finance_action = uid()
-        credit_number = f"CN-CYCLE-{index:03d}"
-        refund_amount = (line_total * index // sold_quantity) - (line_total * (index - 1) // sold_quantity)
+        refund_amount = reserved["refund_amount_minor"]
         db.execute(
             "INSERT INTO payments(payment_id,obligation_id,invoice_id,payer_person_id,payee_person_id,"
             "amount_minor,currency_code,state,provider_ref,external_payment_ref,created_at,updated_at,version_no) "
@@ -431,17 +440,19 @@ def test_commerce_sale_payment_settlement_and_finance_recognition_are_one_govern
             (uid(), finance_action, approver, timestamp, timestamp, timestamp),
         )
         db.commit()
-        return SaleApplication().return_sale_items(
-            db, sale_id, debtor, return_grant,
-            items=[{"sale_line_id": sale_line_id, "quantity": 1}],
-            idempotency_key=f"settled-return-{index:03d}",
-            reason=f"customer returned unit {index}",
-            now=timestamp, return_event_id=return_event,
+        result = SaleApplication().complete_sale_return(
+            db, return_event, debtor, return_grant,
             refund_payment_id=refund_payment, credit_note_number=credit_number,
             financial_account_id=account, finance_context_ref=finance_context,
             finance_authorization_grant_id=finance_grant,
-            finance_agent_action_id=finance_action,
+            finance_agent_action_id=finance_action, now=timestamp,
         )
+        result.update({
+            "finance_context_ref": finance_context,
+            "finance_authorization_grant_id": finance_grant,
+            "finance_agent_action_id": finance_action,
+        })
+        return result
 
     first_return = perform_financial_return(
         1, "2026-10-18T10:05:00.000000Z"
@@ -450,25 +461,15 @@ def test_commerce_sale_payment_settlement_and_finance_recognition_are_one_govern
     assert first_return["refund_amount_minor"] == line_total // sold_quantity
     assert first_return["payment_refund_performed"] is True
     assert first_return["sale_state"] == "fulfilled"
-    first_replay = SaleApplication().return_sale_items(
-        db, sale_id, debtor, return_grant,
-        items=[{"sale_line_id": sale_line_id, "quantity": 1}],
-        idempotency_key="settled-return-001", reason="customer returned unit 1",
-        now="2026-10-18T10:06:00.000000Z", return_event_id=first_return["return_id"],
+    first_replay = SaleApplication().complete_sale_return(
+        db, first_return["return_id"], debtor, return_grant,
         refund_payment_id=first_return["refund_payment_id"],
-        credit_note_number=first_return["credit_note_number"], financial_account_id=account,
-        finance_context_ref=db.execute(
-            "SELECT finance_context_ref FROM credit_notes WHERE credit_note_id=?",
-            (first_return["credit_note_id"],),
-        ).fetchone()[0],
-        finance_authorization_grant_id=db.execute(
-            "SELECT finance_authorization_grant_id FROM credit_notes WHERE credit_note_id=?",
-            (first_return["credit_note_id"],),
-        ).fetchone()[0],
-        finance_agent_action_id=db.execute(
-            "SELECT finance_agent_action_id FROM credit_notes WHERE credit_note_id=?",
-            (first_return["credit_note_id"],),
-        ).fetchone()[0],
+        credit_note_number=first_return["credit_note_number"],
+        financial_account_id=account,
+        finance_context_ref=first_return["finance_context_ref"],
+        finance_authorization_grant_id=first_return["finance_authorization_grant_id"],
+        finance_agent_action_id=first_return["finance_agent_action_id"],
+        now="2026-10-18T10:08:00.000000Z",
     )
     assert first_replay["replayed"] is True
     second_return = perform_financial_return(
