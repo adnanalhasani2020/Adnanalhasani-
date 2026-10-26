@@ -1039,6 +1039,18 @@ internal fun createCommercialCloudPurchaseOrder(
 }
 
 
+internal fun loadCommercialCloudExpenseCurrencyCode(context: Context): String {
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val rows = commercialCloudPagedGet(
+        "/rest/v1/commercial_organizations?select=default_currency_code&id=eq.$orgId",
+        access
+    )
+    require(rows.length() == 1) { "تعذر تحديد عملة المؤسسة من الخادم." }
+    val code = rows.getJSONObject(0).optString("default_currency_code").uppercase(Locale.US)
+    require(code.matches(Regex("^[A-Z]{3}$"))) { "عملة المؤسسة غير صالحة." }
+    return code
+}
+
 internal data class CommercialCloudExpenseVoucher(
     val id: String,
     val category: String,
