@@ -28,6 +28,8 @@ OR (NEW.credit_note_id IS NOT NULL AND NOT EXISTS (
     WHERE cn.credit_note_id=NEW.credit_note_id
       AND cn.return_event_id=NEW.return_event_id
       AND cn.state='issued'
+      AND cn.amount_minor=(SELECT COALESCE(SUM(cnl.amount_minor),0)
+                           FROM credit_note_lines cnl WHERE cnl.credit_note_id=cn.credit_note_id)
 ))
 OR EXISTS (
     SELECT 1
