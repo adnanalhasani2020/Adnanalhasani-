@@ -224,7 +224,7 @@ class PersistedSettlementRecognitionApplication:
                 "SELECT p.invoice_id,p.obligation_id,p.payer_person_id,p.payee_person_id,"
                 "p.amount_minor,p.currency_code,p.state,"
                 "o.creditor_person_id,o.debtor_person_id,o.amount_minor,o.currency_code,o.state,"
-                "i.sale_id,i.obligation_id,i.state,"
+                "i.sale_id,i.obligation_id,i.state,i.version_no,"
                 "s.state,s.lifecycle_state,"
                 "a.person_id,a.state "
                 "FROM payments p "
@@ -241,15 +241,15 @@ class PersistedSettlementRecognitionApplication:
                 )
             (payment_invoice, payment_obligation, payer, payee, payment_amount, payment_currency,
              payment_state, creditor, debtor, obligation_amount, obligation_currency, obligation_state,
-             invoice_sale, invoice_obligation, invoice_state, sale_state, sale_lifecycle_state,
+             invoice_sale, invoice_obligation, invoice_state, invoice_version, sale_state, sale_lifecycle_state,
              account_person, account_state) = row
 
             if invoice_sale != sale_key:
                 raise ValidationError("Payment Invoice does not belong to the requested Commerce Sale")
             if invoice_obligation != obligation_key or payment_invoice is None or payment_obligation != obligation_key:
                 raise ValidationError("Invoice, Payment, and Obligation must reference the same persisted chain")
-            if invoice_state != "issued":
-                raise ValidationError("Commerce Sale settlement requires an issued Invoice")
+            if invoice_state not in {"issued", "settled"}:
+                raise ValidationError("Commerce Sale settlement requires an issued or already-settled Invoice")
             if sale_state not in {"completed", "fulfilled"} or sale_lifecycle_state not in {None, "completed", "fulfilled"}:
                 raise ValidationError("Only a fulfilled Commerce Sale can be settled and recognized")
             if payment_state != "completed":
@@ -297,6 +297,8 @@ class PersistedSettlementRecognitionApplication:
                 if existing_state != "settled" or not existing_settled_at:
                     raise ValidationError("Existing Settlement is not final; explicit reconciliation is required")
             else:
+                if invoice_state == "settled":
+                    raise ValidationError("Settled Invoice has no matching Settlement; explicit reconciliation is required")
                 if obligation_state == "satisfied":
                     raise ValidationError("Satisfied Obligation has no matching Settlement; reconciliation is required")
                 connection.execute(
@@ -317,13 +319,33 @@ class PersistedSettlementRecognitionApplication:
             # The nested savepoint makes settlement creation and final recognition
             # one atomic unit. Any mapping, approval, currency, or ledger failure rolls
             # back the new Settlement rather than leaving a false settled record.
-            return self.recognize(
+            recognition = self.recognize(
                 connection, settlement_id=settlement_key,
                 financial_account_id=account_key, context_ref=context_ref,
                 authorization_grant_id=authorization_grant_id,
                 agent_action_id=agent_action_id, source_event_key=source_event_key,
                 now=timestamp, connected=True,
             )
+            if invoice_state == "issued":
+                next_invoice_version = invoice_version + 1
+                changed = connection.execute(
+                    "UPDATE invoices SET state='settled',updated_at=?,version_no=? "
+                    "WHERE invoice_id=? AND state='issued' AND version_no=?",
+                    (timestamp, next_invoice_version, payment_invoice, invoice_version),
+                ).rowcount
+                if changed != 1:
+                    raise ValidationError("Invoice changed during Settlement recognition; reconciliation is required")
+                connection.execute(
+                    "INSERT INTO domain_history(domain_history_id,owner_domain,target_ref,change_type,"
+                    "historical_at,actor_context_ref,prior_version_ref,current_version_ref,"
+                    "change_payload_ref,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                    (str(uuid4()), "commerce", payment_invoice, "invoice_state_transition", timestamp,
+                     approver, f"invoice-state:{payment_invoice}:v{invoice_version}",
+                     f"invoice-state:{payment_invoice}:v{next_invoice_version}",
+                     f"state:settled;settlement:{settlement_key};transaction:{recognition.financial_transaction_id};"
+                     f"ledger:{recognition.ledger_entry_id}", timestamp),
+                )
+            return recognition
 
     def recognize(self, connection, *, settlement_id, financial_account_id,
                   context_ref, authorization_grant_id, agent_action_id,
