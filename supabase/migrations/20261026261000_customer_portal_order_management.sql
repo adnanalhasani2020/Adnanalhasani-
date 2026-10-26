@@ -39,7 +39,7 @@ BEGIN
       'currency_code', o.currency_code,
       'total_minor', o.total_minor,
       'customer_note', coalesce(o.customer_note, ''),
-      'customer_name', coalesce(c.name, ''),
+      'customer_name', coalesce(c.display_name, ''),
       'fulfillment_supported', (
         o.order_type = 'purchase'
         AND o.payment_status IN ('unpaid','credit')
