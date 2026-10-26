@@ -5,7 +5,7 @@
 CREATE TABLE IF NOT EXISTS public.commercial_customer_order_fulfillments (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id uuid NOT NULL REFERENCES public.commercial_organizations(id) ON DELETE RESTRICT,
-  order_id uuid NOT NULL,
+  order_id uuid NOT NULL REFERENCES public.commercial_customer_orders(id) ON DELETE RESTRICT,
   sale_id uuid NOT NULL REFERENCES public.commercial_sales(id) ON DELETE RESTRICT,
   location_id uuid NOT NULL REFERENCES public.commercial_organization_locations(id) ON DELETE RESTRICT,
   idempotency_key text NOT NULL CHECK (length(btrim(idempotency_key)) BETWEEN 8 AND 200),
@@ -15,10 +15,7 @@ CREATE TABLE IF NOT EXISTS public.commercial_customer_order_fulfillments (
   fulfilled_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT commercial_customer_order_fulfillments_order_uq UNIQUE (order_id),
   CONSTRAINT commercial_customer_order_fulfillments_sale_uq UNIQUE (sale_id),
-  CONSTRAINT commercial_customer_order_fulfillments_org_key_uq UNIQUE (organization_id, idempotency_key),
-  CONSTRAINT commercial_customer_order_fulfillments_order_org_fk
-    FOREIGN KEY (organization_id, order_id)
-    REFERENCES public.commercial_customer_orders(organization_id, id) ON DELETE RESTRICT
+  CONSTRAINT commercial_customer_order_fulfillments_org_key_uq UNIQUE (organization_id, idempotency_key)
 );
 
 ALTER TABLE public.commercial_customer_order_fulfillments ENABLE ROW LEVEL SECURITY;
