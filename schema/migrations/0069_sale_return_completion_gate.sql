@@ -38,7 +38,7 @@ OR EXISTS (
     LEFT JOIN payments p ON p.invoice_id=i.invoice_id
       OR (i.obligation_id IS NOT NULL AND p.obligation_id=i.obligation_id)
     WHERE re.return_event_id=NEW.return_event_id
-      AND (i.state='issued' OR i.obligation_id IS NOT NULL OR p.payment_id IS NOT NULL)
+      AND (i.state IN ('issued','settled') OR i.obligation_id IS NOT NULL OR p.payment_id IS NOT NULL)
       AND NOT EXISTS (
           SELECT 1 FROM credit_notes cn
           WHERE cn.return_event_id=re.return_event_id
