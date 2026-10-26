@@ -131,7 +131,7 @@ internal fun CustomerOrderFulfillmentScreen(context: Context,onBack:()->Unit) {
        Row(verticalAlignment=Alignment.CenterVertically){Text(order.items.size.toString()+" بند",Modifier.weight(1f),fontSize=12.sp,color=CustomerOrdersMuted);Text(customerOrderMoney(order.totalMinor,order.currencyCode),fontWeight=FontWeight.Bold,color=CustomerOrdersInk)}
        Row {
         TextButton(onClick={expanded=if(open)null else order.id}){Text(if(open)"إغلاق التفاصيل" else "التفاصيل")}
-        TextButton(onClick={action("visibility:"+order.id,{setMerchantCustomerOrderHidden(context,order.id,!order.hidden)}){if(order.hidden)"استُعيد الطلب دون تغيير حالته." else "أُخفي الطلب دون حذف سجله."},enabled=busy==null){Text(if(order.hidden)"إظهار مجددًا" else "إخفاء من القائمة")}
+        TextButton(onClick={action("visibility:"+order.id,{setMerchantCustomerOrderHidden(context,order.id,!order.hidden)}){if(order.hidden)"استُعيد الطلب دون تغيير حالته." else "أُخفي الطلب دون حذف سجله.")}},enabled=busy==null){Text(if(order.hidden)"إظهار مجددًا" else "إخفاء من القائمة")}
        }
        if(open){
         if(order.customerNote.isNotBlank())Text("ملاحظة العميل: "+order.customerNote,fontSize=12.sp)
@@ -157,7 +157,7 @@ internal fun CustomerOrderFulfillmentScreen(context: Context,onBack:()->Unit) {
        Row(verticalAlignment=Alignment.CenterVertically){Text("الطلب المرتبط "+booking.orderNumber,Modifier.weight(1f),fontSize=12.sp);Text(customerOrderMoney(booking.totalMinor,booking.currencyCode),fontWeight=FontWeight.Bold)}
        Row {
         TextButton(onClick={expanded=if(open)null else booking.id}){Text(if(open)"إغلاق التفاصيل" else "التفاصيل والبنود")}
-        TextButton(onClick={action("booking-visibility:"+booking.id,{setMerchantCustomerBookingHidden(context,booking.id,!booking.hidden)}){if(booking.hidden)"استُعيد الحجز." else "أُخفي الحجز دون حذف بياناته."},enabled=busy==null){Text(if(booking.hidden)"إظهار مجددًا" else "إخفاء من القائمة")}
+        TextButton(onClick={action("booking-visibility:"+booking.id,{setMerchantCustomerBookingHidden(context,booking.id,!booking.hidden)}){if(booking.hidden)"استُعيد الحجز." else "أُخفي الحجز دون حذف بياناته.")}},enabled=busy==null){Text(if(booking.hidden)"إظهار مجددًا" else "إخفاء من القائمة")}
        }
        if(open){
         Text("حالة الطلب المرتبط: "+customerOrderStatus(booking.orderStatus)+" • الدفع: "+booking.paymentStatus,fontSize=12.sp)
@@ -176,7 +176,7 @@ internal fun CustomerOrderFulfillmentScreen(context: Context,onBack:()->Unit) {
    }
   }
  }
- cashTarget?.let{order->AlertDialog(onDismissRequest={cashTarget=null},title={Text("تأكيد استلام المبلغ نقدًا")},text={Text("سيُسجّل البيع والتحصيل وحركة المخزون بقيمة "+customerOrderMoney(order.totalMinor,order.currencyCode)+". تابع فقط إذا استلمت المبلغ كاملًا.")},confirmButton={Button(onClick={cashTarget=null;fulfill(order)},enabled=busy==null&&locationId.isNotBlank()){Text("استلمت المبلغ — إتمام البيع")}},dismissButton={TextButton(onClick={cashTarget=null){Text("رجوع")}})}
+ cashTarget?.let{order->AlertDialog(onDismissRequest={cashTarget=null},title={Text("تأكيد استلام المبلغ نقدًا")},text={Text("سيُسجّل البيع والتحصيل وحركة المخزون بقيمة "+customerOrderMoney(order.totalMinor,order.currencyCode)+". تابع فقط إذا استلمت المبلغ كاملًا.")},confirmButton={Button(onClick={cashTarget=null;fulfill(order)},enabled=busy==null&&locationId.isNotBlank()){Text("استلمت المبلغ — إتمام البيع")}},dismissButton={TextButton(onClick={cashTarget=null}){Text("رجوع")}})
  decisionTarget?.let{target->
   var reason by remember(target.id,target.reject){mutableStateOf("")}
   AlertDialog(onDismissRequest={if(busy==null)decisionTarget=null},title={Text(if(target.booking){if(target.reject)"رفض الحجز" else "تأكيد الحجز"}else{if(target.reject)"رفض الطلب" else "قبول الطلب"})},
