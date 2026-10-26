@@ -39,6 +39,14 @@ private fun portalMoney(amount: Long, currency: String) =
 internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit) {
     var organizations by remember { mutableStateOf<List<CustomerPortalOrganization>>(emptyList()) }
     var offerings by remember { mutableStateOf<List<CustomerPortalOffering>>(emptyList()) }
+    var bookingResources by remember { mutableStateOf<List<CustomerPortalBookingResource>>(emptyList()) }
+    var bookingMode by remember { mutableStateOf(false) }
+    var bookingOfferingId by remember { mutableStateOf("") }
+    var bookingResourceId by remember { mutableStateOf("") }
+    var startsAt by remember { mutableStateOf("") }
+    var endsAt by remember { mutableStateOf("") }
+    var bookingResourceMenu by remember { mutableStateOf(false) }
+    var bookingOfferingMenu by remember { mutableStateOf(false) }
     var selectedOrganization by remember { mutableStateOf<CustomerPortalOrganization?>(null) }
     var quantities by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var paymentMode by remember { mutableStateOf("cash") }
@@ -76,10 +84,13 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit) {
         error = ""
         portalExecutor.execute {
             val result = runCatching { loadCustomerPortalOfferings(context, org.id) }
+            val resourcesResult = runCatching { loadCustomerPortalBookingResources(context, org.id) }
             portalMain.post {
                 loading = false
-                result.onSuccess { offerings = it; quantities = emptyMap(); notice = "" }
+                result.onSuccess { rows -> offerings = rows; quantities = emptyMap(); bookingOfferingId = rows.firstOrNull { it.itemType == "service" }?.id.orEmpty(); notice = "" }
                     .onFailure { offerings = emptyList(); error = it.message ?: "تعذر تحميل المنتجات والخدمات." }
+                resourcesResult.onSuccess { bookingResources = it; bookingResourceId = it.firstOrNull()?.id.orEmpty() }
+                    .onFailure { bookingResources = emptyList(); notice = it.message ?: "تعذر تحميل موارد الحجز." }
             }
         }
     }
@@ -146,8 +157,47 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit) {
             }
             if (notice.isNotBlank() && error.isBlank()) item { Text(notice, color = PortalMuted, fontSize = 12.sp) }
             if (org != null && offerings.isNotEmpty()) {
-                item { Text("المنتجات والخدمات", color = PortalInk, fontWeight = FontWeight.Bold, fontSize = 18.sp) }
-                items(offerings, key = { it.id }) { item ->
+                item {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text("المنتجات والخدمات", color = PortalInk, fontWeight = FontWeight.Bold, fontSize = 18.sp, modifier = Modifier.weight(1f))
+                        FilterChip(selected = !bookingMode, onClick = { bookingMode = false }, label = { Text("طلب") })
+                        Spacer(Modifier.width(6.dp))
+                        FilterChip(selected = bookingMode, onClick = { bookingMode = true }, label = { Text("حجز") })
+                    }
+                }
+                if (bookingMode) item {
+                    Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, PortalBorder)) {
+                        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                            Text("تفاصيل الحجز", color = PortalInk, fontWeight = FontWeight.Bold)
+                            Box {
+                                OutlinedButton(onClick = { bookingOfferingMenu = true }, modifier = Modifier.fillMaxWidth()) {
+                                    Text(offerings.firstOrNull { it.id == bookingOfferingId }?.name ?: "اختر خدمة", modifier = Modifier.weight(1f))
+                                }
+                                DropdownMenu(expanded = bookingOfferingMenu, onDismissRequest = { bookingOfferingMenu = false }) {
+                                    offerings.filter { it.itemType == "service" }.forEach { service ->
+                                        DropdownMenuItem(text = { Text("${service.name} · ${portalMoney(service.priceMinor, service.currencyCode)}") }, onClick = { bookingOfferingId = service.id; bookingOfferingMenu = false })
+                                    }
+                                }
+                            }
+                            Box {
+                                OutlinedButton(onClick = { bookingResourceMenu = true }, modifier = Modifier.fillMaxWidth()) {
+                                    Text(bookingResources.firstOrNull { it.id == bookingResourceId }?.let { "${it.name} · السعة ${it.capacity}" } ?: "اختر مورد الحجز", modifier = Modifier.weight(1f))
+                                }
+                                DropdownMenu(expanded = bookingResourceMenu, onDismissRequest = { bookingResourceMenu = false }) {
+                                    bookingResources.forEach { resource ->
+                                        DropdownMenuItem(text = { Text("${resource.name} · ${resource.resourceType} · ${resource.timezone}") }, onClick = { bookingResourceId = resource.id; bookingResourceMenu = false })
+                                    }
+                                }
+                            }
+                            OutlinedTextField(startsAt, { startsAt = it.take(40) }, label = { Text("بداية الحجز ISO-8601 مع المنطقة الزمنية") }, placeholder = { Text("2026-10-27T10:00:00+03:00") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                            OutlinedTextField(endsAt, { endsAt = it.take(40) }, label = { Text("نهاية الحجز ISO-8601 مع المنطقة الزمنية") }, placeholder = { Text("2026-10-27T11:00:00+03:00") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                            Text("لا يُثبت الموعد إلا بعد فحص السعة والتداخل في قاعدة البيانات.", color = PortalMuted, fontSize = 11.sp)
+                            if (offerings.none { it.itemType == "service" }) Text("لا توجد خدمات نشطة يمكن حجزها.", color = PortalMuted)
+                            if (bookingResources.isEmpty()) Text("لا توجد موارد حجز نشطة لدى المؤسسة.", color = PortalMuted)
+                        }
+                    }
+                }
+                if (!bookingMode) items(offerings, key = { it.id }) { item ->
                     Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, PortalBorder)) {
                         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -171,7 +221,7 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit) {
                         }
                     }
                 }
-                item {
+                if (!bookingMode) item {
                     Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, PortalBorder)) {
                         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -204,7 +254,30 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit) {
                                 onClick = {
                                     val invalid = cart.any { (_, text, _) -> text.toBigDecimalOrNull()?.let { it <= java.math.BigDecimal.ZERO || it.scale().coerceAtLeast(0) > 3 } != false } ||
                                         cart.map { it.first.currencyCode }.distinct().size != 1
-                                    if (cart.isEmpty() || invalid) {
+                                    if (bookingMode) {
+                                        val service = offerings.firstOrNull { it.id == bookingOfferingId && it.itemType == "service" }
+                                        val startsValid = runCatching { java.time.OffsetDateTime.parse(startsAt).toInstant().isAfter(java.time.Instant.now()) }.getOrDefault(false)
+                                        val endsValid = runCatching { java.time.OffsetDateTime.parse(endsAt).toInstant().isAfter(java.time.OffsetDateTime.parse(startsAt).toInstant()) }.getOrDefault(false)
+                                        if (service == null || bookingResourceId.isBlank() || bookingResources.none { it.id == bookingResourceId } || !startsValid || !endsValid) {
+                                            error = "اختر خدمة وموردًا نشطًا وأدخل وقت بداية ونهاية صالحين في المستقبل مع المنطقة الزمنية."
+                                        } else {
+                                            submitting = true; error = ""; notice = "جارٍ التحقق من الموعد والسعة وتسجيل الحجز..." 
+                                            val snapshotOrg = org; val snapshotService = service; val snapshotResource = bookingResourceId
+                                            val snapshotStart = startsAt; val snapshotEnd = endsAt; val snapshotPayment = paymentMode; val snapshotNote = note
+                                            portalExecutor.execute {
+                                                val result = runCatching {
+                                                    val key = getOrCreateCustomerPortalOrderKey(context, snapshotOrg.id, listOf(snapshotService.id to "1"), snapshotPayment, snapshotNote, listOf(snapshotResource, snapshotStart, snapshotEnd))
+                                                    val booking = submitCustomerPortalBooking(context, snapshotOrg.id, snapshotService.id, snapshotResource, snapshotStart, snapshotEnd, snapshotPayment, snapshotNote, key)
+                                                    clearCustomerPortalOrderKey(context, key); booking
+                                                }
+                                                portalMain.post {
+                                                    submitting = false
+                                                    result.onSuccess { booking -> notice = "تم إرسال طلب الحجز رقم ${booking.bookingNumber}. الحالة: ${booking.status}، القيمة: ${portalMoney(booking.priceMinor, booking.currencyCode)}."; error = "" }
+                                                        .onFailure { error = it.message ?: "تعذر تأكيد الحجز. أعد المحاولة بالبيانات نفسها."; notice = "" }
+                                                }
+                                            }
+                                        }
+                                    } else if (cart.isEmpty() || invalid) {
                                         error = "تحقق من الكميات (حتى 3 منازل عشرية) وتأكد من اختيار أصناف بعملة واحدة."
                                     } else if (estimatedTotal <= 0L) {
                                         error = "إجمالي الطلب يجب أن يكون أكبر من صفر."
@@ -237,11 +310,11 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit) {
                                         }
                                     }
                                 },
-                                enabled = !submitting && !loading && cart.isNotEmpty(),
+                                enabled = !submitting && !loading && (if (bookingMode) offerings.any { it.itemType == "service" } && bookingResources.isNotEmpty() else cart.isNotEmpty()),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 if (submitting) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                                else Text("إرسال الطلب")
+                                else Text(if (bookingMode) "إرسال طلب الحجز" else "إرسال الطلب")
                             }
                         }
                     }
