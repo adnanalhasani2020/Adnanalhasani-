@@ -64,13 +64,13 @@
 - Retry/reopen proves invoice totals, payment balance, inventory and supplier balance come from persisted records.
 - CI passes on the exact PR head. Source-contract tests or an APK build alone do not clear integration gates.
 
-## Current verification snapshot (2026-10-25)
+## Current verification snapshot (2026-10-26)
 
-- Exact PR head `b3ffaf5ac5aff1f46326a017cb132c846ff430bc` passed both GitHub Actions workflows: Python tests and Stage 7 automated tests. A regression test was added for the refund migration contract. CI verifies repository tests only; it does not replace authenticated cloud integration tests.
-- Refund settlement migration review was cross-checked against the live production trigger and `commercial_gl_post_sale_return` definition using read-only SQL. The RPC makes one explicit pre-transition call to post the return/payable journal; changing `refund_status` to `refunded` fires `commercial_return_gl_post`, whose idempotent branch creates the separate refund-settlement journal. The removed second explicit call avoids an unnecessary extra invocation while preserving the trigger-owned settlement. This still requires a disposable authenticated integration test before release.
-- The production Supabase migration history was read without writes. Its latest applied version is `20261024192725` (`require_return_inspection_before_completion`). The repository's multi-line checkout migration `20261024200000` and return-refund migrations `20261025173000`–`20261025174000` are not applied there. The production database also has no `public.commercial_checkout_sale_multi` RPC at the time of this check.
-- The separate project `ygtagdhjlkpounmujolh` has no applied migrations and no public tables, so it is not a usable integration-test environment yet.
-- Do not apply these migrations to production as a substitute for staging validation. First provision/authorize a compatible disposable test database, run migration and authenticated RLS/RPC integration tests there, then reconcile the production migration sequence deliberately.
+- The live Supabase migration registry was rechecked on 2026-10-26. It includes `20261025230817` (`commercial_fractional_purchase_receiving`) and `20261026080000` (`commercial_purchase_fractional_accrual_rounding`). Read-only inspection of the effective receipt and supplier-invoice posting functions confirms cumulative per-line rounding and sequence ordering.
+- Applied `restrict_accounting_integrity_view_access` to the configured Supabase project. The diagnostics view now uses `security_invoker`; `anon` and `authenticated` cannot SELECT it, while `service_role` retains access. The Supabase security advisor no longer reports this view as a security-definer-view finding.
+- Applied `commercial_purchase_order_fractional_quantities` to the configured Supabase project. The effective purchase-order RPC now accepts positive quantities up to six decimal places, matching the `numeric(18,6)` storage and receipt validation. The Android repository previously had an integer-only guard; a PR now changes it to the same six-decimal limit.
+- Repository contract tests and pgTAP assertions cover the purchase-order precision and diagnostics-view permissions. CI runs for the open PR are the authoritative result for the updated source; do not treat them as passed until the exact head's workflows complete successfully.
+- Authenticated end-to-end integration across sales, collections, returns, inventory and general-ledger postings remains a release gate. No production sales/return/payment fixtures were executed. Use a disposable staging database with authenticated sessions and before/after stock, payment and journal reconciliation before declaring full workflow acceptance.
 
 ## Current boundary
 

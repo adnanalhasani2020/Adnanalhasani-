@@ -1,7 +1,7 @@
 -- Run with Supabase CLI / pgTAP in a disposable local or staging database.
 -- These are schema regression tests; they do not replace authenticated-session integration tests.
 BEGIN;
-SELECT plan(35);
+SELECT plan(38);
 
 SELECT has_table('public', 'commercial_audit_events',
   'append-only audit event table exists');
@@ -245,6 +245,22 @@ SELECT ok(
   'first checkout response derives payment-recorded status and paid amount from persisted successful payment rows'
 );
 
+
+-- Accounting diagnostics must not be exposed through the public Data API.
+SELECT ok(
+  NOT has_table_privilege('anon', 'public.commercial_accounting_integrity_checks', 'SELECT'),
+  'anonymous API clients cannot read accounting integrity diagnostics'
+);
+
+SELECT ok(
+  NOT has_table_privilege('authenticated', 'public.commercial_accounting_integrity_checks', 'SELECT'),
+  'authenticated API clients cannot read privileged accounting integrity diagnostics'
+);
+
+SELECT ok(
+  has_table_privilege('service_role', 'public.commercial_accounting_integrity_checks', 'SELECT'),
+  'trusted server-side service role retains access to accounting integrity diagnostics'
+);
 
 -- Purchase fractional-quantity and cumulative accounting regressions.
 SELECT ok(
