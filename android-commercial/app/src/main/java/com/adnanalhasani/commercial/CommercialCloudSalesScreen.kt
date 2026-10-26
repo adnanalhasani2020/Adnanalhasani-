@@ -478,7 +478,7 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
             }
             item {
                 Text(
-                    "هذه الشاشة تعرض الفواتير وبنودها من الخادم فقط. لا تنشئ فاتورة أو تعدّلها من هذه الشاشة، ولا يُفترض مقياس عشري للعملة.",
+                    "هذه الشاشة للعرض فقط: تعرض الفواتير وبنودها من الخادم، ولا تنشئ فاتورة أو تعدّلها، ولا يُفترض مقياس عشري للعملة.",
                     color = CloudSalesMuted, fontSize = 11.sp, modifier = Modifier.padding(vertical = 8.dp)
                 )
             }
