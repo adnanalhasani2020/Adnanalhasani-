@@ -1853,13 +1853,15 @@ internal data class CommercialCloudReceivable(
     val customerName: String,
     val totalMinor: Long,
     val paidMinor: Long,
+    val refundedMinor: Long,
     val creditedMinor: Long,
     val currencyCode: String,
     val createdAt: String
 ) {
-    // Finalized approved returns act as credit notes. Do not also subtract
-    // refund-posting rows: they represent settlement of the credit, not a second credit.
-    val dueMinor: Long get() = (totalMinor - paidMinor - creditedMinor).coerceAtLeast(0L)
+    // A completed approved return reduces the sale value; an executed refund reduces
+    // net cash retained. Keep both adjustments distinct to avoid double counting.
+    val netPaidMinor: Long get() = (paidMinor - refundedMinor).coerceAtLeast(0L)
+    val dueMinor: Long get() = (totalMinor - netPaidMinor - creditedMinor).coerceAtLeast(0L)
 }
 
 internal fun loadCommercialCloudReceivables(context: Context): List<CommercialCloudReceivable> {
@@ -1912,6 +1914,7 @@ internal fun loadCommercialCloudReceivables(context: Context): List<CommercialCl
                 customerName = customerName,
                 totalMinor = total,
                 paidMinor = paid,
+                refundedMinor = refunded,
                 creditedMinor = credited,
                 currencyCode = row.optString("currency_code"),
                 createdAt = row.optString("created_at")
