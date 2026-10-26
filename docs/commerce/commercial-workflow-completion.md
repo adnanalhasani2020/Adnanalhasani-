@@ -14,6 +14,14 @@
 - Tax settings are explicit and versioned. No default tax rate or jurisdictional compliance claim is inferred from location.
 - Print/share documents are immutable renderings of saved records, not alternate sources of totals. Label operational receipts separately from legally compliant tax invoices.
 
+## Financial vouchers and general-ledger linkage
+
+- Customer collections: the cloud debt/sales flows call the guarded `commercial_record_customer_payment` RPC. It validates the outstanding amount and tenant/role scope, uses an idempotency key, and posts the receipt journal in the same transaction. The app must retain the same pending key after an uncertain network response.
+- Supplier payments: the purchasing screen calls `commercial_record_supplier_payment`. The RPC checks the supplier obligation, currency and remaining balance, requires evidence, posts the balanced payable/cash journal, and updates the paid balance atomically.
+- Operating expenses: `commercial_expense_vouchers` stores server-confirmed vouchers. `commercial_record_expense` creates/validates the expense account, checks the cash/bank mapping, writes a balanced journal entry and voucher atomically, enforces tenant/role scope, and rejects changed payloads reusing an idempotency key. Direct clients cannot write voucher rows.
+- Legacy local expenses are not migrated or shown as cloud-confirmed accounting records. They must be reconciled/imported explicitly before they can be included in cloud financial reports.
+- These implementations are not a substitute for an authenticated end-to-end test. Verify a successful receipt, supplier payment, and expense against their source rows, customer/supplier balances, and balanced posted journal entries; also test replay, changed-payload replay, insufficient balance, wrong tenant, missing account mapping and transaction rollback.
+
 ## Workstreams
 
 ### A. Discounts and taxes
