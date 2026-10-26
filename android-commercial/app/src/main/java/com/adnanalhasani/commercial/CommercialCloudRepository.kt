@@ -2151,6 +2151,56 @@ internal fun submitCustomerPortalBooking(
 }
 
 
+internal fun submitCustomerPortalMultiServiceBooking(
+    context: Context,
+    organizationId: String,
+    lines: List<Pair<String, String>>,
+    resourceId: String,
+    startsAt: String,
+    endsAt: String,
+    paymentMode: String,
+    note: String,
+    idempotencyKey: String
+): CustomerPortalBookingResult {
+    require(organizationId.isNotBlank() && resourceId.isNotBlank()) { "اختر المؤسسة ومورد الحجز." }
+    require(lines.isNotEmpty() && lines.size <= 50) { "اختر خدمة واحدة على الأقل، وبحد أقصى 50 بندًا." }
+    require(lines.map { it.first }.distinct().size == lines.size) { "لا تكرر الخدمة نفسها في الفاتورة؛ عدّل كميتها في بند واحد." }
+    require(lines.all { (id, quantity) ->
+        id.isNotBlank() && quantity.toBigDecimalOrNull()?.let {
+            it > java.math.BigDecimal.ZERO && it <= java.math.BigDecimal("100000") && it.scale().coerceAtLeast(0) <= 3
+        } == true
+    }) { "تحقق من كميات الخدمات؛ يجب أن تكون موجبة وبحد أقصى 3 منازل عشرية." }
+    require(paymentMode == "cash" || paymentMode == "credit") { "طريقة الفاتورة غير صحيحة." }
+    require(idempotencyKey.length in 8..200) { "مفتاح الحجز غير صالح." }
+
+    val payloadLines = JSONArray()
+    lines.forEach { (offeringId, quantity) ->
+        payloadLines.put(JSONObject().put("offering_id", offeringId).put("quantity", quantity))
+    }
+    val payload = JSONObject()
+        .put("p_organization_id", organizationId)
+        .put("p_lines", payloadLines)
+        .put("p_resource_id", resourceId)
+        .put("p_starts_at", startsAt)
+        .put("p_ends_at", endsAt)
+        .put("p_payment_mode", paymentMode)
+        .put("p_customer_note", note.take(1000))
+        .put("p_idempotency_key", idempotencyKey)
+    val row = JSONObject(commercialCloudRequest(
+        "/rest/v1/rpc/commercial_customer_portal_create_multi_service_booking", "POST", payload, customerPortalAccessToken(context)
+    ))
+    val bookingId = row.optString("booking_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+    val orderId = row.optString("order_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+    require(bookingId.isNotBlank() && orderId.isNotBlank()) {
+        "لم يرجع الخادم تأكيدًا صالحًا للحجز والفاتورة؛ لا تغيّر مفتاح الطلب قبل تحديث سجل الحجوزات."
+    }
+    return CustomerPortalBookingResult(
+        bookingId, row.optString("booking_number"), orderId, row.optString("status"),
+        row.optLong("price_minor", 0L), row.optString("currency_code"), row.optBoolean("replayed")
+    )
+}
+
+
 internal data class CustomerPortalHistoryItem(
     val id: String,
     val offeringId: String,
