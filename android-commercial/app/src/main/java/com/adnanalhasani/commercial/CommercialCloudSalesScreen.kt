@@ -78,6 +78,7 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
     var documents by remember { mutableStateOf<List<CommercialCloudSaleDocument>>(emptyList()) }
     var search by remember { mutableStateOf("") }
     var selectedStatus by remember { mutableStateOf("all") }
+    var selectedSort by remember { mutableStateOf("newest") }
     var expandedInvoiceIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
@@ -123,6 +124,16 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
         }
         matchesSearch && matchesStatus
     }
+    val sortedFiltered = when (selectedSort) {
+        "highest" -> filtered.sortedByDescending { it.totalMinor }
+        "outstanding" -> filtered.sortedByDescending { doc ->
+            (doc.totalMinor - doc.payments.filter { it.status.equals("succeeded", true) }
+                .sumOf { it.amountMinor.coerceAtLeast(0L) }).coerceAtLeast(0L)
+        }
+        else -> filtered.sortedByDescending { it.createdAt }
+    }
+    val paidCount = documents.count { it.paymentStatus.equals("paid", true) }
+    val dueCount = documents.count { it.paymentStatus.lowercase() in setOf("unpaid", "due", "pending", "credit", "partially_paid", "partial") }
     val totalsByCurrency = filtered.groupBy { it.currencyCode.ifBlank { "غير محدد" } }
         .mapValues { (_, rows) -> rows.sumOf { it.totalMinor } }
         .toSortedMap()
@@ -130,9 +141,9 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
-                        Text("فواتير المبيعات السحابية", fontWeight = FontWeight.Bold, color = CloudSalesInk)
-                        Text("الفواتير الفعلية وبنود كل فاتورة من Supabase", fontSize = 11.sp, color = CloudSalesMuted)
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("المبيعات", fontWeight = FontWeight.Bold, color = CloudSalesInk, fontSize = 20.sp)
+                        Text("إدارة الفواتير والتحصيل", fontSize = 11.sp, color = CloudSalesMuted)
                     }
                 },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "رجوع") } },
@@ -144,19 +155,40 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             item {
-                OutlinedTextField(
-                    value = search,
-                    onValueChange = { search = it },
+                Card(
                     modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    shape = RoundedCornerShape(14.dp),
-                    placeholder = { Text("ابحث برقم الفاتورة أو العميل أو الصنف") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) }
-                )
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    shape = RoundedCornerShape(22.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, CloudSalesBorder)
+                ) {
+                    Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("سجل فواتير البيع", color = CloudSalesInk, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                                Text("ابحث وراجع حالة الدفع والتفاصيل", color = CloudSalesMuted, fontSize = 11.sp)
+                            }
+                            Surface(color = Color(0xFFE8F5EF), shape = RoundedCornerShape(12.dp)) {
+                                Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = CloudSalesGreen, modifier = Modifier.padding(10.dp).size(22.dp))
+                            }
+                        }
+                        OutlinedTextField(
+                            value = search,
+                            onValueChange = { search = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            shape = RoundedCornerShape(15.dp),
+                            placeholder = { Text("رقم الفاتورة، العميل، أو الصنف") },
+                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                            trailingIcon = {
+                                if (search.isNotBlank()) TextButton(onClick = { search = "" }) { Text("مسح") }
+                            }
+                        )
+                    }
+                }
             }
             item {
                 Row(
@@ -180,24 +212,64 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
                 }
             }
             item {
-                Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp)) {
-                    Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Text("ترتيب الفواتير", color = CloudSalesMuted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Row(
+                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf("newest" to "الأحدث", "highest" to "الأعلى قيمة", "outstanding" to "الأكثر استحقاقًا").forEach { (key, label) ->
+                            FilterChip(
+                                selected = selectedSort == key,
+                                onClick = { selectedSort = key },
+                                label = { Text(label, fontSize = 12.sp) }
+                            )
+                        }
+                    }
+                }
+            }
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = CloudSalesInk),
+                    shape = RoundedCornerShape(22.dp)
+                ) {
+                    Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.size(42.dp).background(Color(0xFFE8F5EF), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-                                Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = CloudSalesGreen)
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("ملخص المبيعات", color = Color(0xFFD6E8E0), fontSize = 12.sp)
+                                Text("${documents.size} فاتورة", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 25.sp)
+                                Text("المعروض بعد التصفية: ${filtered.size}", color = Color(0xFFD6E8E0), fontSize = 11.sp)
                             }
-                            Spacer(Modifier.width(12.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text("الفواتير المحمّلة", color = CloudSalesMuted, fontSize = 12.sp)
-                                Text(documents.size.toString(), color = CloudSalesInk, fontWeight = FontWeight.Bold, fontSize = 23.sp)
+                            Box(Modifier.size(54.dp).background(Color(0xFF2D5A4F), RoundedCornerShape(17.dp)), contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = Color.White, modifier = Modifier.size(28.dp))
                             }
-                            Text("النتائج: ${filtered.size}", color = CloudSalesMuted, fontSize = 11.sp)
+                        }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                            Surface(modifier = Modifier.weight(1f), color = Color(0xFF24483F), shape = RoundedCornerShape(14.dp)) {
+                                Column(Modifier.padding(11.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text("مدفوعة", color = Color(0xFFD6E8E0), fontSize = 10.sp)
+                                    Text(paidCount.toString(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 19.sp)
+                                }
+                            }
+                            Surface(modifier = Modifier.weight(1f), color = Color(0xFF24483F), shape = RoundedCornerShape(14.dp)) {
+                                Column(Modifier.padding(11.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text("تحتاج تحصيلًا", color = Color(0xFFD6E8E0), fontSize = 10.sp)
+                                    Text(dueCount.toString(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 19.sp)
+                                }
+                            }
                         }
                         if (totalsByCurrency.isNotEmpty()) {
-                            Spacer(Modifier.height(10.dp))
-                            Text("إجمالي النتائج حسب العملة (بوحدة الصرف الصغرى)", color = CloudSalesMuted, fontSize = 11.sp)
-                            totalsByCurrency.forEach { (currency, total) ->
-                                Text("$currency: ${String.format(java.util.Locale.US, "%,d", total)}", color = CloudSalesInk, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                            Surface(color = Color(0xFF24483F), shape = RoundedCornerShape(15.dp)) {
+                                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                    Text("إجمالي الفواتير الظاهرة حسب العملة", color = Color(0xFFD6E8E0), fontSize = 11.sp)
+                                    totalsByCurrency.forEach { (currency, total) ->
+                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                            Text(currency, color = Color.White, fontSize = 12.sp)
+                                            Text(String.format(java.util.Locale.US, "%,d", total), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                        }
+                                    }
+                                    Text("القيم بوحدة الصرف الصغرى", color = Color(0xFFB8D0C7), fontSize = 10.sp)
+                                }
                             }
                         }
                     }
@@ -222,19 +294,57 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
                 }
             }
             if (!loading && error.isBlank() && filtered.isEmpty()) item {
-                Text(if (documents.isEmpty()) "لا توجد فواتير سحابية متاحة لهذا النشاط." else "لا توجد نتائج مطابقة للبحث.", color = CloudSalesMuted, modifier = Modifier.padding(8.dp))
-            }
-            items(filtered, key = { it.id }) { document ->
                 Card(
+                    modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = Color.White),
-                    shape = RoundedCornerShape(17.dp),
+                    shape = RoundedCornerShape(22.dp),
                     border = androidx.compose.foundation.BorderStroke(1.dp, CloudSalesBorder)
                 ) {
-                    Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(9.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier.size(52.dp).background(Color(0xFFE8F5EF), RoundedCornerShape(17.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = CloudSalesGreen, modifier = Modifier.size(27.dp))
+                        }
+                        Text(
+                            if (documents.isEmpty()) "لا توجد فواتير بعد" else "لم نعثر على فواتير مطابقة",
+                            color = CloudSalesInk,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                        Text(
+                            if (documents.isEmpty()) "ستظهر فواتير المبيعات هنا بعد تسجيلها." else "جرّب تغيير عبارة البحث أو حالة الفاتورة.",
+                            color = CloudSalesMuted,
+                            fontSize = 12.sp
+                        )
+                        if (documents.isNotEmpty() && (search.isNotBlank() || selectedStatus != "all")) {
+                            OutlinedButton(onClick = {
+                                search = ""
+                                selectedStatus = "all"
+                            }) {
+                                Text("مسح البحث والفلاتر")
+                            }
+                        }
+                    }
+                }
+            }
+            items(sortedFiltered, key = { it.id }) { document ->
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    shape = RoundedCornerShape(22.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, CloudSalesBorder),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                ) {
+                    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
-                                Text("فاتورة #${document.receiptNumber}", color = CloudSalesInk, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                                Text(document.customerName, color = CloudSalesMuted, fontSize = 12.sp)
+                                Text("#${document.receiptNumber}", color = CloudSalesInk, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp)
+                                Text(document.customerName.ifBlank { "عميل نقدي" }, color = CloudSalesMuted, fontSize = 13.sp)
                                 if (document.customerPhone.isNotBlank()) Text("هاتف: ${document.customerPhone}", color = CloudSalesMuted, fontSize = 11.sp)
                                 if (document.customerEmail.isNotBlank()) Text(document.customerEmail, color = CloudSalesMuted, fontSize = 11.sp)
                             }
@@ -247,10 +357,17 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
                                 }
                             }
                         }
-                        Text(
-                            "الإجمالي: ${document.totalMinor} ${document.currencyCode.ifBlank { "وحدة نقدية" }} (بوحدة الصرف الصغرى)",
-                            color = CloudSalesGreen, fontWeight = FontWeight.Bold, fontSize = 14.sp
-                        )
+                        Surface(color = Color(0xFFF0F7F3), shape = RoundedCornerShape(15.dp)) {
+                            Row(Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                    Text("إجمالي الفاتورة", color = CloudSalesMuted, fontSize = 11.sp)
+                                    Text("${formatMinorAmount(document.totalMinor)} ${document.currencyCode.ifBlank { "—" }}", color = CloudSalesGreen, fontWeight = FontWeight.ExtraBold, fontSize = 19.sp)
+                                }
+                                Surface(color = Color.White, shape = RoundedCornerShape(10.dp)) {
+                                    Text("${document.lines.size} بنود", color = CloudSalesInk, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp))
+                                }
+                            }
+                        }
                         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                             Text("الإجمالي قبل الخصم: ${formatMinorAmount(document.subtotalMinor)} ${document.currencyCode}", color = CloudSalesMuted, fontSize = 11.sp)
                             Text("الخصم: ${formatMinorAmount(document.discountMinor)} ${document.currencyCode}", color = CloudSalesMuted, fontSize = 11.sp)
@@ -258,7 +375,7 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
                         }
                         if (document.createdAt.isNotBlank()) Text(formatInvoiceTimestamp(document.createdAt), color = CloudSalesMuted, fontSize = 10.sp)
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Text("بنود الفاتورة: ${document.lines.size}", color = CloudSalesInk, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                            Text("تفاصيل الفاتورة", color = CloudSalesInk, fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.weight(1f))
                             TextButton(onClick = {
                                 expandedInvoiceIds = if (document.id in expandedInvoiceIds) expandedInvoiceIds - document.id else expandedInvoiceIds + document.id
                             }) {
@@ -355,13 +472,13 @@ internal fun CommercialCloudSalesScreen(context: Context, onBack: () -> Unit) {
                                 Text("تسجيل تحصيل سحابي")
                             }
                         }
-                        Text("مرجع: ${document.id.take(8)} · تفاصيل من الخادم، عرض فقط", color = CloudSalesMuted, fontSize = 10.sp)
+                        Text("معرّف السجل: ${document.id.take(8)} · بيانات محفوظة سحابيًا", color = CloudSalesMuted, fontSize = 10.sp)
                     }
                 }
             }
             item {
                 Text(
-                    "هذه الشاشة تعرض الفواتير وبنودها من الخادم فقط. لا تنشئ فاتورة أو تعدّلها من هذه الشاشة، ولا يُفترض مقياس عشري للعملة.",
+                    "هذه الشاشة للعرض فقط: تعرض الفواتير وبنودها من الخادم، وتعرض بنود الفاتورة المحفوظة، ولا تنشئ فاتورة أو تعدّلها، ولا يُفترض مقياس عشري للعملة.",
                     color = CloudSalesMuted, fontSize = 11.sp, modifier = Modifier.padding(vertical = 8.dp)
                 )
             }
