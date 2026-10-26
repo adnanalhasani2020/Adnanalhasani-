@@ -627,13 +627,15 @@ class SaleApplication:
 
     def return_sale_items(
         self, connection, sale_id, actor_context_ref, authorization_grant_id, *,
-        items, idempotency_key, reason, now=None,
+        items, idempotency_key, reason, now=None, return_event_id=None,
+        refund_payment_id=None, credit_note_number=None, financial_account_id=None,
+        finance_context_ref=None, finance_authorization_grant_id=None, finance_agent_action_id=None,
     ):
-        """Record an authorized partial/multi-line return with idempotent stock compensation.
+        """Record an authorized partial return and reconcile its financial effects when required.
 
-        This method only performs the Commerce-owned return and inventory effects.
-        It deliberately does not claim to refund Payment or recognize Finance; those
-        remain separate governed operations and require explicit reconciliation.
+        An unlinked Sale return posts inventory only. A financially linked Sale requires a
+        completed external refund Payment, approved Finance action, credit note, and posted
+        negative ledger entry before inventory is restored.
         """
         sale_uuid = self._uuid(sale_id, "Sale identifier")
         actor_uuid = self._uuid(actor_context_ref, "Actor identifier")
@@ -661,9 +663,26 @@ class SaleApplication:
             seen.add(line_key)
             normalized.append({"sale_line_id": line_key, "quantity": quantity})
         normalized.sort(key=lambda item: item["sale_line_id"])
+        requested_return_id = str(self._uuid(return_event_id, "Sale return event identifier")) if return_event_id is not None else None
+        refund_key = str(self._uuid(refund_payment_id, "Refund Payment identifier")) if refund_payment_id is not None else None
+        account_key = str(self._uuid(financial_account_id, "Financial Account identifier")) if financial_account_id is not None else None
+        finance_context_key = str(self._uuid(finance_context_ref, "Finance context identifier")) if finance_context_ref is not None else None
+        finance_grant_key = str(self._uuid(finance_authorization_grant_id, "Finance AuthorizationGrant identifier")) if finance_authorization_grant_id is not None else None
+        finance_action_key = str(self._uuid(finance_agent_action_id, "Finance AgentAction identifier")) if finance_agent_action_id is not None else None
+        if credit_note_number is not None and (not isinstance(credit_note_number, str) or not credit_note_number.strip()):
+            raise ValidationError("Credit note number must be a non-empty string")
+        credit_note_number = credit_note_number.strip() if credit_note_number is not None else None
+        finance_values = (refund_key, credit_note_number, account_key, finance_context_key, finance_grant_key, finance_action_key)
+        if any(value is not None for value in finance_values) and any(value is None for value in finance_values):
+            raise ValidationError("Financial return requires refund Payment, credit note number, account, Finance context, grant, and approved action")
         fingerprint = __import__("hashlib").sha256(
-            json.dumps({"sale_id": sale_key, "reason": reason, "items": normalized},
-                       sort_keys=True, separators=(",", ":")).encode("utf-8")
+            json.dumps({
+                "sale_id": sale_key, "reason": reason, "items": normalized,
+                "return_event_id": requested_return_id, "refund_payment_id": refund_key,
+                "credit_note_number": credit_note_number, "financial_account_id": account_key,
+                "finance_context_ref": finance_context_key, "finance_authorization_grant_id": finance_grant_key,
+                "finance_agent_action_id": finance_action_key,
+            }, sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
 
         savepoint = "sale_return_items_operation"
@@ -690,9 +709,23 @@ class SaleApplication:
             if existing is not None:
                 if existing[1] != fingerprint:
                     raise ValidationError("Sale return idempotency key was reused with a different request")
+                credit = connection.execute(
+                    "SELECT credit_note_id,credit_note_number,amount_minor,refund_payment_id,"
+                    "financial_transaction_id,ledger_entry_id,currency_code FROM credit_notes "
+                    "WHERE return_event_id=?",
+                    (existing[0],),
+                ).fetchone()
                 connection.execute(f"RELEASE SAVEPOINT {savepoint}")
-                return {"return_id": existing[0], "sale_id": sale_key, "replayed": True,
-                        "sale_state": self.get_sale_state(connection, sale_key).value}
+                result = {"return_id": existing[0], "sale_id": sale_key, "replayed": True,
+                          "sale_state": self.get_sale_state(connection, sale_key).value}
+                if credit is not None:
+                    result.update({"credit_note_id": credit[0], "credit_note_number": credit[1],
+                                   "refund_amount_minor": credit[2], "refund_payment_id": credit[3],
+                                   "financial_transaction_id": credit[4], "ledger_entry_id": credit[5],
+                                   "currency_code": credit[6], "financial_effects": "refund_and_inventory"})
+                else:
+                    result["financial_effects"] = "inventory_only"
+                return result
             if sale.state is not SaleState.FULFILLED:
                 raise ValidationError("Only a fulfilled Sale with remaining quantity can be returned")
             financial_link = connection.execute(
@@ -703,10 +736,14 @@ class SaleApplication:
                 "LIMIT 1",
                 (sale_key,),
             ).fetchone()
-            if financial_link is not None:
+            has_financial_link = financial_link is not None
+            if has_financial_link and (requested_return_id is None or not all(value is not None for value in finance_values)):
                 raise ValidationError(
-                    "Sale return requires explicit Invoice, Obligation, and Payment financial reconciliation first"
+                    "Financially linked Sale return requires an event ID, completed refund Payment, credit note number, "
+                    "Finance account/context, active grant, and approved Finance action"
                 )
+            if not has_financial_link and any(value is not None for value in finance_values):
+                raise ValidationError("Financial return evidence was supplied for a Sale without a linked Invoice/Obligation")
 
             sale_lines = {}
             for item in normalized:
@@ -727,12 +764,13 @@ class SaleApplication:
                     raise ValidationError("Cumulative returned quantity exceeds the sold quantity")
                 sale_lines[item["sale_line_id"]] = line
 
-            return_id = str(uuid4())
+            return_id = requested_return_id or str(uuid4())
             connection.execute(
                 "INSERT INTO sale_return_events(return_event_id,sale_id,idempotency_key,"
                 "request_fingerprint,reason,actor_context_ref,created_at) VALUES(?,?,?,?,?,?,?)",
                 (return_id, sale_key, idempotency_key, fingerprint, reason, actor_key, timestamp),
             )
+            return_movements = []
             for item in normalized:
                 line_id, line_offering, line_product, line_quantity = sale_lines[item["sale_line_id"]]
                 original = connection.execute(
@@ -756,13 +794,25 @@ class SaleApplication:
                     "quantity,created_at) VALUES(?,?,?,?,?)",
                     (return_line_id, return_id, line_id, item["quantity"], timestamp),
                 )
+                return_movements.append((return_line_id, movement, item["quantity"]))
+            credit_note = None
+            if has_financial_link:
+                from agent_core.sale_return_financial_application import SaleReturnFinancialApplication
+                credit_note = SaleReturnFinancialApplication().record_credit_note_for_return(
+                    connection, sale_id=sale_key, return_event_id=return_id,
+                    refund_payment_id=refund_key, credit_note_number=credit_note_number,
+                    financial_account_id=account_key, finance_context_ref=finance_context_key,
+                    finance_authorization_grant_id=finance_grant_key,
+                    finance_agent_action_id=finance_action_key, now=timestamp,
+                )
+            for return_line_id, movement, return_quantity in return_movements:
                 connection.execute(
                     "INSERT INTO inventory_movements(inventory_movement_id,inventory_position_id,"
                     "activity_id,product_id,offering_id,location_ref,scope_key,quantity_delta,"
                     "source_type,source_ref,actor_context_ref,occurred_at,created_at) "
                     "VALUES(?,?,?,?,?,?,?,?,'sale_return',?,?,?,?)",
                     (str(uuid4()), movement[0], movement[1], movement[2], movement[3],
-                     movement[4], movement[5], item["quantity"], return_line_id,
+                     movement[4], movement[5], return_quantity, return_line_id,
                      actor_key, timestamp, timestamp),
                 )
 
@@ -801,8 +851,13 @@ class SaleApplication:
                  actor_key, None, None, f"sale:{sale_key};reason:{reason};fingerprint:{fingerprint}", timestamp),
             )
             connection.execute(f"RELEASE SAVEPOINT {savepoint}")
-            return {"return_id": return_id, "sale_id": sale_key, "replayed": False,
-                    "sale_state": next_state.value, "items": normalized}
+            result = {"return_id": return_id, "sale_id": sale_key, "replayed": False,
+                      "sale_state": next_state.value, "items": normalized,
+                      "financial_effects": "refund_and_inventory" if credit_note is not None else "inventory_only",
+                      "payment_refund_performed": credit_note is not None}
+            if credit_note is not None:
+                result.update(credit_note)
+            return result
         except Exception:
             if connection.in_transaction:
                 try:
