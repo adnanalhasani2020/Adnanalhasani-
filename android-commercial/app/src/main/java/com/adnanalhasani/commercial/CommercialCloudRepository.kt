@@ -1105,6 +1105,26 @@ internal fun getOrCreateCommercialExpenseIdempotencyKey(
     }
 }
 
+internal fun clearCommercialExpenseIdempotencyKey(
+    context: Context, category: String, amountMinor: Long, currencyCode: String,
+    paymentMethod: String, evidenceReference: String, note: String, idempotencyKey: String
+): Boolean {
+    val canonical = JSONObject()
+        .put("category", category.trim())
+        .put("amount_minor", amountMinor)
+        .put("currency_code", currencyCode)
+        .put("payment_method", paymentMethod)
+        .put("evidence_reference", evidenceReference.trim())
+        .put("note", note.trim()).toString()
+    val digest = MessageDigest.getInstance("SHA-256")
+        .digest(canonical.toByteArray(Charsets.UTF_8))
+        .joinToString("") { "%02x".format(it) }
+    val preferences = commercialExpensePendingPreferences(context)
+    val preferenceKey = "request_$digest"
+    if (preferences.getString(preferenceKey, null) != idempotencyKey) return false
+    return preferences.edit().remove(preferenceKey).commit()
+}
+
 internal fun recordCommercialCloudExpense(
     context: Context, category: String, amountMinor: Long, currencyCode: String,
     paymentMethod: String, evidenceReference: String, note: String, idempotencyKey: String
