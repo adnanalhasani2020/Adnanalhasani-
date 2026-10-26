@@ -2301,3 +2301,20 @@ internal fun cancelCustomerPortalBooking(context: Context, bookingId: String, re
     }
     return result.optString("status")
 }
+
+
+internal fun cancelCustomerPortalOrder(context: Context, orderId: String, reason: String = ""): String {
+    require(orderId.isNotBlank()) { "رقم الطلب غير صالح." }
+    val access = customerPortalAccessToken(context)
+    val result = JSONObject(commercialCloudRequest(
+        "/rest/v1/rpc/commercial_customer_portal_cancel_order",
+        "POST",
+        JSONObject().put("p_order_id", orderId).put("p_cancellation_reason", reason.take(500)),
+        access
+    ))
+    val id = result.optString("order_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+    require(id.isNotBlank() && result.optString("status") == "cancelled") {
+        "لم يؤكد الخادم إلغاء الطلب؛ حدّث سجل الطلبات قبل إعادة المحاولة."
+    }
+    return if (result.optBoolean("already_cancelled")) "already_cancelled" else "cancelled"
+}
