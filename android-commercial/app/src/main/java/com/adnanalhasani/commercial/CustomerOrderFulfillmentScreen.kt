@@ -142,6 +142,10 @@ internal fun CustomerOrderFulfillmentScreen(context: Context,onBack:()->Unit) {
        if(open){
         if(order.customerNote.isNotBlank())Text("ملاحظة العميل: "+order.customerNote,fontSize=12.sp)
         if(order.decisionReason.isNotBlank())Text("سبب القرار: "+order.decisionReason,fontSize=12.sp,color=CustomerOrdersMuted)
+        if(order.status=="fulfilled" && order.saleId.isNotBlank()) {
+         Text("مستند البيع: "+order.receiptNumber+" • معرّف البيع: "+order.saleId,fontSize=12.sp,color=CustomerOrdersGreen,fontWeight=FontWeight.SemiBold)
+         Text("تاريخ الاعتماد: "+merchantDate(order.fulfilledAt)+" • المدفوع: "+customerOrderMoney(order.paidMinor,order.currencyCode)+" • المتبقي: "+customerOrderMoney(order.outstandingMinor,order.currencyCode),fontSize=11.sp,color=CustomerOrdersMuted)
+        }
         order.items.forEach{line->Column{Text(line.name,fontWeight=FontWeight.Medium);Text("الكمية "+line.quantity+" • سعر الوحدة "+customerOrderMoney(line.unitPriceMinor,order.currencyCode)+" • الإجمالي "+customerOrderMoney(line.lineTotalMinor,order.currencyCode),fontSize=11.sp,color=CustomerOrdersMuted)}}
         if(order.status=="pending") {
          if(order.orderType=="purchase") OutlinedButton(onClick={editTarget=order},enabled=busy==null,modifier=Modifier.fillMaxWidth()){Text("تعديل البنود قبل القبول")}
