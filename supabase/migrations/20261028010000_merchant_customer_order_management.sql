@@ -206,6 +206,7 @@ BEGIN
   SELECT * INTO v_order FROM public.commercial_customer_orders o WHERE o.id=p_order_id AND o.organization_id=p_organization_id FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'customer_order_not_found' USING ERRCODE='P0002'; END IF;
   IF v_order.status<>'pending' THEN RAISE EXCEPTION 'customer_order_lines_locked_after_review' USING ERRCODE='22023'; END IF;
+  IF v_order.order_type IS DISTINCT FROM 'purchase' THEN RAISE EXCEPTION 'customer_order_type_not_editable' USING ERRCODE='22023'; END IF;
   IF EXISTS(SELECT 1 FROM public.commercial_customer_order_fulfillments f WHERE f.order_id=v_order.id) THEN
     RAISE EXCEPTION 'customer_order_lines_locked_after_fulfillment' USING ERRCODE='22023';
   END IF;
