@@ -14,7 +14,7 @@ class ReceivablesAndExpenseIntegrityTests(unittest.TestCase):
         start = source.index("internal fun loadCommercialCloudReceivables(")
         end = source.index("\ninternal fun recordCommercialCloudCustomerPayment(", start)
         block = source[start:end]
-        self.assertIn("returns:commercial_sales_returns(id,status,refund_status,approved_refund_minor)", block)
+        self.assertIn("returns:commercial_sales_returns(id,status,refund_status,approved_refund_minor,refund_postings:commercial_return_refund_postings(amount_minor))", block)
         self.assertIn('saleReturn.optString("status") == "completed"', block)
         self.assertIn("creditedMinor = credited", block)
         self.assertIn("refund_postings:commercial_return_refund_postings(amount_minor)", block)
