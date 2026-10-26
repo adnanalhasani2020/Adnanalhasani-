@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -36,7 +37,7 @@ private fun portalMoney(amount: Long, currency: String) =
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit) {
+internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders: () -> Unit = {}) {
     var organizations by remember { mutableStateOf<List<CustomerPortalOrganization>>(emptyList()) }
     var offerings by remember { mutableStateOf<List<CustomerPortalOffering>>(emptyList()) }
     var bookingResources by remember { mutableStateOf<List<CustomerPortalBookingResource>>(emptyList()) }
@@ -109,7 +110,10 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit) {
             TopAppBar(
                 title = { Column { Text("بوابة الزبون", color = PortalInk, fontWeight = FontWeight.Bold); Text("المؤسسات والطلبات السحابية", color = PortalMuted, fontSize = 11.sp) } },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "رجوع", tint = PortalInk) } },
-                actions = { IconButton(onClick = { refresh++ }) { Icon(Icons.Default.Refresh, contentDescription = "تحديث", tint = PortalInk) } }
+                actions = {
+                    IconButton(onClick = onOrders) { Icon(Icons.Default.History, contentDescription = "طلباتي وحجوزاتي", tint = PortalInk) }
+                    IconButton(onClick = { refresh++ }) { Icon(Icons.Default.Refresh, contentDescription = "تحديث", tint = PortalInk) }
+                }
             )
         }
     ) { padding ->

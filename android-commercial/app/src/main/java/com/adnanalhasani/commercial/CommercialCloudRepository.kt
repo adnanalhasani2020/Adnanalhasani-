@@ -2149,3 +2149,155 @@ internal fun submitCustomerPortalBooking(
     return CustomerPortalBookingResult(bookingId, row.optString("booking_number"), row.optString("order_id"),
         row.optString("status"), row.optLong("price_minor", 0L), row.optString("currency_code"), row.optBoolean("replayed"))
 }
+
+
+internal data class CustomerPortalHistoryItem(
+    val id: String,
+    val offeringId: String,
+    val name: String,
+    val itemType: String,
+    val quantity: String,
+    val unitPriceMinor: Long,
+    val lineTotalMinor: Long
+)
+
+internal data class CustomerPortalHistoryOrder(
+    val id: String,
+    val organizationId: String,
+    val organizationName: String,
+    val orderNumber: String,
+    val createdAt: String,
+    val status: String,
+    val paymentStatus: String,
+    val orderType: String,
+    val currencyCode: String,
+    val subtotalMinor: Long,
+    val discountMinor: Long,
+    val taxMinor: Long,
+    val totalMinor: Long,
+    val note: String,
+    val reservedFrom: String,
+    val reservedUntil: String,
+    val items: List<CustomerPortalHistoryItem>
+)
+
+internal data class CustomerPortalHistoryBooking(
+    val id: String,
+    val organizationId: String,
+    val organizationName: String,
+    val bookingNumber: String,
+    val orderId: String,
+    val orderNumber: String,
+    val status: String,
+    val startsAt: String,
+    val endsAt: String,
+    val timezone: String,
+    val resourceName: String,
+    val resourceType: String,
+    val priceMinor: Long,
+    val paidMinor: Long,
+    val currencyCode: String,
+    val notes: String,
+    val cancellationReason: String
+)
+
+internal data class CustomerPortalHistory(
+    val orders: List<CustomerPortalHistoryOrder>,
+    val bookings: List<CustomerPortalHistoryBooking>,
+    val refreshedAt: String
+)
+
+internal fun loadCustomerPortalHistory(context: Context, organizationId: String? = null): CustomerPortalHistory {
+    val access = customerPortalAccessToken(context)
+    val payload = JSONObject()
+    if (!organizationId.isNullOrBlank()) payload.put("p_organization_id", organizationId)
+    val root = JSONObject(commercialCloudRequest(
+        "/rest/v1/rpc/commercial_customer_portal_list_history", "POST", payload, access
+    ))
+    val ordersJson = root.optJSONArray("orders") ?: JSONArray()
+    val orders = buildList {
+        for (i in 0 until ordersJson.length()) {
+            val row = ordersJson.optJSONObject(i) ?: continue
+            val id = row.optString("id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+            if (id.isBlank()) continue
+            val itemsJson = row.optJSONArray("items") ?: JSONArray()
+            val items = buildList {
+                for (j in 0 until itemsJson.length()) {
+                    val item = itemsJson.optJSONObject(j) ?: continue
+                    add(CustomerPortalHistoryItem(
+                        id = item.optString("id"),
+                        offeringId = item.optString("offering_id"),
+                        name = item.optString("name").takeUnless { it == "null" }.orEmpty().ifBlank { "صنف غير معروف" },
+                        itemType = item.optString("item_type").ifBlank { "product" },
+                        quantity = item.optString("quantity").ifBlank { "0" },
+                        unitPriceMinor = item.optLong("unit_price_minor", 0L),
+                        lineTotalMinor = item.optLong("line_total_minor", 0L)
+                    ))
+                }
+            }
+            add(CustomerPortalHistoryOrder(
+                id = id,
+                organizationId = row.optString("organization_id"),
+                organizationName = row.optString("organization_name").takeUnless { it == "null" }.orEmpty(),
+                orderNumber = row.optString("order_number").takeUnless { it == "null" }.orEmpty(),
+                createdAt = row.optString("created_at").takeUnless { it == "null" }.orEmpty(),
+                status = row.optString("status").ifBlank { "unknown" },
+                paymentStatus = row.optString("payment_status").ifBlank { "unknown" },
+                orderType = row.optString("order_type").ifBlank { "purchase" },
+                currencyCode = row.optString("currency_code").ifBlank { "YER" },
+                subtotalMinor = row.optLong("subtotal_minor", 0L),
+                discountMinor = row.optLong("discount_minor", 0L),
+                taxMinor = row.optLong("tax_minor", 0L),
+                totalMinor = row.optLong("total_minor", 0L),
+                note = row.optString("customer_note").takeUnless { it == "null" }.orEmpty(),
+                reservedFrom = row.optString("reserved_from").takeUnless { it == "null" }.orEmpty(),
+                reservedUntil = row.optString("reserved_until").takeUnless { it == "null" }.orEmpty(),
+                items = items
+            ))
+        }
+    }
+    val bookingsJson = root.optJSONArray("bookings") ?: JSONArray()
+    val bookings = buildList {
+        for (i in 0 until bookingsJson.length()) {
+            val row = bookingsJson.optJSONObject(i) ?: continue
+            val id = row.optString("id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+            if (id.isBlank()) continue
+            add(CustomerPortalHistoryBooking(
+                id = id,
+                organizationId = row.optString("organization_id"),
+                organizationName = row.optString("organization_name").takeUnless { it == "null" }.orEmpty(),
+                bookingNumber = row.optString("booking_number").takeUnless { it == "null" }.orEmpty(),
+                orderId = row.optString("order_id").takeUnless { it == "null" }.orEmpty(),
+                orderNumber = row.optString("order_number").takeUnless { it == "null" }.orEmpty(),
+                status = row.optString("status").ifBlank { "unknown" },
+                startsAt = row.optString("starts_at").takeUnless { it == "null" }.orEmpty(),
+                endsAt = row.optString("ends_at").takeUnless { it == "null" }.orEmpty(),
+                timezone = row.optString("timezone").ifBlank { "UTC" },
+                resourceName = row.optString("resource_name").takeUnless { it == "null" }.orEmpty(),
+                resourceType = row.optString("resource_type").takeUnless { it == "null" }.orEmpty(),
+                priceMinor = row.optLong("price_minor", 0L),
+                paidMinor = row.optLong("paid_minor", 0L),
+                currencyCode = row.optString("currency_code").ifBlank { "YER" },
+                notes = row.optString("notes").takeUnless { it == "null" }.orEmpty(),
+                cancellationReason = row.optString("cancellation_reason").takeUnless { it == "null" }.orEmpty()
+            ))
+        }
+    }
+    return CustomerPortalHistory(orders, bookings, root.optString("refreshed_at").takeUnless { it == "null" }.orEmpty())
+}
+
+internal fun cancelCustomerPortalBooking(context: Context, bookingId: String, reason: String = ""): String {
+    require(bookingId.isNotBlank()) { "رقم الحجز غير صالح." }
+    val access = customerPortalAccessToken(context)
+    val result = JSONObject(commercialCloudRequest(
+        "/rest/v1/rpc/commercial_customer_portal_cancel_booking",
+        "POST",
+        JSONObject().put("p_booking_id", bookingId).put("p_cancellation_reason", reason.take(500)),
+        access
+    ))
+    val id = result.optString("booking_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+    require(id.isNotBlank() && result.optString("status") == "cancelled") {
+        "لم يؤكد الخادم إلغاء الحجز؛ حدّث سجل الحجوزات قبل إعادة المحاولة."
+    }
+    return result.optString("status")
+}
