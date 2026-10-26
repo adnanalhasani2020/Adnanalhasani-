@@ -1079,7 +1079,7 @@ class SaleApplication:
                     "financial_transaction_id,ledger_entry_id FROM credit_notes WHERE return_event_id=?",
                     (return_key,),
                 ).fetchone()
-                if (credit is None or credit[1] != credit_note_number or credit[2] != refund_key
+                if (credit is None or existing[0] != credit[0] or credit[1] != credit_note_number or credit[2] != refund_key
                         or credit[5] != account_key or credit[6] != str(self._uuid(finance_context_ref, "Finance context identifier"))
                         or credit[7] != str(self._uuid(finance_authorization_grant_id, "Finance AuthorizationGrant identifier"))
                         or credit[8] != str(self._uuid(finance_agent_action_id, "Finance AgentAction identifier"))):
