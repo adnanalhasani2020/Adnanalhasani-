@@ -26,8 +26,13 @@ private fun commercialCloudActionableError(raw: String, status: Int): String {
         code == "PGRST202" || message.contains("schema cache", ignoreCase = true) ||
             message.contains("could not find the function", ignoreCase = true) ->
             "توقّف الإجراء لأن دالة قاعدة البيانات المطلوبة غير منشورة أو لم تُحدّث بعد. لم يؤكد الخادم تنفيذ العملية. لا تنشئ عملية بديلة بمفتاح جديد؛ أعد المحاولة بنفس العملية بعد إصلاح ترحيلات قاعدة البيانات. التفاصيل: $detail"
-        message.contains("idempotency_key_reused_with_different_request", ignoreCase = true) ->
-            "تم إيقاف العملية لحماية البيانات: مفتاح إعادة المحاولة مرتبط بطلب مختلف. لا تكرر الدفع أو البيع؛ حدّث البيانات وراجع الفاتورة الموجودة. التفاصيل: $detail"
+        message.contains("idempotency_key_reused_with_different_request", ignoreCase = true) ||
+            message.contains("expense_idempotency_key_reused_with_different_request", ignoreCase = true) ->
+            "تم إيقاف العملية لحماية البيانات: مفتاح إعادة المحاولة مرتبط بطلب مختلف. لا تكرر الدفع أو الصرف؛ راجع السجل الموجود وأعد المحاولة بالبيانات الأصلية فقط. التفاصيل: $detail"
+        message.contains("expense_cash_or_bank_account_not_configured_for_currency", ignoreCase = true) ->
+            "لم يُحفظ سند الصرف لأن حساب الصندوق/البنك غير مربوط بالعملة المختارة في دليل الحسابات. اضبط الربط أولًا ثم أعد المحاولة؛ لم يُسجل قيد أو سند. التفاصيل: $detail"
+        message.contains("customer_payment_journal_not_posted", ignoreCase = true) ->
+            "لم يؤكد الخادم ترحيل قيد التحصيل، لذلك رُفضت المعاملة كاملة. لا تنشئ تحصيلًا جديدًا بمفتاح مختلف؛ حدّث السجل وراجع القيد قبل إعادة المحاولة. التفاصيل: $detail"
         message.contains("collection_exceeds_outstanding_balance", ignoreCase = true) ||
             message.contains("overpayment", ignoreCase = true) ->
             "رُفض التحصيل لأن المبلغ يتجاوز الرصيد المستحق. حدّث الفاتورة وأدخل المبلغ المتبقي الفعلي. التفاصيل: $detail"
