@@ -104,6 +104,16 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
         else Triple(item, text, kotlin.math.round(quantity.toDouble() * item.priceMinor).toLong())
     }
     val estimatedTotal = cart.sumOf { it.third }
+    val bookingCart = offerings.filter { it.itemType == "service" }.mapNotNull { service ->
+        val text = quantities[service.id].orEmpty()
+        val quantity = text.toBigDecimalOrNull()
+        if (quantity == null || quantity <= java.math.BigDecimal.ZERO) null
+        else Triple(service, text, kotlin.math.round(quantity.toDouble() * service.priceMinor).toLong())
+    }
+    val bookingEstimatedTotal = bookingCart.sumOf { it.third }
+    val bookingQuantitiesValid = bookingCart.all { (_, text, _) ->
+        text.toBigDecimalOrNull()?.let { it > java.math.BigDecimal.ZERO && it.scale().coerceAtLeast(0) <= 3 && it <= java.math.BigDecimal("100000") } == true
+    } && bookingCart.map { it.first.currencyCode }.distinct().size <= 1
     val unsupportedFractionalProduct = cart.any { (item, text, _) ->
         item.itemType == "product" && text.toBigDecimalOrNull()?.let { quantity ->
             quantity.stripTrailingZeros().scale() > 0 || quantity > java.math.BigDecimal("100000")
@@ -178,13 +188,32 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
                     Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, PortalBorder)) {
                         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
                             Text("تفاصيل الحجز", color = PortalInk, fontWeight = FontWeight.Bold)
-                            Box {
-                                OutlinedButton(onClick = { bookingOfferingMenu = true }, modifier = Modifier.fillMaxWidth()) {
-                                    Text(offerings.firstOrNull { it.id == bookingOfferingId }?.name ?: "اختر خدمة", modifier = Modifier.weight(1f))
-                                }
-                                DropdownMenu(expanded = bookingOfferingMenu, onDismissRequest = { bookingOfferingMenu = false }) {
-                                    offerings.filter { it.itemType == "service" }.forEach { service ->
-                                        DropdownMenuItem(text = { Text("${service.name} · ${portalMoney(service.priceMinor, service.currencyCode)}") }, onClick = { bookingOfferingId = service.id; bookingOfferingMenu = false })
+                            Text("اختر الخدمات وكميات كل بند", color = PortalMuted, fontSize = 12.sp)
+                            offerings.filter { it.itemType == "service" }.forEach { service ->
+                                Card(
+                                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FBF9)),
+                                    shape = RoundedCornerShape(12.dp),
+                                    border = BorderStroke(1.dp, PortalBorder)
+                                ) {
+                                    Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Column(Modifier.weight(1f)) {
+                                                Text(service.name, color = PortalInk, fontWeight = FontWeight.SemiBold)
+                                                if (service.description.isNotBlank()) Text(service.description, color = PortalMuted, fontSize = 11.sp)
+                                            }
+                                            Text(portalMoney(service.priceMinor, service.currencyCode), color = PortalGreen, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                        }
+                                        OutlinedTextField(
+                                            value = quantities[service.id].orEmpty(),
+                                            onValueChange = { value ->
+                                                quantities = quantities.toMutableMap().apply { put(service.id, value.filter { it.isDigit() || it == '.' }.take(12)) }
+                                                error = ""
+                                            },
+                                            label = { Text("الكمية (اتركها فارغة إذا لم تختر الخدمة)") },
+                                            placeholder = { Text("مثال: 1") },
+                                            singleLine = true,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
                                     }
                                 }
                             }
@@ -336,14 +365,26 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
                 if (bookingMode) item {
                     Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, PortalBorder)) {
                         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Text("مراجعة الحجز", color = PortalInk, fontWeight = FontWeight.Bold)
-                            val service = offerings.firstOrNull { it.id == bookingOfferingId && it.itemType == "service" }
-                            if (service != null) {
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text(service.name, color = PortalInk, modifier = Modifier.weight(1f))
-                                    Text(portalMoney(service.priceMinor, service.currencyCode), color = PortalGreen, fontWeight = FontWeight.Bold)
+                            Text("فاتورة الحجز الذكية", color = PortalInk, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                            if (bookingCart.isEmpty()) {
+                                Text("أدخل كمية أكبر من صفر لخدمة واحدة على الأقل.", color = PortalMuted, fontSize = 12.sp)
+                            } else {
+                                bookingCart.forEach { (service, quantity, total) ->
+                                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                        Column(Modifier.weight(1f)) {
+                                            Text(service.name, color = PortalInk, fontWeight = FontWeight.SemiBold)
+                                            Text("الكمية: $quantity × ${portalMoney(service.priceMinor, service.currencyCode)}", color = PortalMuted, fontSize = 11.sp)
+                                        }
+                                        Text(portalMoney(total, service.currencyCode), color = PortalInk, fontWeight = FontWeight.Medium)
+                                    }
                                 }
                             }
+                            HorizontalDivider(color = PortalBorder)
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("الإجمالي التقديري", color = PortalMuted)
+                                Text(portalMoney(bookingEstimatedTotal, org.currencyCode), color = PortalGreen, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                            }
+                            Text("كل البنود تُحفظ تحت حجز واحد. السعر والإجمالي النهائيان يُعاد احتسابهما والتحقق منهما داخل قاعدة البيانات.", color = PortalMuted, fontSize = 11.sp)
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 RadioButton(selected = paymentMode == "cash", onClick = { paymentMode = "cash" })
                                 Text("نقدي", color = PortalInk)
@@ -354,39 +395,58 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
                             OutlinedTextField(value = note, onValueChange = { note = it.take(1000) }, label = { Text("ملاحظة للحجز (اختياري)") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
                             Button(
                                 onClick = {
-                                    val selectedService = offerings.firstOrNull { it.id == bookingOfferingId && it.itemType == "service" }
                                     val startsValid = runCatching { java.time.OffsetDateTime.parse(startsAt).toInstant().isAfter(java.time.Instant.now()) }.getOrDefault(false)
                                     val endsValid = runCatching { java.time.OffsetDateTime.parse(endsAt).toInstant().isAfter(java.time.OffsetDateTime.parse(startsAt).toInstant()) }.getOrDefault(false)
-                                    if (selectedService == null || bookingResourceId.isBlank() || bookingResources.none { it.id == bookingResourceId } || !startsValid || !endsValid) {
-                                        error = "اختر خدمة وموردًا نشطًا وأدخل وقت بداية ونهاية صالحين في المستقبل مع المنطقة الزمنية."
+                                    if (bookingCart.isEmpty() || !bookingQuantitiesValid) {
+                                        error = "اختر خدمة واحدة على الأقل، وتأكد من أن الكميات موجبة وبحد أقصى 3 منازل عشرية وبعملة واحدة."
+                                    } else if (bookingResourceId.isBlank() || bookingResources.none { it.id == bookingResourceId } || !startsValid || !endsValid) {
+                                        error = "اختر موردًا نشطًا وأدخل وقت بداية ونهاية صالحين في المستقبل مع المنطقة الزمنية."
+                                    } else if (bookingEstimatedTotal <= 0L) {
+                                        error = "إجمالي الحجز يجب أن يكون أكبر من صفر."
                                     } else {
-                                        submitting = true; error = ""; notice = "جارٍ التحقق من الموعد والسعة وتسجيل الحجز..."
-                                        val snapshotOrg = org; val snapshotResource = bookingResourceId
-                                        val snapshotStart = startsAt; val snapshotEnd = endsAt; val snapshotPayment = paymentMode; val snapshotNote = note
+                                        submitting = true
+                                        error = ""
+                                        notice = "جارٍ التحقق من الخدمات والأسعار والصلاحيات والسعة وتسجيل الحجز..."
+                                        val snapshotOrg = org
+                                        val snapshotLines = bookingCart.map { it.first.id to it.second }
+                                        val snapshotResource = bookingResourceId
+                                        val snapshotStart = startsAt
+                                        val snapshotEnd = endsAt
+                                        val snapshotPayment = paymentMode
+                                        val snapshotNote = note
                                         portalExecutor.execute {
                                             val result = runCatching {
-                                                val key = getOrCreateCustomerPortalOrderKey(context, snapshotOrg.id, listOf(selectedService.id to "1"), snapshotPayment, snapshotNote, listOf(snapshotResource, snapshotStart, snapshotEnd))
-                                                val booking = submitCustomerPortalBooking(context, snapshotOrg.id, selectedService.id, snapshotResource, snapshotStart, snapshotEnd, snapshotPayment, snapshotNote, key)
-                                                clearCustomerPortalOrderKey(context, key); booking
+                                                val key = getOrCreateCustomerPortalOrderKey(
+                                                    context, snapshotOrg.id, snapshotLines, snapshotPayment, snapshotNote,
+                                                    listOf(snapshotResource, snapshotStart, snapshotEnd)
+                                                )
+                                                val booking = submitCustomerPortalMultiServiceBooking(
+                                                    context, snapshotOrg.id, snapshotLines, snapshotResource,
+                                                    snapshotStart, snapshotEnd, snapshotPayment, snapshotNote, key
+                                                )
+                                                clearCustomerPortalOrderKey(context, key)
+                                                booking
                                             }
                                             portalMain.post {
                                                 submitting = false
                                                 result.onSuccess { booking ->
-                                                    notice = "تم إرسال طلب الحجز رقم ${booking.bookingNumber}. الحالة: ${booking.status}، القيمة: ${portalMoney(booking.priceMinor, booking.currencyCode)}."
+                                                    quantities = quantities.filterKeys { id -> offerings.any { it.id == id && it.itemType == "product" } }
+                                                    notice = "تم تسجيل الحجز رقم ${booking.bookingNumber} وفيه ${snapshotLines.size} بندًا. الإجمالي المحفوظ: ${portalMoney(booking.priceMinor, booking.currencyCode)}.${if (booking.replayed) " استُرجعت نتيجة المحاولة السابقة." else ""}"
                                                     error = ""
                                                 }.onFailure {
-                                                    error = it.message ?: "تعذر تأكيد الحجز. أعد المحاولة بالبيانات نفسها."
+                                                    error = it.message ?: "تعذر تأكيد الحجز. أعد المحاولة بالبيانات نفسها دون تغيير البنود."
                                                     notice = ""
                                                 }
                                             }
                                         }
                                     }
                                 },
-                                enabled = !submitting && !loading && offerings.any { it.id == bookingOfferingId && it.itemType == "service" } && bookingResources.any { it.id == bookingResourceId },
+                                enabled = !submitting && !loading && bookingCart.isNotEmpty() &&
+                                    bookingQuantitiesValid && bookingResources.any { it.id == bookingResourceId },
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 if (submitting) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                                else Text("إرسال طلب الحجز")
+                                else Text("تأكيد الحجز وإصدار الفاتورة")
                             }
                         }
                     }
