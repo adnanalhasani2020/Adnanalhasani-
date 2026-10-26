@@ -209,7 +209,7 @@ class SaleReturnFinancialApplication:
         if len(chain) != 1:
             raise ValidationError("A single settled Invoice, Settlement, and recognized Finance transaction are required")
         row = chain[0]
-        (invoice_id, issuer, invoice_state, obligation_id, buyer, sale_state,
+        (invoice_id, issuer, invoice_state, obligation_id, sale_state,
          creditor, debtor, obligation_amount, obligation_currency, obligation_state,
          original_payment_id, original_amount, original_currency, original_state,
          original_payer, original_payee, settlement_id, settlement_state,
