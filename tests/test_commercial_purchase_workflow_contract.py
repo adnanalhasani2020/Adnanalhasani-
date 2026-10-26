@@ -193,7 +193,7 @@ def test_purchase_receiving_rejects_fractions_at_android_and_database_boundaries
 
     # Fractional purchase order/invoice quantities remain a separate policy; only receiving
     # is restricted here, as requested.
-    assert "quantity.stripTrailingZeros().scale() <= 6" in order_dialog
+    assert "qty.stripTrailingZeros().scale() <= 6" in order_dialog
     invoice_repository = repository.split("internal fun recordCommercialCloudSupplierInvoice", 1)[1]
     invoice_repository = invoice_repository.split("private fun commercialPurchaseReceiptPendingPreferences", 1)[0]
     assert "quantity.stripTrailingZeros().scale() <= 6" in invoice_repository
