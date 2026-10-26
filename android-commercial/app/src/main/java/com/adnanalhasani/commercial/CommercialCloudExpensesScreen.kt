@@ -20,6 +20,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.util.Locale
+import java.util.Currency
+import java.math.BigDecimal
+import java.math.RoundingMode
 import java.util.concurrent.Executors
 
 private val CloudExpenseIo = Executors.newSingleThreadExecutor()
@@ -28,6 +31,14 @@ private val CloudExpenseInk = Color(0xFF183B35)
 private val CloudExpenseGreen = Color(0xFF167D63)
 private val CloudExpenseMuted = Color(0xFF71817B)
 private val CloudExpenseBorder = Color(0xFFE5EBE8)
+
+private fun cloudExpenseCurrencyScale(code: String): Int =
+    runCatching { Currency.getInstance(code).defaultFractionDigits.coerceIn(0, 6) }.getOrDefault(0)
+
+private fun formatCloudExpenseMinor(amountMinor: Long, code: String): String {
+    val scale = cloudExpenseCurrencyScale(code)
+    return BigDecimal.valueOf(amountMinor, scale).setScale(scale, RoundingMode.UNNECESSARY).toPlainString() + " " + code
+}
 
 @Composable
 internal fun CommercialCloudExpensesScreen(context: Context, onBack: () -> Unit) {
@@ -58,7 +69,7 @@ internal fun CommercialCloudExpensesScreen(context: Context, onBack: () -> Unit)
     LaunchedEffect(Unit) { refresh() }
     val todayPrefix = java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US).format(java.util.Date())
     val today = expenses.filter { it.recordedAt.startsWith(todayPrefix) }
-    val todayTotal = today.sumOf { it.amountMinor.coerceAtLeast(0L) }
+    val todayTotal = today.fold(BigDecimal.ZERO) { total, item -> total.add(BigDecimal.valueOf(item.amountMinor)) }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
@@ -75,7 +86,7 @@ internal fun CommercialCloudExpensesScreen(context: Context, onBack: () -> Unit)
             Card(colors = CardDefaults.cardColors(containerColor = CloudExpenseInk), shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(18.dp)) {
                     Text("إجمالي مصروفات اليوم المؤكدة", color = Color(0xFFBFD9D0), fontSize = 13.sp)
-                    Text(String.format(Locale.US, "%,d", todayTotal) + " " + currency, color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                    Text(formatCloudExpenseMinor(todayTotal.toBigInteger().longValueExact(), currency), color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
                     Text(today.size.toString() + " سند محفوظ", color = Color(0xFF8DE0B8), fontSize = 12.sp)
                 }
             }
@@ -86,7 +97,11 @@ internal fun CommercialCloudExpensesScreen(context: Context, onBack: () -> Unit)
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("بيانات السند", color = CloudExpenseInk, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     OutlinedTextField(category, { category = it.take(120); error = "" }, label = { Text("تصنيف المصروف") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(amountText, { amountText = it.filter(Char::isDigit).take(15); error = "" }, label = { Text("المبلغ (" + currency + ")") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(amountText, {
+                        val normalized = it.filter { ch -> ch.isDigit() || ch == '.' }
+                        if (normalized.count { ch -> ch == '.' } <= 1 && normalized.length <= 24) amountText = normalized
+                        error = ""
+                    }, label = { Text("المبلغ (" + currency + ")") }, supportingText = { Text("عدد المنازل العشرية المسموح: " + cloudExpenseCurrencyScale(currency)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     Text("طريقة الصرف", color = CloudExpenseMuted, fontSize = 12.sp)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                         if (paymentMethod == "cash") Button(onClick = { paymentMethod = "cash" }, modifier = Modifier.weight(1f)) { Text("نقدًا") }
@@ -99,10 +114,15 @@ internal fun CommercialCloudExpensesScreen(context: Context, onBack: () -> Unit)
                     Text("يلزم ضبط حساب الصندوق/البنك للعملة. لا يوجد حفظ محلي بديل.", color = CloudExpenseMuted, fontSize = 11.sp)
                     if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
                     Button(onClick = {
-                        val amount = amountText.toLongOrNull()
+                        val amountMinor = runCatching {
+                            val decimal = BigDecimal(amountText)
+                            require(decimal.signum() > 0)
+                            require(decimal.scale().coerceAtLeast(0) <= cloudExpenseCurrencyScale(currency))
+                            decimal.movePointRight(cloudExpenseCurrencyScale(currency)).longValueExact()
+                        }.getOrNull()
                         when {
                             category.isBlank() -> error = "أدخل تصنيف المصروف."
-                            amount == null || amount <= 0L -> error = "أدخل مبلغًا صحيحًا أكبر من صفر."
+                            amountMinor == null || amountMinor <= 0L -> error = "أدخل مبلغًا موجبًا وبعدد المنازل العشرية المسموح للعملة."
                             evidence.trim().length < 3 -> error = "أدخل مرجع إثبات الصرف."
                             else -> {
                                 submitting = true
@@ -113,9 +133,9 @@ internal fun CommercialCloudExpensesScreen(context: Context, onBack: () -> Unit)
                                 val m = paymentMethod
                                 CloudExpenseIo.execute {
                                     val result = runCatching {
-                                        val key = getOrCreateCommercialExpenseIdempotencyKey(context, c, amount, currency, m, e, n)
-                                        val response = recordCommercialCloudExpense(context, c, amount, currency, m, e, n, key)
-                                        clearCommercialExpenseIdempotencyKey(context, c, amount, currency, m, e, n, key)
+                                        val key = getOrCreateCommercialExpenseIdempotencyKey(context, c, amountMinor, currency, m, e, n)
+                                        val response = recordCommercialCloudExpense(context, c, amountMinor, currency, m, e, n, key)
+                                        clearCommercialExpenseIdempotencyKey(context, c, amountMinor, currency, m, e, n, key)
                                         response
                                     }
                                     val updated = if (result.isSuccess) runCatching { loadCommercialCloudExpenses(context) } else null
@@ -153,7 +173,7 @@ internal fun CommercialCloudExpensesScreen(context: Context, onBack: () -> Unit)
                             Text(voucher.category, color = CloudExpenseInk, fontWeight = FontWeight.SemiBold)
                             Text(voucher.recordedAt.replace("T", " ").take(16), color = CloudExpenseMuted, fontSize = 11.sp)
                         }
-                        Text(String.format(Locale.US, "%,d", voucher.amountMinor) + " " + voucher.currencyCode, color = CloudExpenseGreen, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Text(formatCloudExpenseMinor(voucher.amountMinor, voucher.currencyCode), color = CloudExpenseGreen, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     }
                     Text("طريقة الصرف: " + (if (voucher.paymentMethod == "cash") "نقدًا" else "تحويل بنكي") + " • الإثبات: " + voucher.evidenceReference, color = CloudExpenseMuted, fontSize = 11.sp)
                     if (voucher.note.isNotBlank()) Text(voucher.note, color = CloudExpenseInk, fontSize = 12.sp)
