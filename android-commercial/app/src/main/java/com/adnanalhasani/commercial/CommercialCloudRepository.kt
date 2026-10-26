@@ -1972,3 +1972,126 @@ internal fun loadCommercialCloudCustomerReceipt(context: Context, paymentId: Str
     require(rows.length() == 1) { "لم يُعثر على سند القبض المؤكد لهذه الدفعة." }
     return rows.getJSONObject(0)
 }
+
+
+internal data class CustomerPortalOrganization(
+    val id: String, val name: String, val description: String,
+    val currencyCode: String, val logoUrl: String, val allowCredit: Boolean
+)
+internal data class CustomerPortalOffering(
+    val id: String, val name: String, val description: String, val unitName: String,
+    val priceMinor: Long, val currencyCode: String, val itemType: String
+)
+internal data class CustomerPortalOrderResult(
+    val orderId: String, val orderNumber: String, val status: String,
+    val paymentStatus: String, val totalMinor: Long, val currencyCode: String, val replayed: Boolean
+)
+
+private fun customerPortalAccessToken(context: Context): String {
+    val prefs = commercialCloudSessionPreferences(context)
+    val refresh = prefs.getString("refresh_token", null).orEmpty()
+    require(refresh.isNotBlank()) { "سجّل الدخول إلى حساب الزبون أولًا." }
+    val session = JSONObject(commercialCloudRequest(
+        "/auth/v1/token?grant_type=refresh_token", "POST", JSONObject().put("refresh_token", refresh)
+    ))
+    val access = session.optString("access_token")
+    require(access.isNotBlank()) { "انتهت جلسة الحساب؛ سجّل الدخول مجددًا." }
+    session.optString("refresh_token").takeIf { it.isNotBlank() }?.let { prefs.edit().putString("refresh_token", it).apply() }
+    return access
+}
+
+internal fun loadCustomerPortalOrganizations(context: Context): List<CustomerPortalOrganization> {
+    val access = customerPortalAccessToken(context)
+    val result = JSONArray(commercialCloudRequest(
+        "/rest/v1/rpc/commercial_customer_portal_list_organizations", "POST", JSONObject(), access
+    ))
+    return buildList {
+        for (i in 0 until result.length()) {
+            val row = result.optJSONObject(i) ?: continue
+            val id = row.optString("id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+            val name = row.optString("name").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+            if (id.isBlank() || name.isBlank()) continue
+            add(CustomerPortalOrganization(id, name,
+                row.optString("description").takeUnless { it == "null" }.orEmpty(),
+                row.optString("currency_code", "YER").ifBlank { "YER" },
+                row.optString("logo_url").takeUnless { it == "null" }.orEmpty(),
+                row.optBoolean("allow_credit", false)))
+        }
+    }
+}
+
+internal fun loadCustomerPortalOfferings(context: Context, organizationId: String): List<CustomerPortalOffering> {
+    require(organizationId.isNotBlank()) { "اختر المؤسسة أولًا." }
+    val access = customerPortalAccessToken(context)
+    val result = JSONArray(commercialCloudRequest(
+        "/rest/v1/rpc/commercial_customer_portal_list_offerings", "POST",
+        JSONObject().put("p_organization_id", organizationId), access
+    ))
+    return buildList {
+        for (i in 0 until result.length()) {
+            val row = result.optJSONObject(i) ?: continue
+            val id = row.optString("id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+            val name = row.optString("name").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+            val currency = row.optString("currency_code").takeUnless { it == "null" }.orEmpty()
+            val price = row.optLong("price_minor", -1L)
+            if (id.isBlank() || name.isBlank() || !currency.matches(Regex("^[A-Z]{3}$")) || price < 0) continue
+            add(CustomerPortalOffering(id, name, row.optString("description").takeUnless { it == "null" }.orEmpty(),
+                row.optString("unit_name").ifBlank { "وحدة" }, price, currency,
+                row.optString("item_type").ifBlank { "product" }))
+        }
+    }
+}
+
+private fun customerPortalPendingPrefs(context: Context) =
+    context.getSharedPreferences("customer_portal_pending_order_v1", Context.MODE_PRIVATE)
+
+internal fun getOrCreateCustomerPortalOrderKey(context: Context, organizationId: String, lines: List<Pair<String, String>>, paymentMode: String, note: String): String {
+    require(organizationId.isNotBlank() && lines.isNotEmpty()) { "السلة فارغة أو المؤسسة غير محددة." }
+    val canonical = listOf(organizationId, paymentMode, note) + lines.sortedBy { it.first }.flatMap { listOf(it.first, it.second) }
+    val fingerprint = MessageDigest.getInstance("SHA-256")
+        .digest(canonical.joinToString("\u001f").toByteArray(StandardCharsets.UTF_8))
+        .joinToString("") { "%02x".format(it) }
+    val prefs = customerPortalPendingPrefs(context)
+    val oldFingerprint = prefs.getString("fingerprint", null)
+    val oldKey = prefs.getString("idempotency_key", null)
+    if (!oldKey.isNullOrBlank() && oldFingerprint != fingerprint) {
+        throw IllegalStateException("هناك طلب سابق لم يتأكد حفظه. أعد محاولة الطلب السابق أو تحقق من سجل الطلبات قبل تغيير السلة.")
+    }
+    if (!oldKey.isNullOrBlank()) return oldKey
+    val key = "customer-" + UUID.randomUUID().toString()
+    prefs.edit().putString("fingerprint", fingerprint).putString("idempotency_key", key).apply()
+    return key
+}
+
+internal fun clearCustomerPortalOrderKey(context: Context, key: String) {
+    val prefs = customerPortalPendingPrefs(context)
+    if (prefs.getString("idempotency_key", null) == key) prefs.edit().remove("idempotency_key").remove("fingerprint").apply()
+}
+
+internal fun submitCustomerPortalOrder(
+    context: Context, organizationId: String, lines: List<Pair<String, String>>,
+    paymentMode: String, note: String, idempotencyKey: String
+): CustomerPortalOrderResult {
+    require(paymentMode == "cash" || paymentMode == "credit") { "طريقة الفاتورة غير صحيحة." }
+    require(lines.isNotEmpty() && lines.size <= 100) { "يجب اختيار صنف واحد على الأقل وبحد أقصى 100 صنف." }
+    require(lines.map { it.first }.distinct().size == lines.size) { "يوجد صنف مكرر في السلة." }
+    val lineArray = JSONArray()
+    lines.forEach { (offeringId, quantity) ->
+        require(offeringId.isNotBlank() && quantity.toBigDecimalOrNull()?.let { it > java.math.BigDecimal.ZERO && it <= java.math.BigDecimal("1000000") && it.scale().coerceAtLeast(0) <= 3 } == true) {
+            "تحقق من الصنف والكمية المدخلة."
+        }
+        lineArray.put(JSONObject().put("offering_id", offeringId).put("quantity", quantity))
+    }
+    val access = customerPortalAccessToken(context)
+    val payload = JSONObject()
+        .put("p_organization_id", organizationId)
+        .put("p_lines", lineArray)
+        .put("p_payment_mode", paymentMode)
+        .put("p_customer_note", note.take(1000))
+        .put("p_idempotency_key", idempotencyKey)
+    val row = JSONObject(commercialCloudRequest("/rest/v1/rpc/commercial_customer_portal_create_order", "POST", payload, access))
+    val orderId = row.optString("order_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+    require(orderId.isNotBlank()) { "لم يرجع الخادم تأكيدًا صالحًا للطلب؛ لا تنشئ طلبًا جديدًا بمفتاح مختلف." }
+    return CustomerPortalOrderResult(orderId, row.optString("order_number"), row.optString("status"),
+        row.optString("payment_status"), row.optLong("total_minor", 0L), row.optString("currency_code"), row.optBoolean("replayed"))
+}
