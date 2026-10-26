@@ -74,7 +74,7 @@ internal fun CommercialCloudExpensesScreen(context: Context, onBack: () -> Unit)
     }
     LaunchedEffect(Unit) { refresh() }
     val todayPrefix = java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US).format(java.util.Date())
-    val today = expenses.filter { it.recordedAt.startsWith(todayPrefix) }
+    val today = expenses.filter { it.recordedAt.startsWith(todayPrefix) && it.canceledAt.isBlank() }
     val todayTotal = today.fold(BigDecimal.ZERO) { total, item -> total.add(BigDecimal.valueOf(item.amountMinor)) }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
