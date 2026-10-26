@@ -381,8 +381,7 @@ private fun StoreApp(context: Context) {
                         showReports = false
                     } else ReportsScreen(sales = sales, settlements = settlements, expenses = expenses, onBack = { showReports = false })
                     showExpenses -> if (cloudMode) {
-                        cloudNotice = "المصروفات السحابية لم تُربط بدفتر الحسابات بعد؛ لم يتم تسجيل أي مصروف محلي على أنه سحابي."
-                        showExpenses = false
+                        CommercialCloudExpensesScreen(context = context, onBack = { showExpenses = false })
                     } else ExpensesScreen(expenses = expenses, onBack = { showExpenses = false }, onAdd = { expenseDialog = true })
                     else -> if (showActivityProfile) ActivityProfileScreen(onBack = { showActivityProfile = false }) else MoreScreen(onCustomers = {
                     showDebts = true
