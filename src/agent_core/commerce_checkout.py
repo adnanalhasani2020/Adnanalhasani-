@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 from agent_core.application import SaleApplication
+from agent_core.invoice_application import InvoiceApplication
 from agent_core.inventory_read import InventoryQuantityReader, InventoryQuantityStatus
 from agent_core.shared import ValidationError
 
@@ -182,7 +183,8 @@ class CommercialCheckoutApplication:
         self, connection, *, actor_person_id, activity_id, offering_id, quantity,
         scope_key, location_ref, idempotency_key, sale_id,
         create_sale_grant_id=None, confirm_sale_grant_id=None, fulfill_sale_grant_id=None,
-        session_token=None, now=None,
+        session_token=None, now=None, invoice_issuer_ref=None, invoice_number=None,
+        issue_invoice_grant_id=None, invoice_due_at=None,
     ) -> dict:
         """Atomically fulfill a sale, snapshot its price, and record its stock movement.
 
@@ -205,6 +207,18 @@ class CommercialCheckoutApplication:
             raise ValidationError("Checkout idempotency_key must contain 1–200 non-space characters")
         instant = _instant(datetime.now(timezone.utc) if now is None else now, "Checkout timestamp")
         stamp = _stamp(instant)
+        invoice_fields = (invoice_issuer_ref, invoice_number, issue_invoice_grant_id)
+        if any(value is not None for value in invoice_fields) and any(value is None for value in invoice_fields):
+            raise ValidationError(
+                "Invoice issuance requires an explicit issuer, invoice number, and issue_invoice grant"
+            )
+        issuer_key = _uuid(invoice_issuer_ref, "Invoice issuer identifier") if invoice_issuer_ref is not None else None
+        invoice_grant_key = _uuid(issue_invoice_grant_id, "Issue Invoice grant") if issue_invoice_grant_id is not None else None
+        if invoice_number is not None and (not isinstance(invoice_number, str) or not invoice_number.strip()):
+            raise ValidationError("Invoice number must be a non-empty string")
+        normalized_invoice_number = invoice_number.strip() if invoice_number is not None else None
+        if invoice_due_at is not None and not isinstance(invoice_due_at, (str, datetime)):
+            raise ValidationError("Invoice due date must be an ISO timestamp or timezone-aware datetime")
         request = {
             "actor_person_id": actor, "activity_id": activity, "offering_id": offering,
             "quantity": quantity, "scope_key": scope_key.strip(),
@@ -213,6 +227,10 @@ class CommercialCheckoutApplication:
             "create_sale_grant_id": _uuid(create_sale_grant_id, "Create Sale grant") if create_sale_grant_id is not None else None,
             "confirm_sale_grant_id": _uuid(confirm_sale_grant_id, "Confirm Sale grant") if confirm_sale_grant_id is not None else None,
             "fulfill_sale_grant_id": _uuid(fulfill_sale_grant_id, "Fulfill Sale grant") if fulfill_sale_grant_id is not None else None,
+            "invoice_issuer_ref": issuer_key,
+            "invoice_number": normalized_invoice_number,
+            "issue_invoice_grant_id": invoice_grant_key,
+            "invoice_due_at": invoice_due_at.isoformat() if isinstance(invoice_due_at, datetime) else invoice_due_at,
         }
         fingerprint = _hash_request(request)
         key = idempotency_key.strip()
@@ -360,6 +378,16 @@ class CommercialCheckoutApplication:
                 "location_ref": location_ref.strip() if location_ref is not None else None,
                 "quantity_remaining": remaining, "occurred_at": stamp,
             }
+            if issuer_key is not None:
+                invoice_record = InvoiceApplication().create_invoice(
+                    connection, sale_id=sale_key, actor_context_ref=actor,
+                    authorization_grant_id=invoice_grant_key, issuer_ref=issuer_key,
+                    invoice_number=normalized_invoice_number, issue_at=instant,
+                    due_at=invoice_due_at, now=instant,
+                )
+                response["invoice_id"] = str(invoice_record.invoice.id)
+                response["invoice_number"] = invoice_record.invoice_number
+                response["invoice_state"] = invoice_record.invoice.state.value
             connection.execute(
                 """INSERT INTO commercial_checkout_receipts(
                        actor_person_id, idempotency_key, request_hash, response_json, created_at
