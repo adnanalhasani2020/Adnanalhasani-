@@ -55,17 +55,20 @@ internal fun CommercialCloudExpensesScreen(context: Context, onBack: () -> Unit)
     var paymentMethod by remember { mutableStateOf("cash") }
     var evidence by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
-    val currency = remember { context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE).getString("currency_code", "YER").orEmpty().ifBlank { "YER" } }
+    var currency by remember { mutableStateOf("") }
     fun refresh() {
         if (loading) return
         loading = true
         error = ""
         CloudExpenseIo.execute {
-            val result = runCatching { loadCommercialCloudExpenses(context) }
+            val result = runCatching { loadCommercialCloudExpenseCurrencyCode(context) to loadCommercialCloudExpenses(context) }
             CloudExpenseMain.post {
                 loading = false
-                result.onSuccess { expenses.clear(); expenses.addAll(it) }
-                    .onFailure { error = it.message ?: "تعذر تحميل سندات الصرف من الخادم." }
+                result.onSuccess {
+                    currency = it.first
+                    expenses.clear()
+                    expenses.addAll(it.second)
+                }.onFailure { error = it.message ?: "تعذر تحميل سندات الصرف من الخادم." }
             }
         }
     }
@@ -124,6 +127,7 @@ internal fun CommercialCloudExpensesScreen(context: Context, onBack: () -> Unit)
                             decimal.movePointRight(cloudExpenseCurrencyScale(currency)).longValueExact()
                         }.getOrNull()
                         when {
+                            currency.isBlank() -> error = "تعذر تحميل عملة المؤسسة من الخادم؛ لم يتم إرسال السند."
                             category.isBlank() -> error = "أدخل تصنيف المصروف."
                             amountMinor == null || amountMinor <= 0L -> error = "أدخل مبلغًا موجبًا وبعدد المنازل العشرية المسموح للعملة."
                             evidence.trim().length < 3 -> error = "أدخل مرجع إثبات الصرف."
