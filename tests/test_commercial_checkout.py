@@ -144,13 +144,16 @@ def test_returning_checkout_sale_restores_stock_atomically_once(tmp_path):
 
     movements = db.execute(
         "SELECT source_type, quantity_delta FROM inventory_movements "
-        "WHERE source_ref=? ORDER BY created_at, inventory_movement_id",
-        (request["sale_id"],),
+        "WHERE (source_type='sale' AND source_ref=?) OR "
+        "(source_type='sale_return' AND source_ref IN ("
+        "SELECT rl.sale_return_line_id FROM sale_return_lines rl "
+        "JOIN sale_return_events re ON re.return_event_id=rl.return_event_id WHERE re.sale_id=?)) "
+        "ORDER BY created_at, inventory_movement_id",
+        (request["sale_id"], request["sale_id"]),
     ).fetchall()
     assert sorted(movements) == [("sale", -2), ("sale_return", 2)]
 
-    # The database itself must reject a duplicate compensation even if a caller
-    # bypasses SaleApplication and attempts to write inventory_movements directly.
+    # A repeated movement for the same return line is rejected at the database boundary.
     with pytest.raises(sqlite3.IntegrityError, match="Sale stock has already been returned"):
         db.execute(
             "INSERT INTO inventory_movements("
@@ -159,7 +162,9 @@ def test_returning_checkout_sale_restores_stock_atomically_once(tmp_path):
             "occurred_at,created_at) "
             "SELECT ?,inventory_position_id,activity_id,product_id,offering_id,location_ref,"
             "scope_key,quantity_delta,source_type,source_ref,actor_context_ref,occurred_at,created_at "
-            "FROM inventory_movements WHERE source_type='sale_return' AND source_ref=?",
+            "FROM inventory_movements WHERE source_type='sale_return' AND source_ref IN ("
+            "SELECT rl.sale_return_line_id FROM sale_return_lines rl "
+            "JOIN sale_return_events re ON re.return_event_id=rl.return_event_id WHERE re.sale_id=?)",
             (uid(), request["sale_id"]),
         )
     listed = checkout.list_sellable_offerings(
@@ -185,9 +190,77 @@ def test_returning_checkout_sale_restores_stock_atomically_once(tmp_path):
             now=datetime(2026, 10, 17, 12, 4, tzinfo=timezone.utc),
         )
     assert db.execute(
-        "SELECT COUNT(*) FROM inventory_movements WHERE source_type='sale_return' AND source_ref=?",
+        "SELECT COUNT(*) FROM inventory_movements WHERE source_type='sale_return' AND source_ref IN ("
+        "SELECT rl.sale_return_line_id FROM sale_return_lines rl "
+        "JOIN sale_return_events re ON re.return_event_id=rl.return_event_id WHERE re.sale_id=?)",
         (request["sale_id"],),
     ).fetchone()[0] == 1
+
+
+
+def test_partial_and_multiple_returns_are_idempotent_and_quantity_bounded(tmp_path):
+    db, request = setup_checkout(tmp_path, quantity=2)
+    CommercialCheckoutApplication().checkout(db, **request, now=NOW)
+    sale_line_id = db.execute(
+        "SELECT sale_line_id FROM sale_lines WHERE sale_id=?", (request["sale_id"],)
+    ).fetchone()[0]
+    grant_id = uid()
+    db.execute(
+        """INSERT INTO authorization_grants(
+               authorization_grant_id,subject_person_id,agent_id,action_code,scope_ref,
+               context_ref,delegation_id,state,effective_from,effective_to,created_at,updated_at
+           ) VALUES(?,?,NULL,'return_sale',?,?,NULL,'active',?,NULL,?,?)""",
+        (grant_id, request["actor_person_id"], request["sale_id"], request["activity_id"],
+         BEFORE, BEFORE, BEFORE),
+    )
+    db.commit()
+    app = SaleApplication()
+    first = app.return_sale_items(
+        db, request["sale_id"], request["actor_person_id"], grant_id,
+        items=[{"sale_line_id": sale_line_id, "quantity": 1}],
+        idempotency_key="return-partial-001", reason="customer returned one unit",
+        now=datetime(2026, 10, 17, 12, 2, tzinfo=timezone.utc),
+    )
+    assert first["replayed"] is False
+    assert first["sale_state"] == "fulfilled"
+    assert db.execute(
+        "SELECT COUNT(*) FROM inventory_movements WHERE source_type='sale_return'"
+    ).fetchone()[0] == 1
+
+    replay = app.return_sale_items(
+        db, request["sale_id"], request["actor_person_id"], grant_id,
+        items=[{"sale_line_id": sale_line_id, "quantity": 1}],
+        idempotency_key="return-partial-001", reason="customer returned one unit",
+        now=datetime(2026, 10, 17, 12, 3, tzinfo=timezone.utc),
+    )
+    assert replay["return_id"] == first["return_id"]
+    assert replay["replayed"] is True
+    with pytest.raises(ValidationError, match="Cumulative returned quantity exceeds"):
+        app.return_sale_items(
+            db, request["sale_id"], request["actor_person_id"], grant_id,
+            items=[{"sale_line_id": sale_line_id, "quantity": 2}],
+            idempotency_key="return-overflow-001", reason="attempt over return",
+            now=datetime(2026, 10, 17, 12, 4, tzinfo=timezone.utc),
+        )
+    second = app.return_sale_items(
+        db, request["sale_id"], request["actor_person_id"], grant_id,
+        items=[{"sale_line_id": sale_line_id, "quantity": 1}],
+        idempotency_key="return-partial-002", reason="customer returned remaining unit",
+        now=datetime(2026, 10, 17, 12, 5, tzinfo=timezone.utc),
+    )
+    assert second["replayed"] is False
+    assert second["sale_state"] == "returned"
+    assert SaleApplication().get_sale_state(db, request["sale_id"]).value == "returned"
+    assert db.execute(
+        "SELECT COUNT(*) FROM sale_return_events WHERE sale_id=?", (request["sale_id"],)
+    ).fetchone()[0] == 2
+    assert db.execute(
+        "SELECT SUM(quantity) FROM sale_return_lines rl JOIN sale_return_events re "
+        "ON re.return_event_id=rl.return_event_id WHERE re.sale_id=?", (request["sale_id"],)
+    ).fetchone()[0] == 2
+    assert db.execute(
+        "SELECT SUM(quantity_delta) FROM inventory_movements WHERE source_type='sale_return'"
+    ).fetchone()[0] == 2
 
 
 def test_database_rejects_stock_return_while_invoice_is_issued(tmp_path):
@@ -201,6 +274,22 @@ def test_database_rejects_stock_return_while_invoice_is_issued(tmp_path):
     )
     db.commit()
 
+    line_id = db.execute(
+        "SELECT sale_line_id,quantity FROM sale_lines WHERE sale_id=?",
+        (request["sale_id"],),
+    ).fetchone()
+    event_id = uid()
+    return_line_id = uid()
+    db.execute(
+        "INSERT INTO sale_return_events(return_event_id,sale_id,idempotency_key,request_fingerprint,reason,actor_context_ref,created_at) "
+        "VALUES(?,?,?,'direct-sql-test','test return',?,?)",
+        (event_id, request["sale_id"], "direct-sql-return-001", request["actor_person_id"], STAMP),
+    )
+    db.execute(
+        "INSERT INTO sale_return_lines(sale_return_line_id,return_event_id,sale_line_id,quantity,created_at) "
+        "VALUES(?,?,?,?,?)",
+        (return_line_id, event_id, line_id[0], line_id[1], STAMP),
+    )
     with pytest.raises(
         sqlite3.IntegrityError,
         match="Sale return requires explicit Invoice reconciliation first",
@@ -211,9 +300,9 @@ def test_database_rejects_stock_return_while_invoice_is_issued(tmp_path):
             "location_ref,scope_key,quantity_delta,source_type,source_ref,actor_context_ref,"
             "occurred_at,created_at) "
             "SELECT ?,inventory_position_id,activity_id,product_id,offering_id,location_ref,"
-            "scope_key,-quantity_delta,'sale_return',source_ref,actor_context_ref,?,? "
+            "scope_key,?,'sale_return',?,?,?,? "
             "FROM inventory_movements WHERE source_type='sale' AND source_ref=?",
-            (uid(), STAMP, STAMP, request["sale_id"]),
+            (uid(), line_id[1], return_line_id, request["actor_person_id"], STAMP, STAMP, request["sale_id"]),
         )
 
     assert db.execute(
