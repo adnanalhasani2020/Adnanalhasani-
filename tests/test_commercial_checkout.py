@@ -200,6 +200,70 @@ def test_returning_checkout_sale_restores_stock_atomically_once(tmp_path):
 
 
 
+
+def test_checkout_can_issue_an_authorized_invoice_atomically(tmp_path):
+    db, request = setup_checkout(tmp_path)
+    invoice_grant = uid()
+    db.execute(
+        """INSERT INTO authorization_grants(
+               authorization_grant_id,subject_person_id,agent_id,action_code,scope_ref,
+               context_ref,delegation_id,state,effective_from,effective_to,created_at,updated_at
+           ) VALUES(?,?,NULL,'issue_invoice',?,?,NULL,'active',?,NULL,?,?)""",
+        (invoice_grant, request["actor_person_id"], request["sale_id"], request["activity_id"],
+         BEFORE, BEFORE, BEFORE),
+    )
+    db.commit()
+    result = CommercialCheckoutApplication().checkout(
+        db, **request, invoice_issuer_ref=request["actor_person_id"],
+        invoice_number="INV-CHECKOUT-001", issue_invoice_grant_id=invoice_grant, now=NOW,
+    )
+    assert result["invoice_number"] == "INV-CHECKOUT-001"
+    assert result["invoice_state"] == "issued"
+    assert db.execute(
+        "SELECT sale_id,state,issuer_ref,invoice_number FROM invoices WHERE invoice_id=?",
+        (result["invoice_id"],),
+    ).fetchone() == (
+        request["sale_id"], "issued", request["actor_person_id"], "INV-CHECKOUT-001",
+    )
+    receipt = db.execute(
+        "SELECT response_json FROM commercial_checkout_receipts WHERE idempotency_key=?",
+        (request["idempotency_key"],),
+    ).fetchone()[0]
+    assert result["invoice_id"] in receipt
+    replay = CommercialCheckoutApplication().checkout(
+        db, **request, invoice_issuer_ref=request["actor_person_id"],
+        invoice_number="INV-CHECKOUT-001", issue_invoice_grant_id=invoice_grant, now=NOW,
+    )
+    assert replay == result
+    assert db.execute("SELECT COUNT(*) FROM invoices WHERE sale_id=?", (request["sale_id"],)).fetchone()[0] == 1
+    db.close()
+
+
+def test_invoice_issuance_failure_rolls_back_checkout_sale_stock_and_receipt(tmp_path):
+    db, request = setup_checkout(tmp_path)
+    wrong_grant = uid()
+    db.execute(
+        """INSERT INTO authorization_grants(
+               authorization_grant_id,subject_person_id,agent_id,action_code,scope_ref,
+               context_ref,delegation_id,state,effective_from,effective_to,created_at,updated_at
+           ) VALUES(?,?,NULL,'confirm_sale',?,?,NULL,'active',?,NULL,?,?)""",
+        (wrong_grant, request["actor_person_id"], request["sale_id"], request["activity_id"],
+         BEFORE, BEFORE, BEFORE),
+    )
+    db.commit()
+    with pytest.raises(ValidationError, match="does not permit action issue_invoice"):
+        CommercialCheckoutApplication().checkout(
+            db, **request, invoice_issuer_ref=request["actor_person_id"],
+            invoice_number="INV-CHECKOUT-FAIL", issue_invoice_grant_id=wrong_grant, now=NOW,
+        )
+    assert db.execute("SELECT COUNT(*) FROM sales WHERE sale_id=?", (request["sale_id"],)).fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM sale_lines WHERE sale_id=?", (request["sale_id"],)).fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM inventory_movements WHERE source_ref=?", (request["sale_id"],)).fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM invoices WHERE sale_id=?", (request["sale_id"],)).fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM commercial_checkout_receipts WHERE idempotency_key=?", (request["idempotency_key"],)).fetchone()[0] == 0
+    db.close()
+
+
 def test_commerce_sale_payment_settlement_and_finance_recognition_are_one_governed_chain(tmp_path):
     db, request = setup_checkout(tmp_path, quantity=2)
     checkout = CommercialCheckoutApplication()
