@@ -2304,6 +2304,84 @@ internal fun cancelCustomerPortalBooking(context: Context, bookingId: String, re
 
 
 
+
+internal data class CustomerOrderFulfillmentItem(
+    val offeringId: String,
+    val name: String,
+    val itemType: String,
+    val quantity: String,
+    val unitPriceMinor: Long,
+    val lineTotalMinor: Long
+)
+
+internal data class CustomerOrderFulfillmentOrder(
+    val id: String,
+    val organizationId: String,
+    val orderNumber: String,
+    val createdAt: String,
+    val status: String,
+    val paymentStatus: String,
+    val orderType: String,
+    val currencyCode: String,
+    val totalMinor: Long,
+    val customerNote: String,
+    val customerName: String,
+    val fulfillmentSupported: Boolean,
+    val items: List<CustomerOrderFulfillmentItem>
+)
+
+internal data class CustomerOrderFulfillmentLocation(val id: String, val name: String)
+
+internal fun loadCustomerOrderFulfillmentQueue(context: Context): List<CustomerOrderFulfillmentOrder> {
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val rows = JSONArray(commercialCloudRequest(
+        "/rest/v1/rpc/commercial_customer_portal_list_organization_orders", "POST",
+        JSONObject().put("p_organization_id", orgId).put("p_limit", 100), access
+    ))
+    return (0 until rows.length()).map { index ->
+        val row = rows.getJSONObject(index)
+        val itemRows = row.optJSONArray("items") ?: JSONArray()
+        val items = (0 until itemRows.length()).map { itemIndex ->
+            val item = itemRows.getJSONObject(itemIndex)
+            CustomerOrderFulfillmentItem(
+                offeringId = item.optString("offering_id"),
+                name = item.optString("name"),
+                itemType = item.optString("item_type"),
+                quantity = item.optString("quantity"),
+                unitPriceMinor = item.optLong("unit_price_minor"),
+                lineTotalMinor = item.optLong("line_total_minor")
+            )
+        }
+        CustomerOrderFulfillmentOrder(
+            id = row.optString("id"),
+            organizationId = row.optString("organization_id"),
+            orderNumber = row.optString("order_number"),
+            createdAt = row.optString("created_at"),
+            status = row.optString("status"),
+            paymentStatus = row.optString("payment_status"),
+            orderType = row.optString("order_type"),
+            currencyCode = row.optString("currency_code"),
+            totalMinor = row.optLong("total_minor"),
+            customerNote = row.optString("customer_note").takeUnless { it == "null" }.orEmpty(),
+            customerName = row.optString("customer_name").takeUnless { it == "null" }.orEmpty(),
+            fulfillmentSupported = row.optBoolean("fulfillment_supported"),
+            items = items
+        )
+    }
+}
+
+internal fun loadCustomerOrderFulfillmentLocations(context: Context): List<CustomerOrderFulfillmentLocation> {
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val rows = JSONArray(commercialCloudPagedGet(
+        "/rest/v1/commercial_organization_locations?select=id,name&organization_id=eq.$orgId&state=eq.active&order=name.asc",
+        access
+    ))
+    return (0 until rows.length()).map { index ->
+        val row = rows.getJSONObject(index)
+        CustomerOrderFulfillmentLocation(row.optString("id"), row.optString("name"))
+    }.filter { it.id.isNotBlank() && it.name.isNotBlank() }
+}
+
 internal fun fulfillCustomerPortalOrder(
     context: Context,
     orderId: String,
