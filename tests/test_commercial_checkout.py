@@ -595,7 +595,7 @@ def test_database_rejects_stock_return_while_invoice_is_issued(tmp_path):
         "SELECT sale_line_id,quantity FROM sale_lines WHERE sale_id=?",
         (request["sale_id"],),
     ).fetchone()
-    with pytest.raises(ValidationError, match="Invoice, Obligation, and Payment financial reconciliation"):
+    with pytest.raises(ValidationError, match="reserve a return request and then complete an approved credit note/refund workflow"):
         SaleApplication().return_sale_items(
             db, request["sale_id"], request["actor_person_id"], return_grant,
             items=[{"sale_line_id": app_line[0], "quantity": 1}],
