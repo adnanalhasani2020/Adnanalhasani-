@@ -627,13 +627,15 @@ class SaleApplication:
 
     def return_sale_items(
         self, connection, sale_id, actor_context_ref, authorization_grant_id, *,
-        items, idempotency_key, reason, now=None,
+        items, idempotency_key, reason, now=None, return_event_id=None,
+        refund_payment_id=None, credit_note_number=None, financial_account_id=None,
+        finance_context_ref=None, finance_authorization_grant_id=None, finance_agent_action_id=None,
     ):
-        """Record an authorized partial/multi-line return with idempotent stock compensation.
+        """Record an authorized partial return and reconcile its financial effects when required.
 
-        This method only performs the Commerce-owned return and inventory effects.
-        It deliberately does not claim to refund Payment or recognize Finance; those
-        remain separate governed operations and require explicit reconciliation.
+        An unlinked Sale return posts inventory only. A financially linked Sale requires a
+        completed external refund Payment, approved Finance action, credit note, and posted
+        negative ledger entry before inventory is restored.
         """
         sale_uuid = self._uuid(sale_id, "Sale identifier")
         actor_uuid = self._uuid(actor_context_ref, "Actor identifier")
@@ -661,9 +663,26 @@ class SaleApplication:
             seen.add(line_key)
             normalized.append({"sale_line_id": line_key, "quantity": quantity})
         normalized.sort(key=lambda item: item["sale_line_id"])
+        requested_return_id = str(self._uuid(return_event_id, "Sale return event identifier")) if return_event_id is not None else None
+        refund_key = str(self._uuid(refund_payment_id, "Refund Payment identifier")) if refund_payment_id is not None else None
+        account_key = str(self._uuid(financial_account_id, "Financial Account identifier")) if financial_account_id is not None else None
+        finance_context_key = str(self._uuid(finance_context_ref, "Finance context identifier")) if finance_context_ref is not None else None
+        finance_grant_key = str(self._uuid(finance_authorization_grant_id, "Finance AuthorizationGrant identifier")) if finance_authorization_grant_id is not None else None
+        finance_action_key = str(self._uuid(finance_agent_action_id, "Finance AgentAction identifier")) if finance_agent_action_id is not None else None
+        if credit_note_number is not None and (not isinstance(credit_note_number, str) or not credit_note_number.strip()):
+            raise ValidationError("Credit note number must be a non-empty string")
+        credit_note_number = credit_note_number.strip() if credit_note_number is not None else None
+        finance_values = (refund_key, credit_note_number, account_key, finance_context_key, finance_grant_key, finance_action_key)
+        if any(value is not None for value in finance_values) and any(value is None for value in finance_values):
+            raise ValidationError("Financial return requires refund Payment, credit note number, account, Finance context, grant, and approved action")
         fingerprint = __import__("hashlib").sha256(
-            json.dumps({"sale_id": sale_key, "reason": reason, "items": normalized},
-                       sort_keys=True, separators=(",", ":")).encode("utf-8")
+            json.dumps({
+                "sale_id": sale_key, "reason": reason, "items": normalized,
+                "return_event_id": requested_return_id, "refund_payment_id": refund_key,
+                "credit_note_number": credit_note_number, "financial_account_id": account_key,
+                "finance_context_ref": finance_context_key, "finance_authorization_grant_id": finance_grant_key,
+                "finance_agent_action_id": finance_action_key,
+            }, sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
 
         savepoint = "sale_return_items_operation"
@@ -690,23 +709,49 @@ class SaleApplication:
             if existing is not None:
                 if existing[1] != fingerprint:
                     raise ValidationError("Sale return idempotency key was reused with a different request")
+                completion = connection.execute(
+                    "SELECT credit_note_id FROM sale_return_completions WHERE return_event_id=?",
+                    (existing[0],),
+                ).fetchone()
+                if completion is None:
+                    raise ValidationError("Sale return request is pending; use the approved completion workflow")
+                credit = connection.execute(
+                    "SELECT credit_note_id,credit_note_number,amount_minor,refund_payment_id,"
+                    "financial_transaction_id,ledger_entry_id,currency_code FROM credit_notes "
+                    "WHERE return_event_id=?",
+                    (existing[0],),
+                ).fetchone()
                 connection.execute(f"RELEASE SAVEPOINT {savepoint}")
-                return {"return_id": existing[0], "sale_id": sale_key, "replayed": True,
-                        "sale_state": self.get_sale_state(connection, sale_key).value}
+                result = {"return_id": existing[0], "sale_id": sale_key, "replayed": True,
+                          "sale_state": self.get_sale_state(connection, sale_key).value}
+                if credit is not None:
+                    result.update({"credit_note_id": credit[0], "credit_note_number": credit[1],
+                                   "refund_amount_minor": credit[2], "refund_payment_id": credit[3],
+                                   "financial_transaction_id": credit[4], "ledger_entry_id": credit[5],
+                                   "currency_code": credit[6], "financial_effects": "refund_and_inventory",
+                                   "payment_refund_performed": True})
+                else:
+                    result["financial_effects"] = "inventory_only"
+                    result["payment_refund_performed"] = False
+                return result
             if sale.state is not SaleState.FULFILLED:
                 raise ValidationError("Only a fulfilled Sale with remaining quantity can be returned")
             financial_link = connection.execute(
                 "SELECT i.invoice_id,i.state,i.obligation_id,p.payment_id "
                 "FROM invoices i LEFT JOIN payments p "
                 "ON p.invoice_id=i.invoice_id OR (i.obligation_id IS NOT NULL AND p.obligation_id=i.obligation_id) "
-                "WHERE i.sale_id=? AND (i.state='issued' OR i.obligation_id IS NOT NULL OR p.payment_id IS NOT NULL) "
+                "WHERE i.sale_id=? AND (i.state IN ('issued','settled') OR i.obligation_id IS NOT NULL OR p.payment_id IS NOT NULL) "
                 "LIMIT 1",
                 (sale_key,),
             ).fetchone()
-            if financial_link is not None:
+            has_financial_link = financial_link is not None
+            if has_financial_link:
                 raise ValidationError(
-                    "Sale return requires explicit Invoice, Obligation, and Payment financial reconciliation first"
+                    "Financially linked Sale returns must first reserve a return request and then complete "
+                    "an approved credit note/refund workflow"
                 )
+            if any(value is not None for value in finance_values):
+                raise ValidationError("Finance refund fields are accepted only by complete_sale_return")
 
             sale_lines = {}
             for item in normalized:
@@ -727,12 +772,13 @@ class SaleApplication:
                     raise ValidationError("Cumulative returned quantity exceeds the sold quantity")
                 sale_lines[item["sale_line_id"]] = line
 
-            return_id = str(uuid4())
+            return_id = requested_return_id or str(uuid4())
             connection.execute(
                 "INSERT INTO sale_return_events(return_event_id,sale_id,idempotency_key,"
                 "request_fingerprint,reason,actor_context_ref,created_at) VALUES(?,?,?,?,?,?,?)",
                 (return_id, sale_key, idempotency_key, fingerprint, reason, actor_key, timestamp),
             )
+            return_movements = []
             for item in normalized:
                 line_id, line_offering, line_product, line_quantity = sale_lines[item["sale_line_id"]]
                 original = connection.execute(
@@ -756,13 +802,21 @@ class SaleApplication:
                     "quantity,created_at) VALUES(?,?,?,?,?)",
                     (return_line_id, return_id, line_id, item["quantity"], timestamp),
                 )
+                return_movements.append((return_line_id, movement, item["quantity"]))
+            credit_note = None
+            connection.execute(
+                "INSERT INTO sale_return_completions(return_event_id,completed_at,credit_note_id,state) "
+                "VALUES(?,?,NULL,'completed')",
+                (return_id, timestamp),
+            )
+            for return_line_id, movement, return_quantity in return_movements:
                 connection.execute(
                     "INSERT INTO inventory_movements(inventory_movement_id,inventory_position_id,"
                     "activity_id,product_id,offering_id,location_ref,scope_key,quantity_delta,"
                     "source_type,source_ref,actor_context_ref,occurred_at,created_at) "
                     "VALUES(?,?,?,?,?,?,?,?,'sale_return',?,?,?,?)",
                     (str(uuid4()), movement[0], movement[1], movement[2], movement[3],
-                     movement[4], movement[5], item["quantity"], return_line_id,
+                     movement[4], movement[5], return_quantity, return_line_id,
                      actor_key, timestamp, timestamp),
                 )
 
@@ -770,6 +824,7 @@ class SaleApplication:
                 "SELECT NOT EXISTS (SELECT 1 FROM sale_lines l WHERE l.sale_id=? AND "
                 "COALESCE((SELECT SUM(rl.quantity) FROM sale_return_lines rl "
                 "JOIN sale_return_events re ON re.return_event_id=rl.return_event_id "
+                "JOIN sale_return_completions c ON c.return_event_id=rl.return_event_id "
                 "WHERE rl.sale_line_id=l.sale_line_id),0) < l.quantity)",
                 (sale_key,),
             ).fetchone()[0]
@@ -801,8 +856,323 @@ class SaleApplication:
                  actor_key, None, None, f"sale:{sale_key};reason:{reason};fingerprint:{fingerprint}", timestamp),
             )
             connection.execute(f"RELEASE SAVEPOINT {savepoint}")
-            return {"return_id": return_id, "sale_id": sale_key, "replayed": False,
-                    "sale_state": next_state.value, "items": normalized}
+            result = {"return_id": return_id, "sale_id": sale_key, "replayed": False,
+                      "sale_state": next_state.value, "items": normalized,
+                      "financial_effects": "refund_and_inventory" if credit_note is not None else "inventory_only",
+                      "payment_refund_performed": credit_note is not None}
+            if credit_note is not None:
+                result.update(credit_note)
+            return result
+        except Exception:
+            if connection.in_transaction:
+                try:
+                    connection.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+                    connection.execute(f"RELEASE SAVEPOINT {savepoint}")
+                except Exception:
+                    pass
+            raise
+
+    def request_sale_return_items(
+        self, connection, sale_id, actor_context_ref, authorization_grant_id, *,
+        items, idempotency_key, reason, now=None, return_event_id=None,
+    ):
+        """Reserve quantities for a financially linked return before external refund execution."""
+        sale_uuid = self._uuid(sale_id, "Sale identifier")
+        actor_uuid = self._uuid(actor_context_ref, "Actor identifier")
+        sale_key, actor_key = str(sale_uuid), str(actor_uuid)
+        timestamp = self._timestamp(now)
+        if not isinstance(idempotency_key, str) or not 8 <= len(idempotency_key.strip()) <= 200:
+            raise ValidationError("Sale return idempotency key must contain 8 to 200 characters")
+        idempotency_key = idempotency_key.strip()
+        if not isinstance(reason, str) or not 3 <= len(reason.strip()) <= 2000:
+            raise ValidationError("Sale return reason must contain 3 to 2000 characters")
+        reason = reason.strip()
+        if not isinstance(items, (list, tuple)) or not items or len(items) > 100:
+            raise ValidationError("Sale return requires between 1 and 100 item quantities")
+        requested_return_id = str(self._uuid(return_event_id, "Sale return event identifier")) if return_event_id is not None else None
+        normalized, seen = [], set()
+        for item in items:
+            if not isinstance(item, dict):
+                raise ValidationError("Each Sale return item must be an object")
+            line_key = str(self._uuid(item.get("sale_line_id"), "Sale line identifier"))
+            quantity = item.get("quantity")
+            if type(quantity) is not int or quantity <= 0:
+                raise ValidationError("Sale return quantity must be a positive integer")
+            if line_key in seen:
+                raise ValidationError("A Sale line may appear only once per return event")
+            seen.add(line_key)
+            normalized.append({"sale_line_id": line_key, "quantity": quantity})
+        normalized.sort(key=lambda item: item["sale_line_id"])
+        fingerprint = __import__("hashlib").sha256(
+            json.dumps({
+                "sale_id": sale_key, "reason": reason, "items": normalized,
+                "return_event_id": requested_return_id, "refund_payment_id": None,
+                "credit_note_number": None, "financial_account_id": None,
+                "finance_context_ref": None, "finance_authorization_grant_id": None,
+                "finance_agent_action_id": None,
+            }, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        savepoint = "sale_return_request_operation"
+        connection.execute(f"SAVEPOINT {savepoint}")
+        try:
+            sale, _, _, _ = self._load_sale(connection, sale_uuid)
+            sale_times = connection.execute(
+                "SELECT created_at,updated_at FROM sales WHERE sale_id=?", (sale_key,)
+            ).fetchone()
+            sale_created = self._grant_instant(sale_times[0], "creation timestamp", owner="Sale")
+            sale_updated = self._grant_instant(sale_times[1], "latest update timestamp", owner="Sale")
+            operation_instant = self._grant_instant(timestamp, "operation timestamp", owner="Sale")
+            if operation_instant < sale_created or operation_instant < sale_updated:
+                raise ValidationError("Sale return timestamp cannot precede the Sale timestamps")
+            self._authorize(
+                connection, authorization_grant_id, actor_key, "return_sale",
+                sale_key, str(sale.activity_id), timestamp,
+            )
+            existing = connection.execute(
+                "SELECT return_event_id,request_fingerprint FROM sale_return_events "
+                "WHERE sale_id=? AND idempotency_key=?",
+                (sale_key, idempotency_key),
+            ).fetchone()
+            if existing is not None:
+                if existing[1] != fingerprint:
+                    raise ValidationError("Sale return idempotency key was reused with a different request")
+                completed = connection.execute(
+                    "SELECT credit_note_id FROM sale_return_completions WHERE return_event_id=?",
+                    (existing[0],),
+                ).fetchone()
+                if completed is not None:
+                    credit = connection.execute(
+                        "SELECT credit_note_id,credit_note_number,amount_minor,refund_payment_id,"
+                        "financial_transaction_id,ledger_entry_id,currency_code FROM credit_notes WHERE return_event_id=?",
+                        (existing[0],),
+                    ).fetchone()
+                    result = {"return_id": existing[0], "sale_id": sale_key, "status": "completed",
+                              "replayed": True, "sale_state": self.get_sale_state(connection, sale_key).value}
+                    if credit is not None:
+                        result.update({"credit_note_id": credit[0], "credit_note_number": credit[1],
+                                       "refund_amount_minor": credit[2], "refund_payment_id": credit[3],
+                                       "financial_transaction_id": credit[4], "ledger_entry_id": credit[5],
+                                       "currency_code": credit[6]})
+                    connection.execute(f"RELEASE SAVEPOINT {savepoint}")
+                    return result
+                from agent_core.sale_return_financial_application import SaleReturnFinancialApplication
+                quote = SaleReturnFinancialApplication().quote_return_amount(connection, return_event_id=existing[0])
+                connection.execute(f"RELEASE SAVEPOINT {savepoint}")
+                return {"return_id": existing[0], "sale_id": sale_key, "status": "pending_refund",
+                        "replayed": True, "refund_amount_minor": quote["refund_amount_minor"],
+                        "currency_code": quote["currency_code"], "items": normalized}
+            if sale.state is not SaleState.FULFILLED:
+                raise ValidationError("Only a fulfilled Sale with remaining quantity can be returned")
+            financial_link = connection.execute(
+                "SELECT i.invoice_id,i.state,i.obligation_id FROM invoices i "
+                "WHERE i.sale_id=? AND (i.state IN ('issued','settled') OR i.obligation_id IS NOT NULL) LIMIT 1",
+                (sale_key,),
+            ).fetchone()
+            if financial_link is None:
+                raise ValidationError("A return request is required only for a financially linked Sale; use direct return for inventory-only Sales")
+            if financial_link[1] != "settled" or financial_link[2] is None:
+                raise ValidationError("Financial return requires an issued-and-settled Invoice and recognized Obligation before refund")
+            original_chain = connection.execute(
+                "SELECT 1 FROM invoices i JOIN obligations o ON o.obligation_id=i.obligation_id "
+                "JOIN settlements st ON st.obligation_id=o.obligation_id AND st.state='settled' "
+                "JOIN financial_transactions ft ON ft.settlement_id=st.settlement_id AND ft.state='recognized' "
+                "JOIN payments p ON p.payment_id=st.payment_id AND p.state='completed' "
+                "WHERE i.sale_id=? AND i.state='settled' AND o.state='satisfied' "
+                "AND p.amount_minor=o.amount_minor AND p.currency_code=o.currency_code LIMIT 1",
+                (sale_key,),
+            ).fetchone()
+            if original_chain is None:
+                raise ValidationError("Original Invoice/Payment/Settlement/Finance chain is not fully recognized")
+            for item in normalized:
+                line = connection.execute(
+                    "SELECT quantity FROM sale_lines WHERE sale_line_id=? AND sale_id=?",
+                    (item["sale_line_id"], sale_key),
+                ).fetchone()
+                if line is None:
+                    raise ValidationError("Sale return line does not belong to the requested Sale")
+                prior = connection.execute(
+                    "SELECT COALESCE(SUM(rl.quantity),0) FROM sale_return_lines rl "
+                    "WHERE rl.sale_line_id=?", (item["sale_line_id"],)
+                ).fetchone()[0]
+                if prior + item["quantity"] > line[0]:
+                    raise ValidationError("Cumulative requested/returned quantity exceeds sold quantity")
+            return_id = requested_return_id or str(uuid4())
+            connection.execute(
+                "INSERT INTO sale_return_events(return_event_id,sale_id,idempotency_key,request_fingerprint,"
+                "reason,actor_context_ref,created_at) VALUES(?,?,?,?,?,?,?)",
+                (return_id, sale_key, idempotency_key, fingerprint, reason, actor_key, timestamp),
+            )
+            for item in normalized:
+                connection.execute(
+                    "INSERT INTO sale_return_lines(sale_return_line_id,return_event_id,sale_line_id,quantity,created_at) "
+                    "VALUES(?,?,?,?,?)",
+                    (str(uuid4()), return_id, item["sale_line_id"], item["quantity"], timestamp),
+                )
+            from agent_core.sale_return_financial_application import SaleReturnFinancialApplication
+            quote = SaleReturnFinancialApplication().quote_return_amount(connection, return_event_id=return_id)
+            if quote["refund_amount_minor"] <= 0:
+                raise ValidationError("Return allocation rounds to zero minor units; reconcile manually")
+            connection.execute(
+                "INSERT INTO domain_history(domain_history_id,owner_domain,target_ref,change_type,historical_at,"
+                "actor_context_ref,prior_version_ref,current_version_ref,change_payload_ref,created_at) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?)",
+                (str(uuid4()), "commerce", return_id, "sale_return_requested", timestamp, actor_key,
+                 None, None, f"sale:{sale_key};reason:{reason};refund_minor:{quote['refund_amount_minor']};"
+                 f"currency:{quote['currency_code']}", timestamp),
+            )
+            connection.execute(f"RELEASE SAVEPOINT {savepoint}")
+            return {"return_id": return_id, "sale_id": sale_key, "status": "pending_refund",
+                    "replayed": False, "refund_amount_minor": quote["refund_amount_minor"],
+                    "currency_code": quote["currency_code"], "items": normalized}
+        except Exception:
+            if connection.in_transaction:
+                try:
+                    connection.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+                    connection.execute(f"RELEASE SAVEPOINT {savepoint}")
+                except Exception:
+                    pass
+            raise
+
+    def complete_sale_return(
+        self, connection, return_event_id, actor_context_ref, authorization_grant_id, *,
+        refund_payment_id, credit_note_number, financial_account_id, finance_context_ref,
+        finance_authorization_grant_id, finance_agent_action_id, now=None,
+    ):
+        """Complete a reserved financial return after the external refund Payment is completed."""
+        return_key = str(self._uuid(return_event_id, "Sale return event identifier"))
+        actor_key = str(self._uuid(actor_context_ref, "Actor identifier"))
+        refund_key = str(self._uuid(refund_payment_id, "Refund Payment identifier"))
+        account_key = str(self._uuid(financial_account_id, "Financial Account identifier"))
+        timestamp = self._timestamp(now)
+        if not isinstance(credit_note_number, str) or not credit_note_number.strip():
+            raise ValidationError("Credit note number must be a non-empty string")
+        credit_note_number = credit_note_number.strip()
+        savepoint = "complete_sale_return_operation"
+        connection.execute(f"SAVEPOINT {savepoint}")
+        try:
+            event = connection.execute(
+                "SELECT sale_id,actor_context_ref,reason,created_at FROM sale_return_events WHERE return_event_id=?",
+                (return_key,),
+            ).fetchone()
+            if event is None:
+                raise ValidationError("Sale return request does not exist")
+            sale_key = event[0]
+            sale, _, version_no, previous_ref = self._load_sale(connection, self._uuid(sale_key, "Sale identifier"))
+            sale_times = connection.execute(
+                "SELECT created_at,updated_at FROM sales WHERE sale_id=?", (sale_key,)
+            ).fetchone()
+            operation_instant = self._grant_instant(timestamp, "operation timestamp", owner="Sale")
+            if operation_instant < self._grant_instant(sale_times[0], "creation timestamp", owner="Sale") or operation_instant < self._grant_instant(sale_times[1], "latest update timestamp", owner="Sale"):
+                raise ValidationError("Return completion timestamp cannot precede the Sale timestamps")
+            self._authorize(
+                connection, authorization_grant_id, actor_key, "return_sale",
+                sale_key, str(sale.activity_id), timestamp,
+            )
+            existing = connection.execute(
+                "SELECT credit_note_id FROM sale_return_completions WHERE return_event_id=?",
+                (return_key,),
+            ).fetchone()
+            if existing is not None:
+                credit = connection.execute(
+                    "SELECT credit_note_id,credit_note_number,refund_payment_id,amount_minor,currency_code,"
+                    "financial_account_id,finance_context_ref,finance_authorization_grant_id,finance_agent_action_id,"
+                    "financial_transaction_id,ledger_entry_id FROM credit_notes WHERE return_event_id=?",
+                    (return_key,),
+                ).fetchone()
+                if (credit is None or existing[0] != credit[0] or credit[1] != credit_note_number or credit[2] != refund_key
+                        or credit[5] != account_key or credit[6] != str(self._uuid(finance_context_ref, "Finance context identifier"))
+                        or credit[7] != str(self._uuid(finance_authorization_grant_id, "Finance AuthorizationGrant identifier"))
+                        or credit[8] != str(self._uuid(finance_agent_action_id, "Finance AgentAction identifier"))):
+                    raise ValidationError("Completed Sale return cannot be replayed with different refund/credit-note evidence")
+                connection.execute(f"RELEASE SAVEPOINT {savepoint}")
+                return {"return_id": return_key, "sale_id": sale_key, "status": "completed", "replayed": True,
+                        "sale_state": self.get_sale_state(connection, sale_key).value,
+                        "credit_note_id": credit[0], "credit_note_number": credit[1],
+                        "refund_payment_id": credit[2], "refund_amount_minor": credit[3],
+                        "currency_code": credit[4], "financial_transaction_id": credit[9],
+                        "ledger_entry_id": credit[10], "financial_effects": "refund_and_inventory",
+                        "payment_refund_performed": True}
+            if sale.state is not SaleState.FULFILLED:
+                raise ValidationError("Only a fulfilled Sale can complete a pending return request")
+            if connection.execute(
+                "SELECT 1 FROM sale_return_lines WHERE return_event_id=? LIMIT 1", (return_key,)
+            ).fetchone() is None:
+                raise ValidationError("Sale return request has no reserved quantities")
+            from agent_core.sale_return_financial_application import SaleReturnFinancialApplication
+            credit = SaleReturnFinancialApplication().record_credit_note_for_return(
+                connection, sale_id=sale_key, return_event_id=return_key,
+                refund_payment_id=refund_key, credit_note_number=credit_note_number,
+                financial_account_id=account_key, finance_context_ref=finance_context_ref,
+                finance_authorization_grant_id=finance_authorization_grant_id,
+                finance_agent_action_id=finance_agent_action_id, now=timestamp,
+            )
+            connection.execute(
+                "INSERT INTO sale_return_completions(return_event_id,completed_at,credit_note_id,state) "
+                "VALUES(?,?,?,'completed')",
+                (return_key, timestamp, credit["credit_note_id"]),
+            )
+            lines = connection.execute(
+                "SELECT rl.sale_return_line_id,rl.quantity,l.offering_id,l.product_id,l.quantity,"
+                "l.line_total_minor FROM sale_return_lines rl JOIN sale_lines l ON l.sale_line_id=rl.sale_line_id "
+                "WHERE rl.return_event_id=? ORDER BY l.sale_line_id",
+                (return_key,),
+            ).fetchall()
+            for return_line_id, return_quantity, offering_id, product_id, sold_quantity, _ in lines:
+                original = connection.execute(
+                    "SELECT inventory_position_id,activity_id,product_id,offering_id,location_ref,scope_key,quantity_delta "
+                    "FROM inventory_movements WHERE source_type='sale' AND source_ref=?",
+                    (sale_key,),
+                ).fetchall()
+                matching = [row for row in original if row[2] == product_id and row[3] == offering_id]
+                if len(matching) != 1 or matching[0][6] != -sold_quantity:
+                    raise ValidationError("Sale line and original stock movement cannot be reconciled uniquely")
+                movement = matching[0]
+                connection.execute(
+                    "INSERT INTO inventory_movements(inventory_movement_id,inventory_position_id,activity_id,"
+                    "product_id,offering_id,location_ref,scope_key,quantity_delta,source_type,source_ref,"
+                    "actor_context_ref,occurred_at,created_at) VALUES(?,?,?,?,?,?,?,?,'sale_return',?,?,?,?)",
+                    (str(uuid4()), movement[0], movement[1], movement[2], movement[3], movement[4],
+                     movement[5], return_quantity, return_line_id, actor_key, timestamp, timestamp),
+                )
+            all_returned = connection.execute(
+                "SELECT NOT EXISTS (SELECT 1 FROM sale_lines l WHERE l.sale_id=? AND "
+                "COALESCE((SELECT SUM(rl.quantity) FROM sale_return_lines rl "
+                "JOIN sale_return_completions c ON c.return_event_id=rl.return_event_id "
+                "WHERE rl.sale_line_id=l.sale_line_id),0) < l.quantity)",
+                (sale_key,),
+            ).fetchone()[0]
+            next_state = sale.state
+            if all_returned:
+                sale.return_sale()
+                next_state = sale.state
+                next_version = version_no + 1
+                current_ref = f"sale-state:{sale.id}:v{next_version}"
+                connection.execute(
+                    "UPDATE sales SET state='returned',updated_at=?,version_no=? WHERE sale_id=? AND version_no=?",
+                    (timestamp, next_version, sale_key, version_no),
+                )
+                if connection.execute("SELECT changes()").fetchone()[0] != 1:
+                    raise ValidationError("Concurrent Sale update detected")
+                connection.execute(
+                    "INSERT INTO domain_history(domain_history_id,owner_domain,target_ref,change_type,historical_at,"
+                    "actor_context_ref,prior_version_ref,current_version_ref,change_payload_ref,created_at) "
+                    "VALUES(?,?,?,?,?,?,?,?,?,?)",
+                    (str(uuid4()), "commerce", sale_key, "sale_state_transition", timestamp, actor_key,
+                     previous_ref, current_ref, "state:returned", timestamp),
+                )
+            connection.execute(
+                "INSERT INTO domain_history(domain_history_id,owner_domain,target_ref,change_type,historical_at,"
+                "actor_context_ref,prior_version_ref,current_version_ref,change_payload_ref,created_at) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?)",
+                (str(uuid4()), "commerce", return_key, "sale_return_completed", timestamp, actor_key,
+                 None, None, f"credit_note:{credit['credit_note_id']};refund_payment:{refund_key};"
+                 f"amount_minor:{credit['refund_amount_minor']};ledger:{credit['ledger_entry_id']}", timestamp),
+            )
+            connection.execute(f"RELEASE SAVEPOINT {savepoint}")
+            return {"return_id": return_key, "sale_id": sale_key, "status": "completed", "replayed": False,
+                    "sale_state": next_state.value, "items": [
+                        {"sale_return_line_id": line[0], "quantity": line[1]} for line in lines
+                    ], **credit, "financial_effects": "refund_and_inventory", "payment_refund_performed": True}
         except Exception:
             if connection.in_transaction:
                 try:

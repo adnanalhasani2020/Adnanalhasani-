@@ -383,6 +383,129 @@ def test_commerce_sale_payment_settlement_and_finance_recognition_are_one_govern
     assert replay.replayed is True
     assert db.execute("SELECT COUNT(*) FROM settlements WHERE obligation_id=?", (obligation,)).fetchone()[0] == 1
     assert db.execute("SELECT COUNT(*) FROM financial_transactions WHERE settlement_id=?", (settlement,)).fetchone()[0] == 1
+
+    # Two partial returns against the settled Invoice require one approved credit note,
+    # a completed refund Payment, and a negative Finance ledger entry each.
+    sale_line_id, sold_quantity, line_total = db.execute(
+        "SELECT sale_line_id,quantity,line_total_minor FROM sale_lines WHERE sale_id=?",
+        (sale_id,),
+    ).fetchone()
+    return_grant = uid()
+    db.execute(
+        "INSERT INTO authorization_grants(authorization_grant_id,subject_person_id,agent_id,action_code,"
+        "scope_ref,context_ref,delegation_id,state,effective_from,effective_to,created_at,updated_at) "
+        "VALUES(?,?,NULL,'return_sale',?,?,NULL,'active',?,NULL,?,?)",
+        (return_grant, debtor, sale_id, request["activity_id"], BEFORE, BEFORE, BEFORE),
+    )
+    db.commit()
+
+    def perform_financial_return(index, timestamp):
+        instant = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+        return_event = uid()
+        credit_number = f"CN-CYCLE-{index:03d}"
+        reserved = SaleApplication().request_sale_return_items(
+            db, sale_id, debtor, return_grant,
+            items=[{"sale_line_id": sale_line_id, "quantity": 1}],
+            idempotency_key=f"settled-return-{index:03d}",
+            reason=f"customer returned unit {index}",
+            now=instant, return_event_id=return_event,
+        )
+        assert reserved["status"] == "pending_refund"
+        assert reserved["refund_amount_minor"] > 0
+        assert db.execute(
+            "SELECT COUNT(*) FROM inventory_movements WHERE source_type='sale_return' "
+            "AND source_ref IN (SELECT sale_return_line_id FROM sale_return_lines WHERE return_event_id=?)",
+            (return_event,),
+        ).fetchone()[0] == 0
+        assert db.execute(
+            "SELECT COUNT(*) FROM sale_return_completions WHERE return_event_id=?",
+            (return_event,),
+        ).fetchone()[0] == 0
+        refund_payment = uid()
+        finance_context = uid()
+        finance_grant = uid()
+        finance_action = uid()
+        refund_amount = reserved["refund_amount_minor"]
+        db.execute(
+            "INSERT INTO payments(payment_id,obligation_id,invoice_id,payer_person_id,payee_person_id,"
+            "amount_minor,currency_code,state,provider_ref,external_payment_ref,created_at,updated_at,version_no) "
+            "VALUES(?,NULL,NULL,?,?,?,'SAR','completed','test-refund-provider',?,?,?,1)",
+            (refund_payment, creditor, debtor, refund_amount, f"refund-event-{index}", timestamp, timestamp),
+        )
+        db.execute(
+            "INSERT INTO authorization_grants(authorization_grant_id,agent_id,action_code,scope_ref,context_ref,"
+            "state,effective_from,created_at,updated_at) VALUES(?,?,?,?,?,'active',?,?,?)",
+            (finance_grant, agent, "finance.sale_return.refund", return_event,
+             finance_context, BEFORE, timestamp, timestamp),
+        )
+        db.execute(
+            "INSERT INTO agent_actions(agent_action_id,agent_id,action_code,target_ref,context_ref,"
+            "authorization_grant_id,state,created_at,updated_at) VALUES(?,?,?,?,?,?,'approved',?,?)",
+            (finance_action, agent, "finance.sale_return.refund", return_event,
+             finance_context, finance_grant, timestamp, timestamp),
+        )
+        db.execute(
+            "INSERT INTO approvals(approval_id,agent_action_id,approval_gate_code,state,approver_person_id,"
+            "decision_at,created_at,updated_at) VALUES(?,?, 'default','APPROVED',?,?,?,?)",
+            (uid(), finance_action, approver, timestamp, timestamp, timestamp),
+        )
+        db.commit()
+        result = SaleApplication().complete_sale_return(
+            db, return_event, debtor, return_grant,
+            refund_payment_id=refund_payment, credit_note_number=credit_number,
+            financial_account_id=account, finance_context_ref=finance_context,
+            finance_authorization_grant_id=finance_grant,
+            finance_agent_action_id=finance_action, now=instant,
+        )
+        result.update({
+            "finance_context_ref": finance_context,
+            "finance_authorization_grant_id": finance_grant,
+            "finance_agent_action_id": finance_action,
+        })
+        return result
+
+    first_return = perform_financial_return(
+        1, "2026-10-18T10:05:00.000000Z"
+    )
+    assert first_return["financial_effects"] == "refund_and_inventory"
+    assert first_return["refund_amount_minor"] == line_total // sold_quantity
+    assert first_return["payment_refund_performed"] is True
+    assert first_return["sale_state"] == "fulfilled"
+    first_replay = SaleApplication().complete_sale_return(
+        db, first_return["return_id"], debtor, return_grant,
+        refund_payment_id=first_return["refund_payment_id"],
+        credit_note_number=first_return["credit_note_number"],
+        financial_account_id=account,
+        finance_context_ref=first_return["finance_context_ref"],
+        finance_authorization_grant_id=first_return["finance_authorization_grant_id"],
+        finance_agent_action_id=first_return["finance_agent_action_id"],
+        now=datetime(2026, 10, 18, 10, 8, tzinfo=timezone.utc),
+    )
+    assert first_replay["replayed"] is True
+    second_return = perform_financial_return(
+        2, "2026-10-18T10:07:00.000000Z"
+    )
+    assert second_return["sale_state"] == "returned"
+    assert second_return["refund_amount_minor"] == line_total - first_return["refund_amount_minor"]
+    assert db.execute(
+        "SELECT COUNT(*),SUM(amount_minor) FROM credit_notes WHERE invoice_id=?",
+        (invoice,),
+    ).fetchone() == (2, line_total)
+    assert db.execute(
+        "SELECT SUM(amount_minor) FROM financial_transactions WHERE recognition_source_type='reversal' "
+        "AND recognition_source_ref IN (SELECT return_event_id FROM sale_return_events WHERE sale_id=?)",
+        (sale_id,),
+    ).fetchone()[0] == -line_total
+    assert db.execute(
+        "SELECT SUM(amount_minor) FROM ledger_entries WHERE financial_account_id=?",
+        (account,),
+    ).fetchone()[0] == 0
+    assert db.execute(
+        "SELECT SUM(quantity_delta) FROM inventory_movements WHERE source_type='sale_return' "
+        "AND source_ref IN (SELECT rl.sale_return_line_id FROM sale_return_lines rl "
+        "JOIN sale_return_events re ON re.return_event_id=rl.return_event_id WHERE re.sale_id=?)",
+        (sale_id,),
+    ).fetchone()[0] == sold_quantity
     db.close()
 
 
@@ -482,7 +605,7 @@ def test_database_rejects_stock_return_while_invoice_is_issued(tmp_path):
         "SELECT sale_line_id,quantity FROM sale_lines WHERE sale_id=?",
         (request["sale_id"],),
     ).fetchone()
-    with pytest.raises(ValidationError, match="Invoice, Obligation, and Payment financial reconciliation"):
+    with pytest.raises(ValidationError, match="reserve a return request and then complete an approved credit note/refund workflow"):
         SaleApplication().return_sale_items(
             db, request["sale_id"], request["actor_person_id"], return_grant,
             items=[{"sale_line_id": app_line[0], "quantity": 1}],
@@ -511,18 +634,17 @@ def test_database_rejects_stock_return_while_invoice_is_issued(tmp_path):
     )
     with pytest.raises(
         sqlite3.IntegrityError,
-        match="Sale return requires explicit Invoice reconciliation first",
+        match="Sale return completion requires a valid credit note for financially linked returns",
     ):
         db.execute(
-            "INSERT INTO inventory_movements("
-            "inventory_movement_id,inventory_position_id,activity_id,product_id,offering_id,"
-            "location_ref,scope_key,quantity_delta,source_type,source_ref,actor_context_ref,"
-            "occurred_at,created_at) "
-            "SELECT ?,inventory_position_id,activity_id,product_id,offering_id,location_ref,"
-            "scope_key,?,'sale_return',?,?,?,? "
-            "FROM inventory_movements WHERE source_type='sale' AND source_ref=?",
-            (uid(), line_id[1], return_line_id, request["actor_person_id"], STAMP, STAMP, request["sale_id"]),
+            "INSERT INTO sale_return_completions(return_event_id,completed_at,credit_note_id,state) "
+            "VALUES(?,?,NULL,'completed')",
+            (event_id, STAMP),
         )
+    assert db.execute(
+        "SELECT COUNT(*) FROM inventory_movements WHERE source_type='sale_return' AND source_ref=?",
+        (return_line_id,),
+    ).fetchone()[0] == 0
 
     assert db.execute(
         "SELECT state FROM sales WHERE sale_id=?", (request["sale_id"],)

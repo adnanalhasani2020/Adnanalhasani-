@@ -249,6 +249,8 @@ def test_existing_database_migration_preserves_sales_invoices_and_history_on_reo
     expected_versions.append(("0065_commercial_supabase_identity_links",))
     expected_versions.append(("0066_sale_return_events_partial_multiple",))
     expected_versions.append(("0067_sale_return_financial_link_guard",))
+    expected_versions.append(("0068_credit_notes_refund_reversal",))
+    expected_versions.append(("0069_sale_return_completion_gate",))
     assert db.execute(
         "SELECT version FROM schema_migrations ORDER BY version"
     ).fetchall() == sorted(expected_versions)
