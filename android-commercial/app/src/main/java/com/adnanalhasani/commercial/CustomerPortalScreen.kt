@@ -79,7 +79,9 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
         }
     }
 
-    LaunchedEffect(selectedOrganization?.id) {
+    // Refreshing the portal must reload organization-scoped data even when the selected
+    // organization ID remains unchanged (e.g. after a transient network failure).
+    LaunchedEffect(refresh, selectedOrganization?.id) {
         val org = selectedOrganization ?: return@LaunchedEffect
         loading = true
         error = ""
