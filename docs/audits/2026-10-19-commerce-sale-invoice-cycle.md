@@ -6,7 +6,7 @@
 
 ## Executive result
 
-The repository has a useful, transaction-oriented checkout path and a separately governed invoice lifecycle. They are not yet one end-to-end sale-to-invoice-to-payment-to-recognition workflow. Automatically creating an invoice from the public checkout endpoint is **not safe with the current contracts**: invoice issuance requires an explicit persisted `AuthorizationGrant` scoped to the Sale and Activity, a valid issuer UUID, and a unique invoice number. The public checkout flow currently establishes a customer session, not an invoice-issuer authorization context. Fabricating these values or bypassing authorization would weaken financial controls.
+The repository now has a governed, opt-in path from checkout to Invoice and a Finance-owned finalization path from a completed, invoice-linked Payment to Settlement and durable Finance recognition. It is not an autonomous default workflow: the checkout API remains receipt-only unless an authorized caller supplies the persisted invoice-issuer grant, issuer, invoice number, and (when applicable) Obligation. After the external Payment is completed, an approved Finance action must explicitly finalize the Settlement and recognition. The system does not invent an issuer, invoice number, grant, or payment evidence; doing so would weaken financial controls.
 
 The current printable `/invoices/{sale_id}` route is explicitly a backward-compatible alias for a sales receipt; the page correctly states that it is not a tax invoice. Do not rename it or represent it as a legally compliant invoice.
 
