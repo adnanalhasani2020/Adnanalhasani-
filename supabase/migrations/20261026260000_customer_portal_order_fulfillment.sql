@@ -27,6 +27,7 @@ CREATE POLICY commercial_customer_order_fulfillments_org_read
     SELECT 1 FROM public.commercial_organization_members m
     WHERE m.organization_id = commercial_customer_order_fulfillments.organization_id
       AND m.user_id = auth.uid() AND m.state = 'active'
+      AND m.role IN ('owner','admin','manager')
   ));
 REVOKE ALL ON public.commercial_customer_order_fulfillments FROM PUBLIC, anon, authenticated;
 GRANT SELECT ON public.commercial_customer_order_fulfillments TO authenticated;
