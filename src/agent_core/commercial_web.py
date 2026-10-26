@@ -526,6 +526,101 @@ class CommercialWebApplication:
                     )
                 return self._json(start_response, "200 OK", result)
 
+            if method == "POST" and path == "/api/returns/requests":
+                body = self._body(environ)
+                required = ("sale_id", "items", "idempotency_key", "reason")
+                missing = [key for key in required if key not in body]
+                if missing:
+                    raise ValidationError("Missing Sale return request fields: " + ", ".join(missing))
+                sale_key = str(body["sale_id"])
+                sale = db.execute(
+                    "SELECT activity_id,state FROM sales WHERE sale_id=?", (sale_key,)
+                ).fetchone()
+                if sale is None:
+                    return self._json(start_response, "404 Not Found", {"error": "عملية البيع غير موجودة."})
+                now = datetime.now(timezone.utc)
+                stamp = now.isoformat(timespec="microseconds").replace("+00:00", "Z")
+                if sale[1] not in {"completed", "fulfilled"}:
+                    return self._json(start_response, "409 Conflict", {
+                        "error": "لا يمكن طلب إرجاع لبيع غير مكتمل أو أُرجعت كميته بالكامل."
+                    })
+                grants = db.execute(
+                    "SELECT authorization_grant_id FROM authorization_grants "
+                    "WHERE subject_person_id=? AND agent_id IS NULL AND action_code='return_sale' "
+                    "AND scope_ref=? AND context_ref=? AND state='active' "
+                    "AND effective_from<=? AND (effective_to IS NULL OR effective_to>?) "
+                    "ORDER BY authorization_grant_id",
+                    (person_id, sale_key, sale[0], stamp, stamp),
+                ).fetchall()
+                if not grants:
+                    return self._json(start_response, "403 Forbidden", {
+                        "error": "لا توجد صلاحية إرجاع معتمدة لهذا البيع. لم يتم تغيير المخزون أو الحسابات."
+                    })
+                if len(grants) != 1:
+                    return self._json(start_response, "409 Conflict", {
+                        "error": "توجد صلاحيات إرجاع متعارضة لهذا البيع؛ يلزم تصحيح الصلاحيات قبل المتابعة."
+                    })
+                result = SaleApplication().request_sale_return_items(
+                    db, sale_key, person_id, grants[0][0],
+                    items=body["items"], idempotency_key=body["idempotency_key"],
+                    reason=body["reason"], now=now, return_event_id=body.get("return_event_id"),
+                )
+                result["notice"] = (
+                    "تم حجز الكمية للإرجاع. لا تُرسل رد الدفعة إلا بالمبلغ المحدد هنا؛ "
+                    "لم يُغيّر المخزون ولم يُرحّل عكس محاسبي بعد."
+                )
+                return self._json(start_response, "200 OK", result)
+
+            if method == "POST" and path == "/api/returns/complete":
+                body = self._body(environ)
+                required = (
+                    "return_event_id", "refund_payment_id", "credit_note_number",
+                    "financial_account_id", "finance_context_ref",
+                    "finance_authorization_grant_id", "finance_agent_action_id",
+                )
+                missing = [key for key in required if key not in body]
+                if missing:
+                    raise ValidationError("Missing Sale return completion fields: " + ", ".join(missing))
+                return_key = str(body["return_event_id"])
+                event = db.execute(
+                    "SELECT sale_id FROM sale_return_events WHERE return_event_id=?", (return_key,)
+                ).fetchone()
+                if event is None:
+                    return self._json(start_response, "404 Not Found", {"error": "طلب الإرجاع غير موجود."})
+                sale_key = event[0]
+                sale = db.execute(
+                    "SELECT activity_id,state FROM sales WHERE sale_id=?", (sale_key,)
+                ).fetchone()
+                now = datetime.now(timezone.utc)
+                stamp = now.isoformat(timespec="microseconds").replace("+00:00", "Z")
+                grants = db.execute(
+                    "SELECT authorization_grant_id FROM authorization_grants "
+                    "WHERE subject_person_id=? AND agent_id IS NULL AND action_code='return_sale' "
+                    "AND scope_ref=? AND context_ref=? AND state='active' "
+                    "AND effective_from<=? AND (effective_to IS NULL OR effective_to>?) "
+                    "ORDER BY authorization_grant_id",
+                    (person_id, sale_key, sale[0], stamp, stamp),
+                ).fetchall()
+                if not grants:
+                    return self._json(start_response, "403 Forbidden", {
+                        "error": "لا توجد صلاحية إكمال إرجاع معتمدة لهذا البيع."
+                    })
+                if len(grants) != 1:
+                    return self._json(start_response, "409 Conflict", {
+                        "error": "توجد صلاحيات إرجاع متعارضة لهذا البيع."
+                    })
+                result = SaleApplication().complete_sale_return(
+                    db, return_key, person_id, grants[0][0],
+                    refund_payment_id=body["refund_payment_id"],
+                    credit_note_number=body["credit_note_number"],
+                    financial_account_id=body["financial_account_id"],
+                    finance_context_ref=body["finance_context_ref"],
+                    finance_authorization_grant_id=body["finance_authorization_grant_id"],
+                    finance_agent_action_id=body["finance_agent_action_id"], now=now,
+                )
+                result["notice"] = "تم اعتماد الإشعار الدائن ورد الدفعة وترحيل عكسها المحاسبي، ثم إتمام حركة المخزون."
+                return self._json(start_response, "200 OK", result)
+
             if method == "GET" and (path.startswith("/receipts/") or path.startswith("/invoices/")):
                 # /receipts is the truthful route: this document is a sales receipt,
                 # not a tax invoice. Keep /invoices as a backward-compatible alias.
