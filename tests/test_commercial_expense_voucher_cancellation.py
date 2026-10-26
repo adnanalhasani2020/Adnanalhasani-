@@ -14,7 +14,7 @@ class CommercialExpenseVoucherCancellationTests(unittest.TestCase):
             "canceled_at", "canceled_by", "cancellation_reason",
             "reversal_journal_entry_id", "ON DELETE RESTRICT",
             "public.commercial_gl_reverse_entry", "FOR UPDATE",
-            "expense_voucher_reversal_not_confirmed",
+            "expense_voucher_reversal_not_confirmed", "expense_voucher_original_journal_not_posted",
         ):
             self.assertIn(token, sql)
         self.assertNotIn("DELETE FROM public.commercial_expense_vouchers", sql)
