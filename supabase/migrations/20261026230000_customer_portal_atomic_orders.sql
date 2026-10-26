@@ -399,3 +399,7 @@ CREATE INDEX IF NOT EXISTS commercial_customer_orders_buyer_recent_idx
   ON public.commercial_customer_orders(buyer_account_id,created_at DESC);
 CREATE INDEX IF NOT EXISTS commercial_customer_orders_org_recent_idx
   ON public.commercial_customer_orders(organization_id,created_at DESC);
+
+CREATE INDEX IF NOT EXISTS commercial_bookings_resource_overlap_idx
+  ON public.commercial_bookings(organization_id,resource_id,starts_at,ends_at)
+  WHERE status IN ('requested','confirmed','checked_in');
