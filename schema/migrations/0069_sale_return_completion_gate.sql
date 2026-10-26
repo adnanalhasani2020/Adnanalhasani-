@@ -16,6 +16,38 @@ JOIN inventory_movements m ON m.source_type='sale_return' AND m.source_ref=rl.sa
 LEFT JOIN credit_notes cn ON cn.return_event_id=re.return_event_id
 GROUP BY re.return_event_id,cn.credit_note_id;
 
+CREATE TRIGGER sale_return_completion_integrity_guard
+BEFORE INSERT ON sale_return_completions
+WHEN NOT EXISTS (
+    SELECT 1 FROM sale_return_events re
+    JOIN sale_return_lines rl ON rl.return_event_id=re.return_event_id
+    WHERE re.return_event_id=NEW.return_event_id
+)
+OR (NEW.credit_note_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM credit_notes cn
+    WHERE cn.credit_note_id=NEW.credit_note_id
+      AND cn.return_event_id=NEW.return_event_id
+      AND cn.state='issued'
+))
+OR EXISTS (
+    SELECT 1
+    FROM sale_return_events re
+    JOIN invoices i ON i.sale_id=re.sale_id
+    LEFT JOIN payments p ON p.invoice_id=i.invoice_id
+      OR (i.obligation_id IS NOT NULL AND p.obligation_id=i.obligation_id)
+    WHERE re.return_event_id=NEW.return_event_id
+      AND (i.state='issued' OR i.obligation_id IS NOT NULL OR p.payment_id IS NOT NULL)
+      AND NOT EXISTS (
+          SELECT 1 FROM credit_notes cn
+          WHERE cn.return_event_id=re.return_event_id
+            AND cn.credit_note_id=NEW.credit_note_id
+            AND cn.state='issued'
+      )
+)
+BEGIN
+    SELECT RAISE(ABORT, 'Sale return completion requires a valid credit note for financially linked returns');
+END;
+
 CREATE TRIGGER sale_return_completion_immutable_update
 BEFORE UPDATE ON sale_return_completions
 BEGIN
