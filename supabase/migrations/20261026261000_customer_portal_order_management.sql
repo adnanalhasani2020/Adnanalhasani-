@@ -1,3 +1,40 @@
+
+-- Prevent creating product orders that the current inventory-backed checkout cannot safely fulfill.
+-- Service quantities remain governed by the service/booking workflow.
+CREATE OR REPLACE FUNCTION commercial_private.commercial_guard_customer_order_item_checkout_quantity()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $function$
+DECLARE
+  v_order_type text;
+BEGIN
+  IF NEW.item_type = 'product' THEN
+    SELECT order_type INTO v_order_type
+    FROM public.commercial_customer_orders
+    WHERE id = NEW.order_id;
+    IF v_order_type = 'purchase'
+       AND (NEW.quantity IS NULL OR NEW.quantity <= 0
+         OR NEW.quantity <> trunc(NEW.quantity) OR NEW.quantity > 100000) THEN
+      RAISE EXCEPTION 'product_order_requires_integer_quantity_for_inventory_checkout'
+        USING ERRCODE='22023';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$function$;
+
+DROP TRIGGER IF EXISTS commercial_customer_order_item_checkout_quantity_guard
+  ON public.commercial_customer_order_items;
+CREATE TRIGGER commercial_customer_order_item_checkout_quantity_guard
+BEFORE INSERT OR UPDATE OF quantity, item_type, order_id
+ON public.commercial_customer_order_items
+FOR EACH ROW
+EXECUTE FUNCTION commercial_private.commercial_guard_customer_order_item_checkout_quantity();
+
+REVOKE ALL ON FUNCTION commercial_private.commercial_guard_customer_order_item_checkout_quantity() FROM PUBLIC, anon, authenticated;
+
 -- Manager-only queue for reviewing and fulfilling customer portal product orders.
 CREATE OR REPLACE FUNCTION public.commercial_customer_portal_list_organization_orders(
   p_organization_id uuid, p_limit integer DEFAULT 100
