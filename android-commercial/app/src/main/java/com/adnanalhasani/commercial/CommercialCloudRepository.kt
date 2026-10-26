@@ -356,7 +356,7 @@ internal data class CommercialCloudCustomer(
 internal fun loadCommercialCloudCustomers(context: Context): List<CommercialCloudCustomer> {
     val (orgId, access) = commercialMasterDataAccess(context)
     val path = "/rest/v1/commercial_customers" +
-        "?select=id,display_name,phone,email,state&organization_id=eq.$orgId&state=eq.active&order=display_name.asc,id.asc&limit=200"
+        "?select=id,display_name,phone,email,state&organization_id=eq.$orgId&state=eq.active&order=display_name.asc,id.asc"
     val rows = commercialCloudPagedGet(path, access)
     return buildList {
         for (index in 0 until rows.length()) {
@@ -1105,7 +1105,7 @@ internal fun loadCommercialCloudExpenses(context: Context): List<CommercialCloud
     val (orgId, access) = commercialMasterDataAccess(context)
     val path = "/rest/v1/commercial_expense_vouchers" +
         "?select=id,category,amount_minor,currency_code,payment_method,evidence_reference,note,journal_entry_id,recorded_at,canceled_at,cancellation_reason,reversal_journal_entry_id" +
-        "&organization_id=eq.$orgId&order=recorded_at.desc,id.desc&limit=100"
+        "&organization_id=eq.$orgId&order=recorded_at.desc,id.desc"
     val rows = commercialCloudPagedGet(path, access)
     return buildList {
         for (index in 0 until rows.length()) {
