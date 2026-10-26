@@ -29,6 +29,15 @@ class CommercialCloudExpenseVoucherTests(unittest.TestCase):
         self.assertIn("source_type='payment' AND source_id=v_payment.id", fix)
         self.assertNotIn("commercial_gl_post_payment(v_payment.id)", fix)
 
+    def test_customer_collection_rechecks_key_under_organization_lock(self):
+        fix = (ROOT / "supabase/migrations/20261026161000_fix_customer_collection_double_gl_post.sql").read_text(encoding="utf-8")
+        hardening = (ROOT / "supabase/migrations/20261026162000_harden_customer_collection_idempotency.sql").read_text(encoding="utf-8")
+        self.assertIn("customer_payment_journal_not_posted", fix)
+        self.assertNotIn("commercial_gl_post_payment(v_payment.id)", fix)
+        self.assertIn("customer-payment:'||btrim(p_idempotency_key)", hardening)
+        self.assertIn("Recheck after organization-scoped lock", hardening)
+        self.assertIn("sale_return_reconciliation_required", hardening)
+
     def test_voucher_reads_are_tenant_and_role_scoped(self):
         sql = MIGRATION.read_text(encoding="utf-8")
         self.assertIn("ENABLE ROW LEVEL SECURITY", sql)
