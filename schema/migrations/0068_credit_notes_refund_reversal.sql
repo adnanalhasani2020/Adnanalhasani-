@@ -159,6 +159,7 @@ WHEN NOT EXISTS (
     WHERE cn.credit_note_id=NEW.credit_note_id
       AND NEW.quantity=rl.quantity
       AND NEW.currency_code=l.currency_code
+      AND NEW.currency_code=cn.currency_code
       AND NEW.amount_minor=(
           CAST(l.line_total_minor * (
               COALESCE((SELECT SUM(prior.quantity) FROM sale_return_lines prior
