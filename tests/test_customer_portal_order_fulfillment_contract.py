@@ -5,6 +5,9 @@ MIGRATION = ROOT / "supabase/migrations/20261026260000_customer_portal_order_ful
 DATABASE_TEST = ROOT / "supabase/tests/database/customer_portal_order_fulfillment_test.sql"
 REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt"
 PORTAL = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CustomerPortalScreen.kt"
+SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CustomerOrderFulfillmentScreen.kt"
+ACTIVITY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt"
+ORDER_QUEUE = ROOT / "supabase/migrations/20261026261000_customer_portal_order_management.sql"
 
 
 def test_customer_order_fulfillment_is_explicit_atomic_and_audited():
@@ -58,3 +61,28 @@ def test_database_regression_checks_cover_security_and_atomic_checkout():
     assert "customer_order_fulfillment_permission_required" in sql
     assert "commercial_checkout_sale_multi" in sql
     assert "customer_order_price_or_offering_changed_requote_required" in sql
+
+
+
+def test_manager_queue_and_android_screen_make_fulfillment_operational():
+    queue = ORDER_QUEUE.read_text(encoding="utf-8").lower()
+    screen = SCREEN.read_text(encoding="utf-8")
+    activity = ACTIVITY.read_text(encoding="utf-8")
+    for marker in (
+        "commercial_customer_portal_list_organization_orders",
+        "customer_order_management_permission_required",
+        "p_organization_id",
+        "fulfillment_supported",
+    ):
+        assert marker in queue
+    for marker in (
+        "loadCustomerOrderFulfillmentQueue",
+        "loadCustomerOrderFulfillmentLocations",
+        "fulfillCustomerPortalOrder",
+        "اعتماد وإتمام البيع",
+        "الطلب لا يحجز المخزون عند إنشائه",
+    ):
+        assert marker in screen
+    assert "CustomerOrderFulfillmentScreen(" in activity
+    assert '"طلبات الزبائن"' in activity
+    assert "onCustomerOrders = { customerOrderFulfillmentPage = true }" in activity
