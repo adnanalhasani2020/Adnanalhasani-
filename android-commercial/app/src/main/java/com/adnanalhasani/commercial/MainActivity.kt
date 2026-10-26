@@ -377,12 +377,11 @@ private fun StoreApp(context: Context) {
                         CommercialCloudDebtScreen(context = context, onBack = { showDebts = false })
                     } else DebtScreen(sales = sales, settlements = settlements, onBack = { showDebts = false }, onSettle = { settlingSaleNumber = it.number })
                     showReports -> if (cloudMode) {
-                        cloudNotice = "التقرير المالي الموحد غير جاهز بعد؛ المصروفات والتسديدات محلية، لذلك لن نخلطها مع فواتير السحابة في تقرير واحد."
+                        cloudNotice = "التقرير المالي الموحد غير جاهز بعد؛ يلزم التحقق من تسوية أرصدة التحصيل والموردين والمصروفات السحابية قبل عرض أرباح موثوقة."
                         showReports = false
                     } else ReportsScreen(sales = sales, settlements = settlements, expenses = expenses, onBack = { showReports = false })
                     showExpenses -> if (cloudMode) {
-                        cloudNotice = "المصروفات السحابية لم تُربط بدفتر الحسابات بعد؛ لم يتم تسجيل أي مصروف محلي على أنه سحابي."
-                        showExpenses = false
+                        CommercialCloudExpensesScreen(context = context, onBack = { showExpenses = false })
                     } else ExpensesScreen(expenses = expenses, onBack = { showExpenses = false }, onAdd = { expenseDialog = true })
                     else -> if (showActivityProfile) ActivityProfileScreen(onBack = { showActivityProfile = false }) else MoreScreen(onCustomers = {
                     showDebts = true

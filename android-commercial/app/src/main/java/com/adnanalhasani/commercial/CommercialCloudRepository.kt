@@ -26,8 +26,17 @@ private fun commercialCloudActionableError(raw: String, status: Int): String {
         code == "PGRST202" || message.contains("schema cache", ignoreCase = true) ||
             message.contains("could not find the function", ignoreCase = true) ->
             "توقّف الإجراء لأن دالة قاعدة البيانات المطلوبة غير منشورة أو لم تُحدّث بعد. لم يؤكد الخادم تنفيذ العملية. لا تنشئ عملية بديلة بمفتاح جديد؛ أعد المحاولة بنفس العملية بعد إصلاح ترحيلات قاعدة البيانات. التفاصيل: $detail"
-        message.contains("idempotency_key_reused_with_different_request", ignoreCase = true) ->
-            "تم إيقاف العملية لحماية البيانات: مفتاح إعادة المحاولة مرتبط بطلب مختلف. لا تكرر الدفع أو البيع؛ حدّث البيانات وراجع الفاتورة الموجودة. التفاصيل: $detail"
+        message.contains("idempotency_key_reused_with_different_request", ignoreCase = true) ||
+            message.contains("expense_idempotency_key_reused_with_different_request", ignoreCase = true) ->
+            "تم إيقاف العملية لحماية البيانات: مفتاح إعادة المحاولة مرتبط بطلب مختلف. لا تكرر الدفع أو الصرف؛ راجع السجل الموجود وأعد المحاولة بالبيانات الأصلية فقط. التفاصيل: $detail"
+        message.contains("expense_cash_or_bank_account_not_configured_for_currency", ignoreCase = true) ->
+            "لم يُحفظ سند الصرف لأن حساب الصندوق/البنك غير مربوط بالعملة المختارة في دليل الحسابات. اضبط الربط أولًا ثم أعد المحاولة؛ لم يُسجل قيد أو سند. التفاصيل: $detail"
+        message.contains("customer_payment_journal_not_posted", ignoreCase = true) ->
+            "لم يؤكد الخادم ترحيل قيد التحصيل، لذلك رُفضت المعاملة كاملة. لا تنشئ تحصيلًا جديدًا بمفتاح مختلف؛ حدّث السجل وراجع القيد قبل إعادة المحاولة. التفاصيل: $detail"
+        message.contains("receipt_and_ar_mappings_required", ignoreCase = true) ->
+            "لم يُرحّل التحصيل لأن حساب وسيلة القبض أو ذمم العملاء غير مضبوط. راجع دليل الحسابات قبل إعادة المحاولة. التفاصيل: $detail"
+        message.contains("supplier_payment_account_not_configured_for_currency", ignoreCase = true) ->
+            "لم يُسجل تسديد المورد لأن حساب وسيلة الدفع غير مربوط بالعملة المختارة. اضبط ربط الصندوق/البنك/الشيكات أولًا ثم أعد المحاولة. التفاصيل: $detail"
         message.contains("collection_exceeds_outstanding_balance", ignoreCase = true) ||
             message.contains("overpayment", ignoreCase = true) ->
             "رُفض التحصيل لأن المبلغ يتجاوز الرصيد المستحق. حدّث الفاتورة وأدخل المبلغ المتبقي الفعلي. التفاصيل: $detail"
@@ -1035,6 +1044,131 @@ internal fun createCommercialCloudPurchaseOrder(
             .put("p_receive_location_id", locationId).put("p_lines", lineArray)
             .put("p_idempotency_key", idempotencyKey).put("p_notes", notes.trim().takeIf { it.isNotEmpty() }),
         access
+    ))
+}
+
+
+internal fun loadCommercialCloudExpenseCurrencyCode(context: Context): String {
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val rows = commercialCloudPagedGet(
+        "/rest/v1/commercial_organizations?select=default_currency_code&id=eq.$orgId",
+        access
+    )
+    require(rows.length() == 1) { "تعذر تحديد عملة المؤسسة من الخادم." }
+    val code = rows.getJSONObject(0).optString("default_currency_code").uppercase(Locale.US)
+    require(code.matches(Regex("^[A-Z]{3}$"))) { "عملة المؤسسة غير صالحة." }
+    return code
+}
+
+internal data class CommercialCloudExpenseVoucher(
+    val id: String,
+    val category: String,
+    val amountMinor: Long,
+    val currencyCode: String,
+    val paymentMethod: String,
+    val evidenceReference: String,
+    val note: String,
+    val journalEntryId: String,
+    val recordedAt: String
+)
+
+internal fun loadCommercialCloudExpenses(context: Context): List<CommercialCloudExpenseVoucher> {
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val path = "/rest/v1/commercial_expense_vouchers" +
+        "?select=id,category,amount_minor,currency_code,payment_method,evidence_reference,note,journal_entry_id,recorded_at" +
+        "&organization_id=eq.$orgId&order=recorded_at.desc,id.desc&limit=100"
+    val rows = commercialCloudPagedGet(path, access)
+    return buildList {
+        for (index in 0 until rows.length()) {
+            val row = rows.optJSONObject(index) ?: continue
+            add(CommercialCloudExpenseVoucher(
+                id = row.optString("id"),
+                category = row.optString("category").ifBlank { "مصروف" },
+                amountMinor = row.optLong("amount_minor", 0L),
+                currencyCode = row.optString("currency_code").ifBlank { "YER" },
+                paymentMethod = row.optString("payment_method").ifBlank { "cash" },
+                evidenceReference = row.optString("evidence_reference").takeUnless { it == "null" }.orEmpty(),
+                note = row.optString("note").takeUnless { it == "null" }.orEmpty(),
+                journalEntryId = row.optString("journal_entry_id").takeUnless { it == "null" }.orEmpty(),
+                recordedAt = row.optString("recorded_at").takeUnless { it == "null" }.orEmpty()
+            ))
+        }
+    }
+}
+
+private fun commercialExpensePendingPreferences(context: Context) =
+    context.getSharedPreferences("commercial_expense_pending_v1", Context.MODE_PRIVATE)
+
+internal fun getOrCreateCommercialExpenseIdempotencyKey(
+    context: Context, category: String, amountMinor: Long, currencyCode: String,
+    paymentMethod: String, evidenceReference: String, note: String
+): String {
+    val canonical = JSONObject()
+        .put("category", category.trim())
+        .put("amount_minor", amountMinor)
+        .put("currency_code", currencyCode)
+        .put("payment_method", paymentMethod)
+        .put("evidence_reference", evidenceReference.trim())
+        .put("note", note.trim()).toString()
+    val digest = MessageDigest.getInstance("SHA-256")
+        .digest(canonical.toByteArray(Charsets.UTF_8))
+        .joinToString("") { "%02x".format(it) }
+    val preferences = commercialExpensePendingPreferences(context)
+    val preferenceKey = "request_$digest"
+    val existing = preferences.getString(preferenceKey, null).orEmpty()
+    if (existing.isNotBlank()) return existing
+    val created = UUID.randomUUID().toString()
+    check(preferences.edit().putString(preferenceKey, created).commit()) {
+        "تعذر حفظ مفتاح سند الصرف قبل الإرسال؛ لم يتم إرسال العملية."
+    }
+    return preferences.getString(preferenceKey, null).orEmpty().also {
+        check(it.isNotBlank()) { "تعذر تأكيد حفظ مفتاح سند الصرف؛ لم يتم إرسال العملية." }
+    }
+}
+
+internal fun clearCommercialExpenseIdempotencyKey(
+    context: Context, category: String, amountMinor: Long, currencyCode: String,
+    paymentMethod: String, evidenceReference: String, note: String, idempotencyKey: String
+): Boolean {
+    val canonical = JSONObject()
+        .put("category", category.trim())
+        .put("amount_minor", amountMinor)
+        .put("currency_code", currencyCode)
+        .put("payment_method", paymentMethod)
+        .put("evidence_reference", evidenceReference.trim())
+        .put("note", note.trim()).toString()
+    val digest = MessageDigest.getInstance("SHA-256")
+        .digest(canonical.toByteArray(Charsets.UTF_8))
+        .joinToString("") { "%02x".format(it) }
+    val preferences = commercialExpensePendingPreferences(context)
+    val preferenceKey = "request_$digest"
+    if (preferences.getString(preferenceKey, null) != idempotencyKey) return false
+    return preferences.edit().remove(preferenceKey).commit()
+}
+
+internal fun recordCommercialCloudExpense(
+    context: Context, category: String, amountMinor: Long, currencyCode: String,
+    paymentMethod: String, evidenceReference: String, note: String, idempotencyKey: String
+): JSONObject {
+    require(category.trim().length in 1..120) { "أدخل تصنيف المصروف." }
+    require(amountMinor > 0L) { "يجب أن يكون مبلغ المصروف أكبر من صفر." }
+    require(currencyCode.matches(Regex("^[A-Z]{3}$"))) { "عملة المصروف غير صالحة." }
+    require(paymentMethod in setOf("cash", "bank_transfer")) { "طريقة الصرف غير مدعومة." }
+    require(evidenceReference.trim().length in 3..200) { "أدخل مرجع إثبات الصرف (3 أحرف على الأقل)." }
+    require(note.length <= 1000) { "الملاحظات أطول من الحد المسموح." }
+    require(idempotencyKey.length in 8..200) { "مفتاح سند الصرف غير صالح." }
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val payload = JSONObject()
+        .put("p_organization_id", orgId)
+        .put("p_category", category.trim())
+        .put("p_amount_minor", amountMinor)
+        .put("p_currency_code", currencyCode)
+        .put("p_payment_method", paymentMethod)
+        .put("p_evidence_reference", evidenceReference.trim())
+        .put("p_note", note.trim())
+        .put("p_idempotency_key", idempotencyKey)
+    return JSONObject(commercialCloudRequest(
+        "/rest/v1/rpc/commercial_record_expense", "POST", payload, access
     ))
 }
 
