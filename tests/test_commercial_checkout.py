@@ -266,44 +266,56 @@ def test_invoice_issuance_failure_rolls_back_checkout_sale_stock_and_receipt(tmp
 
 def test_commerce_sale_payment_settlement_and_finance_recognition_are_one_governed_chain(tmp_path):
     db, request = setup_checkout(tmp_path, quantity=2)
-    checkout = CommercialCheckoutApplication()
-    checkout_result = checkout.checkout(db, **request, now=NOW)
     sale_id = request["sale_id"]
     debtor = request["actor_person_id"]
     creditor, approver, agent, context = [uid() for _ in range(4)]
-    account, obligation, invoice, payment, settlement = [uid() for _ in range(5)]
+    account, obligation, payment, settlement = [uid() for _ in range(4)]
     for person in (creditor, approver):
         db.execute(
             "INSERT INTO persons(person_id,state,created_at,updated_at) VALUES(?,'active',?,?)",
-            (person, STAMP, STAMP),
+            (person, BEFORE, BEFORE),
         )
     db.execute(
         "INSERT INTO financial_accounts(financial_account_id,person_id,account_type,state,created_at,updated_at) "
         "VALUES(?,?, 'cash','active',?,?)",
-        (account, creditor, STAMP, STAMP),
+        (account, creditor, BEFORE, BEFORE),
     )
-    amount = checkout_result["total_minor"]
+    price = db.execute(
+        "SELECT unit_price_minor,currency_code FROM offering_prices WHERE offering_id=?",
+        (request["offering_id"],),
+    ).fetchone()
+    amount = price[0] * request["quantity"]
     db.execute(
         "INSERT INTO obligations(obligation_id,creditor_person_id,debtor_person_id,amount_minor,currency_code,"
         "state,created_at,updated_at,version_no) VALUES(?,?,?,?,?,'open',?,?,1)",
-        (obligation, creditor, debtor, amount, "SAR", STAMP, STAMP),
+        (obligation, creditor, debtor, amount, price[1], BEFORE, BEFORE),
     )
+    invoice_grant = uid()
     db.execute(
-        "INSERT INTO invoices(invoice_id,sale_id,obligation_id,state,issuer_ref,invoice_number,"
-        "issue_at,due_at,created_at,updated_at,provenance_id,version_no) "
-        "VALUES(?,?,?,'issued',?,?,?,NULL,?,?,NULL,1)",
-        (invoice, sale_id, obligation, creditor, "INV-CYCLE-001", STAMP, STAMP, STAMP),
-    )
-    db.execute(
-        "INSERT INTO payments(payment_id,obligation_id,invoice_id,payer_person_id,payee_person_id,"
-        "amount_minor,currency_code,state,created_at,updated_at,version_no) "
-        "VALUES(?,?,?,?,?,?,?,'completed',?,?,1)",
-        (payment, obligation, invoice, debtor, creditor, amount, "SAR", STAMP, STAMP),
+        "INSERT INTO authorization_grants(authorization_grant_id,subject_person_id,agent_id,action_code,scope_ref,"
+        "context_ref,delegation_id,state,effective_from,effective_to,created_at,updated_at) "
+        "VALUES(?,?,NULL,'issue_invoice',?,?,NULL,'active',?,NULL,?,?)",
+        (invoice_grant, debtor, sale_id, request["activity_id"], BEFORE, BEFORE, BEFORE),
     )
     db.execute(
         "INSERT INTO agents(agent_id,owner_person_id,configured_identity_ref,context_ref,state,created_at,updated_at) "
         "VALUES(?,?,?,?, 'active',?,?)",
-        (agent, approver, "commerce-finance-agent", context, STAMP, STAMP),
+        (agent, approver, "commerce-finance-agent", context, BEFORE, BEFORE),
+    )
+    db.commit()
+
+    checkout_result = CommercialCheckoutApplication().checkout(
+        db, **request, invoice_issuer_ref=creditor,
+        invoice_number="INV-CYCLE-001", issue_invoice_grant_id=invoice_grant,
+        invoice_obligation_id=obligation, now=NOW,
+    )
+    invoice = checkout_result["invoice_id"]
+    assert checkout_result["invoice_state"] == "issued"
+    db.execute(
+        "INSERT INTO payments(payment_id,obligation_id,invoice_id,payer_person_id,payee_person_id,"
+        "amount_minor,currency_code,state,created_at,updated_at,version_no) "
+        "VALUES(?,?,?,?,?,?,?,'completed',?,?,1)",
+        (payment, obligation, invoice, debtor, creditor, amount, price[1], STAMP, STAMP),
     )
     db.execute(
         "INSERT INTO authorization_grants(authorization_grant_id,agent_id,action_code,scope_ref,context_ref,"
@@ -341,8 +353,8 @@ def test_commerce_sale_payment_settlement_and_finance_recognition_are_one_govern
         (settlement,),
     ).fetchone() == (payment, obligation, "settled", STAMP)
     assert db.execute(
-        "SELECT state FROM invoices WHERE invoice_id=?", (invoice,)
-    ).fetchone()[0] == "issued"
+        "SELECT sale_id,obligation_id,state FROM invoices WHERE invoice_id=?", (invoice,)
+    ).fetchone() == (sale_id, obligation, "issued")
     assert db.execute(
         "SELECT state FROM obligations WHERE obligation_id=?", (obligation,)
     ).fetchone()[0] == "satisfied"
