@@ -200,7 +200,11 @@ internal fun CommercialCloudDebtScreen(context: Context, onBack: () -> Unit) {
                             val payment = recordCommercialCloudCustomerPayment(context, target.saleId, value, method)
                             val paymentId = payment.optString("payment_id")
                             require(paymentId.isNotBlank()) { "أكد الخادم التحصيل دون إرجاع مرجع الدفعة." }
-                            val receipt = loadCommercialCloudCustomerReceipt(context, paymentId)
+                            val receiptResult = runCatching { loadCommercialCloudCustomerReceipt(context, paymentId) }
+                            val receipt = receiptResult.getOrNull()
+                            if (receipt == null || receipt.optLong("receipt_number", 0L) <= 0L) {
+                                "RECEIPT_UNAVAILABLE:$paymentId"
+                            } else {
                             val sale = receipt.optJSONObject("sale")
                             val customer = sale?.optJSONObject("customer")?.optString("display_name").orEmpty().ifBlank { target.customerName }
                             val saleNumber = sale?.optString("receipt_number").orEmpty().ifBlank { target.receiptNumber }
@@ -215,15 +219,21 @@ internal fun CommercialCloudDebtScreen(context: Context, onBack: () -> Unit) {
                                 else -> "أخرى"
                             }
                             "سند قبض رقم RC-$receiptNumber\nالعميل: $customer\nفاتورة رقم: $saleNumber\nالمبلغ المقبوض: ${cloudDebtMoney(paidMinor, currencyCode)}\nطريقة الدفع: $methodLabel\nالتاريخ: $createdAt\nمرجع الدفعة: $paymentId"
+                            }
                         }
                         DebtMain.post {
                             busy = false
                             result.onSuccess { text ->
                                 selected = null
-                                receiptText = text
-                                message = "تم تسجيل التحصيل وإصدار سند قبض مرقّم مرتبط بالدفعة المحاسبية."
+                                if (text.startsWith("RECEIPT_UNAVAILABLE:")) {
+                                    receiptText = ""
+                                    message = "تم تسجيل التحصيل وربطه محاسبيًا. تعذر تحميل رقم السند الرسمي الآن؛ حدّث السجل لاحقًا ولا تكرر التحصيل. مرجع الدفعة: ${text.substringAfter(':')}"
+                                } else {
+                                    receiptText = text
+                                    message = "تم تسجيل التحصيل وإصدار سند قبض مرقّم مرتبط بالدفعة المحاسبية."
+                                }
                                 refresh++
-                            }.onFailure { error = "تم إرسال التحصيل؛ تعذر تجهيز نسخة السند للعرض. حدّث السجل وتحقق من الدفعة قبل إعادة المحاولة. التفاصيل: ${it.message ?: "غير متاح"}" }
+                            }.onFailure { error = it.message ?: "تعذر تسجيل التحصيل؛ تحقق من السجل قبل إعادة المحاولة." }
                         }
                     }
                 }
