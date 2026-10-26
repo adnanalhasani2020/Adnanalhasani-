@@ -54,6 +54,36 @@ internal fun CustomerOrderFulfillmentScreen(context: Context, onBack: () -> Unit
     var error by remember { mutableStateOf("") }
     var notice by remember { mutableStateOf("") }
     var refresh by remember { mutableIntStateOf(0) }
+    var cashConfirmationOrder by remember { mutableStateOf<CustomerOrderFulfillmentOrder?>(null) }
+
+    fun submitFulfillment(order: CustomerOrderFulfillmentOrder) {
+        val id = order.id
+        val location = selectedLocationId
+        busyOrderId = id
+        error = ""
+        notice = "جارٍ التحقق من المخزون والأسعار وتسجيل البيع..."
+        customerOrdersExecutor.execute {
+            val result = runCatching {
+                fulfillCustomerPortalOrder(context, id, location, "customer-order-fulfill:" + id)
+            }
+            customerOrdersMain.post {
+                busyOrderId = null
+                result.onSuccess { response ->
+                    notice = "اكتمل البيع " + response.optString("receipt_number") +
+                        " بمبلغ " + customerOrderMoney(response.optLong("total_minor"), response.optString("currency_code")) +
+                        ". حالة الدفع: " + when (response.optString("payment_status")) {
+                            "paid" -> "مدفوع"
+                            "credit" -> "آجل"
+                            else -> response.optString("payment_status")
+                        } + "."
+                    refresh++
+                }.onFailure {
+                    notice = ""
+                    error = it.message ?: "تعذر إتمام البيع. راجع المخزون والإعدادات المحاسبية ثم أعد المحاولة."
+                }
+            }
+        }
+    }
 
     LaunchedEffect(refresh) {
         loading = true
@@ -196,28 +226,8 @@ internal fun CustomerOrderFulfillmentScreen(context: Context, onBack: () -> Unit
                             } else {
                                 Button(
                                     onClick = {
-                                        val id = order.id
-                                        val location = selectedLocationId
-                                        busyOrderId = id
-                                        error = ""
-                                        notice = "جارٍ التحقق من المخزون والأسعار وتسجيل البيع..."
-                                        customerOrdersExecutor.execute {
-                                            val result = runCatching {
-                                                fulfillCustomerPortalOrder(context, id, location, "customer-order-fulfill:" + id)
-                                            }
-                                            customerOrdersMain.post {
-                                                busyOrderId = null
-                                                result.onSuccess { response ->
-                                                    notice = "اكتمل البيع " + response.optString("receipt_number") +
-                                                        " بمبلغ " + customerOrderMoney(response.optLong("total_minor"), response.optString("currency_code")) +
-                                                        ". حالة الدفع: " + response.optString("payment_status") + "."
-                                                    refresh++
-                                                }.onFailure {
-                                                    notice = ""
-                                                    error = it.message ?: "تعذر إتمام البيع. راجع المخزون والإعدادات المحاسبية ثم أعد المحاولة."
-                                                }
-                                            }
-                                        }
+                                        if (order.paymentStatus == "unpaid") cashConfirmationOrder = order
+                                        else submitFulfillment(order)
                                     },
                                     enabled = !loading && busyOrderId == null && selectedLocationId.isNotBlank(),
                                     modifier = Modifier.fillMaxWidth()
@@ -231,5 +241,29 @@ internal fun CustomerOrderFulfillmentScreen(context: Context, onBack: () -> Unit
                 }
             }
         }
+    }
+    cashConfirmationOrder?.let { order ->
+        AlertDialog(
+            onDismissRequest = { cashConfirmationOrder = null },
+            title = { Text("تأكيد استلام المبلغ نقدًا") },
+            text = {
+                Text(
+                    "سيُسجّل النظام فاتورة مكتملة ومدفوعة نقدًا بقيمة " +
+                        customerOrderMoney(order.totalMinor, order.currencyCode) +
+                        " ويخصم الكمية من المخزون. لا تتابع إلا إذا استلمت المبلغ كاملًا بالفعل."
+                )
+            },
+            confirmButton = {
+                Button(onClick = {
+                    cashConfirmationOrder = null
+                    submitFulfillment(order)
+                }, enabled = busyOrderId == null && selectedLocationId.isNotBlank()) {
+                    Text("استلمت المبلغ — إتمام البيع")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { cashConfirmationOrder = null }) { Text("رجوع") }
+            }
+        )
     }
 }
