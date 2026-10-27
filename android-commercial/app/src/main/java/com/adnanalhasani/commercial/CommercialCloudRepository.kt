@@ -1297,7 +1297,8 @@ internal fun loadCommercialCloudSales(context: Context): List<SaleRecord> {
                 customer = customerObject?.optString("display_name").orEmpty(),
                 paid = paidMinor.coerceAtMost(total),
                 createdAt = createdAt,
-                unitCode = "قطعة"
+                unitCode = "قطعة",
+                currencyCode = row.optString("currency_code").ifBlank { "YER" }
             ))
         }
     }
@@ -1776,7 +1777,7 @@ internal fun restockCommercialCloudSaleReturn(context: Context, returnId: String
 internal data class CommercialCloudRecord(
     val id: String, val title: String, val subtitle: String, val status: String,
     val amountMinor: Long = 0L, val createdAt: String = "",
-    val details: List<String> = emptyList()
+    val details: List<String> = emptyList(), val currencyCode: String = ""
 )
 
 /** Read-only operational projections. Writes must use an approved RPC, never generic POST. */
@@ -1855,7 +1856,7 @@ internal fun loadCommercialCloudRecords(context: Context, screenKey: String): Li
                 ).distinct()
                 else -> emptyList()
             }
-            add(CommercialCloudRecord(id, title, subtitle, status, amount, row.optString("created_at").takeUnless { it == "null" }.orEmpty(), details))
+            add(CommercialCloudRecord(id, title, subtitle, status, amount, row.optString("created_at").takeUnless { it == "null" }.orEmpty(), details, row.optString("currency_code").takeUnless { it == "null" }.orEmpty()))
         }
     }
 }
