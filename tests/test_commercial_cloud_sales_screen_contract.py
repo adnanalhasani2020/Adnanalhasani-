@@ -277,11 +277,13 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         self.assertIn('.put("p_initial_payment_minor", if (paymentMode == "cash") JSONObject.NULL else initialPaymentMinor)', self.repository)
 
     def test_cloud_inventory_precision_is_preserved_for_display_and_stock_guard(self):
-        self.assertIn("val stockPrecise: Double = stock.toDouble()", self.main)
-        self.assertIn("val availableQuantity = (row.optDouble(\"quantity_on_hand\", 0.0) - row.optDouble(\"quantity_reserved\", 0.0)).coerceAtLeast(0.0)", self.repository)
+        self.assertIn("val stockPrecise: BigDecimal = BigDecimal.valueOf(stock.toLong())", self.main)
+        self.assertIn('BigDecimal(row.optString("quantity_on_hand", "0"))', self.repository)
+        self.assertIn('BigDecimal(row.optString("quantity_reserved", "0"))', self.repository)
+        self.assertIn("val availableQuantity = runCatching", self.repository)
         self.assertIn("stockPrecise = availableQuantity", self.repository)
-        self.assertIn('BigDecimal.valueOf(product.stockPrecise).stripTrailingZeros().toPlainString()', self.composer)
-        self.assertIn("BigDecimal.valueOf(lines.first().product.stockPrecise)", self.composer)
+        self.assertIn('product.stockPrecise.stripTrailingZeros().toPlainString()', self.composer)
+        self.assertIn("lines.first().product.stockPrecise", self.composer)
         self.assertNotIn("lines.first().product.stock.toLong()", self.composer)
 
 if __name__ == "__main__":
