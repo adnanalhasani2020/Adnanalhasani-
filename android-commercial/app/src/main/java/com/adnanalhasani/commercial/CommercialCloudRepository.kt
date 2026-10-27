@@ -1810,13 +1810,14 @@ internal data class CommercialCloudSaleReturn(
     val requestedRefundMinor: Long,
     val approvedRefundMinor: Long?,
     val createdAt: String,
+    val completedAt: String,
     val decisionNote: String,
     val items: List<CommercialCloudReturnItem>
 )
 
 internal fun loadCommercialCloudSaleReturns(context: Context): List<CommercialCloudSaleReturn> {
     val (orgId, access) = commercialMasterDataAccess(context)
-    val path = "/rest/v1/commercial_sales_returns?select=id,sale_id,reason_code,reason_note,status,refund_status,restock_status,currency_code,requested_refund_minor,approved_refund_minor,created_at,decision_note,sale:commercial_sales!inner(receipt_number,customer:commercial_customers(display_name)),items:commercial_sale_return_items(id,sale_item_id,quantity,refund_amount_minor,restock,restocked_quantity,condition_code,note,sale_item:commercial_sale_items(product_name_snapshot,quantity,quantity_in_stock_units,unit_cost_minor,cost_total_minor))&organization_id=eq.$orgId&order=created_at.desc,id.asc"
+    val path = "/rest/v1/commercial_sales_returns?select=id,sale_id,reason_code,reason_note,status,refund_status,restock_status,currency_code,requested_refund_minor,approved_refund_minor,created_at,completed_at,decision_note,sale:commercial_sales!inner(receipt_number,customer:commercial_customers(display_name)),items:commercial_sale_return_items(id,sale_item_id,quantity,refund_amount_minor,restock,restocked_quantity,condition_code,note,sale_item:commercial_sale_items(product_name_snapshot,quantity,quantity_in_stock_units,unit_cost_minor,cost_total_minor))&organization_id=eq.$orgId&order=created_at.desc,id.asc"
     val rows = commercialCloudPagedGet(path, access)
     return buildList {
         for (i in 0 until rows.length()) {
@@ -1859,6 +1860,7 @@ internal fun loadCommercialCloudSaleReturns(context: Context): List<CommercialCl
                 requestedRefundMinor = row.optLong("requested_refund_minor", 0L),
                 approvedRefundMinor = if (row.isNull("approved_refund_minor")) null else row.optLong("approved_refund_minor"),
                 createdAt = row.optString("created_at").takeUnless { it == "null" }.orEmpty(),
+                completedAt = row.optString("completed_at").takeUnless { it == "null" }.orEmpty(),
                 decisionNote = row.optString("decision_note").takeUnless { it == "null" }.orEmpty(),
                 items = items
             ))
