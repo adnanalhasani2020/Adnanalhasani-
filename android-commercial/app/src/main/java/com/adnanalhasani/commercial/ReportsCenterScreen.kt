@@ -129,7 +129,7 @@ internal fun ReportsCenterScreen(
         "متوسط قيمة الفاتورة" -> inPeriodSales.groupBy { it.currencyCode.ifBlank { "غير محددة" } }.map { (currency, rows) ->
             ReportLine("-", "-", "متوسط قيمة الفاتورة", if (rows.isEmpty()) 0L else rows.sumOf { it.total.toLong() } / rows.size, currency, "${rows.size} فاتورة · إجمالي ${rows.sumOf { it.total.toLong() }}")
         }
-        "مقارنة فترتين" -> {
+        "مقارنة فترتين", "مقارنة الفترات" -> {
             val days = if (startDate != null && endDate != null) java.time.temporal.ChronoUnit.DAYS.between(startDate, endDate).toInt() + 1 else 0
             val previousStart = startDate?.minusDays(days.toLong())
             val previousEnd = startDate?.minusDays(1)
