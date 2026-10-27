@@ -186,9 +186,9 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
                 item {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text("المنتجات والخدمات", color = PortalInk, fontWeight = FontWeight.Bold, fontSize = 18.sp, modifier = Modifier.weight(1f))
-                        FilterChip(selected = !bookingMode, onClick = { bookingMode = false }, label = { Text("طلب") })
+                        FilterChip(selected = !bookingMode, enabled = selectedOrganization?.canPurchase != false, onClick = { bookingMode = false }, label = { Text("طلب") })
                         Spacer(Modifier.width(6.dp))
-                        FilterChip(selected = bookingMode, onClick = { bookingMode = true }, label = { Text("حجز") })
+                        FilterChip(selected = bookingMode, enabled = selectedOrganization?.canBook != false, onClick = { bookingMode = true }, label = { Text("حجز") })
                     }
                 }
                 if (bookingMode) item {
@@ -360,7 +360,7 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
                                         }
                                     }
                                 },
-                                enabled = !submitting && !loading && (if (bookingMode) offerings.any { it.itemType == "service" } && bookingResources.isNotEmpty() else cart.isNotEmpty()),
+                                enabled = !submitting && !loading && (if (bookingMode) selectedOrganization?.canBook != false && offerings.any { it.itemType == "service" } && bookingResources.isNotEmpty() else selectedOrganization?.canPurchase != false && cart.isNotEmpty()),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 if (submitting) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
