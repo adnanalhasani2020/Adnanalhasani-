@@ -83,12 +83,15 @@ private fun personalAccountSnapshot(context: Context, token: String): JSONObject
     val account = personalAccountValue(personalAccountRpc(context, token, "commercial_account_get_my_personal_account"))
     val orgs = personalAccountValue(personalAccountRpc(context, token, "commercial_account_list_available_organizations"))
     val delegations = personalAccountValue(personalAccountRpc(context, token, "commercial_account_list_delegations"))
+    val ownedOrganizations = personalAccountValue(personalAccountRpc(context, token, "commercial_account_list_my_organizations"))
     return JSONObject().put("account", account ?: JSONObject())
         .put("organizations", orgs as? JSONArray ?: JSONArray())
         .put("delegations", delegations as? JSONArray ?: JSONArray())
+        .put("ownedOrganizations", ownedOrganizations as? JSONArray ?: JSONArray())
 }
 
 private data class DelegationOrg(val id: String, val name: String, val currency: String)
+private data class OwnedOrganization(val id: String, val name: String, val type: String, val currency: String, val activities: Int, val linked: Boolean)
 private data class DelegationEntry(
     val id: String, val childNumber: String, val childName: String, val organizationId: String,
     val organizationName: String, val permissions: String, val status: String, val expiry: String,
@@ -102,6 +105,7 @@ internal fun PersonalAccountsScreen(onBack: () -> Unit) {
     var account by remember { mutableStateOf<JSONObject?>(null) }
     val orgs = remember { mutableStateListOf<DelegationOrg>() }
     val entries = remember { mutableStateListOf<DelegationEntry>() }
+    val ownedOrganizations = remember { mutableStateListOf<OwnedOrganization>() }
     var displayName by remember { mutableStateOf("") }
     var currency by remember { mutableStateOf("YER") }
     var childNumber by remember { mutableStateOf("") }
@@ -137,6 +141,14 @@ internal fun PersonalAccountsScreen(onBack: () -> Unit) {
             orgs.add(DelegationOrg(o.optString("organization_id"), o.optString("name"), o.optString("currency_code", "YER")))
         }
         if (chosenOrg == null) chosenOrg = orgs.firstOrNull()
+        ownedOrganizations.clear()
+        val owned = snapshot.optJSONArray("ownedOrganizations") ?: JSONArray()
+        for (i in 0 until owned.length()) {
+            val o = owned.optJSONObject(i) ?: continue
+            ownedOrganizations.add(OwnedOrganization(o.optString("organization_id"), o.optString("name"),
+                o.optString("organization_type"), o.optString("currency_code", "YER"), o.optInt("activity_count", 0),
+                o.optBoolean("linked_to_personal_account", false)))
+        }
         entries.clear()
         val ds = snapshot.optJSONArray("delegations") ?: JSONArray()
         for (i in 0 until ds.length()) {
@@ -270,6 +282,23 @@ internal fun PersonalAccountsScreen(onBack: () -> Unit) {
                             }
                         }, modifier = Modifier.fillMaxWidth()) { Text("إرسال طلب الربط") }
                     Text("لن يستطيع الحساب الفرعي الشراء أو الحجز قبل موافقة إدارة المؤسسة. التحقق من الصلاحيات وسقف الشراء يتم على الخادم.")
+                }
+            }
+        }
+        item { Text("مؤسساتي وأنشطتي", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
+        if (ownedOrganizations.isEmpty()) item { Text("لا توجد مؤسسة تملكها أو تديرها كمالك بعد. عند إنشاء مؤسسة بحسابك ستظهر هنا تلقائيًا.") }
+        items(ownedOrganizations, key = { it.id }) { org ->
+            Card(border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Text(org.name, fontWeight = FontWeight.Bold)
+                    Text("النوع: ${org.type} · الأنشطة: ${org.activities} · العملة: ${org.currency}")
+                    Text(if (org.linked) "مرتبطة بحسابك الرئيسي" else "لم تُربط بالحساب الرئيسي بعد")
+                    if (!org.linked && account != null) OutlinedButton(enabled = !busy, onClick = {
+                        request({ token -> personalAccountRpc(context, token, "commercial_account_link_my_organization",
+                            JSONObject().put("p_personal_account_id", account!!.optString("account_id")).put("p_organization_id", org.id)) }) {
+                            request({ token -> personalAccountSnapshot(context, token).toString() }) { applySnapshot(JSONObject(it)); message = "تم ربط المؤسسة بحسابك الرئيسي." }
+                        }
+                    }) { Text("ربط بحسابي الرئيسي") }
                 }
             }
         }
