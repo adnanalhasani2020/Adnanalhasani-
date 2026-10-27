@@ -671,11 +671,12 @@ internal fun ReportsCenterScreen(
         "رصيد المخزون الحالي", "تنبيهات المخزون المنخفض" -> stockAlertsLoadError
         else -> ""
     }
+    val movementStatement = selectedReport in setOf("أرصدة العملاء وكشف الحساب", "كشف حركات الموردين")
     val selectedRows = if (dateError || (cloudMode && (cloudLoading || cloudLoadError.isNotBlank())) ||
         (cloudMode && selectedReportSourceError.isNotBlank())) emptyList() else selectedRowsUnvalidated.filter { row ->
-        (rowFilter.isBlank() || row.name.contains(rowFilter.trim(), true) || row.reference.contains(rowFilter.trim(), true)) &&
+        (movementStatement || rowFilter.isBlank() || row.name.contains(rowFilter.trim(), true) || row.reference.contains(rowFilter.trim(), true)) &&
             (currencyFilter.isBlank() || row.currency.contains(currencyFilter.trim(), true)) &&
-            (statusFilter.isBlank() || row.status.contains(statusFilter.trim(), true))
+            (movementStatement || statusFilter.isBlank() || row.status.contains(statusFilter.trim(), true))
     }
     val csvLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri: Uri? ->
         if (uri != null) runCatching {
@@ -797,10 +798,14 @@ internal fun ReportsCenterScreen(
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("تصفية نتائج التقرير", fontWeight = FontWeight.SemiBold, color = ReportInk)
-                OutlinedTextField(rowFilter, { rowFilter = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("اسم أو مرجع المستند") })
+                if (selectedReport !in setOf("أرصدة العملاء وكشف الحساب", "كشف حركات الموردين")) {
+                    OutlinedTextField(rowFilter, { rowFilter = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("اسم أو مرجع المستند") })
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(currencyFilter, { currencyFilter = it }, modifier = Modifier.weight(1f), singleLine = true, label = { Text("العملة") })
-                    OutlinedTextField(statusFilter, { statusFilter = it }, modifier = Modifier.weight(1f), singleLine = true, label = { Text("الحالة") })
+                    if (selectedReport !in setOf("أرصدة العملاء وكشف الحساب", "كشف حركات الموردين")) {
+                        OutlinedTextField(statusFilter, { statusFilter = it }, modifier = Modifier.weight(1f), singleLine = true, label = { Text("الحالة") })
+                    }
                 }
             }
         }
