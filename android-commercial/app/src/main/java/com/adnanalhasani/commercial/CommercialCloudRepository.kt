@@ -2798,6 +2798,7 @@ internal data class CommercialCloudJournalLine(
     val accountCode: String,
     val accountName: String,
     val accountType: String,
+    val normalBalance: String,
     val partyAccountId: String,
     val debitMinor: Long,
     val creditMinor: Long,
@@ -2831,7 +2832,7 @@ internal fun loadCommercialCloudPostedJournalLines(context: Context): List<Comme
         access
     )
     val accounts = commercialCloudPagedGet(
-        "/rest/v1/commercial_ledger_accounts?select=id,account_code,account_name,account_type,currency_code,is_active" +
+        "/rest/v1/commercial_ledger_accounts?select=id,account_code,account_name,account_type,normal_balance,currency_code,is_active" +
             "&organization_id=eq.$orgId&order=account_code.asc,id.asc",
         access
     )
@@ -2861,6 +2862,7 @@ internal fun loadCommercialCloudPostedJournalLines(context: Context): List<Comme
                 accountCode = account?.optString("account_code").takeUnless { it == null || it == "null" }.orEmpty(),
                 accountName = account?.optString("account_name").takeUnless { it == null || it == "null" }.orEmpty(),
                 accountType = account?.optString("account_type").takeUnless { it == null || it == "null" }.orEmpty(),
+                normalBalance = account?.optString("normal_balance").takeUnless { it == null || it == "null" }.orEmpty(),
                 partyAccountId = line.optString("party_account_id").takeUnless { it.isBlank() || it == "null" }.orEmpty(),
                 debitMinor = line.optLong("debit_minor", 0L),
                 creditMinor = line.optLong("credit_minor", 0L),
