@@ -502,6 +502,16 @@ internal fun ReportsCenterScreen(
                 if (dateError) Text("تحقق من التاريخين؛ يجب أن تكون البداية قبل النهاية أو مساوية لها.", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
             }
         }
+        if (selectedReport == "كشف حساب محاسبي") item {
+            OutlinedTextField(
+                value = accountFilter,
+                onValueChange = { accountFilter = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text("رمز الحساب أو اسمه") },
+                supportingText = { Text("أدخل رمزًا أو اسمًا مطابقًا للحساب؛ لا يعرض الكشف كل الحسابات تلقائيًا.") }
+            )
+        }
         item {
             Text("تصنيفات التقارير", fontWeight = FontWeight.Bold, color = ReportInk, fontSize = 17.sp)
             Spacer(Modifier.height(6.dp))
