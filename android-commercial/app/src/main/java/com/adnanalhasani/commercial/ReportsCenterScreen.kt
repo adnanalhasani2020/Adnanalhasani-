@@ -302,6 +302,8 @@ internal fun ReportsCenterScreen(
                 supplierPaymentsLoadError = supplierPayments.exceptionOrNull()?.message.orEmpty()
                 cloudStockMovements = stockMovements.getOrDefault(emptyList())
                 stockMovementsLoadError = stockMovements.exceptionOrNull()?.message.orEmpty()
+                cloudStockAlerts = stockAlerts.getOrDefault(emptyList())
+                stockAlertsLoadError = stockAlerts.exceptionOrNull()?.message.orEmpty()
                 cloudReturns = returns.getOrDefault(emptyList())
                 cloudPayments = payments.getOrDefault(emptyList())
                 cloudJournals = journals.getOrDefault(emptyList())
@@ -852,7 +854,8 @@ internal fun ReportsCenterScreen(
                         }
                         val sourceReady = report.supported && (!cloudMode || (!cloudLoading && cloudLoadError.isBlank() &&
                             (report.title != "كشف حركات الموردين" || supplierPaymentsLoadError.isBlank()) &&
-                            (report.title != "حركة المخزون الفعلية" || stockMovementsLoadError.isBlank())))
+                            (report.title != "حركة المخزون الفعلية" || stockMovementsLoadError.isBlank()) &&
+                            (report.title !in setOf("رصيد المخزون الحالي", "تنبيهات المخزون المنخفض") || stockAlertsLoadError.isBlank())))
                         Surface(color = if (sourceReady) ReportMint else Color(0xFFFFF1DF), shape = RoundedCornerShape(8.dp)) {
                             Text(
                                 when {
