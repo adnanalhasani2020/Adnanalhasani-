@@ -2128,7 +2128,8 @@ internal fun loadCommercialCloudCustomerReceipt(context: Context, paymentId: Str
 
 internal data class CustomerPortalOrganization(
     val id: String, val name: String, val description: String,
-    val currencyCode: String, val logoUrl: String, val allowCredit: Boolean, val delegationId: String = ""
+    val currencyCode: String, val logoUrl: String, val allowCredit: Boolean, val delegationId: String = "",
+    val canPurchase: Boolean = true, val canBook: Boolean = true
 )
 internal data class CustomerPortalOffering(
     val id: String, val name: String, val description: String, val unitName: String,
@@ -2180,12 +2181,14 @@ internal fun loadCustomerPortalOrganizations(context: Context): List<CustomerPor
         val name = row.optString("name").takeUnless { it.isBlank() || it == "null" }.orEmpty()
         if (orgId.isBlank() || delegationId.isBlank() || name.isBlank()) continue
         val parentName = row.optString("parent_display_name").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+        val permissions = row.optJSONObject("permissions") ?: JSONObject()
         resultRows.add(CustomerPortalOrganization(
             orgId, if (parentName.isBlank()) "$name — حساب رئيسي مفوض" else "$name — عبر حساب $parentName",
             row.optString("description").takeUnless { it == "null" }.orEmpty(),
             row.optString("currency_code", "YER").ifBlank { "YER" },
             row.optString("logo_url").takeUnless { it == "null" }.orEmpty(),
-            row.optBoolean("allow_credit", false), delegationId
+            row.optBoolean("allow_credit", false), delegationId,
+            permissions.optBoolean("purchase", false), permissions.optBoolean("book", false)
         ))
     }
     return resultRows
