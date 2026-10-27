@@ -218,6 +218,7 @@ private fun StoreApp(context: Context) {
     var showExpenses by remember { mutableStateOf(false) }
     var showActivityProfile by remember { mutableStateOf(false) }
     var showPersonalAccounts by remember { mutableStateOf(false) }
+    var showNotifications by remember { mutableStateOf(false) }
     var showCatalog by remember { mutableStateOf(false) }
     var showMasterData by remember { mutableStateOf(false) }
     var cloudOperationalPage by remember { mutableStateOf("") }
@@ -300,7 +301,7 @@ private fun StoreApp(context: Context) {
                         }
                     }
                 },
-                actions = { IconButton(onClick = {}) { Icon(Icons.Default.NotificationsNone, "الإشعارات", tint = Ink) } },
+                actions = { IconButton(onClick = { showNotifications = true }) { Icon(Icons.Default.NotificationsNone, "الإشعارات", tint = Ink) } },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Canvas)
             )
         },
@@ -319,7 +320,9 @@ private fun StoreApp(context: Context) {
         }
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
-            if (customerOrderFulfillmentPage) {
+            if (showNotifications) {
+                CommercialNotificationsScreen(context = context, onBack = { showNotifications = false })
+            } else if (customerOrderFulfillmentPage) {
                 CustomerOrderFulfillmentScreen(context = context, onBack = { customerOrderFulfillmentPage = false })
             } else if (customerPortalHistoryPage) {
                 CustomerPortalHistoryScreen(context = context, onBack = { customerPortalHistoryPage = false })
