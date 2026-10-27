@@ -120,6 +120,12 @@ internal fun PersonalAccountsScreen(onBack: () -> Unit) {
     var approveEntry by remember { mutableStateOf<DelegationEntry?>(null) }
     var merchantName by remember { mutableStateOf("") }
     var merchantIcon by remember { mutableStateOf("person") }
+    var editEntry by remember { mutableStateOf<DelegationEntry?>(null) }
+    var editReports by remember { mutableStateOf(false) }
+    var editBook by remember { mutableStateOf(false) }
+    var editPurchase by remember { mutableStateOf(false) }
+    var editExpiryDays by remember { mutableStateOf("") }
+    var editLimitMinor by remember { mutableStateOf("") }
 
     fun applySnapshot(snapshot: JSONObject) {
         val a = snapshot.optJSONObject("account")
@@ -287,6 +293,20 @@ internal fun PersonalAccountsScreen(onBack: () -> Unit) {
                     if (e.limit.isNotBlank()) Text("السقف: ${e.limit} | المنفق: ${e.spent}")
                     if (e.expiry.isNotBlank()) Text("انتهاء الصلاحية: ${e.expiry}")
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (e.status == "active" || e.status == "pending_merchant_approval") {
+                            OutlinedButton(enabled = !busy, onClick = {
+                                editEntry = e
+                                val perms = runCatching { JSONObject(e.permissions) }.getOrDefault(JSONObject())
+                                editReports = perms.optBoolean("view_reports", false)
+                                editBook = perms.optBoolean("book", false)
+                                editPurchase = perms.optBoolean("purchase", false)
+                                editLimitMinor = e.limit
+                                editExpiryDays = if (e.expiry.isBlank()) "" else runCatching {
+                                    val days = java.time.Duration.between(Instant.now(), Instant.parse(e.expiry)).toDays()
+                                    days.coerceAtLeast(1).toString()
+                                }.getOrDefault("")
+                            }) { Text("تعديل الصلاحيات") }
+                        }
                         if (e.status == "pending_merchant_approval") {
                             OutlinedButton(onClick = { approveEntry = e; merchantName = e.childName.ifBlank { e.childNumber }; merchantIcon = "person" }) { Text("موافقة التاجر") }
                         }
@@ -306,6 +326,38 @@ internal fun PersonalAccountsScreen(onBack: () -> Unit) {
         }
         if (report.isNotBlank()) item { Card { Column(Modifier.padding(12.dp)) { Text("تقرير الإنفاق", fontWeight = FontWeight.Bold); Text(report) } } }
         if (message.isNotBlank()) item { Text(message, color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary) }
+    }
+
+    editEntry?.let { target ->
+        AlertDialog(
+            onDismissRequest = { editEntry = null },
+            title = { Text("تعديل صلاحيات الحساب الفرعي") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("بعد التعديل سيعود الطلب إلى انتظار موافقة المؤسسة.")
+                    Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(editReports, { editReports = it }); Text("عرض التقارير") }
+                    Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(editBook, { editBook = it }); Text("الحجز") }
+                    Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(editPurchase, { editPurchase = it }); Text("الشراء") }
+                    OutlinedTextField(editExpiryDays, { editExpiryDays = it.filter(Char::isDigit).take(4) }, label = { Text("الأيام المتبقية (فارغ = بلا انتهاء)") }, singleLine = true)
+                    OutlinedTextField(editLimitMinor, { editLimitMinor = it.filter(Char::isDigit).take(15) }, label = { Text("سقف الشراء بوحدة العملة الصغرى") }, singleLine = true)
+                }
+            },
+            confirmButton = {
+                Button(enabled = !busy && (editReports || editBook || editPurchase), onClick = {
+                    request({ token ->
+                        val args = JSONObject().put("p_delegation_id", target.id)
+                            .put("p_permissions", JSONObject().put("view_reports", editReports).put("book", editBook).put("purchase", editPurchase))
+                        if (editExpiryDays.isNotBlank()) args.put("p_expires_at", Instant.now().plusSeconds(editExpiryDays.toLong().coerceAtMost(3650) * 86400L).toString())
+                        if (editLimitMinor.isNotBlank()) args.put("p_spend_limit_minor", editLimitMinor.toLong())
+                        personalAccountRpc(context, token, "commercial_account_update_delegation", args)
+                    }) {
+                        editEntry = null
+                        request({ token -> personalAccountSnapshot(context, token).toString() }) { applySnapshot(JSONObject(it)); message = "تم تحديث الصلاحيات؛ يلزم اعتماد المؤسسة من جديد." }
+                    }
+                }) { Text("حفظ التعديلات") }
+            },
+            dismissButton = { TextButton(onClick = { editEntry = null }) { Text("إلغاء") } }
+        )
     }
 
     approveEntry?.let { target ->
