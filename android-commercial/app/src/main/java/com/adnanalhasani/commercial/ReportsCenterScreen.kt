@@ -530,8 +530,18 @@ internal fun ReportsCenterScreen(
                             Text(report.title, fontWeight = FontWeight.SemiBold, color = ReportInk)
                             Text(report.category, color = ReportMuted, fontSize = 11.sp)
                         }
-                        Surface(color = if (report.supported) ReportMint else Color(0xFFFFF1DF), shape = RoundedCornerShape(8.dp)) {
-                            Text(if (report.supported) "متاح" else "يتطلب مصدرًا مكتملًا", modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp), color = if (report.supported) ReportGreen else Color(0xFF9A5B12), fontSize = 10.sp)
+                        val sourceReady = report.supported && (!cloudMode || (!cloudLoading && cloudLoadError.isBlank()))
+                        Surface(color = if (sourceReady) ReportMint else Color(0xFFFFF1DF), shape = RoundedCornerShape(8.dp)) {
+                            Text(
+                                when {
+                                    !report.supported -> "يتطلب مصدرًا مكتملًا"
+                                    cloudMode && cloudLoading -> "جارٍ تحميل المصدر"
+                                    cloudMode && cloudLoadError.isNotBlank() -> "تعذر تحميل المصدر"
+                                    else -> "متاح"
+                                },
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                                color = if (sourceReady) ReportGreen else Color(0xFF9A5B12), fontSize = 10.sp
+                            )
                         }
                     }
                     Text(report.source, color = ReportMuted, fontSize = 11.sp)
