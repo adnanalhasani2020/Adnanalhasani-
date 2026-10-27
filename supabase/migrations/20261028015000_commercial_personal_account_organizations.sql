@@ -1,4 +1,8 @@
 -- Explicitly associate a user's businesses/organizations with their personal platform account.
+CREATE UNIQUE INDEX IF NOT EXISTS commercial_party_accounts_one_active_personal_owner_uidx
+  ON public.commercial_party_accounts(owner_user_id)
+  WHERE account_type='personal' AND status='active' AND owner_user_id IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS public.commercial_personal_account_organizations (
   personal_account_id uuid NOT NULL REFERENCES public.commercial_party_accounts(id) ON DELETE RESTRICT,
   organization_id uuid NOT NULL REFERENCES public.commercial_organizations(id) ON DELETE RESTRICT,
