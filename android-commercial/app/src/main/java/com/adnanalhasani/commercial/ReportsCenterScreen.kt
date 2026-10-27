@@ -256,6 +256,8 @@ internal fun ReportsCenterScreen(
     var error by remember { mutableStateOf("") }
     var cloudSalesDocuments by remember { mutableStateOf<List<CommercialCloudSaleDocument>>(emptyList()) }
     var cloudPurchases by remember { mutableStateOf<List<CommercialCloudPurchaseDocument>>(emptyList()) }
+    var cloudSupplierPayments by remember { mutableStateOf<List<CommercialCloudSupplierPaymentMovement>>(emptyList()) }
+    var supplierFilter by remember { mutableStateOf("") }
     var cloudReturns by remember { mutableStateOf<List<CommercialCloudSaleReturn>>(emptyList()) }
     var cloudPayments by remember { mutableStateOf<List<CommercialCloudRecord>>(emptyList()) }
     var cloudJournals by remember { mutableStateOf<List<CommercialCloudRecord>>(emptyList()) }
@@ -272,6 +274,7 @@ internal fun ReportsCenterScreen(
         ReportIo.execute {
             val salesDocuments = runCatching { loadCommercialCloudSaleDocuments(context) }
             val purchases = runCatching { loadCommercialCloudPurchaseDocuments(context) }
+            val supplierPayments = runCatching { loadCommercialCloudSupplierPaymentMovements(context) }
             val returns = runCatching { loadCommercialCloudSaleReturns(context) }
             val payments = runCatching { loadCommercialCloudRecords(context, "payments") }
             val journals = runCatching { loadCommercialCloudRecords(context, "journals") }
@@ -282,13 +285,14 @@ internal fun ReportsCenterScreen(
                 // Clear failed projections rather than silently showing stale results as fresh.
                 cloudSalesDocuments = salesDocuments.getOrDefault(emptyList())
                 cloudPurchases = purchases.getOrDefault(emptyList())
+                cloudSupplierPayments = supplierPayments.getOrDefault(emptyList())
                 cloudReturns = returns.getOrDefault(emptyList())
                 cloudPayments = payments.getOrDefault(emptyList())
                 cloudJournals = journals.getOrDefault(emptyList())
                 cloudLedgerLines = ledgerLines.getOrDefault(emptyList())
                 cloudExpenses = expenses.getOrDefault(emptyList())
                 val errors = listOf(
-                    salesDocuments.exceptionOrNull(), purchases.exceptionOrNull(), returns.exceptionOrNull(), payments.exceptionOrNull(),
+                    salesDocuments.exceptionOrNull(), purchases.exceptionOrNull(), supplierPayments.exceptionOrNull(), returns.exceptionOrNull(), payments.exceptionOrNull(),
                     journals.exceptionOrNull(), ledgerLines.exceptionOrNull(), expenses.exceptionOrNull()
                 ).filterNotNull()
                 cloudLoadError = errors.firstOrNull()?.message ?: if (errors.isNotEmpty()) "تعذر تحميل بعض مصادر التقارير." else ""
@@ -322,7 +326,7 @@ internal fun ReportsCenterScreen(
             ReportCatalogItem("مستحقات فواتير الموردين", "الموردون والمستحقات", "commercial_supplier_obligations المرتبطة بالفواتير", cloudMode, "مجموع الالتزامات المسجلة ناقص المبالغ المسددة المسجلة فقط؛ لا يمثل رصيد المورد الشامل إذا وجدت تسويات أو مرتجعات خارج هذا المصدر."),
             ReportCatalogItem("مرتجعات المبيعات وحالة التسوية", "المرتجعات", "commercial_sales_returns + عناصر المرتجع", cloudMode, "يفصل حالة الموافقة عن الاسترداد الفعلي وإعادة التخزين؛ لا تُعامل الطلبات المعلقة كمرتجعات منفذة."),
             ReportCatalogItem("أرصدة العملاء وكشف الحساب", "العملاء والديون", "فواتير العملاء المكتملة + التحصيلات الناجحة + المرتجعات المعتمدة والاستردادات المنفذة", cloudMode, "يعرض كشف حركة للفواتير المكتملة والتحصيلات والمرتجعات والاستردادات المسجلة في مصادر السحابة، مع رصيد افتتاحي وحركة ورصيد ختامي حسب العميل والعملة."),
-            ReportCatalogItem("أرصدة الموردين والمستحقات", "الموردون والمستحقات", "فواتير المورد والمدفوعات والمرتجعات", false, "يتطلب مطابقة الالتزامات والدفعات والمرتجعات والتسويات."),
+            ReportCatalogItem("كشف حركات الموردين", "الموردون والمستحقات", "فواتير المورد ذات الالتزام + دفعات الموردين ذات القيد المرحل", cloudMode, "يعرض الفواتير والدفعات الفريدة حسب المورد والعملة، مع رصيد افتتاحي وختامي مستنتج من هذين المصدرين فقط؛ لا يمثل رصيد المورد النهائي عند وجود مرتجعات أو تسويات غير محملة."),
             ReportCatalogItem("سندات القبض والصرف", "السندات والتحصيل والصرف", "commercial_payments وحالة كل دفعة", cloudMode, "يعرض حالة كل دفعة؛ لحساب التحصيل الفعلي استخدم تقرير الدفعات الناجحة فقط، ولا تجمع القيد والدفعة مرتين."),
             ReportCatalogItem("سجل القيود المحاسبية", "المحاسبة والمالية", "commercial_journal_entries", cloudMode, "قائمة قراءة فقط لحالات القيود ومصادرها."),
             ReportCatalogItem("ميزان المراجعة حسب الحساب", "المحاسبة والمالية", "commercial_journal_lines + commercial_ledger_accounts + القيود المرحلة", cloudMode, "رصيد حتى نهاية التاريخ المحدد، مع إظهار المدين والدائن والفروقات حسب العملة."),
@@ -478,6 +482,39 @@ internal fun ReportsCenterScreen(
             ReportLine(endText, "-", key.first, (due - paid).coerceAtLeast(0L), key.second,
                 "إجمالي الالتزامات: ${reportMoney(due, key.second, true)} · المسدد: ${reportMoney(paid, key.second, true)} · عدد الالتزامات: ${rows.size}")
         }.sortedByDescending { it.amount }
+        "كشف حركات الموردين" -> {
+            data class SupplierMovement(val date: String, val supplier: String, val currency: String, val reference: String, val amount: Long, val description: String)
+            val invoiceMovements = cloudPurchases.flatMap { purchase ->
+                purchase.supplierInvoices.filter { invoice ->
+                    invoice.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed") &&
+                        invoice.obligation != null && invoice.obligation.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed") &&
+                        invoice.obligation.amountDueMinor > 0L && invoice.obligation.currencyCode.matches(Regex("^[A-Z]{3}$"))
+                }.map { invoice ->
+                    val obligation = invoice.obligation!!
+                    SupplierMovement(invoice.recordedAt.take(10), purchase.supplierName, obligation.currencyCode,
+                        "فاتورة مورد ${invoice.invoiceNumber.ifBlank { invoice.id }}", obligation.amountDueMinor, "مدين · التزام فاتورة مسجل")
+                }
+            }
+            val paymentMovements = cloudSupplierPayments.map { payment ->
+                SupplierMovement(payment.recordedAt.take(10), payment.supplierName, payment.currencyCode,
+                    "دفعة ${payment.id}", -payment.amountMinor, "دائن · سداد مرحل · فاتورة ${payment.invoiceNumber.ifBlank { payment.supplierInvoiceId }} · ${payment.paymentMethod}")
+            }
+            (invoiceMovements + paymentMovements).filter { movement -> supplierFilter.isBlank() || movement.supplier.contains(supplierFilter.trim(), true) }
+                .groupBy { it.supplier to it.currency }.toSortedMap(compareBy<Pair<String, String>> { it.first }.thenBy { it.second }).flatMap { (key, supplierMoves) ->
+                    val ordered = supplierMoves.sortedWith(compareBy<SupplierMovement> { it.date }.thenBy { it.reference })
+                    val opening = ordered.filter { reportDateMillis(it.date)?.let { ts -> ts < startMillis } == true }.sumOf { it.amount }
+                    val periodMoves = ordered.filter { reportDateMillis(it.date)?.let { ts -> ts >= startMillis && ts < endExclusive } == true }
+                    if (periodMoves.isEmpty() && opening == 0L) emptyList() else buildList {
+                        var balance = opening
+                        if (opening != 0L) add(ReportLine(startText, "افتتاحي", key.first, opening, key.second, "رصيد افتتاحي وفق الفواتير والدفعات المحملة"))
+                        periodMoves.forEach { movement ->
+                            balance = Math.addExact(balance, movement.amount)
+                            add(ReportLine(movement.date, movement.reference, movement.supplier, movement.amount, movement.currency, "${movement.description} · الرصيد الجزئي: ${reportMoney(balance, movement.currency, true)}"))
+                        }
+                        add(ReportLine(endText, "ختامي", key.first, balance, key.second, "رصيد جزئي للفواتير والدفعات فقط؛ لا يشمل مرتجعات أو تسويات غير محملة"))
+                    }
+                }
+        }
         "مرتجعات المبيعات وحالة التسوية" -> cloudReturns.filter { row ->
             val timestamp = reportDateMillis(row.createdAt)
             timestamp != null && timestamp >= startMillis && timestamp < endExclusive
@@ -677,6 +714,16 @@ internal fun ReportsCenterScreen(
                 if (dateError) Text("تحقق من التاريخين؛ يجب أن تكون البداية قبل النهاية أو مساوية لها.", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
             }
         }
+        if (selectedReport == "كشف حركات الموردين") item {
+            OutlinedTextField(
+                value = supplierFilter,
+                onValueChange = { supplierFilter = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text("اسم المورد") },
+                supportingText = { Text("الرصيد جزئي ويعتمد على التزامات الفواتير ودفعات الموردين ذات القيود المرحلة فقط.") }
+            )
+        }
         if (selectedReport == "أرصدة العملاء وكشف الحساب") item {
             OutlinedTextField(
                 value = customerFilter,
@@ -718,7 +765,7 @@ internal fun ReportsCenterScreen(
                         "المبيعات حسب العميل", "المبيعات النقدية والآجلة", "المبيعات حسب حالة السداد", "متوسط قيمة الفاتورة", "مقارنة فترتين", "مقارنة الفترات", "الخصومات على فواتير المبيعات", "الضرائب المسجلة على المبيعات",
                         "التحصيلات المسجلة محليًا", "الدفعات السحابية الناجحة", "المصروفات التشغيلية", "رصيد المخزون الحالي", "تنبيهات المخزون المنخفض",
                         "فواتير الشراء والمستحقات المسجلة", "مستحقات فواتير الموردين", "مرتجعات المبيعات وحالة التسوية", "سندات القبض والصرف", "سجل القيود المحاسبية",
-                        "ميزان المراجعة حسب الحساب", "حركة دفتر الأستاذ العام", "كشف حساب محاسبي", "أرصدة العملاء وكشف الحساب" -> selectedReport = report.title
+                        "ميزان المراجعة حسب الحساب", "حركة دفتر الأستاذ العام", "كشف حساب محاسبي", "أرصدة العملاء وكشف الحساب", "كشف حركات الموردين" -> selectedReport = report.title
                         "لوحة المؤشرات" -> selectedReport = "ملخص المبيعات حسب الفترة"
                     }
                 }),
