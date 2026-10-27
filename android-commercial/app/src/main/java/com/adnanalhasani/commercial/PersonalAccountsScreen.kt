@@ -11,6 +11,10 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Work
+import androidx.compose.material.icons.filled.Business
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -95,7 +99,7 @@ private data class OwnedOrganization(val id: String, val name: String, val type:
 private data class DelegationEntry(
     val id: String, val childNumber: String, val childName: String, val organizationId: String,
     val organizationName: String, val permissions: String, val status: String, val expiry: String,
-    val limit: String, val spent: String, val merchantName: String
+    val limit: String, val spent: String, val merchantName: String, val iconKey: String
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -160,7 +164,8 @@ internal fun PersonalAccountsScreen(onBack: () -> Unit) {
                 d.optString("expires_at").takeUnless { it == "null" }.orEmpty(),
                 d.optString("spend_limit_minor").takeUnless { it == "null" }.orEmpty(),
                 d.optString("spent_minor", "0"),
-                d.optString("merchant_display_name").takeUnless { it == "null" }.orEmpty()
+                d.optString("merchant_display_name").takeUnless { it == "null" }.orEmpty(),
+                d.optString("merchant_icon_key").takeUnless { it == "null" }.orEmpty()
             ))
         }
     }
@@ -307,7 +312,10 @@ internal fun PersonalAccountsScreen(onBack: () -> Unit) {
         items(entries, key = { it.id }) { e ->
             Card(border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(e.merchantName.ifBlank { e.childName.ifBlank { e.childNumber } }, fontWeight = FontWeight.Bold)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(when (e.iconKey) { "family" -> Icons.Default.Groups; "work" -> Icons.Default.Work; "business" -> Icons.Default.Business; else -> Icons.Default.Person }, contentDescription = null)
+                        Text(e.merchantName.ifBlank { e.childName.ifBlank { e.childNumber } }, fontWeight = FontWeight.Bold)
+                    }
                     Text("المؤسسة: ${e.organizationName}")
                     Text("رقم الحساب الفرعي: ${e.childNumber}")
                     Text("الحالة: ${when (e.status) {
@@ -397,8 +405,13 @@ internal fun PersonalAccountsScreen(onBack: () -> Unit) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("اختر الاسم والأيقونة اللذين سيظهر بهما الحساب داخل مؤسستك.")
                     OutlinedTextField(merchantName, { merchantName = it }, label = { Text("اسم الحساب داخل المؤسسة") }, singleLine = true)
-                    OutlinedTextField(merchantIcon, { merchantIcon = it.lowercase().filter { ch -> ch.isLetterOrDigit() || ch == '_' || ch == '-' }.take(48) },
-                        label = { Text("مفتاح الأيقونة مثل person أو family") }, singleLine = true)
+                    Text("الأيقونة")
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        FilterChip(selected = merchantIcon == "person", onClick = { merchantIcon = "person" }, label = { Icon(Icons.Default.Person, contentDescription = "شخص") })
+                        FilterChip(selected = merchantIcon == "family", onClick = { merchantIcon = "family" }, label = { Icon(Icons.Default.Groups, contentDescription = "عائلة") })
+                        FilterChip(selected = merchantIcon == "work", onClick = { merchantIcon = "work" }, label = { Icon(Icons.Default.Work, contentDescription = "عمل") })
+                        FilterChip(selected = merchantIcon == "business", onClick = { merchantIcon = "business" }, label = { Icon(Icons.Default.Business, contentDescription = "مؤسسة") })
+                    }
                 }
             },
             confirmButton = {
