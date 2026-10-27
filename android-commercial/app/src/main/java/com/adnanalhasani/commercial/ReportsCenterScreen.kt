@@ -223,8 +223,8 @@ internal fun ReportsCenterScreen(
     val zone = remember { ZoneId.systemDefault() }
     val startMillis = startDate?.atStartOfDay(zone)?.toInstant()?.toEpochMilli() ?: Long.MIN_VALUE
     val endExclusive = endDate?.plusDays(1)?.atStartOfDay(zone)?.toInstant()?.toEpochMilli() ?: Long.MAX_VALUE
-    val inPeriodSales = sales.filter { it.createdAt >= startMillis && it.createdAt < endExclusive && it.status.equals("completed", true) }
-    val inPeriodCloudSalesDocuments = cloudSalesDocuments.filter { doc ->
+    val inPeriodSales = if (dateError) emptyList() else sales.filter { it.createdAt >= startMillis && it.createdAt < endExclusive && it.status.equals("completed", true) }
+    val inPeriodCloudSalesDocuments = if (dateError) emptyList() else cloudSalesDocuments.filter { doc ->
         doc.saleStatus.equals("completed", true) &&
             (reportDateMillis(doc.createdAt)?.let { it >= startMillis && it < endExclusive } == true)
     }
@@ -232,7 +232,7 @@ internal fun ReportsCenterScreen(
     val inPeriodExpenses = if (cloudMode) emptyList() else expenses.filter { it.timestamp >= startMillis && it.timestamp < endExclusive }
     val salesByCurrency = inPeriodSales.groupBy { it.currencyCode.ifBlank { "غير محددة" } }.toSortedMap()
     val stockLow = products.filter { it.stock <= (it.reorderPoint.takeIf { n -> n >= 0 } ?: 9) }
-    val selectedRows = when (selectedReport) {
+    val selectedRowsUnvalidated = when (selectedReport) {
         "ملخص المبيعات حسب الفترة" -> if (cloudMode) inPeriodCloudSalesDocuments.groupBy { it.currencyCode.ifBlank { "غير محددة" } }.map { (currency, rows) ->
             val total = rows.sumOf { it.totalMinor }
             ReportLine("${startText} — ${endText}", "ملخص", "إجمالي المبيعات المكتملة", total, currency, "${rows.size} فاتورة · متوسط ${reportMoney(if (rows.isEmpty()) 0L else total / rows.size, currency, true)}")
@@ -414,6 +414,8 @@ internal fun ReportsCenterScreen(
         }
         else -> emptyList()
     }
+    // Invalid dates must never widen a report to the full history.
+    val selectedRows = if (dateError) emptyList() else selectedRowsUnvalidated
     val csvLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri: Uri? ->
         if (uri != null) runCatching {
             context.contentResolver.openOutputStream(uri)?.use { stream ->
@@ -430,7 +432,7 @@ internal fun ReportsCenterScreen(
                 ?: throw IllegalStateException("تعذر فتح ملف Excel.")
         }.onFailure { error = "تعذر تصدير XLSX: ${it.message ?: "خطأ غير معروف"}" }
     }
-    val currencyTotal = if (cloudMode) inPeriodCloudSalesDocuments.groupBy { it.currencyCode.ifBlank { "غير محددة" } }.mapValues { (_, rows) -> rows.sumOf { it.totalMinor } }
+    val currencyTotal = if (dateError) emptyMap() else if (cloudMode) inPeriodCloudSalesDocuments.groupBy { it.currencyCode.ifBlank { "غير محددة" } }.mapValues { (_, rows) -> rows.sumOf { it.totalMinor } }
         else inPeriodSales.groupBy { it.currencyCode.ifBlank { "غير محددة" } }.mapValues { (_, rows) -> rows.sumOf { it.total.toLong() } }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -447,8 +449,8 @@ internal fun ReportsCenterScreen(
             Card(colors = CardDefaults.cardColors(containerColor = ReportInk), shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("ملخص المبيعات المكتملة", color = Color(0xFFBFD9D0), fontSize = 13.sp)
-                    Text("عدد الفواتير: ${if (cloudMode) inPeriodCloudSalesDocuments.size else inPeriodSales.size}", color = Color.White, fontWeight = FontWeight.SemiBold)
-                    currencyTotal.toSortedMap().forEach { (currency, total) ->
+                    Text(if (dateError) "لا يمكن حساب الملخص: تحقق من الفترة المحددة" else "عدد الفواتير: ${if (cloudMode) inPeriodCloudSalesDocuments.size else inPeriodSales.size}", color = Color.White, fontWeight = FontWeight.SemiBold)
+                    if (!dateError) currencyTotal.toSortedMap().forEach { (currency, total) ->
                         Text(reportMoney(total, currency, cloudMode), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                     }
                     Text("الفترة: ${startText} — ${endText}", color = Color(0xFFBFD9D0), fontSize = 11.sp)
@@ -508,7 +510,7 @@ internal fun ReportsCenterScreen(
         items(filteredCatalog, key = { it.title }) { report ->
             val selected = selectedReport == report.title
             Card(
-                modifier = Modifier.fillMaxWidth().clickable(enabled = report.supported && !dateError, onClick = {
+                modifier = Modifier.fillMaxWidth().clickable(enabled = report.supported && !dateError && (!cloudMode || (!cloudLoading && cloudLoadError.isBlank())), onClick = {
                     when (report.title) {
                         "ملخص المبيعات حسب الفترة", "تفاصيل فواتير المبيعات", "المبيعات حسب الصنف",
                         "المبيعات حسب العميل", "المبيعات النقدية والآجلة", "المبيعات حسب حالة السداد", "متوسط قيمة الفاتورة", "مقارنة فترتين", "مقارنة الفترات", "الخصومات على فواتير المبيعات", "الضرائب المسجلة على المبيعات",
