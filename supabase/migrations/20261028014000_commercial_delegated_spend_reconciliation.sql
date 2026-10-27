@@ -57,7 +57,7 @@ $function$;
 
 DROP TRIGGER IF EXISTS trg_commercial_delegated_spend_order_change ON public.commercial_customer_orders;
 CREATE TRIGGER trg_commercial_delegated_spend_order_change
-AFTER UPDATE OF status,total_minor,delegated_access_id ON public.commercial_customer_orders
+AFTER UPDATE OF status,total_minor,delegated_access_id,principal_account_id,acting_account_id ON public.commercial_customer_orders
 FOR EACH ROW EXECUTE FUNCTION public.commercial_reconcile_delegated_spend_on_order_change();
 
 CREATE OR REPLACE FUNCTION public.commercial_sync_delegated_booking_order_status()
