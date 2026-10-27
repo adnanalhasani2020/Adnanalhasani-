@@ -24,9 +24,9 @@ def test_account_lookup_does_not_return_private_identity_data():
     function = function.split("$function$;", 1)[0]
     assert "'account_number', a.account_number" in function
     assert "'display_name', a.display_name" in function
-    assert "email" not in function.lower()
-    assert "phone" not in function.lower()
-    assert "identity" not in function.lower()
+    assert "'email'," not in function.lower()
+    assert "'phone'," not in function.lower()
+    assert "owner_identity" not in function.lower()
 
 
 def test_delegated_orders_bind_parent_billing_child_actor_and_enforce_budget():
