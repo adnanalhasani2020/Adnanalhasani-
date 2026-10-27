@@ -2700,6 +2700,27 @@ internal fun saveMerchantCustomerOrderLines(context: Context, orderId: String, l
 
 
 /** Read-only projection of posted double-entry journal lines, joined to their source entry and ledger account. */
+internal data class CommercialCloudGlAccountMapping(
+    val mappingKey: String,
+    val ledgerAccountId: String
+)
+
+internal fun loadCommercialCloudGlAccountMappings(context: Context): List<CommercialCloudGlAccountMapping> {
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val rows = commercialCloudPagedGet(
+        "/rest/v1/commercial_gl_account_mappings?select=mapping_key,ledger_account_id&organization_id=eq.$orgId&order=mapping_key.asc",
+        access
+    )
+    return buildList {
+        for (i in 0 until rows.length()) {
+            val row = rows.optJSONObject(i) ?: continue
+            val key = row.optString("mapping_key").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+            val accountId = row.optString("ledger_account_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+            if (key.isNotBlank() && accountId.isNotBlank()) add(CommercialCloudGlAccountMapping(key, accountId))
+        }
+    }
+}
+
 internal data class CommercialCloudPartyAccountLink(
     val partyId: String,
     val partyAccountId: String,
