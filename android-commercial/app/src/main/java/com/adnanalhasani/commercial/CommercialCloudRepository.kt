@@ -750,6 +750,56 @@ internal fun loadCommercialCloudPurchaseOrderOptions(context: Context): Commerci
     return CommercialPurchaseOrderOptions(suppliers, locations, offerings)
 }
 
+internal data class CommercialCloudStockMovement(
+    val id: String,
+    val offeringId: String,
+    val productName: String,
+    val unitName: String,
+    val movementType: String,
+    val quantityDelta: java.math.BigDecimal,
+    val sourceReference: String,
+    val saleId: String,
+    val saleReceiptNumber: String,
+    val saleStatus: String,
+    val createdAt: String
+)
+
+/** Actual inventory movement ledger, restricted to the saved activity and its organization. */
+internal fun loadCommercialCloudStockMovements(context: Context): List<CommercialCloudStockMovement> {
+    val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+    val activityId = saved.getString("activity_id", null).orEmpty()
+    require(activityId.isNotBlank()) { "ملف النشاط غير محفوظ." }
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val path = "/rest/v1/commercial_stock_movements" +
+        "?select=id,sale_id,created_at,source_ref,offering_id,movement_type,quantity_delta,offering:commercial_offerings!inner(id,activity_id,product:commercial_products(name,unit_name),activity:commercial_activities!inner(organization_id)),sale:commercial_sales(receipt_number,status)" +
+        "&offering.activity_id=eq.$activityId&offering.activity.organization_id=eq.$orgId&order=created_at.asc,id.asc"
+    val rows = commercialCloudPagedGet(path, access)
+    return buildList {
+        for (index in 0 until rows.length()) {
+            val row = rows.optJSONObject(index) ?: continue
+            val offering = row.optJSONObject("offering") ?: continue
+            val activity = offering.optJSONObject("activity") ?: continue
+            if (activity.optString("organization_id") != orgId || offering.optString("activity_id") != activityId) continue
+            val id = row.optString("id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+            val offeringId = row.optString("offering_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+            val quantity = runCatching { java.math.BigDecimal(row.optString("quantity_delta")) }.getOrNull() ?: continue
+            if (id.isBlank() || offeringId.isBlank() || quantity.signum() == 0) continue
+            val product = offering.optJSONObject("product")
+            val sale = row.optJSONObject("sale")
+            add(CommercialCloudStockMovement(
+                id = id, offeringId = offeringId,
+                productName = product?.optString("name").takeUnless { it == null || it == "null" }.orEmpty().ifBlank { "صنف غير معروف" },
+                unitName = product?.optString("unit_name").takeUnless { it == null || it == "null" }.orEmpty(),
+                movementType = row.optString("movement_type").ifBlank { "غير محدد" }, quantityDelta = quantity,
+                sourceReference = row.optString("source_ref").takeUnless { it == "null" }.orEmpty(),
+                saleId = row.optString("sale_id").takeUnless { it == "null" }.orEmpty(),
+                saleReceiptNumber = sale?.optString("receipt_number").takeUnless { it == null || it == "null" }.orEmpty(),
+                saleStatus = sale?.optString("status").takeUnless { it == null || it == "null" }.orEmpty(),
+                createdAt = row.optString("created_at").takeUnless { it == "null" }.orEmpty()
+            ))
+        }
+    }
+}
 internal data class CommercialCloudSupplierPaymentMovement(
     val id: String,
     val obligationId: String,
