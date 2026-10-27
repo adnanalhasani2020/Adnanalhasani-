@@ -2742,7 +2742,7 @@ internal data class CommercialCloudPartyAccountLink(
 internal fun loadCommercialCloudCustomerPartyAccounts(context: Context): List<CommercialCloudPartyAccountLink> {
     val (orgId, access) = commercialMasterDataAccess(context)
     val rows = commercialCloudPagedGet(
-        "/rest/v1/commercial_customer_party_accounts?select=customer_id,party_account_id,currency_code&organization_id=eq.$orgId&order=customer_id.asc,currency_code.asc",
+        "/rest/v1/commercial_customer_party_accounts?select=customer_id,party_account_id,party_account:commercial_ledger_accounts(currency_code)&organization_id=eq.$orgId&order=customer_id.asc,party_account_id.asc",
         access
     )
     return buildList {
@@ -2750,7 +2750,8 @@ internal fun loadCommercialCloudCustomerPartyAccounts(context: Context): List<Co
             val row = rows.optJSONObject(i) ?: continue
             val partyId = row.optString("customer_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
             val accountId = row.optString("party_account_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
-            val currency = row.optString("currency_code").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+            val account = row.optJSONObject("party_account")
+            val currency = account?.optString("currency_code").takeUnless { it.isNullOrBlank() || it == "null" }.orEmpty()
             if (partyId.isNotBlank() && accountId.isNotBlank() && currency.matches(Regex("^[A-Z]{3}$"))) {
                 add(CommercialCloudPartyAccountLink(partyId, accountId, currency))
             }
