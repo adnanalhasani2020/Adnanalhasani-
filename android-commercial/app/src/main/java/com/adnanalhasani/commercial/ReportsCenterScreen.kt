@@ -431,6 +431,14 @@ internal fun ReportsCenterScreen(
             "قائمة الدخل والميزانية العمومية" -> ledgerStatementError
             "الضرائب والخصومات التفصيلية" -> taxDetailError
             "تكلفة البضاعة والربح" -> costProfitError
+            "التقييم المالي الحالي للمخزون" -> when {
+                stockAlertsLoadError.isNotBlank() -> stockAlertsLoadError
+                glMappingsLoadError.isNotBlank() -> glMappingsLoadError
+                cloudGlMappings.none { it.mappingKey == "inventory" && it.currencyCode.matches(Regex("^[A-Z]{3}$")) } -> "لا يوجد حساب مخزون مربوط بعملة صالحة في دليل الحسابات."
+                cloudStockAlerts.isEmpty() -> "لا توجد أرصدة مخزون محملة للموقع والنشاط الحاليين."
+                cloudStockAlerts.any { it.unitCostMinor == null || it.unitCostMinor < 0L || it.quantityOnHand.signum() < 0 } -> "بعض أرصدة المخزون تفتقد تكلفة وحدة مسجلة أو تحتوي كمية غير صالحة."
+                else -> ""
+            }
             "التدفقات النقدية والصندوق" -> when {
                 glMappingsLoadError.isNotBlank() -> glMappingsLoadError
                 cloudGlMappings.none { it.mappingKey in setOf("cash", "bank", "card_clearing", "other_receipts", "check_clearing", "other_disbursements") } -> "لا توجد حسابات نقدية أو بنكية مربوطة بدليل الحسابات."
@@ -469,6 +477,8 @@ internal fun ReportsCenterScreen(
             ReportCatalogItem(if (cloudMode) "الدفعات السحابية الناجحة" else "التحصيلات المسجلة محليًا", "السندات والتحصيل والصرف", if (cloudMode) "commercial_payments" else "settlements_json", true, "يعرض الدفعات الناجحة فقط في السحابة؛ السندات لا تُجمع منفصلة عن الدفعة المرتبطة."),
             ReportCatalogItem("المصروفات التشغيلية", "الأرباح والتكاليف", if (cloudMode) "commercial_expense_vouchers" else "expenses_json", true, "تُستبعد سندات الصرف الملغاة؛ هذا تقرير مصروفات مسجلة وليس قائمة دخل."),
             ReportCatalogItem("رصيد المخزون الحالي", "الأصناف والمخزون", if (cloudMode) "commercial_inventory_balances" else "products_json", true, "رصيد حالي فقط؛ ليس رصيدًا تاريخيًا للفترة."),
+            ReportCatalogItem("التقييم المالي الحالي للمخزون", "الأصناف والمخزون", "commercial_inventory_balances.unit_cost_minor + حساب المخزون المربوط", cloudMode, "يقيم الكمية الحالية بتكلفة الوحدة المسجلة وبعملة حساب المخزون؛ يحجب التقييم إذا غابت التكلفة أو العملة. لا يمثل تقييمًا تاريخيًا."),
+
             ReportCatalogItem("حركة المخزون الفعلية", "الأصناف والمخزون", "commercial_stock_movements المرتبطة بنشاط المؤسسة", cloudMode, "يعرض حركات الكمية المسجلة من دفتر حركة المخزون، مع مرجع المصدر وحالة فاتورة البيع عند توفرها؛ لا يستنتج تكلفة أو قيمة مالية من الكمية."),
             ReportCatalogItem("تنبيهات المخزون المنخفض", "الأصناف والمخزون", "الرصيد وحد إعادة الطلب", true, "يعتمد على حد التنبيه المسجل لكل صنف."),
             ReportCatalogItem("فواتير الشراء والمستحقات المسجلة", "المشتريات", "commercial_purchase_orders ← supplier_invoices ← supplier_obligations", cloudMode, "يُعرض مبلغ الفاتورة والرصيد المستحق من سجل الالتزام؛ لا يُخلط مع قيمة أمر الشراء."),
@@ -998,6 +1008,23 @@ internal fun ReportsCenterScreen(
         } else inPeriodExpenses.map {
             ReportLine(Instant.ofEpochMilli(it.timestamp).atZone(zone).toLocalDate().toString(), "مصروف #${it.id}", it.category, it.amount.toLong(), "YER", it.note)
         })
+        "التقييم المالي الحالي للمخزون" -> if (sourceErrorForReport(selectedReport).isNotBlank()) emptyList() else {
+            val currency = cloudGlMappings.first { it.mappingKey == "inventory" }.currencyCode
+            buildList {
+                var totalValue = 0L
+                cloudStockAlerts.sortedBy { it.productName }.forEach { item ->
+                    val value = runCatching {
+                        item.quantityOnHand.multiply(java.math.BigDecimal.valueOf(item.unitCostMinor ?: 0L))
+                            .setScale(0, java.math.RoundingMode.HALF_UP).longValueExact()
+                    }.getOrElse { throw IllegalStateException("تجاوزت قيمة المخزون نطاق الأرقام المدعوم.") }
+                    totalValue = Math.addExact(totalValue, value)
+                    add(ReportLine(endText, item.offeringId, item.productName, value, currency,
+                        "الكمية: ${item.quantityOnHand.stripTrailingZeros().toPlainString()} ${item.unitName} · تكلفة الوحدة المسجلة: ${reportMoney(item.unitCostMinor ?: 0L, currency, true)} · قيمة حالية فقط"))
+                }
+                add(ReportLine(endText, "إجمالي", "إجمالي قيمة المخزون الحالي", totalValue, currency,
+                    "مجموع الكميات الحالية × تكلفة الوحدة المسجلة؛ لا يتضمن تقييمًا تاريخيًا أو مطابقة دفتر الأستاذ"))
+            }
+        }
         "حركة المخزون الفعلية" -> cloudStockMovements.filter { movement ->
             reportDateMillis(movement.createdAt)?.let { it >= startMillis && it < endExclusive } == true
         }.map { movement ->
@@ -1191,7 +1218,7 @@ internal fun ReportsCenterScreen(
                         "فواتير الشراء والمستحقات المسجلة", "مستحقات فواتير الموردين", "مرتجعات المبيعات وحالة التسوية", "سندات القبض والصرف", "سجل القيود المحاسبية",
                         "ميزان المراجعة حسب الحساب", "حركة دفتر الأستاذ العام", "كشف حساب محاسبي", "أرصدة العملاء وكشف الحساب", "كشف حركات الموردين",
                         "الرصيد المحاسبي الكامل للعملاء", "أرصدة الموردين والمستحقات", "قائمة الدخل والميزانية العمومية", "التدفقات النقدية والصندوق", "تكلفة البضاعة والربح", "الضرائب والخصومات التفصيلية",
-                        "حركة المخزون الفعلية", "تفاصيل القيود المرحلة" -> selectedReport = report.title
+                        "حركة المخزون الفعلية", "التقييم المالي الحالي للمخزون", "تفاصيل القيود المرحلة" -> selectedReport = report.title
                         "لوحة المؤشرات" -> selectedReport = "ملخص المبيعات حسب الفترة"
                     }
                 }),
