@@ -241,6 +241,19 @@ BEGIN
           WHERE cpa.customer_id=c.id AND cpa.organization_id=c.organization_id
         );
     END IF;
+    IF NOT EXISTS (
+      SELECT 1 FROM public.commercial_customers c
+      WHERE c.organization_id=v_row.organization_id AND c.auth_user_id=v_parent_owner AND c.state='active'
+        AND EXISTS (
+          SELECT 1 FROM public.commercial_customer_party_accounts cpa
+          JOIN public.commercial_party_accounts a ON a.id=cpa.party_account_id
+            AND a.organization_id=cpa.organization_id
+            AND a.account_type IN ('business','organization') AND a.status='active'
+          WHERE cpa.customer_id=c.id AND cpa.organization_id=c.organization_id
+        )
+    ) THEN
+      RAISE EXCEPTION 'parent_customer_not_linked_to_organization' USING ERRCODE='42501';
+    END IF;
   END IF;
 
   INSERT INTO public.commercial_user_notifications(user_id, organization_id, notification_type, title, body, entity_type, entity_id, priority, metadata)
