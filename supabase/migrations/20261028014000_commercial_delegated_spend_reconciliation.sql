@@ -11,8 +11,11 @@ DECLARE
   v_limit bigint;
 BEGIN
   IF OLD.delegated_access_id IS NULL AND NEW.delegated_access_id IS NULL THEN RETURN NEW; END IF;
-  IF OLD.delegated_access_id IS NOT NULL AND NEW.delegated_access_id IS NOT NULL
-     AND OLD.delegated_access_id <> NEW.delegated_access_id THEN
+  IF OLD.delegated_access_id IS NOT NULL AND (
+       NEW.delegated_access_id IS DISTINCT FROM OLD.delegated_access_id
+       OR NEW.principal_account_id IS DISTINCT FROM OLD.principal_account_id
+       OR NEW.acting_account_id IS DISTINCT FROM OLD.acting_account_id
+     ) THEN
     RAISE EXCEPTION 'delegated_attribution_is_immutable' USING ERRCODE='22023';
   END IF;
   IF OLD.delegated_access_id IS NULL AND NEW.delegated_access_id IS NOT NULL THEN
@@ -41,6 +44,13 @@ BEGIN
   UPDATE public.commercial_account_delegations
   SET spent_minor=greatest(0, (v_current_spend::numeric + v_delta)::bigint), updated_at=now()
   WHERE id=coalesce(NEW.delegated_access_id,OLD.delegated_access_id);
+  IF NEW.delegated_access_id IS NOT NULL AND NEW.status IN ('cancelled','rejected')
+     AND OLD.status NOT IN ('cancelled','rejected') THEN
+    UPDATE public.commercial_bookings
+    SET status=NEW.status
+    WHERE order_id=NEW.id AND delegated_access_id=NEW.delegated_access_id
+      AND status NOT IN ('cancelled','rejected');
+  END IF;
   RETURN NEW;
 END;
 $function$;
@@ -73,3 +83,30 @@ FOR EACH ROW EXECUTE FUNCTION public.commercial_sync_delegated_booking_order_sta
 
 REVOKE ALL ON FUNCTION public.commercial_reconcile_delegated_spend_on_order_change() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.commercial_sync_delegated_booking_order_status() FROM PUBLIC, anon, authenticated;
+
+
+CREATE OR REPLACE FUNCTION public.commercial_protect_delegated_booking_attribution()
+RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
+AS $function$
+BEGIN
+  IF OLD.delegated_access_id IS NOT NULL AND (
+    NEW.delegated_access_id IS DISTINCT FROM OLD.delegated_access_id
+    OR NEW.principal_account_id IS DISTINCT FROM OLD.principal_account_id
+    OR NEW.acting_account_id IS DISTINCT FROM OLD.acting_account_id
+  ) THEN
+    RAISE EXCEPTION 'delegated_attribution_is_immutable' USING ERRCODE='22023';
+  END IF;
+  IF OLD.delegated_access_id IS NULL AND NEW.delegated_access_id IS NOT NULL THEN
+    RAISE EXCEPTION 'delegated_attribution_cannot_be_added_after_booking_creation' USING ERRCODE='22023';
+  END IF;
+  RETURN NEW;
+END;
+$function$;
+
+DROP TRIGGER IF EXISTS trg_commercial_protect_delegated_booking_attribution ON public.commercial_bookings;
+CREATE TRIGGER trg_commercial_protect_delegated_booking_attribution
+BEFORE UPDATE OF delegated_access_id,principal_account_id,acting_account_id ON public.commercial_bookings
+FOR EACH ROW EXECUTE FUNCTION public.commercial_protect_delegated_booking_attribution();
+
+REVOKE ALL ON FUNCTION public.commercial_protect_delegated_booking_attribution() FROM PUBLIC, anon, authenticated;
