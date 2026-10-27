@@ -394,7 +394,7 @@ internal fun ReportsCenterScreen(
             if (doc.lines.isEmpty()) listOf(ReportLine(doc.createdAt.take(10), "فاتورة #${doc.receiptNumber}", doc.customerName, doc.totalMinor, doc.currencyCode, "لا توجد بنود متاحة لهذه الفاتورة"))
             else doc.lines.mapIndexed { index, line ->
                 ReportLine(doc.createdAt.take(10), "فاتورة #${doc.receiptNumber} · ${index + 1}", line.productName, line.lineTotalMinor, doc.currencyCode,
-                    "العميل: ${doc.customerName} · الكمية: ${line.quantity} · سعر الوحدة: ${reportMoney(line.unitPriceMinor, doc.currencyCode, true)} · خصم الفاتورة: ${reportMoney(doc.discountMinor, doc.currencyCode, true)} · ضريبة الفاتورة: ${reportMoney(doc.taxMinor, doc.currencyCode, true)}")
+                    "العميل: ${doc.customerName} · الكمية: ${line.quantity} · سعر الوحدة: ${reportMoney(line.unitPriceMinor, doc.currencyCode, true)} · السداد: ${doc.paymentStatus}")
             }
         }.sortedByDescending { it.date }
         "المبيعات حسب الصنف" -> if (cloudMode) cloudSalesDocuments.filter { doc ->
