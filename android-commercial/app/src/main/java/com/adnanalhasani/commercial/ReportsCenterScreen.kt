@@ -422,7 +422,7 @@ internal fun ReportsCenterScreen(
         else -> emptyList()
     }
     // Invalid dates must never widen a report to the full history.
-    val selectedRows = if (dateError) emptyList() else selectedRowsUnvalidated
+    val selectedRows = if (dateError || (cloudMode && (cloudLoading || cloudLoadError.isNotBlank()))) emptyList() else selectedRowsUnvalidated
     val csvLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri: Uri? ->
         if (uri != null) runCatching {
             context.contentResolver.openOutputStream(uri)?.use { stream ->
@@ -439,7 +439,7 @@ internal fun ReportsCenterScreen(
                 ?: throw IllegalStateException("تعذر فتح ملف Excel.")
         }.onFailure { error = "تعذر تصدير XLSX: ${it.message ?: "خطأ غير معروف"}" }
     }
-    val currencyTotal = if (dateError) emptyMap() else if (cloudMode) inPeriodCloudSalesDocuments.groupBy { it.currencyCode.ifBlank { "غير محددة" } }.mapValues { (_, rows) -> rows.sumOf { it.totalMinor } }
+    val currencyTotal = if (dateError || (cloudMode && (cloudLoading || cloudLoadError.isNotBlank()))) emptyMap() else if (cloudMode) inPeriodCloudSalesDocuments.groupBy { it.currencyCode.ifBlank { "غير محددة" } }.mapValues { (_, rows) -> rows.sumOf { it.totalMinor } }
         else inPeriodSales.groupBy { it.currencyCode.ifBlank { "غير محددة" } }.mapValues { (_, rows) -> rows.sumOf { it.total.toLong() } }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -456,8 +456,8 @@ internal fun ReportsCenterScreen(
             Card(colors = CardDefaults.cardColors(containerColor = ReportInk), shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("ملخص المبيعات المكتملة", color = Color(0xFFBFD9D0), fontSize = 13.sp)
-                    Text(if (dateError) "لا يمكن حساب الملخص: تحقق من الفترة المحددة" else "عدد الفواتير: ${if (cloudMode) inPeriodCloudSalesDocuments.size else inPeriodSales.size}", color = Color.White, fontWeight = FontWeight.SemiBold)
-                    if (!dateError) currencyTotal.toSortedMap().forEach { (currency, total) ->
+                    Text(when { dateError -> "لا يمكن حساب الملخص: تحقق من الفترة المحددة"; cloudMode && cloudLoading -> "جارٍ تحميل مصادر المبيعات"; cloudMode && cloudLoadError.isNotBlank() -> "تعذر حساب الملخص بسبب فشل تحميل مصدر سحابي"; else -> "عدد الفواتير: ${if (cloudMode) inPeriodCloudSalesDocuments.size else inPeriodSales.size}" }, color = Color.White, fontWeight = FontWeight.SemiBold)
+                    if (!dateError && (!cloudMode || (!cloudLoading && cloudLoadError.isBlank()))) currencyTotal.toSortedMap().forEach { (currency, total) ->
                         Text(reportMoney(total, currency, cloudMode), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                     }
                     Text("الفترة: ${startText} — ${endText}", color = Color(0xFFBFD9D0), fontSize = 11.sp)
