@@ -51,7 +51,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-internal data class Product(val name: String, val category: String, val stock: Int, val price: String, val costPrice: Int = 0, val catalogCode: String = "", val barcode: String = "", val unitCode: String = "EA", val imageUrl: String = "", val description: String = "", val brand: String = "", val manufacturer: String = "", val countryOfManufacture: String = "", val createdAt: Long = System.currentTimeMillis(), val createdBy: String = "", val unitVariantsJson: String = "[]", val cloudOfferingId: String = "", val cloudPriceMinor: Long = 0L, val reorderPoint: Int = -1)
+internal data class Product(val name: String, val category: String, val stock: Int, val price: String, val costPrice: Int = 0, val catalogCode: String = "", val barcode: String = "", val unitCode: String = "EA", val imageUrl: String = "", val description: String = "", val brand: String = "", val manufacturer: String = "", val countryOfManufacture: String = "", val createdAt: Long = System.currentTimeMillis(), val createdBy: String = "", val unitVariantsJson: String = "[]", val cloudOfferingId: String = "", val cloudPriceMinor: Long = 0L, val reorderPoint: Int = -1, val stockPrecise: Double = stock.toDouble())
 
 private data class LocalSaleUnit(
     val code: String,
