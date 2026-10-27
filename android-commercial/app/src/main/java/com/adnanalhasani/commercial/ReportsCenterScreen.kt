@@ -412,7 +412,7 @@ internal fun ReportsCenterScreen(
             saleReturn.status.equals("completed", true) &&
                 reportDateMillis(saleReturn.completedAt)?.let { it >= startMillis && it < endExclusive } == true &&
                 (saleReturn.approvedRefundMinor == null ||
-                    saleReturn.items.any { it.restockedQuantity > 0 && (it.saleItemCostTotalMinor == null || it.saleItemQuantity <= 0) })
+                    saleReturn.items.any { it.restockedQuantity > 0 && (it.saleItemCostTotalMinor == null || it.saleItemQuantityInStockUnits <= 0L) })
         } -> "توجد مرتجعات مكتملة تفتقد مبلغ اعتماد أو تكلفة البند التاريخية اللازمة لتسوية الربح."
         cloudReturns.any { saleReturn ->
             saleReturn.status.equals("completed", true) &&
@@ -893,11 +893,11 @@ internal fun ReportsCenterScreen(
                     val soldCost = salesRows.sumOf { doc -> doc.lines.sumOf { it.costTotalMinor ?: 0L } }
                     val returnedCost = returnRows.sumOf { saleReturn ->
                         saleReturn.items.sumOf { item ->
-                            if (item.restockedQuantity <= 0 || item.saleItemQuantity <= 0) 0L
+                            if (item.restockedQuantity <= 0 || item.saleItemQuantityInStockUnits <= 0L) 0L
                             else runCatching {
                                 java.math.BigDecimal.valueOf(item.saleItemCostTotalMinor ?: 0L)
                                     .multiply(java.math.BigDecimal.valueOf(item.restockedQuantity.toLong()))
-                                    .divide(java.math.BigDecimal.valueOf(item.saleItemQuantity.toLong()), 0, java.math.RoundingMode.HALF_UP)
+                                    .divide(java.math.BigDecimal.valueOf(item.saleItemQuantityInStockUnits), 0, java.math.RoundingMode.HALF_UP)
                                     .longValueExact()
                             }.getOrDefault(0L)
                         }
