@@ -806,6 +806,7 @@ internal data class CommercialCloudSupplierPaymentMovement(
     val id: String,
     val obligationId: String,
     val supplierInvoiceId: String,
+    val supplierId: String,
     val supplierName: String,
     val invoiceNumber: String,
     val amountMinor: Long,
@@ -834,12 +835,13 @@ internal fun loadCommercialCloudSupplierPaymentMovements(context: Context): List
             val id = row.optString("id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
             val obligationId = row.optString("obligation_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
             val invoiceId = row.optString("supplier_invoice_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+            val supplierId = obligation.optString("supplier_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
             val journalId = row.optString("journal_entry_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
             val amount = row.optLong("amount_minor", 0L)
             val currency = row.optString("currency_code").takeUnless { it.isBlank() || it == "null" }.orEmpty()
-            if (id.isBlank() || obligationId.isBlank() || invoiceId.isBlank() || journalId.isBlank() || amount <= 0L || !currency.matches(Regex("^[A-Z]{3}$"))) continue
+            if (id.isBlank() || obligationId.isBlank() || invoiceId.isBlank() || supplierId.isBlank() || journalId.isBlank() || amount <= 0L || !currency.matches(Regex("^[A-Z]{3}$"))) continue
             add(CommercialCloudSupplierPaymentMovement(
-                id = id, obligationId = obligationId, supplierInvoiceId = invoiceId,
+                id = id, obligationId = obligationId, supplierInvoiceId = invoiceId, supplierId = supplierId,
                 supplierName = supplier?.optString("display_name").takeUnless { it == null || it == "null" }.orEmpty().ifBlank { "مورد غير محدد" },
                 invoiceNumber = invoice?.optString("invoice_number").takeUnless { it == null || it == "null" }.orEmpty(),
                 amountMinor = amount, currencyCode = currency, paymentMethod = row.optString("payment_method"),
@@ -879,6 +881,7 @@ internal data class CommercialCloudSupplierInvoiceSummary(
 
 internal data class CommercialCloudPurchaseDocument(
     val id: String,
+    val supplierId: String,
     val orderNumber: String,
     val supplierName: String,
     val status: String,
@@ -895,7 +898,7 @@ internal data class CommercialCloudPurchaseDocument(
 internal fun loadCommercialCloudPurchaseDocuments(context: Context): List<CommercialCloudPurchaseDocument> {
     val (orgId, access) = commercialMasterDataAccess(context)
     val path = "/rest/v1/commercial_purchase_orders" +
-        "?select=id,order_number,status,ordered_at,expected_at,currency_code,notes,receive_location_id,supplier:commercial_suppliers(display_name),items:commercial_purchase_order_items(id,line_number,item_description,quantity_ordered,quantity_received,unit_cost_minor,offering_id),supplier_invoices:commercial_supplier_invoices(id,invoice_number,total_minor,currency_code,recorded_at,state,obligation:commercial_supplier_obligations(id,amount_due_minor,amount_paid_minor,state,currency_code))" +
+        "?select=id,supplier_id,order_number,status,ordered_at,expected_at,currency_code,notes,receive_location_id,supplier:commercial_suppliers(display_name),items:commercial_purchase_order_items(id,line_number,item_description,quantity_ordered,quantity_received,unit_cost_minor,offering_id),supplier_invoices:commercial_supplier_invoices(id,invoice_number,total_minor,currency_code,recorded_at,state,obligation:commercial_supplier_obligations(id,amount_due_minor,amount_paid_minor,state,currency_code))" +
         "&organization_id=eq.$orgId&order=created_at.desc.nullslast,id.asc"
     val rows = commercialCloudPagedGet(path, access)
     return buildList {
@@ -945,6 +948,7 @@ internal fun loadCommercialCloudPurchaseDocuments(context: Context): List<Commer
             }.sortedBy { it.lineNumber }
             add(CommercialCloudPurchaseDocument(
                 id = row.optString("id"),
+                supplierId = row.optString("supplier_id").takeUnless { it.isBlank() || it == "null" }.orEmpty(),
                 orderNumber = row.optString("order_number").ifBlank { "—" },
                 supplierName = supplier?.optString("display_name").orEmpty().takeUnless { it == "null" }.orEmpty().ifBlank { "مورد غير محدد" },
                 status = row.optString("status").ifBlank { "غير محدد" },
