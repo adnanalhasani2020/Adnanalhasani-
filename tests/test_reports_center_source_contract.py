@@ -44,6 +44,16 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn('"فواتير المورد والمدفوعات والمرتجعات", false', self.screen)
         self.assertIn("Deliberately unavailable as formal statements", self.contract)
 
+    def test_xlsx_export_is_real_ooxml_and_right_to_left(self):
+        self.assertIn("ZipOutputStream(output)", self.screen)
+        self.assertIn("[Content_Types].xml", self.screen)
+        self.assertIn("xl/workbook.xml", self.screen)
+        self.assertIn("xl/worksheets/sheet1.xml", self.screen)
+        self.assertIn('rightToLeft=\\"1\\"', self.screen)
+        self.assertIn("inlineStr", self.screen)
+        self.assertIn('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', self.screen)
+        self.assertIn("Excel XLSX", self.screen)
+
     def test_csv_contains_period_source_timestamp_and_arabic_bom(self):
         self.assertIn('writer.write("\\uFEFF")', self.screen)
         self.assertIn('add(listOf("الفترة", startText + " — " + endText))', self.screen)
