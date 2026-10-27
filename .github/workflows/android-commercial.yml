@@ -42,3 +42,10 @@ jobs:
         run: gradle -p android-commercial --no-daemon testDebugUnitTest
       - name: Build debug APK
         run: gradle -p android-commercial --no-daemon assembleDebug
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-commercial-debug-apk
+          path: android-commercial/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
