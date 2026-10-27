@@ -4,6 +4,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FOUNDATION = ROOT / "supabase/migrations/20261028010000_commercial_personal_account_delegation_foundation.sql"
 DELEGATED_ORDERS = ROOT / "supabase/migrations/20261028011000_commercial_delegated_customer_orders.sql"
 REPORTING = ROOT / "supabase/migrations/20261028012000_commercial_delegated_spend_reporting.sql"
+PERSONAL_ORGANIZATIONS = ROOT / "supabase/migrations/20261028015000_commercial_personal_account_organizations.sql"
 
 
 def test_delegation_storage_is_private_and_scoped():
@@ -83,3 +84,15 @@ def test_android_portal_routes_delegated_actions_to_guarded_rpcs():
     assert "commercial_customer_portal_create_delegated_multi_service_booking" in repository
     assert "PersonalAccountsScreen" in activity
     assert "onPersonalAccounts" in activity
+
+
+def test_personal_account_owns_multiple_organizations_and_activities():
+    sql = PERSONAL_ORGANIZATIONS.read_text(encoding="utf-8")
+    screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/PersonalAccountsScreen.kt").read_text(encoding="utf-8")
+    assert "commercial_personal_account_organizations" in sql
+    assert "trg_commercial_auto_link_new_organization_to_personal_account" in sql
+    assert "trg_commercial_auto_link_personal_account_to_owned_organizations" in sql
+    assert "commercial_account_list_my_organizations" in sql
+    assert "commercial_account_link_my_organization" in sql
+    assert "مؤسساتي وأنشطتي" in screen
+    assert "ربط بحسابي الرئيسي" in screen
