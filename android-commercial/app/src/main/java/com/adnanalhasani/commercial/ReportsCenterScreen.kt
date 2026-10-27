@@ -437,6 +437,12 @@ internal fun ReportsCenterScreen(
                 cloudGlMappings.none { it.mappingKey == "inventory" && it.currencyCode.matches(Regex("^[A-Z]{3}$")) } -> "لا يوجد حساب مخزون مربوط بعملة صالحة في دليل الحسابات."
                 cloudStockAlerts.isEmpty() -> "لا توجد أرصدة مخزون محملة للموقع والنشاط الحاليين."
                 cloudStockAlerts.any { it.unitCostMinor == null || it.unitCostMinor < 0L || it.quantityOnHand.signum() < 0 } -> "بعض أرصدة المخزون تفتقد تكلفة وحدة مسجلة أو تحتوي كمية غير صالحة."
+                runCatching {
+                    cloudStockAlerts.fold(java.math.BigDecimal.ZERO) { total, item ->
+                        total.add(item.quantityOnHand.multiply(java.math.BigDecimal.valueOf(item.unitCostMinor ?: 0L))
+                            .setScale(0, java.math.RoundingMode.HALF_UP))
+                    }.longValueExact()
+                }.isFailure -> "إجمالي قيمة المخزون يتجاوز نطاق الأرقام المدعوم؛ لم يُعرض تقييم ناقص."
                 else -> ""
             }
             "التدفقات النقدية والصندوق" -> when {
