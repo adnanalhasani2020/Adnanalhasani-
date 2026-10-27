@@ -264,6 +264,7 @@ internal fun ReportsCenterScreen(
     var cloudPurchases by remember { mutableStateOf<List<CommercialCloudPurchaseDocument>>(emptyList()) }
     var cloudSupplierPayments by remember { mutableStateOf<List<CommercialCloudSupplierPaymentMovement>>(emptyList()) }
     var cloudStockMovements by remember { mutableStateOf<List<CommercialCloudStockMovement>>(emptyList()) }
+    var cloudStockAlerts by remember { mutableStateOf<List<CommercialCloudStockAlert>>(emptyList()) }
     var supplierFilter by remember { mutableStateOf("") }
     var cloudReturns by remember { mutableStateOf<List<CommercialCloudSaleReturn>>(emptyList()) }
     var cloudPayments by remember { mutableStateOf<List<CommercialCloudRecord>>(emptyList()) }
@@ -285,6 +286,7 @@ internal fun ReportsCenterScreen(
             val purchases = runCatching { loadCommercialCloudPurchaseDocuments(context) }
             val supplierPayments = runCatching { loadCommercialCloudSupplierPaymentMovements(context) }
             val stockMovements = runCatching { loadCommercialCloudStockMovements(context) }
+            val stockAlerts = runCatching { loadCommercialCloudStockAlerts(context) }
             val returns = runCatching { loadCommercialCloudSaleReturns(context) }
             val payments = runCatching { loadCommercialCloudRecords(context, "payments") }
             val journals = runCatching { loadCommercialCloudRecords(context, "journals") }
@@ -305,7 +307,7 @@ internal fun ReportsCenterScreen(
                 cloudLedgerLines = ledgerLines.getOrDefault(emptyList())
                 cloudExpenses = expenses.getOrDefault(emptyList())
                 val errors = listOf(
-                    salesDocuments.exceptionOrNull(), purchases.exceptionOrNull(), returns.exceptionOrNull(), payments.exceptionOrNull(),
+                    salesDocuments.exceptionOrNull(), purchases.exceptionOrNull(), stockAlerts.exceptionOrNull(), returns.exceptionOrNull(), payments.exceptionOrNull(),
                     journals.exceptionOrNull(), ledgerLines.exceptionOrNull(), expenses.exceptionOrNull()
                 ).filterNotNull()
                 cloudLoadError = errors.firstOrNull()?.message ?: if (errors.isNotEmpty()) "تعذر تحميل بعض مصادر التقارير." else ""
@@ -636,10 +638,16 @@ internal fun ReportsCenterScreen(
                 "نوع الحركة: ${movement.movementType} · المصدر: ${movement.saleId.ifBlank { movement.sourceReference }} ${movement.saleStatus}",
                 displayAmount = movement.quantityDelta.stripTrailingZeros().toPlainString() + if (movement.unitName.isBlank()) "" else " ${movement.unitName}")
         }.sortedByDescending { it.date }
-        "رصيد المخزون الحالي" -> products.map {
+        "رصيد المخزون الحالي" -> if (cloudMode) cloudStockAlerts.map { item ->
+            ReportLine("-", item.offeringId, item.productName, 0L, "-", "المتاح بعد حجز الكمية · ${item.categoryName} · حد إعادة الطلب: ${item.reorderPoint} ${item.unitName}",
+                displayAmount = java.math.BigDecimal.valueOf(item.availableQuantity).stripTrailingZeros().toPlainString() + " ${item.unitName}")
+        } else products.map {
             ReportLine("-", it.catalogCode.ifBlank { it.barcode }, it.name, it.stock.toLong(), "-", "${it.unitCode} · سعر ${it.price}")
         }
-        "تنبيهات المخزون المنخفض" -> stockLow.map {
+        "تنبيهات المخزون المنخفض" -> if (cloudMode) cloudStockAlerts.filter { it.availableQuantity <= it.reorderPoint }.map { item ->
+            ReportLine("-", item.offeringId, item.productName, 0L, "-", "حد إعادة الطلب: ${item.reorderPoint} ${item.unitName} · ${item.categoryName}",
+                displayAmount = java.math.BigDecimal.valueOf(item.availableQuantity).stripTrailingZeros().toPlainString() + " ${item.unitName}")
+        } else stockLow.map {
             ReportLine("-", it.catalogCode.ifBlank { it.barcode }, it.name, it.stock.toLong(), "-", "حد التنبيه ${it.reorderPoint.takeIf { n -> n >= 0 } ?: 9} ${it.unitCode}")
         }
         else -> emptyList()
