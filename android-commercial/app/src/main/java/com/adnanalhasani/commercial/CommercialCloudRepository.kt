@@ -528,7 +528,8 @@ internal data class CommercialCloudReturnSummary(
     val restockStatus: String,
     val requestedRefundMinor: Long,
     val approvedRefundMinor: Long?,
-    val createdAt: String
+    val createdAt: String,
+    val updatedAt: String
 )
 
 internal data class CommercialCloudSaleDocument(
@@ -558,7 +559,7 @@ internal fun loadCommercialCloudSaleDocuments(context: Context): List<Commercial
     require(activityId.isNotBlank()) { "ملف النشاط غير محفوظ." }
     val (orgId, access) = commercialMasterDataAccess(context)
     val path = "/rest/v1/commercial_sales" +
-        "?select=id,customer_id,receipt_number,subtotal_minor,discount_minor,tax_minor,total_minor,payment_status,status,created_at,currency_code,customer:commercial_customers(display_name,phone,email),items:commercial_sale_items(product_name_snapshot,quantity,line_total_minor,unit_price_minor,selling_quantity,selling_unit_name,selling_unit_code,quantity_in_stock_units),payments:commercial_payments(id,amount_minor,status,payment_method_type,created_at),returns:commercial_sales_returns(id,status,refund_status,restock_status,requested_refund_minor,approved_refund_minor,created_at)" +
+        "?select=id,customer_id,receipt_number,subtotal_minor,discount_minor,tax_minor,total_minor,payment_status,status,created_at,currency_code,customer:commercial_customers(display_name,phone,email),items:commercial_sale_items(product_name_snapshot,quantity,line_total_minor,unit_price_minor,selling_quantity,selling_unit_name,selling_unit_code,quantity_in_stock_units),payments:commercial_payments(id,amount_minor,status,payment_method_type,created_at),returns:commercial_sales_returns(id,status,refund_status,restock_status,requested_refund_minor,approved_refund_minor,created_at,updated_at)" +
         "&organization_id=eq.$orgId&activity_id=eq.$activityId&order=created_at.desc,id.asc"
     val rows = commercialCloudPagedGet(path, access)
     return buildList {
@@ -661,7 +662,8 @@ internal fun loadCommercialCloudSaleDocuments(context: Context): List<Commercial
                         restockStatus = item.optString("restock_status").ifBlank { "غير محدد" },
                         requestedRefundMinor = item.optLong("requested_refund_minor", 0L),
                         approvedRefundMinor = if (item.isNull("approved_refund_minor")) null else item.optLong("approved_refund_minor"),
-                        createdAt = item.optString("created_at").takeUnless { it == "null" }.orEmpty()
+                        createdAt = item.optString("created_at").takeUnless { it == "null" }.orEmpty(),
+                        updatedAt = item.optString("updated_at").takeUnless { it == "null" }.orEmpty()
                     ))
                 }
             }
