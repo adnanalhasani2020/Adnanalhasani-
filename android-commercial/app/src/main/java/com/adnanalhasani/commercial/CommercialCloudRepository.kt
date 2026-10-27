@@ -2125,7 +2125,7 @@ internal fun loadCommercialCloudCustomerReceipt(context: Context, paymentId: Str
 
 internal data class CustomerPortalOrganization(
     val id: String, val name: String, val description: String,
-    val currencyCode: String, val logoUrl: String, val allowCredit: Boolean
+    val currencyCode: String, val logoUrl: String, val allowCredit: Boolean, val delegationId: String = ""
 )
 internal data class CustomerPortalOffering(
     val id: String, val name: String, val description: String, val unitName: String,
@@ -2154,7 +2154,7 @@ internal fun loadCustomerPortalOrganizations(context: Context): List<CustomerPor
     val result = JSONArray(commercialCloudRequest(
         "/rest/v1/rpc/commercial_customer_portal_list_organizations", "POST", JSONObject(), access
     ))
-    return buildList {
+    val resultRows = buildList {
         for (i in 0 until result.length()) {
             val row = result.optJSONObject(i) ?: continue
             val id = row.optString("id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
@@ -2166,15 +2166,35 @@ internal fun loadCustomerPortalOrganizations(context: Context): List<CustomerPor
                 row.optString("logo_url").takeUnless { it == "null" }.orEmpty(),
                 row.optBoolean("allow_credit", false)))
         }
+    }.toMutableList()
+    val delegated = JSONArray(commercialCloudRequest(
+        "/rest/v1/rpc/commercial_account_list_my_active_delegations", "POST", JSONObject(), access
+    ))
+    for (i in 0 until delegated.length()) {
+        val row = delegated.optJSONObject(i) ?: continue
+        val orgId = row.optString("organization_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+        val delegationId = row.optString("delegation_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+        val name = row.optString("name").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+        if (orgId.isBlank() || delegationId.isBlank() || name.isBlank()) continue
+        val parentName = row.optString("parent_display_name").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+        resultRows.add(CustomerPortalOrganization(
+            orgId, if (parentName.isBlank()) "$name — حساب رئيسي مفوض" else "$name — عبر حساب $parentName",
+            row.optString("description").takeUnless { it == "null" }.orEmpty(),
+            row.optString("currency_code", "YER").ifBlank { "YER" },
+            row.optString("logo_url").takeUnless { it == "null" }.orEmpty(),
+            row.optBoolean("allow_credit", false), delegationId
+        ))
     }
+    return resultRows
 }
 
-internal fun loadCustomerPortalOfferings(context: Context, organizationId: String): List<CustomerPortalOffering> {
+internal fun loadCustomerPortalOfferings(context: Context, organizationId: String, delegationId: String = ""): List<CustomerPortalOffering> {
     require(organizationId.isNotBlank()) { "اختر المؤسسة أولًا." }
     val access = customerPortalAccessToken(context)
+    val delegated = delegationId.isNotBlank()
     val result = JSONArray(commercialCloudRequest(
-        "/rest/v1/rpc/commercial_customer_portal_list_offerings", "POST",
-        JSONObject().put("p_organization_id", organizationId), access
+        if (delegated) "/rest/v1/rpc/commercial_account_list_delegated_offerings" else "/rest/v1/rpc/commercial_customer_portal_list_offerings", "POST",
+        if (delegated) JSONObject().put("p_delegation_id", delegationId) else JSONObject().put("p_organization_id", organizationId), access
     ))
     return buildList {
         for (i in 0 until result.length()) {
@@ -2219,7 +2239,7 @@ internal fun clearCustomerPortalOrderKey(context: Context, key: String) {
 
 internal fun submitCustomerPortalOrder(
     context: Context, organizationId: String, lines: List<Pair<String, String>>,
-    paymentMode: String, note: String, idempotencyKey: String
+    paymentMode: String, note: String, idempotencyKey: String, delegationId: String = ""
 ): CustomerPortalOrderResult {
     require(paymentMode == "cash" || paymentMode == "credit") { "طريقة الفاتورة غير صحيحة." }
     require(lines.isNotEmpty() && lines.size <= 100) { "يجب اختيار صنف واحد على الأقل وبحد أقصى 100 صنف." }
@@ -2238,7 +2258,10 @@ internal fun submitCustomerPortalOrder(
         .put("p_payment_mode", paymentMode)
         .put("p_customer_note", note.take(1000))
         .put("p_idempotency_key", idempotencyKey)
-    val row = JSONObject(commercialCloudRequest("/rest/v1/rpc/commercial_customer_portal_create_order", "POST", payload, access))
+    if (delegationId.isNotBlank()) payload.put("p_delegation_id", delegationId)
+    val endpoint = if (delegationId.isNotBlank()) "/rest/v1/rpc/commercial_customer_portal_create_delegated_order"
+        else "/rest/v1/rpc/commercial_customer_portal_create_order"
+    val row = JSONObject(commercialCloudRequest(endpoint, "POST", payload, access))
     val orderId = row.optString("order_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
     require(orderId.isNotBlank()) { "لم يرجع الخادم تأكيدًا صالحًا للطلب؛ لا تنشئ طلبًا جديدًا بمفتاح مختلف." }
     return CustomerPortalOrderResult(orderId, row.optString("order_number"), row.optString("status"),
@@ -2254,12 +2277,13 @@ internal data class CustomerPortalBookingResult(
     val status: String, val priceMinor: Long, val currencyCode: String, val replayed: Boolean
 )
 
-internal fun loadCustomerPortalBookingResources(context: Context, organizationId: String): List<CustomerPortalBookingResource> {
+internal fun loadCustomerPortalBookingResources(context: Context, organizationId: String, delegationId: String = ""): List<CustomerPortalBookingResource> {
     require(organizationId.isNotBlank()) { "اختر المؤسسة أولًا." }
     val access = customerPortalAccessToken(context)
+    val delegated = delegationId.isNotBlank()
     val rows = JSONArray(commercialCloudRequest(
-        "/rest/v1/rpc/commercial_customer_portal_list_booking_resources", "POST",
-        JSONObject().put("p_organization_id", organizationId), access
+        if (delegated) "/rest/v1/rpc/commercial_account_list_delegated_booking_resources" else "/rest/v1/rpc/commercial_customer_portal_list_booking_resources", "POST",
+        if (delegated) JSONObject().put("p_delegation_id", delegationId) else JSONObject().put("p_organization_id", organizationId), access
     ))
     return buildList {
         for (i in 0 until rows.length()) {
@@ -2274,7 +2298,7 @@ internal fun loadCustomerPortalBookingResources(context: Context, organizationId
 
 internal fun submitCustomerPortalBooking(
     context: Context, organizationId: String, offeringId: String, resourceId: String,
-    startsAt: String, endsAt: String, paymentMode: String, note: String, idempotencyKey: String
+    startsAt: String, endsAt: String, paymentMode: String, note: String, idempotencyKey: String, delegationId: String = ""
 ): CustomerPortalBookingResult {
     require(organizationId.isNotBlank() && offeringId.isNotBlank() && resourceId.isNotBlank()) { "اختر الخدمة ومورد الحجز." }
     require(paymentMode == "cash" || paymentMode == "credit") { "طريقة الفاتورة غير صحيحة." }
@@ -2288,7 +2312,10 @@ internal fun submitCustomerPortalBooking(
         .put("p_payment_mode", paymentMode)
         .put("p_customer_note", note.take(1000))
         .put("p_idempotency_key", idempotencyKey)
-    val row = JSONObject(commercialCloudRequest("/rest/v1/rpc/commercial_customer_portal_create_booking", "POST", payload, access))
+    if (delegationId.isNotBlank()) payload.put("p_delegation_id", delegationId)
+    val endpoint = if (delegationId.isNotBlank()) "/rest/v1/rpc/commercial_customer_portal_create_delegated_booking"
+        else "/rest/v1/rpc/commercial_customer_portal_create_booking"
+    val row = JSONObject(commercialCloudRequest(endpoint, "POST", payload, access))
     val bookingId = row.optString("booking_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
     require(bookingId.isNotBlank()) { "لم يرجع الخادم تأكيدًا صالحًا للحجز؛ لا تنشئ حجزًا جديدًا بمفتاح مختلف." }
     return CustomerPortalBookingResult(bookingId, row.optString("booking_number"), row.optString("order_id"),
@@ -2305,7 +2332,8 @@ internal fun submitCustomerPortalMultiServiceBooking(
     endsAt: String,
     paymentMode: String,
     note: String,
-    idempotencyKey: String
+    idempotencyKey: String,
+    delegationId: String = ""
 ): CustomerPortalBookingResult {
     require(organizationId.isNotBlank() && resourceId.isNotBlank()) { "اختر المؤسسة ومورد الحجز." }
     require(lines.isNotEmpty() && lines.size <= 50) { "اختر خدمة واحدة على الأقل، وبحد أقصى 50 بندًا." }
@@ -2331,9 +2359,10 @@ internal fun submitCustomerPortalMultiServiceBooking(
         .put("p_payment_mode", paymentMode)
         .put("p_customer_note", note.take(1000))
         .put("p_idempotency_key", idempotencyKey)
-    val row = JSONObject(commercialCloudRequest(
-        "/rest/v1/rpc/commercial_customer_portal_create_multi_service_booking", "POST", payload, customerPortalAccessToken(context)
-    ))
+    if (delegationId.isNotBlank()) payload.put("p_delegation_id", delegationId)
+    val endpoint = if (delegationId.isNotBlank()) "/rest/v1/rpc/commercial_customer_portal_create_delegated_multi_service_booking"
+        else "/rest/v1/rpc/commercial_customer_portal_create_multi_service_booking"
+    val row = JSONObject(commercialCloudRequest(endpoint, "POST", payload, customerPortalAccessToken(context)))
     val bookingId = row.optString("booking_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
     val orderId = row.optString("order_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
     require(bookingId.isNotBlank() && orderId.isNotBlank()) {
