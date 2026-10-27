@@ -510,7 +510,9 @@ internal data class CommercialCloudSaleLine(
     val productName: String,
     val quantity: String,
     val unitPriceMinor: Long,
-    val lineTotalMinor: Long
+    val lineTotalMinor: Long,
+    val costTotalMinor: Long?,
+    val unitCostMinor: Long?
 )
 
 internal data class CommercialCloudPaymentSummary(
@@ -559,7 +561,7 @@ internal fun loadCommercialCloudSaleDocuments(context: Context): List<Commercial
     require(activityId.isNotBlank()) { "ملف النشاط غير محفوظ." }
     val (orgId, access) = commercialMasterDataAccess(context)
     val path = "/rest/v1/commercial_sales" +
-        "?select=id,customer_id,receipt_number,subtotal_minor,discount_minor,tax_minor,total_minor,payment_status,status,created_at,currency_code,customer:commercial_customers(display_name,phone,email),items:commercial_sale_items(product_name_snapshot,quantity,line_total_minor,unit_price_minor,selling_quantity,selling_unit_name,selling_unit_code,quantity_in_stock_units),payments:commercial_payments(id,amount_minor,status,payment_method_type,created_at),returns:commercial_sales_returns(id,status,refund_status,restock_status,requested_refund_minor,approved_refund_minor,created_at,updated_at)" +
+        "?select=id,customer_id,receipt_number,subtotal_minor,discount_minor,tax_minor,total_minor,payment_status,status,created_at,currency_code,customer:commercial_customers(display_name,phone,email),items:commercial_sale_items(product_name_snapshot,quantity,line_total_minor,unit_price_minor,unit_cost_minor,cost_total_minor,selling_quantity,selling_unit_name,selling_unit_code,quantity_in_stock_units),payments:commercial_payments(id,amount_minor,status,payment_method_type,created_at),returns:commercial_sales_returns(id,status,refund_status,restock_status,requested_refund_minor,approved_refund_minor,created_at,updated_at)" +
         "&organization_id=eq.$orgId&activity_id=eq.$activityId&order=created_at.desc,id.asc"
     val rows = commercialCloudPagedGet(path, access)
     return buildList {
@@ -619,7 +621,9 @@ internal fun loadCommercialCloudSaleDocuments(context: Context): List<Commercial
                             item.optString("selling_unit_name").takeUnless { it.isBlank() || it == "null" }?.let { " ($it)" }.orEmpty(),
                         quantity = sellingQuantityText,
                         unitPriceMinor = sellingUnitPrice,
-                        lineTotalMinor = item.optLong("line_total_minor", 0L)
+                        lineTotalMinor = item.optLong("line_total_minor", 0L),
+                        costTotalMinor = if (item.isNull("cost_total_minor")) null else item.optLong("cost_total_minor"),
+                        unitCostMinor = if (item.isNull("unit_cost_minor")) null else item.optLong("unit_cost_minor")
                     ))
                 }
             }
@@ -1785,7 +1789,11 @@ internal data class CommercialCloudReturnItem(
     val restock: Boolean,
     val restockedQuantity: Int,
     val conditionCode: String,
-    val note: String
+    val note: String,
+    val saleItemQuantity: Int,
+    val saleItemQuantityInStockUnits: Long,
+    val saleItemCostTotalMinor: Long?,
+    val saleItemUnitCostMinor: Long?
 )
 
 internal data class CommercialCloudSaleReturn(
@@ -1808,7 +1816,7 @@ internal data class CommercialCloudSaleReturn(
 
 internal fun loadCommercialCloudSaleReturns(context: Context): List<CommercialCloudSaleReturn> {
     val (orgId, access) = commercialMasterDataAccess(context)
-    val path = "/rest/v1/commercial_sales_returns?select=id,sale_id,reason_code,reason_note,status,refund_status,restock_status,currency_code,requested_refund_minor,approved_refund_minor,created_at,decision_note,sale:commercial_sales!inner(receipt_number,customer:commercial_customers(display_name)),items:commercial_sale_return_items(id,sale_item_id,quantity,refund_amount_minor,restock,restocked_quantity,condition_code,note,sale_item:commercial_sale_items(product_name_snapshot))&organization_id=eq.$orgId&order=created_at.desc,id.asc"
+    val path = "/rest/v1/commercial_sales_returns?select=id,sale_id,reason_code,reason_note,status,refund_status,restock_status,currency_code,requested_refund_minor,approved_refund_minor,created_at,decision_note,sale:commercial_sales!inner(receipt_number,customer:commercial_customers(display_name)),items:commercial_sale_return_items(id,sale_item_id,quantity,refund_amount_minor,restock,restocked_quantity,condition_code,note,sale_item:commercial_sale_items(product_name_snapshot,quantity,quantity_in_stock_units,unit_cost_minor,cost_total_minor))&organization_id=eq.$orgId&order=created_at.desc,id.asc"
     val rows = commercialCloudPagedGet(path, access)
     return buildList {
         for (i in 0 until rows.length()) {
@@ -1829,7 +1837,11 @@ internal fun loadCommercialCloudSaleReturns(context: Context): List<CommercialCl
                         restock = item.optBoolean("restock", false),
                         restockedQuantity = item.optInt("restocked_quantity", 0),
                         conditionCode = item.optString("condition_code").takeUnless { it == "null" }.orEmpty(),
-                        note = item.optString("note").takeUnless { it == "null" }.orEmpty()
+                        note = item.optString("note").takeUnless { it == "null" }.orEmpty(),
+                        saleItemQuantity = saleItem?.optInt("quantity", 0) ?: 0,
+                        saleItemQuantityInStockUnits = saleItem?.optLong("quantity_in_stock_units", 0L) ?: 0L,
+                        saleItemCostTotalMinor = if (saleItem == null || saleItem.isNull("cost_total_minor")) null else saleItem.optLong("cost_total_minor"),
+                        saleItemUnitCostMinor = if (saleItem == null || saleItem.isNull("unit_cost_minor")) null else saleItem.optLong("unit_cost_minor")
                     ))
                 }
             }
