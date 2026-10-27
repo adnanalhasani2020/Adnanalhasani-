@@ -160,7 +160,10 @@ internal fun loadCommercialCloudInventory(context: Context): CommercialCloudInve
                 .map { category -> category.optString("name_ar").takeUnless { it == "null" }.orEmpty().ifBlank { category.optString("name_en").takeUnless { it == "null" }.orEmpty() } }
                 .firstOrNull { it.isNotBlank() && it != "null" }
                 ?: "غير مصنف"
-            val quantity = (row.optDouble("quantity_on_hand", 0.0) - row.optDouble("quantity_reserved", 0.0)).coerceAtLeast(0.0).toInt()
+            // Preserve the server's numeric quantity before any legacy integer projection.
+            // Cloud sale validation and display must use stockPrecise, never the truncated stock field.
+            val availableQuantity = (row.optDouble("quantity_on_hand", 0.0) - row.optDouble("quantity_reserved", 0.0)).coerceAtLeast(0.0)
+            val quantity = availableQuantity.toInt()
             val price = offering.optLong("price_minor", 0L).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
             val sellUnits = offering.optJSONArray("sell_units") ?: JSONArray()
             val sellUnitsJson = JSONArray()
@@ -191,7 +194,8 @@ internal fun loadCommercialCloudInventory(context: Context): CommercialCloudInve
                 unitCode = baseUnitCode,
                 unitVariantsJson = sellUnitsJson.toString(),
                 createdBy = orgId,
-                reorderPoint = row.optDouble("reorder_point", 0.0).toInt().coerceAtLeast(0)
+                reorderPoint = row.optDouble("reorder_point", 0.0).toInt().coerceAtLeast(0),
+                stockPrecise = availableQuantity
             ))
         }
     }
