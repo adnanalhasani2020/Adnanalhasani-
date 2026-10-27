@@ -32,6 +32,8 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.Currency
 import java.util.concurrent.Executors
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 private val ReportInk = Color(0xFF183B35)
 private val ReportGreen = Color(0xFF167D63)
@@ -54,6 +56,55 @@ private fun reportMoney(amount: Long, currency: String, cloudMinorUnits: Boolean
 private fun reportDateMillis(value: String): Long? =
     runCatching { Instant.parse(value).toEpochMilli() }.getOrNull()
         ?: runCatching { LocalDate.parse(value.take(10)).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() }.getOrNull()
+
+
+/** Creates a valid XLSX OOXML workbook; Arabic text is stored as UTF-8 inline strings. */
+private fun writeReportXlsx(output: java.io.OutputStream, rows: List<List<String>>) {
+    require(rows.isNotEmpty()) { "لا توجد بيانات لتصديرها." }
+    fun xml(value: String): String = buildString {
+        value.forEach { ch ->
+            when (ch) {
+                '&' -> append("&amp;")
+                '<' -> append("&lt;")
+                '>' -> append("&gt;")
+                '"' -> append("&quot;")
+                '\'' -> append("&apos;")
+                else -> if (ch == '\t' || ch == '\n' || ch == '\r' || ch.code >= 0x20) append(ch)
+            }
+        }
+    }
+    fun colName(index: Int): String {
+        var n = index + 1
+        val out = StringBuilder()
+        while (n > 0) { val rem = (n - 1) % 26; out.append(('A'.code + rem).toChar()); n = (n - 1) / 26 }
+        return out.reverse().toString()
+    }
+    val sheet = buildString {
+        append("""<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0" rightToLeft="1"/></sheetViews><sheetData>""")
+        rows.forEachIndexed { ri, row ->
+            append("<row r=\"").append(ri + 1).append("\">")
+            row.forEachIndexed { ci, cell ->
+                append("<c r=\"").append(colName(ci)).append(ri + 1).append("\" t=\"inlineStr\"><is><t xml:space=\"preserve\">")
+                append(xml(cell))
+                append("</t></is></c>")
+            }
+            append("</row>")
+        }
+        append("</sheetData></worksheet>")
+    }
+    ZipOutputStream(output).use { zip ->
+        fun entry(name: String, content: String) {
+            zip.putNextEntry(ZipEntry(name))
+            zip.write(content.toByteArray(Charsets.UTF_8))
+            zip.closeEntry()
+        }
+        entry("[Content_Types].xml", """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>""")
+        entry("_rels/.rels", """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>""")
+        entry("xl/workbook.xml", """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="التقرير" sheetId="1" r:id="rId1"/></sheets></workbook>""")
+        entry("xl/_rels/workbook.xml.rels", """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>""")
+        entry("xl/worksheets/sheet1.xml", sheet)
+    }
+}
 
 private data class ReportCatalogItem(val title: String, val category: String, val source: String, val supported: Boolean, val note: String)
 private data class ReportLine(val date: String, val reference: String, val name: String, val amount: Long, val currency: String, val status: String)
@@ -372,6 +423,12 @@ internal fun ReportsCenterScreen(
             } ?: throw IllegalStateException("تعذر فتح ملف التصدير.")
         }.onFailure { error = "تعذر تصدير التقرير: ${it.message ?: "خطأ غير معروف"}" }
     }
+    val xlsxLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")) { uri: Uri? ->
+        if (uri != null) runCatching {
+            context.contentResolver.openOutputStream(uri)?.use { writeReportXlsx(it, exportRows) }
+                ?: throw IllegalStateException("تعذر فتح ملف Excel.")
+        }.onFailure { error = "تعذر تصدير XLSX: ${it.message ?: "خطأ غير معروف"}" }
+    }
     val currencyTotal = if (cloudMode) inPeriodCloudSalesDocuments.groupBy { it.currencyCode.ifBlank { "غير محددة" } }.mapValues { (_, rows) -> rows.sumOf { it.totalMinor } }
         else inPeriodSales.groupBy { it.currencyCode.ifBlank { "غير محددة" } }.mapValues { (_, rows) -> rows.sumOf { it.total.toLong() } }
 
@@ -498,6 +555,18 @@ internal fun ReportsCenterScreen(
                         }
                         csvLauncher.launch("mutajri-report-${selectedReport.hashCode()}.csv")
                     }) { Icon(Icons.Default.FileDownload, null); Spacer(Modifier.width(4.dp)); Text("تصدير CSV") }
+                    OutlinedButton(onClick = {
+                        exportTitle = selectedReport
+                        exportRows = buildList {
+                            add(listOf("التقرير", exportTitle))
+                            add(listOf("الفترة", startText + " — " + endText))
+                            add(listOf("مصدر البيانات", if (cloudMode) "السحابة" else "محلي على الجهاز"))
+                            add(listOf("تاريخ التصدير", java.time.LocalDateTime.now().toString()))
+                            add(listOf("التاريخ", "المرجع", "الاسم", "المبلغ/الكمية", "العملة", "الحالة"))
+                            selectedRows.forEach { row -> add(listOf(row.date, row.reference, row.name, if (row.currency.isBlank() || row.currency == "-") row.amount.toString() else reportMoney(row.amount, row.currency, cloudMode), row.currency, row.status)) }
+                        }
+                        xlsxLauncher.launch("mutajri-report-${selectedReport.hashCode()}.xlsx")
+                    }) { Icon(Icons.Default.TableChart, null); Spacer(Modifier.width(4.dp)); Text("Excel XLSX") }
                 }
             }
             items(selectedRows) { row ->
