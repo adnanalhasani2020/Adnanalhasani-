@@ -99,7 +99,7 @@ private data class OwnedOrganization(val id: String, val name: String, val type:
 private data class DelegationEntry(
     val id: String, val childNumber: String, val childName: String, val organizationId: String,
     val organizationName: String, val permissions: String, val status: String, val expiry: String,
-    val limit: String, val spent: String, val merchantName: String, val iconKey: String
+    val limit: String, val spent: String, val merchantName: String, val iconKey: String, val canReview: Boolean
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -165,7 +165,7 @@ internal fun PersonalAccountsScreen(onBack: () -> Unit) {
                 d.optString("spend_limit_minor").takeUnless { it == "null" }.orEmpty(),
                 d.optString("spent_minor", "0"),
                 d.optString("merchant_display_name").takeUnless { it == "null" }.orEmpty(),
-                d.optString("merchant_icon_key").takeUnless { it == "null" }.orEmpty()
+                d.optString("merchant_icon_key").takeUnless { it == "null" }.orEmpty(), d.optBoolean("can_review", false)
             ))
         }
     }
@@ -344,7 +344,7 @@ internal fun PersonalAccountsScreen(onBack: () -> Unit) {
                                 }.getOrDefault("")
                             }) { Text("تعديل الصلاحيات") }
                         }
-                        if (e.status == "pending_merchant_approval") {
+                        if (e.status == "pending_merchant_approval" && e.canReview) {
                             OutlinedButton(onClick = { approveEntry = e; merchantName = e.childName.ifBlank { e.childNumber }; merchantIcon = "person" }) { Text("موافقة التاجر") }
                         }
                         if (e.status == "active") {
