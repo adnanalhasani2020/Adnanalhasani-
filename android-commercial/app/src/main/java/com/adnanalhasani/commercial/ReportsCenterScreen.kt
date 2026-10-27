@@ -431,7 +431,7 @@ internal fun ReportsCenterScreen(
             "تكلفة البضاعة والربح" -> costProfitError
             "التدفقات النقدية والصندوق" -> when {
                 glMappingsLoadError.isNotBlank() -> glMappingsLoadError
-                cloudGlMappings.none { it.mappingKey in setOf("cash", "bank", "card_clearing", "other_receipts") } -> "لا توجد حسابات نقدية أو بنكية مربوطة بدليل الحسابات."
+                cloudGlMappings.none { it.mappingKey in setOf("cash", "bank", "card_clearing", "other_receipts", "check_clearing", "other_disbursements") } -> "لا توجد حسابات نقدية أو بنكية مربوطة بدليل الحسابات."
                 ledgerLinesLoadError.isNotBlank() -> ledgerLinesLoadError
                 else -> ""
             }
