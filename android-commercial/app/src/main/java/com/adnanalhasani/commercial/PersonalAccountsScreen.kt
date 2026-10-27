@@ -424,6 +424,8 @@ internal fun PersonalAccountsScreen(onBack: () -> Unit) {
                                 request({ token -> personalAccountRpc(context, token, "commercial_account_revoke_delegation",
                                     JSONObject().put("p_delegation_id", e.id)); "ok" }) { refresh() }
                             }) { Text("إلغاء الربط") }
+                        }
+                        if (e.status != "pending_merchant_approval") {
                             OutlinedButton(enabled = !busy, onClick = {
                                 request({ token -> personalAccountRpc(context, token, "commercial_account_delegated_spend_report",
                                     JSONObject().put("p_delegation_id", e.id)) }) { report = it }
@@ -433,7 +435,41 @@ internal fun PersonalAccountsScreen(onBack: () -> Unit) {
                 }
             }
         }
-        if (report.isNotBlank()) item { Card { Column(Modifier.padding(12.dp)) { Text("تقرير الإنفاق", fontWeight = FontWeight.Bold); Text(report) } } }
+        if (report.isNotBlank()) item {
+            val data = runCatching { JSONObject(report) }.getOrNull()
+            Card(border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Text("تقرير مشتريات وحجوزات الحساب الفرعي", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    if (data == null) {
+                        Text(report)
+                    } else {
+                        val reportCurrency = data.optString("currency_code", "YER")
+                        Text("المؤسسة: ${data.optString("organization_name")}")
+                        Text("الإنفاق المحتسب للسقف: ${data.optString("tracked_spend_minor", "0")} $reportCurrency")
+                        val limit = data.opt("spend_limit_minor")
+                        if (limit != null && limit != JSONObject.NULL) Text("سقف الإنفاق: $limit $reportCurrency")
+                        val orders = data.optJSONArray("orders") ?: JSONArray()
+                        if (orders.length() == 0) Text("لا توجد مشتريات أو حجوزات مسجلة لهذا التفويض.")
+                        for (i in 0 until orders.length()) {
+                            val order = orders.optJSONObject(i) ?: continue
+                            val type = when (order.optString("order_type")) { "purchase" -> "شراء"; "booking" -> "حجز"; "service" -> "خدمة"; else -> order.optString("order_type") }
+                            val status = when (order.optString("status")) { "pending" -> "بانتظار المؤسسة"; "confirmed" -> "مؤكد"; "in_progress" -> "قيد التنفيذ"; "fulfilled" -> "مكتمل"; "cancelled" -> "ملغى"; "rejected" -> "مرفوض"; else -> order.optString("status") }
+                            val payment = when (order.optString("payment_status")) { "unpaid" -> "غير مدفوع"; "partially_paid" -> "مدفوع جزئيًا"; "paid" -> "مدفوع"; "credit" -> "آجل"; "refunded" -> "مسترد"; else -> order.optString("payment_status") }
+                            Text("رقم العملية: ${order.optString("order_number")} · النوع: $type")
+                            Text("المبلغ: ${order.optString("total_minor", "0")} ${order.optString("currency_code", reportCurrency)} · الحالة: $status · الدفع: $payment")
+                            if (order.optString("reserved_from").isNotBlank() && order.optString("reserved_from") != "null") Text("موعد الحجز: ${order.optString("reserved_from")} — ${order.optString("reserved_until")}")
+                            val lines = order.optJSONArray("items") ?: JSONArray()
+                            for (j in 0 until lines.length()) {
+                                val line = lines.optJSONObject(j) ?: continue
+                                Text("• ${line.optString("name")} — كمية ${line.optString("quantity")} × ${line.optString("unit_price_minor")} = ${line.optString("line_total_minor")} $reportCurrency", style = MaterialTheme.typography.bodySmall)
+                            }
+                            HorizontalDivider()
+                        }
+                    }
+                    TextButton(onClick = { report = "" }) { Text("إغلاق التقرير") }
+                }
+            }
+        }
         if (message.isNotBlank()) item { Text(message, color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary) }
     }
 
