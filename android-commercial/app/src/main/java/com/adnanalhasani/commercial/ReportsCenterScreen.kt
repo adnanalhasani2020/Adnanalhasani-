@@ -353,6 +353,9 @@ internal fun ReportsCenterScreen(
     }
 
     val ledgerStatementError = if (!cloudMode) "القوائم المالية تتطلب دفتر الأستاذ السحابي." else run {
+        val invalidPostedDate = cloudLedgerLines.any { line ->
+            runCatching { LocalDate.parse(line.entryDate.take(10)) }.getOrNull() == null
+        }
         val throughEnd = cloudLedgerLines.filter { line ->
             val date = runCatching { LocalDate.parse(line.entryDate.take(10)) }.getOrNull()
             date != null && endDate != null && !date.isAfter(endDate)
@@ -365,6 +368,7 @@ internal fun ReportsCenterScreen(
             ledgerLinesLoadError.isNotBlank() -> ledgerLinesLoadError
             glMappingsLoadError.isNotBlank() -> glMappingsLoadError
             missingGlMappings.isNotEmpty() -> "خرائط حسابات المبيعات والذمم والمخزون غير مكتملة: ${missingGlMappings.sorted().joinToString()}."
+            invalidPostedDate -> "توجد قيود مرحلة بتاريخ غير صالح؛ لا يمكن استبعادها بأمان من القوائم المالية."
             supplierControlAccountsLoadError.isNotBlank() -> supplierControlAccountsLoadError
             missingSupplierRoles.isNotEmpty() -> "خرائط حسابات المشتريات والموردين غير مكتملة: ${missingSupplierRoles.sorted().joinToString()}."
             throughEnd.isEmpty() -> "لا توجد قيود مرحلة ضمن الفترة؛ لا يمكن اعتماد القوائم المالية."
@@ -822,16 +826,20 @@ internal fun ReportsCenterScreen(
             buildList {
                 currencies.forEach { currency ->
                     val currencyMoves = movements.filter { it.first.currencyCode == currency }
-                    val opening = currencyMoves.filter { it.second < (startDate ?: LocalDate.MIN) }.sumOf { it.third }
-                    val periodMoves = currencyMoves.filter { startDate != null && endDate != null && !it.second.isBefore(startDate) && !it.second.isAfter(endDate) }
-                    var balance = opening
-                    add(ReportLine(startText, "رصيد افتتاحي", "النقد والبنوك", opening, currency, "صافي أرصدة الحسابات النقدية المربوطة من القيود المرحلة قبل الفترة"))
-                    periodMoves.forEach { (line, date, amount) ->
-                        balance = Math.addExact(balance, amount)
-                        add(ReportLine(date.toString(), "قيد ${line.entryNumber} · سطر ${line.lineNumber}", line.accountName.ifBlank { line.accountCode }, amount, currency,
-                            "${line.entryDescription} · ${line.sourceType}:${line.sourceId} · الحساب ${line.accountCode} · الرصيد النقدي المتحرك ${reportMoney(balance, currency, true)}"))
-                    }
-                    add(ReportLine(endText, "رصيد ختامي", "النقد والبنوك", balance, currency, "الرصيد الافتتاحي + حركة القيود النقدية المرحلة ضمن الفترة"))
+                    currencyMoves.groupBy { it.first.accountId to it.first.accountCode }.toSortedMap(compareBy<Pair<String, String>> { it.second }.thenBy { it.first })
+                        .forEach { (accountKey, accountMoves) ->
+                            val opening = accountMoves.filter { it.second < (startDate ?: LocalDate.MIN) }.sumOf { it.third }
+                            val periodMoves = accountMoves.filter { startDate != null && endDate != null && !it.second.isBefore(startDate) && !it.second.isAfter(endDate) }
+                            var balance = opening
+                            val accountName = accountMoves.firstOrNull()?.first?.accountName?.ifBlank { accountKey.second } ?: accountKey.second
+                            add(ReportLine(startText, "رصيد افتتاحي", accountName, opening, currency, "حساب النقد/البنك ${accountKey.second} · رصيد من القيود المرحلة قبل الفترة"))
+                            periodMoves.forEach { (line, date, amount) ->
+                                balance = Math.addExact(balance, amount)
+                                add(ReportLine(date.toString(), "قيد ${line.entryNumber} · سطر ${line.lineNumber}", accountName, amount, currency,
+                                    "${line.entryDescription} · ${line.sourceType}:${line.sourceId} · الحساب ${line.accountCode} · الرصيد المتحرك ${reportMoney(balance, currency, true)}"))
+                            }
+                            add(ReportLine(endText, "رصيد ختامي", accountName, balance, currency, "الرصيد الافتتاحي + الحركة المرحلة · حساب ${accountKey.second}"))
+                        }
                 }
             }
         }
