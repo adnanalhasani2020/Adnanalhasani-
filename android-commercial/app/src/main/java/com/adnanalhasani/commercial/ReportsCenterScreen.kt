@@ -74,7 +74,7 @@ internal fun ReportsCenterScreen(
     var endText by remember { mutableStateOf(today.toString()) }
     var search by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("الكل") }
-    var selectedReport by remember { mutableStateOf("ملخص المبيعات") }
+    var selectedReport by remember { mutableStateOf("ملخص المبيعات حسب الفترة") }
     var exportRows by remember { mutableStateOf<List<List<String>>>(emptyList()) }
     var exportTitle by remember { mutableStateOf("تقرير متجري") }
     var error by remember { mutableStateOf("") }
@@ -297,7 +297,7 @@ internal fun ReportsCenterScreen(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("الفترة", fontWeight = FontWeight.SemiBold, color = ReportInk)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf("اليوم", "أمس", "الأسبوع الحالي", "الأسبوع السابق", "الشهر الحالي", "الشهر السابق", "السنة الحالية").forEach { label ->
+                    listOf("اليوم", "أمس", "الأسبوع الحالي", "الأسبوع السابق", "الشهر الحالي", "الشهر السابق", "الربع الحالي", "الربع السابق", "السنة الحالية", "السنة السابقة").forEach { label ->
                         FilterChip(selected = selectedPeriod == label, onClick = {
                             selectedPeriod = label
                             val now = LocalDate.now()
@@ -308,6 +308,13 @@ internal fun ReportsCenterScreen(
                                 "الأسبوع السابق" -> now.with(java.time.DayOfWeek.MONDAY).minusWeeks(1) to now.with(java.time.DayOfWeek.MONDAY).minusDays(1)
                                 "الشهر الحالي" -> now.withDayOfMonth(1) to now
                                 "الشهر السابق" -> now.minusMonths(1).withDayOfMonth(1) to now.withDayOfMonth(1).minusDays(1)
+                                "الربع الحالي" -> now.withMonth(((now.monthValue - 1) / 3) * 3 + 1).withDayOfMonth(1) to now
+                                "الربع السابق" -> {
+                                    val currentQuarterStart = now.withMonth(((now.monthValue - 1) / 3) * 3 + 1).withDayOfMonth(1)
+                                    val previousQuarterEnd = currentQuarterStart.minusDays(1)
+                                    previousQuarterEnd.minusMonths(2).withDayOfMonth(1) to previousQuarterEnd
+                                }
+                                "السنة السابقة" -> now.minusYears(1).withDayOfYear(1) to now.withDayOfYear(1).minusDays(1)
                                 else -> now.withDayOfYear(1) to now
                             }
                             startText = range.first.toString(); endText = range.second.toString(); error = ""
@@ -342,7 +349,7 @@ internal fun ReportsCenterScreen(
                         "المبيعات حسب العميل", "المبيعات النقدية والآجلة", "متوسط قيمة الفاتورة", "مقارنة فترتين", "مقارنة الفترات",
                         "التحصيلات المسجلة محليًا", "الدفعات السحابية الناجحة", "المصروفات التشغيلية", "رصيد المخزون الحالي", "تنبيهات المخزون المنخفض",
                         "فواتير الشراء والمستحقات المسجلة", "مرتجعات المبيعات وحالة التسوية", "سندات القبض والصرف", "سجل القيود المحاسبية" -> selectedReport = report.title
-                        "لوحة المؤشرات" -> selectedReport = "ملخص المبيعات"
+                        "لوحة المؤشرات" -> selectedReport = "ملخص المبيعات حسب الفترة"
                     }
                 }),
                 colors = CardDefaults.cardColors(containerColor = if (selected) ReportMint else Color.White),
