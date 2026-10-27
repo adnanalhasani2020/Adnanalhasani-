@@ -32,15 +32,39 @@ BEGIN
   SELECT jsonb_build_object(
     'delegation_id',v_row.id,
     'organization_id',v_row.organization_id,
+    'organization_name',(SELECT o.name FROM public.commercial_organizations o WHERE o.id=v_row.organization_id),
+    'parent_account_number',(SELECT a.account_number FROM public.commercial_party_accounts a WHERE a.id=v_row.parent_account_id),
+    'child_account_number',(SELECT a.account_number FROM public.commercial_party_accounts a WHERE a.id=v_row.child_account_id),
+    'child_display_name',(SELECT a.display_name FROM public.commercial_party_accounts a WHERE a.id=v_row.child_account_id),
     'status',v_row.status,
     'currency_code',v_row.spend_currency_code,
     'spend_limit_minor',v_row.spend_limit_minor,
     'tracked_spend_minor',v_row.spent_minor,
+    'totals_by_type',coalesce((
+      SELECT jsonb_object_agg(t.order_type, t.total_minor)
+      FROM (
+        SELECT o.order_type, sum(o.total_minor)::bigint AS total_minor
+        FROM public.commercial_customer_orders o
+        WHERE o.delegated_access_id=v_row.id
+          AND o.principal_account_id=v_row.parent_account_id
+          AND o.acting_account_id=v_row.child_account_id
+          AND (o.status NOT IN ('cancelled','rejected') OR o.payment_status NOT IN ('unpaid','credit','refunded'))
+        GROUP BY o.order_type
+      ) t
+    ),'{}'::jsonb),
     'orders',coalesce((
       SELECT jsonb_agg(jsonb_build_object(
         'order_id',o.id,'order_number',o.order_number,'created_at',o.created_at,
+        'order_type',o.order_type,'reserved_from',o.reserved_from,'reserved_until',o.reserved_until,
         'status',o.status,'payment_status',o.payment_status,
-        'total_minor',o.total_minor,'currency_code',o.currency_code
+        'total_minor',o.total_minor,'currency_code',o.currency_code,
+        'items',coalesce((
+          SELECT jsonb_agg(jsonb_build_object(
+            'name',oi.item_name_snapshot,'item_type',oi.item_type,'quantity',oi.quantity,
+            'unit_price_minor',oi.unit_price_minor,'line_total_minor',oi.line_total_minor
+          ) ORDER BY oi.id)
+          FROM public.commercial_customer_order_items oi WHERE oi.order_id=o.id
+        ),'[]'::jsonb)
       ) ORDER BY o.created_at DESC)
       FROM public.commercial_customer_orders o
       WHERE o.delegated_access_id=v_row.id
