@@ -43,9 +43,9 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn('ReportCatalogItem("الرصيد المحاسبي الكامل للعملاء"', self.screen)
         self.assertIn('ReportCatalogItem("أرصدة الموردين والمستحقات", "الموردون والمستحقات", "سطور دفتر الأستاذ المرحلة المرتبطة بحساب مراقبة المورد", cloudMode', self.screen)
         self.assertIn('ReportCatalogItem("الرصيد المحاسبي الكامل للعملاء", "العملاء والديون", "سطور دفتر الأستاذ المرحلة المرتبطة بحساب مراقبة العميل", cloudMode', self.screen)
-        self.assertIn("manual opening balances", self.contract)
-        self.assertIn("Supplier movement statement", self.contract)
-        self.assertIn("Deliberately unavailable as formal statements", self.contract)
+        self.assertIn("Full customer ledger statement", self.contract)
+        self.assertIn("Full supplier ledger statement", self.contract)
+        self.assertIn("historical inventory valuation and inventory-to-GL valuation reconciliation", self.contract)
 
     def test_xlsx_export_is_real_ooxml_and_right_to_left(self):
         self.assertIn("ZipOutputStream(output)", self.screen)
