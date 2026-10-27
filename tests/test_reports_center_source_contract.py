@@ -40,7 +40,8 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
     def test_limited_customer_and_supplier_statements_are_not_mislabeled_as_full_financial_statements(self):
         self.assertIn('ReportCatalogItem("أرصدة العملاء وكشف الحساب"', self.screen)
         self.assertIn('ReportCatalogItem("كشف حركات الموردين"', self.screen)
-        self.assertIn('ReportCatalogItem("أرصدة الموردين والمستحقات", "الموردون والمستحقات", "فواتير المورد والمدفوعات والمرتجعات", false', self.screen)
+        self.assertIn('ReportCatalogItem("الرصيد المحاسبي الكامل للعملاء"', self.screen)
+        self.assertIn('ReportCatalogItem("أرصدة الموردين والمستحقات", "الموردون والمستحقات", "فواتير المورد والمدفوعات والمرتجعات والتسويات", false', self.screen)
         self.assertIn("manual opening balances", self.contract)
         self.assertIn("Supplier movement statement", self.contract)
         self.assertIn("Deliberately unavailable as formal statements", self.contract)
