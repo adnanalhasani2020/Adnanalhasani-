@@ -92,7 +92,8 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         loader = self.repository[start:end]
         self.assertIn("commercial_supplier_payments", loader)
         self.assertIn("journal.status=eq.posted", loader)
-        self.assertIn("UNIQUE", self.repository[self.repository.index("CREATE TABLE IF NOT EXISTS public.commercial_supplier_payments"):self.repository.index("CREATE INDEX IF NOT EXISTS commercial_supplier_obligations_supplier_idx")])
+        self.assertIn('val id: String,', loader)
+        self.assertIn('if (id.isBlank() || obligationId.isBlank() || invoiceId.isBlank() || journalId.isBlank()', loader)
 
     def test_csv_contains_period_source_timestamp_and_arabic_bom(self):
         self.assertIn('writer.write("\\uFEFF")', self.screen)
