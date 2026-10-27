@@ -52,6 +52,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.math.BigDecimal
 import java.math.BigInteger
 import java.util.Locale
 import java.util.UUID
@@ -292,7 +293,7 @@ internal fun CommercialCloudSaleComposerScreen(
                 Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(14.dp), border = BorderStroke(1.dp, CloudComposerBorder)) {
                     Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                         Text(product.name, color = CloudComposerInk, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                        Text("المخزون المتاح: ${product.stock} ${product.unitCode}", color = CloudComposerMuted, fontSize = 11.sp)
+                        Text("المخزون المتاح: ${product.stockPrecise.stripTrailingZeros().toPlainString()} ${product.unitCode}", color = CloudComposerMuted, fontSize = 11.sp)
                         Text("وحدات البيع: " + availableUnits.joinToString("، ") { "${it.label} = ${it.factor} ${product.unitCode}" }, color = CloudComposerMuted, fontSize = 11.sp)
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(onClick = {
@@ -388,7 +389,10 @@ internal fun CommercialCloudSaleComposerScreen(
                         } else if (selectedLines.size != invoiceLines.size) {
                             error = "صحح الكميات في جميع سطور الفاتورة قبل المتابعة."
                         } else if (selectedLines.groupBy { it.product.cloudOfferingId }.any { (_, lines) ->
-                            lines.sumOf { it.quantity.toLong() * it.unit.factor } > lines.first().product.stock.toLong()
+                            val requestedBaseQuantity = lines.fold(BigDecimal.ZERO) { sum, line ->
+                                sum + BigDecimal.valueOf(line.quantity.toLong()).multiply(BigDecimal.valueOf(line.unit.factor))
+                            }
+                            requestedBaseQuantity > lines.first().product.stockPrecise
                         }) {
                             error = "مجموع الكميات بوحدة المخزون يتجاوز المتاح لأحد الأصناف؛ حدّث المخزون وصحح السطور."
                         } else if (selectedLines.any { it.product.cloudPriceMinor < 0L }) {

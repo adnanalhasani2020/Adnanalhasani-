@@ -276,5 +276,15 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         self.assertIn('.put("p_payment_mode", paymentMode)', self.repository)
         self.assertIn('.put("p_initial_payment_minor", if (paymentMode == "cash") JSONObject.NULL else initialPaymentMinor)', self.repository)
 
+    def test_cloud_inventory_precision_is_preserved_for_display_and_stock_guard(self):
+        self.assertIn("val stockPrecise: BigDecimal = BigDecimal.valueOf(stock.toLong())", self.main)
+        self.assertIn('BigDecimal(row.optString("quantity_on_hand", "0"))', self.repository)
+        self.assertIn('BigDecimal(row.optString("quantity_reserved", "0"))', self.repository)
+        self.assertIn("val availableQuantity = runCatching", self.repository)
+        self.assertIn("stockPrecise = availableQuantity", self.repository)
+        self.assertIn('product.stockPrecise.stripTrailingZeros().toPlainString()', self.composer)
+        self.assertIn("lines.first().product.stockPrecise", self.composer)
+        self.assertNotIn("lines.first().product.stock.toLong()", self.composer)
+
 if __name__ == "__main__":
     unittest.main()
