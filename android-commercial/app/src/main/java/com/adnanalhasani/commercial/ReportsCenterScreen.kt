@@ -2,6 +2,9 @@ package com.adnanalhasani.commercial
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
@@ -106,6 +109,71 @@ private fun writeReportXlsx(output: java.io.OutputStream, rows: List<List<String
     }
 }
 
+/** Writes a paginated PDF report using Android's native PDF renderer. */
+private fun writeReportPdf(output: java.io.OutputStream, rows: List<List<String>>) {
+    require(rows.isNotEmpty()) { "لا توجد بيانات لتصديرها." }
+    val document = PdfDocument()
+    val pageWidth = 595
+    val pageHeight = 842
+    val left = 36f
+    val right = pageWidth - 36f
+    val bodyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.rgb(35, 48, 44)
+        textSize = 10f
+        typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+        textAlign = Paint.Align.RIGHT
+    }
+    val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.rgb(22, 91, 72)
+        textSize = 16f
+        typeface = Typeface.create("sans-serif", Typeface.BOLD)
+        textAlign = Paint.Align.RIGHT
+    }
+    val rulePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.rgb(210, 222, 216)
+        strokeWidth = 1f
+    }
+    var pageNumber = 0
+    var page: PdfDocument.Page? = null
+    var canvas: android.graphics.Canvas? = null
+    var y = 0f
+    fun startPage() {
+        pageNumber++
+        page = document.startPage(PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create())
+        canvas = page!!.canvas
+        canvas!!.drawColor(android.graphics.Color.WHITE)
+        y = 42f
+        canvas!!.drawText("تقرير متجري", right, y, titlePaint)
+        y += 22f
+        canvas!!.drawLine(left, y, right, y, rulePaint)
+        y += 20f
+    }
+    fun finishPage() {
+        val current = page ?: return
+        canvas?.drawText("صفحة $pageNumber", right, (pageHeight - 22).toFloat(), bodyPaint)
+        document.finishPage(current)
+        page = null
+        canvas = null
+    }
+    try {
+        startPage()
+        rows.forEach { row ->
+            val text = row.joinToString("    |    ") { it.replace('\n', ' ').replace('\r', ' ') }
+            var remaining = text
+            do {
+                val count = bodyPaint.breakText(remaining, true, right - left, null).coerceAtLeast(1)
+                val chunk = remaining.substring(0, count)
+                if (y > pageHeight - 54f) { finishPage(); startPage() }
+                canvas!!.drawText(chunk, right, y, bodyPaint)
+                y += 15f
+                remaining = remaining.substring(count)
+            } while (remaining.isNotEmpty())
+            y += 3f
+        }
+        finishPage()
+        document.writeTo(output)
+    } finally { document.close() }
+}
 private data class ReportCatalogItem(val title: String, val category: String, val source: String, val supported: Boolean, val note: String)
 private data class ReportLine(val date: String, val reference: String, val name: String, val amount: Long, val currency: String, val status: String)
 
