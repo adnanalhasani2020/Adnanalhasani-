@@ -352,6 +352,13 @@ internal fun ReportsCenterScreen(
         }
     }
 
+    val startDate = runCatching { LocalDate.parse(startText) }.getOrNull()
+    val endDate = runCatching { LocalDate.parse(endText) }.getOrNull()
+    val dateError = startDate == null || endDate == null || startDate.isAfter(endDate)
+    val zone = remember { ZoneId.systemDefault() }
+    val startMillis = startDate?.atStartOfDay(zone)?.toInstant()?.toEpochMilli() ?: Long.MIN_VALUE
+    val endExclusive = endDate?.plusDays(1)?.atStartOfDay(zone)?.toInstant()?.toEpochMilli() ?: Long.MAX_VALUE
+
     val ledgerStatementError = if (!cloudMode) "القوائم المالية تتطلب دفتر الأستاذ السحابي." else run {
         val invalidPostedDate = cloudLedgerLines.any { line ->
             runCatching { LocalDate.parse(line.entryDate.take(10)) }.getOrNull() == null
@@ -555,12 +562,6 @@ internal fun ReportsCenterScreen(
         (selectedCategory == "الكل" || it.category == selectedCategory) &&
             (search.isBlank() || it.title.contains(search, true) || it.category.contains(search, true))
     }
-    val startDate = runCatching { LocalDate.parse(startText) }.getOrNull()
-    val endDate = runCatching { LocalDate.parse(endText) }.getOrNull()
-    val dateError = startDate == null || endDate == null || startDate.isAfter(endDate)
-    val zone = remember { ZoneId.systemDefault() }
-    val startMillis = startDate?.atStartOfDay(zone)?.toInstant()?.toEpochMilli() ?: Long.MIN_VALUE
-    val endExclusive = endDate?.plusDays(1)?.atStartOfDay(zone)?.toInstant()?.toEpochMilli() ?: Long.MAX_VALUE
     val inPeriodSales = if (dateError) emptyList() else sales.filter { it.createdAt >= startMillis && it.createdAt < endExclusive && it.status.equals("completed", true) }
     val inPeriodCloudSalesDocuments = if (dateError) emptyList() else cloudSalesDocuments.filter { doc ->
         doc.saleStatus.equals("completed", true) &&
