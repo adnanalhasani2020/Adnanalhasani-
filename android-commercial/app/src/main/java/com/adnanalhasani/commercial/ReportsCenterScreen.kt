@@ -573,12 +573,12 @@ internal fun ReportsCenterScreen(
                 val periodMoves = ordered.filter { reportDateMillis(it.date)?.let { ts -> ts >= startMillis && ts < endExclusive } == true }
                 if (periodMoves.isEmpty() && opening == 0L) emptyList() else buildList {
                     var balance = opening
-                    if (opening != 0L) add(ReportLine(startText, "افتتاحي", key.second, opening, key.third, "رصيد افتتاحي"))
+                    if (opening != 0L) add(ReportLine(startText, "سابق", key.second, opening, key.third, "رصيد سابق محسوب من الحركات المتاحة"))
                     periodMoves.forEach { movement ->
                         balance = Math.addExact(balance, movement.amount)
                         add(ReportLine(movement.date, movement.reference, movement.customer, movement.amount, movement.currency, "${movement.description} · الرصيد: ${reportMoney(balance, movement.currency, true)}"))
                     }
-                    add(ReportLine(endText, "ختامي", key.second, balance, key.third, "الرصيد الختامي حسب الحركات المعروضة"))
+                    add(ReportLine(endText, "ختامي", key.second, balance, key.third, "الرصيد الختامي المحسوب من الحركات المتاحة؛ لا يشمل تعديلات خارج هذه المصادر"))
                 }
             }
         }
