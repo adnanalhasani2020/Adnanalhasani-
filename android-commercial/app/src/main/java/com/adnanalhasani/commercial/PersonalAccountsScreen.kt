@@ -134,6 +134,11 @@ internal fun PersonalAccountsScreen(onBack: () -> Unit) {
     var editPurchase by remember { mutableStateOf(false) }
     var editExpiryDays by remember { mutableStateOf("") }
     var editLimitMinor by remember { mutableStateOf("") }
+    var authRequired by remember { mutableStateOf(personalAccountPrefs(context).getString("refresh_token", null).isNullOrBlank()) }
+    var authEmail by remember { mutableStateOf("") }
+    var authPassword by remember { mutableStateOf("") }
+    var authDisplayName by remember { mutableStateOf("") }
+    var authRegister by remember { mutableStateOf(false) }
 
     fun applySnapshot(snapshot: JSONObject) {
         val a = snapshot.optJSONObject("account")
@@ -180,6 +185,7 @@ internal fun PersonalAccountsScreen(onBack: () -> Unit) {
                 result.onSuccess(onSuccess).onFailure {
                     message = it.message ?: "تعذر إكمال العملية."
                     isError = true
+                    if (message.contains("سجّل الدخول") || message.contains("انتهت جلسة")) authRequired = true
                 }
             }
         }
@@ -195,11 +201,63 @@ internal fun PersonalAccountsScreen(onBack: () -> Unit) {
     LaunchedEffect(Unit) {
         request({ personalAccountSnapshot(context, it).toString() }) {
             applySnapshot(JSONObject(it))
+            authRequired = false
             message = ""
         }
     }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (authRequired) item {
+            Card(border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    Text(if (authRegister) "إنشاء حساب منصة جديد" else "تسجيل الدخول إلى حساب المنصة", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("المصادقة بالبريد الإلكتروني وكلمة المرور، دون تسجيل Google.")
+                    OutlinedTextField(authEmail, { authEmail = it.trim() }, Modifier.fillMaxWidth(), label = { Text("البريد الإلكتروني") }, singleLine = true)
+                    if (authRegister) OutlinedTextField(authDisplayName, { authDisplayName = it }, Modifier.fillMaxWidth(), label = { Text("الاسم الذي تختاره") }, singleLine = true)
+                    OutlinedTextField(authPassword, { authPassword = it }, Modifier.fillMaxWidth(), label = { Text("كلمة المرور (12 حرفًا على الأقل)") }, singleLine = true)
+                    Button(enabled = !busy && authEmail.contains("@") && authPassword.length >= 12 && (!authRegister || authDisplayName.trim().length >= 2), onClick = {
+                        busy = true; message = ""; isError = false
+                        personalAccountIo.execute {
+                            val result = runCatching {
+                                val payload = JSONObject().put("email", authEmail).put("password", authPassword)
+                                val route = if (authRegister) "/auth/v1/signup" else "/auth/v1/token?grant_type=password"
+                                if (authRegister) payload.put("data", JSONObject().put("display_name", authDisplayName.trim()))
+                                val response = JSONObject(personalAccountHttp(context, route, payload))
+                                val session = response.optJSONObject("session") ?: response
+                                val access = session.optString("access_token")
+                                if (access.isBlank()) {
+                                    if (authRegister) throw IllegalStateException("تم إنشاء طلب التسجيل. أكّد بريدك الإلكتروني ثم سجّل الدخول.")
+                                    throw IllegalStateException("لم تُرجع خدمة المصادقة جلسة صالحة.")
+                                }
+                                val refreshToken = session.optString("refresh_token")
+                                require(refreshToken.isNotBlank()) { "لم تُرجع خدمة المصادقة رمز تجديد صالحًا." }
+                                personalAccountPrefs(context).edit().putString("refresh_token", refreshToken).apply()
+                                val snapshot = personalAccountSnapshot(context, access)
+                                snapshot
+                            }
+                            personalAccountMain.post {
+                                busy = false
+                                result.onSuccess {
+                                    applySnapshot(it)
+                                    authRequired = false
+                                    authPassword = ""
+                                    message = if (authRegister) "تم إنشاء حساب المنصة وتسجيل الدخول." else "تم تسجيل الدخول."
+                                    authRegister = false
+                                }.onFailure {
+                                    message = it.message ?: "تعذر تسجيل الدخول."
+                                    isError = !message.startsWith("تم إنشاء طلب التسجيل")
+                                }
+                            }
+                        }
+                    }, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (busy) "جارٍ الاتصال..." else if (authRegister) "إنشاء الحساب" else "تسجيل الدخول")
+                    }
+                    TextButton(enabled = !busy, onClick = { authRegister = !authRegister; message = ""; isError = false }) {
+                        Text(if (authRegister) "لدي حساب بالفعل — تسجيل الدخول" else "إنشاء حساب جديد")
+                    }
+                }
+            }
+        }
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "رجوع") }
