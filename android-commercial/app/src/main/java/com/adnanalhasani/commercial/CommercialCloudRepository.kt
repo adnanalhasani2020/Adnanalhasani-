@@ -2750,7 +2750,7 @@ internal data class CommercialCloudPartyAccountLink(
 internal fun loadCommercialCloudCustomerPartyAccounts(context: Context): List<CommercialCloudPartyAccountLink> {
     val (orgId, access) = commercialMasterDataAccess(context)
     val rows = commercialCloudPagedGet(
-        "/rest/v1/commercial_customer_party_accounts?select=customer_id,party_account_id,party_account:commercial_ledger_accounts(currency_code)&organization_id=eq.$orgId&order=customer_id.asc,party_account_id.asc",
+        "/rest/v1/commercial_customer_party_accounts?select=customer_id,party_account_id,party_account:commercial_party_accounts!commercial_customer_party_accounts_party_account_id_fkey(currency_code)&organization_id=eq.$orgId&order=customer_id.asc,party_account_id.asc",
         access
     )
     return buildList {
