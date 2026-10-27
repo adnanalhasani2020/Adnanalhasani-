@@ -37,11 +37,12 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn("debit_minor", loader)
         self.assertIn("credit_minor", loader)
 
-    def test_financial_balances_not_supported_by_complete_ledger_remain_gated(self):
+    def test_limited_customer_and_supplier_statements_are_not_mislabeled_as_full_financial_statements(self):
         self.assertIn('ReportCatalogItem("أرصدة العملاء وكشف الحساب"', self.screen)
-        self.assertIn('"حركات الفواتير والتحصيل والمرتجعات والتسويات", false', self.screen)
-        self.assertIn('ReportCatalogItem("أرصدة الموردين والمستحقات"', self.screen)
-        self.assertIn('"فواتير المورد والمدفوعات والمرتجعات", false', self.screen)
+        self.assertIn('ReportCatalogItem("كشف حركات الموردين"', self.screen)
+        self.assertIn('ReportCatalogItem("أرصدة الموردين والمستحقات", "الموردون والمستحقات", "فواتير المورد والمدفوعات والمرتجعات", false', self.screen)
+        self.assertIn("manual opening balances", self.contract)
+        self.assertIn("Supplier movement statement", self.contract)
         self.assertIn("Deliberately unavailable as formal statements", self.contract)
 
     def test_xlsx_export_is_real_ooxml_and_right_to_left(self):
