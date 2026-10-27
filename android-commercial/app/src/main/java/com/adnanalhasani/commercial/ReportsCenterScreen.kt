@@ -155,13 +155,14 @@ internal fun ReportsCenterScreen(
             val expenses = runCatching { loadCommercialCloudExpenses(context) }
             ReportMain.post {
                 cloudLoading = false
-                if (salesDocuments.isSuccess) cloudSalesDocuments = salesDocuments.getOrThrow()
-                if (purchases.isSuccess) cloudPurchases = purchases.getOrThrow()
-                if (returns.isSuccess) cloudReturns = returns.getOrThrow()
-                if (payments.isSuccess) cloudPayments = payments.getOrThrow()
-                if (journals.isSuccess) cloudJournals = journals.getOrThrow()
-                if (ledgerLines.isSuccess) cloudLedgerLines = ledgerLines.getOrThrow()
-                if (expenses.isSuccess) cloudExpenses = expenses.getOrThrow()
+                // Clear failed projections rather than silently showing stale results as fresh.
+                cloudSalesDocuments = salesDocuments.getOrDefault(emptyList())
+                cloudPurchases = purchases.getOrDefault(emptyList())
+                cloudReturns = returns.getOrDefault(emptyList())
+                cloudPayments = payments.getOrDefault(emptyList())
+                cloudJournals = journals.getOrDefault(emptyList())
+                cloudLedgerLines = ledgerLines.getOrDefault(emptyList())
+                cloudExpenses = expenses.getOrDefault(emptyList())
                 val errors = listOf(
                     salesDocuments.exceptionOrNull(), purchases.exceptionOrNull(), returns.exceptionOrNull(), payments.exceptionOrNull(),
                     journals.exceptionOrNull(), ledgerLines.exceptionOrNull(), expenses.exceptionOrNull()
