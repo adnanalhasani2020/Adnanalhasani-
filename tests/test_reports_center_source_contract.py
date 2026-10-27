@@ -7,6 +7,7 @@ SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commerci
 REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt"
 CONTRACT = ROOT / "android-commercial/docs/reports-data-contract.md"
 COLLECTION_REPLAY_MIGRATION = ROOT / "supabase/migrations/20261027221500_harden_customer_collection_replay_posting.sql"
+RETURN_CURRENCY_GUARD_MIGRATION = ROOT / "supabase/migrations/20261027224500_guard_return_adjustment_currency.sql"
 
 
 class ReportsCenterSourceContractTests(unittest.TestCase):
@@ -16,6 +17,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         cls.repository = REPOSITORY.read_text(encoding="utf-8")
         cls.contract = CONTRACT.read_text(encoding="utf-8")
         cls.collection_replay_migration = COLLECTION_REPLAY_MIGRATION.read_text(encoding="utf-8")
+        cls.return_currency_guard_migration = RETURN_CURRENCY_GUARD_MIGRATION.read_text(encoding="utf-8")
 
     def test_cloud_operational_reports_use_authoritative_sources(self):
         for source in (
@@ -165,6 +167,19 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn("e.source_id = v_existing.id", self.collection_replay_migration)
         self.assertIn("e.status = 'posted'", self.collection_replay_migration)
         self.assertIn("'idempotent_replay', true", self.collection_replay_migration)
+
+    def test_return_adjusted_collection_fails_closed_on_missing_credit_or_currency_mismatch(self):
+        for error in (
+            "completed_return_credit_missing_or_currency_mismatch",
+            "return_refund_currency_mismatch",
+        ):
+            with self.subTest(error=error):
+                self.assertIn(error, self.return_currency_guard_migration)
+        self.assertIn("sr.approved_refund_minor IS NULL", self.return_currency_guard_migration)
+        self.assertIn("rp.currency_code IS DISTINCT FROM", self.return_currency_guard_migration)
+        self.assertIn("customer_payment_journal_not_posted", self.return_currency_guard_migration)
+        self.assertIn("e.status = 'posted'", self.return_currency_guard_migration)
+        self.assertIn("pg_advisory_xact_lock", self.return_currency_guard_migration)
 
     def test_inventory_value_uses_saved_unit_cost_and_mapped_currency(self):
         self.assertIn("unitCostMinor: Long?", self.repository)
