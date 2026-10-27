@@ -364,9 +364,11 @@ internal fun ReportsCenterScreen(
                     "expense", "expenses", "cost_of_goods_sold", "cost_of_sales", "contra_revenue"
                 )
             }
+            val invalidCurrency = throughEnd.any { !it.currencyCode.matches(Regex("^[A-Z]{3}$")) }
             when {
                 unbalanced -> "توجد قيود مرحلة غير متزنة حسب العملة؛ تم حجب القوائم."
                 unknown -> "توجد حسابات بأنواع غير معروفة؛ يلزم تصنيف دليل الحسابات قبل اعتماد القوائم."
+                invalidCurrency -> "توجد سطور أستاذ بلا رمز عملة ISO صالح؛ تم حجب القوائم لمنع خلط العملات."
                 else -> ""
             }
         }
