@@ -111,6 +111,13 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn("statusFilter.isBlank() || row.status.contains(statusFilter.trim(), true)", self.screen)
         self.assertIn("rowFilter.isBlank() || row.name.contains(rowFilter.trim(), true)", self.screen)
 
+    def test_cloud_stock_reports_use_inventory_balances_and_movements(self):
+        self.assertIn("loadCommercialCloudStockAlerts(context)", self.screen)
+        self.assertIn("loadCommercialCloudStockMovements(context)", self.screen)
+        self.assertIn("cloudStockAlerts.filter { it.availableQuantity <= it.reorderPoint }", self.screen)
+        self.assertIn("offering.activity.organization_id=eq.$orgId", self.repository)
+        self.assertIn("commercial_stock_movements", self.repository)
+
     def test_csv_contains_period_source_timestamp_and_arabic_bom(self):
         self.assertIn('writer.write("\\uFEFF")', self.screen)
         self.assertIn('add(listOf("الفترة", startText + " — " + endText))', self.screen)
