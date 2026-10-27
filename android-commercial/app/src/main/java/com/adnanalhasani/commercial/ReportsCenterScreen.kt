@@ -371,6 +371,28 @@ internal fun ReportsCenterScreen(
             }
         }
     }
+    val costProfitError = when {
+        !cloudMode -> "تكلفة الربح التاريخية تتطلب سجلات تكلفة السحابة."
+        salesDocumentsLoadError.isNotBlank() -> salesDocumentsLoadError
+        returnsLoadError.isNotBlank() -> returnsLoadError
+        cloudSalesDocuments.any { doc ->
+            doc.saleStatus.equals("completed", true) &&
+                reportDateMillis(doc.createdAt)?.let { it >= startMillis && it < endExclusive } == true &&
+                (doc.lines.isEmpty() || doc.lines.any { it.costTotalMinor == null || it.costTotalMinor < 0L })
+        } -> "توجد بنود مبيعات في الفترة بلا تكلفة تاريخية مسجلة؛ لا يمكن اعتماد الربح."
+        cloudReturns.any { saleReturn ->
+            saleReturn.status.equals("completed", true) &&
+                reportDateMillis(saleReturn.completedAt)?.let { it >= startMillis && it < endExclusive } == true &&
+                (saleReturn.approvedRefundMinor == null ||
+                    saleReturn.items.any { it.restockedQuantity > 0 && (it.saleItemCostTotalMinor == null || it.saleItemQuantity <= 0) })
+        } -> "توجد مرتجعات مكتملة تفتقد مبلغ اعتماد أو تكلفة البند التاريخية اللازمة لتسوية الربح."
+        cloudReturns.any { saleReturn ->
+            saleReturn.status.equals("completed", true) &&
+                reportDateMillis(saleReturn.completedAt)?.let { it >= startMillis && it < endExclusive } == true &&
+                cloudSalesDocuments.any { it.id == saleReturn.saleId && it.taxMinor > 0L }
+        } -> "توجد مرتجعات لفواتير ضريبية؛ لم تُفصل حصة الضريبة في مبلغ الاسترداد، لذلك حُجب صافي الربح."
+        else -> ""
+    }
     val customerStatementError = when {
         !cloudMode -> "كشف العميل الكامل يتطلب دفتر الأستاذ السحابي."
         ledgerLinesLoadError.isNotBlank() -> ledgerLinesLoadError
@@ -398,6 +420,7 @@ internal fun ReportsCenterScreen(
             "سجل القيود المحاسبية" -> journalsLoadError
             "ميزان المراجعة حسب الحساب", "حركة دفتر الأستاذ العام", "كشف حساب محاسبي", "تفاصيل القيود المرحلة" -> ledgerLinesLoadError
             "قائمة الدخل والميزانية العمومية" -> ledgerStatementError
+            "تكلفة البضاعة والربح" -> costProfitError
             "التدفقات النقدية والصندوق" -> when {
                 glMappingsLoadError.isNotBlank() -> glMappingsLoadError
                 cloudGlMappings.none { it.mappingKey in setOf("cash", "bank", "card_clearing", "other_receipts") } -> "لا توجد حسابات نقدية أو بنكية مربوطة بدليل الحسابات."
@@ -456,7 +479,7 @@ internal fun ReportsCenterScreen(
             ReportCatalogItem("الضرائب والخصومات", "الضرائب والخصومات", "تفاصيل الضرائب والخصومات من المستندات", false, "لا تُخمن النسب أو مبالغ الضريبة إذا لم تسجل في المصدر."),
             ReportCatalogItem("أداء المستخدمين والفروع والمستودعات", "المستخدمون والعمليات", "مستخدم/فرع/مستودع محفوظ على المستند", false, "لا تتوفر كل هذه الأبعاد في نموذج البيانات المحمل حاليًا."),
 
-            ReportCatalogItem("تكلفة البضاعة والربح", "الأرباح والتكاليف", "تكلفة شراء موثوقة لكل بند ومرتجعات منفذة", false, "تكلفة الصنف المحلي قد تكون مفقودة أو غير تاريخية؛ لا يعرض ربحًا محاسبيًا معتمدًا.")
+            ReportCatalogItem("تكلفة البضاعة والربح", "الأرباح والتكاليف", "commercial_sale_items.cost_total_minor + المرتجعات المكتملة", cloudMode, "يعتمد على لقطة التكلفة المحفوظة مع بند البيع، ويعكس تكلفة البضاعة المرتجعة التي أعيد تخزينها؛ يحجب الربح إذا كانت التكلفة أو تسوية الضريبة غير مكتملة.")
         )
     }
     val filteredCatalog = catalog.filter {
