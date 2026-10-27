@@ -95,7 +95,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn("commercial_supplier_payments", loader)
         self.assertIn("journal.status=eq.posted", loader)
         self.assertIn('val id: String,', loader)
-        self.assertIn('if (id.isBlank() || obligationId.isBlank() || invoiceId.isBlank() || journalId.isBlank()', loader)
+        self.assertIn('if (id.isBlank() || obligationId.isBlank() || invoiceId.isBlank() || supplierId.isBlank() || journalId.isBlank()', loader)
 
     def test_inventory_movement_report_uses_scoped_source_and_preserves_fractional_quantity(self):
         self.assertIn('"حركة المخزون الفعلية" ->', self.screen)
