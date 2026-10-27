@@ -88,12 +88,28 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn('"كشف حركات الموردين" ->', self.screen)
         self.assertIn("loadCommercialCloudSupplierPaymentMovements(context)", self.screen)
         start = self.repository.index("internal fun loadCommercialCloudSupplierPaymentMovements(")
-        end = self.repository.index("\\ninternal data class CommercialCloudPurchaseLine(", start)
+        end = self.repository.index("\ninternal data class CommercialCloudPurchaseLine(", start)
         loader = self.repository[start:end]
         self.assertIn("commercial_supplier_payments", loader)
         self.assertIn("journal.status=eq.posted", loader)
         self.assertIn('val id: String,', loader)
         self.assertIn('if (id.isBlank() || obligationId.isBlank() || invoiceId.isBlank() || journalId.isBlank()', loader)
+
+    def test_inventory_movement_report_uses_scoped_source_and_preserves_fractional_quantity(self):
+        self.assertIn('"حركة المخزون الفعلية" ->', self.screen)
+        start = self.repository.index("internal fun loadCommercialCloudStockMovements(")
+        end = self.repository.index("\\ninternal data class CommercialCloudSupplierPaymentMovement(", start)
+        loader = self.repository[start:end]
+        self.assertIn("commercial_stock_movements", loader)
+        self.assertIn("offering.activity.organization_id=eq.$orgId", loader)
+        self.assertIn("quantity_delta", loader)
+        self.assertIn("quantityDelta.stripTrailingZeros().toPlainString()", self.screen)
+        self.assertIn("reportLineAmount(row, cloudMode)", self.screen)
+
+    def test_report_filters_apply_to_rendered_and_exported_rows(self):
+        self.assertIn("currencyFilter.isBlank() || row.currency.contains(currencyFilter.trim(), true)", self.screen)
+        self.assertIn("statusFilter.isBlank() || row.status.contains(statusFilter.trim(), true)", self.screen)
+        self.assertIn("rowFilter.isBlank() || row.name.contains(rowFilter.trim(), true)", self.screen)
 
     def test_csv_contains_period_source_timestamp_and_arabic_bom(self):
         self.assertIn('writer.write("\\uFEFF")', self.screen)
