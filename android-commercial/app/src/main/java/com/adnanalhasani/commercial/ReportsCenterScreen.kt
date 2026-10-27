@@ -427,7 +427,8 @@ internal fun ReportsCenterScreen(
         cloudLedgerLines.isEmpty() -> "لا توجد قيود مرحلة في دفتر الأستاذ؛ لا يمكن إنشاء كشف حساب محاسبي."
         customerPartyAccountsLoadError.isNotBlank() -> customerPartyAccountsLoadError
         cloudCustomerPartyAccounts.isEmpty() -> "لا توجد روابط لحسابات مراقبة العملاء في دليل الحسابات."
-        cloudGlMappings.none { it.mappingKey == "accounts_receivable" } -> "حساب مراقبة العملاء غير مربوط في دليل الحسابات."
+        cloudGlMappings.none { it.mappingKey == "accounts_receivable" && it.currencyCode.matches(Regex("^[A-Z]{3}$")) } -> "حساب مراقبة العملاء غير مربوط بعملة صالحة في دليل الحسابات."
+        cloudCustomerPartyAccounts.any { link -> cloudGlMappings.none { it.mappingKey == "accounts_receivable" && it.currencyCode == link.currencyCode } } -> "توجد عملة عميل بلا حساب مراقبة عملاء مطابق؛ تعذر اعتماد الكشف."
         cloudLedgerLines.any { line ->
             line.accountId in cloudGlMappings.filter { it.mappingKey == "accounts_receivable" }.map { it.ledgerAccountId }.toSet() &&
                 (line.partyAccountId.isBlank() || cloudCustomerPartyAccounts.none { link ->
@@ -443,7 +444,8 @@ internal fun ReportsCenterScreen(
         supplierPartyAccountsLoadError.isNotBlank() -> supplierPartyAccountsLoadError
         supplierControlAccountsLoadError.isNotBlank() -> supplierControlAccountsLoadError
         cloudSupplierPartyAccounts.isEmpty() -> "لا توجد روابط لحسابات مراقبة الموردين في دليل الحسابات."
-        cloudSupplierControlAccounts.none { it.accountRole == "accounts_payable" } -> "حساب مراقبة الموردين غير مربوط في دليل الحسابات."
+        cloudSupplierControlAccounts.none { it.accountRole == "accounts_payable" && it.currencyCode.matches(Regex("^[A-Z]{3}$")) } -> "حساب مراقبة الموردين غير مربوط بعملة صالحة في دليل الحسابات."
+        cloudSupplierPartyAccounts.any { link -> cloudSupplierControlAccounts.none { it.accountRole == "accounts_payable" && it.currencyCode == link.currencyCode } } -> "توجد عملة مورد بلا حساب مراقبة موردين مطابق؛ تعذر اعتماد الكشف."
         cloudLedgerLines.any { line ->
             line.accountId in cloudSupplierControlAccounts.filter { it.accountRole == "accounts_payable" }.map { it.ledgerAccountId }.toSet() &&
                 (line.partyAccountId.isBlank() || cloudSupplierPartyAccounts.none { link ->
@@ -744,7 +746,12 @@ internal fun ReportsCenterScreen(
             cloudCustomerPartyAccounts.filter { customerFilter.isBlank() || (names[it.partyId] ?: it.partyId).contains(customerFilter.trim(), true) || it.partyId.contains(customerFilter.trim(), true) }
                 .groupBy { it.partyId to it.currencyCode }.flatMap { (party, links) ->
                     val accountIds = links.map { it.partyAccountId }.toSet()
-                    val movements = cloudLedgerLines.filter { it.partyAccountId in accountIds && it.currencyCode == party.second }
+                    val controlAccountIds = cloudGlMappings.filter {
+                        it.mappingKey == "accounts_receivable" && it.currencyCode == party.second
+                    }.map { it.ledgerAccountId }.toSet()
+                    val movements = cloudLedgerLines.filter {
+                        it.partyAccountId in accountIds && it.accountId in controlAccountIds && it.currencyCode == party.second
+                    }
                         .mapNotNull { line ->
                             val date = runCatching { LocalDate.parse(line.entryDate.take(10)) }.getOrNull() ?: return@mapNotNull null
                             Triple(line, date, line.debitMinor - line.creditMinor)
@@ -770,7 +777,12 @@ internal fun ReportsCenterScreen(
             cloudSupplierPartyAccounts.filter { supplierFilter.isBlank() || (names[it.partyId] ?: it.partyId).contains(supplierFilter.trim(), true) || it.partyId.contains(supplierFilter.trim(), true) }
                 .groupBy { it.partyId to it.currencyCode }.flatMap { (party, links) ->
                     val accountIds = links.map { it.partyAccountId }.toSet()
-                    val movements = cloudLedgerLines.filter { it.partyAccountId in accountIds && it.currencyCode == party.second }
+                    val controlAccountIds = cloudSupplierControlAccounts.filter {
+                        it.accountRole == "accounts_payable" && it.currencyCode == party.second
+                    }.map { it.ledgerAccountId }.toSet()
+                    val movements = cloudLedgerLines.filter {
+                        it.partyAccountId in accountIds && it.accountId in controlAccountIds && it.currencyCode == party.second
+                    }
                         .mapNotNull { line ->
                             val date = runCatching { LocalDate.parse(line.entryDate.take(10)) }.getOrNull() ?: return@mapNotNull null
                             Triple(line, date, line.creditMinor - line.debitMinor)
