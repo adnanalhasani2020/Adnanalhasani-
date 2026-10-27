@@ -637,6 +637,58 @@ internal fun ReportsCenterScreen(
             ReportLine(row.createdAt.take(10), row.receiptNumber, row.customerName, approved, row.currencyCode,
                 "الطلب: ${row.status} · الاسترداد: ${row.refundStatus} · المخزون: ${row.restockStatus}")
         }.sortedByDescending { it.date }
+        "الرصيد المحاسبي الكامل للعملاء" -> if (customerStatementError.isNotBlank()) emptyList() else {
+            val names = cloudSalesDocuments.filter { it.customerId.isNotBlank() }
+                .associate { it.customerId to it.customerName.ifBlank { it.customerId } }
+            cloudCustomerPartyAccounts.filter { customerFilter.isBlank() || (names[it.partyId] ?: it.partyId).contains(customerFilter.trim(), true) || it.partyId.contains(customerFilter.trim(), true) }
+                .groupBy { it.partyId to it.currencyCode }.flatMap { (party, links) ->
+                    val accountIds = links.map { it.partyAccountId }.toSet()
+                    val movements = cloudLedgerLines.filter { it.partyAccountId in accountIds && it.currencyCode == party.second }
+                        .mapNotNull { line ->
+                            val date = runCatching { LocalDate.parse(line.entryDate.take(10)) }.getOrNull() ?: return@mapNotNull null
+                            Triple(line, date, line.debitMinor - line.creditMinor)
+                        }.sortedWith(compareBy<Triple<CommercialCloudJournalLine, LocalDate, Long>> { it.second }.thenBy { it.first.entryNumber }.thenBy { it.first.lineNumber })
+                    val opening = movements.filter { it.second < (startDate ?: LocalDate.MIN) }.sumOf { it.third }
+                    val period = movements.filter { startDate != null && endDate != null && !it.second.isBefore(startDate) && !it.second.isAfter(endDate) }
+                    if (period.isEmpty() && opening == 0L) emptyList() else buildList {
+                        var balance = opening
+                        val name = names[party.first] ?: party.first
+                        if (opening != 0L) add(ReportLine(startText, "رصيد سابق", name, opening, party.second, "رصيد افتتاحي من دفتر الأستاذ · العميل ${party.first}"))
+                        period.forEach { (line, date, amount) ->
+                            balance = Math.addExact(balance, amount)
+                            add(ReportLine(date.toString(), "قيد ${line.entryNumber} · سطر ${line.lineNumber}", name, amount, party.second,
+                                "${line.entryDescription} · المصدر ${line.sourceType}:${line.sourceId} · الرصيد ${reportMoney(balance, party.second, true)}"))
+                        }
+                        add(ReportLine(endText, "رصيد ختامي", name, balance, party.second, "رصيد حساب مراقبة العميل من القيود المرحلة · ${party.first}"))
+                    }
+                }
+        }
+        "أرصدة الموردين والمستحقات" -> if (supplierStatementError.isNotBlank()) emptyList() else {
+            val names = cloudPurchases.filter { it.supplierId.isNotBlank() }
+                .associate { it.supplierId to it.supplierName.ifBlank { it.supplierId } }
+            cloudSupplierPartyAccounts.filter { supplierFilter.isBlank() || (names[it.partyId] ?: it.partyId).contains(supplierFilter.trim(), true) || it.partyId.contains(supplierFilter.trim(), true) }
+                .groupBy { it.partyId to it.currencyCode }.flatMap { (party, links) ->
+                    val accountIds = links.map { it.partyAccountId }.toSet()
+                    val movements = cloudLedgerLines.filter { it.partyAccountId in accountIds && it.currencyCode == party.second }
+                        .mapNotNull { line ->
+                            val date = runCatching { LocalDate.parse(line.entryDate.take(10)) }.getOrNull() ?: return@mapNotNull null
+                            Triple(line, date, line.creditMinor - line.debitMinor)
+                        }.sortedWith(compareBy<Triple<CommercialCloudJournalLine, LocalDate, Long>> { it.second }.thenBy { it.first.entryNumber }.thenBy { it.first.lineNumber })
+                    val opening = movements.filter { it.second < (startDate ?: LocalDate.MIN) }.sumOf { it.third }
+                    val period = movements.filter { startDate != null && endDate != null && !it.second.isBefore(startDate) && !it.second.isAfter(endDate) }
+                    if (period.isEmpty() && opening == 0L) emptyList() else buildList {
+                        var balance = opening
+                        val name = names[party.first] ?: party.first
+                        if (opening != 0L) add(ReportLine(startText, "رصيد سابق", name, opening, party.second, "رصيد افتتاحي من دفتر الأستاذ · المورد ${party.first}"))
+                        period.forEach { (line, date, amount) ->
+                            balance = Math.addExact(balance, amount)
+                            add(ReportLine(date.toString(), "قيد ${line.entryNumber} · سطر ${line.lineNumber}", name, amount, party.second,
+                                "${line.entryDescription} · المصدر ${line.sourceType}:${line.sourceId} · الرصيد ${reportMoney(balance, party.second, true)}"))
+                        }
+                        add(ReportLine(endText, "رصيد ختامي", name, balance, party.second, "رصيد حساب مراقبة المورد من القيود المرحلة · ${party.first}"))
+                    }
+                }
+        }
         "أرصدة العملاء وكشف الحساب" -> {
             val movements = buildList {
                 cloudSalesDocuments.filter { it.saleStatus.equals("completed", true) && it.customerId.isNotBlank() }.forEach { doc ->
@@ -813,7 +865,7 @@ internal fun ReportsCenterScreen(
     }
     // Invalid dates must never widen a report to the full history.
     val selectedReportSourceError = sourceErrorForReport(selectedReport)
-    val movementStatement = selectedReport in setOf("أرصدة العملاء وكشف الحساب", "كشف حركات الموردين")
+    val movementStatement = selectedReport in setOf("أرصدة العملاء وكشف الحساب", "كشف حركات الموردين", "الرصيد المحاسبي الكامل للعملاء", "أرصدة الموردين والمستحقات")
     val selectedRows = if (dateError || (cloudMode && (cloudLoading || selectedReportSourceError.isNotBlank()))) emptyList() else selectedRowsUnvalidated.filter { row ->
         (movementStatement || rowFilter.isBlank() || row.name.contains(rowFilter.trim(), true) || row.reference.contains(rowFilter.trim(), true)) &&
             (currencyFilter.isBlank() || row.currency.contains(currencyFilter.trim(), true)) &&
