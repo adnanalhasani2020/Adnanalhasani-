@@ -97,7 +97,7 @@ private fun localSaleUnits(product: Product): List<LocalSaleUnit> {
         listOf(LocalSaleUnit(product.unitCode.ifBlank { "EA" }, "base", product.unitCode.ifBlank { "EA" }, 1.0, product.barcode, product.imageUrl, true))
     }
 }
-internal data class SaleRecord(val number: Int, val product: String, val quantity: Int, val total: Int, val credit: Boolean, val customer: String = "", val paid: Int = 0, val createdAt: Long = System.currentTimeMillis(), val unitCost: Int = 0, val unitCode: String = "EA", val baseQuantitySold: Int = quantity, val currencyCode: String = "YER")
+internal data class SaleRecord(val number: Int, val product: String, val quantity: Int, val total: Int, val credit: Boolean, val customer: String = "", val paid: Int = 0, val createdAt: Long = System.currentTimeMillis(), val unitCost: Int = 0, val unitCode: String = "EA", val baseQuantitySold: Int = quantity, val currencyCode: String = "YER", val status: String = "completed")
 internal data class SettlementRecord(val invoiceNumber: Int, val customer: String, val amount: Int, val timestamp: Long = System.currentTimeMillis())
 internal data class ExpenseRecord(val id: Long, val category: String, val amount: Int, val note: String, val timestamp: Long = System.currentTimeMillis())
 private fun money(value: Int): String = String.format(Locale.US, "%,d ر.ي", value)
@@ -142,7 +142,7 @@ private fun loadSales(context: Context): List<SaleRecord> {
         List(json.length()) { i ->
             val item = json.getJSONObject(i)
             SaleRecord(item.getInt("number"), item.getString("product"), item.getInt("quantity"),
-                item.getInt("total"), item.getBoolean("credit"), item.optString("customer", ""), item.optInt("paid", 0), item.optLong("createdAt", 0L), item.optInt("unitCost", 0), item.optString("unitCode", "EA"), item.optInt("baseQuantitySold", item.optInt("quantity", 1)), item.optString("currencyCode", "YER").ifBlank { "YER" })
+                item.getInt("total"), item.getBoolean("credit"), item.optString("customer", ""), item.optInt("paid", 0), item.optLong("createdAt", 0L), item.optInt("unitCost", 0), item.optString("unitCode", "EA"), item.optInt("baseQuantitySold", item.optInt("quantity", 1)), item.optString("currencyCode", "YER").ifBlank { "YER" }, item.optString("status", "completed").ifBlank { "completed" })
         }
     }.getOrElse { emptyList() }
 }
@@ -193,7 +193,7 @@ private fun saveSales(context: Context, items: List<SaleRecord>) {
     items.forEach { item ->
         json.put(JSONObject().put("number", item.number).put("product", item.product)
             .put("quantity", item.quantity).put("total", item.total).put("credit", item.credit)
-            .put("customer", item.customer).put("paid", item.paid).put("createdAt", item.createdAt).put("unitCost", item.unitCost).put("unitCode", item.unitCode).put("baseQuantitySold", item.baseQuantitySold).put("currencyCode", item.currencyCode))
+            .put("customer", item.customer).put("paid", item.paid).put("createdAt", item.createdAt).put("unitCost", item.unitCost).put("unitCode", item.unitCode).put("baseQuantitySold", item.baseQuantitySold).put("currencyCode", item.currencyCode).put("status", item.status))
     }
     context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).edit().putString(scopedStoreKey(context, SALES_KEY), json.toString()).apply()
 }
@@ -1330,7 +1330,7 @@ private fun CommercialCloudReportsScreen(context: Context, onBack: () -> Unit) {
     fun timestamp(value: String): Long? = runCatching { java.time.Instant.parse(value).toEpochMilli() }.getOrNull()
         ?: runCatching { java.time.OffsetDateTime.parse(value).toInstant().toEpochMilli() }.getOrNull()
     fun within(value: String): Boolean = timestamp(value)?.let { it >= startMs && it < endMs } ?: false
-    val periodSales = sales.filter { it.createdAt >= startMs && it.createdAt < endMs && it.currencyCode.isNotBlank() }
+    val periodSales = sales.filter { it.status.equals("completed", true) && it.createdAt >= startMs && it.createdAt < endMs && it.currencyCode.isNotBlank() }
     val periodExpenses = expenses.filter { it.canceledAt.isBlank() && within(it.recordedAt) }
     val periodPayments = payments.filter { it.status.equals("succeeded", true) && it.currencyCode.isNotBlank() && within(it.createdAt) }
     val periodReturns = returns.filter { it.status.equals("completed", true) && it.approvedRefundMinor != null && within(it.createdAt) }
