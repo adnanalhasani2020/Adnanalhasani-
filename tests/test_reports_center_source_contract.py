@@ -76,6 +76,24 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn("PrintManager", self.screen)
         self.assertIn('Text("معاينة وطباعة")', self.screen)
 
+    def test_customer_statement_uses_invoice_payments_returns_and_customer_filter(self):
+        self.assertIn('"أرصدة العملاء وكشف الحساب" ->', self.screen)
+        self.assertIn("doc.customerId.isNotBlank()", self.screen)
+        self.assertIn('it.status.lowercase(Locale.ROOT) in setOf("succeeded", "partially_refunded", "refunded")', self.screen)
+        self.assertIn('it.status.equals("completed", true)', self.screen)
+        self.assertIn('it.refundStatus.equals("refunded", true)', self.screen)
+        self.assertIn("رصيد الختامي حسب الحركات المعروضة", self.screen)
+
+    def test_supplier_statement_uses_unique_posted_payment_rows_not_journal_totals(self):
+        self.assertIn('"كشف حركات الموردين" ->', self.screen)
+        self.assertIn("loadCommercialCloudSupplierPaymentMovements(context)", self.screen)
+        start = self.repository.index("internal fun loadCommercialCloudSupplierPaymentMovements(")
+        end = self.repository.index("\\ninternal data class CommercialCloudPurchaseLine(", start)
+        loader = self.repository[start:end]
+        self.assertIn("commercial_supplier_payments", loader)
+        self.assertIn("journal.status=eq.posted", loader)
+        self.assertIn("UNIQUE", self.repository[self.repository.index("CREATE TABLE IF NOT EXISTS public.commercial_supplier_payments"):self.repository.index("CREATE INDEX IF NOT EXISTS commercial_supplier_obligations_supplier_idx")])
+
     def test_csv_contains_period_source_timestamp_and_arabic_bom(self):
         self.assertIn('writer.write("\\uFEFF")', self.screen)
         self.assertIn('add(listOf("الفترة", startText + " — " + endText))', self.screen)
