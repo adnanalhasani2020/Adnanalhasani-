@@ -65,6 +65,11 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn('selectedReport != "كشف حساب محاسبي" || (accountQuery.isNotBlank()', self.screen)
         self.assertIn('label = { Text("رمز الحساب أو اسمه") }', self.screen)
 
+    def test_pdf_export_has_native_renderer(self):
+        self.assertIn("writeReportPdf", self.screen)
+        self.assertIn("application/pdf", self.screen)
+        self.assertIn("Intent.ACTION_SEND", self.screen)
+
     def test_csv_contains_period_source_timestamp_and_arabic_bom(self):
         self.assertIn('writer.write("\\uFEFF")', self.screen)
         self.assertIn('add(listOf("الفترة", startText + " — " + endText))', self.screen)
