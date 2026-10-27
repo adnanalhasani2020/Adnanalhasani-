@@ -700,8 +700,7 @@ internal fun ReportsCenterScreen(
     // Invalid dates must never widen a report to the full history.
     val selectedReportSourceError = sourceErrorForReport(selectedReport)
     val movementStatement = selectedReport in setOf("أرصدة العملاء وكشف الحساب", "كشف حركات الموردين")
-    val selectedRows = if (dateError || (cloudMode && (cloudLoading || cloudLoadError.isNotBlank())) ||
-        (cloudMode && selectedReportSourceError.isNotBlank())) emptyList() else selectedRowsUnvalidated.filter { row ->
+    val selectedRows = if (dateError || (cloudMode && (cloudLoading || selectedReportSourceError.isNotBlank()))) emptyList() else selectedRowsUnvalidated.filter { row ->
         (movementStatement || rowFilter.isBlank() || row.name.contains(rowFilter.trim(), true) || row.reference.contains(rowFilter.trim(), true)) &&
             (currencyFilter.isBlank() || row.currency.contains(currencyFilter.trim(), true)) &&
             (movementStatement || statusFilter.isBlank() || row.status.contains(statusFilter.trim(), true))
@@ -936,8 +935,8 @@ internal fun ReportsCenterScreen(
                         xlsxLauncher.launch("mutajri-report-${selectedReport.hashCode()}.xlsx")
                     }) { Icon(Icons.Default.TableChart, null); Spacer(Modifier.width(4.dp)); Text("Excel XLSX") }
                     OutlinedButton(onClick = {
-                        if (dateError || (cloudMode && (cloudLoading || cloudLoadError.isNotBlank()))) {
-                            error = "لا يمكن تصدير تقرير بفترة غير صالحة أو بمصدر بيانات غير مكتمل."
+                        if (dateError || (cloudMode && (cloudLoading || selectedReportSourceError.isNotBlank()))) {
+                            error = "لا يمكن تصدير التقرير: تحقق من الفترة واكتمال مصادر هذا التقرير."
                         } else {
                             exportTitle = selectedReport
                             exportRows = buildList {
@@ -956,8 +955,8 @@ internal fun ReportsCenterScreen(
                         }
                     }) { Icon(Icons.Default.PictureAsPdf, null); Spacer(Modifier.width(4.dp)); Text("PDF ومشاركة") }
                     OutlinedButton(onClick = {
-                        if (dateError || (cloudMode && (cloudLoading || cloudLoadError.isNotBlank()))) {
-                            error = "لا يمكن طباعة تقرير بفترة غير صالحة أو بمصدر بيانات غير مكتمل."
+                        if (dateError || (cloudMode && (cloudLoading || selectedReportSourceError.isNotBlank()))) {
+                            error = "لا يمكن طباعة التقرير: تحقق من الفترة واكتمال مصادر هذا التقرير."
                         } else {
                             exportTitle = selectedReport
                             exportRows = buildList {
@@ -983,7 +982,7 @@ internal fun ReportsCenterScreen(
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(row.name, fontWeight = FontWeight.SemiBold, color = ReportInk)
                         Text("${row.reference} · ${row.date}", color = ReportMuted, fontSize = 11.sp)
-                        Text(if (row.currency.isBlank() || row.currency == "-") "${java.text.NumberFormat.getNumberInstance(Locale.US).format(row.amount)} ${row.currency}" else reportMoney(row.amount, row.currency, cloudMode), color = ReportGreen, fontWeight = FontWeight.Bold)
+                        Text(reportLineAmount(row, cloudMode), color = ReportGreen, fontWeight = FontWeight.Bold)
                         if (row.status.isNotBlank()) Text(row.status, color = ReportMuted, fontSize = 11.sp)
                     }
                 }
