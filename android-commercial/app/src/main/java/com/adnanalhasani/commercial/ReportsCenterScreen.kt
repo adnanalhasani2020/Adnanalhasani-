@@ -1051,7 +1051,7 @@ internal fun ReportsCenterScreen(
                             .setScale(0, java.math.RoundingMode.HALF_UP).longValueExact()
                     }.getOrElse { throw IllegalStateException("تجاوزت قيمة المخزون نطاق الأرقام المدعوم.") }
                     totalValue = Math.addExact(totalValue, value)
-                    add(ReportLine(endText, item.offeringId, item.productName, value, currency,
+                    add(ReportLine("حالي", item.offeringId, item.productName, value, currency,
                         "الكمية: ${item.quantityOnHand.stripTrailingZeros().toPlainString()} ${item.unitName} · تكلفة الوحدة المسجلة: ${reportMoney(item.unitCostMinor ?: 0L, currency, true)} · قيمة حالية فقط"))
                 }
                 add(ReportLine(endText, "إجمالي", "إجمالي قيمة المخزون الحالي", totalValue, currency,
@@ -1298,7 +1298,7 @@ internal fun ReportsCenterScreen(
                         exportTitle = selectedReport
                         exportRows = buildList {
                             add(listOf("التقرير", exportTitle))
-                            add(listOf("الفترة", startText + " — " + endText))
+                            add(listOf("الفترة", if (exportTitle == "التقييم المالي الحالي للمخزون") "لقطة حالية للموقع المختار؛ ليست تاريخية" else startText + " — " + endText))
                             add(listOf("مصدر البيانات", if (cloudMode) "السحابة" else "محلي على الجهاز"))
                             add(listOf("تاريخ التصدير", java.time.LocalDateTime.now().toString()))
                             add(listOf("التاريخ", "المرجع", "الاسم", "المبلغ/الكمية", "العملة", "الحالة"))
@@ -1310,7 +1310,7 @@ internal fun ReportsCenterScreen(
                         exportTitle = selectedReport
                         exportRows = buildList {
                             add(listOf("التقرير", exportTitle))
-                            add(listOf("الفترة", startText + " — " + endText))
+                            add(listOf("الفترة", if (exportTitle == "التقييم المالي الحالي للمخزون") "لقطة حالية للموقع المختار؛ ليست تاريخية" else startText + " — " + endText))
                             add(listOf("مصدر البيانات", if (cloudMode) "السحابة" else "محلي على الجهاز"))
                             add(listOf("تاريخ التصدير", java.time.LocalDateTime.now().toString()))
                             add(listOf("التاريخ", "المرجع", "الاسم", "المبلغ/الكمية", "العملة", "الحالة"))
@@ -1325,7 +1325,7 @@ internal fun ReportsCenterScreen(
                             exportTitle = selectedReport
                             exportRows = buildList {
                                 add(listOf("التقرير", exportTitle))
-                                add(listOf("الفترة", startText + " — " + endText))
+                                add(listOf("الفترة", if (exportTitle == "التقييم المالي الحالي للمخزون") "لقطة حالية للموقع المختار؛ ليست تاريخية" else startText + " — " + endText))
                                 add(listOf("مصدر البيانات", if (cloudMode) "السحابة" else "محلي على الجهاز"))
                                 add(listOf("تاريخ التصدير", java.time.LocalDateTime.now().toString()))
                                 add(listOf("التاريخ", "المرجع", "الاسم", "المبلغ/الكمية", "العملة", "الحالة"))
@@ -1345,7 +1345,7 @@ internal fun ReportsCenterScreen(
                             exportTitle = selectedReport
                             exportRows = buildList {
                                 add(listOf("التقرير", exportTitle))
-                                add(listOf("الفترة", startText + " — " + endText))
+                                add(listOf("الفترة", if (exportTitle == "التقييم المالي الحالي للمخزون") "لقطة حالية للموقع المختار؛ ليست تاريخية" else startText + " — " + endText))
                                 add(listOf("مصدر البيانات", if (cloudMode) "السحابة" else "محلي على الجهاز"))
                                 add(listOf("تاريخ التصدير", java.time.LocalDateTime.now().toString()))
                                 add(listOf("التاريخ", "المرجع", "الاسم", "المبلغ/الكمية", "العملة", "الحالة"))
