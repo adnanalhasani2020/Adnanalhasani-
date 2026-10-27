@@ -843,6 +843,12 @@ internal fun ReportsCenterScreen(
                                 add(ReportLine(date.toString(), "قيد ${line.entryNumber} · سطر ${line.lineNumber}", accountName, amount, currency,
                                     "${line.entryDescription} · ${line.sourceType}:${line.sourceId} · الحساب ${line.accountCode} · الرصيد المتحرك ${reportMoney(balance, currency, true)}"))
                             }
+                            val debitMovements = periodMoves.sumOf { if (it.third > 0L) it.third else 0L }
+                            val creditMovements = periodMoves.sumOf { if (it.third < 0L) -it.third else 0L }
+                            add(ReportLine("${startText} — ${endText}", "إجمالي الحركة المدينة", accountName, debitMovements, currency,
+                                "إجمالي الزيادات المدينة على حساب النقد/البنك خلال الفترة؛ قد تشمل تحويلات داخلية"))
+                            add(ReportLine("${startText} — ${endText}", "إجمالي الحركة الدائنة", accountName, -creditMovements, currency,
+                                "إجمالي التخفيضات الدائنة على حساب النقد/البنك خلال الفترة؛ قد تشمل تحويلات داخلية"))
                             add(ReportLine(endText, "رصيد ختامي", accountName, balance, currency, "الرصيد الافتتاحي + الحركة المرحلة · حساب ${accountKey.second}"))
                         }
                 }
