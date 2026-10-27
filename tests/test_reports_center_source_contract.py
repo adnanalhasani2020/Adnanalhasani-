@@ -58,11 +58,11 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
 
     def test_invalid_date_never_expands_sales_to_all_history(self):
         self.assertIn("require(!dateError) { \"لا يمكن تصدير تقرير بفترة غير صالحة.\" }", self.screen)
-        self.assertIn("require(!cloudMode || (!cloudLoading && cloudLoadError.isBlank()))", self.screen)
-        self.assertIn("val selectedRows = if (dateError || (cloudMode && (cloudLoading || cloudLoadError.isNotBlank())) ||", self.screen)
-        self.assertIn("selectedReportSourceError.isNotBlank())) emptyList() else selectedRowsUnvalidated.filter", self.screen)
+        self.assertIn("require(!cloudMode || (!cloudLoading && selectedReportSourceError.isBlank()))", self.screen)
+        self.assertIn("val selectedRows = if (dateError || (cloudMode && (cloudLoading || selectedReportSourceError.isNotBlank()))) emptyList()", self.screen)
         self.assertIn("val inPeriodSales = if (dateError) emptyList()", self.screen)
-        self.assertIn("val currencyTotal = if (dateError || (cloudMode && (cloudLoading || cloudLoadError.isNotBlank()))) emptyMap()", self.screen)
+        self.assertIn("val sourceErrorForReport: (String) -> String", self.screen)
+        self.assertIn("val currencyTotal = if (dateError || (cloudMode && (cloudLoading || salesDocumentsLoadError.isNotBlank()))) emptyMap()", self.screen)
         self.assertIn("لا يمكن حساب الملخص: تحقق من الفترة المحددة", self.screen)
 
     def test_ledger_account_statement_requires_account_filter(self):
