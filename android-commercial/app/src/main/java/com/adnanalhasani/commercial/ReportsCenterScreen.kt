@@ -53,6 +53,7 @@ private fun reportMoney(amount: Long, currency: String, cloudMinorUnits: Boolean
 
 private fun reportDateMillis(value: String): Long? =
     runCatching { Instant.parse(value).toEpochMilli() }.getOrNull()
+        ?: runCatching { LocalDate.parse(value.take(10)).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() }.getOrNull()
 
 private data class ReportCatalogItem(val title: String, val category: String, val source: String, val supported: Boolean, val note: String)
 private data class ReportLine(val date: String, val reference: String, val name: String, val amount: Long, val currency: String, val status: String)
@@ -83,6 +84,7 @@ internal fun ReportsCenterScreen(
     var cloudReturns by remember { mutableStateOf<List<CommercialCloudSaleReturn>>(emptyList()) }
     var cloudPayments by remember { mutableStateOf<List<CommercialCloudRecord>>(emptyList()) }
     var cloudJournals by remember { mutableStateOf<List<CommercialCloudRecord>>(emptyList()) }
+    var cloudLedgerLines by remember { mutableStateOf<List<CommercialCloudJournalLine>>(emptyList()) }
     var cloudExpenses by remember { mutableStateOf<List<CommercialCloudExpenseVoucher>>(emptyList()) }
     var cloudLoading by remember { mutableStateOf(false) }
     var cloudLoadError by remember { mutableStateOf("") }
@@ -98,6 +100,7 @@ internal fun ReportsCenterScreen(
             val returns = runCatching { loadCommercialCloudSaleReturns(context) }
             val payments = runCatching { loadCommercialCloudRecords(context, "payments") }
             val journals = runCatching { loadCommercialCloudRecords(context, "journals") }
+            val ledgerLines = runCatching { loadCommercialCloudPostedJournalLines(context) }
             val expenses = runCatching { loadCommercialCloudExpenses(context) }
             ReportMain.post {
                 cloudLoading = false
@@ -106,10 +109,11 @@ internal fun ReportsCenterScreen(
                 if (returns.isSuccess) cloudReturns = returns.getOrThrow()
                 if (payments.isSuccess) cloudPayments = payments.getOrThrow()
                 if (journals.isSuccess) cloudJournals = journals.getOrThrow()
+                if (ledgerLines.isSuccess) cloudLedgerLines = ledgerLines.getOrThrow()
                 if (expenses.isSuccess) cloudExpenses = expenses.getOrThrow()
                 val errors = listOf(
                     salesDocuments.exceptionOrNull(), purchases.exceptionOrNull(), returns.exceptionOrNull(), payments.exceptionOrNull(),
-                    journals.exceptionOrNull(), expenses.exceptionOrNull()
+                    journals.exceptionOrNull(), ledgerLines.exceptionOrNull(), expenses.exceptionOrNull()
                 ).filterNotNull()
                 cloudLoadError = errors.firstOrNull()?.message ?: if (errors.isNotEmpty()) "تعذر تحميل بعض مصادر التقارير." else ""
             }
@@ -143,7 +147,9 @@ internal fun ReportsCenterScreen(
             ReportCatalogItem("أرصدة العملاء وكشف الحساب", "العملاء والديون", "حركات الفواتير والتحصيل والمرتجعات والتسويات", false, "يتطلب دفتر حركات موحدًا ومطابقة المرتجعات والتسويات؛ لا يصح استنتاج الرصيد من الفواتير وحدها."),
             ReportCatalogItem("أرصدة الموردين والمستحقات", "الموردون والمستحقات", "فواتير المورد والمدفوعات والمرتجعات", false, "يتطلب مطابقة الالتزامات والدفعات والمرتجعات والتسويات."),
             ReportCatalogItem("سندات القبض والصرف", "السندات والتحصيل والصرف", "commercial_payments وحالة كل دفعة", cloudMode, "يعرض الدفعات الناجحة فقط؛ لا تُجمع قيود السند والدفعة مرتين."),
-            ReportCatalogItem("سجل القيود المحاسبية", "المحاسبة والمالية", "commercial_journal_entries", cloudMode, "قائمة قراءة فقط لحالات القيود ومصادرها؛ لا تُعرض كميزان مراجعة أو قائمة مالية."),
+            ReportCatalogItem("سجل القيود المحاسبية", "المحاسبة والمالية", "commercial_journal_entries", cloudMode, "قائمة قراءة فقط لحالات القيود ومصادرها."),
+            ReportCatalogItem("ميزان المراجعة حسب الحساب", "المحاسبة والمالية", "commercial_journal_lines + commercial_ledger_accounts + القيود المرحلة", cloudMode, "رصيد حتى نهاية التاريخ المحدد، مع إظهار المدين والدائن والفروقات حسب العملة."),
+            ReportCatalogItem("حركة دفتر الأستاذ العام", "المحاسبة والمالية", "سطور القيود المرحلة ومصادرها", cloudMode, "تفاصيل سطور القيود المرحلة ضمن الفترة؛ ليست كشف حساب لحساب واحد لعدم وجود مرشح حساب في هذه النسخة."),
 
             ReportCatalogItem("ميزان المراجعة", "المحاسبة والمالية", "سطور القيود المرحلة والمتوازنة", false, "غير متاح كتقرير معتمد قبل التحقق من دفتر الأستاذ والقيود المرحلة."),
             ReportCatalogItem("دفتر الأستاذ وكشف حركة الحساب", "المحاسبة والمالية", "قيود مرحلة مربوطة بالحسابات", false, "يلزم مصدر قيود موحد مع ربط الحسابات ومصدر العملية."),
@@ -265,6 +271,34 @@ internal fun ReportsCenterScreen(
         }.map { row ->
             ReportLine(row.createdAt.take(10), row.id, row.title, row.amountMinor, row.currencyCode, row.status)
         }.sortedByDescending { it.date }
+        "ميزان المراجعة حسب الحساب" -> {
+            val throughEnd = cloudLedgerLines.filter { line ->
+                val date = runCatching { LocalDate.parse(line.entryDate.take(10)) }.getOrNull()
+                date != null && endDate != null && !date.isAfter(endDate)
+            }
+            val accountRows = throughEnd.groupBy { Triple(it.accountId, it.accountName.ifBlank { "حساب غير معروف" }, it.currencyCode.ifBlank { "غير محددة" }) }
+                .map { (key, rows) ->
+                    val debit = rows.sumOf { it.debitMinor }
+                    val credit = rows.sumOf { it.creditMinor }
+                    ReportLine(endText, key.first, key.second, debit - credit, key.third,
+                        "مدين: ${reportMoney(debit, key.third, true)} · دائن: ${reportMoney(credit, key.third, true)}")
+                }
+            val totals = throughEnd.groupBy { it.currencyCode.ifBlank { "غير محددة" } }.map { (currency, rows) ->
+                val debit = rows.sumOf { it.debitMinor }
+                val credit = rows.sumOf { it.creditMinor }
+                ReportLine(endText, "إجمالي", "إجمالي الميزان", debit - credit, currency,
+                    "إجمالي المدين: ${reportMoney(debit, currency, true)} · إجمالي الدائن: ${reportMoney(credit, currency, true)} · الفرق: ${reportMoney(debit - credit, currency, true)}")
+            }
+            accountRows.sortedBy { it.reference } + totals
+        }
+        "حركة دفتر الأستاذ العام" -> cloudLedgerLines.filter { line ->
+            val timestamp = reportDateMillis(line.entryDate)
+            timestamp != null && timestamp >= startMillis && timestamp < endExclusive
+        }.map { line ->
+            ReportLine(line.entryDate.take(10), line.entryNumber.ifBlank { line.entryId }, "${line.accountCode} · ${line.accountName}",
+                line.debitMinor - line.creditMinor, line.currencyCode,
+                "قيد ${line.entryNumber} · مدين: ${line.debitMinor} · دائن: ${line.creditMinor} · مصدر: ${line.sourceType} ${line.sourceId}")
+        }.sortedByDescending { it.date }
         "سجل القيود المحاسبية" -> cloudJournals.filter { row ->
             val timestamp = reportDateMillis(row.createdAt)
             timestamp != null && timestamp >= startMillis && timestamp < endExclusive
@@ -376,7 +410,8 @@ internal fun ReportsCenterScreen(
                         "ملخص المبيعات حسب الفترة", "تفاصيل فواتير المبيعات", "المبيعات حسب الصنف",
                         "المبيعات حسب العميل", "المبيعات النقدية والآجلة", "متوسط قيمة الفاتورة", "مقارنة فترتين", "مقارنة الفترات", "الخصومات على فواتير المبيعات", "الضرائب المسجلة على المبيعات",
                         "التحصيلات المسجلة محليًا", "الدفعات السحابية الناجحة", "المصروفات التشغيلية", "رصيد المخزون الحالي", "تنبيهات المخزون المنخفض",
-                        "فواتير الشراء والمستحقات المسجلة", "مرتجعات المبيعات وحالة التسوية", "سندات القبض والصرف", "سجل القيود المحاسبية" -> selectedReport = report.title
+                        "فواتير الشراء والمستحقات المسجلة", "مرتجعات المبيعات وحالة التسوية", "سندات القبض والصرف", "سجل القيود المحاسبية",
+                        "ميزان المراجعة حسب الحساب", "حركة دفتر الأستاذ العام" -> selectedReport = report.title
                         "لوحة المؤشرات" -> selectedReport = "ملخص المبيعات حسب الفترة"
                     }
                 }),
