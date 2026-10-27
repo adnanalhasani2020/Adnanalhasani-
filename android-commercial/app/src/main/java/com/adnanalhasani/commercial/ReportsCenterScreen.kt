@@ -230,8 +230,8 @@ private fun printReport(context: Context, title: String, rows: List<List<String>
 }
 private data class ReportCatalogItem(val title: String, val category: String, val source: String, val supported: Boolean, val note: String)
 private data class ReportLine(val date: String, val reference: String, val name: String, val amount: Long, val currency: String, val status: String)
-private data class ReportReportCustomerMovement(val date: String, val customerId: String, val customer: String, val currency: String, val reference: String, val amount: Long, val description: String)
-private data class ReportReportSupplierMovement(val date: String, val supplier: String, val currency: String, val reference: String, val amount: Long, val description: String)
+private data class ReportCustomerMovement(val date: String, val customerId: String, val customer: String, val currency: String, val reference: String, val amount: Long, val description: String)
+private data class ReportSupplierMovement(val date: String, val supplier: String, val currency: String, val reference: String, val amount: Long, val description: String)
 
 @Composable
 internal fun ReportsCenterScreen(
