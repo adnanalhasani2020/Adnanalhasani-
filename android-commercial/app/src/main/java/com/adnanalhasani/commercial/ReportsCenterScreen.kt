@@ -277,6 +277,7 @@ internal fun ReportsCenterScreen(
     var cloudSupplierPartyAccounts by remember { mutableStateOf<List<CommercialCloudPartyAccountLink>>(emptyList()) }
     var customerPartyAccountsLoadError by remember { mutableStateOf("") }
     var supplierPartyAccountsLoadError by remember { mutableStateOf("") }
+    var supplierControlAccountsLoadError by remember { mutableStateOf("") }
     var cloudExpenses by remember { mutableStateOf<List<CommercialCloudExpenseVoucher>>(emptyList()) }
     var cloudLoading by remember { mutableStateOf(false) }
     var cloudLoadError by remember { mutableStateOf("") }
@@ -333,7 +334,7 @@ internal fun ReportsCenterScreen(
                 cloudLedgerLines = ledgerLines.getOrDefault(emptyList())
                 ledgerLinesLoadError = ledgerLines.exceptionOrNull()?.message.orEmpty()
                 cloudSupplierControlAccounts = supplierControlAccounts.getOrDefault(emptyList())
-                supplierPartyAccountsLoadError = supplierControlAccounts.exceptionOrNull()?.message.orEmpty()
+                supplierControlAccountsLoadError = supplierControlAccounts.exceptionOrNull()?.message.orEmpty()
                 cloudGlMappings = glMappings.getOrDefault(emptyList())
                 glMappingsLoadError = glMappings.exceptionOrNull()?.message.orEmpty()
                 cloudCustomerPartyAccounts = customerPartyAccounts.getOrDefault(emptyList())
@@ -419,6 +420,7 @@ internal fun ReportsCenterScreen(
         !cloudMode -> "كشف المورد الكامل يتطلب دفتر الأستاذ السحابي."
         ledgerLinesLoadError.isNotBlank() -> ledgerLinesLoadError
         supplierPartyAccountsLoadError.isNotBlank() -> supplierPartyAccountsLoadError
+        supplierControlAccountsLoadError.isNotBlank() -> supplierControlAccountsLoadError
         cloudSupplierPartyAccounts.isEmpty() -> "لا توجد روابط لحسابات مراقبة الموردين في دليل الحسابات."
         cloudSupplierControlAccounts.none { it.accountRole == "accounts_payable" } -> "حساب مراقبة الموردين غير مربوط في دليل الحسابات."
         cloudLedgerLines.any { line -> line.accountId in cloudSupplierControlAccounts.filter { it.accountRole == "accounts_payable" }.map { it.ledgerAccountId }.toSet() && line.partyAccountId.isBlank() } -> "توجد حركات على حساب مراقبة الموردين بلا ربط بالمورد؛ تعذر اعتماد الكشف الكامل."
