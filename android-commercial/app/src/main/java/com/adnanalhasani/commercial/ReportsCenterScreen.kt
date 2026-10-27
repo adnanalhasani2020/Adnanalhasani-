@@ -275,6 +275,7 @@ internal fun ReportsCenterScreen(
     var cloudLoadError by remember { mutableStateOf("") }
     var supplierPaymentsLoadError by remember { mutableStateOf("") }
     var stockMovementsLoadError by remember { mutableStateOf("") }
+    var stockAlertsLoadError by remember { mutableStateOf("") }
     var cloudReload by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(cloudMode, cloudReload) {
@@ -307,7 +308,7 @@ internal fun ReportsCenterScreen(
                 cloudLedgerLines = ledgerLines.getOrDefault(emptyList())
                 cloudExpenses = expenses.getOrDefault(emptyList())
                 val errors = listOf(
-                    salesDocuments.exceptionOrNull(), purchases.exceptionOrNull(), stockAlerts.exceptionOrNull(), returns.exceptionOrNull(), payments.exceptionOrNull(),
+                    salesDocuments.exceptionOrNull(), purchases.exceptionOrNull(), returns.exceptionOrNull(), payments.exceptionOrNull(),
                     journals.exceptionOrNull(), ledgerLines.exceptionOrNull(), expenses.exceptionOrNull()
                 ).filterNotNull()
                 cloudLoadError = errors.firstOrNull()?.message ?: if (errors.isNotEmpty()) "تعذر تحميل بعض مصادر التقارير." else ""
@@ -665,6 +666,7 @@ internal fun ReportsCenterScreen(
     val selectedReportSourceError = when (selectedReport) {
         "كشف حركات الموردين" -> supplierPaymentsLoadError
         "حركة المخزون الفعلية" -> stockMovementsLoadError
+        "رصيد المخزون الحالي", "تنبيهات المخزون المنخفض" -> stockAlertsLoadError
         else -> ""
     }
     val selectedRows = if (dateError || (cloudMode && (cloudLoading || cloudLoadError.isNotBlank())) ||
@@ -827,7 +829,8 @@ internal fun ReportsCenterScreen(
             Card(
                 modifier = Modifier.fillMaxWidth().clickable(enabled = report.supported && !dateError && (!cloudMode || (!cloudLoading && cloudLoadError.isBlank() &&
                     (report.title != "كشف حركات الموردين" || supplierPaymentsLoadError.isBlank()) &&
-                    (report.title != "حركة المخزون الفعلية" || stockMovementsLoadError.isBlank()))), onClick = {
+                    (report.title != "حركة المخزون الفعلية" || stockMovementsLoadError.isBlank()) &&
+                    (report.title !in setOf("رصيد المخزون الحالي", "تنبيهات المخزون المنخفض") || stockAlertsLoadError.isBlank()))), onClick = {
                     when (report.title) {
                         "ملخص المبيعات حسب الفترة", "تفاصيل فواتير المبيعات", "تفاصيل بنود فواتير المبيعات", "المبيعات حسب الصنف",
                         "المبيعات حسب العميل", "المبيعات النقدية والآجلة", "المبيعات حسب حالة السداد", "متوسط قيمة الفاتورة", "مقارنة فترتين", "مقارنة الفترات", "الخصومات على فواتير المبيعات", "الضرائب المسجلة على المبيعات",
@@ -858,6 +861,7 @@ internal fun ReportsCenterScreen(
                                     cloudMode && cloudLoadError.isNotBlank() -> "تعذر تحميل المصدر"
                                     cloudMode && report.title == "كشف حركات الموردين" && supplierPaymentsLoadError.isNotBlank() -> "تعذر تحميل المصدر"
                                     cloudMode && report.title == "حركة المخزون الفعلية" && stockMovementsLoadError.isNotBlank() -> "تعذر تحميل المصدر"
+                                    cloudMode && report.title in setOf("رصيد المخزون الحالي", "تنبيهات المخزون المنخفض") && stockAlertsLoadError.isNotBlank() -> "تعذر تحميل المصدر"
                                     else -> "متاح"
                                 },
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
