@@ -5,6 +5,10 @@ import android.content.Intent
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
+import android.text.Layout
+import android.text.StaticLayout
+import android.text.TextDirectionHeuristics
+import android.text.TextPaint
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
@@ -117,7 +121,7 @@ private fun writeReportPdf(output: java.io.OutputStream, rows: List<List<String>
     val pageHeight = 842
     val left = 36f
     val right = pageWidth - 36f
-    val bodyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    val bodyPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
         color = android.graphics.Color.rgb(35, 48, 44)
         textSize = 10f
         typeface = Typeface.create("sans-serif", Typeface.NORMAL)
@@ -159,16 +163,18 @@ private fun writeReportPdf(output: java.io.OutputStream, rows: List<List<String>
         startPage()
         rows.forEach { row ->
             val text = row.joinToString("    |    ") { it.replace('\n', ' ').replace('\r', ' ') }
-            var remaining = text
-            do {
-                val count = bodyPaint.breakText(remaining, true, right - left, null).coerceAtLeast(1)
-                val chunk = remaining.substring(0, count)
-                if (y > pageHeight - 54f) { finishPage(); startPage() }
-                canvas!!.drawText(chunk, right, y, bodyPaint)
-                y += 15f
-                remaining = remaining.substring(count)
-            } while (remaining.isNotEmpty())
-            y += 3f
+            val layout = StaticLayout.Builder.obtain(text, 0, text.length, bodyPaint, (right - left).toInt())
+                .setAlignment(Layout.Alignment.ALIGN_OPPOSITE)
+                .setTextDirection(TextDirectionHeuristics.RTL)
+                .setIncludePad(false)
+                .setLineSpacing(2f, 1f)
+                .build()
+            if (y + layout.height > pageHeight - 54f) { finishPage(); startPage() }
+            canvas!!.save()
+            canvas!!.translate(left, y)
+            layout.draw(canvas!!)
+            canvas!!.restore()
+            y += layout.height + 3f
         }
         finishPage()
         document.writeTo(output)
