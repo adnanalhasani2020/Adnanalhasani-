@@ -250,6 +250,9 @@ internal fun ReportsCenterScreen(
     var startText by remember { mutableStateOf(today.withDayOfMonth(1).toString()) }
     var endText by remember { mutableStateOf(today.toString()) }
     var search by remember { mutableStateOf("") }
+    var rowFilter by remember { mutableStateOf("") }
+    var currencyFilter by remember { mutableStateOf("") }
+    var statusFilter by remember { mutableStateOf("") }
     var accountFilter by remember { mutableStateOf("") }
     var customerFilter by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("الكل") }
@@ -628,7 +631,11 @@ internal fun ReportsCenterScreen(
         else -> emptyList()
     }
     // Invalid dates must never widen a report to the full history.
-    val selectedRows = if (dateError || (cloudMode && (cloudLoading || cloudLoadError.isNotBlank()))) emptyList() else selectedRowsUnvalidated
+    val selectedRows = if (dateError || (cloudMode && (cloudLoading || cloudLoadError.isNotBlank()))) emptyList() else selectedRowsUnvalidated.filter { row ->
+        (rowFilter.isBlank() || row.name.contains(rowFilter.trim(), true) || row.reference.contains(rowFilter.trim(), true)) &&
+            (currencyFilter.isBlank() || row.currency.contains(currencyFilter.trim(), true)) &&
+            (statusFilter.isBlank() || row.status.contains(statusFilter.trim(), true))
+    }
     val csvLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri: Uri? ->
         if (uri != null) runCatching {
             require(!dateError) { "لا يمكن تصدير تقرير بفترة غير صالحة." }
@@ -745,6 +752,16 @@ internal fun ReportsCenterScreen(
                 label = { Text("اسم العميل أو معرفه") },
                 supportingText = { Text("يصفّي الكشف حسب العميل؛ الرصيد يحسب من الفواتير والتحصيلات والمرتجعات والاستردادات المحملة.") }
             )
+        }
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("تصفية نتائج التقرير", fontWeight = FontWeight.SemiBold, color = ReportInk)
+                OutlinedTextField(rowFilter, { rowFilter = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("اسم أو مرجع المستند") })
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(currencyFilter, { currencyFilter = it }, modifier = Modifier.weight(1f), singleLine = true, label = { Text("العملة") })
+                    OutlinedTextField(statusFilter, { statusFilter = it }, modifier = Modifier.weight(1f), singleLine = true, label = { Text("الحالة") })
+                }
+            }
         }
         if (selectedReport == "كشف حساب محاسبي") item {
             OutlinedTextField(
