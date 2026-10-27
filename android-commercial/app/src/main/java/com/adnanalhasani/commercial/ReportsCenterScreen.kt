@@ -213,7 +213,7 @@ internal fun ReportsCenterScreen(
                                 else -> now.withDayOfYear(1) to now
                             }
                             startText = range.first.toString(); endText = range.second.toString(); error = ""
-                        }) { Text(label, fontSize = 11.sp) }
+                        }, label = { Text(label, fontSize = 11.sp) })
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -238,14 +238,14 @@ internal fun ReportsCenterScreen(
         items(filteredCatalog, key = { it.title }) { report ->
             val selected = selectedReport == report.title
             Card(
-                modifier = Modifier.fillMaxWidth().clickable(enabled = report.supported && !dateError) {
+                modifier = Modifier.fillMaxWidth().clickable(enabled = report.supported && !dateError, onClick = {
                     when (report.title) {
                         "ملخص المبيعات حسب الفترة", "تفاصيل فواتير المبيعات", "المبيعات حسب الصنف",
                         "المبيعات حسب العميل", "المبيعات النقدية والآجلة", "متوسط قيمة الفاتورة", "مقارنة فترتين", "مقارنة الفترات",
                         "التحصيلات المسجلة محليًا", "المصروفات التشغيلية", "رصيد المخزون الحالي", "تنبيهات المخزون المنخفض" -> selectedReport = report.title
                         "لوحة المؤشرات" -> selectedReport = "ملخص المبيعات"
                     }
-                },
+                }),
                 colors = CardDefaults.cardColors(containerColor = if (selected) ReportMint else Color.White),
                 border = BorderStroke(1.dp, if (selected) ReportGreen else ReportBorder),
                 shape = RoundedCornerShape(16.dp)
