@@ -75,7 +75,7 @@ internal fun ReportsCenterScreen(
             ReportCatalogItem("المبيعات حسب العميل", "المبيعات", "اسم العميل المحفوظ في سجل البيع", true, "يعرض مجموع الفواتير المكتملة المسجلة للعميل حسب العملة."),
             ReportCatalogItem("المبيعات النقدية والآجلة", "المبيعات", "نوع البيع المسجل في الفاتورة", true, "تصنيف حسب علامة النقدي/الآجل في سجل البيع، وليس تسوية الرصيد."),
             ReportCatalogItem("متوسط قيمة الفاتورة", "المبيعات", "إجمالي الفواتير المكتملة وعددها", true, "متوسط تشغيلي منفصل حسب العملة."),
-            ReportCatalogItem("مقارنة فترتين", "الفترات والمقارنات", "سجلات المبيعات المكتملة المؤرخة", true, "يقارن الفترة الحالية بفترة سابقة مساوية لها في عدد الأيام حسب العملة."),
+            ReportCatalogItem("مقارنة الفترات", "الفترات والمقارنات", "سجلات المبيعات المكتملة المؤرخة", true, "يقارن الفترة الحالية بفترة سابقة مساوية لها في عدد الأيام حسب العملة."),
             ReportCatalogItem("التحصيلات المسجلة محليًا", "السندات والتحصيل والصرف", "settlements_json", !cloudMode, "لا تعرض هذه البيانات في وضع السحابة لتجنب خلط المصادر."),
             ReportCatalogItem("المصروفات التشغيلية", "الأرباح والتكاليف", if (cloudMode) "سندات المصروفات السحابية" else "expenses_json", !cloudMode, "التقرير المحلي يعرض المصروفات المحفوظة على الجهاز."),
             ReportCatalogItem("رصيد المخزون الحالي", "الأصناف والمخزون", if (cloudMode) "commercial_inventory_balances" else "products_json", true, "رصيد حالي فقط؛ ليس رصيدًا تاريخيًا للفترة."),
@@ -91,7 +91,7 @@ internal fun ReportsCenterScreen(
             ReportCatalogItem("المرتجعات وأثرها المالي والمخزني", "المرتجعات", "طلبات المرتجعات وحالات الاعتماد والتنفيذ", false, "الطلب والموافقة وإعادة التخزين والاسترداد مراحل منفصلة؛ يلزم تجميع نتائجها المؤكدة."),
             ReportCatalogItem("الضرائب والخصومات", "الضرائب والخصومات", "تفاصيل الضرائب والخصومات من المستندات", false, "لا تُخمن النسب أو مبالغ الضريبة إذا لم تسجل في المصدر."),
             ReportCatalogItem("أداء المستخدمين والفروع والمستودعات", "المستخدمون والعمليات", "مستخدم/فرع/مستودع محفوظ على المستند", false, "لا تتوفر كل هذه الأبعاد في نموذج البيانات المحمل حاليًا."),
-            ReportCatalogItem("مقارنة فترتين", "الفترات والمقارنات", "سجلات المبيعات المؤرخة", true, "مقارنة تشغيلية للمبيعات المكتملة حسب العملة."),
+
             ReportCatalogItem("تكلفة البضاعة والربح", "الأرباح والتكاليف", "تكلفة شراء موثوقة لكل بند ومرتجعات منفذة", false, "تكلفة الصنف المحلي قد تكون مفقودة أو غير تاريخية؛ لا يعرض ربحًا محاسبيًا معتمدًا.")
         )
     }
@@ -111,6 +111,9 @@ internal fun ReportsCenterScreen(
     val salesByCurrency = inPeriodSales.groupBy { it.currencyCode.ifBlank { "غير محددة" } }.toSortedMap()
     val stockLow = products.filter { it.stock <= (it.reorderPoint.takeIf { n -> n >= 0 } ?: 9) }
     val selectedRows = when (selectedReport) {
+        "ملخص المبيعات حسب الفترة" -> inPeriodSales.groupBy { it.currencyCode.ifBlank { "غير محددة" } }.map { (currency, rows) ->
+            ReportLine("${startText} — ${endText}", "ملخص", "إجمالي المبيعات المكتملة", rows.sumOf { it.total.toLong() }, currency, "${rows.size} فاتورة · متوسط ${if (rows.isEmpty()) 0L else rows.sumOf { it.total.toLong() } / rows.size}")
+        }
         "تفاصيل فواتير المبيعات" -> inPeriodSales.sortedByDescending { it.createdAt }.map {
             ReportLine(Instant.ofEpochMilli(it.createdAt).atZone(zone).toLocalDate().toString(), "فاتورة #${it.number}", it.product, it.total.toLong(), it.currencyCode, if (it.credit) "آجل" else "نقدي")
         }
