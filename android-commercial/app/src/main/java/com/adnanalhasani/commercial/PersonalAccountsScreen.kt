@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
@@ -70,7 +71,8 @@ private fun personalAccountAccessToken(context: Context): String {
     val prefs = personalAccountPrefs(context)
     val saved = prefs.getString("refresh_token", null).orEmpty()
     require(saved.isNotBlank()) { "سجّل الدخول أولًا من إعدادات المتجر، ثم افتح الحسابات الفرعية." }
-    val result = JSONObject(personalAccountHttp(context, "/auth/v1/token?grant_type=refresh_token", JSONObject().put("refresh_token", saved)))
+    val result = runCatching { JSONObject(personalAccountHttp(context, "/auth/v1/token?grant_type=refresh_token", JSONObject().put("refresh_token", saved))) }
+        .getOrElse { throw IllegalStateException("انتهت جلسة الدخول أو تعذر تجديدها؛ سجّل الدخول مجددًا.") }
     val access = result.optString("access_token")
     val refresh = result.optString("refresh_token").ifBlank { saved }
     require(access.isNotBlank()) { "انتهت جلسة الدخول؛ سجّل الدخول مجددًا." }
@@ -214,7 +216,7 @@ internal fun PersonalAccountsScreen(onBack: () -> Unit) {
                     Text("المصادقة بالبريد الإلكتروني وكلمة المرور، دون تسجيل Google.")
                     OutlinedTextField(authEmail, { authEmail = it.trim() }, Modifier.fillMaxWidth(), label = { Text("البريد الإلكتروني") }, singleLine = true)
                     if (authRegister) OutlinedTextField(authDisplayName, { authDisplayName = it }, Modifier.fillMaxWidth(), label = { Text("الاسم الذي تختاره") }, singleLine = true)
-                    OutlinedTextField(authPassword, { authPassword = it }, Modifier.fillMaxWidth(), label = { Text("كلمة المرور (12 حرفًا على الأقل)") }, singleLine = true)
+                    OutlinedTextField(authPassword, { authPassword = it }, Modifier.fillMaxWidth(), label = { Text("كلمة المرور (12 حرفًا على الأقل)") }, singleLine = true, visualTransformation = PasswordVisualTransformation())
                     Button(enabled = !busy && authEmail.contains("@") && authPassword.length >= 12 && (!authRegister || authDisplayName.trim().length >= 2), onClick = {
                         busy = true; message = ""; isError = false
                         personalAccountIo.execute {
@@ -267,6 +269,18 @@ internal fun PersonalAccountsScreen(onBack: () -> Unit) {
                 }
                 IconButton(enabled = !busy, onClick = { refresh() }) { Icon(Icons.Default.Refresh, contentDescription = "تحديث") }
             }
+        }
+        if (!authRequired) item {
+            TextButton(enabled = !busy, onClick = {
+                personalAccountPrefs(context).edit().remove("refresh_token").apply()
+                authRequired = true
+                account = null
+                entries.clear()
+                ownedOrganizations.clear()
+                orgs.clear()
+                message = "تم تسجيل الخروج من حساب المنصة."
+                isError = false
+            }) { Text("تسجيل الخروج من حساب المنصة") }
         }
         item {
             Card(border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
