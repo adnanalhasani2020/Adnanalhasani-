@@ -680,7 +680,7 @@ internal fun ReportsCenterScreen(
                     val cumulativeRows = throughEnd.filter { it.currencyCode == currency }
                     fun accountNet(lines: List<CommercialCloudJournalLine>, cls: String): Long =
                         lines.filter { statementClass(normalizedType(it)) == cls }
-                            .sumOf { if (cls in setOf("asset", "expense", "cogs")) it.debitMinor - it.creditMinor else it.creditMinor - it.debitMinor }
+                            .sumOf { if (cls in setOf("asset", "expense", "cogs", "contra_revenue")) it.debitMinor - it.creditMinor else it.creditMinor - it.debitMinor }
                     val revenue = accountNet(periodRows, "revenue")
                     val contraRevenue = accountNet(periodRows, "contra_revenue")
                     val cogs = accountNet(periodRows, "cogs")
