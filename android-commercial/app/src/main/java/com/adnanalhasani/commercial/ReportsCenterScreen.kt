@@ -232,7 +232,7 @@ private data class ReportCatalogItem(val title: String, val category: String, va
 private data class ReportLine(val date: String, val reference: String, val name: String, val amount: Long, val currency: String, val status: String, val displayAmount: String? = null)
 private fun reportLineAmount(row: ReportLine, cloudMode: Boolean): String = row.displayAmount ?: if (row.currency.isBlank() || row.currency == "-") row.amount.toString() else reportMoney(row.amount, row.currency, cloudMode)
 private data class ReportCustomerMovement(val date: String, val customerId: String, val customer: String, val currency: String, val reference: String, val amount: Long, val description: String)
-private data class ReportSupplierMovement(val date: String, val supplier: String, val currency: String, val reference: String, val amount: Long, val description: String)
+private data class ReportSupplierMovement(val date: String, val supplierId: String, val supplier: String, val currency: String, val reference: String, val amount: Long, val description: String)
 
 @Composable
 internal fun ReportsCenterScreen(
@@ -517,27 +517,27 @@ internal fun ReportsCenterScreen(
                         invoice.obligation.amountDueMinor > 0L && invoice.obligation.currencyCode.matches(Regex("^[A-Z]{3}$"))
                 }.map { invoice ->
                     val obligation = invoice.obligation!!
-                    ReportSupplierMovement(invoice.recordedAt.take(10), purchase.supplierName, obligation.currencyCode,
+                    ReportReportSupplierMovement(invoice.recordedAt.take(10), purchase.supplierId, purchase.supplierName, obligation.currencyCode,
                         "فاتورة مورد ${invoice.invoiceNumber.ifBlank { invoice.id }}", obligation.amountDueMinor, "مدين · التزام فاتورة مسجل")
                 }
             }
             val paymentMovements = cloudSupplierPayments.map { payment ->
-                ReportSupplierMovement(payment.recordedAt.take(10), payment.supplierName, payment.currencyCode,
+                ReportReportSupplierMovement(payment.recordedAt.take(10), payment.supplierId, payment.supplierName, payment.currencyCode,
                     "دفعة ${payment.id}", -payment.amountMinor, "دائن · سداد مرحل · فاتورة ${payment.invoiceNumber.ifBlank { payment.supplierInvoiceId }} · ${payment.paymentMethod}")
             }
             (invoiceMovements + paymentMovements).filter { movement -> supplierFilter.isBlank() || movement.supplier.contains(supplierFilter.trim(), true) }
-                .groupBy { it.supplier to it.currency }.toSortedMap(compareBy<Pair<String, String>> { it.first }.thenBy { it.second }).flatMap { (key, supplierMoves) ->
+                .groupBy { Triple(it.supplierId, it.supplier, it.currency) }.toSortedMap(compareBy<Triple<String, String, String>> { it.second }.thenBy { it.third }.thenBy { it.first }).flatMap { (key, supplierMoves) ->
                     val ordered = supplierMoves.sortedWith(compareBy<ReportSupplierMovement> { it.date }.thenBy { it.reference })
                     val opening = ordered.filter { reportDateMillis(it.date)?.let { ts -> ts < startMillis } == true }.sumOf { it.amount }
                     val periodMoves = ordered.filter { reportDateMillis(it.date)?.let { ts -> ts >= startMillis && ts < endExclusive } == true }
                     if (periodMoves.isEmpty() && opening == 0L) emptyList() else buildList {
                         var balance = opening
-                        if (opening != 0L) add(ReportLine(startText, "افتتاحي", key.first, opening, key.second, "رصيد افتتاحي وفق الفواتير والدفعات المحملة"))
+                        if (opening != 0L) add(ReportLine(startText, "افتتاحي", key.second, opening, key.third, "رصيد افتتاحي وفق الفواتير والدفعات المحملة · المورد: ${key.first}"))
                         periodMoves.forEach { movement ->
                             balance = Math.addExact(balance, movement.amount)
-                            add(ReportLine(movement.date, movement.reference, movement.supplier, movement.amount, movement.currency, "${movement.description} · الرصيد الجزئي: ${reportMoney(balance, movement.currency, true)}"))
+                            add(ReportLine(movement.date, movement.reference, movement.supplier, movement.amount, movement.currency, "${movement.description} · الرصيد الجزئي: ${reportMoney(balance, movement.currency, true)} · المورد: ${movement.supplierId}"))
                         }
-                        add(ReportLine(endText, "ختامي", key.first, balance, key.second, "رصيد جزئي للفواتير والدفعات فقط؛ لا يشمل مرتجعات أو تسويات غير محملة"))
+                        add(ReportLine(endText, "ختامي", key.second, balance, key.third, "رصيد جزئي للفواتير والدفعات فقط؛ لا يشمل مرتجعات أو تسويات غير محملة · المورد: ${key.first}"))
                     }
                 }
         }
