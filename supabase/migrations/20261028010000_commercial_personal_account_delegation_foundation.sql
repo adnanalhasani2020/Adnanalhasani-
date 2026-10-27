@@ -213,10 +213,11 @@ BEGIN
       reviewed_by=v_uid, reviewed_at=now(), updated_at=now()
   WHERE id=p_delegation_id;
 
-  SELECT owner_user_id, display_name, currency_code
+  SELECT a.owner_user_id, a.display_name, o.default_currency_code
     INTO v_parent_owner, v_parent_display_name, v_parent_currency
-  FROM public.commercial_party_accounts
-  WHERE id=v_row.parent_account_id AND account_type='personal' AND status='active';
+  FROM public.commercial_party_accounts a
+  JOIN public.commercial_organizations o ON o.id=v_row.organization_id
+  WHERE a.id=v_row.parent_account_id AND a.account_type='personal' AND a.status='active';
   SELECT owner_user_id INTO v_child_owner FROM public.commercial_party_accounts WHERE id=v_row.child_account_id;
 
   -- Link the parent to the merchant's existing customer account only when a verified email maps unambiguously.
