@@ -279,7 +279,7 @@ CREATE OR REPLACE FUNCTION public.commercial_account_update_delegation(
 RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
 AS $function$
-DECLARE v_uid uuid := auth.uid(); v_parent_id uuid; v_status text;
+DECLARE v_uid uuid := auth.uid(); v_parent_id uuid; v_status text; v_org_id uuid; v_child_owner uuid;
 BEGIN
   IF v_uid IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
   IF p_permissions IS NULL OR jsonb_typeof(p_permissions) <> 'object'
@@ -291,8 +291,10 @@ BEGIN
      OR (p_spend_limit_minor IS NOT NULL AND p_spend_limit_minor < 0)
      OR (p_expires_at IS NOT NULL AND p_expires_at <= now())
   THEN RAISE EXCEPTION 'invalid_delegation_policy' USING ERRCODE='22023'; END IF;
-  SELECT d.parent_account_id,d.status INTO v_parent_id,v_status
-  FROM public.commercial_account_delegations d WHERE d.id=p_delegation_id FOR UPDATE;
+  SELECT d.parent_account_id,d.status,d.organization_id,ca.owner_user_id INTO v_parent_id,v_status,v_org_id,v_child_owner
+  FROM public.commercial_account_delegations d
+  JOIN public.commercial_party_accounts ca ON ca.id=d.child_account_id
+  WHERE d.id=p_delegation_id FOR UPDATE OF d;
   IF v_parent_id IS NULL OR NOT EXISTS (
     SELECT 1 FROM public.commercial_party_accounts a
     WHERE a.id=v_parent_id AND a.owner_user_id=v_uid AND a.account_type='personal' AND a.status='active'
@@ -303,6 +305,14 @@ BEGIN
       status=CASE WHEN v_status='active' THEN 'pending_merchant_approval' ELSE v_status END,
       reviewed_by=NULL, reviewed_at=NULL, updated_at=now()
   WHERE id=p_delegation_id;
+  INSERT INTO public.commercial_user_notifications(user_id,organization_id,notification_type,title,body,entity_type,entity_id,priority,metadata)
+  SELECT m.user_id,v_org_id,'approval','تعديل صلاحيات حساب فرعي','عدّل الحساب الرئيسي الصلاحيات أو سقف الشراء، ويلزم مراجعة المؤسسة.',
+    'account_delegation',p_delegation_id,'high',jsonb_build_object('delegation_id',p_delegation_id,'status','pending_merchant_approval')
+  FROM public.commercial_organization_members m
+  WHERE m.organization_id=v_org_id AND m.state='active' AND m.role IN ('owner','admin','manager');
+  INSERT INTO public.commercial_user_notifications(user_id,organization_id,notification_type,title,body,entity_type,entity_id,priority,metadata)
+  VALUES(v_child_owner,v_org_id,'account_access','تعديل صلاحيات حسابك الفرعي','عدّل الحساب الرئيسي الصلاحيات؛ انتظر اعتماد المؤسسة قبل استخدامها.',
+    'account_delegation',p_delegation_id,'normal',jsonb_build_object('delegation_id',p_delegation_id,'status','pending_merchant_approval'));
   RETURN jsonb_build_object('delegation_id',p_delegation_id,'status','pending_merchant_approval');
 END;
 $function$;
