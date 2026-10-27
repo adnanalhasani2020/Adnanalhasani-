@@ -471,8 +471,10 @@ internal fun ReportsCenterScreen(
             }
             "التدفقات النقدية والصندوق" -> when {
                 glMappingsLoadError.isNotBlank() -> glMappingsLoadError
-                cloudGlMappings.none { it.mappingKey in setOf("cash", "bank", "card_clearing", "other_receipts", "check_clearing", "other_disbursements") } -> "لا توجد حسابات نقدية أو بنكية مربوطة بدليل الحسابات."
+                cloudGlMappings.none { it.mappingKey in setOf("cash", "bank", "card_clearing", "other_receipts", "check_clearing", "other_disbursements") && it.currencyCode.matches(Regex("^[A-Z]{3}$")) } -> "لا توجد حسابات نقدية أو بنكية مربوطة بعملة صالحة في دليل الحسابات."
                 ledgerLinesLoadError.isNotBlank() -> ledgerLinesLoadError
+                cloudLedgerLines.any { runCatching { LocalDate.parse(it.entryDate.take(10)) }.getOrNull() == null } -> "توجد قيود مرحلة بتاريخ غير صالح؛ لا يمكن ضمان الرصيد الافتتاحي."
+                cloudLedgerLines.any { !it.currencyCode.matches(Regex("^[A-Z]{3}$")) } -> "توجد قيود نقدية بعملة غير محددة؛ تم حجب كشف الصندوق."
                 else -> ""
             }
             "الرصيد المحاسبي الكامل للعملاء" -> customerStatementError
@@ -860,8 +862,6 @@ internal fun ReportsCenterScreen(
                 }.forEach { invoice ->
                     if (invoice.taxMinor != 0L) add(ReportLine(invoice.recordedAt.take(10), "فاتورة شراء #${invoice.invoiceNumber.ifBlank { invoice.id }}", purchase.supplierName, invoice.taxMinor, invoice.currencyCode.ifBlank { purchase.currencyCode },
                         "ضريبة شراء مسجلة · commercial_supplier_invoices.tax_minor"))
-                    if (invoice.freightMinor != 0L) add(ReportLine(invoice.recordedAt.take(10), "فاتورة شراء #${invoice.invoiceNumber.ifBlank { invoice.id }}", purchase.supplierName, invoice.freightMinor, invoice.currencyCode.ifBlank { purchase.currencyCode },
-                        "تكاليف شحن مسجلة؛ لا تصنف كضريبة"))
                 }
             }
             cloudReturns.filter { saleReturn ->
