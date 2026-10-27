@@ -371,6 +371,13 @@ internal fun ReportsCenterScreen(
             }
         }
     }
+    val taxDetailError = when {
+        !cloudMode -> "التقرير الضريبي التفصيلي يتطلب مصادر السحابة."
+        salesDocumentsLoadError.isNotBlank() -> salesDocumentsLoadError
+        purchasesLoadError.isNotBlank() -> purchasesLoadError
+        returnsLoadError.isNotBlank() -> returnsLoadError
+        else -> ""
+    }
     val costProfitError = when {
         !cloudMode -> "تكلفة الربح التاريخية تتطلب سجلات تكلفة السحابة."
         salesDocumentsLoadError.isNotBlank() -> salesDocumentsLoadError
@@ -420,6 +427,7 @@ internal fun ReportsCenterScreen(
             "سجل القيود المحاسبية" -> journalsLoadError
             "ميزان المراجعة حسب الحساب", "حركة دفتر الأستاذ العام", "كشف حساب محاسبي", "تفاصيل القيود المرحلة" -> ledgerLinesLoadError
             "قائمة الدخل والميزانية العمومية" -> ledgerStatementError
+            "الضرائب والخصومات التفصيلية" -> taxDetailError
             "تكلفة البضاعة والربح" -> costProfitError
             "التدفقات النقدية والصندوق" -> when {
                 glMappingsLoadError.isNotBlank() -> glMappingsLoadError
@@ -450,6 +458,8 @@ internal fun ReportsCenterScreen(
             ReportCatalogItem("المبيعات حسب الصنف", "المبيعات", if (cloudMode) "commercial_sale_items" else "sales_json", true, "يعرض بنود الفواتير السحابية الفعلية؛ في المحلي يمثل كل سجل بيع الصنف المسجل فيه."),
             ReportCatalogItem("الخصومات على فواتير المبيعات", "الضرائب والخصومات", "commercial_sales.discount_minor", cloudMode, "يعرض الخصومات المخزنة على الفواتير المكتملة، دون افتراض نسبة خصم."),
             ReportCatalogItem("الضرائب المسجلة على المبيعات", "الضرائب والخصومات", "commercial_sales.tax_minor", cloudMode, "يعرض قيمة الضريبة المخزنة فقط؛ لا يستنتج نسبة ضريبية من الإجمالي."),
+            ReportCatalogItem("الضرائب والخصومات التفصيلية", "الضرائب والخصومات", "ضرائب وخصومات فواتير البيع والشراء والمرتجعات المسجلة", cloudMode, "يعرض الضرائب والخصومات المخزنة حسب المستند والعملة؛ لا يخترع نسبًا ولا يصف الضريبة بعد المرتجعات بأنها صافية إذا لم تفصل حصة الضريبة."),
+
             ReportCatalogItem("المبيعات حسب العميل", "المبيعات", "اسم العميل المحفوظ في سجل البيع", true, "يعرض مجموع الفواتير المكتملة المسجلة للعميل حسب العملة."),
             ReportCatalogItem(if (cloudMode) "المبيعات حسب حالة السداد" else "المبيعات النقدية والآجلة", "المبيعات", "نوع البيع المحلي أو حالة السداد الفعلية في الفاتورة السحابية", true, "في السحابة يصنف حسب حالة السداد المسجلة، ولا يستنتج طريقة الدفع من مجرد إجمالي الفاتورة."),
             ReportCatalogItem("متوسط قيمة الفاتورة", "المبيعات", "إجمالي الفواتير المكتملة وعددها", true, "متوسط تشغيلي منفصل حسب العملة."),
@@ -787,6 +797,35 @@ internal fun ReportsCenterScreen(
                 }
             }
         }
+        "الضرائب والخصومات التفصيلية" -> if (taxDetailError.isNotBlank()) emptyList() else buildList {
+            cloudSalesDocuments.filter { doc ->
+                doc.saleStatus.equals("completed", true) &&
+                    reportDateMillis(doc.createdAt)?.let { it >= startMillis && it < endExclusive } == true
+            }.forEach { doc ->
+                if (doc.discountMinor != 0L) add(ReportLine(doc.createdAt.take(10), "فاتورة بيع #${doc.receiptNumber}", doc.customerName, -doc.discountMinor, doc.currencyCode,
+                    "خصم مسجل على الفاتورة · مصدر commercial_sales.discount_minor"))
+                if (doc.taxMinor != 0L) add(ReportLine(doc.createdAt.take(10), "فاتورة بيع #${doc.receiptNumber}", doc.customerName, doc.taxMinor, doc.currencyCode,
+                    "ضريبة مسجلة قبل تسوية المرتجعات · مصدر commercial_sales.tax_minor"))
+            }
+            cloudPurchases.forEach { purchase ->
+                purchase.supplierInvoices.filter { invoice ->
+                    reportDateMillis(invoice.recordedAt)?.let { it >= startMillis && it < endExclusive } == true &&
+                        invoice.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed")
+                }.forEach { invoice ->
+                    if (invoice.taxMinor != 0L) add(ReportLine(invoice.recordedAt.take(10), "فاتورة شراء #${invoice.invoiceNumber.ifBlank { invoice.id }}", purchase.supplierName, invoice.taxMinor, invoice.currencyCode.ifBlank { purchase.currencyCode },
+                        "ضريبة شراء مسجلة · commercial_supplier_invoices.tax_minor"))
+                    if (invoice.freightMinor != 0L) add(ReportLine(invoice.recordedAt.take(10), "فاتورة شراء #${invoice.invoiceNumber.ifBlank { invoice.id }}", purchase.supplierName, invoice.freightMinor, invoice.currencyCode.ifBlank { purchase.currencyCode },
+                        "تكاليف شحن مسجلة؛ لا تصنف كضريبة"))
+                }
+            }
+            cloudReturns.filter { saleReturn ->
+                saleReturn.status.equals("completed", true) &&
+                    reportDateMillis(saleReturn.completedAt)?.let { it >= startMillis && it < endExclusive } == true
+            }.forEach { saleReturn ->
+                add(ReportLine(saleReturn.completedAt.take(10), "مرتجع #${saleReturn.id}", saleReturn.customerName, -(saleReturn.approvedRefundMinor ?: 0L), saleReturn.currencyCode,
+                    "قيمة مرتجع معتمد؛ لا تفصل حصة الضريبة لأن مصدر المرتجع لا يخزنها منفصلة"))
+            }
+        }.sortedByDescending { it.date }
         "تكلفة البضاعة والربح" -> if (costProfitError.isNotBlank()) emptyList() else {
             val periodSales = cloudSalesDocuments.filter { doc ->
                 doc.saleStatus.equals("completed", true) &&
@@ -1138,7 +1177,7 @@ internal fun ReportsCenterScreen(
                         "التحصيلات المسجلة محليًا", "الدفعات السحابية الناجحة", "المصروفات التشغيلية", "رصيد المخزون الحالي", "تنبيهات المخزون المنخفض",
                         "فواتير الشراء والمستحقات المسجلة", "مستحقات فواتير الموردين", "مرتجعات المبيعات وحالة التسوية", "سندات القبض والصرف", "سجل القيود المحاسبية",
                         "ميزان المراجعة حسب الحساب", "حركة دفتر الأستاذ العام", "كشف حساب محاسبي", "أرصدة العملاء وكشف الحساب", "كشف حركات الموردين",
-                        "الرصيد المحاسبي الكامل للعملاء", "أرصدة الموردين والمستحقات", "قائمة الدخل والميزانية العمومية", "التدفقات النقدية والصندوق", "تكلفة البضاعة والربح",
+                        "الرصيد المحاسبي الكامل للعملاء", "أرصدة الموردين والمستحقات", "قائمة الدخل والميزانية العمومية", "التدفقات النقدية والصندوق", "تكلفة البضاعة والربح", "الضرائب والخصومات التفصيلية",
                         "حركة المخزون الفعلية", "تفاصيل القيود المرحلة" -> selectedReport = report.title
                         "لوحة المؤشرات" -> selectedReport = "ملخص المبيعات حسب الفترة"
                     }
