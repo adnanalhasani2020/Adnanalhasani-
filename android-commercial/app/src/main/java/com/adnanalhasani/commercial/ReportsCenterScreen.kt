@@ -389,14 +389,19 @@ internal fun ReportsCenterScreen(
             }
             accountRows.sortedBy { it.reference } + totals
         }
-        "حركة دفتر الأستاذ العام" -> cloudLedgerLines.filter { line ->
-            val timestamp = reportDateMillis(line.entryDate)
-            timestamp != null && timestamp >= startMillis && timestamp < endExclusive
-        }.map { line ->
-            ReportLine(line.entryDate.take(10), line.entryNumber.ifBlank { line.entryId }, "${line.accountCode} · ${line.accountName}",
-                line.debitMinor - line.creditMinor, line.currencyCode,
-                "قيد ${line.entryNumber} · مدين: ${line.debitMinor} · دائن: ${line.creditMinor} · مصدر: ${line.sourceType} ${line.sourceId}")
-        }.sortedByDescending { it.date }
+        "حركة دفتر الأستاذ العام", "كشف حساب محاسبي" -> {
+            val accountQuery = accountFilter.trim()
+            cloudLedgerLines.filter { line ->
+                val timestamp = reportDateMillis(line.entryDate)
+                timestamp != null && timestamp >= startMillis && timestamp < endExclusive &&
+                    (selectedReport != "كشف حساب محاسبي" || (accountQuery.isNotBlank() &&
+                        listOf(line.accountId, line.accountCode, line.accountName).any { it.contains(accountQuery, true) }))
+            }.map { line ->
+                ReportLine(line.entryDate.take(10), line.entryNumber.ifBlank { line.entryId }, "${line.accountCode} · ${line.accountName}",
+                    line.debitMinor - line.creditMinor, line.currencyCode,
+                    "قيد ${line.entryNumber} · مدين: ${line.debitMinor} · دائن: ${line.creditMinor} · مصدر: ${line.sourceType} ${line.sourceId}")
+            }.sortedByDescending { it.date }
+        }
         "سجل القيود المحاسبية" -> cloudJournals.filter { row ->
             val timestamp = reportDateMillis(row.createdAt)
             timestamp != null && timestamp >= startMillis && timestamp < endExclusive
@@ -518,7 +523,7 @@ internal fun ReportsCenterScreen(
                         "المبيعات حسب العميل", "المبيعات النقدية والآجلة", "المبيعات حسب حالة السداد", "متوسط قيمة الفاتورة", "مقارنة فترتين", "مقارنة الفترات", "الخصومات على فواتير المبيعات", "الضرائب المسجلة على المبيعات",
                         "التحصيلات المسجلة محليًا", "الدفعات السحابية الناجحة", "المصروفات التشغيلية", "رصيد المخزون الحالي", "تنبيهات المخزون المنخفض",
                         "فواتير الشراء والمستحقات المسجلة", "مستحقات فواتير الموردين", "مرتجعات المبيعات وحالة التسوية", "سندات القبض والصرف", "سجل القيود المحاسبية",
-                        "ميزان المراجعة حسب الحساب", "حركة دفتر الأستاذ العام" -> selectedReport = report.title
+                        "ميزان المراجعة حسب الحساب", "حركة دفتر الأستاذ العام", "كشف حساب محاسبي" -> selectedReport = report.title
                         "لوحة المؤشرات" -> selectedReport = "ملخص المبيعات حسب الفترة"
                     }
                 }),
