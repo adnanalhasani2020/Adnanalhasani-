@@ -181,6 +181,12 @@ DECLARE
   v_parent_owner uuid;
   v_child_owner uuid;
   v_parent_email text;
+  v_parent_display_name text;
+  v_parent_currency text;
+  v_parent_customer_id uuid;
+  v_parent_customer_account_id uuid;
+  v_parent_customer_count integer;
+  v_matching_unlinked_count integer;
 BEGIN
   IF v_uid IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
   SELECT d.* INTO v_row
@@ -207,7 +213,10 @@ BEGIN
       reviewed_by=v_uid, reviewed_at=now(), updated_at=now()
   WHERE id=p_delegation_id;
 
-  SELECT owner_user_id INTO v_parent_owner FROM public.commercial_party_accounts WHERE id=v_row.parent_account_id;
+  SELECT owner_user_id, display_name, currency_code
+    INTO v_parent_owner, v_parent_display_name, v_parent_currency
+  FROM public.commercial_party_accounts
+  WHERE id=v_row.parent_account_id AND account_type='personal' AND status='active';
   SELECT owner_user_id INTO v_child_owner FROM public.commercial_party_accounts WHERE id=v_row.child_account_id;
 
   -- Link the parent to the merchant's existing customer account only when a verified email maps unambiguously.
@@ -241,17 +250,59 @@ BEGIN
           WHERE cpa.customer_id=c.id AND cpa.organization_id=c.organization_id
         );
     END IF;
-    IF (
-      SELECT count(*) FROM public.commercial_customers c
-      WHERE c.organization_id=v_row.organization_id AND c.auth_user_id=v_parent_owner AND c.state='active'
+    SELECT count(*) INTO v_parent_customer_count
+    FROM public.commercial_customers c
+    WHERE c.organization_id=v_row.organization_id AND c.auth_user_id=v_parent_owner AND c.state='active'
+      AND EXISTS (
+        SELECT 1 FROM public.commercial_customer_party_accounts cpa
+        JOIN public.commercial_party_accounts a ON a.id=cpa.party_account_id
+          AND a.organization_id=cpa.organization_id
+          AND a.account_type IN ('business','organization') AND a.status='active'
+        WHERE cpa.customer_id=c.id AND cpa.organization_id=c.organization_id
+      );
+
+    IF v_parent_customer_count = 0 THEN
+      SELECT count(*) INTO v_matching_unlinked_count
+      FROM public.commercial_customers c
+      WHERE c.organization_id=v_row.organization_id AND c.state='active'
+        AND c.auth_user_id IS NULL AND v_parent_email IS NOT NULL
+        AND c.email IS NOT NULL AND lower(btrim(c.email))=lower(btrim(v_parent_email))
         AND EXISTS (
           SELECT 1 FROM public.commercial_customer_party_accounts cpa
           JOIN public.commercial_party_accounts a ON a.id=cpa.party_account_id
             AND a.organization_id=cpa.organization_id
             AND a.account_type IN ('business','organization') AND a.status='active'
           WHERE cpa.customer_id=c.id AND cpa.organization_id=c.organization_id
-        )
-    ) <> 1 THEN
+        );
+      IF v_matching_unlinked_count > 1 THEN
+        RAISE EXCEPTION 'parent_customer_email_mapping_ambiguous' USING ERRCODE='42501';
+      END IF;
+
+      -- No existing customer account is linked to the parent. Create an organization-owned
+      -- customer ledger account during the merchant's explicit approval, so all later
+      -- purchases are billed to the parent customer, never to the child.
+      INSERT INTO public.commercial_customers(
+        organization_id, display_name, email, state, created_by, auth_user_id
+      ) VALUES (
+        v_row.organization_id, left(coalesce(nullif(btrim(v_parent_display_name),''),'عميل المنصة'),200),
+        v_parent_email, 'active', v_uid, v_parent_owner
+      ) RETURNING id INTO v_parent_customer_id;
+
+      INSERT INTO public.commercial_party_accounts(
+        account_number, account_type, organization_id, display_name, currency_code, status, allow_credit
+      ) VALUES (
+        'CUS-' || replace(v_parent_customer_id::text,'-',''), 'business', v_row.organization_id,
+        left(coalesce(nullif(btrim(v_parent_display_name),''),'عميل المنصة'),180),
+        coalesce(v_parent_currency, (SELECT o.default_currency_code FROM public.commercial_organizations o WHERE o.id=v_row.organization_id)),
+        'active', false
+      ) RETURNING id INTO v_parent_customer_account_id;
+
+      INSERT INTO public.commercial_customer_party_accounts(organization_id,customer_id,party_account_id)
+      VALUES(v_row.organization_id,v_parent_customer_id,v_parent_customer_account_id);
+      v_parent_customer_count := 1;
+    END IF;
+
+    IF v_parent_customer_count <> 1 THEN
       RAISE EXCEPTION 'parent_customer_not_linked_or_ambiguous' USING ERRCODE='42501';
     END IF;
   END IF;
