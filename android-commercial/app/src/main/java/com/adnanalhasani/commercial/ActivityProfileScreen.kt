@@ -71,6 +71,7 @@ private fun supabaseRequest(path: String, payload: JSONObject, token: String? = 
 internal fun ActivityProfileScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     var email by remember { mutableStateOf("") }
+    var accountDisplayName by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var accessToken by remember { mutableStateOf<String?>(null) }
     var isRegister by remember { mutableStateOf(false) }
@@ -169,13 +170,16 @@ internal fun ActivityProfileScreen(onBack: () -> Unit) {
         if (accessToken == null) {
             Text("تسجيل الدخول إلى Supabase", style = MaterialTheme.typography.titleMedium)
             OutlinedTextField(email, { email = it.trim() }, Modifier.fillMaxWidth(), label = { Text("البريد الإلكتروني") }, singleLine = true)
+            if (isRegister) OutlinedTextField(accountDisplayName, { accountDisplayName = it }, Modifier.fillMaxWidth(), label = { Text("الاسم الذي تختاره في المنصة") }, singleLine = true)
             OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text("كلمة المرور (12 حرفًا على الأقل)") }, singleLine = true)
             Button(
-                enabled = !busy && email.contains("@") && password.length >= 12,
+                enabled = !busy && email.contains("@") && password.length >= 12 && (!isRegister || accountDisplayName.trim().length >= 2),
                 onClick = {
                     runRequest({
                         val route = if (isRegister) "/auth/v1/signup" else "/auth/v1/token?grant_type=password"
-                        val result = supabaseRequest(route, JSONObject().put("email", email).put("password", password))
+                        val authPayload = JSONObject().put("email", email).put("password", password)
+                        if (isRegister) authPayload.put("data", JSONObject().put("display_name", accountDisplayName.trim()))
+                        val result = supabaseRequest(route, authPayload)
                         val session = result.optJSONObject("session") ?: result
                         val token = session.optString("access_token")
                         if (token.isBlank()) {
