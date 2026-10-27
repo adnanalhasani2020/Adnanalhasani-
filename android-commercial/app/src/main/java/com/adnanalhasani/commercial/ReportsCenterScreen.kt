@@ -295,9 +295,11 @@ internal fun ReportsCenterScreen(
         } else if (selectedReport != "ملخص المبيعات" && !dateError) {
             item { Text("لا توجد بيانات لهذا التقرير ضمن الفترة المحددة.", color = ReportMuted, modifier = Modifier.padding(8.dp)) }
         }
-        if (cloudMode) item {
+        item {
             OutlinedButton(onClick = onOpenExistingReports, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Default.Cloud, null); Spacer(Modifier.width(8.dp)); Text("فتح تقرير السحابة التشغيلي التفصيلي")
+                Icon(if (cloudMode) Icons.Default.Cloud else Icons.Default.Assessment, null)
+                Spacer(Modifier.width(8.dp))
+                Text(if (cloudMode) "فتح تقرير السحابة التشغيلي التفصيلي" else "فتح شاشة التقارير التشغيلية الحالية")
             }
         }
         item {
