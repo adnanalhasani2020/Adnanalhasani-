@@ -7,6 +7,7 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import org.json.JSONArray
 import org.json.JSONObject
+import java.math.BigDecimal
 import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.charset.StandardCharsets
@@ -162,8 +163,13 @@ internal fun loadCommercialCloudInventory(context: Context): CommercialCloudInve
                 ?: "غير مصنف"
             // Preserve the server's numeric quantity before any legacy integer projection.
             // Cloud sale validation and display must use stockPrecise, never the truncated stock field.
-            val availableQuantity = (row.optDouble("quantity_on_hand", 0.0) - row.optDouble("quantity_reserved", 0.0)).coerceAtLeast(0.0)
-            val quantity = availableQuantity.toInt()
+            // Parse PostgreSQL NUMERIC as decimal text so fractional stock is not rounded through Double.
+            val availableQuantity = runCatching {
+                BigDecimal(row.optString("quantity_on_hand", "0"))
+                    .subtract(BigDecimal(row.optString("quantity_reserved", "0")))
+                    .max(BigDecimal.ZERO)
+            }.getOrDefault(BigDecimal.ZERO)
+            val quantity = availableQuantity.toInt().coerceAtLeast(0)
             val price = offering.optLong("price_minor", 0L).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
             val sellUnits = offering.optJSONArray("sell_units") ?: JSONArray()
             val sellUnitsJson = JSONArray()
