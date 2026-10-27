@@ -757,6 +757,27 @@ internal fun ReportsCenterScreen(
                             pdfLauncher.launch("mutajri-report-${selectedReport.hashCode()}.pdf")
                         }
                     }) { Icon(Icons.Default.PictureAsPdf, null); Spacer(Modifier.width(4.dp)); Text("PDF ومشاركة") }
+                    OutlinedButton(onClick = {
+                        if (dateError || (cloudMode && (cloudLoading || cloudLoadError.isNotBlank()))) {
+                            error = "لا يمكن طباعة تقرير بفترة غير صالحة أو بمصدر بيانات غير مكتمل."
+                        } else {
+                            exportTitle = selectedReport
+                            exportRows = buildList {
+                                add(listOf("التقرير", exportTitle))
+                                add(listOf("الفترة", startText + " — " + endText))
+                                add(listOf("مصدر البيانات", if (cloudMode) "السحابة" else "محلي على الجهاز"))
+                                add(listOf("تاريخ التصدير", java.time.LocalDateTime.now().toString()))
+                                add(listOf("التاريخ", "المرجع", "الاسم", "المبلغ/الكمية", "العملة", "الحالة"))
+                                selectedRows.forEach { row ->
+                                    add(listOf(row.date, row.reference, row.name,
+                                        if (row.currency.isBlank() || row.currency == "-") row.amount.toString() else reportMoney(row.amount, row.currency, cloudMode),
+                                        row.currency, row.status))
+                                }
+                            }
+                            runCatching { printReport(context, selectedReport, exportRows) }
+                                .onFailure { error = "تعذرت معاينة الطباعة: ${it.message ?: "خطأ غير معروف"}" }
+                        }
+                    }) { Icon(Icons.Default.Print, null); Spacer(Modifier.width(4.dp)); Text("معاينة وطباعة") }
                 }
             }
             items(selectedRows) { row ->
