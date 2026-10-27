@@ -36,7 +36,7 @@ def test_delegated_orders_bind_parent_billing_child_actor_and_enforce_budget():
     assert "delegated_purchase_permission_required" in sql
     assert "delegated_booking_permission_required" in sql
     assert "delegated_spend_limit_exceeded" in sql
-    assert "v_delegation.spent_minor + v_subtotal" in sql
+    assert "v_delegation.spent_minor::numeric + v_subtotal::numeric" in sql
     assert "delegated_access_id,principal_account_id,acting_account_id" in sql
     assert "SET spent_minor=spent_minor + v_subtotal" in sql
     assert "commercial_customer_portal_create_delegated_booking" in sql
@@ -66,3 +66,20 @@ def test_delegation_functions_are_not_callable_anonymously():
     ):
         assert f"REVOKE ALL ON FUNCTION public.{name}" in sql
         assert f"GRANT EXECUTE ON FUNCTION public.{name}" in sql
+
+
+def test_android_portal_routes_delegated_actions_to_guarded_rpcs():
+    repository = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt").read_text(encoding="utf-8")
+    portal = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CustomerPortalScreen.kt").read_text(encoding="utf-8")
+    activity = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt").read_text(encoding="utf-8")
+    screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/PersonalAccountsScreen.kt").read_text(encoding="utf-8")
+    assert "commercial_account_list_my_active_delegations" in repository
+    assert "commercial_account_create_delegation" in screen
+    assert "commercial_account_review_delegation" in screen
+    assert "commercial_account_update_delegation" in screen
+    assert "commercial_account_delegated_spend_report" in screen
+    assert "commercial_customer_portal_create_delegated_order" in repository
+    assert "commercial_customer_portal_create_delegated_booking" in repository
+    assert "commercial_customer_portal_create_delegated_multi_service_booking" in repository
+    assert "PersonalAccountsScreen" in activity
+    assert "onPersonalAccounts" in activity
