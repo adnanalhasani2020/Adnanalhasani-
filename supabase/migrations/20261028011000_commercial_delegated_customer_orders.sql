@@ -260,3 +260,92 @@ $function$
 
 REVOKE ALL ON FUNCTION public.commercial_customer_portal_create_delegated_order(uuid,uuid,jsonb,text,text,timestamptz,timestamptz,text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.commercial_customer_portal_create_delegated_order(uuid,uuid,jsonb,text,text,timestamptz,timestamptz,text) TO authenticated;
+
+
+-- Delegated bookings use the same parent receivable account and atomic spend ledger as delegated purchases.
+CREATE OR REPLACE FUNCTION public.commercial_customer_portal_create_delegated_booking(p_delegation_id uuid, p_organization_id uuid, p_offering_id uuid, p_resource_id uuid, p_starts_at timestamp with time zone, p_ends_at timestamp with time zone, p_payment_mode text, p_customer_note text DEFAULT NULL::text, p_idempotency_key text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+ v_uid uuid:=auth.uid(); v_parent_uid uuid; v_parent_personal_account_id uuid; v_child_personal_account_id uuid;
+ v_delegation public.commercial_account_delegations%ROWTYPE; v_account_id uuid; v_resource public.commercial_booking_resources%ROWTYPE;
+ v_existing public.commercial_bookings%ROWTYPE; v_order jsonb; v_order_id uuid; v_order_total bigint;
+ v_currency text; v_count integer; v_key text:=nullif(btrim(p_idempotency_key),'');
+BEGIN
+ IF v_uid IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
+ SELECT d, parent_account.owner_user_id, child_account.id
+ INTO v_delegation, v_parent_uid, v_child_personal_account_id
+ FROM public.commercial_account_delegations d
+ JOIN public.commercial_party_accounts parent_account ON parent_account.id=d.parent_account_id
+ JOIN public.commercial_party_accounts child_account ON child_account.id=d.child_account_id
+ WHERE d.id=p_delegation_id AND d.organization_id=p_organization_id
+  AND d.status='active' AND (d.expires_at IS NULL OR d.expires_at>now())
+  AND parent_account.account_type='personal' AND parent_account.status='active'
+  AND child_account.account_type='personal' AND child_account.status='active'
+  AND child_account.owner_user_id=v_uid
+ FOR UPDATE OF d;
+ IF NOT FOUND THEN RAISE EXCEPTION 'delegated_access_not_active_or_not_owned' USING ERRCODE='42501'; END IF;
+ v_parent_personal_account_id:=v_delegation.parent_account_id;
+ IF NOT coalesce((v_delegation.permissions->>'book')::boolean,false) THEN
+  RAISE EXCEPTION 'delegated_booking_permission_required' USING ERRCODE='42501';
+ END IF;
+ PERFORM public.commercial_customer_portal_link_verified_email();
+ IF p_organization_id IS NULL OR p_offering_id IS NULL OR p_resource_id IS NULL THEN RAISE EXCEPTION 'booking_fields_required' USING ERRCODE='22023'; END IF;
+ IF p_starts_at IS NULL OR p_ends_at IS NULL OR p_starts_at<=now() OR p_ends_at<=p_starts_at THEN RAISE EXCEPTION 'invalid_reservation_window' USING ERRCODE='22023'; END IF;
+ IF p_payment_mode IS NULL OR p_payment_mode NOT IN ('cash','credit') THEN RAISE EXCEPTION 'invalid_payment_mode' USING ERRCODE='22023'; END IF;
+ IF v_key IS NULL OR length(v_key)<8 OR length(v_key)>200 THEN RAISE EXCEPTION 'invalid_idempotency_key' USING ERRCODE='22023'; END IF;
+ SELECT a.id,a.currency_code INTO v_account_id,v_currency
+ FROM public.commercial_customer_party_accounts cpa
+ JOIN public.commercial_customers c ON c.id=cpa.customer_id AND c.organization_id=cpa.organization_id AND c.state='active' AND c.auth_user_id=v_parent_uid
+ JOIN public.commercial_party_accounts a ON a.id=cpa.party_account_id AND a.organization_id=cpa.organization_id AND a.account_type IN ('business','organization') AND a.status='active'
+ JOIN public.commercial_organizations o ON o.id=cpa.organization_id AND o.state='active' AND o.deleted_at IS NULL
+ WHERE cpa.organization_id=p_organization_id LIMIT 1;
+ IF v_account_id IS NULL THEN RAISE EXCEPTION 'customer_not_linked_to_organization' USING ERRCODE='42501'; END IF;
+ IF p_payment_mode='credit' AND NOT EXISTS (SELECT 1 FROM public.commercial_party_accounts a WHERE a.id=v_account_id AND a.allow_credit) THEN RAISE EXCEPTION 'customer_credit_not_authorized' USING ERRCODE='42501'; END IF;
+ PERFORM pg_advisory_xact_lock(hashtextextended(v_account_id::text||':'||v_key,0));
+ SELECT * INTO v_existing FROM public.commercial_bookings WHERE customer_account_id=v_account_id AND idempotency_key=v_key;
+ IF FOUND THEN
+  IF v_existing.organization_id<>p_organization_id OR v_existing.resource_id<>p_resource_id OR v_existing.starts_at<>p_starts_at OR v_existing.ends_at<>p_ends_at OR coalesce(v_existing.notes,'')<>coalesce(nullif(btrim(p_customer_note),''),'') OR v_existing.delegated_access_id IS DISTINCT FROM p_delegation_id OR v_existing.principal_account_id IS DISTINCT FROM v_parent_personal_account_id OR v_existing.acting_account_id IS DISTINCT FROM v_child_personal_account_id OR NOT EXISTS (SELECT 1 FROM public.commercial_customer_orders o JOIN public.commercial_customer_order_items oi ON oi.order_id=o.id WHERE o.id=v_existing.order_id AND o.payment_status=(CASE WHEN p_payment_mode='credit' THEN 'credit' ELSE 'unpaid' END) AND oi.offering_id=p_offering_id AND oi.quantity=1 AND (SELECT count(*) FROM public.commercial_customer_order_items x WHERE x.order_id=o.id)=1) THEN
+   RAISE EXCEPTION 'idempotency_key_reused_with_different_request' USING ERRCODE='22023';
+  END IF;
+  RETURN jsonb_build_object('booking_id',v_existing.id,'booking_number',v_existing.booking_number,'order_id',v_existing.order_id,'status',v_existing.status,'price_minor',v_existing.price_minor,'currency_code',v_existing.currency_code,'replayed',true);
+ END IF;
+ SELECT * INTO v_resource FROM public.commercial_booking_resources r WHERE r.id=p_resource_id AND r.organization_id=p_organization_id AND r.status='active' FOR UPDATE;
+ IF NOT FOUND THEN RAISE EXCEPTION 'booking_resource_not_available' USING ERRCODE='22023'; END IF;
+ IF NOT EXISTS (
+   SELECT 1 FROM public.commercial_offerings f
+   JOIN public.commercial_activities a ON a.id=f.activity_id
+   JOIN public.commercial_products p ON p.id=f.product_id
+   WHERE f.id=p_offering_id AND f.state='active' AND f.valid_from<=now() AND (f.valid_to IS NULL OR f.valid_to>now())
+    AND f.currency_code=v_currency AND a.organization_id=p_organization_id AND a.activity_type='service'
+    AND (v_delegation.activity_id IS NULL OR a.id=v_delegation.activity_id)
+    AND a.state='active' AND a.deleted_at IS NULL AND p.state='active'
+ ) THEN RAISE EXCEPTION 'booking_service_not_available' USING ERRCODE='22023'; END IF;
+ SELECT count(*) INTO v_count FROM public.commercial_bookings b
+ WHERE b.organization_id=p_organization_id AND b.resource_id=p_resource_id
+  AND b.status IN ('requested','confirmed','checked_in')
+  AND b.starts_at<p_ends_at AND b.ends_at>p_starts_at;
+ IF v_count>=v_resource.capacity THEN RAISE EXCEPTION 'booking_resource_capacity_exceeded' USING ERRCODE='22023'; END IF;
+ v_order := public.commercial_customer_portal_create_delegated_order(
+  p_delegation_id,p_organization_id,jsonb_build_array(jsonb_build_object('offering_id',p_offering_id,'quantity',1)),
+  p_payment_mode,p_customer_note,p_starts_at,p_ends_at,v_key
+ );
+ v_order_id := (v_order->>'order_id')::uuid;
+ v_order_total := (v_order->>'total_minor')::bigint;
+ SELECT currency_code INTO v_currency FROM public.commercial_customer_orders WHERE id=v_order_id;
+ INSERT INTO public.commercial_bookings(
+  organization_id,resource_id,customer_account_id,order_id,status,starts_at,ends_at,currency_code,price_minor,paid_minor,created_by,notes,idempotency_key,
+  delegated_access_id,principal_account_id,acting_account_id
+ ) VALUES (
+  p_organization_id,p_resource_id,v_account_id,v_order_id,'requested',p_starts_at,p_ends_at,v_currency,v_order_total,0,v_uid,nullif(btrim(p_customer_note),''),v_key,
+  p_delegation_id,v_parent_personal_account_id,v_child_personal_account_id
+ ) RETURNING id,booking_number INTO v_existing.id,v_existing.booking_number;
+ RETURN jsonb_build_object('booking_id',v_existing.id,'booking_number',v_existing.booking_number,'order_id',v_order_id,'status','requested','price_minor',v_order_total,'currency_code',v_currency,'replayed',false);
+END;
+$function$
+
+REVOKE ALL ON FUNCTION public.commercial_customer_portal_create_delegated_booking(uuid,uuid,uuid,uuid,timestamptz,timestamptz,text,text,text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.commercial_customer_portal_create_delegated_booking(uuid,uuid,uuid,uuid,timestamptz,timestamptz,text,text,text) TO authenticated;
