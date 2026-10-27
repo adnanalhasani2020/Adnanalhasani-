@@ -507,6 +507,20 @@ internal fun ReportsCenterScreen(
                 ?: throw IllegalStateException("تعذر فتح ملف Excel.")
         }.onFailure { error = "تعذر تصدير XLSX: ${it.message ?: "خطأ غير معروف"}" }
     }
+    val pdfLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri: Uri? ->
+        if (uri != null) runCatching {
+            require(!dateError) { "لا يمكن تصدير تقرير بفترة غير صالحة." }
+            require(!cloudMode || (!cloudLoading && cloudLoadError.isBlank())) { "تعذر التصدير لأن مصادر البيانات السحابية غير مكتملة." }
+            context.contentResolver.openOutputStream(uri)?.use { writeReportPdf(it, exportRows) }
+                ?: throw IllegalStateException("تعذر فتح ملف PDF.")
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "application/pdf"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startActivity(Intent.createChooser(shareIntent, "مشاركة تقرير متجري"))
+        }.onFailure { error = "تعذر إنشاء أو مشاركة PDF: ${it.message ?: "خطأ غير معروف"}" }
+    }
     val currencyTotal = if (dateError || (cloudMode && (cloudLoading || cloudLoadError.isNotBlank()))) emptyMap() else if (cloudMode) inPeriodCloudSalesDocuments.groupBy { it.currencyCode.ifBlank { "غير محددة" } }.mapValues { (_, rows) -> rows.sumOf { it.totalMinor } }
         else inPeriodSales.groupBy { it.currencyCode.ifBlank { "غير محددة" } }.mapValues { (_, rows) -> rows.sumOf { it.total.toLong() } }
 
