@@ -69,6 +69,8 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn("writeReportPdf", self.screen)
         self.assertIn("application/pdf", self.screen)
         self.assertIn("Intent.ACTION_SEND", self.screen)
+        self.assertIn("StaticLayout.Builder", self.screen)
+        self.assertIn("TextDirectionHeuristics.RTL", self.screen)
 
     def test_csv_contains_period_source_timestamp_and_arabic_bom(self):
         self.assertIn('writer.write("\\uFEFF")', self.screen)
