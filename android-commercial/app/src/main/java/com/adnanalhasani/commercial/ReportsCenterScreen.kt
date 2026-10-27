@@ -787,6 +787,51 @@ internal fun ReportsCenterScreen(
                 }
             }
         }
+        "تكلفة البضاعة والربح" -> if (costProfitError.isNotBlank()) emptyList() else {
+            val periodSales = cloudSalesDocuments.filter { doc ->
+                doc.saleStatus.equals("completed", true) &&
+                    reportDateMillis(doc.createdAt)?.let { it >= startMillis && it < endExclusive } == true
+            }
+            val periodReturns = cloudReturns.filter { saleReturn ->
+                saleReturn.status.equals("completed", true) &&
+                    reportDateMillis(saleReturn.completedAt)?.let { it >= startMillis && it < endExclusive } == true
+            }
+            val currencies = (periodSales.map { it.currencyCode } + periodReturns.map { it.currencyCode })
+                .filter { it.matches(Regex("^[A-Z]{3}$")) }.distinct().sorted()
+            buildList {
+                currencies.forEach { currency ->
+                    val salesRows = periodSales.filter { it.currencyCode == currency }
+                    val returnRows = periodReturns.filter { it.currencyCode == currency }
+                    val grossSales = salesRows.sumOf { (it.subtotalMinor - it.discountMinor).coerceAtLeast(0L) }
+                    val returnRevenue = returnRows.sumOf { it.approvedRefundMinor ?: 0L }
+                    val netRevenue = grossSales - returnRevenue
+                    val soldCost = salesRows.sumOf { doc -> doc.lines.sumOf { it.costTotalMinor ?: 0L } }
+                    val returnedCost = returnRows.sumOf { saleReturn ->
+                        saleReturn.items.sumOf { item ->
+                            if (item.restockedQuantity <= 0 || item.saleItemQuantity <= 0) 0L
+                            else runCatching {
+                                java.math.BigDecimal.valueOf(item.saleItemCostTotalMinor ?: 0L)
+                                    .multiply(java.math.BigDecimal.valueOf(item.restockedQuantity.toLong()))
+                                    .divide(java.math.BigDecimal.valueOf(item.saleItemQuantity.toLong()), 0, java.math.RoundingMode.HALF_UP)
+                                    .longValueExact()
+                            }.getOrDefault(0L)
+                        }
+                    }
+                    val netCost = soldCost - returnedCost
+                    val grossProfit = netRevenue - netCost
+                    add(ReportLine("${startText} — ${endText}", "تكلفة وربح", "إيرادات المبيعات بعد الخصومات المسجلة", grossSales, currency,
+                        "إجمالي ${salesRows.size} فاتورة مكتملة؛ الإيراد لا يتضمن الضريبة"))
+                    if (returnRevenue != 0L) add(ReportLine("${startText} — ${endText}", "مرتجعات", "مبالغ المرتجعات المعتمدة", -returnRevenue, currency,
+                        "مرتجعات مكتملة ضمن الفترة فقط؛ تم حجب التقرير إذا تعذر فصل ضريبة المرتجع"))
+                    add(ReportLine("${startText} — ${endText}", "صافي الإيرادات", "صافي الإيرادات بعد المرتجعات", netRevenue, currency, "من الفواتير المكتملة ناقص الخصومات والمرتجعات المعتمدة"))
+                    add(ReportLine("${startText} — ${endText}", "تكلفة البضاعة", "تكلفة البنود المباعة المحفوظة", -soldCost, currency, "لقطات cost_total_minor المسجلة عند البيع؛ لا تستخدم تكلفة الشراء الحالية"))
+                    if (returnedCost != 0L) add(ReportLine("${startText} — ${endText}", "عكس تكلفة المرتجع", "تكلفة الكمية التي أعيد تخزينها", returnedCost, currency, "محسوبة من تكلفة بند البيع التاريخية والكمية المعاد تخزينها"))
+                    add(ReportLine("${startText} — ${endText}", "تكلفة صافية", "تكلفة البضاعة بعد المرتجعات المعاد تخزينها", -netCost, currency, "تكلفة البيع ناقص تكلفة المرتجعات التي أعيد تخزينها"))
+                    add(ReportLine("${startText} — ${endText}", "مجمل الربح", "مجمل الربح بعد الخصومات والمرتجعات", grossProfit, currency,
+                        "إيرادات صافية ناقص تكلفة تاريخية صافية؛ لا يمثل صافي الربح بعد المصروفات التشغيلية"))
+                }
+            }
+        }
         "قائمة الدخل والميزانية العمومية" -> if (ledgerStatementError.isNotBlank()) emptyList() else {
             val throughEnd = cloudLedgerLines.filter { line ->
                 val date = runCatching { LocalDate.parse(line.entryDate.take(10)) }.getOrNull()
@@ -1093,7 +1138,7 @@ internal fun ReportsCenterScreen(
                         "التحصيلات المسجلة محليًا", "الدفعات السحابية الناجحة", "المصروفات التشغيلية", "رصيد المخزون الحالي", "تنبيهات المخزون المنخفض",
                         "فواتير الشراء والمستحقات المسجلة", "مستحقات فواتير الموردين", "مرتجعات المبيعات وحالة التسوية", "سندات القبض والصرف", "سجل القيود المحاسبية",
                         "ميزان المراجعة حسب الحساب", "حركة دفتر الأستاذ العام", "كشف حساب محاسبي", "أرصدة العملاء وكشف الحساب", "كشف حركات الموردين",
-                        "الرصيد المحاسبي الكامل للعملاء", "أرصدة الموردين والمستحقات", "قائمة الدخل والميزانية العمومية", "التدفقات النقدية والصندوق",
+                        "الرصيد المحاسبي الكامل للعملاء", "أرصدة الموردين والمستحقات", "قائمة الدخل والميزانية العمومية", "التدفقات النقدية والصندوق", "تكلفة البضاعة والربح",
                         "حركة المخزون الفعلية", "تفاصيل القيود المرحلة" -> selectedReport = report.title
                         "لوحة المؤشرات" -> selectedReport = "ملخص المبيعات حسب الفترة"
                     }
