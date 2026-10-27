@@ -97,7 +97,7 @@ private fun localSaleUnits(product: Product): List<LocalSaleUnit> {
         listOf(LocalSaleUnit(product.unitCode.ifBlank { "EA" }, "base", product.unitCode.ifBlank { "EA" }, 1.0, product.barcode, product.imageUrl, true))
     }
 }
-internal data class SaleRecord(val number: Int, val product: String, val quantity: Int, val total: Int, val credit: Boolean, val customer: String = "", val paid: Int = 0, val createdAt: Long = System.currentTimeMillis(), val unitCost: Int = 0, val unitCode: String = "EA", val baseQuantitySold: Int = quantity)
+internal data class SaleRecord(val number: Int, val product: String, val quantity: Int, val total: Int, val credit: Boolean, val customer: String = "", val paid: Int = 0, val createdAt: Long = System.currentTimeMillis(), val unitCost: Int = 0, val unitCode: String = "EA", val baseQuantitySold: Int = quantity, val currencyCode: String = "YER", val status: String = "completed")
 internal data class SettlementRecord(val invoiceNumber: Int, val customer: String, val amount: Int, val timestamp: Long = System.currentTimeMillis())
 internal data class ExpenseRecord(val id: Long, val category: String, val amount: Int, val note: String, val timestamp: Long = System.currentTimeMillis())
 private fun money(value: Int): String = String.format(Locale.US, "%,d ر.ي", value)
@@ -142,7 +142,7 @@ private fun loadSales(context: Context): List<SaleRecord> {
         List(json.length()) { i ->
             val item = json.getJSONObject(i)
             SaleRecord(item.getInt("number"), item.getString("product"), item.getInt("quantity"),
-                item.getInt("total"), item.getBoolean("credit"), item.optString("customer", ""), item.optInt("paid", 0), item.optLong("createdAt", 0L), item.optInt("unitCost", 0), item.optString("unitCode", "EA"), item.optInt("baseQuantitySold", item.optInt("quantity", 1)))
+                item.getInt("total"), item.getBoolean("credit"), item.optString("customer", ""), item.optInt("paid", 0), item.optLong("createdAt", 0L), item.optInt("unitCost", 0), item.optString("unitCode", "EA"), item.optInt("baseQuantitySold", item.optInt("quantity", 1)), item.optString("currencyCode", "YER").ifBlank { "YER" }, item.optString("status", "completed").ifBlank { "completed" })
         }
     }.getOrElse { emptyList() }
 }
@@ -193,7 +193,7 @@ private fun saveSales(context: Context, items: List<SaleRecord>) {
     items.forEach { item ->
         json.put(JSONObject().put("number", item.number).put("product", item.product)
             .put("quantity", item.quantity).put("total", item.total).put("credit", item.credit)
-            .put("customer", item.customer).put("paid", item.paid).put("createdAt", item.createdAt).put("unitCost", item.unitCost).put("unitCode", item.unitCode).put("baseQuantitySold", item.baseQuantitySold))
+            .put("customer", item.customer).put("paid", item.paid).put("createdAt", item.createdAt).put("unitCost", item.unitCost).put("unitCode", item.unitCode).put("baseQuantitySold", item.baseQuantitySold).put("currencyCode", item.currencyCode).put("status", item.status))
     }
     context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).edit().putString(scopedStoreKey(context, SALES_KEY), json.toString()).apply()
 }
@@ -390,10 +390,7 @@ private fun StoreApp(context: Context) {
                     showDebts -> if (cloudMode) {
                         CommercialCloudDebtScreen(context = context, onBack = { showDebts = false })
                     } else DebtScreen(sales = sales, settlements = settlements, onBack = { showDebts = false }, onSettle = { settlingSaleNumber = it.number })
-                    showReports -> if (cloudMode) {
-                        cloudNotice = "التقرير المالي الموحد غير جاهز بعد؛ يلزم التحقق من تسوية أرصدة التحصيل والموردين والمصروفات السحابية قبل عرض أرباح موثوقة."
-                        showReports = false
-                    } else ReportsScreen(sales = sales, settlements = settlements, expenses = expenses, onBack = { showReports = false })
+                    showReports -> if (cloudMode) CommercialCloudReportsScreen(context = context, onBack = { showReports = false }) else ReportsScreen(sales = sales, settlements = settlements, expenses = expenses, onBack = { showReports = false })
                     showExpenses -> if (cloudMode) {
                         CommercialCloudExpensesScreen(context = context, onBack = { showExpenses = false })
                     } else ExpensesScreen(expenses = expenses, onBack = { showExpenses = false }, onAdd = { expenseDialog = true })
@@ -1150,103 +1147,121 @@ private fun ExpenseEntryDialog(onDismiss: () -> Unit, onSave: (String, Int, Stri
 
 @Composable
 private fun ReportsScreen(sales: List<SaleRecord>, settlements: List<SettlementRecord>, expenses: List<ExpenseRecord>, onBack: () -> Unit) {
-    val calendar = java.util.Calendar.getInstance()
-    calendar.set(java.util.Calendar.HOUR_OF_DAY, 0)
-    calendar.set(java.util.Calendar.MINUTE, 0)
-    calendar.set(java.util.Calendar.SECOND, 0)
-    calendar.set(java.util.Calendar.MILLISECOND, 0)
-    val dayStart = calendar.timeInMillis
-    val dayEnd = dayStart + 24L * 60L * 60L * 1000L
-    val todaySales = sales.filter { it.createdAt >= dayStart && it.createdAt < dayEnd }
-    val todaySettlements = settlements.filter { it.timestamp >= dayStart && it.timestamp < dayEnd }
-    val todayExpenses = expenses.filter { it.timestamp >= dayStart && it.timestamp < dayEnd }
-    val totalExpenses = todayExpenses.sumOf { it.amount }
-    val costOfGoods = todaySales.sumOf { it.quantity * it.unitCost }
-    val grossProfit = todaySales.sumOf { it.total } - costOfGoods
-    val netOperatingResult = grossProfit - totalExpenses
-    val cashSales = todaySales.filter { !it.credit }.sumOf { it.total }
-    val creditSales = todaySales.filter { it.credit }.sumOf { it.total }
-    val collections = cashSales + todaySettlements.sumOf { it.amount }
-    val netCashFlow = collections - totalExpenses
-    val outstanding = sales.filter { it.credit }.sumOf { (it.total - it.paid).coerceAtLeast(0) }
-    val dateLabel = java.text.DateFormat.getDateInstance(java.text.DateFormat.FULL, Locale("ar")).format(java.util.Date(dayStart))
+    val today = remember { java.time.LocalDate.now() }
+    var fromText by remember { mutableStateOf(today.toString()) }
+    var toText by remember { mutableStateOf(today.toString()) }
+    var error by remember { mutableStateOf("") }
+    var range by remember { mutableStateOf(today to today) }
+    var presetLabel by remember { mutableStateOf("اليوم") }
+    val zone = java.time.ZoneId.systemDefault()
+    val startMs = range.first.atStartOfDay(zone).toInstant().toEpochMilli()
+    val endMs = range.second.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+    val periodSales = sales.filter { it.createdAt >= startMs && it.createdAt < endMs }
+    val periodPayments = settlements.filter { it.timestamp >= startMs && it.timestamp < endMs }
+    val periodExpenses = expenses.filter { it.timestamp >= startMs && it.timestamp < endMs }
+    val salesTotal = periodSales.sumOf { it.total.toLong() }.coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong()).toInt()
+    val cashSales = periodSales.filter { !it.credit }.sumOf { it.total.toLong() }.coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong()).toInt()
+    val creditSales = periodSales.filter { it.credit }.sumOf { it.total.toLong() }.coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong()).toInt()
+    val expenseTotal = periodExpenses.sumOf { it.amount.toLong() }.coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong()).toInt()
+    val cogs = periodSales.sumOf { it.quantity.toLong() * it.unitCost.toLong() }.coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong()).toInt()
+    val collections = (cashSales.toLong() + periodPayments.sumOf { it.amount.toLong() }).coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong()).toInt()
+    val grossProfit = (salesTotal.toLong() - cogs).coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong()).toInt()
+    val netResult = (grossProfit.toLong() - expenseTotal).coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong()).toInt()
+    val cashFlow = (collections.toLong() - expenseTotal).coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong()).toInt()
+    val outstanding = sales.filter { it.credit }.sumOf { (it.total.toLong() - it.paid.toLong()).coerceAtLeast(0L) }.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
+    fun setPreset(first: java.time.LocalDate, last: java.time.LocalDate, label: String) {
+        fromText = first.toString(); toText = last.toString(); range = first to last; presetLabel = label; error = ""
+    }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "رجوع") }
-                Heading("التقارير اليومية", dateLabel)
+                Heading("التقارير التشغيلية", if (range.first == range.second) range.first.toString() else range.first.toString() + " — " + range.second.toString())
             }
         }
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = Ink), shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("إجمالي التحصيل اليوم", color = Color(0xFFBFD9D0), fontSize = 13.sp)
-                    Text(money(collections), color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Bold)
-                    Text("يشمل المبيعات النقدية ودفعات تسديد الديون اليوم", color = Color(0xFF8DE0B8), fontSize = 11.sp)
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Border), modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("الفترة الزمنية", color = Ink, fontWeight = FontWeight.Bold)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                        listOf("اليوم", "الأسبوع", "الشهر", "السنة").forEach { p ->
+                            TextButton(onClick = {
+                                val now = java.time.LocalDate.now()
+                                when (p) {
+                                    "اليوم" -> setPreset(now, now, p)
+                                    "الأسبوع" -> setPreset(now.with(java.time.DayOfWeek.MONDAY), now, p)
+                                    "الشهر" -> setPreset(now.withDayOfMonth(1), now, p)
+                                    else -> setPreset(now.withDayOfYear(1), now, p)
+                                }
+                            }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 1.dp)) { Text(p, color = if (presetLabel == p) Green else Muted, fontSize = 12.sp) }
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(fromText, { fromText = it.take(10); error = "" }, modifier = Modifier.weight(1f), singleLine = true, label = { Text("من YYYY-MM-DD") })
+                        OutlinedTextField(toText, { toText = it.take(10); error = "" }, modifier = Modifier.weight(1f), singleLine = true, label = { Text("إلى YYYY-MM-DD") })
+                    }
+                    Button(onClick = {
+                        val first = runCatching { java.time.LocalDate.parse(fromText.trim()) }.getOrNull()
+                        val last = runCatching { java.time.LocalDate.parse(toText.trim()) }.getOrNull()
+                        if (first == null || last == null) error = "أدخل التاريخين بصيغة YYYY-MM-DD."
+                        else if (first.isAfter(last)) error = "تاريخ البداية يجب ألا يتجاوز تاريخ النهاية."
+                        else { range = first to last; presetLabel = "مخصصة"; error = "" }
+                    }, modifier = Modifier.fillMaxWidth()) { Text("عرض الفترة المحددة") }
+                    if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                    Text("الفترة المطبقة: " + presetLabel + " • تاريخ النهاية مشمول بالكامل.", color = Muted, fontSize = 11.sp)
                 }
             }
         }
+        item { Metric("إجمالي التحصيل في الفترة", money(collections), "المبيعات النقدية + دفعات الديون المسجلة", Icons.Default.Payments, Modifier.fillMaxWidth()) }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Metric("مبيعات اليوم", money(todaySales.sumOf { it.total }), "${todaySales.size} فاتورة", Icons.Default.PointOfSale, Modifier.weight(1f))
+                Metric("المبيعات", money(salesTotal), periodSales.size.toString() + " فاتورة", Icons.Default.PointOfSale, Modifier.weight(1f))
                 Metric("المبيعات النقدية", money(cashSales), "مدفوعة عند البيع", Icons.Default.AttachMoney, Modifier.weight(1f))
             }
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Metric("المبيعات الآجلة", money(creditSales), "فواتير اليوم الآجلة", Icons.Default.TrendingUp, Modifier.weight(1f))
-                Metric("تحصيل الديون", money(todaySettlements.sumOf { it.amount }), "${todaySettlements.size} دفعة اليوم", Icons.Default.Payments, Modifier.weight(1f))
+                Metric("المبيعات الآجلة", money(creditSales), "فواتير ضمن الفترة", Icons.Default.TrendingUp, Modifier.weight(1f))
+                Metric("تحصيل الديون", money(periodPayments.sumOf { it.amount.toLong() }.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()), periodPayments.size.toString() + " دفعة", Icons.Default.Payments, Modifier.weight(1f))
             }
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Metric("مصروفات اليوم", money(totalExpenses), "${todayExpenses.size} مصروف", Icons.Default.ReceiptLong, Modifier.weight(1f))
-                Metric("تكلفة البضاعة", money(costOfGoods), "تكلفة وحدات اليوم المباعة", Icons.Default.Inventory2, Modifier.weight(1f))
+                Metric("المصروفات", money(expenseTotal), periodExpenses.size.toString() + " مصروف", Icons.Default.ReceiptLong, Modifier.weight(1f))
+                Metric("تكلفة البضاعة", money(cogs), "حسب التكلفة المسجلة", Icons.Default.Inventory2, Modifier.weight(1f))
             }
         }
-        if (todaySales.any { it.unitCost == 0 }) {
-            item {
-                Text(
-                    "تنبيه: توجد ${todaySales.count { it.unitCost == 0 }} فاتورة/فواتير اليوم بتكلفة شراء صفرية أو غير مسجلة؛ قد يكون تقدير الربح أعلى من الواقع. أدخل تكلفة الشراء الصحيحة لكل منتج.",
-                    color = Muted,
-                    fontSize = 11.sp
-                )
-            }
-        } else {
-            item { Text("تقدير الربح يعتمد على تكاليف الشراء المسجلة، ولا يشمل الضرائب أو التكاليف الأخرى.", color = Muted, fontSize = 11.sp) }
-        }
+        item { Text(if (periodSales.any { it.unitCost == 0 }) "تنبيه: توجد فواتير دون تكلفة شراء موثوقة؛ قد يكون تقدير الربح مضللًا." else "الربح والنتيجة أدناه مؤشرات تشغيلية وليست قوائم دخل محاسبية معتمدة.", color = Muted, fontSize = 11.sp) }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Metric("الربح الإجمالي التقديري", money(grossProfit), "المبيعات ناقص تكلفة البضاعة", Icons.Default.TrendingUp, Modifier.weight(1f))
-                Metric("النتيجة بعد المصروفات", money(netOperatingResult), "قبل أي تكاليف أخرى أو ضرائب", Icons.Default.AccountBalanceWallet, Modifier.weight(1f))
+                Metric("النتيجة بعد المصروفات", money(netResult), "مؤشر غير مدقق", Icons.Default.AccountBalanceWallet, Modifier.weight(1f))
             }
         }
+        item { Metric("صافي حركة النقد التقديرية", money(cashFlow), "ليس بيان تدفقات نقدية محاسبيًا", Icons.Default.AccountBalanceWallet, Modifier.fillMaxWidth()) }
         item {
-            Metric(
-                "صافي حركة النقد",
-                money(netCashFlow),
-                "التحصيلات ناقص المصروفات؛ ليس صافي الربح",
-                Icons.Default.AccountBalanceWallet,
-                Modifier.fillMaxWidth()
-            )
+            Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF7E8)), shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("القوائم المحاسبية غير معتمدة", color = Ink, fontWeight = FontWeight.Bold)
+                    Text("ميزان المراجعة، قائمة الدخل، الميزانية العمومية، التدفقات النقدية وكشف الأستاذ لا تُعرض كقوائم موثوقة قبل مطابقة القيود المنشورة ومصادرها والتسويات.", color = Muted, fontSize = 12.sp)
+                }
+            }
         }
         item {
             Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Border), modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                    Text("إجمالي الديون المتبقية", color = Muted, fontSize = 12.sp)
+                    Text("الديون المتبقية التقريبية", color = Muted, fontSize = 12.sp)
                     Text(money(outstanding), color = Orange, fontSize = 23.sp, fontWeight = FontWeight.Bold)
-                    Text("هذا الرصيد يشمل جميع الفواتير الآجلة غير المسددة بالكامل.", color = Muted, fontSize = 11.sp)
+                    Text("رصيد جميع الفواتير الآجلة غير المسددة بالكامل؛ ليس كشف أعمار ديون محاسبيًا.", color = Muted, fontSize = 11.sp)
                 }
             }
         }
-        item { Heading("فواتير اليوم", "المبيعات المسجلة خلال اليوم الحالي") }
-        if (todaySales.isEmpty()) item { Text("لا توجد فواتير مسجلة اليوم.", color = Muted) }
-        items(todaySales, key = { "daily-sale-${it.number}" }) { sale ->
-            SaleRow("فاتورة #${sale.number}", "${sale.product} · ${sale.quantity} قطعة", money(sale.total), sale.credit)
-        }
-        item { Heading("مصروفات اليوم", "المصروفات المسجلة خلال اليوم الحالي") }
-        if (todayExpenses.isEmpty()) item { Text("لا توجد مصروفات مسجلة اليوم.", color = Muted) }
-        items(todayExpenses, key = { "daily-expense-${it.id}" }) { expense ->
+        item { Heading("فواتير الفترة", "المبيعات المسجلة ضمن الفترة المحددة") }
+        if (periodSales.isEmpty()) item { Text("لا توجد فواتير ضمن هذه الفترة.", color = Muted) }
+        items(periodSales, key = { "period-sale-" + it.number + "-" + it.createdAt }) { sale -> SaleRow("فاتورة #" + sale.number, sale.product + " · " + sale.quantity + " " + sale.unitCode, money(sale.total), sale.credit) }
+        item { Heading("مصروفات الفترة", "المصروفات المسجلة ضمن الفترة المحددة") }
+        if (periodExpenses.isEmpty()) item { Text("لا توجد مصروفات ضمن هذه الفترة.", color = Muted) }
+        items(periodExpenses, key = { "period-expense-" + it.id }) { expense ->
             Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(14.dp), border = BorderStroke(1.dp, Border), modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text(expense.category, color = Ink, fontWeight = FontWeight.SemiBold)
@@ -1255,16 +1270,140 @@ private fun ReportsScreen(sales: List<SaleRecord>, settlements: List<SettlementR
                 }
             }
         }
-        item { Heading("دفعات التحصيل اليوم", "التسديدات التي تم تسجيلها اليوم") }
-        if (todaySettlements.isEmpty()) item { Text("لا توجد دفعات تحصيل مسجلة اليوم.", color = Muted) }
-        items(todaySettlements, key = { "daily-payment-${it.invoiceNumber}-${it.timestamp}" }) { payment ->
+        item { Heading("دفعات التحصيل في الفترة", "التسديدات المسجلة ضمن الفترة المحددة") }
+        if (periodPayments.isEmpty()) item { Text("لا توجد دفعات تحصيل ضمن هذه الفترة.", color = Muted) }
+        items(periodPayments, key = { "period-payment-" + it.invoiceNumber + "-" + it.timestamp }) { payment ->
             Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(14.dp), border = BorderStroke(1.dp, Border), modifier = Modifier.fillMaxWidth()) {
                 Row(Modifier.fillMaxWidth().padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(payment.customer.ifBlank { "عميل غير محدد" }, color = Ink, fontWeight = FontWeight.SemiBold)
-                        Text("فاتورة #${payment.invoiceNumber}", color = Muted, fontSize = 11.sp)
-                    }
+                    Column(Modifier.weight(1f)) { Text(payment.customer.ifBlank { "عميل غير محدد" }, color = Ink, fontWeight = FontWeight.SemiBold); Text("فاتورة #" + payment.invoiceNumber, color = Muted, fontSize = 11.sp) }
                     Text(money(payment.amount), color = Green, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CommercialCloudReportsScreen(context: Context, onBack: () -> Unit) {
+    val today = remember { java.time.LocalDate.now() }
+    var fromText by remember { mutableStateOf(today.toString()) }
+    var toText by remember { mutableStateOf(today.toString()) }
+    var range by remember { mutableStateOf(today to today) }
+    var presetLabel by remember { mutableStateOf("اليوم") }
+    var error by remember { mutableStateOf("") }
+    var loading by remember { mutableStateOf(false) }
+    var loaded by remember { mutableStateOf(false) }
+    val sales = remember { mutableStateListOf<SaleRecord>() }
+    val expenses = remember { mutableStateListOf<CommercialCloudExpenseVoucher>() }
+    val payments = remember { mutableStateListOf<CommercialCloudRecord>() }
+    val returns = remember { mutableStateListOf<CommercialCloudSaleReturn>() }
+    val io = remember { Executors.newSingleThreadExecutor() }
+    val main = remember { Handler(Looper.getMainLooper()) }
+    fun refresh() {
+        if (loading) return
+        loading = true; error = ""
+        io.execute {
+            val s = runCatching { loadCommercialCloudSales(context) }
+            val e = runCatching { loadCommercialCloudExpenses(context) }
+            val p = runCatching { loadCommercialCloudRecords(context, "payments") }
+            val r = runCatching { loadCommercialCloudSaleReturns(context) }
+            main.post {
+                if (s.isSuccess && e.isSuccess && p.isSuccess && r.isSuccess) {
+                    sales.apply { clear(); addAll(s.getOrThrow()) }
+                    expenses.apply { clear(); addAll(e.getOrThrow()) }
+                    payments.apply { clear(); addAll(p.getOrThrow()) }
+                    returns.apply { clear(); addAll(r.getOrThrow()) }
+                    loaded = true
+                } else {
+                    error = listOfNotNull(s.exceptionOrNull(), e.exceptionOrNull(), p.exceptionOrNull(), r.exceptionOrNull()).joinToString(" • ") { it.message ?: "تعذر تحميل مصدر" }
+                }
+                loading = false
+            }
+        }
+    }
+    LaunchedEffect(Unit) { refresh() }
+    val first = runCatching { java.time.LocalDate.parse(fromText) }.getOrNull()
+    val last = runCatching { java.time.LocalDate.parse(toText) }.getOrNull()
+    val zone = java.time.ZoneId.systemDefault()
+    val startMs = range.first.atStartOfDay(zone).toInstant().toEpochMilli()
+    val endMs = range.second.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+    fun timestamp(value: String): Long? = runCatching { java.time.Instant.parse(value).toEpochMilli() }.getOrNull()
+        ?: runCatching { java.time.OffsetDateTime.parse(value).toInstant().toEpochMilli() }.getOrNull()
+    fun within(value: String): Boolean = timestamp(value)?.let { it >= startMs && it < endMs } ?: false
+    val periodSales = sales.filter { it.status.equals("completed", true) && it.createdAt >= startMs && it.createdAt < endMs && it.currencyCode.isNotBlank() }
+    val periodExpenses = expenses.filter { it.canceledAt.isBlank() && within(it.recordedAt) }
+    val periodPayments = payments.filter { it.status.equals("succeeded", true) && it.currencyCode.isNotBlank() && within(it.createdAt) }
+    val periodReturns = returns.filter { it.status.equals("completed", true) && it.approvedRefundMinor != null && within(it.createdAt) }
+    val currencies = (periodSales.map { it.currencyCode } + periodExpenses.map { it.currencyCode } + periodPayments.map { it.currencyCode } + periodReturns.map { it.currencyCode }).filter { it.isNotBlank() }.distinct().sorted()
+    fun formatMinor(amount: Long, code: String): String {
+        val scale = runCatching { java.util.Currency.getInstance(code).defaultFractionDigits.coerceIn(0, 6) }.getOrDefault(0)
+        return java.math.BigDecimal.valueOf(amount).movePointLeft(scale).setScale(scale, java.math.RoundingMode.HALF_UP).toPlainString() + " " + code
+    }
+    fun setPreset(firstDate: java.time.LocalDate, lastDate: java.time.LocalDate, label: String) {
+        fromText = firstDate.toString(); toText = lastDate.toString(); range = firstDate to lastDate; presetLabel = label; error = ""
+    }
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "رجوع") }
+                Column(Modifier.weight(1f)) { Text("تقارير السحابة", color = Ink, fontWeight = FontWeight.Bold, fontSize = 19.sp); Text(range.first.toString() + " — " + range.second.toString(), color = Muted, fontSize = 11.sp) }
+                IconButton(onClick = { refresh() }, enabled = !loading) { Icon(Icons.Default.Refresh, contentDescription = "تحديث") }
+            }
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Border), modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("الفترة الزمنية", color = Ink, fontWeight = FontWeight.Bold)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                        listOf("اليوم", "الأسبوع", "الشهر", "السنة").forEach { p ->
+                            TextButton(onClick = {
+                                val now = java.time.LocalDate.now()
+                                when (p) {
+                                    "اليوم" -> setPreset(now, now, p)
+                                    "الأسبوع" -> setPreset(now.with(java.time.DayOfWeek.MONDAY), now, p)
+                                    "الشهر" -> setPreset(now.withDayOfMonth(1), now, p)
+                                    else -> setPreset(now.withDayOfYear(1), now, p)
+                                }
+                            }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 1.dp)) { Text(p, color = if (presetLabel == p) Green else Muted, fontSize = 12.sp) }
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(fromText, { fromText = it.take(10); error = "" }, modifier = Modifier.weight(1f), singleLine = true, label = { Text("من YYYY-MM-DD") })
+                        OutlinedTextField(toText, { toText = it.take(10); error = "" }, modifier = Modifier.weight(1f), singleLine = true, label = { Text("إلى YYYY-MM-DD") })
+                    }
+                    Button(onClick = {
+                        if (first == null || last == null) error = "أدخل التاريخين بصيغة YYYY-MM-DD."
+                        else if (first.isAfter(last)) error = "تاريخ البداية يجب ألا يتجاوز تاريخ النهاية."
+                        else { range = first to last; presetLabel = "مخصصة"; error = ""; refresh() }
+                    }, modifier = Modifier.fillMaxWidth()) { Text("تطبيق الفترة وتحديث البيانات") }
+                    if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                    if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+                }
+            }
+        }
+        if (error.isNotBlank() && !loaded) item { Text("تعذر تحميل التقارير السحابية: " + error, color = MaterialTheme.colorScheme.error) }
+        if (loaded && currencies.isEmpty()) item { Text("لا توجد حركات ضمن الفترة المحددة.", color = Muted) }
+        items(currencies, key = { "cloud-report-" + it }) { code ->
+            val salesTotal = periodSales.filter { it.currencyCode == code }.sumOf { it.total.toLong() }
+            val collectionTotal = periodPayments.filter { it.currencyCode == code }.sumOf { it.amountMinor }
+            val expenseTotal = periodExpenses.filter { it.currencyCode == code }.sumOf { it.amountMinor }
+            val returnTotal = periodReturns.filter { it.currencyCode == code }.sumOf { it.approvedRefundMinor ?: 0L }
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Border), modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("العملة: " + code, color = Ink, fontWeight = FontWeight.Bold)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("المبيعات", color = Muted); Text(formatMinor(salesTotal, code), color = Green, fontWeight = FontWeight.Bold) }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("التحصيلات الناجحة", color = Muted); Text(formatMinor(collectionTotal, code), color = Green, fontWeight = FontWeight.Bold) }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("المصروفات غير الملغاة", color = Muted); Text(formatMinor(expenseTotal, code), color = Orange, fontWeight = FontWeight.Bold) }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("المرتجعات المكتملة المعتمدة", color = Muted); Text(formatMinor(returnTotal, code), color = Orange, fontWeight = FontWeight.Bold) }
+                    Text("مؤشرات تشغيلية من سجلات المصدر، وليست قائمة دخل أو تدفقات نقدية محاسبية.", color = Muted, fontSize = 11.sp)
+                }
+            }
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF7E8)), shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Text("بوابة اعتماد القوائم المالية", color = Ink, fontWeight = FontWeight.Bold)
+                    Text("ميزان المراجعة، قائمة الدخل، الميزانية العمومية، التدفقات النقدية وكشف الأستاذ لا تُعرض كقوائم معتمدة قبل مطابقة القيود المنشورة والمتوازنة مع المبيعات والتحصيلات والمرتجعات والاستردادات والمشتريات وتكلفة المخزون والمصروفات والتسويات.", color = Muted, fontSize = 12.sp)
                 }
             }
         }
