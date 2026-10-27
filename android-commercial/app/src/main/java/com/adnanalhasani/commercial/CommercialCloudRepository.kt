@@ -2724,6 +2724,31 @@ internal fun saveMerchantCustomerOrderLines(context: Context, orderId: String, l
 
 
 /** Read-only projection of posted double-entry journal lines, joined to their source entry and ledger account. */
+internal data class CommercialCloudSupplierControlAccount(
+    val accountRole: String,
+    val ledgerAccountId: String,
+    val currencyCode: String
+)
+
+internal fun loadCommercialCloudSupplierControlAccounts(context: Context): List<CommercialCloudSupplierControlAccount> {
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val rows = commercialCloudPagedGet(
+        "/rest/v1/commercial_supplier_gl_accounts?select=account_role,ledger_account_id,currency_code&organization_id=eq.$orgId&order=account_role.asc,currency_code.asc",
+        access
+    )
+    return buildList {
+        for (i in 0 until rows.length()) {
+            val row = rows.optJSONObject(i) ?: continue
+            val role = row.optString("account_role").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+            val accountId = row.optString("ledger_account_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+            val currency = row.optString("currency_code").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+            if (role.isNotBlank() && accountId.isNotBlank() && currency.matches(Regex("^[A-Z]{3}$"))) {
+                add(CommercialCloudSupplierControlAccount(role, accountId, currency))
+            }
+        }
+    }
+}
+
 internal data class CommercialCloudGlAccountMapping(
     val mappingKey: String,
     val ledgerAccountId: String,
