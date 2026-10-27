@@ -41,7 +41,8 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn('ReportCatalogItem("أرصدة العملاء وكشف الحساب"', self.screen)
         self.assertIn('ReportCatalogItem("كشف حركات الموردين"', self.screen)
         self.assertIn('ReportCatalogItem("الرصيد المحاسبي الكامل للعملاء"', self.screen)
-        self.assertIn('ReportCatalogItem("أرصدة الموردين والمستحقات", "الموردون والمستحقات", "فواتير المورد والمدفوعات والمرتجعات والتسويات", false', self.screen)
+        self.assertIn('ReportCatalogItem("أرصدة الموردين والمستحقات", "الموردون والمستحقات", "سطور دفتر الأستاذ المرحلة المرتبطة بحساب مراقبة المورد", cloudMode', self.screen)
+        self.assertIn('ReportCatalogItem("الرصيد المحاسبي الكامل للعملاء", "العملاء والديون", "سطور دفتر الأستاذ المرحلة المرتبطة بحساب مراقبة العميل", cloudMode', self.screen)
         self.assertIn("manual opening balances", self.contract)
         self.assertIn("Supplier movement statement", self.contract)
         self.assertIn("Deliberately unavailable as formal statements", self.contract)
@@ -120,6 +121,34 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn("مدين: ${reportMoney(line.debitMinor, line.currencyCode, true)}", self.screen)
         self.assertIn("دائن: ${reportMoney(line.creditMinor, line.currencyCode, true)}", self.screen)
         self.assertIn("line.sourceType", self.screen)
+
+    def test_financial_statements_require_balanced_posted_ledger_and_separate_currencies(self):
+        self.assertIn('val ledgerStatementError', self.screen)
+        self.assertIn('throughEnd.groupBy { it.entryId to it.currencyCode }', self.screen)
+        self.assertIn('إجمالي الأصول', self.screen)
+        self.assertIn('الأصول − الالتزامات − حقوق الملكية', self.screen)
+        self.assertIn('ReportCatalogItem("قائمة الدخل والميزانية العمومية"', self.screen)
+        self.assertIn('ReportCatalogItem("التدفقات النقدية والصندوق"', self.screen)
+
+    def test_customer_and_supplier_statements_use_party_linked_posted_journal_lines(self):
+        self.assertIn('loadCommercialCloudCustomerPartyAccounts(context)', self.screen)
+        self.assertIn('loadCommercialCloudSupplierPartyAccounts(context)', self.screen)
+        self.assertIn('partyAccountId = line.optString("party_account_id")', self.repository)
+        self.assertIn('"الرصيد المحاسبي الكامل للعملاء" -> if (customerStatementError.isNotBlank()) emptyList()', self.screen)
+        self.assertIn('"أرصدة الموردين والمستحقات" -> if (supplierStatementError.isNotBlank()) emptyList()', self.screen)
+
+    def test_historical_cogs_uses_stored_cost_and_only_reverses_restocked_return_cost(self):
+        self.assertIn('costTotalMinor = if (item.isNull("cost_total_minor")) null', self.repository)
+        self.assertIn('saleItemCostTotalMinor = if (saleItem == null || saleItem.isNull("cost_total_minor")) null', self.repository)
+        self.assertIn('item.restockedQuantity <= 0', self.screen)
+        self.assertIn('تكلفة البنود المباعة المحفوظة', self.screen)
+        self.assertIn('val costProfitError', self.screen)
+
+    def test_cash_report_uses_mapped_cash_accounts_and_posted_ledger_only(self):
+        self.assertIn('loadCommercialCloudGlAccountMappings(context)', self.screen)
+        self.assertIn('val cashKeys = setOf("cash", "bank", "card_clearing", "other_receipts")', self.screen)
+        self.assertIn('رصيد افتتاحي', self.screen)
+        self.assertIn('رصيد ختامي', self.screen)
 
     def test_cloud_stock_reports_use_inventory_balances_and_movements(self):
         self.assertIn("loadCommercialCloudStockAlerts(context)", self.screen)
