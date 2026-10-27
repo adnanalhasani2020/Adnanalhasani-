@@ -59,7 +59,8 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
     def test_invalid_date_never_expands_sales_to_all_history(self):
         self.assertIn("require(!dateError) { \"لا يمكن تصدير تقرير بفترة غير صالحة.\" }", self.screen)
         self.assertIn("require(!cloudMode || (!cloudLoading && cloudLoadError.isBlank()))", self.screen)
-        self.assertIn("val selectedRows = if (dateError || (cloudMode && (cloudLoading || cloudLoadError.isNotBlank()))) emptyList()", self.screen)
+        self.assertIn("val selectedRows = if (dateError || (cloudMode && (cloudLoading || cloudLoadError.isNotBlank())) ||", self.screen)
+        self.assertIn("selectedReportSourceError.isNotBlank())) emptyList() else selectedRowsUnvalidated.filter", self.screen)
         self.assertIn("val inPeriodSales = if (dateError) emptyList()", self.screen)
         self.assertIn("val currencyTotal = if (dateError || (cloudMode && (cloudLoading || cloudLoadError.isNotBlank()))) emptyMap()", self.screen)
         self.assertIn("لا يمكن حساب الملخص: تحقق من الفترة المحددة", self.screen)
