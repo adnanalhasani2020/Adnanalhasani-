@@ -78,6 +78,7 @@ internal fun ReportsCenterScreen(
     var exportRows by remember { mutableStateOf<List<List<String>>>(emptyList()) }
     var exportTitle by remember { mutableStateOf("تقرير متجري") }
     var error by remember { mutableStateOf("") }
+    var cloudSalesDocuments by remember { mutableStateOf<List<CommercialCloudSaleDocument>>(emptyList()) }
     var cloudPurchases by remember { mutableStateOf<List<CommercialCloudPurchaseDocument>>(emptyList()) }
     var cloudReturns by remember { mutableStateOf<List<CommercialCloudSaleReturn>>(emptyList()) }
     var cloudPayments by remember { mutableStateOf<List<CommercialCloudRecord>>(emptyList()) }
@@ -92,6 +93,7 @@ internal fun ReportsCenterScreen(
         cloudLoading = true
         cloudLoadError = ""
         ReportIo.execute {
+            val salesDocuments = runCatching { loadCommercialCloudSaleDocuments(context) }
             val purchases = runCatching { loadCommercialCloudPurchaseDocuments(context) }
             val returns = runCatching { loadCommercialCloudSaleReturns(context) }
             val payments = runCatching { loadCommercialCloudRecords(context, "payments") }
@@ -99,13 +101,14 @@ internal fun ReportsCenterScreen(
             val expenses = runCatching { loadCommercialCloudExpenses(context) }
             ReportMain.post {
                 cloudLoading = false
+                if (salesDocuments.isSuccess) cloudSalesDocuments = salesDocuments.getOrThrow()
                 if (purchases.isSuccess) cloudPurchases = purchases.getOrThrow()
                 if (returns.isSuccess) cloudReturns = returns.getOrThrow()
                 if (payments.isSuccess) cloudPayments = payments.getOrThrow()
                 if (journals.isSuccess) cloudJournals = journals.getOrThrow()
                 if (expenses.isSuccess) cloudExpenses = expenses.getOrThrow()
                 val errors = listOf(
-                    purchases.exceptionOrNull(), returns.exceptionOrNull(), payments.exceptionOrNull(),
+                    salesDocuments.exceptionOrNull(), purchases.exceptionOrNull(), returns.exceptionOrNull(), payments.exceptionOrNull(),
                     journals.exceptionOrNull(), expenses.exceptionOrNull()
                 ).filterNotNull()
                 cloudLoadError = errors.firstOrNull()?.message ?: if (errors.isNotEmpty()) "تعذر تحميل بعض مصادر التقارير." else ""
@@ -124,7 +127,9 @@ internal fun ReportsCenterScreen(
             ReportCatalogItem("لوحة المؤشرات", "لوحة المعلومات", if (cloudMode) "مبيعات السحابة المحملة" else "المبيعات والمصروفات المحلية", true, "مؤشرات تشغيلية وليست قوائم مالية معتمدة."),
             ReportCatalogItem("ملخص المبيعات حسب الفترة", "المبيعات", if (cloudMode) "commercial_sales عبر مستودع السحابة" else "sales_json على الجهاز", true, "الفواتير المكتملة فقط؛ فصل حسب العملة."),
             ReportCatalogItem("تفاصيل فواتير المبيعات", "المبيعات", if (cloudMode) "فواتير السحابة" else "sales_json على الجهاز", true, "تفاصيل الفاتورة المتاحة في نموذج التطبيق."),
-            ReportCatalogItem("المبيعات حسب الصنف", "المبيعات", "بنود الفواتير المتاحة", true, "النموذج المحلي الحالي يسجل اسم صنف لكل سجل بيع، وليس دائمًا بنود فاتورة متعددة."),
+            ReportCatalogItem("المبيعات حسب الصنف", "المبيعات", if (cloudMode) "commercial_sale_items" else "sales_json", true, "يعرض بنود الفواتير السحابية الفعلية؛ في المحلي يمثل كل سجل بيع الصنف المسجل فيه."),
+            ReportCatalogItem("الخصومات على فواتير المبيعات", "الضرائب والخصومات", "commercial_sales.discount_minor", cloudMode, "يعرض الخصومات المخزنة على الفواتير المكتملة، دون افتراض نسبة خصم."),
+            ReportCatalogItem("الضرائب المسجلة على المبيعات", "الضرائب والخصومات", "commercial_sales.tax_minor", cloudMode, "يعرض قيمة الضريبة المخزنة فقط؛ لا يستنتج نسبة ضريبية من الإجمالي."),
             ReportCatalogItem("المبيعات حسب العميل", "المبيعات", "اسم العميل المحفوظ في سجل البيع", true, "يعرض مجموع الفواتير المكتملة المسجلة للعميل حسب العملة."),
             ReportCatalogItem("المبيعات النقدية والآجلة", "المبيعات", "نوع البيع المسجل في الفاتورة", true, "تصنيف حسب علامة النقدي/الآجل في سجل البيع، وليس تسوية الرصيد."),
             ReportCatalogItem("متوسط قيمة الفاتورة", "المبيعات", "إجمالي الفواتير المكتملة وعددها", true, "متوسط تشغيلي منفصل حسب العملة."),
@@ -170,12 +175,35 @@ internal fun ReportsCenterScreen(
         "ملخص المبيعات حسب الفترة" -> inPeriodSales.groupBy { it.currencyCode.ifBlank { "غير محددة" } }.map { (currency, rows) ->
             ReportLine("${startText} — ${endText}", "ملخص", "إجمالي المبيعات المكتملة", rows.sumOf { it.total.toLong() }, currency, "${rows.size} فاتورة · متوسط ${if (rows.isEmpty()) 0L else rows.sumOf { it.total.toLong() } / rows.size}")
         }
-        "تفاصيل فواتير المبيعات" -> inPeriodSales.sortedByDescending { it.createdAt }.map {
+        "تفاصيل فواتير المبيعات" -> if (cloudMode) cloudSalesDocuments.filter { doc ->
+            val timestamp = reportDateMillis(doc.createdAt)
+            timestamp != null && timestamp >= startMillis && timestamp < endExclusive
+        }.sortedByDescending { it.createdAt }.map { doc ->
+            ReportLine(doc.createdAt.take(10), "فاتورة #${doc.receiptNumber}", doc.customerName.ifBlank { "عميل غير محدد" },
+                doc.totalMinor, doc.currencyCode, "الفاتورة: ${doc.saleStatus} · السداد: ${doc.paymentStatus} · بنود: ${doc.lines.size}")
+        } else inPeriodSales.sortedByDescending { it.createdAt }.map {
             ReportLine(Instant.ofEpochMilli(it.createdAt).atZone(zone).toLocalDate().toString(), "فاتورة #${it.number}", it.product, it.total.toLong(), it.currencyCode, if (it.credit) "آجل" else "نقدي")
         }
-        "المبيعات حسب الصنف" -> inPeriodSales.groupBy { it.product to it.currencyCode }.map { (key, rows) ->
+        "المبيعات حسب الصنف" -> if (cloudMode) cloudSalesDocuments.filter { doc ->
+            doc.saleStatus.equals("completed", true) && (reportDateMillis(doc.createdAt)?.let { it >= startMillis && it < endExclusive } == true)
+        }.flatMap { doc -> doc.lines.map { line -> Triple(line.productName, doc.currencyCode, line) } }
+            .groupBy { it.first to it.second }.map { (key, rows) ->
+                ReportLine("-", "-", key.first, rows.sumOf { it.third.lineTotalMinor }, key.second,
+                    "${rows.sumOf { it.third.quantity.toBigDecimalOrNull() ?: java.math.BigDecimal.ZERO }} وحدة · بنود فعلية")
+            }.sortedByDescending { it.amount }
+        else inPeriodSales.groupBy { it.product to it.currencyCode }.map { (key, rows) ->
             ReportLine("-", "-", key.first, rows.sumOf { it.total.toLong() }, key.second, "${rows.sumOf { it.quantity }} وحدة · ${rows.size} فاتورة")
         }.sortedByDescending { it.amount }
+        "الخصومات على فواتير المبيعات" -> cloudSalesDocuments.filter { doc ->
+            doc.saleStatus.equals("completed", true) && (reportDateMillis(doc.createdAt)?.let { it >= startMillis && it < endExclusive } == true)
+        }.filter { it.discountMinor > 0L }.map { doc ->
+            ReportLine(doc.createdAt.take(10), "فاتورة #${doc.receiptNumber}", doc.customerName, doc.discountMinor, doc.currencyCode, "خصم مسجل على الفاتورة")
+        }.sortedByDescending { it.date }
+        "الضرائب المسجلة على المبيعات" -> cloudSalesDocuments.filter { doc ->
+            doc.saleStatus.equals("completed", true) && (reportDateMillis(doc.createdAt)?.let { it >= startMillis && it < endExclusive } == true)
+        }.filter { it.taxMinor > 0L }.map { doc ->
+            ReportLine(doc.createdAt.take(10), "فاتورة #${doc.receiptNumber}", doc.customerName, doc.taxMinor, doc.currencyCode, "ضريبة مسجلة على الفاتورة")
+        }.sortedByDescending { it.date }
         "المبيعات حسب العميل" -> inPeriodSales.groupBy { it.customer.ifBlank { "عميل غير محدد" } to it.currencyCode }.map { (key, rows) ->
             ReportLine("-", "-", key.first, rows.sumOf { it.total.toLong() }, key.second, "${rows.size} فاتورة")
         }.sortedByDescending { it.amount }
@@ -346,7 +374,7 @@ internal fun ReportsCenterScreen(
                 modifier = Modifier.fillMaxWidth().clickable(enabled = report.supported && !dateError, onClick = {
                     when (report.title) {
                         "ملخص المبيعات حسب الفترة", "تفاصيل فواتير المبيعات", "المبيعات حسب الصنف",
-                        "المبيعات حسب العميل", "المبيعات النقدية والآجلة", "متوسط قيمة الفاتورة", "مقارنة فترتين", "مقارنة الفترات",
+                        "المبيعات حسب العميل", "المبيعات النقدية والآجلة", "متوسط قيمة الفاتورة", "مقارنة فترتين", "مقارنة الفترات", "الخصومات على فواتير المبيعات", "الضرائب المسجلة على المبيعات",
                         "التحصيلات المسجلة محليًا", "الدفعات السحابية الناجحة", "المصروفات التشغيلية", "رصيد المخزون الحالي", "تنبيهات المخزون المنخفض",
                         "فواتير الشراء والمستحقات المسجلة", "مرتجعات المبيعات وحالة التسوية", "سندات القبض والصرف", "سجل القيود المحاسبية" -> selectedReport = report.title
                         "لوحة المؤشرات" -> selectedReport = "ملخص المبيعات حسب الفترة"
