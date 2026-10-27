@@ -270,6 +270,8 @@ internal fun ReportsCenterScreen(
     var cloudPayments by remember { mutableStateOf<List<CommercialCloudRecord>>(emptyList()) }
     var cloudJournals by remember { mutableStateOf<List<CommercialCloudRecord>>(emptyList()) }
     var cloudLedgerLines by remember { mutableStateOf<List<CommercialCloudJournalLine>>(emptyList()) }
+    var cloudGlMappings by remember { mutableStateOf<List<CommercialCloudGlAccountMapping>>(emptyList()) }
+    var glMappingsLoadError by remember { mutableStateOf("") }
     var cloudCustomerPartyAccounts by remember { mutableStateOf<List<CommercialCloudPartyAccountLink>>(emptyList()) }
     var cloudSupplierPartyAccounts by remember { mutableStateOf<List<CommercialCloudPartyAccountLink>>(emptyList()) }
     var customerPartyAccountsLoadError by remember { mutableStateOf("") }
@@ -303,6 +305,7 @@ internal fun ReportsCenterScreen(
             val payments = runCatching { loadCommercialCloudRecords(context, "payments") }
             val journals = runCatching { loadCommercialCloudRecords(context, "journals") }
             val ledgerLines = runCatching { loadCommercialCloudPostedJournalLines(context) }
+            val glMappings = runCatching { loadCommercialCloudGlAccountMappings(context) }
             val customerPartyAccounts = runCatching { loadCommercialCloudCustomerPartyAccounts(context) }
             val supplierPartyAccounts = runCatching { loadCommercialCloudSupplierPartyAccounts(context) }
             val expenses = runCatching { loadCommercialCloudExpenses(context) }
@@ -327,6 +330,8 @@ internal fun ReportsCenterScreen(
                 journalsLoadError = journals.exceptionOrNull()?.message.orEmpty()
                 cloudLedgerLines = ledgerLines.getOrDefault(emptyList())
                 ledgerLinesLoadError = ledgerLines.exceptionOrNull()?.message.orEmpty()
+                cloudGlMappings = glMappings.getOrDefault(emptyList())
+                glMappingsLoadError = glMappings.exceptionOrNull()?.message.orEmpty()
                 cloudCustomerPartyAccounts = customerPartyAccounts.getOrDefault(emptyList())
                 customerPartyAccountsLoadError = customerPartyAccounts.exceptionOrNull()?.message.orEmpty()
                 cloudSupplierPartyAccounts = supplierPartyAccounts.getOrDefault(emptyList())
@@ -393,6 +398,12 @@ internal fun ReportsCenterScreen(
             "سجل القيود المحاسبية" -> journalsLoadError
             "ميزان المراجعة حسب الحساب", "حركة دفتر الأستاذ العام", "كشف حساب محاسبي", "تفاصيل القيود المرحلة" -> ledgerLinesLoadError
             "قائمة الدخل والميزانية العمومية" -> ledgerStatementError
+            "التدفقات النقدية والصندوق" -> when {
+                glMappingsLoadError.isNotBlank() -> glMappingsLoadError
+                cloudGlMappings.none { it.mappingKey in setOf("cash", "bank", "card_clearing", "other_receipts") } -> "لا توجد حسابات نقدية أو بنكية مربوطة بدليل الحسابات."
+                ledgerLinesLoadError.isNotBlank() -> ledgerLinesLoadError
+                else -> ""
+            }
             "الرصيد المحاسبي الكامل للعملاء" -> customerStatementError
             "أرصدة الموردين والمستحقات" -> supplierStatementError
             "المصروفات التشغيلية" -> expensesLoadError
@@ -440,7 +451,7 @@ internal fun ReportsCenterScreen(
             ReportCatalogItem("كشف حساب محاسبي", "المحاسبة والمالية", "سطور دفتر الأستاذ المرحلة حسب الحساب", cloudMode, "يتطلب إدخال رمز الحساب أو اسمه؛ يعرض الحركات المرحلة فقط ضمن الفترة والعملة المسجلة."),
 
             ReportCatalogItem("قائمة الدخل والميزانية العمومية", "المحاسبة والمالية", "commercial_journal_lines + دليل الحسابات؛ القيود المرحلة فقط", cloudMode, "يعرض قائمة دخل للفترة وميزانية حتى تاريخ النهاية منفصلتين حسب العملة؛ يحجب النتائج إذا كانت القيود غير متزنة أو أنواع الحسابات غير معروفة."),
-            ReportCatalogItem("التدفقات النقدية والصندوق", "الصندوق والنقدية", "حركات نقدية فريدة ورصيد افتتاحي موثوق", false, "يلزم تحديد جميع الحركات النقدية ومنع تكرار الدفعات والسندات."),
+            ReportCatalogItem("التدفقات النقدية والصندوق", "الصندوق والنقدية", "سطور دفتر الأستاذ المرحلة لحسابات النقد والبنك المربوطة", cloudMode, "يحسب صافي حركة الحسابات النقدية حسب العملة من القيود المرحلة فقط؛ التحويل بين حسابين نقديين يظهر كتغير داخلي دون تضخيم صافي النقد."),
 
             ReportCatalogItem("الضرائب والخصومات", "الضرائب والخصومات", "تفاصيل الضرائب والخصومات من المستندات", false, "لا تُخمن النسب أو مبالغ الضريبة إذا لم تسجل في المصدر."),
             ReportCatalogItem("أداء المستخدمين والفروع والمستودعات", "المستخدمون والعمليات", "مستخدم/فرع/مستودع محفوظ على المستند", false, "لا تتوفر كل هذه الأبعاد في نموذج البيانات المحمل حاليًا."),
