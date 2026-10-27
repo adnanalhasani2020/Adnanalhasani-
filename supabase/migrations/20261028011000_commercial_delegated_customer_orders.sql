@@ -204,10 +204,10 @@ BEGIN
   END IF;
 
   IF p_reserved_from IS NOT NULL THEN v_order_type := 'booking'; END IF;
+  IF v_currency <> v_delegation.spend_currency_code THEN
+    RAISE EXCEPTION 'delegated_spend_currency_mismatch' USING ERRCODE='22023';
+  END IF;
   IF v_delegation.spend_limit_minor IS NOT NULL THEN
-    IF v_currency <> v_delegation.spend_currency_code THEN
-      RAISE EXCEPTION 'delegated_spend_currency_mismatch' USING ERRCODE='22023';
-    END IF;
     IF v_delegation.spent_minor::numeric + v_subtotal::numeric > v_delegation.spend_limit_minor::numeric THEN
       RAISE EXCEPTION 'delegated_spend_limit_exceeded' USING ERRCODE='22023';
     END IF;
