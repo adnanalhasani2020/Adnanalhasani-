@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - "android-commercial/**"
+      - "tests/test_reports_center_source_contract.py"
+      - "supabase/migrations/**"
       - ".github/workflows/android-commercial.yml"
   push:
     branches:
@@ -38,6 +40,8 @@ jobs:
           packages: platform-tools
       - name: Install Android SDK 35
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Run focused report and accounting source-contract tests
+        run: python -m unittest discover -s tests -p "test_reports_center_source_contract.py"
       - name: Run unit tests
         run: gradle -p android-commercial --no-daemon testDebugUnitTest
       - name: Build debug APK
