@@ -230,6 +230,8 @@ private fun printReport(context: Context, title: String, rows: List<List<String>
 }
 private data class ReportCatalogItem(val title: String, val category: String, val source: String, val supported: Boolean, val note: String)
 private data class ReportLine(val date: String, val reference: String, val name: String, val amount: Long, val currency: String, val status: String)
+private data class ReportReportCustomerMovement(val date: String, val customerId: String, val customer: String, val currency: String, val reference: String, val amount: Long, val description: String)
+private data class ReportReportSupplierMovement(val date: String, val supplier: String, val currency: String, val reference: String, val amount: Long, val description: String)
 
 @Composable
 internal fun ReportsCenterScreen(
@@ -483,7 +485,6 @@ internal fun ReportsCenterScreen(
                 "إجمالي الالتزامات: ${reportMoney(due, key.second, true)} · المسدد: ${reportMoney(paid, key.second, true)} · عدد الالتزامات: ${rows.size}")
         }.sortedByDescending { it.amount }
         "كشف حركات الموردين" -> {
-            data class SupplierMovement(val date: String, val supplier: String, val currency: String, val reference: String, val amount: Long, val description: String)
             val invoiceMovements = cloudPurchases.flatMap { purchase ->
                 purchase.supplierInvoices.filter { invoice ->
                     invoice.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed") &&
@@ -491,17 +492,17 @@ internal fun ReportsCenterScreen(
                         invoice.obligation.amountDueMinor > 0L && invoice.obligation.currencyCode.matches(Regex("^[A-Z]{3}$"))
                 }.map { invoice ->
                     val obligation = invoice.obligation!!
-                    SupplierMovement(invoice.recordedAt.take(10), purchase.supplierName, obligation.currencyCode,
+                    ReportSupplierMovement(invoice.recordedAt.take(10), purchase.supplierName, obligation.currencyCode,
                         "فاتورة مورد ${invoice.invoiceNumber.ifBlank { invoice.id }}", obligation.amountDueMinor, "مدين · التزام فاتورة مسجل")
                 }
             }
             val paymentMovements = cloudSupplierPayments.map { payment ->
-                SupplierMovement(payment.recordedAt.take(10), payment.supplierName, payment.currencyCode,
+                ReportSupplierMovement(payment.recordedAt.take(10), payment.supplierName, payment.currencyCode,
                     "دفعة ${payment.id}", -payment.amountMinor, "دائن · سداد مرحل · فاتورة ${payment.invoiceNumber.ifBlank { payment.supplierInvoiceId }} · ${payment.paymentMethod}")
             }
             (invoiceMovements + paymentMovements).filter { movement -> supplierFilter.isBlank() || movement.supplier.contains(supplierFilter.trim(), true) }
                 .groupBy { it.supplier to it.currency }.toSortedMap(compareBy<Pair<String, String>> { it.first }.thenBy { it.second }).flatMap { (key, supplierMoves) ->
-                    val ordered = supplierMoves.sortedWith(compareBy<SupplierMovement> { it.date }.thenBy { it.reference })
+                    val ordered = supplierMoves.sortedWith(compareBy<ReportSupplierMovement> { it.date }.thenBy { it.reference })
                     val opening = ordered.filter { reportDateMillis(it.date)?.let { ts -> ts < startMillis } == true }.sumOf { it.amount }
                     val periodMoves = ordered.filter { reportDateMillis(it.date)?.let { ts -> ts >= startMillis && ts < endExclusive } == true }
                     if (periodMoves.isEmpty() && opening == 0L) emptyList() else buildList {
@@ -524,26 +525,25 @@ internal fun ReportsCenterScreen(
                 "الطلب: ${row.status} · الاسترداد: ${row.refundStatus} · المخزون: ${row.restockStatus}")
         }.sortedByDescending { it.date }
         "أرصدة العملاء وكشف الحساب" -> {
-            data class CustomerMovement(val date: String, val customerId: String, val customer: String, val currency: String, val reference: String, val amount: Long, val description: String)
             val movements = buildList {
                 cloudSalesDocuments.filter { it.saleStatus.equals("completed", true) && it.customerId.isNotBlank() }.forEach { doc ->
                     val customerName = doc.customerName.ifBlank { "عميل غير محدد" }
                     val currency = doc.currencyCode.ifBlank { "غير محددة" }
-                    add(CustomerMovement(doc.createdAt.take(10), doc.customerId, customerName, currency, "فاتورة #${doc.receiptNumber}", doc.totalMinor.coerceAtLeast(0L), "مدين · فاتورة مكتملة"))
+                    add(ReportCustomerMovement(doc.createdAt.take(10), doc.customerId, customerName, currency, "فاتورة #${doc.receiptNumber}", doc.totalMinor.coerceAtLeast(0L), "مدين · فاتورة مكتملة"))
                     doc.payments.filter { it.status.lowercase(Locale.ROOT) in setOf("succeeded", "partially_refunded", "refunded") && it.amountMinor > 0L }.forEach { payment ->
                         val date = payment.createdAt.take(10).ifBlank { doc.createdAt.take(10) }
-                        add(CustomerMovement(date, doc.customerId, customerName, currency, "تحصيل ${payment.id.ifBlank { doc.receiptNumber }}", -payment.amountMinor.coerceAtLeast(0L), "دائن · تحصيل ${payment.status}"))
+                        add(ReportCustomerMovement(date, doc.customerId, customerName, currency, "تحصيل ${payment.id.ifBlank { doc.receiptNumber }}", -payment.amountMinor.coerceAtLeast(0L), "دائن · تحصيل ${payment.status}"))
                     }
                     doc.returns.filter { it.status.equals("completed", true) && (it.approvedRefundMinor ?: 0L) > 0L }.forEach { saleReturn ->
-                        add(CustomerMovement(saleReturn.createdAt.take(10), doc.customerId, customerName, currency, "مرتجع ${saleReturn.id}", -(saleReturn.approvedRefundMinor ?: 0L).coerceAtLeast(0L), "دائن · مرتجع معتمد"))
+                        add(ReportCustomerMovement(saleReturn.createdAt.take(10), doc.customerId, customerName, currency, "مرتجع ${saleReturn.id}", -(saleReturn.approvedRefundMinor ?: 0L).coerceAtLeast(0L), "دائن · مرتجع معتمد"))
                     }
                     doc.returns.filter { it.refundStatus.equals("refunded", true) && (it.approvedRefundMinor ?: 0L) > 0L }.forEach { saleReturn ->
-                        add(CustomerMovement(saleReturn.createdAt.take(10), doc.customerId, customerName, currency, "استرداد ${saleReturn.id}", (saleReturn.approvedRefundMinor ?: 0L).coerceAtLeast(0L), "مدين · استرداد منفذ"))
+                        add(ReportCustomerMovement(saleReturn.createdAt.take(10), doc.customerId, customerName, currency, "استرداد ${saleReturn.id}", (saleReturn.approvedRefundMinor ?: 0L).coerceAtLeast(0L), "مدين · استرداد منفذ"))
                     }
                 }
             }.filter { movement -> customerFilter.isBlank() || movement.customer.contains(customerFilter.trim(), true) || movement.customerId.contains(customerFilter.trim(), true) }
             movements.groupBy { Triple(it.customerId, it.customer, it.currency) }.toSortedMap(compareBy<Triple<String, String, String>> { it.second }.thenBy { it.third }).flatMap { (key, customerMoves) ->
-                val ordered = customerMoves.sortedWith(compareBy<CustomerMovement> { it.date }.thenBy { it.reference })
+                val ordered = customerMoves.sortedWith(compareBy<ReportCustomerMovement> { it.date }.thenBy { it.reference })
                 val opening = ordered.filter { reportDateMillis(it.date)?.let { ts -> ts < startMillis } == true }.sumOf { it.amount }
                 val periodMoves = ordered.filter { reportDateMillis(it.date)?.let { ts -> ts >= startMillis && ts < endExclusive } == true }
                 if (periodMoves.isEmpty() && opening == 0L) emptyList() else buildList {
