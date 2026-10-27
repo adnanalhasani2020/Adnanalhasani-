@@ -2588,3 +2588,88 @@ internal fun saveMerchantCustomerOrderLines(context: Context, orderId: String, l
     return JSONObject(commercialCloudRequest("/rest/v1/rpc/commercial_customer_portal_edit_order_lines","POST",
         JSONObject().put("p_organization_id",orgId).put("p_order_id",orderId).put("p_lines",payload).put("p_reason",reason.take(500)),access))
 }
+
+
+/** Read-only projection of posted double-entry journal lines, joined to their source entry and ledger account. */
+internal data class CommercialCloudJournalLine(
+    val entryId: String,
+    val entryNumber: String,
+    val entryDate: String,
+    val entryDescription: String,
+    val sourceType: String,
+    val sourceId: String,
+    val lineNumber: Int,
+    val accountId: String,
+    val accountCode: String,
+    val accountName: String,
+    val accountType: String,
+    val debitMinor: Long,
+    val creditMinor: Long,
+    val currencyCode: String
+)
+
+/**
+ * Loads posted entries and their lines from the authoritative organization-scoped ledger.
+ * Draft/unposted entries are intentionally excluded. This function is read-only and does not post
+ * or repair accounting data.
+ */
+internal fun loadCommercialCloudPostedJournalLines(context: Context): List<CommercialCloudJournalLine> {
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val entries = commercialCloudPagedGet(
+        "/rest/v1/commercial_journal_entries?select=id,entry_number,status,entry_date,description,source_type,source_id" +
+            "&organization_id=eq.$orgId&status=eq.posted&order=entry_date.asc,id.asc",
+        access
+    )
+    val entryById = buildMap {
+        for (i in 0 until entries.length()) {
+            val row = entries.optJSONObject(i) ?: continue
+            val id = row.optString("id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+            if (id.isNotBlank() && row.optString("status").equals("posted", true)) put(id, row)
+        }
+    }
+    if (entryById.isEmpty()) return emptyList()
+
+    val lines = commercialCloudPagedGet(
+        "/rest/v1/commercial_journal_lines?select=id,journal_entry_id,line_number,ledger_account_id,description,debit_minor,credit_minor,currency_code" +
+            "&organization_id=eq.$orgId&order=journal_entry_id.asc,line_number.asc",
+        access
+    )
+    val accounts = commercialCloudPagedGet(
+        "/rest/v1/commercial_ledger_accounts?select=id,account_code,account_name,account_type,currency_code,is_active" +
+            "&organization_id=eq.$orgId&order=account_code.asc,id.asc",
+        access
+    )
+    val accountById = buildMap {
+        for (i in 0 until accounts.length()) {
+            val row = accounts.optJSONObject(i) ?: continue
+            val id = row.optString("id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+            if (id.isNotBlank()) put(id, row)
+        }
+    }
+    return buildList {
+        for (i in 0 until lines.length()) {
+            val line = lines.optJSONObject(i) ?: continue
+            val entryId = line.optString("journal_entry_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+            val entry = entryById[entryId] ?: continue
+            val accountId = line.optString("ledger_account_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+            val account = accountById[accountId]
+            add(CommercialCloudJournalLine(
+                entryId = entryId,
+                entryNumber = entry.optString("entry_number").takeUnless { it == "null" }.orEmpty(),
+                entryDate = entry.optString("entry_date").takeUnless { it == "null" }.orEmpty(),
+                entryDescription = entry.optString("description").takeUnless { it == "null" }.orEmpty(),
+                sourceType = entry.optString("source_type").takeUnless { it == "null" }.orEmpty(),
+                sourceId = entry.optString("source_id").takeUnless { it == "null" }.orEmpty(),
+                lineNumber = line.optInt("line_number", i + 1),
+                accountId = accountId,
+                accountCode = account?.optString("account_code").takeUnless { it == null || it == "null" }.orEmpty(),
+                accountName = account?.optString("account_name").takeUnless { it == null || it == "null" }.orEmpty(),
+                accountType = account?.optString("account_type").takeUnless { it == null || it == "null" }.orEmpty(),
+                debitMinor = line.optLong("debit_minor", 0L),
+                creditMinor = line.optLong("credit_minor", 0L),
+                currencyCode = line.optString("currency_code").takeUnless { it == "null" }.orEmpty()
+                    .ifBlank { account?.optString("currency_code").takeUnless { it == null || it == "null" }.orEmpty() }
+            ))
+        }
+    }
+}
