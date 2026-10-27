@@ -2700,6 +2700,50 @@ internal fun saveMerchantCustomerOrderLines(context: Context, orderId: String, l
 
 
 /** Read-only projection of posted double-entry journal lines, joined to their source entry and ledger account. */
+internal data class CommercialCloudPartyAccountLink(
+    val partyId: String,
+    val partyAccountId: String,
+    val currencyCode: String
+)
+
+internal fun loadCommercialCloudCustomerPartyAccounts(context: Context): List<CommercialCloudPartyAccountLink> {
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val rows = commercialCloudPagedGet(
+        "/rest/v1/commercial_customer_party_accounts?select=customer_id,party_account_id,currency_code&organization_id=eq.$orgId&order=customer_id.asc,currency_code.asc",
+        access
+    )
+    return buildList {
+        for (i in 0 until rows.length()) {
+            val row = rows.optJSONObject(i) ?: continue
+            val partyId = row.optString("customer_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+            val accountId = row.optString("party_account_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+            val currency = row.optString("currency_code").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+            if (partyId.isNotBlank() && accountId.isNotBlank() && currency.matches(Regex("^[A-Z]{3}$"))) {
+                add(CommercialCloudPartyAccountLink(partyId, accountId, currency))
+            }
+        }
+    }
+}
+
+internal fun loadCommercialCloudSupplierPartyAccounts(context: Context): List<CommercialCloudPartyAccountLink> {
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val rows = commercialCloudPagedGet(
+        "/rest/v1/commercial_supplier_party_accounts?select=supplier_id,party_account_id,currency_code&organization_id=eq.$orgId&order=supplier_id.asc,currency_code.asc",
+        access
+    )
+    return buildList {
+        for (i in 0 until rows.length()) {
+            val row = rows.optJSONObject(i) ?: continue
+            val partyId = row.optString("supplier_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+            val accountId = row.optString("party_account_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+            val currency = row.optString("currency_code").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+            if (partyId.isNotBlank() && accountId.isNotBlank() && currency.matches(Regex("^[A-Z]{3}$"))) {
+                add(CommercialCloudPartyAccountLink(partyId, accountId, currency))
+            }
+        }
+    }
+}
+
 internal data class CommercialCloudJournalLine(
     val entryId: String,
     val entryNumber: String,
@@ -2712,6 +2756,7 @@ internal data class CommercialCloudJournalLine(
     val accountCode: String,
     val accountName: String,
     val accountType: String,
+    val partyAccountId: String,
     val debitMinor: Long,
     val creditMinor: Long,
     val currencyCode: String
@@ -2739,7 +2784,7 @@ internal fun loadCommercialCloudPostedJournalLines(context: Context): List<Comme
     if (entryById.isEmpty()) return emptyList()
 
     val lines = commercialCloudPagedGet(
-        "/rest/v1/commercial_journal_lines?select=id,journal_entry_id,line_number,ledger_account_id,description,debit_minor,credit_minor,currency_code" +
+        "/rest/v1/commercial_journal_lines?select=id,journal_entry_id,line_number,ledger_account_id,party_account_id,description,debit_minor,credit_minor,currency_code" +
             "&organization_id=eq.$orgId&order=journal_entry_id.asc,line_number.asc",
         access
     )
@@ -2774,6 +2819,7 @@ internal fun loadCommercialCloudPostedJournalLines(context: Context): List<Comme
                 accountCode = account?.optString("account_code").takeUnless { it == null || it == "null" }.orEmpty(),
                 accountName = account?.optString("account_name").takeUnless { it == null || it == "null" }.orEmpty(),
                 accountType = account?.optString("account_type").takeUnless { it == null || it == "null" }.orEmpty(),
+                partyAccountId = line.optString("party_account_id").takeUnless { it.isBlank() || it == "null" }.orEmpty(),
                 debitMinor = line.optLong("debit_minor", 0L),
                 creditMinor = line.optLong("credit_minor", 0L),
                 currencyCode = line.optString("currency_code").takeUnless { it == "null" }.orEmpty()
