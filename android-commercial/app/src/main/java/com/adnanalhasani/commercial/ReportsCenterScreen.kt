@@ -270,6 +270,10 @@ internal fun ReportsCenterScreen(
     var cloudPayments by remember { mutableStateOf<List<CommercialCloudRecord>>(emptyList()) }
     var cloudJournals by remember { mutableStateOf<List<CommercialCloudRecord>>(emptyList()) }
     var cloudLedgerLines by remember { mutableStateOf<List<CommercialCloudJournalLine>>(emptyList()) }
+    var cloudCustomerPartyAccounts by remember { mutableStateOf<List<CommercialCloudPartyAccountLink>>(emptyList()) }
+    var cloudSupplierPartyAccounts by remember { mutableStateOf<List<CommercialCloudPartyAccountLink>>(emptyList()) }
+    var customerPartyAccountsLoadError by remember { mutableStateOf("") }
+    var supplierPartyAccountsLoadError by remember { mutableStateOf("") }
     var cloudExpenses by remember { mutableStateOf<List<CommercialCloudExpenseVoucher>>(emptyList()) }
     var cloudLoading by remember { mutableStateOf(false) }
     var cloudLoadError by remember { mutableStateOf("") }
@@ -299,6 +303,8 @@ internal fun ReportsCenterScreen(
             val payments = runCatching { loadCommercialCloudRecords(context, "payments") }
             val journals = runCatching { loadCommercialCloudRecords(context, "journals") }
             val ledgerLines = runCatching { loadCommercialCloudPostedJournalLines(context) }
+            val customerPartyAccounts = runCatching { loadCommercialCloudCustomerPartyAccounts(context) }
+            val supplierPartyAccounts = runCatching { loadCommercialCloudSupplierPartyAccounts(context) }
             val expenses = runCatching { loadCommercialCloudExpenses(context) }
             ReportMain.post {
                 cloudLoading = false
@@ -321,6 +327,10 @@ internal fun ReportsCenterScreen(
                 journalsLoadError = journals.exceptionOrNull()?.message.orEmpty()
                 cloudLedgerLines = ledgerLines.getOrDefault(emptyList())
                 ledgerLinesLoadError = ledgerLines.exceptionOrNull()?.message.orEmpty()
+                cloudCustomerPartyAccounts = customerPartyAccounts.getOrDefault(emptyList())
+                customerPartyAccountsLoadError = customerPartyAccounts.exceptionOrNull()?.message.orEmpty()
+                cloudSupplierPartyAccounts = supplierPartyAccounts.getOrDefault(emptyList())
+                supplierPartyAccountsLoadError = supplierPartyAccounts.exceptionOrNull()?.message.orEmpty()
                 cloudExpenses = expenses.getOrDefault(emptyList())
                 expensesLoadError = expenses.exceptionOrNull()?.message.orEmpty()
                 val errors = listOf(
