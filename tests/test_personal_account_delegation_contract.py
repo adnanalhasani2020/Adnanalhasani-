@@ -117,3 +117,25 @@ def test_delegated_portal_respects_purchase_and_booking_flags():
     assert "permissions.optBoolean(\"book\", false)" in repository
     assert "selectedOrganization?.canPurchase != false" in portal
     assert "selectedOrganization?.canBook != false" in portal
+
+
+def test_merchant_approval_establishes_parent_customer_ledger_when_missing():
+    sql = FOUNDATION.read_text(encoding="utf-8")
+    review = sql.split("CREATE OR REPLACE FUNCTION public.commercial_account_review_delegation", 1)[1].split("$function$;", 1)[0]
+    assert "INSERT INTO public.commercial_customers" in review
+    assert "INSERT INTO public.commercial_party_accounts" in review
+    assert "INSERT INTO public.commercial_customer_party_accounts" in review
+    assert "v_parent_owner" in review
+    assert "v_child_owner" in review
+    assert "parent_customer_email_mapping_ambiguous" in review
+
+
+def test_delegated_report_includes_order_type_booking_time_and_line_items():
+    sql = REPORTING.read_text(encoding="utf-8")
+    assert "'order_type',o.order_type" in sql
+    assert "'reserved_from',o.reserved_from" in sql
+    assert "'items',coalesce" in sql
+    assert "'tracked_spend_minor',v_row.spent_minor" in sql
+    screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/PersonalAccountsScreen.kt").read_text(encoding="utf-8")
+    assert "تقرير مشتريات وحجوزات الحساب الفرعي" in screen
+    assert "e.status != \"pending_merchant_approval\"" in screen
