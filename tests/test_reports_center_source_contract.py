@@ -98,7 +98,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
     def test_inventory_movement_report_uses_scoped_source_and_preserves_fractional_quantity(self):
         self.assertIn('"حركة المخزون الفعلية" ->', self.screen)
         start = self.repository.index("internal fun loadCommercialCloudStockMovements(")
-        end = self.repository.index("\\ninternal data class CommercialCloudSupplierPaymentMovement(", start)
+        end = self.repository.index("\ninternal data class CommercialCloudSupplierPaymentMovement(", start)
         loader = self.repository[start:end]
         self.assertIn("commercial_stock_movements", loader)
         self.assertIn("offering.activity.organization_id=eq.$orgId", loader)
