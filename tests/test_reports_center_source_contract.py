@@ -7,7 +7,7 @@ SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commerci
 REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt"
 CONTRACT = ROOT / "android-commercial/docs/reports-data-contract.md"
 COLLECTION_REPLAY_MIGRATION = ROOT / "supabase/migrations/20261027221500_harden_customer_collection_replay_posting.sql"
-RETURN_CURRENCY_GUARD_MIGRATION = ROOT / "supabase/migrations/20261027224500_guard_return_adjustment_currency.sql"
+RETURN_CURRENCY_GUARD_MIGRATION = ROOT / "supabase/migrations/20261027195426_guard_return_adjustment_currency.sql"
 
 
 class ReportsCenterSourceContractTests(unittest.TestCase):
