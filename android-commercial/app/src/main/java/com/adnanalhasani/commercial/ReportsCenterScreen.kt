@@ -739,6 +739,31 @@ internal fun ReportsCenterScreen(
         }.map { row ->
             ReportLine(row.createdAt.take(10), row.id, row.title, row.amountMinor, row.currencyCode, row.status)
         }.sortedByDescending { it.date }
+        "التدفقات النقدية والصندوق" -> if (sourceErrorForReport(selectedReport).isNotBlank()) emptyList() else {
+            val cashKeys = setOf("cash", "bank", "card_clearing", "other_receipts")
+            val cashAccountIds = cloudGlMappings.filter { it.mappingKey in cashKeys }.map { it.ledgerAccountId }.toSet()
+            val movements = cloudLedgerLines.filter { it.accountId in cashAccountIds }
+                .mapNotNull { line ->
+                    val date = runCatching { LocalDate.parse(line.entryDate.take(10)) }.getOrNull() ?: return@mapNotNull null
+                    Triple(line, date, line.debitMinor - line.creditMinor)
+                }.sortedWith(compareBy<Triple<CommercialCloudJournalLine, LocalDate, Long>> { it.second }.thenBy { it.first.entryNumber }.thenBy { it.first.lineNumber })
+            val currencies = movements.map { it.first.currencyCode }.filter { it.matches(Regex("^[A-Z]{3}$")) }.distinct().sorted()
+            buildList {
+                currencies.forEach { currency ->
+                    val currencyMoves = movements.filter { it.first.currencyCode == currency }
+                    val opening = currencyMoves.filter { it.second < (startDate ?: LocalDate.MIN) }.sumOf { it.third }
+                    val periodMoves = currencyMoves.filter { startDate != null && endDate != null && !it.second.isBefore(startDate) && !it.second.isAfter(endDate) }
+                    var balance = opening
+                    add(ReportLine(startText, "رصيد افتتاحي", "النقد والبنوك", opening, currency, "صافي أرصدة الحسابات النقدية المربوطة من القيود المرحلة قبل الفترة"))
+                    periodMoves.forEach { (line, date, amount) ->
+                        balance = Math.addExact(balance, amount)
+                        add(ReportLine(date.toString(), "قيد ${line.entryNumber} · سطر ${line.lineNumber}", line.accountName.ifBlank { line.accountCode }, amount, currency,
+                            "${line.entryDescription} · ${line.sourceType}:${line.sourceId} · الحساب ${line.accountCode} · الرصيد النقدي المتحرك ${reportMoney(balance, currency, true)}"))
+                    }
+                    add(ReportLine(endText, "رصيد ختامي", "النقد والبنوك", balance, currency, "الرصيد الافتتاحي + حركة القيود النقدية المرحلة ضمن الفترة"))
+                }
+            }
+        }
         "قائمة الدخل والميزانية العمومية" -> if (ledgerStatementError.isNotBlank()) emptyList() else {
             val throughEnd = cloudLedgerLines.filter { line ->
                 val date = runCatching { LocalDate.parse(line.entryDate.take(10)) }.getOrNull()
