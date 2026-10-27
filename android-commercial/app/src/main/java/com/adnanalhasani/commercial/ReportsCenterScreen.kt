@@ -927,6 +927,14 @@ internal fun ReportsCenterScreen(
                 date != null && startDate != null && endDate != null &&
                     !date.isBefore(startDate) && !date.isAfter(endDate)
             }
+            val periodDays = if (startDate != null && endDate != null)
+                java.time.temporal.ChronoUnit.DAYS.between(startDate, endDate).coerceAtLeast(0L) + 1L else 0L
+            val previousStart = if (startDate != null && periodDays > 0L) runCatching { startDate.minusDays(periodDays) }.getOrNull() else null
+            val previousEnd = if (startDate != null) runCatching { startDate.minusDays(1) }.getOrNull() else null
+            val previousPeriod = if (previousStart != null && previousEnd != null) throughEnd.filter { line ->
+                val date = runCatching { LocalDate.parse(line.entryDate.take(10)) }.getOrNull()
+                date != null && !date.isBefore(previousStart) && !date.isAfter(previousEnd)
+            } else emptyList()
             fun normalizedType(line: CommercialCloudJournalLine): String =
                 line.accountType.lowercase(Locale.ROOT).replace('-', '_').replace(' ', '_')
             fun statementClass(line: CommercialCloudJournalLine): String = when (normalizedType(line)) {
@@ -975,6 +983,18 @@ internal fun ReportsCenterScreen(
                     val netRevenue = revenue - contraRevenue
                     val grossProfit = netRevenue - cogs
                     val netProfit = grossProfit - operatingExpenses
+                    val previousRows = previousPeriod.filter { it.currencyCode == currency }
+                    if (previousRows.isNotEmpty()) {
+                        val previousRevenue = accountNet(previousRows, "revenue") - accountNet(previousRows, "contra_revenue")
+                        val previousGrossProfit = previousRevenue - accountNet(previousRows, "cogs")
+                        val previousNetProfit = previousGrossProfit - accountNet(previousRows, "expense")
+                        add(ReportLine("${previousStart} — ${previousEnd}", "مقارنة الفترة السابقة", "صافي الإيرادات للفترة السابقة", previousRevenue, currency,
+                            "الفترة السابقة مساوية للمدة المحددة؛ من القيود المرحلة فقط"))
+                        add(ReportLine("${previousStart} — ${previousEnd}", "مقارنة الفترة السابقة", "مجمل الربح للفترة السابقة", previousGrossProfit, currency,
+                            "صافي الإيرادات السابقة ناقص تكلفة البضاعة المرحلة"))
+                        add(ReportLine("${previousStart} — ${previousEnd}", "مقارنة الفترة السابقة", "صافي الربح/الخسارة للفترة السابقة", previousNetProfit, currency,
+                            "النتيجة السابقة من حسابات الإيرادات والمصروفات المرحلة"))
+                    }
                     add(ReportLine(startText + " — " + endText, "قائمة الدخل", "الإيرادات المسجلة", revenue, currency, "مصدرها حسابات الإيرادات المرحلة"))
                     if (contraRevenue != 0L) add(ReportLine(startText + " — " + endText, "قائمة الدخل", "المرتجعات/الخصومات المسجلة كحساب مقابل للإيراد", -contraRevenue, currency, "يعتمد على تصنيف الحساب في دفتر الأستاذ"))
                     add(ReportLine(startText + " — " + endText, "قائمة الدخل", "صافي الإيرادات", netRevenue, currency, "الإيرادات ناقص الحسابات المقابلة للإيراد"))
