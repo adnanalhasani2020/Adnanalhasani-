@@ -54,6 +54,17 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', self.screen)
         self.assertIn("Excel XLSX", self.screen)
 
+    def test_invalid_date_never_expands_sales_to_all_history(self):
+        self.assertIn("val selectedRows = if (dateError || (cloudMode && (cloudLoading || cloudLoadError.isNotBlank()))) emptyList()", self.screen)
+        self.assertIn("val inPeriodSales = if (dateError) emptyList()", self.screen)
+        self.assertIn("val currencyTotal = if (dateError || (cloudMode && (cloudLoading || cloudLoadError.isNotBlank()))) emptyMap()", self.screen)
+        self.assertIn("لا يمكن حساب الملخص: تحقق من الفترة المحددة", self.screen)
+
+    def test_ledger_account_statement_requires_account_filter(self):
+        self.assertIn('ReportCatalogItem("كشف حساب محاسبي"', self.screen)
+        self.assertIn('selectedReport != "كشف حساب محاسبي" || (accountQuery.isNotBlank()', self.screen)
+        self.assertIn('label = { Text("رمز الحساب أو اسمه") }', self.screen)
+
     def test_csv_contains_period_source_timestamp_and_arabic_bom(self):
         self.assertIn('writer.write("\\uFEFF")', self.screen)
         self.assertIn('add(listOf("الفترة", startText + " — " + endText))', self.screen)
