@@ -293,7 +293,7 @@ internal fun CommercialCloudSaleComposerScreen(
                 Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(14.dp), border = BorderStroke(1.dp, CloudComposerBorder)) {
                     Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                         Text(product.name, color = CloudComposerInk, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                        Text("المخزون المتاح: ${BigDecimal.valueOf(product.stockPrecise).stripTrailingZeros().toPlainString()} ${product.unitCode}", color = CloudComposerMuted, fontSize = 11.sp)
+                        Text("المخزون المتاح: ${product.stockPrecise.stripTrailingZeros().toPlainString()} ${product.unitCode}", color = CloudComposerMuted, fontSize = 11.sp)
                         Text("وحدات البيع: " + availableUnits.joinToString("، ") { "${it.label} = ${it.factor} ${product.unitCode}" }, color = CloudComposerMuted, fontSize = 11.sp)
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(onClick = {
@@ -392,7 +392,7 @@ internal fun CommercialCloudSaleComposerScreen(
                             val requestedBaseQuantity = lines.fold(BigDecimal.ZERO) { sum, line ->
                                 sum + BigDecimal.valueOf(line.quantity.toLong()).multiply(BigDecimal.valueOf(line.unit.factor))
                             }
-                            requestedBaseQuantity > BigDecimal.valueOf(lines.first().product.stockPrecise)
+                            requestedBaseQuantity > lines.first().product.stockPrecise
                         }) {
                             error = "مجموع الكميات بوحدة المخزون يتجاوز المتاح لأحد الأصناف؛ حدّث المخزون وصحح السطور."
                         } else if (selectedLines.any { it.product.cloudPriceMinor < 0L }) {
