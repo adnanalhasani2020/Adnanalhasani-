@@ -138,7 +138,7 @@ internal fun ReportsCenterScreen(
             ReportCatalogItem("أرصدة العملاء وكشف الحساب", "العملاء والديون", "حركات الفواتير والتحصيل والمرتجعات والتسويات", false, "يتطلب دفتر حركات موحدًا ومطابقة المرتجعات والتسويات؛ لا يصح استنتاج الرصيد من الفواتير وحدها."),
             ReportCatalogItem("أرصدة الموردين والمستحقات", "الموردون والمستحقات", "فواتير المورد والمدفوعات والمرتجعات", false, "يتطلب مطابقة الالتزامات والدفعات والمرتجعات والتسويات."),
             ReportCatalogItem("سندات القبض والصرف", "السندات والتحصيل والصرف", "commercial_payments وحالة كل دفعة", cloudMode, "يعرض الدفعات الناجحة فقط؛ لا تُجمع قيود السند والدفعة مرتين."),
-            ReportCatalogItem("القيود المحاسبية المرحّلة (قائمة)", "المحاسبة والمالية", "commercial_journal_entries", cloudMode, "عرض سجل القيود وحالتها فقط؛ لا يُسمى ميزان مراجعة ولا يعرض أرصدة دون سطور القيود."),
+            ReportCatalogItem("سجل القيود المحاسبية", "المحاسبة والمالية", "commercial_journal_entries", cloudMode, "قائمة قراءة فقط لحالات القيود ومصادرها؛ لا تُعرض كميزان مراجعة أو قائمة مالية."),
 
             ReportCatalogItem("ميزان المراجعة", "المحاسبة والمالية", "سطور القيود المرحلة والمتوازنة", false, "غير متاح كتقرير معتمد قبل التحقق من دفتر الأستاذ والقيود المرحلة."),
             ReportCatalogItem("دفتر الأستاذ وكشف حركة الحساب", "المحاسبة والمالية", "قيود مرحلة مربوطة بالحسابات", false, "يلزم مصدر قيود موحد مع ربط الحسابات ومصدر العملية."),
@@ -237,7 +237,7 @@ internal fun ReportsCenterScreen(
         }.map { row ->
             ReportLine(row.createdAt.take(10), row.id, row.title, row.amountMinor, row.currencyCode, row.status)
         }.sortedByDescending { it.date }
-        "القيود المحاسبية المرحّلة (قائمة)" -> cloudJournals.filter { row ->
+        "سجل القيود المحاسبية" -> cloudJournals.filter { row ->
             val timestamp = reportDateMillis(row.createdAt)
             timestamp != null && timestamp >= startMillis && timestamp < endExclusive
         }.map { row ->
@@ -284,7 +284,7 @@ internal fun ReportsCenterScreen(
                     Text("ملخص المبيعات المكتملة", color = Color(0xFFBFD9D0), fontSize = 13.sp)
                     Text("عدد الفواتير: ${inPeriodSales.size}", color = Color.White, fontWeight = FontWeight.SemiBold)
                     currencyTotal.toSortedMap().forEach { (currency, total) ->
-                        Text("${java.text.NumberFormat.getNumberInstance(Locale.US).format(total)} $currency", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                        Text(reportMoney(total, currency, cloudMode), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                     }
                     Text("الفترة: ${startText} — ${endText}", color = Color(0xFFBFD9D0), fontSize = 11.sp)
                 }
@@ -341,7 +341,7 @@ internal fun ReportsCenterScreen(
                         "ملخص المبيعات حسب الفترة", "تفاصيل فواتير المبيعات", "المبيعات حسب الصنف",
                         "المبيعات حسب العميل", "المبيعات النقدية والآجلة", "متوسط قيمة الفاتورة", "مقارنة فترتين", "مقارنة الفترات",
                         "التحصيلات المسجلة محليًا", "الدفعات السحابية الناجحة", "المصروفات التشغيلية", "رصيد المخزون الحالي", "تنبيهات المخزون المنخفض",
-                        "فواتير الشراء والمستحقات المسجلة", "مرتجعات المبيعات وحالة التسوية", "سندات القبض والصرف", "القيود المحاسبية المرحّلة (قائمة)" -> selectedReport = report.title
+                        "فواتير الشراء والمستحقات المسجلة", "مرتجعات المبيعات وحالة التسوية", "سندات القبض والصرف", "سجل القيود المحاسبية" -> selectedReport = report.title
                         "لوحة المؤشرات" -> selectedReport = "ملخص المبيعات"
                     }
                 }),
@@ -379,7 +379,7 @@ internal fun ReportsCenterScreen(
                             add(listOf("مصدر البيانات", if (cloudMode) "السحابة" else "محلي على الجهاز"))
                             add(listOf("تاريخ التصدير", java.time.LocalDateTime.now().toString()))
                             add(listOf("التاريخ", "المرجع", "الاسم", "المبلغ/الكمية", "العملة", "الحالة"))
-                            selectedRows.forEach { add(listOf(it.date, it.reference, it.name, it.amount.toString(), it.currency, it.status)) }
+                            selectedRows.forEach { row -> add(listOf(row.date, row.reference, row.name, if (row.currency.isBlank() || row.currency == "-") row.amount.toString() else reportMoney(row.amount, row.currency, cloudMode), row.currency, row.status)) }
                         }
                         csvLauncher.launch("mutajri-report-${selectedReport.hashCode()}.csv")
                     }) { Icon(Icons.Default.FileDownload, null); Spacer(Modifier.width(4.dp)); Text("تصدير CSV") }
@@ -390,13 +390,27 @@ internal fun ReportsCenterScreen(
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(row.name, fontWeight = FontWeight.SemiBold, color = ReportInk)
                         Text("${row.reference} · ${row.date}", color = ReportMuted, fontSize = 11.sp)
-                        Text("${java.text.NumberFormat.getNumberInstance(Locale.US).format(row.amount)} ${row.currency}", color = ReportGreen, fontWeight = FontWeight.Bold)
+                        Text(if (row.currency.isBlank() || row.currency == "-") "${java.text.NumberFormat.getNumberInstance(Locale.US).format(row.amount)} ${row.currency}" else reportMoney(row.amount, row.currency, cloudMode), color = ReportGreen, fontWeight = FontWeight.Bold)
                         if (row.status.isNotBlank()) Text(row.status, color = ReportMuted, fontSize = 11.sp)
                     }
                 }
             }
         } else if (selectedReport != "ملخص المبيعات" && !dateError) {
             item { Text("لا توجد بيانات لهذا التقرير ضمن الفترة المحددة.", color = ReportMuted, modifier = Modifier.padding(8.dp)) }
+        }
+        if (cloudMode && cloudLoading) item {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                Text("جارٍ تحميل مصادر التقارير السحابية...", color = ReportMuted, fontSize = 12.sp)
+            }
+        }
+        if (cloudMode && cloudLoadError.isNotBlank()) item {
+            Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3DE)), modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("تعذر تحميل بعض التقارير: $cloudLoadError", color = Color(0xFF8A4B08), fontSize = 12.sp)
+                    OutlinedButton(onClick = { cloudReload++ }) { Icon(Icons.Default.Refresh, null); Spacer(Modifier.width(6.dp)); Text("إعادة المحاولة") }
+                }
+            }
         }
         item {
             OutlinedButton(onClick = onOpenExistingReports, modifier = Modifier.fillMaxWidth()) {
