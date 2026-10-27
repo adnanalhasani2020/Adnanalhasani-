@@ -86,7 +86,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
 
     def test_customer_statement_uses_invoice_payments_returns_and_customer_filter(self):
         self.assertIn('"أرصدة العملاء وكشف الحساب" ->', self.screen)
-        self.assertIn("doc.customerId.isNotBlank()", self.screen)
+        self.assertIn("it.customerId.isNotBlank()", self.screen)
         self.assertIn('it.status.lowercase(Locale.ROOT) in setOf("succeeded", "partially_refunded", "refunded")', self.screen)
         self.assertIn('it.status.equals("completed", true)', self.screen)
         self.assertIn('it.refundStatus.equals("refunded", true)', self.screen)
@@ -100,7 +100,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         loader = self.repository[start:end]
         self.assertIn("commercial_supplier_payments", loader)
         self.assertIn("journal.status=eq.posted", loader)
-        self.assertIn('val id: String,', loader)
+        self.assertIn('val id = row.optString("id")', loader)
         self.assertIn('if (id.isBlank() || obligationId.isBlank() || invoiceId.isBlank() || supplierId.isBlank() || journalId.isBlank()', loader)
 
     def test_inventory_movement_report_uses_scoped_source_and_preserves_fractional_quantity(self):
@@ -199,7 +199,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
 
     def test_csv_contains_period_source_timestamp_and_arabic_bom(self):
         self.assertIn('writer.write("\\uFEFF")', self.screen)
-        self.assertIn('add(listOf("الفترة", startText + " — " + endText))', self.screen)
+        self.assertIn('add(listOf("الفترة", if (exportTitle == "التقييم المالي الحالي للمخزون")', self.screen)
         self.assertIn('add(listOf("مصدر البيانات"', self.screen)
         self.assertIn('add(listOf("تاريخ التصدير"', self.screen)
 
