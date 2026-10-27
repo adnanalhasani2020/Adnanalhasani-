@@ -1274,6 +1274,7 @@ internal fun loadCommercialCloudSales(context: Context): List<SaleRecord> {
             val total = row.optLong("total_minor", 0L).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
             val paymentStatus = row.optString("payment_status").lowercase(Locale.ROOT)
             val saleStatus = row.optString("status").lowercase(Locale.ROOT)
+            if (saleStatus != "completed") continue
             val paymentRows = row.optJSONArray("payments")
             val paidMinor = (0 until (paymentRows?.length() ?: 0))
                 .mapNotNull { paymentRows?.optJSONObject(it) }
