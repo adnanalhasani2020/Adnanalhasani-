@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterScreen.kt"
 REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt"
 CONTRACT = ROOT / "android-commercial/docs/reports-data-contract.md"
+COLLECTION_REPLAY_MIGRATION = ROOT / "supabase/migrations/20261027221500_harden_customer_collection_replay_posting.sql"
 
 
 class ReportsCenterSourceContractTests(unittest.TestCase):
@@ -14,6 +15,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         cls.screen = SCREEN.read_text(encoding="utf-8")
         cls.repository = REPOSITORY.read_text(encoding="utf-8")
         cls.contract = CONTRACT.read_text(encoding="utf-8")
+        cls.collection_replay_migration = COLLECTION_REPLAY_MIGRATION.read_text(encoding="utf-8")
 
     def test_cloud_operational_reports_use_authoritative_sources(self):
         for source in (
@@ -149,6 +151,19 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn('val cashKeys = setOf("cash", "bank", "card_clearing", "other_receipts")', self.screen)
         self.assertIn('رصيد افتتاحي', self.screen)
         self.assertIn('رصيد ختامي', self.screen)
+
+    def test_customer_collection_idempotent_replay_requires_posted_journal(self):
+        self.assertIn("customer_payment_journal_not_posted", self.collection_replay_migration)
+        self.assertIn("e.source_type = 'payment'", self.collection_replay_migration)
+        self.assertIn("e.source_id = v_existing.id", self.collection_replay_migration)
+        self.assertIn("e.status = 'posted'", self.collection_replay_migration)
+        self.assertIn("'idempotent_replay', true", self.collection_replay_migration)
+
+    def test_inventory_value_uses_saved_unit_cost_and_mapped_currency(self):
+        self.assertIn("unitCostMinor: Long?", self.repository)
+        self.assertIn("quantityOnHand: java.math.BigDecimal", self.repository)
+        self.assertIn('it.mappingKey == "inventory"', self.screen)
+        self.assertIn("التقييم المالي الحالي للمخزون", self.screen)
 
     def test_cloud_stock_reports_use_inventory_balances_and_movements(self):
         self.assertIn("loadCommercialCloudStockAlerts(context)", self.screen)
