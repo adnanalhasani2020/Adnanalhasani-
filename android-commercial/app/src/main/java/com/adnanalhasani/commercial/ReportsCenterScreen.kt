@@ -428,7 +428,12 @@ internal fun ReportsCenterScreen(
         customerPartyAccountsLoadError.isNotBlank() -> customerPartyAccountsLoadError
         cloudCustomerPartyAccounts.isEmpty() -> "لا توجد روابط لحسابات مراقبة العملاء في دليل الحسابات."
         cloudGlMappings.none { it.mappingKey == "accounts_receivable" } -> "حساب مراقبة العملاء غير مربوط في دليل الحسابات."
-        cloudLedgerLines.any { line -> line.accountId in cloudGlMappings.filter { it.mappingKey == "accounts_receivable" }.map { it.ledgerAccountId }.toSet() && line.partyAccountId.isBlank() } -> "توجد حركات على حساب مراقبة العملاء بلا ربط بالعميل؛ تعذر اعتماد الكشف الكامل."
+        cloudLedgerLines.any { line ->
+            line.accountId in cloudGlMappings.filter { it.mappingKey == "accounts_receivable" }.map { it.ledgerAccountId }.toSet() &&
+                (line.partyAccountId.isBlank() || cloudCustomerPartyAccounts.none { link ->
+                    link.partyAccountId == line.partyAccountId && link.currencyCode == line.currencyCode
+                })
+        } -> "توجد حركات على حساب مراقبة العملاء بلا ربط صالح بعميل وعملة مطابقين؛ تعذر اعتماد الكشف الكامل."
         else -> ""
     }
     val supplierStatementError = when {
@@ -439,7 +444,12 @@ internal fun ReportsCenterScreen(
         supplierControlAccountsLoadError.isNotBlank() -> supplierControlAccountsLoadError
         cloudSupplierPartyAccounts.isEmpty() -> "لا توجد روابط لحسابات مراقبة الموردين في دليل الحسابات."
         cloudSupplierControlAccounts.none { it.accountRole == "accounts_payable" } -> "حساب مراقبة الموردين غير مربوط في دليل الحسابات."
-        cloudLedgerLines.any { line -> line.accountId in cloudSupplierControlAccounts.filter { it.accountRole == "accounts_payable" }.map { it.ledgerAccountId }.toSet() && line.partyAccountId.isBlank() } -> "توجد حركات على حساب مراقبة الموردين بلا ربط بالمورد؛ تعذر اعتماد الكشف الكامل."
+        cloudLedgerLines.any { line ->
+            line.accountId in cloudSupplierControlAccounts.filter { it.accountRole == "accounts_payable" }.map { it.ledgerAccountId }.toSet() &&
+                (line.partyAccountId.isBlank() || cloudSupplierPartyAccounts.none { link ->
+                    link.partyAccountId == line.partyAccountId && link.currencyCode == line.currencyCode
+                })
+        } -> "توجد حركات على حساب مراقبة الموردين بلا ربط صالح بمورد وعملة مطابقين؛ تعذر اعتماد الكشف الكامل."
         else -> ""
     }
     val sourceErrorForReport: (String) -> String = { title ->
