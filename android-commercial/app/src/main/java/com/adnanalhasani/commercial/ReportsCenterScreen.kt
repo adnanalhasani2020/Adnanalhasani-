@@ -3,6 +3,8 @@ package com.adnanalhasani.commercial
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -28,12 +30,29 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import java.util.Currency
+import java.util.concurrent.Executors
 
 private val ReportInk = Color(0xFF183B35)
 private val ReportGreen = Color(0xFF167D63)
 private val ReportMint = Color(0xFFE8F5EF)
 private val ReportMuted = Color(0xFF71817B)
 private val ReportBorder = Color(0xFFE5EBE8)
+private val ReportIo = Executors.newSingleThreadExecutor()
+private val ReportMain = Handler(Looper.getMainLooper())
+
+private fun reportCurrencyScale(code: String): Int =
+    runCatching { Currency.getInstance(code).defaultFractionDigits.coerceIn(0, 6) }.getOrDefault(0)
+
+private fun reportMoney(amount: Long, currency: String, cloudMinorUnits: Boolean): String {
+    val value = if (cloudMinorUnits) java.math.BigDecimal.valueOf(amount).movePointLeft(reportCurrencyScale(currency))
+    else java.math.BigDecimal.valueOf(amount)
+    return value.setScale(if (cloudMinorUnits) reportCurrencyScale(currency) else 0, java.math.RoundingMode.HALF_UP)
+        .toPlainString() + " " + currency
+}
+
+private fun reportDateMillis(value: String): Long? =
+    runCatching { Instant.parse(value).toEpochMilli() }.getOrNull()
 
 private data class ReportCatalogItem(val title: String, val category: String, val source: String, val supported: Boolean, val note: String)
 private data class ReportLine(val date: String, val reference: String, val name: String, val amount: Long, val currency: String, val status: String)
@@ -59,6 +78,40 @@ internal fun ReportsCenterScreen(
     var exportRows by remember { mutableStateOf<List<List<String>>>(emptyList()) }
     var exportTitle by remember { mutableStateOf("تقرير متجري") }
     var error by remember { mutableStateOf("") }
+    var cloudPurchases by remember { mutableStateOf<List<CommercialCloudPurchaseDocument>>(emptyList()) }
+    var cloudReturns by remember { mutableStateOf<List<CommercialCloudSaleReturn>>(emptyList()) }
+    var cloudPayments by remember { mutableStateOf<List<CommercialCloudRecord>>(emptyList()) }
+    var cloudJournals by remember { mutableStateOf<List<CommercialCloudRecord>>(emptyList()) }
+    var cloudExpenses by remember { mutableStateOf<List<CommercialCloudExpenseVoucher>>(emptyList()) }
+    var cloudLoading by remember { mutableStateOf(false) }
+    var cloudLoadError by remember { mutableStateOf("") }
+    var cloudReload by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(cloudMode, cloudReload) {
+        if (!cloudMode) return@LaunchedEffect
+        cloudLoading = true
+        cloudLoadError = ""
+        ReportIo.execute {
+            val purchases = runCatching { loadCommercialCloudPurchaseDocuments(context) }
+            val returns = runCatching { loadCommercialCloudSaleReturns(context) }
+            val payments = runCatching { loadCommercialCloudRecords(context, "payments") }
+            val journals = runCatching { loadCommercialCloudRecords(context, "journals") }
+            val expenses = runCatching { loadCommercialCloudExpenses(context) }
+            ReportMain.post {
+                cloudLoading = false
+                if (purchases.isSuccess) cloudPurchases = purchases.getOrThrow()
+                if (returns.isSuccess) cloudReturns = returns.getOrThrow()
+                if (payments.isSuccess) cloudPayments = payments.getOrThrow()
+                if (journals.isSuccess) cloudJournals = journals.getOrThrow()
+                if (expenses.isSuccess) cloudExpenses = expenses.getOrThrow()
+                val errors = listOf(
+                    purchases.exceptionOrNull(), returns.exceptionOrNull(), payments.exceptionOrNull(),
+                    journals.exceptionOrNull(), expenses.exceptionOrNull()
+                ).filterNotNull()
+                cloudLoadError = errors.firstOrNull()?.message ?: if (errors.isNotEmpty()) "تعذر تحميل بعض مصادر التقارير." else ""
+            }
+        }
+    }
 
     val categories = listOf(
         "لوحة المعلومات", "المبيعات", "المشتريات", "العملاء والديون", "الموردون والمستحقات",
@@ -76,19 +129,22 @@ internal fun ReportsCenterScreen(
             ReportCatalogItem("المبيعات النقدية والآجلة", "المبيعات", "نوع البيع المسجل في الفاتورة", true, "تصنيف حسب علامة النقدي/الآجل في سجل البيع، وليس تسوية الرصيد."),
             ReportCatalogItem("متوسط قيمة الفاتورة", "المبيعات", "إجمالي الفواتير المكتملة وعددها", true, "متوسط تشغيلي منفصل حسب العملة."),
             ReportCatalogItem("مقارنة الفترات", "الفترات والمقارنات", "سجلات المبيعات المكتملة المؤرخة", true, "يقارن الفترة الحالية بفترة سابقة مساوية لها في عدد الأيام حسب العملة."),
-            ReportCatalogItem("التحصيلات المسجلة محليًا", "السندات والتحصيل والصرف", "settlements_json", !cloudMode, "لا تعرض هذه البيانات في وضع السحابة لتجنب خلط المصادر."),
-            ReportCatalogItem("المصروفات التشغيلية", "الأرباح والتكاليف", if (cloudMode) "سندات المصروفات السحابية" else "expenses_json", !cloudMode, "التقرير المحلي يعرض المصروفات المحفوظة على الجهاز."),
+            ReportCatalogItem(if (cloudMode) "الدفعات السحابية الناجحة" else "التحصيلات المسجلة محليًا", "السندات والتحصيل والصرف", true, "commercial_payments" if (cloudMode) else "settlements_json", "يعرض الدفعات الناجحة فقط في السحابة؛ السندات لا تُجمع منفصلة عن الدفعة المرتبطة."),
+            ReportCatalogItem("المصروفات التشغيلية", "الأرباح والتكاليف", if (cloudMode) "commercial_expense_vouchers" else "expenses_json", true, "تُستبعد سندات الصرف الملغاة؛ هذا تقرير مصروفات مسجلة وليس قائمة دخل."),
             ReportCatalogItem("رصيد المخزون الحالي", "الأصناف والمخزون", if (cloudMode) "commercial_inventory_balances" else "products_json", true, "رصيد حالي فقط؛ ليس رصيدًا تاريخيًا للفترة."),
             ReportCatalogItem("تنبيهات المخزون المنخفض", "الأصناف والمخزون", "الرصيد وحد إعادة الطلب", true, "يعتمد على حد التنبيه المسجل لكل صنف."),
-            ReportCatalogItem("مشتريات الفترة وفواتير الشراء", "المشتريات", "مصدر مشتريات موثوق متاح للتقرير", false, "لا تُعرض هنا حتى اكتمال تحميل بيانات فواتير الشراء وتفاصيلها وربطها بالمصدر."),
+            ReportCatalogItem("فواتير الشراء والمستحقات المسجلة", "المشتريات", "commercial_purchase_orders ← supplier_invoices ← supplier_obligations", cloudMode, "يُعرض مبلغ الفاتورة والرصيد المستحق من سجل الالتزام؛ لا يُخلط مع قيمة أمر الشراء."),
+            ReportCatalogItem("مرتجعات المبيعات وحالة التسوية", "المرتجعات", "commercial_sales_returns + عناصر المرتجع", cloudMode, "يفصل حالة الموافقة عن الاسترداد الفعلي وإعادة التخزين؛ لا تُعامل الطلبات المعلقة كمرتجعات منفذة."),
             ReportCatalogItem("أرصدة العملاء وكشف الحساب", "العملاء والديون", "حركات الفواتير والتحصيل والمرتجعات والتسويات", false, "يتطلب دفتر حركات موحدًا ومطابقة المرتجعات والتسويات؛ لا يصح استنتاج الرصيد من الفواتير وحدها."),
             ReportCatalogItem("أرصدة الموردين والمستحقات", "الموردون والمستحقات", "فواتير المورد والمدفوعات والمرتجعات", false, "يتطلب مطابقة الالتزامات والدفعات والمرتجعات والتسويات."),
-            ReportCatalogItem("سندات القبض والصرف", "السندات والتحصيل والصرف", "السندات وحالاتها وروابط الدفعات", false, "يجب إزالة ازدواجية السند والدفعة المرتبطة قبل إظهار الإجمالي."),
+            ReportCatalogItem("سندات القبض والصرف", "السندات والتحصيل والصرف", "commercial_payments وحالة كل دفعة", cloudMode, "يعرض الدفعات الناجحة فقط؛ لا تُجمع قيود السند والدفعة مرتين."),
+            ReportCatalogItem("القيود المحاسبية المرحّلة (قائمة)", "المحاسبة والمالية", "commercial_journal_entries", cloudMode, "عرض سجل القيود وحالتها فقط؛ لا يُسمى ميزان مراجعة ولا يعرض أرصدة دون سطور القيود."),
+
             ReportCatalogItem("ميزان المراجعة", "المحاسبة والمالية", "سطور القيود المرحلة والمتوازنة", false, "غير متاح كتقرير معتمد قبل التحقق من دفتر الأستاذ والقيود المرحلة."),
             ReportCatalogItem("دفتر الأستاذ وكشف حركة الحساب", "المحاسبة والمالية", "قيود مرحلة مربوطة بالحسابات", false, "يلزم مصدر قيود موحد مع ربط الحسابات ومصدر العملية."),
             ReportCatalogItem("قائمة الدخل والميزانية العمومية", "المحاسبة والمالية", "دفتر أستاذ مكتمل وتسويات الفترة", false, "غير متاحة لتجنب عرض قوائم مضللة."),
             ReportCatalogItem("التدفقات النقدية والصندوق", "الصندوق والنقدية", "حركات نقدية فريدة ورصيد افتتاحي موثوق", false, "يلزم تحديد جميع الحركات النقدية ومنع تكرار الدفعات والسندات."),
-            ReportCatalogItem("المرتجعات وأثرها المالي والمخزني", "المرتجعات", "طلبات المرتجعات وحالات الاعتماد والتنفيذ", false, "الطلب والموافقة وإعادة التخزين والاسترداد مراحل منفصلة؛ يلزم تجميع نتائجها المؤكدة."),
+
             ReportCatalogItem("الضرائب والخصومات", "الضرائب والخصومات", "تفاصيل الضرائب والخصومات من المستندات", false, "لا تُخمن النسب أو مبالغ الضريبة إذا لم تسجل في المصدر."),
             ReportCatalogItem("أداء المستخدمين والفروع والمستودعات", "المستخدمون والعمليات", "مستخدم/فرع/مستودع محفوظ على المستند", false, "لا تتوفر كل هذه الأبعاد في نموذج البيانات المحمل حاليًا."),
 
@@ -144,12 +200,54 @@ internal fun ReportsCenterScreen(
                 ReportLine("${startText} — ${endText}", "مقارنة", "مبيعات الفترة الحالية", currentTotal, currency, "الفترة السابقة: $previousTotal · الفرق: ${currentTotal - previousTotal}")
             }
         }
+        "الدفعات السحابية الناجحة" -> cloudPayments.filter { row ->
+            val timestamp = reportDateMillis(row.createdAt)
+            timestamp != null && timestamp >= startMillis && timestamp < endExclusive &&
+                row.status.equals("succeeded", true)
+        }.map { row ->
+            ReportLine(row.createdAt.take(10), row.id, row.title, row.amountMinor, row.currencyCode, row.status)
+        }
         "التحصيلات المسجلة محليًا" -> inPeriodSettlements.map {
             ReportLine(Instant.ofEpochMilli(it.timestamp).atZone(zone).toLocalDate().toString(), "فاتورة #${it.invoiceNumber}", it.customer, it.amount.toLong(), "YER", "تحصيل محلي")
         }
-        "المصروفات التشغيلية" -> inPeriodExpenses.map {
+        "فواتير الشراء والمستحقات المسجلة" -> cloudPurchases.flatMap { purchase ->
+            purchase.supplierInvoices.filter { invoice ->
+                val timestamp = reportDateMillis(invoice.recordedAt)
+                timestamp != null && timestamp >= startMillis && timestamp < endExclusive &&
+                    invoice.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed")
+            }.map { invoice ->
+                val due = invoice.obligation?.amountDueMinor
+                val paid = invoice.obligation?.amountPaidMinor
+                ReportLine(invoice.recordedAt.take(10), invoice.invoiceNumber.ifBlank { purchase.orderNumber }, purchase.supplierName,
+                    invoice.totalMinor, invoice.currencyCode.ifBlank { purchase.currencyCode },
+                    if (due != null && paid != null) "مستحق: ${(due - paid).coerceAtLeast(0)} · ${invoice.state}" else invoice.state)
+            }
+        }.sortedByDescending { it.date }
+        "مرتجعات المبيعات وحالة التسوية" -> cloudReturns.filter { row ->
+            val timestamp = reportDateMillis(row.createdAt)
+            timestamp != null && timestamp >= startMillis && timestamp < endExclusive
+        }.map { row ->
+            val approved = if (row.status in setOf("approved", "completed")) (row.approvedRefundMinor ?: 0L) else 0L
+            ReportLine(row.createdAt.take(10), row.receiptNumber, row.customerName, approved, row.currencyCode,
+                "الطلب: ${row.status} · الاسترداد: ${row.refundStatus} · المخزون: ${row.restockStatus}")
+        }.sortedByDescending { it.date }
+        "سندات القبض والصرف" -> cloudPayments.filter { row ->
+            val timestamp = reportDateMillis(row.createdAt)
+            timestamp != null && timestamp >= startMillis && timestamp < endExclusive
+        }.map { row ->
+            ReportLine(row.createdAt.take(10), row.id, row.title, row.amountMinor, row.currencyCode, row.status)
+        }.sortedByDescending { it.date }
+        "القيود المحاسبية المرحّلة (قائمة)" -> cloudJournals.filter { row ->
+            val timestamp = reportDateMillis(row.createdAt)
+            timestamp != null && timestamp >= startMillis && timestamp < endExclusive
+        }.map { row ->
+            ReportLine(row.createdAt.take(10), row.id, row.title, 0L, "", row.status + " · " + row.subtitle)
+        }.sortedByDescending { it.date }
+        "المصروفات التشغيلية" -> (if (cloudMode) cloudExpenses.filter { it.canceledAt.isBlank() && (reportDateMillis(it.recordedAt)?.let { ts -> ts >= startMillis && ts < endExclusive } == true) }.map {
+            ReportLine(it.recordedAt.take(10), it.id, it.category, it.amountMinor, it.currencyCode, it.paymentMethod)
+        } else inPeriodExpenses.map {
             ReportLine(Instant.ofEpochMilli(it.timestamp).atZone(zone).toLocalDate().toString(), "مصروف #${it.id}", it.category, it.amount.toLong(), "YER", it.note)
-        }
+        })
         "رصيد المخزون الحالي" -> products.map {
             ReportLine("-", it.catalogCode.ifBlank { it.barcode }, it.name, it.stock.toLong(), "-", "${it.unitCode} · سعر ${it.price}")
         }
@@ -242,7 +340,8 @@ internal fun ReportsCenterScreen(
                     when (report.title) {
                         "ملخص المبيعات حسب الفترة", "تفاصيل فواتير المبيعات", "المبيعات حسب الصنف",
                         "المبيعات حسب العميل", "المبيعات النقدية والآجلة", "متوسط قيمة الفاتورة", "مقارنة فترتين", "مقارنة الفترات",
-                        "التحصيلات المسجلة محليًا", "المصروفات التشغيلية", "رصيد المخزون الحالي", "تنبيهات المخزون المنخفض" -> selectedReport = report.title
+                        "التحصيلات المسجلة محليًا", "الدفعات السحابية الناجحة", "المصروفات التشغيلية", "رصيد المخزون الحالي", "تنبيهات المخزون المنخفض",
+                        "فواتير الشراء والمستحقات المسجلة", "مرتجعات المبيعات وحالة التسوية", "سندات القبض والصرف", "القيود المحاسبية المرحّلة (قائمة)" -> selectedReport = report.title
                         "لوحة المؤشرات" -> selectedReport = "ملخص المبيعات"
                     }
                 }),
@@ -275,6 +374,10 @@ internal fun ReportsCenterScreen(
                     OutlinedButton(onClick = {
                         exportTitle = selectedReport
                         exportRows = buildList {
+                            add(listOf("التقرير", exportTitle))
+                            add(listOf("الفترة", startText + " — " + endText))
+                            add(listOf("مصدر البيانات", if (cloudMode) "السحابة" else "محلي على الجهاز"))
+                            add(listOf("تاريخ التصدير", java.time.LocalDateTime.now().toString()))
                             add(listOf("التاريخ", "المرجع", "الاسم", "المبلغ/الكمية", "العملة", "الحالة"))
                             selectedRows.forEach { add(listOf(it.date, it.reference, it.name, it.amount.toString(), it.currency, it.status)) }
                         }
