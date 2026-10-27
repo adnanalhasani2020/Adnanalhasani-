@@ -347,7 +347,7 @@ BEGIN
     'child_account_number',ca.account_number,'child_display_name',ca.display_name,
     'organization_id',d.organization_id,'organization_name',o.name,'activity_id',d.activity_id,
     'permissions',d.permissions,'expires_at',d.expires_at,'spend_limit_minor',d.spend_limit_minor,
-    'spent_minor',d.spent_minor,'status',d.status,'merchant_display_name',d.merchant_display_name,
+    'spent_minor',d.spent_minor,'status',CASE WHEN d.status='active' AND d.expires_at IS NOT NULL AND d.expires_at<=now() THEN 'expired' ELSE d.status END,'merchant_display_name',d.merchant_display_name,
     'merchant_icon_key',d.merchant_icon_key,'created_at',d.created_at,
     'can_review',EXISTS (SELECT 1 FROM public.commercial_organization_members reviewer WHERE reviewer.organization_id=d.organization_id AND reviewer.user_id=v_uid AND reviewer.state='active' AND reviewer.role IN ('owner','admin','manager'))
   ) ORDER BY d.created_at DESC), '[]'::jsonb) INTO v_result
