@@ -708,7 +708,7 @@ internal fun ReportsCenterScreen(
     val csvLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri: Uri? ->
         if (uri != null) runCatching {
             require(!dateError) { "لا يمكن تصدير تقرير بفترة غير صالحة." }
-            require(!cloudMode || (!cloudLoading && cloudLoadError.isBlank())) { "تعذر التصدير لأن مصادر البيانات السحابية غير مكتملة." }
+            require(!cloudMode || (!cloudLoading && selectedReportSourceError.isBlank())) { "تعذر التصدير لأن مصدر هذا التقرير غير مكتمل." }
             context.contentResolver.openOutputStream(uri)?.use { stream ->
                 OutputStreamWriter(stream, Charsets.UTF_8).use { writer ->
                     writer.write("\uFEFF")
@@ -720,7 +720,7 @@ internal fun ReportsCenterScreen(
     val xlsxLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")) { uri: Uri? ->
         if (uri != null) runCatching {
             require(!dateError) { "لا يمكن تصدير تقرير بفترة غير صالحة." }
-            require(!cloudMode || (!cloudLoading && cloudLoadError.isBlank())) { "تعذر التصدير لأن مصادر البيانات السحابية غير مكتملة." }
+            require(!cloudMode || (!cloudLoading && selectedReportSourceError.isBlank())) { "تعذر التصدير لأن مصدر هذا التقرير غير مكتمل." }
             context.contentResolver.openOutputStream(uri)?.use { writeReportXlsx(it, exportRows) }
                 ?: throw IllegalStateException("تعذر فتح ملف Excel.")
         }.onFailure { error = "تعذر تصدير XLSX: ${it.message ?: "خطأ غير معروف"}" }
@@ -728,7 +728,7 @@ internal fun ReportsCenterScreen(
     val pdfLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri: Uri? ->
         if (uri != null) runCatching {
             require(!dateError) { "لا يمكن تصدير تقرير بفترة غير صالحة." }
-            require(!cloudMode || (!cloudLoading && cloudLoadError.isBlank())) { "تعذر التصدير لأن مصادر البيانات السحابية غير مكتملة." }
+            require(!cloudMode || (!cloudLoading && selectedReportSourceError.isBlank())) { "تعذر التصدير لأن مصدر هذا التقرير غير مكتمل." }
             context.contentResolver.openOutputStream(uri)?.use { writeReportPdf(it, exportRows) }
                 ?: throw IllegalStateException("تعذر فتح ملف PDF.")
             val shareIntent = Intent(Intent.ACTION_SEND).apply {
@@ -739,7 +739,7 @@ internal fun ReportsCenterScreen(
             context.startActivity(Intent.createChooser(shareIntent, "مشاركة تقرير متجري"))
         }.onFailure { error = "تعذر إنشاء أو مشاركة PDF: ${it.message ?: "خطأ غير معروف"}" }
     }
-    val currencyTotal = if (dateError || (cloudMode && (cloudLoading || cloudLoadError.isNotBlank()))) emptyMap() else if (cloudMode) inPeriodCloudSalesDocuments.groupBy { it.currencyCode.ifBlank { "غير محددة" } }.mapValues { (_, rows) -> rows.sumOf { it.totalMinor } }
+    val currencyTotal = if (dateError || (cloudMode && (cloudLoading || salesDocumentsLoadError.isNotBlank()))) emptyMap() else if (cloudMode) inPeriodCloudSalesDocuments.groupBy { it.currencyCode.ifBlank { "غير محددة" } }.mapValues { (_, rows) -> rows.sumOf { it.totalMinor } }
         else inPeriodSales.groupBy { it.currencyCode.ifBlank { "غير محددة" } }.mapValues { (_, rows) -> rows.sumOf { it.total.toLong() } }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -756,8 +756,8 @@ internal fun ReportsCenterScreen(
             Card(colors = CardDefaults.cardColors(containerColor = ReportInk), shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("ملخص المبيعات المكتملة", color = Color(0xFFBFD9D0), fontSize = 13.sp)
-                    Text(when { dateError -> "لا يمكن حساب الملخص: تحقق من الفترة المحددة"; cloudMode && cloudLoading -> "جارٍ تحميل مصادر المبيعات"; cloudMode && cloudLoadError.isNotBlank() -> "تعذر حساب الملخص بسبب فشل تحميل مصدر سحابي"; else -> "عدد الفواتير: ${if (cloudMode) inPeriodCloudSalesDocuments.size else inPeriodSales.size}" }, color = Color.White, fontWeight = FontWeight.SemiBold)
-                    if (!dateError && (!cloudMode || (!cloudLoading && cloudLoadError.isBlank()))) currencyTotal.toSortedMap().forEach { (currency, total) ->
+                    Text(when { dateError -> "لا يمكن حساب الملخص: تحقق من الفترة المحددة"; cloudMode && cloudLoading -> "جارٍ تحميل مصادر المبيعات"; cloudMode && salesDocumentsLoadError.isNotBlank() -> "تعذر حساب الملخص بسبب فشل تحميل مصدر المبيعات"; else -> "عدد الفواتير: ${if (cloudMode) inPeriodCloudSalesDocuments.size else inPeriodSales.size}" }, color = Color.White, fontWeight = FontWeight.SemiBold)
+                    if (!dateError && (!cloudMode || (!cloudLoading && salesDocumentsLoadError.isBlank()))) currencyTotal.toSortedMap().forEach { (currency, total) ->
                         Text(reportMoney(total, currency, cloudMode), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                     }
                     Text("الفترة: ${startText} — ${endText}", color = Color(0xFFBFD9D0), fontSize = 11.sp)
