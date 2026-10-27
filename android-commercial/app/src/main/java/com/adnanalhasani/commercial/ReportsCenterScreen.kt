@@ -332,6 +332,23 @@ internal fun ReportsCenterScreen(
         }
     }
 
+    val sourceErrorForReport: (String) -> String = { title ->
+        when (title) {
+            "ملخص المبيعات حسب الفترة", "تفاصيل فواتير المبيعات", "تفاصيل بنود فواتير المبيعات",
+            "المبيعات حسب الصنف", "الخصومات على فواتير المبيعات", "الضرائب المسجلة على المبيعات",
+            "المبيعات حسب العميل", "المبيعات حسب حالة السداد", "متوسط قيمة الفاتورة", "مقارنة الفترات",
+            "أرصدة العملاء وكشف الحساب", "مرتجعات المبيعات وحالة التسوية" -> salesDocumentsLoadError.ifBlank { returnsLoadError.takeIf { title == "مرتجعات المبيعات وحالة التسوية" }.orEmpty() }
+            "فواتير الشراء والمستحقات المسجلة", "مستحقات فواتير الموردين" -> purchasesLoadError
+            "كشف حركات الموردين" -> purchasesLoadError.ifBlank { supplierPaymentsLoadError }
+            "الدفعات السحابية الناجحة", "سندات القبض والصرف" -> paymentsLoadError
+            "سجل القيود المحاسبية" -> journalsLoadError
+            "ميزان المراجعة حسب الحساب", "حركة دفتر الأستاذ العام", "كشف حساب محاسبي", "تفاصيل القيود المرحلة" -> ledgerLinesLoadError
+            "المصروفات التشغيلية" -> expensesLoadError
+            "حركة المخزون الفعلية" -> stockMovementsLoadError
+            "رصيد المخزون الحالي", "تنبيهات المخزون المنخفض" -> stockAlertsLoadError
+            else -> ""
+        }
+    }
     val categories = listOf(
         "لوحة المعلومات", "المبيعات", "المشتريات", "العملاء والديون", "الموردون والمستحقات",
         "السندات والتحصيل والصرف", "المحاسبة والمالية", "الأرباح والتكاليف", "المرتجعات",
@@ -681,12 +698,7 @@ internal fun ReportsCenterScreen(
         else -> emptyList()
     }
     // Invalid dates must never widen a report to the full history.
-    val selectedReportSourceError = when (selectedReport) {
-        "كشف حركات الموردين" -> supplierPaymentsLoadError
-        "حركة المخزون الفعلية" -> stockMovementsLoadError
-        "رصيد المخزون الحالي", "تنبيهات المخزون المنخفض" -> stockAlertsLoadError
-        else -> ""
-    }
+    val selectedReportSourceError = sourceErrorForReport(selectedReport)
     val movementStatement = selectedReport in setOf("أرصدة العملاء وكشف الحساب", "كشف حركات الموردين")
     val selectedRows = if (dateError || (cloudMode && (cloudLoading || cloudLoadError.isNotBlank())) ||
         (cloudMode && selectedReportSourceError.isNotBlank())) emptyList() else selectedRowsUnvalidated.filter { row ->
@@ -850,10 +862,7 @@ internal fun ReportsCenterScreen(
         items(filteredCatalog, key = { it.title }) { report ->
             val selected = selectedReport == report.title
             Card(
-                modifier = Modifier.fillMaxWidth().clickable(enabled = report.supported && !dateError && (!cloudMode || (!cloudLoading && cloudLoadError.isBlank() &&
-                    (report.title != "كشف حركات الموردين" || supplierPaymentsLoadError.isBlank()) &&
-                    (report.title != "حركة المخزون الفعلية" || stockMovementsLoadError.isBlank()) &&
-                    (report.title !in setOf("رصيد المخزون الحالي", "تنبيهات المخزون المنخفض") || stockAlertsLoadError.isBlank()))), onClick = {
+                modifier = Modifier.fillMaxWidth().clickable(enabled = report.supported && !dateError && (!cloudMode || (!cloudLoading && sourceErrorForReport(report.title).isBlank())), onClick = {
                     when (report.title) {
                         "ملخص المبيعات حسب الفترة", "تفاصيل فواتير المبيعات", "تفاصيل بنود فواتير المبيعات", "المبيعات حسب الصنف",
                         "المبيعات حسب العميل", "المبيعات النقدية والآجلة", "المبيعات حسب حالة السداد", "متوسط قيمة الفاتورة", "مقارنة فترتين", "مقارنة الفترات", "الخصومات على فواتير المبيعات", "الضرائب المسجلة على المبيعات",
@@ -873,16 +882,13 @@ internal fun ReportsCenterScreen(
                             Text(report.title, fontWeight = FontWeight.SemiBold, color = ReportInk)
                             Text(report.category, color = ReportMuted, fontSize = 11.sp)
                         }
-                        val sourceReady = report.supported && (!cloudMode || (!cloudLoading && cloudLoadError.isBlank() &&
-                            (report.title != "كشف حركات الموردين" || supplierPaymentsLoadError.isBlank()) &&
-                            (report.title != "حركة المخزون الفعلية" || stockMovementsLoadError.isBlank()) &&
-                            (report.title !in setOf("رصيد المخزون الحالي", "تنبيهات المخزون المنخفض") || stockAlertsLoadError.isBlank())))
+                        val sourceReady = report.supported && (!cloudMode || (!cloudLoading && sourceErrorForReport(report.title).isBlank()))
                         Surface(color = if (sourceReady) ReportMint else Color(0xFFFFF1DF), shape = RoundedCornerShape(8.dp)) {
                             Text(
                                 when {
                                     !report.supported -> "يتطلب مصدرًا مكتملًا"
                                     cloudMode && cloudLoading -> "جارٍ تحميل المصدر"
-                                    cloudMode && cloudLoadError.isNotBlank() -> "تعذر تحميل المصدر"
+                                    cloudMode && sourceErrorForReport(report.title).isNotBlank() -> "تعذر تحميل المصدر"
                                     cloudMode && report.title == "كشف حركات الموردين" && supplierPaymentsLoadError.isNotBlank() -> "تعذر تحميل المصدر"
                                     cloudMode && report.title == "حركة المخزون الفعلية" && stockMovementsLoadError.isNotBlank() -> "تعذر تحميل المصدر"
                                     cloudMode && report.title in setOf("رصيد المخزون الحالي", "تنبيهات المخزون المنخفض") && stockAlertsLoadError.isNotBlank() -> "تعذر تحميل المصدر"
