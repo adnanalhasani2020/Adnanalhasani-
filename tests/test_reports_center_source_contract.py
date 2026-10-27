@@ -148,7 +148,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
 
     def test_cash_report_uses_mapped_cash_accounts_and_posted_ledger_only(self):
         self.assertIn('loadCommercialCloudGlAccountMappings(context)', self.screen)
-        self.assertIn('val cashKeys = setOf("cash", "bank", "card_clearing", "other_receipts")', self.screen)
+        self.assertIn('val cashKeys = setOf("cash", "bank", "card_clearing", "other_receipts", "check_clearing", "other_disbursements")', self.screen)
         self.assertIn('رصيد افتتاحي', self.screen)
         self.assertIn('رصيد ختامي', self.screen)
 
