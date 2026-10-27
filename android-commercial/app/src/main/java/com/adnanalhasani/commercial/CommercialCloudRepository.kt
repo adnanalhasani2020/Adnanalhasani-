@@ -143,7 +143,7 @@ internal fun loadCommercialCloudInventory(context: Context): CommercialCloudInve
     sessionPrefs.edit().putString("refresh_token", rotatedRefresh).apply()
 
     val query = "/rest/v1/commercial_inventory_balances" +
-        "?select=offering_id,quantity_on_hand,quantity_reserved,reorder_point,offering:commercial_offerings!inner(id,price_minor,currency_code,activity_id,product:commercial_products!inner(name,description,unit_name,unit_code,state),categories:commercial_offering_categories(is_primary,category:commercial_product_categories(name_ar,name_en)),sell_units:commercial_offering_sell_units(unit_code,display_name,quantity_in_stock,is_base,is_active))" +
+        "?select=offering_id,quantity_on_hand,quantity_reserved,reorder_point,unit_cost_minor,offering:commercial_offerings!inner(id,price_minor,currency_code,activity_id,product:commercial_products!inner(name,description,unit_name,unit_code,state),categories:commercial_offering_categories(is_primary,category:commercial_product_categories(name_ar,name_en)),sell_units:commercial_offering_sell_units(unit_code,display_name,quantity_in_stock,is_base,is_active))" +
         "&organization_id=eq.$orgId&location_id=eq.$locationId&offering.activity_id=eq.$activityId&order=updated_at.desc,offering_id.asc"
     val rows = commercialCloudPagedGet(query, access)
     val products = buildList {
@@ -1628,7 +1628,9 @@ internal data class CommercialCloudStockAlert(
     val categoryName: String,
     val unitName: String,
     val availableQuantity: Double,
-    val reorderPoint: Double
+    val reorderPoint: Double,
+    val quantityOnHand: java.math.BigDecimal,
+    val unitCostMinor: Long?
 )
 
 /** Precise read-only quantities for the stock-alert screen; preserve fractional units. */
@@ -1667,7 +1669,9 @@ internal fun loadCommercialCloudStockAlerts(context: Context): List<CommercialCl
                 categoryName = categoryName,
                 unitName = product.optString("unit_name").ifBlank { "وحدة" },
                 availableQuantity = (onHand - reserved).coerceAtLeast(0.0),
-                reorderPoint = row.optDouble("reorder_point", 0.0).coerceAtLeast(0.0)
+                reorderPoint = row.optDouble("reorder_point", 0.0).coerceAtLeast(0.0),
+                quantityOnHand = runCatching { java.math.BigDecimal(row.optString("quantity_on_hand", "0")) }.getOrDefault(java.math.BigDecimal.ZERO),
+                unitCostMinor = if (row.isNull("unit_cost_minor")) null else row.optLong("unit_cost_minor")
             ))
         }
     }
@@ -2722,13 +2726,14 @@ internal fun saveMerchantCustomerOrderLines(context: Context, orderId: String, l
 /** Read-only projection of posted double-entry journal lines, joined to their source entry and ledger account. */
 internal data class CommercialCloudGlAccountMapping(
     val mappingKey: String,
-    val ledgerAccountId: String
+    val ledgerAccountId: String,
+    val currencyCode: String
 )
 
 internal fun loadCommercialCloudGlAccountMappings(context: Context): List<CommercialCloudGlAccountMapping> {
     val (orgId, access) = commercialMasterDataAccess(context)
     val rows = commercialCloudPagedGet(
-        "/rest/v1/commercial_gl_account_mappings?select=mapping_key,ledger_account_id&organization_id=eq.$orgId&order=mapping_key.asc",
+        "/rest/v1/commercial_gl_account_mappings?select=mapping_key,ledger_account_id,ledger_account:commercial_ledger_accounts!commercial_gl_account_mapping_organization_id_ledger_accou_fkey(currency_code)&organization_id=eq.$orgId&order=mapping_key.asc",
         access
     )
     return buildList {
@@ -2736,7 +2741,9 @@ internal fun loadCommercialCloudGlAccountMappings(context: Context): List<Commer
             val row = rows.optJSONObject(i) ?: continue
             val key = row.optString("mapping_key").takeUnless { it.isBlank() || it == "null" }.orEmpty()
             val accountId = row.optString("ledger_account_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
-            if (key.isNotBlank() && accountId.isNotBlank()) add(CommercialCloudGlAccountMapping(key, accountId))
+            val account = row.optJSONObject("ledger_account")
+            val currency = account?.optString("currency_code").takeUnless { it.isNullOrBlank() || it == "null" }.orEmpty()
+            if (key.isNotBlank() && accountId.isNotBlank()) add(CommercialCloudGlAccountMapping(key, accountId, currency))
         }
     }
 }
