@@ -1643,7 +1643,7 @@ internal fun loadCommercialCloudStockAlerts(context: Context): List<CommercialCl
     }
     val (orgId, access) = commercialMasterDataAccess(context)
     val query = "/rest/v1/commercial_inventory_balances" +
-        "?select=offering_id,quantity_on_hand,quantity_reserved,reorder_point,offering:commercial_offerings!inner(id,activity_id,product:commercial_products!inner(name,unit_name,state),categories:commercial_offering_categories(is_primary,category:commercial_product_categories(name_ar,name_en)))" +
+        "?select=offering_id,quantity_on_hand,quantity_reserved,reorder_point,unit_cost_minor,offering:commercial_offerings!inner(id,activity_id,product:commercial_products!inner(name,unit_name,state),categories:commercial_offering_categories(is_primary,category:commercial_product_categories(name_ar,name_en)))" +
         "&organization_id=eq.$orgId&location_id=eq.$locationId&offering.activity_id=eq.$activityId&order=updated_at.desc,offering_id.asc"
     val rows = commercialCloudPagedGet(query, access)
     return buildList {
