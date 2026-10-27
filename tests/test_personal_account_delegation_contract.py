@@ -5,6 +5,7 @@ FOUNDATION = ROOT / "supabase/migrations/20261028010000_commercial_personal_acco
 DELEGATED_ORDERS = ROOT / "supabase/migrations/20261028011000_commercial_delegated_customer_orders.sql"
 REPORTING = ROOT / "supabase/migrations/20261028012000_commercial_delegated_spend_reporting.sql"
 PERSONAL_ORGANIZATIONS = ROOT / "supabase/migrations/20261028015000_commercial_personal_account_organizations.sql"
+NOTIFICATIONS = ROOT / "supabase/migrations/20261028016000_commercial_notifications_inbox.sql"
 
 
 def test_delegation_storage_is_private_and_scoped():
@@ -139,3 +140,16 @@ def test_delegated_report_includes_order_type_booking_time_and_line_items():
     screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/PersonalAccountsScreen.kt").read_text(encoding="utf-8")
     assert "تقرير مشتريات وحجوزات الحساب الفرعي" in screen
     assert "e.status != \"pending_merchant_approval\"" in screen
+
+
+def test_notifications_are_private_and_accessible_from_the_app_bell():
+    sql = NOTIFICATIONS.read_text(encoding="utf-8")
+    screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialNotificationsScreen.kt").read_text(encoding="utf-8")
+    activity = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt").read_text(encoding="utf-8")
+    assert "WHERE user_id=v_uid" in sql
+    assert "WHERE id=p_notification_id AND user_id=v_uid" in sql
+    assert "REVOKE ALL ON FUNCTION public.commercial_user_notifications_list_my(integer) FROM PUBLIC, anon" in sql
+    assert "GRANT EXECUTE ON FUNCTION public.commercial_user_notifications_mark_read(uuid) TO authenticated" in sql
+    assert "CommercialNotificationsScreen(context = context" in activity
+    assert 'onClick = { showNotifications = true }' in activity
+    assert "تحديد كمقروء" in screen
