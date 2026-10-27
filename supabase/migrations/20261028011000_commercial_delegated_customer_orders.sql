@@ -57,7 +57,7 @@ BEGIN
       RAISE EXCEPTION 'delegated_purchase_permission_required' USING ERRCODE='42501';
     END IF;
   END IF;
-  PERFORM public.commercial_customer_portal_link_verified_email();
+  -- The parent was linked by the merchant approval flow; do not auto-link the child to a separate customer account.
   IF p_organization_id IS NULL THEN RAISE EXCEPTION 'organization_required' USING ERRCODE='22023'; END IF;
   IF p_payment_mode IS NULL OR p_payment_mode NOT IN ('cash','credit') THEN RAISE EXCEPTION 'invalid_payment_mode' USING ERRCODE='22023'; END IF;
   IF v_key IS NULL OR length(v_key) < 8 OR length(v_key) > 200 THEN RAISE EXCEPTION 'invalid_idempotency_key' USING ERRCODE='22023'; END IF;
@@ -413,7 +413,7 @@ BEGIN
   IF NOT coalesce((v_delegation.permissions->>'book')::boolean,false) THEN
     RAISE EXCEPTION 'delegated_booking_permission_required' USING ERRCODE='42501';
   END IF;
-  PERFORM public.commercial_customer_portal_link_verified_email();
+  -- The parent was linked by the merchant approval flow; do not auto-link the child to a separate customer account.
 
   IF p_organization_id IS NULL OR p_resource_id IS NULL THEN
     RAISE EXCEPTION 'booking_fields_required' USING ERRCODE='22023';
