@@ -642,3 +642,43 @@ GRANT EXECUTE ON FUNCTION public.commercial_account_review_delegation(uuid,boole
 GRANT EXECUTE ON FUNCTION public.commercial_account_update_delegation(uuid,jsonb,timestamptz,bigint) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.commercial_account_revoke_delegation(uuid) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.commercial_account_list_delegations() TO authenticated;
+
+
+CREATE OR REPLACE FUNCTION public.commercial_account_get_my_personal_account()
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
+AS $function$
+DECLARE v_uid uuid := auth.uid(); v_result jsonb;
+BEGIN
+  IF v_uid IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
+  SELECT jsonb_build_object('account_id',a.id,'account_number',a.account_number,'display_name',a.display_name,'currency_code',a.currency_code)
+  INTO v_result
+  FROM public.commercial_party_accounts a
+  WHERE a.owner_user_id=v_uid AND a.account_type='personal' AND a.status='active'
+  ORDER BY a.created_at DESC LIMIT 1;
+  RETURN v_result;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.commercial_account_list_available_organizations()
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
+AS $function$
+DECLARE v_uid uuid := auth.uid(); v_result jsonb;
+BEGIN
+  IF v_uid IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
+  SELECT coalesce(jsonb_agg(jsonb_build_object(
+    'organization_id',o.id,'name',o.name,'organization_type',o.organization_type,
+    'currency_code',o.default_currency_code
+  ) ORDER BY o.name),'[]'::jsonb)
+  INTO v_result
+  FROM public.commercial_organizations o
+  WHERE o.state='active' AND o.deleted_at IS NULL AND o.public_listing=true;
+  RETURN v_result;
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION public.commercial_account_get_my_personal_account() FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.commercial_account_list_available_organizations() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.commercial_account_get_my_personal_account() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.commercial_account_list_available_organizations() TO authenticated;
