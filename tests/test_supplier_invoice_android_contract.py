@@ -16,7 +16,7 @@ def test_supplier_invoice_has_an_android_entry_point_and_cloud_rpc():
     assert "clearCommercialSupplierInvoiceIdempotencyKey(context, order.id, key)" in dialog
     assert "UUID.randomUUID()" not in dialog
     assert "commercial_supplier_invoice_pending_v1" in repository
-    assert "supplier_invoices:commercial_supplier_invoices(id,invoice_number,total_minor,currency_code,recorded_at,state,obligation:commercial_supplier_obligations(" in repository
+    assert "supplier_invoices:commercial_supplier_invoices(id,invoice_number,subtotal_minor,tax_minor,freight_minor,total_minor,currency_code,recorded_at,state,obligation:commercial_supplier_obligations(" in repository
     assert "supplierInvoices = supplierInvoices" in repository
     assert "فواتير المورد المسجلة" in screen
     assert "/rest/v1/rpc/commercial_record_supplier_invoice" in repository
