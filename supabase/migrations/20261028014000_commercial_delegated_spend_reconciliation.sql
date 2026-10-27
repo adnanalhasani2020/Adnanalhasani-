@@ -22,8 +22,9 @@ BEGIN
     RAISE EXCEPTION 'delegated_attribution_cannot_be_added_after_order_creation' USING ERRCODE='22023';
   END IF;
 
-  v_was_counted := OLD.status NOT IN ('cancelled','rejected');
-  v_is_counted := NEW.status NOT IN ('cancelled','rejected');
+  -- A cancelled order still consumes the cap while money is paid/partially paid; release only unpaid, credit, or refunded orders.
+  v_was_counted := OLD.status NOT IN ('cancelled','rejected') OR OLD.payment_status NOT IN ('unpaid','credit','refunded');
+  v_is_counted := NEW.status NOT IN ('cancelled','rejected') OR NEW.payment_status NOT IN ('unpaid','credit','refunded');
   IF v_was_counted AND NOT v_is_counted THEN
     v_delta := -OLD.total_minor::numeric;
   ELSIF NOT v_was_counted AND v_is_counted THEN
@@ -57,7 +58,7 @@ $function$;
 
 DROP TRIGGER IF EXISTS trg_commercial_delegated_spend_order_change ON public.commercial_customer_orders;
 CREATE TRIGGER trg_commercial_delegated_spend_order_change
-AFTER UPDATE OF status,total_minor,delegated_access_id,principal_account_id,acting_account_id ON public.commercial_customer_orders
+AFTER UPDATE OF status,total_minor,payment_status,delegated_access_id,principal_account_id,acting_account_id ON public.commercial_customer_orders
 FOR EACH ROW EXECUTE FUNCTION public.commercial_reconcile_delegated_spend_on_order_change();
 
 CREATE OR REPLACE FUNCTION public.commercial_sync_delegated_booking_order_status()
