@@ -785,7 +785,7 @@ internal fun ReportsCenterScreen(
             ReportLine(row.createdAt.take(10), row.id, row.title, row.amountMinor, row.currencyCode, row.status)
         }.sortedByDescending { it.date }
         "التدفقات النقدية والصندوق" -> if (sourceErrorForReport(selectedReport).isNotBlank()) emptyList() else {
-            val cashKeys = setOf("cash", "bank", "card_clearing", "other_receipts")
+            val cashKeys = setOf("cash", "bank", "card_clearing", "other_receipts", "check_clearing", "other_disbursements")
             val cashAccountIds = cloudGlMappings.filter { it.mappingKey in cashKeys }.map { it.ledgerAccountId }.toSet()
             val movements = cloudLedgerLines.filter { it.accountId in cashAccountIds }
                 .mapNotNull { line ->
