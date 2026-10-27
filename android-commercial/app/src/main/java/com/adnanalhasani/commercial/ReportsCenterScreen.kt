@@ -385,6 +385,7 @@ internal fun ReportsCenterScreen(
                 invalidCurrency -> "توجد سطور أستاذ بلا رمز عملة ISO صالح؛ تم حجب القوائم لمنع خلط العملات."
                 else -> ""
             }
+            }
         }
     }
     val taxDetailError = when {
