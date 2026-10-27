@@ -49,7 +49,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn("[Content_Types].xml", self.screen)
         self.assertIn("xl/workbook.xml", self.screen)
         self.assertIn("xl/worksheets/sheet1.xml", self.screen)
-        self.assertIn('rightToLeft=\\"1\\"', self.screen)
+        self.assertIn('rightToLeft="1"', self.screen)
         self.assertIn("inlineStr", self.screen)
         self.assertIn('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', self.screen)
         self.assertIn("Excel XLSX", self.screen)
