@@ -292,7 +292,7 @@ BEGIN
  IF NOT coalesce((v_delegation.permissions->>'book')::boolean,false) THEN
   RAISE EXCEPTION 'delegated_booking_permission_required' USING ERRCODE='42501';
  END IF;
- PERFORM public.commercial_customer_portal_link_verified_email();
+ -- Parent is linked by the merchant approval flow; never auto-link the delegated child.
  IF p_organization_id IS NULL OR p_offering_id IS NULL OR p_resource_id IS NULL THEN RAISE EXCEPTION 'booking_fields_required' USING ERRCODE='22023'; END IF;
  IF p_starts_at IS NULL OR p_ends_at IS NULL OR p_starts_at<=now() OR p_ends_at<=p_starts_at THEN RAISE EXCEPTION 'invalid_reservation_window' USING ERRCODE='22023'; END IF;
  IF p_payment_mode IS NULL OR p_payment_mode NOT IN ('cash','credit') THEN RAISE EXCEPTION 'invalid_payment_mode' USING ERRCODE='22023'; END IF;
