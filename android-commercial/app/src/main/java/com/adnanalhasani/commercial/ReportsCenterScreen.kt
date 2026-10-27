@@ -165,7 +165,7 @@ internal fun ReportsCenterScreen(
                     writer.write("\uFEFF")
                     writer.write(exportRows.joinToString("\r\n") { row -> row.joinToString(",") { cell -> "\"${cell.replace("\"", "\"\"")}\"" } })
                 }
-            } ?: error("تعذر فتح ملف التصدير.")
+            } ?: throw IllegalStateException("تعذر فتح ملف التصدير.")
         }.onFailure { error = "تعذر تصدير التقرير: ${it.message ?: "خطأ غير معروف"}" }
     }
     val currencyTotal = inPeriodSales.groupBy { it.currencyCode.ifBlank { "غير محددة" } }.mapValues { (_, rows) -> rows.sumOf { it.total.toLong() } }
