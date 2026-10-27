@@ -97,3 +97,23 @@ def test_personal_account_owns_multiple_organizations_and_activities():
     assert "commercial_account_link_my_organization" in sql
     assert "مؤسساتي وأنشطتي" in screen
     assert "ربط بحسابي الرئيسي" in screen
+
+
+def test_personal_accounts_screen_has_direct_email_password_auth_and_session_controls():
+    screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/PersonalAccountsScreen.kt").read_text(encoding="utf-8")
+    assert "/auth/v1/signup" in screen
+    assert "/auth/v1/token?grant_type=password" in screen
+    assert "PasswordVisualTransformation()" in screen
+    assert "تم تسجيل الخروج من حساب المنصة" in screen
+    assert "commercial_create_personal_account" in screen
+    assert "commercial_account_lookup_personal_account" in screen
+
+
+def test_delegated_portal_respects_purchase_and_booking_flags():
+    repository = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt").read_text(encoding="utf-8")
+    portal = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CustomerPortalScreen.kt").read_text(encoding="utf-8")
+    assert "commercial_account_list_my_active_delegations" in repository
+    assert "permissions.optBoolean(\"purchase\", false)" in repository
+    assert "permissions.optBoolean(\"book\", false)" in repository
+    assert "selectedOrganization?.canPurchase != false" in portal
+    assert "selectedOrganization?.canBook != false" in portal
