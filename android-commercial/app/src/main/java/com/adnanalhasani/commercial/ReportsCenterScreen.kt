@@ -650,6 +650,68 @@ internal fun ReportsCenterScreen(
         }.map { row ->
             ReportLine(row.createdAt.take(10), row.id, row.title, row.amountMinor, row.currencyCode, row.status)
         }.sortedByDescending { it.date }
+        "قائمة الدخل والميزانية العمومية" -> if (ledgerStatementError.isNotBlank()) emptyList() else {
+            val throughEnd = cloudLedgerLines.filter { line ->
+                val date = runCatching { LocalDate.parse(line.entryDate.take(10)) }.getOrNull()
+                date != null && endDate != null && !date.isAfter(endDate)
+            }
+            val inPeriod = throughEnd.filter { line ->
+                val date = runCatching { LocalDate.parse(line.entryDate.take(10)) }.getOrNull()
+                date != null && startDate != null && endDate != null &&
+                    !date.isBefore(startDate) && !date.isAfter(endDate)
+            }
+            fun normalizedType(line: CommercialCloudJournalLine): String =
+                line.accountType.lowercase(Locale.ROOT).replace('-', '_').replace(' ', '_')
+            fun statementClass(type: String): String = when (type) {
+                "asset", "assets" -> "asset"
+                "liability", "liabilities" -> "liability"
+                "equity" -> "equity"
+                "revenue", "income" -> "revenue"
+                "contra_revenue" -> "contra_revenue"
+                "cost_of_goods_sold", "cost_of_sales" -> "cogs"
+                "expense", "expenses" -> "expense"
+                else -> "unknown"
+            }
+            val currencies = (throughEnd.map { it.currencyCode } + inPeriod.map { it.currencyCode })
+                .filter { it.matches(Regex("^[A-Z]{3}$")) }.distinct().sorted()
+            buildList {
+                currencies.forEach { currency ->
+                    val periodRows = inPeriod.filter { it.currencyCode == currency }
+                    val cumulativeRows = throughEnd.filter { it.currencyCode == currency }
+                    fun accountNet(lines: List<CommercialCloudJournalLine>, cls: String): Long =
+                        lines.filter { statementClass(normalizedType(it)) == cls }
+                            .sumOf { if (cls in setOf("asset", "expense", "cogs")) it.debitMinor - it.creditMinor else it.creditMinor - it.debitMinor }
+                    val revenue = accountNet(periodRows, "revenue")
+                    val contraRevenue = accountNet(periodRows, "contra_revenue")
+                    val cogs = accountNet(periodRows, "cogs")
+                    val operatingExpenses = accountNet(periodRows, "expense")
+                    val netRevenue = revenue - contraRevenue
+                    val grossProfit = netRevenue - cogs
+                    val netProfit = grossProfit - operatingExpenses
+                    add(ReportLine(startText + " — " + endText, "قائمة الدخل", "الإيرادات المسجلة", revenue, currency, "مصدرها حسابات الإيرادات المرحلة"))
+                    if (contraRevenue != 0L) add(ReportLine(startText + " — " + endText, "قائمة الدخل", "المرتجعات/الخصومات المسجلة كحساب مقابل للإيراد", -contraRevenue, currency, "يعتمد على تصنيف الحساب في دفتر الأستاذ"))
+                    add(ReportLine(startText + " — " + endText, "قائمة الدخل", "صافي الإيرادات", netRevenue, currency, "الإيرادات ناقص الحسابات المقابلة للإيراد"))
+                    add(ReportLine(startText + " — " + endText, "قائمة الدخل", "تكلفة البضاعة المباعة", -cogs, currency, "حسابات التكلفة المرحلة فقط"))
+                    add(ReportLine(startText + " — " + endText, "قائمة الدخل", "مجمل الربح", grossProfit, currency, "صافي الإيرادات ناقص تكلفة البضاعة"))
+                    add(ReportLine(startText + " — " + endText, "قائمة الدخل", "المصروفات التشغيلية والأخرى", -operatingExpenses, currency, "حسابات المصروفات المرحلة"))
+                    add(ReportLine(startText + " — " + endText, "قائمة الدخل", "صافي الربح/الخسارة للفترة", netProfit, currency, "لا يتضمن حسابات مجهولة النوع؛ تم التحقق من اتزان القيود"))
+                    val assets = accountNet(cumulativeRows, "asset")
+                    val liabilities = accountNet(cumulativeRows, "liability")
+                    val equity = accountNet(cumulativeRows, "equity")
+                    val cumulativeIncome = accountNet(cumulativeRows, "revenue") - accountNet(cumulativeRows, "contra_revenue") -
+                        accountNet(cumulativeRows, "cogs") - accountNet(cumulativeRows, "expense")
+                    val totalEquity = equity + cumulativeIncome
+                    val equationDifference = assets - liabilities - totalEquity
+                    add(ReportLine(endText, "الميزانية العمومية", "إجمالي الأصول", assets, currency, "رصيد حتى تاريخ التقرير"))
+                    add(ReportLine(endText, "الميزانية العمومية", "إجمالي الالتزامات", liabilities, currency, "رصيد حتى تاريخ التقرير"))
+                    add(ReportLine(endText, "الميزانية العمومية", "حقوق الملكية المسجلة", equity, currency, "لا يشمل نتيجة الفترات غير المقفلة"))
+                    add(ReportLine(endText, "الميزانية العمومية", "نتائج متراكمة غير مقفلة", cumulativeIncome, currency, "إيرادات ومصروفات مرحّلة منذ بداية دفتر الأستاذ"))
+                    add(ReportLine(endText, "الميزانية العمومية", "إجمالي حقوق الملكية شاملاً النتائج غير المقفلة", totalEquity, currency, "حقوق الملكية المسجلة + صافي النتائج المتراكمة"))
+                    add(ReportLine(endText, "اختبار المعادلة", "الأصول − الالتزامات − حقوق الملكية", equationDifference, currency,
+                        if (equationDifference == 0L) "متزن حسابيًا حسب دفتر الأستاذ المحمل" else "فرق يحتاج إلى مطابقة؛ لا تعتمد الميزانية حتى تفسيره"))
+                }
+            }
+        }
         "ميزان المراجعة حسب الحساب" -> {
             val throughEnd = cloudLedgerLines.filter { line ->
                 val date = runCatching { LocalDate.parse(line.entryDate.take(10)) }.getOrNull()
