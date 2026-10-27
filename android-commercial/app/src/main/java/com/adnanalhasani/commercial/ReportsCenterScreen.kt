@@ -357,9 +357,18 @@ internal fun ReportsCenterScreen(
             val date = runCatching { LocalDate.parse(line.entryDate.take(10)) }.getOrNull()
             date != null && endDate != null && !date.isAfter(endDate)
         }
-        if (ledgerLinesLoadError.isNotBlank()) ledgerLinesLoadError
-        else if (throughEnd.isEmpty()) "لا توجد قيود مرحلة ضمن الفترة؛ لا يمكن اعتماد القوائم المالية."
-        else {
+        val requiredGlMappings = setOf("accounts_receivable", "sales_revenue", "sales_returns", "sales_discounts", "sales_tax_payable", "inventory", "cost_of_goods_sold")
+        val missingGlMappings = requiredGlMappings - cloudGlMappings.map { it.mappingKey }.toSet()
+        val requiredSupplierRoles = setOf("inventory_asset", "accounts_payable", "goods_received_not_invoiced", "purchase_price_variance", "purchase_tax_freight_expense")
+        val missingSupplierRoles = requiredSupplierRoles - cloudSupplierControlAccounts.map { it.accountRole }.toSet()
+        when {
+            ledgerLinesLoadError.isNotBlank() -> ledgerLinesLoadError
+            glMappingsLoadError.isNotBlank() -> glMappingsLoadError
+            missingGlMappings.isNotEmpty() -> "خرائط حسابات المبيعات والذمم والمخزون غير مكتملة: ${missingGlMappings.sorted().joinToString()}."
+            supplierControlAccountsLoadError.isNotBlank() -> supplierControlAccountsLoadError
+            missingSupplierRoles.isNotEmpty() -> "خرائط حسابات المشتريات والموردين غير مكتملة: ${missingSupplierRoles.sorted().joinToString()}."
+            throughEnd.isEmpty() -> "لا توجد قيود مرحلة ضمن الفترة؛ لا يمكن اعتماد القوائم المالية."
+            else -> {
             val unbalanced = throughEnd.groupBy { it.entryId to it.currencyCode }.any { (_, lines) ->
                 lines.sumOf { it.debitMinor } != lines.sumOf { it.creditMinor }
             }
