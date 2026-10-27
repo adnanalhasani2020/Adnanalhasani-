@@ -140,6 +140,9 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn('partyAccountId = line.optString("party_account_id")', self.repository)
         self.assertIn('"الرصيد المحاسبي الكامل للعملاء" -> if (customerStatementError.isNotBlank()) emptyList()', self.screen)
         self.assertIn('"أرصدة الموردين والمستحقات" -> if (supplierStatementError.isNotBlank()) emptyList()', self.screen)
+        self.assertIn('link.partyAccountId == line.partyAccountId && link.currencyCode == line.currencyCode', self.screen)
+        self.assertIn('بلا ربط صالح بعميل وعملة مطابقين', self.screen)
+        self.assertIn('بلا ربط صالح بمورد وعملة مطابقين', self.screen)
 
     def test_historical_cogs_uses_stored_cost_and_only_reverses_restocked_return_cost(self):
         self.assertIn('costTotalMinor = if (item.isNull("cost_total_minor")) null', self.repository)
