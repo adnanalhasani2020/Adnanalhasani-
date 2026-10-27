@@ -156,7 +156,7 @@ BEGIN
   ) RETURNING id INTO v_delegation_id;
 
   INSERT INTO public.commercial_user_notifications(user_id, organization_id, notification_type, title, body, entity_type, entity_id, priority, metadata)
-  SELECT m.user_id, p_organization_id, 'delegated_account_approval',
+  SELECT m.user_id, p_organization_id, 'approval',
          'طلب ربط حساب فرعي', 'يوجد طلب جديد لربط حساب فرعي يحتاج موافقة إدارة المؤسسة.',
          'account_delegation', v_delegation_id, 'high',
          jsonb_build_object('delegation_id',v_delegation_id,'organization_name',v_org_name)
@@ -258,11 +258,11 @@ BEGIN
 
   INSERT INTO public.commercial_user_notifications(user_id, organization_id, notification_type, title, body, entity_type, entity_id, priority, metadata)
   VALUES
-    (v_parent_owner, v_row.organization_id, 'delegated_account_reviewed',
+    (v_parent_owner, v_row.organization_id, 'account_access',
      CASE WHEN p_approve THEN 'تمت الموافقة على الحساب الفرعي' ELSE 'تم رفض طلب الحساب الفرعي' END,
      CASE WHEN p_approve THEN 'وافقت المؤسسة على ربط الحساب الفرعي.' ELSE 'رفضت المؤسسة طلب ربط الحساب الفرعي.' END,
      'account_delegation', p_delegation_id, 'normal', jsonb_build_object('delegation_id',p_delegation_id,'status',CASE WHEN p_approve THEN 'active' ELSE 'rejected' END)),
-    (v_child_owner, v_row.organization_id, 'delegated_account_reviewed',
+    (v_child_owner, v_row.organization_id, 'account_access',
      CASE WHEN p_approve THEN 'تم اعتمادك كحساب فرعي' ELSE 'تم رفض طلب ربط حسابك' END,
      CASE WHEN p_approve THEN 'اعتمدت المؤسسة ربط حسابك بالحساب الرئيسي ضمن الصلاحيات المحددة.' ELSE 'لم توافق المؤسسة على طلب الربط.' END,
      'account_delegation', p_delegation_id, 'normal', jsonb_build_object('delegation_id',p_delegation_id,'status',CASE WHEN p_approve THEN 'active' ELSE 'rejected' END));
@@ -495,7 +495,7 @@ BEGIN
   ) RETURNING id INTO v_delegation_id;
 
   INSERT INTO public.commercial_user_notifications(user_id, organization_id, notification_type, title, body, entity_type, entity_id, priority, metadata)
-  SELECT m.user_id, p_organization_id, 'delegated_account_approval',
+  SELECT m.user_id, p_organization_id, 'approval',
          'طلب ربط حساب فرعي', 'يوجد طلب جديد لربط حساب فرعي يحتاج موافقة إدارة المؤسسة.',
          'account_delegation', v_delegation_id, 'high',
          jsonb_build_object('delegation_id',v_delegation_id,'organization_name',v_org_name)
@@ -549,11 +549,11 @@ BEGIN
   SELECT owner_user_id INTO v_child_owner FROM public.commercial_party_accounts WHERE id=v_row.child_account_id;
   INSERT INTO public.commercial_user_notifications(user_id, organization_id, notification_type, title, body, entity_type, entity_id, priority, metadata)
   VALUES
-    (v_parent_owner, v_row.organization_id, 'delegated_account_reviewed',
+    (v_parent_owner, v_row.organization_id, 'account_access',
      CASE WHEN p_approve THEN 'تمت الموافقة على الحساب الفرعي' ELSE 'تم رفض طلب الحساب الفرعي' END,
      CASE WHEN p_approve THEN 'وافقت المؤسسة على ربط الحساب الفرعي.' ELSE 'رفضت المؤسسة طلب ربط الحساب الفرعي.' END,
      'account_delegation', p_delegation_id, 'normal', jsonb_build_object('delegation_id',p_delegation_id,'status',CASE WHEN p_approve THEN 'active' ELSE 'rejected' END)),
-    (v_child_owner, v_row.organization_id, 'delegated_account_reviewed',
+    (v_child_owner, v_row.organization_id, 'account_access',
      CASE WHEN p_approve THEN 'تم اعتمادك كحساب فرعي' ELSE 'تم رفض طلب ربط حسابك' END,
      CASE WHEN p_approve THEN 'اعتمدت المؤسسة ربط حسابك بالحساب الرئيسي ضمن الصلاحيات المحددة.' ELSE 'لم توافق المؤسسة على طلب الربط.' END,
      'account_delegation', p_delegation_id, 'normal', jsonb_build_object('delegation_id',p_delegation_id,'status',CASE WHEN p_approve THEN 'active' ELSE 'rejected' END));
