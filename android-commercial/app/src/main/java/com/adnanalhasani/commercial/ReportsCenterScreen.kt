@@ -273,6 +273,13 @@ internal fun ReportsCenterScreen(
     var cloudExpenses by remember { mutableStateOf<List<CommercialCloudExpenseVoucher>>(emptyList()) }
     var cloudLoading by remember { mutableStateOf(false) }
     var cloudLoadError by remember { mutableStateOf("") }
+    var salesDocumentsLoadError by remember { mutableStateOf("") }
+    var purchasesLoadError by remember { mutableStateOf("") }
+    var returnsLoadError by remember { mutableStateOf("") }
+    var paymentsLoadError by remember { mutableStateOf("") }
+    var journalsLoadError by remember { mutableStateOf("") }
+    var ledgerLinesLoadError by remember { mutableStateOf("") }
+    var expensesLoadError by remember { mutableStateOf("") }
     var supplierPaymentsLoadError by remember { mutableStateOf("") }
     var stockMovementsLoadError by remember { mutableStateOf("") }
     var stockAlertsLoadError by remember { mutableStateOf("") }
@@ -297,7 +304,9 @@ internal fun ReportsCenterScreen(
                 cloudLoading = false
                 // Clear failed projections rather than silently showing stale results as fresh.
                 cloudSalesDocuments = salesDocuments.getOrDefault(emptyList())
+                salesDocumentsLoadError = salesDocuments.exceptionOrNull()?.message.orEmpty()
                 cloudPurchases = purchases.getOrDefault(emptyList())
+                purchasesLoadError = purchases.exceptionOrNull()?.message.orEmpty()
                 cloudSupplierPayments = supplierPayments.getOrDefault(emptyList())
                 supplierPaymentsLoadError = supplierPayments.exceptionOrNull()?.message.orEmpty()
                 cloudStockMovements = stockMovements.getOrDefault(emptyList())
@@ -305,10 +314,15 @@ internal fun ReportsCenterScreen(
                 cloudStockAlerts = stockAlerts.getOrDefault(emptyList())
                 stockAlertsLoadError = stockAlerts.exceptionOrNull()?.message.orEmpty()
                 cloudReturns = returns.getOrDefault(emptyList())
+                returnsLoadError = returns.exceptionOrNull()?.message.orEmpty()
                 cloudPayments = payments.getOrDefault(emptyList())
+                paymentsLoadError = payments.exceptionOrNull()?.message.orEmpty()
                 cloudJournals = journals.getOrDefault(emptyList())
+                journalsLoadError = journals.exceptionOrNull()?.message.orEmpty()
                 cloudLedgerLines = ledgerLines.getOrDefault(emptyList())
+                ledgerLinesLoadError = ledgerLines.exceptionOrNull()?.message.orEmpty()
                 cloudExpenses = expenses.getOrDefault(emptyList())
+                expensesLoadError = expenses.exceptionOrNull()?.message.orEmpty()
                 val errors = listOf(
                     salesDocuments.exceptionOrNull(), purchases.exceptionOrNull(), returns.exceptionOrNull(), payments.exceptionOrNull(),
                     journals.exceptionOrNull(), ledgerLines.exceptionOrNull(), expenses.exceptionOrNull()
