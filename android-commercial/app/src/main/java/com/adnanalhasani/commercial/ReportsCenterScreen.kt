@@ -499,6 +499,8 @@ internal fun ReportsCenterScreen(
     val selectedRows = if (dateError || (cloudMode && (cloudLoading || cloudLoadError.isNotBlank()))) emptyList() else selectedRowsUnvalidated
     val csvLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri: Uri? ->
         if (uri != null) runCatching {
+            require(!dateError) { "لا يمكن تصدير تقرير بفترة غير صالحة." }
+            require(!cloudMode || (!cloudLoading && cloudLoadError.isBlank())) { "تعذر التصدير لأن مصادر البيانات السحابية غير مكتملة." }
             context.contentResolver.openOutputStream(uri)?.use { stream ->
                 OutputStreamWriter(stream, Charsets.UTF_8).use { writer ->
                     writer.write("\uFEFF")
@@ -509,6 +511,8 @@ internal fun ReportsCenterScreen(
     }
     val xlsxLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")) { uri: Uri? ->
         if (uri != null) runCatching {
+            require(!dateError) { "لا يمكن تصدير تقرير بفترة غير صالحة." }
+            require(!cloudMode || (!cloudLoading && cloudLoadError.isBlank())) { "تعذر التصدير لأن مصادر البيانات السحابية غير مكتملة." }
             context.contentResolver.openOutputStream(uri)?.use { writeReportXlsx(it, exportRows) }
                 ?: throw IllegalStateException("تعذر فتح ملف Excel.")
         }.onFailure { error = "تعذر تصدير XLSX: ${it.message ?: "خطأ غير معروف"}" }
