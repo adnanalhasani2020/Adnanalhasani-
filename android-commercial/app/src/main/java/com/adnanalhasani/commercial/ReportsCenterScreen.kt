@@ -5,11 +5,18 @@ import android.content.Intent
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
+import android.print.PageRange
+import android.print.PrintAttributes
+import android.print.PrintDocumentAdapter
+import android.print.PrintDocumentInfo
+import android.print.PrintManager
 import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextDirectionHeuristics
 import android.text.TextPaint
 import android.net.Uri
+import android.os.CancellationSignal
+import android.os.ParcelFileDescriptor
 import android.os.Handler
 import android.os.Looper
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -31,6 +38,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.io.FileOutputStream
 import java.io.OutputStreamWriter
 import java.time.Instant
 import java.time.LocalDate
@@ -179,6 +187,46 @@ private fun writeReportPdf(output: java.io.OutputStream, rows: List<List<String>
         finishPage()
         document.writeTo(output)
     } finally { document.close() }
+}
+/** Opens Android's system print preview and streams the same PDF report into the print spooler. */
+private fun printReport(context: Context, title: String, rows: List<List<String>>) {
+    require(rows.isNotEmpty()) { "لا توجد بيانات للطباعة." }
+    val printManager = context.getSystemService(Context.PRINT_SERVICE) as? PrintManager
+        ?: throw IllegalStateException("خدمة الطباعة غير متاحة على هذا الجهاز.")
+    val adapter = object : PrintDocumentAdapter() {
+        override fun onLayout(
+            oldAttributes: PrintAttributes?,
+            newAttributes: PrintAttributes,
+            cancellationSignal: CancellationSignal,
+            callback: LayoutResultCallback,
+            extras: android.os.Bundle?
+        ) {
+            if (cancellationSignal.isCanceled) { callback.onLayoutCancelled(); return }
+            val info = PrintDocumentInfo.Builder("$title.pdf")
+                .setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT)
+                .setPageCount(PrintDocumentInfo.PAGE_COUNT_UNKNOWN)
+                .build()
+            callback.onLayoutFinished(info, oldAttributes != newAttributes)
+        }
+        override fun onWrite(
+            pages: Array<out PageRange>,
+            destination: ParcelFileDescriptor,
+            cancellationSignal: CancellationSignal,
+            callback: WriteResultCallback
+        ) {
+            if (cancellationSignal.isCanceled) { callback.onWriteCancelled(); return }
+            try {
+                FileOutputStream(destination.fileDescriptor).use { writeReportPdf(it, rows) }
+                callback.onWriteFinished(arrayOf(PageRange.ALL_PAGES))
+            } catch (failure: Exception) {
+                callback.onWriteFailed(failure.message ?: "تعذر إنشاء ملف الطباعة.")
+            }
+        }
+    }
+    printManager.print(title, adapter, PrintAttributes.Builder()
+        .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
+        .setColorMode(PrintAttributes.COLOR_MODE_COLOR)
+        .build())
 }
 private data class ReportCatalogItem(val title: String, val category: String, val source: String, val supported: Boolean, val note: String)
 private data class ReportLine(val date: String, val reference: String, val name: String, val amount: Long, val currency: String, val status: String)
