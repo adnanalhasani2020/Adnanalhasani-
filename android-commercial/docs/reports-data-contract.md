@@ -23,5 +23,8 @@ This document defines the source and calculation boundary for the report center.
 ## Deliberately unavailable as formal statements
 Customer-wide balances, full supplier balances, cash-flow opening/closing balances, income statement, balance sheet, tax return, historical inventory valuation, and profit/COGS are not labelled as authoritative until all relevant posted sources, reversals, returns, cost valuation, and reconciliations are verified. Never infer these from invoice totals alone.
 
-## CSV export
-The CSV export contains the selected report's displayed rows plus the report title, inclusive date range, source mode, and export timestamp. It uses UTF-8 with BOM and quoted/escaped cells for spreadsheet compatibility.
+## Exports
+- **CSV:** contains the selected report's displayed rows plus report title, inclusive date range, source mode, and export timestamp. It uses UTF-8 with BOM and quoted/escaped cells for spreadsheet compatibility.
+- **XLSX:** generated as an Office Open XML ZIP workbook (not renamed CSV), with UTF-8 inline strings, XML escaping, a right-to-left worksheet view, and the same selected rows and report metadata as CSV.
+- PDF export and print layout are not implemented in this version. Do not describe them as available until a real Arabic RTL document renderer and output validation are added.
+- Exported amounts are the same formatted values shown in the report rows; they are not a substitute for underlying accounting detail or financial-statement certification.
