@@ -143,6 +143,9 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn('"الرصيد المحاسبي الكامل للعملاء" -> if (customerStatementError.isNotBlank()) emptyList()', self.screen)
         self.assertIn('"أرصدة الموردين والمستحقات" -> if (supplierStatementError.isNotBlank()) emptyList()', self.screen)
         self.assertIn('link.partyAccountId == line.partyAccountId && link.currencyCode == line.currencyCode', self.screen)
+        self.assertIn('it.accountId in controlAccountIds && it.currencyCode == party.second', self.screen)
+        self.assertIn('it.mappingKey == "accounts_receivable" && it.currencyCode == party.second', self.screen)
+        self.assertIn('it.accountRole == "accounts_payable" && it.currencyCode == party.second', self.screen)
         self.assertIn('بلا ربط صالح بعميل وعملة مطابقين', self.screen)
         self.assertIn('بلا ربط صالح بمورد وعملة مطابقين', self.screen)
 
