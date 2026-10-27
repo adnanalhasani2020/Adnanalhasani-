@@ -229,7 +229,8 @@ private fun printReport(context: Context, title: String, rows: List<List<String>
         .build())
 }
 private data class ReportCatalogItem(val title: String, val category: String, val source: String, val supported: Boolean, val note: String)
-private data class ReportLine(val date: String, val reference: String, val name: String, val amount: Long, val currency: String, val status: String)
+private data class ReportLine(val date: String, val reference: String, val name: String, val amount: Long, val currency: String, val status: String, val displayAmount: String? = null)
+private fun reportLineAmount(row: ReportLine, cloudMode: Boolean): String = row.displayAmount ?: reportLineAmount(row, cloudMode)
 private data class ReportCustomerMovement(val date: String, val customerId: String, val customer: String, val currency: String, val reference: String, val amount: Long, val description: String)
 private data class ReportSupplierMovement(val date: String, val supplier: String, val currency: String, val reference: String, val amount: Long, val description: String)
 
@@ -259,6 +260,7 @@ internal fun ReportsCenterScreen(
     var cloudSalesDocuments by remember { mutableStateOf<List<CommercialCloudSaleDocument>>(emptyList()) }
     var cloudPurchases by remember { mutableStateOf<List<CommercialCloudPurchaseDocument>>(emptyList()) }
     var cloudSupplierPayments by remember { mutableStateOf<List<CommercialCloudSupplierPaymentMovement>>(emptyList()) }
+    var cloudStockMovements by remember { mutableStateOf<List<CommercialCloudStockMovement>>(emptyList()) }
     var supplierFilter by remember { mutableStateOf("") }
     var cloudReturns by remember { mutableStateOf<List<CommercialCloudSaleReturn>>(emptyList()) }
     var cloudPayments by remember { mutableStateOf<List<CommercialCloudRecord>>(emptyList()) }
@@ -277,6 +279,7 @@ internal fun ReportsCenterScreen(
             val salesDocuments = runCatching { loadCommercialCloudSaleDocuments(context) }
             val purchases = runCatching { loadCommercialCloudPurchaseDocuments(context) }
             val supplierPayments = runCatching { loadCommercialCloudSupplierPaymentMovements(context) }
+            val stockMovements = runCatching { loadCommercialCloudStockMovements(context) }
             val returns = runCatching { loadCommercialCloudSaleReturns(context) }
             val payments = runCatching { loadCommercialCloudRecords(context, "payments") }
             val journals = runCatching { loadCommercialCloudRecords(context, "journals") }
@@ -288,13 +291,14 @@ internal fun ReportsCenterScreen(
                 cloudSalesDocuments = salesDocuments.getOrDefault(emptyList())
                 cloudPurchases = purchases.getOrDefault(emptyList())
                 cloudSupplierPayments = supplierPayments.getOrDefault(emptyList())
+                cloudStockMovements = stockMovements.getOrDefault(emptyList())
                 cloudReturns = returns.getOrDefault(emptyList())
                 cloudPayments = payments.getOrDefault(emptyList())
                 cloudJournals = journals.getOrDefault(emptyList())
                 cloudLedgerLines = ledgerLines.getOrDefault(emptyList())
                 cloudExpenses = expenses.getOrDefault(emptyList())
                 val errors = listOf(
-                    salesDocuments.exceptionOrNull(), purchases.exceptionOrNull(), supplierPayments.exceptionOrNull(), returns.exceptionOrNull(), payments.exceptionOrNull(),
+                    salesDocuments.exceptionOrNull(), purchases.exceptionOrNull(), supplierPayments.exceptionOrNull(), stockMovements.exceptionOrNull(), returns.exceptionOrNull(), payments.exceptionOrNull(),
                     journals.exceptionOrNull(), ledgerLines.exceptionOrNull(), expenses.exceptionOrNull()
                 ).filterNotNull()
                 cloudLoadError = errors.firstOrNull()?.message ?: if (errors.isNotEmpty()) "تعذر تحميل بعض مصادر التقارير." else ""
@@ -323,6 +327,7 @@ internal fun ReportsCenterScreen(
             ReportCatalogItem(if (cloudMode) "الدفعات السحابية الناجحة" else "التحصيلات المسجلة محليًا", "السندات والتحصيل والصرف", if (cloudMode) "commercial_payments" else "settlements_json", true, "يعرض الدفعات الناجحة فقط في السحابة؛ السندات لا تُجمع منفصلة عن الدفعة المرتبطة."),
             ReportCatalogItem("المصروفات التشغيلية", "الأرباح والتكاليف", if (cloudMode) "commercial_expense_vouchers" else "expenses_json", true, "تُستبعد سندات الصرف الملغاة؛ هذا تقرير مصروفات مسجلة وليس قائمة دخل."),
             ReportCatalogItem("رصيد المخزون الحالي", "الأصناف والمخزون", if (cloudMode) "commercial_inventory_balances" else "products_json", true, "رصيد حالي فقط؛ ليس رصيدًا تاريخيًا للفترة."),
+            ReportCatalogItem("حركة المخزون الفعلية", "الأصناف والمخزون", "commercial_stock_movements المرتبطة بنشاط المؤسسة", cloudMode, "يعرض حركات الكمية المسجلة من دفتر حركة المخزون، مع مرجع المصدر وحالة فاتورة البيع عند توفرها؛ لا يستنتج تكلفة أو قيمة مالية من الكمية.")
             ReportCatalogItem("تنبيهات المخزون المنخفض", "الأصناف والمخزون", "الرصيد وحد إعادة الطلب", true, "يعتمد على حد التنبيه المسجل لكل صنف."),
             ReportCatalogItem("فواتير الشراء والمستحقات المسجلة", "المشتريات", "commercial_purchase_orders ← supplier_invoices ← supplier_obligations", cloudMode, "يُعرض مبلغ الفاتورة والرصيد المستحق من سجل الالتزام؛ لا يُخلط مع قيمة أمر الشراء."),
             ReportCatalogItem("مستحقات فواتير الموردين", "الموردون والمستحقات", "commercial_supplier_obligations المرتبطة بالفواتير", cloudMode, "مجموع الالتزامات المسجلة ناقص المبالغ المسددة المسجلة فقط؛ لا يمثل رصيد المورد الشامل إذا وجدت تسويات أو مرتجعات خارج هذا المصدر."),
@@ -607,6 +612,13 @@ internal fun ReportsCenterScreen(
         } else inPeriodExpenses.map {
             ReportLine(Instant.ofEpochMilli(it.timestamp).atZone(zone).toLocalDate().toString(), "مصروف #${it.id}", it.category, it.amount.toLong(), "YER", it.note)
         })
+        "حركة المخزون الفعلية" -> cloudStockMovements.filter { movement ->
+            reportDateMillis(movement.createdAt)?.let { it >= startMillis && it < endExclusive } == true
+        }.map { movement ->
+            ReportLine(movement.createdAt.take(10), movement.sourceReference.ifBlank { movement.id }, movement.productName, 0L, "-",
+                "نوع الحركة: ${movement.movementType} · المصدر: ${movement.saleId.ifBlank { movement.sourceReference }} ${movement.saleStatus}",
+                displayAmount = movement.quantityDelta.stripTrailingZeros().toPlainString() + if (movement.unitName.isBlank()) "" else " ${movement.unitName}")
+        }.sortedByDescending { it.date }
         "رصيد المخزون الحالي" -> products.map {
             ReportLine("-", it.catalogCode.ifBlank { it.barcode }, it.name, it.stock.toLong(), "-", "${it.unitCode} · سعر ${it.price}")
         }
@@ -765,7 +777,7 @@ internal fun ReportsCenterScreen(
                         "المبيعات حسب العميل", "المبيعات النقدية والآجلة", "المبيعات حسب حالة السداد", "متوسط قيمة الفاتورة", "مقارنة فترتين", "مقارنة الفترات", "الخصومات على فواتير المبيعات", "الضرائب المسجلة على المبيعات",
                         "التحصيلات المسجلة محليًا", "الدفعات السحابية الناجحة", "المصروفات التشغيلية", "رصيد المخزون الحالي", "تنبيهات المخزون المنخفض",
                         "فواتير الشراء والمستحقات المسجلة", "مستحقات فواتير الموردين", "مرتجعات المبيعات وحالة التسوية", "سندات القبض والصرف", "سجل القيود المحاسبية",
-                        "ميزان المراجعة حسب الحساب", "حركة دفتر الأستاذ العام", "كشف حساب محاسبي", "أرصدة العملاء وكشف الحساب", "كشف حركات الموردين" -> selectedReport = report.title
+                        "ميزان المراجعة حسب الحساب", "حركة دفتر الأستاذ العام", "كشف حساب محاسبي", "أرصدة العملاء وكشف الحساب", "كشف حركات الموردين", "حركة المخزون الفعلية" -> selectedReport = report.title
                         "لوحة المؤشرات" -> selectedReport = "ملخص المبيعات حسب الفترة"
                     }
                 }),
