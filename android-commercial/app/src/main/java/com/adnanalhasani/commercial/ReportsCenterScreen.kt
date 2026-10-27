@@ -72,6 +72,10 @@ internal fun ReportsCenterScreen(
             ReportCatalogItem("ملخص المبيعات حسب الفترة", "المبيعات", if (cloudMode) "commercial_sales عبر مستودع السحابة" else "sales_json على الجهاز", true, "الفواتير المكتملة فقط؛ فصل حسب العملة."),
             ReportCatalogItem("تفاصيل فواتير المبيعات", "المبيعات", if (cloudMode) "فواتير السحابة" else "sales_json على الجهاز", true, "تفاصيل الفاتورة المتاحة في نموذج التطبيق."),
             ReportCatalogItem("المبيعات حسب الصنف", "المبيعات", "بنود الفواتير المتاحة", true, "النموذج المحلي الحالي يسجل اسم صنف لكل سجل بيع، وليس دائمًا بنود فاتورة متعددة."),
+            ReportCatalogItem("المبيعات حسب العميل", "المبيعات", "اسم العميل المحفوظ في سجل البيع", true, "يعرض مجموع الفواتير المكتملة المسجلة للعميل حسب العملة."),
+            ReportCatalogItem("المبيعات النقدية والآجلة", "المبيعات", "نوع البيع المسجل في الفاتورة", true, "تصنيف حسب علامة النقدي/الآجل في سجل البيع، وليس تسوية الرصيد."),
+            ReportCatalogItem("متوسط قيمة الفاتورة", "المبيعات", "إجمالي الفواتير المكتملة وعددها", true, "متوسط تشغيلي منفصل حسب العملة."),
+            ReportCatalogItem("مقارنة فترتين", "الفترات والمقارنات", "سجلات المبيعات المكتملة المؤرخة", true, "يقارن الفترة الحالية بفترة سابقة مساوية لها في عدد الأيام حسب العملة."),
             ReportCatalogItem("التحصيلات المسجلة محليًا", "السندات والتحصيل والصرف", "settlements_json", !cloudMode, "لا تعرض هذه البيانات في وضع السحابة لتجنب خلط المصادر."),
             ReportCatalogItem("المصروفات التشغيلية", "الأرباح والتكاليف", if (cloudMode) "سندات المصروفات السحابية" else "expenses_json", !cloudMode, "التقرير المحلي يعرض المصروفات المحفوظة على الجهاز."),
             ReportCatalogItem("رصيد المخزون الحالي", "الأصناف والمخزون", if (cloudMode) "commercial_inventory_balances" else "products_json", true, "رصيد حالي فقط؛ ليس رصيدًا تاريخيًا للفترة."),
@@ -110,9 +114,33 @@ internal fun ReportsCenterScreen(
         "تفاصيل فواتير المبيعات" -> inPeriodSales.sortedByDescending { it.createdAt }.map {
             ReportLine(Instant.ofEpochMilli(it.createdAt).atZone(zone).toLocalDate().toString(), "فاتورة #${it.number}", it.product, it.total.toLong(), it.currencyCode, if (it.credit) "آجل" else "نقدي")
         }
-        "المبيعات حسب الصنف" -> inPeriodSales.groupBy { it.product }.map { (name, rows) ->
-            ReportLine("-", "-", name, rows.sumOf { it.total.toLong() }, rows.firstOrNull()?.currencyCode.orEmpty(), "${rows.sumOf { it.quantity }} وحدة")
+        "المبيعات حسب الصنف" -> inPeriodSales.groupBy { it.product to it.currencyCode }.map { (key, rows) ->
+            ReportLine("-", "-", key.first, rows.sumOf { it.total.toLong() }, key.second, "${rows.sumOf { it.quantity }} وحدة · ${rows.size} فاتورة")
         }.sortedByDescending { it.amount }
+        "المبيعات حسب العميل" -> inPeriodSales.groupBy { it.customer.ifBlank { "عميل غير محدد" } to it.currencyCode }.map { (key, rows) ->
+            ReportLine("-", "-", key.first, rows.sumOf { it.total.toLong() }, key.second, "${rows.size} فاتورة")
+        }.sortedByDescending { it.amount }
+        "المبيعات النقدية والآجلة" -> inPeriodSales.groupBy { (if (it.credit) "آجل" else "نقدي") to it.currencyCode }.map { (key, rows) ->
+            ReportLine("-", "-", key.first, rows.sumOf { it.total.toLong() }, key.second, "${rows.size} فاتورة")
+        }.sortedByDescending { it.amount }
+        "متوسط قيمة الفاتورة" -> inPeriodSales.groupBy { it.currencyCode.ifBlank { "غير محددة" } }.map { (currency, rows) ->
+            ReportLine("-", "-", "متوسط قيمة الفاتورة", if (rows.isEmpty()) 0L else rows.sumOf { it.total.toLong() } / rows.size, currency, "${rows.size} فاتورة · إجمالي ${rows.sumOf { it.total.toLong() }}")
+        }
+        "مقارنة فترتين" -> {
+            val days = if (startDate != null && endDate != null) java.time.temporal.ChronoUnit.DAYS.between(startDate, endDate).toInt() + 1 else 0
+            val previousStart = startDate?.minusDays(days.toLong())
+            val previousEnd = startDate?.minusDays(1)
+            val previousRows = if (previousStart != null && previousEnd != null) sales.filter {
+                it.createdAt >= previousStart.atStartOfDay(zone).toInstant().toEpochMilli() &&
+                    it.createdAt < previousEnd.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli() &&
+                    it.status.equals("completed", true)
+            } else emptyList()
+            (inPeriodSales.map { it.currencyCode.ifBlank { "غير محددة" } } + previousRows.map { it.currencyCode.ifBlank { "غير محددة" } }).distinct().sorted().map { currency ->
+                val currentTotal = inPeriodSales.filter { it.currencyCode.ifBlank { "غير محددة" } == currency }.sumOf { it.total.toLong() }
+                val previousTotal = previousRows.filter { it.currencyCode.ifBlank { "غير محددة" } == currency }.sumOf { it.total.toLong() }
+                ReportLine("${startText} — ${endText}", "مقارنة", "مبيعات الفترة الحالية", currentTotal, currency, "الفترة السابقة: $previousTotal · الفرق: ${currentTotal - previousTotal}")
+            }
+        }
         "التحصيلات المسجلة محليًا" -> inPeriodSettlements.map {
             ReportLine(Instant.ofEpochMilli(it.timestamp).atZone(zone).toLocalDate().toString(), "فاتورة #${it.invoiceNumber}", it.customer, it.amount.toLong(), "YER", "تحصيل محلي")
         }
@@ -209,8 +237,9 @@ internal fun ReportsCenterScreen(
             Card(
                 modifier = Modifier.fillMaxWidth().clickable(enabled = report.supported && !dateError) {
                     when (report.title) {
-                        "ملخص المبيعات حسب الفترة" -> { selectedReport = "ملخص المبيعات"; onOpenExistingReports() }
-                        "تفاصيل فواتير المبيعات", "المبيعات حسب الصنف", "التحصيلات المسجلة محليًا", "المصروفات التشغيلية", "رصيد المخزون الحالي", "تنبيهات المخزون المنخفض" -> selectedReport = report.title
+                        "ملخص المبيعات حسب الفترة", "تفاصيل فواتير المبيعات", "المبيعات حسب الصنف",
+                        "المبيعات حسب العميل", "المبيعات النقدية والآجلة", "متوسط قيمة الفاتورة", "مقارنة فترتين",
+                        "التحصيلات المسجلة محليًا", "المصروفات التشغيلية", "رصيد المخزون الحالي", "تنبيهات المخزون المنخفض" -> selectedReport = report.title
                         "لوحة المؤشرات" -> selectedReport = "ملخص المبيعات"
                     }
                 },
