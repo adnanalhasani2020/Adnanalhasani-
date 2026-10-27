@@ -82,7 +82,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn('it.status.lowercase(Locale.ROOT) in setOf("succeeded", "partially_refunded", "refunded")', self.screen)
         self.assertIn('it.status.equals("completed", true)', self.screen)
         self.assertIn('it.refundStatus.equals("refunded", true)', self.screen)
-        self.assertIn("رصيد الختامي حسب الحركات المعروضة", self.screen)
+        self.assertIn("الرصيد الختامي المحسوب من الحركات المتاحة", self.screen)
 
     def test_supplier_statement_uses_unique_posted_payment_rows_not_journal_totals(self):
         self.assertIn('"كشف حركات الموردين" ->', self.screen)
@@ -110,6 +110,13 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn("currencyFilter.isBlank() || row.currency.contains(currencyFilter.trim(), true)", self.screen)
         self.assertIn("statusFilter.isBlank() || row.status.contains(statusFilter.trim(), true)", self.screen)
         self.assertIn("rowFilter.isBlank() || row.name.contains(rowFilter.trim(), true)", self.screen)
+
+    def test_posted_journal_detail_report_shows_debit_credit_and_source(self):
+        self.assertIn('"تفاصيل القيود المرحلة" ->', self.screen)
+        self.assertIn("loadCommercialCloudPostedJournalLines(context)", self.screen)
+        self.assertIn("مدين: ${reportMoney(line.debitMinor, line.currencyCode, true)}", self.screen)
+        self.assertIn("دائن: ${reportMoney(line.creditMinor, line.currencyCode, true)}", self.screen)
+        self.assertIn("line.sourceType", self.screen)
 
     def test_cloud_stock_reports_use_inventory_balances_and_movements(self):
         self.assertIn("loadCommercialCloudStockAlerts(context)", self.screen)
