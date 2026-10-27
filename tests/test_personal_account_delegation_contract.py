@@ -42,6 +42,7 @@ def test_delegated_orders_bind_parent_billing_child_actor_and_enforce_budget():
     assert "SET spent_minor=spent_minor + v_subtotal" in sql
     assert "commercial_customer_portal_create_delegated_booking" in sql
     assert "commercial_customer_portal_create_delegated_order(" in sql
+    assert "PERFORM public.commercial_customer_portal_link_verified_email()" not in sql
 
 
 def test_delegated_report_requires_parent_child_permission_or_merchant_manager():
