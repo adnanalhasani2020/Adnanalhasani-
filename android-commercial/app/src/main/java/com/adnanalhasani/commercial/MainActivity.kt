@@ -214,6 +214,7 @@ private fun StoreApp(context: Context) {
     var editingProductIndex by remember { mutableIntStateOf(-1) }
     var showDebts by remember { mutableStateOf(false) }
     var showReports by remember { mutableStateOf(false) }
+    var showReportsCenter by remember { mutableStateOf(false) }
     var showExpenses by remember { mutableStateOf(false) }
     var showActivityProfile by remember { mutableStateOf(false) }
     var showCatalog by remember { mutableStateOf(false) }
@@ -390,13 +391,14 @@ private fun StoreApp(context: Context) {
                     showDebts -> if (cloudMode) {
                         CommercialCloudDebtScreen(context = context, onBack = { showDebts = false })
                     } else DebtScreen(sales = sales, settlements = settlements, onBack = { showDebts = false }, onSettle = { settlingSaleNumber = it.number })
+                    showReportsCenter -> ReportsCenterScreen(context = context, sales = sales, settlements = settlements, expenses = expenses, products = inventory, cloudMode = cloudMode, onBack = { showReportsCenter = false }, onOpenExistingReports = { showReportsCenter = false; showReports = true })
                     showReports -> if (cloudMode) CommercialCloudReportsScreen(context = context, onBack = { showReports = false }) else ReportsScreen(sales = sales, settlements = settlements, expenses = expenses, onBack = { showReports = false })
                     showExpenses -> if (cloudMode) {
                         CommercialCloudExpensesScreen(context = context, onBack = { showExpenses = false })
                     } else ExpensesScreen(expenses = expenses, onBack = { showExpenses = false }, onAdd = { expenseDialog = true })
                     else -> if (showActivityProfile) ActivityProfileScreen(onBack = { showActivityProfile = false }) else MoreScreen(cloudMode = cloudMode, onCustomers = {
                     showDebts = true
-                }, onReports = { showReports = true }, onExpenses = { showExpenses = true }, onActivityProfile = { showActivityProfile = true }, onCatalog = { showCatalog = true }, onMasterData = { showMasterData = true }, onCloudOperational = { cloudOperationalPage = it }, onCloudSales = { cloudSalesPage = true }, onCloudPurchases = { cloudPurchasesPage = true }, onCloudStockAlerts = { cloudStockAlertsPage = true }, onUnitsDirectory = { cloudUnitsPage = true }, onCustomerPortal = { customerPortalPage = true }, onCustomerOrders = { customerOrderFulfillmentPage = true })
+                }, onReports = { showReportsCenter = true }, onExpenses = { showExpenses = true }, onActivityProfile = { showActivityProfile = true }, onCatalog = { showCatalog = true }, onMasterData = { showMasterData = true }, onCloudOperational = { cloudOperationalPage = it }, onCloudSales = { cloudSalesPage = true }, onCloudPurchases = { cloudPurchasesPage = true }, onCloudStockAlerts = { cloudStockAlertsPage = true }, onUnitsDirectory = { cloudUnitsPage = true }, onCustomerPortal = { customerPortalPage = true }, onCustomerOrders = { customerOrderFulfillmentPage = true })
                 }
             }
         }
