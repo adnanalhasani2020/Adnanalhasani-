@@ -424,6 +424,7 @@ internal fun ReportsCenterScreen(
     val customerStatementError = when {
         !cloudMode -> "كشف العميل الكامل يتطلب دفتر الأستاذ السحابي."
         ledgerLinesLoadError.isNotBlank() -> ledgerLinesLoadError
+        cloudLedgerLines.isEmpty() -> "لا توجد قيود مرحلة في دفتر الأستاذ؛ لا يمكن إنشاء كشف حساب محاسبي."
         customerPartyAccountsLoadError.isNotBlank() -> customerPartyAccountsLoadError
         cloudCustomerPartyAccounts.isEmpty() -> "لا توجد روابط لحسابات مراقبة العملاء في دليل الحسابات."
         cloudGlMappings.none { it.mappingKey == "accounts_receivable" } -> "حساب مراقبة العملاء غير مربوط في دليل الحسابات."
@@ -433,6 +434,7 @@ internal fun ReportsCenterScreen(
     val supplierStatementError = when {
         !cloudMode -> "كشف المورد الكامل يتطلب دفتر الأستاذ السحابي."
         ledgerLinesLoadError.isNotBlank() -> ledgerLinesLoadError
+        cloudLedgerLines.isEmpty() -> "لا توجد قيود مرحلة في دفتر الأستاذ؛ لا يمكن إنشاء كشف حساب محاسبي."
         supplierPartyAccountsLoadError.isNotBlank() -> supplierPartyAccountsLoadError
         supplierControlAccountsLoadError.isNotBlank() -> supplierControlAccountsLoadError
         cloudSupplierPartyAccounts.isEmpty() -> "لا توجد روابط لحسابات مراقبة الموردين في دليل الحسابات."
@@ -473,6 +475,7 @@ internal fun ReportsCenterScreen(
                 glMappingsLoadError.isNotBlank() -> glMappingsLoadError
                 cloudGlMappings.none { it.mappingKey in setOf("cash", "bank", "card_clearing", "other_receipts", "check_clearing", "other_disbursements") && it.currencyCode.matches(Regex("^[A-Z]{3}$")) } -> "لا توجد حسابات نقدية أو بنكية مربوطة بعملة صالحة في دليل الحسابات."
                 ledgerLinesLoadError.isNotBlank() -> ledgerLinesLoadError
+                cloudLedgerLines.isEmpty() -> "لا توجد قيود مرحلة لحسابات النقد والبنك؛ لا يمكن اعتماد الرصيد."
                 cloudLedgerLines.any { runCatching { LocalDate.parse(it.entryDate.take(10)) }.getOrNull() == null } -> "توجد قيود مرحلة بتاريخ غير صالح؛ لا يمكن ضمان الرصيد الافتتاحي."
                 cloudLedgerLines.any { !it.currencyCode.matches(Regex("^[A-Z]{3}$")) } -> "توجد قيود نقدية بعملة غير محددة؛ تم حجب كشف الصندوق."
                 else -> ""
