@@ -270,6 +270,7 @@ internal fun ReportsCenterScreen(
     var cloudPayments by remember { mutableStateOf<List<CommercialCloudRecord>>(emptyList()) }
     var cloudJournals by remember { mutableStateOf<List<CommercialCloudRecord>>(emptyList()) }
     var cloudLedgerLines by remember { mutableStateOf<List<CommercialCloudJournalLine>>(emptyList()) }
+    var cloudSupplierControlAccounts by remember { mutableStateOf<List<CommercialCloudSupplierControlAccount>>(emptyList()) }
     var cloudGlMappings by remember { mutableStateOf<List<CommercialCloudGlAccountMapping>>(emptyList()) }
     var glMappingsLoadError by remember { mutableStateOf("") }
     var cloudCustomerPartyAccounts by remember { mutableStateOf<List<CommercialCloudPartyAccountLink>>(emptyList()) }
@@ -305,6 +306,7 @@ internal fun ReportsCenterScreen(
             val payments = runCatching { loadCommercialCloudRecords(context, "payments") }
             val journals = runCatching { loadCommercialCloudRecords(context, "journals") }
             val ledgerLines = runCatching { loadCommercialCloudPostedJournalLines(context) }
+            val supplierControlAccounts = runCatching { loadCommercialCloudSupplierControlAccounts(context) }
             val glMappings = runCatching { loadCommercialCloudGlAccountMappings(context) }
             val customerPartyAccounts = runCatching { loadCommercialCloudCustomerPartyAccounts(context) }
             val supplierPartyAccounts = runCatching { loadCommercialCloudSupplierPartyAccounts(context) }
@@ -330,6 +332,8 @@ internal fun ReportsCenterScreen(
                 journalsLoadError = journals.exceptionOrNull()?.message.orEmpty()
                 cloudLedgerLines = ledgerLines.getOrDefault(emptyList())
                 ledgerLinesLoadError = ledgerLines.exceptionOrNull()?.message.orEmpty()
+                cloudSupplierControlAccounts = supplierControlAccounts.getOrDefault(emptyList())
+                supplierPartyAccountsLoadError = supplierControlAccounts.exceptionOrNull()?.message.orEmpty()
                 cloudGlMappings = glMappings.getOrDefault(emptyList())
                 glMappingsLoadError = glMappings.exceptionOrNull()?.message.orEmpty()
                 cloudCustomerPartyAccounts = customerPartyAccounts.getOrDefault(emptyList())
@@ -407,6 +411,8 @@ internal fun ReportsCenterScreen(
         ledgerLinesLoadError.isNotBlank() -> ledgerLinesLoadError
         customerPartyAccountsLoadError.isNotBlank() -> customerPartyAccountsLoadError
         cloudCustomerPartyAccounts.isEmpty() -> "لا توجد روابط لحسابات مراقبة العملاء في دليل الحسابات."
+        cloudGlMappings.none { it.mappingKey == "accounts_receivable" } -> "حساب مراقبة العملاء غير مربوط في دليل الحسابات."
+        cloudLedgerLines.any { line -> line.accountId in cloudGlMappings.filter { it.mappingKey == "accounts_receivable" }.map { it.ledgerAccountId }.toSet() && line.partyAccountId.isBlank() } -> "توجد حركات على حساب مراقبة العملاء بلا ربط بالعميل؛ تعذر اعتماد الكشف الكامل."
         else -> ""
     }
     val supplierStatementError = when {
@@ -414,6 +420,8 @@ internal fun ReportsCenterScreen(
         ledgerLinesLoadError.isNotBlank() -> ledgerLinesLoadError
         supplierPartyAccountsLoadError.isNotBlank() -> supplierPartyAccountsLoadError
         cloudSupplierPartyAccounts.isEmpty() -> "لا توجد روابط لحسابات مراقبة الموردين في دليل الحسابات."
+        cloudSupplierControlAccounts.none { it.accountRole == "accounts_payable" } -> "حساب مراقبة الموردين غير مربوط في دليل الحسابات."
+        cloudLedgerLines.any { line -> line.accountId in cloudSupplierControlAccounts.filter { it.accountRole == "accounts_payable" }.map { it.ledgerAccountId }.toSet() && line.partyAccountId.isBlank() } -> "توجد حركات على حساب مراقبة الموردين بلا ربط بالمورد؛ تعذر اعتماد الكشف الكامل."
         else -> ""
     }
     val sourceErrorForReport: (String) -> String = { title ->
