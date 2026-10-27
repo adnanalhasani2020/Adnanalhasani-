@@ -901,7 +901,7 @@ internal fun ReportsCenterScreen(
             }
             fun normalizedType(line: CommercialCloudJournalLine): String =
                 line.accountType.lowercase(Locale.ROOT).replace('-', '_').replace(' ', '_')
-            fun statementClass(line: CommercialCloudJournalLine): String = when (val type = normalizedType(line)) {
+            fun statementClass(line: CommercialCloudJournalLine): String = when (normalizedType(line)) {
                 "asset", "assets" -> "asset"
                 "liability", "liabilities" -> "liability"
                 "equity" -> "equity"
