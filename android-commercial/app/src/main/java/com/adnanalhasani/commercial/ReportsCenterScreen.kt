@@ -230,7 +230,7 @@ private fun printReport(context: Context, title: String, rows: List<List<String>
 }
 private data class ReportCatalogItem(val title: String, val category: String, val source: String, val supported: Boolean, val note: String)
 private data class ReportLine(val date: String, val reference: String, val name: String, val amount: Long, val currency: String, val status: String, val displayAmount: String? = null)
-private fun reportLineAmount(row: ReportLine, cloudMode: Boolean): String = row.displayAmount ?: reportLineAmount(row, cloudMode)
+private fun reportLineAmount(row: ReportLine, cloudMode: Boolean): String = row.displayAmount ?: if (row.currency.isBlank() || row.currency == "-") row.amount.toString() else reportMoney(row.amount, row.currency, cloudMode)
 private data class ReportCustomerMovement(val date: String, val customerId: String, val customer: String, val currency: String, val reference: String, val amount: Long, val description: String)
 private data class ReportSupplierMovement(val date: String, val supplier: String, val currency: String, val reference: String, val amount: Long, val description: String)
 
@@ -825,7 +825,7 @@ internal fun ReportsCenterScreen(
                             add(listOf("مصدر البيانات", if (cloudMode) "السحابة" else "محلي على الجهاز"))
                             add(listOf("تاريخ التصدير", java.time.LocalDateTime.now().toString()))
                             add(listOf("التاريخ", "المرجع", "الاسم", "المبلغ/الكمية", "العملة", "الحالة"))
-                            selectedRows.forEach { row -> add(listOf(row.date, row.reference, row.name, if (row.currency.isBlank() || row.currency == "-") row.amount.toString() else reportMoney(row.amount, row.currency, cloudMode), row.currency, row.status)) }
+                            selectedRows.forEach { row -> add(listOf(row.date, row.reference, row.name, reportLineAmount(row, cloudMode), row.currency, row.status)) }
                         }
                         csvLauncher.launch("mutajri-report-${selectedReport.hashCode()}.csv")
                     }) { Icon(Icons.Default.FileDownload, null); Spacer(Modifier.width(4.dp)); Text("تصدير CSV") }
@@ -837,7 +837,7 @@ internal fun ReportsCenterScreen(
                             add(listOf("مصدر البيانات", if (cloudMode) "السحابة" else "محلي على الجهاز"))
                             add(listOf("تاريخ التصدير", java.time.LocalDateTime.now().toString()))
                             add(listOf("التاريخ", "المرجع", "الاسم", "المبلغ/الكمية", "العملة", "الحالة"))
-                            selectedRows.forEach { row -> add(listOf(row.date, row.reference, row.name, if (row.currency.isBlank() || row.currency == "-") row.amount.toString() else reportMoney(row.amount, row.currency, cloudMode), row.currency, row.status)) }
+                            selectedRows.forEach { row -> add(listOf(row.date, row.reference, row.name, reportLineAmount(row, cloudMode), row.currency, row.status)) }
                         }
                         xlsxLauncher.launch("mutajri-report-${selectedReport.hashCode()}.xlsx")
                     }) { Icon(Icons.Default.TableChart, null); Spacer(Modifier.width(4.dp)); Text("Excel XLSX") }
@@ -854,7 +854,7 @@ internal fun ReportsCenterScreen(
                                 add(listOf("التاريخ", "المرجع", "الاسم", "المبلغ/الكمية", "العملة", "الحالة"))
                                 selectedRows.forEach { row ->
                                     add(listOf(row.date, row.reference, row.name,
-                                        if (row.currency.isBlank() || row.currency == "-") row.amount.toString() else reportMoney(row.amount, row.currency, cloudMode),
+                                        reportLineAmount(row, cloudMode),
                                         row.currency, row.status))
                                 }
                             }
@@ -874,7 +874,7 @@ internal fun ReportsCenterScreen(
                                 add(listOf("التاريخ", "المرجع", "الاسم", "المبلغ/الكمية", "العملة", "الحالة"))
                                 selectedRows.forEach { row ->
                                     add(listOf(row.date, row.reference, row.name,
-                                        if (row.currency.isBlank() || row.currency == "-") row.amount.toString() else reportMoney(row.amount, row.currency, cloudMode),
+                                        reportLineAmount(row, cloudMode),
                                         row.currency, row.status))
                                 }
                             }
