@@ -332,6 +332,30 @@ internal fun ReportsCenterScreen(
         }
     }
 
+    val ledgerStatementError = if (!cloudMode) "القوائم المالية تتطلب دفتر الأستاذ السحابي." else run {
+        val throughEnd = cloudLedgerLines.filter { line ->
+            val date = runCatching { LocalDate.parse(line.entryDate.take(10)) }.getOrNull()
+            date != null && endDate != null && !date.isAfter(endDate)
+        }
+        if (ledgerLinesLoadError.isNotBlank()) ledgerLinesLoadError
+        else if (throughEnd.isEmpty()) "لا توجد قيود مرحلة ضمن الفترة؛ لا يمكن اعتماد القوائم المالية."
+        else {
+            val unbalanced = throughEnd.groupBy { it.entryId to it.currencyCode }.any { (_, lines) ->
+                lines.sumOf { it.debitMinor } != lines.sumOf { it.creditMinor }
+            }
+            val unknown = throughEnd.any { line ->
+                line.accountType.lowercase(Locale.ROOT).replace('-', '_').replace(' ', '_') !in setOf(
+                    "asset", "assets", "liability", "liabilities", "equity", "revenue", "income",
+                    "expense", "expenses", "cost_of_goods_sold", "cost_of_sales", "contra_revenue"
+                )
+            }
+            when {
+                unbalanced -> "توجد قيود مرحلة غير متزنة حسب العملة؛ تم حجب القوائم."
+                unknown -> "توجد حسابات بأنواع غير معروفة؛ يلزم تصنيف دليل الحسابات قبل اعتماد القوائم."
+                else -> ""
+            }
+        }
+    }
     val sourceErrorForReport: (String) -> String = { title ->
         when (title) {
             "ملخص المبيعات حسب الفترة", "تفاصيل فواتير المبيعات", "تفاصيل بنود فواتير المبيعات",
@@ -344,6 +368,7 @@ internal fun ReportsCenterScreen(
             "الدفعات السحابية الناجحة", "سندات القبض والصرف" -> paymentsLoadError
             "سجل القيود المحاسبية" -> journalsLoadError
             "ميزان المراجعة حسب الحساب", "حركة دفتر الأستاذ العام", "كشف حساب محاسبي", "تفاصيل القيود المرحلة" -> ledgerLinesLoadError
+            "قائمة الدخل والميزانية العمومية" -> ledgerStatementError
             "المصروفات التشغيلية" -> expensesLoadError
             "حركة المخزون الفعلية" -> stockMovementsLoadError
             "رصيد المخزون الحالي", "تنبيهات المخزون المنخفض" -> stockAlertsLoadError
@@ -388,7 +413,7 @@ internal fun ReportsCenterScreen(
             ReportCatalogItem("حركة دفتر الأستاذ العام", "المحاسبة والمالية", "سطور القيود المرحلة ومصادرها", cloudMode, "تفاصيل سطور القيود المرحلة ضمن الفترة."),
             ReportCatalogItem("كشف حساب محاسبي", "المحاسبة والمالية", "سطور دفتر الأستاذ المرحلة حسب الحساب", cloudMode, "يتطلب إدخال رمز الحساب أو اسمه؛ يعرض الحركات المرحلة فقط ضمن الفترة والعملة المسجلة."),
 
-            ReportCatalogItem("قائمة الدخل والميزانية العمومية", "المحاسبة والمالية", "دفتر أستاذ مكتمل وتسويات الفترة", false, "غير متاحة لتجنب عرض قوائم مضللة."),
+            ReportCatalogItem("قائمة الدخل والميزانية العمومية", "المحاسبة والمالية", "commercial_journal_lines + دليل الحسابات؛ القيود المرحلة فقط", cloudMode, "يعرض قائمة دخل للفترة وميزانية حتى تاريخ النهاية منفصلتين حسب العملة؛ يحجب النتائج إذا كانت القيود غير متزنة أو أنواع الحسابات غير معروفة."),
             ReportCatalogItem("التدفقات النقدية والصندوق", "الصندوق والنقدية", "حركات نقدية فريدة ورصيد افتتاحي موثوق", false, "يلزم تحديد جميع الحركات النقدية ومنع تكرار الدفعات والسندات."),
 
             ReportCatalogItem("الضرائب والخصومات", "الضرائب والخصومات", "تفاصيل الضرائب والخصومات من المستندات", false, "لا تُخمن النسب أو مبالغ الضريبة إذا لم تسجل في المصدر."),
