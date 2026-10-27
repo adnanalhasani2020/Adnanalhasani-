@@ -883,14 +883,25 @@ internal fun ReportsCenterScreen(
             }
             fun normalizedType(line: CommercialCloudJournalLine): String =
                 line.accountType.lowercase(Locale.ROOT).replace('-', '_').replace(' ', '_')
-            fun statementClass(type: String): String = when (type) {
+            fun statementClass(line: CommercialCloudJournalLine): String = when (val type = normalizedType(line)) {
                 "asset", "assets" -> "asset"
                 "liability", "liabilities" -> "liability"
                 "equity" -> "equity"
-                "revenue", "income" -> "revenue"
+                "revenue", "income" -> if (
+                    line.normalBalance.equals("debit", true) ||
+                    line.accountName.contains("مردودات", true) ||
+                    line.accountName.contains("خصومات", true) ||
+                    line.accountName.contains("sales return", true) ||
+                    line.accountName.contains("sales discount", true)
+                ) "contra_revenue" else "revenue"
                 "contra_revenue" -> "contra_revenue"
                 "cost_of_goods_sold", "cost_of_sales" -> "cogs"
-                "expense", "expenses" -> "expense"
+                "expense", "expenses" -> if (
+                    line.accountName.contains("تكلفة البضاعة المباعة", true) ||
+                    line.accountName.contains("cost of goods sold", true) ||
+                    line.accountName.contains("تكلفة المبيعات", true) ||
+                    line.accountCode == "5000"
+                ) "cogs" else "expense"
                 else -> "unknown"
             }
             val currencies = (throughEnd.map { it.currencyCode } + inPeriod.map { it.currencyCode })
@@ -900,7 +911,7 @@ internal fun ReportsCenterScreen(
                     val periodRows = inPeriod.filter { it.currencyCode == currency }
                     val cumulativeRows = throughEnd.filter { it.currencyCode == currency }
                     fun accountNet(lines: List<CommercialCloudJournalLine>, cls: String): Long =
-                        lines.filter { statementClass(normalizedType(it)) == cls }
+                        lines.filter { statementClass(it) == cls }
                             .sumOf { if (cls in setOf("asset", "expense", "cogs", "contra_revenue")) it.debitMinor - it.creditMinor else it.creditMinor - it.debitMinor }
                     val revenue = accountNet(periodRows, "revenue")
                     val contraRevenue = accountNet(periodRows, "contra_revenue")
