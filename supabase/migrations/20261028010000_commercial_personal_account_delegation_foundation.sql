@@ -180,6 +180,7 @@ DECLARE
   v_row public.commercial_account_delegations%ROWTYPE;
   v_parent_owner uuid;
   v_child_owner uuid;
+  v_parent_email text;
 BEGIN
   IF v_uid IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
   SELECT d.* INTO v_row
@@ -208,6 +209,40 @@ BEGIN
 
   SELECT owner_user_id INTO v_parent_owner FROM public.commercial_party_accounts WHERE id=v_row.parent_account_id;
   SELECT owner_user_id INTO v_child_owner FROM public.commercial_party_accounts WHERE id=v_row.child_account_id;
+
+  -- Link the parent to the merchant's existing customer account only when a verified email maps unambiguously.
+  -- This preserves the parent as the merchant receivable owner without guessing across duplicate customer records.
+  IF p_approve THEN
+    SELECT u.email INTO v_parent_email
+    FROM auth.users u
+    WHERE u.id=v_parent_owner AND u.email_confirmed_at IS NOT NULL;
+    IF v_parent_email IS NOT NULL AND (
+      SELECT count(*) FROM public.commercial_customers c
+      WHERE c.organization_id=v_row.organization_id AND c.state='active'
+        AND c.auth_user_id IS NULL AND c.email IS NOT NULL
+        AND lower(btrim(c.email))=lower(btrim(v_parent_email))
+        AND EXISTS (
+          SELECT 1 FROM public.commercial_customer_party_accounts cpa
+          JOIN public.commercial_party_accounts a ON a.id=cpa.party_account_id
+            AND a.organization_id=cpa.organization_id
+            AND a.account_type IN ('business','organization') AND a.status='active'
+          WHERE cpa.customer_id=c.id AND cpa.organization_id=c.organization_id
+        )
+    ) = 1 THEN
+      UPDATE public.commercial_customers c SET auth_user_id=v_parent_owner, updated_at=now()
+      WHERE c.organization_id=v_row.organization_id AND c.state='active'
+        AND c.auth_user_id IS NULL AND c.email IS NOT NULL
+        AND lower(btrim(c.email))=lower(btrim(v_parent_email))
+        AND EXISTS (
+          SELECT 1 FROM public.commercial_customer_party_accounts cpa
+          JOIN public.commercial_party_accounts a ON a.id=cpa.party_account_id
+            AND a.organization_id=cpa.organization_id
+            AND a.account_type IN ('business','organization') AND a.status='active'
+          WHERE cpa.customer_id=c.id AND cpa.organization_id=c.organization_id
+        );
+    END IF;
+  END IF;
+
   INSERT INTO public.commercial_user_notifications(user_id, organization_id, notification_type, title, body, entity_type, entity_id, priority, metadata)
   VALUES
     (v_parent_owner, v_row.organization_id, 'delegated_account_reviewed',
