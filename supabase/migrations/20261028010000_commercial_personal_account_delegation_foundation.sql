@@ -331,7 +331,7 @@ CREATE OR REPLACE FUNCTION public.commercial_account_update_delegation(
 RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
 AS $function$
-DECLARE v_uid uuid := auth.uid(); v_parent_id uuid; v_status text; v_org_id uuid; v_child_owner uuid;
+DECLARE v_uid uuid := auth.uid(); v_parent_id uuid; v_status text; v_org_id uuid; v_child_owner uuid; v_spent_minor bigint;
 BEGIN
   IF v_uid IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
   IF p_permissions IS NULL OR jsonb_typeof(p_permissions) <> 'object'
@@ -343,7 +343,8 @@ BEGIN
      OR (p_spend_limit_minor IS NOT NULL AND p_spend_limit_minor < 0)
      OR (p_expires_at IS NOT NULL AND p_expires_at <= now())
   THEN RAISE EXCEPTION 'invalid_delegation_policy' USING ERRCODE='22023'; END IF;
-  SELECT d.parent_account_id,d.status,d.organization_id,ca.owner_user_id INTO v_parent_id,v_status,v_org_id,v_child_owner
+  SELECT d.parent_account_id,d.status,d.organization_id,ca.owner_user_id,d.spent_minor
+    INTO v_parent_id,v_status,v_org_id,v_child_owner,v_spent_minor
   FROM public.commercial_account_delegations d
   JOIN public.commercial_party_accounts ca ON ca.id=d.child_account_id
   WHERE d.id=p_delegation_id FOR UPDATE OF d;
@@ -352,6 +353,9 @@ BEGIN
     WHERE a.id=v_parent_id AND a.owner_user_id=v_uid AND a.account_type='personal' AND a.status='active'
   ) THEN RAISE EXCEPTION 'parent_account_required' USING ERRCODE='42501'; END IF;
   IF v_status NOT IN ('pending_merchant_approval','active') THEN RAISE EXCEPTION 'delegation_not_editable' USING ERRCODE='22023'; END IF;
+  IF p_spend_limit_minor IS NOT NULL AND p_spend_limit_minor < v_spent_minor THEN
+    RAISE EXCEPTION 'spend_limit_below_already_counted_spend' USING ERRCODE='22023';
+  END IF;
   UPDATE public.commercial_account_delegations
   SET permissions=p_permissions, expires_at=p_expires_at, spend_limit_minor=p_spend_limit_minor,
       status=CASE WHEN v_status='active' THEN 'pending_merchant_approval' ELSE v_status END,
