@@ -925,6 +925,15 @@ internal fun ReportsCenterScreen(
                     fun accountNet(lines: List<CommercialCloudJournalLine>, cls: String): Long =
                         lines.filter { statementClass(it) == cls }
                             .sumOf { if (cls in setOf("asset", "expense", "cogs", "contra_revenue")) it.debitMinor - it.creditMinor else it.creditMinor - it.debitMinor }
+                    periodRows.groupBy { Triple(it.accountId, it.accountName.ifBlank { it.accountCode }, statementClass(it)) }
+                        .filterKeys { it.third in setOf("revenue", "contra_revenue", "cogs", "expense") }
+                        .toSortedMap(compareBy<Triple<String, String, String>> { it.third }.thenBy { it.second }.thenBy { it.first })
+                        .forEach { (key, rows) ->
+                            val raw = rows.sumOf { if (key.third == "revenue") it.creditMinor - it.debitMinor else it.debitMinor - it.creditMinor }
+                            val amount = if (key.third == "revenue") raw else -raw
+                            add(ReportLine("${startText} — ${endText}", "حساب ${key.first}", key.second, amount, currency,
+                                "تفصيل حساب قائمة الدخل · التصنيف ${key.third} · دفتر الأستاذ المرحل"))
+                        }
                     val revenue = accountNet(periodRows, "revenue")
                     val contraRevenue = accountNet(periodRows, "contra_revenue")
                     val cogs = accountNet(periodRows, "cogs")
@@ -939,6 +948,14 @@ internal fun ReportsCenterScreen(
                     add(ReportLine(startText + " — " + endText, "قائمة الدخل", "مجمل الربح", grossProfit, currency, "صافي الإيرادات ناقص تكلفة البضاعة"))
                     add(ReportLine(startText + " — " + endText, "قائمة الدخل", "المصروفات التشغيلية والأخرى", -operatingExpenses, currency, "حسابات المصروفات المرحلة"))
                     add(ReportLine(startText + " — " + endText, "قائمة الدخل", "صافي الربح/الخسارة للفترة", netProfit, currency, "لا يتضمن حسابات مجهولة النوع؛ تم التحقق من اتزان القيود"))
+                    cumulativeRows.groupBy { Triple(it.accountId, it.accountName.ifBlank { it.accountCode }, statementClass(it)) }
+                        .filterKeys { it.third in setOf("asset", "liability", "equity") }
+                        .toSortedMap(compareBy<Triple<String, String, String>> { it.third }.thenBy { it.second }.thenBy { it.first })
+                        .forEach { (key, rows) ->
+                            val amount = rows.sumOf { if (key.third == "asset") it.debitMinor - it.creditMinor else it.creditMinor - it.debitMinor }
+                            add(ReportLine(endText, "حساب ${key.first}", key.second, amount, currency,
+                                "رصيد حساب ${key.third} حتى تاريخ التقرير · دفتر الأستاذ المرحل"))
+                        }
                     val assets = accountNet(cumulativeRows, "asset")
                     val liabilities = accountNet(cumulativeRows, "liability")
                     val equity = accountNet(cumulativeRows, "equity")
