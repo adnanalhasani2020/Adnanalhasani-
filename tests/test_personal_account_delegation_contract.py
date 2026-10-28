@@ -6,6 +6,7 @@ DELEGATED_ORDERS = ROOT / "supabase/migrations/20261028011000_commercial_delegat
 REPORTING = ROOT / "supabase/migrations/20261028012000_commercial_delegated_spend_reporting.sql"
 PERSONAL_ORGANIZATIONS = ROOT / "supabase/migrations/20261028015000_commercial_personal_account_organizations.sql"
 NOTIFICATIONS = ROOT / "supabase/migrations/20261028016000_commercial_notifications_inbox.sql"
+SALE_ATTRIBUTION = ROOT / "supabase/migrations/20261028017000_commercial_delegated_sale_attribution.sql"
 
 
 def test_delegation_storage_is_private_and_scoped():
@@ -290,3 +291,13 @@ def test_notifications_are_private_and_accessible_from_the_app_bell():
     assert "CommercialNotificationsScreen(context = context" in activity
     assert 'onClick = { showNotifications = true }' in activity
     assert "تحديد كمقروء" in screen
+
+
+def test_completed_sale_retains_parent_and_child_delegation_attribution():
+    sql = SALE_ATTRIBUTION.read_text(encoding="utf-8")
+    assert "commercial_customer_order_fulfillments" in sql
+    assert "SET delegated_access_id=v_order.delegated_access_id" in sql
+    assert "principal_account_id=v_order.principal_account_id" in sql
+    assert "acting_account_id=v_order.acting_account_id" in sql
+    assert "delegated_sale_parent_customer_mismatch" in sql
+    assert "delegated_order.sale_attributed" in sql
