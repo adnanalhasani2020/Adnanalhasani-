@@ -14,6 +14,14 @@ class CatalogDiscoveryPaginationMigrationTests(unittest.TestCase):
         self.assertIn("FROM PUBLIC, anon", sql)
         self.assertIn("TO authenticated", sql)
 
+    def test_android_catalog_loads_more_when_scrolling_near_end(self):
+        screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogScreen.kt").read_text(encoding="utf-8")
+        self.assertIn("rememberLazyListState()", screen)
+        self.assertIn("snapshotFlow {", screen)
+        self.assertIn("state=catalogListState", screen)
+        self.assertIn("loadCatalog(reset = false)", screen)
+        self.assertIn(".distinctBy { it.id }", screen)
+
     def test_paged_rpc_preserves_sector_level_region_and_unit_filters(self):
         sql = (ROOT / "supabase/migrations/20261029010000_catalog_discovery_pagination.sql").read_text(encoding="utf-8")
         for marker in ("commercial_catalog_product_sectors", "commercial_catalog_product_business_levels", "commercial_catalog_product_regions", "available_units jsonb", "ORDER BY 12 DESC"):
