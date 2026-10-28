@@ -24,6 +24,8 @@ class UniversalCommercialCatalogContractTests(unittest.TestCase):
         self.assertIn("موافق — إضافة دون تسعير", self.android)
         self.assertIn("إنشاء صنف جديد", self.android)
         self.assertIn("items.filter { it.id in selectedCatalogItemIds }.forEach(onAddToInventory)", self.android)
+        self.assertIn("if (cloudMode)", self.android)
+        self.assertIn("ربط هذه القوالب بمخزون المؤسسة السحابي غير متاح", self.android)
 
     def test_extends_existing_masters_without_parallel_product_or_unit_masters(self):
         self.assertIn("ALTER TABLE public.commercial_global_catalog_items", self.schema)
