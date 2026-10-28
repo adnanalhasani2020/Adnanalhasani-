@@ -22,6 +22,9 @@ def test_delegation_storage_is_private_and_scoped():
     assert "spend_limit_minor" in sql
     assert "spend_currency_code" in sql
     assert "commercial_account_delegations_spend_currency CHECK" in sql and "A-Z]{3}" in sql
+    assert sql.count("CREATE OR REPLACE FUNCTION public.commercial_account_create_delegation") == 1
+    assert sql.count("CREATE OR REPLACE FUNCTION public.commercial_account_review_delegation") == 1
+    assert sql.count("CREATE OR REPLACE FUNCTION public.commercial_account_list_delegations") == 1
 
 def test_account_lookup_does_not_return_private_identity_data():
     sql = FOUNDATION.read_text(encoding="utf-8")
@@ -159,9 +162,6 @@ def test_notifications_are_private_and_accessible_from_the_app_bell():
     assert "CommercialNotificationsScreen(context = context" in activity
     assert 'onClick = { showNotifications = true }' in activity
     assert "تحديد كمقروء" in screen
-    assert sql.count("CREATE OR REPLACE FUNCTION public.commercial_account_create_delegation") == 1
-    assert sql.count("CREATE OR REPLACE FUNCTION public.commercial_account_review_delegation") == 1
-    assert sql.count("CREATE OR REPLACE FUNCTION public.commercial_account_list_delegations") == 1
 
 
 def test_completed_sale_retains_parent_and_child_delegation_attribution():
