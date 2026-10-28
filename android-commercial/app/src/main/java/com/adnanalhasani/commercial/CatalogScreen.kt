@@ -604,11 +604,11 @@ internal fun CatalogScreen(onBack: () -> Unit, cloudMode: Boolean, onAddToInvent
                             }
                         }
                         if(items.isEmpty()) item { Text("ابحث عن أصناف أو اضغط تحديث الأدلة لعرض التصنيفات والوحدات المتاحة.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
-                        if(items.isNotEmpty()) item {
+                        item {
                             Column(Modifier.fillMaxWidth().padding(vertical=8.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                                if (cloudMode) {
+                                if (items.isNotEmpty() && cloudMode) {
                                     Text("تم تحديد ${selectedCatalogItemIds.size} صنفًا من الدليل. ربط هذه القوالب بمخزون المؤسسة السحابي غير متاح من هذا المسار بعد؛ لا يتم إنشاء مخزون سحابي أو أسعار تلقائيًا.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.error)
-                                } else {
+                                } else if (items.isNotEmpty()) {
                                     Text("تم تحديد ${selectedCatalogItemIds.size} صنفًا. ستُضاف إلى القائمة المحلية دون تسعير تلقائي.",style=MaterialTheme.typography.bodySmall)
                                     Button(onClick={ items.filter { it.id in selectedCatalogItemIds }.forEach(onAddToInventory); selectedCatalogItemIds=emptySet(); feedback="تم إرسال الأصناف المحددة إلى القائمة المحلية دون تحديد سعر." },enabled=selectedCatalogItemIds.isNotEmpty() && !busy,modifier=Modifier.fillMaxWidth()) { Text("موافق — إضافة دون تسعير (${selectedCatalogItemIds.size})") }
                                 }
