@@ -287,19 +287,23 @@ internal fun PersonalAccountsScreen(onBack: () -> Unit) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("حساب المنصة الرئيسي", fontWeight = FontWeight.Bold)
                     if (account == null) {
-                        Text("أنشئ حسابًا شخصيًا للحصول على رقم حساب فريد تشاركه مع الشخص الذي تريد ربطه.")
-                        OutlinedTextField(displayName, { displayName = it }, Modifier.fillMaxWidth(), label = { Text("الاسم الذي تختاره") }, singleLine = true)
-                        OutlinedTextField(currency, { currency = it.uppercase().take(3) }, Modifier.fillMaxWidth(), label = { Text("رمز العملة (مثل YER)") }, singleLine = true)
-                        Button(enabled = !busy && displayName.trim().length >= 2 && currency.matches(Regex("[A-Z]{3}")), onClick = {
-                            request({ token ->
-                                personalAccountRpc(context, token, "commercial_create_personal_account",
-                                    JSONObject().put("p_display_name", displayName.trim()).put("p_currency_code", currency))
-                            }) {
-                                request({ token -> personalAccountSnapshot(context, token).toString() }) {
-                                    applySnapshot(JSONObject(it)); message = "تم إنشاء الحساب الرئيسي."
+                        if (authRequired) {
+                            Text("سجّل الدخول أو أنشئ حساب المنصة أولًا، ثم أنشئ رقم حسابك الشخصي.")
+                        } else {
+                            Text("أنشئ حسابًا شخصيًا للحصول على رقم حساب فريد تشاركه مع الشخص الذي تريد ربطه.")
+                            OutlinedTextField(displayName, { displayName = it }, Modifier.fillMaxWidth(), label = { Text("الاسم الذي تختاره") }, singleLine = true)
+                            OutlinedTextField(currency, { currency = it.uppercase().take(3) }, Modifier.fillMaxWidth(), label = { Text("رمز العملة (مثل YER)") }, singleLine = true)
+                            Button(enabled = !busy && displayName.trim().length >= 2 && currency.matches(Regex("[A-Z]{3}")), onClick = {
+                                request({ token ->
+                                    personalAccountRpc(context, token, "commercial_create_personal_account",
+                                        JSONObject().put("p_display_name", displayName.trim()).put("p_currency_code", currency))
+                                }) {
+                                    request({ token -> personalAccountSnapshot(context, token).toString() }) {
+                                        applySnapshot(JSONObject(it)); message = "تم إنشاء الحساب الرئيسي."
+                                    }
                                 }
-                            }
-                        }, modifier = Modifier.fillMaxWidth()) { Text("إنشاء حساب المنصة") }
+                            }, modifier = Modifier.fillMaxWidth()) { Text("إنشاء حساب المنصة") }
+                        }
                     } else {
                         Text(account!!.optString("display_name"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         SelectionContainer { Text("رقم الحساب: ${account!!.optString("account_number")}") }
