@@ -158,6 +158,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var catalogOffset by remember { mutableIntStateOf(0) }
     var catalogHasMore by remember { mutableStateOf(true) }
     var catalogPageLoadFailed by remember { mutableStateOf(false) }
+    var selectedCatalogIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     val catalogListState = rememberLazyListState()
     var categories by remember { mutableStateOf<List<CatalogCategory>>(emptyList()) }
     var directoryUnits by remember { mutableStateOf<List<DirectoryUnit>>(emptyList()) }; var pendingTransfers by remember { mutableStateOf<List<PendingTransfer>>(emptyList()) }
@@ -536,6 +537,34 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             if(feedback.isNotBlank()) Text(feedback,color=if(feedback.startsWith("تم")||feedback.startsWith("اكتملت")) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,style=MaterialTheme.typography.bodySmall)
             when(section) {
                 "browse" -> {
+                    if (selectedCatalogIds.isNotEmpty()) {
+                        Card(Modifier.fillMaxWidth(), colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.secondaryContainer)) {
+                            Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement=Arrangement.spacedBy(6.dp)) {
+                                Text("تم تحديد ${selectedCatalogIds.size} صنفًا", fontWeight=FontWeight.SemiBold)
+                                Text("سيتم ربطها بدليل المؤسسة دون تسعير، وستبقى غير متاحة للبيع حتى ضبط أسعارها.", style=MaterialTheme.typography.bodySmall)
+                                Row(horizontalArrangement=Arrangement.spacedBy(8.dp), verticalAlignment=Alignment.CenterVertically) {
+                                    Button(onClick={
+                                        val active=token
+                                        val orgId=org()
+                                        if(active==null || orgId==null) { feedback="أدخل معرّف المؤسسة الصحيح وسجّل الدخول."; return@Button }
+                                        if(selectedCatalogIds.size>100) { feedback="الحد الأقصى للعملية الواحدة 100 صنف."; return@Button }
+                                        val ids=selectedCatalogIds.toList()
+                                        request({
+                                            catalogHttp("/rest/v1/rpc/commercial_catalog_link_unpriced_items",
+                                                JSONObject().put("p_organization_id",orgId).put("p_global_item_ids",JSONArray(ids)),active)
+                                        }, { raw ->
+                                            val result=runCatching { JSONObject(raw) }.getOrNull()
+                                            val added=result?.optInt("newly_linked_count",-1) ?: -1
+                                            val existing=result?.optInt("already_linked_count",-1) ?: -1
+                                            selectedCatalogIds=emptySet()
+                                            feedback=if(added>=0 && existing>=0) "تم ربط $added صنفًا جديدًا؛ $existing كان مرتبطًا مسبقًا. لم تُضبط أسعار ولم تُفعّل للبيع." else "اكتملت عملية الربط دون تسعير. الأصناف الجديدة غير متاحة للبيع."
+                                        })
+                                    }, enabled=!busy && selectedCatalogIds.size<=100) { Text("موافق — ربط بدون تسعير") }
+                                    TextButton(onClick={selectedCatalogIds=emptySet()}, enabled=!busy) { Text("إلغاء التحديد") }
+                                }
+                            }
+                        }
+                    }
                     LazyColumn(state=catalogListState,verticalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(bottom=20.dp)) {
                         item { OutlinedTextField(query,{query=it},Modifier.fillMaxWidth(),label={Text("بحث بالاسم أو الوصف أو الباركود أو الكود")},singleLine=true) }
                         item { Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
@@ -557,6 +586,13 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                                 Column(Modifier.fillMaxWidth().padding(12.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
                                     if(item.imageUrl.startsWith("https://",true)) AsyncImage(model=item.imageUrl,contentDescription=item.name,modifier=Modifier.fillMaxWidth().heightIn(max=180.dp),contentScale=ContentScale.Fit)
                                     Row(verticalAlignment=Alignment.Top) {
+                                        Checkbox(
+                                            checked=item.id in selectedCatalogIds,
+                                            onCheckedChange={checked ->
+                                                selectedCatalogIds = if (checked) selectedCatalogIds + item.id else selectedCatalogIds - item.id
+                                            },
+                                            enabled=!busy && (item.id in selectedCatalogIds || selectedCatalogIds.size < 100)
+                                        )
                                         Column(Modifier.weight(1f)) {
                                             Text(item.name.ifBlank { item.catalogCode },fontWeight=FontWeight.SemiBold)
                                             Text("${item.category} • ${item.catalogCode}",color=MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.bodySmall)
