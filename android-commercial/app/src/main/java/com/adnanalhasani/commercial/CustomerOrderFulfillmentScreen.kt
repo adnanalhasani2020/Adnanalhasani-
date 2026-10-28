@@ -15,6 +15,10 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Work
+import androidx.compose.material.icons.filled.Business
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -136,7 +140,12 @@ internal fun CustomerOrderFulfillmentScreen(context: Context,onBack:()->Unit) {
      val open=expanded==order.id
      Card(colors=CardDefaults.cardColors(containerColor=Color.White),border=BorderStroke(1.dp,CustomerOrdersBorder),shape=RoundedCornerShape(16.dp)){
       Column(Modifier.fillMaxWidth().padding(13.dp),verticalArrangement=Arrangement.spacedBy(7.dp)){
-       Row(verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text("طلب "+order.orderNumber,fontWeight=FontWeight.Bold,color=CustomerOrdersInk);Text(order.customerName.ifBlank{"عميل المؤسسة"},fontSize=12.sp,color=CustomerOrdersMuted);Text(merchantDate(order.createdAt),fontSize=11.sp,color=CustomerOrdersMuted)};Column(horizontalAlignment=Alignment.End){Text(customerOrderStatus(order.status),color=CustomerOrdersGreen,fontWeight=FontWeight.SemiBold);Text(order.paymentStatus,fontSize=11.sp,color=CustomerOrdersMuted)}}
+       Row(verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text("طلب "+order.orderNumber,fontWeight=FontWeight.Bold,color=CustomerOrdersInk);Text(order.customerName.ifBlank{"عميل المؤسسة"},fontSize=12.sp,color=CustomerOrdersMuted)
+if(order.delegatedDisplayName.isNotBlank()) Row(verticalAlignment=Alignment.CenterVertically) {
+ Icon(when(order.delegatedIconKey){"family"->Icons.Default.Groups;"work"->Icons.Default.Work;"business"->Icons.Default.Business;else->Icons.Default.Person},contentDescription=null,tint=CustomerOrdersGreen,modifier=Modifier.size(16.dp))
+ Text("الحساب الفرعي: "+order.delegatedDisplayName+(if(order.actingAccountNumber.isNotBlank())" • "+order.actingAccountNumber else ""),fontSize=12.sp,color=CustomerOrdersGreen)
+}
+Text(merchantDate(order.createdAt),fontSize=11.sp,color=CustomerOrdersMuted)};Column(horizontalAlignment=Alignment.End){Text(customerOrderStatus(order.status),color=CustomerOrdersGreen,fontWeight=FontWeight.SemiBold);Text(order.paymentStatus,fontSize=11.sp,color=CustomerOrdersMuted)}}
        Row(verticalAlignment=Alignment.CenterVertically){Text(order.items.size.toString()+" بند",Modifier.weight(1f),fontSize=12.sp,color=CustomerOrdersMuted);Text(customerOrderMoney(order.totalMinor,order.currencyCode),fontWeight=FontWeight.Bold,color=CustomerOrdersInk)}
        Row {
         TextButton(onClick={expanded=if(open)null else order.id}){Text(if(open)"إغلاق التفاصيل" else "التفاصيل")}
@@ -169,7 +178,12 @@ internal fun CustomerOrderFulfillmentScreen(context: Context,onBack:()->Unit) {
      val open=expanded==booking.id
      Card(colors=CardDefaults.cardColors(containerColor=Color.White),border=BorderStroke(1.dp,CustomerOrdersBorder),shape=RoundedCornerShape(16.dp)){
       Column(Modifier.fillMaxWidth().padding(13.dp),verticalArrangement=Arrangement.spacedBy(7.dp)){
-       Row(verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text("حجز "+booking.bookingNumber,fontWeight=FontWeight.Bold,color=CustomerOrdersInk);Text(booking.customerName+" • "+booking.resourceName,fontSize=12.sp,color=CustomerOrdersMuted);Text(merchantDate(booking.startsAt)+" — "+merchantDate(booking.endsAt)+" ("+booking.timezone+")",fontSize=11.sp,color=CustomerOrdersMuted)};Text(merchantBookingStatus(booking.status),fontWeight=FontWeight.SemiBold,color=CustomerOrdersGreen)}
+       Row(verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text("حجز "+booking.bookingNumber,fontWeight=FontWeight.Bold,color=CustomerOrdersInk);Text(booking.customerName+" • "+booking.resourceName,fontSize=12.sp,color=CustomerOrdersMuted)
+if(booking.delegatedDisplayName.isNotBlank()) Row(verticalAlignment=Alignment.CenterVertically) {
+ Icon(when(booking.delegatedIconKey){"family"->Icons.Default.Groups;"work"->Icons.Default.Work;"business"->Icons.Default.Business;else->Icons.Default.Person},contentDescription=null,tint=CustomerOrdersGreen,modifier=Modifier.size(16.dp))
+ Text("الحساب الفرعي: "+booking.delegatedDisplayName+(if(booking.actingAccountNumber.isNotBlank())" • "+booking.actingAccountNumber else ""),fontSize=12.sp,color=CustomerOrdersGreen)
+}
+Text(merchantDate(booking.startsAt)+" — "+merchantDate(booking.endsAt)+" ("+booking.timezone+")",fontSize=11.sp,color=CustomerOrdersMuted)};Text(merchantBookingStatus(booking.status),fontWeight=FontWeight.SemiBold,color=CustomerOrdersGreen)}
        Row(verticalAlignment=Alignment.CenterVertically){Text("الطلب المرتبط "+booking.orderNumber,Modifier.weight(1f),fontSize=12.sp);Text(customerOrderMoney(booking.totalMinor,booking.currencyCode),fontWeight=FontWeight.Bold)}
        Row {
         TextButton(onClick={expanded=if(open)null else booking.id}){Text(if(open)"إغلاق التفاصيل" else "التفاصيل والبنود")}

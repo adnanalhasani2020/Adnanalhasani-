@@ -68,7 +68,7 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
                 loading = false
                 result.onSuccess { rows ->
                     organizations = rows
-                    if (selectedOrganization == null || rows.none { it.id == selectedOrganization?.id }) {
+                    if (selectedOrganization == null || rows.none { it.id == selectedOrganization?.id && it.delegationId == selectedOrganization?.delegationId }) {
                         selectedOrganization = null
                         offerings = emptyList()
                         quantities = emptyMap()
@@ -86,8 +86,8 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
         loading = true
         error = ""
         portalExecutor.execute {
-            val result = runCatching { loadCustomerPortalOfferings(context, org.id) }
-            val resourcesResult = runCatching { loadCustomerPortalBookingResources(context, org.id) }
+            val result = runCatching { loadCustomerPortalOfferings(context, org.id, org.delegationId) }
+            val resourcesResult = runCatching { loadCustomerPortalBookingResources(context, org.id, org.delegationId) }
             portalMain.post {
                 loading = false
                 result.onSuccess { rows -> offerings = rows; quantities = emptyMap(); bookingOfferingId = rows.firstOrNull { it.itemType == "service" }?.id.orEmpty(); notice = "" }
@@ -186,9 +186,9 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
                 item {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text("المنتجات والخدمات", color = PortalInk, fontWeight = FontWeight.Bold, fontSize = 18.sp, modifier = Modifier.weight(1f))
-                        FilterChip(selected = !bookingMode, onClick = { bookingMode = false }, label = { Text("طلب") })
+                        FilterChip(selected = !bookingMode, enabled = selectedOrganization?.canPurchase != false, onClick = { bookingMode = false }, label = { Text("طلب") })
                         Spacer(Modifier.width(6.dp))
-                        FilterChip(selected = bookingMode, onClick = { bookingMode = true }, label = { Text("حجز") })
+                        FilterChip(selected = bookingMode, enabled = selectedOrganization?.canBook != false, onClick = { bookingMode = true }, label = { Text("حجز") })
                     }
                 }
                 if (bookingMode) item {
@@ -314,8 +314,8 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
                                             val snapshotStart = startsAt; val snapshotEnd = endsAt; val snapshotPayment = paymentMode; val snapshotNote = note
                                             portalExecutor.execute {
                                                 val result = runCatching {
-                                                    val key = getOrCreateCustomerPortalOrderKey(context, snapshotOrg.id, listOf(snapshotService.id to "1"), snapshotPayment, snapshotNote, listOf(snapshotResource, snapshotStart, snapshotEnd))
-                                                    val booking = submitCustomerPortalBooking(context, snapshotOrg.id, snapshotService.id, snapshotResource, snapshotStart, snapshotEnd, snapshotPayment, snapshotNote, key)
+                                                    val key = getOrCreateCustomerPortalOrderKey(context, snapshotOrg.id, listOf(snapshotService.id to "1"), snapshotPayment, snapshotNote, listOf(snapshotResource, snapshotStart, snapshotEnd) + if (snapshotOrg.delegationId.isBlank()) emptyList() else listOf("delegation", snapshotOrg.delegationId))
+                                                    val booking = submitCustomerPortalBooking(context, snapshotOrg.id, snapshotService.id, snapshotResource, snapshotStart, snapshotEnd, snapshotPayment, snapshotNote, key, snapshotOrg.delegationId)
                                                     clearCustomerPortalOrderKey(context, key); booking
                                                 }
                                                 portalMain.post {
@@ -341,8 +341,8 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
                                         val snapshotNote = note
                                         portalExecutor.execute {
                                             val result = runCatching {
-                                                val key = getOrCreateCustomerPortalOrderKey(context, snapshotOrg.id, snapshotLines, snapshotPayment, snapshotNote)
-                                                val order = submitCustomerPortalOrder(context, snapshotOrg.id, snapshotLines, snapshotPayment, snapshotNote, key)
+                                                val key = getOrCreateCustomerPortalOrderKey(context, snapshotOrg.id, snapshotLines, snapshotPayment, snapshotNote, if (snapshotOrg.delegationId.isBlank()) emptyList() else listOf("delegation", snapshotOrg.delegationId))
+                                                val order = submitCustomerPortalOrder(context, snapshotOrg.id, snapshotLines, snapshotPayment, snapshotNote, key, snapshotOrg.delegationId)
                                                 clearCustomerPortalOrderKey(context, key)
                                                 order
                                             }
@@ -360,7 +360,7 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
                                         }
                                     }
                                 },
-                                enabled = !submitting && !loading && (if (bookingMode) offerings.any { it.itemType == "service" } && bookingResources.isNotEmpty() else cart.isNotEmpty()),
+                                enabled = !submitting && !loading && (if (bookingMode) selectedOrganization?.canBook != false && offerings.any { it.itemType == "service" } && bookingResources.isNotEmpty() else selectedOrganization?.canPurchase != false && cart.isNotEmpty()),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 if (submitting) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
@@ -425,11 +425,11 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
                                             val result = runCatching {
                                                 val key = getOrCreateCustomerPortalOrderKey(
                                                     context, snapshotOrg.id, snapshotLines, snapshotPayment, snapshotNote,
-                                                    listOf(snapshotResource, snapshotStart, snapshotEnd)
+                                                    listOf(snapshotResource, snapshotStart, snapshotEnd) + if (snapshotOrg.delegationId.isBlank()) emptyList() else listOf("delegation", snapshotOrg.delegationId)
                                                 )
                                                 val booking = submitCustomerPortalMultiServiceBooking(
                                                     context, snapshotOrg.id, snapshotLines, snapshotResource,
-                                                    snapshotStart, snapshotEnd, snapshotPayment, snapshotNote, key
+                                                    snapshotStart, snapshotEnd, snapshotPayment, snapshotNote, key, snapshotOrg.delegationId
                                                 )
                                                 clearCustomerPortalOrderKey(context, key)
                                                 booking

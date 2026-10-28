@@ -217,6 +217,8 @@ private fun StoreApp(context: Context) {
     var showReportsCenter by remember { mutableStateOf(false) }
     var showExpenses by remember { mutableStateOf(false) }
     var showActivityProfile by remember { mutableStateOf(false) }
+    var showPersonalAccounts by remember { mutableStateOf(false) }
+    var showNotifications by remember { mutableStateOf(false) }
     var showCatalog by remember { mutableStateOf(false) }
     var showMasterData by remember { mutableStateOf(false) }
     var cloudOperationalPage by remember { mutableStateOf("") }
@@ -299,7 +301,7 @@ private fun StoreApp(context: Context) {
                         }
                     }
                 },
-                actions = { IconButton(onClick = {}) { Icon(Icons.Default.NotificationsNone, "الإشعارات", tint = Ink) } },
+                actions = { IconButton(onClick = { showNotifications = true }) { Icon(Icons.Default.NotificationsNone, "الإشعارات", tint = Ink) } },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Canvas)
             )
         },
@@ -318,7 +320,9 @@ private fun StoreApp(context: Context) {
         }
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
-            if (customerOrderFulfillmentPage) {
+            if (showNotifications) {
+                CommercialNotificationsScreen(context = context, onBack = { showNotifications = false })
+            } else if (customerOrderFulfillmentPage) {
                 CustomerOrderFulfillmentScreen(context = context, onBack = { customerOrderFulfillmentPage = false })
             } else if (customerPortalHistoryPage) {
                 CustomerPortalHistoryScreen(context = context, onBack = { customerPortalHistoryPage = false })
@@ -396,7 +400,7 @@ private fun StoreApp(context: Context) {
                     showExpenses -> if (cloudMode) {
                         CommercialCloudExpensesScreen(context = context, onBack = { showExpenses = false })
                     } else ExpensesScreen(expenses = expenses, onBack = { showExpenses = false }, onAdd = { expenseDialog = true })
-                    else -> if (showActivityProfile) ActivityProfileScreen(onBack = { showActivityProfile = false }) else MoreScreen(cloudMode = cloudMode, onCustomers = {
+                    else -> if (showPersonalAccounts) PersonalAccountsScreen(onBack = { showPersonalAccounts = false }) else if (showActivityProfile) ActivityProfileScreen(onBack = { showActivityProfile = false }) else MoreScreen(cloudMode = cloudMode, onPersonalAccounts = { showPersonalAccounts = true }, onCustomers = {
                     showDebts = true
                 }, onReports = { showReportsCenter = true }, onExpenses = { showExpenses = true }, onActivityProfile = { showActivityProfile = true }, onCatalog = { showCatalog = true }, onMasterData = { showMasterData = true }, onCloudOperational = { cloudOperationalPage = it }, onCloudSales = { cloudSalesPage = true }, onCloudPurchases = { cloudPurchasesPage = true }, onCloudStockAlerts = { cloudStockAlertsPage = true }, onUnitsDirectory = { cloudUnitsPage = true }, onCustomerPortal = { customerPortalPage = true }, onCustomerOrders = { customerOrderFulfillmentPage = true })
                 }
@@ -1048,12 +1052,12 @@ private fun AddProductDialog(
 }
 
 @Composable
-private fun MoreScreen(cloudMode: Boolean, onCustomers: () -> Unit, onReports: () -> Unit, onExpenses: () -> Unit, onActivityProfile: () -> Unit, onCatalog: () -> Unit, onMasterData: () -> Unit, onCloudOperational: (String) -> Unit, onCloudSales: () -> Unit, onCloudPurchases: () -> Unit, onCloudStockAlerts: () -> Unit, onUnitsDirectory: () -> Unit, onCustomerPortal: () -> Unit, onCustomerOrders: () -> Unit) {
-    val options = listOf("دليل الأصناف العالمي", "المستودعات والمجموعات والأقسام", "العملاء والمديونيات", "دليل العملاء السحابي", "دليل الموردين", "أوامر الشراء", "السندات والمدفوعات", "مرتجعات المبيعات", "القيود المحاسبية", "دليل الحسابات", "فواتير المبيعات السحابية", "تنبيهات المخزون السحابي", "دليل وحدات القياس", "بوابة الزبون", "طلبات الزبائن", "التقارير والأرباح", "المصروفات", "إعدادات المتجر", "النسخ الاحتياطي").filter { cloudMode || it != "طلبات الزبائن" }
+private fun MoreScreen(cloudMode: Boolean, onCustomers: () -> Unit, onReports: () -> Unit, onExpenses: () -> Unit, onActivityProfile: () -> Unit, onPersonalAccounts: () -> Unit, onCatalog: () -> Unit, onMasterData: () -> Unit, onCloudOperational: (String) -> Unit, onCloudSales: () -> Unit, onCloudPurchases: () -> Unit, onCloudStockAlerts: () -> Unit, onUnitsDirectory: () -> Unit, onCustomerPortal: () -> Unit, onCustomerOrders: () -> Unit) {
+    val options = listOf("دليل الأصناف العالمي", "المستودعات والمجموعات والأقسام", "العملاء والمديونيات", "دليل العملاء السحابي", "دليل الموردين", "أوامر الشراء", "السندات والمدفوعات", "مرتجعات المبيعات", "القيود المحاسبية", "دليل الحسابات", "فواتير المبيعات السحابية", "تنبيهات المخزون السحابي", "دليل وحدات القياس", "بوابة الزبون", "طلبات الزبائن", "التقارير والأرباح", "المصروفات", "إعدادات المتجر", "الحسابات الفرعية", "النسخ الاحتياطي").filter { cloudMode || it != "طلبات الزبائن" }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Heading("إدارة المتجر", "الأدوات والإعدادات") }
         items(options) { label ->
-            Card(onClick = { when (label) { "العملاء والمديونيات" -> onCustomers(); "التقارير والأرباح" -> onReports(); "المصروفات" -> onExpenses(); "إعدادات المتجر" -> onActivityProfile(); "دليل الأصناف العالمي" -> onCatalog(); "المستودعات والمجموعات والأقسام" -> onMasterData(); "دليل العملاء السحابي" -> onCloudOperational("customers"); "دليل الموردين" -> onCloudOperational("suppliers"); "أوامر الشراء" -> onCloudPurchases(); "السندات والمدفوعات" -> onCloudOperational("payments"); "مرتجعات المبيعات" -> onCloudOperational("returns"); "القيود المحاسبية" -> onCloudOperational("journals"); "دليل الحسابات" -> onCloudOperational("accounts"); "فواتير المبيعات السحابية" -> onCloudSales(); "تنبيهات المخزون السحابي" -> onCloudStockAlerts(); "دليل وحدات القياس" -> onUnitsDirectory();
+            Card(onClick = { when (label) { "العملاء والمديونيات" -> onCustomers(); "التقارير والأرباح" -> onReports(); "المصروفات" -> onExpenses(); "إعدادات المتجر" -> onActivityProfile(); "الحسابات الفرعية" -> onPersonalAccounts(); "دليل الأصناف العالمي" -> onCatalog(); "المستودعات والمجموعات والأقسام" -> onMasterData(); "دليل العملاء السحابي" -> onCloudOperational("customers"); "دليل الموردين" -> onCloudOperational("suppliers"); "أوامر الشراء" -> onCloudPurchases(); "السندات والمدفوعات" -> onCloudOperational("payments"); "مرتجعات المبيعات" -> onCloudOperational("returns"); "القيود المحاسبية" -> onCloudOperational("journals"); "دليل الحسابات" -> onCloudOperational("accounts"); "فواتير المبيعات السحابية" -> onCloudSales(); "تنبيهات المخزون السحابي" -> onCloudStockAlerts(); "دليل وحدات القياس" -> onUnitsDirectory();
             "بوابة الزبون" -> onCustomerPortal()
             "طلبات الزبائن" -> onCustomerOrders()
         } }, colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Border)) {
