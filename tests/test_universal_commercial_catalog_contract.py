@@ -19,6 +19,12 @@ class UniversalCommercialCatalogContractTests(unittest.TestCase):
         cls.main = (ANDROID / "MainActivity.kt").read_text(encoding="utf-8")
         cls.edit_dialog = (ANDROID / "CatalogProductEditDialog.kt").read_text(encoding="utf-8")
 
+    def test_catalog_supports_multi_select_import_without_forcing_prices(self):
+        self.assertIn("selectedCatalogItemIds", self.android)
+        self.assertIn("موافق — إضافة دون تسعير", self.android)
+        self.assertIn("إنشاء صنف جديد", self.android)
+        self.assertIn("items.filter { it.id in selectedCatalogItemIds }.forEach(onAddToInventory)", self.android)
+
     def test_extends_existing_masters_without_parallel_product_or_unit_masters(self):
         self.assertIn("ALTER TABLE public.commercial_global_catalog_items", self.schema)
         self.assertIn("ALTER TABLE public.commercial_global_catalog_categories", self.schema)
