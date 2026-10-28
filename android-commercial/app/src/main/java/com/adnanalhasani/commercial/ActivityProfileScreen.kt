@@ -172,9 +172,9 @@ internal fun ActivityProfileScreen(onBack: () -> Unit) {
             Text("تسجيل الدخول إلى Supabase", style = MaterialTheme.typography.titleMedium)
             OutlinedTextField(email, { email = it.trim() }, Modifier.fillMaxWidth(), label = { Text("البريد الإلكتروني") }, singleLine = true)
             if (isRegister) OutlinedTextField(accountDisplayName, { accountDisplayName = it }, Modifier.fillMaxWidth(), label = { Text("الاسم الذي تختاره في المنصة") }, singleLine = true)
-            OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text("كلمة المرور (12 حرفًا على الأقل)") }, singleLine = true, visualTransformation = PasswordVisualTransformation())
+            OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text(if (isRegister) "كلمة المرور (12 حرفًا على الأقل)" else "كلمة المرور") }, singleLine = true, visualTransformation = PasswordVisualTransformation())
             Button(
-                enabled = !busy && email.contains("@") && password.length >= 12 && (!isRegister || accountDisplayName.trim().length >= 2),
+                enabled = !busy && email.contains("@") && password.isNotBlank() && (!isRegister || (password.length >= 12 && accountDisplayName.trim().length >= 2)),
                 onClick = {
                     runRequest({
                         val route = if (isRegister) "/auth/v1/signup" else "/auth/v1/token?grant_type=password"
