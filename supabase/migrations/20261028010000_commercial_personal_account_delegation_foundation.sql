@@ -26,7 +26,6 @@ CREATE TABLE IF NOT EXISTS public.commercial_account_delegations (
   CONSTRAINT commercial_account_delegations_spend_nonnegative CHECK (spent_minor >= 0),
   CONSTRAINT commercial_account_delegations_spend_currency CHECK (spend_currency_code ~ '^[A-Z]{3}$'),
   CONSTRAINT commercial_account_delegations_limit_nonnegative CHECK (spend_limit_minor IS NULL OR spend_limit_minor >= 0),
-  CONSTRAINT commercial_account_delegations_limit_nonnegative CHECK (spend_limit_minor IS NULL OR spend_limit_minor >= 0),
   CONSTRAINT commercial_account_delegations_permissions_object CHECK (
     jsonb_typeof(permissions) = 'object'
     AND permissions ? 'view_reports'
