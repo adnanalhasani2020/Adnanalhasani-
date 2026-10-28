@@ -2171,9 +2171,18 @@ internal fun loadCustomerPortalOrganizations(context: Context): List<CustomerPor
                 row.optBoolean("allow_credit", false)))
         }
     }.toMutableList()
-    val delegated = JSONArray(commercialCloudRequest(
-        "/rest/v1/rpc/commercial_account_list_my_active_delegations", "POST", JSONObject(), access
-    ))
+    val delegated = runCatching {
+        JSONArray(commercialCloudRequest(
+            "/rest/v1/rpc/commercial_account_list_my_active_delegations", "POST", JSONObject(), access
+        ))
+    }.getOrElse { error ->
+        val detail = error.message.orEmpty()
+        // Keep the existing customer portal usable while the backend migration is not deployed yet.
+        if (detail.contains("PGRST202", ignoreCase = true) ||
+            detail.contains("Could not find the function", ignoreCase = true) ||
+            detail.contains("HTTP 404", ignoreCase = true)) JSONArray()
+        else throw error
+    }
     for (i in 0 until delegated.length()) {
         val row = delegated.optJSONObject(i) ?: continue
         val orgId = row.optString("organization_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
