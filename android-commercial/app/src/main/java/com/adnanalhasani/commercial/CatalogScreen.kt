@@ -10,6 +10,7 @@ import android.os.Looper
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -17,6 +18,9 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.snapshots.SnapshotStateList
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.collect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -152,6 +156,8 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var country by remember { mutableStateOf("YE") }; var region by remember { mutableStateOf("") }; var city by remember { mutableStateOf("") }
     var locale by remember { mutableStateOf("ar") }; var query by remember { mutableStateOf("") }
     var items by remember { mutableStateOf<List<CatalogProduct>>(emptyList()) }
+    var catalogOffset by remember { mutableIntStateOf(0) }
+    var catalogHasMore by remember { mutableStateOf(true) }
     var categories by remember { mutableStateOf<List<CatalogCategory>>(emptyList()) }
     var directoryUnits by remember { mutableStateOf<List<DirectoryUnit>>(emptyList()) }; var pendingTransfers by remember { mutableStateOf<List<PendingTransfer>>(emptyList()) }
     var busy by remember { mutableStateOf(false) }; var restoringSession by remember { mutableStateOf(true) }; var feedback by remember { mutableStateOf("") }; var editingProduct by remember { mutableStateOf<CatalogProduct?>(null) }
@@ -225,20 +231,23 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     }
 
     fun org(): String? = organizationId.trim().takeIf { it.isNotBlank() }
-    fun loadCatalog() {
+    fun loadCatalog(reset: Boolean = true) {
         val active = token ?: return
         val orgId = org() ?: run { feedback = "أدخل معرّف المؤسسة UUID أولًا."; return }
+        if (!reset && (!catalogHasMore || busy)) return
+        val requestedOffset = if (reset) 0 else catalogOffset
+        if (reset) { catalogOffset = 0; catalogHasMore = true; items = emptyList() }
         request({
             val payload = JSONObject().put("p_organization_id",orgId)
                 .put("p_sector_code",sector.trim().ifBlank { JSONObject.NULL })
                 .put("p_business_level_code",businessLevel.trim().ifBlank { JSONObject.NULL })
                 .put("p_country_code",country.trim().ifBlank { JSONObject.NULL })
                 .put("p_region_code",region.trim().ifBlank { JSONObject.NULL }).put("p_city",city.trim().ifBlank { JSONObject.NULL })
-                .put("p_locale_code",locale.trim().lowercase().ifBlank { "ar" }).put("p_query",query.trim().ifBlank { JSONObject.NULL }).put("p_limit",100)
-            catalogHttp("/rest/v1/rpc/commercial_catalog_discover_products",payload,active)
+                 .put("p_locale_code",locale.trim().lowercase().ifBlank { "ar" }).put("p_query",query.trim().ifBlank { JSONObject.NULL }).put("p_limit",100).put("p_offset",requestedOffset)
+            catalogHttp("/rest/v1/rpc/commercial_catalog_discover_products_page",payload,active)
         }, { raw ->
             val json=JSONArray(raw)
-            items=List(json.length()) { i ->
+            val pageItems=List(json.length()) { i ->
                 val row=json.getJSONObject(i)
                 val localized=row.optJSONObject("localized_details") ?: JSONObject()
                 CatalogProduct(
@@ -297,7 +306,10 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                     ) } } ?: emptyList()
                 )
             }
-            feedback="تم جلب ${items.size} صنفًا. راجع بيانات القوالب العامة قبل اعتمادها."
+            items = if (reset) pageItems.distinctBy { it.id } else (items + pageItems).distinctBy { it.id }
+            catalogOffset = requestedOffset + json.length()
+            catalogHasMore = json.length() == 100
+            feedback = if (catalogHasMore) "تم تحميل ${items.size} صنفًا؛ اسحب إلى الأسفل لتحميل المزيد." else "اكتمل تحميل ${items.size} صنفًا مطابقًا."
         })
     }
     fun loadDirectories() {
