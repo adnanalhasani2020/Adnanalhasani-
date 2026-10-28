@@ -152,6 +152,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var country by remember { mutableStateOf("YE") }; var region by remember { mutableStateOf("") }; var city by remember { mutableStateOf("") }
     var locale by remember { mutableStateOf("ar") }; var query by remember { mutableStateOf("") }
     var items by remember { mutableStateOf<List<CatalogProduct>>(emptyList()) }
+    var selectedCatalogItemIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var categories by remember { mutableStateOf<List<CatalogCategory>>(emptyList()) }
     var directoryUnits by remember { mutableStateOf<List<DirectoryUnit>>(emptyList()) }; var pendingTransfers by remember { mutableStateOf<List<PendingTransfer>>(emptyList()) }
     var busy by remember { mutableStateOf(false) }; var restoringSession by remember { mutableStateOf(true) }; var feedback by remember { mutableStateOf("") }; var editingProduct by remember { mutableStateOf<CatalogProduct?>(null) }
@@ -526,10 +527,11 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                             OutlinedButton(onClick={loadDirectories()},enabled=!busy) { Text("تحديث الأدلة") }
                         } }
                         items(items,key={it.id}) { item ->
-                            Card(colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface),border=BorderStroke(1.dp,MaterialTheme.colorScheme.outlineVariant)) {
+                            Card(colors=CardDefaults.cardColors(containerColor=if(item.id in selectedCatalogItemIds) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface),border=BorderStroke(if(item.id in selectedCatalogItemIds) 2.dp else 1.dp,if(item.id in selectedCatalogItemIds) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant)) {
                                 Column(Modifier.fillMaxWidth().padding(12.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
                                     if(item.imageUrl.startsWith("https://",true)) AsyncImage(model=item.imageUrl,contentDescription=item.name,modifier=Modifier.fillMaxWidth().heightIn(max=180.dp),contentScale=ContentScale.Fit)
-                                    Row(verticalAlignment=Alignment.Top) {
+                                    Row(verticalAlignment=Alignment.CenterVertically) {
+                                        Checkbox(checked=item.id in selectedCatalogItemIds,onCheckedChange={checked -> selectedCatalogItemIds=if(checked) selectedCatalogItemIds+item.id else selectedCatalogItemIds-item.id })
                                         Column(Modifier.weight(1f)) {
                                             Text(item.name.ifBlank { item.catalogCode },fontWeight=FontWeight.SemiBold)
                                             Text("${item.category} • ${item.catalogCode}",color=MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.bodySmall)
@@ -602,6 +604,13 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                             }
                         }
                         if(items.isEmpty()) item { Text("ابحث عن أصناف أو اضغط تحديث الأدلة لعرض التصنيفات والوحدات المتاحة.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
+                        if(items.isNotEmpty()) item {
+                            Column(Modifier.fillMaxWidth().padding(vertical=8.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                                Text("تم تحديد ${selectedCatalogItemIds.size} صنفًا. ستُضاف إلى مخزون المؤسسة دون تسعير تلقائي.",style=MaterialTheme.typography.bodySmall)
+                                Button(onClick={ items.filter { it.id in selectedCatalogItemIds }.forEach(onAddToInventory); selectedCatalogItemIds=emptySet(); feedback="تم إرسال الأصناف المحددة إلى مسار الإضافة للمخزون دون تحديد سعر." },enabled=selectedCatalogItemIds.isNotEmpty() && !busy,modifier=Modifier.fillMaxWidth()) { Text("موافق — إضافة دون تسعير (${selectedCatalogItemIds.size})") }
+                                OutlinedButton(onClick={section="product"},enabled=!busy,modifier=Modifier.fillMaxWidth()) { Icon(Icons.Default.Add,null); Text("إنشاء صنف جديد") }
+                            }
+                        }
                         if(categories.isNotEmpty()) item { Text("دليل التصنيفات: ${categories.size} تصنيفًا محمّلًا",style=MaterialTheme.typography.bodySmall) }
                         if(directoryUnits.isNotEmpty()) item { Text("دليل الوحدات: ${directoryUnits.size} وحدة محمّلة",style=MaterialTheme.typography.bodySmall) }
                     }
