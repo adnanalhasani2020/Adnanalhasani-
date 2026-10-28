@@ -22,6 +22,14 @@ class CatalogItemActivityMappingContractTests(unittest.TestCase):
         self.assertIn("FROM PUBLIC, anon", sql)
         self.assertIn("TO authenticated", sql)
 
+    def test_android_loads_activity_directory_and_assigns_selected_items(self):
+        screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogScreen.kt").read_text(encoding="utf-8")
+        self.assertIn("commercial_list_business_activity_nodes", screen)
+        self.assertIn("activityNodes", screen)
+        self.assertIn("commercial_catalog_assign_items_to_activity", screen)
+        self.assertIn("p_activity_node_code", screen)
+        self.assertIn("p_global_item_ids", screen)
+
     def test_assignment_is_idempotent_and_does_not_change_prices_or_stock(self):
         sql = MIGRATION.read_text(encoding="utf-8")
         self.assertIn("ON CONFLICT (organization_id, global_item_id, activity_node_id) DO NOTHING", sql)
