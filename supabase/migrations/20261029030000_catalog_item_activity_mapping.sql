@@ -16,6 +16,7 @@ CREATE INDEX IF NOT EXISTS ix_org_catalog_item_activities_activity
   ON public.commercial_organization_catalog_item_activities(organization_id, activity_node_id, global_item_id);
 
 ALTER TABLE public.commercial_organization_catalog_item_activities ENABLE ROW LEVEL SECURITY;
+GRANT SELECT ON public.commercial_organization_catalog_item_activities TO authenticated;
 DROP POLICY IF EXISTS commercial_org_catalog_item_activities_read ON public.commercial_organization_catalog_item_activities;
 CREATE POLICY commercial_org_catalog_item_activities_read
 ON public.commercial_organization_catalog_item_activities
