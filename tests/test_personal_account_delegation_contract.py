@@ -315,3 +315,10 @@ def test_parent_can_view_consolidated_spend_by_child_and_institution():
     assert "'booking_total_minor'" in sql
     assert "ملخص إنفاق جميع الحسابات الفرعية والمؤسسات" in screen
     assert "ملخص إنفاق الحساب الرئيسي" in screen
+
+
+def test_customer_portal_falls_back_when_delegation_rpc_is_not_deployed():
+    repository = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt").read_text(encoding="utf-8")
+    assert 'detail.contains("PGRST202"' in repository
+    assert 'detail.contains("Could not find the function"' in repository
+    assert 'else throw error' in repository
