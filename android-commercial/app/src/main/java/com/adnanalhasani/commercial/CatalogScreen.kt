@@ -159,6 +159,9 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var catalogHasMore by remember { mutableStateOf(true) }
     var catalogPageLoadFailed by remember { mutableStateOf(false) }
     var selectedCatalogIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var activityNodes by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+    var selectedActivityCode by remember { mutableStateOf("") }
+    var activityMenuExpanded by remember { mutableStateOf(false) }
     val catalogListState = rememberLazyListState()
     var categories by remember { mutableStateOf<List<CatalogCategory>>(emptyList()) }
     var directoryUnits by remember { mutableStateOf<List<DirectoryUnit>>(emptyList()) }; var pendingTransfers by remember { mutableStateOf<List<PendingTransfer>>(emptyList()) }
@@ -341,12 +344,14 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         }, { raw ->
             val result=JSONObject(raw); val cats=result.getJSONArray("categories"); val units=result.getJSONArray("units")
             val catTr=result.getJSONArray("categoryTranslations"); val catDescTr=result.getJSONArray("categoryDescriptionTranslations"); val unitTr=result.getJSONArray("unitTranslations")
+            val activityJson=result.optJSONArray("activityDirectory") ?: JSONArray()
+            activityNodes=List(activityJson.length()) { i -> val node=activityJson.getJSONObject(i); node.optString("code") to node.optString("path_ar",node.optString("name_ar")) }.filter { it.first.isNotBlank() }
             val categoryNames=buildMap { for(i in 0 until catTr.length()) { val v=catTr.getJSONObject(i); put(v.optString("entity_key"),v.optString("translated_value")) } }
             val categoryDescriptions=buildMap { for(i in 0 until catDescTr.length()) { val v=catDescTr.getJSONObject(i); put(v.optString("entity_key"),v.optString("translated_value")) } }
             val unitNames=buildMap { for(i in 0 until unitTr.length()) { val v=unitTr.getJSONObject(i); put(v.optString("entity_key"),v.optString("translated_value")) } }
             categories=List(cats.length()) { i -> val v=cats.getJSONObject(i); val code=v.optString("code"); CatalogCategory(code,v.optString("parent_code").takeUnless { it == "null" }.orEmpty(),v.optString("name_ar"),v.optString("name_en"),categoryNames[code].orEmpty(),v.optString("description_ar").takeUnless { it == "null" }.orEmpty(),v.optString("description_en").takeUnless { it == "null" }.orEmpty(),categoryDescriptions[code].orEmpty()) }
             directoryUnits=List(units.length()) { i -> val v=units.getJSONObject(i); val code=v.optString("code"); DirectoryUnit(code,v.optString("name_ar"),v.optString("name_en"),v.optString("dimension"),v.optString("base_unit_code").takeUnless { it == "null" }.orEmpty(),v.optString("factor_to_base").takeUnless { it == "null" }.orEmpty(),v.optString("owner_organization_id").takeUnless { it == "null" }.orEmpty(),unitNames[code].orEmpty()) }
-            feedback="تم تحميل ${categories.size} تصنيفًا و${directoryUnits.size} وحدة قياس."
+            feedback="تم تحميل ${categories.size} تصنيفًا و${directoryUnits.size} وحدة قياس و${activityNodes.size} نشاطًا."
         })
     }
     fun createCategory() {
@@ -556,8 +561,21 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                                             val result=runCatching { JSONObject(raw) }.getOrNull()
                                             val added=result?.optInt("newly_linked_count",-1) ?: -1
                                             val existing=result?.optInt("already_linked_count",-1) ?: -1
-                                            selectedCatalogIds=emptySet()
-                                            feedback=if(added>=0 && existing>=0) "تم ربط $added صنفًا جديدًا؛ $existing كان مرتبطًا مسبقًا. لم تُضبط أسعار ولم تُفعّل للبيع." else "اكتملت عملية الربط دون تسعير. الأصناف الجديدة غير متاحة للبيع."
+                                            if (selectedActivityCode.isBlank()) {
+                                                selectedCatalogIds=emptySet()
+                                                feedback=if(added>=0 && existing>=0) "تم ربط $added صنفًا جديدًا؛ $existing كان مرتبطًا مسبقًا. لم تُضبط أسعار ولم تُفعّل للبيع." else "اكتملت عملية الربط دون تسعير. الأصناف الجديدة غير متاحة للبيع."
+                                            } else {
+                                                request({
+                                                    catalogHttp("/rest/v1/rpc/commercial_catalog_assign_items_to_activity",
+                                                        JSONObject().put("p_organization_id",orgId).put("p_activity_node_code",selectedActivityCode).put("p_global_item_ids",JSONArray(ids)),active)
+                                                }, { mappingRaw ->
+                                                    val mapped=runCatching { JSONObject(mappingRaw) }.getOrNull()
+                                                    selectedCatalogIds=emptySet()
+                                                    feedback="تم ربط $added صنفًا جديدًا ($existing موجود مسبقًا)، وإسناد ${mapped?.optInt("newly_assigned_count",0) ?: 0} صنف للنشاط المحدد. الأصناف غير مسعّرة وغير متاحة للبيع."
+                                                }, { failure ->
+                                                    feedback="تم ربط الأصناف بدليل المؤسسة لكنها لم تُسند للنشاط: ${failure.message ?: "خطأ غير معروف"}. أعد المحاولة مع بقاء التحديد."
+                                                })
+                                            }
                                         })
                                     }, enabled=!busy && selectedCatalogIds.size<=100) { Text("موافق — ربط بدون تسعير") }
                                     TextButton(onClick={selectedCatalogIds=emptySet()}, enabled=!busy) { Text("إلغاء التحديد") }
@@ -567,10 +585,27 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                     }
                     LazyColumn(state=catalogListState,verticalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(bottom=20.dp)) {
                         item { OutlinedTextField(query,{query=it},Modifier.fillMaxWidth(),label={Text("بحث بالاسم أو الوصف أو الباركود أو الكود")},singleLine=true) }
-                        item { Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(sector,{sector=it},Modifier.weight(1f),label={Text("النشاط")},singleLine=true)
+                        item { Row(horizontalArrangement=Arrangement.spacedBy(8.dp), verticalAlignment=Alignment.CenterVertically) {
+                            OutlinedTextField(sector,{sector=it},Modifier.weight(1f),label={Text("القطاع")},singleLine=true)
                             OutlinedTextField(businessLevel,{businessLevel=it},Modifier.weight(1f),label={Text("مستوى النشاط")},singleLine=true)
                         } }
+                        item {
+                            Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
+                                Text("ربط الأصناف بنشاط تجاري محدد (اختياري)", style=MaterialTheme.typography.labelMedium)
+                                Box {
+                                    OutlinedButton(onClick={activityMenuExpanded=true}, enabled=!busy) {
+                                        Text(activityNodes.firstOrNull { it.first == selectedActivityCode }?.second ?: "اختر النشاط من الدليل")
+                                    }
+                                    DropdownMenu(expanded=activityMenuExpanded, onDismissRequest={activityMenuExpanded=false}) {
+                                        DropdownMenuItem(text={Text("بدون إسناد لنشاط محدد")}, onClick={selectedActivityCode=""; activityMenuExpanded=false})
+                                        activityNodes.forEach { node ->
+                                            DropdownMenuItem(text={Text(node.second)}, onClick={selectedActivityCode=node.first; activityMenuExpanded=false})
+                                        }
+                                    }
+                                }
+                                Text("حدّد نشاطًا ثم اربط الأصناف؛ سيُحفظ الربط بالنشاط بعد ربطها بالمؤسسة.", style=MaterialTheme.typography.bodySmall, color=MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
                         item { Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                             OutlinedTextField(country,{country=it.uppercase()},Modifier.weight(1f),label={Text("الدولة")},singleLine=true)
                             OutlinedTextField(region,{region=it},Modifier.weight(1f),label={Text("المنطقة")},singleLine=true)
