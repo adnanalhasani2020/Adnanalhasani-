@@ -157,6 +157,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var items by remember { mutableStateOf<List<CatalogProduct>>(emptyList()) }
     var catalogOffset by remember { mutableIntStateOf(0) }
     var catalogHasMore by remember { mutableStateOf(true) }
+    var catalogPageLoadFailed by remember { mutableStateOf(false) }
     val catalogListState = rememberLazyListState()
     var categories by remember { mutableStateOf<List<CatalogCategory>>(emptyList()) }
     var directoryUnits by remember { mutableStateOf<List<DirectoryUnit>>(emptyList()) }; var pendingTransfers by remember { mutableStateOf<List<PendingTransfer>>(emptyList()) }
@@ -199,12 +200,12 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var transferSource by remember { mutableStateOf("") }; var transferDestination by remember { mutableStateOf("") }
     var transferIds by remember { mutableStateOf("") }
 
-    fun request(action: () -> String, onSuccess: (String) -> Unit) {
+    fun request(action: () -> String, onSuccess: (String) -> Unit, onFailure: ((Throwable) -> Unit)? = null) {
         if (busy) return
         busy = true; feedback = ""
         catalogIo.execute {
             val result = runCatching(action)
-            catalogMain.post { busy = false; result.onSuccess(onSuccess).onFailure { feedback = it.message ?: "تعذر إكمال العملية."; restoringSession = false } }
+            catalogMain.post { busy = false; result.onSuccess(onSuccess).onFailure { error -> if (onFailure != null) onFailure(error) else feedback = error.message ?: "تعذر إكمال العملية."; restoringSession = false } }
         }
     }
     LaunchedEffect(Unit) {
@@ -234,7 +235,8 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     fun loadCatalog(reset: Boolean = true) {
         val active = token ?: return
         val orgId = org() ?: run { feedback = "أدخل معرّف المؤسسة UUID أولًا."; return }
-        if (!reset && (!catalogHasMore || busy)) return
+        if (!reset && (!catalogHasMore || busy || catalogPageLoadFailed)) return
+        catalogPageLoadFailed = false
         val requestedOffset = if (reset) 0 else catalogOffset
         if (reset) { catalogOffset = 0; catalogHasMore = true; items = emptyList() }
         request({
@@ -310,16 +312,16 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             catalogOffset = requestedOffset + json.length()
             catalogHasMore = json.length() == 100
             feedback = if (catalogHasMore) "تم تحميل ${items.size} صنفًا؛ اسحب إلى الأسفل لتحميل المزيد." else "اكتمل تحميل ${items.size} صنفًا مطابقًا."
-        })
+        }, { catalogPageLoadFailed = true })
     }
-    LaunchedEffect(section, items.size, catalogHasMore, busy) {
-        if (section != "browse" || busy || !catalogHasMore || items.isEmpty()) return@LaunchedEffect
+    LaunchedEffect(section, items.size, catalogHasMore, busy, catalogPageLoadFailed) {
+        if (section != "browse" || busy || !catalogHasMore || catalogPageLoadFailed || items.isEmpty()) return@LaunchedEffect
         snapshotFlow {
             val lastVisible = catalogListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
             val total = catalogListState.layoutInfo.totalItemsCount
             lastVisible to total
         }.collect { (lastVisible, total) ->
-            if (total > 0 && lastVisible >= total - 5 && !busy && catalogHasMore) {
+            if (total > 0 && lastVisible >= total - 5 && !busy && catalogHasMore && !catalogPageLoadFailed) {
                 loadCatalog(reset = false)
             }
         }
