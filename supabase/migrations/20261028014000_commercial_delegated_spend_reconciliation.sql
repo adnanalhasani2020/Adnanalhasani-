@@ -10,7 +10,12 @@ DECLARE
   v_current_spend bigint;
   v_limit bigint;
 BEGIN
-  IF OLD.delegated_access_id IS NULL AND NEW.delegated_access_id IS NULL THEN RETURN NEW; END IF;
+  IF OLD.delegated_access_id IS NULL AND NEW.delegated_access_id IS NULL THEN
+    IF NEW.principal_account_id IS NOT NULL OR NEW.acting_account_id IS NOT NULL THEN
+      RAISE EXCEPTION 'delegated_attribution_requires_delegation_id' USING ERRCODE='23514';
+    END IF;
+    RETURN NEW;
+  END IF;
   IF OLD.delegated_access_id IS NOT NULL AND (
        NEW.delegated_access_id IS DISTINCT FROM OLD.delegated_access_id
        OR NEW.principal_account_id IS DISTINCT FROM OLD.principal_account_id
@@ -91,6 +96,10 @@ RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
 AS $function$
 BEGIN
+  IF OLD.delegated_access_id IS NULL AND NEW.delegated_access_id IS NULL
+     AND (NEW.principal_account_id IS NOT NULL OR NEW.acting_account_id IS NOT NULL) THEN
+    RAISE EXCEPTION 'delegated_attribution_requires_delegation_id' USING ERRCODE='23514';
+  END IF;
   IF OLD.delegated_access_id IS NOT NULL AND (
     NEW.delegated_access_id IS DISTINCT FROM OLD.delegated_access_id
     OR NEW.principal_account_id IS DISTINCT FROM OLD.principal_account_id
