@@ -143,7 +143,7 @@ private fun catalogGet(path: String, token: String): String {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct) -> Unit) {
+internal fun CatalogScreen(onBack: () -> Unit, cloudMode: Boolean, onAddToInventory: (CatalogProduct) -> Unit) {
     val context = LocalContext.current
     var email by remember { mutableStateOf("") }; var password by remember { mutableStateOf("") }
     var token by remember { mutableStateOf<String?>(null) }; var signedInUserId by remember { mutableStateOf("") }; var organizationId by remember { mutableStateOf("") }
@@ -606,8 +606,12 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                         if(items.isEmpty()) item { Text("ابحث عن أصناف أو اضغط تحديث الأدلة لعرض التصنيفات والوحدات المتاحة.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
                         if(items.isNotEmpty()) item {
                             Column(Modifier.fillMaxWidth().padding(vertical=8.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                                Text("تم تحديد ${selectedCatalogItemIds.size} صنفًا. ستُضاف إلى مخزون المؤسسة دون تسعير تلقائي.",style=MaterialTheme.typography.bodySmall)
-                                Button(onClick={ items.filter { it.id in selectedCatalogItemIds }.forEach(onAddToInventory); selectedCatalogItemIds=emptySet(); feedback="تم إرسال الأصناف المحددة إلى مسار الإضافة للمخزون دون تحديد سعر." },enabled=selectedCatalogItemIds.isNotEmpty() && !busy,modifier=Modifier.fillMaxWidth()) { Text("موافق — إضافة دون تسعير (${selectedCatalogItemIds.size})") }
+                                if (cloudMode) {
+                                    Text("تم تحديد ${selectedCatalogItemIds.size} صنفًا من الدليل. ربط هذه القوالب بمخزون المؤسسة السحابي غير متاح من هذا المسار بعد؛ لا يتم إنشاء مخزون سحابي أو أسعار تلقائيًا.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.error)
+                                } else {
+                                    Text("تم تحديد ${selectedCatalogItemIds.size} صنفًا. ستُضاف إلى القائمة المحلية دون تسعير تلقائي.",style=MaterialTheme.typography.bodySmall)
+                                    Button(onClick={ items.filter { it.id in selectedCatalogItemIds }.forEach(onAddToInventory); selectedCatalogItemIds=emptySet(); feedback="تم إرسال الأصناف المحددة إلى القائمة المحلية دون تحديد سعر." },enabled=selectedCatalogItemIds.isNotEmpty() && !busy,modifier=Modifier.fillMaxWidth()) { Text("موافق — إضافة دون تسعير (${selectedCatalogItemIds.size})") }
+                                }
                                 OutlinedButton(onClick={section="product"},enabled=!busy,modifier=Modifier.fillMaxWidth()) { Icon(Icons.Default.Add,null); Text("إنشاء صنف جديد") }
                             }
                         }
