@@ -10,6 +10,7 @@ class CatalogDiscoveryPaginationMigrationTests(unittest.TestCase):
         self.assertIn("p_offset integer DEFAULT 0", sql)
         self.assertIn("LIMIT greatest(1,least(COALESCE(p_limit,50),100))", sql)
         self.assertIn("OFFSET greatest(0,COALESCE(p_offset,0))", sql)
+        self.assertIn("p.id", sql)  # final tie-breaker keeps pages deterministic when scores and names match
         self.assertIn("commercial_catalog_member_of", sql)
         self.assertIn("FROM PUBLIC, anon", sql)
         self.assertIn("TO authenticated", sql)
