@@ -7,6 +7,7 @@ REPORTING = ROOT / "supabase/migrations/20261028012000_commercial_delegated_spen
 PERSONAL_ORGANIZATIONS = ROOT / "supabase/migrations/20261028015000_commercial_personal_account_organizations.sql"
 NOTIFICATIONS = ROOT / "supabase/migrations/20261028016000_commercial_notifications_inbox.sql"
 SALE_ATTRIBUTION = ROOT / "supabase/migrations/20261028017000_commercial_delegated_sale_attribution.sql"
+PARENT_SUMMARY = ROOT / "supabase/migrations/20261028018000_commercial_parent_delegated_spend_summary.sql"
 
 
 def test_delegation_storage_is_private_and_scoped():
@@ -301,3 +302,16 @@ def test_completed_sale_retains_parent_and_child_delegation_attribution():
     assert "acting_account_id=v_order.acting_account_id" in sql
     assert "delegated_sale_parent_customer_mismatch" in sql
     assert "delegated_order.sale_attributed" in sql
+
+
+def test_parent_can_view_consolidated_spend_by_child_and_institution():
+    sql = PARENT_SUMMARY.read_text(encoding="utf-8")
+    screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/PersonalAccountsScreen.kt").read_text(encoding="utf-8")
+    assert "commercial_account_parent_spend_summary" in sql
+    assert "WHERE pa.owner_user_id=v_uid" in sql
+    assert "'organization_name',o.name" in sql
+    assert "'child_account_number',ca.account_number" in sql
+    assert "'purchase_total_minor'" in sql
+    assert "'booking_total_minor'" in sql
+    assert "ملخص إنفاق جميع الحسابات الفرعية والمؤسسات" in screen
+    assert "ملخص إنفاق الحساب الرئيسي" in screen
