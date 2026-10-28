@@ -2574,7 +2574,10 @@ internal data class CustomerOrderFulfillmentOrder(
     val saleId: String = "",
     val fulfilledAt: String = "",
     val paidMinor: Long = 0L,
-    val outstandingMinor: Long = 0L
+    val outstandingMinor: Long = 0L,
+    val delegatedDisplayName: String = "",
+    val delegatedIconKey: String = "",
+    val actingAccountNumber: String = ""
 )
 
 internal data class CustomerOrderFulfillmentLocation(val id: String, val name: String)
@@ -2612,6 +2615,9 @@ internal fun loadCustomerOrderFulfillmentQueue(context: Context, includeHidden: 
             totalMinor = row.optLong("total_minor"),
             customerNote = row.optString("customer_note").takeUnless { it == "null" }.orEmpty(),
             customerName = row.optString("customer_name").takeUnless { it == "null" }.orEmpty(),
+            delegatedDisplayName = row.optString("delegated_display_name").takeUnless { it == "null" }.orEmpty(),
+            delegatedIconKey = row.optString("delegated_icon_key").takeUnless { it == "null" }.orEmpty(),
+            actingAccountNumber = row.optString("acting_account_number").takeUnless { it == "null" }.orEmpty(),
             fulfillmentSupported = row.optBoolean("fulfillment_supported"),
             items = items,
             hidden = row.optBoolean("merchant_hidden"),
@@ -2683,7 +2689,8 @@ internal data class MerchantBooking(
     val orderNumber: String, val createdAt: String, val startsAt: String, val endsAt: String,
     val status: String, val currencyCode: String, val totalMinor: Long, val notes: String,
     val customerName: String, val resourceName: String, val timezone: String, val orderStatus: String, val paymentStatus: String,
-    val hidden: Boolean, val decisionReason: String, val items: List<MerchantBookingItem>
+    val hidden: Boolean, val decisionReason: String, val items: List<MerchantBookingItem>,
+    val delegatedDisplayName: String = "", val delegatedIconKey: String = "", val actingAccountNumber: String = ""
 )
 internal data class MerchantEditableOffering(val id: String, val name: String, val priceMinor: Long, val currencyCode: String, val unitCode: String)
 
@@ -2709,6 +2716,9 @@ internal fun loadMerchantBookings(context: Context, includeHidden: Boolean = fal
             currencyCode=row.optString("currency_code"), totalMinor=row.optLong("price_minor"), notes=row.optString("notes").takeUnless { it=="null" }.orEmpty(),
             customerName=row.optString("customer_name"), resourceName=row.optString("resource_name"), timezone=row.optString("timezone","UTC"), orderStatus=row.optString("order_status"),
             paymentStatus=row.optString("payment_status"), hidden=row.optBoolean("merchant_hidden"),
+            delegatedDisplayName=row.optString("delegated_display_name").takeUnless { it=="null" }.orEmpty(),
+            delegatedIconKey=row.optString("delegated_icon_key").takeUnless { it=="null" }.orEmpty(),
+            actingAccountNumber=row.optString("acting_account_number").takeUnless { it=="null" }.orEmpty(),
             decisionReason=row.optString("merchant_decision_reason").takeUnless { it=="null" }.orEmpty(), items=items
         )
     }
