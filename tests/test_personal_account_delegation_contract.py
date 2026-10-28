@@ -1,7 +1,7 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-FOUNDATION = ROOT / "supabase/migrations/20261028010000_commercial_personal_account_delegation_foundation.sql"
+FOUNDATION = ROOT / "supabase/migrations/20261028010500_commercial_personal_account_delegation_foundation.sql"
 DELEGATED_ORDERS = ROOT / "supabase/migrations/20261028011000_commercial_delegated_customer_orders.sql"
 REPORTING = ROOT / "supabase/migrations/20261028012000_commercial_delegated_spend_reporting.sql"
 PERSONAL_ORGANIZATIONS = ROOT / "supabase/migrations/20261028015000_commercial_personal_account_organizations.sql"
