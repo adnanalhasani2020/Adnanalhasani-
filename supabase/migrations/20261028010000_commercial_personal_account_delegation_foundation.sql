@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS public.commercial_account_delegations (
   updated_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT commercial_account_delegations_not_self CHECK (parent_account_id <> child_account_id),
   CONSTRAINT commercial_account_delegations_spend_nonnegative CHECK (spent_minor >= 0),
-  CONSTRAINT commercial_account_delegations_spend_currency CHECK (spend_currency_code ~ '^[A-Z]{3}$'),
+  CONSTRAINT commercial_account_delegations_spend_currency CHECK (spend_currency_code ~ '^[A-Z]{3}
   CONSTRAINT commercial_account_delegations_limit_nonnegative CHECK (spend_limit_minor IS NULL OR spend_limit_minor >= 0),
   CONSTRAINT commercial_account_delegations_permissions_object CHECK (
     jsonb_typeof(permissions) = 'object'
@@ -279,9 +279,8 @@ BEGIN
         RAISE EXCEPTION 'parent_customer_email_mapping_ambiguous' USING ERRCODE='42501';
       END IF;
 
-      -- No existing customer account is linked to the parent. Create an organization-owned
-      -- customer ledger account during the merchant's explicit approval, so all later
-      -- purchases are billed to the parent customer, never to the child.
+      -- Create an organization-owned customer account only after explicit merchant approval.
+      -- All delegated purchases are charged to this parent customer account, never the child.
       INSERT INTO public.commercial_customers(
         organization_id, display_name, email, state, created_by, auth_user_id
       ) VALUES (
@@ -294,8 +293,7 @@ BEGIN
       ) VALUES (
         'CUS-' || replace(v_parent_customer_id::text,'-',''), 'business', v_row.organization_id,
         left(coalesce(nullif(btrim(v_parent_display_name),''),'عميل المنصة'),180),
-        coalesce(v_parent_currency, (SELECT o.default_currency_code FROM public.commercial_organizations o WHERE o.id=v_row.organization_id)),
-        'active', false
+        v_parent_currency, 'active', false
       ) RETURNING id INTO v_parent_customer_account_id;
 
       INSERT INTO public.commercial_customer_party_accounts(organization_id,customer_id,party_account_id)
@@ -431,30 +429,6 @@ GRANT EXECUTE ON FUNCTION public.commercial_account_review_delegation(uuid,boole
 GRANT EXECUTE ON FUNCTION public.commercial_account_update_delegation(uuid,jsonb,timestamptz,bigint) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.commercial_account_revoke_delegation(uuid) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.commercial_account_list_delegations() TO authenticated;
-),
-  CONSTRAINT commercial_account_delegations_limit_nonnegative CHECK (spend_limit_minor IS NULL OR spend_limit_minor >= 0),
-  CONSTRAINT commercial_account_delegations_permissions_object CHECK (
-    jsonb_typeof(permissions) = 'object'
-    AND permissions ? 'view_reports'
-    AND permissions ? 'book'
-    AND permissions ? 'purchase'
-    AND jsonb_typeof(permissions->'view_reports') = 'boolean'
-    AND jsonb_typeof(permissions->'book') = 'boolean'
-    AND jsonb_typeof(permissions->'purchase') = 'boolean'
-    AND (permissions - 'view_reports' - 'book' - 'purchase') = '{}'::jsonb
-  ),
-  CONSTRAINT commercial_account_delegations_expiry_future CHECK (expires_at IS NULL OR expires_at > created_at)
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS commercial_account_delegations_scope_uidx
-  ON public.commercial_account_delegations(parent_account_id, child_account_id, organization_id, coalesce(activity_id, '00000000-0000-0000-0000-000000000000'::uuid))
-  WHERE status IN ('pending_merchant_approval','active');
-CREATE INDEX IF NOT EXISTS commercial_account_delegations_parent_idx
-  ON public.commercial_account_delegations(parent_account_id, status, created_at DESC);
-CREATE INDEX IF NOT EXISTS commercial_account_delegations_child_idx
-  ON public.commercial_account_delegations(child_account_id, status, created_at DESC);
-CREATE INDEX IF NOT EXISTS commercial_account_delegations_organization_idx
-  ON public.commercial_account_delegations(organization_id, status, created_at DESC);
 
 CREATE OR REPLACE FUNCTION public.commercial_account_get_my_personal_account()
 RETURNS jsonb
