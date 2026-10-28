@@ -127,6 +127,7 @@ internal fun PersonalAccountsScreen(onBack: () -> Unit) {
     var message by remember { mutableStateOf("") }
     var isError by remember { mutableStateOf(false) }
     var report by remember { mutableStateOf("") }
+    var summaryReport by remember { mutableStateOf("") }
     var approveEntry by remember { mutableStateOf<DelegationEntry?>(null) }
     var merchantName by remember { mutableStateOf("") }
     var merchantIcon by remember { mutableStateOf("person") }
@@ -384,6 +385,13 @@ internal fun PersonalAccountsScreen(onBack: () -> Unit) {
             }
         }
         item { Text("الحسابات الفرعية وطلبات الموافقة", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
+        item {
+            OutlinedButton(enabled = !busy && account != null, onClick = {
+                request({ token -> personalAccountRpc(context, token, "commercial_account_parent_spend_summary") }) { summaryReport = it }
+            }, modifier = Modifier.fillMaxWidth()) {
+                Text("ملخص إنفاق جميع الحسابات الفرعية والمؤسسات")
+            }
+        }
         if (entries.isEmpty()) item { Text("لا توجد حسابات فرعية أو طلبات ربط بعد.") }
         items(entries, key = { it.id }) { e ->
             Card(border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
@@ -436,6 +444,31 @@ internal fun PersonalAccountsScreen(onBack: () -> Unit) {
                             }) { Text("تقرير الإنفاق") }
                         }
                     }
+                }
+            }
+        }
+        if (summaryReport.isNotBlank()) item {
+            val data = runCatching { JSONObject(summaryReport) }.getOrNull()
+            Card(border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("ملخص إنفاق الحساب الرئيسي", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    if (data == null) Text(summaryReport) else {
+                        val rows = data.optJSONArray("delegations") ?: JSONArray()
+                        if (rows.length() == 0) Text("لا توجد حسابات فرعية مرتبطة بحسابك حتى الآن.")
+                        for (i in 0 until rows.length()) {
+                            val row = rows.optJSONObject(i) ?: continue
+                            val cur = row.optString("currency_code", "YER")
+                            val state = when (row.optString("status")) { "pending_merchant_approval" -> "بانتظار موافقة المؤسسة"; "active" -> "فعال"; "expired" -> "منتهي"; "revoked" -> "ملغى"; "rejected" -> "مرفوض"; else -> row.optString("status") }
+                            Text("${row.optString("organization_name")} — ${row.optString("child_display_name")} (${row.optString("child_account_number")})", fontWeight = FontWeight.Bold)
+                            Text("الحالة: $state · عدد العمليات: ${row.optString("orders_count", "0")}")
+                            Text("المشتريات: ${row.optString("purchase_total_minor", "0")} $cur · الحجوزات والخدمات: ${row.optString("booking_total_minor", "0")} $cur")
+                            Text("الإنفاق المحتسب للسقف: ${row.optString("tracked_spend_minor", "0")} $cur")
+                            val limit = row.opt("spend_limit_minor")
+                            if (limit != null && limit != JSONObject.NULL) Text("السقف: $limit $cur")
+                            HorizontalDivider()
+                        }
+                    }
+                    TextButton(onClick = { summaryReport = "" }) { Text("إغلاق الملخص") }
                 }
             }
         }
