@@ -217,8 +217,8 @@ internal fun PersonalAccountsScreen(onBack: () -> Unit) {
                     Text("المصادقة بالبريد الإلكتروني وكلمة المرور، دون تسجيل Google.")
                     OutlinedTextField(authEmail, { authEmail = it.trim() }, Modifier.fillMaxWidth(), label = { Text("البريد الإلكتروني") }, singleLine = true)
                     if (authRegister) OutlinedTextField(authDisplayName, { authDisplayName = it }, Modifier.fillMaxWidth(), label = { Text("الاسم الذي تختاره") }, singleLine = true)
-                    OutlinedTextField(authPassword, { authPassword = it }, Modifier.fillMaxWidth(), label = { Text("كلمة المرور (12 حرفًا على الأقل)") }, singleLine = true, visualTransformation = PasswordVisualTransformation())
-                    Button(enabled = !busy && authEmail.contains("@") && authPassword.length >= 12 && (!authRegister || authDisplayName.trim().length >= 2), onClick = {
+                    OutlinedTextField(authPassword, { authPassword = it }, Modifier.fillMaxWidth(), label = { Text(if (authRegister) "كلمة المرور (12 حرفًا على الأقل)" else "كلمة المرور") }, singleLine = true, visualTransformation = PasswordVisualTransformation())
+                    Button(enabled = !busy && authEmail.contains("@") && authPassword.isNotBlank() && (!authRegister || (authPassword.length >= 12 && authDisplayName.trim().length >= 2)), onClick = {
                         busy = true; message = ""; isError = false
                         personalAccountIo.execute {
                             val result = runCatching {
