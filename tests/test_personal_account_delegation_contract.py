@@ -21,7 +21,7 @@ def test_delegation_storage_is_private_and_scoped():
     assert "activity_not_in_organization" in sql
     assert "spend_limit_minor" in sql
     assert "spend_currency_code" in sql
-    assert "CHECK (spend_currency_code ~ '^[A-Z]{3}
+    assert "commercial_account_delegations_spend_currency CHECK" in sql and "A-Z]{3}" in sql
     sql = FOUNDATION.read_text(encoding="utf-8")
     function = sql.split("CREATE OR REPLACE FUNCTION public.commercial_account_lookup_personal_account", 1)[1]
     function = function.split("$function$;", 1)[0]
