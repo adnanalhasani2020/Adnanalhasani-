@@ -157,6 +157,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var items by remember { mutableStateOf<List<CatalogProduct>>(emptyList()) }
     var catalogOffset by remember { mutableIntStateOf(0) }
     var catalogHasMore by remember { mutableStateOf(true) }
+    val catalogListState = rememberLazyListState()
     var categories by remember { mutableStateOf<List<CatalogCategory>>(emptyList()) }
     var directoryUnits by remember { mutableStateOf<List<DirectoryUnit>>(emptyList()) }; var pendingTransfers by remember { mutableStateOf<List<PendingTransfer>>(emptyList()) }
     var busy by remember { mutableStateOf(false) }; var restoringSession by remember { mutableStateOf(true) }; var feedback by remember { mutableStateOf("") }; var editingProduct by remember { mutableStateOf<CatalogProduct?>(null) }
@@ -311,6 +312,19 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             feedback = if (catalogHasMore) "تم تحميل ${items.size} صنفًا؛ اسحب إلى الأسفل لتحميل المزيد." else "اكتمل تحميل ${items.size} صنفًا مطابقًا."
         })
     }
+    LaunchedEffect(section, items.size, catalogHasMore, busy) {
+        if (section != "browse" || busy || !catalogHasMore || items.isEmpty()) return@LaunchedEffect
+        snapshotFlow {
+            val lastVisible = catalogListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+            val total = catalogListState.layoutInfo.totalItemsCount
+            lastVisible to total
+        }.collect { (lastVisible, total) ->
+            if (total > 0 && lastVisible >= total - 5 && !busy && catalogHasMore) {
+                loadCatalog(reset = false)
+            }
+        }
+    }
+
     fun loadDirectories() {
         val active=token ?: return
         request({
@@ -520,7 +534,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             if(feedback.isNotBlank()) Text(feedback,color=if(feedback.startsWith("تم")||feedback.startsWith("اكتملت")) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,style=MaterialTheme.typography.bodySmall)
             when(section) {
                 "browse" -> {
-                    LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(bottom=20.dp)) {
+                    LazyColumn(state=catalogListState,verticalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(bottom=20.dp)) {
                         item { OutlinedTextField(query,{query=it},Modifier.fillMaxWidth(),label={Text("بحث بالاسم أو الوصف أو الباركود أو الكود")},singleLine=true) }
                         item { Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                             OutlinedTextField(sector,{sector=it},Modifier.weight(1f),label={Text("النشاط")},singleLine=true)
