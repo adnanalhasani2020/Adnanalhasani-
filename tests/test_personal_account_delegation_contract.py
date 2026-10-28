@@ -8,6 +8,7 @@ PERSONAL_ORGANIZATIONS = ROOT / "supabase/migrations/20261028015000_commercial_p
 NOTIFICATIONS = ROOT / "supabase/migrations/20261028016000_commercial_notifications_inbox.sql"
 SALE_ATTRIBUTION = ROOT / "supabase/migrations/20261028017000_commercial_delegated_sale_attribution.sql"
 PARENT_SUMMARY = ROOT / "supabase/migrations/20261028018000_commercial_parent_delegated_spend_summary.sql"
+MERCHANT_ALIASES = ROOT / "supabase/migrations/20261028019000_commercial_merchant_delegated_aliases.sql"
 
 
 def test_delegation_storage_is_private_and_scoped():
@@ -322,3 +323,14 @@ def test_customer_portal_falls_back_when_delegation_rpc_is_not_deployed():
     assert 'detail.contains("PGRST202"' in repository
     assert 'detail.contains("Could not find the function"' in repository
     assert 'else throw error' in repository
+
+
+def test_merchant_order_queue_shows_selected_child_alias_and_icon():
+    sql = MERCHANT_ALIASES.read_text(encoding="utf-8")
+    repository = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt").read_text(encoding="utf-8")
+    screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CustomerOrderFulfillmentScreen.kt").read_text(encoding="utf-8")
+    assert "'delegated_display_name'" in sql
+    assert "'delegated_icon_key'" in sql
+    assert "val delegatedDisplayName: String = \"\"" in repository
+    assert "val delegatedIconKey: String = \"\"" in repository
+    assert "الحساب الفرعي:" in screen
