@@ -110,6 +110,9 @@ def test_personal_accounts_screen_has_direct_email_password_auth_and_session_con
     assert "PasswordVisualTransformation()" in screen
     assert "تم تسجيل الخروج من حساب المنصة" in screen
     assert "commercial_create_personal_account" in screen
+    assert "authPassword.isNotBlank() && (!authRegister ||" in screen
+    profile = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ActivityProfileScreen.kt").read_text(encoding="utf-8")
+    assert "password.isNotBlank() && (!isRegister ||" in profile
     assert "commercial_account_lookup_personal_account" in screen
 
 
