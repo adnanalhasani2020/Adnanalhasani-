@@ -21,6 +21,15 @@ class CatalogUnpricedLinkingContractTests(unittest.TestCase):
         self.assertIn("false,", sql)
         self.assertIn("'unpriced'", sql)
 
+    def test_linking_does_not_create_sellable_offerings_or_stock(self):
+        sql = (ROOT / "supabase/migrations/20261029020000_catalog_link_unpriced_items.sql").read_text(encoding="utf-8")
+        # Linking into the organization directory is intentionally not stock initialization.
+        self.assertNotIn("INSERT INTO public.commercial_offerings", sql)
+        self.assertNotIn("INSERT INTO public.commercial_inventory_balances", sql)
+        self.assertNotIn("INSERT INTO public.commercial_stock_movements", sql)
+        self.assertIn("'is_available', false", sql)
+        self.assertIn("'pricing_status', 'unpriced'", sql)
+
     def test_android_bulk_action_uses_rpc_and_limits_selection(self):
         screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogScreen.kt").read_text(encoding="utf-8")
         self.assertIn("selectedCatalogIds", screen)
