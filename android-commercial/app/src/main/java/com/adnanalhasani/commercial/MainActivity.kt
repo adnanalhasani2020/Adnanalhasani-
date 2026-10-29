@@ -379,7 +379,11 @@ private fun StoreApp(context: Context) {
                     cloudOperationalPage == "returns" -> CommercialCloudReturnsScreen(context = context, onBack = { cloudOperationalPage = "" })
                     cloudOperationalPage.isNotBlank() -> CommercialCloudOperationalScreen(context = context, screenKey = cloudOperationalPage, onBack = { cloudOperationalPage = "" })
                     showMasterData -> MasterDataScreen(context = context, onBack = { showMasterData = false })
-                    showCatalog -> CatalogScreen(onBack = { showCatalog = false }, onAddToInventory = { catalogItem ->
+                    showCatalog -> CatalogScreen(
+                        onBack = { showCatalog = false },
+                        initialOrganizationId = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE).getString("organization_id", "").orEmpty(),
+                        initialActivityCode = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE).getString("activity_code", "").orEmpty(),
+                        onAddToInventory = { catalogItem ->
                         val existing = inventory.indexOfFirst { it.catalogCode.isNotBlank() && it.catalogCode == catalogItem.catalogCode }
                         val mapped = Product(name = catalogItem.name, category = catalogItem.category, stock = 0, price = "0 ر.ي", catalogCode = catalogItem.catalogCode, barcode = catalogItem.barcode.ifBlank { catalogItem.availableUnits.firstOrNull { it.isDefault && it.barcode.isNotBlank() }?.barcode.orEmpty() }, unitCode = catalogItem.unitCode, imageUrl = catalogItem.imageUrl, description = catalogItem.description, brand = catalogItem.brand, manufacturer = catalogItem.manufacturer, countryOfManufacture = catalogItem.countryOfManufacture, createdBy = catalogItem.importedBy, unitVariantsJson = JSONArray().also { rows -> catalogItem.availableUnits.forEach { unit -> rows.put(JSONObject().put("unitCode",unit.unitCode).put("unitName",unit.unitName).put("role",unit.role).put("quantityInBase",unit.quantityInBase).put("barcode",unit.barcode).put("sku",unit.sku).put("netQuantity",unit.netQuantity).put("netUnitCode",unit.netUnitCode).put("packageName",unit.packageName).put("imageUrl",unit.imageUrl).put("isDefault",unit.isDefault)) } }.toString())
                         if (cloudMode) {
@@ -400,7 +404,7 @@ private fun StoreApp(context: Context) {
                     showExpenses -> if (cloudMode) {
                         CommercialCloudExpensesScreen(context = context, onBack = { showExpenses = false })
                     } else ExpensesScreen(expenses = expenses, onBack = { showExpenses = false }, onAdd = { expenseDialog = true })
-                    else -> if (showPersonalAccounts) PersonalAccountsScreen(onBack = { showPersonalAccounts = false }) else if (showActivityProfile) ActivityProfileScreen(onBack = { showActivityProfile = false }) else MoreScreen(cloudMode = cloudMode, onPersonalAccounts = { showPersonalAccounts = true }, onCustomers = {
+                    else -> if (showPersonalAccounts) PersonalAccountsScreen(onBack = { showPersonalAccounts = false }) else if (showActivityProfile) ActivityProfileScreen(onBack = { showActivityProfile = false }, onCatalog = { showActivityProfile = false; showCatalog = true }) else MoreScreen(cloudMode = cloudMode, onPersonalAccounts = { showPersonalAccounts = true }, onCustomers = {
                     showDebts = true
                 }, onReports = { showReportsCenter = true }, onExpenses = { showExpenses = true }, onActivityProfile = { showActivityProfile = true }, onCatalog = { showCatalog = true }, onMasterData = { showMasterData = true }, onCloudOperational = { cloudOperationalPage = it }, onCloudSales = { cloudSalesPage = true }, onCloudPurchases = { cloudPurchasesPage = true }, onCloudStockAlerts = { cloudStockAlertsPage = true }, onUnitsDirectory = { cloudUnitsPage = true }, onCustomerPortal = { customerPortalPage = true }, onCustomerOrders = { customerOrderFulfillmentPage = true })
                 }
