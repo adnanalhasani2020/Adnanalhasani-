@@ -234,6 +234,51 @@ internal fun configureCommercialCloudSellUnit(
     ))
 }
 
+internal fun findCommercialCloudCatalogOffering(context: Context, globalItemId: String, locationId: String): String? {
+    require(globalItemId.isNotBlank() && locationId.isNotBlank()) { "معرّف الصنف أو الفرع غير مكتمل." }
+    val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+    val orgId = saved.getString("organization_id", null).orEmpty()
+    require(orgId.isNotBlank()) { "معرّف المؤسسة غير محفوظ." }
+    val prefs = commercialCloudSessionPreferences(context)
+    val refresh = prefs.getString("refresh_token", null).orEmpty()
+    require(refresh.isNotBlank()) { "سجّل الدخول إلى حساب Supabase أولًا." }
+    val session = JSONObject(commercialCloudRequest("/auth/v1/token?grant_type=refresh_token", "POST", JSONObject().put("refresh_token", refresh)))
+    val access = session.optString("access_token")
+    require(access.isNotBlank()) { "انتهت جلسة الحساب؛ سجّل الدخول مجددًا." }
+    prefs.edit().putString("refresh_token",session.optString("refresh_token").ifBlank { refresh }).apply()
+    val rows = JSONArray(commercialCloudRequest("/rest/v1/commercial_catalog_item_offerings?select=offering_id&organization_id=eq.$orgId&global_item_id=eq.$globalItemId&location_id=eq.$locationId&limit=1","GET",token=access))
+    return rows.optJSONObject(0)?.optString("offering_id")?.takeIf { it.isNotBlank() && it!="null" }
+}
+
+internal fun createCommercialCloudCatalogInventoryItem(
+    context: Context, globalItemId: String, activityNodeCode: String, locationId: String, warehouseId: String,
+    baseUnitCode: String, saleUnitCode: String, unitCode: String, displayName: String, priceMinor: Long,
+    initialQuantity: Int, reorderPoint: Double, categoryId: String, idempotencyKey: String
+): String {
+    val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+    val orgId = saved.getString("organization_id", null).orEmpty()
+    val activityId = saved.getString("activity_id", null).orEmpty()
+    val currency = saved.getString("currency_code", "YER").orEmpty().uppercase(Locale.ROOT)
+    require(orgId.isNotBlank() && activityId.isNotBlank()) { "بيانات المؤسسة والنشاط غير محفوظة." }
+    require(globalItemId.isNotBlank() && activityNodeCode.isNotBlank() && locationId.isNotBlank() && warehouseId.isNotBlank()) { "اختر النشاط والفرع والمستودع." }
+    require(baseUnitCode.isNotBlank() && saleUnitCode.isNotBlank() && unitCode.isNotBlank()) { "لا توجد وحدات موثوقة مكتملة لهذا الصنف." }
+    require(priceMinor > 0 && initialQuantity >= 0) { "أدخل سعر بيع أكبر من صفر وكمية افتتاحية صحيحة." }
+    require(idempotencyKey.length in 8..200) { "مفتاح العملية غير صالح." }
+    val prefs = commercialCloudSessionPreferences(context)
+    val refresh = prefs.getString("refresh_token", null).orEmpty()
+    require(refresh.isNotBlank()) { "سجّل الدخول إلى حساب Supabase أولًا." }
+    val session = JSONObject(commercialCloudRequest("/auth/v1/token?grant_type=refresh_token", "POST", JSONObject().put("refresh_token", refresh)))
+    val access = session.optString("access_token")
+    require(access.isNotBlank()) { "انتهت جلسة الحساب؛ سجّل الدخول مجددًا." }
+    prefs.edit().putString("refresh_token",session.optString("refresh_token").ifBlank { refresh }).apply()
+    val payload = JSONObject().put("p_organization_id",orgId).put("p_activity_id",activityId).put("p_activity_node_code",activityNodeCode)
+        .put("p_location_id",locationId).put("p_warehouse_id",warehouseId).put("p_global_item_id",globalItemId)
+        .put("p_base_unit_code",baseUnitCode).put("p_sale_unit_code",saleUnitCode).put("p_unit_code",unitCode)
+        .put("p_display_name",displayName.trim()).put("p_price_minor",priceMinor).put("p_currency_code",currency)
+        .put("p_initial_quantity",initialQuantity).put("p_reorder_point",reorderPoint.coerceAtLeast(0.0))
+        .put("p_category_id",if(categoryId.isNotBlank()) categoryId else JSONObject.NULL).put("p_idempotency_key",idempotencyKey)
+    return commercialCloudRequest("/rest/v1/rpc/commercial_catalog_create_inventory_item_from_global","POST",payload,access)
+}
 internal fun createCommercialCloudInventoryItem(
     context: Context,
     name: String,

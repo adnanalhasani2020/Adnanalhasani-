@@ -69,12 +69,16 @@ private fun supabaseRequest(path: String, payload: JSONObject, token: String? = 
 }
 
 @Composable
-internal fun ActivityProfileScreen(onBack: () -> Unit) {
+internal fun ActivityProfileScreen(onBack: () -> Unit, onCatalog: () -> Unit) {
     val context = LocalContext.current
     var email by remember { mutableStateOf("") }
     var accountDisplayName by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var accessToken by remember { mutableStateOf<String?>(null) }
+    var authMethod by remember { mutableStateOf("email") }
+    var authPhone by remember { mutableStateOf("") }
+    var phoneOtp by remember { mutableStateOf("") }
+    var phoneOtpRequested by remember { mutableStateOf(false) }
     var isRegister by remember { mutableStateOf(false) }
     var organizationName by remember { mutableStateOf("") }
     var organizationSlug by remember { mutableStateOf("") }
@@ -170,6 +174,48 @@ internal fun ActivityProfileScreen(onBack: () -> Unit) {
 
         if (accessToken == null) {
             Text("تسجيل الدخول إلى Supabase", style = MaterialTheme.typography.titleMedium)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                FilterChip(selected = authMethod == "email", onClick = { authMethod = "email"; phoneOtpRequested = false; feedback = "" }, label = { Text("البريد وكلمة المرور") })
+                FilterChip(selected = authMethod == "phone", onClick = { authMethod = "phone"; isRegister = false; phoneOtpRequested = false; feedback = "" }, label = { Text("رمز الهاتف SMS") })
+            }
+            if (authMethod == "phone") {
+                Text("يتطلب هذا المسار تفعيل مزود SMS في Supabase Auth. لا يُنشئ حسابًا جديدًا تلقائيًا.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                OutlinedTextField(authPhone, { authPhone = it.trim() }, Modifier.fillMaxWidth(), label = { Text("رقم الهاتف الدولي مثل +967…") }, singleLine = true)
+                if (!phoneOtpRequested) {
+                    Button(
+                        onClick = {
+                            runRequest({
+                                val normalized = authPhone.trim()
+                                require(normalized.matches(Regex("^\\+[1-9][0-9]{7,14}$"))) { "أدخل رقم الهاتف بصيغة دولية صحيحة، مثل +967…" }
+                                supabaseRequest("/auth/v1/otp", JSONObject().put("phone", normalized).put("create_user", false).put("channel", "sms"))
+                                phoneOtpRequested = true
+                                "تم طلب رمز SMS. أدخل الرمز المرسل إلى الرقم نفسه."
+                            }, { feedback = it })
+                        },
+                        enabled = !busy && authPhone.matches(Regex("^\\+[1-9][0-9]{7,14}$")),
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text(if (busy) "جارٍ إرسال الرمز..." else "إرسال رمز SMS") }
+                } else {
+                    OutlinedTextField(phoneOtp, { phoneOtp = it.filter(Char::isDigit).take(10) }, Modifier.fillMaxWidth(), label = { Text("رمز التحقق") }, singleLine = true)
+                    Button(
+                        onClick = {
+                            runRequest({
+                                require(phoneOtp.length in 4..10) { "أدخل رمز التحقق كما وصلك." }
+                                val result = supabaseRequest("/auth/v1/verify", JSONObject().put("phone", authPhone.trim()).put("token", phoneOtp).put("type", "sms"))
+                                val token = result.optString("access_token")
+                                val refresh = result.optString("refresh_token")
+                                require(token.isNotBlank() && refresh.isNotBlank()) { "لم تُرجع خدمة المصادقة جلسة موثقة؛ تحقق من الرمز أو إعدادات Supabase Auth." }
+                                profileSessionPreferences(context).edit().putString("refresh_token", refresh).apply()
+                                accessToken = token
+                                "تم التحقق من الهاتف وتسجيل الدخول."
+                            }, { feedback = it })
+                        },
+                        enabled = !busy && phoneOtp.length in 4..10,
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text(if (busy) "جارٍ التحقق..." else "تحقق ودخول") }
+                    TextButton(onClick = { phoneOtpRequested = false; phoneOtp = ""; feedback = "" }, enabled = !busy) { Text("إعادة طلب رمز") }
+                }
+            } else {
             OutlinedTextField(email, { email = it.trim() }, Modifier.fillMaxWidth(), label = { Text("البريد الإلكتروني") }, singleLine = true)
             if (isRegister) OutlinedTextField(accountDisplayName, { accountDisplayName = it }, Modifier.fillMaxWidth(), label = { Text("الاسم الذي تختاره في المنصة") }, singleLine = true)
             OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text(if (isRegister) "كلمة المرور (12 حرفًا على الأقل)" else "كلمة المرور") }, singleLine = true, visualTransformation = PasswordVisualTransformation())
@@ -199,6 +245,7 @@ internal fun ActivityProfileScreen(onBack: () -> Unit) {
             ) { Text(if (busy) "جارٍ الاتصال..." else if (isRegister) "إنشاء حساب" else "تسجيل الدخول") }
             TextButton(onClick = { isRegister = !isRegister; feedback = "" }) {
                 Text(if (isRegister) "لدي حساب بالفعل — تسجيل الدخول" else "إنشاء حساب جديد")
+            }
             }
         } else if (!created) {
             Text("بيانات النشاط والمالك", style = MaterialTheme.typography.titleMedium)
@@ -309,6 +356,7 @@ internal fun ActivityProfileScreen(onBack: () -> Unit) {
                         context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE).edit()
                             .putString("organization_id", organizationId)
                             .putString("activity_id", activityId)
+                            .putString("activity_code", activityCode.trim().uppercase())
                             .putString("location_id", locationId)
                             .putString("currency_code", currency)
                             .putString("country_code", country)
@@ -319,8 +367,9 @@ internal fun ActivityProfileScreen(onBack: () -> Unit) {
                 modifier = Modifier.fillMaxWidth()
             ) { Text(if (busy) "جارٍ الحفظ في قاعدة البيانات..." else "حفظ ملف النشاط") }
         } else {
-            Text("تم إنشاء ملف النشاط وحفظه في Supabase. يمكنك العودة إلى واجهة المتجر.", color = MaterialTheme.colorScheme.primary)
-            Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("العودة إلى المتجر") }
+            Text("تم إنشاء ملف النشاط وحفظه في Supabase. يمكنك الآن اختيار الأصناف وربطها بهذا النشاط قبل تهيئة المخزون.", color = MaterialTheme.colorScheme.primary)
+            Button(onClick = onCatalog, modifier = Modifier.fillMaxWidth()) { Text("اختيار أصناف النشاط") }
+            OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("العودة إلى المتجر") }
         }
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
         if (feedback.isNotBlank()) Text(feedback, color = if (created) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
