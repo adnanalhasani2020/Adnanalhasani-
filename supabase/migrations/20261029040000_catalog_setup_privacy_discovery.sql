@@ -150,7 +150,7 @@ BEGIN
  IF NOT public.commercial_catalog_member_of(p_organization_id,ARRAY['owner','admin','manager','staff']::text[]) THEN
   RAISE EXCEPTION 'price_suggestions_forbidden' USING ERRCODE='42501';
  END IF;
- IF p_latitude NOT BETWEEN -90 AND 90 OR p_longitude NOT BETWEEN -180 AND 180
+ IF p_latitude IS NULL OR p_longitude IS NULL OR p_latitude NOT BETWEEN -90 AND 90 OR p_longitude NOT BETWEEN -180 AND 180
   OR p_radius_m NOT BETWEEN 1000 AND 100000 OR upper(p_currency_code) !~ '^[A-Z]{3}$'
   OR p_global_item_ids IS NULL OR cardinality(p_global_item_ids) NOT BETWEEN 1 AND 100 THEN
   RAISE EXCEPTION 'invalid_price_suggestion_request' USING ERRCODE='22023';
@@ -185,7 +185,7 @@ BEGIN
  IF NOT public.commercial_catalog_member_of(p_organization_id,ARRAY['owner','admin','manager','staff']::text[]) THEN
   RAISE EXCEPTION 'nearby_catalog_forbidden' USING ERRCODE='42501';
  END IF;
- IF p_latitude NOT BETWEEN -90 AND 90 OR p_longitude NOT BETWEEN -180 AND 180
+ IF p_latitude IS NULL OR p_longitude IS NULL OR p_latitude NOT BETWEEN -90 AND 90 OR p_longitude NOT BETWEEN -180 AND 180
   OR p_radius_m NOT IN(5000,10000,25000,50000,100000) OR p_offset<0 OR p_limit NOT BETWEEN 1 AND 100 THEN
   RAISE EXCEPTION 'invalid_nearby_discovery_request' USING ERRCODE='22023';
  END IF;

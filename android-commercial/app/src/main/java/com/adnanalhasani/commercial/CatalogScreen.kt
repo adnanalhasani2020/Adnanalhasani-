@@ -94,6 +94,10 @@ internal data class CatalogProduct(
     val rawWarnings: String = ""
 )
 private data class CatalogCategory(val code: String, val parentCode: String, val nameAr: String, val nameEn: String, val localizedName: String = "", val descriptionAr: String = "", val descriptionEn: String = "", val localizedDescription: String = "")
+private data class CatalogBranchOption(val id: String, val name: String, val latitude: String, val longitude: String)
+private data class CatalogWarehouseOption(val id: String, val name: String, val branchId: String)
+private data class NearbyCatalogItem(val id: String, val name: String, val popularityBand: String, val merchantCountBand: String)
+
 private data class DirectoryUnit(val code: String, val nameAr: String, val nameEn: String, val dimension: String, val baseCode: String, val factor: String, val owner: String, val localizedName: String = "")
 private data class PendingTransfer(val id: String, val source: String, val destination: String, val itemCount: Int, val createdAt: String)
 
@@ -162,6 +166,16 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var activityNodes by remember { mutableStateOf<List<Triple<String, String, String>>>(emptyList()) }
     var selectedActivityCode by remember { mutableStateOf(initialActivityCode.uppercase()) }
     var activityMenuExpanded by remember { mutableStateOf(false) }
+    var marketBranches by remember { mutableStateOf<List<CatalogBranchOption>>(emptyList()) }
+    var marketWarehouses by remember { mutableStateOf<List<CatalogWarehouseOption>>(emptyList()) }
+    var selectedBranchId by remember { mutableStateOf("") }
+    var selectedWarehouseId by remember { mutableStateOf("") }
+    var branchMenuExpanded by remember { mutableStateOf(false) }
+    var warehouseMenuExpanded by remember { mutableStateOf(false) }
+    var nearbyMarketItems by remember { mutableStateOf<List<NearbyCatalogItem>>(emptyList()) }
+    var marketRadius by remember { mutableIntStateOf(5000) }
+    var nearbyOffset by remember { mutableIntStateOf(0) }
+    var marketPriceHints by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     val catalogListState = rememberLazyListState()
     var categories by remember { mutableStateOf<List<CatalogCategory>>(emptyList()) }
     var directoryUnits by remember { mutableStateOf<List<DirectoryUnit>>(emptyList()) }; var pendingTransfers by remember { mutableStateOf<List<PendingTransfer>>(emptyList()) }
@@ -331,6 +345,101 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         }
     }
 
+    fun loadMarketContext() {
+        val active=token ?: return
+        val orgId=org() ?: run { feedback="أدخل معرّف المؤسسة UUID أولًا."; return }
+        request({
+            val branches=catalogGet("/rest/v1/commercial_organization_locations?select=id,name,latitude,longitude&organization_id=eq."+orgId+"&state=eq.active&order=name.asc",active)
+            val warehouses=catalogGet("/rest/v1/commercial_warehouses?select=id,name,branch_location_id&organization_id=eq."+orgId+"&state=eq.active&order=name.asc",active)
+            JSONObject().put("branches",JSONArray(branches)).put("warehouses",JSONArray(warehouses)).toString()
+        }, { raw ->
+            val result=JSONObject(raw); val bs=result.getJSONArray("branches"); val ws=result.getJSONArray("warehouses")
+            marketBranches=List(bs.length()) { i -> val row=bs.getJSONObject(i); CatalogBranchOption(row.optString("id"),row.optString("name"),row.optString("latitude").takeUnless { it=="null" }.orEmpty(),row.optString("longitude").takeUnless { it=="null" }.orEmpty()) }
+            marketWarehouses=List(ws.length()) { i -> val row=ws.getJSONObject(i); CatalogWarehouseOption(row.optString("id"),row.optString("name"),row.optString("branch_location_id")) }
+            if(selectedBranchId.isBlank()) selectedBranchId=marketBranches.firstOrNull()?.id.orEmpty()
+            if(selectedWarehouseId.isBlank() || marketWarehouses.none { it.id==selectedWarehouseId && it.branchId==selectedBranchId }) selectedWarehouseId=marketWarehouses.firstOrNull { it.branchId==selectedBranchId }?.id.orEmpty()
+            feedback="تم تحميل الفروع والمستودعات: "+marketBranches.size+" / "+marketWarehouses.size
+        })
+    }
+
+    fun configureSelectedCatalogItems() {
+        val active=token ?: return
+        val orgId=org() ?: run { feedback="أدخل معرّف المؤسسة UUID أولًا."; return }
+        if(selectedActivityCode.isBlank() || selectedBranchId.isBlank() || selectedWarehouseId.isBlank() || selectedCatalogIds.isEmpty()) {
+            feedback="اختر النشاط والفرع والمستودع وحدد الأصناف أولًا."; return
+        }
+        val chosen=items.filter { it.id in selectedCatalogIds }
+        val payloadItems=JSONArray()
+        for(item in chosen) {
+            val base=item.availableUnits.firstOrNull { it.role.equals("base",true) && it.quantityInBase.toBigDecimalOrNull()?.compareTo(java.math.BigDecimal.ONE)==0 }
+            val sale=item.availableUnits.firstOrNull { it.isDefault } ?: item.availableUnits.firstOrNull { it.role.equals("sale",true) } ?: base
+            if(base==null || sale==null) {
+                feedback="تعذر تهيئة صنف لأن دليل وحداته لا يحتوي وحدة أساس ومعامل تحويل موثوقين. لن يتم اختلاق معامل تحويل."
+                return
+            }
+            payloadItems.put(JSONObject().put("global_item_id",item.id).put("base_unit_code",base.unitCode).put("sale_unit_code",sale.unitCode))
+        }
+        request({
+            catalogHttp("/rest/v1/rpc/commercial_catalog_configure_items",JSONObject().put("p_organization_id",orgId)
+                .put("p_activity_node_code",selectedActivityCode).put("p_branch_location_id",selectedBranchId)
+                .put("p_warehouse_id",selectedWarehouseId).put("p_items",payloadItems),active)
+        }, { raw ->
+            val result=runCatching { JSONObject(raw) }.getOrNull()
+            feedback="تمت تهيئة "+(result?.optInt("configured_count",chosen.size) ?: chosen.size)+
+                " صنفًا للنشاط والفرع والمستودع. الأصناف غير المسعرة تبقى غير متاحة للبيع ولا يُنشأ مخزون تلقائيًا."
+        })
+    }
+
+    fun loadNearbyCatalog(expandRadius: Boolean = false) {
+        val active=token ?: return
+        val orgId=org() ?: run { feedback="أدخل معرّف المؤسسة UUID أولًا."; return }
+        val branch=marketBranches.firstOrNull { it.id==selectedBranchId }
+        val lat=branch?.latitude?.toBigDecimalOrNull(); val lon=branch?.longitude?.toBigDecimalOrNull()
+        if(lat==null || lon==null) { feedback="الفرع المحدد لا يحتوي إحداثيات محفوظة."; return }
+        val radiusSteps=listOf(5000,10000,25000,50000,100000)
+        val nextRadius=if(expandRadius) radiusSteps.firstOrNull { it>marketRadius } ?: marketRadius else marketRadius
+        if(expandRadius && nextRadius==marketRadius) { feedback="تم بلوغ أقصى نطاق بحث (100 كم)."; return }
+        val requestedOffset=if(expandRadius) 0 else nearbyOffset
+        request({
+            catalogHttp("/rest/v1/rpc/commercial_catalog_nearby_popularity",JSONObject().put("p_organization_id",orgId)
+                .put("p_latitude",lat.toPlainString()).put("p_longitude",lon.toPlainString()).put("p_radius_m",nextRadius)
+                .put("p_offset",requestedOffset).put("p_limit",30),active)
+        }, { raw ->
+            val rows=JSONArray(raw)
+            val page=List(rows.length()) { i -> val row=rows.getJSONObject(i); NearbyCatalogItem(row.optString("global_item_id"),
+                row.optString("product_name"),row.optString("popularity_band"),row.optString("merchant_count_band")) }
+            if(expandRadius) marketRadius=nextRadius
+            nearbyOffset=requestedOffset+rows.length()
+            nearbyMarketItems=(nearbyMarketItems+page).distinctBy { it.id }
+            feedback=if(page.isEmpty()) "لا توجد نتائج مؤهلة ضمن هذا النطاق؛ لا توجد بيانات مجمعة كافية أو روابط أصناف موثوقة بعد."
+                else "تم تحميل "+page.size+" نتيجة جديدة. النتائج مجمعة ولا تكشف هوية التجار."
+        })
+    }
+
+    fun loadSelectedPriceSuggestions() {
+        val active=token ?: return
+        val orgId=org() ?: run { feedback="أدخل معرّف المؤسسة UUID أولًا."; return }
+        val branch=marketBranches.firstOrNull { it.id==selectedBranchId }
+        val lat=branch?.latitude?.toBigDecimalOrNull(); val lon=branch?.longitude?.toBigDecimalOrNull()
+        if(lat==null || lon==null || selectedCatalogIds.isEmpty()) { feedback="اختر فرعًا بإحداثيات صحيحة وحدد الأصناف."; return }
+        val ids=selectedCatalogIds.toList()
+        request({
+            catalogHttp("/rest/v1/rpc/commercial_catalog_price_suggestions",JSONObject().put("p_organization_id",orgId)
+                .put("p_global_item_ids",JSONArray(ids)).put("p_latitude",lat.toPlainString()).put("p_longitude",lon.toPlainString())
+                .put("p_radius_m",marketRadius.coerceAtLeast(1000)).put("p_currency_code",currencyCode.uppercase()),active)
+        }, { raw ->
+            val rows=JSONArray(raw); val hints=mutableMapOf<String,String>()
+            for(i in 0 until rows.length()) {
+                val row=rows.getJSONObject(i)
+                hints[row.optString("global_item_id")]=row.optString("currency_code")+" • وسيط "+row.optLong("suggested_median_minor")+
+                    " • نطاق ربعي "+row.optLong("lower_quartile_minor")+"–"+row.optLong("upper_quartile_minor")+
+                    " • تجار "+row.optString("merchant_count_band")
+            }
+            marketPriceHints=hints
+            feedback=if(hints.isEmpty()) "لا توجد أسعار استرشادية مؤهلة؛ لم يتم اختلاق أي سعر." else "وصلت أسعار مجمعة لـ "+hints.size+" صنفًا من مجموعات تضم خمسة تجار مستقلين على الأقل."
+        })
+    }
+
     fun loadDirectories() {
         val active=token ?: return
         request({
@@ -354,6 +463,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             categories=List(cats.length()) { i -> val v=cats.getJSONObject(i); val code=v.optString("code"); CatalogCategory(code,v.optString("parent_code").takeUnless { it == "null" }.orEmpty(),v.optString("name_ar"),v.optString("name_en"),categoryNames[code].orEmpty(),v.optString("description_ar").takeUnless { it == "null" }.orEmpty(),v.optString("description_en").takeUnless { it == "null" }.orEmpty(),categoryDescriptions[code].orEmpty()) }
             directoryUnits=List(units.length()) { i -> val v=units.getJSONObject(i); val code=v.optString("code"); DirectoryUnit(code,v.optString("name_ar"),v.optString("name_en"),v.optString("dimension"),v.optString("base_unit_code").takeUnless { it == "null" }.orEmpty(),v.optString("factor_to_base").takeUnless { it == "null" }.orEmpty(),v.optString("owner_organization_id").takeUnless { it == "null" }.orEmpty(),unitNames[code].orEmpty()) }
             feedback="تم تحميل ${categories.size} تصنيفًا و${directoryUnits.size} وحدة قياس و${activityNodes.size} نشاطًا."
+            loadMarketContext()
         })
     }
     LaunchedEffect(token, organizationId) {
@@ -550,6 +660,52 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             if(feedback.isNotBlank()) Text(feedback,color=if(feedback.startsWith("تم")||feedback.startsWith("اكتملت")) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,style=MaterialTheme.typography.bodySmall)
             when(section) {
                 "browse" -> {
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.fillMaxWidth().padding(10.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                            Text("الفرع والمستودع واكتشاف السوق",fontWeight=FontWeight.SemiBold)
+                            Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                                Box(Modifier.weight(1f)) {
+                                    OutlinedButton(onClick={branchMenuExpanded=true},modifier=Modifier.fillMaxWidth(),enabled=!busy) {
+                                        Text(marketBranches.firstOrNull { it.id==selectedBranchId }?.name ?: "اختر الفرع")
+                                    }
+                                    DropdownMenu(expanded=branchMenuExpanded,onDismissRequest={branchMenuExpanded=false}) {
+                                        marketBranches.forEach { branch -> DropdownMenuItem(text={Text(branch.name)},onClick={
+                                            selectedBranchId=branch.id
+                                            selectedWarehouseId=marketWarehouses.firstOrNull { it.branchId==branch.id }?.id.orEmpty()
+                                            nearbyMarketItems=emptyList(); nearbyOffset=0; marketRadius=5000; marketPriceHints=emptyMap(); branchMenuExpanded=false
+                                        }) }
+                                    }
+                                }
+                                Box(Modifier.weight(1f)) {
+                                    OutlinedButton(onClick={warehouseMenuExpanded=true},modifier=Modifier.fillMaxWidth(),enabled=!busy && selectedBranchId.isNotBlank()) {
+                                        Text(marketWarehouses.firstOrNull { it.id==selectedWarehouseId }?.name ?: "اختر المستودع")
+                                    }
+                                    DropdownMenu(expanded=warehouseMenuExpanded,onDismissRequest={warehouseMenuExpanded=false}) {
+                                        marketWarehouses.filter { it.branchId==selectedBranchId }.forEach { warehouse ->
+                                            DropdownMenuItem(text={Text(warehouse.name)},onClick={selectedWarehouseId=warehouse.id;warehouseMenuExpanded=false})
+                                        }
+                                    }
+                                }
+                            }
+                            Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+                                OutlinedButton(onClick={loadMarketContext()},enabled=!busy) { Text("تحديث الفروع") }
+                                Button(onClick={loadNearbyCatalog(false)},enabled=!busy && selectedBranchId.isNotBlank()) { Text("الأكثر استخدامًا قريبًا") }
+                                OutlinedButton(onClick={loadSelectedPriceSuggestions()},enabled=!busy && selectedCatalogIds.isNotEmpty()) { Text("أسعار استرشادية") }
+                            }
+                            Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+                                Button(onClick={configureSelectedCatalogItems()},enabled=!busy && selectedCatalogIds.isNotEmpty() && selectedActivityCode.isNotBlank() && selectedBranchId.isNotBlank() && selectedWarehouseId.isNotBlank()) { Text("تهيئة المختار للفرع") }
+                                OutlinedButton(onClick={loadNearbyCatalog(false)},enabled=!busy) { Text("تحميل المزيد") }
+                                OutlinedButton(onClick={loadNearbyCatalog(true)},enabled=!busy && marketRadius<100000) { Text("توسيع النطاق") }
+                            }
+                            if(nearbyMarketItems.isNotEmpty()) {
+                                Text("الأكثر استخدامًا في السوق القريب • نطاق "+(marketRadius/1000)+" كم",fontWeight=FontWeight.SemiBold)
+                                nearbyMarketItems.forEach { market ->
+                                    Text("• "+market.name+" — "+market.popularityBand+" • تجار "+market.merchantCountBand,style=MaterialTheme.typography.bodySmall)
+                                }
+                            }
+                            Text("يعتمد البحث على إحداثيات الفرع المحفوظة، وليس تتبع الجهاز. الأسعار لا تظهر إلا عند توافر بيانات مجمعة موثوقة من خمسة تجار مستقلين على الأقل.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
                     if (selectedCatalogIds.isNotEmpty()) {
                         Card(Modifier.fillMaxWidth(), colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.secondaryContainer)) {
                             Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement=Arrangement.spacedBy(6.dp)) {
@@ -657,6 +813,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                                         item.barcode.takeIf{it.isNotBlank()}?.let{"الباركود الأساسي: $it"},
                                         "وحدة الأساس/البيع: ${item.unitCode}",
                                         item.availableUnits.takeIf{it.isNotEmpty()}?.joinToString("، "){u->"${u.packageName.ifBlank{u.unitName.ifBlank{u.unitCode}}} × ${u.quantityInBase}${if(u.barcode.isNotBlank()) " (باركود ${u.barcode})" else ""}"}?.let{"العبوات: $it"},
+                                        marketPriceHints[item.id]?.let{"سعر استرشادي مجمّع: "+it},
                                         item.createdAt.takeIf{it.isNotBlank()}?.let{"تاريخ إدخال سجل الدليل: $it"},
                                         item.createdBy.takeIf{it.isNotBlank()}?.let{"معرّف مدخل سجل الدليل: $it"},
                                         item.imageUrl.takeIf{it.isNotBlank()}?.let{"رابط الصورة الخارجية: $it"},

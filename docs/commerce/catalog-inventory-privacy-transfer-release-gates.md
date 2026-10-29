@@ -1,17 +1,13 @@
 # Catalog and transfer implementation gates
 
-## Backend foundation added in this batch
-- Catalog items can be assigned to an existing activity, branch and warehouse; unit conversion is accepted only from curated product-unit records.
-- New links remain unpriced and unavailable. Setup does not silently create opening stock.
-- Historical offering identity must be explicitly bound to a global catalog item; no fuzzy product-name matching.
-- Price suggestions use median/interquartile aggregates from active mapped offerings, matching currency and radius, with at least five distinct other organizations. Seller identities, addresses, exact counts and individual prices are not returned.
-- Nearby popularity uses completed sales from the last 30 days, explicit item/offering mappings, progressive radius values capped at 100 km, pagination and a five-organization cohort threshold.
-- Seller invoice transfer requests are idempotent. The destination organization must approve or reject. Approval creates a draft purchase order and supplier mapping; inventory remains unchanged until the existing receiving workflow is used.
+The catalog screen now exposes branch/warehouse selection, configures selected items using only units and conversion factors already defined in the global catalog, and offers radius-expanding nearby discovery plus cohort-gated price suggestions. Market discovery uses saved branch coordinates rather than silently tracking the device.
 
-## Remaining end-to-end release blockers
-- Android screens are not yet wired to all new setup, price-suggestion, nearby-discovery and buyer-approval RPCs; backend contracts alone do not prove end-to-end completion.
-- Historical offerings are not auto-mapped. An authorized user must bind exact product identities before they contribute to market aggregates.
-- FIFO/LIFO/weighted-average must not be enabled by a setting alone. Current checkout consumes existing balance cost and sale-item cost snapshots. A safe implementation requires receipt cost layers, issue allocations, return reversals, transfers, idempotency, and GL reconciliation before changing checkout COGS.
-- Phone OTP must use configured Supabase Auth SMS delivery and be integrated with Android registration/recovery. Daily SIM ownership cannot be guaranteed by an ordinary Android app without carrier/platform support.
-- Complete role-by-role screen/operation audit and two-organization authenticated integration tests remain required.
-- Migrations have not been applied to the live Supabase project; do not merge or deploy until staging validation and the release gates pass.
+The database requires explicit offering-to-global-item mappings; no fuzzy name joins are used. Price suggestions return only median/interquartile aggregates and cohort bands when five distinct other organizations contribute. Nearby popularity uses completed sales from the last 30 days, radius filters, pagination and item deduplication. Transfer requests are idempotent; only a destination owner/admin/manager can approve/reject. Approval creates a draft purchase order and supplier relation; stock remains unchanged until receipt.
+
+Still not production-complete:
+- Historical offerings need explicit identity mapping; they are not guessed from names.
+- Android seller/buyer invoice-transfer request and approval inbox screens still need to be connected to the transfer RPCs.
+- FIFO/LIFO/weighted-average is not enabled. Current checkout cost capture uses existing balance cost and sale-item cost snapshots. A safe costing engine requires receipt cost layers, deterministic issue allocations, return reversals, transfer handling, idempotency and GL reconciliation before changing COGS.
+- Phone OTP requires the project's configured Supabase Auth SMS provider and Android registration/recovery integration. A regular Android app cannot guarantee daily SIM ownership without carrier/platform support.
+- Full role-by-role operation audit and authenticated tests across two organizations remain release gates.
+- These migrations are not applied to live Supabase and must be staged before production.

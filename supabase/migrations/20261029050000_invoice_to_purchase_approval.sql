@@ -18,6 +18,9 @@ CREATE TABLE IF NOT EXISTS public.commercial_invoice_purchase_requests(
  created_at timestamptz NOT NULL DEFAULT now(),UNIQUE(source_organization_id,request_key),
  CHECK(source_organization_id<>destination_organization_id)
 );
+CREATE UNIQUE INDEX IF NOT EXISTS ux_invoice_purchase_request_active_sale_destination
+ ON public.commercial_invoice_purchase_requests(source_sale_id,destination_organization_id)
+ WHERE status IN('pending','approved');
 CREATE TABLE IF NOT EXISTS public.commercial_invoice_purchase_request_items(
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
  request_id uuid NOT NULL REFERENCES public.commercial_invoice_purchase_requests(id) ON DELETE CASCADE,
