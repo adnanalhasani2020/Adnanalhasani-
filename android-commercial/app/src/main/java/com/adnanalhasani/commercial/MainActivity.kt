@@ -220,6 +220,13 @@ private fun StoreApp(context: Context) {
     var showPersonalAccounts by remember { mutableStateOf(false) }
     var showNotifications by remember { mutableStateOf(false) }
     var showCatalog by remember { mutableStateOf(false) }
+    var pendingCatalogProduct by remember { mutableStateOf<CatalogProduct?>(null) }
+    var pendingCatalogBranchId by remember { mutableStateOf("") }
+    var pendingCatalogWarehouseId by remember { mutableStateOf("") }
+    var pendingCatalogActivityCode by remember { mutableStateOf("") }
+    var pendingCatalogBaseUnitCode by remember { mutableStateOf("") }
+    var pendingCatalogSaleUnitCode by remember { mutableStateOf("") }
+    var pendingCatalogIdempotencyKey by remember { mutableStateOf(UUID.randomUUID().toString()) }
     var showMasterData by remember { mutableStateOf(false) }
     var cloudOperationalPage by remember { mutableStateOf("") }
     var cloudSalesPage by remember { mutableStateOf(false) }
@@ -383,18 +390,40 @@ private fun StoreApp(context: Context) {
                         onBack = { showCatalog = false },
                         initialOrganizationId = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE).getString("organization_id", "").orEmpty(),
                         initialActivityCode = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE).getString("activity_code", "").orEmpty(),
-                        onAddToInventory = { catalogItem ->
-                        val existing = inventory.indexOfFirst { it.catalogCode.isNotBlank() && it.catalogCode == catalogItem.catalogCode }
-                        val mapped = Product(name = catalogItem.name, category = catalogItem.category, stock = 0, price = "0 ر.ي", catalogCode = catalogItem.catalogCode, barcode = catalogItem.barcode.ifBlank { catalogItem.availableUnits.firstOrNull { it.isDefault && it.barcode.isNotBlank() }?.barcode.orEmpty() }, unitCode = catalogItem.unitCode, imageUrl = catalogItem.imageUrl, description = catalogItem.description, brand = catalogItem.brand, manufacturer = catalogItem.manufacturer, countryOfManufacture = catalogItem.countryOfManufacture, createdBy = catalogItem.importedBy, unitVariantsJson = JSONArray().also { rows -> catalogItem.availableUnits.forEach { unit -> rows.put(JSONObject().put("unitCode",unit.unitCode).put("unitName",unit.unitName).put("role",unit.role).put("quantityInBase",unit.quantityInBase).put("barcode",unit.barcode).put("sku",unit.sku).put("netQuantity",unit.netQuantity).put("netUnitCode",unit.netUnitCode).put("packageName",unit.packageName).put("imageUrl",unit.imageUrl).put("isDefault",unit.isDefault)) } }.toString())
+                        onAddToInventory = { catalogItem, branchId, warehouseId, activityNodeCode, baseUnitCode, saleUnitCode ->
                         if (cloudMode) {
-                            cloudNotice = "تم اختيار قالب الدليل. لإضافته للمخزون السحابي أنشئ الصنف مع سعره وكميته من شاشة المخزون؛ لن يتم حفظ نسخة محلية مضللة."
+                            storeCloudIo.execute {
+                                val lookup = runCatching { findCommercialCloudCatalogOffering(context,catalogItem.id,branchId) }
+                                storeCloudMain.post {
+                                    lookup.onSuccess { existingOffering ->
+                                        if (!existingOffering.isNullOrBlank()) {
+                                            cloudNotice = "هذا الصنف مرتبط بالفعل بالمخزون في الفرع المحدد (عرض: $existingOffering). لم يتم إنشاء نسخة جديدة."
+                                            showCatalog = false
+                                        } else {
+                                            pendingCatalogProduct = catalogItem
+                                            pendingCatalogBranchId = branchId
+                                            pendingCatalogWarehouseId = warehouseId
+                                            pendingCatalogActivityCode = activityNodeCode
+                                            pendingCatalogBaseUnitCode = baseUnitCode
+                                            pendingCatalogSaleUnitCode = saleUnitCode
+                                            pendingCatalogIdempotencyKey = UUID.randomUUID().toString()
+                                            addProduct = true
+                                            showCatalog = false
+                                        }
+                                    }.onFailure {
+                                        cloudNotice = "تعذر التحقق من وجود ربط سابق؛ لم يتم فتح الإنشاء لتجنب التكرار. ${it.message.orEmpty()}"
+                                    }
+                                }
+                            }
                         } else {
+                            val existing = inventory.indexOfFirst { it.catalogCode.isNotBlank() && it.catalogCode == catalogItem.catalogCode }
+                            val mapped = Product(name = catalogItem.name, category = catalogItem.category, stock = 0, price = "0 ر.ي", catalogCode = catalogItem.catalogCode, barcode = catalogItem.barcode.ifBlank { catalogItem.availableUnits.firstOrNull { it.isDefault && it.barcode.isNotBlank() }?.barcode.orEmpty() }, unitCode = catalogItem.unitCode, imageUrl = catalogItem.imageUrl, description = catalogItem.description, brand = catalogItem.brand, manufacturer = catalogItem.manufacturer, countryOfManufacture = catalogItem.countryOfManufacture, createdBy = catalogItem.importedBy, unitVariantsJson = JSONArray().also { rows -> catalogItem.availableUnits.forEach { unit -> rows.put(JSONObject().put("unitCode",unit.unitCode).put("unitName",unit.unitName).put("role",unit.role).put("quantityInBase",unit.quantityInBase).put("barcode",unit.barcode).put("sku",unit.sku).put("netQuantity",unit.netQuantity).put("netUnitCode",unit.netUnitCode).put("packageName",unit.packageName).put("imageUrl",unit.imageUrl).put("isDefault",unit.isDefault)) } }.toString())
                             if (existing >= 0) inventory[existing] = inventory[existing].copy(name = mapped.name, category = mapped.category, catalogCode = mapped.catalogCode, barcode = mapped.barcode, unitCode = mapped.unitCode, imageUrl = mapped.imageUrl, description = mapped.description, brand = mapped.brand, manufacturer = mapped.manufacturer, countryOfManufacture = mapped.countryOfManufacture, unitVariantsJson = mapped.unitVariantsJson)
                             else inventory.add(mapped)
                             saveProducts(context, inventory)
                             tab = 2
+                            showCatalog = false
                         }
-                        showCatalog = false
                     })
                     showDebts -> if (cloudMode) {
                         CommercialCloudDebtScreen(context = context, onBack = { showDebts = false })
@@ -437,28 +466,46 @@ private fun StoreApp(context: Context) {
         cloudMode = cloudMode,
         cloudCategories = cloudCategories,
         cloudUnits = cloudUnits,
-        onDismiss = { addProduct = false },
+        initialName = pendingCatalogProduct?.let { if (it.nameAr.isNotBlank()) it.nameAr else it.name }.orEmpty(),
+        initialUnitCode = pendingCatalogProduct?.unitCode.orEmpty(),
+        onDismiss = { addProduct = false; pendingCatalogProduct = null },
         onSave = { name, category, unitName, stock, price, costPrice, reorderPoint, categoryId, unitCode ->
             if (cloudMode) {
                 cloudInventoryBusy = true
-                cloudNotice = "جارٍ حفظ الصنف في قاعدة البيانات..."
+                cloudNotice = "جارٍ حفظ الصنف وربطه بدليل المؤسسة..."
+                val catalogItem = pendingCatalogProduct
+                val creationKey = pendingCatalogIdempotencyKey
+                val branchId = pendingCatalogBranchId
+                val warehouseId = pendingCatalogWarehouseId
+                val activityNodeCode = pendingCatalogActivityCode
+                val baseUnitCode = pendingCatalogBaseUnitCode
+                val saleUnitCode = pendingCatalogSaleUnitCode
                 storeCloudIo.execute {
                     val result = runCatching {
-                        createCommercialCloudInventoryItem(context, name, unitName, price.toLong(), stock, reorderPoint.toDouble(), categoryId, unitCode)
-                        loadCommercialCloudInventory(context)
+                        if (catalogItem != null) {
+                            val created = createCommercialCloudCatalogInventoryItem(context,catalogItem.id,activityNodeCode,branchId,warehouseId,baseUnitCode,saleUnitCode,unitCode,name,price.toLong(),stock,reorderPoint.toDouble(),categoryId,creationKey)
+                            val resultJson = JSONObject(created)
+                            Pair(resultJson.optBoolean("created_new_offering",true),loadCommercialCloudInventory(context))
+                        } else {
+                            createCommercialCloudInventoryItem(context,name,unitName,price.toLong(),stock,reorderPoint.toDouble(),categoryId,unitCode)
+                            Pair(true,loadCommercialCloudInventory(context))
+                        }
                     }
                     storeCloudMain.post {
                         cloudInventoryBusy = false
-                        result.onSuccess { snapshot ->
+                        result.onSuccess { outcome ->
                             inventory.clear()
-                            inventory.addAll(snapshot.products)
+                            inventory.addAll(outcome.second.products)
                             cloudInventoryError = ""
-                            cloudNotice = "تم حفظ الصنف والمخزون في قاعدة البيانات."
+                            cloudNotice = if (catalogItem != null && !outcome.first) "الصنف مرتبط بالفعل بهذا الفرع؛ لم يتم إنشاء نسخة جديدة." else if (catalogItem != null) "تم إنشاء الصنف وربطه بدليل الأصناف والنشاط والفرع والمستودع ووحداته." else "تم حفظ الصنف والمخزون في قاعدة البيانات."
+                            pendingCatalogProduct = null
+                            pendingCatalogIdempotencyKey = UUID.randomUUID().toString()
+                            addProduct = false
                         }.onFailure {
                             cloudInventoryError = it.message ?: "تعذر حفظ الصنف في قاعدة البيانات."
                             cloudNotice = cloudInventoryError
+                            if (catalogItem == null) addProduct = false
                         }
-                        addProduct = false
                     }
                 }
             } else {
@@ -970,16 +1017,18 @@ private fun AddProductDialog(
     cloudMode: Boolean = false,
     cloudCategories: List<CommercialMasterDataRow> = emptyList(),
     cloudUnits: List<CommercialUnitOption> = emptyList(),
+    initialName: String = "",
+    initialUnitCode: String = "",
     onDismiss: () -> Unit,
     onSave: (String, String, String, Int, Int, Int, Int, String, String) -> Unit
 ) {
-    var name by remember { mutableStateOf("") }
+    var name by remember(initialName) { mutableStateOf(initialName) }
     var category by remember { mutableStateOf("") }
     var categoryId by remember { mutableStateOf("") }
     var categoryMenuExpanded by remember { mutableStateOf(false) }
-    var unitCode by remember(cloudUnits) { mutableStateOf(cloudUnits.firstOrNull { it.code == "each" }?.code ?: cloudUnits.firstOrNull()?.code.orEmpty()) }
+    var unitCode by remember(cloudUnits, initialUnitCode) { mutableStateOf(initialUnitCode.takeIf { code -> cloudUnits.any { it.code == code } } ?: cloudUnits.firstOrNull { it.code == "each" }?.code ?: cloudUnits.firstOrNull()?.code.orEmpty()) }
     var unitMenuExpanded by remember { mutableStateOf(false) }
-    var unitName by remember { mutableStateOf("قطعة") }
+    var unitName by remember(cloudUnits, initialUnitCode) { mutableStateOf(cloudUnits.firstOrNull { it.code == initialUnitCode }?.label ?: "قطعة") }
     var reorderPointText by remember { mutableStateOf("0") }
     var stockText by remember { mutableStateOf("0") }
     var priceText by remember { mutableStateOf("") }

@@ -155,7 +155,7 @@ private fun catalogGet(path: String, token: String): String {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct) -> Unit, initialOrganizationId: String = "", initialActivityCode: String = "") {
+internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct, String, String, String, String, String) -> Unit, initialOrganizationId: String = "", initialActivityCode: String = "") {
     val context = LocalContext.current
     var email by remember { mutableStateOf("") }; var password by remember { mutableStateOf("") }
     var token by remember { mutableStateOf<String?>(null) }; var signedInUserId by remember { mutableStateOf("") }; var organizationId by remember { mutableStateOf(initialOrganizationId) }
@@ -915,7 +915,15 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                                         }
                                     }
                                     Text("معرّف الصنف: ${item.id}",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.End) { TextButton(onClick={onAddToInventory(item)}) { Icon(Icons.Default.Add,null); Text("إضافة إلى المخزون المحلي") } }
+                                    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.End) { TextButton(onClick={
+ val baseUnit=item.availableUnits.firstOrNull { it.role.equals("base",true) && it.quantityInBase.toBigDecimalOrNull()?.compareTo(java.math.BigDecimal.ONE)==0 }
+ val saleUnit=item.availableUnits.firstOrNull { it.isDefault } ?: item.availableUnits.firstOrNull { it.role.equals("sale",true) } ?: baseUnit
+ if(selectedActivityCode.isBlank() || selectedBranchId.isBlank() || selectedWarehouseId.isBlank()) {
+  feedback="اختر النشاط والفرع والمستودع أولًا قبل إنشاء الصنف بالمخزون."
+ } else if(baseUnit==null || saleUnit==null) {
+  feedback="لا يمكن إنشاء الصنف: دليل الوحدات لا يحتوي وحدة أساس ووحدة بيع بمعامل تحويل موثوق."
+ } else onAddToInventory(item,selectedBranchId,selectedWarehouseId,selectedActivityCode,baseUnit.unitCode,saleUnit.unitCode)
+}) { Icon(Icons.Default.Add,null); Text("إنشاء وربط بالمخزون") } }
                     if(item.ownerOrganizationId.isNotBlank() && item.ownerOrganizationId==organizationId.trim()) {
                         OutlinedButton(onClick={editingProduct=item},enabled=!busy,modifier=Modifier.fillMaxWidth()) { Text("تعديل بيانات الصنف") }
                     }

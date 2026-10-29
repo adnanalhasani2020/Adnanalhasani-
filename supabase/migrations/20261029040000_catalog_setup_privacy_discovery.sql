@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS public.commercial_organization_catalog_item_setup (
  sale_quantity_in_base numeric(30,12) NOT NULL CHECK(sale_quantity_in_base>0),
  created_by uuid NOT NULL REFERENCES auth.users(id) ON DELETE RESTRICT,
  updated_at timestamptz NOT NULL DEFAULT now(),
- PRIMARY KEY(organization_id,global_item_id,activity_node_id),
+ PRIMARY KEY(organization_id,global_item_id,activity_node_id,branch_location_id,warehouse_id),
  FOREIGN KEY(organization_id,global_item_id)
   REFERENCES public.commercial_organization_catalog_items(organization_id,global_item_id) ON DELETE CASCADE
 );
@@ -99,7 +99,7 @@ BEGIN
   INSERT INTO public.commercial_organization_catalog_item_setup(organization_id,global_item_id,activity_node_id,
    branch_location_id,warehouse_id,base_unit_code,sale_unit_code,sale_quantity_in_base,created_by,updated_at)
   VALUES(p_organization_id,v_gid,v_node,p_branch_location_id,p_warehouse_id,v_base,v_sale,v_factor,v_uid,now())
-  ON CONFLICT(organization_id,global_item_id,activity_node_id) DO UPDATE SET
+  ON CONFLICT(organization_id,global_item_id,activity_node_id,branch_location_id,warehouse_id) DO UPDATE SET
    branch_location_id=EXCLUDED.branch_location_id,warehouse_id=EXCLUDED.warehouse_id,
    base_unit_code=EXCLUDED.base_unit_code,sale_unit_code=EXCLUDED.sale_unit_code,
    sale_quantity_in_base=EXCLUDED.sale_quantity_in_base,updated_at=now();
