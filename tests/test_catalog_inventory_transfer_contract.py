@@ -15,7 +15,9 @@ class CatalogInventoryTransferContract(unittest.TestCase):
         self.assertIn("تهيئة المختار للفرع",kt)
         self.assertIn("warehouse_not_in_branch",sql)
         self.assertIn("percentile_cont(0.5)",sql)
-        self.assertIn("HAVING count(DISTINCT e.organization_id)>=5",sql)
+        self.assertIn("HAVING count(*)>=5",sql)
+        self.assertIn("merchant_prices AS",sql)
+        self.assertIn("count(DISTINCT s.id)::numeric transaction_count",sql)
         self.assertIn("distinctBy { it.id }",kt)
 
     def test_transfer_requires_recipient_approval_and_does_not_receive_stock(self):
