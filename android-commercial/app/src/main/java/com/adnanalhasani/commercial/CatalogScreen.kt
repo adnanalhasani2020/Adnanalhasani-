@@ -146,10 +146,10 @@ private fun catalogGet(path: String, token: String): String {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct) -> Unit) {
+internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct) -> Unit, initialOrganizationId: String = "", initialActivityCode: String = "") {
     val context = LocalContext.current
     var email by remember { mutableStateOf("") }; var password by remember { mutableStateOf("") }
-    var token by remember { mutableStateOf<String?>(null) }; var signedInUserId by remember { mutableStateOf("") }; var organizationId by remember { mutableStateOf("") }
+    var token by remember { mutableStateOf<String?>(null) }; var signedInUserId by remember { mutableStateOf("") }; var organizationId by remember { mutableStateOf(initialOrganizationId) }
     var section by remember { mutableStateOf("browse") }
     var sector by remember { mutableStateOf("retail") }; var businessLevel by remember { mutableStateOf("shop") }
     var country by remember { mutableStateOf("YE") }; var region by remember { mutableStateOf("") }; var city by remember { mutableStateOf("") }
@@ -160,7 +160,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var catalogPageLoadFailed by remember { mutableStateOf(false) }
     var selectedCatalogIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var activityNodes by remember { mutableStateOf<List<Triple<String, String, String>>>(emptyList()) }
-    var selectedActivityCode by remember { mutableStateOf("") }
+    var selectedActivityCode by remember { mutableStateOf(initialActivityCode.uppercase()) }
     var activityMenuExpanded by remember { mutableStateOf(false) }
     val catalogListState = rememberLazyListState()
     var categories by remember { mutableStateOf<List<CatalogCategory>>(emptyList()) }
