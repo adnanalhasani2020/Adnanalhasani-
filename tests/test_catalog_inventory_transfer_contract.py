@@ -22,6 +22,8 @@ class CatalogInventoryTransferContract(unittest.TestCase):
         sql=(ROOT/"supabase/migrations/20261029050000_invoice_to_purchase_approval.sql").read_text(encoding="utf-8")
         self.assertIn("recipient_approval_forbidden",sql)
         self.assertIn("'draft'",sql)
+        self.assertIn("receive_location_id",sql)
+        self.assertIn("recipient_active_receiving_location_required",sql)
         self.assertIn("'stock_received',false",sql)
         self.assertIn("commercial_purchase_order_items",sql)
 

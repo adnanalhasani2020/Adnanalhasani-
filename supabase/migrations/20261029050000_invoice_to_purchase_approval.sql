@@ -80,7 +80,7 @@ CREATE OR REPLACE FUNCTION public.commercial_review_invoice_purchase_request(
  p_request_id uuid,p_decision text,p_review_note text DEFAULT NULL
 ) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $$
 DECLARE v_uid uuid:=auth.uid(); v_req public.commercial_invoice_purchase_requests%ROWTYPE;
- v_supplier uuid; v_po uuid; v_org_name text; v_item record; v_line integer:=0;
+ v_supplier uuid; v_po uuid; v_org_name text; v_item record; v_line integer:=0; v_receive_location uuid;
 BEGIN
  IF v_uid IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
  IF p_decision NOT IN('approve','reject') THEN RAISE EXCEPTION 'invalid_decision' USING ERRCODE='22023'; END IF;
@@ -95,6 +95,13 @@ BEGIN
    review_note=left(p_review_note,1000) WHERE id=v_req.id;
   RETURN jsonb_build_object('request_id',v_req.id,'state','rejected','idempotent_replay',false);
  END IF;
+ SELECT id INTO v_receive_location FROM public.commercial_organization_locations
+  WHERE organization_id=v_req.destination_organization_id AND state='active'
+  ORDER BY CASE WHEN location_type='warehouse' THEN 0 WHEN location_type='branch' THEN 1 ELSE 2 END,created_at,id
+  LIMIT 1;
+ IF v_receive_location IS NULL THEN
+  RAISE EXCEPTION 'recipient_active_receiving_location_required' USING ERRCODE='55000';
+ END IF;
  SELECT id INTO v_supplier FROM public.commercial_suppliers WHERE organization_id=v_req.destination_organization_id
   AND source_organization_id=v_req.source_organization_id;
  IF v_supplier IS NULL THEN
@@ -106,10 +113,10 @@ BEGIN
   ON CONFLICT(organization_id,source_organization_id) WHERE source_organization_id IS NOT NULL
   DO UPDATE SET updated_at=now() RETURNING id INTO v_supplier;
  END IF;
- INSERT INTO public.commercial_purchase_orders(organization_id,supplier_id,order_number,status,currency_code,notes,created_by,ordered_at)
+ INSERT INTO public.commercial_purchase_orders(organization_id,supplier_id,order_number,status,currency_code,notes,created_by,ordered_at,receive_location_id)
  VALUES(v_req.destination_organization_id,v_supplier,'INV-XFER-'||upper(substr(replace(v_req.id::text,'-',''),1,12)),
   'draft',v_req.currency_code,'Approved seller invoice '||v_req.source_invoice_number||
-  '. Stock remains unchanged until receiving.',v_uid,now()) RETURNING id INTO v_po;
+  '. Stock remains unchanged until receiving.',v_uid,now(),v_receive_location) RETURNING id INTO v_po;
  FOR v_item IN SELECT * FROM public.commercial_invoice_purchase_request_items WHERE request_id=v_req.id ORDER BY id LOOP
   v_line:=v_line+1;
   INSERT INTO public.commercial_purchase_order_items(organization_id,purchase_order_id,line_number,offering_id,item_description,
