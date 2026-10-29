@@ -97,6 +97,11 @@ private data class CatalogCategory(val code: String, val parentCode: String, val
 private data class CatalogBranchOption(val id: String, val name: String, val latitude: String, val longitude: String)
 private data class CatalogWarehouseOption(val id: String, val name: String, val branchId: String)
 private data class NearbyCatalogItem(val id: String, val name: String, val popularityBand: String, val merchantCountBand: String)
+private data class InvoicePurchaseRequestRow(
+ val id: String,val sourceOrganizationId: String,val destinationOrganizationId: String,
+ val invoiceNumber: String,val currencyCode: String,val totalMinor: Long,val status: String,
+ val purchaseOrderId: String,val createdAt: String
+)
 
 private data class DirectoryUnit(val code: String, val nameAr: String, val nameEn: String, val dimension: String, val baseCode: String, val factor: String, val owner: String, val localizedName: String = "")
 private data class PendingTransfer(val id: String, val source: String, val destination: String, val itemCount: Int, val createdAt: String)
@@ -176,6 +181,10 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var marketRadius by remember { mutableIntStateOf(5000) }
     var nearbyOffset by remember { mutableIntStateOf(0) }
     var marketPriceHints by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var invoiceSaleId by remember { mutableStateOf("") }
+    var invoiceDestinationOrg by remember { mutableStateOf("") }
+    var invoiceRequestKey by remember { mutableStateOf(java.util.UUID.randomUUID().toString()) }
+    var invoiceRequests by remember { mutableStateOf<List<InvoicePurchaseRequestRow>>(emptyList()) }
     val catalogListState = rememberLazyListState()
     var categories by remember { mutableStateOf<List<CatalogCategory>>(emptyList()) }
     var directoryUnits by remember { mutableStateOf<List<DirectoryUnit>>(emptyList()) }; var pendingTransfers by remember { mutableStateOf<List<PendingTransfer>>(emptyList()) }
@@ -579,6 +588,51 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                 .put("p_units",unitRows).put("p_sectors",sectorArray).put("p_business_levels",levelRows).put("p_regions",regionRows).put("p_rulings",rulingRows),active)
         }, { feedback="تم حفظ الصنف وتفاصيل وحداته ونطاق ظهوره ومعلومات الحكم المرتبطة به: $it"; section="browse"; loadCatalog() })
     }
+    fun loadInvoiceRequests() {
+        val active=token ?: return
+        val orgId=org() ?: run { feedback="أدخل معرّف المؤسسة UUID أولًا."; return }
+        request({
+            catalogGet("/rest/v1/commercial_invoice_purchase_requests?select=id,source_organization_id,destination_organization_id,source_invoice_number,currency_code,total_minor,status,destination_purchase_order_id,created_at&or=(source_organization_id.eq."+orgId+",destination_organization_id.eq."+orgId+")&order=created_at.desc&limit=50",active)
+        }, { raw ->
+            val rows=JSONArray(raw)
+            invoiceRequests=List(rows.length()) { i ->
+                val row=rows.getJSONObject(i)
+                InvoicePurchaseRequestRow(row.optString("id"),row.optString("source_organization_id"),row.optString("destination_organization_id"),
+                    row.optString("source_invoice_number"),row.optString("currency_code"),row.optLong("total_minor"),row.optString("status"),
+                    row.optString("destination_purchase_order_id").takeUnless { it=="null" }.orEmpty(),row.optString("created_at"))
+            }
+            feedback="طلبات تحويل الفواتير: "+invoiceRequests.size
+        })
+    }
+    fun requestInvoiceAsPurchase() {
+        val active=token ?: return
+        val source=org() ?: run { feedback="أدخل معرّف المؤسسة البائعة UUID أولًا."; return }
+        if(invoiceSaleId.isBlank() || invoiceDestinationOrg.isBlank()) { feedback="أدخل معرّف فاتورة البيع ومعرّف المؤسسة المستقبلة."; return }
+        if(source==invoiceDestinationOrg.trim()) { feedback="لا يمكن تحويل الفاتورة إلى المؤسسة نفسها."; return }
+        val key=invoiceRequestKey
+        request({
+            catalogHttp("/rest/v1/rpc/commercial_request_invoice_as_purchase",JSONObject()
+                .put("p_source_organization_id",source).put("p_destination_organization_id",invoiceDestinationOrg.trim())
+                .put("p_sale_id",invoiceSaleId.trim()).put("p_request_key",key),active)
+        }, { raw ->
+            val result=runCatching { JSONObject(raw) }.getOrNull()
+            feedback="تم إرسال الطلب: "+(result?.optString("state") ?: raw)+". لن يتغير مخزون المؤسسة المستقبلة قبل الاستلام."
+            invoiceRequestKey=java.util.UUID.randomUUID().toString()
+            loadInvoiceRequests()
+        })
+    }
+    fun reviewInvoicePurchaseRequest(id: String, approve: Boolean) {
+        val active=token ?: return
+        request({
+            catalogHttp("/rest/v1/rpc/commercial_review_invoice_purchase_request",JSONObject()
+                .put("p_request_id",id).put("p_decision",if(approve) "approve" else "reject")
+                .put("p_review_note",JSONObject.NULL),active)
+        }, {
+            feedback=if(approve) "تمت الموافقة وإنشاء أمر شراء مسودة. الاستلام منفصل." else "تم رفض طلب تحويل الفاتورة."
+            loadInvoiceRequests()
+        })
+    }
+
     fun transferCatalog() {
         val active=token ?: return
         if(transferSource.isBlank() || transferDestination.isBlank()) { feedback="أدخل معرّف الحساب المصدر والوجهة."; return }
@@ -652,7 +706,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         } else {
             OutlinedTextField(organizationId,{organizationId=it.trim()},Modifier.fillMaxWidth(),label={Text("معرّف المؤسسة UUID")},singleLine=true)
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(4.dp)) {
-                listOf("browse" to "بحث", "product" to "صنف جديد", "category" to "تصنيف", "unit" to "وحدة", "transfer" to "نقل").forEach { (key,label) ->
+                listOf("browse" to "بحث", "product" to "صنف جديد", "category" to "تصنيف", "unit" to "وحدة", "transfer" to "نقل", "invoice_transfer" to "فاتورة بيع → مشتريات").forEach { (key,label) ->
                     FilterChip(selected=section==key,onClick={section=key},label={Text(label,style=MaterialTheme.typography.labelSmall)})
                 }
             }
@@ -1010,6 +1064,34 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                     item { OutlinedTextField(extraRulingsText,{extraRulingsText=it},Modifier.fillMaxWidth().heightIn(min=90.dp),label={Text("أحكام إضافية متعددة — domain|authority|religion|jurisdiction|outcome|source_title|source_url|confidence|rationale")}) }
                     item { Button(onClick={createProduct()},enabled=!busy && nameAr.isNotBlank() && nameEn.isNotBlank() && productCategory.isNotBlank() && unitCode.isNotBlank(),modifier=Modifier.fillMaxWidth()) { Text("حفظ الصنف وكل تفاصيله") } }
                     item { Text("يُحفظ سجل الصنف والوحدات والاستهداف والأحكام في معاملة واحدة. لا يُعتمد أي حكم طبي أو ديني تلقائيًا؛ ارفع الثقة بعد مراجعة مصدر موثوق.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
+                }
+                "invoice_transfer" -> LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(bottom=20.dp)) {
+                    item { Text("تحويل فاتورة البيع إلى أمر شراء لدى المؤسسة المستقبلة",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold) }
+                    item { Text("أدخل UUID فاتورة البيع المكتملة وUUID المؤسسة المستقبلة. لن يُنشأ أمر الشراء إلا بعد موافقة مالك/مدير المؤسسة المستقبلة.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
+                    item { OutlinedTextField(invoiceSaleId,{invoiceSaleId=it.trim()},Modifier.fillMaxWidth(),label={Text("معرّف فاتورة البيع UUID")},singleLine=true) }
+                    item { OutlinedTextField(invoiceDestinationOrg,{invoiceDestinationOrg=it.trim()},Modifier.fillMaxWidth(),label={Text("معرّف المؤسسة المستقبلة UUID")},singleLine=true) }
+                    item { Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                        Button(onClick={requestInvoiceAsPurchase()},enabled=!busy && invoiceSaleId.isNotBlank() && invoiceDestinationOrg.isNotBlank(),modifier=Modifier.weight(1f)) { Text("إرسال للموافقة") }
+                        OutlinedButton(onClick={loadInvoiceRequests()},enabled=!busy) { Text("تحديث الطلبات") }
+                    } }
+                    items(invoiceRequests,key={it.id}) { req ->
+                        Card(Modifier.fillMaxWidth()) {
+                            Column(Modifier.fillMaxWidth().padding(10.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                                Text("فاتورة رقم "+req.invoiceNumber+" • "+req.currencyCode+" "+req.totalMinor,fontWeight=FontWeight.SemiBold)
+                                Text("الحالة: "+req.status+" • طلب: "+req.id,style=MaterialTheme.typography.bodySmall)
+                                Text("المصدر: "+req.sourceOrganizationId,style=MaterialTheme.typography.bodySmall)
+                                Text("المستقبل: "+req.destinationOrganizationId,style=MaterialTheme.typography.bodySmall)
+                                if(req.purchaseOrderId.isNotBlank()) Text("أمر الشراء: "+req.purchaseOrderId,style=MaterialTheme.typography.bodySmall)
+                                if(req.destinationOrganizationId==org().orEmpty() && req.status=="pending") {
+                                    Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                                        Button(onClick={reviewInvoicePurchaseRequest(req.id,true)},enabled=!busy,modifier=Modifier.weight(1f)) { Text("موافقة وإنشاء أمر شراء") }
+                                        OutlinedButton(onClick={reviewInvoicePurchaseRequest(req.id,false)},enabled=!busy,modifier=Modifier.weight(1f)) { Text("رفض") }
+                                    }
+                                }
+                                Text("الموافقة لا تزيد المخزون؛ يجب استلام أمر الشراء عبر دورة الاستلام المعتادة.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
                 }
                 "transfer" -> LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(bottom=20.dp)) {
                     item { Text("النقل متاح فقط إذا كنت مالكًا أو مديرًا في الحساب المصدر والوجهة. اترك قائمة UUID فارغة لنقل كل روابط الدليل.",style=MaterialTheme.typography.bodySmall) }

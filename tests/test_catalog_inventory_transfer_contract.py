@@ -10,6 +10,8 @@ class CatalogInventoryTransferContract(unittest.TestCase):
         self.assertIn("commercial_catalog_configure_items",kt)
         self.assertIn("commercial_catalog_nearby_popularity",kt)
         self.assertIn("commercial_catalog_price_suggestions",kt)
+        self.assertIn("commercial_request_invoice_as_purchase",kt)
+        self.assertIn("reviewInvoicePurchaseRequest",kt)
         self.assertIn("تهيئة المختار للفرع",kt)
         self.assertIn("warehouse_not_in_branch",sql)
         self.assertIn("percentile_cont(0.5)",sql)
