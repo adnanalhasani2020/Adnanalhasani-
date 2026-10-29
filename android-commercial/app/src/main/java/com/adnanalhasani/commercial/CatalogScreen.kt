@@ -159,7 +159,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var catalogHasMore by remember { mutableStateOf(true) }
     var catalogPageLoadFailed by remember { mutableStateOf(false) }
     var selectedCatalogIds by remember { mutableStateOf<Set<String>>(emptySet()) }
-    var activityNodes by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+    var activityNodes by remember { mutableStateOf<List<Triple<String, String, String>>>(emptyList()) }
     var selectedActivityCode by remember { mutableStateOf("") }
     var activityMenuExpanded by remember { mutableStateOf(false) }
     val catalogListState = rememberLazyListState()
@@ -347,7 +347,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             val result=JSONObject(raw); val cats=result.getJSONArray("categories"); val units=result.getJSONArray("units")
             val catTr=result.getJSONArray("categoryTranslations"); val catDescTr=result.getJSONArray("categoryDescriptionTranslations"); val unitTr=result.getJSONArray("unitTranslations")
             val activityJson=result.optJSONArray("activityDirectory") ?: JSONArray()
-            activityNodes=List(activityJson.length()) { i -> val node=activityJson.getJSONObject(i); node.optString("code") to node.optString("path_ar",node.optString("name_ar")) }.filter { it.first.isNotBlank() }
+            activityNodes=List(activityJson.length()) { i -> val node=activityJson.getJSONObject(i); Triple(node.optString("code"), node.optString("path_ar",node.optString("name_ar")), node.optString("default_business_level_code")) }.filter { it.first.isNotBlank() }
             val categoryNames=buildMap { for(i in 0 until catTr.length()) { val v=catTr.getJSONObject(i); put(v.optString("entity_key"),v.optString("translated_value")) } }
             val categoryDescriptions=buildMap { for(i in 0 until catDescTr.length()) { val v=catDescTr.getJSONObject(i); put(v.optString("entity_key"),v.optString("translated_value")) } }
             val unitNames=buildMap { for(i in 0 until unitTr.length()) { val v=unitTr.getJSONObject(i); put(v.optString("entity_key"),v.optString("translated_value")) } }
@@ -356,6 +356,12 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             feedback="تم تحميل ${categories.size} تصنيفًا و${directoryUnits.size} وحدة قياس و${activityNodes.size} نشاطًا."
         })
     }
+    LaunchedEffect(token, organizationId) {
+        if (token != null && organizationId.trim().isNotBlank() && activityNodes.isEmpty() && !busy) {
+            loadDirectories()
+        }
+    }
+
     fun createCategory() {
         val active=token ?: return; val orgId=org() ?: run { feedback="أدخل معرّف المؤسسة UUID أولًا."; return }
         request({
@@ -601,7 +607,11 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                                     DropdownMenu(expanded=activityMenuExpanded, onDismissRequest={activityMenuExpanded=false}) {
                                         DropdownMenuItem(text={Text("بدون إسناد لنشاط محدد")}, onClick={selectedActivityCode=""; activityMenuExpanded=false})
                                         activityNodes.forEach { node ->
-                                            DropdownMenuItem(text={Text(node.second)}, onClick={selectedActivityCode=node.first; activityMenuExpanded=false})
+                                            DropdownMenuItem(text={Text(node.second)}, onClick={
+                                                selectedActivityCode=node.first
+                                                if (node.third.isNotBlank()) businessLevel=node.third
+                                                activityMenuExpanded=false
+                                            })
                                         }
                                     }
                                 }
