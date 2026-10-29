@@ -30,6 +30,13 @@ class CatalogItemActivityMappingContractTests(unittest.TestCase):
         self.assertIn("p_activity_node_code", screen)
         self.assertIn("p_global_item_ids", screen)
 
+    def test_android_auto_loads_activity_directory_and_uses_default_business_level(self):
+        screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogScreen.kt").read_text(encoding="utf-8")
+        self.assertIn('LaunchedEffect(token, organizationId)', screen)
+        self.assertIn('node.optString("default_business_level_code")', screen)
+        self.assertIn('if (node.third.isNotBlank()) businessLevel=node.third', screen)
+        self.assertIn('commercial_list_business_activity_nodes', screen)
+
     def test_assignment_is_idempotent_and_does_not_change_prices_or_stock(self):
         sql = MIGRATION.read_text(encoding="utf-8")
         self.assertIn("ON CONFLICT (organization_id, global_item_id, activity_node_id) DO NOTHING", sql)
