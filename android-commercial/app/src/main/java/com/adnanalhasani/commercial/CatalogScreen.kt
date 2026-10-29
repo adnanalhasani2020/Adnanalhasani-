@@ -633,6 +633,14 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         })
     }
 
+    fun mapKnownInvoicePurchaseItems(id: String) {
+        val active=token ?: return
+        request({ catalogHttp("/rest/v1/rpc/commercial_invoice_purchase_map_known_items",JSONObject().put("p_request_id",id),active) }, { raw ->
+            val result=runCatching { JSONObject(raw) }.getOrNull()
+            feedback="تم ربط "+(result?.optInt("mapped_lines",0) ?: 0)+" صنفًا مطابقًا بشكل موثوق. الأصناف غير المطابقة: "+(result?.optInt("unmapped_lines",0) ?: 0)+". لم يتغير المخزون."
+            loadInvoiceRequests()
+        })
+    }
     fun transferCatalog() {
         val active=token ?: return
         if(transferSource.isBlank() || transferDestination.isBlank()) { feedback="أدخل معرّف الحساب المصدر والوجهة."; return }
@@ -1097,6 +1105,9 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                                         Button(onClick={reviewInvoicePurchaseRequest(req.id,true)},enabled=!busy,modifier=Modifier.weight(1f)) { Text("موافقة وإنشاء أمر شراء") }
                                         OutlinedButton(onClick={reviewInvoicePurchaseRequest(req.id,false)},enabled=!busy,modifier=Modifier.weight(1f)) { Text("رفض") }
                                     }
+                                }
+                                if(req.destinationOrganizationId==org().orEmpty() && req.status=="approved" && req.purchaseOrderId.isNotBlank()) {
+                                    OutlinedButton(onClick={mapKnownInvoicePurchaseItems(req.id)},enabled=!busy,modifier=Modifier.fillMaxWidth()) { Text("ربط الأصناف المعروفة بأمر الشراء") }
                                 }
                                 Text("الموافقة لا تزيد المخزون؛ يجب استلام أمر الشراء عبر دورة الاستلام المعتادة.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                             }

@@ -28,6 +28,13 @@ class CatalogInventoryTransferContract(unittest.TestCase):
         self.assertIn("recipient_active_receiving_location_required",sql)
         self.assertIn("'stock_received',false",sql)
         self.assertIn("commercial_purchase_order_items",sql)
+        mapping=(ROOT/"supabase/migrations/20261029070000_invoice_purchase_catalog_mapping.sql").read_text(encoding="utf-8")
+        kt=(ROOT/"android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogScreen.kt").read_text(encoding="utf-8")
+        self.assertIn("commercial_invoice_purchase_map_known_items",mapping)
+        self.assertIn("stock_changed",mapping)
+        self.assertIn("recipient_catalog_mapping_forbidden",mapping)
+        self.assertIn("ربط الأصناف المعروفة بأمر الشراء",kt)
+        self.assertIn("commercial_invoice_purchase_map_known_items",kt)
 
 if __name__=="__main__":
     unittest.main()
