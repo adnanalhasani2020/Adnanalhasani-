@@ -1,13 +1,24 @@
-# Catalog and transfer implementation gates
+# Catalog, inventory costing, phone authentication, and authorization release gates
 
-The catalog screen now exposes branch/warehouse selection, configures selected items using only units and conversion factors already defined in the global catalog, and offers radius-expanding nearby discovery plus cohort-gated price suggestions. Market discovery uses saved branch coordinates rather than silently tracking the device.
+## Implemented in the current feature branch
+- Catalog discovery pagination, idempotent unpriced linking, organization/activity mapping, and onboarding handoff.
+- Selected catalog items can be configured to an existing branch and warehouse with curated base/sale units; setup creates no price or stock.
+- Nearby popularity and price suggestions use explicit offering-to-global-item mappings and cohort aggregates. No fuzzy product-name joins, seller identities, exact seller counts, or individual prices are returned.
+- Seller invoice transfer requests require recipient approval; approval creates a draft purchase order only. Inventory changes only through the normal receipt workflow.
+- Activity profile supports Supabase phone SMS OTP request and verification for existing accounts, alongside email/password authentication. OTP requires the Supabase Auth SMS provider to be enabled and configured.
 
-The database requires explicit offering-to-global-item mappings; no fuzzy name joins are used. Price suggestions return only median/interquartile aggregates and cohort bands when five distinct other organizations contribute. Nearby popularity uses completed sales from the last 30 days, radius filters, pagination and item deduplication. Transfer requests are idempotent; only a destination owner/admin/manager can approve/reject. Approval creates a draft purchase order and supplier relation; stock remains unchanged until receipt.
+## Inventory costing audit — valuation method must not be switched yet
+- Current checkout reads one `commercial_inventory_balances.unit_cost_minor` value and snapshots it into sale lines; COGS is posted from that snapshot.
+- Purchase receiving records the purchase-line `unit_cost_minor` and calls `commercial_receive_inventory_stock`, but checkout does not select or allocate FIFO/LIFO cost layers.
+- Return/restocking and opening/manual inventory paths also need cost-preserving reversal semantics.
+- A real FIFO/LIFO/weighted-average implementation must atomically create cost layers at receipt, allocate each sale issue to layers, snapshot allocations per sale line, restore original layer cost on return, handle opening stock and adjustments, prevent negative layer quantities, remain idempotent, and reconcile inventory asset/COGS journals. LIFO may be restricted by accounting rules in some jurisdictions.
+- Until those controls and reconciliation tests exist, the current balance-cost model remains authoritative. No valuation toggle was added.
 
-Still not production-complete:
-- Historical offerings need explicit identity mapping; they are not guessed from names.
-- Android seller/buyer invoice-transfer request and approval inbox screens still need to be connected to the transfer RPCs.
-- FIFO/LIFO/weighted-average is not enabled. Current checkout cost capture uses existing balance cost and sale-item cost snapshots. A safe costing engine requires receipt cost layers, deterministic issue allocations, return reversals, transfer handling, idempotency and GL reconciliation before changing COGS.
-- Phone OTP requires the project's configured Supabase Auth SMS provider and Android registration/recovery integration. A regular Android app cannot guarantee daily SIM ownership without carrier/platform support.
-- Full role-by-role operation audit and authenticated tests across two organizations remain release gates.
-- These migrations are not applied to live Supabase and must be staged before production.
+## Authorization review
+- Existing purchase receipt and checkout RPCs perform server-side membership/role checks; catalog write RPCs explicitly require owner/admin/manager and scope reads by organization.
+- A complete exhaustive audit still requires enumerating every `SECURITY DEFINER` function, execute grant, RLS policy, and organization/branch-scoped read/write path, then exercising every role against a live staging database. Repository tests cannot prove deployed RLS behavior.
+- Phone OTP verifies possession at the time of the SMS challenge only. The Android app does not claim daily SIM ownership verification; a normal app cannot reliably prove the same SIM remains present daily without platform/carrier support and server-side freshness gates on every protected operation.
+- WhatsApp and voice OTP are not enabled by this UI; they require provider support/configuration and verified delivery testing.
+
+## Rollout
+- No live database migrations have been applied by this change. Stage these changes first; do not merge/deploy until database integration, two-organization isolation, role matrix, and current CI pass.

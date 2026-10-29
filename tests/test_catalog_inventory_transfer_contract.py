@@ -27,3 +27,13 @@ class CatalogInventoryTransferContract(unittest.TestCase):
 
 if __name__=="__main__":
     unittest.main()
+
+
+def test_activity_profile_supports_supabase_phone_sms_otp():
+    source=(ROOT/"android-commercial/app/src/main/java/com/adnanalhasani/commercial/ActivityProfileScreen.kt").read_text(encoding="utf-8")
+    assert '"/auth/v1/otp"' in source
+    assert '"/auth/v1/verify"' in source
+    assert '.put("create_user", false)' in source
+    assert '.put("type", "sms")' in source
+    assert 'putString("refresh_token", refresh)' in source
+    assert "رمز الهاتف SMS" in source
