@@ -48,8 +48,10 @@ DECLARE v_uid uuid:=auth.uid(); v_node uuid; v_item jsonb; v_gid uuid; v_base te
 BEGIN
  IF v_uid IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
  IF p_organization_id IS NULL OR p_branch_location_id IS NULL OR p_warehouse_id IS NULL
-  OR nullif(btrim(p_activity_node_code),'') IS NULL OR jsonb_typeof(p_items) IS DISTINCT FROM 'array'
-  OR jsonb_array_length(p_items) NOT BETWEEN 1 AND 100 THEN
+  OR nullif(btrim(p_activity_node_code),'') IS NULL OR jsonb_typeof(p_items) IS DISTINCT FROM 'array' THEN
+  RAISE EXCEPTION 'invalid_catalog_setup_request' USING ERRCODE='22023';
+ END IF;
+ IF jsonb_array_length(p_items) NOT BETWEEN 1 AND 100 THEN
   RAISE EXCEPTION 'invalid_catalog_setup_request' USING ERRCODE='22023';
  END IF;
  IF NOT public.commercial_catalog_member_of(p_organization_id,ARRAY['owner','admin','manager']::text[]) THEN
@@ -90,7 +92,9 @@ BEGIN
    jsonb_build_object('linked_without_pricing',true,'pricing_required',true,'source','global_catalog'),v_uid,true,now(),'unpriced'
   FROM public.commercial_global_catalog_items p WHERE p.id=v_gid
   ON CONFLICT(organization_id,global_item_id) DO NOTHING;
-  GET DIAGNOSTICS v_added=ROW_COUNT;
+  DECLARE v_rows_added integer;
+  GET DIAGNOSTICS v_rows_added=ROW_COUNT;
+  v_added:=v_added+v_rows_added;
   INSERT INTO public.commercial_organization_catalog_item_activities(organization_id,global_item_id,activity_node_id,created_by)
    VALUES(p_organization_id,v_gid,v_node,v_uid) ON CONFLICT DO NOTHING;
   INSERT INTO public.commercial_organization_catalog_item_setup(organization_id,global_item_id,activity_node_id,
