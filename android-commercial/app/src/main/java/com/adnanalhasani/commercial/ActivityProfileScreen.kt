@@ -69,7 +69,7 @@ private fun supabaseRequest(path: String, payload: JSONObject, token: String? = 
 }
 
 @Composable
-internal fun ActivityProfileScreen(onBack: () -> Unit) {
+internal fun ActivityProfileScreen(onBack: () -> Unit, onCatalog: () -> Unit) {
     val context = LocalContext.current
     var email by remember { mutableStateOf("") }
     var accountDisplayName by remember { mutableStateOf("") }
@@ -309,6 +309,7 @@ internal fun ActivityProfileScreen(onBack: () -> Unit) {
                         context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE).edit()
                             .putString("organization_id", organizationId)
                             .putString("activity_id", activityId)
+                            .putString("activity_code", activityCode.trim().uppercase())
                             .putString("location_id", locationId)
                             .putString("currency_code", currency)
                             .putString("country_code", country)
@@ -319,8 +320,9 @@ internal fun ActivityProfileScreen(onBack: () -> Unit) {
                 modifier = Modifier.fillMaxWidth()
             ) { Text(if (busy) "جارٍ الحفظ في قاعدة البيانات..." else "حفظ ملف النشاط") }
         } else {
-            Text("تم إنشاء ملف النشاط وحفظه في Supabase. يمكنك العودة إلى واجهة المتجر.", color = MaterialTheme.colorScheme.primary)
-            Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("العودة إلى المتجر") }
+            Text("تم إنشاء ملف النشاط وحفظه في Supabase. يمكنك الآن اختيار الأصناف وربطها بهذا النشاط قبل تهيئة المخزون.", color = MaterialTheme.colorScheme.primary)
+            Button(onClick = onCatalog, modifier = Modifier.fillMaxWidth()) { Text("اختيار أصناف النشاط") }
+            OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("العودة إلى المتجر") }
         }
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
         if (feedback.isNotBlank()) Text(feedback, color = if (created) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
