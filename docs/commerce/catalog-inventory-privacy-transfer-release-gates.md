@@ -4,7 +4,7 @@
 - Catalog discovery pagination, idempotent unpriced linking, organization/activity mapping, and onboarding handoff.
 - Selected items can be configured to an existing activity, branch, warehouse and curated base/sale units.
 - A catalog-backed inventory creation RPC creates the priced local offering, opening stock movement, activity mapping, branch/warehouse/unit setup, and explicit global-catalog offering mapping in one transaction. It uses an idempotency key and rejects conflicting retries; Android checks for an existing mapped offering before opening creation.
-- Nearby popularity and price suggestions use explicit offering-to-global-item mappings and cohort aggregates. No fuzzy product-name joins, seller identities, exact seller counts, or individual prices are returned.
+- Nearby popularity uses completed invoice transaction counts (not incomparable raw quantities across different units). Price suggestions first reduce each merchant's branch prices to one median, then calculate market quartiles across merchants; results use explicit offering-to-global-item mappings and cohort aggregates. No fuzzy product-name joins, seller identities, exact seller counts, or individual prices are returned.
 - Seller-invoice transfer requests require recipient approval; approval creates a draft purchase order with an active receiving location. Stock changes only through the normal receipt workflow.
 - Activity profile supports Supabase phone SMS OTP request and verification for existing accounts, alongside email/password authentication. OTP requires the Supabase Auth SMS provider to be enabled and configured.
 

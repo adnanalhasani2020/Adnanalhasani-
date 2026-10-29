@@ -165,12 +165,18 @@ BEGIN
   WHERE m.global_item_id=ANY(p_global_item_ids) AND m.organization_id<>p_organization_id
    AND o.price_minor>0 AND upper(o.currency_code)=upper(p_currency_code)
    AND l.latitude IS NOT NULL AND l.longitude IS NOT NULL
- ), eligible AS(SELECT * FROM prices WHERE distance_m<=p_radius_m)
- SELECT e.global_item_id,e.currency_code,percentile_cont(0.5) WITHIN GROUP(ORDER BY e.price_minor)::bigint,
-  percentile_cont(0.25) WITHIN GROUP(ORDER BY e.price_minor)::bigint,
-  percentile_cont(0.75) WITHIN GROUP(ORDER BY e.price_minor)::bigint,
-  CASE WHEN count(DISTINCT e.organization_id)>=20 THEN '20+' WHEN count(DISTINCT e.organization_id)>=10 THEN '10-19' ELSE '5-9' END
- FROM eligible e GROUP BY e.global_item_id,e.currency_code HAVING count(DISTINCT e.organization_id)>=5;
+ ), eligible AS (SELECT * FROM prices WHERE distance_m<=p_radius_m),
+ merchant_prices AS (
+  SELECT global_item_id,currency_code,organization_id,
+   percentile_cont(0.5) WITHIN GROUP(ORDER BY price_minor)::numeric merchant_median_minor
+  FROM eligible GROUP BY global_item_id,currency_code,organization_id
+ )
+ SELECT m.global_item_id,m.currency_code,
+  percentile_cont(0.5) WITHIN GROUP(ORDER BY m.merchant_median_minor)::bigint,
+  percentile_cont(0.25) WITHIN GROUP(ORDER BY m.merchant_median_minor)::bigint,
+  percentile_cont(0.75) WITHIN GROUP(ORDER BY m.merchant_median_minor)::bigint,
+  CASE WHEN count(*)>=20 THEN '20+' WHEN count(*)>=10 THEN '10-19' ELSE '5-9' END
+ FROM merchant_prices m GROUP BY m.global_item_id,m.currency_code HAVING count(*)>=5;
 END; $$;
 REVOKE ALL ON FUNCTION public.commercial_catalog_price_suggestions(uuid,uuid[],numeric,numeric,integer,text) FROM PUBLIC,anon;
 GRANT EXECUTE ON FUNCTION public.commercial_catalog_price_suggestions(uuid,uuid[],numeric,numeric,integer,text) TO authenticated;
@@ -190,7 +196,7 @@ BEGIN
   RAISE EXCEPTION 'invalid_nearby_discovery_request' USING ERRCODE='22023';
  END IF;
  RETURN QUERY WITH sold AS (
-  SELECT m.global_item_id,s.organization_id,sum(si.quantity::numeric) sold_qty,
+  SELECT m.global_item_id,s.organization_id,count(DISTINCT s.id)::numeric transaction_count,
    6371000*2*asin(sqrt(power(sin(radians((l.latitude-p_latitude)::double precision)/2),2)+
    cos(radians(p_latitude::double precision))*cos(radians(l.latitude::double precision))*
    power(sin(radians((l.longitude-p_longitude)::double precision)/2),2))) distance_m
@@ -201,15 +207,15 @@ BEGIN
   WHERE m.organization_id<>p_organization_id AND l.latitude IS NOT NULL AND l.longitude IS NOT NULL
   GROUP BY m.global_item_id,s.organization_id,l.latitude,l.longitude
  ), ag AS (
-  SELECT global_item_id,count(DISTINCT organization_id)::integer merchants,sum(sold_qty)::numeric qty
+  SELECT global_item_id,count(DISTINCT organization_id)::integer merchants,sum(transaction_count)::numeric transactions
   FROM sold WHERE distance_m<=p_radius_m GROUP BY global_item_id HAVING count(DISTINCT organization_id)>=5
  )
  SELECT p.id,coalesce(p.name_ar,p.name_en),
-  CASE WHEN ag.qty>=1000 THEN 'high' WHEN ag.qty>=100 THEN 'medium' ELSE 'emerging' END,
+  CASE WHEN ag.transactions>=100 THEN 'high' WHEN ag.transactions>=25 THEN 'medium' ELSE 'emerging' END,
   CASE WHEN ag.merchants>=20 THEN '20+' WHEN ag.merchants>=10 THEN '10-19' ELSE '5-9' END,
   least(100000,p_radius_m*2)
  FROM ag JOIN public.commercial_global_catalog_items p ON p.id=ag.global_item_id
- WHERE p.is_active ORDER BY ag.qty DESC,p.id OFFSET p_offset LIMIT p_limit;
+ WHERE p.is_active ORDER BY ag.transactions DESC,p.id OFFSET p_offset LIMIT p_limit;
 END; $$;
 REVOKE ALL ON FUNCTION public.commercial_catalog_nearby_popularity(uuid,numeric,numeric,integer,integer,integer) FROM PUBLIC,anon;
 GRANT EXECUTE ON FUNCTION public.commercial_catalog_nearby_popularity(uuid,numeric,numeric,integer,integer,integer) TO authenticated;

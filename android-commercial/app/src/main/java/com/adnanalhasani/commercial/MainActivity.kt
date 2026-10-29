@@ -390,6 +390,7 @@ private fun StoreApp(context: Context) {
                         onBack = { showCatalog = false },
                         initialOrganizationId = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE).getString("organization_id", "").orEmpty(),
                         initialActivityCode = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE).getString("activity_code", "").orEmpty(),
+                        requireCloudInventoryContext = cloudMode,
                         onAddToInventory = { catalogItem, branchId, warehouseId, activityNodeCode, baseUnitCode, saleUnitCode ->
                         if (cloudMode) {
                             storeCloudIo.execute {

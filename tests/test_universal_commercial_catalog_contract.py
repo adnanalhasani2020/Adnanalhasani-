@@ -91,7 +91,7 @@ class UniversalCommercialCatalogContractTests(unittest.TestCase):
     def test_android_import_preserves_catalog_identity_without_claiming_cloud_sync(self):
         for field in ("catalogCode", "barcode", "unitCode", "imageUrl", "manufacturer", "countryOfManufacture"):
             self.assertIn(field, self.main)
-        self.assertIn("إضافة إلى المخزون المحلي", self.android)
+        self.assertIn("إنشاء وربط بالمخزون", self.android)
         self.assertIn("quantityIsWholeBaseUnits", self.main)
         self.assertIn("baseQuantitySold", self.main)
         self.assertIn("unitVariantsJson", self.main)
