@@ -44,7 +44,7 @@ CREATE OR REPLACE FUNCTION public.commercial_catalog_configure_items(
  p_organization_id uuid,p_activity_node_code text,p_branch_location_id uuid,p_warehouse_id uuid,p_items jsonb
 ) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $$
 DECLARE v_uid uuid:=auth.uid(); v_node uuid; v_item jsonb; v_gid uuid; v_base text; v_sale text;
- v_factor numeric(30,12); v_count integer; v_added integer:=0; v_done integer:=0;
+ v_factor numeric(30,12); v_count integer; v_added integer:=0; v_done integer:=0; v_rows_added integer:=0;
 BEGIN
  IF v_uid IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
  IF p_organization_id IS NULL OR p_branch_location_id IS NULL OR p_warehouse_id IS NULL
@@ -92,7 +92,6 @@ BEGIN
    jsonb_build_object('linked_without_pricing',true,'pricing_required',true,'source','global_catalog'),v_uid,true,now(),'unpriced'
   FROM public.commercial_global_catalog_items p WHERE p.id=v_gid
   ON CONFLICT(organization_id,global_item_id) DO NOTHING;
-  DECLARE v_rows_added integer;
   GET DIAGNOSTICS v_rows_added=ROW_COUNT;
   v_added:=v_added+v_rows_added;
   INSERT INTO public.commercial_organization_catalog_item_activities(organization_id,global_item_id,activity_node_id,created_by)
