@@ -436,7 +436,6 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         nearbyHasMore=true
         nearbyLoadGeneration++
         marketRadius=5000
-        nearbyListState.scrollToItem(0)
         loadNearbyCatalog(false)
     }
 
