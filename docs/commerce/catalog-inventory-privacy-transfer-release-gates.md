@@ -1,6 +1,6 @@
 # Catalog, inventory costing, phone authentication, and authorization release gates
 
-## Implemented in the current feature branch
+## Implemented in main
 - Catalog discovery pagination, idempotent unpriced linking, organization/activity mapping, and onboarding handoff.
 - Selected items can be configured to an existing activity, branch, warehouse and curated base/sale units.
 - A catalog-backed inventory creation RPC creates the priced local offering, opening stock movement, activity mapping, branch/warehouse/unit setup, and explicit global-catalog offering mapping in one transaction. It uses an idempotency key and rejects conflicting retries; Android checks for an existing mapped offering before opening creation.
@@ -15,8 +15,10 @@
 - Current checkout reads one `commercial_inventory_balances.unit_cost_minor` value and snapshots it into sale lines; COGS is posted from that snapshot.
 - Purchase receiving records purchase-line `unit_cost_minor` and calls `commercial_receive_inventory_stock`, but checkout does not select or allocate FIFO/LIFO cost layers.
 - Return/restocking and opening/manual inventory paths also need cost-preserving reversal semantics.
-- A real FIFO/LIFO/weighted-average implementation must atomically create cost layers at receipt, allocate each sale issue to layers, snapshot allocations per sale line, restore original layer cost on return, handle opening stock and adjustments, prevent negative layer quantities, remain idempotent, and reconcile inventory asset/COGS journals. LIFO may be restricted by accounting rules in some jurisdictions.
-- Until those controls and reconciliation tests exist, the current balance-cost model remains authoritative. No valuation toggle was added.
+- **Rolling weighted average is already implemented** in the current balance-cost model: purchase receipts recompute `commercial_inventory_balances.unit_cost_minor` from the prior balance and incoming receipt, checkout snapshots that cost on sale lines, and COGS uses the sale-line snapshot. This is not a FIFO/LIFO layer engine.
+- FIFO and LIFO are not implemented. They require cost layers per organization/location/offering, atomic issue allocations, per-line cost snapshots, original-layer restoration on returns, opening/adjustment handling, negative-layer prevention, idempotency, and inventory-asset/COGS journal reconciliation. LIFO may be restricted by accounting rules in some jurisdictions.
+- Return restocking currently restores stock at the original sale-line `unit_cost_minor` and updates the rolling average. The GL return routine reverses COGS using the sum of restock-posting quantity multiplied by its stored unit cost. The accounting integrity view currently verifies posting/movement quantities, but it does not yet verify the cost basis, offering/location identity, or the matching inventory/COGS journal amounts. A live read-only comparison on 2026-10-31 found zero rows violating the compared posting-vs-sale-line cost/quantity/offering/organization/movement checks; this is a snapshot, not a guarantee against future corruption.
+- The current rolling-average balance model remains authoritative until the additional cost/journal integrity checks and FIFO/LIFO requirements are implemented. No valuation toggle was added.
 
 ## Authorization review
 - Existing purchase receipt and checkout RPCs perform server-side membership/role checks; catalog write RPCs explicitly require owner/admin/manager and scope reads by organization.
