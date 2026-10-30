@@ -24,8 +24,10 @@ class NearbyCatalogInventorySetupContractTests(unittest.TestCase):
 
     def test_unit_selection_rejects_missing_or_ambiguous_conversion_data(self):
         self.assertIn("if(baseCandidates.size!=1)", self.screen)
-        self.assertIn("defaultCandidates.size>1", self.screen)
-        self.assertIn("(defaultCandidates.isEmpty() && saleCandidates.size>1)", self.screen)
+        self.assertIn("defaultSaleCandidates.size>1", self.screen)
+        self.assertIn("val defaultSaleCandidates=saleCandidates.filter { it.optBoolean(\"is_default\",false) }", self.screen)
+        self.assertIn("defaultSaleCandidates.singleOrNull() ?: saleCandidates.singleOrNull() ?: base", self.screen)
+        self.assertNotIn("val defaultCandidates=units.filter { it.optBoolean(\"is_default\",false) }", self.screen)
         self.assertIn("saleFactor<=java.math.BigDecimal.ZERO", self.screen)
         self.assertIn('put("base_unit_code",base.optString("unit_code"))', self.screen)
         self.assertIn('put("sale_unit_code",sale.optString("unit_code"))', self.screen)
