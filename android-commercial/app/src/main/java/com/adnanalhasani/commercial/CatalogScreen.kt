@@ -430,6 +430,16 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         })
     }
 
+    fun startNearbyCatalog() {
+        nearbyMarketItems=emptyList()
+        nearbyOffset=0
+        nearbyHasMore=true
+        nearbyLoadGeneration++
+        marketRadius=5000
+        nearbyListState.scrollToItem(0)
+        loadNearbyCatalog(false)
+    }
+
     LaunchedEffect(section, nearbyMarketItems.size, nearbyHasMore, nearbyLoadGeneration, busy, marketRadius) {
         if(section!="browse" || nearbyMarketItems.isEmpty() || busy || marketRadius>=100000) return@LaunchedEffect
         snapshotFlow {
@@ -769,7 +779,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                             }
                             Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
                                 OutlinedButton(onClick={loadMarketContext()},enabled=!busy) { Text("تحديث الفروع") }
-                                Button(onClick={loadNearbyCatalog(false)},enabled=!busy && selectedBranchId.isNotBlank()) { Text("الأكثر استخدامًا قريبًا") }
+                                Button(onClick={startNearbyCatalog()},enabled=!busy && selectedBranchId.isNotBlank()) { Text("الأكثر استخدامًا قريبًا") }
                                 OutlinedButton(onClick={loadSelectedPriceSuggestions()},enabled=!busy && selectedCatalogIds.isNotEmpty()) { Text("أسعار استرشادية") }
                             }
                             Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
