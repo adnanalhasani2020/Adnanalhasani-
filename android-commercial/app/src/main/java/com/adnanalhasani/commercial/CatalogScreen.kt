@@ -180,6 +180,9 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var nearbyMarketItems by remember { mutableStateOf<List<NearbyCatalogItem>>(emptyList()) }
     var marketRadius by remember { mutableIntStateOf(5000) }
     var nearbyOffset by remember { mutableIntStateOf(0) }
+    var nearbyHasMore by remember { mutableStateOf(true) }
+    var nearbyLoadGeneration by remember { mutableIntStateOf(0) }
+    val nearbyListState = rememberLazyListState()
     var marketPriceHints by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var invoiceSaleId by remember { mutableStateOf("") }
     var invoiceDestinationOrg by remember { mutableStateOf("") }
@@ -419,10 +422,25 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                 row.optString("product_name"),row.optString("popularity_band"),row.optString("merchant_count_band")) }
             if(expandRadius) marketRadius=nextRadius
             nearbyOffset=requestedOffset+rows.length()
+            nearbyHasMore=rows.length()==30
             nearbyMarketItems=(nearbyMarketItems+page).distinctBy { it.id }
-            feedback=if(page.isEmpty()) "لا توجد نتائج مؤهلة ضمن هذا النطاق؛ لا توجد بيانات مجمعة كافية أو روابط أصناف موثوقة بعد."
+            nearbyLoadGeneration++
+            feedback=if(page.isEmpty()) "لا توجد نتائج إضافية في هذا النطاق؛ اسحب قائمة السوق لتوسيع البحث."
                 else "تم تحميل "+page.size+" نتيجة جديدة. النتائج مجمعة ولا تكشف هوية التجار."
         })
+    }
+
+    LaunchedEffect(section, nearbyMarketItems.size, nearbyHasMore, nearbyLoadGeneration, busy, marketRadius) {
+        if(section!="browse" || nearbyMarketItems.isEmpty() || busy || marketRadius>=100000) return@LaunchedEffect
+        snapshotFlow {
+            val lastVisible=nearbyListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+            val total=nearbyListState.layoutInfo.totalItemsCount
+            Triple(lastVisible,total,nearbyListState.isScrollInProgress)
+        }.collect { (lastVisible,total,scrolling) ->
+            if(scrolling && total>0 && lastVisible>=total-2 && !busy) {
+                if(nearbyHasMore) loadNearbyCatalog(false) else loadNearbyCatalog(true)
+            }
+        }
     }
 
     fun loadSelectedPriceSuggestions() {
@@ -734,7 +752,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                                         marketBranches.forEach { branch -> DropdownMenuItem(text={Text(branch.name)},onClick={
                                             selectedBranchId=branch.id
                                             selectedWarehouseId=marketWarehouses.firstOrNull { it.branchId==branch.id }?.id.orEmpty()
-                                            nearbyMarketItems=emptyList(); nearbyOffset=0; marketRadius=5000; marketPriceHints=emptyMap(); branchMenuExpanded=false
+                                            nearbyMarketItems=emptyList(); nearbyOffset=0; nearbyHasMore=true; nearbyLoadGeneration++; marketRadius=5000; marketPriceHints=emptyMap(); branchMenuExpanded=false
                                         }) }
                                     }
                                 }
@@ -756,13 +774,18 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                             }
                             Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
                                 Button(onClick={configureSelectedCatalogItems()},enabled=!busy && selectedCatalogIds.isNotEmpty() && selectedActivityCode.isNotBlank() && selectedBranchId.isNotBlank() && selectedWarehouseId.isNotBlank()) { Text("تهيئة المختار للفرع") }
-                                OutlinedButton(onClick={loadNearbyCatalog(false)},enabled=!busy) { Text("تحميل المزيد") }
-                                OutlinedButton(onClick={loadNearbyCatalog(true)},enabled=!busy && marketRadius<100000) { Text("توسيع النطاق") }
+                                OutlinedButton(onClick={loadNearbyCatalog(false)},enabled=!busy && nearbyHasMore) { Text("تحميل المزيد") }
+                                OutlinedButton(onClick={loadNearbyCatalog(true)},enabled=!busy && marketRadius<100000 && !nearbyHasMore) { Text("توسيع النطاق") }
                             }
                             if(nearbyMarketItems.isNotEmpty()) {
                                 Text("الأكثر استخدامًا في السوق القريب • نطاق "+(marketRadius/1000)+" كم",fontWeight=FontWeight.SemiBold)
-                                nearbyMarketItems.forEach { market ->
-                                    Text("• "+market.name+" — "+market.popularityBand+" • تجار "+market.merchantCountBand,style=MaterialTheme.typography.bodySmall)
+                                LazyColumn(state=nearbyListState,modifier=Modifier.fillMaxWidth().heightIn(min=48.dp,max=220.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                                    items(nearbyMarketItems,key={it.id}) { market ->
+                                        Text("• "+market.name+" — "+market.popularityBand+" • تجار "+market.merchantCountBand,style=MaterialTheme.typography.bodySmall)
+                                    }
+                                    if(busy) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+                                    if(!nearbyHasMore && marketRadius<100000) item { Text("اسحب لأعلى لتوسيع نطاق البحث إلى المنطقة التالية.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
+                                    if(marketRadius>=100000 && !nearbyHasMore) item { Text("وصل البحث إلى أقصى نطاق 100 كم.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
                                 }
                             }
                             Text("يعتمد البحث على إحداثيات الفرع المحفوظة، وليس تتبع الجهاز. الأسعار لا تظهر إلا عند توافر بيانات مجمعة موثوقة من خمسة تجار مستقلين على الأقل.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
