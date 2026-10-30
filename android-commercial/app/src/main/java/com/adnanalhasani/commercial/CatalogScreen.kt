@@ -773,7 +773,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                                 OutlinedButton(onClick={loadSelectedPriceSuggestions()},enabled=!busy && selectedCatalogIds.isNotEmpty()) { Text("أسعار استرشادية") }
                             }
                             Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-                                Button(onClick={configureSelectedCatalogItems()},enabled=!busy && selectedCatalogIds.isNotEmpty() && selectedActivityCode.isNotBlank() && selectedBranchId.isNotBlank() && selectedWarehouseId.isNotBlank()) { Text("تهيئة المختار للفرع") }
+                                Button(onClick={configureSelectedCatalogItems()},enabled=!busy && selectedCatalogIds.isNotEmpty() && selectedCatalogIds.all { id -> items.any { it.id==id } } && selectedActivityCode.isNotBlank() && selectedBranchId.isNotBlank() && selectedWarehouseId.isNotBlank()) { Text("تهيئة المختار للفرع") }
                                 OutlinedButton(onClick={loadNearbyCatalog(false)},enabled=!busy && nearbyHasMore) { Text("تحميل المزيد") }
                                 OutlinedButton(onClick={loadNearbyCatalog(true)},enabled=!busy && marketRadius<100000 && !nearbyHasMore) { Text("توسيع النطاق") }
                             }
@@ -781,7 +781,15 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                                 Text("الأكثر استخدامًا في السوق القريب • نطاق "+(marketRadius/1000)+" كم",fontWeight=FontWeight.SemiBold)
                                 LazyColumn(state=nearbyListState,modifier=Modifier.fillMaxWidth().heightIn(min=48.dp,max=220.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
                                     items(nearbyMarketItems,key={it.id}) { market ->
-                                        Text("• "+market.name+" — "+market.popularityBand+" • تجار "+market.merchantCountBand,style=MaterialTheme.typography.bodySmall)
+                                        FilterChip(
+                                            selected=market.id in selectedCatalogIds,
+                                            onClick={
+                                                selectedCatalogIds=if(market.id in selectedCatalogIds) selectedCatalogIds-market.id
+                                                else if(selectedCatalogIds.size<100) selectedCatalogIds+market.id
+                                                else selectedCatalogIds
+                                            },
+                                            label={Text(market.name+" • "+market.popularityBand+" • تجار "+market.merchantCountBand)}
+                                        )
                                     }
                                     if(busy) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
                                     if(!nearbyHasMore && marketRadius<100000) item { Text("اسحب لأعلى لتوسيع نطاق البحث إلى المنطقة التالية.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
