@@ -377,25 +377,51 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         if(selectedActivityCode.isBlank() || selectedBranchId.isBlank() || selectedWarehouseId.isBlank() || selectedCatalogIds.isEmpty()) {
             feedback="اختر النشاط والفرع والمستودع وحدد الأصناف أولًا."; return
         }
-        val chosen=items.filter { it.id in selectedCatalogIds }
-        val payloadItems=JSONArray()
-        for(item in chosen) {
-            val base=item.availableUnits.firstOrNull { it.role.equals("base",true) && it.quantityInBase.toBigDecimalOrNull()?.compareTo(java.math.BigDecimal.ONE)==0 }
-            val sale=item.availableUnits.firstOrNull { it.isDefault } ?: item.availableUnits.firstOrNull { it.role.equals("sale",true) } ?: base
-            if(base==null || sale==null) {
-                feedback="تعذر تهيئة صنف لأن دليل وحداته لا يحتوي وحدة أساس ومعامل تحويل موثوقين. لن يتم اختلاق معامل تحويل."
-                return
-            }
-            payloadItems.put(JSONObject().put("global_item_id",item.id).put("base_unit_code",base.unitCode).put("sale_unit_code",sale.unitCode))
-        }
+        if(selectedCatalogIds.size>100) { feedback="الحد الأقصى للعملية الواحدة 100 صنف."; return }
+        val selectedIds=selectedCatalogIds.toList()
         request({
+            // Fetch authoritative unit rows for every selected item, including items selected from nearby discovery.
+            // Product-unit RLS inherits visibility from the global catalog item.
+            val filter=java.net.URLEncoder.encode("in.("+selectedIds.joinToString(",")+")","UTF-8")
+            val unitRaw=catalogGet("/rest/v1/commercial_catalog_product_units?select=product_id,unit_code,unit_role,quantity_in_base,is_default&is_active=eq.true&product_id=$filter&order=product_id.asc,is_default.desc,created_at.asc",active)
+            val unitRows=JSONArray(unitRaw)
+            val grouped=mutableMapOf<String,MutableList<JSONObject>>()
+            for(i in 0 until unitRows.length()) {
+                val row=unitRows.getJSONObject(i)
+                grouped.getOrPut(row.optString("product_id")) { mutableListOf() }.add(row)
+            }
+            val payloadItems=JSONArray()
+            for(id in selectedIds) {
+                val units=grouped[id].orEmpty()
+                val baseCandidates=units.filter {
+                    it.optString("unit_role").equals("base",true) &&
+                        it.optString("quantity_in_base").toBigDecimalOrNull()?.compareTo(java.math.BigDecimal.ONE)==0
+                }
+                if(baseCandidates.size!=1) {
+                    throw IllegalStateException("الصنف $id لا يملك وحدة أساس واحدة موثوقة في الدليل؛ راجع بيانات وحداته قبل التهيئة.")
+                }
+                val defaultCandidates=units.filter { it.optBoolean("is_default",false) }
+                val saleCandidates=units.filter { it.optString("unit_role").equals("sale",true) }
+                if(defaultCandidates.size>1 || (defaultCandidates.isEmpty() && saleCandidates.size>1)) {
+                    throw IllegalStateException("وحدات الصنف $id تحتوي أكثر من وحدة بيع افتراضية أو مرشحة؛ يلزم تصحيح الدليل قبل التهيئة.")
+                }
+                val base=baseCandidates.single()
+                val sale=defaultCandidates.singleOrNull() ?: saleCandidates.singleOrNull() ?: base
+                val saleFactor=sale.optString("quantity_in_base").toBigDecimalOrNull()
+                if(saleFactor==null || saleFactor<=java.math.BigDecimal.ZERO || sale.optString("unit_code").isBlank()) {
+                    throw IllegalStateException("معامل تحويل وحدة البيع للصنف $id غير صالح؛ لم يتم اختلاق معامل بديل.")
+                }
+                payloadItems.put(JSONObject().put("global_item_id",id)
+                    .put("base_unit_code",base.optString("unit_code"))
+                    .put("sale_unit_code",sale.optString("unit_code")))
+            }
             catalogHttp("/rest/v1/rpc/commercial_catalog_configure_items",JSONObject().put("p_organization_id",orgId)
                 .put("p_activity_node_code",selectedActivityCode).put("p_branch_location_id",selectedBranchId)
                 .put("p_warehouse_id",selectedWarehouseId).put("p_items",payloadItems),active)
         }, { raw ->
             val result=runCatching { JSONObject(raw) }.getOrNull()
-            feedback="تمت تهيئة "+(result?.optInt("configured_count",chosen.size) ?: chosen.size)+
-                " صنفًا للنشاط والفرع والمستودع. الأصناف غير المسعرة تبقى غير متاحة للبيع ولا يُنشأ مخزون تلقائيًا."
+            feedback="تمت تهيئة "+(result?.optInt("configured_count",selectedIds.size) ?: selectedIds.size)+
+                " صنفًا للنشاط والفرع والمستودع، بما فيها نتائج السوق القريب. الأصناف غير المسعرة تبقى غير متاحة للبيع ولا يُنشأ مخزون تلقائيًا."
         })
     }
 
@@ -755,7 +781,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                                 OutlinedButton(onClick={loadSelectedPriceSuggestions()},enabled=!busy && selectedCatalogIds.isNotEmpty()) { Text("أسعار استرشادية") }
                             }
                             Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-                                Button(onClick={configureSelectedCatalogItems()},enabled=!busy && selectedCatalogIds.isNotEmpty() && selectedActivityCode.isNotBlank() && selectedBranchId.isNotBlank() && selectedWarehouseId.isNotBlank()) { Text("تهيئة المختار للفرع") }
+                                Button(onClick={configureSelectedCatalogItems()},enabled=!busy && selectedCatalogIds.isNotEmpty() && selectedCatalogIds.size<=100 && selectedActivityCode.isNotBlank() && selectedBranchId.isNotBlank() && selectedWarehouseId.isNotBlank()) { Text("تهيئة المختار للفرع") }
                                 OutlinedButton(onClick={loadNearbyCatalog(false)},enabled=!busy) { Text("تحميل المزيد") }
                                 OutlinedButton(onClick={loadNearbyCatalog(true)},enabled=!busy && marketRadius<100000) { Text("توسيع النطاق") }
                             }
