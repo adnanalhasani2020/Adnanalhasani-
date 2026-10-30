@@ -400,13 +400,15 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                 if(baseCandidates.size!=1) {
                     throw IllegalStateException("الصنف $id لا يملك وحدة أساس واحدة موثوقة في الدليل؛ راجع بيانات وحداته قبل التهيئة.")
                 }
-                val defaultCandidates=units.filter { it.optBoolean("is_default",false) }
+                // The catalog authoring contract marks the base unit as the product's sole default.
+                // Therefore, only a sale-role default can be preferred as the sale unit.
                 val saleCandidates=units.filter { it.optString("unit_role").equals("sale",true) }
-                if(defaultCandidates.size>1 || (defaultCandidates.isEmpty() && saleCandidates.size>1)) {
+                val defaultSaleCandidates=saleCandidates.filter { it.optBoolean("is_default",false) }
+                if(defaultSaleCandidates.size>1 || (defaultSaleCandidates.isEmpty() && saleCandidates.size>1)) {
                     throw IllegalStateException("وحدات الصنف $id تحتوي أكثر من وحدة بيع افتراضية أو مرشحة؛ يلزم تصحيح الدليل قبل التهيئة.")
                 }
                 val base=baseCandidates.single()
-                val sale=defaultCandidates.singleOrNull() ?: saleCandidates.singleOrNull() ?: base
+                val sale=defaultSaleCandidates.singleOrNull() ?: saleCandidates.singleOrNull() ?: base
                 val saleFactor=sale.optString("quantity_in_base").toBigDecimalOrNull()
                 if(saleFactor==null || saleFactor<=java.math.BigDecimal.ZERO || sale.optString("unit_code").isBlank()) {
                     throw IllegalStateException("معامل تحويل وحدة البيع للصنف $id غير صالح؛ لم يتم اختلاق معامل بديل.")
