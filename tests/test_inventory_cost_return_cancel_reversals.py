@@ -47,6 +47,7 @@ def test_return_gl_reverses_exact_layer_cost_and_preserves_legacy_fallback():
     assert "CREATE OR REPLACE FUNCTION public.commercial_gl_post_sale_return" in sql
     assert "sum(ra.total_cost_minor)" in sql
     assert "FROM public.commercial_inventory_return_cost_allocations ra" in sql
-    assert "IF v_has_layer_cost THEN" in sql
+    assert "NOT EXISTS (" in sql
+    assert "WHERE ra.return_item_id=rp.return_item_id" in sql
     assert "sum(rp.quantity::numeric*rp.unit_cost_minor::numeric)" in sql
     assert "'cost_reversed_minor'" in sql
