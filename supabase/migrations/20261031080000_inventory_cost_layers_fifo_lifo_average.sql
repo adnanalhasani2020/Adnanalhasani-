@@ -210,6 +210,7 @@ DECLARE
   v_take numeric;
   v_total_cost numeric := 0;
   v_unit_cost bigint;
+  v_layer_cost bigint;
   v_existing_qty numeric;
   v_existing_cost numeric;
 BEGIN
@@ -271,6 +272,10 @@ BEGIN
       'unit_cost_minor',v_unit_cost,'idempotent_replay',true);
   END IF;
 
+  IF v_method='weighted_average' AND v_balance.unit_cost_minor IS NULL THEN
+    RAISE EXCEPTION 'inventory_average_cost_unknown' USING ERRCODE='55000';
+  END IF;
+
   v_remaining := v_quantity;
   FOR v_layer IN
     SELECT l.*
@@ -286,18 +291,19 @@ BEGIN
   LOOP
     EXIT WHEN v_remaining=0;
     v_take := least(v_remaining,v_layer.quantity_remaining);
+    v_layer_cost := CASE WHEN v_method='weighted_average' THEN v_balance.unit_cost_minor ELSE v_layer.unit_cost_minor END;
     INSERT INTO public.commercial_inventory_cost_allocations(
       organization_id,location_id,offering_id,sale_id,sale_item_id,cost_layer_id,
       costing_method,quantity,unit_cost_minor,total_cost_minor
     ) VALUES (
       v_org,p_location_id,v_item.offering_id,v_item.sale_id,p_sale_item_id,
-      v_layer.id,v_method,v_take,v_layer.unit_cost_minor,
-      round(v_take*v_layer.unit_cost_minor::numeric)
+      v_layer.id,v_method,v_take,v_layer_cost,
+      round(v_take*v_layer_cost::numeric)
     );
     UPDATE public.commercial_inventory_cost_layers
     SET quantity_remaining=quantity_remaining-v_take
     WHERE id=v_layer.id;
-    v_total_cost := v_total_cost+round(v_take*v_layer.unit_cost_minor::numeric);
+    v_total_cost := v_total_cost+round(v_take*v_layer_cost::numeric);
     v_remaining := v_remaining-v_take;
   END LOOP;
 
