@@ -64,15 +64,34 @@ internal fun CommercialCloudStockAlertsScreen(context: Context, onBack: () -> Un
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
     var reloadToken by remember { mutableIntStateOf(0) }
+    var costingPolicy by remember { mutableStateOf<CommercialInventoryCostingPolicyState?>(null) }
+    var layerSummary by remember { mutableStateOf<CommercialCloudCostLayerSummary?>(null) }
+    var selectedCostMethod by remember { mutableStateOf("weighted_average") }
+    var costingScope by remember { mutableStateOf("location") }
+    var costingLoading by remember { mutableStateOf(false) }
+    var costingSaving by remember { mutableStateOf(false) }
+    var costingError by remember { mutableStateOf("") }
+    var costingNotice by remember { mutableStateOf("") }
 
     LaunchedEffect(reloadToken) {
         loading = true
         error = ""
         StockAlertsWorker.execute {
             val result = runCatching { loadCommercialCloudStockAlerts(context) }
+            val policyResult = runCatching { loadCommercialInventoryCostingPolicy(context) }
+            val layersResult = runCatching { loadCommercialCloudCostLayerSummary(context) }
             StockAlertsMain.post {
                 result.onSuccess { products = it }
                     .onFailure { error = it.message ?: "تعذر تحميل المخزون السحابي." }
+                policyResult.onSuccess {
+                    costingPolicy = it
+                    selectedCostMethod = if (costingScope == "organization") it.organizationMethod ?: it.effectiveMethod else it.locationMethod ?: it.effectiveMethod
+                    costingError = ""
+                }.onFailure {
+                    costingError = it.message ?: "تعذر تحميل سياسة تكلفة المخزون."
+                }
+                layersResult.onSuccess { layerSummary = it }
+                    .onFailure { layerSummary = null }
                 loading = false
             }
         }
@@ -118,6 +137,106 @@ internal fun CommercialCloudStockAlertsScreen(context: Context, onBack: () -> Un
                     MetricCard("الأصناف", products.size.toString(), Modifier.weight(1f))
                     MetricCard("تحت حد الطلب", lowStockCount.toString(), Modifier.weight(1f))
                     MetricCard("نفد المتاح", outOfStockCount.toString(), Modifier.weight(1f))
+                }
+            }
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, Color(0xFFE5EBE8))
+                ) {
+                    Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("طريقة تقييم تكلفة المخزون", color = StockAlertsInk, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        Text(
+                            "الطريقة الفعالة حاليًا: " + when (costingPolicy?.effectiveMethod ?: "weighted_average") {
+                                "fifo" -> "FIFO — الوارد أولًا يصرف أولًا"
+                                "lifo" -> "LIFO — الوارد أخيرًا يصرف أولًا"
+                                else -> "المتوسط المرجح"
+                            },
+                            color = StockAlertsGreen, fontWeight = FontWeight.SemiBold, fontSize = 12.sp
+                        )
+                        Text("اختر الطريقة التي ستطبق على عمليات الصرف الجديدة:", color = StockAlertsMuted, fontSize = 11.sp)
+                        Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                            FilterChip(selected = selectedCostMethod == "fifo", onClick = { selectedCostMethod = "fifo" }, label = { Text("FIFO") })
+                            FilterChip(selected = selectedCostMethod == "lifo", onClick = { selectedCostMethod = "lifo" }, label = { Text("LIFO") })
+                            FilterChip(selected = selectedCostMethod == "weighted_average", onClick = { selectedCostMethod = "weighted_average" }, label = { Text("المتوسط") })
+                        }
+                        Text("نطاق تطبيق الإعداد:", color = StockAlertsMuted, fontSize = 11.sp)
+                        Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                            FilterChip(
+                                selected = costingScope == "location",
+                                onClick = {
+                                    costingScope = "location"
+                                    selectedCostMethod = costingPolicy?.locationMethod ?: costingPolicy?.effectiveMethod ?: "weighted_average"
+                                },
+                                label = { Text("هذا الموقع") }
+                            )
+                            FilterChip(
+                                selected = costingScope == "organization",
+                                onClick = {
+                                    costingScope = "organization"
+                                    selectedCostMethod = costingPolicy?.organizationMethod ?: "weighted_average"
+                                },
+                                label = { Text("المؤسسة بالكامل") }
+                            )
+                        }
+                        Button(
+                            onClick = {
+                                costingSaving = true
+                                costingError = ""
+                                costingNotice = ""
+                                StockAlertsWorker.execute {
+                                    val savedResult = runCatching {
+                                        saveCommercialInventoryCostingPolicy(context, selectedCostMethod, costingScope)
+                                        loadCommercialInventoryCostingPolicy(context)
+                                    }
+                                    StockAlertsMain.post {
+                                        savedResult.onSuccess {
+                                            costingPolicy = it
+                                            costingNotice = "تم حفظ طريقة التكلفة. لن تتغير تخصيصات الفواتير السابقة."
+                                        }.onFailure {
+                                            costingError = it.message ?: "تعذر حفظ طريقة التكلفة."
+                                        }
+                                        costingSaving = false
+                                    }
+                                }
+                            },
+                            enabled = !costingSaving && !loading,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(if (costingSaving) "جارٍ الحفظ…" else "حفظ طريقة التكلفة")
+                        }
+                        if (costingError.isNotBlank()) Text(costingError, color = Color(0xFFB3261E), fontSize = 11.sp)
+                        if (costingNotice.isNotBlank()) Text(costingNotice, color = StockAlertsGreen, fontSize = 11.sp)
+                        Text(
+                            "تغيير الطريقة لا يعيد كتابة تكلفة المبيعات السابقة. صلاحية الحفظ محكومة بدورك في المؤسسة على الخادم.",
+                            color = StockAlertsMuted, fontSize = 10.sp
+                        )
+                    }
+                }
+            }
+            item {
+                val summary = layerSummary
+                val totalOnHand = products.fold(java.math.BigDecimal.ZERO) { total, item -> total.add(item.quantityOnHand) }
+                val uncovered = totalOnHand.subtract(summary?.remainingQuantity ?: java.math.BigDecimal.ZERO).max(java.math.BigDecimal.ZERO)
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5EF)),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Text("ملخص طبقات التكلفة النشطة", color = StockAlertsInk, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        if (summary == null) {
+                            Text("بيانات طبقات التكلفة غير متاحة حاليًا. تحقق من تطبيق ترحيلات التكلفة على الخادم.", color = StockAlertsMuted, fontSize = 11.sp)
+                        } else {
+                            Text("الطبقات النشطة: ${summary.activeLayerCount} • الأصناف المغطاة: ${summary.offeringCount}", color = StockAlertsInk, fontSize = 12.sp)
+                            Text("الكمية المغطاة بطبقات التكلفة: ${summary.remainingQuantity.stripTrailingZeros().toPlainString()}", color = StockAlertsInk, fontSize = 12.sp)
+                            Text("قيمة التكلفة بوحدات العملة الصغرى: ${summary.inventoryValueMinor.toPlainString()}", color = StockAlertsInk, fontSize = 12.sp)
+                            if (uncovered.signum() > 0) {
+                                Text("كمية الرصيد التي لا تغطيها طبقات تكلفة: ${uncovered.stripTrailingZeros().toPlainString()} — لا تُخمن لها تكلفة.", color = Color(0xFF9A5B00), fontSize = 11.sp)
+                            }
+                        }
+                    }
                 }
             }
             item {
