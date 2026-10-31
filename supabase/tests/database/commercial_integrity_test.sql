@@ -1,7 +1,7 @@
 -- Run with Supabase CLI / pgTAP in a disposable local or staging database.
 -- These are schema regression tests; they do not replace authenticated-session integration tests.
 BEGIN;
-SELECT plan(41);
+SELECT plan(42);
 
 SELECT has_table('public', 'commercial_audit_events',
   'append-only audit event table exists');
@@ -328,6 +328,25 @@ SELECT ok(
    FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
    WHERE n.nspname = 'public' AND p.proname = 'commercial_catalog_link_unpriced_items'),
   'catalog linking validates membership, bounded non-null unique selections before writes'
+);
+
+
+-- Repository-wide SECURITY DEFINER audit: no public function may be callable by anon,
+-- and every such function must pin search_path (an explicitly empty path is also pinned).
+SELECT ok(
+  (SELECT count(*) = 0
+   FROM pg_proc p
+   JOIN pg_namespace n ON n.oid = p.pronamespace
+   WHERE n.nspname = 'public'
+     AND p.prosecdef
+     AND (
+       has_function_privilege('anon', p.oid, 'EXECUTE')
+       OR NOT EXISTS (
+         SELECT 1 FROM unnest(coalesce(p.proconfig, ARRAY[]::text[])) AS settings(setting)
+         WHERE settings.setting LIKE 'search_path=%'
+       )
+     )),
+  'all public SECURITY DEFINER functions pin search_path and none are executable by anon'
 );
 
 SELECT * FROM finish();
