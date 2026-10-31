@@ -1,7 +1,6 @@
 BEGIN;
 
 -- Return quantities restore the exact source cost layers consumed by the sale.
--- Cost restoration is intentionally coupled to the existing restock transaction.
 -- This is separate from the refund posting: stock restoration and cash refund
 -- remain distinct, existing workflows.
 CREATE TABLE IF NOT EXISTS public.commercial_inventory_return_cost_allocations (
@@ -376,5 +375,136 @@ AFTER UPDATE OF status ON public.commercial_sales
 FOR EACH ROW
 WHEN (NEW.status='cancelled' AND OLD.status IS DISTINCT FROM NEW.status)
 EXECUTE FUNCTION commercial_private.commercial_reverse_sale_cost_layers();
+
+
+-- Use exact returned sale-to-layer allocations for the COGS reversal. Legacy
+-- returns without layer-allocation records retain their original posting-cost path.
+CREATE OR REPLACE FUNCTION public.commercial_gl_post_sale_return(p_return_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'pg_catalog','public','commercial_private'
+AS $function$
+DECLARE
+  r public.commercial_sales_returns%ROWTYPE;
+  s public.commercial_sales%ROWTYPE;
+  m record;
+  v_party uuid;
+  v_amount bigint;
+  v_cost numeric;
+  v_lines jsonb;
+  v_entry uuid;
+  v_actor uuid;
+  v_existing uuid;
+  v_has_layer_cost boolean;
+BEGIN
+  IF auth.uid() IS NULL AND pg_trigger_depth()=0 THEN
+    RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501';
+  END IF;
+  SELECT * INTO r FROM public.commercial_sales_returns WHERE id=p_return_id FOR UPDATE;
+  IF NOT FOUND OR r.status<>'completed' THEN
+    RAISE EXCEPTION 'completed_return_required' USING ERRCODE='55000';
+  END IF;
+  SELECT * INTO s FROM public.commercial_sales WHERE id=r.sale_id FOR UPDATE;
+  IF NOT FOUND OR s.organization_id IS DISTINCT FROM r.organization_id OR s.currency_code<>r.currency_code THEN
+    RAISE EXCEPTION 'return_sale_scope_or_currency_mismatch' USING ERRCODE='55000';
+  END IF;
+  IF pg_trigger_depth()=0 AND NOT EXISTS(
+    SELECT 1 FROM public.commercial_organization_members om
+    WHERE om.organization_id=s.organization_id AND om.user_id=auth.uid()
+      AND om.state='active' AND om.role IN ('owner','admin','manager')
+  ) THEN
+    RAISE EXCEPTION 'accounting_permission_required' USING ERRCODE='42501';
+  END IF;
+
+  v_amount:=COALESCE(r.approved_refund_minor,r.requested_refund_minor);
+  IF v_amount<=0 OR v_amount>s.total_minor THEN
+    RAISE EXCEPTION 'invalid_return_amount' USING ERRCODE='55000';
+  END IF;
+  v_actor:=COALESCE(auth.uid(),s.user_id);
+
+  SELECT max(ledger_account_id) FILTER(WHERE mapping_key='cash') cash,
+         max(ledger_account_id) FILTER(WHERE mapping_key='accounts_receivable') ar,
+         max(ledger_account_id) FILTER(WHERE mapping_key='sales_returns') returns,
+         max(ledger_account_id) FILTER(WHERE mapping_key='inventory') inventory,
+         max(ledger_account_id) FILTER(WHERE mapping_key='cost_of_goods_sold') cogs,
+         max(ledger_account_id) FILTER(WHERE mapping_key='refunds_payable') payable
+  INTO m
+  FROM public.commercial_gl_account_mappings
+  WHERE organization_id=s.organization_id;
+
+  SELECT id INTO v_existing
+  FROM public.commercial_journal_entries
+  WHERE organization_id=s.organization_id AND idempotency_key='sale-return:'||r.id;
+  IF FOUND THEN
+    IF r.refund_status='refunded' AND NOT EXISTS(
+      SELECT 1 FROM public.commercial_journal_entries
+      WHERE organization_id=s.organization_id AND idempotency_key='refund-settlement:'||r.id
+    ) THEN
+      IF m.cash IS NULL OR m.payable IS NULL THEN
+        RAISE EXCEPTION 'cash_and_refunds_payable_mappings_required' USING ERRCODE='55000';
+      END IF;
+      v_entry:=commercial_private.commercial_gl_post_entry(
+        s.organization_id,'refund-settlement:'||r.id,'refund_settlement',r.id,
+        'Settlement of refund for receipt '||s.receipt_number,s.currency_code,
+        jsonb_build_array(
+          jsonb_build_object('ledger_account_id',m.payable,'debit_minor',v_amount,'credit_minor',0,'description','Settle refund payable'),
+          jsonb_build_object('ledger_account_id',m.cash,'debit_minor',0,'credit_minor',v_amount,'description','Refund paid')
+        ),v_actor,NULL
+      );
+      RETURN jsonb_build_object('return_id',r.id,'journal_entry_id',v_existing,
+        'refund_settlement_entry_id',v_entry,'posted',true,'idempotent_replay',true);
+    END IF;
+    RETURN jsonb_build_object('return_id',r.id,'journal_entry_id',v_existing,
+      'posted',true,'idempotent_replay',true);
+  END IF;
+
+  IF m.returns IS NULL OR m.payable IS NULL OR (r.refund_status='refunded' AND m.cash IS NULL) THEN
+    RAISE EXCEPTION 'return_gl_mappings_incomplete' USING ERRCODE='55000';
+  END IF;
+
+  SELECT EXISTS(
+    SELECT 1 FROM public.commercial_inventory_return_cost_allocations ra
+    WHERE ra.return_id=r.id
+  ) INTO v_has_layer_cost;
+  IF v_has_layer_cost THEN
+    SELECT COALESCE(sum(ra.total_cost_minor),0)
+      INTO v_cost
+    FROM public.commercial_inventory_return_cost_allocations ra
+    WHERE ra.return_id=r.id;
+  ELSE
+    SELECT COALESCE(sum(rp.quantity::numeric*rp.unit_cost_minor::numeric),0)
+      INTO v_cost
+    FROM public.commercial_return_restock_postings rp
+    WHERE rp.return_id=r.id;
+  END IF;
+
+  v_party:=commercial_private.commercial_customer_party_account(s.organization_id,s.customer_id,s.currency_code);
+  v_lines:=jsonb_build_array(
+    jsonb_build_object('ledger_account_id',m.returns,'debit_minor',v_amount,'credit_minor',0,'description','Sales return/allowance'),
+    jsonb_build_object('ledger_account_id',CASE WHEN r.refund_status='refunded' THEN m.cash ELSE m.payable END,
+      'debit_minor',0,'credit_minor',v_amount,
+      'description',CASE WHEN r.refund_status='refunded' THEN 'Refund paid' ELSE 'Refund payable' END)
+  );
+  IF v_cost>0 THEN
+    IF m.inventory IS NULL OR m.cogs IS NULL THEN
+      RAISE EXCEPTION 'inventory_and_cogs_mappings_required' USING ERRCODE='55000';
+    END IF;
+    IF v_cost>9223372036854775807 THEN
+      RAISE EXCEPTION 'return_cost_reversal_overflow' USING ERRCODE='22003';
+    END IF;
+    v_lines:=v_lines||jsonb_build_array(
+      jsonb_build_object('ledger_account_id',m.inventory,'debit_minor',v_cost::bigint,'credit_minor',0,'description','Resalable returned stock'),
+      jsonb_build_object('ledger_account_id',m.cogs,'debit_minor',0,'credit_minor',v_cost::bigint,'description','Reverse cost of goods sold')
+    );
+  END IF;
+  v_entry:=commercial_private.commercial_gl_post_entry(
+    s.organization_id,'sale-return:'||r.id,'sale_return',r.id,
+    'Sales return for receipt '||s.receipt_number,s.currency_code,v_lines,v_actor,NULL
+  );
+  RETURN jsonb_build_object('return_id',r.id,'journal_entry_id',v_entry,'posted',true,
+    'refund_minor',v_amount,'cost_reversed_minor',v_cost::bigint);
+END;
+$function$;
 
 COMMIT;
