@@ -299,8 +299,8 @@ BEGIN
     IF NOT FOUND THEN RAISE EXCEPTION 'cancel_cost_layer_scope_mismatch' USING ERRCODE='55000'; END IF;
   END LOOP;
 
-  -- Existing cancellation logic has already restored the stock balance. Verify
-  -- the layer ledger now reconciles to it for every offering with cost history.
+  -- Existing cancellation logic has already restored the stock balance. Ensure
+  -- the restored cost layers never exceed that balance for any affected offering.
   FOR v_alloc IN
     SELECT DISTINCT a.organization_id,a.location_id,a.offering_id
     FROM public.commercial_inventory_cost_allocations a
