@@ -17,8 +17,8 @@ def test_return_restock_restores_original_sale_cost_layers():
 
 def test_weighted_average_return_revalues_remaining_layers_without_losing_original_cost():
     sql = MIGRATION.read_text(encoding="utf-8")
-    assert "v_before_value+v_return_cost" in sql
-    assert "SET unit_cost_minor=v_new_average::bigint" in sql
+    assert "SET unit_cost_minor=v_balance.unit_cost_minor" in sql
+    assert "source_unit_cost_minor" in sql
     assert "source_unit_cost_minor" not in sql or "commercial_inventory_cost_layers" in sql
 
 
@@ -30,7 +30,7 @@ def test_sale_cancellation_reverses_only_unreturned_cost_and_adjustment_journals
     assert "'reversal:'||v_entry.id::text" in sql
     assert "sale_with_open_return_cannot_be_cancelled_resolve_return_first" in sql
     assert "cancel_cost_layer_balance_quantity_mismatch" in sql
-    assert "SET unit_cost_minor=v_new_average::bigint" in sql
+    assert "v_layer_qty>v_balance_qty" in sql
 
 
 def test_return_and_cancel_cost_history_is_preserved_and_read_only_to_members():
