@@ -12,7 +12,6 @@ CREATE TABLE IF NOT EXISTS public.commercial_inventory_costing_policies (
   created_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
-  CHECK (location_id IS NULL OR location_id IS NOT NULL)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS commercial_inventory_costing_policy_org_location_uq
   ON public.commercial_inventory_costing_policies(organization_id,location_id)
@@ -67,6 +66,29 @@ CREATE INDEX IF NOT EXISTS commercial_inventory_cost_allocations_sale_idx
   ON public.commercial_inventory_cost_allocations(organization_id,sale_id,sale_item_id);
 CREATE INDEX IF NOT EXISTS commercial_inventory_cost_allocations_layer_idx
   ON public.commercial_inventory_cost_allocations(cost_layer_id);
+
+-- Prevent a manager from attaching a costing policy to another organization's branch.
+CREATE OR REPLACE FUNCTION commercial_private.commercial_validate_inventory_costing_policy_scope()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path TO 'pg_catalog','public','commercial_private'
+AS $function$
+BEGIN
+  IF NEW.location_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM public.commercial_organization_locations l
+    WHERE l.id=NEW.location_id AND l.organization_id=NEW.organization_id
+  ) THEN
+    RAISE EXCEPTION 'inventory_costing_policy_location_scope_mismatch' USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END;
+$function$;
+DROP TRIGGER IF EXISTS commercial_inventory_costing_policy_scope_trg
+  ON public.commercial_inventory_costing_policies;
+CREATE TRIGGER commercial_inventory_costing_policy_scope_trg
+BEFORE INSERT OR UPDATE OF organization_id,location_id
+ON public.commercial_inventory_costing_policies
+FOR EACH ROW EXECUTE FUNCTION commercial_private.commercial_validate_inventory_costing_policy_scope();
 
 -- Seed current positive stock as a single opening layer only where a known
 -- balance cost exists. This preserves current valuation without inventing
@@ -198,11 +220,14 @@ BEGIN
     RAISE EXCEPTION 'invalid_inventory_cost_allocation_request' USING ERRCODE='22023';
   END IF;
 
-  SELECT i.*,s.organization_id,s.user_id
-    INTO v_item,v_org,v_sale_user
+  SELECT i.* INTO v_item
   FROM public.commercial_sale_items i
-  JOIN public.commercial_sales s ON s.id=i.sale_id
   WHERE i.id=p_sale_item_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'sale_item_not_found' USING ERRCODE='P0002';
+  END IF;
+  SELECT s.organization_id,s.user_id INTO v_org,v_sale_user
+  FROM public.commercial_sales s WHERE s.id=v_item.sale_id;
   IF NOT FOUND OR v_sale_user IS DISTINCT FROM auth.uid() THEN
     RAISE EXCEPTION 'sale_item_not_owned_by_authenticated_user' USING ERRCODE='42501';
   END IF;
