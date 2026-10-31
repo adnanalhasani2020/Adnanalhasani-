@@ -24,6 +24,8 @@ class CatalogActivityWarehouseScopeTests(unittest.TestCase):
         self.assertIn("catalog_offering_location_or_organization_mismatch", self.sql)
         self.assertIn("v_offering_location_ref IS DISTINCT FROM NEW.location_id::text", self.sql)
         self.assertIn("commercial_catalog_offering_activity_scope", self.sql)
+        self.assertIn("AND NOT EXISTS (", self.sql)
+        self.assertNotIn("ORDER BY s.updated_at DESC", self.sql)
 
     def test_validation_is_additive_and_never_posts_stock_or_prices(self):
         self.assertIn("CREATE OR REPLACE FUNCTION", self.sql)
