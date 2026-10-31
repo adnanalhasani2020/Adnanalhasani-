@@ -29,10 +29,25 @@ The additive migration `20261031090000_inventory_cost_layers_checkout_integratio
 - The trigger reconciles the allocated sale-item COGS against the original posted sale journal. If the valuation differs, it posts one idempotent balanced inventory/COGS adjustment using the existing GL posting routine.
 - Replayed trigger events are idempotent and verify the existing adjustment rather than posting it twice.
 
-### Remaining integration before declaring the full costing lifecycle complete
+## Phase 3 — return and cancellation reversals
 
-Return restocking must restore the original sale cost-layer quantities (not create a new purchase-cost layer), and sale cancellation must reverse the same allocations and any COGS adjustment. These paths are not yet changed by Phase 2 because their existing posting contracts need to be connected without duplicating stock or journal entries. Opening stock with unknown cost must be valued through an audited opening-stock workflow before it can be issued through the layer allocator.
+The additive migration `20261031100000_inventory_cost_return_cancel_reversals.sql` connects the existing return and sale-cancellation workflows:
 
-Until return and cancellation reversals are integrated and tested, FIFO/LIFO checkout costing is integrated, but the full sale-return-cancellation lifecycle is not complete.
+- A successful return restock restores quantities to the exact original cost layers consumed by that sale line. It does not create a fictitious purchase receipt.
+- Return-cost allocations preserve the source sale allocation, cost layer, quantity, and historical unit cost as a separate audit trail from the cash-refund posting.
+- Repeated or excessive return quantities are bounded by the original unreturned sale allocations; any mismatch aborts the entire restock transaction.
+- Weighted-average returns keep active layers aligned with the moving-average balance maintained by the existing restock RPC. FIFO/LIFO preserve the original layer costs.
+- Sale cancellation restores only the still-unreturned portions of original cost allocations and records explicit reversal rows.
+- The existing cancellation journal reversal remains in place; the new trigger also reverses any additional sale-cost-adjustment journal exactly once.
+- Cancellation is blocked while a sale has an unresolved return request, preventing a return from being orphaned after stock is restored by cancellation.
+- The layer ledger is checked against the existing balance quantity without replacing the balance table as the quantity source of truth.
+
+### Remaining work before calling the entire costing lifecycle production-complete
+
+- Add an audited opening-stock valuation workflow for balances whose cost is unknown; these balances must not receive fabricated costs.
+- Add operator-facing organization/branch costing-method settings and cost-layer valuation/reconciliation reports.
+- Validate the migrations against a disposable/staging database with real authenticated checkout, receipt, partial-return, full-return, and cancellation transactions before production deployment.
+
+FIFO/LIFO/weighted-average now have repository-level foundations for receipts, checkout/COGS, returns, and cancellation reversals. Do not deploy the migrations to the live Supabase project until the staging transaction tests and release checks are complete.
 
 > LIFO is implemented as a technical valuation option; confirm the applicable accounting standards and local tax rules before using it for statutory reporting.
