@@ -30,3 +30,4 @@ def test_stock_screen_exposes_policy_controls_and_cost_layer_coverage():
     assert "حفظ طريقة التكلفة" in screen
     assert "ملخص طبقات التكلفة النشطة" in screen
     assert "لا تُخمن لها تكلفة" in screen
+    assert "ملخص التغطية أعلاه يخص الموقع الحالي فقط" in screen
