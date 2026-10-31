@@ -22,6 +22,7 @@ def test_post_checkout_allocation_is_bound_to_exact_sale_location_and_quantity()
     assert "sm.movement_type='sale'" in sql
     assert "v_movement_delta IS DISTINCT FROM -v_expected_sale_quantity" in sql
     assert "sale_item_not_owned_by_authenticated_user" in sql
+    assert "ELSE v_layer.source_unit_cost_minor END" in sql
 
 
 def test_costing_gl_is_reconciled_with_a_single_idempotent_adjustment():
