@@ -32,6 +32,19 @@ class NearbyCatalogInventorySetupContractTests(unittest.TestCase):
         self.assertIn('put("base_unit_code",base.optString("unit_code"))', self.screen)
         self.assertIn('put("sale_unit_code",sale.optString("unit_code"))', self.screen)
 
+    def test_nearby_results_keep_scroll_pagination_radius_expansion_and_selection(self):
+        self.assertIn("var nearbyHasMore by remember", self.screen)
+        self.assertIn("var nearbyLoadGeneration by remember", self.screen)
+        self.assertIn("val nearbyListState = rememberLazyListState()", self.screen)
+        self.assertIn("fun startNearbyCatalog()", self.screen)
+        self.assertIn("nearbyHasMore=rows.length()==30", self.screen)
+        self.assertIn("snapshotFlow", self.screen)
+        self.assertIn("if(nearbyHasMore) loadNearbyCatalog(false) else loadNearbyCatalog(true)", self.screen)
+        self.assertIn("LazyColumn(state=nearbyListState", self.screen)
+        self.assertIn("FilterChip(", self.screen)
+        self.assertIn("selectedCatalogIds.size<100", self.screen)
+        self.assertIn("nearbyHasMore=true; nearbyLoadGeneration++", self.screen)
+
     def test_configure_rpc_remains_authoritative_and_does_not_create_stock_or_price(self):
         self.assertIn('commercial_catalog_configure_items', self.screen)
         self.assertIn('p_branch_location_id', self.screen)
