@@ -127,7 +127,7 @@ BEGIN
   LOOP
     EXIT WHEN v_remaining=0;
     v_take := least(v_remaining,v_layer.quantity_remaining);
-    v_layer_cost := CASE WHEN v_method='weighted_average' THEN v_balance.unit_cost_minor ELSE v_layer.unit_cost_minor END;
+    v_layer_cost := CASE WHEN v_method='weighted_average' THEN v_balance.unit_cost_minor ELSE v_layer.source_unit_cost_minor END;
     INSERT INTO public.commercial_inventory_cost_allocations(
       organization_id,location_id,offering_id,sale_id,sale_item_id,cost_layer_id,
       costing_method,quantity,unit_cost_minor,total_cost_minor
