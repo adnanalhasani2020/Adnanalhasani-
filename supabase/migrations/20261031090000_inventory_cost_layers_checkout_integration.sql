@@ -174,6 +174,7 @@ DECLARE
   v_sale public.commercial_sales%ROWTYPE;
   v_offering uuid;
   v_location uuid;
+  v_location_text text;
   v_movement_count integer;
   v_movement_delta numeric;
   v_expected_quantity numeric;
@@ -202,8 +203,149 @@ BEGIN
     ORDER BY i.offering_id
   LOOP
     SELECT count(*)::integer, min(sm.quantity_delta),
-           min(substring(sm.source_ref from ':location:([0-9a-fA-F-]{36})$'))
-      INTO v_movement_count,v_movement_delta,v_location
+           min(substring(sm.source_ref from ':location:([0-9a-fA-F-]{36})
+    FROM public.commercial_stock_movements sm
+    WHERE sm.sale_id=p_sale_id AND sm.offering_id=v_offering
+      AND sm.movement_type='sale'
+      AND sm.source_ref LIKE 'sale:'||p_sale_id::text||':offering:'||v_offering::text||':location:%';
+    IF v_movement_count=0 THEN
+      -- Other legacy sale flows that do not post this stock-movement contract
+      -- retain their existing valuation behavior.
+      CONTINUE;
+    END IF;
+    v_has_sale_movements := true;
+    IF v_movement_count<>1 OR v_location_text IS NULL THEN
+      RAISE EXCEPTION 'sale_costing_stock_movement_ambiguous' USING ERRCODE='55000';
+    END IF;
+    v_location := v_location_text::uuid;
+    SELECT coalesce(sum(coalesce(i.quantity_in_stock_units,i.quantity)::numeric),0)
+      INTO v_expected_quantity
+    FROM public.commercial_sale_items i
+    WHERE i.sale_id=p_sale_id AND i.offering_id=v_offering;
+    IF v_movement_delta IS DISTINCT FROM -v_expected_quantity THEN
+      RAISE EXCEPTION 'sale_costing_stock_movement_quantity_mismatch' USING ERRCODE='55000';
+    END IF;
+
+    FOR v_item IN
+      SELECT i.id
+      FROM public.commercial_sale_items i
+      WHERE i.sale_id=p_sale_id AND i.offering_id=v_offering
+      ORDER BY i.created_at,i.id
+    LOOP
+      PERFORM commercial_private.commercial_allocate_sale_item_cost(v_item.id,v_location);
+    END LOOP;
+  END LOOP;
+
+  IF NOT v_has_sale_movements THEN RETURN; END IF;
+
+  SELECT coalesce(sum(i.cost_total_minor::numeric),0)
+    INTO v_target_cogs
+  FROM public.commercial_sale_items i
+  WHERE i.sale_id=p_sale_id;
+
+  SELECT max(m.ledger_account_id) FILTER (WHERE m.mapping_key='cost_of_goods_sold'),
+         max(m.ledger_account_id) FILTER (WHERE m.mapping_key='inventory')
+    INTO v_cogs_account,v_inventory_account
+  FROM public.commercial_gl_account_mappings m
+  WHERE m.organization_id=v_sale.organization_id;
+  IF v_target_cogs>0 AND (v_cogs_account IS NULL OR v_inventory_account IS NULL) THEN
+    RAISE EXCEPTION 'inventory_costing_gl_mappings_incomplete' USING ERRCODE='55000';
+  END IF;
+
+  SELECT coalesce(sum(l.debit_minor::numeric-l.credit_minor::numeric),0)
+    INTO v_original_cogs
+  FROM public.commercial_journal_entries e
+  JOIN public.commercial_journal_lines l ON l.journal_entry_id=e.id
+  WHERE e.organization_id=v_sale.organization_id
+    AND e.source_type='sale' AND e.source_id=p_sale_id AND e.status='posted'
+    AND l.ledger_account_id=v_cogs_account;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.commercial_journal_entries e
+    WHERE e.organization_id=v_sale.organization_id
+      AND e.source_type='sale' AND e.source_id=p_sale_id AND e.status='posted'
+  ) THEN
+    RAISE EXCEPTION 'sale_costing_original_journal_missing' USING ERRCODE='55000';
+  END IF;
+
+  v_delta := v_target_cogs-v_original_cogs;
+  IF abs(v_delta)>9223372036854775807 THEN
+    RAISE EXCEPTION 'inventory_costing_gl_adjustment_overflow' USING ERRCODE='22003';
+  END IF;
+
+  SELECT e.id INTO v_existing_adjustment
+  FROM public.commercial_journal_entries e
+  WHERE e.organization_id=v_sale.organization_id
+    AND e.source_type='sale_cost_adjustment' AND e.source_id=p_sale_id
+    AND e.status='posted'
+  ORDER BY e.created_at DESC
+  LIMIT 1;
+
+  IF v_existing_adjustment IS NOT NULL THEN
+    SELECT coalesce(sum(l.debit_minor::numeric-l.credit_minor::numeric),0)
+      INTO v_existing_adjustment_cogs
+    FROM public.commercial_journal_lines l
+    WHERE l.journal_entry_id=v_existing_adjustment
+      AND l.ledger_account_id=v_cogs_account;
+    IF v_existing_adjustment_cogs IS DISTINCT FROM v_delta THEN
+      RAISE EXCEPTION 'sale_costing_adjustment_reconciliation_mismatch' USING ERRCODE='55000';
+    END IF;
+    RETURN;
+  END IF;
+
+  IF v_delta<>0 THEN
+    IF v_delta>0 THEN
+      v_lines:=jsonb_build_array(
+        jsonb_build_object('ledger_account_id',v_cogs_account,'debit_minor',v_delta::bigint,'credit_minor',0,'description','Inventory costing method adjustment - COGS'),
+        jsonb_build_object('ledger_account_id',v_inventory_account,'debit_minor',0,'credit_minor',v_delta::bigint,'description','Inventory costing method adjustment - inventory')
+      );
+    ELSE
+      v_lines:=jsonb_build_array(
+        jsonb_build_object('ledger_account_id',v_inventory_account,'debit_minor',abs(v_delta)::bigint,'credit_minor',0,'description','Inventory costing method adjustment - inventory'),
+        jsonb_build_object('ledger_account_id',v_cogs_account,'debit_minor',0,'credit_minor',abs(v_delta)::bigint,'description','Inventory costing method adjustment - COGS')
+      );
+    END IF;
+    PERFORM commercial_private.commercial_gl_post_entry(
+      v_sale.organization_id,
+      'sale-cost-adjustment:'||p_sale_id::text,
+      'sale_cost_adjustment',
+      p_sale_id,
+      'Inventory costing reconciliation for sale '||p_sale_id::text,
+      v_sale.currency_code,
+      v_lines,
+      v_sale.user_id,
+      NULL
+    );
+  END IF;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION commercial_private.commercial_finalize_sale_inventory_costing_trigger()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'pg_catalog','public','commercial_private'
+AS $function$
+BEGIN
+  PERFORM commercial_private.commercial_finalize_sale_inventory_costing(NEW.sale_id);
+  RETURN NULL;
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION commercial_private.commercial_allocate_sale_item_cost(uuid,uuid) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION commercial_private.commercial_allocate_sale_item_cost(uuid,uuid) TO postgres,service_role;
+REVOKE ALL ON FUNCTION commercial_private.commercial_finalize_sale_inventory_costing(uuid) FROM PUBLIC,anon,authenticated;
+REVOKE ALL ON FUNCTION commercial_private.commercial_finalize_sale_inventory_costing_trigger() FROM PUBLIC,anon,authenticated;
+
+DROP TRIGGER IF EXISTS commercial_sale_item_costing_finalize_trg ON public.commercial_sale_items;
+CREATE CONSTRAINT TRIGGER commercial_sale_item_costing_finalize_trg
+AFTER INSERT OR UPDATE ON public.commercial_sale_items
+DEFERRABLE INITIALLY DEFERRED
+FOR EACH ROW
+EXECUTE FUNCTION commercial_private.commercial_finalize_sale_inventory_costing_trigger();
+
+COMMIT;
+))
+      INTO v_movement_count,v_movement_delta,v_location_text
     FROM public.commercial_stock_movements sm
     WHERE sm.sale_id=p_sale_id AND sm.offering_id=v_offering
       AND sm.movement_type='sale'
