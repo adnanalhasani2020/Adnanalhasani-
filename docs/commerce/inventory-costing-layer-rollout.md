@@ -19,12 +19,20 @@ A missing policy keeps the existing weighted-average balance-cost behavior. The 
 - Repeated allocation calls are idempotent; insufficient layer quantity fails rather than falling back to a guessed cost.
 - Policy, layer, and allocation records are organization-scoped and protected by RLS.
 
-### Required integration before enabling FIFO/LIFO for live sales
+## Phase 2 — checkout and COGS integration
 
-This phase deliberately does not silently switch existing checkout, return, cancellation, or accounting behavior. The checkout transaction must call `commercial_private.commercial_allocate_sale_item_cost(sale_item_id, location_id)` after creating each sale line and before decrementing its inventory balance. The existing mixed-selling-unit wrapper must allocate all resulting sale lines exactly once.
+The additive migration `20261031090000_inventory_cost_layers_checkout_integration.sql` connects the existing checkout without replacing its pricing, payment, stock, or mixed-selling-unit workflows:
 
-Return restocking must restore the original cost-layer allocations (not create a new purchase-cost layer), and sale cancellation must reverse the same allocations. Opening stock with unknown cost must be valued through an audited opening-stock workflow before it can be issued through the layer allocator.
+- A deferred constraint trigger runs at transaction end, after the mixed-selling-unit wrapper has materialized the final sale-item rows.
+- It allocates each final sale line against the configured FIFO, LIFO, or weighted-average layers and verifies the exact sale stock movement, offering, location, and total issued quantity.
+- Insufficient or unknown cost layers abort the checkout transaction; stock, sale, allocations, and journal work do not partially commit.
+- The trigger reconciles the allocated sale-item COGS against the original posted sale journal. If the valuation differs, it posts one idempotent balanced inventory/COGS adjustment using the existing GL posting routine.
+- Replayed trigger events are idempotent and verify the existing adjustment rather than posting it twice.
 
-The next integration phase must reconcile the resulting sale-item COGS snapshots with the existing inventory-asset / COGS journal lines and extend the inventory integrity checks. Until that is complete, the current checkout remains authoritative and this migration does not claim end-to-end FIFO/LIFO activation.
+### Remaining integration before declaring the full costing lifecycle complete
+
+Return restocking must restore the original sale cost-layer quantities (not create a new purchase-cost layer), and sale cancellation must reverse the same allocations and any COGS adjustment. These paths are not yet changed by Phase 2 because their existing posting contracts need to be connected without duplicating stock or journal entries. Opening stock with unknown cost must be valued through an audited opening-stock workflow before it can be issued through the layer allocator.
+
+Until return and cancellation reversals are integrated and tested, FIFO/LIFO checkout costing is integrated, but the full sale-return-cancellation lifecycle is not complete.
 
 > LIFO is implemented as a technical valuation option; confirm the applicable accounting standards and local tax rules before using it for statutory reporting.
