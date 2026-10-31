@@ -12,6 +12,7 @@ DECLARE
   v_warehouse_activity_id uuid;
   v_activity_node_id uuid;
   v_activity_code text;
+  v_setup_node_code text;
   v_activity_org_id uuid;
   v_offering_location_ref text;
 BEGIN
