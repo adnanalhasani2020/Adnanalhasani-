@@ -42,18 +42,11 @@ def test_return_and_cancel_cost_history_is_preserved_and_read_only_to_members():
     assert "DROP TABLE" not in sql
 
 
-def test_return_and_cancel_hooks_run_inside_existing_transactions():
+def test_return_gl_reverses_exact_layer_cost_and_preserves_legacy_fallback():
     sql = MIGRATION.read_text(encoding="utf-8")
-    assert "AFTER UPDATE OF restocked_quantity" in sql
-    assert "AFTER UPDATE OF status ON public.commercial_sales" in sql
-    assert "commercial_sale_cost_layers_cancel_reversal_trg" in sql
-    assert "commercial_return_restore_cost_layers_trg" in sql
-
-
-def test_return_and_cancellation_quantities_cannot_exceed_original_allocations():
-    sql = MIGRATION.read_text(encoding="utf-8")
-    assert "a.quantity" in sql
-    assert "sum(ra.quantity)" in sql
-    assert "sum(cr.quantity)" in sql
-    assert "greatest(" in sql
-    assert "return_cost_allocation_insufficient" in sql
+    assert "CREATE OR REPLACE FUNCTION public.commercial_gl_post_sale_return" in sql
+    assert "sum(ra.total_cost_minor)" in sql
+    assert "FROM public.commercial_inventory_return_cost_allocations ra" in sql
+    assert "IF v_has_layer_cost THEN" in sql
+    assert "sum(rp.quantity::numeric*rp.unit_cost_minor::numeric)" in sql
+    assert "'cost_reversed_minor'" in sql
