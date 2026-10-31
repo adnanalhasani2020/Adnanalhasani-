@@ -74,8 +74,9 @@ BEGIN
   END LOOP;
 
   IF v_found <> cardinality(v_constraint_names) THEN
-    RAISE EXCEPTION 'Expected % foreign keys for indexing, found %',
-      cardinality(v_constraint_names), v_found;
+    RAISE EXCEPTION 'Expected % foreign keys for indexing',
+      cardinality(v_constraint_names)
+      USING DETAIL = format('Found %s foreign keys', v_found);
   END IF;
 END $$;
 
