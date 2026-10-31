@@ -267,6 +267,7 @@ DECLARE
   v_available numeric;
   v_layer_qty numeric;
   v_balance_qty numeric;
+  v_new_average numeric;
   v_entry public.commercial_journal_entries%ROWTYPE;
   v_currency text;
   v_lines jsonb;
@@ -346,6 +347,21 @@ BEGIN
     IF NOT FOUND OR v_layer_qty IS DISTINCT FROM v_balance_qty THEN
       RAISE EXCEPTION 'cancel_cost_layer_balance_quantity_mismatch' USING ERRCODE='55000';
     END IF;
+    SELECT round(sum(l.quantity_remaining*l.unit_cost_minor::numeric)/v_layer_qty)
+      INTO v_new_average
+    FROM public.commercial_inventory_cost_layers l
+    WHERE l.organization_id=v_alloc.organization_id
+      AND l.location_id=v_alloc.location_id
+      AND l.offering_id=v_alloc.offering_id
+      AND l.quantity_remaining>0;
+    IF v_new_average IS NULL OR v_new_average>9223372036854775807 THEN
+      RAISE EXCEPTION 'cancel_cost_average_invalid' USING ERRCODE='22003';
+    END IF;
+    UPDATE public.commercial_inventory_balances b
+    SET unit_cost_minor=v_new_average::bigint,updated_at=now()
+    WHERE b.organization_id=v_alloc.organization_id
+      AND b.location_id=v_alloc.location_id
+      AND b.offering_id=v_alloc.offering_id;
   END LOOP;
 
   -- The pre-existing cancellation trigger reverses the sale and collection
