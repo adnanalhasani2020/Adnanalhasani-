@@ -1,6 +1,7 @@
 BEGIN;
 
 -- Return quantities restore the exact source cost layers consumed by the sale.
+-- Cost restoration is intentionally coupled to the existing restock transaction.
 -- This is separate from the refund posting: stock restoration and cash refund
 -- remain distinct, existing workflows.
 CREATE TABLE IF NOT EXISTS public.commercial_inventory_return_cost_allocations (
