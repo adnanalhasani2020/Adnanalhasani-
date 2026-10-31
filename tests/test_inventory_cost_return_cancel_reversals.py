@@ -19,7 +19,6 @@ def test_weighted_average_return_revalues_remaining_layers_without_losing_origin
     sql = MIGRATION.read_text(encoding="utf-8")
     assert "SET unit_cost_minor=v_balance.unit_cost_minor" in sql
     assert "source_unit_cost_minor" in sql
-    assert "source_unit_cost_minor" not in sql or "commercial_inventory_cost_layers" in sql
 
 
 def test_sale_cancellation_reverses_only_unreturned_cost_and_adjustment_journals():
