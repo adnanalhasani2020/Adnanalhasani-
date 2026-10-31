@@ -342,8 +342,8 @@ SELECT ok(
      AND (
        has_function_privilege('anon', p.oid, 'EXECUTE')
        OR NOT EXISTS (
-         SELECT 1 FROM unnest(coalesce(p.proconfig, ARRAY[]::text[])) setting
-         WHERE setting LIKE 'search_path=%'
+         SELECT 1 FROM unnest(coalesce(p.proconfig, ARRAY[]::text[])) AS settings(setting)
+         WHERE settings.setting LIKE 'search_path=%'
        )
      )),
   'all public SECURITY DEFINER functions pin search_path and none are executable by anon'
