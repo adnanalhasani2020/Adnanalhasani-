@@ -34,7 +34,7 @@ The additive migration `20261031090000_inventory_cost_layers_checkout_integratio
 The additive migration `20261031100000_inventory_cost_return_cancel_reversals.sql` connects the existing return and sale-cancellation workflows:
 
 - A successful return restock restores quantities to the exact original cost layers consumed by that sale line; it does not create a fictitious purchase receipt.
-- Return-cost allocations preserve the source sale allocation, cost layer, quantity, and historical unit cost as a separate audit trail from the cash-refund posting.
+- Return-cost allocations preserve the source sale allocation, cost layer, quantity, and historical unit cost as a separate audit trail from the cash-refund posting. The return GL posting now uses these exact allocation totals for COGS reversal, with the original posting-cost calculation retained for legacy returns.
 - Returned quantities are bounded by original unreturned sale allocations; any mismatch aborts the entire restock transaction.
 - Weighted-average returns keep active layers aligned with the moving-average balance maintained by the existing restock RPC. FIFO/LIFO preserve the original layer costs.
 - Sale cancellation restores only still-unreturned portions of original cost allocations and records explicit reversal rows.
@@ -45,7 +45,7 @@ The additive migration `20261031100000_inventory_cost_return_cancel_reversals.sq
 ### Remaining release work
 
 - Add an audited opening-stock valuation workflow for balances whose cost is unknown; never fabricate historical costs.
-- Add operator-facing organization/branch costing-method settings and cost-layer valuation/reconciliation reports.
+- Organization-default and current-location costing-method controls are exposed in the cloud stock-alert screen, with server-side role enforcement. The same screen summarizes active cost-layer coverage and flags quantities not covered by known cost layers. Detailed exportable layer-allocation and reconciliation reports remain to be completed.
 - Validate the migrations with authenticated receipt, checkout, partial-return, full-return, and cancellation transactions in a disposable or staging database before production deployment.
 
 FIFO/LIFO/weighted-average now have repository-level foundations for receipts, checkout/COGS, returns, and cancellation reversals. Do not deploy these migrations to the live Supabase project until staging transaction tests and release checks are complete.
