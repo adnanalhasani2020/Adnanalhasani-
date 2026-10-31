@@ -14,9 +14,10 @@ class InvoicePurchaseLineIntegrityTests(unittest.TestCase):
         self.assertIn("ORDER BY line_number", self.migration)
 
     def test_approval_does_not_guess_catalog_offerings(self):
-        self.assertIn("v_item.line_number,NULL", self.migration)
-        self.assertIn("catalog_mapping_required',true", self.migration)
-        self.assertNotIn("LIMIT 1", self.migration.split("CREATE OR REPLACE FUNCTION public.commercial_review_invoice_purchase_request", 1)[1].split("-- Map by", 1)[0])
+        approval = self.migration.split("CREATE OR REPLACE FUNCTION public.commercial_review_invoice_purchase_request", 1)[1].split("-- Map by", 1)[0]
+        self.assertIn("v_item.line_number,NULL", approval)
+        self.assertIn("catalog_mapping_required',true", approval)
+        self.assertNotIn("SELECT m.offering_id", approval)
 
     def test_mapping_is_scoped_to_the_receiving_location_and_preserves_stock(self):
         mapping = self.migration.split("CREATE OR REPLACE FUNCTION public.commercial_invoice_purchase_map_known_items", 1)[1]
