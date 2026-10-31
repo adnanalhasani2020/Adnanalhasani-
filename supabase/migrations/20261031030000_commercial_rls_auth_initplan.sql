@@ -103,4 +103,23 @@ CREATE POLICY commercial_supplier_payments_org_read ON public.commercial_supplie
    AND m.user_id=(SELECT auth.uid()) AND m.state='active'
  ));
 
+
+DROP POLICY IF EXISTS commercial_supplier_gl_accounts_org_read ON public.commercial_supplier_gl_accounts;
+CREATE POLICY commercial_supplier_gl_accounts_org_read ON public.commercial_supplier_gl_accounts
+ FOR SELECT TO authenticated
+ USING (EXISTS (
+  SELECT 1 FROM public.commercial_organization_members m
+  WHERE m.organization_id=commercial_supplier_gl_accounts.organization_id
+   AND m.user_id=(SELECT auth.uid()) AND m.state='active'
+ ));
+
+DROP POLICY IF EXISTS commercial_supplier_party_accounts_org_read ON public.commercial_supplier_party_accounts;
+CREATE POLICY commercial_supplier_party_accounts_org_read ON public.commercial_supplier_party_accounts
+ FOR SELECT TO authenticated
+ USING (EXISTS (
+  SELECT 1 FROM public.commercial_organization_members m
+  WHERE m.organization_id=commercial_supplier_party_accounts.organization_id
+   AND m.user_id=(SELECT auth.uid()) AND m.state='active'
+ ));
+
 COMMIT;
