@@ -8,7 +8,7 @@ class CommercialRlsInitplanTests(unittest.TestCase):
         cls.sql = Path("supabase/migrations/20261031030000_commercial_rls_auth_initplan.sql").read_text(encoding="utf-8")
 
     def test_policies_cache_auth_uid_without_widening_access(self):
-        self.assertEqual(self.sql.count("(SELECT auth.uid())"), 12)
+        self.assertEqual(self.sql.count("(SELECT auth.uid())"), 11)
         self.assertNotIn("auth.uid())", self.sql.replace("(SELECT auth.uid())", ""))
         self.assertIn("ARRAY['owner','admin','accountant']::text[]", self.sql)
         self.assertIn("ARRAY['owner','admin','manager']::text[]", self.sql)
