@@ -43,6 +43,8 @@ class InventoryCostLayersContractTests(unittest.TestCase):
     def test_costing_data_is_organization_scoped_and_rls_protected(self):
         self.assertIn("ENABLE ROW LEVEL SECURITY", self.sql)
         self.assertIn("commercial_organization_members", self.sql)
+        self.assertIn("commercial_validate_inventory_costing_policy_scope", self.sql)
+        self.assertIn("inventory_costing_policy_location_scope_mismatch", self.sql)
         self.assertIn("commercial_inventory_cost_allocations_member_read", self.sql)
         self.assertIn("REVOKE ALL ON public.commercial_inventory_costing_policies", self.sql)
 
