@@ -19,6 +19,20 @@ class CommercialSecurityDefinerAuditContractTests(unittest.TestCase):
         self.assertIn("explicitly empty path is also pinned", sql)
         self.assertIn("coalesce(p.proconfig, ARRAY[]::text[])", sql)
 
+    def test_internal_financial_helpers_are_not_direct_api_entry_points(self):
+        migration = (
+            ROOT
+            / "supabase/migrations/20261101010000_revoke_internal_financial_helper_execute.sql"
+        ).read_text(encoding="utf-8")
+        for function in (
+            "commercial_customer_party_account(uuid,uuid,text)",
+            "commercial_initialize_gl_chart(uuid)",
+        ):
+            self.assertIn("REVOKE ALL ON FUNCTION commercial_private." + function, migration)
+        self.assertIn("FROM PUBLIC, anon, authenticated", migration)
+        sql = PGTAP.read_text(encoding="utf-8")
+        self.assertIn("internal customer-party and GL initialization helpers", sql)
+
 
 if __name__ == "__main__":
     unittest.main()
