@@ -51,3 +51,10 @@ def test_return_gl_reverses_exact_layer_cost_and_preserves_legacy_fallback():
     assert "WHERE ra.return_item_id=rp.return_item_id" in sql
     assert "sum(rp.quantity::numeric*rp.unit_cost_minor::numeric)" in sql
     assert "'cost_reversed_minor'" in sql
+
+
+def test_legacy_sale_returns_without_cost_layers_keep_existing_restock_path():
+    sql = MIGRATION.read_text(encoding="utf-8")
+    assert "Legacy sale lines predate cost-layer allocations" in sql
+    assert "WHERE a.sale_item_id=NEW.sale_item_id" in sql
+    assert "RETURN NEW;" in sql
