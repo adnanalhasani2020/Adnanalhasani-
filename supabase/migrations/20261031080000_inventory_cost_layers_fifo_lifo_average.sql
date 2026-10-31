@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS public.commercial_inventory_costing_policies (
   effective_at timestamptz NOT NULL DEFAULT now(),
   created_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS commercial_inventory_costing_policy_org_location_uq
   ON public.commercial_inventory_costing_policies(organization_id,location_id)
