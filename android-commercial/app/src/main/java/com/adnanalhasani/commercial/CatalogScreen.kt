@@ -809,6 +809,11 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                                 Button(onClick={startNearbyCatalog()},enabled=!busy && selectedBranchId.isNotBlank()) { Text("الأكثر استخدامًا قريبًا") }
                                 OutlinedButton(onClick={loadSelectedPriceSuggestions()},enabled=!busy && selectedCatalogIds.isNotEmpty()) { Text("أسعار استرشادية") }
                             }
+                            OutlinedButton(
+                                onClick={section="product"},
+                                enabled=!busy,
+                                modifier=Modifier.fillMaxWidth()
+                            ) { Text("إنشاء صنف جديد") }
                             Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
                                 Button(onClick={configureSelectedCatalogItems()},enabled=!busy && selectedCatalogIds.isNotEmpty() && selectedCatalogIds.size<=100 && selectedActivityCode.isNotBlank() && selectedBranchId.isNotBlank() && selectedWarehouseId.isNotBlank()) { Text("تهيئة المختار للفرع") }
                                 OutlinedButton(onClick={loadNearbyCatalog(false)},enabled=!busy && nearbyHasMore) { Text("تحميل المزيد") }

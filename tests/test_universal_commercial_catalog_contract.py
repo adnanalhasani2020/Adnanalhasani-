@@ -104,6 +104,10 @@ class UniversalCommercialCatalogContractTests(unittest.TestCase):
         self.assertIn("runCatching { JSONArray(line) }", self.edit_dialog)
         self.assertIn("put(structured ?: line)", self.edit_dialog)
 
+    def test_catalog_has_direct_shortcut_to_create_new_item_from_activity_setup(self):
+        self.assertIn('onClick={section="product"}', self.android)
+        self.assertIn('Text("إنشاء صنف جديد")', self.android)
+
     def test_cross_industry_starter_templates_are_bilingual_and_unbranded(self):
         self.assertIn("PHONE-SMARTPHONE", self.seed)
         self.assertIn("AUTO-OIL-FILTER", self.seed)
