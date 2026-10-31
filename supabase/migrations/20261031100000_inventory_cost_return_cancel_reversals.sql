@@ -114,6 +114,15 @@ BEGIN
   FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'sale_item_not_found_for_cost_restoration' USING ERRCODE='55000'; END IF;
 
+  -- Legacy sale lines predate cost-layer allocations. Preserve their existing
+  -- return restock path; the return GL routine falls back to posting snapshots.
+  IF NOT EXISTS (
+    SELECT 1 FROM public.commercial_inventory_cost_allocations a
+    WHERE a.sale_item_id=NEW.sale_item_id
+  ) THEN
+    RETURN NEW;
+  END IF;
+
   SELECT * INTO v_posting
   FROM public.commercial_return_restock_postings
   WHERE return_item_id=NEW.id
