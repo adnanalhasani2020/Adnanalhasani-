@@ -180,6 +180,9 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var nearbyMarketItems by remember { mutableStateOf<List<NearbyCatalogItem>>(emptyList()) }
     var marketRadius by remember { mutableIntStateOf(5000) }
     var nearbyOffset by remember { mutableIntStateOf(0) }
+    var nearbyHasMore by remember { mutableStateOf(true) }
+    var nearbyLoadGeneration by remember { mutableIntStateOf(0) }
+    val nearbyListState = rememberLazyListState()
     var marketPriceHints by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var invoiceSaleId by remember { mutableStateOf("") }
     var invoiceDestinationOrg by remember { mutableStateOf("") }
@@ -377,25 +380,53 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         if(selectedActivityCode.isBlank() || selectedBranchId.isBlank() || selectedWarehouseId.isBlank() || selectedCatalogIds.isEmpty()) {
             feedback="اختر النشاط والفرع والمستودع وحدد الأصناف أولًا."; return
         }
-        val chosen=items.filter { it.id in selectedCatalogIds }
-        val payloadItems=JSONArray()
-        for(item in chosen) {
-            val base=item.availableUnits.firstOrNull { it.role.equals("base",true) && it.quantityInBase.toBigDecimalOrNull()?.compareTo(java.math.BigDecimal.ONE)==0 }
-            val sale=item.availableUnits.firstOrNull { it.isDefault } ?: item.availableUnits.firstOrNull { it.role.equals("sale",true) } ?: base
-            if(base==null || sale==null) {
-                feedback="تعذر تهيئة صنف لأن دليل وحداته لا يحتوي وحدة أساس ومعامل تحويل موثوقين. لن يتم اختلاق معامل تحويل."
-                return
-            }
-            payloadItems.put(JSONObject().put("global_item_id",item.id).put("base_unit_code",base.unitCode).put("sale_unit_code",sale.unitCode))
-        }
+        if(selectedCatalogIds.size>100) { feedback="الحد الأقصى للعملية الواحدة 100 صنف."; return }
+        val selectedIds=selectedCatalogIds.toList()
         request({
+            // Fetch authoritative unit rows for every selected item, including items selected from nearby discovery.
+            // Product-unit RLS inherits visibility from the global catalog item.
+            val filter=java.net.URLEncoder.encode("in.("+selectedIds.joinToString(",")+")","UTF-8")
+            val unitRaw=catalogGet("/rest/v1/commercial_catalog_product_units?select=product_id,unit_code,unit_role,quantity_in_base,is_default&is_active=eq.true&product_id=$filter&order=product_id.asc,is_default.desc,created_at.asc",active)
+            val unitRows=JSONArray(unitRaw)
+            val grouped=mutableMapOf<String,MutableList<JSONObject>>()
+            for(i in 0 until unitRows.length()) {
+                val row=unitRows.getJSONObject(i)
+                grouped.getOrPut(row.optString("product_id")) { mutableListOf() }.add(row)
+            }
+            val payloadItems=JSONArray()
+            for(id in selectedIds) {
+                val units=grouped[id].orEmpty()
+                val baseCandidates=units.filter {
+                    it.optString("unit_role").equals("base",true) &&
+                        it.optString("quantity_in_base").toBigDecimalOrNull()?.compareTo(java.math.BigDecimal.ONE)==0
+                }
+                if(baseCandidates.size!=1) {
+                    throw IllegalStateException("الصنف $id لا يملك وحدة أساس واحدة موثوقة في الدليل؛ راجع بيانات وحداته قبل التهيئة.")
+                }
+                // The catalog authoring contract marks the base unit as the product's sole default.
+                // Therefore, only a sale-role default can be preferred as the sale unit.
+                val saleCandidates=units.filter { it.optString("unit_role").equals("sale",true) }
+                val defaultSaleCandidates=saleCandidates.filter { it.optBoolean("is_default",false) }
+                if(defaultSaleCandidates.size>1 || (defaultSaleCandidates.isEmpty() && saleCandidates.size>1)) {
+                    throw IllegalStateException("وحدات الصنف $id تحتوي أكثر من وحدة بيع افتراضية أو مرشحة؛ يلزم تصحيح الدليل قبل التهيئة.")
+                }
+                val base=baseCandidates.single()
+                val sale=defaultSaleCandidates.singleOrNull() ?: saleCandidates.singleOrNull() ?: base
+                val saleFactor=sale.optString("quantity_in_base").toBigDecimalOrNull()
+                if(saleFactor==null || saleFactor<=java.math.BigDecimal.ZERO || sale.optString("unit_code").isBlank()) {
+                    throw IllegalStateException("معامل تحويل وحدة البيع للصنف $id غير صالح؛ لم يتم اختلاق معامل بديل.")
+                }
+                payloadItems.put(JSONObject().put("global_item_id",id)
+                    .put("base_unit_code",base.optString("unit_code"))
+                    .put("sale_unit_code",sale.optString("unit_code")))
+            }
             catalogHttp("/rest/v1/rpc/commercial_catalog_configure_items",JSONObject().put("p_organization_id",orgId)
                 .put("p_activity_node_code",selectedActivityCode).put("p_branch_location_id",selectedBranchId)
                 .put("p_warehouse_id",selectedWarehouseId).put("p_items",payloadItems),active)
         }, { raw ->
             val result=runCatching { JSONObject(raw) }.getOrNull()
-            feedback="تمت تهيئة "+(result?.optInt("configured_count",chosen.size) ?: chosen.size)+
-                " صنفًا للنشاط والفرع والمستودع. الأصناف غير المسعرة تبقى غير متاحة للبيع ولا يُنشأ مخزون تلقائيًا."
+            feedback="تمت تهيئة "+(result?.optInt("configured_count",selectedIds.size) ?: selectedIds.size)+
+                " صنفًا للنشاط والفرع والمستودع، بما فيها نتائج السوق القريب. الأصناف غير المسعرة تبقى غير متاحة للبيع ولا يُنشأ مخزون تلقائيًا."
         })
     }
 
@@ -419,10 +450,34 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                 row.optString("product_name"),row.optString("popularity_band"),row.optString("merchant_count_band")) }
             if(expandRadius) marketRadius=nextRadius
             nearbyOffset=requestedOffset+rows.length()
+            nearbyHasMore=rows.length()==30
             nearbyMarketItems=(nearbyMarketItems+page).distinctBy { it.id }
-            feedback=if(page.isEmpty()) "لا توجد نتائج مؤهلة ضمن هذا النطاق؛ لا توجد بيانات مجمعة كافية أو روابط أصناف موثوقة بعد."
+            nearbyLoadGeneration++
+            feedback=if(page.isEmpty()) "لا توجد نتائج إضافية في هذا النطاق؛ اسحب قائمة السوق لتوسيع البحث."
                 else "تم تحميل "+page.size+" نتيجة جديدة. النتائج مجمعة ولا تكشف هوية التجار."
         })
+    }
+
+    fun startNearbyCatalog() {
+        nearbyMarketItems=emptyList()
+        nearbyOffset=0
+        nearbyHasMore=true
+        nearbyLoadGeneration++
+        marketRadius=5000
+        loadNearbyCatalog(false)
+    }
+
+    LaunchedEffect(section, nearbyMarketItems.size, nearbyHasMore, nearbyLoadGeneration, busy, marketRadius) {
+        if(section!="browse" || nearbyMarketItems.isEmpty() || busy || marketRadius>=100000) return@LaunchedEffect
+        snapshotFlow {
+            val lastVisible=nearbyListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+            val total=nearbyListState.layoutInfo.totalItemsCount
+            Triple(lastVisible,total,nearbyListState.isScrollInProgress)
+        }.collect { (lastVisible,total,scrolling) ->
+            if(scrolling && total>0 && lastVisible>=total-2 && !busy) {
+                if(nearbyHasMore) loadNearbyCatalog(false) else loadNearbyCatalog(true)
+            }
+        }
     }
 
     fun loadSelectedPriceSuggestions() {
@@ -734,7 +789,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                                         marketBranches.forEach { branch -> DropdownMenuItem(text={Text(branch.name)},onClick={
                                             selectedBranchId=branch.id
                                             selectedWarehouseId=marketWarehouses.firstOrNull { it.branchId==branch.id }?.id.orEmpty()
-                                            nearbyMarketItems=emptyList(); nearbyOffset=0; marketRadius=5000; marketPriceHints=emptyMap(); branchMenuExpanded=false
+                                            nearbyMarketItems=emptyList(); nearbyOffset=0; nearbyHasMore=true; nearbyLoadGeneration++; marketRadius=5000; marketPriceHints=emptyMap(); branchMenuExpanded=false
                                         }) }
                                     }
                                 }
@@ -751,18 +806,31 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                             }
                             Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
                                 OutlinedButton(onClick={loadMarketContext()},enabled=!busy) { Text("تحديث الفروع") }
-                                Button(onClick={loadNearbyCatalog(false)},enabled=!busy && selectedBranchId.isNotBlank()) { Text("الأكثر استخدامًا قريبًا") }
+                                Button(onClick={startNearbyCatalog()},enabled=!busy && selectedBranchId.isNotBlank()) { Text("الأكثر استخدامًا قريبًا") }
                                 OutlinedButton(onClick={loadSelectedPriceSuggestions()},enabled=!busy && selectedCatalogIds.isNotEmpty()) { Text("أسعار استرشادية") }
                             }
                             Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-                                Button(onClick={configureSelectedCatalogItems()},enabled=!busy && selectedCatalogIds.isNotEmpty() && selectedActivityCode.isNotBlank() && selectedBranchId.isNotBlank() && selectedWarehouseId.isNotBlank()) { Text("تهيئة المختار للفرع") }
-                                OutlinedButton(onClick={loadNearbyCatalog(false)},enabled=!busy) { Text("تحميل المزيد") }
-                                OutlinedButton(onClick={loadNearbyCatalog(true)},enabled=!busy && marketRadius<100000) { Text("توسيع النطاق") }
+                                Button(onClick={configureSelectedCatalogItems()},enabled=!busy && selectedCatalogIds.isNotEmpty() && selectedCatalogIds.size<=100 && selectedActivityCode.isNotBlank() && selectedBranchId.isNotBlank() && selectedWarehouseId.isNotBlank()) { Text("تهيئة المختار للفرع") }
+                                OutlinedButton(onClick={loadNearbyCatalog(false)},enabled=!busy && nearbyHasMore) { Text("تحميل المزيد") }
+                                OutlinedButton(onClick={loadNearbyCatalog(true)},enabled=!busy && marketRadius<100000 && !nearbyHasMore) { Text("توسيع النطاق") }
                             }
                             if(nearbyMarketItems.isNotEmpty()) {
                                 Text("الأكثر استخدامًا في السوق القريب • نطاق "+(marketRadius/1000)+" كم",fontWeight=FontWeight.SemiBold)
-                                nearbyMarketItems.forEach { market ->
-                                    Text("• "+market.name+" — "+market.popularityBand+" • تجار "+market.merchantCountBand,style=MaterialTheme.typography.bodySmall)
+                                LazyColumn(state=nearbyListState,modifier=Modifier.fillMaxWidth().heightIn(min=48.dp,max=220.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                                    items(nearbyMarketItems,key={it.id}) { market ->
+                                        FilterChip(
+                                            selected=market.id in selectedCatalogIds,
+                                            onClick={
+                                                selectedCatalogIds=if(market.id in selectedCatalogIds) selectedCatalogIds-market.id
+                                                else if(selectedCatalogIds.size<100) selectedCatalogIds+market.id
+                                                else selectedCatalogIds
+                                            },
+                                            label={Text(market.name+" • "+market.popularityBand+" • تجار "+market.merchantCountBand)}
+                                        )
+                                    }
+                                    if(busy) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+                                    if(!nearbyHasMore && marketRadius<100000) item { Text("اسحب قائمة السوق لتوسيع البحث إلى المنطقة التالية.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
+                                    if(marketRadius>=100000 && !nearbyHasMore) item { Text("وصل البحث إلى أقصى نطاق 100 كم.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
                                 }
                             }
                             Text("يعتمد البحث على إحداثيات الفرع المحفوظة، وليس تتبع الجهاز. الأسعار لا تظهر إلا عند توافر بيانات مجمعة موثوقة من خمسة تجار مستقلين على الأقل.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
