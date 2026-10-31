@@ -42,10 +42,20 @@ The additive migration `20261031100000_inventory_cost_return_cancel_reversals.sq
 - Cancellation is blocked while a return request remains unresolved, preventing a return from being orphaned after cancellation restores stock.
 - The existing inventory balance remains the quantity source of truth; the cost-layer ledger is checked so it cannot exceed that balance.
 
-### Remaining release work
+## Phase 4 — audit and export data source
+
+The additive migration `20261031110000_inventory_cost_audit_report.sql` exposes `public.commercial_inventory_cost_audit_report`, a read-only event feed suitable for filtered reporting and CSV export:
+
+- Includes opening/purchase/adjustment layer receipts, sale-to-layer cost allocations, returned quantities restored to their source layers, and sale-cancellation reversals.
+- Each row includes event time, organization, location, offering, sale/return references when applicable, source cost layer, quantity, unit cost, extended cost, costing method where applicable, and source reference.
+- Monetary amounts are expressed in currency minor units. Consumers must use the transaction's currency metadata to format them; the view intentionally does not invent a currency or exchange rate.
+- The view uses `security_invoker = true`, so underlying table RLS remains the access boundary. It grants read-only access to authenticated users and does not mutate inventory, costing records, or journals.
+- Filter by `organization_id` and a bounded `event_at` date range for operational reports. This view is a valuation audit feed, not a replacement for posted general-ledger reports.
+
+## Remaining release work
 
 - Add an audited opening-stock valuation workflow for balances whose cost is unknown; never fabricate historical costs.
-- Organization-default and current-location costing-method controls are exposed in the cloud stock-alert screen, with server-side role enforcement. The same screen summarizes active cost-layer coverage and flags quantities not covered by known cost layers. Detailed exportable layer-allocation and reconciliation reports remain to be completed.
+- Organization-default and current-location costing-method controls are exposed in the cloud stock-alert screen, with server-side role enforcement. The same screen summarizes active cost-layer coverage and flags quantities not covered by known cost layers. The detailed event feed is now available for reporting/export; an in-app export screen and report reconciliation presentation remain.
 - Validate the migrations with authenticated receipt, checkout, partial-return, full-return, and cancellation transactions in a disposable or staging database before production deployment.
 
 FIFO/LIFO/weighted-average now have repository-level foundations for receipts, checkout/COGS, returns, and cancellation reversals. Do not deploy these migrations to the live Supabase project until staging transaction tests and release checks are complete.
