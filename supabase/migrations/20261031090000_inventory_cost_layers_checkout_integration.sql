@@ -203,7 +203,7 @@ BEGIN
     ORDER BY i.offering_id
   LOOP
     SELECT count(*)::integer, min(sm.quantity_delta),
-           min(substring(sm.source_ref from ':location:([0-9a-fA-F-]{36})
+           min(substring(sm.source_ref from ':location:([0-9a-fA-F-]{36})'))
     FROM public.commercial_stock_movements sm
     WHERE sm.sale_id=p_sale_id AND sm.offering_id=v_offering
       AND sm.movement_type='sale'

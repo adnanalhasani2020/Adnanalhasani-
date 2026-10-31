@@ -42,3 +42,8 @@ def test_cost_layer_history_is_preserved_and_failures_roll_back_checkout():
     assert "DEFERRABLE INITIALLY DEFERRED" in sql
     assert "DELETE FROM public.commercial_inventory_cost_layers" not in sql
     assert "DELETE FROM public.commercial_inventory_cost_allocations" not in sql
+
+def test_sale_location_uuid_extraction_is_valid_sql():
+    sql = MIGRATION.read_text(encoding="utf-8")
+    assert "min(substring(sm.source_ref from ':location:([0-9a-fA-F-]{36})'))" in sql
+    assert "min(substring(sm.source_ref from ':location:([0-9a-fA-F-]{36})\n    FROM" not in sql
