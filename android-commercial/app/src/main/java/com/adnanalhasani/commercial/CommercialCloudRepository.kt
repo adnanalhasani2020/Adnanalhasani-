@@ -1725,6 +1725,114 @@ internal fun loadCommercialCloudStockAlerts(context: Context): List<CommercialCl
     }
 }
 
+internal data class CommercialInventoryCostingPolicyState(
+    val organizationMethod: String?,
+    val locationMethod: String?,
+    val effectiveMethod: String
+)
+
+internal data class CommercialCloudCostLayerSummary(
+    val activeLayerCount: Int,
+    val offeringCount: Int,
+    val remainingQuantity: BigDecimal,
+    val inventoryValueMinor: BigDecimal
+)
+
+/** Loads the organization default and current-location override without changing either policy. */
+internal fun loadCommercialInventoryCostingPolicy(context: Context): CommercialInventoryCostingPolicyState {
+    val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+    val locationId = saved.getString("location_id", null).orEmpty()
+    require(locationId.isNotBlank()) { "اختر موقع المؤسسة قبل تحميل طريقة تقييم المخزون." }
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val rows = commercialCloudPagedGet(
+        "/rest/v1/commercial_inventory_costing_policies" +
+            "?select=id,location_id,costing_method,effective_at" +
+            "&organization_id=eq.$orgId" +
+            "&or=(location_id.eq.$locationId,location_id.is.null)" +
+            "&order=effective_at.desc,id.asc",
+        access
+    )
+    var organizationMethod: String? = null
+    var locationMethod: String? = null
+    for (index in 0 until rows.length()) {
+        val row = rows.optJSONObject(index) ?: continue
+        val method = row.optString("costing_method").takeIf { it in setOf("fifo", "lifo", "weighted_average") } ?: continue
+        val policyLocation = row.optString("location_id").takeUnless { it.isBlank() || it == "null" }
+        if (policyLocation == null && organizationMethod == null) organizationMethod = method
+        if (policyLocation == locationId && locationMethod == null) locationMethod = method
+    }
+    return CommercialInventoryCostingPolicyState(
+        organizationMethod = organizationMethod,
+        locationMethod = locationMethod,
+        effectiveMethod = locationMethod ?: organizationMethod ?: "weighted_average"
+    )
+}
+
+/** Saves only the selected scope; existing sale allocations retain their original method snapshot. */
+internal fun saveCommercialInventoryCostingPolicy(context: Context, method: String, scope: String) {
+    require(method in setOf("fifo", "lifo", "weighted_average")) { "طريقة تقييم المخزون غير صالحة." }
+    require(scope in setOf("organization", "location")) { "نطاق سياسة التكلفة غير صالح." }
+    val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+    val locationId = saved.getString("location_id", null).orEmpty()
+    require(scope != "location" || locationId.isNotBlank()) { "اختر موقع المؤسسة أولًا." }
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val locationFilter = if (scope == "location") "location_id=eq.$locationId" else "location_id=is.null"
+    val existing = JSONArray(commercialCloudRequest(
+        "/rest/v1/commercial_inventory_costing_policies" +
+            "?select=id&organization_id=eq.$orgId&$locationFilter&limit=1",
+        "GET", token = access
+    ))
+    val now = java.time.Instant.now().toString()
+    val payload = JSONObject()
+        .put("costing_method", method)
+        .put("effective_at", now)
+        .put("updated_at", now)
+    if (existing.length() > 0) {
+        val id = existing.optJSONObject(0)?.optString("id").orEmpty()
+        require(id.isNotBlank() && id != "null") { "تعذر تحديد سياسة التكلفة الحالية." }
+        commercialCloudRequest(
+            "/rest/v1/commercial_inventory_costing_policies?id=eq.$id&organization_id=eq.$orgId",
+            "PATCH", payload, access
+        )
+    } else {
+        payload.put("organization_id", orgId)
+            .put("location_id", if (scope == "location") locationId else JSONObject.NULL)
+        commercialCloudRequest("/rest/v1/commercial_inventory_costing_policies", "POST", payload, access)
+    }
+}
+
+/** Read-only summary of active cost layers for the current activity and location. */
+internal fun loadCommercialCloudCostLayerSummary(context: Context): CommercialCloudCostLayerSummary {
+    val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+    val activityId = saved.getString("activity_id", null).orEmpty()
+    val locationId = saved.getString("location_id", null).orEmpty()
+    require(activityId.isNotBlank() && locationId.isNotBlank()) { "بيانات النشاط والموقع غير محفوظة." }
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val rows = commercialCloudPagedGet(
+        "/rest/v1/commercial_inventory_cost_layers" +
+            "?select=offering_id,quantity_remaining,unit_cost_minor,offering:commercial_offerings!inner(activity_id)" +
+            "&organization_id=eq.$orgId&location_id=eq.$locationId" +
+            "&quantity_remaining=gt.0&offering.activity_id=eq.$activityId" +
+            "&order=received_at.asc,id.asc",
+        access
+    )
+    var quantity = BigDecimal.ZERO
+    var valueMinor = BigDecimal.ZERO
+    val offerings = mutableSetOf<String>()
+    var activeLayers = 0
+    for (index in 0 until rows.length()) {
+        val row = rows.optJSONObject(index) ?: continue
+        val remaining = runCatching { BigDecimal(row.optString("quantity_remaining", "0")) }.getOrDefault(BigDecimal.ZERO)
+        val unitCost = row.optLong("unit_cost_minor", -1L)
+        if (remaining.signum() <= 0 || unitCost < 0L) continue
+        activeLayers++
+        offerings += row.optString("offering_id")
+        quantity = quantity.add(remaining)
+        valueMinor = valueMinor.add(remaining.multiply(BigDecimal.valueOf(unitCost)))
+    }
+    return CommercialCloudCostLayerSummary(activeLayers, offerings.size, quantity, valueMinor.setScale(0, java.math.RoundingMode.HALF_UP))
+}
+
 internal data class CommercialCloudReturnableSaleItem(
     val id: String,
     val productName: String,
