@@ -13,6 +13,10 @@ class CatalogUnpricedLinkingContractTests(unittest.TestCase):
         self.assertIn("ON CONFLICT (organization_id, global_item_id) DO NOTHING", sql)
         self.assertIn("FROM PUBLIC, anon", sql)
         self.assertIn("TO authenticated", sql)
+        self.assertIn("SET search_path = pg_catalog, public", sql)
+        self.assertIn("array_position(p_global_item_ids, NULL)", sql)
+        self.assertIn("duplicate_catalog_item_selection", sql)
+        self.assertIn("p.owner_organization_id IS NULL OR p.owner_organization_id = p_organization_id", sql)
 
     def test_new_links_are_explicitly_unpriced_and_unavailable(self):
         sql = (ROOT / "supabase/migrations/20261029020000_catalog_link_unpriced_items.sql").read_text(encoding="utf-8")

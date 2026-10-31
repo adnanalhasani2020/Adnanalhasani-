@@ -21,6 +21,9 @@ class CatalogItemActivityMappingContractTests(unittest.TestCase):
         self.assertIn("cardinality(p_global_item_ids) NOT BETWEEN 1 AND 100", sql)
         self.assertIn("FROM PUBLIC, anon", sql)
         self.assertIn("TO authenticated", sql)
+        self.assertIn("SET search_path = pg_catalog, public", sql)
+        self.assertIn("array_position(p_global_item_ids, NULL)", sql)
+        self.assertIn("duplicate_catalog_item_selection", sql)
 
     def test_android_loads_activity_directory_and_assigns_selected_items(self):
         screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogScreen.kt").read_text(encoding="utf-8")
