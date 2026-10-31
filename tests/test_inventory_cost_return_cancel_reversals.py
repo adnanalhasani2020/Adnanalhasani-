@@ -30,6 +30,7 @@ def test_sale_cancellation_reverses_only_unreturned_cost_and_adjustment_journals
     assert "'reversal:'||v_entry.id::text" in sql
     assert "sale_with_open_return_cannot_be_cancelled_resolve_return_first" in sql
     assert "cancel_cost_layer_balance_quantity_mismatch" in sql
+    assert "SET unit_cost_minor=v_new_average::bigint" in sql
 
 
 def test_return_and_cancel_cost_history_is_preserved_and_read_only_to_members():
