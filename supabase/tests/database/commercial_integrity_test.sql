@@ -1,7 +1,7 @@
 -- Run with Supabase CLI / pgTAP in a disposable local or staging database.
 -- These are schema regression tests; they do not replace authenticated-session integration tests.
 BEGIN;
-SELECT plan(38);
+SELECT plan(41);
 
 SELECT has_table('public', 'commercial_audit_events',
   'append-only audit event table exists');
@@ -300,6 +300,35 @@ SELECT has_trigger('public', 'commercial_purchase_receipts',
 SELECT has_trigger('public', 'commercial_supplier_invoices',
   'commercial_supplier_invoice_financials_after_insert',
   'supplier invoice accounting is wired through a deferred constraint trigger');
+
+
+-- Catalog setup RPCs are privileged writes: pin search_path and restrict execution.
+SELECT ok(
+  (SELECT count(*) = 2
+   FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+   WHERE n.nspname = 'public'
+     AND p.proname IN ('commercial_catalog_link_unpriced_items','commercial_catalog_assign_items_to_activity')
+     AND p.prosecdef
+     AND coalesce(p.proconfig, ARRAY[]::text[]) @> ARRAY['search_path=pg_catalog, public']
+     AND NOT has_function_privilege('anon', p.oid, 'EXECUTE')
+     AND has_function_privilege('authenticated', p.oid, 'EXECUTE')),
+  'catalog link and activity assignment RPCs pin search_path and are executable only by authenticated callers'
+);
+SELECT ok(
+  (SELECT c.relrowsecurity AND EXISTS (SELECT 1 FROM pg_policy pol WHERE pol.polrelid = c.oid)
+   FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+   WHERE n.nspname = 'public' AND c.relname = 'commercial_organization_catalog_item_activities'),
+  'organization catalog activity mapping is protected by RLS and an explicit policy'
+);
+SELECT ok(
+  (SELECT position('commercial_catalog_member_of' in pg_get_functiondef(p.oid)) > 0
+          AND position('cardinality(p_global_item_ids) NOT BETWEEN 1 AND 100' in pg_get_functiondef(p.oid)) > 0
+          AND position('array_position(p_global_item_ids, NULL)' in pg_get_functiondef(p.oid)) > 0
+          AND position('duplicate_catalog_item_selection' in pg_get_functiondef(p.oid)) > 0
+   FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+   WHERE n.nspname = 'public' AND p.proname = 'commercial_catalog_link_unpriced_items'),
+  'catalog linking validates membership, bounded non-null unique selections before writes'
+);
 
 SELECT * FROM finish();
 ROLLBACK;
