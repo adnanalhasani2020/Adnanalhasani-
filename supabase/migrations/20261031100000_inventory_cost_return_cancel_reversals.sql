@@ -396,7 +396,6 @@ DECLARE
   v_entry uuid;
   v_actor uuid;
   v_existing uuid;
-  v_has_layer_cost boolean;
 BEGIN
   IF auth.uid() IS NULL AND pg_trigger_depth()=0 THEN
     RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501';
@@ -463,21 +462,22 @@ BEGIN
     RAISE EXCEPTION 'return_gl_mappings_incomplete' USING ERRCODE='55000';
   END IF;
 
-  SELECT EXISTS(
-    SELECT 1 FROM public.commercial_inventory_return_cost_allocations ra
-    WHERE ra.return_id=r.id
-  ) INTO v_has_layer_cost;
-  IF v_has_layer_cost THEN
-    SELECT COALESCE(sum(ra.total_cost_minor),0)
-      INTO v_cost
-    FROM public.commercial_inventory_return_cost_allocations ra
-    WHERE ra.return_id=r.id;
-  ELSE
-    SELECT COALESCE(sum(rp.quantity::numeric*rp.unit_cost_minor::numeric),0)
-      INTO v_cost
-    FROM public.commercial_return_restock_postings rp
-    WHERE rp.return_id=r.id;
-  END IF;
+  SELECT
+    COALESCE((
+      SELECT sum(ra.total_cost_minor)
+      FROM public.commercial_inventory_return_cost_allocations ra
+      WHERE ra.return_id=r.id
+    ),0)
+    + COALESCE((
+      SELECT sum(rp.quantity::numeric*rp.unit_cost_minor::numeric)
+      FROM public.commercial_return_restock_postings rp
+      WHERE rp.return_id=r.id
+        AND NOT EXISTS (
+          SELECT 1 FROM public.commercial_inventory_return_cost_allocations ra
+          WHERE ra.return_item_id=rp.return_item_id
+        )
+    ),0)
+  INTO v_cost;
 
   v_party:=commercial_private.commercial_customer_party_account(s.organization_id,s.customer_id,s.currency_code);
   v_lines:=jsonb_build_array(
