@@ -76,22 +76,29 @@ BEGIN
         USING ERRCODE = '23514';
     END IF;
 
-    SELECT s.activity_node_id, n.code
-      INTO v_setup_node_id, v_setup_node_code
-    FROM public.commercial_organization_catalog_item_setup s
-    JOIN public.commercial_global_business_activity_nodes n
-      ON n.id = s.activity_node_id
-    WHERE s.organization_id = NEW.organization_id
-      AND s.global_item_id = NEW.global_item_id
-      AND s.branch_location_id = NEW.location_id
-      AND n.status = 'active'
-      AND n.is_selectable
-    ORDER BY s.updated_at DESC, s.warehouse_id
-    LIMIT 1;
-
-    IF FOUND AND (
-      (v_activity_node_id IS NOT NULL AND v_activity_node_id IS DISTINCT FROM v_setup_node_id)
-      OR (v_activity_node_id IS NULL AND v_activity_code IS DISTINCT FROM v_setup_node_code)
+    -- A catalog item may legitimately be configured for several activity nodes
+    -- at the same branch. Match the offering against any exact node mapping;
+    -- never choose an arbitrary "latest" mapping.
+    IF EXISTS (
+      SELECT 1
+      FROM public.commercial_organization_catalog_item_setup s
+      WHERE s.organization_id = NEW.organization_id
+        AND s.global_item_id = NEW.global_item_id
+        AND s.branch_location_id = NEW.location_id
+    ) AND NOT EXISTS (
+      SELECT 1
+      FROM public.commercial_organization_catalog_item_setup s
+      JOIN public.commercial_global_business_activity_nodes n
+        ON n.id = s.activity_node_id
+      WHERE s.organization_id = NEW.organization_id
+        AND s.global_item_id = NEW.global_item_id
+        AND s.branch_location_id = NEW.location_id
+        AND n.status = 'active'
+        AND n.is_selectable
+        AND (
+          (v_activity_node_id IS NOT NULL AND s.activity_node_id = v_activity_node_id)
+          OR (v_activity_node_id IS NULL AND n.code = v_activity_code)
+        )
     ) THEN
       RAISE EXCEPTION 'catalog_offering_activity_node_mismatch'
         USING ERRCODE = '23514';
