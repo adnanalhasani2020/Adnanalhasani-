@@ -16,6 +16,8 @@ class CatalogActivityWarehouseScopeTests(unittest.TestCase):
         self.assertIn("w.activity_id", self.sql)
         self.assertIn("catalog_setup_warehouse_activity_mismatch", self.sql)
         self.assertIn("business_activity_node_id", self.sql)
+        self.assertIn("v_setup_node_code text;", self.sql)
+        self.assertIn("SELECT n.code INTO v_setup_node_code", self.sql)
         self.assertIn("commercial_catalog_setup_activity_scope", self.sql)
 
     def test_linked_offering_must_match_configured_activity_and_branch(self):
