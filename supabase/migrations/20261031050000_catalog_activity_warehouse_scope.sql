@@ -14,8 +14,6 @@ DECLARE
   v_activity_code text;
   v_activity_org_id uuid;
   v_offering_location_ref text;
-  v_setup_node_id uuid;
-  v_setup_node_code text;
 BEGIN
   IF TG_TABLE_NAME = 'commercial_organization_catalog_item_setup' THEN
     SELECT w.activity_id
