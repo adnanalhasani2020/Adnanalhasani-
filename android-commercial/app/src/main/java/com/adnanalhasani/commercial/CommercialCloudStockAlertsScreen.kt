@@ -162,6 +162,14 @@ internal fun CommercialCloudStockAlertsScreen(context: Context, onBack: () -> Un
                             FilterChip(selected = selectedCostMethod == "weighted_average", onClick = { selectedCostMethod = "weighted_average" }, label = { Text("المتوسط") })
                         }
                         Text("نطاق تطبيق الإعداد:", color = StockAlertsMuted, fontSize = 11.sp)
+                        if (costingScope == "organization") {
+                            Text(
+                                "سيؤثر الإعداد على المواقع التي لا تملك سياسة خاصة. ملخص التغطية أعلاه يخص الموقع الحالي فقط؛ تحقق من بقية المواقع قبل الحفظ.",
+                                color = Color(0xFF9A5B00), fontSize = 10.sp
+                            )
+                        } else {
+                            Text("سيطبق الإعداد على الموقع الحالي فقط.", color = StockAlertsMuted, fontSize = 10.sp)
+                        }
                         Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                             FilterChip(
                                 selected = costingScope == "location",
