@@ -1,7 +1,7 @@
 -- Run with Supabase CLI / pgTAP in a disposable local or staging database.
 -- These are schema regression tests; they do not replace authenticated-session integration tests.
 BEGIN;
-SELECT plan(42);
+SELECT plan(43);
 
 SELECT has_table('public', 'commercial_audit_events',
   'append-only audit event table exists');
@@ -347,6 +347,25 @@ SELECT ok(
        )
      )),
   'all public SECURITY DEFINER functions pin search_path and none are executable by anon'
+);
+
+
+-- Internal financial helpers are called only by SECURITY DEFINER wrappers or
+-- triggers; they are not public RPC entry points.
+SELECT ok(
+  (SELECT count(*) = 0
+   FROM pg_proc p
+   JOIN pg_namespace n ON n.oid = p.pronamespace
+   WHERE n.nspname = 'commercial_private'
+     AND p.proname IN ('commercial_customer_party_account','commercial_initialize_gl_chart')
+     AND has_function_privilege('authenticated', p.oid, 'EXECUTE'))
+  AND (SELECT count(*) = 0
+       FROM pg_proc p
+       JOIN pg_namespace n ON n.oid = p.pronamespace
+       WHERE n.nspname = 'commercial_private'
+         AND p.proname IN ('commercial_customer_party_account','commercial_initialize_gl_chart')
+         AND has_function_privilege('anon', p.oid, 'EXECUTE')),
+  'internal customer-party and GL initialization helpers are not directly executable by API roles'
 );
 
 SELECT * FROM finish();
