@@ -32,16 +32,7 @@ BEGIN
     RAISE EXCEPTION 'longitude_out_of_range' USING ERRCODE='22023';
   END IF;
 
-  SELECT l.* INTO v_location
-  FROM public.commercial_organization_locations l
-  WHERE l.id=p_location_id
-    AND l.organization_id=p_organization_id
-    AND l.state='active'
-  FOR UPDATE;
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'active_location_not_found_in_organization' USING ERRCODE='P0002';
-  END IF;
-
+  -- Authorize the organization before checking whether the requested location exists.
   IF NOT EXISTS (
     SELECT 1
     FROM public.commercial_organization_members m
@@ -51,6 +42,16 @@ BEGIN
       AND m.role IN ('owner','admin','manager')
   ) THEN
     RAISE EXCEPTION 'location_coordinates_permission_required' USING ERRCODE='42501';
+  END IF;
+
+  SELECT l.* INTO v_location
+  FROM public.commercial_organization_locations l
+  WHERE l.id=p_location_id
+    AND l.organization_id=p_organization_id
+    AND l.state='active'
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'active_location_not_found_in_organization' USING ERRCODE='P0002';
   END IF;
 
   UPDATE public.commercial_organization_locations
