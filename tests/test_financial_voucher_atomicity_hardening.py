@@ -2,7 +2,7 @@ from pathlib import Path
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-REVERSAL_VERIFICATION = ROOT / "supabase/migrations/20261026200000_verify_expense_voucher_reversal_integrity.sql"
+REVERSAL_VERIFICATION = ROOT / "supabase/migrations/20261026180434_verify_expense_voucher_reversal_integrity.sql"
 CANCELLATION = ROOT / "supabase/migrations/20261026170000_commercial_expense_voucher_cancellation.sql"
 COLLECTION = ROOT / "supabase/migrations/20261024220000_commercial_customer_collection_rpc.sql"
 EXPENSE = ROOT / "supabase/migrations/20261026121906_commercial_cloud_expense_vouchers.sql"

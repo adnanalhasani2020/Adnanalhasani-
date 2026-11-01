@@ -22,7 +22,7 @@ class CommercialSecurityDefinerAuditContractTests(unittest.TestCase):
     def test_internal_financial_helpers_are_not_direct_api_entry_points(self):
         migration = (
             ROOT
-            / "supabase/migrations/20261101010000_revoke_internal_financial_helper_execute.sql"
+            / "supabase/migrations/20261101015000_revoke_internal_financial_helper_execute.sql"
         ).read_text(encoding="utf-8")
         for function in (
             "commercial_customer_party_account(uuid,uuid,text)",
