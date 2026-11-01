@@ -1131,8 +1131,16 @@ internal fun ReportsCenterScreen(
         "حركة المخزون الفعلية" -> cloudStockMovements.filter { movement ->
             reportDateMillis(movement.createdAt)?.let { it >= startMillis && it < endExclusive } == true
         }.map { movement ->
+            val movementTypeLabel = when (movement.movementType.lowercase()) {
+                "opening" -> "رصيد افتتاحي"
+                "sale" -> "بيع"
+                "receipt" -> "توريد / استلام"
+                "adjustment" -> "تسوية مخزون"
+                "return" -> "مرتجع"
+                else -> movement.movementType
+            }
             ReportLine(movement.createdAt.take(10), movement.sourceReference.ifBlank { movement.id }, movement.productName, 0L, "-",
-                "نوع الحركة: ${movement.movementType} · المصدر: ${movement.saleId.ifBlank { movement.sourceReference }} ${movement.saleStatus}",
+                "نوع الحركة: $movementTypeLabel · المصدر: ${movement.saleId.ifBlank { movement.sourceReference }} ${movement.saleStatus}",
                 displayAmount = movement.quantityDelta.stripTrailingZeros().toPlainString() + if (movement.unitName.isBlank()) "" else " ${movement.unitName}")
         }.sortedByDescending { it.date }
         "رصيد المخزون الحالي" -> if (cloudMode) cloudStockAlerts.map { item ->
