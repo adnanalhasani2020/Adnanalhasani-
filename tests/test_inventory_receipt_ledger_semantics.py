@@ -3,12 +3,14 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = ROOT / "supabase/migrations/20261101030000_inventory_receipt_ledger_semantics.sql"
+REPORTS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterScreen.kt"
 
 
 class InventoryReceiptLedgerSemanticsTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.sql = MIGRATION.read_text(encoding="utf-8")
+        cls.reports = REPORTS.read_text(encoding="utf-8")
 
     def test_historical_receipts_are_reclassified_by_stable_source_reference(self):
         self.assertIn("SET movement_type='receipt'", self.sql)
@@ -26,6 +28,10 @@ class InventoryReceiptLedgerSemanticsTests(unittest.TestCase):
         self.assertIn("UPDATE public.commercial_inventory_balances", self.sql)
         self.assertIn("REVOKE ALL ON FUNCTION public.commercial_receive_inventory_stock", self.sql)
         self.assertIn("GRANT EXECUTE ON FUNCTION public.commercial_receive_inventory_stock", self.sql)
+
+    def test_reports_localize_receipt_movement_type(self):
+        self.assertIn('"receipt" -> "توريد / استلام"', self.reports)
+        self.assertIn('"adjustment" -> "تسوية مخزون"', self.reports)
 
     def test_reclassification_does_not_rewrite_balances_or_receipt_history(self):
         prefix = self.sql.split("CREATE OR REPLACE FUNCTION", 1)[0]
