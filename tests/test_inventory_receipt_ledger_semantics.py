@@ -21,6 +21,11 @@ class InventoryReceiptLedgerSemanticsTests(unittest.TestCase):
         self.assertIn("VALUES(p_offering_id,'receipt',p_quantity,'receipt:'", self.sql)
         self.assertNotIn("VALUES(p_offering_id,'adjustment',p_quantity,'receipt:'", self.sql)
 
+    def test_receipt_rpc_preserves_fractional_quantity_support(self):
+        self.assertIn("scale(p_quantity)>6", self.sql)
+        self.assertNotIn("p_quantity<>trunc(p_quantity)", self.sql)
+        self.assertIn("numeric(20,6)", self.sql)
+
     def test_receipt_rpc_keeps_existing_transaction_and_access_contract(self):
         self.assertIn("CREATE OR REPLACE FUNCTION public.commercial_receive_inventory_stock", self.sql)
         self.assertIn("pg_advisory_xact_lock", self.sql)
