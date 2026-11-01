@@ -183,6 +183,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var marketRadius by remember { mutableIntStateOf(5000) }
     var nearbyOffset by remember { mutableIntStateOf(0) }
     var nearbyHasMore by remember { mutableStateOf(true) }
+    var nearbyPageLoadFailed by remember { mutableStateOf(false) }
     var nearbyLoadGeneration by remember { mutableIntStateOf(0) }
     val nearbyListState = rememberLazyListState()
     var marketPriceHints by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
@@ -446,6 +447,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         val nextRadius=if(expandRadius) radiusSteps.firstOrNull { it>marketRadius } ?: marketRadius else marketRadius
         if(expandRadius && nextRadius==marketRadius) { feedback="تم بلوغ أقصى نطاق بحث (100 كم)."; return }
         val requestedOffset=if(expandRadius) 0 else nearbyOffset
+        nearbyPageLoadFailed=false
         request({
             catalogHttp("/rest/v1/rpc/commercial_catalog_nearby_popularity",JSONObject().put("p_organization_id",orgId)
                 .put("p_latitude",lat.toPlainString()).put("p_longitude",lon.toPlainString()).put("p_radius_m",nextRadius)
@@ -459,8 +461,12 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             nearbyHasMore=rows.length()==30
             nearbyMarketItems=(nearbyMarketItems+page).distinctBy { it.id }
             nearbyLoadGeneration++
+            nearbyPageLoadFailed=false
             feedback=if(page.isEmpty()) "لا توجد نتائج إضافية في هذا النطاق؛ اسحب قائمة السوق لتوسيع البحث."
                 else "تم تحميل "+page.size+" نتيجة جديدة. النتائج مجمعة ولا تكشف هوية التجار."
+        }, { error ->
+            nearbyPageLoadFailed=true
+            feedback="تعذر تحميل نتائج السوق القريب. تحقق من الاتصال ثم أعد المحاولة: "+(error.message ?: "خطأ غير معروف")
         })
     }
 
@@ -468,13 +474,14 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         nearbyMarketItems=emptyList()
         nearbyOffset=0
         nearbyHasMore=true
+        nearbyPageLoadFailed=false
         nearbyLoadGeneration++
         marketRadius=5000
         loadNearbyCatalog(false)
     }
 
     LaunchedEffect(section, nearbyMarketItems.size, nearbyHasMore, nearbyLoadGeneration, busy, marketRadius) {
-        if(section!="browse" || nearbyMarketItems.isEmpty() || busy || marketRadius>=100000) return@LaunchedEffect
+        if(section!="browse" || nearbyMarketItems.isEmpty() || busy || nearbyPageLoadFailed || marketRadius>=100000) return@LaunchedEffect
         snapshotFlow {
             val lastVisible=nearbyListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
             val total=nearbyListState.layoutInfo.totalItemsCount
@@ -864,7 +871,8 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                             ) { Text("إنشاء صنف جديد") }
                             Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
                                 Button(onClick={configureSelectedCatalogItems()},enabled=!busy && selectedCatalogIds.isNotEmpty() && selectedCatalogIds.size<=100 && selectedActivityCode.isNotBlank() && selectedBranchId.isNotBlank() && selectedWarehouseId.isNotBlank()) { Text("تهيئة المختار للفرع") }
-                                OutlinedButton(onClick={loadNearbyCatalog(false)},enabled=!busy && nearbyHasMore) { Text("تحميل المزيد") }
+                                OutlinedButton(onClick={loadNearbyCatalog(false)},enabled=!busy && nearbyHasMore && !nearbyPageLoadFailed) { Text("تحميل المزيد") }
+                                if(nearbyPageLoadFailed) OutlinedButton(onClick={loadNearbyCatalog(!nearbyHasMore)},enabled=!busy) { Text("إعادة المحاولة") }
                                 OutlinedButton(onClick={loadNearbyCatalog(true)},enabled=!busy && marketRadius<100000 && !nearbyHasMore) { Text("توسيع النطاق") }
                             }
                             if(nearbyMarketItems.isNotEmpty()) {
@@ -975,9 +983,14 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                                         Checkbox(
                                             checked=item.id in selectedCatalogIds,
                                             onCheckedChange={checked ->
-                                                selectedCatalogIds = if (checked) selectedCatalogIds + item.id else selectedCatalogIds - item.id
+                                                selectedCatalogIds = when {
+                                                    !checked -> selectedCatalogIds - item.id
+                                                    item.id in selectedCatalogIds -> selectedCatalogIds
+                                                    selectedCatalogIds.size < 100 -> selectedCatalogIds + item.id
+                                                    else -> { feedback="الحد الأقصى للعملية الواحدة 100 صنف. أزل تحديد صنف قبل إضافة آخر."; selectedCatalogIds }
+                                                }
                                             },
-                                            enabled=!busy && (item.id in selectedCatalogIds || selectedCatalogIds.size < 100)
+                                            enabled=!busy
                                         )
                                         Column(Modifier.weight(1f)) {
                                             Text(item.name.ifBlank { item.catalogCode },fontWeight=FontWeight.SemiBold)

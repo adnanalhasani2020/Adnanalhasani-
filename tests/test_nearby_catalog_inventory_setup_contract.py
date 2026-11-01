@@ -45,6 +45,18 @@ class NearbyCatalogInventorySetupContractTests(unittest.TestCase):
         self.assertIn("selectedCatalogIds.size<100", self.screen)
         self.assertIn("nearbyHasMore=true; nearbyLoadGeneration++", self.screen)
 
+    def test_nearby_pagination_failure_has_explicit_retry_without_auto_retry_loop(self):
+        self.assertIn("var nearbyPageLoadFailed by remember", self.screen)
+        self.assertIn("nearbyPageLoadFailed=true", self.screen)
+        self.assertIn("nearbyPageLoadFailed || marketRadius>=100000", self.screen)
+        self.assertIn('Text("إعادة المحاولة")', self.screen)
+        self.assertIn("nearbyPageLoadFailed=false", self.screen)
+
+    def test_catalog_selection_is_capped_at_one_hundred_across_both_lists(self):
+        self.assertIn("selectedCatalogIds.size < 100 -> selectedCatalogIds + item.id", self.screen)
+        self.assertIn("الحد الأقصى للعملية الواحدة 100 صنف", self.screen)
+        self.assertIn("else if(selectedCatalogIds.size<100) selectedCatalogIds+market.id", self.screen)
+
     def test_configure_rpc_remains_authoritative_and_does_not_create_stock_or_price(self):
         self.assertIn('commercial_catalog_configure_items', self.screen)
         self.assertIn('p_branch_location_id', self.screen)
