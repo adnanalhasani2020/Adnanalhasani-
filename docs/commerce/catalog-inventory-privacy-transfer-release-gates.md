@@ -1,28 +1,34 @@
 # Catalog, inventory costing, phone authentication, and authorization release gates
 
-## Implemented in the current feature branch
+## Implemented in the repository (not yet proven deployed)
 - Catalog discovery pagination, idempotent unpriced linking, organization/activity mapping, and onboarding handoff.
 - Selected items can be configured to an existing activity, branch, warehouse and curated base/sale units.
-- A catalog-backed inventory creation RPC creates the priced local offering, opening stock movement, activity mapping, branch/warehouse/unit setup, and explicit global-catalog offering mapping in one transaction. It uses an idempotency key and rejects conflicting retries; Android checks for an existing mapped offering before opening creation.
-- Nearby popularity uses completed invoice transaction counts (not incomparable raw quantities across different units). Price suggestions first reduce each merchant's branch prices to one median, then calculate market quartiles across merchants; results use explicit offering-to-global-item mappings and cohort aggregates. No fuzzy product-name joins, seller identities, exact seller counts, or individual prices are returned.
+- A catalog-backed inventory creation RPC creates the priced local offering, opening stock movement, activity mapping, branch/warehouse/unit setup, and explicit global-catalog offering mapping in one transaction. It uses an idempotency key and rejects conflicting retries.
+- Nearby popularity uses completed invoice transaction counts, not incomparable raw quantities across units. Price suggestions aggregate branch-level merchant medians into market quartiles. Results use explicit offering-to-global-item mappings and cohort aggregates; seller identities and individual merchant prices are not returned.
 - Seller-invoice transfer requests require recipient approval; approval creates a draft purchase order with an active receiving location. Stock changes only through the normal receipt workflow.
-- Activity profile supports Supabase phone SMS OTP request and verification for existing accounts, alongside email/password authentication. OTP requires the Supabase Auth SMS provider to be enabled and configured.
+- The repository contains additive FIFO/LIFO/weighted-average cost-layer migrations, checkout allocation integration, return/cancellation restoration, and an audit view. This is a code-level implementation only; it is not production-ready until all migrations are applied in order and database integration tests reconcile inventory asset and COGS.
+- Activity profile supports Supabase phone SMS OTP request and verification for existing accounts. OTP requires the Supabase Auth SMS provider to be enabled and configured.
 
-## Important warehouse limitation
-- The existing inventory balance and checkout model is location-scoped, not warehouse-scoped. The new setup records the selected warehouse, but current stock balances and sale movements still use the branch/location key. Independent balances per warehouse require a coordinated migration of balance uniqueness, receipt/issue/return movements, checkout, and all reports; this is not falsely represented as completed.
+## Known high-priority gaps
+1. **Warehouse isolation:** the existing inventory balance and checkout model is location-scoped, not warehouse-scoped. Setup records the selected warehouse, but balances and sale movements still use the branch/location key. Independent warehouse balances require a coordinated migration of balance identity, receipt/issue/return movements, checkout, transfers, and reports. Do not describe this as complete.
+2. **SIM/device verification:** SMS OTP proves possession at the time of the challenge only. Android cannot reliably prove the same SIM remains installed every day without carrier/platform support. Do not block access based on an unreliable SIM-detection claim. A safer control is server-side device/session registration with revocation, risk-based reauthentication, and explicit policy configuration.
+3. **WhatsApp and voice OTP:** not enabled by the current UI. They require provider configuration and verified delivery tests.
+4. **Authorization completeness:** catalog and core purchase/checkout RPCs have server-side membership checks, but an exhaustive role-by-screen/action audit still requires enumerating all SECURITY DEFINER functions, grants, RLS policies and tenant/branch paths, then testing every role against a staging database.
+5. **Production rollout:** repository migrations must be reconciled against the actual production migration history before any deployment. No live migration should be applied until a representative staging environment has been restored and the full migration chain, two-tenant isolation, role matrix and financial reconciliation tests pass.
 
-## Inventory costing audit — valuation method must not be switched yet
-- Current checkout reads one `commercial_inventory_balances.unit_cost_minor` value and snapshots it into sale lines; COGS is posted from that snapshot.
-- Purchase receiving records purchase-line `unit_cost_minor` and calls `commercial_receive_inventory_stock`, but checkout does not select or allocate FIFO/LIFO cost layers.
-- Return/restocking and opening/manual inventory paths also need cost-preserving reversal semantics.
-- A real FIFO/LIFO/weighted-average implementation must atomically create cost layers at receipt, allocate each sale issue to layers, snapshot allocations per sale line, restore original layer cost on return, handle opening stock and adjustments, prevent negative layer quantities, remain idempotent, and reconcile inventory asset/COGS journals. LIFO may be restricted by accounting rules in some jurisdictions.
-- Until those controls and reconciliation tests exist, the current balance-cost model remains authoritative. No valuation toggle was added.
+## Costing behavior and controls
+- The repository now contains a cost-layer implementation for FIFO, LIFO and weighted average. The older balance-cost path remains the fallback when no costing policy is configured.
+- Existing positive balances with known unit cost are seeded as opening layers; historical receipt layers are not fabricated.
+- New receipts create layers; checkout allocation is intended to consume layers and snapshot cost; returns/cancellations restore cost provenance.
+- Never enable a costing policy until the deployed database has the complete migration chain and tests prove no negative layer quantities, idempotent allocation, correct return restoration, and balanced inventory-asset/COGS journals.
+- LIFO policy suitability must be reviewed for the applicable accounting jurisdiction before enabling it.
 
-## Authorization review
-- Existing purchase receipt and checkout RPCs perform server-side membership/role checks; catalog write RPCs explicitly require owner/admin/manager and scope reads by organization.
-- A complete exhaustive audit still requires enumerating every `SECURITY DEFINER` function, execute grant, RLS policy, and organization/branch-scoped read/write path, then exercising every role against a live staging database. Repository tests cannot prove deployed RLS behavior.
-- Phone OTP verifies possession at the time of the SMS challenge only. The Android app does not claim daily SIM ownership verification; a normal app cannot reliably prove the same SIM remains present daily without platform/carrier support and server-side freshness gates on every protected operation.
-- WhatsApp and voice OTP are not enabled by this UI; they require provider support/configuration and verified delivery testing.
-
-## Rollout
-- No live database migrations have been applied by this change. Stage these changes first; do not merge/deploy until database integration, two-organization isolation, role matrix, and current CI pass.
+## Release gates
+- Verify repository migration order against the target project's migration history.
+- Apply to a representative staging database first.
+- Run database integration tests and Android build/tests on the exact candidate commit.
+- Test at least two organizations and owner/admin/manager/staff/read-only roles, including direct RPC and direct REST attempts.
+- Verify no cross-tenant catalog, price, invoice, inventory, notification or audit leakage.
+- Reconcile opening stock, receipts, sales, returns, cancellations, cost layers, and general-ledger postings.
+- Run Supabase security and performance advisors after migrations.
+- Do not merge/deploy a candidate with failed or stale CI results.
