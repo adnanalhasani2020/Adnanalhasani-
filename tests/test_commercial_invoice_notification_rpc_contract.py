@@ -17,7 +17,7 @@ class CommercialInvoiceNotificationAndRpcContractTests(unittest.TestCase):
         sources = self.catalog + "\n" + self.notifications
         rpc_names = set(re.findall(r"/rest/v1/rpc/([a-zA-Z0-9_]+)", sources))
         defined = set(re.findall(
-            r"CREATE(?: OR REPLACE)? FUNCTION\\s+public\\.([a-zA-Z0-9_]+)\\s*\\(",
+            r"CREATE(?: OR REPLACE)? FUNCTION\s+public\.([a-zA-Z0-9_]+)\s*\(",
             self.sql,
             flags=re.IGNORECASE,
         ))
