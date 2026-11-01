@@ -271,6 +271,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         if (reset) { catalogOffset = 0; catalogHasMore = true; items = emptyList() }
         request({
             val payload = JSONObject().put("p_organization_id",orgId)
+                .put("p_activity_node_code",selectedActivityCode.trim().uppercase().ifBlank { JSONObject.NULL })
                 .put("p_sector_code",sector.trim().ifBlank { JSONObject.NULL })
                 .put("p_business_level_code",businessLevel.trim().ifBlank { JSONObject.NULL })
                 .put("p_country_code",country.trim().ifBlank { JSONObject.NULL })
