@@ -22,10 +22,10 @@ DECLARE
 BEGIN
  IF auth.uid() IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
  IF p_organization_id IS NULL OR p_location_id IS NULL OR p_offering_id IS NULL
-    OR p_quantity IS NULL OR p_quantity<=0 OR p_quantity<>trunc(p_quantity)
+    OR p_quantity IS NULL OR p_quantity<=0 OR scale(p_quantity)>6
     OR p_unit_cost_minor IS NULL OR p_unit_cost_minor<0
     OR p_source_ref IS NULL OR length(btrim(p_source_ref))<8 OR length(btrim(p_source_ref))>200 THEN
-   RAISE EXCEPTION 'invalid_inventory_receipt_integer_quantity' USING ERRCODE='22023';
+   RAISE EXCEPTION 'invalid_inventory_receipt' USING ERRCODE='22023';
  END IF;
  IF NOT EXISTS(
    SELECT 1 FROM public.commercial_organization_members m
