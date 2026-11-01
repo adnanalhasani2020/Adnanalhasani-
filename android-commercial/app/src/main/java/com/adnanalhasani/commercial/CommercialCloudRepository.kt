@@ -1840,7 +1840,7 @@ internal fun loadCommercialCloudCostLayerSummary(context: Context): CommercialCl
 internal data class CommercialCloudReturnableSaleItem(
     val id: String,
     val productName: String,
-    val soldQuantity: Int,
+    val soldQuantity: String,
     val remainingQuantity: Int,
     val lineTotalMinor: Long,
     val sellingUnitCode: String = "each",
@@ -1898,7 +1898,12 @@ internal fun loadCommercialCloudReturnableSales(context: Context): List<Commerci
                     add(CommercialCloudReturnableSaleItem(
                         id = itemId,
                         productName = item.optString("product_name_snapshot").takeUnless { it == "null" || it.isBlank() } ?: "صنف غير معروف",
-                        soldQuantity = item.optString("selling_quantity").toDoubleOrNull()?.toInt() ?: qty,
+                        soldQuantity = runCatching {
+                            java.math.BigDecimal(item.optString("selling_quantity"))
+                                .takeIf { it.signum() > 0 }
+                                ?.stripTrailingZeros()
+                                ?.toPlainString()
+                        }.getOrNull() ?: qty.toString(),
                         remainingQuantity = remaining,
                         lineTotalMinor = item.optLong("line_total_minor", 0L),
                         sellingUnitCode = item.optString("selling_unit_code").takeUnless { it.isBlank() || it == "null" } ?: "each",
