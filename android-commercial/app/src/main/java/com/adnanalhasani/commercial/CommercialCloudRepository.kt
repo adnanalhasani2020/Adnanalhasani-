@@ -910,7 +910,11 @@ internal data class CommercialCloudPurchaseLine(
     val quantityOrdered: String,
     val quantityReceived: String,
     val unitCostMinor: Long,
-    val offeringId: String?
+    val offeringId: String?,
+    val sourceSellingUnitCode: String = "",
+    val sourceSellingUnitName: String = "",
+    val sourceSellingQuantity: String = "",
+    val sourceQuantityInStockUnits: String = ""
 )
 
 internal data class CommercialCloudSupplierObligationSummary(
@@ -953,7 +957,7 @@ internal data class CommercialCloudPurchaseDocument(
 internal fun loadCommercialCloudPurchaseDocuments(context: Context): List<CommercialCloudPurchaseDocument> {
     val (orgId, access) = commercialMasterDataAccess(context)
     val path = "/rest/v1/commercial_purchase_orders" +
-        "?select=id,supplier_id,order_number,status,ordered_at,expected_at,currency_code,notes,receive_location_id,supplier:commercial_suppliers(display_name),items:commercial_purchase_order_items(id,line_number,item_description,quantity_ordered,quantity_received,unit_cost_minor,offering_id),supplier_invoices:commercial_supplier_invoices(id,invoice_number,subtotal_minor,tax_minor,freight_minor,total_minor,currency_code,recorded_at,state,obligation:commercial_supplier_obligations(id,amount_due_minor,amount_paid_minor,state,currency_code))" +
+        "?select=id,supplier_id,order_number,status,ordered_at,expected_at,currency_code,notes,receive_location_id,supplier:commercial_suppliers(display_name),items:commercial_purchase_order_items(id,line_number,item_description,quantity_ordered,quantity_received,unit_cost_minor,offering_id,source_selling_unit_code,source_selling_unit_name,source_selling_quantity,source_quantity_in_stock_units),supplier_invoices:commercial_supplier_invoices(id,invoice_number,subtotal_minor,tax_minor,freight_minor,total_minor,currency_code,recorded_at,state,obligation:commercial_supplier_obligations(id,amount_due_minor,amount_paid_minor,state,currency_code))" +
         "&organization_id=eq.$orgId&order=created_at.desc.nullslast,id.asc"
     val rows = commercialCloudPagedGet(path, access)
     return buildList {
@@ -1000,7 +1004,11 @@ internal fun loadCommercialCloudPurchaseDocuments(context: Context): List<Commer
                         quantityOrdered = item.optString("quantity_ordered").takeUnless { it == "null" }.orEmpty(),
                         quantityReceived = item.optString("quantity_received").takeUnless { it == "null" }.orEmpty(),
                         unitCostMinor = item.optLong("unit_cost_minor", 0L),
-                        offeringId = item.optString("offering_id").takeUnless { it.isBlank() || it == "null" }
+                        offeringId = item.optString("offering_id").takeUnless { it.isBlank() || it == "null" },
+                        sourceSellingUnitCode = item.optString("source_selling_unit_code").takeUnless { it == "null" }.orEmpty(),
+                        sourceSellingUnitName = item.optString("source_selling_unit_name").takeUnless { it == "null" }.orEmpty(),
+                        sourceSellingQuantity = item.optString("source_selling_quantity").takeUnless { it == "null" }.orEmpty(),
+                        sourceQuantityInStockUnits = item.optString("source_quantity_in_stock_units").takeUnless { it == "null" }.orEmpty()
                     ))
                 }
             }.sortedBy { it.lineNumber }

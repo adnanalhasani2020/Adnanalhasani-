@@ -27,7 +27,7 @@ def test_supplier_invoice_purchase_item_ids_are_projected_for_rpc_lines():
 
     # The dialog sends each selected line ID to the RPC; omitting id from the nested
     # PostgREST select silently produced empty IDs and every save failed server-side.
-    assert "items:commercial_purchase_order_items(id,line_number,item_description,quantity_ordered,quantity_received,unit_cost_minor,offering_id)" in repository
+    assert "items:commercial_purchase_order_items(id,line_number,item_description,quantity_ordered,quantity_received,unit_cost_minor,offering_id,source_selling_unit_code,source_selling_unit_name,source_selling_quantity,source_quantity_in_stock_units)" in repository
     assert 'id = item.optString("id")' in repository
 
 
@@ -75,3 +75,12 @@ def test_supplier_invoice_minor_unit_rounding_is_consistent_per_line():
     # the persisted integer-minor-unit line totals for fractional quantities.
     assert migration.count("v_line_total := round(v_qty * v_price);") == 2
     assert "v_subtotal := v_subtotal + v_line_total;" in migration
+
+
+def test_invoice_transfer_purchase_order_projection_preserves_source_units():
+    repository = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt").read_text(encoding="utf-8")
+    screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudPurchasesScreen.kt").read_text(encoding="utf-8")
+    for field in ("source_selling_unit_code", "source_selling_unit_name", "source_selling_quantity", "source_quantity_in_stock_units"):
+        assert field in repository
+    assert "sourceSellingUnitName" in repository
+    assert "وحدة فاتورة المصدر:" in screen
