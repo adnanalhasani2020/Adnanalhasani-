@@ -21,6 +21,17 @@ class InventoryReceiptLedgerSemanticsTests(unittest.TestCase):
         self.assertIn("VALUES(p_offering_id,'receipt',p_quantity,'receipt:'", self.sql)
         self.assertNotIn("VALUES(p_offering_id,'adjustment',p_quantity,'receipt:'", self.sql)
 
+    def test_purchase_order_receiving_preserves_fractional_quantities(self):
+        marker = "CREATE OR REPLACE FUNCTION commercial_private.commercial_receive_purchase_order("
+        self.assertIn(marker, self.sql)
+        receipt_rpc = self.sql.split(marker, 1)[1].split("$function$;", 1)[0]
+        self.assertIn("scale(v_qty)>6", receipt_rpc)
+        self.assertNotIn("v_qty<>trunc(v_qty)", receipt_rpc)
+        self.assertIn("v_qty>999999999999.999999", receipt_rpc)
+        self.assertIn("public.commercial_receive_inventory_stock", receipt_rpc)
+        self.assertIn("REVOKE ALL ON FUNCTION commercial_private.commercial_receive_purchase_order", 
+                      (ROOT / "supabase/migrations/20261026250000_commercial_integer_purchase_receiving.sql").read_text(encoding="utf-8"))
+
     def test_receipt_rpc_preserves_fractional_quantity_support(self):
         self.assertIn("scale(p_quantity)>6", self.sql)
         self.assertNotIn("p_quantity<>trunc(p_quantity)", self.sql)
