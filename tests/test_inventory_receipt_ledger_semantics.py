@@ -4,6 +4,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = ROOT / "supabase/migrations/20261101030000_inventory_receipt_ledger_semantics.sql"
 REPORTS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterScreen.kt"
+INTEGER_RECEIVING = ROOT / "supabase/migrations/20261026250000_commercial_integer_purchase_receiving.sql"
 
 
 class InventoryReceiptLedgerSemanticsTests(unittest.TestCase):
@@ -29,8 +30,9 @@ class InventoryReceiptLedgerSemanticsTests(unittest.TestCase):
         self.assertNotIn("v_qty<>trunc(v_qty)", receipt_rpc)
         self.assertIn("v_qty>999999999999.999999", receipt_rpc)
         self.assertIn("public.commercial_receive_inventory_stock", receipt_rpc)
-        self.assertIn("REVOKE ALL ON FUNCTION commercial_private.commercial_receive_purchase_order", 
-                      (ROOT / "supabase/migrations/20261026250000_commercial_integer_purchase_receiving.sql").read_text(encoding="utf-8"))
+        integer_migration = INTEGER_RECEIVING.read_text(encoding="utf-8")
+        self.assertIn("REVOKE ALL ON FUNCTION commercial_private.commercial_receive_purchase_order", integer_migration)
+        self.assertIn("FROM PUBLIC,anon,authenticated", integer_migration)
 
     def test_receipt_rpc_preserves_fractional_quantity_support(self):
         self.assertIn("scale(p_quantity)>6", self.sql)
