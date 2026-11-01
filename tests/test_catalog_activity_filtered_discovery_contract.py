@@ -15,6 +15,8 @@ class CatalogActivityFilteredDiscoveryTests(unittest.TestCase):
         self.assertIn("activity.code = upper(btrim(p_activity_node_code))", sql)
         self.assertIn("activity.status = 'active'", sql)
         self.assertIn("activity.is_selectable", sql)
+        self.assertIn("existing_activity.organization_id = p_organization_id", sql)
+        self.assertIn("not-yet-classified catalog items discoverable", sql)
         self.assertNotIn("CREATE TABLE", sql)
         self.assertNotIn("DROP TABLE", sql)
 
