@@ -990,7 +990,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                                                     else -> { feedback="الحد الأقصى للعملية الواحدة 100 صنف. أزل تحديد صنف قبل إضافة آخر."; selectedCatalogIds }
                                                 }
                                             },
-                                            enabled=!busy && (item.id in selectedCatalogIds || selectedCatalogIds.size < 100)
+                                            enabled=!busy
                                         )
                                         Column(Modifier.weight(1f)) {
                                             Text(item.name.ifBlank { item.catalogCode },fontWeight=FontWeight.SemiBold)
