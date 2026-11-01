@@ -1837,6 +1837,14 @@ internal fun loadCommercialCloudCostLayerSummary(context: Context): CommercialCl
     return CommercialCloudCostLayerSummary(activeLayers, offerings.size, quantity, valueMinor.setScale(0, java.math.RoundingMode.HALF_UP))
 }
 
+internal fun formatCommercialReturnSoldQuantity(value: String?, fallback: Int): String =
+    runCatching {
+        value?.let { java.math.BigDecimal(it) }
+            ?.takeIf { it.signum() > 0 }
+            ?.stripTrailingZeros()
+            ?.toPlainString()
+    }.getOrNull() ?: fallback.coerceAtLeast(0).toString()
+
 internal data class CommercialCloudReturnableSaleItem(
     val id: String,
     val productName: String,
@@ -1898,12 +1906,9 @@ internal fun loadCommercialCloudReturnableSales(context: Context): List<Commerci
                     add(CommercialCloudReturnableSaleItem(
                         id = itemId,
                         productName = item.optString("product_name_snapshot").takeUnless { it == "null" || it.isBlank() } ?: "صنف غير معروف",
-                        soldQuantity = runCatching {
-                            java.math.BigDecimal(item.optString("selling_quantity"))
-                                .takeIf { it.signum() > 0 }
-                                ?.stripTrailingZeros()
-                                ?.toPlainString()
-                        }.getOrNull() ?: qty.toString(),
+                        soldQuantity = formatCommercialReturnSoldQuantity(
+                            item.optString("selling_quantity").takeUnless { it == "null" || it.isBlank() }, qty
+                        ),
                         remainingQuantity = remaining,
                         lineTotalMinor = item.optLong("line_total_minor", 0L),
                         sellingUnitCode = item.optString("selling_unit_code").takeUnless { it.isBlank() || it == "null" } ?: "each",
