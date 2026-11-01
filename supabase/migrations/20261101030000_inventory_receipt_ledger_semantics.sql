@@ -80,7 +80,6 @@ GRANT EXECUTE ON FUNCTION public.commercial_receive_inventory_stock(uuid,uuid,uu
 COMMENT ON FUNCTION public.commercial_receive_inventory_stock(uuid,uuid,uuid,numeric,bigint,text) IS
 'Posts an idempotent inventory receipt, updates the branch balance and weighted average cost, and records an explicit receipt movement in the stock ledger.';
 
-COMMIT;
 
 -- Restore fractional quantity handling in the private purchase receiving RPC.
 -- The later integer-only migration replaced this function and otherwise blocks decimal receipts,
@@ -149,3 +148,5 @@ BEGIN
   RETURN jsonb_build_object('receipt_id',v_receipt_id,'purchase_order_id',p_purchase_order_id,'status',v_new_status,'line_count',v_item_count,'idempotent_replay',false);
 END;
 $function$;
+
+COMMIT;
