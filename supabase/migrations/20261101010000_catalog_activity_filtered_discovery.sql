@@ -228,6 +228,14 @@ BEGIN
           AND activity.status = 'active'
           AND activity.is_selectable
       )
+      -- Keep not-yet-classified catalog items discoverable during first-time setup.
+      -- Once an organization explicitly assigns an item to an activity, it is scoped.
+      OR NOT EXISTS (
+        SELECT 1
+        FROM public.commercial_organization_catalog_item_activities existing_activity
+        WHERE existing_activity.organization_id = p_organization_id
+          AND existing_activity.global_item_id = p.id
+      )
     )
     AND NOT EXISTS (
       SELECT 1 FROM public.commercial_organization_catalog_items disabled_item
