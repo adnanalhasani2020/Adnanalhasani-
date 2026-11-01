@@ -1837,14 +1837,6 @@ internal fun loadCommercialCloudCostLayerSummary(context: Context): CommercialCl
     return CommercialCloudCostLayerSummary(activeLayers, offerings.size, quantity, valueMinor.setScale(0, java.math.RoundingMode.HALF_UP))
 }
 
-internal fun formatCommercialReturnSoldQuantity(value: String?, fallback: Int): String =
-    runCatching {
-        value?.let { java.math.BigDecimal(it) }
-            ?.takeIf { it.signum() > 0 }
-            ?.stripTrailingZeros()
-            ?.toPlainString()
-    }.getOrNull() ?: fallback.coerceAtLeast(0).toString()
-
 internal data class CommercialCloudReturnableSaleItem(
     val id: String,
     val productName: String,
