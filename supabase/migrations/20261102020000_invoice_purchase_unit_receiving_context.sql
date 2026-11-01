@@ -29,10 +29,11 @@ SET source_selling_unit_code=ri.selling_unit_code,
     source_selling_unit_name=ri.selling_unit_name,
     source_selling_quantity=ri.selling_quantity,
     source_quantity_in_stock_units=ri.quantity_in_stock_units
-FROM public.commercial_invoice_purchase_requests r
-JOIN public.commercial_invoice_purchase_request_items ri
-  ON ri.request_id=r.id AND ri.line_number=poi.line_number
-WHERE r.destination_purchase_order_id=poi.purchase_order_id
+FROM public.commercial_invoice_purchase_requests r,
+     public.commercial_invoice_purchase_request_items ri
+WHERE ri.request_id=r.id
+  AND ri.line_number=poi.line_number
+  AND r.destination_purchase_order_id=poi.purchase_order_id
   AND r.destination_organization_id=poi.organization_id
   AND (poi.source_selling_unit_code IS NULL OR poi.source_selling_unit_name IS NULL
        OR poi.source_selling_quantity IS NULL OR poi.source_quantity_in_stock_units IS NULL);

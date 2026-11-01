@@ -32,6 +32,9 @@ class InvoicePurchaseUnitAndReceivingLocationTests(unittest.TestCase):
         self.assertIn("quantity_ordered,quantity_received,unit_cost_minor,", sql)
         self.assertIn("v_item.quantity,0,v_item.unit_price_minor", sql)
         self.assertIn("recipient_receiving_location_not_in_organization", sql)
+        self.assertIn("recipient_active_receiving_location_required", sql)
+        self.assertIn("Backward compatibility for older clients", sql)
+        self.assertIn("ri.line_number=poi.line_number", sql)
 
 
 if __name__ == "__main__":
