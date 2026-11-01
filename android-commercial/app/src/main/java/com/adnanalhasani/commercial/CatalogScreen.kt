@@ -191,6 +191,8 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var invoiceDestinationOrg by remember { mutableStateOf("") }
     var invoiceRequestKey by remember { mutableStateOf(java.util.UUID.randomUUID().toString()) }
     var invoiceRequests by remember { mutableStateOf<List<InvoicePurchaseRequestRow>>(emptyList()) }
+    var invoiceReceiveLocationId by remember { mutableStateOf("") }
+    var invoiceReceiveLocationMenuExpanded by remember { mutableStateOf(false) }
     val catalogListState = rememberLazyListState()
     var categories by remember { mutableStateOf<List<CatalogCategory>>(emptyList()) }
     var directoryUnits by remember { mutableStateOf<List<DirectoryUnit>>(emptyList()) }; var pendingTransfers by remember { mutableStateOf<List<PendingTransfer>>(emptyList()) }
@@ -691,12 +693,18 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     }
     fun reviewInvoicePurchaseRequest(id: String, approve: Boolean) {
         val active=token ?: return
+        val receiveLocation=invoiceReceiveLocationId.ifBlank { selectedBranchId }
+        if(approve && (receiveLocation.isBlank() || marketBranches.none { it.id==receiveLocation })) {
+            feedback="اختر فرع استلام نشطًا تابعًا للمؤسسة المستقبلة قبل الموافقة."
+            return
+        }
         request({
             catalogHttp("/rest/v1/rpc/commercial_review_invoice_purchase_request",JSONObject()
                 .put("p_request_id",id).put("p_decision",if(approve) "approve" else "reject")
-                .put("p_review_note",JSONObject.NULL),active)
+                .put("p_review_note",JSONObject.NULL)
+                .put("p_receive_location_id",if(approve) receiveLocation else JSONObject.NULL),active)
         }, {
-            feedback=if(approve) "تمت الموافقة وإنشاء أمر شراء مسودة. الاستلام منفصل." else "تم رفض طلب تحويل الفاتورة."
+            feedback=if(approve) "تمت الموافقة وإنشاء أمر شراء مسودة في الفرع المحدد. الاستلام منفصل." else "تم رفض طلب تحويل الفاتورة."
             loadInvoiceRequests()
         })
     }
@@ -1226,6 +1234,26 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                         Button(onClick={requestInvoiceAsPurchase()},enabled=!busy && invoiceSaleId.isNotBlank() && invoiceDestinationOrg.isNotBlank(),modifier=Modifier.weight(1f)) { Text("إرسال للموافقة") }
                         OutlinedButton(onClick={loadInvoiceRequests()},enabled=!busy) { Text("تحديث الطلبات") }
                     } }
+                    item {
+                        Column(verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                            Text("فرع الاستلام للموافقة الواردة",fontWeight=FontWeight.SemiBold)
+                            Box {
+                                OutlinedButton(onClick={invoiceReceiveLocationMenuExpanded=true},enabled=!busy && marketBranches.isNotEmpty(),modifier=Modifier.fillMaxWidth()) {
+                                    Text(marketBranches.firstOrNull { it.id==invoiceReceiveLocationId }?.name
+                                        ?: marketBranches.firstOrNull { it.id==selectedBranchId }?.name ?: "اختر فرع الاستلام")
+                                }
+                                DropdownMenu(expanded=invoiceReceiveLocationMenuExpanded,onDismissRequest={invoiceReceiveLocationMenuExpanded=false}) {
+                                    marketBranches.forEach { branch ->
+                                        DropdownMenuItem(text={Text(branch.name)},onClick={
+                                            invoiceReceiveLocationId=branch.id
+                                            invoiceReceiveLocationMenuExpanded=false
+                                        })
+                                    }
+                                }
+                            }
+                            Text("تُستخدم الوجهة المختارة عند الموافقة؛ لا يُنقل المخزون إلا عند تنفيذ الاستلام.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
                     items(invoiceRequests,key={it.id}) { req ->
                         Card(Modifier.fillMaxWidth()) {
                             Column(Modifier.fillMaxWidth().padding(10.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
