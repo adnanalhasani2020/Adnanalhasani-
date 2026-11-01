@@ -10,12 +10,24 @@ class CommercialInvoiceNotificationAndRpcContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.sql = "\n".join(p.read_text(encoding="utf-8") for p in MIGRATIONS.glob("*.sql"))
-        cls.catalog = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogScreen.kt").read_text(encoding="utf-8")
-        cls.notifications = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialNotificationsScreen.kt").read_text(encoding="utf-8")
+        android = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial"
+        cls.catalog = (android / "CatalogScreen.kt").read_text(encoding="utf-8")
+        cls.notifications = (android / "CommercialNotificationsScreen.kt").read_text(encoding="utf-8")
+        cls.cloud_repository = (android / "CommercialCloudRepository.kt").read_text(encoding="utf-8")
+        cls.accounts = (android / "PersonalAccountsScreen.kt").read_text(encoding="utf-8")
+        cls.return_refund = (android / "CommercialCloudReturnRefund.kt").read_text(encoding="utf-8")
+        cls.activity_profile = (android / "ActivityProfileScreen.kt").read_text(encoding="utf-8")
 
-    def test_android_catalog_and_notification_rpc_names_have_database_definitions(self):
-        sources = self.catalog + "\n" + self.notifications
+    def test_android_rpc_names_have_database_definitions(self):
+        sources = "\n".join((
+            self.catalog, self.notifications, self.cloud_repository,
+            self.accounts, self.return_refund, self.activity_profile,
+        ))
         rpc_names = set(re.findall(r"/rest/v1/rpc/([a-zA-Z0-9_]+)", sources))
+        rpc_names.update(re.findall(
+            r'personalAccountRpc\(context,\s*token,\s*"([a-zA-Z0-9_]+)"',
+            self.accounts,
+        ))
         defined = set(re.findall(
             r"CREATE(?: OR REPLACE)? FUNCTION\s+public\.([a-zA-Z0-9_]+)\s*\(",
             self.sql,
