@@ -16,6 +16,7 @@ GLOBAL_PAYMENT_EVIDENCE = ROOT / "supabase/migrations/20261025224128_commercial_
 FRACTIONAL_RECEIVING = ROOT / "supabase/migrations/20261025230817_commercial_fractional_purchase_receiving.sql"
 ACCOUNTING_ROUNDING = ROOT / "supabase/migrations/20261026080000_commercial_purchase_fractional_accrual_rounding.sql"
 INTEGER_RECEIVING = ROOT / "supabase/migrations/20261026250000_commercial_integer_purchase_receiving.sql"
+RECEIPT_FIX_MIGRATION = ROOT / "supabase/migrations/20261101030000_inventory_receipt_ledger_semantics.sql"
 
 
 def test_purchase_order_lifecycle_is_scoped_and_idempotent():
@@ -162,37 +163,44 @@ def test_android_purchase_workflow_is_connected_to_server_rpcs():
     assert "resolvePendingCommercialPurchaseReceipt" in repository
 
 
-def test_purchase_receiving_rejects_fractions_at_android_and_database_boundaries():
+def test_purchase_receiving_supports_fractions_at_android_and_database_boundaries():
     fractional_migration = FRACTIONAL_RECEIVING.read_text(encoding="utf-8")
     integer_migration = INTEGER_RECEIVING.read_text(encoding="utf-8")
+    receipt_fix = RECEIPT_FIX_MIGRATION.read_text(encoding="utf-8")
     repository = REPOSITORY.read_text(encoding="utf-8")
     order_dialog = ORDER_DIALOG.read_text(encoding="utf-8")
     receipt_dialog = RECEIPT_DIALOG.read_text(encoding="utf-8")
 
-    # Keep numeric storage for compatibility with existing fractional records, but reject
-    # any new fractional receipt at both the purchase RPC and inventory receipt boundary.
     for marker in ("numeric(18,6)", "numeric(20,6)", "quantity_delta TYPE numeric(20,6)"):
         assert marker in fractional_migration
-    receipt_rpc = integer_migration.split(
+
+    # The old migration is intentionally retained as historical evidence; the newer
+    # additive migration must replace its integer-only RPCs without changing grants.
+    historical_receipt_rpc = integer_migration.split(
         "CREATE OR REPLACE FUNCTION commercial_private.commercial_receive_purchase_order", 1
     )[1].split("$function$;", 1)[0]
-    inventory_rpc = integer_migration.split(
+    assert "v_qty<>trunc(v_qty)" in historical_receipt_rpc
+    effective_receipt_rpc = receipt_fix.split(
+        "CREATE OR REPLACE FUNCTION commercial_private.commercial_receive_purchase_order", 1
+    )[1].split("$function$;", 1)[0]
+    effective_inventory_rpc = receipt_fix.split(
         "CREATE OR REPLACE FUNCTION public.commercial_receive_inventory_stock", 1
     )[1].split("$function$;", 1)[0]
-    assert "v_qty<>trunc(v_qty)" in receipt_rpc
-    assert "p_quantity<>trunc(p_quantity)" in inventory_rpc
-    assert "purchase_receipt_requires_positive_integer_quantity" in receipt_rpc
-    assert "invalid_inventory_receipt_integer_quantity" in inventory_rpc
+    assert "scale(v_qty)>6" in effective_receipt_rpc
+    assert "v_qty<>trunc(v_qty)" not in effective_receipt_rpc
+    assert "v_qty>999999999999.999999" in effective_receipt_rpc
+    assert "scale(p_quantity)>6" in effective_inventory_rpc
+    assert "p_quantity<>trunc(p_quantity)" not in effective_inventory_rpc
+    assert "public.commercial_receive_inventory_stock" in effective_receipt_rpc
 
     receipt_repository = repository.split("internal fun receiveCommercialCloudPurchaseOrder", 1)[1]
     receipt_repository = receipt_repository.split("internal fun createCommercialCloudPurchaseOrder", 1)[0]
-    assert "quantity.stripTrailingZeros().scale() <= 0" in receipt_repository
-    assert "كمية الاستلام يجب أن تكون عددًا صحيحًا موجبًا دون كسور." in receipt_repository
-    assert "quantity.stripTrailingZeros().scale() > 0" in receipt_dialog
-    assert "كميات صحيحة موجبة بدون كسور" in receipt_dialog
+    assert "quantity.stripTrailingZeros().scale() <= 6" in receipt_repository
+    assert "999999999999.999999" in receipt_repository
+    assert "6 منازل عشرية" in receipt_repository
+    assert "quantity.stripTrailingZeros().scale() > 6" in receipt_dialog
+    assert "6 منازل عشرية" in receipt_dialog
 
-    # Fractional purchase order/invoice quantities remain a separate policy; only receiving
-    # is restricted here, as requested.
     assert "qty.stripTrailingZeros().scale() <= 6" in order_dialog
     invoice_repository = repository.split("internal fun recordCommercialCloudSupplierInvoice", 1)[1]
     invoice_repository = invoice_repository.split("private fun commercialPurchaseReceiptPendingPreferences", 1)[0]
