@@ -81,3 +81,71 @@ COMMENT ON FUNCTION public.commercial_receive_inventory_stock(uuid,uuid,uuid,num
 'Posts an idempotent inventory receipt, updates the branch balance and weighted average cost, and records an explicit receipt movement in the stock ledger.';
 
 COMMIT;
+
+-- Restore fractional quantity handling in the private purchase receiving RPC.
+-- The later integer-only migration replaced this function and otherwise blocks decimal receipts,
+-- even though the public inventory receipt RPC and quantity columns support six decimals.
+CREATE OR REPLACE FUNCTION commercial_private.commercial_receive_purchase_order(
+  p_organization_id uuid, p_purchase_order_id uuid, p_location_id uuid, p_lines jsonb, p_idempotency_key text
+) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER
+SET search_path TO 'pg_catalog','public','commercial_private'
+AS $function$
+DECLARE v_uid uuid:=auth.uid(); v_status text; v_default_location uuid; v_receipt_id uuid; v_existing_fingerprint text;
+  v_fingerprint text; v_line jsonb; v_item_id uuid; v_qty numeric; v_ordered numeric; v_received numeric;
+  v_offering uuid; v_cost bigint; v_item_count integer:=0; v_new_status text; v_inventory jsonb; v_inv_receipt uuid;
+BEGIN
+  IF v_uid IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
+  IF p_organization_id IS NULL OR p_purchase_order_id IS NULL OR p_location_id IS NULL OR p_lines IS NULL
+    OR jsonb_typeof(p_lines)<>'array' OR jsonb_array_length(p_lines)=0 OR p_idempotency_key IS NULL
+    OR length(btrim(p_idempotency_key)) NOT BETWEEN 8 AND 200 THEN RAISE EXCEPTION 'invalid_purchase_receipt_request' USING ERRCODE='22023'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.commercial_organization_members m WHERE m.organization_id=p_organization_id AND m.user_id=v_uid AND m.state='active' AND m.role IN ('owner','admin','manager')) THEN
+    RAISE EXCEPTION 'purchase_management_permission_required' USING ERRCODE='42501';
+  END IF;
+  PERFORM pg_advisory_xact_lock(hashtext(p_organization_id::text),hashtext('purchase-receive:'||btrim(p_idempotency_key)));
+  v_fingerprint:=md5(jsonb_build_object('purchase_order_id',p_purchase_order_id,'location_id',p_location_id,'lines',p_lines)::text);
+  SELECT id,request_fingerprint INTO v_receipt_id,v_existing_fingerprint FROM public.commercial_purchase_receipts
+    WHERE organization_id=p_organization_id AND idempotency_key=btrim(p_idempotency_key);
+  IF FOUND THEN
+    IF v_existing_fingerprint IS DISTINCT FROM v_fingerprint THEN RAISE EXCEPTION 'purchase_receipt_key_reused_with_different_request' USING ERRCODE='23505'; END IF;
+    RETURN jsonb_build_object('receipt_id',v_receipt_id,'idempotent_replay',true);
+  END IF;
+  SELECT status,receive_location_id INTO v_status,v_default_location FROM public.commercial_purchase_orders
+    WHERE id=p_purchase_order_id AND organization_id=p_organization_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'purchase_order_not_found' USING ERRCODE='P0002'; END IF;
+  IF v_status NOT IN ('approved','partially_received') THEN RAISE EXCEPTION 'purchase_order_not_receivable' USING ERRCODE='55000'; END IF;
+  IF p_location_id IS DISTINCT FROM v_default_location OR NOT EXISTS (
+    SELECT 1 FROM public.commercial_organization_locations WHERE id=p_location_id AND organization_id=p_organization_id AND state='active'
+  ) THEN RAISE EXCEPTION 'purchase_receipt_location_mismatch' USING ERRCODE='22023'; END IF;
+  INSERT INTO public.commercial_purchase_receipts(organization_id,purchase_order_id,location_id,idempotency_key,request_fingerprint,received_by)
+  VALUES(p_organization_id,p_purchase_order_id,p_location_id,btrim(p_idempotency_key),v_fingerprint,v_uid)
+  RETURNING id INTO v_receipt_id;
+  FOR v_line IN SELECT value FROM jsonb_array_elements(p_lines) LOOP
+    BEGIN v_item_id:=(v_line->>'purchase_order_item_id')::uuid; v_qty:=(v_line->>'quantity')::numeric;
+    EXCEPTION WHEN others THEN RAISE EXCEPTION 'invalid_purchase_receipt_line' USING ERRCODE='22023'; END;
+    IF v_item_id IS NULL OR v_qty IS NULL OR v_qty<=0 OR scale(v_qty)>6 OR v_qty>999999999999.999999 THEN RAISE EXCEPTION 'invalid_purchase_receipt_line' USING ERRCODE='22023'; END IF;
+    IF EXISTS (SELECT 1 FROM public.commercial_purchase_receipt_items WHERE receipt_id=v_receipt_id AND purchase_order_item_id=v_item_id) THEN RAISE EXCEPTION 'duplicate_purchase_receipt_line' USING ERRCODE='22023'; END IF;
+    SELECT quantity_ordered,quantity_received,offering_id,unit_cost_minor INTO v_ordered,v_received,v_offering,v_cost
+      FROM public.commercial_purchase_order_items WHERE id=v_item_id AND organization_id=p_organization_id AND purchase_order_id=p_purchase_order_id FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'purchase_receipt_line_not_in_order' USING ERRCODE='22023'; END IF;
+    IF v_offering IS NULL THEN RAISE EXCEPTION 'purchase_line_missing_inventory_offering' USING ERRCODE='55000'; END IF;
+    IF v_received+v_qty>v_ordered THEN RAISE EXCEPTION 'purchase_receipt_exceeds_remaining_quantity' USING ERRCODE='22023'; END IF;
+    INSERT INTO public.commercial_inventory_balances(organization_id,location_id,offering_id,quantity_on_hand,quantity_reserved,reorder_point,unit_cost_minor)
+    VALUES(p_organization_id,p_location_id,v_offering,0,0,0,NULL) ON CONFLICT (organization_id,location_id,offering_id) DO NOTHING;
+    v_inventory:=public.commercial_receive_inventory_stock(p_organization_id,p_location_id,v_offering,v_qty::numeric,v_cost,
+      'purchase-receipt:'||v_receipt_id::text||':'||v_item_id::text);
+    v_inv_receipt:=(v_inventory->>'receipt_id')::uuid;
+    UPDATE public.commercial_purchase_order_items SET quantity_received=quantity_received+v_qty,updated_at=now()
+      WHERE id=v_item_id AND purchase_order_id=p_purchase_order_id AND organization_id=p_organization_id;
+    INSERT INTO public.commercial_purchase_receipt_items(organization_id,receipt_id,purchase_order_id,purchase_order_item_id,offering_id,quantity,unit_cost_minor,inventory_receipt_id)
+    VALUES(p_organization_id,v_receipt_id,p_purchase_order_id,v_item_id,v_offering,v_qty,v_cost,v_inv_receipt);
+    v_item_count:=v_item_count+1;
+  END LOOP;
+  SELECT CASE WHEN bool_and(quantity_received=quantity_ordered) THEN 'received' ELSE 'partially_received' END INTO v_new_status
+    FROM public.commercial_purchase_order_items WHERE purchase_order_id=p_purchase_order_id AND organization_id=p_organization_id;
+  UPDATE public.commercial_purchase_orders SET status=v_new_status,updated_at=now()
+    WHERE id=p_purchase_order_id AND organization_id=p_organization_id;
+  INSERT INTO public.commercial_audit_events(organization_id,actor_user_id,action,entity_type,entity_id,metadata)
+  VALUES(p_organization_id,v_uid,'purchase_order.received','purchase_receipt',v_receipt_id::text,jsonb_build_object('purchase_order_id',p_purchase_order_id,'location_id',p_location_id,'line_count',v_item_count,'new_order_status',v_new_status));
+  RETURN jsonb_build_object('receipt_id',v_receipt_id,'purchase_order_id',p_purchase_order_id,'status',v_new_status,'line_count',v_item_count,'idempotent_replay',false);
+END;
+$function$;
