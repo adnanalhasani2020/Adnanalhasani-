@@ -14,6 +14,11 @@ class CommercialLocationCoordinatesContractTests(unittest.TestCase):
         cls.screen = SCREEN.read_text(encoding="utf-8")
 
     def test_coordinate_rpc_is_authenticated_scoped_and_audited(self):
+        self.assertLess(
+            self.sql.index("m.role IN ('owner','admin','manager')"),
+            self.sql.index("SELECT l.* INTO v_location"),
+            "membership authorization must happen before revealing location existence",
+        )
         for token in (
             "CREATE OR REPLACE FUNCTION public.commercial_update_location_coordinates",
             "SECURITY DEFINER",
