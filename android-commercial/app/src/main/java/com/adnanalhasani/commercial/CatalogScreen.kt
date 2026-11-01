@@ -175,6 +175,8 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var marketWarehouses by remember { mutableStateOf<List<CatalogWarehouseOption>>(emptyList()) }
     var selectedBranchId by remember { mutableStateOf("") }
     var selectedWarehouseId by remember { mutableStateOf("") }
+    var branchLatitude by remember { mutableStateOf("") }
+    var branchLongitude by remember { mutableStateOf("") }
     var branchMenuExpanded by remember { mutableStateOf(false) }
     var warehouseMenuExpanded by remember { mutableStateOf(false) }
     var nearbyMarketItems by remember { mutableStateOf<List<NearbyCatalogItem>>(emptyList()) }
@@ -371,6 +373,9 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             marketWarehouses=List(ws.length()) { i -> val row=ws.getJSONObject(i); CatalogWarehouseOption(row.optString("id"),row.optString("name"),row.optString("branch_location_id")) }
             if(selectedBranchId.isBlank()) selectedBranchId=marketBranches.firstOrNull()?.id.orEmpty()
             if(selectedWarehouseId.isBlank() || marketWarehouses.none { it.id==selectedWarehouseId && it.branchId==selectedBranchId }) selectedWarehouseId=marketWarehouses.firstOrNull { it.branchId==selectedBranchId }?.id.orEmpty()
+            val selectedBranch=marketBranches.firstOrNull { it.id==selectedBranchId }
+            branchLatitude=selectedBranch?.latitude.orEmpty()
+            branchLongitude=selectedBranch?.longitude.orEmpty()
             feedback="تم تحميل الفروع والمستودعات: "+marketBranches.size+" / "+marketWarehouses.size
         })
     }
@@ -789,6 +794,8 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                                     DropdownMenu(expanded=branchMenuExpanded,onDismissRequest={branchMenuExpanded=false}) {
                                         marketBranches.forEach { branch -> DropdownMenuItem(text={Text(branch.name)},onClick={
                                             selectedBranchId=branch.id
+                                            branchLatitude=branch.latitude
+                                            branchLongitude=branch.longitude
                                             selectedWarehouseId=marketWarehouses.firstOrNull { it.branchId==branch.id }?.id.orEmpty()
                                             nearbyMarketItems=emptyList(); nearbyOffset=0; nearbyHasMore=true; nearbyLoadGeneration++; marketRadius=5000; marketPriceHints=emptyMap(); branchMenuExpanded=false
                                         }) }
@@ -805,6 +812,46 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                                     }
                                 }
                             }
+                            Text("إحداثيات الفرع المحدد",fontWeight=FontWeight.SemiBold)
+                            Text("أدخل إحداثيات الموقع يدويًا لاستخدام اكتشاف السوق القريب. اترك الحقلين فارغين لمسح الموقع.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                            Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                                OutlinedTextField(branchLatitude,{branchLatitude=it},Modifier.weight(1f),label={Text("خط العرض Latitude")},singleLine=true)
+                                OutlinedTextField(branchLongitude,{branchLongitude=it},Modifier.weight(1f),label={Text("خط الطول Longitude")},singleLine=true)
+                            }
+                            val parsedLatitude=branchLatitude.trim().takeIf { it.isNotEmpty() }?.toBigDecimalOrNull()
+                            val parsedLongitude=branchLongitude.trim().takeIf { it.isNotEmpty() }?.toBigDecimalOrNull()
+                            val coordinatesCleared=branchLatitude.isBlank() && branchLongitude.isBlank()
+                            val coordinatesValid=coordinatesCleared || (
+                                parsedLatitude!=null && parsedLongitude!=null &&
+                                parsedLatitude >= java.math.BigDecimal("-90") && parsedLatitude <= java.math.BigDecimal("90") &&
+                                parsedLongitude >= java.math.BigDecimal("-180") && parsedLongitude <= java.math.BigDecimal("180")
+                            )
+                            Button(
+                                onClick={
+                                    val active=token
+                                    val orgId=org()
+                                    if(active==null || orgId==null || selectedBranchId.isBlank()) { feedback="اختر مؤسسة وفرعًا صالحين أولًا."; return@Button }
+                                    request({
+                                        catalogHttp("/rest/v1/rpc/commercial_update_location_coordinates",JSONObject()
+                                            .put("p_organization_id",orgId)
+                                            .put("p_location_id",selectedBranchId)
+                                            .put("p_latitude",parsedLatitude?.toPlainString() ?: JSONObject.NULL)
+                                            .put("p_longitude",parsedLongitude?.toPlainString() ?: JSONObject.NULL),active)
+                                    }, { raw ->
+                                        val result=JSONObject(raw)
+                                        val savedLat=result.optString("latitude").takeUnless { it=="null" }.orEmpty()
+                                        val savedLon=result.optString("longitude").takeUnless { it=="null" }.orEmpty()
+                                        marketBranches=marketBranches.map { branch ->
+                                            if(branch.id==selectedBranchId) branch.copy(latitude=savedLat,longitude=savedLon) else branch
+                                        }
+                                        branchLatitude=savedLat
+                                        branchLongitude=savedLon
+                                        feedback=if(savedLat.isBlank()) "تم مسح إحداثيات الفرع." else "تم حفظ إحداثيات الفرع وتسجيل التغيير في سجل التدقيق."
+                                    })
+                                },
+                                enabled=!busy && selectedBranchId.isNotBlank() && coordinatesValid,
+                                modifier=Modifier.fillMaxWidth()
+                            ) { Text(if(coordinatesCleared) "مسح الإحداثيات" else "حفظ إحداثيات الفرع") }
                             Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
                                 OutlinedButton(onClick={loadMarketContext()},enabled=!busy) { Text("تحديث الفروع") }
                                 Button(onClick={startNearbyCatalog()},enabled=!busy && selectedBranchId.isNotBlank()) { Text("الأكثر استخدامًا قريبًا") }
