@@ -33,6 +33,8 @@ class InvoicePurchaseUnitAndReceivingLocationTests(unittest.TestCase):
         self.assertIn("v_item.quantity,0,v_item.unit_price_minor", sql)
         self.assertIn("recipient_receiving_location_not_in_organization", sql)
         self.assertIn("recipient_active_receiving_location_required", sql)
+        self.assertIn("REVOKE ALL ON FUNCTION public.commercial_review_invoice_purchase_request(uuid,text,text,uuid)", sql)
+        self.assertIn("GRANT EXECUTE ON FUNCTION public.commercial_review_invoice_purchase_request(uuid,text,text,uuid) TO authenticated", sql)
         self.assertIn("Backward compatibility for older clients", sql)
         self.assertIn("ri.line_number=poi.line_number", sql)
 

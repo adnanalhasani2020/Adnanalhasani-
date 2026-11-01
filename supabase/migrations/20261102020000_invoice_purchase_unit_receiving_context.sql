@@ -168,4 +168,7 @@ BEGIN
   'stock_received',false,'catalog_mapping_required',true,'idempotent_replay',false);
 END; $$;
 
+REVOKE ALL ON FUNCTION public.commercial_review_invoice_purchase_request(uuid,text,text,uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.commercial_review_invoice_purchase_request(uuid,text,text,uuid) TO authenticated;
+
 COMMIT;
