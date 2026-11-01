@@ -1187,8 +1187,12 @@ internal fun receiveCommercialCloudPurchaseOrder(
     lines.forEach { line ->
         val quantity = line.quantity.toBigDecimalOrNull()
             ?: throw IllegalArgumentException("كمية الاستلام غير صالحة.")
-        require(quantity > java.math.BigDecimal.ZERO && quantity.stripTrailingZeros().scale() <= 0) {
-            "كمية الاستلام يجب أن تكون عددًا صحيحًا موجبًا دون كسور."
+        require(
+            quantity > java.math.BigDecimal.ZERO &&
+                quantity <= java.math.BigDecimal("999999999999.999999") &&
+                quantity.stripTrailingZeros().scale() <= 6
+        ) {
+            "كمية الاستلام يجب أن تكون موجبة وبحد أقصى 6 منازل عشرية."
         }
         lineArray.put(JSONObject().put("purchase_order_item_id", line.purchaseOrderItemId).put("quantity", quantity.stripTrailingZeros().toPlainString()))
     }
