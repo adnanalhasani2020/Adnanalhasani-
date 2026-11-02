@@ -576,38 +576,16 @@ internal fun ReportsCenterScreen(
             "تعذر مطابقة عملات الالتزامات أو تجاوزت مجاميعها نطاق الأرقام الدقيق؛ تم حجب المستحقات."
         else -> ""
     }
-    val supplierLiabilityAgingInputs = supplierObligationCandidates.mapNotNull { (purchase, invoice) ->
-        val obligation = invoice.obligation ?: return@mapNotNull null
-        SupplierLiabilityAgingInput(
-            invoiceId = invoice.id,
-            invoiceNumber = invoice.invoiceNumber,
-            supplierId = purchase.supplierId,
-            supplierName = purchase.supplierName.ifBlank { "مورد غير محدد" },
-            invoiceDate = invoice.recordedAt,
-            currencyCode = obligation.currencyCode,
-            amountDueMinor = obligation.amountDueMinor,
-            amountPaidMinor = obligation.amountPaidMinor
+    val supplierLiabilityAgingReport = remember(cloudPurchases, today, cloudMode, purchasesLoadError, supplierInvoiceDetailError) {
+        buildSupplierLiabilityAgingReport(
+            purchases = cloudPurchases,
+            asOfDate = today.toString(),
+            cloudMode = cloudMode,
+            purchasesLoadError = purchasesLoadError,
+            invoiceIntegrityError = supplierInvoiceDetailError
         )
     }
-    val supplierLiabilityAgingCalculation = remember(cloudPurchases, today, cloudMode) {
-        runCatching { calculateSupplierLiabilityAging(supplierLiabilityAgingInputs, today.toString()) }
-    }
-    val supplierLiabilityAgingError = when {
-        !cloudMode -> "أعمار مستحقات الموردين تتطلب مصادر السحابة."
-        purchasesLoadError.isNotBlank() -> purchasesLoadError
-        supplierInvoiceDetailError.isNotBlank() -> supplierInvoiceDetailError
-        supplierObligationCandidates.any { (_, invoice) -> reportDateMillis(invoice.recordedAt) == null } ->
-            "توجد فاتورة مورد بتاريخ تسجيل غير صالح؛ تم حجب تقرير الأعمار."
-        supplierObligationCandidates.any { (_, invoice) ->
-            val obligation = invoice.obligation
-            obligation != null && (!obligation.currencyCode.matches(Regex("^[A-Z]{3}$")) ||
-                obligation.amountDueMinor < 0L || obligation.amountPaidMinor < 0L ||
-                obligation.amountPaidMinor > obligation.amountDueMinor)
-        } -> "توجد مبالغ أو عملات التزام غير متطابقة؛ تم حجب تقرير الأعمار."
-        supplierLiabilityAgingCalculation.isFailure ->
-            supplierLiabilityAgingCalculation.exceptionOrNull()?.message.orEmpty()
-        else -> ""
-    }
+    val supplierLiabilityAgingError = supplierLiabilityAgingReport.error
     val taxDetailError = when {
         !cloudMode -> "التقرير الضريبي التفصيلي يتطلب مصادر السحابة."
         salesDocumentsLoadError.isNotBlank() -> salesDocumentsLoadError
@@ -1162,7 +1140,7 @@ internal fun ReportsCenterScreen(
             }
         }.sortedByDescending { it.date }
         "عمر مستحقات الموردين حسب تاريخ الفاتورة" -> if (supplierLiabilityAgingError.isNotBlank()) emptyList() else {
-            supplierLiabilityAgingCalculation.getOrThrow().map { aging ->
+            supplierLiabilityAgingReport.rows.map { aging ->
                 ReportLine(
                     today.toString(),
                     aging.bucket,
