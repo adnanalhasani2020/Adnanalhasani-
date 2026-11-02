@@ -651,6 +651,49 @@ internal fun ReportsCenterScreen(
         } -> "توجد حركات على حساب مراقبة الموردين بلا ربط صالح بمورد وعملة مطابقين؛ تعذر اعتماد الكشف الكامل."
         else -> ""
     }
+    val itemProfitabilityCalculation = runCatching {
+        val allSaleLines = cloudSalesDocuments.flatMap { document ->
+            val inPeriod = document.saleStatus.equals("completed", true) &&
+                reportDateMillis(document.createdAt)?.let { it >= startMillis && it < endExclusive } == true
+            document.lines.map { line ->
+                ItemProfitSaleLineInput(
+                    saleItemId = line.id,
+                    productName = line.productName,
+                    currencyCode = document.currencyCode,
+                    quantity = line.quantity,
+                    lineTotalMinor = line.lineTotalMinor,
+                    costTotalMinor = line.costTotalMinor,
+                    inSelectedPeriod = inPeriod
+                )
+            }
+        }
+        val periodReturns = cloudReturns.filter { saleReturn ->
+            saleReturn.status.equals("completed", true) &&
+                reportDateMillis(saleReturn.completedAt)?.let { it >= startMillis && it < endExclusive } == true
+        }.map { saleReturn ->
+            ItemProfitReturnInput(
+                returnId = saleReturn.id,
+                currencyCode = saleReturn.currencyCode,
+                approvedRefundMinor = saleReturn.approvedRefundMinor,
+                items = saleReturn.items.map { item ->
+                    ItemProfitReturnLineInput(
+                        saleItemId = item.saleItemId,
+                        quantity = item.quantity,
+                        refundAmountMinor = item.refundAmountMinor,
+                        restockedQuantity = item.restockedQuantity,
+                        saleItemQuantityInStockUnits = item.saleItemQuantityInStockUnits
+                    )
+                }
+            )
+        }
+        calculateItemProfitability(allSaleLines, periodReturns)
+    }
+    val itemProfitabilityError = when {
+        !cloudMode -> "ربحية الأصناف بعد المرتجعات تتطلب سجلات السحابة."
+        salesDocumentsLoadError.isNotBlank() -> salesDocumentsLoadError
+        returnsLoadError.isNotBlank() -> returnsLoadError
+        else -> itemProfitabilityCalculation.exceptionOrNull()?.message.orEmpty()
+    }
     val sourceErrorForReport: (String) -> String = { title ->
         when (title) {
             "ملخص المبيعات حسب الفترة", "تفاصيل فواتير المبيعات", "تفاصيل بنود فواتير المبيعات",
@@ -669,6 +712,7 @@ internal fun ReportsCenterScreen(
             "قائمة الدخل والميزانية العمومية" -> ledgerStatementError
             "الضرائب والخصومات التفصيلية" -> taxDetailError
             "تكلفة البضاعة والربح" -> costProfitError
+            "ربحية الأصناف بعد المرتجعات" -> itemProfitabilityError
             "التقييم المالي الحالي للمخزون" -> when {
                 stockAlertsLoadError.isNotBlank() -> stockAlertsLoadError
                 glMappingsLoadError.isNotBlank() -> glMappingsLoadError
@@ -758,7 +802,8 @@ internal fun ReportsCenterScreen(
             ReportCatalogItem("تقييم المخزون التاريخي ومطابقته مع الأستاذ", "الأصناف والمخزون", "طبقات تكلفة تاريخية وحركات وأرصدة حسب المستودع + حساب المخزون", false, "الرصيد الحالي لا يعيد بناء قيمة تاريخية، ودفتر الكميات/التكلفة لم يكتمل على مستوى المستودع مع مطابقة حساب المخزون."),
             ReportCatalogItem("تجميع القوائم المالية متعددة العملات", "الإدارة الشاملة", "أسعار صرف معتمدة بتاريخ الغرض وسياسة ترجمة وفروق عملة", false, "لا توجد سياسة تحويل معتمدة أو مصدر أسعار صرف مؤرخ لغرض التقارير؛ لن تُجمع العملات أو تُحوّل بسعر حالي عشوائي."),
 
-            ReportCatalogItem("تكلفة البضاعة والربح", "الأرباح والتكاليف", "commercial_sale_items.cost_total_minor + المرتجعات المكتملة", cloudMode, "يعتمد على لقطة التكلفة المحفوظة مع بند البيع، ويعكس تكلفة البضاعة المرتجعة التي أعيد تخزينها؛ يحجب الربح إذا كانت التكلفة أو تسوية الضريبة غير مكتملة.")
+            ReportCatalogItem("تكلفة البضاعة والربح", "الأرباح والتكاليف", "commercial_sale_items.cost_total_minor + المرتجعات المكتملة", cloudMode, "يعتمد على لقطة التكلفة المحفوظة مع بند البيع، ويعكس تكلفة البضاعة المرتجعة التي أعيد تخزينها؛ يحجب الربح إذا كانت التكلفة أو تسوية الضريبة غير مكتملة."),
+            ReportCatalogItem("ربحية الأصناف بعد المرتجعات", "الأرباح والتكاليف", "commercial_sale_items + commercial_sale_return_items", cloudMode, "يحسب صافي الإيراد والتكلفة والربح لكل صنف وعملة، ويربط كل مرتجع ببند البيع الأصلي ويعكس تكلفة الكمية المعاد تخزينها؛ يحجب النتائج عند نقص تكلفة تاريخية أو عدم تطابق مبلغ اعتماد المرتجع مع بنوده.")
         )
     }
     val filteredCatalog = catalog.filter {
@@ -1134,6 +1179,19 @@ internal fun ReportsCenterScreen(
                     "قيمة مرتجع معتمد؛ لا تفصل حصة الضريبة لأن مصدر المرتجع لا يخزنها منفصلة"))
             }
         }.sortedByDescending { it.date }
+        "ربحية الأصناف بعد المرتجعات" -> if (itemProfitabilityError.isNotBlank()) emptyList() else {
+            itemProfitabilityCalculation.getOrThrow().map { item ->
+                ReportLine(
+                    "${startText} — ${endText}",
+                    "ربحية صنف",
+                    item.productName,
+                    item.grossProfitMinor,
+                    item.currencyCode,
+                    "الإيراد: ${reportMoney(item.salesMinor, item.currencyCode, true)} · المرتجعات المعتمدة: ${reportMoney(item.refundMinor, item.currencyCode, true)} · صافي الإيراد: ${reportMoney(item.netRevenueMinor, item.currencyCode, true)} · تكلفة البيع: ${reportMoney(item.soldCostMinor, item.currencyCode, true)} · تكلفة المرتجع المعاد تخزينه: ${reportMoney(item.returnedCostMinor, item.currencyCode, true)} · صافي التكلفة: ${reportMoney(item.netCostMinor, item.currencyCode, true)} · عدد بنود البيع: ${item.saleLineCount}",
+                    displayAmount = "الكمية المباعة: ${item.soldQuantity.stripTrailingZeros().toPlainString()} · الكمية المرتجعة: ${item.returnedQuantity}"
+                )
+            }
+        }
         "تكلفة البضاعة والربح" -> if (costProfitError.isNotBlank()) emptyList() else {
             val periodSales = cloudSalesDocuments.filter { doc ->
                 doc.saleStatus.equals("completed", true) &&
@@ -1557,7 +1615,7 @@ internal fun ReportsCenterScreen(
                         "التحصيلات المسجلة محليًا", "الدفعات السحابية الناجحة", "التحصيل حسب طريقة الدفع", "المصروفات التشغيلية", "ملخص المصروفات حسب التصنيف وطريقة الصرف", "رصيد المخزون الحالي", "تنبيهات المخزون المنخفض",
                         "فواتير الشراء والمستحقات المسجلة", "فروقات أسعار فواتير الموردين", "مستحقات فواتير الموردين", "مرتجعات المبيعات وحالة التسوية", "سندات القبض والصرف", "سجل القيود المحاسبية",
                         "ميزان المراجعة حسب الحساب", "حركة دفتر الأستاذ العام", "كشف حساب محاسبي", "أرصدة العملاء وكشف الحساب", "كشف حركات الموردين",
-                        "الرصيد المحاسبي الكامل للعملاء", "أرصدة الموردين والمستحقات", "قائمة الدخل والميزانية العمومية", "التدفقات النقدية والصندوق", "تكلفة البضاعة والربح", "الضرائب والخصومات التفصيلية",
+                        "الرصيد المحاسبي الكامل للعملاء", "أرصدة الموردين والمستحقات", "قائمة الدخل والميزانية العمومية", "التدفقات النقدية والصندوق", "تكلفة البضاعة والربح", "ربحية الأصناف بعد المرتجعات", "الضرائب والخصومات التفصيلية",
                         "حركة المخزون الفعلية", "التقييم المالي الحالي للمخزون", "تفاصيل القيود المرحلة" -> selectedReport = report.title
                         "لوحة المؤشرات" -> selectedReport = "ملخص المبيعات حسب الفترة"
                     }
