@@ -11,24 +11,11 @@ class CostProfitReportTotalsTest {
         discount: Long = 100,
         cost: Long? = 500,
         currency: String = "YER"
-    ) = CommercialCloudSaleDocument(
-        id = id,
-        customerId = "customer-1",
-        receiptNumber = id,
-        customerName = "عميل",
-        customerPhone = "",
-        customerEmail = "",
-        totalMinor = subtotal,
+    ) = CostProfitSaleInput(
+        currencyCode = currency,
         subtotalMinor = subtotal,
         discountMinor = discount,
-        taxMinor = 0,
-        saleStatus = "completed",
-        paymentStatus = "paid",
-        createdAt = "2026-11-02T10:00:00Z",
-        currencyCode = currency,
-        lines = listOf(CommercialCloudSaleLine("صنف", "2", 500, subtotal, cost, null)),
-        payments = emptyList(),
-        returns = emptyList()
+        lines = listOf(CostProfitSaleLineInput(cost))
     )
 
     private fun saleReturn(
@@ -38,37 +25,14 @@ class CostProfitReportTotalsTest {
         originalQuantity: Long = 2,
         saleCost: Long? = 400,
         currency: String = "YER"
-    ) = CommercialCloudSaleReturn(
-        id = id,
-        saleId = "sale-1",
-        receiptNumber = "sale-1",
-        customerName = "عميل",
-        reasonCode = "customer_request",
-        reasonNote = "",
-        status = "completed",
-        refundStatus = "completed",
-        restockStatus = "completed",
+    ) = CostProfitReturnInput(
         currencyCode = currency,
-        requestedRefundMinor = approvedRefund ?: 0,
         approvedRefundMinor = approvedRefund,
-        createdAt = "2026-11-02T11:00:00Z",
-        completedAt = "2026-11-02T11:00:00Z",
-        decisionNote = "",
         items = listOf(
-            CommercialCloudReturnItem(
-                id = "return-line-1",
-                saleItemId = "sale-line-1",
-                productName = "صنف",
-                quantity = 1,
-                refundAmountMinor = approvedRefund ?: 0,
-                restock = restocked > 0,
-                restockedQuantity = restocked,
-                conditionCode = "resalable",
-                note = "",
-                saleItemQuantity = originalQuantity.toInt(),
-                saleItemQuantityInStockUnits = originalQuantity,
+            CostProfitReturnItemInput(
                 saleItemCostTotalMinor = saleCost,
-                saleItemUnitCostMinor = null
+                restockedQuantity = restocked,
+                saleItemQuantityInStockUnits = originalQuantity
             )
         )
     )
