@@ -77,6 +77,6 @@ Source-contract assertions were added for financial-statement gating, party-cont
 
 
 ## Supplier liability invoice-age report
-- **Supplier liability invoice age:** groups outstanding balances from active supplier invoice obligations by supplier, obligation currency, and invoice-recording-age buckets (0–30, 31–60, 61–90, over 90 days) as of the selected report end date. It subtracts the saved cumulative amount paid from the saved obligation amount due and excludes fully settled invoices.
+- **Supplier liability invoice age:** groups outstanding balances from active supplier invoice obligations by supplier, obligation currency, and invoice-recording-age buckets (0–30, 31–60, 61–90, over 90 days) as of today. It subtracts the saved cumulative amount paid from the saved obligation amount due and excludes fully settled invoices.
 - The source schema stores `commercial_supplier_invoices.recorded_at`, but does not store a contractual invoice date or due date. Therefore this report explicitly measures **age since invoice capture/recording**, not days overdue and not contractual due-date aging. Do not relabel it as overdue aging.
-- It blocks duplicate invoice identities, invalid/future dates, malformed currencies, negative or overpaid obligation amounts, cross-source invoice/obligation mismatches, and arithmetic overflow. Currency totals remain separate.
+- It blocks duplicate invoice identities, invalid/future dates, malformed currencies, negative or overpaid obligation amounts, cross-source invoice/obligation mismatches, and arithmetic overflow. The amount due/paid values are current cumulative obligation values, so the report does not present a historical balance as of an earlier selected date. Currency totals remain separate.
