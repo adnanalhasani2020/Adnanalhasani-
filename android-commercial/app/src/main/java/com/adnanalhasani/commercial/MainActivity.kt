@@ -244,7 +244,7 @@ private fun StoreApp(context: Context) {
             !saved.getString("activity_id", null).isNullOrBlank() &&
             !saved.getString("location_id", null).isNullOrBlank()
     }
-    val sales = remember { mutableStateListOf<SaleRecord>().apply { addAll(loadSales(context)) } }
+    val sales = remember { mutableStateListOf<SaleRecord>().apply { if (!cloudContextExists) addAll(loadSales(context)) } }
     val settlements = remember { mutableStateListOf<SettlementRecord>().apply { addAll(loadSettlements(context)) } }
     val expenses = remember { mutableStateListOf<ExpenseRecord>().apply { addAll(loadExpenses(context)) } }
     var expenseDialog by remember { mutableStateOf(false) }
@@ -287,7 +287,8 @@ private fun StoreApp(context: Context) {
                     sales.addAll(serverSales)
                     nextInvoice = maxOf(nextInvoice, (serverSales.maxOfOrNull { it.number } ?: 0) + 1)
                 }.onFailure {
-                    cloudNotice = "تعذر تحميل سجل المبيعات من الخادم: " + (it.message ?: "خطأ غير معروف")
+                    sales.clear()
+                    cloudNotice = "تعذر تحميل سجل المبيعات من الخادم؛ أخفينا البيانات المحلية حتى لا تختلط بسجلات المؤسسة: " + (it.message ?: "خطأ غير معروف")
                 }
             }
         }
