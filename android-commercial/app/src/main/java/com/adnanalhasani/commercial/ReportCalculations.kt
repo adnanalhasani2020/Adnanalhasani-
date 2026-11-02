@@ -197,6 +197,7 @@ internal fun calculateSupplierObligationTotals(
     obligations: List<SupplierObligationInput>
 ): List<SupplierObligationTotals> {
     obligations.forEach { row ->
+        require(row.supplierId.isNotBlank()) { "يوجد التزام مورد بلا معرف مورد محفوظ." }
         require(row.purchaseOrderCurrencyCode.matches(Regex("^[A-Z]{3}$")) &&
             row.invoiceCurrencyCode == row.purchaseOrderCurrencyCode &&
             row.obligationCurrencyCode == row.purchaseOrderCurrencyCode) {
