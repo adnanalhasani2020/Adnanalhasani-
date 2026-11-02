@@ -333,13 +333,21 @@ BEGIN
   END IF;
   SELECT coalesce(jsonb_agg(jsonb_build_object(
     'id',q.id,'customer_id',q.customer_id,'customer_name',q.customer_name,
-    'sale_id',q.sale_id,'invoice_number',q.receipt_number,'amount_minor',q.amount_minor,
+    'sale_id',q.sale_id,'invoice_number',q.receipt_number,'amount_minor',q.amount_minor,'due_minor',q.due_minor,
     'currency_code',q.currency_code,'customer_note',q.customer_note,'status',q.status,
     'review_note',q.review_note,'version',q.version,'created_at',q.created_at
   ) ORDER BY q.created_at,q.id),'[]'::jsonb)
   INTO v_result
   FROM (
-    SELECT r.*,c.display_name customer_name,s.receipt_number
+    SELECT r.*,c.display_name customer_name,s.receipt_number,
+      greatest(s.total_minor::numeric
+        - greatest(coalesce((SELECT sum(p.amount_minor)::numeric FROM public.commercial_payments p
+            WHERE p.sale_id=s.id AND p.organization_id=s.organization_id
+              AND p.status IN ('succeeded','partially_refunded','refunded')),0)
+          - coalesce((SELECT sum(sr.approved_refund_minor)::numeric FROM public.commercial_sales_returns sr
+            WHERE sr.sale_id=s.id AND sr.organization_id=s.organization_id AND sr.refund_status='refunded'),0),0)
+        - coalesce((SELECT sum(sr.approved_refund_minor)::numeric FROM public.commercial_sales_returns sr
+            WHERE sr.sale_id=s.id AND sr.organization_id=s.organization_id AND sr.status='completed'),0),0)::bigint AS due_minor
     FROM public.commercial_customer_payment_requests r
     JOIN public.commercial_customers c ON c.id=r.customer_id AND c.organization_id=r.organization_id
     JOIN public.commercial_sales s ON s.id=r.sale_id AND s.organization_id=r.organization_id
