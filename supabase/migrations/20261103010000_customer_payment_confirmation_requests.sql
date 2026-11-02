@@ -121,7 +121,7 @@ BEGIN
     'id',r.id,'organization_id',r.organization_id,'organization_name',o.name,
     'sale_id',r.sale_id,'invoice_number',s.receipt_number,'amount_minor',r.amount_minor,
     'currency_code',r.currency_code,'customer_note',r.customer_note,'status',r.status,
-    'review_note',r.review_note,'payment_id',r.payment_id,'version',r.version,
+    'review_note',r.review_note,'payment_id',r.payment_id,'receipt_number',p.receipt_number,'version',r.version,
     'created_at',r.created_at,'updated_at',r.updated_at,'reviewed_at',r.reviewed_at
   ) ORDER BY r.created_at DESC,r.id), '[]'::jsonb)
   INTO v_result
@@ -131,6 +131,7 @@ BEGIN
    AND c.auth_user_id=v_uid AND c.state='active'
   JOIN public.commercial_organizations o ON o.id=r.organization_id
   JOIN public.commercial_sales s ON s.id=r.sale_id AND s.organization_id=r.organization_id
+  LEFT JOIN public.commercial_payments p ON p.id=r.payment_id AND p.organization_id=r.organization_id
   WHERE r.submitted_by=v_uid
     AND (p_organization_id IS NULL OR r.organization_id=p_organization_id);
   RETURN v_result;
