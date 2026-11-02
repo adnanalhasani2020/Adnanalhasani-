@@ -493,6 +493,51 @@ internal fun ReportsCenterScreen(
             "تعذر مطابقة أحد فواتير المورد مع بنودها وأسعار أمر الشراء؛ لم يتم عرض إجمالي جزئي أو فرق سعر مضلل."
         else -> ""
     }
+    val activeSupplierInvoiceCandidates = cloudPurchases.flatMap { purchase ->
+        purchase.supplierInvoices.filter { invoice ->
+            invoice.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed")
+        }.map { invoice -> purchase to invoice }
+    }
+    val supplierObligationCandidates = activeSupplierInvoiceCandidates.filter { (_, invoice) ->
+        invoice.obligation != null &&
+            invoice.obligation.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed")
+    }
+    val supplierObligationInputs = supplierObligationCandidates.mapNotNull { (purchase, invoice) ->
+        val timestamp = reportDateMillis(invoice.recordedAt) ?: return@mapNotNull null
+        if (timestamp >= endExclusive) return@mapNotNull null
+        val obligation = invoice.obligation ?: return@mapNotNull null
+        SupplierObligationInput(
+            supplierName = purchase.supplierName.ifBlank { "مورد غير محدد" },
+            purchaseOrderCurrencyCode = purchase.currencyCode,
+            invoiceCurrencyCode = invoice.currencyCode,
+            obligationCurrencyCode = obligation.currencyCode,
+            amountDueMinor = obligation.amountDueMinor,
+            amountPaidMinor = obligation.amountPaidMinor
+        )
+    }
+    val supplierInvoiceDetailError = when {
+        !cloudMode -> "تفاصيل فواتير الشراء تتطلب مصادر السحابة."
+        purchasesLoadError.isNotBlank() -> purchasesLoadError
+        activeSupplierInvoiceCandidates.any { (_, invoice) -> reportDateMillis(invoice.recordedAt) == null } ->
+            "توجد فاتورة مورد بتاريخ تسجيل غير صالح؛ تعذر تحديد الفترة بدقة."
+        activeSupplierInvoiceCandidates.any { (purchase, invoice) ->
+            val obligation = invoice.obligation
+            invoice.totalMinor < 0L || !purchase.currencyCode.matches(Regex("^[A-Z]{3}$")) ||
+                invoice.currencyCode != purchase.currencyCode ||
+                (obligation != null && (obligation.currencyCode != purchase.currencyCode ||
+                    obligation.amountDueMinor < 0L || obligation.amountPaidMinor < 0L))
+        } -> "توجد فاتورة أو مستحق مورد بمبلغ أو عملة غير متطابقة؛ تم حجب التقرير."
+        else -> ""
+    }
+    val supplierObligationsError = when {
+        !cloudMode -> "مستحقات فواتير الموردين تتطلب مصادر السحابة."
+        purchasesLoadError.isNotBlank() -> purchasesLoadError
+        supplierObligationCandidates.any { (_, invoice) -> reportDateMillis(invoice.recordedAt) == null } ->
+            "توجد فاتورة التزام مورد بتاريخ غير صالح؛ لا يمكن حساب الرصيد حتى نهاية الفترة."
+        runCatching { calculateSupplierObligationTotals(supplierObligationInputs) }.isFailure ->
+            "تعذر مطابقة عملات الالتزامات أو تجاوزت مجاميعها نطاق الأرقام الدقيق؛ تم حجب المستحقات."
+        else -> ""
+    }
     val taxDetailError = when {
         !cloudMode -> "التقرير الضريبي التفصيلي يتطلب مصادر السحابة."
         salesDocumentsLoadError.isNotBlank() -> salesDocumentsLoadError
@@ -612,7 +657,8 @@ internal fun ReportsCenterScreen(
             "لوحة المؤشرات", "المبيعات حسب العميل", "المبيعات حسب حالة السداد", "متوسط قيمة الفاتورة", "مقارنة الفترات",
             "أرصدة العملاء وكشف الحساب" -> customerOperationalStatementError
             "مرتجعات المبيعات وحالة التسوية" -> returnsLoadError
-            "فواتير الشراء والمستحقات المسجلة", "مستحقات فواتير الموردين" -> purchasesLoadError
+            "فواتير الشراء والمستحقات المسجلة" -> supplierInvoiceDetailError
+            "مستحقات فواتير الموردين" -> supplierObligationsError
             "فروقات أسعار فواتير الموردين" -> supplierInvoiceVarianceError
             "كشف حركات الموردين" -> purchasesLoadError.ifBlank { supplierPaymentsLoadError }
             "الدفعات السحابية الناجحة", "سندات القبض والصرف" -> paymentsLoadError
@@ -872,25 +918,23 @@ internal fun ReportsCenterScreen(
                 val paid = invoice.obligation?.amountPaidMinor
                 ReportLine(invoice.recordedAt.take(10), invoice.invoiceNumber.ifBlank { purchase.orderNumber }, purchase.supplierName,
                     invoice.totalMinor, invoice.currencyCode.ifBlank { purchase.currencyCode },
-                    if (due != null && paid != null) "مستحق: ${(due - paid).coerceAtLeast(0)} · ${invoice.state}" else invoice.state)
+                    if (due != null && paid != null) {
+                        val balance = Math.subtractExact(due, paid)
+                        if (balance >= 0L) "المستحق: ${reportMoney(balance, invoice.currencyCode, true)} · ${invoice.state}"
+                        else "رصيد دائن/مقدم للمورد: ${reportMoney(balance, invoice.currencyCode, true)} · ${invoice.state}"
+                    } else invoice.state)
             }
         }.sortedByDescending { it.date }
-        "مستحقات فواتير الموردين" -> cloudPurchases.flatMap { purchase ->
-            purchase.supplierInvoices.filter { invoice ->
-                val timestamp = reportDateMillis(invoice.recordedAt)
-                timestamp != null && timestamp < endExclusive &&
-                    invoice.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed") &&
-                    invoice.obligation != null &&
-                    invoice.obligation.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed")
-            }.mapNotNull { invoice ->
-                val obligation = invoice.obligation ?: return@mapNotNull null
-                Triple(purchase.supplierName.ifBlank { "مورد غير محدد" }, invoice.currencyCode.ifBlank { purchase.currencyCode }, obligation)
-            }
-        }.groupBy { it.first to it.second }.map { (key, rows) ->
-            val due = rows.sumOf { it.third.amountDueMinor }
-            val paid = rows.sumOf { it.third.amountPaidMinor }
-            ReportLine(endText, "-", key.first, (due - paid).coerceAtLeast(0L), key.second,
-                "إجمالي الالتزامات: ${reportMoney(due, key.second, true)} · المسدد: ${reportMoney(paid, key.second, true)} · عدد الالتزامات: ${rows.size}")
+        "مستحقات فواتير الموردين" -> calculateSupplierObligationTotals(supplierObligationInputs).map { totals ->
+            val balanceLabel = if (totals.balanceMinor >= 0L) "المستحق للمورد" else "رصيد دائن/مقدم للمورد"
+            ReportLine(
+                endText,
+                "-",
+                totals.supplierName,
+                totals.balanceMinor,
+                totals.currencyCode,
+                "إجمالي الالتزامات: ${reportMoney(totals.amountDueMinor, totals.currencyCode, true)} · المسدد: ${reportMoney(totals.amountPaidMinor, totals.currencyCode, true)} · ${balanceLabel}: ${reportMoney(totals.balanceMinor, totals.currencyCode, true)}"
+            )
         }.sortedByDescending { it.amount }
         "كشف حركات الموردين" -> {
             val invoiceMovements = cloudPurchases.flatMap { purchase ->
