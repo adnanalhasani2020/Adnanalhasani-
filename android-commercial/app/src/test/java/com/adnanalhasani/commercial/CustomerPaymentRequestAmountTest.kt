@@ -10,7 +10,7 @@ class CustomerPaymentRequestAmountTest {
         assertEquals(1250L, parseMerchantPaymentRequestAmount("12.50", "USD"))
         assertEquals(1250L, parseMerchantPaymentRequestAmount("12,50", "USD"))
         assertEquals(500L, parseMerchantPaymentRequestAmount("500", "YER"))
-        assertEquals(0L, parseMerchantPaymentRequestAmount("0.00", "USD") ?: 0L)
+        assertNull(parseMerchantPaymentRequestAmount("0.00", "USD"))
     }
 
     @Test
