@@ -35,8 +35,7 @@ DECLARE
   v_matching_count integer;
 BEGIN
   IF v_uid IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
-  SELECT d, parent_account.owner_user_id, child_account.id
-    INTO v_delegation, v_parent_uid, v_child_personal_account_id
+  SELECT d.* INTO v_delegation
   FROM public.commercial_account_delegations d
   JOIN public.commercial_party_accounts parent_account ON parent_account.id=d.parent_account_id
   JOIN public.commercial_party_accounts child_account ON child_account.id=d.child_account_id
