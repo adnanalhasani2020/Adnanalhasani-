@@ -154,6 +154,7 @@ internal fun CommercialCloudDebtScreen(context: Context, onBack: () -> Unit) {
                         Text(request.customerName, color = DebtInk, fontWeight = FontWeight.Bold)
                         Text("فاتورة #"+request.invoiceNumber, color = DebtMuted, fontSize = 12.sp)
                         Text(cloudDebtMoney(request.amountMinor, request.currencyCode), color = DebtGreen, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        Text("المتبقي حاليًا: "+cloudDebtMoney(request.dueMinor, request.currencyCode), color = DebtMuted, fontSize = 11.sp)
                         if (request.customerNote.isNotBlank()) Text("ملاحظة العميل: "+request.customerNote, color = DebtMuted, fontSize = 12.sp)
                         Button(onClick = {
                             selectedRequest = request
@@ -212,7 +213,7 @@ internal fun CommercialCloudDebtScreen(context: Context, onBack: () -> Unit) {
     }
 
     val requestTarget = selectedRequest
-    val requestCurrentDue = requestTarget?.let { target -> rows.firstOrNull { it.saleId == target.saleId }?.dueMinor }
+    val requestCurrentDue = requestTarget?.dueMinor?.takeIf { it >= 0L }
     if (requestTarget != null) AlertDialog(
         onDismissRequest = { if (!busy) selectedRequest = null },
         title = { Text("مراجعة طلب سند قبض") },
