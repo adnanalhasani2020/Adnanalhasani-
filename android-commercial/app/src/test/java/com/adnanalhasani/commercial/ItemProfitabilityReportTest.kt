@@ -30,7 +30,11 @@ class ItemProfitabilityReportTest {
             saleItemId = saleItemId,
             quantity = 1,
             refundAmountMinor = refund,
+            refundAmountPresent = true,
+            restockRequested = restocked > 0,
+            restockFlagPresent = true,
             restockedQuantity = restocked,
+            restockedQuantityPresent = true,
             saleItemQuantityInStockUnits = 2
         ))
     )
@@ -132,6 +136,22 @@ class ItemProfitabilityReportTest {
         }
         assertThrows(IllegalArgumentException::class.java) {
             calculateItemProfitability(listOf(sale(saleTax = 100)), listOf(returned()))
+        }
+    }
+
+    @Test
+    fun rejectsMissingRefundOrRestockSourceFields() {
+        assertThrows(IllegalArgumentException::class.java) {
+            calculateItemProfitability(
+                listOf(sale()),
+                listOf(returned().copy(items = listOf(returned().items.single().copy(refundAmountPresent = false))))
+            )
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            calculateItemProfitability(
+                listOf(sale()),
+                listOf(returned().copy(items = listOf(returned().items.single().copy(restockedQuantityPresent = false))))
+            )
         }
     }
 
