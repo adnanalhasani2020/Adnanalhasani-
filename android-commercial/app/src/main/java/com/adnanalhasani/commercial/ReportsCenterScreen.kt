@@ -320,6 +320,8 @@ internal fun ReportsCenterScreen(
     var exportTitle by remember { mutableStateOf("تقرير متجري") }
     var error by remember { mutableStateOf("") }
     var cloudSalesDocuments by remember { mutableStateOf<List<CommercialCloudSaleDocument>>(emptyList()) }
+    var cloudReceivables by remember { mutableStateOf<List<CommercialCloudReceivable>>(emptyList()) }
+    var receivablesLoadError by remember { mutableStateOf("") }
     var cloudPurchases by remember { mutableStateOf<List<CommercialCloudPurchaseDocument>>(emptyList()) }
     var cloudSupplierPayments by remember { mutableStateOf<List<CommercialCloudSupplierPaymentMovement>>(emptyList()) }
     var cloudStockMovements by remember { mutableStateOf<List<CommercialCloudStockMovement>>(emptyList()) }
@@ -358,6 +360,7 @@ internal fun ReportsCenterScreen(
         cloudLoadError = ""
         ReportIo.execute {
             val salesDocuments = runCatching { loadCommercialCloudSaleDocuments(context) }
+            val receivables = runCatching { loadCommercialCloudReceivables(context) }
             val purchases = runCatching { loadCommercialCloudPurchaseDocuments(context) }
             val supplierPayments = runCatching { loadCommercialCloudSupplierPaymentMovements(context) }
             val stockMovements = runCatching { loadCommercialCloudStockMovements(context) }
@@ -376,6 +379,8 @@ internal fun ReportsCenterScreen(
                 // Clear failed projections rather than silently showing stale results as fresh.
                 cloudSalesDocuments = salesDocuments.getOrDefault(emptyList())
                 salesDocumentsLoadError = salesDocuments.exceptionOrNull()?.message.orEmpty()
+                cloudReceivables = receivables.getOrDefault(emptyList())
+                receivablesLoadError = receivables.exceptionOrNull()?.message.orEmpty()
                 cloudPurchases = purchases.getOrDefault(emptyList())
                 purchasesLoadError = purchases.exceptionOrNull()?.message.orEmpty()
                 cloudSupplierPayments = supplierPayments.getOrDefault(emptyList())
@@ -734,6 +739,15 @@ internal fun ReportsCenterScreen(
             calculateItemProfitability(allSaleLines, periodReturns)
         }
     }
+    val customerReceivableAgingReport = remember(cloudReceivables, today, cloudMode, receivablesLoadError) {
+        buildCustomerReceivableAgingReport(
+            receivables = cloudReceivables,
+            asOfDate = today.toString(),
+            cloudMode = cloudMode,
+            loadError = receivablesLoadError
+        )
+    }
+    val customerReceivableAgingError = customerReceivableAgingReport.error
     val customerCollectionsCalculation = remember(cloudSalesDocuments, startMillis, endExclusive, cloudMode) {
         runCatching {
             val payments = cloudSalesDocuments.flatMap { document ->
@@ -823,6 +837,7 @@ internal fun ReportsCenterScreen(
             "الدفعات السحابية الناجحة", "سندات القبض والصرف" -> paymentsLoadError
             "التحصيل حسب طريقة الدفع" -> paymentMethodAnalysisError
             "التحصيل حسب العميل" -> customerCollectionsError
+            "عمر أرصدة العملاء حسب تاريخ الفاتورة" -> customerReceivableAgingError
             "سجل القيود المحاسبية" -> journalsLoadError
             "ميزان المراجعة حسب الحساب", "حركة دفتر الأستاذ العام", "كشف حساب محاسبي", "تفاصيل القيود المرحلة" -> ledgerLinesLoadError
             "قائمة الدخل والميزانية العمومية" -> ledgerStatementError
@@ -915,6 +930,7 @@ internal fun ReportsCenterScreen(
             ReportCatalogItem("الضرائب والخصومات", "الضرائب والخصومات", "تفاصيل الضرائب والخصومات من المستندات", false, "لا تُخمن النسب أو مبالغ الضريبة إذا لم تسجل في المصدر."),
             ReportCatalogItem("أداء المستخدمين والفروع والمستودعات", "المستخدمون والعمليات", "مستخدم/فرع/مستودع محفوظ على المستند", false, "لا تتوفر كل هذه الأبعاد على جميع مستندات البيع والشراء والتحصيل في نموذج البيانات الحالي؛ لن تُنسب العمليات إلى مستخدم أو فرع بالتخمين."),
             ReportCatalogItem("أعمار ديون العملاء", "العملاء والديون", "تاريخ استحقاق معتمد وتخصيصات تحصيل على مستوى الفاتورة", false, "لا يوجد تاريخ استحقاق موحد محفوظ للفواتير؛ تاريخ إنشاء الفاتورة ليس تاريخ استحقاق، لذلك لا يمكن تكوين شرائح 30/60/90 يومًا بدقة."),
+            ReportCatalogItem("عمر أرصدة العملاء حسب تاريخ الفاتورة", "العملاء والديون", "فواتير العملاء المكتملة + التحصيلات + المرتجعات المعتمدة والاستردادات المنفذة", cloudMode, "يعرض الأرصدة المفتوحة الحالية بعد عكس المرتجعات المعتمدة والاستردادات المنفذة في شرائح عمر منذ تاريخ إنشاء الفاتورة حتى اليوم؛ لا يمثل أيام التأخر عن استحقاق تعاقدي ولا يعيد بناء رصيد تاريخ سابق."),
             ReportCatalogItem("أعمار مستحقات الموردين", "الموردون والمستحقات", "تاريخ استحقاق تعاقدي لكل التزام", false, "جدول التزامات الموردين لا يحتوي تاريخ استحقاق أو شروط ائتمان؛ لا يجوز استخدام تاريخ تسجيل الفاتورة كموعد استحقاق مفترض."),
             ReportCatalogItem("التسوية البنكية", "الصندوق والنقدية", "كشف بنك خارجي + أسطر مطابقة وحالة تسوية", false, "دفتر الأستاذ الداخلي لا يثبت حركات البنك الفعلية؛ لا يوجد مصدر كشف بنكي مستورد ومطابقات معتمدة."),
             ReportCatalogItem("قائمة التدفقات النقدية المصنفة", "الصندوق والنقدية", "تصنيف معتمد للتدفقات التشغيلية والاستثمارية والتمويلية", false, "المتاح حاليًا حركة حسابات النقد والبنك من القيود المرحلة فقط؛ لا توجد تصنيفات تدفق معتمدة تكفي لقائمة تدفقات نقدية كاملة."),
@@ -1039,6 +1055,18 @@ internal fun ReportsCenterScreen(
                     val previousTotal = previousRows.filter { it.currencyCode.ifBlank { "غير محددة" } == currency }.sumOf { it.total.toLong() }
                     ReportLine("${startText} — ${endText}", "مقارنة", "مبيعات الفترة الحالية", currentTotal, currency, "الفترة السابقة: $previousTotal · الفرق: ${currentTotal - previousTotal}")
                 }
+            }
+        }
+        "عمر أرصدة العملاء حسب تاريخ الفاتورة" -> if (customerReceivableAgingError.isNotBlank()) emptyList() else {
+            customerReceivableAgingReport.rows.map { aging ->
+                ReportLine(
+                    today.toString(),
+                    aging.bucket,
+                    aging.customerName,
+                    aging.balanceMinor,
+                    aging.currencyCode,
+                    "${aging.invoiceCount} فاتورة مفتوحة · الرصيد الحالي بعد المرتجعات والاستردادات · العمر من تاريخ الفاتورة وليس الاستحقاق"
+                )
             }
         }
         "التحصيل حسب العميل" -> if (customerCollectionsError.isNotBlank()) emptyList() else {
