@@ -89,9 +89,9 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
     def test_customer_statement_uses_invoice_payments_returns_and_customer_filter(self):
         self.assertIn('"أرصدة العملاء وكشف الحساب" ->', self.screen)
         self.assertIn("it.customerId.isNotBlank()", self.screen)
-        self.assertIn('it.status.lowercase(Locale.ROOT) in setOf("succeeded", "partially_refunded", "refunded")', self.screen)
-        self.assertIn('it.status.equals("completed", true)', self.screen)
-        self.assertIn('it.refundStatus.equals("refunded", true)', self.screen)
+        self.assertIn('it.status.lowercase(Locale.ROOT) in setOf("succeeded", "partially_refunded", "refunded")', self.calculations)
+        self.assertIn('it.status.equals("completed", true)', self.calculations)
+        self.assertIn('it.refundStatus.equals("refunded", true)', self.calculations)
         self.assertIn("الرصيد الختامي من الفواتير والتحصيلات والمرتجعات المكتملة", self.screen)
 
     def test_supplier_statement_uses_unique_posted_payment_rows_not_journal_totals(self):
@@ -237,8 +237,8 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
     def test_customer_operational_statement_validates_dates_refunds_and_exact_balances(self):
         self.assertIn("buildCustomerOperationalStatementMovements", self.screen)
         self.assertIn('"أرصدة العملاء وكشف الحساب" -> customerOperationalStatementError', self.screen)
-        self.assertIn("مرتجع مكتمل بلا مبلغ اعتماد محفوظ", self.screen)
-        self.assertIn("دفعة عميل ناجحة بلا مبلغ موجب أو تاريخ تسجيل صالح", self.screen)
+        self.assertIn("مرتجع مكتمل بلا مبلغ اعتماد محفوظ", self.calculations)
+        self.assertIn("دفعة عميل ناجحة بلا مبلغ موجب أو تاريخ تسجيل صالح", self.calculations)
         self.assertIn("sumReportAmountsExactly", self.screen)
         self.assertNotIn("payment.createdAt.take(10).ifBlank { doc.createdAt.take(10) }", self.screen)
 
