@@ -39,13 +39,13 @@ class SupplierDueDateAgingReportTest {
             ),
             "2026-11-02"
         )
-        assertEquals(6, rows.size)
-        assertEquals(800L, rows.single { it.bucket == "غير مستحق" }.balanceMinor)
-        assertEquals(800L, rows.single { it.bucket == "مستحق اليوم" }.balanceMinor)
-        assertEquals(800L, rows.single { it.bucket == "متأخر 1–30 يومًا" }.balanceMinor)
-        assertEquals(800L, rows.single { it.bucket == "متأخر 31–60 يومًا" }.balanceMinor)
-        assertEquals(800L, rows.single { it.bucket == "متأخر 61–90 يومًا" }.balanceMinor)
-        assertEquals(800L, rows.single { it.bucket == "متأخر أكثر من 90 يومًا" }.balanceMinor)
+        assertEquals(7, rows.size)
+        assertEquals(800L, rows.single { it.bucket == "غير مستحق" && it.currencyCode == "YER" }.balanceMinor)
+        assertEquals(800L, rows.single { it.bucket == "مستحق اليوم" && it.currencyCode == "YER" }.balanceMinor)
+        assertEquals(800L, rows.single { it.bucket == "متأخر 1–30 يومًا" && it.currencyCode == "YER" }.balanceMinor)
+        assertEquals(800L, rows.single { it.bucket == "متأخر 31–60 يومًا" && it.currencyCode == "YER" }.balanceMinor)
+        assertEquals(800L, rows.single { it.bucket == "متأخر 61–90 يومًا" && it.currencyCode == "YER" }.balanceMinor)
+        assertEquals(800L, rows.single { it.bucket == "متأخر أكثر من 90 يومًا" && it.currencyCode == "YER" }.balanceMinor)
     }
 
     @Test
