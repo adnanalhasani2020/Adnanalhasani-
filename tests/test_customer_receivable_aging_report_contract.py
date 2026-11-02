@@ -3,6 +3,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterScreen.kt"
 CALCULATIONS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportCalculations.kt"
+AGING = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CustomerReceivableAgingReport.kt"
 REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt"
 CONTRACT = ROOT / "android-commercial/docs/reports-data-contract.md"
 
@@ -10,12 +11,14 @@ CONTRACT = ROOT / "android-commercial/docs/reports-data-contract.md"
 def test_customer_receivable_age_report_uses_current_return_adjusted_balances():
     screen = SCREEN.read_text(encoding="utf-8")
     calculations = CALCULATIONS.read_text(encoding="utf-8")
+    aging = AGING.read_text(encoding="utf-8")
     repository = REPOSITORY.read_text(encoding="utf-8")
     contract = CONTRACT.read_text(encoding="utf-8")
     assert 'ReportCatalogItem("عمر أرصدة العملاء حسب تاريخ الفاتورة"' in screen
     assert 'loadCommercialCloudReceivables(context)' in screen
-    assert 'balanceMinor = receivable.dueMinor' in screen
-    assert 'calculateCustomerReceivableAging(customerReceivableAgingInputs, today.toString())' in screen
+    assert 'balanceMinor = receivable.dueMinor' in aging
+    assert 'buildCustomerReceivableAgingReport(' in screen
+    assert 'calculateCustomerReceivableAging(inputs, asOfDate)' in aging
     assert 'ChronoUnit.DAYS.between(date, asOf)' in calculations
     assert 'val dueMinor: Long get() = (totalMinor - netPaidMinor - creditedMinor).coerceAtLeast(0L)' in repository
     assert 'not contractual due-date aging' in contract.lower()
