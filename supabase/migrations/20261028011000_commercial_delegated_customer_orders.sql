@@ -35,8 +35,7 @@ DECLARE
   v_matching_count integer;
 BEGIN
   IF v_uid IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
-  SELECT d, parent_account.owner_user_id, child_account.id
-    INTO v_delegation, v_parent_uid, v_child_personal_account_id
+  SELECT d.* INTO v_delegation
   FROM public.commercial_account_delegations d
   JOIN public.commercial_party_accounts parent_account ON parent_account.id=d.parent_account_id
   JOIN public.commercial_party_accounts child_account ON child_account.id=d.child_account_id
@@ -47,6 +46,11 @@ BEGIN
     AND child_account.owner_user_id=v_uid
   FOR UPDATE OF d;
   IF NOT FOUND THEN RAISE EXCEPTION 'delegated_access_not_active_or_not_owned' USING ERRCODE='42501'; END IF;
+  SELECT parent_account.owner_user_id, child_account.id
+    INTO v_parent_uid, v_child_personal_account_id
+  FROM public.commercial_party_accounts parent_account
+  JOIN public.commercial_party_accounts child_account ON child_account.id=v_delegation.child_account_id
+  WHERE parent_account.id=v_delegation.parent_account_id;
   v_parent_personal_account_id := v_delegation.parent_account_id;
   IF p_reserved_from IS NOT NULL THEN
     IF NOT coalesce((v_delegation.permissions->>'book')::boolean,false) THEN
@@ -256,8 +260,7 @@ BEGIN
     'acting_account_id',o.acting_account_id,'replayed',false)
     FROM public.commercial_customer_orders o WHERE o.id=v_order_id);
 END;
-$function$
-
+$function$;
 REVOKE ALL ON FUNCTION public.commercial_customer_portal_create_delegated_order(uuid,uuid,jsonb,text,text,timestamptz,timestamptz,text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.commercial_customer_portal_create_delegated_order(uuid,uuid,jsonb,text,text,timestamptz,timestamptz,text) TO authenticated;
 
@@ -276,18 +279,22 @@ DECLARE
  v_currency text; v_count integer; v_key text:=nullif(btrim(p_idempotency_key),'');
 BEGIN
  IF v_uid IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
- SELECT d, parent_account.owner_user_id, child_account.id
- INTO v_delegation, v_parent_uid, v_child_personal_account_id
- FROM public.commercial_account_delegations d
- JOIN public.commercial_party_accounts parent_account ON parent_account.id=d.parent_account_id
- JOIN public.commercial_party_accounts child_account ON child_account.id=d.child_account_id
- WHERE d.id=p_delegation_id AND d.organization_id=p_organization_id
-  AND d.status='active' AND (d.expires_at IS NULL OR d.expires_at>now())
-  AND parent_account.account_type='personal' AND parent_account.status='active'
-  AND child_account.account_type='personal' AND child_account.status='active'
-  AND child_account.owner_user_id=v_uid
- FOR UPDATE OF d;
+ SELECT d.* INTO v_delegation
+  FROM public.commercial_account_delegations d
+  JOIN public.commercial_party_accounts parent_account ON parent_account.id=d.parent_account_id
+  JOIN public.commercial_party_accounts child_account ON child_account.id=d.child_account_id
+  WHERE d.id=p_delegation_id AND d.organization_id=p_organization_id
+    AND d.status='active' AND (d.expires_at IS NULL OR d.expires_at>now())
+    AND parent_account.account_type='personal' AND parent_account.status='active'
+    AND child_account.account_type='personal' AND child_account.status='active'
+    AND child_account.owner_user_id=v_uid
+  FOR UPDATE OF d;
  IF NOT FOUND THEN RAISE EXCEPTION 'delegated_access_not_active_or_not_owned' USING ERRCODE='42501'; END IF;
+  SELECT parent_account.owner_user_id, child_account.id
+    INTO v_parent_uid, v_child_personal_account_id
+  FROM public.commercial_party_accounts parent_account
+  JOIN public.commercial_party_accounts child_account ON child_account.id=v_delegation.child_account_id
+  WHERE parent_account.id=v_delegation.parent_account_id;
  v_parent_personal_account_id:=v_delegation.parent_account_id;
  IF NOT coalesce((v_delegation.permissions->>'book')::boolean,false) THEN
   RAISE EXCEPTION 'delegated_booking_permission_required' USING ERRCODE='42501';
@@ -345,8 +352,7 @@ BEGIN
  ) RETURNING id,booking_number INTO v_existing.id,v_existing.booking_number;
  RETURN jsonb_build_object('booking_id',v_existing.id,'booking_number',v_existing.booking_number,'order_id',v_order_id,'status','requested','price_minor',v_order_total,'currency_code',v_currency,'replayed',false);
 END;
-$function$
-
+$function$;
 REVOKE ALL ON FUNCTION public.commercial_customer_portal_create_delegated_booking(uuid,uuid,uuid,uuid,timestamptz,timestamptz,text,text,text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.commercial_customer_portal_create_delegated_booking(uuid,uuid,uuid,uuid,timestamptz,timestamptz,text,text,text) TO authenticated;
 
@@ -397,8 +403,7 @@ BEGIN
   IF v_uid IS NULL THEN
     RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501';
   END IF;
-  SELECT d, parent_account.owner_user_id, child_account.id
-    INTO v_delegation, v_parent_uid, v_child_personal_account_id
+  SELECT d.* INTO v_delegation
   FROM public.commercial_account_delegations d
   JOIN public.commercial_party_accounts parent_account ON parent_account.id=d.parent_account_id
   JOIN public.commercial_party_accounts child_account ON child_account.id=d.child_account_id
@@ -409,6 +414,11 @@ BEGIN
     AND child_account.owner_user_id=v_uid
   FOR UPDATE OF d;
   IF NOT FOUND THEN RAISE EXCEPTION 'delegated_access_not_active_or_not_owned' USING ERRCODE='42501'; END IF;
+  SELECT parent_account.owner_user_id, child_account.id
+    INTO v_parent_uid, v_child_personal_account_id
+  FROM public.commercial_party_accounts parent_account
+  JOIN public.commercial_party_accounts child_account ON child_account.id=v_delegation.child_account_id
+  WHERE parent_account.id=v_delegation.parent_account_id;
   v_parent_personal_account_id:=v_delegation.parent_account_id;
   IF NOT coalesce((v_delegation.permissions->>'book')::boolean,false) THEN
     RAISE EXCEPTION 'delegated_booking_permission_required' USING ERRCODE='42501';
