@@ -28,7 +28,7 @@ The merchant chooses the payment method at approval. The customer cannot choose 
 - Requests are tied to one completed sale/invoice so the existing receivable subledger and payment posting remain authoritative.
 - Customer RPCs validate the authenticated, verified-email-linked customer identity and ownership of the sale.
 - Merchant list/review RPCs require an active organization owner, admin, or manager.
-- Amounts are stored in currency minor units; the customer UI formats and parses major currency units using the currency's configured fraction digits.
+- Amounts are stored in currency minor units; both customer entry and merchant confirmation use readable major currency units and convert using the currency's configured fraction digits. Precision beyond the currency's supported minor unit is rejected.
 - Pending requests reserve part of the invoice's currently unreserved balance so multiple claims cannot collectively exceed the debt.
 - The amount and outstanding balance are revalidated during merchant approval; a changed or already-collected balance cannot be silently over-collected.
 - Idempotency keys protect create, edit, and review retries. Request events preserve submission, resubmission, correction, rejection, and approval history.
