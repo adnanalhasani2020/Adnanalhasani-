@@ -30,8 +30,8 @@ class CatalogActivityHierarchySelectorTests(unittest.TestCase):
         self.assertIn("sectorMenuExpanded", self.source)
         self.assertIn("businessLevelMenuExpanded", self.source)
         self.assertIn("activityMenuExpanded", self.source)
-        self.assertNotRegex(self.source, r"OutlinedTextField\\(sector\\s*,")
-        self.assertNotRegex(self.source, r"OutlinedTextField\\(businessLevel\\s*,")
+        self.assertNotRegex(self.source, r"OutlinedTextField\(sector\s*,")
+        self.assertNotRegex(self.source, r"OutlinedTextField\(businessLevel\s*,")
 
     def test_initial_activity_restores_its_sector_and_default_level(self):
         self.assertIn("catalogSectorForNode(initialActivityCode.uppercase(), activityNodes)", self.source)
