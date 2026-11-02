@@ -70,3 +70,8 @@ The table above is a historical snapshot from the audit commit, not the current 
 - Full authenticated Android end-to-end tests and a successful build on the current commit have not been evidenced. No paid Supabase branch/project was created, and no valid free staging baseline was available.
 
 This update does not retroactively change the historical audit's scope or actions. It supersedes only the deployment-status statements above where the live verification now differs.
+
+
+### تصحيح مالي إضافي منشور — 2026-11-02
+
+نُشر ترحيل `20261102003940_harden_journal_posting_account_validation` إلى قاعدة الإنتاج. دالة ترحيل القيود تتحقق الآن من نشاط حساب الأستاذ ومطابقة عملته لعملة السطر، إضافة إلى التوازن حسب العملة وصلاحية المالك/المسؤول/المدير. التحقق بعد النشر أكد وجود الحارسين، ومنع `anon` من التنفيذ، وإبقاء التنفيذ لـ`authenticated`. لم تُعدّل قيود موجودة؛ كان جدولا القيود والأسطر فارغين وقت التحقق.
