@@ -153,6 +153,12 @@ class ItemProfitabilityReportTest {
                 listOf(returned().copy(items = listOf(returned().items.single().copy(restockedQuantityPresent = false))))
             )
         }
+        assertThrows(IllegalArgumentException::class.java) {
+            calculateItemProfitability(
+                listOf(sale()),
+                listOf(returned().copy(items = listOf(returned().items.single().copy(restockFlagPresent = false))))
+            )
+        }
     }
 
     @Test
