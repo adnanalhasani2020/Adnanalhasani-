@@ -47,3 +47,13 @@ def test_item_profitability_rejects_unbounded_completed_dates_and_refund_state_m
     assert 'completed", true) && reportDateMillis(it.createdAt) == null' in screen
     assert 'completed", true) && reportDateMillis(it.completedAt) == null' in screen
     assert 'it.refundStatus.equals("refunded", true) && !it.status.equals("completed", true)' in screen
+
+def test_daily_sales_trend_uses_completed_invoices_and_currency_separated_totals():
+    screen = SCREEN.read_text(encoding="utf-8")
+    calculations = CALCULATIONS.read_text(encoding="utf-8")
+    contract = CONTRACT.read_text(encoding="utf-8")
+    assert 'ReportCatalogItem("اتجاه المبيعات اليومي"' in screen
+    assert 'DailySalesInvoiceInput(' in screen
+    assert 'calculateDailySalesTrend(' in calculations
+    assert 'document.saleStatus.equals("completed", true)' in screen
+    assert 'Daily sales trend' in contract
