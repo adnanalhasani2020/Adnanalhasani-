@@ -591,15 +591,13 @@ internal fun ReportsCenterScreen(
         )
     }
     val supplierLiabilityAgingError = supplierLiabilityAgingReport.error
-    val supplierDueDateAgingReport = remember(cloudPurchases, today, cloudMode, purchasesLoadError, supplierInvoiceDetailError) {
-        buildSupplierDueDateAgingReport(
-            purchases = cloudPurchases,
-            asOfDate = today.toString(),
-            cloudMode = cloudMode,
-            purchasesLoadError = purchasesLoadError,
-            invoiceIntegrityError = supplierInvoiceDetailError
-        )
-    }
+    val supplierDueDateAgingReport = rememberSupplierDueDateAgingReport(
+        purchases = cloudPurchases,
+        asOfDate = today.toString(),
+        cloudMode = cloudMode,
+        purchasesLoadError = purchasesLoadError,
+        invoiceIntegrityError = supplierInvoiceDetailError
+    )
     val supplierDueDateAgingError = supplierDueDateAgingReport.error
     val taxDetailError = when {
         !cloudMode -> "التقرير الضريبي التفصيلي يتطلب مصادر السحابة."
@@ -1190,18 +1188,8 @@ internal fun ReportsCenterScreen(
                 )
             }
         }
-        "أعمار مستحقات الموردين" -> if (supplierDueDateAgingError.isNotBlank()) emptyList() else {
-            supplierDueDateAgingReport.rows.map { aging ->
-                ReportLine(
-                    today.toString(),
-                    aging.bucket,
-                    aging.supplierName,
-                    aging.balanceMinor,
-                    aging.currencyCode,
-                    "${aging.invoiceCount} فاتورة مفتوحة · الرصيد الحالي · الشرائح محسوبة من تاريخ الاستحقاق التعاقدي المحفوظ"
-                )
-            }
-        }
+        "أعمار مستحقات الموردين" -> if (supplierDueDateAgingError.isNotBlank()) emptyList()
+            else supplierDueDateAgingReport.toReportLines(today.toString())
         "مستحقات فواتير الموردين" -> calculateSupplierObligationTotals(supplierObligationInputs).map { totals ->
             val balanceLabel = if (totals.balanceMinor >= 0L) "المستحق للمورد" else "رصيد دائن/مقدم للمورد"
             ReportLine(
