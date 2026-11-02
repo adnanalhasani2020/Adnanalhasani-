@@ -633,12 +633,12 @@ internal fun calculateCustomerCollectionsByCustomer(
         }
     }
     return payments.groupBy { payment ->
-        Triple(payment.customerId.ifBlank { "cash:${payment.customerName}" }, payment.customerName, payment.currencyCode)
+        payment.customerId.ifBlank { "cash:${payment.customerName}" } to payment.currencyCode
     }.map { (key, rows) ->
         CustomerCollectionSummary(
             customerId = rows.first().customerId,
-            customerName = key.second,
-            currencyCode = key.third,
+            customerName = rows.first().customerName,
+            currencyCode = key.second,
             paymentCount = rows.size,
             totalMinor = sumReportAmountsExactly(rows.map { it.amountMinor })
         )
