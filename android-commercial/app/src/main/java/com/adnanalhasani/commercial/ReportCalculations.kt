@@ -387,10 +387,7 @@ internal fun calculateItemProfitability(
     }
 
     val returnIds = mutableSetOf<String>()
-    val returnRevenueByItem = mutableMapOf<String, Long>()
-    val returnedCostByItem = mutableMapOf<String, Long>()
-    val returnedQuantityByItem = mutableMapOf<String, Int>()
-    returns.forEach { saleReturn ->
+        returns.forEach { saleReturn ->
         require(saleReturn.returnId.isNotBlank() && returnIds.add(saleReturn.returnId)) {
             "معرف مرتجع مفقود أو مكرر في تقرير ربحية الأصناف."
         }
@@ -413,19 +410,11 @@ internal fun calculateItemProfitability(
                 item.refundAmountMinor >= 0L && item.quantity > 0) {
                 "عملة أو كمية أو مبلغ بند المرتجع غير صالح أو لا يطابق بند البيع الأصلي."
             }
-            returnRevenueByItem[item.saleItemId] = Math.addExact(
-                returnRevenueByItem[item.saleItemId] ?: 0L, item.refundAmountMinor
-            )
-            val restoredCost = calculateRestockedCostMinor(
+            // Validate each returned-cost slice now; totals are recomputed per return line below.
+            calculateRestockedCostMinor(
                 saleLine.costTotalMinor,
                 item.restockedQuantity,
                 item.saleItemQuantityInStockUnits
-            )
-            returnedCostByItem[item.saleItemId] = Math.addExact(
-                returnedCostByItem[item.saleItemId] ?: 0L, restoredCost
-            )
-            returnedQuantityByItem[item.saleItemId] = Math.addExact(
-                returnedQuantityByItem[item.saleItemId] ?: 0, item.quantity
             )
         }
     }
@@ -446,7 +435,14 @@ internal fun calculateItemProfitability(
         val salesMinor = sumReportAmountsExactly(productSales.map { it.lineTotalMinor })
         val soldCostMinor = sumReportAmountsExactly(productSales.map { it.costTotalMinor!! })
         val refundMinor = sumReportAmountsExactly(productReturns.map { it.refundAmountMinor })
-        val returnedCostMinor = sumReportAmountsExactly(productReturns.map { returnedCostByItem[it.saleItemId] ?: 0L })
+        val returnedCostMinor = sumReportAmountsExactly(productReturns.map { item ->
+            val saleLine = saleById.getValue(item.saleItemId)
+            calculateRestockedCostMinor(
+                saleLine.costTotalMinor,
+                item.restockedQuantity,
+                item.saleItemQuantityInStockUnits
+            )
+        })
         val soldQuantity = productSales.fold(BigDecimal.ZERO) { total, line ->
             total.add(line.quantity.toBigDecimal())
         }
