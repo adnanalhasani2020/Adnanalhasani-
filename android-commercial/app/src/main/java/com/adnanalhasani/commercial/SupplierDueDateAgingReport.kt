@@ -1,9 +1,10 @@
 package com.adnanalhasani.commercial
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
-internal data class SupplierDueDateAgingReportState(
     val rows: List<SupplierLiabilityAgingSummary>,
     val error: String
 )
@@ -98,4 +99,24 @@ internal fun buildSupplierDueDateAgingReport(
         else -> ""
     }
     return SupplierDueDateAgingReportState(result.getOrDefault(emptyList()), error)
+}
+
+
+@Composable
+internal fun rememberSupplierDueDateAgingReport(
+    purchases: List<CommercialCloudPurchaseDocument>,
+    asOfDate: String,
+    cloudMode: Boolean,
+    purchasesLoadError: String,
+    invoiceIntegrityError: String
+): SupplierDueDateAgingReportState = remember(
+    purchases, asOfDate, cloudMode, purchasesLoadError, invoiceIntegrityError
+) {
+    buildSupplierDueDateAgingReport(
+        purchases = purchases,
+        asOfDate = asOfDate,
+        cloudMode = cloudMode,
+        purchasesLoadError = purchasesLoadError,
+        invoiceIntegrityError = invoiceIntegrityError
+    )
 }
