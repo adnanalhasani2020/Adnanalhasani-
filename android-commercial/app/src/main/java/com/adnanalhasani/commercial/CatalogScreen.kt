@@ -190,6 +190,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     // Device coordinates are opt-in, foreground-only and kept in memory for this screen session.
     var deviceLatitude by remember { mutableStateOf<String?>(null) }
     var deviceLongitude by remember { mutableStateOf<String?>(null) }
+    var locatingDevice by remember { mutableStateOf(false) }
     val locationScope = rememberCoroutineScope()
     var nearbyOffset by remember { mutableIntStateOf(0) }
     var nearbyHasMore by remember { mutableStateOf(true) }
@@ -498,7 +499,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     ) { granted ->
         if (granted) {
             locationScope.launch {
-                busy = true
+                locatingDevice = true
                 try {
                     val location = getFreshCatalogDeviceLocation(context)
                     deviceLatitude = location.latitude.toString()
@@ -508,7 +509,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                 } catch (error: Exception) {
                     feedback = error.message ?: "تعذر تحديد موقع الجهاز. تحقق من تشغيل خدمات الموقع."
                 } finally {
-                    busy = false
+                    locatingDevice = false
                 }
             }
         } else {
@@ -519,7 +520,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     fun loadNearbyFromDevice() {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
             locationScope.launch {
-                busy = true
+                locatingDevice = true
                 try {
                     val location = getFreshCatalogDeviceLocation(context)
                     deviceLatitude = location.latitude.toString()
@@ -529,7 +530,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                 } catch (error: Exception) {
                     feedback = error.message ?: "تعذر تحديد موقع الجهاز. تحقق من تشغيل خدمات الموقع."
                 } finally {
-                    busy = false
+                    locatingDevice = false
                 }
             }
         } else {
@@ -925,8 +926,8 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                             ) { Text(if(coordinatesCleared) "مسح الإحداثيات" else "حفظ إحداثيات الفرع") }
                             Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
                                 OutlinedButton(onClick={loadMarketContext()},enabled=!busy) { Text("تحديث الفروع") }
-                                Button(onClick={loadNearbyFromDevice()},enabled=!busy) { Text("البحث حسب موقعي الحالي") }
-                                OutlinedButton(onClick={startNearbyCatalog()},enabled=!busy && selectedBranchId.isNotBlank()) { Text("حسب موقع الفرع") }
+                                Button(onClick={loadNearbyFromDevice()},enabled=!busy && !locatingDevice) { Text(if(locatingDevice) "جارٍ تحديد الموقع..." else "البحث حسب موقعي الحالي") }
+                                OutlinedButton(onClick={deviceLatitude=null;deviceLongitude=null;startNearbyCatalog()},enabled=!busy && selectedBranchId.isNotBlank()) { Text("حسب موقع الفرع") }
                                 OutlinedButton(onClick={loadSelectedPriceSuggestions()},enabled=!busy && selectedCatalogIds.isNotEmpty()) { Text("أسعار استرشادية") }
                             }
                             OutlinedButton(
