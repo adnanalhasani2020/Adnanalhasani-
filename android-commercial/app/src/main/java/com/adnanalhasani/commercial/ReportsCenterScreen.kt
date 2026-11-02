@@ -695,8 +695,10 @@ internal fun ReportsCenterScreen(
                 document.lines.map { line ->
                     ItemProfitSaleLineInput(
                         saleItemId = line.id,
+                        saleId = document.id,
                         productName = line.productName,
                         currencyCode = document.currencyCode,
+                        saleTaxMinor = document.taxMinor,
                         quantity = line.quantity,
                         lineTotalMinor = line.lineTotalMinor,
                         costTotalMinor = line.costTotalMinor,
@@ -710,6 +712,7 @@ internal fun ReportsCenterScreen(
             }.map { saleReturn ->
                 ItemProfitReturnInput(
                     returnId = saleReturn.id,
+                    saleId = saleReturn.saleId,
                     currencyCode = saleReturn.currencyCode,
                     approvedRefundMinor = saleReturn.approvedRefundMinor,
                     items = saleReturn.items.map { item ->
