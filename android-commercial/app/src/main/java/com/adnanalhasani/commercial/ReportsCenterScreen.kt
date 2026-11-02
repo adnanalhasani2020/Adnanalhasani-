@@ -252,6 +252,7 @@ private fun buildReportsCatalog(cloudMode: Boolean): List<ReportCatalogItem> = l
             ReportCatalogItem("المصروفات التشغيلية", "الأرباح والتكاليف", if (cloudMode) "commercial_expense_vouchers" else "expenses_json", true, "تُستبعد سندات الصرف الملغاة؛ هذا تقرير مصروفات مسجلة وليس قائمة دخل."),
             ReportCatalogItem("ملخص المصروفات حسب التصنيف وطريقة الصرف", "الأرباح والتكاليف", "commercial_expense_vouchers.category + payment_method + amount_minor", cloudMode, "يجمع سندات الصرف غير الملغاة حسب التصنيف وطريقة الصرف والعملة؛ لا يخلط العملات ولا يضيف القيود المحاسبية مرة ثانية."),
             ReportCatalogItem("رصيد المخزون الحالي", "الأصناف والمخزون", if (cloudMode) "commercial_inventory_balances" else "products_json", true, "رصيد حالي فقط؛ ليس رصيدًا تاريخيًا للفترة."),
+            ReportCatalogItem("رصيد المخزون حسب الموقع", "الأصناف والمخزون", "commercial_inventory_balances.location_id + commercial_organization_locations", cloudMode, "يعرض أرصدة كل مواقع المؤسسة حسب الموقع ووحدة القياس؛ يفصل الوحدات ويعرض الكمية الإجمالية والمحجوزة والمتاحة. لقطة حالية وليست حركة تاريخية أو تقييمًا ماليًا."),
             ReportCatalogItem("التقييم المالي الحالي للمخزون", "الأصناف والمخزون", "commercial_inventory_balances.unit_cost_minor + حساب المخزون المربوط", cloudMode, "يقيم كمية الموقع الحالي بتكلفة الوحدة المسجلة وبعملة حساب المخزون المربوط؛ يحجب التقييم إذا غابت التكلفة أو العملة. لا يمثل تقييمًا تاريخيًا."),
 
             ReportCatalogItem("حركة المخزون الفعلية", "الأصناف والمخزون", "commercial_stock_movements المرتبطة بنشاط المؤسسة", cloudMode, "يعرض حركات الكمية المسجلة من دفتر حركة المخزون، مع مرجع المصدر وحالة فاتورة البيع عند توفرها؛ لا يستنتج تكلفة أو قيمة مالية من الكمية."),
@@ -292,6 +293,43 @@ private fun buildReportsCatalog(cloudMode: Boolean): List<ReportCatalogItem> = l
             ReportCatalogItem("ربحية الأصناف بعد المرتجعات", "الأرباح والتكاليف", "commercial_sale_items + commercial_sale_return_items", cloudMode, "يحسب صافي الإيراد والتكلفة والربح لكل صنف وعملة، ويربط كل مرتجع ببند البيع الأصلي ويعكس تكلفة الكمية المعاد تخزينها؛ يحجب النتائج عند نقص تكلفة تاريخية أو عدم تطابق مبلغ اعتماد المرتجع مع بنوده، أو وجود خصم فاتورة غير موزع أو مرتجع على فاتورة ضريبية.")
 )
 private data class ReportLine(val date: String, val reference: String, val name: String, val amount: Long, val currency: String, val status: String, val displayAmount: String? = null)
+
+private data class LocationInventoryReportState(val lines: List<ReportLine>, val error: String)
+
+private fun buildLocationInventoryReportState(
+    balances: List<CommercialCloudLocationInventoryBalance>,
+    loadError: String
+): LocationInventoryReportState {
+    if (loadError.isNotBlank()) return LocationInventoryReportState(emptyList(), loadError)
+    val totals = runCatching {
+        calculateLocationInventoryBalanceTotals(balances.map { row ->
+            LocationInventoryBalanceInput(
+                locationId = row.locationId,
+                locationName = row.locationName,
+                locationType = row.locationType,
+                offeringId = row.offeringId,
+                unitName = row.unitName,
+                quantityOnHand = row.quantityOnHand,
+                quantityReserved = row.quantityReserved
+            )
+        })
+    }.getOrElse {
+        return LocationInventoryReportState(emptyList(), it.message.orEmpty().ifBlank { "تعذر حساب أرصدة المخزون حسب الموقع." })
+    }
+    val lines = totals.map { row ->
+        val typeLabel = row.locationType.ifBlank { "نوع موقع غير محدد" }
+        ReportLine(
+            "حالي",
+            row.locationId,
+            row.locationName,
+            0L,
+            "-",
+            "$typeLabel · ${row.offeringCount} صنف · محجوز ${row.quantityReserved.stripTrailingZeros().toPlainString()} ${row.unitName}",
+            displayAmount = "متاح ${row.quantityAvailable.stripTrailingZeros().toPlainString()} ${row.unitName} · إجمالي ${row.quantityOnHand.stripTrailingZeros().toPlainString()} ${row.unitName}"
+        )
+    }
+    return LocationInventoryReportState(lines, "")
+}
 
 private data class StockMovementUserReportState(val lines: List<ReportLine>, val error: String)
 
@@ -418,6 +456,49 @@ private fun SupplierDueDateAgingReportState.toReportLines(asOfDate: String): Lis
     }
 private data class ReportSupplierMovement(val date: String, val supplierId: String, val supplier: String, val currency: String, val reference: String, val amount: Long, val description: String)
 
+private fun buildCashFlowReportLines(
+    cloudLedgerLines: List<CommercialCloudJournalLine>,
+    cloudGlMappings: List<CommercialCloudGlAccountMapping>,
+    startDate: LocalDate?,
+    endDate: LocalDate?,
+    startText: String,
+    endText: String
+): List<ReportLine> {
+    val cashKeys = setOf("cash", "bank", "card_clearing", "other_receipts", "check_clearing", "other_disbursements")
+            val cashAccountIds = cloudGlMappings.filter { it.mappingKey in cashKeys }.map { it.ledgerAccountId }.toSet()
+            val movements = cloudLedgerLines.filter { it.accountId in cashAccountIds }
+                .mapNotNull { line ->
+                    val date = runCatching { LocalDate.parse(line.entryDate.take(10)) }.getOrNull() ?: return@mapNotNull null
+                    Triple(line, date, line.debitMinor - line.creditMinor)
+                }.sortedWith(compareBy<Triple<CommercialCloudJournalLine, LocalDate, Long>> { it.second }.thenBy { it.first.entryNumber }.thenBy { it.first.lineNumber })
+            val currencies = movements.map { it.first.currencyCode }.filter { it.matches(Regex("^[A-Z]{3}$")) }.distinct().sorted()
+    return buildList {
+                currencies.forEach { currency ->
+                    val currencyMoves = movements.filter { it.first.currencyCode == currency }
+                    currencyMoves.groupBy { it.first.accountId to it.first.accountCode }.toSortedMap(compareBy<Pair<String, String>> { it.second }.thenBy { it.first })
+                        .forEach { (accountKey, accountMoves) ->
+                            val opening = accountMoves.filter { it.second < (startDate ?: LocalDate.MIN) }.sumOf { it.third }
+                            val periodMoves = accountMoves.filter { startDate != null && endDate != null && !it.second.isBefore(startDate) && !it.second.isAfter(endDate) }
+                            var balance = opening
+                            val accountName = accountMoves.firstOrNull()?.first?.accountName?.ifBlank { accountKey.second } ?: accountKey.second
+                            add(ReportLine(startText, "رصيد افتتاحي", accountName, opening, currency, "حساب النقد/البنك ${accountKey.second} · رصيد من القيود المرحلة قبل الفترة"))
+                            periodMoves.forEach { (line, date, amount) ->
+                                balance = Math.addExact(balance, amount)
+                                add(ReportLine(date.toString(), "قيد ${line.entryNumber} · سطر ${line.lineNumber}", accountName, amount, currency,
+                                    "${line.entryDescription} · ${line.sourceType}:${line.sourceId} · الحساب ${line.accountCode} · الرصيد المتحرك ${reportMoney(balance, currency, true)}"))
+                            }
+                            val debitMovements = periodMoves.sumOf { if (it.third > 0L) it.third else 0L }
+                            val creditMovements = periodMoves.sumOf { if (it.third < 0L) -it.third else 0L }
+                            add(ReportLine("${startText} — ${endText}", "إجمالي الحركة المدينة", accountName, debitMovements, currency,
+                                "إجمالي الزيادات المدينة على حساب النقد/البنك خلال الفترة؛ قد تشمل تحويلات داخلية"))
+                            add(ReportLine("${startText} — ${endText}", "إجمالي الحركة الدائنة", accountName, -creditMovements, currency,
+                                "إجمالي التخفيضات الدائنة على حساب النقد/البنك خلال الفترة؛ قد تشمل تحويلات داخلية"))
+                            add(ReportLine(endText, "رصيد ختامي", accountName, balance, currency, "الرصيد الافتتاحي + الحركة المرحلة · حساب ${accountKey.second}"))
+                        }
+                }
+            }
+}
+
 @Composable
 internal fun ReportsCenterScreen(
     context: Context,
@@ -451,6 +532,8 @@ internal fun ReportsCenterScreen(
     var cloudSupplierPayments by remember { mutableStateOf<List<CommercialCloudSupplierPaymentMovement>>(emptyList()) }
     var cloudStockMovements by remember { mutableStateOf<List<CommercialCloudStockMovement>>(emptyList()) }
     var cloudStockAlerts by remember { mutableStateOf<List<CommercialCloudStockAlert>>(emptyList()) }
+    var cloudLocationInventoryBalances by remember { mutableStateOf<List<CommercialCloudLocationInventoryBalance>>(emptyList()) }
+    var locationInventoryLoadError by remember { mutableStateOf("") }
     var supplierFilter by remember { mutableStateOf("") }
     var cloudReturns by remember { mutableStateOf<List<CommercialCloudSaleReturn>>(emptyList()) }
     var cloudPayments by remember { mutableStateOf<List<CommercialCloudRecord>>(emptyList()) }
@@ -490,6 +573,7 @@ internal fun ReportsCenterScreen(
             val supplierPayments = runCatching { loadCommercialCloudSupplierPaymentMovements(context) }
             val stockMovements = runCatching { loadCommercialCloudStockMovements(context) }
             val stockAlerts = runCatching { loadCommercialCloudStockAlerts(context) }
+            val locationInventory = runCatching { loadCommercialCloudLocationInventoryBalances(context) }
             val returns = runCatching { loadCommercialCloudSaleReturns(context) }
             val payments = runCatching { loadCommercialCloudRecords(context, "payments") }
             val journals = runCatching { loadCommercialCloudRecords(context, "journals") }
@@ -514,6 +598,8 @@ internal fun ReportsCenterScreen(
                 stockMovementsLoadError = stockMovements.exceptionOrNull()?.message.orEmpty()
                 cloudStockAlerts = stockAlerts.getOrDefault(emptyList())
                 stockAlertsLoadError = stockAlerts.exceptionOrNull()?.message.orEmpty()
+                cloudLocationInventoryBalances = locationInventory.getOrDefault(emptyList())
+                locationInventoryLoadError = locationInventory.exceptionOrNull()?.message.orEmpty()
                 cloudReturns = returns.getOrDefault(emptyList())
                 returnsLoadError = returns.exceptionOrNull()?.message.orEmpty()
                 cloudPayments = payments.getOrDefault(emptyList())
@@ -949,6 +1035,9 @@ internal fun ReportsCenterScreen(
     }
 
 
+    val locationInventoryReport = remember(cloudLocationInventoryBalances, locationInventoryLoadError) {
+        buildLocationInventoryReportState(cloudLocationInventoryBalances, locationInventoryLoadError)
+    }
     val stockMovementUserReport = remember(cloudStockMovements, startDate, endDate, cloudMode, stockMovementsLoadError) {
         buildStockMovementUserReportState(cloudStockMovements, startDate, endDate, cloudMode, stockMovementsLoadError)
     }
@@ -1051,6 +1140,7 @@ internal fun ReportsCenterScreen(
             "حركة المخزون الفعلية" -> stockMovementsLoadError
             "حركة المخزون حسب المستخدم" -> stockMovementUserReport.error
             "رصيد المخزون الحالي", "تنبيهات المخزون المنخفض" -> stockAlertsLoadError
+            "رصيد المخزون حسب الموقع" -> locationInventoryReport.error
             else -> ""
         }
     }
@@ -1448,41 +1538,7 @@ internal fun ReportsCenterScreen(
         }.map { row ->
             ReportLine(row.createdAt.take(10), row.id, row.title, row.amountMinor, row.currencyCode, row.status)
         }.sortedByDescending { it.date }
-        "التدفقات النقدية والصندوق" -> if (sourceErrorForReport(selectedReport).isNotBlank()) emptyList() else {
-            val cashKeys = setOf("cash", "bank", "card_clearing", "other_receipts", "check_clearing", "other_disbursements")
-            val cashAccountIds = cloudGlMappings.filter { it.mappingKey in cashKeys }.map { it.ledgerAccountId }.toSet()
-            val movements = cloudLedgerLines.filter { it.accountId in cashAccountIds }
-                .mapNotNull { line ->
-                    val date = runCatching { LocalDate.parse(line.entryDate.take(10)) }.getOrNull() ?: return@mapNotNull null
-                    Triple(line, date, line.debitMinor - line.creditMinor)
-                }.sortedWith(compareBy<Triple<CommercialCloudJournalLine, LocalDate, Long>> { it.second }.thenBy { it.first.entryNumber }.thenBy { it.first.lineNumber })
-            val currencies = movements.map { it.first.currencyCode }.filter { it.matches(Regex("^[A-Z]{3}$")) }.distinct().sorted()
-            buildList {
-                currencies.forEach { currency ->
-                    val currencyMoves = movements.filter { it.first.currencyCode == currency }
-                    currencyMoves.groupBy { it.first.accountId to it.first.accountCode }.toSortedMap(compareBy<Pair<String, String>> { it.second }.thenBy { it.first })
-                        .forEach { (accountKey, accountMoves) ->
-                            val opening = accountMoves.filter { it.second < (startDate ?: LocalDate.MIN) }.sumOf { it.third }
-                            val periodMoves = accountMoves.filter { startDate != null && endDate != null && !it.second.isBefore(startDate) && !it.second.isAfter(endDate) }
-                            var balance = opening
-                            val accountName = accountMoves.firstOrNull()?.first?.accountName?.ifBlank { accountKey.second } ?: accountKey.second
-                            add(ReportLine(startText, "رصيد افتتاحي", accountName, opening, currency, "حساب النقد/البنك ${accountKey.second} · رصيد من القيود المرحلة قبل الفترة"))
-                            periodMoves.forEach { (line, date, amount) ->
-                                balance = Math.addExact(balance, amount)
-                                add(ReportLine(date.toString(), "قيد ${line.entryNumber} · سطر ${line.lineNumber}", accountName, amount, currency,
-                                    "${line.entryDescription} · ${line.sourceType}:${line.sourceId} · الحساب ${line.accountCode} · الرصيد المتحرك ${reportMoney(balance, currency, true)}"))
-                            }
-                            val debitMovements = periodMoves.sumOf { if (it.third > 0L) it.third else 0L }
-                            val creditMovements = periodMoves.sumOf { if (it.third < 0L) -it.third else 0L }
-                            add(ReportLine("${startText} — ${endText}", "إجمالي الحركة المدينة", accountName, debitMovements, currency,
-                                "إجمالي الزيادات المدينة على حساب النقد/البنك خلال الفترة؛ قد تشمل تحويلات داخلية"))
-                            add(ReportLine("${startText} — ${endText}", "إجمالي الحركة الدائنة", accountName, -creditMovements, currency,
-                                "إجمالي التخفيضات الدائنة على حساب النقد/البنك خلال الفترة؛ قد تشمل تحويلات داخلية"))
-                            add(ReportLine(endText, "رصيد ختامي", accountName, balance, currency, "الرصيد الافتتاحي + الحركة المرحلة · حساب ${accountKey.second}"))
-                        }
-                }
-            }
-        }
+        "التدفقات النقدية والصندوق" -> if (sourceErrorForReport(selectedReport).isNotBlank()) emptyList() else buildCashFlowReportLines(cloudLedgerLines, cloudGlMappings, startDate, endDate, startText, endText)
         "الضرائب والخصومات التفصيلية" -> if (taxDetailError.isNotBlank()) emptyList() else buildList {
             cloudSalesDocuments.filter { doc ->
                 doc.saleStatus.equals("completed", true) &&
@@ -1762,6 +1818,7 @@ internal fun ReportsCenterScreen(
                 "نوع الحركة: $movementTypeLabel · المصدر: ${movement.saleId.ifBlank { movement.sourceReference }} ${movement.saleStatus}",
                 displayAmount = movement.quantityDelta.stripTrailingZeros().toPlainString() + if (movement.unitName.isBlank()) "" else " ${movement.unitName}")
         }.sortedByDescending { it.date }
+        "رصيد المخزون حسب الموقع" -> locationInventoryReport.lines
         "رصيد المخزون الحالي" -> if (cloudMode) cloudStockAlerts.map { item ->
             ReportLine("-", item.offeringId, item.productName, 0L, "-", "المتاح بعد حجز الكمية · ${item.categoryName} · حد إعادة الطلب: ${item.reorderPoint} ${item.unitName}",
                 displayAmount = java.math.BigDecimal.valueOf(item.availableQuantity).stripTrailingZeros().toPlainString() + " ${item.unitName}")
@@ -1948,7 +2005,7 @@ internal fun ReportsCenterScreen(
                         "فواتير الشراء والمستحقات المسجلة", "المشتريات حسب المورد", "فروقات أسعار فواتير الموردين", "مستحقات فواتير الموردين", "أعمار مستحقات الموردين", "عمر مستحقات الموردين حسب تاريخ الفاتورة", "مرتجعات المبيعات وحالة التسوية", "سندات القبض والصرف", "سجل القيود المحاسبية",
                         "ميزان المراجعة حسب الحساب", "حركة دفتر الأستاذ العام", "كشف حساب محاسبي", "أرصدة العملاء وكشف الحساب", "كشف حركات الموردين",
                         "الرصيد المحاسبي الكامل للعملاء", "أرصدة الموردين والمستحقات", "قائمة الدخل والميزانية العمومية", "التدفقات النقدية والصندوق", "تكلفة البضاعة والربح", "ربحية الأصناف بعد المرتجعات", "الضرائب والخصومات التفصيلية",
-                        "حركة المخزون الفعلية", "حركة المخزون حسب المستخدم", "التقييم المالي الحالي للمخزون", "تفاصيل القيود المرحلة" -> selectedReport = report.title
+                        "حركة المخزون الفعلية", "حركة المخزون حسب المستخدم", "رصيد المخزون حسب الموقع", "التقييم المالي الحالي للمخزون", "تفاصيل القيود المرحلة" -> selectedReport = report.title
                         "لوحة المؤشرات" -> selectedReport = "ملخص المبيعات حسب الفترة"
                     }
                 }),
@@ -1972,6 +2029,7 @@ internal fun ReportsCenterScreen(
                                     cloudMode && report.title == "كشف حركات الموردين" && supplierPaymentsLoadError.isNotBlank() -> "تعذر تحميل المصدر"
                                     cloudMode && report.title == "حركة المخزون الفعلية" && stockMovementsLoadError.isNotBlank() -> "تعذر تحميل المصدر"
                                     cloudMode && report.title in setOf("رصيد المخزون الحالي", "تنبيهات المخزون المنخفض") && stockAlertsLoadError.isNotBlank() -> "تعذر تحميل المصدر"
+                                     cloudMode && report.title == "رصيد المخزون حسب الموقع" && locationInventoryLoadError.isNotBlank() -> "تعذر تحميل المصدر"
                                     else -> "متاح"
                                 },
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
@@ -1995,7 +2053,7 @@ internal fun ReportsCenterScreen(
                         exportTitle = selectedReport
                         exportRows = buildList {
                             add(listOf("التقرير", exportTitle))
-                            add(listOf("الفترة", if (exportTitle == "التقييم المالي الحالي للمخزون") "لقطة حالية للموقع المختار؛ ليست تاريخية" else startText + " — " + endText))
+                            add(listOf("الفترة", if (exportTitle == "التقييم المالي الحالي للمخزون") "لقطة حالية للموقع المختار؛ ليست تاريخية" else if (exportTitle == "رصيد المخزون حسب الموقع") "لقطة حالية لجميع مواقع المؤسسة؛ ليست تاريخية" else startText + " — " + endText))
                             add(listOf("مصدر البيانات", if (cloudMode) "السحابة" else "محلي على الجهاز"))
                             add(listOf("تاريخ التصدير", java.time.LocalDateTime.now().toString()))
                             add(listOf("التاريخ", "المرجع", "الاسم", "المبلغ/الكمية", "العملة", "الحالة"))
@@ -2007,7 +2065,7 @@ internal fun ReportsCenterScreen(
                         exportTitle = selectedReport
                         exportRows = buildList {
                             add(listOf("التقرير", exportTitle))
-                            add(listOf("الفترة", if (exportTitle == "التقييم المالي الحالي للمخزون") "لقطة حالية للموقع المختار؛ ليست تاريخية" else startText + " — " + endText))
+                            add(listOf("الفترة", if (exportTitle == "التقييم المالي الحالي للمخزون") "لقطة حالية للموقع المختار؛ ليست تاريخية" else if (exportTitle == "رصيد المخزون حسب الموقع") "لقطة حالية لجميع مواقع المؤسسة؛ ليست تاريخية" else startText + " — " + endText))
                             add(listOf("مصدر البيانات", if (cloudMode) "السحابة" else "محلي على الجهاز"))
                             add(listOf("تاريخ التصدير", java.time.LocalDateTime.now().toString()))
                             add(listOf("التاريخ", "المرجع", "الاسم", "المبلغ/الكمية", "العملة", "الحالة"))
@@ -2022,7 +2080,7 @@ internal fun ReportsCenterScreen(
                             exportTitle = selectedReport
                             exportRows = buildList {
                                 add(listOf("التقرير", exportTitle))
-                                add(listOf("الفترة", if (exportTitle == "التقييم المالي الحالي للمخزون") "لقطة حالية للموقع المختار؛ ليست تاريخية" else startText + " — " + endText))
+                                add(listOf("الفترة", if (exportTitle == "التقييم المالي الحالي للمخزون") "لقطة حالية للموقع المختار؛ ليست تاريخية" else if (exportTitle == "رصيد المخزون حسب الموقع") "لقطة حالية لجميع مواقع المؤسسة؛ ليست تاريخية" else startText + " — " + endText))
                                 add(listOf("مصدر البيانات", if (cloudMode) "السحابة" else "محلي على الجهاز"))
                                 add(listOf("تاريخ التصدير", java.time.LocalDateTime.now().toString()))
                                 add(listOf("التاريخ", "المرجع", "الاسم", "المبلغ/الكمية", "العملة", "الحالة"))
@@ -2042,7 +2100,7 @@ internal fun ReportsCenterScreen(
                             exportTitle = selectedReport
                             exportRows = buildList {
                                 add(listOf("التقرير", exportTitle))
-                                add(listOf("الفترة", if (exportTitle == "التقييم المالي الحالي للمخزون") "لقطة حالية للموقع المختار؛ ليست تاريخية" else startText + " — " + endText))
+                                add(listOf("الفترة", if (exportTitle == "التقييم المالي الحالي للمخزون") "لقطة حالية للموقع المختار؛ ليست تاريخية" else if (exportTitle == "رصيد المخزون حسب الموقع") "لقطة حالية لجميع مواقع المؤسسة؛ ليست تاريخية" else startText + " — " + endText))
                                 add(listOf("مصدر البيانات", if (cloudMode) "السحابة" else "محلي على الجهاز"))
                                 add(listOf("تاريخ التصدير", java.time.LocalDateTime.now().toString()))
                                 add(listOf("التاريخ", "المرجع", "الاسم", "المبلغ/الكمية", "العملة", "الحالة"))
