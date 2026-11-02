@@ -10,10 +10,14 @@ class CommercialInvoiceNotificationAndRpcContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.sql = "\n".join(p.read_text(encoding="utf-8") for p in MIGRATIONS.glob("*.sql"))
-        cls.catalog = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogScreen.kt").read_text(encoding="utf-8")
-        cls.notifications = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialNotificationsScreen.kt").read_text(encoding="utf-8")
+        android = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial"
+        cls.catalog = (android / "CatalogScreen.kt").read_text(encoding="utf-8")
+        cls.notifications = (android / "CommercialNotificationsScreen.kt").read_text(encoding="utf-8")
 
     def test_android_catalog_and_notification_rpc_names_have_database_definitions(self):
+        # Keep this contract focused on the catalog/notification surface changed here.
+        # Other legacy Android modules have pre-existing RPCs supplied by the deployed
+        # baseline but not represented as standalone migrations in this repository.
         sources = self.catalog + "\n" + self.notifications
         rpc_names = set(re.findall(r"/rest/v1/rpc/([a-zA-Z0-9_]+)", sources))
         defined = set(re.findall(

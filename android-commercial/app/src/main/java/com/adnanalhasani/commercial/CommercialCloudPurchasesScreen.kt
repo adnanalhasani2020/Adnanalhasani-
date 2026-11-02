@@ -193,6 +193,10 @@ internal fun CommercialCloudPurchasesScreen(context: Context, onBack: () -> Unit
                         order.lines.forEach { line ->
                             Column(Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 2.dp)) {
                                 Text("${line.lineNumber}. ${line.description}", color = CloudPurchasesInk, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                if (line.sourceSellingUnitName.isNotBlank() && line.sourceSellingQuantity.isNotBlank()) {
+                                    Text("وحدة فاتورة المصدر: ${line.sourceSellingQuantity} ${line.sourceSellingUnitName} • المكافئ المخزني: ${line.sourceQuantityInStockUnits}",
+                                        color = CloudPurchasesMuted, fontSize = 10.sp)
+                                }
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Text("مطلوب: ${line.quantityOrdered}", color = CloudPurchasesMuted, fontSize = 11.sp)
                                     Text("مستلم: ${line.quantityReceived.ifBlank { "0" }}", color = CloudPurchasesMuted, fontSize = 11.sp)
