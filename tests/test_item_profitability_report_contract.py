@@ -72,3 +72,8 @@ def test_item_profitability_does_not_invent_invoice_discount_allocation():
     contract = CONTRACT.read_text(encoding="utf-8")
     assert 'line.saleDiscountMinor == 0L' in calculations
     assert 'does not distribute them by an invented proportional rule' in contract
+
+def test_item_profitability_blocks_returns_from_discounted_historical_sales():
+    calculations = CALCULATIONS.read_text(encoding="utf-8")
+    assert 'saleLine.saleDiscountMinor == 0L' in calculations
+    assert 'يرتبط المرتجع بفاتورة لها خصم إجمالي غير موزع' in calculations
