@@ -90,7 +90,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn('it.status.lowercase(Locale.ROOT) in setOf("succeeded", "partially_refunded", "refunded")', self.screen)
         self.assertIn('it.status.equals("completed", true)', self.screen)
         self.assertIn('it.refundStatus.equals("refunded", true)', self.screen)
-        self.assertIn("الرصيد الختامي المحسوب من الحركات المتاحة", self.screen)
+        self.assertIn("الرصيد الختامي من الفواتير والتحصيلات والمرتجعات المكتملة", self.screen)
 
     def test_supplier_statement_uses_unique_posted_payment_rows_not_journal_totals(self):
         self.assertIn('"كشف حركات الموردين" ->', self.screen)
