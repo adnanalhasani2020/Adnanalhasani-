@@ -416,7 +416,8 @@ BEGIN
   ELSE
     UPDATE public.commercial_customer_payment_requests
     SET status='change_requested',review_note=btrim(p_review_note),reviewed_by=v_uid,
-        reviewed_at=now(),last_action_key=btrim(p_idempotency_key),updated_at=now()
+        reviewed_at=now(),last_action_key=btrim(p_idempotency_key),
+        last_action_fingerprint=md5(concat_ws('|',p_request_id::text,p_decision,coalesce(p_confirmed_amount_minor::text,'null'),btrim(p_review_note),p_payment_method_type)),updated_at=now()
     WHERE id=v_request.id RETURNING * INTO v_request;
     v_event:='change_requested';
   END IF;
