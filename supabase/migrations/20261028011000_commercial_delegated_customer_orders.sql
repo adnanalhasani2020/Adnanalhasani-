@@ -256,8 +256,7 @@ BEGIN
     'acting_account_id',o.acting_account_id,'replayed',false)
     FROM public.commercial_customer_orders o WHERE o.id=v_order_id);
 END;
-$function$
-
+$function$;
 REVOKE ALL ON FUNCTION public.commercial_customer_portal_create_delegated_order(uuid,uuid,jsonb,text,text,timestamptz,timestamptz,text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.commercial_customer_portal_create_delegated_order(uuid,uuid,jsonb,text,text,timestamptz,timestamptz,text) TO authenticated;
 
@@ -345,8 +344,7 @@ BEGIN
  ) RETURNING id,booking_number INTO v_existing.id,v_existing.booking_number;
  RETURN jsonb_build_object('booking_id',v_existing.id,'booking_number',v_existing.booking_number,'order_id',v_order_id,'status','requested','price_minor',v_order_total,'currency_code',v_currency,'replayed',false);
 END;
-$function$
-
+$function$;
 REVOKE ALL ON FUNCTION public.commercial_customer_portal_create_delegated_booking(uuid,uuid,uuid,uuid,timestamptz,timestamptz,text,text,text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.commercial_customer_portal_create_delegated_booking(uuid,uuid,uuid,uuid,timestamptz,timestamptz,text,text,text) TO authenticated;
 
