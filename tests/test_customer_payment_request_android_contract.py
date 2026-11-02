@@ -41,3 +41,11 @@ def test_customer_portal_and_main_activity_expose_payment_request_screen():
     assert "Icons.Default.ReceiptLong" in PORTAL_SCREEN
     assert "CustomerPortalPaymentRequestsScreen(" in MAIN
     assert "customerPaymentRequestsPage" in MAIN
+
+
+def test_merchant_confirmation_amount_uses_currency_units_not_minor_units():
+    debt = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudDebtScreen.kt").read_text(encoding="utf-8")
+    assert "parseMerchantPaymentRequestAmount" in debt
+    assert 'cloudDebtInput(request.amountMinor, request.currencyCode)' in debt
+    assert 'label = { Text("المبلغ الفعلي الذي استلمته (" + requestTarget.currencyCode + ")") }' in debt
+    assert "confirmedAmount.toLongOrNull()" not in debt
