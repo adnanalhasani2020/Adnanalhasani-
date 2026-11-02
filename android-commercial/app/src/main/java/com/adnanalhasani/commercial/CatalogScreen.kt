@@ -257,6 +257,21 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var invoiceMappingOfferingId by remember { mutableStateOf("") }
     var invoiceMappingLineMenuExpanded by remember { mutableStateOf(false) }
     var invoiceMappingOfferingMenuExpanded by remember { mutableStateOf(false) }
+    var invoiceMappingLocationId by remember { mutableStateOf("") }
+    var invoiceMappingWarehouses by remember { mutableStateOf<List<CatalogWarehouseOption>>(emptyList()) }
+    var invoiceMappingWarehouseId by remember { mutableStateOf("") }
+    var invoiceMappingWarehouseMenuExpanded by remember { mutableStateOf(false) }
+    var showInvoiceItemCreation by remember { mutableStateOf(false) }
+    var invoiceNewNameAr by remember { mutableStateOf("") }
+    var invoiceNewNameEn by remember { mutableStateOf("") }
+    var invoiceNewCategoryCode by remember { mutableStateOf("") }
+    var invoiceNewBaseUnitCode by remember { mutableStateOf("") }
+    var invoiceNewSaleUnitCode by remember { mutableStateOf("") }
+    var invoiceNewCategoryMenuExpanded by remember { mutableStateOf(false) }
+    var invoiceNewBaseUnitMenuExpanded by remember { mutableStateOf(false) }
+    var invoiceNewSaleUnitMenuExpanded by remember { mutableStateOf(false) }
+    var invoiceNewIdempotencyKey by remember { mutableStateOf("") }
+    var localUnitCodes by remember { mutableStateOf<Set<String>>(emptySet()) }
     var invoiceReceiveLocationId by remember { mutableStateOf("") }
     var invoiceReceiveLocationMenuExpanded by remember { mutableStateOf(false) }
     val catalogListState = rememberLazyListState()
@@ -638,15 +653,18 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         request({
             val catRaw=catalogGet("/rest/v1/commercial_global_catalog_categories?select=code,parent_code,name_ar,name_en,description_ar,description_en&is_active=eq.true&order=parent_code.asc,sort_order.asc,code.asc",active)
             val unitRaw=catalogGet("/rest/v1/commercial_global_units?select=code,name_ar,name_en,dimension,base_unit_code,factor_to_base,owner_organization_id&is_active=eq.true&order=dimension.asc,code.asc",active)
+            val localUnitRaw=catalogGet("/rest/v1/commercial_unit_of_measure?select=code&is_active=eq.true&order=code.asc",active)
             val categoryTranslationRaw=catalogGet("/rest/v1/commercial_global_entity_translations?select=entity_key,translated_value&entity_type=eq.catalog_category&field_key=eq.name&locale_code=eq.${locale.trim().ifBlank { "ar" }}",active)
             val categoryDescriptionTranslationRaw=catalogGet("/rest/v1/commercial_global_entity_translations?select=entity_key,translated_value&entity_type=eq.catalog_category&field_key=eq.description&locale_code=eq.${locale.trim().ifBlank { "ar" }}",active)
             val unitTranslationRaw=catalogGet("/rest/v1/commercial_global_entity_translations?select=entity_key,translated_value&entity_type=eq.unit&field_key=eq.name&locale_code=eq.${locale.trim().ifBlank { "ar" }}",active)
             val activityDirectoryRaw=catalogHttp("/rest/v1/rpc/commercial_list_business_activity_nodes",JSONObject(),active)
             val activityDirectory=JSONObject(activityDirectoryRaw).optJSONArray("nodes") ?: JSONArray()
-            JSONObject().put("categories",JSONArray(catRaw)).put("units",JSONArray(unitRaw))
+            JSONObject().put("categories",JSONArray(catRaw)).put("units",JSONArray(unitRaw)).put("localUnits",JSONArray(localUnitRaw))
                 .put("categoryTranslations",JSONArray(categoryTranslationRaw)).put("categoryDescriptionTranslations",JSONArray(categoryDescriptionTranslationRaw)).put("unitTranslations",JSONArray(unitTranslationRaw)).put("activityDirectory",activityDirectory).toString()
         }, { raw ->
             val result=JSONObject(raw); val cats=result.getJSONArray("categories"); val units=result.getJSONArray("units")
+            val localUnits=result.optJSONArray("localUnits") ?: JSONArray()
+            localUnitCodes=(0 until localUnits.length()).map { localUnits.getJSONObject(it).optString("code") }.filter { it.isNotBlank() }.toSet()
             val catTr=result.getJSONArray("categoryTranslations"); val catDescTr=result.getJSONArray("categoryDescriptionTranslations"); val unitTr=result.getJSONArray("unitTranslations")
             val activityJson=result.optJSONArray("activityDirectory") ?: JSONArray()
             activityNodes=List(activityJson.length()) { i -> val node=activityJson.getJSONObject(i); CatalogActivityNode(node.optString("code"),node.optString("parent_code").takeUnless { it == "null" }.orEmpty(),node.optString("node_kind"),node.optString("path_ar",node.optString("name_ar")),node.optString("path_en",node.optString("name_en")),node.optString("default_business_level_code").takeUnless { it == "null" }.orEmpty(),node.optInt("depth",0),node.optBoolean("is_selectable",false)) }.filter { it.code.isNotBlank() }
@@ -855,6 +873,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             val supplierInvoices=JSONArray(catalogGet("/rest/v1/commercial_supplier_invoices?select=id&organization_id=eq."+orgId+"&purchase_order_id=eq."+req.purchaseOrderId+"&limit=1",active))
             if(supplierInvoices.length()>0) throw IllegalStateException("تم تسجيل فاتورة مورد لهذا الأمر؛ لا يمكن تغيير ربط الأصناف بعد ذلك.")
             val lineRows=JSONArray(catalogGet("/rest/v1/commercial_purchase_order_items?select=id,line_number,item_description,quantity_ordered,quantity_received,offering_id,source_selling_unit_code&organization_id=eq."+orgId+"&purchase_order_id=eq."+req.purchaseOrderId+"&offering_id=is.null&quantity_received=eq.0&order=line_number.asc",active))
+            val warehouseRows=JSONArray(catalogGet("/rest/v1/commercial_warehouses?select=id,name,branch_location_id&organization_id=eq."+orgId+"&branch_location_id=eq."+locationId+"&state=eq.active&order=name.asc",active))
             val mapRows=JSONArray(catalogGet("/rest/v1/commercial_catalog_item_offerings?select=offering_id,global_item_id&organization_id=eq."+orgId+"&location_id=eq."+locationId,active))
             val globalIds=(0 until mapRows.length()).map { mapRows.getJSONObject(it).optString("global_item_id") }.filter { it.isNotBlank() }.distinct()
             val offeringIds=(0 until mapRows.length()).map { mapRows.getJSONObject(it).optString("offering_id") }.filter { it.isNotBlank() }.distinct()
@@ -886,11 +905,17 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                 InvoicePurchaseUnmappedLine(row.optString("id"),row.optInt("line_number"),row.optString("item_description"),
                     row.optString("quantity_ordered"),row.optString("source_selling_unit_code").takeUnless { it=="null" }.orEmpty())
             }
-            JSONObject().put("lines",JSONArray().apply { lines.forEach { put(JSONObject().put("id",it.id).put("line_number",it.lineNumber).put("description",it.description).put("quantity",it.quantity).put("unit_code",it.unitCode)) } })
+            JSONObject().put("location_id",locationId)
+                .put("lines",JSONArray().apply { lines.forEach { put(JSONObject().put("id",it.id).put("line_number",it.lineNumber).put("description",it.description).put("quantity",it.quantity).put("unit_code",it.unitCode)) } })
                 .put("offerings",JSONArray().apply { candidates.forEach { put(JSONObject().put("id",it.id).put("global_item_id",it.globalItemId).put("name",it.name).put("unit_code",it.unitCode)) } })
+                .put("warehouses",warehouseRows)
                 .toString()
         }, { raw ->
             val result=JSONObject(raw); val lines=result.getJSONArray("lines"); val offerings=result.getJSONArray("offerings")
+            invoiceMappingLocationId=result.optString("location_id")
+            val warehouses=result.optJSONArray("warehouses") ?: JSONArray()
+            invoiceMappingWarehouses=List(warehouses.length()) { i -> val row=warehouses.getJSONObject(i); CatalogWarehouseOption(row.optString("id"),row.optString("name"),row.optString("branch_location_id")) }
+            if(invoiceMappingWarehouses.none { it.id==invoiceMappingWarehouseId }) invoiceMappingWarehouseId=invoiceMappingWarehouses.firstOrNull()?.id.orEmpty()
             invoiceMappingLines=List(lines.length()) { i -> val row=lines.getJSONObject(i); InvoicePurchaseUnmappedLine(row.optString("id"),row.optInt("line_number"),row.optString("description"),row.optString("quantity"),row.optString("unit_code")) }
             invoiceMappingOfferings=List(offerings.length()) { i -> val row=offerings.getJSONObject(i); InvoicePurchaseOffering(row.optString("id"),row.optString("global_item_id"),row.optString("name"),row.optString("unit_code")) }
             invoiceMappingRequestId=req.id
