@@ -213,6 +213,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn('ReportCatalogItem("فروقات أسعار فواتير الموردين"', self.screen)
         self.assertIn('"فروقات أسعار فواتير الموردين" -> supplierInvoiceVarianceError', self.screen)
         self.assertIn('"فروقات أسعار فواتير الموردين" -> cloudPurchases.flatMap', self.screen)
+        self.assertIn('"فواتير الشراء والمستحقات المسجلة", "فروقات أسعار فواتير الموردين", "مستحقات فواتير الموردين"', self.screen)
         self.assertIn("round the sum of quantity × recorded PO unit cost once", self.screen)
 
 if __name__ == "__main__":
