@@ -726,6 +726,30 @@ internal fun ReportsCenterScreen(
             calculateItemProfitability(allSaleLines, periodReturns)
         }
     }
+    val dailySalesTrendCalculation = remember(cloudSalesDocuments, startMillis, endExclusive, cloudMode) {
+        runCatching {
+            val invoices = cloudSalesDocuments.filter { document ->
+                document.saleStatus.equals("completed", true) &&
+                    reportDateMillis(document.createdAt)?.let { it >= startMillis && it < endExclusive } == true
+            }.map { document ->
+                DailySalesInvoiceInput(
+                    invoiceId = document.id,
+                    date = document.createdAt.take(10),
+                    currencyCode = document.currencyCode,
+                    totalMinor = document.totalMinor
+                )
+            }
+            calculateDailySalesTrend(invoices)
+        }
+    }
+    val dailySalesTrendError = when {
+        !cloudMode -> "الاتجاه اليومي للمبيعات يتطلب سجلات السحابة."
+        salesDocumentsLoadError.isNotBlank() -> salesDocumentsLoadError
+        cloudSalesDocuments.any { it.saleStatus.equals("completed", true) &&
+            (reportDateMillis(it.createdAt) == null || !it.currencyCode.matches(Regex("^[A-Z]{3}$")) || it.totalMinor < 0L) } ->
+            "توجد فاتورة مكتملة بتاريخ أو عملة أو مبلغ غير صالح؛ تم حجب الاتجاه اليومي."
+        else -> dailySalesTrendCalculation.exceptionOrNull()?.message.orEmpty()
+    }
     val itemProfitabilityError = when {
         !cloudMode -> "ربحية الأصناف بعد المرتجعات تتطلب سجلات السحابة."
         salesDocumentsLoadError.isNotBlank() -> salesDocumentsLoadError
@@ -742,7 +766,7 @@ internal fun ReportsCenterScreen(
         when (title) {
             "ملخص المبيعات حسب الفترة", "تفاصيل فواتير المبيعات", "تفاصيل بنود فواتير المبيعات",
             "المبيعات حسب الصنف", "الخصومات على فواتير المبيعات", "الضرائب المسجلة على المبيعات",
-            "لوحة المؤشرات", "المبيعات حسب العميل", "المبيعات حسب حالة السداد", "متوسط قيمة الفاتورة", "مقارنة الفترات",
+            "لوحة المؤشرات", "المبيعات حسب العميل", "المبيعات حسب حالة السداد", "متوسط قيمة الفاتورة", "مقارنة الفترات", "اتجاه المبيعات اليومي",
             "أرصدة العملاء وكشف الحساب" -> customerOperationalStatementError
             "مرتجعات المبيعات وحالة التسوية" -> returnsLoadError
             "فواتير الشراء والمستحقات المسجلة" -> supplierInvoiceDetailError
@@ -758,6 +782,7 @@ internal fun ReportsCenterScreen(
             "الضرائب والخصومات التفصيلية" -> taxDetailError
             "تكلفة البضاعة والربح" -> costProfitError
             "ربحية الأصناف بعد المرتجعات" -> itemProfitabilityError
+            "اتجاه المبيعات اليومي" -> dailySalesTrendError
             "التقييم المالي الحالي للمخزون" -> when {
                 stockAlertsLoadError.isNotBlank() -> stockAlertsLoadError
                 glMappingsLoadError.isNotBlank() -> glMappingsLoadError
@@ -810,6 +835,7 @@ internal fun ReportsCenterScreen(
             ReportCatalogItem(if (cloudMode) "المبيعات حسب حالة السداد" else "المبيعات النقدية والآجلة", "المبيعات", "نوع البيع المحلي أو حالة السداد الفعلية في الفاتورة السحابية", true, "في السحابة يصنف حسب حالة السداد المسجلة، ولا يستنتج طريقة الدفع من مجرد إجمالي الفاتورة."),
             ReportCatalogItem("متوسط قيمة الفاتورة", "المبيعات", "إجمالي الفواتير المكتملة وعددها", true, "متوسط تشغيلي منفصل حسب العملة."),
             ReportCatalogItem("مقارنة الفترات", "الفترات والمقارنات", "سجلات المبيعات المكتملة المؤرخة", true, "يقارن الفترة الحالية بفترة سابقة مساوية لها في عدد الأيام حسب العملة."),
+            ReportCatalogItem("اتجاه المبيعات اليومي", "الفترات والمقارنات", "commercial_sales.completed + created_at + total_minor", cloudMode, "يعرض إجمالي المبيعات وعدد الفواتير لكل يوم وعملة منفصلة؛ لا يخلط العملات ولا يحسب الفواتير غير المكتملة."),
             ReportCatalogItem(if (cloudMode) "الدفعات السحابية الناجحة" else "التحصيلات المسجلة محليًا", "السندات والتحصيل والصرف", if (cloudMode) "commercial_payments" else "settlements_json", true, "يعرض الدفعات الناجحة فقط في السحابة؛ السندات لا تُجمع منفصلة عن الدفعة المرتبطة."),
             ReportCatalogItem("التحصيل حسب طريقة الدفع", "السندات والتحصيل والصرف", "commercial_payments.payment_method_type + amount_minor", cloudMode, "يجمع الدفعات الناجحة فقط حسب طريقة الدفع والعملة؛ لا يضيف قيود الأستاذ مرة ثانية، ويظهر طريقة الدفع غير المسجلة كفئة منفصلة."),
             ReportCatalogItem("المصروفات التشغيلية", "الأرباح والتكاليف", if (cloudMode) "commercial_expense_vouchers" else "expenses_json", true, "تُستبعد سندات الصرف الملغاة؛ هذا تقرير مصروفات مسجلة وليس قائمة دخل."),
@@ -926,6 +952,18 @@ internal fun ReportsCenterScreen(
             ReportLine("-", "-", "متوسط قيمة الفاتورة", if (rows.isEmpty()) 0L else total / rows.size, currency, "${rows.size} فاتورة · الإجمالي ${reportMoney(total, currency, true)}")
         } else inPeriodSales.groupBy { it.currencyCode.ifBlank { "غير محددة" } }.map { (currency, rows) ->
             ReportLine("-", "-", "متوسط قيمة الفاتورة", if (rows.isEmpty()) 0L else rows.sumOf { it.total.toLong() } / rows.size, currency, "${rows.size} فاتورة · إجمالي ${rows.sumOf { it.total.toLong() }}")
+        }
+        "اتجاه المبيعات اليومي" -> if (dailySalesTrendError.isNotBlank()) emptyList() else {
+            dailySalesTrendCalculation.getOrThrow().map { day ->
+                ReportLine(
+                    day.date,
+                    "${day.invoiceCount} فاتورة",
+                    "إجمالي مبيعات اليوم",
+                    day.totalMinor,
+                    day.currencyCode,
+                    "إجمالي الفواتير المكتملة في هذا اليوم · العملة: ${day.currencyCode}"
+                )
+            }
         }
         "مقارنة فترتين", "مقارنة الفترات" -> {
             val days = if (startDate != null && endDate != null) java.time.temporal.ChronoUnit.DAYS.between(startDate, endDate).toInt() + 1 else 0
