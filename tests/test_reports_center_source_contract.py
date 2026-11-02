@@ -204,5 +204,16 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn('add(listOf("تاريخ التصدير"', self.screen)
 
 
+    def test_supplier_invoice_price_variance_uses_saved_lines_and_purchase_baseline(self):
+        self.assertIn("CommercialCloudSupplierInvoiceLineSummary", self.repository)
+        self.assertIn("purchase_order_item_id,quantity,unit_price_minor,line_total_minor", self.repository)
+        self.assertIn("commercial_supplier_invoice_items_purchase_order_item_id_fkey", self.repository)
+        self.assertIn("purchaseOrderUnitCostMinor", self.repository)
+        self.assertIn("calculateSupplierInvoicePriceVariance", self.screen)
+        self.assertIn('ReportCatalogItem("فروقات أسعار فواتير الموردين"', self.screen)
+        self.assertIn('"فروقات أسعار فواتير الموردين" -> supplierInvoiceVarianceError', self.screen)
+        self.assertIn('"فروقات أسعار فواتير الموردين" -> cloudPurchases.flatMap', self.screen)
+        self.assertIn("round the sum of quantity × recorded PO unit cost once", self.screen)
+
 if __name__ == "__main__":
     unittest.main()
