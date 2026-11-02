@@ -569,6 +569,26 @@ internal fun ReportsCenterScreen(
         salesDocumentsLoadError.isNotBlank() -> salesDocumentsLoadError
         purchasesLoadError.isNotBlank() -> purchasesLoadError
         returnsLoadError.isNotBlank() -> returnsLoadError
+        cloudSalesDocuments.any { doc ->
+            doc.saleStatus.equals("completed", true) &&
+                reportDateMillis(doc.createdAt)?.let { it >= startMillis && it < endExclusive } == true &&
+                (doc.subtotalMinor < 0L || doc.discountMinor < 0L || doc.discountMinor > doc.subtotalMinor ||
+                    doc.taxMinor < 0L || !doc.currencyCode.matches(Regex("^[A-Z]{3}$")))
+        } -> "توجد فاتورة بيع مكتملة بخصم أو ضريبة أو عملة غير صالحة؛ تم حجب تفاصيل الضرائب والخصومات."
+        cloudPurchases.any { purchase ->
+            purchase.supplierInvoices.any { invoice ->
+                invoice.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed") &&
+                    reportDateMillis(invoice.recordedAt)?.let { it >= startMillis && it < endExclusive } == true &&
+                    (invoice.subtotalMinor < 0L || invoice.taxMinor < 0L || invoice.freightMinor < 0L ||
+                        !invoice.currencyCode.matches(Regex("^[A-Z]{3}$")) || invoice.currencyCode != purchase.currencyCode)
+            }
+        } -> "توجد فاتورة مورد بمبالغ أو عملة غير متطابقة مع أمر الشراء؛ تم حجب تفاصيل الضرائب والخصومات."
+        cloudReturns.any { saleReturn ->
+            saleReturn.status.equals("completed", true) &&
+                reportDateMillis(saleReturn.completedAt)?.let { it >= startMillis && it < endExclusive } == true &&
+                (saleReturn.approvedRefundMinor == null || saleReturn.approvedRefundMinor < 0L ||
+                    !saleReturn.currencyCode.matches(Regex("^[A-Z]{3}$")))
+        } -> "يوجد مرتجع مكتمل بلا مبلغ اعتماد أو عملة صالحة؛ تم حجب تفاصيل الضرائب والخصومات."
         else -> ""
     }
     val costProfitError = when {
@@ -1124,7 +1144,7 @@ internal fun ReportsCenterScreen(
                 saleReturn.status.equals("completed", true) &&
                     reportDateMillis(saleReturn.completedAt)?.let { it >= startMillis && it < endExclusive } == true
             }.forEach { saleReturn ->
-                add(ReportLine(saleReturn.completedAt.take(10), "مرتجع #${saleReturn.id}", saleReturn.customerName, -(saleReturn.approvedRefundMinor ?: 0L), saleReturn.currencyCode,
+                add(ReportLine(saleReturn.completedAt.take(10), "مرتجع #${saleReturn.id}", saleReturn.customerName, -saleReturn.approvedRefundMinor!!, saleReturn.currencyCode,
                     "قيمة مرتجع معتمد؛ لا تفصل حصة الضريبة لأن مصدر المرتجع لا يخزنها منفصلة"))
             }
         }.sortedByDescending { it.date }
