@@ -530,6 +530,37 @@ internal fun ReportsCenterScreen(
         } -> "توجد فاتورة أو مستحق مورد بمبلغ أو عملة غير متطابقة؛ تم حجب التقرير."
         else -> ""
     }
+    val supplierPurchaseSummaryCalculation = remember(cloudPurchases, startMillis, endExclusive, cloudMode) {
+        runCatching {
+            val invoices = cloudPurchases.flatMap { purchase ->
+                purchase.supplierInvoices.filter { invoice ->
+                    invoice.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed") &&
+                        reportDateMillis(invoice.recordedAt)?.let { it >= startMillis && it < endExclusive } == true
+                }.map { invoice ->
+                    SupplierPurchaseInvoiceInput(
+                        invoiceId = invoice.id,
+                        supplierId = purchase.supplierId,
+                        supplierName = purchase.supplierName,
+                        currencyCode = invoice.currencyCode,
+                        totalMinor = invoice.totalMinor
+                    )
+                }
+            }
+            calculateSupplierPurchaseSummary(invoices)
+        }
+    }
+    val supplierPurchaseSummaryError = when {
+        !cloudMode -> "ملخص المشتريات حسب المورد يتطلب فواتير السحابة."
+        purchasesLoadError.isNotBlank() -> purchasesLoadError
+        supplierInvoiceDetailError.isNotBlank() -> supplierInvoiceDetailError
+        activeSupplierInvoiceCandidates.any { (_, invoice) ->
+            invoice.subtotalMinor < 0L || invoice.taxMinor < 0L || invoice.freightMinor < 0L ||
+                runCatching {
+                    Math.addExact(Math.addExact(invoice.subtotalMinor, invoice.taxMinor), invoice.freightMinor)
+                }.getOrNull() != invoice.totalMinor
+        } -> "توجد فاتورة مورد لا يتطابق إجماليها مع البنود والضريبة والشحن؛ تم حجب ملخص الموردين."
+        else -> supplierPurchaseSummaryCalculation.exceptionOrNull()?.message.orEmpty()
+    }
     val supplierObligationsError = when {
         !cloudMode -> "مستحقات فواتير الموردين تتطلب مصادر السحابة."
         purchasesLoadError.isNotBlank() -> purchasesLoadError
@@ -703,6 +734,7 @@ internal fun ReportsCenterScreen(
             "أرصدة العملاء وكشف الحساب" -> customerOperationalStatementError
             "مرتجعات المبيعات وحالة التسوية" -> returnsLoadError
             "فواتير الشراء والمستحقات المسجلة" -> supplierInvoiceDetailError
+            "المشتريات حسب المورد" -> supplierPurchaseSummaryError
             "مستحقات فواتير الموردين" -> supplierObligationsError
             "فروقات أسعار فواتير الموردين" -> supplierInvoiceVarianceError
             "كشف حركات الموردين" -> purchasesLoadError.ifBlank { supplierPaymentsLoadError }
@@ -777,6 +809,7 @@ internal fun ReportsCenterScreen(
             ReportCatalogItem("تنبيهات المخزون المنخفض", "الأصناف والمخزون", "الرصيد وحد إعادة الطلب", true, "يعتمد على حد التنبيه المسجل لكل صنف."),
             ReportCatalogItem("فواتير الشراء والمستحقات المسجلة", "المشتريات", "commercial_purchase_orders ← supplier_invoices ← supplier_obligations", cloudMode, "يُعرض مبلغ الفاتورة والرصيد المستحق من سجل الالتزام؛ لا يُخلط مع قيمة أمر الشراء."),
             ReportCatalogItem("فروقات أسعار فواتير الموردين", "المشتريات", "commercial_supplier_invoice_items مقابل commercial_purchase_order_items.unit_cost_minor", cloudMode, "يقارن مجموع بنود فاتورة المورد بسعر الأساس المسجل في أمر الشراء، وفق تقريب القيد المحاسبي نفسه؛ يستبعد الضريبة والشحن من فرق السعر ويوقف التقرير إذا تعذر مطابقة أي بند."),
+            ReportCatalogItem("المشتريات حسب المورد", "المشتريات", "commercial_supplier_invoices.total_minor", cloudMode, "يجمع إجمالي فواتير الموردين غير الملغاة ضمن الفترة حسب المورد والعملة؛ يتحقق من تطابق الإجمالي مع المجموع الفرعي والضريبة والشحن ولا يخلط العملات.")
             ReportCatalogItem("مستحقات فواتير الموردين", "الموردون والمستحقات", "commercial_supplier_obligations المرتبطة بالفواتير", cloudMode, "مجموع الالتزامات المسجلة ناقص المبالغ المسددة المسجلة فقط؛ لا يمثل رصيد المورد الشامل إذا وجدت تسويات أو مرتجعات خارج هذا المصدر."),
             ReportCatalogItem("مرتجعات المبيعات وحالة التسوية", "المرتجعات", "commercial_sales_returns + عناصر المرتجع", cloudMode, "يفصل حالة الموافقة عن الاسترداد الفعلي وإعادة التخزين؛ لا تُعامل الطلبات المعلقة كمرتجعات منفذة."),
             ReportCatalogItem("أرصدة العملاء وكشف الحساب", "العملاء والديون", "فواتير العملاء المكتملة + التحصيلات الناجحة + المرتجعات المعتمدة والاستردادات المنفذة", cloudMode, "يعرض كشف حركة للفواتير المكتملة والتحصيلات والمرتجعات والاستردادات المسجلة في مصادر السحابة، مع رصيد افتتاحي وحركة ورصيد ختامي حسب العميل والعملة."),
@@ -934,6 +967,18 @@ internal fun ReportsCenterScreen(
         }
         "التحصيلات المسجلة محليًا" -> inPeriodSettlements.map {
             ReportLine(Instant.ofEpochMilli(it.timestamp).atZone(zone).toLocalDate().toString(), "فاتورة #${it.invoiceNumber}", it.customer, it.amount.toLong(), "YER", "تحصيل محلي")
+        }
+        "المشتريات حسب المورد" -> if (supplierPurchaseSummaryError.isNotBlank()) emptyList() else {
+            supplierPurchaseSummaryCalculation.getOrThrow().map { summary ->
+                ReportLine(
+                    "${startText} — ${endText}",
+                    "${summary.invoiceCount} فاتورة",
+                    summary.supplierName,
+                    summary.totalMinor,
+                    summary.currencyCode,
+                    "إجمالي فواتير المورد غير الملغاة · معرف المورد: ${summary.supplierId}"
+                )
+            }
         }
         "فروقات أسعار فواتير الموردين" -> cloudPurchases.flatMap { purchase ->
             purchase.supplierInvoices.filter { invoice ->
@@ -1614,7 +1659,7 @@ internal fun ReportsCenterScreen(
                         "ملخص المبيعات حسب الفترة", "تفاصيل فواتير المبيعات", "تفاصيل بنود فواتير المبيعات", "المبيعات حسب الصنف",
                         "المبيعات حسب العميل", "المبيعات النقدية والآجلة", "المبيعات حسب حالة السداد", "متوسط قيمة الفاتورة", "مقارنة فترتين", "مقارنة الفترات", "الخصومات على فواتير المبيعات", "الضرائب المسجلة على المبيعات",
                         "التحصيلات المسجلة محليًا", "الدفعات السحابية الناجحة", "التحصيل حسب طريقة الدفع", "المصروفات التشغيلية", "ملخص المصروفات حسب التصنيف وطريقة الصرف", "رصيد المخزون الحالي", "تنبيهات المخزون المنخفض",
-                        "فواتير الشراء والمستحقات المسجلة", "فروقات أسعار فواتير الموردين", "مستحقات فواتير الموردين", "مرتجعات المبيعات وحالة التسوية", "سندات القبض والصرف", "سجل القيود المحاسبية",
+                        "فواتير الشراء والمستحقات المسجلة", "المشتريات حسب المورد", "فروقات أسعار فواتير الموردين", "مستحقات فواتير الموردين", "مرتجعات المبيعات وحالة التسوية", "سندات القبض والصرف", "سجل القيود المحاسبية",
                         "ميزان المراجعة حسب الحساب", "حركة دفتر الأستاذ العام", "كشف حساب محاسبي", "أرصدة العملاء وكشف الحساب", "كشف حركات الموردين",
                         "الرصيد المحاسبي الكامل للعملاء", "أرصدة الموردين والمستحقات", "قائمة الدخل والميزانية العمومية", "التدفقات النقدية والصندوق", "تكلفة البضاعة والربح", "ربحية الأصناف بعد المرتجعات", "الضرائب والخصومات التفصيلية",
                         "حركة المخزون الفعلية", "التقييم المالي الحالي للمخزون", "تفاصيل القيود المرحلة" -> selectedReport = report.title
