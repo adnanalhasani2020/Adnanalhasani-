@@ -8,24 +8,15 @@ class CustomerOperationalStatementTest {
     private fun sale(
         total: Long = 1_000,
         currency: String = "YER",
-        payments: List<CommercialCloudPaymentSummary> = emptyList(),
-        returns: List<CommercialCloudReturnSummary> = emptyList()
-    ) = CommercialCloudSaleDocument(
-        id = "sale-1",
+        payments: List<CustomerStatementPaymentInput> = emptyList(),
+        returns: List<CustomerStatementReturnInput> = emptyList()
+    ) = CustomerStatementInvoiceInput(
         customerId = "customer-1",
         receiptNumber = "R-1",
         customerName = "عميل",
-        customerPhone = "",
-        customerEmail = "",
         totalMinor = total,
-        subtotalMinor = total,
-        discountMinor = 0,
-        taxMinor = 0,
-        saleStatus = "completed",
-        paymentStatus = "partially_paid",
-        createdAt = "2026-11-01T10:00:00Z",
         currencyCode = currency,
-        lines = listOf(CommercialCloudSaleLine("صنف", "1", total, total, 0, 0)),
+        createdAt = "2026-11-01T10:00:00Z",
         payments = payments,
         returns = returns
     )
@@ -35,8 +26,8 @@ class CustomerOperationalStatementTest {
         val movements = buildCustomerOperationalStatementMovements(
             listOf(
                 sale(
-                    payments = listOf(CommercialCloudPaymentSummary("payment-1", 600, "succeeded", "cash", "2026-11-01T11:00:00Z")),
-                    returns = listOf(CommercialCloudReturnSummary(
+                    payments = listOf(CustomerStatementPaymentInput("payment-1", 600, "succeeded", "cash", "2026-11-01T11:00:00Z")),
+                    returns = listOf(CustomerStatementReturnInput(
                         "return-1", "completed", "refunded", "restocked", 200, 200,
                         "2026-11-01T12:00:00Z", "2026-11-01T13:00:00Z"
                     ))
