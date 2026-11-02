@@ -94,3 +94,8 @@ Source-contract assertions were added for financial-statement gating, party-cont
 - A database insert trigger rejects invoice creation without the validated transaction-local dates, so direct calls to the older invoice-capture RPC cannot create additional date-less invoices. Replaying an existing idempotency key with different dates is rejected.
 - **Contractual supplier aging:** calculates the current outstanding balance from the supplier obligation and classifies it by saved due date: not yet due, due today, 1–30, 31–60, 61–90, and over 90 days overdue. It blocks the entire report when any open obligation lacks verified invoice/due dates, has invalid dates, or has invalid amounts/currency. Fully paid obligations are excluded. This is current-balance aging, not a historical as-of balance.
 - This migration is source-only until explicitly applied to the connected database. No production migration or backfill was performed as part of this change.
+
+## User sales performance
+- The cloud report "أداء المبيعات حسب المستخدم" groups completed sales in the selected period by the persisted `commercial_sales.user_id` and currency. It reports invoice count, recorded sales total, and average invoice value; it does not claim net profit or collections.
+- Sales without a persisted actor are grouped as "غير منسوب". Until a verified user display-name relationship is exposed to this report, the report shows the stored user identifier rather than guessing a person's name.
+- Branch and warehouse performance remain separate unfinished work: the current sale document projection does not persist a reliable branch/location foreign key. Stock movement source text is not treated as an authoritative substitute.

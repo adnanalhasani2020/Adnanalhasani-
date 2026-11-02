@@ -785,3 +785,46 @@ internal fun calculateCustomerReceivableAging(
         .sortedWith(compareBy<CustomerReceivableAgingSummary> { it.currencyCode }
             .thenBy { it.customerName }.thenBy { it.bucket })
 }
+
+internal data class UserSalesPerformanceInvoiceInput(
+    val invoiceId: String,
+    val userId: String,
+    val currencyCode: String,
+    val totalMinor: Long
+)
+
+internal data class UserSalesPerformanceTotal(
+    val userId: String,
+    val currencyCode: String,
+    val invoiceCount: Int,
+    val totalMinor: Long,
+    val averageInvoiceMinor: Long
+)
+
+/** Sales performance is attributed only to the persisted sale actor; currencies stay separate. */
+internal fun calculateUserSalesPerformance(
+    invoices: List<UserSalesPerformanceInvoiceInput>
+): List<UserSalesPerformanceTotal> {
+    val seen = mutableSetOf<String>()
+    invoices.forEach { invoice ->
+        require(invoice.invoiceId.isNotBlank() && seen.add(invoice.invoiceId)) {
+            "معرف فاتورة مبيعات مفقود أو مكرر في تقرير أداء المستخدمين."
+        }
+        require(invoice.currencyCode.matches(Regex("^[A-Z]{3}$")) && invoice.totalMinor >= 0L) {
+            "توجد فاتورة بعملة أو مبلغ غير صالح؛ تم حجب تقرير أداء المستخدمين."
+        }
+    }
+    return invoices.groupBy { (it.userId.ifBlank { "غير منسوب" }) to it.currencyCode }
+        .map { (key, rows) ->
+            val total = sumReportAmountsExactly(rows.map { it.totalMinor })
+            UserSalesPerformanceTotal(
+                userId = key.first,
+                currencyCode = key.second,
+                invoiceCount = rows.size,
+                totalMinor = total,
+                averageInvoiceMinor = if (rows.isEmpty()) 0L else total / rows.size
+            )
+        }
+        .sortedWith(compareBy<UserSalesPerformanceTotal> { it.currencyCode }
+            .thenByDescending { it.totalMinor }.thenBy { it.userId })
+}
