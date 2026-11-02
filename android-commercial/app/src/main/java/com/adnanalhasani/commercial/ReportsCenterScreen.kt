@@ -1049,7 +1049,7 @@ internal fun ReportsCenterScreen(
                     customer.customerName,
                     customer.totalMinor,
                     customer.currencyCode,
-                    "دفعات ناجحة فقط · معرف العميل: ${customer.customerId}"
+                    "دفعات ناجحة فقط · ${if (customer.customerId.isBlank()) "لا يوجد معرف عميل محفوظ" else "معرف العميل: ${customer.customerId}"}"
                 )
             }
         }
