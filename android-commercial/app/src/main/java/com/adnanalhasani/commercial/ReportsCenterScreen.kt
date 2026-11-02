@@ -307,11 +307,11 @@ internal fun calculateCostProfitReportTotals(
                 )
             }
         })
+        // Returns in this period may refer to sales from an earlier period;
+        // negative net revenue or net COGS is therefore possible and must not be
+        // silently clamped or treated as invalid.
         val netRevenue = Math.subtractExact(grossSales, returnRevenue)
         val netCost = Math.subtractExact(soldCost, returnedCost)
-        require(netRevenue >= 0L && netCost >= 0L) {
-            "تجاوزت المرتجعات إيرادات أو تكلفة المبيعات ضمن الفترة؛ يلزم مراجعة المستندات."
-        }
         CostProfitReportTotals(
             currencyCode = currency,
             grossSalesMinor = grossSales,
