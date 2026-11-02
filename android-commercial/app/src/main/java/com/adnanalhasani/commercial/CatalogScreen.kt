@@ -1,5 +1,10 @@
 package com.adnanalhasani.commercial
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.ui.platform.LocalContext
@@ -181,6 +186,10 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var warehouseMenuExpanded by remember { mutableStateOf(false) }
     var nearbyMarketItems by remember { mutableStateOf<List<NearbyCatalogItem>>(emptyList()) }
     var marketRadius by remember { mutableIntStateOf(5000) }
+    // Device coordinates are opt-in, foreground-only and kept in memory for this screen session.
+    var deviceLatitude by remember { mutableStateOf<String?>(null) }
+    var deviceLongitude by remember { mutableStateOf<String?>(null) }
+    val locationScope = rememberCoroutineScope()
     var nearbyOffset by remember { mutableIntStateOf(0) }
     var nearbyHasMore by remember { mutableStateOf(true) }
     var nearbyPageLoadFailed by remember { mutableStateOf(false) }
@@ -443,8 +452,9 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         val active=token ?: return
         val orgId=org() ?: run { feedback="أدخل معرّف المؤسسة UUID أولًا."; return }
         val branch=marketBranches.firstOrNull { it.id==selectedBranchId }
-        val lat=branch?.latitude?.toBigDecimalOrNull(); val lon=branch?.longitude?.toBigDecimalOrNull()
-        if(lat==null || lon==null) { feedback="الفرع المحدد لا يحتوي إحداثيات محفوظة."; return }
+        val deviceLat=deviceLatitude?.toBigDecimalOrNull(); val deviceLon=deviceLongitude?.toBigDecimalOrNull()
+        val lat=deviceLat ?: branch?.latitude?.toBigDecimalOrNull(); val lon=deviceLon ?: branch?.longitude?.toBigDecimalOrNull()
+        if(lat==null || lon==null) { feedback="حدد موقعك الحالي أو اختر فرعًا بإحداثيات محفوظة."; return }
         val radiusSteps=listOf(5000,10000,25000,50000,100000)
         val nextRadius=if(expandRadius) radiusSteps.firstOrNull { it>marketRadius } ?: marketRadius else marketRadius
         if(expandRadius && nextRadius==marketRadius) { feedback="تم بلوغ أقصى نطاق بحث (100 كم)."; return }
@@ -482,6 +492,50 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         loadNearbyCatalog(false)
     }
 
+    val deviceLocationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            locationScope.launch {
+                busy = true
+                try {
+                    val location = getFreshCatalogDeviceLocation(context)
+                    deviceLatitude = location.latitude.toString()
+                    deviceLongitude = location.longitude.toString()
+                    feedback = "تم تحديد موقعك لهذه الجلسة فقط. لا يتم حفظ الإحداثيات في ملفك أو تتبعك في الخلفية."
+                    startNearbyCatalog()
+                } catch (error: Exception) {
+                    feedback = error.message ?: "تعذر تحديد موقع الجهاز. تحقق من تشغيل خدمات الموقع."
+                } finally {
+                    busy = false
+                }
+            }
+        } else {
+            feedback = "لم تمنح إذن الموقع. يمكنك متابعة البحث باستخدام إحداثيات الفرع المحفوظة."
+        }
+    }
+
+    fun loadNearbyFromDevice() {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            locationScope.launch {
+                busy = true
+                try {
+                    val location = getFreshCatalogDeviceLocation(context)
+                    deviceLatitude = location.latitude.toString()
+                    deviceLongitude = location.longitude.toString()
+                    feedback = "تم تحديد موقعك لهذه الجلسة فقط. لا يتم حفظ الإحداثيات في ملفك أو تتبعك في الخلفية."
+                    startNearbyCatalog()
+                } catch (error: Exception) {
+                    feedback = error.message ?: "تعذر تحديد موقع الجهاز. تحقق من تشغيل خدمات الموقع."
+                } finally {
+                    busy = false
+                }
+            }
+        } else {
+            deviceLocationPermissionLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
+        }
+    }
+
     LaunchedEffect(section, nearbyMarketItems.size, nearbyHasMore, nearbyLoadGeneration, busy, marketRadius) {
         if(section!="browse" || nearbyMarketItems.isEmpty() || busy || nearbyPageLoadFailed || marketRadius>=100000) return@LaunchedEffect
         snapshotFlow {
@@ -499,8 +553,9 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         val active=token ?: return
         val orgId=org() ?: run { feedback="أدخل معرّف المؤسسة UUID أولًا."; return }
         val branch=marketBranches.firstOrNull { it.id==selectedBranchId }
-        val lat=branch?.latitude?.toBigDecimalOrNull(); val lon=branch?.longitude?.toBigDecimalOrNull()
-        if(lat==null || lon==null || selectedCatalogIds.isEmpty()) { feedback="اختر فرعًا بإحداثيات صحيحة وحدد الأصناف."; return }
+        val deviceLat=deviceLatitude?.toBigDecimalOrNull(); val deviceLon=deviceLongitude?.toBigDecimalOrNull()
+        val lat=deviceLat ?: branch?.latitude?.toBigDecimalOrNull(); val lon=deviceLon ?: branch?.longitude?.toBigDecimalOrNull()
+        if(lat==null || lon==null || selectedCatalogIds.isEmpty()) { feedback="حدد موقعك الحالي أو اختر فرعًا بإحداثيات صحيحة، ثم حدد الأصناف."; return }
         val ids=selectedCatalogIds.toList()
         request({
             catalogHttp("/rest/v1/rpc/commercial_catalog_price_suggestions",JSONObject().put("p_organization_id",orgId)
@@ -869,7 +924,8 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                             ) { Text(if(coordinatesCleared) "مسح الإحداثيات" else "حفظ إحداثيات الفرع") }
                             Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
                                 OutlinedButton(onClick={loadMarketContext()},enabled=!busy) { Text("تحديث الفروع") }
-                                Button(onClick={startNearbyCatalog()},enabled=!busy && selectedBranchId.isNotBlank()) { Text("الأكثر استخدامًا قريبًا") }
+                                Button(onClick={loadNearbyFromDevice()},enabled=!busy) { Text("البحث حسب موقعي الحالي") }
+                                OutlinedButton(onClick={startNearbyCatalog()},enabled=!busy && selectedBranchId.isNotBlank()) { Text("حسب موقع الفرع") }
                                 OutlinedButton(onClick={loadSelectedPriceSuggestions()},enabled=!busy && selectedCatalogIds.isNotEmpty()) { Text("أسعار استرشادية") }
                             }
                             OutlinedButton(
@@ -902,7 +958,8 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                                     if(marketRadius>=100000 && !nearbyHasMore) item { Text("وصل البحث إلى أقصى نطاق 100 كم.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
                                 }
                             }
-                            Text("يعتمد البحث على إحداثيات الفرع المحفوظة، وليس تتبع الجهاز. الأسعار لا تظهر إلا عند توافر بيانات مجمعة موثوقة من خمسة تجار مستقلين على الأقل.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(if(deviceLatitude!=null && deviceLongitude!=null) "مركز البحث: موقع الجهاز الحالي لهذه الجلسة. استخدم «حسب موقع الفرع» للعودة إلى إحداثيات الفرع." else "مركز البحث الافتراضي: إحداثيات الفرع المحفوظة. يمكنك اختيار موقع الجهاز بإذن اختياري لمرة واحدة.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("لا يعمل الموقع في الخلفية ولا تُحفظ إحداثيات الجهاز. الأسعار لا تظهر إلا عند توافر بيانات مجمعة موثوقة من خمسة تجار مستقلين على الأقل.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                     if (selectedCatalogIds.isNotEmpty()) {
