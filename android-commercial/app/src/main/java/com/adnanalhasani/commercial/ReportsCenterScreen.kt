@@ -730,6 +730,12 @@ internal fun ReportsCenterScreen(
         !cloudMode -> "ربحية الأصناف بعد المرتجعات تتطلب سجلات السحابة."
         salesDocumentsLoadError.isNotBlank() -> salesDocumentsLoadError
         returnsLoadError.isNotBlank() -> returnsLoadError
+        cloudSalesDocuments.any { it.saleStatus.equals("completed", true) && reportDateMillis(it.createdAt) == null } ->
+            "توجد فاتورة بيع مكتملة بتاريخ غير صالح؛ تعذر تحديد فترة ربحيتها."
+        cloudReturns.any { it.status.equals("completed", true) && reportDateMillis(it.completedAt) == null } ->
+            "يوجد مرتجع مكتمل بتاريخ غير صالح؛ تعذر تحديد فترة أثره على الربحية."
+        cloudReturns.any { it.refundStatus.equals("refunded", true) && !it.status.equals("completed", true) } ->
+            "يوجد استرداد منفذ لمرتجع غير مكتمل؛ يلزم تسوية حالة المرتجع قبل اعتماد ربحية الأصناف."
         else -> itemProfitabilityCalculation.exceptionOrNull()?.message.orEmpty()
     }
     val sourceErrorForReport: (String) -> String = { title ->
