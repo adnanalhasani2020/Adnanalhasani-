@@ -171,7 +171,7 @@ BEGIN
   IF v_base_dimension IS NULL THEN RAISE EXCEPTION 'active_base_unit_not_found' USING ERRCODE = '22023'; END IF;
   IF NOT EXISTS (
     SELECT 1 FROM public.commercial_unit_of_measure
-    WHERE code = lower(btrim(p_base_unit_code)) AND is_active
+    WHERE code = lower(btrim(p_base_unit_code)) AND dimension = v_base_dimension AND is_active
   ) THEN RAISE EXCEPTION 'active_unit_of_measure_not_found' USING ERRCODE = '22023'; END IF;
 
   IF upper(btrim(p_base_unit_code)) = upper(btrim(p_sale_unit_code)) THEN
@@ -203,7 +203,7 @@ BEGIN
 
   SELECT display_name INTO v_unit_name
   FROM public.commercial_unit_of_measure
-  WHERE code = lower(btrim(p_base_unit_code)) AND is_active;
+  WHERE code = lower(btrim(p_base_unit_code)) AND dimension = v_base_dimension AND is_active;
   v_currency := upper(v_order.currency_code);
 
   PERFORM pg_advisory_xact_lock(
