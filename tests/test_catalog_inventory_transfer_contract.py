@@ -35,6 +35,15 @@ class CatalogInventoryTransferContract(unittest.TestCase):
         self.assertIn("recipient_catalog_mapping_forbidden",mapping)
         self.assertIn("ربط الأصناف المعروفة بأمر الشراء",kt)
         self.assertIn("commercial_invoice_purchase_map_known_items",kt)
+        self.assertIn("loadInvoicePurchaseUnmappedLines",kt)
+        self.assertIn("linkSelectedInvoicePurchaseLine",kt)
+        self.assertIn("commercial_link_purchase_order_item_offering",kt)
+        self.assertIn("commercial_catalog_item_offerings?select=offering_id,global_item_id",kt)
+        self.assertIn("location_id=eq.",kt)
+        self.assertIn("offering_id=is.null",kt)
+        self.assertIn("quantity_received=eq.0",kt)
+        self.assertIn("لا يُنشأ صنف تلقائيًا من وصف الفاتورة",kt)
+        self.assertIn("لم يتغير المخزون",kt)
 
 if __name__=="__main__":
     unittest.main()
