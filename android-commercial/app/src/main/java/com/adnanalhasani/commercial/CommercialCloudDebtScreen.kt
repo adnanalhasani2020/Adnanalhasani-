@@ -72,6 +72,12 @@ private fun cloudDebtMoney(amount: Long, currency: String): String {
 @Composable
 internal fun CommercialCloudDebtScreen(context: Context, onBack: () -> Unit) {
     var rows by remember { mutableStateOf<List<CommercialCloudReceivable>>(emptyList()) }
+    var paymentRequests by remember { mutableStateOf<List<MerchantCustomerPaymentRequest>>(emptyList()) }
+    var selectedRequest by remember { mutableStateOf<MerchantCustomerPaymentRequest?>(null) }
+    var confirmedAmount by remember { mutableStateOf("") }
+    var reviewNote by remember { mutableStateOf("") }
+    var reviewMethod by remember { mutableStateOf("cash") }
+    var requestError by remember { mutableStateOf("") }
     var selected by remember { mutableStateOf<CommercialCloudReceivable?>(null) }
     var amount by remember { mutableStateOf("") }
     var method by remember { mutableStateOf("cash") }
@@ -84,12 +90,16 @@ internal fun CommercialCloudDebtScreen(context: Context, onBack: () -> Unit) {
     LaunchedEffect(refresh) {
         busy = true
         error = ""
+        requestError = ""
         DebtIo.execute {
             val result = runCatching { loadCommercialCloudReceivables(context) }
+            val requestResult = runCatching { loadCommercialCloudCustomerPaymentRequests(context, "pending") }
             DebtMain.post {
                 busy = false
                 result.onSuccess { rows = it }
                     .onFailure { error = it.message ?: "تعذر تحميل مديونيات العملاء من الخادم." }
+                requestResult.onSuccess { paymentRequests = it }
+                    .onFailure { requestError = it.message ?: "تعذر تحميل طلبات سندات القبض." }
             }
         }
     }
@@ -130,6 +140,32 @@ internal fun CommercialCloudDebtScreen(context: Context, onBack: () -> Unit) {
                 }
             }
             if (message.isNotBlank()) item { Text(message, color = DebtGreen, fontSize = 12.sp) }
+            if (requestError.isNotBlank()) item { Text(requestError, color = Color(0xFF9C3028), fontSize = 12.sp) }
+            item {
+                Text("طلبات سندات القبض من العملاء", color = DebtInk, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                Text("لا يظهر أثر مالي لأي طلب قبل مراجعتك واعتمادك للمبلغ الفعلي.", color = DebtMuted, fontSize = 11.sp)
+            }
+            if (!busy && paymentRequests.isEmpty() && requestError.isBlank()) {
+                item { Text("لا توجد طلبات قبض معلّقة.", color = DebtMuted, fontSize = 12.sp) }
+            }
+            items(paymentRequests, key = { it.id }) { request ->
+                Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp)) {
+                    Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(request.customerName, color = DebtInk, fontWeight = FontWeight.Bold)
+                        Text("فاتورة #"+request.invoiceNumber, color = DebtMuted, fontSize = 12.sp)
+                        Text(cloudDebtMoney(request.amountMinor, request.currencyCode), color = DebtGreen, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        Text("المتبقي حاليًا: "+cloudDebtMoney(request.dueMinor, request.currencyCode), color = DebtMuted, fontSize = 11.sp)
+                        if (request.customerNote.isNotBlank()) Text("ملاحظة العميل: "+request.customerNote, color = DebtMuted, fontSize = 12.sp)
+                        Button(onClick = {
+                            selectedRequest = request
+                            confirmedAmount = request.amountMinor.toString()
+                            reviewNote = ""
+                            reviewMethod = "cash"
+                            error = ""
+                        }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("مراجعة الطلب") }
+                    }
+                }
+            }
             if (busy && rows.isEmpty()) item { CircularProgressIndicator(color = DebtGreen) }
             if (!busy && error.isBlank() && rows.isEmpty()) item {
                 Text("لا توجد فواتير آجلة مستحقة لهذا النشاط.", color = DebtMuted)
@@ -175,6 +211,97 @@ internal fun CommercialCloudDebtScreen(context: Context, onBack: () -> Unit) {
             }
         }
     }
+
+    val requestTarget = selectedRequest
+    val requestCurrentDue = requestTarget?.dueMinor?.takeIf { it >= 0L }
+    if (requestTarget != null) AlertDialog(
+        onDismissRequest = { if (!busy) selectedRequest = null },
+        title = { Text("مراجعة طلب سند قبض") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                Text(requestTarget.customerName, color = DebtInk, fontWeight = FontWeight.SemiBold)
+                Text("فاتورة #"+requestTarget.invoiceNumber, color = DebtMuted, fontSize = 12.sp)
+                Text("المبلغ الذي طلبه العميل: "+cloudDebtMoney(requestTarget.amountMinor, requestTarget.currencyCode), color = DebtMuted, fontSize = 12.sp)
+                Text(
+                    requestCurrentDue?.let { "المتبقي حسب النظام: "+cloudDebtMoney(it, requestTarget.currencyCode) } ?: "الفاتورة لا تظهر الآن ضمن المديونيات المستحقة.",
+                    color = if (requestCurrentDue == null || requestCurrentDue < requestTarget.amountMinor) Color(0xFF9C3028) else DebtMuted,
+                    fontSize = 12.sp
+                )
+                OutlinedTextField(
+                    value = confirmedAmount,
+                    onValueChange = { confirmedAmount = it.filter(Char::isDigit).take(18) },
+                    enabled = !busy,
+                    label = { Text("المبلغ الفعلي الذي استلمته بوحدة الصرف الصغرى") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text("طريقة القبض", color = DebtMuted, fontSize = 12.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("cash" to "نقدي", "bank_transfer" to "تحويل", "card" to "بطاقة", "other" to "أخرى").forEach { (value, label) ->
+                        FilterChip(selected = reviewMethod == value, onClick = { reviewMethod = value }, enabled = !busy, label = { Text(label, fontSize = 11.sp) })
+                    }
+                }
+                OutlinedTextField(
+                    value = reviewNote,
+                    onValueChange = { reviewNote = it.take(1000) },
+                    enabled = !busy,
+                    label = { Text("ملاحظة أو سبب الرفض/التعديل") },
+                    minLines = 2,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (requestCurrentDue == null || requestCurrentDue < requestTarget.amountMinor) {
+                    Text("لا يمكن اعتماد الطلب لأن المتبقي الحالي أقل من المبلغ المطلوب أو لم يعد مستحقًا.", color = Color(0xFF9C3028), fontSize = 11.sp)
+                }
+                if (confirmedAmount.toLongOrNull() != requestTarget.amountMinor) {
+                    Text("المبلغ الفعلي لا يطابق طلب العميل. اطلب التعديل أو ارفض الطلب؛ لا تعتمد مبلغًا مختلفًا.", color = Color(0xFF9C3028), fontSize = 11.sp)
+                }
+                if (error.isNotBlank()) Text(error, color = Color(0xFF9C3028), fontSize = 12.sp)
+            }
+        },
+        confirmButton = {
+            Button(
+                enabled = !busy && requestCurrentDue != null && requestCurrentDue >= requestTarget.amountMinor && confirmedAmount.toLongOrNull() == requestTarget.amountMinor,
+                onClick = {
+                    busy = true
+                    error = ""
+                    DebtIo.execute {
+                        val result = runCatching {
+                            reviewCommercialCloudCustomerPaymentRequest(
+                                context, requestTarget.id, "approve", requestTarget.amountMinor,
+                                reviewNote, reviewMethod
+                            )
+                        }
+                        DebtMain.post {
+                            busy = false
+                            result.onSuccess {
+                                selectedRequest = null
+                                message = "تم اعتماد الطلب وإنشاء سند قبض محاسبي مرتبط بالدفعة."
+                                refresh++
+                            }.onFailure { error = it.message ?: "تعذر اعتماد طلب سند القبض." }
+                        }
+                    }
+                }
+            ) { Text(if (busy) "جارٍ الاعتماد..." else "اعتماد وإنشاء سند قبض") }
+        },
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                TextButton(enabled = !busy && reviewNote.isNotBlank(), onClick = {
+                    busy = true
+                    DebtIo.execute {
+                        val result = runCatching { reviewCommercialCloudCustomerPaymentRequest(context, requestTarget.id, "request_changes", 0L, reviewNote, reviewMethod) }
+                        DebtMain.post { busy = false; result.onSuccess { selectedRequest = null; message = "أُرسل طلب التعديل إلى العميل."; refresh++ }.onFailure { error = it.message ?: "تعذر طلب التعديل." } }
+                    }
+                }) { Text("طلب تعديل") }
+                TextButton(enabled = !busy && reviewNote.isNotBlank(), onClick = {
+                    busy = true
+                    DebtIo.execute {
+                        val result = runCatching { reviewCommercialCloudCustomerPaymentRequest(context, requestTarget.id, "reject", 0L, reviewNote, reviewMethod) }
+                        DebtMain.post { busy = false; result.onSuccess { selectedRequest = null; message = "تم رفض الطلب وإبلاغ العميل."; refresh++ }.onFailure { error = it.message ?: "تعذر رفض الطلب." } }
+                    }
+                }) { Text("رفض") }
+            }
+        }
+    )
 
     val target = selected
     if (target != null) AlertDialog(

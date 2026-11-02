@@ -236,6 +236,9 @@ private fun StoreApp(context: Context) {
     var cloudUnitsPage by remember { mutableStateOf(false) }
     var customerPortalPage by remember { mutableStateOf(false) }
     var customerPortalHistoryPage by remember { mutableStateOf(false) }
+    var customerPaymentRequestsPage by remember { mutableStateOf(false) }
+    var customerPaymentOrganizationId by remember { mutableStateOf("") }
+    var customerPaymentOrganizationName by remember { mutableStateOf("") }
     var customerOrderFulfillmentPage by remember { mutableStateOf(false) }
     var settlingSaleNumber by remember { mutableIntStateOf(-1) }
     val cloudContextExists = remember {
@@ -330,6 +333,13 @@ private fun StoreApp(context: Context) {
         Box(Modifier.fillMaxSize().padding(padding)) {
             if (showNotifications) {
                 CommercialNotificationsScreen(context = context, onBack = { showNotifications = false })
+            } else if (customerPaymentRequestsPage) {
+                CustomerPortalPaymentRequestsScreen(
+                    context = context,
+                    organizationId = customerPaymentOrganizationId,
+                    organizationName = customerPaymentOrganizationName,
+                    onBack = { customerPaymentRequestsPage = false }
+                )
             } else if (customerOrderFulfillmentPage) {
                 CustomerOrderFulfillmentScreen(context = context, onBack = { customerOrderFulfillmentPage = false })
             } else if (customerPortalHistoryPage) {
@@ -338,7 +348,12 @@ private fun StoreApp(context: Context) {
                 CustomerPortalScreen(
                     context = context,
                     onBack = { customerPortalPage = false },
-                    onOrders = { customerPortalHistoryPage = true }
+                    onOrders = { customerPortalHistoryPage = true },
+                    onPaymentRequests = { organization ->
+                        customerPaymentOrganizationId = organization.id
+                        customerPaymentOrganizationName = organization.name
+                        customerPaymentRequestsPage = true
+                    }
                 )
             } else if (cloudSaleComposerPage) {
                 CommercialCloudSaleComposerScreen(
