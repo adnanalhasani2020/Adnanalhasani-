@@ -43,6 +43,7 @@ class InvoicePurchaseItemCreationAtomicTests(unittest.TestCase):
         self.assertIn("active_global_catalog_category_not_found", sql)
         self.assertIn("sale_unit_not_compatible_with_base_unit", sql)
         self.assertIn("code = lower(btrim(p_base_unit_code))", sql)
+        self.assertIn("dimension = v_base_dimension", sql)
         self.assertIn("p_local_category_id, lower(btrim(p_base_unit_code))", sql)
         self.assertIn("commercial_global_catalog_items", sql)
         self.assertIn("multiple_exact_catalog_items_require_manual_resolution", sql)
