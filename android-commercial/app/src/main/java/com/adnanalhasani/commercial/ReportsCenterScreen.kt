@@ -230,6 +230,50 @@ private fun printReport(context: Context, title: String, rows: List<List<String>
 }
 private data class ReportCatalogItem(val title: String, val category: String, val source: String, val supported: Boolean, val note: String)
 private data class ReportLine(val date: String, val reference: String, val name: String, val amount: Long, val currency: String, val status: String, val displayAmount: String? = null)
+
+internal data class SupplierInvoicePriceVariance(
+    val expectedSubtotalMinor: Long,
+    val invoiceSubtotalMinor: Long,
+    val varianceMinor: Long
+)
+
+/** Match the database accrual trigger: round the sum of quantity × recorded PO unit cost once. */
+internal fun calculateSupplierInvoicePriceVariance(
+    invoice: CommercialCloudSupplierInvoiceSummary
+): SupplierInvoicePriceVariance {
+    require(invoice.currencyCode.matches(Regex("^[A-Z]{3}$"))) { "عملة فاتورة المورد غير صالحة." }
+    require(invoice.subtotalMinor >= 0L && invoice.taxMinor >= 0L && invoice.freightMinor >= 0L) {
+        "تحتوي فاتورة المورد على مبلغ سالب غير صالح."
+    }
+    require(invoice.lines.isNotEmpty()) { "لا توجد تفاصيل بنود محفوظة لفاتورة المورد." }
+    var expectedExact = java.math.BigDecimal.ZERO
+    var invoiceLineTotal = 0L
+    invoice.lines.forEach { line ->
+        val quantity = line.quantity.toBigDecimalOrNull()
+            ?: throw IllegalArgumentException("توجد كمية غير صالحة في بنود فاتورة المورد.")
+        require(quantity.signum() > 0) { "توجد كمية صفرية أو سالبة في فاتورة المورد." }
+        val baseline = line.purchaseOrderUnitCostMinor
+            ?: throw IllegalArgumentException("تعذر ربط سعر أساس أمر الشراء بأحد بنود فاتورة المورد.")
+        require(baseline >= 0L && line.unitPriceMinor >= 0L && line.lineTotalMinor >= 0L) {
+            "توجد قيمة سعر أو إجمالي بند غير صالحة."
+        }
+        expectedExact = expectedExact.add(quantity.multiply(java.math.BigDecimal.valueOf(baseline)))
+        invoiceLineTotal = Math.addExact(invoiceLineTotal, line.lineTotalMinor)
+    }
+    require(invoiceLineTotal == invoice.subtotalMinor) {
+        "مجموع بنود فاتورة المورد لا يطابق الإجمالي الفرعي المحفوظ؛ تم حجب فرق السعر."
+    }
+    val expected = expectedExact.setScale(0, java.math.RoundingMode.HALF_UP).longValueExact()
+    val headerTotal = Math.addExact(Math.addExact(invoice.subtotalMinor, invoice.taxMinor), invoice.freightMinor)
+    require(headerTotal == invoice.totalMinor) {
+        "إجمالي فاتورة المورد لا يطابق البنود والضريبة والشحن؛ تم حجب فرق السعر."
+    }
+    return SupplierInvoicePriceVariance(
+        expectedSubtotalMinor = expected,
+        invoiceSubtotalMinor = invoice.subtotalMinor,
+        varianceMinor = Math.subtractExact(invoice.subtotalMinor, expected)
+    )
+}
 private fun reportLineAmount(row: ReportLine, cloudMode: Boolean): String = row.displayAmount ?: if (row.currency.isBlank() || row.currency == "-") row.amount.toString() else reportMoney(row.amount, row.currency, cloudMode)
 private data class ReportCustomerMovement(val date: String, val customerId: String, val customer: String, val currency: String, val reference: String, val amount: Long, val description: String)
 private data class ReportSupplierMovement(val date: String, val supplierId: String, val supplier: String, val currency: String, val reference: String, val amount: Long, val description: String)
@@ -399,6 +443,18 @@ internal fun ReportsCenterScreen(
             }
         }
     }
+    val supplierInvoiceVarianceError = when {
+        !cloudMode -> "فروقات أسعار فواتير الموردين تتطلب فواتير السحابة وبنودها المحفوظة."
+        purchasesLoadError.isNotBlank() -> purchasesLoadError
+        cloudPurchases.flatMap { purchase ->
+            purchase.supplierInvoices.filter { invoice ->
+                invoice.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed") &&
+                    reportDateMillis(invoice.recordedAt)?.let { it >= startMillis && it < endExclusive } == true
+            }
+        }.any { invoice -> runCatching { calculateSupplierInvoicePriceVariance(invoice) }.isFailure } ->
+            "تعذر مطابقة أحد فواتير المورد مع بنودها وأسعار أمر الشراء؛ لم يتم عرض إجمالي جزئي أو فرق سعر مضلل."
+        else -> ""
+    }
     val taxDetailError = when {
         !cloudMode -> "التقرير الضريبي التفصيلي يتطلب مصادر السحابة."
         salesDocumentsLoadError.isNotBlank() -> salesDocumentsLoadError
@@ -469,6 +525,7 @@ internal fun ReportsCenterScreen(
             "أرصدة العملاء وكشف الحساب" -> salesDocumentsLoadError
             "مرتجعات المبيعات وحالة التسوية" -> returnsLoadError
             "فواتير الشراء والمستحقات المسجلة", "مستحقات فواتير الموردين" -> purchasesLoadError
+            "فروقات أسعار فواتير الموردين" -> supplierInvoiceVarianceError
             "كشف حركات الموردين" -> purchasesLoadError.ifBlank { supplierPaymentsLoadError }
             "الدفعات السحابية الناجحة", "سندات القبض والصرف" -> paymentsLoadError
             "سجل القيود المحاسبية" -> journalsLoadError
@@ -536,6 +593,7 @@ internal fun ReportsCenterScreen(
             ReportCatalogItem("حركة المخزون الفعلية", "الأصناف والمخزون", "commercial_stock_movements المرتبطة بنشاط المؤسسة", cloudMode, "يعرض حركات الكمية المسجلة من دفتر حركة المخزون، مع مرجع المصدر وحالة فاتورة البيع عند توفرها؛ لا يستنتج تكلفة أو قيمة مالية من الكمية."),
             ReportCatalogItem("تنبيهات المخزون المنخفض", "الأصناف والمخزون", "الرصيد وحد إعادة الطلب", true, "يعتمد على حد التنبيه المسجل لكل صنف."),
             ReportCatalogItem("فواتير الشراء والمستحقات المسجلة", "المشتريات", "commercial_purchase_orders ← supplier_invoices ← supplier_obligations", cloudMode, "يُعرض مبلغ الفاتورة والرصيد المستحق من سجل الالتزام؛ لا يُخلط مع قيمة أمر الشراء."),
+            ReportCatalogItem("فروقات أسعار فواتير الموردين", "المشتريات", "commercial_supplier_invoice_items مقابل commercial_purchase_order_items.unit_cost_minor", cloudMode, "يقارن مجموع بنود فاتورة المورد بسعر الأساس المسجل في أمر الشراء، وفق تقريب القيد المحاسبي نفسه؛ يستبعد الضريبة والشحن من فرق السعر ويوقف التقرير إذا تعذر مطابقة أي بند."),
             ReportCatalogItem("مستحقات فواتير الموردين", "الموردون والمستحقات", "commercial_supplier_obligations المرتبطة بالفواتير", cloudMode, "مجموع الالتزامات المسجلة ناقص المبالغ المسددة المسجلة فقط؛ لا يمثل رصيد المورد الشامل إذا وجدت تسويات أو مرتجعات خارج هذا المصدر."),
             ReportCatalogItem("مرتجعات المبيعات وحالة التسوية", "المرتجعات", "commercial_sales_returns + عناصر المرتجع", cloudMode, "يفصل حالة الموافقة عن الاسترداد الفعلي وإعادة التخزين؛ لا تُعامل الطلبات المعلقة كمرتجعات منفذة."),
             ReportCatalogItem("أرصدة العملاء وكشف الحساب", "العملاء والديون", "فواتير العملاء المكتملة + التحصيلات الناجحة + المرتجعات المعتمدة والاستردادات المنفذة", cloudMode, "يعرض كشف حركة للفواتير المكتملة والتحصيلات والمرتجعات والاستردادات المسجلة في مصادر السحابة، مع رصيد افتتاحي وحركة ورصيد ختامي حسب العميل والعملة."),
@@ -671,6 +729,22 @@ internal fun ReportsCenterScreen(
         "التحصيلات المسجلة محليًا" -> inPeriodSettlements.map {
             ReportLine(Instant.ofEpochMilli(it.timestamp).atZone(zone).toLocalDate().toString(), "فاتورة #${it.invoiceNumber}", it.customer, it.amount.toLong(), "YER", "تحصيل محلي")
         }
+        "فروقات أسعار فواتير الموردين" -> cloudPurchases.flatMap { purchase ->
+            purchase.supplierInvoices.filter { invoice ->
+                invoice.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed") &&
+                    reportDateMillis(invoice.recordedAt)?.let { it >= startMillis && it < endExclusive } == true
+            }.map { invoice ->
+                val variance = calculateSupplierInvoicePriceVariance(invoice)
+                ReportLine(
+                    invoice.recordedAt.take(10),
+                    "فاتورة المورد #${invoice.invoiceNumber.ifBlank { invoice.id }}",
+                    purchase.supplierName,
+                    variance.varianceMinor,
+                    invoice.currencyCode,
+                    "أساس أمر الشراء: ${reportMoney(variance.expectedSubtotalMinor, invoice.currencyCode, true)} · الفاتورة قبل الضريبة والشحن: ${reportMoney(variance.invoiceSubtotalMinor, invoice.currencyCode, true)} · الضريبة: ${reportMoney(invoice.taxMinor, invoice.currencyCode, true)} · الشحن: ${reportMoney(invoice.freightMinor, invoice.currencyCode, true)} · البنود: ${invoice.lines.size}"
+                )
+            }
+        }.sortedByDescending { it.date }
         "فواتير الشراء والمستحقات المسجلة" -> cloudPurchases.flatMap { purchase ->
             purchase.supplierInvoices.filter { invoice ->
                 val timestamp = reportDateMillis(invoice.recordedAt)
