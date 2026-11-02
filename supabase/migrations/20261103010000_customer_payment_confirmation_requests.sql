@@ -436,12 +436,12 @@ BEGIN
 END;
 $function$;
 
-REVOKE ALL ON FUNCTION public.commercial_customer_portal_list_outstanding_sales(uuid) FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION public.commercial_customer_portal_list_my_payment_requests(uuid) FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION public.commercial_customer_portal_submit_payment_request(uuid,bigint,text,text) FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION public.commercial_customer_portal_update_payment_request(uuid,bigint,text,text) FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION public.commercial_merchant_list_customer_payment_requests(uuid,text,integer) FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION public.commercial_merchant_review_customer_payment_request(uuid,text,bigint,text,text,text) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.commercial_customer_portal_list_outstanding_sales(uuid) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.commercial_customer_portal_list_my_payment_requests(uuid) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.commercial_customer_portal_submit_payment_request(uuid,bigint,text,text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.commercial_customer_portal_update_payment_request(uuid,bigint,text,text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.commercial_merchant_list_customer_payment_requests(uuid,text,integer) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.commercial_merchant_review_customer_payment_request(uuid,text,bigint,text,text,text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.commercial_customer_portal_list_outstanding_sales(uuid) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.commercial_customer_portal_list_my_payment_requests(uuid) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.commercial_customer_portal_submit_payment_request(uuid,bigint,text,text) TO authenticated;
