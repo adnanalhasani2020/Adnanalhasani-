@@ -171,7 +171,7 @@ BEGIN
   IF v_base_dimension IS NULL THEN RAISE EXCEPTION 'active_base_unit_not_found' USING ERRCODE = '22023'; END IF;
   IF NOT EXISTS (
     SELECT 1 FROM public.commercial_unit_of_measure
-    WHERE code = upper(btrim(p_base_unit_code)) AND is_active
+    WHERE code = lower(btrim(p_base_unit_code)) AND is_active
   ) THEN RAISE EXCEPTION 'active_unit_of_measure_not_found' USING ERRCODE = '22023'; END IF;
 
   IF upper(btrim(p_base_unit_code)) = upper(btrim(p_sale_unit_code)) THEN
@@ -203,7 +203,7 @@ BEGIN
 
   SELECT display_name INTO v_unit_name
   FROM public.commercial_unit_of_measure
-  WHERE code = upper(btrim(p_base_unit_code)) AND is_active;
+  WHERE code = lower(btrim(p_base_unit_code)) AND is_active;
   v_currency := upper(v_order.currency_code);
 
   PERFORM pg_advisory_xact_lock(
@@ -274,7 +274,7 @@ BEGIN
   v_offering_result := public.commercial_create_inventory_item_with_category_and_unit(
     p_organization_id, p_activity_id, v_order.receive_location_id,
     btrim(p_name_ar), v_unit_name, 0, v_currency, 0, 0,
-    p_local_category_id, upper(btrim(p_base_unit_code))
+    p_local_category_id, lower(btrim(p_base_unit_code))
   );
   v_offering_id := (v_offering_result->>'offering_id')::uuid;
 
