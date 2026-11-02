@@ -26,8 +26,8 @@ class SupplierInvoicePriceVarianceReportTest {
         val report = calculateSupplierInvoicePriceVariance(
             invoice(
                 lines = listOf(
-                    SupplierInvoicePriceVarianceLineInput("l1", "po1", "1.5", 120, 180, "A", 100),
-                    CommercialCloudSupplierInvoiceLineSummary("l2", "po2", "2.5", 208, 520, "B", 200)
+                    SupplierInvoicePriceVarianceLineInput("1.5", 120, 180, 100),
+                    SupplierInvoicePriceVarianceLineInput("2.5", 208, 520, 200)
                 ),
                 subtotal = 700
             )
@@ -42,7 +42,7 @@ class SupplierInvoicePriceVarianceReportTest {
         assertThrows(IllegalArgumentException::class.java) {
             calculateSupplierInvoicePriceVariance(
                 invoice(
-                    listOf(CommercialCloudSupplierInvoiceLineSummary("l1", "po1", "1", 100, 100, "A", null)),
+                    listOf(SupplierInvoicePriceVarianceLineInput("1", 100, 100, null)),
                     subtotal = 100,
                     tax = 0,
                     freight = 0
@@ -56,7 +56,7 @@ class SupplierInvoicePriceVarianceReportTest {
         assertThrows(IllegalArgumentException::class.java) {
             calculateSupplierInvoicePriceVariance(
                 invoice(
-                    listOf(CommercialCloudSupplierInvoiceLineSummary("l1", "po1", "1", 100, 99, "A", 100)),
+                    listOf(SupplierInvoicePriceVarianceLineInput("1", 100, 99, 100)),
                     subtotal = 100,
                     tax = 0,
                     freight = 0
@@ -67,7 +67,7 @@ class SupplierInvoicePriceVarianceReportTest {
 
     @Test
     fun rejectsHeaderTotalMismatchAndInvalidCurrency() {
-        val validLine = listOf(CommercialCloudSupplierInvoiceLineSummary("l1", "po1", "1", 100, 100, "A", 100))
+        val validLine = listOf(SupplierInvoicePriceVarianceLineInput("1", 100, 100, 100))
         assertThrows(IllegalArgumentException::class.java) {
             calculateSupplierInvoicePriceVariance(invoice(validLine, subtotal = 100, tax = 0, freight = 0, total = 99))
         }
@@ -82,8 +82,8 @@ class SupplierInvoicePriceVarianceReportTest {
             calculateSupplierInvoicePriceVariance(
                 invoice(
                     listOf(
-                        CommercialCloudSupplierInvoiceLineSummary("l1", "po1", "1", 1, Long.MAX_VALUE, "A", Long.MAX_VALUE),
-                        CommercialCloudSupplierInvoiceLineSummary("l2", "po2", "1", 1, 1, "B", 1)
+                        SupplierInvoicePriceVarianceLineInput("1", 1, Long.MAX_VALUE, Long.MAX_VALUE),
+                        SupplierInvoicePriceVarianceLineInput("1", 1, 1, 1)
                     ),
                     subtotal = Long.MAX_VALUE,
                     tax = 0,
