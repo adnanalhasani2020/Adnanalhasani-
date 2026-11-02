@@ -664,7 +664,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         }, { raw ->
             val result=JSONObject(raw); val cats=result.getJSONArray("categories"); val units=result.getJSONArray("units")
             val localUnits=result.optJSONArray("localUnits") ?: JSONArray()
-            localUnitCodes=(0 until localUnits.length()).map { localUnits.getJSONObject(it).optString("code") }.filter { it.isNotBlank() }.toSet()
+            localUnitCodes=(0 until localUnits.length()).map { localUnits.getJSONObject(it).optString("code").lowercase() }.filter { it.isNotBlank() }.toSet()
             val catTr=result.getJSONArray("categoryTranslations"); val catDescTr=result.getJSONArray("categoryDescriptionTranslations"); val unitTr=result.getJSONArray("unitTranslations")
             val activityJson=result.optJSONArray("activityDirectory") ?: JSONArray()
             activityNodes=List(activityJson.length()) { i -> val node=activityJson.getJSONObject(i); CatalogActivityNode(node.optString("code"),node.optString("parent_code").takeUnless { it == "null" }.orEmpty(),node.optString("node_kind"),node.optString("path_ar",node.optString("name_ar")),node.optString("path_en",node.optString("name_en")),node.optString("default_business_level_code").takeUnless { it == "null" }.orEmpty(),node.optInt("depth",0),node.optBoolean("is_selectable",false)) }.filter { it.code.isNotBlank() }
@@ -967,7 +967,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             return
         }
         val available=directoryUnits.filter { it.owner.isBlank() || it.owner==orgId }
-        val baseOptions=available.filter { it.baseCode.isBlank() && it.code in localUnitCodes }
+        val baseOptions=available.filter { it.baseCode.isBlank() && it.code.lowercase() in localUnitCodes }
         val sourceUnit=available.firstOrNull { it.code.equals(line.unitCode,true) }
         val base=if(sourceUnit==null) baseOptions.firstOrNull() else if(sourceUnit.baseCode.isBlank()) baseOptions.firstOrNull { it.code==sourceUnit.code } else baseOptions.firstOrNull { it.code==sourceUnit.baseCode }
         if(base==null) {
@@ -993,7 +993,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             return
         }
         val line=invoiceMappingLines.firstOrNull { it.id==invoiceMappingLineId } ?: run { feedback="اختر بند الفاتورة."; return }
-        val base=directoryUnits.firstOrNull { it.code==invoiceNewBaseUnitCode && it.baseCode.isBlank() && it.code in localUnitCodes }
+        val base=directoryUnits.firstOrNull { it.code==invoiceNewBaseUnitCode && it.baseCode.isBlank() && it.code.lowercase() in localUnitCodes }
             ?: run { feedback="اختر وحدة أساس نشطة ومعتمدة للمخزون."; return }
         val sale=directoryUnits.firstOrNull { it.code==invoiceNewSaleUnitCode && (it.code==base.code || it.baseCode==base.code) && (it.owner.isBlank() || it.owner==orgId) }
             ?: run { feedback="اختر وحدة بيع متوافقة مع وحدة الأساس."; return }
@@ -1731,7 +1731,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     }
     if(showInvoiceItemCreation) {
         val orgId=org().orEmpty()
-        val baseOptions=directoryUnits.filter { (it.owner.isBlank() || it.owner==orgId) && it.baseCode.isBlank() && it.code in localUnitCodes }
+        val baseOptions=directoryUnits.filter { (it.owner.isBlank() || it.owner==orgId) && it.baseCode.isBlank() && it.code.lowercase() in localUnitCodes }
         val saleOptions=directoryUnits.filter { (it.owner.isBlank() || it.owner==orgId) && (it.code==invoiceNewBaseUnitCode || it.baseCode==invoiceNewBaseUnitCode) }
         AlertDialog(
             onDismissRequest={if(!busy) showInvoiceItemCreation=false},
