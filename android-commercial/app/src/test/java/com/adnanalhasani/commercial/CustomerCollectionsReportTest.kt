@@ -18,13 +18,14 @@ class CustomerCollectionsReportTest {
         val rows = calculateCustomerCollectionsByCustomer(listOf(
             payment("p1", amount = 100),
             payment("p2", amount = 250),
+            payment("p5", customerName = "عميل أ محدث", amount = 50),
             payment("p3", customerId = "customer-2", customerName = "عميل ب", amount = 80),
             payment("p4", currency = "SAR", amount = 40)
         ))
         assertEquals(3, rows.size)
         val customer = rows.single { it.customerId == "customer-1" && it.currencyCode == "YER" }
-        assertEquals(2, customer.paymentCount)
-        assertEquals(350L, customer.totalMinor)
+        assertEquals(3, customer.paymentCount)
+        assertEquals(400L, customer.totalMinor)
         assertEquals(40L, rows.single { it.currencyCode == "SAR" }.totalMinor)
     }
 
