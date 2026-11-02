@@ -16,7 +16,7 @@ def test_customer_collections_report_uses_successful_nested_payments_and_currenc
     assert 'payment.createdAt' in screen
     assert 'document.customerId' in screen
     assert 'currencyCode = payment.currencyCode' in screen
-    assert 'currency_code = payment.optString("currency_code")' in REPOSITORY.read_text(encoding="utf-8")
+    assert 'currencyCode = payment.optString("currency_code")' in REPOSITORY.read_text(encoding="utf-8")
     assert 'calculateCustomerCollectionsByCustomer(' in calculations
     assert 'paymentIds.add(payment.paymentId)' in calculations
     assert 'Collections by customer' in contract
