@@ -387,6 +387,9 @@ internal fun calculateItemProfitability(
     }
 
     val returnIds = mutableSetOf<String>()
+    val refundedBySaleItem = mutableMapOf<String, Long>()
+    val restockedBySaleItem = mutableMapOf<String, Long>()
+    val returnedQuantityBySaleItem = mutableMapOf<String, BigDecimal>()
     returns.forEach { saleReturn ->
         require(saleReturn.returnId.isNotBlank() && returnIds.add(saleReturn.returnId)) {
             "معرف مرتجع مفقود أو مكرر في تقرير ربحية الأصناف."
@@ -410,6 +413,28 @@ internal fun calculateItemProfitability(
                 item.refundAmountMinor >= 0L && item.quantity > 0) {
                 "عملة أو كمية أو مبلغ بند المرتجع غير صالح أو لا يطابق بند البيع الأصلي."
             }
+            val cumulativeRefund = Math.addExact(refundedBySaleItem[item.saleItemId] ?: 0L, item.refundAmountMinor)
+            require(cumulativeRefund <= saleLine.lineTotalMinor) {
+                "إجمالي مبالغ المرتجعات يتجاوز قيمة بند البيع الأصلي؛ تم حجب ربحية الأصناف."
+            }
+            refundedBySaleItem[item.saleItemId] = cumulativeRefund
+            val originalQuantity = saleLine.quantity.toBigDecimal()
+            val cumulativeReturnedQuantity = (returnedQuantityBySaleItem[item.saleItemId] ?: BigDecimal.ZERO)
+                .add(BigDecimal.valueOf(item.quantity.toLong()))
+            require(cumulativeReturnedQuantity <= originalQuantity) {
+                "إجمالي كمية المرتجعات يتجاوز كمية بند البيع الأصلي."
+            }
+            returnedQuantityBySaleItem[item.saleItemId] = cumulativeReturnedQuantity
+            val cumulativeRestocked = Math.addExact(
+                restockedBySaleItem[item.saleItemId] ?: 0L, item.restockedQuantity.toLong()
+            )
+            if (item.restockedQuantity > 0) {
+                require(item.saleItemQuantityInStockUnits > 0L &&
+                    cumulativeRestocked <= item.saleItemQuantityInStockUnits) {
+                    "إجمالي الكمية المعاد تخزينها يتجاوز كمية وحدات المخزون الأصلية."
+                }
+            }
+            restockedBySaleItem[item.saleItemId] = cumulativeRestocked
             // Validate each returned-cost slice now; totals are recomputed per return line below.
             calculateRestockedCostMinor(
                 saleLine.costTotalMinor,
