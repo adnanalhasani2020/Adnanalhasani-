@@ -894,7 +894,7 @@ internal fun ReportsCenterScreen(
                 invoice.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed") &&
                     reportDateMillis(invoice.recordedAt)?.let { it >= startMillis && it < endExclusive } == true
             }.map { invoice ->
-                val variance = calculateSupplierInvoicePriceVariance(invoice)
+                val variance = calculateSupplierInvoicePriceVariance(invoice.toPriceVarianceInput())
                 val itemPreview = invoice.lines.take(4).joinToString("؛ ") { line ->
                     "${line.purchaseOrderItemDescription.ifBlank { "بند" }}: ${line.quantity} × ${reportMoney(line.unitPriceMinor, invoice.currencyCode, true)} (أساس ${reportMoney(line.purchaseOrderUnitCostMinor!!, invoice.currencyCode, true)})"
                 }
