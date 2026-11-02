@@ -507,6 +507,7 @@ internal fun ReportsCenterScreen(
         if (timestamp >= endExclusive) return@mapNotNull null
         val obligation = invoice.obligation ?: return@mapNotNull null
         SupplierObligationInput(
+            supplierId = purchase.supplierId,
             supplierName = purchase.supplierName.ifBlank { "مورد غير محدد" },
             purchaseOrderCurrencyCode = purchase.currencyCode,
             invoiceCurrencyCode = invoice.currencyCode,
@@ -929,7 +930,7 @@ internal fun ReportsCenterScreen(
             val balanceLabel = if (totals.balanceMinor >= 0L) "المستحق للمورد" else "رصيد دائن/مقدم للمورد"
             ReportLine(
                 endText,
-                "-",
+                totals.supplierId,
                 totals.supplierName,
                 totals.balanceMinor,
                 totals.currencyCode,
