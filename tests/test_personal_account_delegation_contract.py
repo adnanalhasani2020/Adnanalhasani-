@@ -89,7 +89,7 @@ def test_android_portal_routes_delegated_actions_to_guarded_rpcs():
     assert "commercial_account_delegated_spend_report" in screen
     assert "commercial_customer_portal_create_delegated_order" in repository
     assert "commercial_customer_portal_create_delegated_booking" in repository
-    assert "commercial_customer_portal_create_delegated_multi_service_booking" in repository
+    assert "/rest/v1/rpc/commercial_customer_portal_create_delegated_multi_booking" in repository
     assert "PersonalAccountsScreen" in activity
     assert "onPersonalAccounts" in activity
 
