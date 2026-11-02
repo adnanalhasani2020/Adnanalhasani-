@@ -124,4 +124,4 @@ def test_contractual_supplier_aging_uses_due_date_and_fails_closed_for_legacy_ro
     assert 'ReportCatalogItem("أعمار مستحقات الموردين"' in screen
     assert '"أعمار مستحقات الموردين" -> supplierDueDateAgingError' in screen
     assert '"أعمار مستحقات الموردين", "عمر مستحقات الموردين حسب تاريخ الفاتورة"' in screen
-    assert '"أعمار مستحقات الموردين" -> if (supplierDueDateAgingError.isNotBlank()) emptyList() else' in screen
+    assert '"أعمار مستحقات الموردين" -> if (supplierDueDateAgingError.isNotBlank()) emptyList()' in screen
