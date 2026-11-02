@@ -1709,77 +1709,6 @@ internal fun assignCommercialDepartmentToWarehouse(context: Context, departmentI
 }
 
 
-internal data class CommercialCloudLocationInventoryBalance(
-    val locationId: String,
-    val locationName: String,
-    val locationType: String,
-    val offeringId: String,
-    val productName: String,
-    val unitName: String,
-    val quantityOnHand: java.math.BigDecimal,
-    val quantityReserved: java.math.BigDecimal
-)
-
-/** Loads current inventory balances for every organization location, without using the selected-location filter. */
-internal fun loadCommercialCloudLocationInventoryBalances(context: Context): List<CommercialCloudLocationInventoryBalance> {
-    val (orgId, access) = commercialMasterDataAccess(context)
-    val locationRows = commercialCloudPagedGet(
-        "/rest/v1/commercial_organization_locations" +
-            "?select=id,name,location_type&organization_id=eq.$orgId&order=name.asc,id.asc",
-        access
-    )
-    val locations = buildMap {
-        for (index in 0 until locationRows.length()) {
-            val row = locationRows.optJSONObject(index) ?: continue
-            val id = row.optString("id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
-            if (id.isBlank()) continue
-            val name = row.optString("name").takeUnless { it.isBlank() || it == "null" }.orEmpty()
-            val type = row.optString("location_type").takeUnless { it.isBlank() || it == "null" }.orEmpty()
-            require(put(id, (name.ifBlank { "موقع بلا اسم" }) to type) == null) {
-                "يوجد معرف موقع مكرر في بيانات المؤسسة؛ تم إيقاف تقرير أرصدة المواقع."
-            }
-        }
-    }
-    val balanceRows = commercialCloudPagedGet(
-        "/rest/v1/commercial_inventory_balances" +
-            "?select=location_id,offering_id,quantity_on_hand,quantity_reserved,offering:commercial_offerings!inner(id,product:commercial_products!inner(name,unit_name))" +
-            "&organization_id=eq.$orgId&order=location_id.asc,offering_id.asc",
-        access
-    )
-    return buildList {
-        for (index in 0 until balanceRows.length()) {
-            val row = balanceRows.optJSONObject(index) ?: continue
-            val locationId = row.optString("location_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
-            val offeringId = row.optString("offering_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
-            require(locationId.isNotBlank() && offeringId.isNotBlank()) {
-                "يوجد رصيد مخزون بلا موقع أو صنف مرتبط؛ تم حجب تقرير أرصدة المواقع."
-            }
-            val location = locations[locationId] ?: throw IllegalStateException(
-                "يوجد رصيد مخزون مرتبط بموقع غير موجود ضمن المؤسسة؛ تم حجب التقرير."
-            )
-            val offering = row.optJSONObject("offering")
-                ?: throw IllegalStateException("تعذر قراءة الصنف المرتبط بأحد أرصدة المخزون.")
-            val product = offering.optJSONObject("product")
-                ?: throw IllegalStateException("تعذر قراءة بيانات الصنف المرتبط بأحد أرصدة المخزون.")
-            val onHand = runCatching { java.math.BigDecimal(row.optString("quantity_on_hand")) }
-                .getOrElse { throw IllegalStateException("توجد كمية مخزون غير رقمية؛ تم حجب التقرير.") }
-            val reserved = runCatching { java.math.BigDecimal(row.optString("quantity_reserved")) }
-                .getOrElse { throw IllegalStateException("توجد كمية محجوزة غير رقمية؛ تم حجب التقرير.") }
-            require(reserved.signum() >= 0) { "توجد كمية محجوزة سالبة؛ تم حجب تقرير أرصدة المواقع." }
-            add(CommercialCloudLocationInventoryBalance(
-                locationId = locationId,
-                locationName = location.first,
-                locationType = location.second,
-                offeringId = offeringId,
-                productName = product.optString("name").takeUnless { it.isBlank() || it == "null" }.orEmpty().ifBlank { "صنف بلا اسم" },
-                unitName = product.optString("unit_name").takeUnless { it.isBlank() || it == "null" }.orEmpty().ifBlank { "وحدة غير محددة" },
-                quantityOnHand = onHand,
-                quantityReserved = reserved
-            ))
-        }
-    }
-}
-
 internal data class CommercialCloudStockAlert(
     val offeringId: String,
     val productName: String,
@@ -3239,3 +3168,76 @@ internal fun loadCommercialCloudPostedJournalLines(context: Context): List<Comme
         }
     }
 }
+
+
+internal data class CommercialCloudLocationInventoryBalance(
+    val locationId: String,
+    val locationName: String,
+    val locationType: String,
+    val offeringId: String,
+    val productName: String,
+    val unitName: String,
+    val quantityOnHand: java.math.BigDecimal,
+    val quantityReserved: java.math.BigDecimal
+)
+
+/** Loads current inventory balances for every organization location, without using the selected-location filter. */
+internal fun loadCommercialCloudLocationInventoryBalances(context: Context): List<CommercialCloudLocationInventoryBalance> {
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val locationRows = commercialCloudPagedGet(
+        "/rest/v1/commercial_organization_locations" +
+            "?select=id,name,location_type&organization_id=eq.$orgId&order=name.asc,id.asc",
+        access
+    )
+    val locations = buildMap {
+        for (index in 0 until locationRows.length()) {
+            val row = locationRows.optJSONObject(index) ?: continue
+            val id = row.optString("id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+            if (id.isBlank()) continue
+            val name = row.optString("name").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+            val type = row.optString("location_type").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+            require(put(id, (name.ifBlank { "موقع بلا اسم" }) to type) == null) {
+                "يوجد معرف موقع مكرر في بيانات المؤسسة؛ تم إيقاف تقرير أرصدة المواقع."
+            }
+        }
+    }
+    val balanceRows = commercialCloudPagedGet(
+        "/rest/v1/commercial_inventory_balances" +
+            "?select=location_id,offering_id,quantity_on_hand,quantity_reserved,offering:commercial_offerings!inner(id,product:commercial_products!inner(name,unit_name))" +
+            "&organization_id=eq.$orgId&order=location_id.asc,offering_id.asc",
+        access
+    )
+    return buildList {
+        for (index in 0 until balanceRows.length()) {
+            val row = balanceRows.optJSONObject(index) ?: continue
+            val locationId = row.optString("location_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+            val offeringId = row.optString("offering_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+            require(locationId.isNotBlank() && offeringId.isNotBlank()) {
+                "يوجد رصيد مخزون بلا موقع أو صنف مرتبط؛ تم حجب تقرير أرصدة المواقع."
+            }
+            val location = locations[locationId] ?: throw IllegalStateException(
+                "يوجد رصيد مخزون مرتبط بموقع غير موجود ضمن المؤسسة؛ تم حجب التقرير."
+            )
+            val offering = row.optJSONObject("offering")
+                ?: throw IllegalStateException("تعذر قراءة الصنف المرتبط بأحد أرصدة المخزون.")
+            val product = offering.optJSONObject("product")
+                ?: throw IllegalStateException("تعذر قراءة بيانات الصنف المرتبط بأحد أرصدة المخزون.")
+            val onHand = runCatching { java.math.BigDecimal(row.optString("quantity_on_hand")) }
+                .getOrElse { throw IllegalStateException("توجد كمية مخزون غير رقمية؛ تم حجب التقرير.") }
+            val reserved = runCatching { java.math.BigDecimal(row.optString("quantity_reserved")) }
+                .getOrElse { throw IllegalStateException("توجد كمية محجوزة غير رقمية؛ تم حجب التقرير.") }
+            require(reserved.signum() >= 0) { "توجد كمية محجوزة سالبة؛ تم حجب تقرير أرصدة المواقع." }
+            add(CommercialCloudLocationInventoryBalance(
+                locationId = locationId,
+                locationName = location.first,
+                locationType = location.second,
+                offeringId = offeringId,
+                productName = product.optString("name").takeUnless { it.isBlank() || it == "null" }.orEmpty().ifBlank { "صنف بلا اسم" },
+                unitName = product.optString("unit_name").takeUnless { it.isBlank() || it == "null" }.orEmpty().ifBlank { "وحدة غير محددة" },
+                quantityOnHand = onHand,
+                quantityReserved = reserved
+            ))
+        }
+    }
+}
+
