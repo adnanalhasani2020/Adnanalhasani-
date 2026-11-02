@@ -786,6 +786,59 @@ internal fun calculateCustomerReceivableAging(
             .thenBy { it.customerName }.thenBy { it.bucket })
 }
 
+
+internal data class StockMovementUserInput(
+    val movementId: String,
+    val userId: String,
+    val movementType: String,
+    val unitName: String,
+    val quantityDelta: java.math.BigDecimal
+)
+
+internal data class StockMovementUserTotal(
+    val userId: String,
+    val movementType: String,
+    val unitName: String,
+    val movementCount: Int,
+    val quantityDelta: java.math.BigDecimal
+)
+
+/** Groups persisted stock movements by their recorded actor, movement type, and unit. */
+internal fun calculateStockMovementUserTotals(
+    movements: List<StockMovementUserInput>
+): List<StockMovementUserTotal> {
+    val seen = mutableSetOf<String>()
+    movements.forEach { movement ->
+        require(movement.movementId.isNotBlank() && seen.add(movement.movementId)) {
+            "معرف حركة مخزون مفقود أو مكرر في تقرير المستخدمين."
+        }
+        require(movement.movementType.isNotBlank() && movement.quantityDelta.compareTo(java.math.BigDecimal.ZERO) != 0) {
+            "توجد حركة مخزون بنوع أو كمية غير صالحة؛ تم حجب تقرير المستخدمين."
+        }
+    }
+    return movements.groupBy {
+        Triple(
+            movementActorLabel(it.userId),
+            it.movementType.trim(),
+            it.unitName.trim().ifBlank { "وحدة غير محددة" }
+        )
+    }.map { (key, rows) ->
+        StockMovementUserTotal(
+            userId = key.first,
+            movementType = key.second,
+            unitName = key.third,
+            movementCount = rows.size,
+            quantityDelta = rows.fold(java.math.BigDecimal.ZERO) { total, row -> total.add(row.quantityDelta) }
+        )
+    }.sortedWith(
+        compareBy<StockMovementUserTotal> { it.movementType }
+            .thenBy { it.userId }
+            .thenBy { it.unitName }
+    )
+}
+
+private fun movementActorLabel(userId: String): String = userId.trim().ifBlank { "غير منسوب" }
+
 internal data class UserSalesPerformanceInvoiceInput(
     val invoiceId: String,
     val userId: String,
