@@ -654,6 +654,7 @@ internal data class SupplierLiabilityAgingInput(
     val supplierId: String,
     val supplierName: String,
     val invoiceDate: String,
+    val dueDate: String = "",
     val currencyCode: String,
     val amountDueMinor: Long,
     val amountPaidMinor: Long
