@@ -175,6 +175,50 @@ internal fun calculateCostProfitReportTotals(
     }
 }
 
+internal data class SupplierObligationInput(
+    val supplierName: String,
+    val purchaseOrderCurrencyCode: String,
+    val invoiceCurrencyCode: String,
+    val obligationCurrencyCode: String,
+    val amountDueMinor: Long,
+    val amountPaidMinor: Long
+)
+internal data class SupplierObligationTotals(
+    val supplierName: String,
+    val currencyCode: String,
+    val amountDueMinor: Long,
+    val amountPaidMinor: Long,
+    val balanceMinor: Long
+)
+
+internal fun calculateSupplierObligationTotals(
+    obligations: List<SupplierObligationInput>
+): List<SupplierObligationTotals> {
+    obligations.forEach { row ->
+        require(row.purchaseOrderCurrencyCode.matches(Regex("^[A-Z]{3}$")) &&
+            row.invoiceCurrencyCode == row.purchaseOrderCurrencyCode &&
+            row.obligationCurrencyCode == row.purchaseOrderCurrencyCode) {
+            "عملة التزام المورد لا تطابق عملة أمر الشراء والفاتورة."
+        }
+        require(row.amountDueMinor >= 0L && row.amountPaidMinor >= 0L) {
+            "مبلغ الالتزام أو المسدد للمورد غير صالح."
+        }
+    }
+    return obligations.groupBy { it.supplierName to it.purchaseOrderCurrencyCode }
+        .map { (key, rows) ->
+            val due = sumReportAmountsExactly(rows.map { it.amountDueMinor })
+            val paid = sumReportAmountsExactly(rows.map { it.amountPaidMinor })
+            SupplierObligationTotals(
+                supplierName = key.first,
+                currencyCode = key.second,
+                amountDueMinor = due,
+                amountPaidMinor = paid,
+                balanceMinor = Math.subtractExact(due, paid)
+            )
+        }
+        .sortedWith(compareBy<SupplierObligationTotals> { it.currencyCode }.thenBy { it.supplierName })
+}
+
 internal data class CustomerStatementPaymentInput(
     val id: String,
     val amountMinor: Long,
