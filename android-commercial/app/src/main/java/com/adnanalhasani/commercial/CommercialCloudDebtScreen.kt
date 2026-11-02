@@ -224,7 +224,7 @@ internal fun CommercialCloudDebtScreen(context: Context, onBack: () -> Unit) {
                     value = confirmedAmount,
                     onValueChange = { confirmedAmount = it.filter(Char::isDigit).take(18) },
                     enabled = !busy,
-                    label = { Text("المبلغ الفعلي الذي استلمته") },
+                    label = { Text("المبلغ الفعلي الذي استلمته بوحدة الصرف الصغرى") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
