@@ -74,7 +74,9 @@ BEGIN
   IF auth.uid() IS NULL THEN
     RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501';
   END IF;
-  IF p_invoice_date IS NULL OR p_due_date IS NULL
+  IF p_organization_id IS NULL OR p_idempotency_key IS NULL
+     OR length(btrim(p_idempotency_key)) NOT BETWEEN 8 AND 200
+     OR p_invoice_date IS NULL OR p_due_date IS NULL
      OR p_invoice_date > current_date OR p_due_date < p_invoice_date THEN
     RAISE EXCEPTION 'invalid_supplier_invoice_dates' USING ERRCODE='22023';
   END IF;
