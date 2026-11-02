@@ -10,8 +10,9 @@ class ItemProfitabilityReportTest {
         quantity: String = "2",
         lineTotal: Long = 2_000,
         cost: Long? = 1_000,
-        inPeriod: Boolean = true
-    ) = ItemProfitSaleLineInput(id, "صنف أ", "YER", quantity, lineTotal, cost, inPeriod)
+        inPeriod: Boolean = true,
+        saleTax: Long = 0
+    ) = ItemProfitSaleLineInput(id, "sale-1", "صنف أ", "YER", saleTax, quantity, lineTotal, cost, inPeriod)
 
     private fun returned(
         id: String = "return-1",
@@ -21,6 +22,7 @@ class ItemProfitabilityReportTest {
         restocked: Int = 1
     ) = ItemProfitReturnInput(
         returnId = id,
+        saleId = "sale-1",
         currencyCode = "YER",
         approvedRefundMinor = approved,
         items = listOf(ItemProfitReturnLineInput(
@@ -102,6 +104,16 @@ class ItemProfitabilityReportTest {
         )
         assertThrows(IllegalArgumentException::class.java) {
             calculateItemProfitability(listOf(sale()), excessiveRestock)
+        }
+    }
+
+    @Test
+    fun rejectsReturnLinkedToDifferentSaleAndTaxBearingSale() {
+        assertThrows(IllegalArgumentException::class.java) {
+            calculateItemProfitability(listOf(sale()), listOf(returned().copy(saleId = "another-sale")))
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            calculateItemProfitability(listOf(sale(saleTax = 100)), listOf(returned()))
         }
     }
 
