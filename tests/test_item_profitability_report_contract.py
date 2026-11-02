@@ -66,3 +66,9 @@ def test_item_profitability_matches_return_to_original_sale_and_blocks_tax_inclu
     assert 'saleLine.saleId == saleReturn.saleId' in calculations
     assert 'saleLine.saleTaxMinor == 0L' in calculations
     assert 'tax-inclusive refund as net revenue' in contract
+
+def test_item_profitability_does_not_invent_invoice_discount_allocation():
+    calculations = CALCULATIONS.read_text(encoding="utf-8")
+    contract = CONTRACT.read_text(encoding="utf-8")
+    assert 'line.saleDiscountMinor == 0L' in calculations
+    assert 'does not distribute them by an invented proportional rule' in contract
