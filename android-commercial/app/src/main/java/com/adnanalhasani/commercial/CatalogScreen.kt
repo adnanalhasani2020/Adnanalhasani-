@@ -1675,6 +1675,25 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                                                 Button(onClick={linkSelectedInvoicePurchaseLine()},enabled=!busy && invoiceMappingLineId.isNotBlank() && invoiceMappingOfferingId.isNotBlank(),modifier=Modifier.fillMaxWidth()) { Text("تأكيد ربط البند المحدد") }
                                             }
                                             if(invoiceMappingOfferings.isEmpty()) Text("لا توجد أصناف مهيأة لهذا الفرع/موقع الاستلام. أنشئ الصنف أو هيئه من دليل الأصناف أولًا، ثم أعد تحميل المطابقة.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                            if(invoiceMappingWarehouses.isNotEmpty()) {
+                                                Box {
+                                                    OutlinedButton(onClick={invoiceMappingWarehouseMenuExpanded=true},modifier=Modifier.fillMaxWidth()) {
+                                                        Text("مستودع الاستلام: "+(invoiceMappingWarehouses.firstOrNull { it.id==invoiceMappingWarehouseId }?.name ?: "اختر المستودع"))
+                                                    }
+                                                    DropdownMenu(expanded=invoiceMappingWarehouseMenuExpanded,onDismissRequest={invoiceMappingWarehouseMenuExpanded=false}) {
+                                                        invoiceMappingWarehouses.forEach { warehouse ->
+                                                            DropdownMenuItem(text={Text(warehouse.name)},onClick={
+                                                                invoiceMappingWarehouseId=warehouse.id
+                                                                invoiceMappingWarehouseMenuExpanded=false
+                                                            })
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            OutlinedButton(onClick={openInvoiceItemCreationDialog()},enabled=!busy && invoiceMappingLines.isNotEmpty() && invoiceMappingWarehouses.isNotEmpty() && categories.isNotEmpty() && directoryUnits.isNotEmpty(),modifier=Modifier.fillMaxWidth()) {
+                                                Icon(Icons.Default.Add,contentDescription=null)
+                                                Text("إنشاء صنف جديد وربطه بهذا البند")
+                                            }
                                             Text("لا يُنشأ صنف تلقائيًا من وصف الفاتورة ولا يُضاف مخزون عند المطابقة. اختر تطابقًا مؤكدًا؛ الاستلام هو الذي يحدّث الكمية.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                                         }
                                     }
@@ -1709,6 +1728,72 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             }
         }
     }
+    if(showInvoiceItemCreation) {
+        val orgId=org().orEmpty()
+        val baseOptions=directoryUnits.filter { (it.owner.isBlank() || it.owner==orgId) && it.baseCode.isBlank() && it.code in localUnitCodes }
+        val saleOptions=directoryUnits.filter { (it.owner.isBlank() || it.owner==orgId) && it.code in localUnitCodes && (it.code==invoiceNewBaseUnitCode || it.baseCode==invoiceNewBaseUnitCode) }
+        AlertDialog(
+            onDismissRequest={if(!busy) showInvoiceItemCreation=false},
+            title={Text("إنشاء صنف وربطه بأمر الشراء")},
+            text={
+                Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                    Text("أدخل بيانات الصنف المعتمدة. لا يُستنتج التصنيف أو الاسم الإنجليزي من وصف الفاتورة.",style=MaterialTheme.typography.bodySmall)
+                    OutlinedTextField(value=invoiceNewNameAr,onValueChange={invoiceNewNameAr=it.take(180)},label={Text("اسم الصنف بالعربية *")},singleLine=true,enabled=!busy,modifier=Modifier.fillMaxWidth())
+                    OutlinedTextField(value=invoiceNewNameEn,onValueChange={invoiceNewNameEn=it.take(180)},label={Text("اسم الصنف بالإنجليزية *")},singleLine=true,enabled=!busy,modifier=Modifier.fillMaxWidth())
+                    Box {
+                        OutlinedButton(onClick={invoiceNewCategoryMenuExpanded=true},modifier=Modifier.fillMaxWidth()) {
+                            Text("التصنيف: "+(categories.firstOrNull { it.code==invoiceNewCategoryCode }?.nameAr ?: "اختر تصنيف الدليل"))
+                        }
+                        DropdownMenu(expanded=invoiceNewCategoryMenuExpanded,onDismissRequest={invoiceNewCategoryMenuExpanded=false}) {
+                            categories.forEach { category ->
+                                DropdownMenuItem(text={Text(category.nameAr+" • "+category.code)},onClick={
+                                    invoiceNewCategoryCode=category.code
+                                    invoiceNewCategoryMenuExpanded=false
+                                })
+                            }
+                        }
+                    }
+                    Box {
+                        OutlinedButton(onClick={invoiceNewBaseUnitMenuExpanded=true},modifier=Modifier.fillMaxWidth()) {
+                            Text("وحدة الأساس: "+(baseOptions.firstOrNull { it.code==invoiceNewBaseUnitCode }?.let { it.code+" • "+it.nameAr } ?: "اختر وحدة الأساس"))
+                        }
+                        DropdownMenu(expanded=invoiceNewBaseUnitMenuExpanded,onDismissRequest={invoiceNewBaseUnitMenuExpanded=false}) {
+                            baseOptions.forEach { unit ->
+                                DropdownMenuItem(text={Text(unit.code+" • "+unit.nameAr)},onClick={
+                                    invoiceNewBaseUnitCode=unit.code
+                                    invoiceNewSaleUnitCode=unit.code
+                                    invoiceNewBaseUnitMenuExpanded=false
+                                })
+                            }
+                        }
+                    }
+                    Box {
+                        OutlinedButton(onClick={invoiceNewSaleUnitMenuExpanded=true},modifier=Modifier.fillMaxWidth()) {
+                            Text("وحدة الفاتورة/البيع: "+(saleOptions.firstOrNull { it.code==invoiceNewSaleUnitCode }?.let { it.code+" • "+it.nameAr } ?: "اختر وحدة متوافقة"))
+                        }
+                        DropdownMenu(expanded=invoiceNewSaleUnitMenuExpanded,onDismissRequest={invoiceNewSaleUnitMenuExpanded=false}) {
+                            saleOptions.forEach { unit ->
+                                DropdownMenuItem(text={Text(unit.code+" • "+unit.nameAr+" • "+unit.factor)},onClick={
+                                    invoiceNewSaleUnitCode=unit.code
+                                    invoiceNewSaleUnitMenuExpanded=false
+                                })
+                            }
+                        }
+                    }
+                    Text("السعر سيبقى صفرًا بحالة غير مسعّر، والرصيد الافتتاحي صفر. إنشاء الصنف وربطه لا يستلم البضاعة؛ كما يتطلب صلاحية المالك أو المسؤول.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    val selectedLine=invoiceMappingLines.firstOrNull { it.id==invoiceMappingLineId }
+                    if(selectedLine?.unitCode?.isNotBlank()==true) Text("وحدة بند الفاتورة: "+selectedLine.unitCode+" — يجب اختيارها كوحدة البيع نفسها.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+            confirmButton={
+                Button(onClick={createInvoicePurchaseItem()},enabled=!busy && invoiceNewNameAr.isNotBlank() && invoiceNewNameEn.isNotBlank() && invoiceNewCategoryCode.isNotBlank() && invoiceNewBaseUnitCode.isNotBlank() && invoiceNewSaleUnitCode.isNotBlank() && invoiceMappingWarehouseId.isNotBlank()) {
+                    Text(if(busy) "جارٍ الإنشاء..." else "إنشاء وربط الصنف")
+                }
+            },
+            dismissButton={TextButton(onClick={if(!busy) showInvoiceItemCreation=false}) { Text("إلغاء") }}
+        )
+    }
+
     editingProduct?.let { item ->
         CatalogProductEditDialog(item=item,busy=busy,onDismiss={editingProduct=null},onSave={payload -> updateProductDetails(item,payload)})
     }
