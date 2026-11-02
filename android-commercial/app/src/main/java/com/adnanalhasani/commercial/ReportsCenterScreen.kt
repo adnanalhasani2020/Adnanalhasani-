@@ -231,7 +231,7 @@ private fun printReport(context: Context, title: String, rows: List<List<String>
 private data class ReportCatalogItem(val title: String, val category: String, val source: String, val supported: Boolean, val note: String)
 private data class ReportLine(val date: String, val reference: String, val name: String, val amount: Long, val currency: String, val status: String, val displayAmount: String? = null)
 
-internal data class SupplierInvoicePriceVariance(
+internal data class SupplierInvoicePriceVarianceReportTotals(
     val expectedSubtotalMinor: Long,
     val invoiceSubtotalMinor: Long,
     val varianceMinor: Long
@@ -240,7 +240,7 @@ internal data class SupplierInvoicePriceVariance(
 /** Match the database accrual trigger: round the sum of quantity × recorded PO unit cost once. */
 internal fun calculateSupplierInvoicePriceVariance(
     invoice: CommercialCloudSupplierInvoiceSummary
-): SupplierInvoicePriceVariance {
+): SupplierInvoicePriceVarianceReportTotals {
     require(invoice.currencyCode.matches(Regex("^[A-Z]{3}$"))) { "عملة فاتورة المورد غير صالحة." }
     require(invoice.subtotalMinor >= 0L && invoice.taxMinor >= 0L && invoice.freightMinor >= 0L) {
         "تحتوي فاتورة المورد على مبلغ سالب غير صالح."
@@ -268,7 +268,7 @@ internal fun calculateSupplierInvoicePriceVariance(
     require(headerTotal == invoice.totalMinor) {
         "إجمالي فاتورة المورد لا يطابق البنود والضريبة والشحن؛ تم حجب فرق السعر."
     }
-    return SupplierInvoicePriceVariance(
+    return SupplierInvoicePriceVarianceReportTotals(
         expectedSubtotalMinor = expected,
         invoiceSubtotalMinor = invoice.subtotalMinor,
         varianceMinor = Math.subtractExact(invoice.subtotalMinor, expected)
