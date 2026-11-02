@@ -241,6 +241,7 @@ private fun buildReportsCatalog(cloudMode: Boolean): List<ReportCatalogItem> = l
             ReportCatalogItem("الضرائب والخصومات التفصيلية", "الضرائب والخصومات", "ضرائب وخصومات فواتير البيع والشراء والمرتجعات المسجلة", cloudMode, "يعرض الضرائب والخصومات المخزنة حسب المستند والعملة؛ لا يخترع نسبًا ولا يصف الضريبة بعد المرتجعات بأنها صافية إذا لم تفصل حصة الضريبة."),
 
             ReportCatalogItem("المبيعات حسب العميل", "المبيعات", "اسم العميل المحفوظ في سجل البيع", true, "يعرض مجموع الفواتير المكتملة المسجلة للعميل حسب العملة."),
+            ReportCatalogItem("أداء المبيعات حسب المستخدم", "المستخدمون والعمليات", "commercial_sales.user_id + total_minor + currency_code", cloudMode, "يجمع الفواتير المكتملة حسب المستخدم الذي سجل عملية البيع، مع فصل العملات ومتوسط الفاتورة. يعرض معرف المستخدم عند عدم توفر اسم عرض موثوق؛ لا ينسب المبيعات إلى فرع أو مستودع لأن علاقة الموقع غير محفوظة على سجل البيع."),
             ReportCatalogItem(if (cloudMode) "المبيعات حسب حالة السداد" else "المبيعات النقدية والآجلة", "المبيعات", "نوع البيع المحلي أو حالة السداد الفعلية في الفاتورة السحابية", true, "في السحابة يصنف حسب حالة السداد المسجلة، ولا يستنتج طريقة الدفع من مجرد إجمالي الفاتورة."),
             ReportCatalogItem("متوسط قيمة الفاتورة", "المبيعات", "إجمالي الفواتير المكتملة وعددها", true, "متوسط تشغيلي منفصل حسب العملة."),
             ReportCatalogItem("مقارنة الفترات", "الفترات والمقارنات", "سجلات المبيعات المكتملة المؤرخة", true, "يقارن الفترة الحالية بفترة سابقة مساوية لها في عدد الأيام حسب العملة."),
@@ -869,6 +870,32 @@ internal fun ReportsCenterScreen(
         } -> "توجد دفعة ناجحة بتاريخ أو مبلغ أو عملة غير صالحة؛ تم حجب تجميع التحصيل حسب العميل."
         else -> customerCollectionsCalculation.exceptionOrNull()?.message.orEmpty()
     }
+    val userSalesPerformanceCalculation = remember(cloudSalesDocuments, startMillis, endExclusive, cloudMode) {
+        runCatching {
+            calculateUserSalesPerformance(cloudSalesDocuments.filter { document ->
+                document.saleStatus.equals("completed", true) &&
+                    reportDateMillis(document.createdAt)?.let { it >= startMillis && it < endExclusive } == true
+            }.map { document ->
+                UserSalesPerformanceInvoiceInput(
+                    invoiceId = document.id,
+                    userId = document.userId,
+                    currencyCode = document.currencyCode,
+                    totalMinor = document.totalMinor
+                )
+            })
+        }
+    }
+    val userSalesPerformanceError = when {
+        !cloudMode -> "أداء المبيعات حسب المستخدم يتطلب سجلات السحابة."
+        salesDocumentsLoadError.isNotBlank() -> salesDocumentsLoadError
+        cloudSalesDocuments.any { document ->
+            document.saleStatus.equals("completed", true) &&
+                (reportDateMillis(document.createdAt) == null ||
+                    !document.currencyCode.matches(Regex("^[A-Z]{3}$")) || document.totalMinor < 0L)
+        } -> "توجد فاتورة مكتملة بتاريخ أو عملة أو مبلغ غير صالح؛ تم حجب تقرير أداء المستخدمين."
+        else -> userSalesPerformanceCalculation.exceptionOrNull()?.message.orEmpty()
+    }
+
     val dailySalesTrendCalculation = remember(cloudSalesDocuments, startMillis, endExclusive, cloudMode) {
         runCatching {
             val invoices = cloudSalesDocuments.filter { document ->
@@ -936,6 +963,7 @@ internal fun ReportsCenterScreen(
             "الضرائب والخصومات التفصيلية" -> taxDetailError
             "تكلفة البضاعة والربح" -> costProfitError
             "ربحية الأصناف بعد المرتجعات" -> itemProfitabilityError
+            "أداء المبيعات حسب المستخدم" -> userSalesPerformanceError
             "اتجاه المبيعات اليومي" -> dailySalesTrendError
             "التقييم المالي الحالي للمخزون" -> when {
                 stockAlertsLoadError.isNotBlank() -> stockAlertsLoadError
@@ -1034,6 +1062,19 @@ internal fun ReportsCenterScreen(
         }.filter { it.taxMinor > 0L }.map { doc ->
             ReportLine(doc.createdAt.take(10), "فاتورة #${doc.receiptNumber}", doc.customerName, doc.taxMinor, doc.currencyCode, "ضريبة مسجلة على الفاتورة")
         }.sortedByDescending { it.date }
+        "أداء المبيعات حسب المستخدم" -> if (userSalesPerformanceError.isNotBlank()) emptyList()
+            else userSalesPerformanceCalculation.getOrThrow().map { row ->
+                val actorLabel = if (row.userId == "غير منسوب") "مبيعات غير منسوبة لمستخدم"
+                    else "مستخدم ${row.userId}"
+                ReportLine(
+                    "-",
+                    row.userId,
+                    actorLabel,
+                    row.totalMinor,
+                    row.currencyCode,
+                    "${row.invoiceCount} فاتورة مكتملة · متوسط الفاتورة ${reportMoney(row.averageInvoiceMinor, row.currencyCode, true)}"
+                )
+            }
         "المبيعات حسب العميل" -> if (cloudMode) inPeriodCloudSalesDocuments.groupBy { it.customerName.ifBlank { "عميل غير محدد" } to it.currencyCode }.map { (key, rows) ->
             ReportLine("-", "-", key.first, rows.sumOf { it.totalMinor }, key.second, "${rows.size} فاتورة")
         }.sortedByDescending { it.amount } else inPeriodSales.groupBy { it.customer.ifBlank { "عميل غير محدد" } to it.currencyCode }.map { (key, rows) ->
