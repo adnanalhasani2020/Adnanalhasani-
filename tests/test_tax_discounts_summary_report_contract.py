@@ -17,6 +17,9 @@ def test_tax_discount_summary_is_registered_and_uses_existing_validated_sources(
     assert 'TaxDiscountSummaryInput(doc.id, doc.currencyCode, "sales_tax", doc.taxMinor)' in screen
     assert '"purchase_tax", invoice.taxMinor' in screen
     assert '"sales_return", refund' in screen
+    assert "reportDateMillis(doc.createdAt) == null" in screen
+    assert "reportDateMillis(invoice.recordedAt) == null" in screen
+    assert "reportDateMillis(saleReturn.completedAt) == null" in screen
     assert "does not calculate net tax payable" in contract
     assert "does not infer a refundable tax portion" in contract
 
