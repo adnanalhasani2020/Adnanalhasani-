@@ -285,6 +285,12 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         self.assertIn('product.stockPrecise.stripTrailingZeros().toPlainString()', self.composer)
         self.assertIn("lines.first().product.stockPrecise", self.composer)
         self.assertNotIn("lines.first().product.stock.toLong()", self.composer)
+    def test_cloud_mode_never_falls_back_to_local_sales(self):
+        self.assertIn("if (!cloudContextExists) addAll(loadSales(context))", self.main)
+        sales_load = self.main.split("salesResult.onSuccess", 1)[1].split("Scaffold(", 1)[0]
+        self.assertIn("sales.clear()", sales_load)
+        self.assertIn("أخفينا البيانات المحلية حتى لا تختلط بسجلات المؤسسة", sales_load)
+
 
 if __name__ == "__main__":
     unittest.main()
