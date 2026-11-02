@@ -721,7 +721,11 @@ internal fun ReportsCenterScreen(
                             saleItemId = item.saleItemId,
                             quantity = item.quantity,
                             refundAmountMinor = item.refundAmountMinor,
+                            refundAmountPresent = item.refundAmountPresent,
+                            restockRequested = item.restock,
+                            restockFlagPresent = item.restockFlagPresent,
                             restockedQuantity = item.restockedQuantity,
+                            restockedQuantityPresent = item.restockedQuantityPresent,
                             saleItemQuantityInStockUnits = item.saleItemQuantityInStockUnits
                         )
                     }
