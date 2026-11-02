@@ -58,6 +58,7 @@ class InvoicePurchaseItemCreationAtomicTests(unittest.TestCase):
         self.assertIn("مستودع الاستلام", source)
         self.assertIn("commercial_unit_of_measure?select=code", source)
         self.assertIn("invoiceNewIdempotencyKey", source)
+        self.assertIn("لم نفترض تحويلًا بديلًا", source)
         self.assertIn("السعر سيبقى صفرًا بحالة غير مسعّر", source)
         self.assertIn("لن يتغير المخزون حتى تسجيل الاستلام", source)
         self.assertIn("لا ينشأ رصيد مستقل للمستودع", source)
