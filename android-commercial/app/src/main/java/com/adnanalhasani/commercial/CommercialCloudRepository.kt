@@ -2003,8 +2003,11 @@ internal data class CommercialCloudSaleReturn(
 )
 
 internal fun loadCommercialCloudSaleReturns(context: Context): List<CommercialCloudSaleReturn> {
+    val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+    val activityId = saved.getString("activity_id", null).orEmpty()
+    require(activityId.isNotBlank()) { "ملف النشاط غير محفوظ." }
     val (orgId, access) = commercialMasterDataAccess(context)
-    val path = "/rest/v1/commercial_sales_returns?select=id,sale_id,reason_code,reason_note,status,refund_status,restock_status,currency_code,requested_refund_minor,approved_refund_minor,created_at,completed_at,decision_note,sale:commercial_sales!inner(receipt_number,customer:commercial_customers(display_name)),items:commercial_sale_return_items(id,sale_item_id,quantity,refund_amount_minor,restock,restocked_quantity,condition_code,note,sale_item:commercial_sale_items(product_name_snapshot,quantity,quantity_in_stock_units,unit_cost_minor,cost_total_minor))&organization_id=eq.$orgId&order=created_at.desc,id.asc"
+    val path = "/rest/v1/commercial_sales_returns?select=id,sale_id,reason_code,reason_note,status,refund_status,restock_status,currency_code,requested_refund_minor,approved_refund_minor,created_at,completed_at,decision_note,sale:commercial_sales!inner(receipt_number,activity_id,customer:commercial_customers(display_name)),items:commercial_sale_return_items(id,sale_item_id,quantity,refund_amount_minor,restock,restocked_quantity,condition_code,note,sale_item:commercial_sale_items(product_name_snapshot,quantity,quantity_in_stock_units,unit_cost_minor,cost_total_minor))&organization_id=eq.$orgId&sale.activity_id=eq.$activityId&order=created_at.desc,id.asc"
     val rows = commercialCloudPagedGet(path, access)
     return buildList {
         for (i in 0 until rows.length()) {
