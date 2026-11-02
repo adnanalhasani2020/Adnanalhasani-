@@ -87,3 +87,27 @@ def test_rpc_permissions_are_explicitly_scoped_to_authenticated_users():
     ):
         assert f"REVOKE ALL ON FUNCTION public.{signature} FROM PUBLIC, anon, authenticated" in SQL
         assert f"GRANT EXECUTE ON FUNCTION public.{signature} TO authenticated" in SQL
+
+
+def test_each_payment_request_transition_notifies_the_other_party():
+    submit = function_body(
+        "commercial_customer_portal_submit_payment_request",
+        "CREATE OR REPLACE FUNCTION public.commercial_customer_portal_update_payment_request",
+    )
+    update = function_body(
+        "commercial_customer_portal_update_payment_request",
+        "CREATE OR REPLACE FUNCTION public.commercial_merchant_list_customer_payment_requests",
+    )
+    review = function_body(
+        "commercial_merchant_review_customer_payment_request",
+        "REVOKE ALL ON FUNCTION public.commercial_customer_portal_list_outstanding_sales",
+    )
+    assert "'طلب سند قبض جديد'" in submit
+    assert "INSERT INTO public.commercial_user_notifications" in submit
+    assert "'تم تعديل طلب سند قبض'" in update
+    assert "INSERT INTO public.commercial_user_notifications" in update
+    assert "v_customer_uid" in review
+    assert "'تم اعتماد سند القبض'" in review
+    assert "'تم رفض طلب سند القبض'" in review
+    assert "'طلب التاجر تعديل سند القبض'" in review
+    assert "INSERT INTO public.commercial_user_notifications" in review
