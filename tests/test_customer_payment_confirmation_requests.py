@@ -19,6 +19,9 @@ def test_payment_claim_tables_are_private_and_audited():
     assert "REVOKE ALL ON TABLE public.commercial_customer_payment_requests FROM PUBLIC, anon, authenticated" in SQL
     assert "REVOKE ALL ON TABLE public.commercial_customer_payment_request_events FROM PUBLIC, anon, authenticated" in SQL
     assert "commercial_customer_payment_request_approved_payment_check" in SQL
+    assert "idempotency_fingerprint text NOT NULL" in SQL
+    assert "last_action_fingerprint text NOT NULL" in SQL
+    assert "md5(concat_ws" in SQL
     assert "CHECK (status IN ('pending','change_requested','rejected','approved'))" in SQL
 
 
