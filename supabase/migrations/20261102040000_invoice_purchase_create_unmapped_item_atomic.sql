@@ -342,6 +342,7 @@ DECLARE
   v_uid uuid := auth.uid();
   v_status text;
   v_currency text;
+  v_location_id uuid;
   v_existing_offering uuid;
   v_received numeric;
   v_reapproval_required boolean := false;
@@ -357,11 +358,12 @@ BEGIN
       AND m.state='active' AND m.role IN ('owner','admin','manager')
   ) THEN RAISE EXCEPTION 'purchase_management_permission_required' USING ERRCODE='42501'; END IF;
 
-  SELECT status,currency_code INTO v_status,v_currency
+  SELECT status,currency_code,receive_location_id INTO v_status,v_currency,v_location_id
   FROM public.commercial_purchase_orders
   WHERE id=p_purchase_order_id AND organization_id=p_organization_id
   FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'purchase_order_not_found' USING ERRCODE='P0002'; END IF;
+  IF v_location_id IS NULL THEN RAISE EXCEPTION 'purchase_order_receiving_location_invalid' USING ERRCODE='22023'; END IF;
   IF v_status NOT IN ('draft','submitted','approved') THEN
     RAISE EXCEPTION 'purchase_line_offering_link_state_forbidden' USING ERRCODE='55000';
   END IF;
@@ -394,6 +396,7 @@ BEGIN
     JOIN public.commercial_products p ON p.id=o.product_id
     WHERE o.id=p_offering_id AND a.organization_id=p_organization_id
       AND a.state='active' AND o.state='active' AND p.state='active'
+      AND o.location_ref=v_location_id::text
       AND upper(o.currency_code)=v_currency
   ) THEN RAISE EXCEPTION 'purchase_offering_currency_or_scope_mismatch' USING ERRCODE='22023'; END IF;
 
