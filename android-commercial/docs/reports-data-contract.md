@@ -103,3 +103,9 @@ Source-contract assertions were added for financial-statement gating, party-cont
 ## Stock movement activity by user
 - The cloud report "حركة المخزون حسب المستخدم" groups rows from `commercial_stock_movements` by persisted `created_by`, movement type, and recorded unit. It shows movement count and signed net quantity; negative quantities remain negative and no financial value is inferred.
 - Missing actors are grouped as "غير منسوب". The report keeps units separate so quantities such as pieces, kilograms, and liters are never added together. It does not infer branch or warehouse attribution from `source_ref`.
+
+
+## Current inventory balances by location
+- The cloud report "رصيد المخزون حسب الموقع" reads organization-scoped rows from `commercial_inventory_balances` and resolves each `location_id` against `commercial_organization_locations`. It includes every location in the organization, not only the currently selected location.
+- Results are grouped by location and recorded unit. On-hand, reserved, and available quantities are shown separately; different units are never summed together. Negative available quantity is preserved rather than clamped so over-reservation remains visible.
+- This is a current balance snapshot, not a dated movement report, sales performance report, or financial inventory valuation. It does not attribute sales to a location.
