@@ -24,7 +24,8 @@ def test_supplier_liability_age_report_uses_recorded_invoice_date_and_open_oblig
     assert 'not contractual due-date aging' in contract.lower()
 
 
-def test_supplier_liability_age_report_keeps_original_due_date_report_blocked():
+def test_contractual_supplier_due_date_aging_is_enabled_from_saved_invoice_dates():
     screen = SCREEN.read_text(encoding="utf-8")
-    assert 'ReportCatalogItem("أعمار مستحقات الموردين"' in screen
-    assert 'false, "جدول التزامات الموردين لا يحتوي تاريخ استحقاق' in screen
+    assert 'ReportCatalogItem("أعمار مستحقات الموردين", "الموردون والمستحقات", "commercial_supplier_invoices.invoice_date + due_date + commercial_supplier_obligations", cloudMode' in screen
+    assert '"أعمار مستحقات الموردين" -> supplierDueDateAgingError' in screen
+    assert '"أعمار مستحقات الموردين" -> if (supplierDueDateAgingError.isNotBlank()) emptyList()' in screen
