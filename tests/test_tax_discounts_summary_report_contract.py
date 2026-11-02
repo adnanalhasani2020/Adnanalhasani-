@@ -12,7 +12,7 @@ def test_tax_discount_summary_is_registered_and_uses_existing_validated_sources(
 
     assert 'ReportCatalogItem("ملخص الضرائب والخصومات"' in screen
     assert '"ملخص الضرائب والخصومات" -> taxDiscountSummaryError' in screen
-    assert '"ملخص الضرائب والخصومات" -> if (taxDiscountSummaryError.isNotBlank()) emptyList()' in screen
+    assert '"ملخص الضرائب والخصومات" -> taxDiscountSummaryReport.lines' in screen
     assert 'TaxDiscountSummaryInput(doc.id, doc.currencyCode, "sales_discount", doc.discountMinor)' in screen
     assert 'TaxDiscountSummaryInput(doc.id, doc.currencyCode, "sales_tax", doc.taxMinor)' in screen
     assert '"purchase_tax", invoice.taxMinor' in screen
