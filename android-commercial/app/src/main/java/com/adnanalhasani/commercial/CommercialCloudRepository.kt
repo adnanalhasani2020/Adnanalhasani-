@@ -3250,7 +3250,7 @@ internal data class CustomerPortalOutstandingSale(
 
 internal data class CustomerPaymentRequest(
     val id: String, val organizationId: String, val organizationName: String,
-    val saleId: String, val invoiceNumber: String, val amountMinor: Long,
+    val saleId: String, val invoiceNumber: String, val amountMinor: Long, val dueMinor: Long,
     val currencyCode: String, val customerNote: String, val status: String,
     val reviewNote: String, val paymentId: String, val receiptNumber: String,
     val version: Int, val createdAt: String
@@ -3306,7 +3306,7 @@ internal fun loadCustomerPortalPaymentRequests(
             add(CustomerPaymentRequest(
                 id, row.optString("organization_id"), row.optString("organization_name"),
                 row.optString("sale_id"), row.optString("invoice_number"),
-                row.optLong("amount_minor"), row.optString("currency_code"),
+                row.optLong("amount_minor"), row.optLong("due_minor", -1L), row.optString("currency_code"),
                 row.optString("customer_note"), row.optString("status"),
                 row.optString("review_note"), row.optString("payment_id"),
                 row.optString("receipt_number"), row.optInt("version", 1),
