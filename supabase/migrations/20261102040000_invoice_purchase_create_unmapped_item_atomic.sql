@@ -299,7 +299,7 @@ BEGIN
     'offering_id', v_offering_id, 'location_id', v_order.receive_location_id,
     'warehouse_id', p_warehouse_id, 'currency_code', v_currency,
     'status', v_link_result->>'status',
-    'reapproval_required', coalesce((v_link_result->>'status') = 'submitted', false),
+    'reapproval_required', (v_order.status = 'approved'),
     'pricing_required', true, 'price_minor', 0, 'initial_quantity', 0, 'stock_created', false
   );
 
