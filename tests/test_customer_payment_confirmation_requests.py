@@ -22,6 +22,8 @@ def test_payment_claim_tables_are_private_and_audited():
     assert "idempotency_fingerprint text NOT NULL" in SQL
     assert "last_action_fingerprint text NOT NULL" in SQL
     assert "md5(concat_ws" in SQL
+    assert "'due_minor',q.due_minor" in SQL
+    assert "last_action_fingerprint=md5" in SQL
     assert "CHECK (status IN ('pending','change_requested','rejected','approved'))" in SQL
 
 
