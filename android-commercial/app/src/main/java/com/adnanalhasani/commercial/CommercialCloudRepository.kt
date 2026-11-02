@@ -3418,7 +3418,7 @@ internal fun reviewCommercialCloudCustomerPaymentRequest(
     require(paymentMethod in setOf("cash", "bank_transfer", "card", "other"))
     require(reviewNote.length <= 1000)
     val fingerprint = listOf(requestId, decision, confirmedAmountMinor.toString(), reviewNote, paymentMethod).joinToString("|")
-    val slot = "review:$requestId"
+    val slot = "review:$requestId:$decision"
     val key = getCustomerPaymentRequestActionKey(context, slot, fingerprint)
     val (_, access) = commercialMasterDataAccess(context)
     val result = JSONObject(commercialCloudRequest(
