@@ -219,6 +219,10 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn('"التحصيل حسب طريقة الدفع" -> paymentMethodAnalysisError', self.screen)
         self.assertIn('"التحصيل حسب طريقة الدفع" -> cloudPayments.filter', self.screen)
         self.assertIn("paymentMethodCode", self.repository)
+        self.assertIn('ReportCatalogItem("ملخص المصروفات حسب التصنيف وطريقة الصرف"', self.screen)
+        self.assertIn('"ملخص المصروفات حسب التصنيف وطريقة الصرف" -> expenseReportError', self.screen)
+        self.assertIn('"ملخص المصروفات حسب التصنيف وطريقة الصرف" -> cloudExpenses.filter', self.screen)
+        self.assertIn('currencyCode = row.optString("currency_code").takeUnless { it == "null" }.orEmpty()', self.repository)
 
     def test_unready_financial_reports_are_visible_but_not_selectable(self):
         for marker in (
