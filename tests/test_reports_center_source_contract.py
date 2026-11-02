@@ -226,12 +226,21 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn('"ملخص المصروفات حسب التصنيف وطريقة الصرف" -> cloudExpenses.filter', self.screen)
         self.assertIn('currencyCode = row.optString("currency_code").takeUnless { it == "null" }.orEmpty()', self.repository)
 
+    def test_customer_operational_statement_validates_dates_refunds_and_exact_balances(self):
+        self.assertIn("buildCustomerOperationalStatementMovements", self.screen)
+        self.assertIn('"أرصدة العملاء وكشف الحساب" -> customerOperationalStatementError', self.screen)
+        self.assertIn("مرتجع مكتمل بلا مبلغ اعتماد محفوظ", self.screen)
+        self.assertIn("دفعة عميل ناجحة بلا مبلغ موجب أو تاريخ تسجيل صالح", self.screen)
+        self.assertIn("sumReportAmountsExactly", self.screen)
+        self.assertNotIn("payment.createdAt.take(10).ifBlank { doc.createdAt.take(10) }", self.screen)
+
     def test_tax_detail_report_fails_closed_on_missing_or_invalid_source_amounts(self):
         self.assertIn("doc.discountMinor > doc.subtotalMinor", self.screen)
         self.assertIn("invoice.currencyCode != purchase.currencyCode", self.screen)
         self.assertIn("saleReturn.approvedRefundMinor == null", self.screen)
         self.assertIn("-saleReturn.approvedRefundMinor!!", self.screen)
-        self.assertNotIn("-(saleReturn.approvedRefundMinor ?: 0L)", self.screen)
+        tax_block = self.screen.split("val taxDetailError =", 1)[1].split("val costProfitError =", 1)[0]
+        self.assertNotIn("approvedRefundMinor ?: 0L", tax_block)
 
     def test_gross_profit_report_uses_exact_arithmetic_and_return_cost_snapshots(self):
         for marker in (
