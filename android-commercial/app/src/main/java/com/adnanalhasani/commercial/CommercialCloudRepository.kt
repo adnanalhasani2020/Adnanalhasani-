@@ -2542,7 +2542,7 @@ internal fun submitCustomerPortalMultiServiceBooking(
         .put("p_customer_note", note.take(1000))
         .put("p_idempotency_key", idempotencyKey)
     if (delegationId.isNotBlank()) payload.put("p_delegation_id", delegationId)
-    val endpoint = if (delegationId.isNotBlank()) "/rest/v1/rpc/commercial_customer_portal_create_delegated_multi_service_booking"
+    val endpoint = if (delegationId.isNotBlank()) "/rest/v1/rpc/commercial_customer_portal_create_delegated_multi_booking"
         else "/rest/v1/rpc/commercial_customer_portal_create_multi_service_booking"
     val row = JSONObject(commercialCloudRequest(endpoint, "POST", payload, customerPortalAccessToken(context)))
     val bookingId = row.optString("booking_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
