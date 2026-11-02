@@ -457,7 +457,50 @@ private fun SupplierDueDateAgingReportState.toReportLines(asOfDate: String): Lis
 private data class ReportSupplierMovement(val date: String, val supplierId: String, val supplier: String, val currency: String, val reference: String, val amount: Long, val description: String)
 
 @Composable
-internal fun ReportsCenterScreen(
+internal private fun buildCashFlowReportLines(
+    cloudLedgerLines: List<CommercialCloudJournalLine>,
+    cloudGlMappings: List<CommercialCloudGlAccountMapping>,
+    startDate: LocalDate?,
+    endDate: LocalDate?,
+    startText: String,
+    endText: String
+): List<ReportLine> {
+    val cashKeys = setOf("cash", "bank", "card_clearing", "other_receipts", "check_clearing", "other_disbursements")
+            val cashAccountIds = cloudGlMappings.filter { it.mappingKey in cashKeys }.map { it.ledgerAccountId }.toSet()
+            val movements = cloudLedgerLines.filter { it.accountId in cashAccountIds }
+                .mapNotNull { line ->
+                    val date = runCatching { LocalDate.parse(line.entryDate.take(10)) }.getOrNull() ?: return@mapNotNull null
+                    Triple(line, date, line.debitMinor - line.creditMinor)
+                }.sortedWith(compareBy<Triple<CommercialCloudJournalLine, LocalDate, Long>> { it.second }.thenBy { it.first.entryNumber }.thenBy { it.first.lineNumber })
+            val currencies = movements.map { it.first.currencyCode }.filter { it.matches(Regex("^[A-Z]{3}$")) }.distinct().sorted()
+            buildList {
+                currencies.forEach { currency ->
+                    val currencyMoves = movements.filter { it.first.currencyCode == currency }
+                    currencyMoves.groupBy { it.first.accountId to it.first.accountCode }.toSortedMap(compareBy<Pair<String, String>> { it.second }.thenBy { it.first })
+                        .forEach { (accountKey, accountMoves) ->
+                            val opening = accountMoves.filter { it.second < (startDate ?: LocalDate.MIN) }.sumOf { it.third }
+                            val periodMoves = accountMoves.filter { startDate != null && endDate != null && !it.second.isBefore(startDate) && !it.second.isAfter(endDate) }
+                            var balance = opening
+                            val accountName = accountMoves.firstOrNull()?.first?.accountName?.ifBlank { accountKey.second } ?: accountKey.second
+                            add(ReportLine(startText, "رصيد افتتاحي", accountName, opening, currency, "حساب النقد/البنك ${accountKey.second} · رصيد من القيود المرحلة قبل الفترة"))
+                            periodMoves.forEach { (line, date, amount) ->
+                                balance = Math.addExact(balance, amount)
+                                add(ReportLine(date.toString(), "قيد ${line.entryNumber} · سطر ${line.lineNumber}", accountName, amount, currency,
+                                    "${line.entryDescription} · ${line.sourceType}:${line.sourceId} · الحساب ${line.accountCode} · الرصيد المتحرك ${reportMoney(balance, currency, true)}"))
+                            }
+                            val debitMovements = periodMoves.sumOf { if (it.third > 0L) it.third else 0L }
+                            val creditMovements = periodMoves.sumOf { if (it.third < 0L) -it.third else 0L }
+                            add(ReportLine("${startText} — ${endText}", "إجمالي الحركة المدينة", accountName, debitMovements, currency,
+                                "إجمالي الزيادات المدينة على حساب النقد/البنك خلال الفترة؛ قد تشمل تحويلات داخلية"))
+                            add(ReportLine("${startText} — ${endText}", "إجمالي الحركة الدائنة", accountName, -creditMovements, currency,
+                                "إجمالي التخفيضات الدائنة على حساب النقد/البنك خلال الفترة؛ قد تشمل تحويلات داخلية"))
+                            add(ReportLine(endText, "رصيد ختامي", accountName, balance, currency, "الرصيد الافتتاحي + الحركة المرحلة · حساب ${accountKey.second}"))
+                        }
+                }
+            }
+}
+
+fun ReportsCenterScreen(
     context: Context,
     sales: List<SaleRecord>,
     settlements: List<SettlementRecord>,
@@ -1495,41 +1538,7 @@ internal fun ReportsCenterScreen(
         }.map { row ->
             ReportLine(row.createdAt.take(10), row.id, row.title, row.amountMinor, row.currencyCode, row.status)
         }.sortedByDescending { it.date }
-        "التدفقات النقدية والصندوق" -> if (sourceErrorForReport(selectedReport).isNotBlank()) emptyList() else {
-            val cashKeys = setOf("cash", "bank", "card_clearing", "other_receipts", "check_clearing", "other_disbursements")
-            val cashAccountIds = cloudGlMappings.filter { it.mappingKey in cashKeys }.map { it.ledgerAccountId }.toSet()
-            val movements = cloudLedgerLines.filter { it.accountId in cashAccountIds }
-                .mapNotNull { line ->
-                    val date = runCatching { LocalDate.parse(line.entryDate.take(10)) }.getOrNull() ?: return@mapNotNull null
-                    Triple(line, date, line.debitMinor - line.creditMinor)
-                }.sortedWith(compareBy<Triple<CommercialCloudJournalLine, LocalDate, Long>> { it.second }.thenBy { it.first.entryNumber }.thenBy { it.first.lineNumber })
-            val currencies = movements.map { it.first.currencyCode }.filter { it.matches(Regex("^[A-Z]{3}$")) }.distinct().sorted()
-            buildList {
-                currencies.forEach { currency ->
-                    val currencyMoves = movements.filter { it.first.currencyCode == currency }
-                    currencyMoves.groupBy { it.first.accountId to it.first.accountCode }.toSortedMap(compareBy<Pair<String, String>> { it.second }.thenBy { it.first })
-                        .forEach { (accountKey, accountMoves) ->
-                            val opening = accountMoves.filter { it.second < (startDate ?: LocalDate.MIN) }.sumOf { it.third }
-                            val periodMoves = accountMoves.filter { startDate != null && endDate != null && !it.second.isBefore(startDate) && !it.second.isAfter(endDate) }
-                            var balance = opening
-                            val accountName = accountMoves.firstOrNull()?.first?.accountName?.ifBlank { accountKey.second } ?: accountKey.second
-                            add(ReportLine(startText, "رصيد افتتاحي", accountName, opening, currency, "حساب النقد/البنك ${accountKey.second} · رصيد من القيود المرحلة قبل الفترة"))
-                            periodMoves.forEach { (line, date, amount) ->
-                                balance = Math.addExact(balance, amount)
-                                add(ReportLine(date.toString(), "قيد ${line.entryNumber} · سطر ${line.lineNumber}", accountName, amount, currency,
-                                    "${line.entryDescription} · ${line.sourceType}:${line.sourceId} · الحساب ${line.accountCode} · الرصيد المتحرك ${reportMoney(balance, currency, true)}"))
-                            }
-                            val debitMovements = periodMoves.sumOf { if (it.third > 0L) it.third else 0L }
-                            val creditMovements = periodMoves.sumOf { if (it.third < 0L) -it.third else 0L }
-                            add(ReportLine("${startText} — ${endText}", "إجمالي الحركة المدينة", accountName, debitMovements, currency,
-                                "إجمالي الزيادات المدينة على حساب النقد/البنك خلال الفترة؛ قد تشمل تحويلات داخلية"))
-                            add(ReportLine("${startText} — ${endText}", "إجمالي الحركة الدائنة", accountName, -creditMovements, currency,
-                                "إجمالي التخفيضات الدائنة على حساب النقد/البنك خلال الفترة؛ قد تشمل تحويلات داخلية"))
-                            add(ReportLine(endText, "رصيد ختامي", accountName, balance, currency, "الرصيد الافتتاحي + الحركة المرحلة · حساب ${accountKey.second}"))
-                        }
-                }
-            }
-        }
+        "التدفقات النقدية والصندوق" -> if (sourceErrorForReport(selectedReport).isNotBlank()) emptyList() else buildCashFlowReportLines(cloudLedgerLines, cloudGlMappings, startDate, endDate, startText, endText)
         "الضرائب والخصومات التفصيلية" -> if (taxDetailError.isNotBlank()) emptyList() else buildList {
             cloudSalesDocuments.filter { doc ->
                 doc.saleStatus.equals("completed", true) &&
