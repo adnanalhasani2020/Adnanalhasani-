@@ -536,3 +536,43 @@ internal fun calculateSupplierPurchaseSummary(
         .sortedWith(compareBy<SupplierPurchaseSummary> { it.currencyCode }
             .thenByDescending { it.totalMinor }.thenBy { it.supplierName }.thenBy { it.supplierId })
 }
+
+
+internal data class DailySalesInvoiceInput(
+    val invoiceId: String,
+    val date: String,
+    val currencyCode: String,
+    val totalMinor: Long
+)
+
+internal data class DailySalesTrendTotal(
+    val date: String,
+    val currencyCode: String,
+    val invoiceCount: Int,
+    val totalMinor: Long
+)
+
+internal fun calculateDailySalesTrend(
+    invoices: List<DailySalesInvoiceInput>
+): List<DailySalesTrendTotal> {
+    val invoiceIds = mutableSetOf<String>()
+    invoices.forEach { invoice ->
+        require(invoice.invoiceId.isNotBlank() && invoiceIds.add(invoice.invoiceId)) {
+            "معرف فاتورة مبيعات مفقود أو مكرر في الاتجاه اليومي."
+        }
+        require(runCatching { LocalDate.parse(invoice.date) }.isSuccess &&
+            invoice.currencyCode.matches(Regex("^[A-Z]{3}$")) && invoice.totalMinor >= 0L) {
+            "تاريخ أو عملة أو مبلغ فاتورة غير صالح في الاتجاه اليومي."
+        }
+    }
+    return invoices.groupBy { it.date to it.currencyCode }
+        .map { (key, rows) ->
+            DailySalesTrendTotal(
+                date = key.first,
+                currencyCode = key.second,
+                invoiceCount = rows.size,
+                totalMinor = sumReportAmountsExactly(rows.map { it.totalMinor })
+            )
+        }
+        .sortedWith(compareBy<DailySalesTrendTotal> { it.date }.thenBy { it.currencyCode })
+}
