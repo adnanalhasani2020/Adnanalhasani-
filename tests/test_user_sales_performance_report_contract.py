@@ -39,7 +39,8 @@ def test_stock_movement_user_report_uses_persisted_actor_and_separates_units():
     assert "created_at,created_by,source_ref,offering_id,movement_type,quantity_delta" in repository
     assert 'createdBy = row.optString("created_by")' in repository
     assert 'ReportCatalogItem("حركة المخزون حسب المستخدم"' in screen
-    assert "StockMovementUserInput(" in screen
+    assert "buildStockMovementUserReportState(" in screen
+    assert "StockMovementUserInput(" in calculations
     assert "internal fun calculateStockMovementUserTotals(" in calculations
     assert 'it.unitName.trim().ifBlank { "وحدة غير محددة" }' in calculations
     assert 'movementId.isNotBlank() && seen.add(movement.movementId)' in calculations
