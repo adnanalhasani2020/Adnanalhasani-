@@ -109,6 +109,16 @@ class ItemProfitabilityReportTest {
     }
 
     @Test
+    fun rejectsReturnForEarlierSaleWithUnallocatedInvoiceDiscount() {
+        assertThrows(IllegalArgumentException::class.java) {
+            calculateItemProfitability(
+                listOf(sale(inPeriod = false, saleDiscount = 100)),
+                listOf(returned())
+            )
+        }
+    }
+
+    @Test
     fun rejectsUnallocatedInvoiceDiscountFromItemProfitability() {
         assertThrows(IllegalArgumentException::class.java) {
             calculateItemProfitability(listOf(sale(saleDiscount = 100)), emptyList())
