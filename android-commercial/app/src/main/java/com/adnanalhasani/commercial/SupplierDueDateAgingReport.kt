@@ -5,6 +5,7 @@ import androidx.compose.runtime.remember
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
+internal data class SupplierDueDateAgingReportState(
     val rows: List<SupplierLiabilityAgingSummary>,
     val error: String
 )
