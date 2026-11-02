@@ -187,6 +187,7 @@ internal fun CommercialCloudDebtScreen(context: Context, onBack: () -> Unit) {
                 OutlinedTextField(
                     value = amount,
                     onValueChange = { amount = it.filter(Char::isDigit).take(18) },
+                    enabled = !busy,
                     label = { Text("مبلغ التحصيل بوحدة الصرف الصغرى") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
@@ -194,7 +195,7 @@ internal fun CommercialCloudDebtScreen(context: Context, onBack: () -> Unit) {
                 Text("طريقة الدفع", color = DebtMuted, fontSize = 12.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf("cash" to "نقدي", "bank_transfer" to "تحويل", "card" to "بطاقة", "other" to "أخرى").forEach { (value, label) ->
-                        FilterChip(selected = method == value, onClick = { method = value }, label = { Text(label, fontSize = 11.sp) })
+                        FilterChip(selected = method == value, onClick = { method = value }, enabled = !busy, label = { Text(label, fontSize = 11.sp) })
                     }
                 }
                 if (error.isNotBlank()) Text(error, color = Color(0xFF9C3028), fontSize = 12.sp)
@@ -205,11 +206,12 @@ internal fun CommercialCloudDebtScreen(context: Context, onBack: () -> Unit) {
                 enabled = !busy && (amount.toLongOrNull() ?: 0L) in 1L..target.dueMinor,
                 onClick = {
                     val value = amount.toLongOrNull() ?: return@Button
+                    val selectedMethod = method
                     busy = true
                     error = ""
                     DebtIo.execute {
                         val result = runCatching {
-                            val payment = recordCommercialCloudCustomerPayment(context, target.saleId, value, method)
+                            val payment = recordCommercialCloudCustomerPayment(context, target.saleId, value, selectedMethod)
                             val paymentId = payment.optString("payment_id")
                             require(paymentId.isNotBlank()) { "أكد الخادم التحصيل دون إرجاع مرجع الدفعة." }
                             val receiptResult = runCatching { loadCommercialCloudCustomerReceipt(context, paymentId) }
