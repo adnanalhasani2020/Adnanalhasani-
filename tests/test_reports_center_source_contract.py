@@ -216,5 +216,20 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn('"فواتير الشراء والمستحقات المسجلة", "فروقات أسعار فواتير الموردين", "مستحقات فواتير الموردين"', self.screen)
         self.assertIn("round the sum of quantity × recorded PO unit cost once", self.screen)
 
+    def test_unready_financial_reports_are_visible_but_not_selectable(self):
+        for marker in (
+            'ReportCatalogItem("أعمار ديون العملاء"',
+            'ReportCatalogItem("أعمار مستحقات الموردين"',
+            'ReportCatalogItem("التسوية البنكية"',
+            'ReportCatalogItem("قائمة التدفقات النقدية المصنفة"',
+            'ReportCatalogItem("الإقرار الضريبي النظامي"',
+            'ReportCatalogItem("تقييم المخزون التاريخي ومطابقته مع الأستاذ"',
+            'ReportCatalogItem("تجميع القوائم المالية متعددة العملات"',
+        ):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, self.screen)
+        self.assertIn("لا يوجد تاريخ استحقاق أو شروط ائتمان", self.screen)
+        self.assertIn("لا توجد سياسة تحويل معتمدة", self.screen)
+
 if __name__ == "__main__":
     unittest.main()
