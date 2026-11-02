@@ -45,3 +45,21 @@ def test_stock_movement_user_report_uses_persisted_actor_and_separates_units():
     assert 'it.unitName.trim().ifBlank { "وحدة غير محددة" }' in calculations
     assert 'movementId.isNotBlank() && seen.add(movement.movementId)' in calculations
     assert 'by persisted `created_by`, movement type, and recorded unit' in contract
+
+
+
+def test_location_inventory_report_uses_organization_locations_and_separates_units():
+    repository = REPOSITORY.read_text(encoding="utf-8")
+    screen = SCREEN.read_text(encoding="utf-8")
+    calculations = CALCULATIONS.read_text(encoding="utf-8")
+    contract = CONTRACT.read_text(encoding="utf-8")
+
+    assert "loadCommercialCloudLocationInventoryBalances(" in repository
+    assert "commercial_inventory_balances" in repository
+    assert "commercial_organization_locations" in repository
+    assert 'ReportCatalogItem("رصيد المخزون حسب الموقع"' in screen
+    assert "buildLocationInventoryReportState(" in screen
+    assert "internal fun calculateLocationInventoryBalanceTotals(" in calculations
+    assert "seen.add(balance.locationId to balance.offeringId)" in calculations
+    assert "balance.unitName.trim()" in calculations
+    assert 'by location and recorded unit' in contract
