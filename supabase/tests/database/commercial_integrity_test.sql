@@ -1,7 +1,7 @@
 -- Run with Supabase CLI / pgTAP in a disposable local or staging database.
 -- These are schema regression tests; they do not replace authenticated-session integration tests.
 BEGIN;
-SELECT plan(43);
+SELECT plan(44);
 
 SELECT has_table('public', 'commercial_audit_events',
   'append-only audit event table exists');
@@ -367,6 +367,26 @@ SELECT ok(
          AND has_function_privilege('anon', p.oid, 'EXECUTE')),
   'internal customer-party and GL initialization helpers are not directly executable by API roles'
 );
+
+
+SELECT ok(
+  (SELECT count(*) = 7
+   FROM pg_proc p
+   JOIN pg_namespace n ON n.oid = p.pronamespace
+   WHERE n.nspname = 'public'
+     AND p.proname IN (
+       'commercial_add_global_item_to_organization',
+       'commercial_create_personal_account',
+       'commercial_decide_sale_return',
+       'commercial_inspect_sale_return_item',
+       'commercial_post_journal_entry',
+       'commercial_request_sale_return',
+       'commercial_restock_approved_sale_return'
+     )
+     AND p.prosecdef
+     AND has_function_privilege('authenticated', p.oid, 'EXECUTE')
+     AND NOT has_function_privilege('anon', p.oid, 'EXECUTE')),
+  'all seven protected commercial RPCs remain authenticated-only');
 
 SELECT * FROM finish();
 ROLLBACK;
