@@ -11,8 +11,9 @@ class ItemProfitabilityReportTest {
         lineTotal: Long = 2_000,
         cost: Long? = 1_000,
         inPeriod: Boolean = true,
-        saleTax: Long = 0
-    ) = ItemProfitSaleLineInput(id, "sale-1", "صنف أ", "YER", saleTax, quantity, lineTotal, cost, inPeriod)
+        saleTax: Long = 0,
+        saleDiscount: Long = 0
+    ) = ItemProfitSaleLineInput(id, "sale-1", "صنف أ", "YER", saleTax, saleDiscount, quantity, lineTotal, cost, inPeriod)
 
     private fun returned(
         id: String = "return-1",
@@ -104,6 +105,13 @@ class ItemProfitabilityReportTest {
         )
         assertThrows(IllegalArgumentException::class.java) {
             calculateItemProfitability(listOf(sale()), excessiveRestock)
+        }
+    }
+
+    @Test
+    fun rejectsUnallocatedInvoiceDiscountFromItemProfitability() {
+        assertThrows(IllegalArgumentException::class.java) {
+            calculateItemProfitability(listOf(sale(saleDiscount = 100)), emptyList())
         }
     }
 
