@@ -824,8 +824,8 @@ internal fun calculateLocationInventoryBalanceTotals(
             "توجد بيانات موقع أو وحدة أو كمية محجوزة غير صالحة؛ تم حجب التقرير."
         }
     }
-    return balances.groupBy {
-        Triple(balanceLocationKey(it.locationId), it.unitName.trim(), it.locationType.trim())
+    return balances.groupBy { balance ->
+        Triple(balanceLocationKey(balance.locationId), balance.unitName.trim(), balance.locationType.trim())
     }.map { (key, rows) ->
         val onHand = rows.fold(java.math.BigDecimal.ZERO) { total, row -> total.add(row.quantityOnHand) }
         val reserved = rows.fold(java.math.BigDecimal.ZERO) { total, row -> total.add(row.quantityReserved) }
