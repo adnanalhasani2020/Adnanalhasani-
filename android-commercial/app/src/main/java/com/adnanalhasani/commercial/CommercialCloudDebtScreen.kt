@@ -90,6 +90,7 @@ internal fun CommercialCloudDebtScreen(context: Context, onBack: () -> Unit) {
     LaunchedEffect(refresh) {
         busy = true
         error = ""
+        requestError = ""
         DebtIo.execute {
             val result = runCatching { loadCommercialCloudReceivables(context) }
             val requestResult = runCatching { loadCommercialCloudCustomerPaymentRequests(context, "pending") }
