@@ -387,7 +387,7 @@ internal fun calculateItemProfitability(
     }
 
     val returnIds = mutableSetOf<String>()
-        returns.forEach { saleReturn ->
+    returns.forEach { saleReturn ->
         require(saleReturn.returnId.isNotBlank() && returnIds.add(saleReturn.returnId)) {
             "معرف مرتجع مفقود أو مكرر في تقرير ربحية الأصناف."
         }
