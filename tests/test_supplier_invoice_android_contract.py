@@ -16,7 +16,8 @@ def test_supplier_invoice_has_an_android_entry_point_and_cloud_rpc():
     assert "clearCommercialSupplierInvoiceIdempotencyKey(context, order.id, key)" in dialog
     assert "UUID.randomUUID()" not in dialog
     assert "commercial_supplier_invoice_pending_v1" in repository
-    assert "supplier_invoices:commercial_supplier_invoices(id,invoice_number,subtotal_minor,tax_minor,freight_minor,total_minor,currency_code,recorded_at,state,obligation:commercial_supplier_obligations(" in repository
+    assert "supplier_invoices:commercial_supplier_invoices(id,invoice_number,subtotal_minor,tax_minor,freight_minor,total_minor,currency_code,recorded_at,state,items:commercial_supplier_invoice_items(" in repository
+    assert "obligation:commercial_supplier_obligations(" in repository
     assert "supplierInvoices = supplierInvoices" in repository
     assert "فواتير المورد المسجلة" in screen
     assert "/rest/v1/rpc/commercial_record_supplier_invoice" in repository
@@ -84,3 +85,13 @@ def test_invoice_transfer_purchase_order_projection_preserves_source_units():
         assert field in repository
     assert "sourceSellingUnitName" in repository
     assert "وحدة فاتورة المصدر:" in screen
+
+def test_supplier_invoice_line_projection_includes_saved_price_and_purchase_baseline():
+    repository = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt").read_text(encoding="utf-8")
+    for marker in (
+        "purchase_order_item_id,quantity,unit_price_minor,line_total_minor",
+        "commercial_supplier_invoice_items_purchase_order_item_id_fkey",
+        "purchaseOrderUnitCostMinor = baseline",
+        "lines = invoiceLines",
+    ):
+        assert marker in repository

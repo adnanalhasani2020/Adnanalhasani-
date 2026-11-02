@@ -614,35 +614,6 @@ internal fun loadCommercialCloudSaleDocuments(context: Context): List<Commercial
             val row = rows.optJSONObject(index) ?: continue
             val customer = row.optJSONObject("customer")
             val items = row.optJSONArray("items")
-            val invoiceRows = row.optJSONArray("supplier_invoices")
-            val supplierInvoices = buildList {
-                for (invoiceIndex in 0 until (invoiceRows?.length() ?: 0)) {
-                    val invoice = invoiceRows?.optJSONObject(invoiceIndex) ?: continue
-                    val invoiceId = invoice.optString("id").takeUnless { it == "null" }.orEmpty()
-                    if (invoiceId.isBlank()) continue
-                    add(CommercialCloudSupplierInvoiceSummary(
-                        id = invoiceId,
-                        invoiceNumber = invoice.optString("invoice_number").takeUnless { it == "null" }.orEmpty(),
-                        totalMinor = invoice.optLong("total_minor", 0L),
-                        subtotalMinor = invoice.optLong("subtotal_minor", 0L),
-                        taxMinor = invoice.optLong("tax_minor", 0L),
-                        freightMinor = invoice.optLong("freight_minor", 0L),
-                        currencyCode = invoice.optString("currency_code").takeUnless { it == "null" }.orEmpty(),
-                        recordedAt = invoice.optString("recorded_at").takeUnless { it == "null" }.orEmpty(),
-                        state = invoice.optString("state").takeUnless { it == "null" }.orEmpty(),
-                        obligation = (invoice.optJSONObject("obligation") ?: invoice.optJSONArray("obligation")?.optJSONObject(0))?.let { ob ->
-                            val obligationId = ob.optString("id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
-                            if (obligationId.isBlank()) null else CommercialCloudSupplierObligationSummary(
-                                id = obligationId,
-                                amountDueMinor = ob.optLong("amount_due_minor", 0L),
-                                amountPaidMinor = ob.optLong("amount_paid_minor", 0L),
-                                state = ob.optString("state").takeUnless { it == "null" }.orEmpty(),
-                                currencyCode = ob.optString("currency_code").takeUnless { it == "null" }.orEmpty()
-                            )
-                        }
-                    ))
-                }
-            }.sortedBy { it.recordedAt }
             val lines = buildList {
                 for (lineIndex in 0 until (items?.length() ?: 0)) {
                     val item = items?.optJSONObject(lineIndex) ?: continue
@@ -925,6 +896,16 @@ internal data class CommercialCloudSupplierObligationSummary(
     val currencyCode: String
 )
 
+internal data class CommercialCloudSupplierInvoiceLineSummary(
+    val id: String,
+    val purchaseOrderItemId: String,
+    val quantity: String,
+    val unitPriceMinor: Long,
+    val lineTotalMinor: Long,
+    val purchaseOrderItemDescription: String,
+    val purchaseOrderUnitCostMinor: Long?
+)
+
 internal data class CommercialCloudSupplierInvoiceSummary(
     val id: String,
     val invoiceNumber: String,
@@ -935,6 +916,7 @@ internal data class CommercialCloudSupplierInvoiceSummary(
     val currencyCode: String,
     val recordedAt: String,
     val state: String,
+    val lines: List<CommercialCloudSupplierInvoiceLineSummary>,
     val obligation: CommercialCloudSupplierObligationSummary?
 )
 
@@ -957,7 +939,7 @@ internal data class CommercialCloudPurchaseDocument(
 internal fun loadCommercialCloudPurchaseDocuments(context: Context): List<CommercialCloudPurchaseDocument> {
     val (orgId, access) = commercialMasterDataAccess(context)
     val path = "/rest/v1/commercial_purchase_orders" +
-        "?select=id,supplier_id,order_number,status,ordered_at,expected_at,currency_code,notes,receive_location_id,supplier:commercial_suppliers(display_name),items:commercial_purchase_order_items(id,line_number,item_description,quantity_ordered,quantity_received,unit_cost_minor,offering_id,source_selling_unit_code,source_selling_unit_name,source_selling_quantity,source_quantity_in_stock_units),supplier_invoices:commercial_supplier_invoices(id,invoice_number,subtotal_minor,tax_minor,freight_minor,total_minor,currency_code,recorded_at,state,obligation:commercial_supplier_obligations(id,amount_due_minor,amount_paid_minor,state,currency_code))" +
+        "?select=id,supplier_id,order_number,status,ordered_at,expected_at,currency_code,notes,receive_location_id,supplier:commercial_suppliers(display_name),items:commercial_purchase_order_items(id,line_number,item_description,quantity_ordered,quantity_received,unit_cost_minor,offering_id,source_selling_unit_code,source_selling_unit_name,source_selling_quantity,source_quantity_in_stock_units),supplier_invoices:commercial_supplier_invoices(id,invoice_number,subtotal_minor,tax_minor,freight_minor,total_minor,currency_code,recorded_at,state,items:commercial_supplier_invoice_items(id,purchase_order_item_id,quantity,unit_price_minor,line_total_minor,purchase_order_item:commercial_purchase_order_items!commercial_supplier_invoice_items_purchase_order_item_id_fkey(item_description,unit_cost_minor)),obligation:commercial_supplier_obligations(id,amount_due_minor,amount_paid_minor,state,currency_code))" +
         "&organization_id=eq.$orgId&order=created_at.desc.nullslast,id.asc"
     val rows = commercialCloudPagedGet(path, access)
     return buildList {
@@ -971,6 +953,28 @@ internal fun loadCommercialCloudPurchaseDocuments(context: Context): List<Commer
                     val invoice = invoiceRows?.optJSONObject(invoiceIndex) ?: continue
                     val invoiceId = invoice.optString("id").takeUnless { it == "null" }.orEmpty()
                     if (invoiceId.isBlank()) continue
+                    val invoiceItems = invoice.optJSONArray("items")
+                    val invoiceLines = buildList {
+                        for (itemIndex in 0 until (invoiceItems?.length() ?: 0)) {
+                            val item = invoiceItems?.optJSONObject(itemIndex) ?: continue
+                            val purchaseItem = item.optJSONObject("purchase_order_item")
+                            val lineId = item.optString("id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+                            val purchaseItemId = item.optString("purchase_order_item_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+                            if (lineId.isBlank() || purchaseItemId.isBlank()) continue
+                            val baseline = purchaseItem?.takeIf { it.has("unit_cost_minor") && !it.isNull("unit_cost_minor") }
+                                ?.optLong("unit_cost_minor")
+                            add(CommercialCloudSupplierInvoiceLineSummary(
+                                id = lineId,
+                                purchaseOrderItemId = purchaseItemId,
+                                quantity = item.optString("quantity").takeUnless { it == "null" }.orEmpty(),
+                                unitPriceMinor = item.optLong("unit_price_minor", -1L),
+                                lineTotalMinor = item.optLong("line_total_minor", -1L),
+                                purchaseOrderItemDescription = purchaseItem?.optString("item_description")
+                                    .takeUnless { it.isNullOrBlank() || it == "null" }.orEmpty(),
+                                purchaseOrderUnitCostMinor = baseline
+                            ))
+                        }
+                    }
                     add(CommercialCloudSupplierInvoiceSummary(
                         id = invoiceId,
                         invoiceNumber = invoice.optString("invoice_number").takeUnless { it == "null" }.orEmpty(),
@@ -981,6 +985,7 @@ internal fun loadCommercialCloudPurchaseDocuments(context: Context): List<Commer
                         currencyCode = invoice.optString("currency_code").takeUnless { it == "null" }.orEmpty(),
                         recordedAt = invoice.optString("recorded_at").takeUnless { it == "null" }.orEmpty(),
                         state = invoice.optString("state").takeUnless { it == "null" }.orEmpty(),
+                        lines = invoiceLines,
                         obligation = invoice.optJSONObject("obligation")?.let { ob ->
                             val obligationId = ob.optString("id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
                             if (obligationId.isBlank()) null else CommercialCloudSupplierObligationSummary(
@@ -1307,7 +1312,7 @@ internal fun loadCommercialCloudExpenses(context: Context): List<CommercialCloud
                 id = row.optString("id"),
                 category = row.optString("category").ifBlank { "مصروف" },
                 amountMinor = row.optLong("amount_minor", 0L),
-                currencyCode = row.optString("currency_code").ifBlank { "YER" },
+                currencyCode = row.optString("currency_code").takeUnless { it == "null" }.orEmpty(),
                 paymentMethod = row.optString("payment_method").ifBlank { "cash" },
                 evidenceReference = row.optString("evidence_reference").takeUnless { it == "null" }.orEmpty(),
                 note = row.optString("note").takeUnless { it == "null" }.orEmpty(),
@@ -2081,7 +2086,8 @@ internal fun restockCommercialCloudSaleReturn(context: Context, returnId: String
 internal data class CommercialCloudRecord(
     val id: String, val title: String, val subtitle: String, val status: String,
     val amountMinor: Long = 0L, val createdAt: String = "",
-    val details: List<String> = emptyList(), val currencyCode: String = ""
+    val details: List<String> = emptyList(), val currencyCode: String = "",
+    val paymentMethodCode: String = ""
 )
 
 /** Read-only operational projections. Writes must use an approved RPC, never generic POST. */
@@ -2160,7 +2166,13 @@ internal fun loadCommercialCloudRecords(context: Context, screenKey: String): Li
                 ).distinct()
                 else -> emptyList()
             }
-            add(CommercialCloudRecord(id, title, subtitle, status, amount, row.optString("created_at").takeUnless { it == "null" }.orEmpty(), details, row.optString("currency_code").takeUnless { it == "null" }.orEmpty()))
+            add(CommercialCloudRecord(
+                id, title, subtitle, status, amount,
+                row.optString("created_at").takeUnless { it == "null" }.orEmpty(),
+                details,
+                row.optString("currency_code").takeUnless { it == "null" }.orEmpty(),
+                if (screenKey == "payments") row.optString("payment_method_type").takeUnless { it == "null" }.orEmpty() else ""
+            ))
         }
     }
 }

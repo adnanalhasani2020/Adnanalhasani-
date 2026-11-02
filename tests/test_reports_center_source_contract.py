@@ -5,6 +5,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterScreen.kt"
 REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt"
+CALCULATIONS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportCalculations.kt"
 CONTRACT = ROOT / "android-commercial/docs/reports-data-contract.md"
 COLLECTION_REPLAY_MIGRATION = ROOT / "supabase/migrations/20261027221500_harden_customer_collection_replay_posting.sql"
 RETURN_CURRENCY_GUARD_MIGRATION = ROOT / "supabase/migrations/20261027195426_guard_return_adjustment_currency.sql"
@@ -15,6 +16,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
     def setUpClass(cls):
         cls.screen = SCREEN.read_text(encoding="utf-8")
         cls.repository = REPOSITORY.read_text(encoding="utf-8")
+        cls.calculations = CALCULATIONS.read_text(encoding="utf-8")
         cls.contract = CONTRACT.read_text(encoding="utf-8")
         cls.collection_replay_migration = COLLECTION_REPLAY_MIGRATION.read_text(encoding="utf-8")
         cls.return_currency_guard_migration = RETURN_CURRENCY_GUARD_MIGRATION.read_text(encoding="utf-8")
@@ -87,10 +89,10 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
     def test_customer_statement_uses_invoice_payments_returns_and_customer_filter(self):
         self.assertIn('"أرصدة العملاء وكشف الحساب" ->', self.screen)
         self.assertIn("it.customerId.isNotBlank()", self.screen)
-        self.assertIn('it.status.lowercase(Locale.ROOT) in setOf("succeeded", "partially_refunded", "refunded")', self.screen)
-        self.assertIn('it.status.equals("completed", true)', self.screen)
-        self.assertIn('it.refundStatus.equals("refunded", true)', self.screen)
-        self.assertIn("الرصيد الختامي المحسوب من الحركات المتاحة", self.screen)
+        self.assertIn('it.status.lowercase(Locale.ROOT) in setOf("succeeded", "partially_refunded", "refunded")', self.calculations)
+        self.assertIn('it.status.equals("completed", true)', self.calculations)
+        self.assertIn('it.refundStatus.equals("refunded", true)', self.calculations)
+        self.assertIn("الرصيد الختامي من الفواتير والتحصيلات والمرتجعات المكتملة", self.screen)
 
     def test_supplier_statement_uses_unique_posted_payment_rows_not_journal_totals(self):
         self.assertIn('"كشف حركات الموردين" ->', self.screen)
@@ -152,7 +154,8 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
     def test_historical_cogs_uses_stored_cost_and_only_reverses_restocked_return_cost(self):
         self.assertIn('costTotalMinor = if (item.isNull("cost_total_minor")) null', self.repository)
         self.assertIn('saleItemCostTotalMinor = if (saleItem == null || saleItem.isNull("cost_total_minor")) null', self.repository)
-        self.assertIn('item.restockedQuantity <= 0', self.screen)
+        self.assertIn('require(restockedQuantity >= 0)', self.calculations)
+        self.assertIn('calculateRestockedCostMinor', self.calculations)
         self.assertIn('تكلفة البنود المباعة المحفوظة', self.screen)
         self.assertIn('val costProfitError', self.screen)
 
@@ -203,6 +206,88 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn('add(listOf("مصدر البيانات"', self.screen)
         self.assertIn('add(listOf("تاريخ التصدير"', self.screen)
 
+
+    def test_financial_report_calculations_are_pure_and_testable_without_android_runtime(self):
+        self.assertNotIn("android.os.", self.calculations)
+        self.assertNotIn("androidx.compose", self.calculations)
+        self.assertIn("reportCalculationDateMillis", self.calculations)
+
+    def test_supplier_invoice_price_variance_uses_saved_lines_and_purchase_baseline(self):
+        self.assertIn("CommercialCloudSupplierInvoiceLineSummary", self.repository)
+        self.assertIn("purchase_order_item_id,quantity,unit_price_minor,line_total_minor", self.repository)
+        self.assertIn("commercial_supplier_invoice_items_purchase_order_item_id_fkey", self.repository)
+        self.assertIn("purchaseOrderUnitCostMinor", self.repository)
+        self.assertIn("calculateSupplierInvoicePriceVariance", self.screen)
+        self.assertIn('ReportCatalogItem("فروقات أسعار فواتير الموردين"', self.screen)
+        self.assertIn('"فروقات أسعار فواتير الموردين" -> supplierInvoiceVarianceError', self.screen)
+        self.assertIn('"فروقات أسعار فواتير الموردين" -> cloudPurchases.flatMap', self.screen)
+        self.assertIn("فرق موجب = أعلى من أمر الشراء، وسالب = أقل", self.screen)
+        self.assertIn("purchaseOrderItemDescription", self.repository)
+        self.assertIn('"فواتير الشراء والمستحقات المسجلة", "فروقات أسعار فواتير الموردين", "مستحقات فواتير الموردين"', self.screen)
+        self.assertIn("round the sum of quantity × recorded PO unit cost once", self.calculations)
+        self.assertIn('ReportCatalogItem("التحصيل حسب طريقة الدفع"', self.screen)
+        self.assertIn('"التحصيل حسب طريقة الدفع" -> paymentMethodAnalysisError', self.screen)
+        self.assertIn('"التحصيل حسب طريقة الدفع" -> cloudPayments.filter', self.screen)
+        self.assertIn("paymentMethodCode", self.repository)
+        self.assertIn('ReportCatalogItem("ملخص المصروفات حسب التصنيف وطريقة الصرف"', self.screen)
+        self.assertIn('"ملخص المصروفات حسب التصنيف وطريقة الصرف" -> expenseReportError', self.screen)
+        self.assertIn('"ملخص المصروفات حسب التصنيف وطريقة الصرف" -> cloudExpenses.filter', self.screen)
+        self.assertIn('currencyCode = row.optString("currency_code").takeUnless { it == "null" }.orEmpty()', self.repository)
+
+    def test_supplier_obligations_preserve_overpayments_and_use_exact_currency_matched_totals(self):
+        self.assertIn("calculateSupplierObligationTotals", self.calculations)
+        self.assertIn("balanceMinor = Math.subtractExact(due, paid)", self.calculations)
+        self.assertIn("invoiceCurrencyCode == row.purchaseOrderCurrencyCode", self.calculations)
+        self.assertIn("obligationCurrencyCode == row.purchaseOrderCurrencyCode", self.calculations)
+        self.assertIn('"مستحقات فواتير الموردين" -> supplierObligationsError', self.screen)
+        self.assertIn("رصيد دائن/مقدم للمورد", self.screen)
+        self.assertIn("Math.subtractExact(due, paid)", self.screen)
+        self.assertNotIn("(due - paid).coerceAtLeast(0L)", self.screen)
+        self.assertNotIn("rows.sumOf { it.third.amountDueMinor }", self.screen)
+
+    def test_customer_operational_statement_validates_dates_refunds_and_exact_balances(self):
+        self.assertIn("buildCustomerOperationalStatementMovements", self.screen)
+        self.assertIn('"أرصدة العملاء وكشف الحساب" -> customerOperationalStatementError', self.screen)
+        self.assertIn("مرتجع مكتمل بلا مبلغ اعتماد محفوظ", self.calculations)
+        self.assertIn("دفعة عميل ناجحة بلا مبلغ موجب أو تاريخ تسجيل صالح", self.calculations)
+        self.assertIn("sumReportAmountsExactly", self.screen)
+        self.assertNotIn("payment.createdAt.take(10).ifBlank { doc.createdAt.take(10) }", self.screen)
+
+    def test_tax_detail_report_fails_closed_on_missing_or_invalid_source_amounts(self):
+        self.assertIn("doc.discountMinor > doc.subtotalMinor", self.screen)
+        self.assertIn("invoice.currencyCode != purchase.currencyCode", self.screen)
+        self.assertIn("saleReturn.approvedRefundMinor == null", self.screen)
+        self.assertIn("-saleReturn.approvedRefundMinor!!", self.screen)
+        tax_block = self.screen.split("val taxDetailError =", 1)[1].split("val costProfitError =", 1)[0]
+        self.assertNotIn("approvedRefundMinor ?: 0L", tax_block)
+
+    def test_gross_profit_report_uses_exact_arithmetic_and_return_cost_snapshots(self):
+        for marker in (
+            "calculateCostProfitReportTotals",
+            "sumReportAmountsExactly",
+            "calculateRestockedCostMinor",
+            "Math.addExact",
+            "Math.subtractExact",
+            "تجاوزت مجاميع المبيعات أو التكلفة أو المرتجعات نطاق الأرقام الدقيق",
+        ):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, self.calculations if marker in ("calculateRestockedCostMinor", "Math.addExact", "Math.subtractExact") else self.screen)
+        self.assertNotIn("}.getOrDefault(0L)", self.screen)
+
+    def test_unready_financial_reports_are_visible_but_not_selectable(self):
+        for marker in (
+            'ReportCatalogItem("أعمار ديون العملاء"',
+            'ReportCatalogItem("أعمار مستحقات الموردين"',
+            'ReportCatalogItem("التسوية البنكية"',
+            'ReportCatalogItem("قائمة التدفقات النقدية المصنفة"',
+            'ReportCatalogItem("الإقرار الضريبي النظامي"',
+            'ReportCatalogItem("تقييم المخزون التاريخي ومطابقته مع الأستاذ"',
+            'ReportCatalogItem("تجميع القوائم المالية متعددة العملات"',
+        ):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, self.screen)
+        self.assertIn("لا يحتوي تاريخ استحقاق أو شروط ائتمان", self.screen)
+        self.assertIn("لا توجد سياسة تحويل معتمدة", self.screen)
 
 if __name__ == "__main__":
     unittest.main()
