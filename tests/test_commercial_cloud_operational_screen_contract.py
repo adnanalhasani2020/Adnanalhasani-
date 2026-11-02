@@ -98,6 +98,13 @@ class CommercialCloudOperationalScreenContractTests(unittest.TestCase):
         self.assertRegex(function, r'val config = when \(screenKey\)')
         self.assertNotRegex(function, r'\$\{screenKey\}.*select=')
 
+    def test_cloud_debt_collection_freezes_request_inputs_while_submitting(self):
+        debt = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudDebtScreen.kt").read_text(encoding="utf-8")
+        self.assertIn("enabled = !busy", debt)
+        self.assertIn("val selectedMethod = method", debt)
+        self.assertIn("recordCommercialCloudCustomerPayment(context, target.saleId, value, selectedMethod)", debt)
+        self.assertNotIn("recordCommercialCloudCustomerPayment(context, target.saleId, value, method)", debt)
+
 
 if __name__ == "__main__":
     unittest.main()
