@@ -50,3 +50,23 @@ A second project, `ygtagdhjlkpounmujolh`, has no migrations or public tables and
 - No production data or schema was changed.
 - No migrations were applied to either Supabase project.
 - No feature is marked production-complete solely because its source code exists.
+
+
+## Post-audit deployment update — 2026-11-02
+
+The table above is a historical snapshot from the audit commit, not the current production state. A subsequent production verification after the Nov 2 migration batch found:
+
+- Production migration history now extends through `20261102002527`; the later catalog, activity mapping, purchase approval, warehouse context projection, inventory costing, invoice notifications, and multi-service booking migrations are recorded as applied.
+- The public schema now contains **102 base tables** (up from the 88-table snapshot above); every table returned by the latest table inventory has RLS enabled.
+- The 12 RPCs previously marked unavailable in the reconciliation audit are now all present in production (**12/12**).
+- Critical checkout and customer-payment RPC privileges were checked: no `anon` EXECUTE; authenticated access is granted to the intended entry points.
+- PR #672 was merged to `main` at `fe9194a8beff71b2a4e050ad9e7562001f94b33e`, repairing two SQL migrations and shortening the delegated multi-service booking RPC identifier to PostgreSQL's supported length.
+
+### Still open after the deployment
+
+- Warehouse-specific stock balances and storage-location posting are not yet a complete end-to-end workflow. Existing warehouse/location tables and a context projection do not prove stock is posted to warehouse-level balances.
+- A complete role × screen × action authorization matrix remains unverified. Do not blanket-revoke authenticated execution from SECURITY DEFINER RPCs; review each function's internal authorization and intended caller.
+- SMS provider delivery, secure device/session registration, and replacement of daily same-SIM checks remain unverified or unimplemented.
+- Full authenticated Android end-to-end tests and a successful build on the current commit have not been evidenced. No paid Supabase branch/project was created, and no valid free staging baseline was available.
+
+This update does not retroactively change the historical audit's scope or actions. It supersedes only the deployment-status statements above where the live verification now differs.
