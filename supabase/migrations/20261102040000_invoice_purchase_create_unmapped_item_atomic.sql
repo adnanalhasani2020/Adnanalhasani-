@@ -427,6 +427,10 @@ BEGIN
 END;
 $;
 
+REVOKE ALL ON FUNCTION commercial_private.commercial_link_purchase_order_item_offering(
+  uuid, uuid, uuid, uuid
+) FROM PUBLIC, anon, authenticated;
+
 REVOKE ALL ON FUNCTION public.commercial_create_and_link_invoice_purchase_item(
   uuid, uuid, uuid, uuid, text, uuid, text, text, text, text, text, text, uuid, text
 ) FROM PUBLIC, anon;
