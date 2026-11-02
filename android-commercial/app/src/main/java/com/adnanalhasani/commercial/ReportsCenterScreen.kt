@@ -456,8 +456,7 @@ private fun SupplierDueDateAgingReportState.toReportLines(asOfDate: String): Lis
     }
 private data class ReportSupplierMovement(val date: String, val supplierId: String, val supplier: String, val currency: String, val reference: String, val amount: Long, val description: String)
 
-@Composable
-internal private fun buildCashFlowReportLines(
+private fun buildCashFlowReportLines(
     cloudLedgerLines: List<CommercialCloudJournalLine>,
     cloudGlMappings: List<CommercialCloudGlAccountMapping>,
     startDate: LocalDate?,
@@ -500,7 +499,8 @@ internal private fun buildCashFlowReportLines(
             }
 }
 
-fun ReportsCenterScreen(
+@Composable
+internal fun ReportsCenterScreen(
     context: Context,
     sales: List<SaleRecord>,
     settlements: List<SettlementRecord>,
