@@ -80,5 +80,5 @@ def test_rpc_permissions_are_explicitly_scoped_to_authenticated_users():
         "commercial_merchant_list_customer_payment_requests(uuid,text,integer)",
         "commercial_merchant_review_customer_payment_request(uuid,text,bigint,text,text,text)",
     ):
-        assert f"REVOKE ALL ON FUNCTION public.{signature} FROM PUBLIC, anon" in SQL
+        assert f"REVOKE ALL ON FUNCTION public.{signature} FROM PUBLIC, anon, authenticated" in SQL
         assert f"GRANT EXECUTE ON FUNCTION public.{signature} TO authenticated" in SQL
