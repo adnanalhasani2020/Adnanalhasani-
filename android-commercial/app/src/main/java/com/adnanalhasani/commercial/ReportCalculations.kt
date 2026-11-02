@@ -632,11 +632,11 @@ internal fun calculateCustomerCollectionsByCustomer(
             "اسم العميل أو عملة أو مبلغ دفعة غير صالح في تقرير التحصيل حسب العميل."
         }
     }
-    return payments.groupBy {
-        Triple(it.customerId.ifBlank { "cash:${it.customerName}" }, it.customerName, it.currencyCode)
+    return payments.groupBy { payment ->
+        Triple(payment.customerId.ifBlank { "cash:${payment.customerName}" }, payment.customerName, payment.currencyCode)
     }.map { (key, rows) ->
         CustomerCollectionSummary(
-            customerId = key.first,
+            customerId = rows.first().customerId,
             customerName = key.second,
             currencyCode = key.third,
             paymentCount = rows.size,
