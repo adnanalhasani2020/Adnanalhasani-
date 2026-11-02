@@ -1312,7 +1312,7 @@ internal fun loadCommercialCloudExpenses(context: Context): List<CommercialCloud
                 id = row.optString("id"),
                 category = row.optString("category").ifBlank { "مصروف" },
                 amountMinor = row.optLong("amount_minor", 0L),
-                currencyCode = row.optString("currency_code").ifBlank { "YER" },
+                currencyCode = row.optString("currency_code").takeUnless { it == "null" }.orEmpty(),
                 paymentMethod = row.optString("payment_method").ifBlank { "cash" },
                 evidenceReference = row.optString("evidence_reference").takeUnless { it == "null" }.orEmpty(),
                 note = row.optString("note").takeUnless { it == "null" }.orEmpty(),
