@@ -108,6 +108,9 @@ class CostProfitReportTotalsTest {
         assertThrows(IllegalArgumentException::class.java) {
             calculateRestockedCostMinor(100, 4, 3)
         }
+        assertThrows(IllegalArgumentException::class.java) {
+            calculateRestockedCostMinor(100, -1, 3)
+        }
     }
 
     @Test
