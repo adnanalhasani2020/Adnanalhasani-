@@ -77,3 +77,9 @@ def test_item_profitability_blocks_returns_from_discounted_historical_sales():
     calculations = CALCULATIONS.read_text(encoding="utf-8")
     assert 'saleLine.saleDiscountMinor == 0L' in calculations
     assert 'يرتبط المرتجع بفاتورة لها خصم إجمالي غير موزع' in calculations
+
+def test_item_profitability_reconciles_sale_lines_to_invoice_subtotal():
+    screen = SCREEN.read_text(encoding="utf-8")
+    assert 'sumReportAmountsExactly(document.lines.map { it.lineTotalMinor })' in screen
+    assert 'document.lines.isEmpty()' in screen
+    assert 'document.discountMinor > document.subtotalMinor' in screen
