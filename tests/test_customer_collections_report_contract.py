@@ -14,7 +14,8 @@ def test_customer_collections_report_uses_successful_nested_payments_and_currenc
     assert 'payment.status.equals("succeeded", true)' in screen
     assert 'payment.createdAt' in screen
     assert 'document.customerId' in screen
-    assert 'document.currencyCode' in screen
+    assert 'currencyCode = payment.currencyCode' in screen
+    assert 'currency_code = payment.optString("currency_code")' in REPOSITORY.read_text(encoding="utf-8")
     assert 'calculateCustomerCollectionsByCustomer(' in calculations
     assert 'paymentIds.add(payment.paymentId)' in calculations
     assert 'Collections by customer' in contract
@@ -25,4 +26,5 @@ def test_customer_collections_report_blocks_invalid_successful_payment_sources()
     calculations = CALCULATIONS.read_text(encoding="utf-8")
     assert 'reportDateMillis(payment.createdAt) == null' in screen
     assert 'payment.amountMinor <= 0L' in screen
+    assert '!payment.currencyCode.matches(Regex("^[A-Z]{3}$"))' in screen
     assert 'payment.currencyCode.matches(Regex("^[A-Z]{3}$"))' in calculations
