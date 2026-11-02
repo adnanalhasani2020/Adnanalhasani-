@@ -154,7 +154,8 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
     def test_historical_cogs_uses_stored_cost_and_only_reverses_restocked_return_cost(self):
         self.assertIn('costTotalMinor = if (item.isNull("cost_total_minor")) null', self.repository)
         self.assertIn('saleItemCostTotalMinor = if (saleItem == null || saleItem.isNull("cost_total_minor")) null', self.repository)
-        self.assertIn('if (restockedQuantity <= 0) return 0L', self.screen)
+        self.assertIn('require(restockedQuantity >= 0)', self.calculations)
+        self.assertIn('calculateRestockedCostMinor', self.calculations)
         self.assertIn('تكلفة البنود المباعة المحفوظة', self.screen)
         self.assertIn('val costProfitError', self.screen)
 
@@ -205,6 +206,11 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn('add(listOf("مصدر البيانات"', self.screen)
         self.assertIn('add(listOf("تاريخ التصدير"', self.screen)
 
+
+    def test_financial_report_calculations_are_pure_and_testable_without_android_runtime(self):
+        self.assertNotIn("android.os.", self.calculations)
+        self.assertNotIn("androidx.compose", self.calculations)
+        self.assertIn("reportCalculationDateMillis", self.calculations)
 
     def test_supplier_invoice_price_variance_uses_saved_lines_and_purchase_baseline(self):
         self.assertIn("CommercialCloudSupplierInvoiceLineSummary", self.repository)
