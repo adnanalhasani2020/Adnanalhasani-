@@ -318,8 +318,10 @@ internal fun buildCustomerOperationalStatementMovements(
 
 internal data class ItemProfitSaleLineInput(
     val saleItemId: String,
+    val saleId: String,
     val productName: String,
     val currencyCode: String,
+    val saleTaxMinor: Long,
     val quantity: String,
     val lineTotalMinor: Long,
     val costTotalMinor: Long?,
@@ -336,6 +338,7 @@ internal data class ItemProfitReturnLineInput(
 
 internal data class ItemProfitReturnInput(
     val returnId: String,
+    val saleId: String,
     val currencyCode: String,
     val approvedRefundMinor: Long?,
     val items: List<ItemProfitReturnLineInput>
@@ -371,7 +374,8 @@ internal fun calculateItemProfitability(
         require(line.saleItemId.isNotBlank() && saleById.put(line.saleItemId, line) == null) {
             "معرف بند البيع مفقود أو مكرر؛ تعذر ربط المرتجعات بالصنف الصحيح."
         }
-        require(line.productName.isNotBlank() && line.currencyCode.matches(Regex("^[A-Z]{3}$"))) {
+        require(line.saleId.isNotBlank() && line.productName.isNotBlank() &&
+            line.currencyCode.matches(Regex("^[A-Z]{3}$")) && line.saleTaxMinor >= 0L) {
             "اسم الصنف أو عملة بند البيع غير صالحة."
         }
         val quantity = line.quantity.toBigDecimalOrNull()
@@ -394,7 +398,7 @@ internal fun calculateItemProfitability(
         require(saleReturn.returnId.isNotBlank() && returnIds.add(saleReturn.returnId)) {
             "معرف مرتجع مفقود أو مكرر في تقرير ربحية الأصناف."
         }
-        require(saleReturn.currencyCode.matches(Regex("^[A-Z]{3}$"))) {
+        require(saleReturn.saleId.isNotBlank() && saleReturn.currencyCode.matches(Regex("^[A-Z]{3}$"))) {
             "عملة المرتجع غير صالحة في تقرير ربحية الأصناف."
         }
         val approved = saleReturn.approvedRefundMinor
@@ -409,9 +413,13 @@ internal fun calculateItemProfitability(
         saleReturn.items.forEach { item ->
             val saleLine = saleById[item.saleItemId]
                 ?: throw IllegalArgumentException("تعذر ربط بند مرتجع ببند البيع الأصلي.")
-            require(saleLine.currencyCode == saleReturn.currencyCode &&
+            require(saleLine.saleId == saleReturn.saleId &&
+                saleLine.currencyCode == saleReturn.currencyCode &&
                 item.refundAmountMinor >= 0L && item.quantity > 0) {
-                "عملة أو كمية أو مبلغ بند المرتجع غير صالح أو لا يطابق بند البيع الأصلي."
+                "مرجع البيع أو عملة أو كمية أو مبلغ بند المرتجع لا يطابق بند البيع الأصلي."
+            }
+            require(saleLine.saleTaxMinor == 0L) {
+                "توجد مرتجعات لفواتير ضريبية ولا توجد حصة ضريبية مفصلة لكل بند؛ تم حجب ربحية الأصناف."
             }
             val cumulativeRefund = Math.addExact(refundedBySaleItem[item.saleItemId] ?: 0L, item.refundAmountMinor)
             require(cumulativeRefund <= saleLine.lineTotalMinor) {
