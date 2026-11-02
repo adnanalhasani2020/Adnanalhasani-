@@ -651,42 +651,43 @@ internal fun ReportsCenterScreen(
         } -> "توجد حركات على حساب مراقبة الموردين بلا ربط صالح بمورد وعملة مطابقين؛ تعذر اعتماد الكشف الكامل."
         else -> ""
     }
-    val itemProfitabilityCalculation = runCatching {
-        val allSaleLines = cloudSalesDocuments.flatMap { document ->
-            val inPeriod = document.saleStatus.equals("completed", true) &&
-                reportDateMillis(document.createdAt)?.let { it >= startMillis && it < endExclusive } == true
-            document.lines.map { line ->
-                ItemProfitSaleLineInput(
-                    saleItemId = line.id,
-                    productName = line.productName,
-                    currencyCode = document.currencyCode,
-                    quantity = line.quantity,
-                    lineTotalMinor = line.lineTotalMinor,
-                    costTotalMinor = line.costTotalMinor,
-                    inSelectedPeriod = inPeriod
-                )
-            }
-        }
-        val periodReturns = cloudReturns.filter { saleReturn ->
-            saleReturn.status.equals("completed", true) &&
-                reportDateMillis(saleReturn.completedAt)?.let { it >= startMillis && it < endExclusive } == true
-        }.map { saleReturn ->
-            ItemProfitReturnInput(
-                returnId = saleReturn.id,
-                currencyCode = saleReturn.currencyCode,
-                approvedRefundMinor = saleReturn.approvedRefundMinor,
-                items = saleReturn.items.map { item ->
-                    ItemProfitReturnLineInput(
-                        saleItemId = item.saleItemId,
-                        quantity = item.quantity,
-                        refundAmountMinor = item.refundAmountMinor,
-                        restockedQuantity = item.restockedQuantity,
-                        saleItemQuantityInStockUnits = item.saleItemQuantityInStockUnits
+    val itemProfitabilityCalculation = remember(cloudSalesDocuments, cloudReturns, startMillis, endExclusive, cloudMode) {
+        runCatching {
+            val allSaleLines = cloudSalesDocuments.filter { it.saleStatus.equals("completed", true) }.flatMap { document ->
+                val inPeriod = reportDateMillis(document.createdAt)?.let { it >= startMillis && it < endExclusive } == true
+                document.lines.map { line ->
+                    ItemProfitSaleLineInput(
+                        saleItemId = line.id,
+                        productName = line.productName,
+                        currencyCode = document.currencyCode,
+                        quantity = line.quantity,
+                        lineTotalMinor = line.lineTotalMinor,
+                        costTotalMinor = line.costTotalMinor,
+                        inSelectedPeriod = inPeriod
                     )
                 }
-            )
+            }
+            val periodReturns = cloudReturns.filter { saleReturn ->
+                saleReturn.status.equals("completed", true) &&
+                    reportDateMillis(saleReturn.completedAt)?.let { it >= startMillis && it < endExclusive } == true
+            }.map { saleReturn ->
+                ItemProfitReturnInput(
+                    returnId = saleReturn.id,
+                    currencyCode = saleReturn.currencyCode,
+                    approvedRefundMinor = saleReturn.approvedRefundMinor,
+                    items = saleReturn.items.map { item ->
+                        ItemProfitReturnLineInput(
+                            saleItemId = item.saleItemId,
+                            quantity = item.quantity,
+                            refundAmountMinor = item.refundAmountMinor,
+                            restockedQuantity = item.restockedQuantity,
+                            saleItemQuantityInStockUnits = item.saleItemQuantityInStockUnits
+                        )
+                    }
+                )
+            }
+            calculateItemProfitability(allSaleLines, periodReturns)
         }
-        calculateItemProfitability(allSaleLines, periodReturns)
     }
     val itemProfitabilityError = when {
         !cloudMode -> "ربحية الأصناف بعد المرتجعات تتطلب سجلات السحابة."
