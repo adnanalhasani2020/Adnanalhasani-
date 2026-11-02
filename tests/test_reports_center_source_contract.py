@@ -215,6 +215,10 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn('"فروقات أسعار فواتير الموردين" -> cloudPurchases.flatMap', self.screen)
         self.assertIn('"فواتير الشراء والمستحقات المسجلة", "فروقات أسعار فواتير الموردين", "مستحقات فواتير الموردين"', self.screen)
         self.assertIn("round the sum of quantity × recorded PO unit cost once", self.screen)
+        self.assertIn('ReportCatalogItem("التحصيل حسب طريقة الدفع"', self.screen)
+        self.assertIn('"التحصيل حسب طريقة الدفع" -> paymentMethodAnalysisError', self.screen)
+        self.assertIn('"التحصيل حسب طريقة الدفع" -> cloudPayments.filter', self.screen)
+        self.assertIn("paymentMethodCode", self.repository)
 
     def test_unready_financial_reports_are_visible_but_not_selectable(self):
         for marker in (
