@@ -1,3 +1,5 @@
+BEGIN;
+
 -- Customer-submitted payment claims. A claim is not a payment and has no
 -- accounting effect until an authorized merchant approves it.
 CREATE TABLE IF NOT EXISTS public.commercial_customer_payment_requests (
@@ -240,6 +242,7 @@ DECLARE
   v_previous_amount bigint;
 BEGIN
   IF v_uid IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
+  PERFORM public.commercial_customer_portal_link_verified_email();
   IF p_request_id IS NULL OR p_amount_minor IS NULL OR p_amount_minor<=0
      OR p_customer_note IS NULL OR length(p_customer_note)>1000
      OR p_idempotency_key IS NULL OR length(btrim(p_idempotency_key)) NOT BETWEEN 8 AND 200 THEN
@@ -451,3 +454,5 @@ GRANT EXECUTE ON FUNCTION public.commercial_customer_portal_submit_payment_reque
 GRANT EXECUTE ON FUNCTION public.commercial_customer_portal_update_payment_request(uuid,bigint,text,text) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.commercial_merchant_list_customer_payment_requests(uuid,text,integer) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.commercial_merchant_review_customer_payment_request(uuid,text,bigint,text,text,text) TO authenticated;
+
+COMMIT;
