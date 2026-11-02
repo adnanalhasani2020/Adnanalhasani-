@@ -118,6 +118,7 @@ def test_contractual_supplier_aging_uses_due_date_and_fails_closed_for_legacy_ro
     aging = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/SupplierDueDateAgingReport.kt").read_text()
     screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterScreen.kt").read_text()
     assert "LocalDate.parse(invoice.dueDate.take(10))" in aging
+    assert "rememberSupplierDueDateAgingReport(" in aging
     assert "ChronoUnit.DAYS.between(dueDate, asOf)" in aging
     assert "invoice.invoiceDate.isNotBlank() && invoice.dueDate.isNotBlank()" in aging
     assert 'ReportCatalogItem("أعمار مستحقات الموردين"' in screen
