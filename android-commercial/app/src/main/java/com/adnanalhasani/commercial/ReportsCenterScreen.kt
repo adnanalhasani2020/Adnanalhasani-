@@ -230,8 +230,67 @@ private fun printReport(context: Context, title: String, rows: List<List<String>
 }
 private data class ReportCatalogItem(val title: String, val category: String, val source: String, val supported: Boolean, val note: String)
 private data class ReportLine(val date: String, val reference: String, val name: String, val amount: Long, val currency: String, val status: String, val displayAmount: String? = null)
+
+private fun CommercialCloudSupplierInvoiceSummary.toPriceVarianceInput() = SupplierInvoicePriceVarianceInput(
+    currencyCode = currencyCode,
+    subtotalMinor = subtotalMinor,
+    taxMinor = taxMinor,
+    freightMinor = freightMinor,
+    totalMinor = totalMinor,
+    lines = lines.map { line ->
+        SupplierInvoicePriceVarianceLineInput(
+            quantity = line.quantity,
+            unitPriceMinor = line.unitPriceMinor,
+            lineTotalMinor = line.lineTotalMinor,
+            purchaseOrderUnitCostMinor = line.purchaseOrderUnitCostMinor
+        )
+    }
+)
+
+private fun CommercialCloudSaleDocument.toCostProfitInput() = CostProfitSaleInput(
+    currencyCode = currencyCode,
+    subtotalMinor = subtotalMinor,
+    discountMinor = discountMinor,
+    lines = lines.map { CostProfitSaleLineInput(it.costTotalMinor) }
+)
+
+private fun CommercialCloudSaleReturn.toCostProfitInput() = CostProfitReturnInput(
+    currencyCode = currencyCode,
+    approvedRefundMinor = approvedRefundMinor,
+    items = items.map { item ->
+        CostProfitReturnItemInput(
+            saleItemCostTotalMinor = item.saleItemCostTotalMinor,
+            restockedQuantity = item.restockedQuantity,
+            saleItemQuantityInStockUnits = item.saleItemQuantityInStockUnits
+        )
+    }
+)
+
+private fun List<CommercialCloudSaleDocument>.toCustomerStatementInputs(): List<CustomerStatementInvoiceInput> =
+    filter { it.saleStatus.equals("completed", true) && it.customerId.isNotBlank() }.map { doc ->
+        CustomerStatementInvoiceInput(
+            customerId = doc.customerId,
+            receiptNumber = doc.receiptNumber,
+            customerName = doc.customerName,
+            totalMinor = doc.totalMinor,
+            currencyCode = doc.currencyCode,
+            createdAt = doc.createdAt,
+            payments = doc.payments.map { payment ->
+                CustomerStatementPaymentInput(payment.id, payment.amountMinor, payment.status, payment.createdAt)
+            },
+            returns = doc.returns.map { saleReturn ->
+                CustomerStatementReturnInput(
+                    saleReturn.id,
+                    saleReturn.status,
+                    saleReturn.refundStatus,
+                    saleReturn.approvedRefundMinor,
+                    saleReturn.updatedAt
+                )
+            }
+        )
+    }
+
 private fun reportLineAmount(row: ReportLine, cloudMode: Boolean): String = row.displayAmount ?: if (row.currency.isBlank() || row.currency == "-") row.amount.toString() else reportMoney(row.amount, row.currency, cloudMode)
-private data class ReportCustomerMovement(val date: String, val customerId: String, val customer: String, val currency: String, val reference: String, val amount: Long, val description: String)
 private data class ReportSupplierMovement(val date: String, val supplierId: String, val supplier: String, val currency: String, val reference: String, val amount: Long, val description: String)
 
 @Composable
@@ -399,11 +458,112 @@ internal fun ReportsCenterScreen(
             }
         }
     }
+    val expenseReportError = when {
+        !cloudMode -> expensesLoadError
+        expensesLoadError.isNotBlank() -> expensesLoadError
+        cloudExpenses.any { expense ->
+            expense.canceledAt.isBlank() &&
+                reportDateMillis(expense.recordedAt)?.let { it >= startMillis && it < endExclusive } == true &&
+                (expense.amountMinor <= 0L || !expense.currencyCode.matches(Regex("^[A-Z]{3}$")))
+        } -> "توجد مصروفات مسجلة بمبلغ أو عملة غير صالحة؛ تم حجب التقرير بدل افتراض عملة أو إجمالي غير موثوق."
+        else -> ""
+    }
+    val paymentMethodAnalysisError = when {
+        !cloudMode -> "تحليل التحصيل حسب طريقة الدفع يتطلب سجل الدفعات السحابي."
+        paymentsLoadError.isNotBlank() -> paymentsLoadError
+        cloudPayments.any { row ->
+            row.status.equals("succeeded", true) &&
+                reportDateMillis(row.createdAt)?.let { it >= startMillis && it < endExclusive } == true &&
+                (row.amountMinor <= 0L || !row.currencyCode.matches(Regex("^[A-Z]{3}$")))
+        } -> "توجد دفعة ناجحة بمبلغ أو عملة غير صالحة؛ تم حجب التجميع حتى لا يظهر إجمالي ناقص."
+        else -> ""
+    }
+    val supplierInvoiceVarianceError = when {
+        !cloudMode -> "فروقات أسعار فواتير الموردين تتطلب فواتير السحابة وبنودها المحفوظة."
+        purchasesLoadError.isNotBlank() -> purchasesLoadError
+        cloudPurchases.any { purchase ->
+            purchase.supplierInvoices.filter { invoice ->
+                invoice.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed") &&
+                    reportDateMillis(invoice.recordedAt)?.let { it >= startMillis && it < endExclusive } == true
+            }.any { invoice ->
+                invoice.currencyCode != purchase.currencyCode ||
+                    runCatching { calculateSupplierInvoicePriceVariance(invoice.toPriceVarianceInput()) }.isFailure
+            }
+        } ->
+            "تعذر مطابقة أحد فواتير المورد مع بنودها وأسعار أمر الشراء؛ لم يتم عرض إجمالي جزئي أو فرق سعر مضلل."
+        else -> ""
+    }
+    val activeSupplierInvoiceCandidates = cloudPurchases.flatMap { purchase ->
+        purchase.supplierInvoices.filter { invoice ->
+            invoice.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed")
+        }.map { invoice -> purchase to invoice }
+    }
+    val supplierObligationCandidates = activeSupplierInvoiceCandidates.filter { (_, invoice) ->
+        invoice.obligation != null &&
+            invoice.obligation.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed")
+    }
+    val supplierObligationInputs = supplierObligationCandidates.mapNotNull { (purchase, invoice) ->
+        val timestamp = reportDateMillis(invoice.recordedAt) ?: return@mapNotNull null
+        if (timestamp >= endExclusive) return@mapNotNull null
+        val obligation = invoice.obligation ?: return@mapNotNull null
+        SupplierObligationInput(
+            supplierId = purchase.supplierId,
+            supplierName = purchase.supplierName.ifBlank { "مورد غير محدد" },
+            purchaseOrderCurrencyCode = purchase.currencyCode,
+            invoiceCurrencyCode = invoice.currencyCode,
+            obligationCurrencyCode = obligation.currencyCode,
+            amountDueMinor = obligation.amountDueMinor,
+            amountPaidMinor = obligation.amountPaidMinor
+        )
+    }
+    val supplierInvoiceDetailError = when {
+        !cloudMode -> "تفاصيل فواتير الشراء تتطلب مصادر السحابة."
+        purchasesLoadError.isNotBlank() -> purchasesLoadError
+        activeSupplierInvoiceCandidates.any { (_, invoice) -> reportDateMillis(invoice.recordedAt) == null } ->
+            "توجد فاتورة مورد بتاريخ تسجيل غير صالح؛ تعذر تحديد الفترة بدقة."
+        activeSupplierInvoiceCandidates.any { (purchase, invoice) ->
+            val obligation = invoice.obligation
+            invoice.totalMinor < 0L || !purchase.currencyCode.matches(Regex("^[A-Z]{3}$")) ||
+                invoice.currencyCode != purchase.currencyCode ||
+                (obligation != null && (obligation.currencyCode != purchase.currencyCode ||
+                    obligation.amountDueMinor < 0L || obligation.amountPaidMinor < 0L))
+        } -> "توجد فاتورة أو مستحق مورد بمبلغ أو عملة غير متطابقة؛ تم حجب التقرير."
+        else -> ""
+    }
+    val supplierObligationsError = when {
+        !cloudMode -> "مستحقات فواتير الموردين تتطلب مصادر السحابة."
+        purchasesLoadError.isNotBlank() -> purchasesLoadError
+        supplierObligationCandidates.any { (_, invoice) -> reportDateMillis(invoice.recordedAt) == null } ->
+            "توجد فاتورة التزام مورد بتاريخ غير صالح؛ لا يمكن حساب الرصيد حتى نهاية الفترة."
+        runCatching { calculateSupplierObligationTotals(supplierObligationInputs) }.isFailure ->
+            "تعذر مطابقة عملات الالتزامات أو تجاوزت مجاميعها نطاق الأرقام الدقيق؛ تم حجب المستحقات."
+        else -> ""
+    }
     val taxDetailError = when {
         !cloudMode -> "التقرير الضريبي التفصيلي يتطلب مصادر السحابة."
         salesDocumentsLoadError.isNotBlank() -> salesDocumentsLoadError
         purchasesLoadError.isNotBlank() -> purchasesLoadError
         returnsLoadError.isNotBlank() -> returnsLoadError
+        cloudSalesDocuments.any { doc ->
+            doc.saleStatus.equals("completed", true) &&
+                reportDateMillis(doc.createdAt)?.let { it >= startMillis && it < endExclusive } == true &&
+                (doc.subtotalMinor < 0L || doc.discountMinor < 0L || doc.discountMinor > doc.subtotalMinor ||
+                    doc.taxMinor < 0L || !doc.currencyCode.matches(Regex("^[A-Z]{3}$")))
+        } -> "توجد فاتورة بيع مكتملة بخصم أو ضريبة أو عملة غير صالحة؛ تم حجب تفاصيل الضرائب والخصومات."
+        cloudPurchases.any { purchase ->
+            purchase.supplierInvoices.any { invoice ->
+                invoice.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed") &&
+                    reportDateMillis(invoice.recordedAt)?.let { it >= startMillis && it < endExclusive } == true &&
+                    (invoice.subtotalMinor < 0L || invoice.taxMinor < 0L || invoice.freightMinor < 0L ||
+                        !invoice.currencyCode.matches(Regex("^[A-Z]{3}$")) || invoice.currencyCode != purchase.currencyCode)
+            }
+        } -> "توجد فاتورة مورد بمبالغ أو عملة غير متطابقة مع أمر الشراء؛ تم حجب تفاصيل الضرائب والخصومات."
+        cloudReturns.any { saleReturn ->
+            saleReturn.status.equals("completed", true) &&
+                reportDateMillis(saleReturn.completedAt)?.let { it >= startMillis && it < endExclusive } == true &&
+                (saleReturn.approvedRefundMinor == null || saleReturn.approvedRefundMinor < 0L ||
+                    !saleReturn.currencyCode.matches(Regex("^[A-Z]{3}$")))
+        } -> "يوجد مرتجع مكتمل بلا مبلغ اعتماد أو عملة صالحة؛ تم حجب تفاصيل الضرائب والخصومات."
         else -> ""
     }
     val costProfitError = when {
@@ -424,8 +584,38 @@ internal fun ReportsCenterScreen(
         cloudReturns.any { saleReturn ->
             saleReturn.status.equals("completed", true) &&
                 reportDateMillis(saleReturn.completedAt)?.let { it >= startMillis && it < endExclusive } == true &&
+                cloudSalesDocuments.none { it.id == saleReturn.saleId && it.currencyCode == saleReturn.currencyCode }
+        } -> "تعذر مطابقة عملة أو فاتورة أحد المرتجعات مع سجل البيع الأصلي؛ تم حجب الربح."
+        cloudReturns.any { saleReturn ->
+            saleReturn.status.equals("completed", true) &&
+                reportDateMillis(saleReturn.completedAt)?.let { it >= startMillis && it < endExclusive } == true &&
                 cloudSalesDocuments.any { it.id == saleReturn.saleId && it.taxMinor > 0L }
         } -> "توجد مرتجعات لفواتير ضريبية؛ لم تُفصل حصة الضريبة في مبلغ الاسترداد، لذلك حُجب صافي الربح."
+        runCatching {
+            val periodSales = cloudSalesDocuments.filter { doc ->
+                doc.saleStatus.equals("completed", true) &&
+                    reportDateMillis(doc.createdAt)?.let { it >= startMillis && it < endExclusive } == true
+            }
+            val periodReturns = cloudReturns.filter { saleReturn ->
+                saleReturn.status.equals("completed", true) &&
+                    reportDateMillis(saleReturn.completedAt)?.let { it >= startMillis && it < endExclusive } == true
+            }
+            calculateCostProfitReportTotals(periodSales.map { it.toCostProfitInput() }, periodReturns.map { it.toCostProfitInput() })
+        }.isFailure -> "تجاوزت مجاميع المبيعات أو التكلفة أو المرتجعات نطاق الأرقام الدقيق، أو تعذر تسويتها؛ تم حجب الربح بدل إظهار إجمالي ملتف أو ناقص."
+        else -> ""
+    }
+    val customerOperationalStatementError = when {
+        !cloudMode -> "كشف العميل التشغيلي يتطلب فواتير السحابة والتحصيلات والمرتجعات."
+        salesDocumentsLoadError.isNotBlank() -> salesDocumentsLoadError
+        runCatching {
+            val movements = buildCustomerOperationalStatementMovements(cloudSalesDocuments.toCustomerStatementInputs())
+            movements.groupBy { it.customerId to it.currency }.values.forEach { customerMoves ->
+                val ordered = customerMoves.sortedWith(compareBy<ReportCustomerMovement> { it.date }.thenBy { it.reference })
+                sumReportAmountsExactly(ordered.map { it.amount })
+                var balance = 0L
+                ordered.forEach { balance = Math.addExact(balance, it.amount) }
+            }
+        }.isFailure -> "توجد فاتورة أو دفعة أو مرتجع عميل بمبلغ/تاريخ غير صالح، أو تجاوزت مجاميع كشف العميل نطاق الأرقام الدقيق؛ تم حجب الكشف."
         else -> ""
     }
     val customerStatementError = when {
@@ -466,11 +656,14 @@ internal fun ReportsCenterScreen(
             "ملخص المبيعات حسب الفترة", "تفاصيل فواتير المبيعات", "تفاصيل بنود فواتير المبيعات",
             "المبيعات حسب الصنف", "الخصومات على فواتير المبيعات", "الضرائب المسجلة على المبيعات",
             "لوحة المؤشرات", "المبيعات حسب العميل", "المبيعات حسب حالة السداد", "متوسط قيمة الفاتورة", "مقارنة الفترات",
-            "أرصدة العملاء وكشف الحساب" -> salesDocumentsLoadError
+            "أرصدة العملاء وكشف الحساب" -> customerOperationalStatementError
             "مرتجعات المبيعات وحالة التسوية" -> returnsLoadError
-            "فواتير الشراء والمستحقات المسجلة", "مستحقات فواتير الموردين" -> purchasesLoadError
+            "فواتير الشراء والمستحقات المسجلة" -> supplierInvoiceDetailError
+            "مستحقات فواتير الموردين" -> supplierObligationsError
+            "فروقات أسعار فواتير الموردين" -> supplierInvoiceVarianceError
             "كشف حركات الموردين" -> purchasesLoadError.ifBlank { supplierPaymentsLoadError }
             "الدفعات السحابية الناجحة", "سندات القبض والصرف" -> paymentsLoadError
+            "التحصيل حسب طريقة الدفع" -> paymentMethodAnalysisError
             "سجل القيود المحاسبية" -> journalsLoadError
             "ميزان المراجعة حسب الحساب", "حركة دفتر الأستاذ العام", "كشف حساب محاسبي", "تفاصيل القيود المرحلة" -> ledgerLinesLoadError
             "قائمة الدخل والميزانية العمومية" -> ledgerStatementError
@@ -501,7 +694,7 @@ internal fun ReportsCenterScreen(
             }
             "الرصيد المحاسبي الكامل للعملاء" -> customerStatementError
             "أرصدة الموردين والمستحقات" -> supplierStatementError
-            "المصروفات التشغيلية" -> expensesLoadError
+            "المصروفات التشغيلية", "ملخص المصروفات حسب التصنيف وطريقة الصرف" -> expenseReportError
             "حركة المخزون الفعلية" -> stockMovementsLoadError
             "رصيد المخزون الحالي", "تنبيهات المخزون المنخفض" -> stockAlertsLoadError
             else -> ""
@@ -529,13 +722,16 @@ internal fun ReportsCenterScreen(
             ReportCatalogItem("متوسط قيمة الفاتورة", "المبيعات", "إجمالي الفواتير المكتملة وعددها", true, "متوسط تشغيلي منفصل حسب العملة."),
             ReportCatalogItem("مقارنة الفترات", "الفترات والمقارنات", "سجلات المبيعات المكتملة المؤرخة", true, "يقارن الفترة الحالية بفترة سابقة مساوية لها في عدد الأيام حسب العملة."),
             ReportCatalogItem(if (cloudMode) "الدفعات السحابية الناجحة" else "التحصيلات المسجلة محليًا", "السندات والتحصيل والصرف", if (cloudMode) "commercial_payments" else "settlements_json", true, "يعرض الدفعات الناجحة فقط في السحابة؛ السندات لا تُجمع منفصلة عن الدفعة المرتبطة."),
+            ReportCatalogItem("التحصيل حسب طريقة الدفع", "السندات والتحصيل والصرف", "commercial_payments.payment_method_type + amount_minor", cloudMode, "يجمع الدفعات الناجحة فقط حسب طريقة الدفع والعملة؛ لا يضيف قيود الأستاذ مرة ثانية، ويظهر طريقة الدفع غير المسجلة كفئة منفصلة."),
             ReportCatalogItem("المصروفات التشغيلية", "الأرباح والتكاليف", if (cloudMode) "commercial_expense_vouchers" else "expenses_json", true, "تُستبعد سندات الصرف الملغاة؛ هذا تقرير مصروفات مسجلة وليس قائمة دخل."),
+            ReportCatalogItem("ملخص المصروفات حسب التصنيف وطريقة الصرف", "الأرباح والتكاليف", "commercial_expense_vouchers.category + payment_method + amount_minor", cloudMode, "يجمع سندات الصرف غير الملغاة حسب التصنيف وطريقة الصرف والعملة؛ لا يخلط العملات ولا يضيف القيود المحاسبية مرة ثانية."),
             ReportCatalogItem("رصيد المخزون الحالي", "الأصناف والمخزون", if (cloudMode) "commercial_inventory_balances" else "products_json", true, "رصيد حالي فقط؛ ليس رصيدًا تاريخيًا للفترة."),
             ReportCatalogItem("التقييم المالي الحالي للمخزون", "الأصناف والمخزون", "commercial_inventory_balances.unit_cost_minor + حساب المخزون المربوط", cloudMode, "يقيم كمية الموقع الحالي بتكلفة الوحدة المسجلة وبعملة حساب المخزون المربوط؛ يحجب التقييم إذا غابت التكلفة أو العملة. لا يمثل تقييمًا تاريخيًا."),
 
             ReportCatalogItem("حركة المخزون الفعلية", "الأصناف والمخزون", "commercial_stock_movements المرتبطة بنشاط المؤسسة", cloudMode, "يعرض حركات الكمية المسجلة من دفتر حركة المخزون، مع مرجع المصدر وحالة فاتورة البيع عند توفرها؛ لا يستنتج تكلفة أو قيمة مالية من الكمية."),
             ReportCatalogItem("تنبيهات المخزون المنخفض", "الأصناف والمخزون", "الرصيد وحد إعادة الطلب", true, "يعتمد على حد التنبيه المسجل لكل صنف."),
             ReportCatalogItem("فواتير الشراء والمستحقات المسجلة", "المشتريات", "commercial_purchase_orders ← supplier_invoices ← supplier_obligations", cloudMode, "يُعرض مبلغ الفاتورة والرصيد المستحق من سجل الالتزام؛ لا يُخلط مع قيمة أمر الشراء."),
+            ReportCatalogItem("فروقات أسعار فواتير الموردين", "المشتريات", "commercial_supplier_invoice_items مقابل commercial_purchase_order_items.unit_cost_minor", cloudMode, "يقارن مجموع بنود فاتورة المورد بسعر الأساس المسجل في أمر الشراء، وفق تقريب القيد المحاسبي نفسه؛ يستبعد الضريبة والشحن من فرق السعر ويوقف التقرير إذا تعذر مطابقة أي بند."),
             ReportCatalogItem("مستحقات فواتير الموردين", "الموردون والمستحقات", "commercial_supplier_obligations المرتبطة بالفواتير", cloudMode, "مجموع الالتزامات المسجلة ناقص المبالغ المسددة المسجلة فقط؛ لا يمثل رصيد المورد الشامل إذا وجدت تسويات أو مرتجعات خارج هذا المصدر."),
             ReportCatalogItem("مرتجعات المبيعات وحالة التسوية", "المرتجعات", "commercial_sales_returns + عناصر المرتجع", cloudMode, "يفصل حالة الموافقة عن الاسترداد الفعلي وإعادة التخزين؛ لا تُعامل الطلبات المعلقة كمرتجعات منفذة."),
             ReportCatalogItem("أرصدة العملاء وكشف الحساب", "العملاء والديون", "فواتير العملاء المكتملة + التحصيلات الناجحة + المرتجعات المعتمدة والاستردادات المنفذة", cloudMode, "يعرض كشف حركة للفواتير المكتملة والتحصيلات والمرتجعات والاستردادات المسجلة في مصادر السحابة، مع رصيد افتتاحي وحركة ورصيد ختامي حسب العميل والعملة."),
@@ -553,7 +749,14 @@ internal fun ReportsCenterScreen(
             ReportCatalogItem("التدفقات النقدية والصندوق", "الصندوق والنقدية", "سطور دفتر الأستاذ المرحلة لحسابات النقد والبنك المربوطة", cloudMode, "يحسب صافي حركة الحسابات النقدية حسب العملة من القيود المرحلة فقط؛ التحويل بين حسابين نقديين يظهر كتغير داخلي دون تضخيم صافي النقد."),
 
             ReportCatalogItem("الضرائب والخصومات", "الضرائب والخصومات", "تفاصيل الضرائب والخصومات من المستندات", false, "لا تُخمن النسب أو مبالغ الضريبة إذا لم تسجل في المصدر."),
-            ReportCatalogItem("أداء المستخدمين والفروع والمستودعات", "المستخدمون والعمليات", "مستخدم/فرع/مستودع محفوظ على المستند", false, "لا تتوفر كل هذه الأبعاد في نموذج البيانات المحمل حاليًا."),
+            ReportCatalogItem("أداء المستخدمين والفروع والمستودعات", "المستخدمون والعمليات", "مستخدم/فرع/مستودع محفوظ على المستند", false, "لا تتوفر كل هذه الأبعاد على جميع مستندات البيع والشراء والتحصيل في نموذج البيانات الحالي؛ لن تُنسب العمليات إلى مستخدم أو فرع بالتخمين."),
+            ReportCatalogItem("أعمار ديون العملاء", "العملاء والديون", "تاريخ استحقاق معتمد وتخصيصات تحصيل على مستوى الفاتورة", false, "لا يوجد تاريخ استحقاق موحد محفوظ للفواتير؛ تاريخ إنشاء الفاتورة ليس تاريخ استحقاق، لذلك لا يمكن تكوين شرائح 30/60/90 يومًا بدقة."),
+            ReportCatalogItem("أعمار مستحقات الموردين", "الموردون والمستحقات", "تاريخ استحقاق تعاقدي لكل التزام", false, "جدول التزامات الموردين لا يحتوي تاريخ استحقاق أو شروط ائتمان؛ لا يجوز استخدام تاريخ تسجيل الفاتورة كموعد استحقاق مفترض."),
+            ReportCatalogItem("التسوية البنكية", "الصندوق والنقدية", "كشف بنك خارجي + أسطر مطابقة وحالة تسوية", false, "دفتر الأستاذ الداخلي لا يثبت حركات البنك الفعلية؛ لا يوجد مصدر كشف بنكي مستورد ومطابقات معتمدة."),
+            ReportCatalogItem("قائمة التدفقات النقدية المصنفة", "الصندوق والنقدية", "تصنيف معتمد للتدفقات التشغيلية والاستثمارية والتمويلية", false, "المتاح حاليًا حركة حسابات النقد والبنك من القيود المرحلة فقط؛ لا توجد تصنيفات تدفق معتمدة تكفي لقائمة تدفقات نقدية كاملة."),
+            ReportCatalogItem("الإقرار الضريبي النظامي", "الضرائب والخصومات", "ولاية ضريبية وتسجيل المنشأة وقواعد وفترات الإقرار", false, "الحقول المسجلة للضريبة ليست إقرارًا نظاميًا؛ لم تُعتمد الولاية الضريبية أو متطلبات التسجيل والنماذج والتقريب والائتمانات."),
+            ReportCatalogItem("تقييم المخزون التاريخي ومطابقته مع الأستاذ", "الأصناف والمخزون", "طبقات تكلفة تاريخية وحركات وأرصدة حسب المستودع + حساب المخزون", false, "الرصيد الحالي لا يعيد بناء قيمة تاريخية، ودفتر الكميات/التكلفة لم يكتمل على مستوى المستودع مع مطابقة حساب المخزون."),
+            ReportCatalogItem("تجميع القوائم المالية متعددة العملات", "الإدارة الشاملة", "أسعار صرف معتمدة بتاريخ الغرض وسياسة ترجمة وفروق عملة", false, "لا توجد سياسة تحويل معتمدة أو مصدر أسعار صرف مؤرخ لغرض التقارير؛ لن تُجمع العملات أو تُحوّل بسعر حالي عشوائي."),
 
             ReportCatalogItem("تكلفة البضاعة والربح", "الأرباح والتكاليف", "commercial_sale_items.cost_total_minor + المرتجعات المكتملة", cloudMode, "يعتمد على لقطة التكلفة المحفوظة مع بند البيع، ويعكس تكلفة البضاعة المرتجعة التي أعيد تخزينها؛ يحجب الربح إذا كانت التكلفة أو تسوية الضريبة غير مكتملة.")
         )
@@ -661,6 +864,21 @@ internal fun ReportsCenterScreen(
                 }
             }
         }
+        "التحصيل حسب طريقة الدفع" -> cloudPayments.filter { row ->
+            val timestamp = reportDateMillis(row.createdAt)
+            timestamp != null && timestamp >= startMillis && timestamp < endExclusive &&
+                row.status.equals("succeeded", true)
+        }.groupBy { it.paymentMethodCode.ifBlank { "غير محددة" } to it.currencyCode }.map { (key, rows) ->
+            val total = rows.fold(0L) { sum, row -> Math.addExact(sum, row.amountMinor) }
+            ReportLine(
+                "${startText} — ${endText}",
+                "تجميع",
+                key.first,
+                total,
+                key.second,
+                "عدد الدفعات: ${rows.size} · دفعات ناجحة فقط · المصدر: commercial_payments"
+            )
+        }.sortedWith(compareBy<ReportLine> { it.currency }.thenBy { it.name })
         "الدفعات السحابية الناجحة" -> cloudPayments.filter { row ->
             val timestamp = reportDateMillis(row.createdAt)
             timestamp != null && timestamp >= startMillis && timestamp < endExclusive &&
@@ -671,6 +889,26 @@ internal fun ReportsCenterScreen(
         "التحصيلات المسجلة محليًا" -> inPeriodSettlements.map {
             ReportLine(Instant.ofEpochMilli(it.timestamp).atZone(zone).toLocalDate().toString(), "فاتورة #${it.invoiceNumber}", it.customer, it.amount.toLong(), "YER", "تحصيل محلي")
         }
+        "فروقات أسعار فواتير الموردين" -> cloudPurchases.flatMap { purchase ->
+            purchase.supplierInvoices.filter { invoice ->
+                invoice.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed") &&
+                    reportDateMillis(invoice.recordedAt)?.let { it >= startMillis && it < endExclusive } == true
+            }.map { invoice ->
+                val variance = calculateSupplierInvoicePriceVariance(invoice)
+                val itemPreview = invoice.lines.take(4).joinToString("؛ ") { line ->
+                    "${line.purchaseOrderItemDescription.ifBlank { "بند" }}: ${line.quantity} × ${reportMoney(line.unitPriceMinor, invoice.currencyCode, true)} (أساس ${reportMoney(line.purchaseOrderUnitCostMinor!!, invoice.currencyCode, true)})"
+                }
+                val moreItems = if (invoice.lines.size > 4) " · وبنود أخرى: ${invoice.lines.size - 4}" else ""
+                ReportLine(
+                    invoice.recordedAt.take(10),
+                    "فاتورة المورد #${invoice.invoiceNumber.ifBlank { invoice.id }}",
+                    purchase.supplierName,
+                    variance.varianceMinor,
+                    invoice.currencyCode,
+                    "فرق موجب = أعلى من أمر الشراء، وسالب = أقل · أساس الأمر: ${reportMoney(variance.expectedSubtotalMinor, invoice.currencyCode, true)} · الفاتورة قبل الضريبة والشحن: ${reportMoney(variance.invoiceSubtotalMinor, invoice.currencyCode, true)} · الضريبة: ${reportMoney(invoice.taxMinor, invoice.currencyCode, true)} · الشحن: ${reportMoney(invoice.freightMinor, invoice.currencyCode, true)} · التفاصيل: ${itemPreview}${moreItems}"
+                )
+            }
+        }.sortedByDescending { it.date }
         "فواتير الشراء والمستحقات المسجلة" -> cloudPurchases.flatMap { purchase ->
             purchase.supplierInvoices.filter { invoice ->
                 val timestamp = reportDateMillis(invoice.recordedAt)
@@ -681,25 +919,23 @@ internal fun ReportsCenterScreen(
                 val paid = invoice.obligation?.amountPaidMinor
                 ReportLine(invoice.recordedAt.take(10), invoice.invoiceNumber.ifBlank { purchase.orderNumber }, purchase.supplierName,
                     invoice.totalMinor, invoice.currencyCode.ifBlank { purchase.currencyCode },
-                    if (due != null && paid != null) "مستحق: ${(due - paid).coerceAtLeast(0)} · ${invoice.state}" else invoice.state)
+                    if (due != null && paid != null) {
+                        val balance = Math.subtractExact(due, paid)
+                        if (balance >= 0L) "المستحق: ${reportMoney(balance, invoice.currencyCode, true)} · ${invoice.state}"
+                        else "رصيد دائن/مقدم للمورد: ${reportMoney(balance, invoice.currencyCode, true)} · ${invoice.state}"
+                    } else invoice.state)
             }
         }.sortedByDescending { it.date }
-        "مستحقات فواتير الموردين" -> cloudPurchases.flatMap { purchase ->
-            purchase.supplierInvoices.filter { invoice ->
-                val timestamp = reportDateMillis(invoice.recordedAt)
-                timestamp != null && timestamp < endExclusive &&
-                    invoice.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed") &&
-                    invoice.obligation != null &&
-                    invoice.obligation.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed")
-            }.mapNotNull { invoice ->
-                val obligation = invoice.obligation ?: return@mapNotNull null
-                Triple(purchase.supplierName.ifBlank { "مورد غير محدد" }, invoice.currencyCode.ifBlank { purchase.currencyCode }, obligation)
-            }
-        }.groupBy { it.first to it.second }.map { (key, rows) ->
-            val due = rows.sumOf { it.third.amountDueMinor }
-            val paid = rows.sumOf { it.third.amountPaidMinor }
-            ReportLine(endText, "-", key.first, (due - paid).coerceAtLeast(0L), key.second,
-                "إجمالي الالتزامات: ${reportMoney(due, key.second, true)} · المسدد: ${reportMoney(paid, key.second, true)} · عدد الالتزامات: ${rows.size}")
+        "مستحقات فواتير الموردين" -> calculateSupplierObligationTotals(supplierObligationInputs).map { totals ->
+            val balanceLabel = if (totals.balanceMinor >= 0L) "المستحق للمورد" else "رصيد دائن/مقدم للمورد"
+            ReportLine(
+                endText,
+                totals.supplierId,
+                totals.supplierName,
+                totals.balanceMinor,
+                totals.currencyCode,
+                "إجمالي الالتزامات: ${reportMoney(totals.amountDueMinor, totals.currencyCode, true)} · المسدد: ${reportMoney(totals.amountPaidMinor, totals.currencyCode, true)} · ${balanceLabel}: ${reportMoney(totals.balanceMinor, totals.currencyCode, true)}"
+            )
         }.sortedByDescending { it.amount }
         "كشف حركات الموردين" -> {
             val invoiceMovements = cloudPurchases.flatMap { purchase ->
@@ -804,37 +1040,31 @@ internal fun ReportsCenterScreen(
                 }
         }
         "أرصدة العملاء وكشف الحساب" -> {
-            val movements = buildList {
-                cloudSalesDocuments.filter { it.saleStatus.equals("completed", true) && it.customerId.isNotBlank() }.forEach { doc ->
-                    val customerName = doc.customerName.ifBlank { "عميل غير محدد" }
-                    val currency = doc.currencyCode.ifBlank { "غير محددة" }
-                    add(ReportCustomerMovement(doc.createdAt.take(10), doc.customerId, customerName, currency, "فاتورة #${doc.receiptNumber}", doc.totalMinor.coerceAtLeast(0L), "مدين · فاتورة مكتملة"))
-                    doc.payments.filter { it.status.lowercase(Locale.ROOT) in setOf("succeeded", "partially_refunded", "refunded") && it.amountMinor > 0L }.forEach { payment ->
-                        val date = payment.createdAt.take(10).ifBlank { doc.createdAt.take(10) }
-                        add(ReportCustomerMovement(date, doc.customerId, customerName, currency, "تحصيل ${payment.id.ifBlank { doc.receiptNumber }}", -payment.amountMinor.coerceAtLeast(0L), "دائن · تحصيل ${payment.status}"))
-                    }
-                    doc.returns.filter { it.status.equals("completed", true) && (it.approvedRefundMinor ?: 0L) > 0L }.forEach { saleReturn ->
-                        add(ReportCustomerMovement((saleReturn.updatedAt.ifBlank { saleReturn.createdAt }).take(10), doc.customerId, customerName, currency, "مرتجع ${saleReturn.id}", -(saleReturn.approvedRefundMinor ?: 0L).coerceAtLeast(0L), "دائن · مرتجع معتمد"))
-                    }
-                    doc.returns.filter { it.refundStatus.equals("refunded", true) && (it.approvedRefundMinor ?: 0L) > 0L }.forEach { saleReturn ->
-                        add(ReportCustomerMovement((saleReturn.updatedAt.ifBlank { saleReturn.createdAt }).take(10), doc.customerId, customerName, currency, "استرداد ${saleReturn.id}", (saleReturn.approvedRefundMinor ?: 0L).coerceAtLeast(0L), "مدين · استرداد منفذ"))
+            val movements = buildCustomerOperationalStatementMovements(cloudSalesDocuments.toCustomerStatementInputs())
+                .filter { movement ->
+                    customerFilter.isBlank() ||
+                        movement.customer.contains(customerFilter.trim(), true) ||
+                        movement.customerId.contains(customerFilter.trim(), true)
+                }
+            movements.groupBy { Triple(it.customerId, it.customer, it.currency) }
+                .toSortedMap(compareBy<Triple<String, String, String>> { it.second }.thenBy { it.third })
+                .flatMap { (key, customerMoves) ->
+                    val ordered = customerMoves.sortedWith(compareBy<ReportCustomerMovement> { it.date }.thenBy { it.reference })
+                    val opening = sumReportAmountsExactly(
+                        ordered.filter { reportDateMillis(it.date)?.let { ts -> ts < startMillis } == true }.map { it.amount }
+                    )
+                    val periodMoves = ordered.filter { reportDateMillis(it.date)?.let { ts -> ts >= startMillis && ts < endExclusive } == true }
+                    if (periodMoves.isEmpty() && opening == 0L) emptyList() else buildList {
+                        var balance = opening
+                        if (opening != 0L) add(ReportLine(startText, "سابق", key.second, opening, key.third, "رصيد سابق محسوب من الحركات المسجلة"))
+                        periodMoves.forEach { movement ->
+                            balance = Math.addExact(balance, movement.amount)
+                            add(ReportLine(movement.date, movement.reference, movement.customer, movement.amount, movement.currency,
+                                "${movement.description} · الرصيد: ${reportMoney(balance, movement.currency, true)}"))
+                        }
+                        add(ReportLine(endText, "ختامي", key.second, balance, key.third, "الرصيد الختامي من الفواتير والتحصيلات والمرتجعات المكتملة فقط"))
                     }
                 }
-            }.filter { movement -> customerFilter.isBlank() || movement.customer.contains(customerFilter.trim(), true) || movement.customerId.contains(customerFilter.trim(), true) }
-            movements.groupBy { Triple(it.customerId, it.customer, it.currency) }.toSortedMap(compareBy<Triple<String, String, String>> { it.second }.thenBy { it.third }).flatMap { (key, customerMoves) ->
-                val ordered = customerMoves.sortedWith(compareBy<ReportCustomerMovement> { it.date }.thenBy { it.reference })
-                val opening = ordered.filter { reportDateMillis(it.date)?.let { ts -> ts < startMillis } == true }.sumOf { it.amount }
-                val periodMoves = ordered.filter { reportDateMillis(it.date)?.let { ts -> ts >= startMillis && ts < endExclusive } == true }
-                if (periodMoves.isEmpty() && opening == 0L) emptyList() else buildList {
-                    var balance = opening
-                    if (opening != 0L) add(ReportLine(startText, "سابق", key.second, opening, key.third, "رصيد سابق محسوب من الحركات المتاحة"))
-                    periodMoves.forEach { movement ->
-                        balance = Math.addExact(balance, movement.amount)
-                        add(ReportLine(movement.date, movement.reference, movement.customer, movement.amount, movement.currency, "${movement.description} · الرصيد: ${reportMoney(balance, movement.currency, true)}"))
-                    }
-                    add(ReportLine(endText, "ختامي", key.second, balance, key.third, "الرصيد الختامي المحسوب من الحركات المتاحة؛ لا يشمل تعديلات خارج هذه المصادر"))
-                }
-            }
         }
         "سندات القبض والصرف" -> cloudPayments.filter { row ->
             val timestamp = reportDateMillis(row.createdAt)
@@ -900,7 +1130,7 @@ internal fun ReportsCenterScreen(
                 saleReturn.status.equals("completed", true) &&
                     reportDateMillis(saleReturn.completedAt)?.let { it >= startMillis && it < endExclusive } == true
             }.forEach { saleReturn ->
-                add(ReportLine(saleReturn.completedAt.take(10), "مرتجع #${saleReturn.id}", saleReturn.customerName, -(saleReturn.approvedRefundMinor ?: 0L), saleReturn.currencyCode,
+                add(ReportLine(saleReturn.completedAt.take(10), "مرتجع #${saleReturn.id}", saleReturn.customerName, -saleReturn.approvedRefundMinor!!, saleReturn.currencyCode,
                     "قيمة مرتجع معتمد؛ لا تفصل حصة الضريبة لأن مصدر المرتجع لا يخزنها منفصلة"))
             }
         }.sortedByDescending { it.date }
@@ -913,38 +1143,22 @@ internal fun ReportsCenterScreen(
                 saleReturn.status.equals("completed", true) &&
                     reportDateMillis(saleReturn.completedAt)?.let { it >= startMillis && it < endExclusive } == true
             }
-            val currencies = (periodSales.map { it.currencyCode } + periodReturns.map { it.currencyCode })
-                .filter { it.matches(Regex("^[A-Z]{3}$")) }.distinct().sorted()
             buildList {
-                currencies.forEach { currency ->
-                    val salesRows = periodSales.filter { it.currencyCode == currency }
-                    val returnRows = periodReturns.filter { it.currencyCode == currency }
-                    val grossSales = salesRows.sumOf { (it.subtotalMinor - it.discountMinor).coerceAtLeast(0L) }
-                    val returnRevenue = returnRows.sumOf { it.approvedRefundMinor ?: 0L }
-                    val netRevenue = grossSales - returnRevenue
-                    val soldCost = salesRows.sumOf { doc -> doc.lines.sumOf { it.costTotalMinor ?: 0L } }
-                    val returnedCost = returnRows.sumOf { saleReturn ->
-                        saleReturn.items.sumOf { item ->
-                            if (item.restockedQuantity <= 0 || item.saleItemQuantityInStockUnits <= 0L) 0L
-                            else runCatching {
-                                java.math.BigDecimal.valueOf(item.saleItemCostTotalMinor ?: 0L)
-                                    .multiply(java.math.BigDecimal.valueOf(item.restockedQuantity.toLong()))
-                                    .divide(java.math.BigDecimal.valueOf(item.saleItemQuantityInStockUnits), 0, java.math.RoundingMode.HALF_UP)
-                                    .longValueExact()
-                            }.getOrDefault(0L)
-                        }
-                    }
-                    val netCost = soldCost - returnedCost
-                    val grossProfit = netRevenue - netCost
-                    add(ReportLine("${startText} — ${endText}", "تكلفة وربح", "إيرادات المبيعات بعد الخصومات المسجلة", grossSales, currency,
-                        "إجمالي ${salesRows.size} فاتورة مكتملة؛ الإيراد لا يتضمن الضريبة"))
-                    if (returnRevenue != 0L) add(ReportLine("${startText} — ${endText}", "مرتجعات", "مبالغ المرتجعات المعتمدة", -returnRevenue, currency,
-                        "مرتجعات مكتملة ضمن الفترة فقط؛ تم حجب التقرير إذا تعذر فصل ضريبة المرتجع"))
-                    add(ReportLine("${startText} — ${endText}", "صافي الإيرادات", "صافي الإيرادات بعد المرتجعات", netRevenue, currency, "من الفواتير المكتملة ناقص الخصومات والمرتجعات المعتمدة"))
-                    add(ReportLine("${startText} — ${endText}", "تكلفة البضاعة", "تكلفة البنود المباعة المحفوظة", -soldCost, currency, "لقطات cost_total_minor المسجلة عند البيع؛ لا تستخدم تكلفة الشراء الحالية"))
-                    if (returnedCost != 0L) add(ReportLine("${startText} — ${endText}", "عكس تكلفة المرتجع", "تكلفة الكمية التي أعيد تخزينها", returnedCost, currency, "محسوبة من تكلفة بند البيع التاريخية والكمية المعاد تخزينها"))
-                    add(ReportLine("${startText} — ${endText}", "تكلفة صافية", "تكلفة البضاعة بعد المرتجعات المعاد تخزينها", -netCost, currency, "تكلفة البيع ناقص تكلفة المرتجعات التي أعيد تخزينها"))
-                    add(ReportLine("${startText} — ${endText}", "مجمل الربح", "مجمل الربح بعد الخصومات والمرتجعات", grossProfit, currency,
+                calculateCostProfitReportTotals(periodSales.map { it.toCostProfitInput() }, periodReturns.map { it.toCostProfitInput() }).forEach { totals ->
+                    val currency = totals.currencyCode
+                    add(ReportLine("${startText} — ${endText}", "إيرادات", "إجمالي المبيعات بعد الخصومات", totals.grossSalesMinor, currency,
+                        "إجمالي ${totals.invoiceCount} فاتورة مكتملة؛ الإيراد لا يتضمن الضريبة"))
+                    if (totals.returnRevenueMinor != 0L) add(ReportLine("${startText} — ${endText}", "مرتجعات", "مبالغ المرتجعات المعتمدة", -totals.returnRevenueMinor, currency,
+                        "مرتجعات مكتملة ضمن الفترة فقط؛ تم التحقق من ربط الفاتورة والعملة"))
+                    add(ReportLine("${startText} — ${endText}", "صافي الإيرادات", "صافي الإيرادات بعد المرتجعات", totals.netRevenueMinor, currency,
+                        "من الفواتير المكتملة ناقص الخصومات والمرتجعات المعتمدة"))
+                    add(ReportLine("${startText} — ${endText}", "تكلفة البضاعة", "تكلفة البنود المباعة المحفوظة", -totals.soldCostMinor, currency,
+                        "لقطات cost_total_minor المسجلة عند البيع؛ لا تستخدم تكلفة الشراء الحالية"))
+                    if (totals.returnedCostMinor != 0L) add(ReportLine("${startText} — ${endText}", "عكس تكلفة المرتجع", "تكلفة الكمية التي أعيد تخزينها", totals.returnedCostMinor, currency,
+                        "محسوبة من تكلفة بند البيع التاريخية والكمية المعاد تخزينها"))
+                    add(ReportLine("${startText} — ${endText}", "تكلفة صافية", "تكلفة البضاعة بعد المرتجعات المعاد تخزينها", -totals.netCostMinor, currency,
+                        "تكلفة البيع ناقص تكلفة المرتجعات التي أعيد تخزينها"))
+                    add(ReportLine("${startText} — ${endText}", "مجمل الربح", "مجمل الربح بعد الخصومات والمرتجعات", totals.grossProfitMinor, currency,
                         "إيرادات صافية ناقص تكلفة تاريخية صافية؛ لا يمثل صافي الربح بعد المصروفات التشغيلية"))
                 }
             }
@@ -1106,6 +1320,21 @@ internal fun ReportsCenterScreen(
         }.map { row ->
             ReportLine(row.createdAt.take(10), row.id, row.title, 0L, "", row.status + " · " + row.subtitle)
         }.sortedByDescending { it.date }
+        "ملخص المصروفات حسب التصنيف وطريقة الصرف" -> cloudExpenses.filter { expense ->
+            expense.canceledAt.isBlank() &&
+                reportDateMillis(expense.recordedAt)?.let { it >= startMillis && it < endExclusive } == true
+        }.groupBy { Triple(it.category, it.paymentMethod.ifBlank { "غير محددة" }, it.currencyCode) }
+            .map { (key, rows) ->
+                val total = rows.fold(0L) { sum, expense -> Math.addExact(sum, expense.amountMinor) }
+                ReportLine(
+                    "${startText} — ${endText}",
+                    "تجميع",
+                    key.first,
+                    total,
+                    key.third,
+                    "طريقة الصرف: ${key.second} · عدد السندات: ${rows.size} · سندات غير ملغاة فقط"
+                )
+            }.sortedWith(compareBy<ReportLine> { it.currency }.thenBy { it.name })
         "المصروفات التشغيلية" -> (if (cloudMode) cloudExpenses.filter { it.canceledAt.isBlank() && (reportDateMillis(it.recordedAt)?.let { ts -> ts >= startMillis && ts < endExclusive } == true) }.map {
             ReportLine(it.recordedAt.take(10), it.id, it.category, it.amountMinor, it.currencyCode, it.paymentMethod)
         } else inPeriodExpenses.map {
@@ -1325,8 +1554,8 @@ internal fun ReportsCenterScreen(
                     when (report.title) {
                         "ملخص المبيعات حسب الفترة", "تفاصيل فواتير المبيعات", "تفاصيل بنود فواتير المبيعات", "المبيعات حسب الصنف",
                         "المبيعات حسب العميل", "المبيعات النقدية والآجلة", "المبيعات حسب حالة السداد", "متوسط قيمة الفاتورة", "مقارنة فترتين", "مقارنة الفترات", "الخصومات على فواتير المبيعات", "الضرائب المسجلة على المبيعات",
-                        "التحصيلات المسجلة محليًا", "الدفعات السحابية الناجحة", "المصروفات التشغيلية", "رصيد المخزون الحالي", "تنبيهات المخزون المنخفض",
-                        "فواتير الشراء والمستحقات المسجلة", "مستحقات فواتير الموردين", "مرتجعات المبيعات وحالة التسوية", "سندات القبض والصرف", "سجل القيود المحاسبية",
+                        "التحصيلات المسجلة محليًا", "الدفعات السحابية الناجحة", "التحصيل حسب طريقة الدفع", "المصروفات التشغيلية", "ملخص المصروفات حسب التصنيف وطريقة الصرف", "رصيد المخزون الحالي", "تنبيهات المخزون المنخفض",
+                        "فواتير الشراء والمستحقات المسجلة", "فروقات أسعار فواتير الموردين", "مستحقات فواتير الموردين", "مرتجعات المبيعات وحالة التسوية", "سندات القبض والصرف", "سجل القيود المحاسبية",
                         "ميزان المراجعة حسب الحساب", "حركة دفتر الأستاذ العام", "كشف حساب محاسبي", "أرصدة العملاء وكشف الحساب", "كشف حركات الموردين",
                         "الرصيد المحاسبي الكامل للعملاء", "أرصدة الموردين والمستحقات", "قائمة الدخل والميزانية العمومية", "التدفقات النقدية والصندوق", "تكلفة البضاعة والربح", "الضرائب والخصومات التفصيلية",
                         "حركة المخزون الفعلية", "التقييم المالي الحالي للمخزون", "تفاصيل القيود المرحلة" -> selectedReport = report.title
