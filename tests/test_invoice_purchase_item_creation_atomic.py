@@ -32,6 +32,8 @@ class InvoicePurchaseItemCreationAtomicTests(unittest.TestCase):
             "'reapproval_required', (v_order.status = 'approved')",
             "'reapproval_required',v_reapproval_required",
             "CREATE OR REPLACE FUNCTION commercial_private.commercial_link_purchase_order_item_offering(",
+            "receive_location_id INTO v_status,v_currency,v_location_id",
+            "o.location_ref=v_location_id::text",
             "is_available = false",
             "pricing_status = 'unpriced'",
             "GRANT EXECUTE ON FUNCTION public.commercial_create_and_link_invoice_purchase_item",
