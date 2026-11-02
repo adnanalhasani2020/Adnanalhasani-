@@ -21,6 +21,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import java.time.LocalDate
+import java.time.format.DateTimeParseException
 import java.util.concurrent.Executors
 
 private val SupplierInvoiceWorker = Executors.newSingleThreadExecutor()
@@ -34,6 +36,8 @@ internal fun SupplierInvoiceEntryDialog(
     onSaved: () -> Unit
 ) {
     var invoiceNumber by remember(order.id) { mutableStateOf("") }
+    var invoiceDate by remember(order.id) { mutableStateOf("") }
+    var dueDate by remember(order.id) { mutableStateOf("") }
     var tax by remember(order.id) { mutableStateOf("0") }
     var freight by remember(order.id) { mutableStateOf("0") }
     var quantities by remember(order.id) { mutableStateOf(order.lines.associate { it.id to "0" }) }
@@ -56,6 +60,22 @@ internal fun SupplierInvoiceEntryDialog(
                         value = invoiceNumber,
                         onValueChange = { invoiceNumber = it },
                         label = { Text("رقم فاتورة المورد") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        enabled = !saving
+                    )
+                    OutlinedTextField(
+                        value = invoiceDate,
+                        onValueChange = { invoiceDate = it },
+                        label = { Text("تاريخ الفاتورة الفعلي (YYYY-MM-DD)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        enabled = !saving
+                    )
+                    OutlinedTextField(
+                        value = dueDate,
+                        onValueChange = { dueDate = it },
+                        label = { Text("تاريخ الاستحقاق التعاقدي (YYYY-MM-DD)") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         enabled = !saving
@@ -95,6 +115,8 @@ internal fun SupplierInvoiceEntryDialog(
                 val number = invoiceNumber.trim()
                 val taxValue = tax.toLongOrNull()
                 val freightValue = freight.toLongOrNull()
+                val parsedInvoiceDate = runCatching { LocalDate.parse(invoiceDate.trim()) }.getOrNull()
+                val parsedDueDate = runCatching { LocalDate.parse(dueDate.trim()) }.getOrNull()
                 val lineInputs = mutableListOf<CommercialSupplierInvoiceLineInput>()
                 var lineError = ""
                 order.lines.forEach { line ->
@@ -111,6 +133,8 @@ internal fun SupplierInvoiceEntryDialog(
                 }
                 val validation = when {
                     number.isBlank() -> "أدخل رقم فاتورة المورد."
+                    parsedInvoiceDate == null || parsedDueDate == null -> "أدخل تاريخ الفاتورة وتاريخ الاستحقاق بصيغة YYYY-MM-DD."
+                    parsedInvoiceDate.isAfter(LocalDate.now()) || parsedDueDate.isBefore(parsedInvoiceDate) -> "تأكد أن تاريخ الفاتورة ليس مستقبليًا وأن الاستحقاق لا يسبق تاريخ الفاتورة."
                     taxValue == null || taxValue < 0L -> "الضريبة غير صالحة."
                     freightValue == null || freightValue < 0L -> "الشحن غير صالح."
                     lineInputs.isEmpty() -> "أدخل كمية موجبة لبند واحد على الأقل."
@@ -125,7 +149,8 @@ internal fun SupplierInvoiceEntryDialog(
                         val result = runCatching {
                             recordCommercialCloudSupplierInvoice(
                                 context, order.id, number, order.currencyCode,
-                                lineInputs, taxValue!!, freightValue!!, key
+                                lineInputs, taxValue!!, freightValue!!, key,
+                                parsedInvoiceDate.toString(), parsedDueDate.toString()
                             )
                         }
                         SupplierInvoiceMain.post {
