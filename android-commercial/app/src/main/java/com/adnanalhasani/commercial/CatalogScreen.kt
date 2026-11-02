@@ -955,6 +955,96 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         })
     }
 
+    fun openInvoiceItemCreationDialog() {
+        val line=invoiceMappingLines.firstOrNull { it.id==invoiceMappingLineId } ?: run { feedback="اختر بندًا غير مطابق أولًا."; return }
+        val orgId=org() ?: return
+        if(invoiceMappingWarehouses.isEmpty() || invoiceMappingWarehouseId.isBlank()) {
+            feedback="لا يوجد مستودع نشط مرتبط بفرع استلام أمر الشراء."
+            return
+        }
+        if(selectedActivityCode.isBlank()) {
+            feedback="اختر النشاط التجاري من الدليل أولًا."
+            return
+        }
+        val available=directoryUnits.filter { (it.owner.isBlank() || it.owner==orgId) && it.code in localUnitCodes }
+        val sourceUnit=available.firstOrNull { it.code.equals(line.unitCode,true) }
+        val base=if(sourceUnit==null) available.firstOrNull { it.baseCode.isBlank() } else if(sourceUnit.baseCode.isBlank()) sourceUnit else available.firstOrNull { it.code==sourceUnit.baseCode }
+        if(base==null) {
+            feedback="لا توجد وحدة أساس نشطة مشتركة بين دليل الوحدات ووحدات المخزون."
+            return
+        }
+        val sale=sourceUnit?.takeIf { it.baseCode.isBlank() || it.baseCode==base.code } ?: base
+        invoiceNewNameAr=line.description.trim().take(180)
+        invoiceNewNameEn=""
+        invoiceNewCategoryCode=categories.firstOrNull()?.code.orEmpty()
+        invoiceNewBaseUnitCode=base.code
+        invoiceNewSaleUnitCode=sale.code
+        invoiceNewIdempotencyKey=java.util.UUID.randomUUID().toString()
+        showInvoiceItemCreation=true
+    }
+
+    fun createInvoicePurchaseItem() {
+        val active=token ?: return
+        val orgId=org() ?: return
+        val requestRow=invoiceRequests.firstOrNull { it.id==invoiceMappingRequestId }
+        if(requestRow==null || requestRow.destinationOrganizationId!=orgId || requestRow.status!="approved") {
+            feedback="إنشاء الصنف متاح للمؤسسة المستقبلة بعد اعتماد طلب الشراء فقط."
+            return
+        }
+        val line=invoiceMappingLines.firstOrNull { it.id==invoiceMappingLineId } ?: run { feedback="اختر بند الفاتورة."; return }
+        val base=directoryUnits.firstOrNull { it.code==invoiceNewBaseUnitCode && it.baseCode.isBlank() && it.code in localUnitCodes }
+            ?: run { feedback="اختر وحدة أساس نشطة ومعتمدة للمخزون."; return }
+        val sale=directoryUnits.firstOrNull { it.code==invoiceNewSaleUnitCode && (it.baseCode.isBlank() && it.code==base.code || it.baseCode==base.code) }
+            ?: run { feedback="اختر وحدة بيع متوافقة مع وحدة الأساس."; return }
+        if(line.unitCode.isNotBlank() && !line.unitCode.equals(sale.code,true)) {
+            feedback="وحدة بند الفاتورة لا تطابق وحدة البيع المختارة. لا يمكن تغيير التحويل تلقائيًا."
+            return
+        }
+        if(invoiceNewNameAr.isBlank() || invoiceNewNameEn.isBlank() || invoiceNewCategoryCode.isBlank()) {
+            feedback="أدخل الاسم العربي والإنجليزي واختر تصنيف الدليل."
+            return
+        }
+        val contextActivityId=context.getSharedPreferences("commercial_cloud_context_v1",android.content.Context.MODE_PRIVATE)
+            .getString("activity_id",null).orEmpty()
+        if(contextActivityId.isBlank()) {
+            feedback="لم يتم العثور على النشاط الحالي في سياق المؤسسة. افتح ملف النشاط ثم أعد المحاولة."
+            return
+        }
+        if(invoiceMappingWarehouseId.isBlank() || invoiceMappingLocationId.isBlank()) {
+            feedback="اختر مستودعًا نشطًا تابعًا لفرع استلام أمر الشراء."
+            return
+        }
+        val key=invoiceNewIdempotencyKey.ifBlank { java.util.UUID.randomUUID().toString().also { invoiceNewIdempotencyKey=it } }
+        request({
+            catalogHttp("/rest/v1/rpc/commercial_create_and_link_invoice_purchase_item",JSONObject()
+                .put("p_organization_id",orgId)
+                .put("p_purchase_order_id",invoiceMappingPurchaseOrderId)
+                .put("p_purchase_order_item_id",line.id)
+                .put("p_activity_id",contextActivityId)
+                .put("p_activity_node_code",selectedActivityCode.uppercase())
+                .put("p_warehouse_id",invoiceMappingWarehouseId)
+                .put("p_name_ar",invoiceNewNameAr.trim())
+                .put("p_name_en",invoiceNewNameEn.trim())
+                .put("p_category_code",invoiceNewCategoryCode.uppercase())
+                .put("p_base_unit_code",base.code)
+                .put("p_sale_unit_code",sale.code)
+                .put("p_item_type","product")
+                .put("p_local_category_id",JSONObject.NULL)
+                .put("p_idempotency_key",key),active)
+        }, { raw ->
+            val result=runCatching { JSONObject(raw) }.getOrNull()
+            val status=result?.optString("status").orEmpty()
+            showInvoiceItemCreation=false
+            invoiceNewIdempotencyKey=java.util.UUID.randomUUID().toString()
+            feedback=if(status=="submitted") {
+                "تم إنشاء الصنف وربطه. أُعيد أمر الشراء إلى حالة الإرسال ويتطلب إعادة اعتماده. السعر غير محدد والمخزون لم يتغير."
+            } else {
+                "تم إنشاء الصنف وربطه دون سعر أو كمية افتتاحية. لن يتغير المخزون حتى تسجيل الاستلام."
+            }
+            loadInvoicePurchaseUnmappedLines(requestRow)
+        })
+    }
+
     fun transferCatalog() {
         val active=token ?: return
         if(transferSource.isBlank() || transferDestination.isBlank()) { feedback="أدخل معرّف الحساب المصدر والوجهة."; return }
