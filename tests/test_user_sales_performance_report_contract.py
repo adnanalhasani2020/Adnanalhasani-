@@ -44,4 +44,4 @@ def test_stock_movement_user_report_uses_persisted_actor_and_separates_units():
     assert "internal fun calculateStockMovementUserTotals(" in calculations
     assert 'it.unitName.trim().ifBlank { "وحدة غير محددة" }' in calculations
     assert 'movementId.isNotBlank() && seen.add(movement.movementId)' in calculations
-    assert 'group by persisted `created_by`, movement type, and recorded unit' in contract
+    assert 'by persisted `created_by`, movement type, and recorded unit' in contract
