@@ -60,6 +60,7 @@ class InvoicePurchaseItemCreationAtomicTests(unittest.TestCase):
         self.assertIn("invoiceNewIdempotencyKey", source)
         self.assertIn("السعر سيبقى صفرًا بحالة غير مسعّر", source)
         self.assertIn("لن يتغير المخزون حتى تسجيل الاستلام", source)
+        self.assertIn("لا ينشأ رصيد مستقل للمستودع", source)
         self.assertIn("purchase_order_id", source)
         self.assertIn("result?.optBoolean(\"reapproval_required\",false)", source)
         self.assertIn("val requiresReapproval=invoiceMappingPurchaseOrderStatus==\"approved\"", source)
