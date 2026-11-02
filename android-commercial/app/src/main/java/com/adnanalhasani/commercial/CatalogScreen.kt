@@ -257,6 +257,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var invoiceMappingOfferingId by remember { mutableStateOf("") }
     var invoiceMappingLineMenuExpanded by remember { mutableStateOf(false) }
     var invoiceMappingOfferingMenuExpanded by remember { mutableStateOf(false) }
+    var invoiceMappingPurchaseOrderStatus by remember { mutableStateOf("") }
     var invoiceMappingLocationId by remember { mutableStateOf("") }
     var invoiceMappingWarehouses by remember { mutableStateOf<List<CatalogWarehouseOption>>(emptyList()) }
     var invoiceMappingWarehouseId by remember { mutableStateOf("") }
@@ -905,7 +906,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                 InvoicePurchaseUnmappedLine(row.optString("id"),row.optInt("line_number"),row.optString("item_description"),
                     row.optString("quantity_ordered"),row.optString("source_selling_unit_code").takeUnless { it=="null" }.orEmpty())
             }
-            JSONObject().put("location_id",locationId)
+            JSONObject().put("location_id",locationId).put("purchase_order_status",purchaseOrderStatus)
                 .put("lines",JSONArray().apply { lines.forEach { put(JSONObject().put("id",it.id).put("line_number",it.lineNumber).put("description",it.description).put("quantity",it.quantity).put("unit_code",it.unitCode)) } })
                 .put("offerings",JSONArray().apply { candidates.forEach { put(JSONObject().put("id",it.id).put("global_item_id",it.globalItemId).put("name",it.name).put("unit_code",it.unitCode)) } })
                 .put("warehouses",warehouseRows)
@@ -913,6 +914,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         }, { raw ->
             val result=JSONObject(raw); val lines=result.getJSONArray("lines"); val offerings=result.getJSONArray("offerings")
             invoiceMappingLocationId=result.optString("location_id")
+            invoiceMappingPurchaseOrderStatus=result.optString("purchase_order_status")
             val warehouses=result.optJSONArray("warehouses") ?: JSONArray()
             invoiceMappingWarehouses=List(warehouses.length()) { i -> val row=warehouses.getJSONObject(i); CatalogWarehouseOption(row.optString("id"),row.optString("name"),row.optString("branch_location_id")) }
             if(invoiceMappingWarehouses.none { it.id==invoiceMappingWarehouseId }) invoiceMappingWarehouseId=invoiceMappingWarehouses.firstOrNull()?.id.orEmpty()
@@ -936,6 +938,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         }
         val line=invoiceMappingLines.firstOrNull { it.id==invoiceMappingLineId } ?: run { feedback="اختر بندًا غير مطابق."; return }
         val offering=invoiceMappingOfferings.firstOrNull { it.id==invoiceMappingOfferingId } ?: run { feedback="اختر صنفًا محليًا مرتبطًا بموقع الاستلام."; return }
+        val requiresReapproval=invoiceMappingPurchaseOrderStatus=="approved"
         request({
             catalogHttp("/rest/v1/rpc/commercial_link_purchase_order_item_offering",JSONObject()
                 .put("p_organization_id",orgId).put("p_purchase_order_id",invoiceMappingPurchaseOrderId)
@@ -943,10 +946,11 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         }, { raw ->
             val result=runCatching { JSONObject(raw) }.getOrNull()
             val orderStatus=result?.optString("status").orEmpty()
+            val orderNeedsReapproval=requiresReapproval && orderStatus=="submitted"
             invoiceMappingLines=invoiceMappingLines.filterNot { it.id==line.id }
             invoiceMappingLineId=invoiceMappingLines.firstOrNull()?.id.orEmpty()
             invoiceMappingOfferingId=""
-            feedback=if(orderStatus=="submitted") {
+            feedback=if(orderNeedsReapproval) {
                 "تم ربط بند الفاتورة بالصنف المحلي "+offering.name+". أعيد أمر الشراء إلى حالة الإرسال ويتطلب إعادة اعتماد؛ لم يتغير المخزون."
             } else {
                 "تم ربط بند الفاتورة بالصنف المحلي "+offering.name+". لم يتغير المخزون؛ سيُحدّث عند الاستلام فقط."
@@ -1035,9 +1039,10 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         }, { raw ->
             val result=runCatching { JSONObject(raw) }.getOrNull()
             val status=result?.optString("status").orEmpty()
+            val reapprovalRequired=result?.optBoolean("reapproval_required",false) ?: false
             showInvoiceItemCreation=false
             invoiceNewIdempotencyKey=java.util.UUID.randomUUID().toString()
-            feedback=if(status=="submitted") {
+            feedback=if(reapprovalRequired) {
                 "تم إنشاء الصنف وربطه. أُعيد أمر الشراء إلى حالة الإرسال ويتطلب إعادة اعتماده. السعر غير محدد والمخزون لم يتغير."
             } else {
                 "تم إنشاء الصنف وربطه دون سعر أو كمية افتتاحية. لن يتغير المخزون حتى تسجيل الاستلام."
