@@ -48,6 +48,8 @@ class CatalogInventoryTransferContract(unittest.TestCase):
         self.assertIn("state=eq.active",kt)
         self.assertIn("يتطلب إعادة اعتماد",kt)
         self.assertIn("commercial_global_catalog_items?select=id,name_ar,name_en,unit_code",kt)
+        self.assertIn("commercial_supplier_invoices?select=id",kt)
+        self.assertIn('setOf("draft","submitted","approved")',kt)
         self.assertIn("offering_id=is.null",kt)
         self.assertIn("quantity_received=eq.0",kt)
         self.assertIn("لا يُنشأ صنف تلقائيًا من وصف الفاتورة",kt)
