@@ -75,6 +75,7 @@ internal fun buildSupplierDueDateAgingReport(
         purchase.supplierInvoices.mapNotNull { invoice ->
             if (invoice.state.lowercase() in setOf("cancelled", "canceled", "void", "reversed")) return@mapNotNull null
             val obligation = invoice.obligation ?: return@mapNotNull null
+            if (obligation.state.lowercase() in setOf("cancelled", "canceled", "void", "reversed")) return@mapNotNull null
             SupplierLiabilityAgingInput(
                 invoiceId = invoice.id,
                 invoiceNumber = invoice.invoiceNumber,
