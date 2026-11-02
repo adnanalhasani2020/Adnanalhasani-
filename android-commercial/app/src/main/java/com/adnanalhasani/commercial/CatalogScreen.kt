@@ -973,6 +973,10 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         val available=directoryUnits.filter { it.owner.isBlank() || it.owner==orgId }
         val baseOptions=available.filter { it.baseCode.isBlank() && it.code.lowercase() in localUnitCodes }
         val sourceUnit=available.firstOrNull { it.code.equals(line.unitCode,true) }
+        if(line.unitCode.isNotBlank() && sourceUnit==null) {
+            feedback="وحدة الفاتورة "+line.unitCode+" غير موجودة في دليل الوحدات النشطة؛ لم نفترض تحويلًا بديلًا."
+            return
+        }
         val base=if(sourceUnit==null) baseOptions.firstOrNull() else if(sourceUnit.baseCode.isBlank()) baseOptions.firstOrNull { it.code==sourceUnit.code } else baseOptions.firstOrNull { it.code==sourceUnit.baseCode }
         if(base==null) {
             feedback="لا توجد وحدة أساس نشطة مشتركة بين دليل الوحدات ووحدات المخزون."
