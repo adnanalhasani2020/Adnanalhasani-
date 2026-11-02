@@ -26,10 +26,9 @@ class CustomerOperationalStatementTest {
         val movements = buildCustomerOperationalStatementMovements(
             listOf(
                 sale(
-                    payments = listOf(CustomerStatementPaymentInput("payment-1", 600, "succeeded", "cash", "2026-11-01T11:00:00Z")),
+                    payments = listOf(CustomerStatementPaymentInput("payment-1", 600, "succeeded", "2026-11-01T11:00:00Z")),
                     returns = listOf(CustomerStatementReturnInput(
-                        "return-1", "completed", "refunded", "restocked", 200, 200,
-                        "2026-11-01T12:00:00Z", "2026-11-01T13:00:00Z"
+                        "return-1", "completed", "refunded", 200, "2026-11-01T13:00:00Z"
                     ))
                 )
             )
@@ -43,14 +42,14 @@ class CustomerOperationalStatementTest {
         assertThrows(IllegalArgumentException::class.java) {
             buildCustomerOperationalStatementMovements(
                 listOf(sale(returns = listOf(
-                    CommercialCloudReturnSummary("return-1", "completed", "pending", "pending", 200, null, "2026-11-01T12:00:00Z", "2026-11-01T13:00:00Z")
+                    CustomerStatementReturnInput("return-1", "completed", "pending", null, "2026-11-01T13:00:00Z")
                 )))
             )
         }
         assertThrows(IllegalArgumentException::class.java) {
             buildCustomerOperationalStatementMovements(
                 listOf(sale(returns = listOf(
-                    CommercialCloudReturnSummary("return-1", "completed", "pending", "pending", 200, 200, "2026-11-01T12:00:00Z", "")
+                    CustomerStatementReturnInput("return-1", "completed", "pending", 200, "")
                 )))
             )
         }
@@ -61,7 +60,7 @@ class CustomerOperationalStatementTest {
         assertThrows(IllegalArgumentException::class.java) {
             buildCustomerOperationalStatementMovements(
                 listOf(sale(payments = listOf(
-                    CommercialCloudPaymentSummary("payment-1", 500, "succeeded", "cash", "")
+                    CustomerStatementPaymentInput("payment-1", 500, "succeeded", "")
                 )))
             )
         }
@@ -75,7 +74,7 @@ class CustomerOperationalStatementTest {
         assertThrows(IllegalArgumentException::class.java) {
             buildCustomerOperationalStatementMovements(
                 listOf(sale(returns = listOf(
-                    CommercialCloudReturnSummary("return-1", "approved", "refunded", "pending", 200, 200, "2026-11-01T12:00:00Z", "2026-11-01T13:00:00Z")
+                    CustomerStatementReturnInput("return-1", "approved", "refunded", 200, "2026-11-01T13:00:00Z")
                 )))
             )
         }
