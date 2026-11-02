@@ -100,6 +100,46 @@ internal data class CatalogProduct(
     val rawWarnings: String = ""
 )
 private data class CatalogCategory(val code: String, val parentCode: String, val nameAr: String, val nameEn: String, val localizedName: String = "", val descriptionAr: String = "", val descriptionEn: String = "", val localizedDescription: String = "")
+private data class CatalogActivityNode(val code: String, val parentCode: String, val nodeKind: String, val pathAr: String, val pathEn: String, val defaultBusinessLevelCode: String, val depth: Int, val selectable: Boolean)
+private fun catalogNodeBelongsToSector(node: CatalogActivityNode, sectorCode: String, nodes: List<CatalogActivityNode>): Boolean {
+    if (sectorCode.isBlank()) return true
+    val byCode = nodes.associateBy { it.code }
+    var current: CatalogActivityNode? = node
+    val visited = mutableSetOf<String>()
+    while (current != null && visited.add(current.code)) {
+        if (current.code.equals(sectorCode, ignoreCase = true)) return true
+        current = byCode[current.parentCode]
+    }
+    return false
+}
+private fun catalogBusinessLevelLabel(code: String): String = when (code.lowercase()) {
+    "clinic" -> "عيادة / مركز صحي"
+    "contractor" -> "مقاول"
+    "factory" -> "مصنع"
+    "grocery" -> "بقالة"
+    "hotel" -> "فندق"
+    "manufacturer" -> "منشأة تصنيع"
+    "office" -> "مكتب"
+    "other" -> "أخرى"
+    "pharmacy" -> "صيدلية"
+    "producer" -> "منتج / مزارع"
+    "restaurant" -> "مطعم"
+    "service" -> "مقدم خدمات"
+    "shop" -> "محل تجاري"
+    "supermarket" -> "سوبرماركت"
+    "wholesale" -> "تجارة جملة"
+    else -> code
+}
+private fun catalogSectorForNode(nodeCode: String, nodes: List<CatalogActivityNode>): String {
+    val byCode = nodes.associateBy { it.code }
+    var current = byCode[nodeCode]
+    val visited = mutableSetOf<String>()
+    while (current != null && visited.add(current.code)) {
+        if (current.nodeKind.equals("sector", ignoreCase = true)) return current.code
+        current = byCode[current.parentCode]
+    }
+    return ""
+}
 private data class CatalogBranchOption(val id: String, val name: String, val latitude: String, val longitude: String)
 private data class CatalogWarehouseOption(val id: String, val name: String, val branchId: String)
 private data class NearbyCatalogItem(val id: String, val name: String, val popularityBand: String, val merchantCountBand: String)
@@ -166,7 +206,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var email by remember { mutableStateOf("") }; var password by remember { mutableStateOf("") }
     var token by remember { mutableStateOf<String?>(null) }; var signedInUserId by remember { mutableStateOf("") }; var organizationId by remember { mutableStateOf(initialOrganizationId) }
     var section by remember { mutableStateOf("browse") }
-    var sector by remember { mutableStateOf("retail") }; var businessLevel by remember { mutableStateOf("shop") }
+    var sector by remember { mutableStateOf("TRADE") }; var businessLevel by remember { mutableStateOf("shop") }
     var country by remember { mutableStateOf("YE") }; var region by remember { mutableStateOf("") }; var city by remember { mutableStateOf("") }
     var locale by remember { mutableStateOf("ar") }; var query by remember { mutableStateOf("") }
     var items by remember { mutableStateOf<List<CatalogProduct>>(emptyList()) }
@@ -174,9 +214,14 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var catalogHasMore by remember { mutableStateOf(true) }
     var catalogPageLoadFailed by remember { mutableStateOf(false) }
     var selectedCatalogIds by remember { mutableStateOf<Set<String>>(emptySet()) }
-    var activityNodes by remember { mutableStateOf<List<Triple<String, String, String>>>(emptyList()) }
+    var activityNodes by remember { mutableStateOf<List<CatalogActivityNode>>(emptyList()) }
     var selectedActivityCode by remember { mutableStateOf(initialActivityCode.uppercase()) }
+    var sectorMenuExpanded by remember { mutableStateOf(false) }
+    var businessLevelMenuExpanded by remember { mutableStateOf(false) }
     var activityMenuExpanded by remember { mutableStateOf(false) }
+    val sectorOptions = remember(activityNodes) { activityNodes.filter { it.nodeKind.equals("sector", true) }.sortedBy { it.pathAr } }
+    val activityOptions = remember(activityNodes, sector) { activityNodes.filter { it.selectable && !it.nodeKind.equals("sector", true) && catalogNodeBelongsToSector(it, sector, activityNodes) }.sortedBy { it.pathAr } }
+    val businessLevelOptions = remember(activityOptions) { activityOptions.map { it.defaultBusinessLevelCode }.filter { it.isNotBlank() }.distinct().sorted() }
     var marketBranches by remember { mutableStateOf<List<CatalogBranchOption>>(emptyList()) }
     var marketWarehouses by remember { mutableStateOf<List<CatalogWarehouseOption>>(emptyList()) }
     var selectedBranchId by remember { mutableStateOf("") }
@@ -594,13 +639,18 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             val result=JSONObject(raw); val cats=result.getJSONArray("categories"); val units=result.getJSONArray("units")
             val catTr=result.getJSONArray("categoryTranslations"); val catDescTr=result.getJSONArray("categoryDescriptionTranslations"); val unitTr=result.getJSONArray("unitTranslations")
             val activityJson=result.optJSONArray("activityDirectory") ?: JSONArray()
-            activityNodes=List(activityJson.length()) { i -> val node=activityJson.getJSONObject(i); Triple(node.optString("code"), node.optString("path_ar",node.optString("name_ar")), node.optString("default_business_level_code")) }.filter { it.first.isNotBlank() }
+            activityNodes=List(activityJson.length()) { i -> val node=activityJson.getJSONObject(i); CatalogActivityNode(node.optString("code"),node.optString("parent_code").takeUnless { it == "null" }.orEmpty(),node.optString("node_kind"),node.optString("path_ar",node.optString("name_ar")),node.optString("path_en",node.optString("name_en")),node.optString("default_business_level_code").takeUnless { it == "null" }.orEmpty(),node.optInt("depth",0),node.optBoolean("is_selectable",false)) }.filter { it.code.isNotBlank() }
+            if (initialActivityCode.isNotBlank()) {
+                val inferredSector = catalogSectorForNode(initialActivityCode.uppercase(), activityNodes)
+                if (inferredSector.isNotBlank()) sector = inferredSector
+                activityNodes.firstOrNull { it.code.equals(initialActivityCode, true) }?.defaultBusinessLevelCode?.takeIf { it.isNotBlank() }?.let { businessLevel = it }
+            }
             val categoryNames=buildMap { for(i in 0 until catTr.length()) { val v=catTr.getJSONObject(i); put(v.optString("entity_key"),v.optString("translated_value")) } }
             val categoryDescriptions=buildMap { for(i in 0 until catDescTr.length()) { val v=catDescTr.getJSONObject(i); put(v.optString("entity_key"),v.optString("translated_value")) } }
             val unitNames=buildMap { for(i in 0 until unitTr.length()) { val v=unitTr.getJSONObject(i); put(v.optString("entity_key"),v.optString("translated_value")) } }
             categories=List(cats.length()) { i -> val v=cats.getJSONObject(i); val code=v.optString("code"); CatalogCategory(code,v.optString("parent_code").takeUnless { it == "null" }.orEmpty(),v.optString("name_ar"),v.optString("name_en"),categoryNames[code].orEmpty(),v.optString("description_ar").takeUnless { it == "null" }.orEmpty(),v.optString("description_en").takeUnless { it == "null" }.orEmpty(),categoryDescriptions[code].orEmpty()) }
             directoryUnits=List(units.length()) { i -> val v=units.getJSONObject(i); val code=v.optString("code"); DirectoryUnit(code,v.optString("name_ar"),v.optString("name_en"),v.optString("dimension"),v.optString("base_unit_code").takeUnless { it == "null" }.orEmpty(),v.optString("factor_to_base").takeUnless { it == "null" }.orEmpty(),v.optString("owner_organization_id").takeUnless { it == "null" }.orEmpty(),unitNames[code].orEmpty()) }
-            feedback="تم تحميل ${categories.size} تصنيفًا و${directoryUnits.size} وحدة قياس و${activityNodes.size} نشاطًا."
+            feedback="تم تحميل ${categories.size} تصنيفًا و${directoryUnits.size} وحدة قياس و${sectorOptions.size} قطاعًا و${activityNodes.count { it.nodeKind.equals("activity", true) }} نشاطًا و${activityNodes.count { it.nodeKind.equals("specialization", true) }} تخصصًا."
             loadMarketContext()
         })
     }
@@ -1011,29 +1061,63 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                     }
                     LazyColumn(state=catalogListState,verticalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(bottom=20.dp)) {
                         item { OutlinedTextField(query,{query=it},Modifier.fillMaxWidth(),label={Text("بحث بالاسم أو الوصف أو الباركود أو الكود")},singleLine=true) }
-                        item { Row(horizontalArrangement=Arrangement.spacedBy(8.dp), verticalAlignment=Alignment.CenterVertically) {
-                            OutlinedTextField(sector,{sector=it},Modifier.weight(1f),label={Text("القطاع")},singleLine=true)
-                            OutlinedTextField(businessLevel,{businessLevel=it},Modifier.weight(1f),label={Text("مستوى النشاط")},singleLine=true)
-                        } }
                         item {
                             Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
-                                Text("ربط الأصناف بنشاط تجاري محدد (اختياري)", style=MaterialTheme.typography.labelMedium)
+                                Text("تصفية الدليل حسب النشاط التجاري", style=MaterialTheme.typography.labelMedium)
                                 Box {
-                                    OutlinedButton(onClick={activityMenuExpanded=true}, enabled=!busy) {
-                                        Text(activityNodes.firstOrNull { it.first == selectedActivityCode }?.second ?: "اختر النشاط من الدليل")
+                                    OutlinedButton(onClick={sectorMenuExpanded=true}, enabled=!busy && sectorOptions.isNotEmpty(), modifier=Modifier.fillMaxWidth()) {
+                                        Text(sectorOptions.firstOrNull { it.code.equals(sector, true) }?.pathAr ?: "كل القطاعات")
                                     }
-                                    DropdownMenu(expanded=activityMenuExpanded, onDismissRequest={activityMenuExpanded=false}) {
-                                        DropdownMenuItem(text={Text("بدون إسناد لنشاط محدد")}, onClick={selectedActivityCode=""; activityMenuExpanded=false})
-                                        activityNodes.forEach { node ->
-                                            DropdownMenuItem(text={Text(node.second)}, onClick={
-                                                selectedActivityCode=node.first
-                                                if (node.third.isNotBlank()) businessLevel=node.third
-                                                activityMenuExpanded=false
+                                    DropdownMenu(expanded=sectorMenuExpanded, onDismissRequest={sectorMenuExpanded=false}) {
+                                        DropdownMenuItem(text={Text("كل القطاعات")}, onClick={
+                                            sector=""; selectedActivityCode=""; businessLevel=""; sectorMenuExpanded=false; loadCatalog(true)
+                                        })
+                                        sectorOptions.forEach { option ->
+                                            DropdownMenuItem(text={Text(option.pathAr)}, onClick={
+                                                sector=option.code
+                                                val selectedNode=activityNodes.firstOrNull { it.code==selectedActivityCode }
+                                                if (selectedNode!=null && !catalogNodeBelongsToSector(selectedNode,option.code,activityNodes)) selectedActivityCode=""
+                                                val validLevels=activityNodes.filter { it.selectable && catalogNodeBelongsToSector(it,option.code,activityNodes) }.map { it.defaultBusinessLevelCode }.filter { it.isNotBlank() }.distinct()
+                                                if (businessLevel !in validLevels) businessLevel=""
+                                                sectorMenuExpanded=false; loadCatalog(true)
                                             })
                                         }
                                     }
                                 }
-                                Text("حدّد نشاطًا ثم اربط الأصناف؛ سيُحفظ الربط بالنشاط بعد ربطها بالمؤسسة.", style=MaterialTheme.typography.bodySmall, color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                Box {
+                                    OutlinedButton(onClick={businessLevelMenuExpanded=true}, enabled=!busy && businessLevelOptions.isNotEmpty(), modifier=Modifier.fillMaxWidth()) {
+                                        Text(businessLevel.takeIf { it.isNotBlank() }?.let { "مستوى النشاط: ${catalogBusinessLevelLabel(it)}" } ?: "كل مستويات النشاط")
+                                    }
+                                    DropdownMenu(expanded=businessLevelMenuExpanded, onDismissRequest={businessLevelMenuExpanded=false}) {
+                                        DropdownMenuItem(text={Text("كل المستويات")}, onClick={businessLevel=""; businessLevelMenuExpanded=false; loadCatalog(true)})
+                                        businessLevelOptions.forEach { level ->
+                                            DropdownMenuItem(text={Text(catalogBusinessLevelLabel(level))}, onClick={businessLevel=level; businessLevelMenuExpanded=false; loadCatalog(true)})
+                                        }
+                                    }
+                                }
+                                Text("اختر القطاع لتصفية الأنشطة ومستوياتها من الدليل الرسمي؛ لا تُكتب الرموز يدويًا.", style=MaterialTheme.typography.bodySmall, color=MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        item {
+                            Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
+                                Text("ربط الأصناف بنشاط تجاري محدد (اختياري)", style=MaterialTheme.typography.labelMedium)
+                                Box {
+                                    OutlinedButton(onClick={activityMenuExpanded=true}, enabled=!busy && activityOptions.isNotEmpty(), modifier=Modifier.fillMaxWidth()) {
+                                        Text(activityOptions.firstOrNull { it.code == selectedActivityCode }?.pathAr ?: "اختر النشاط من الدليل")
+                                    }
+                                    DropdownMenu(expanded=activityMenuExpanded, onDismissRequest={activityMenuExpanded=false}) {
+                                        DropdownMenuItem(text={Text("بدون إسناد لنشاط محدد")}, onClick={selectedActivityCode=""; activityMenuExpanded=false; loadCatalog(true)})
+                                        activityOptions.forEach { node ->
+                                            DropdownMenuItem(text={Text(node.pathAr)}, onClick={
+                                                selectedActivityCode=node.code
+                                                if (node.defaultBusinessLevelCode.isNotBlank()) businessLevel=node.defaultBusinessLevelCode
+                                                activityMenuExpanded=false
+                                                loadCatalog(true)
+                                            })
+                                        }
+                                    }
+                                }
+                                Text("تُعرض الأنشطة والتخصصات التابعة للقطاع المختار فقط، ويُضبط المستوى المقترح من بيانات الدليل.", style=MaterialTheme.typography.bodySmall, color=MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                         item { Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {

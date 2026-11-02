@@ -37,7 +37,9 @@ class CatalogItemActivityMappingContractTests(unittest.TestCase):
         screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogScreen.kt").read_text(encoding="utf-8")
         self.assertIn('LaunchedEffect(token, organizationId)', screen)
         self.assertIn('node.optString("default_business_level_code")', screen)
-        self.assertIn('if (node.third.isNotBlank()) businessLevel=node.third', screen)
+        self.assertIn('node.optString("default_business_level_code")', screen)
+        self.assertIn("CatalogActivityNode", screen)
+        self.assertIn("businessLevel = it", screen)
         self.assertIn('commercial_list_business_activity_nodes', screen)
 
     def test_new_activity_onboarding_opens_catalog_with_saved_activity_context(self):
