@@ -83,3 +83,11 @@ def test_item_profitability_reconciles_sale_lines_to_invoice_subtotal():
     assert 'sumReportAmountsExactly(document.lines.map { it.lineTotalMinor })' in screen
     assert 'document.lines.isEmpty()' in screen
     assert 'document.discountMinor > document.subtotalMinor' in screen
+
+def test_item_profitability_requires_explicit_return_item_amount_and_restock_fields():
+    calculations = CALCULATIONS.read_text(encoding="utf-8")
+    repository = REPOSITORY.read_text(encoding="utf-8")
+    assert 'refundAmountPresent = item.has("refund_amount_minor")' in repository
+    assert 'restockFlagPresent = item.has("restock")' in repository
+    assert 'restockedQuantityPresent = item.has("restocked_quantity")' in repository
+    assert 'item.refundAmountPresent && item.restockFlagPresent && item.restockedQuantityPresent' in calculations
