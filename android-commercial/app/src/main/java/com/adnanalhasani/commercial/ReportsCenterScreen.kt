@@ -699,6 +699,7 @@ internal fun ReportsCenterScreen(
                         productName = line.productName,
                         currencyCode = document.currencyCode,
                         saleTaxMinor = document.taxMinor,
+                        saleDiscountMinor = document.discountMinor,
                         quantity = line.quantity,
                         lineTotalMinor = line.lineTotalMinor,
                         costTotalMinor = line.costTotalMinor,
