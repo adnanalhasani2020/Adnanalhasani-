@@ -6,24 +6,19 @@ import org.junit.Test
 
 class SupplierInvoicePriceVarianceReportTest {
     private fun invoice(
-        lines: List<CommercialCloudSupplierInvoiceLineSummary>,
+        lines: List<SupplierInvoicePriceVarianceLineInput>,
         subtotal: Long,
         tax: Long = 25,
         freight: Long = 10,
         total: Long = subtotal + tax + freight,
         currency: String = "YER"
-    ) = CommercialCloudSupplierInvoiceSummary(
-        id = "invoice-1",
-        invoiceNumber = "INV-1",
-        totalMinor = total,
+    ) = SupplierInvoicePriceVarianceInput(
+        currencyCode = currency,
         subtotalMinor = subtotal,
         taxMinor = tax,
         freightMinor = freight,
-        currencyCode = currency,
-        recordedAt = "2026-11-02T10:00:00Z",
-        state = "recorded",
-        lines = lines,
-        obligation = null
+        totalMinor = total,
+        lines = lines
     )
 
     @Test
@@ -31,7 +26,7 @@ class SupplierInvoicePriceVarianceReportTest {
         val report = calculateSupplierInvoicePriceVariance(
             invoice(
                 lines = listOf(
-                    CommercialCloudSupplierInvoiceLineSummary("l1", "po1", "1.5", 120, 180, "A", 100),
+                    SupplierInvoicePriceVarianceLineInput("l1", "po1", "1.5", 120, 180, "A", 100),
                     CommercialCloudSupplierInvoiceLineSummary("l2", "po2", "2.5", 208, 520, "B", 200)
                 ),
                 subtotal = 700
