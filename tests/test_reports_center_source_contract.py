@@ -5,6 +5,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterScreen.kt"
 REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt"
+CALCULATIONS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportCalculations.kt"
 CONTRACT = ROOT / "android-commercial/docs/reports-data-contract.md"
 COLLECTION_REPLAY_MIGRATION = ROOT / "supabase/migrations/20261027221500_harden_customer_collection_replay_posting.sql"
 RETURN_CURRENCY_GUARD_MIGRATION = ROOT / "supabase/migrations/20261027195426_guard_return_adjustment_currency.sql"
@@ -15,6 +16,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
     def setUpClass(cls):
         cls.screen = SCREEN.read_text(encoding="utf-8")
         cls.repository = REPOSITORY.read_text(encoding="utf-8")
+        cls.calculations = CALCULATIONS.read_text(encoding="utf-8")
         cls.contract = CONTRACT.read_text(encoding="utf-8")
         cls.collection_replay_migration = COLLECTION_REPLAY_MIGRATION.read_text(encoding="utf-8")
         cls.return_currency_guard_migration = RETURN_CURRENCY_GUARD_MIGRATION.read_text(encoding="utf-8")
@@ -216,7 +218,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn("فرق موجب = أعلى من أمر الشراء، وسالب = أقل", self.screen)
         self.assertIn("purchaseOrderItemDescription", self.repository)
         self.assertIn('"فواتير الشراء والمستحقات المسجلة", "فروقات أسعار فواتير الموردين", "مستحقات فواتير الموردين"', self.screen)
-        self.assertIn("round the sum of quantity × recorded PO unit cost once", self.screen)
+        self.assertIn("round the sum of quantity × recorded PO unit cost once", self.calculations)
         self.assertIn('ReportCatalogItem("التحصيل حسب طريقة الدفع"', self.screen)
         self.assertIn('"التحصيل حسب طريقة الدفع" -> paymentMethodAnalysisError', self.screen)
         self.assertIn('"التحصيل حسب طريقة الدفع" -> cloudPayments.filter', self.screen)
@@ -252,7 +254,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
             "تجاوزت مجاميع المبيعات أو التكلفة أو المرتجعات نطاق الأرقام الدقيق",
         ):
             with self.subTest(marker=marker):
-                self.assertIn(marker, self.screen)
+                self.assertIn(marker, self.calculations if marker in ("calculateRestockedCostMinor", "Math.addExact", "Math.subtractExact") else self.screen)
         self.assertNotIn("}.getOrDefault(0L)", self.screen)
 
     def test_unready_financial_reports_are_visible_but_not_selectable(self):
