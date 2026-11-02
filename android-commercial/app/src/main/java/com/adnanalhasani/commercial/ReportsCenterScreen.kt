@@ -500,6 +500,71 @@ private fun buildCashFlowReportLines(
             }
 }
 
+private data class TaxDiscountSummaryReportState(val lines: List<ReportLine>, val error: String)
+
+private fun buildTaxDiscountSummaryReportState(
+    sales: List<CommercialCloudSaleDocument>,
+    purchases: List<CommercialCloudPurchaseDocument>,
+    returns: List<CommercialCloudSaleReturn>,
+    startMillis: Long,
+    endExclusive: Long,
+    startText: String,
+    endText: String,
+    sourceError: String
+): TaxDiscountSummaryReportState {
+    if (sourceError.isNotBlank()) return TaxDiscountSummaryReportState(emptyList(), sourceError)
+    val totals = runCatching {
+        calculateTaxDiscountSummaryTotals(buildList {
+            sales.filter { doc ->
+                doc.saleStatus.equals("completed", true) &&
+                    reportDateMillis(doc.createdAt)?.let { it >= startMillis && it < endExclusive } == true
+            }.forEach { doc ->
+                if (doc.discountMinor > 0L) add(TaxDiscountSummaryInput(doc.id, doc.currencyCode, "sales_discount", doc.discountMinor))
+                if (doc.taxMinor > 0L) add(TaxDiscountSummaryInput(doc.id, doc.currencyCode, "sales_tax", doc.taxMinor))
+            }
+            purchases.forEach { purchase ->
+                purchase.supplierInvoices.filter { invoice ->
+                    invoice.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed") &&
+                        reportDateMillis(invoice.recordedAt)?.let { it >= startMillis && it < endExclusive } == true
+                }.forEach { invoice ->
+                    if (invoice.taxMinor > 0L) add(TaxDiscountSummaryInput(
+                        invoice.id, invoice.currencyCode, "purchase_tax", invoice.taxMinor
+                    ))
+                }
+            }
+            returns.filter { saleReturn ->
+                saleReturn.status.equals("completed", true) &&
+                    reportDateMillis(saleReturn.completedAt)?.let { it >= startMillis && it < endExclusive } == true
+            }.forEach { saleReturn ->
+                val refund = saleReturn.approvedRefundMinor ?: 0L
+                if (refund > 0L) add(TaxDiscountSummaryInput(
+                    saleReturn.id, saleReturn.currencyCode, "sales_return", refund
+                ))
+            }
+        })
+    }.getOrElse {
+        return TaxDiscountSummaryReportState(emptyList(), "تعذر تجميع الضرائب والخصومات بدقة؛ تم حجب الملخص بدل عرض أرقام ناقصة.")
+    }
+    val period = startText + " — " + endText
+    val lines = if (totals.isEmpty()) {
+        listOf(ReportLine(period, "ملخص", "لا توجد ضرائب أو خصومات أو مرتجعات مسجلة ضمن الفترة", 0L, "—",
+            "لا توجد مستندات بمبالغ مسجلة؛ لم يتم استنتاج أي قيمة ضريبية."))
+    } else buildList {
+        totals.forEach { total ->
+            val currency = total.currencyCode
+            add(ReportLine(period, "خصومات المبيعات", "إجمالي الخصومات الممنوحة",
+                total.salesDiscountMinor, currency, "عدد فواتير البيع ذات الخصم: " + total.salesDiscountDocumentCount))
+            add(ReportLine(period, "ضريبة المبيعات", "إجمالي الضريبة المسجلة على المبيعات",
+                total.salesTaxMinor, currency, "عدد فواتير البيع ذات الضريبة: " + total.salesTaxDocumentCount))
+            add(ReportLine(period, "ضريبة المشتريات", "إجمالي الضريبة المسجلة على المشتريات",
+                total.purchaseTaxMinor, currency, "عدد فواتير الموردين ذات الضريبة: " + total.purchaseTaxDocumentCount))
+            add(ReportLine(period, "مرتجعات المبيعات", "قيمة المرتجعات المعتمدة",
+                total.salesReturnMinor, currency, "عدد المرتجعات المعتمدة: " + total.salesReturnCount + "؛ لا تمثل هذه القيمة ضريبة مستردة."))
+        }
+    }
+    return TaxDiscountSummaryReportState(lines, "")
+}
+
 @Composable
 internal fun ReportsCenterScreen(
     context: Context,
@@ -844,46 +909,14 @@ internal fun ReportsCenterScreen(
         } -> "تعذر مطابقة عملة المرتجع مع فاتورة البيع الأصلية؛ تم حجب تفاصيل الضرائب والخصومات."
         else -> ""
     }
-    val taxDiscountSummaryCalculation = remember(
-        cloudSalesDocuments, cloudPurchases, cloudReturns, startMillis, endExclusive, taxDetailError
+    val taxDiscountSummaryReport = remember(
+        cloudSalesDocuments, cloudPurchases, cloudReturns, startMillis, endExclusive, startText, endText, taxDetailError
     ) {
-        runCatching {
-            if (taxDetailError.isNotBlank()) emptyList()
-            else calculateTaxDiscountSummaryTotals(buildList {
-                cloudSalesDocuments.filter { doc ->
-                    doc.saleStatus.equals("completed", true) &&
-                        reportDateMillis(doc.createdAt)?.let { it >= startMillis && it < endExclusive } == true
-                }.forEach { doc ->
-                    if (doc.discountMinor > 0L) add(TaxDiscountSummaryInput(doc.id, doc.currencyCode, "sales_discount", doc.discountMinor))
-                    if (doc.taxMinor > 0L) add(TaxDiscountSummaryInput(doc.id, doc.currencyCode, "sales_tax", doc.taxMinor))
-                }
-                cloudPurchases.forEach { purchase ->
-                    purchase.supplierInvoices.filter { invoice ->
-                        invoice.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed") &&
-                            reportDateMillis(invoice.recordedAt)?.let { it >= startMillis && it < endExclusive } == true
-                    }.forEach { invoice ->
-                        if (invoice.taxMinor > 0L) add(TaxDiscountSummaryInput(
-                            invoice.id, invoice.currencyCode, "purchase_tax", invoice.taxMinor
-                        ))
-                    }
-                }
-                cloudReturns.filter { saleReturn ->
-                    saleReturn.status.equals("completed", true) &&
-                        reportDateMillis(saleReturn.completedAt)?.let { it >= startMillis && it < endExclusive } == true
-                }.forEach { saleReturn ->
-                    val refund = saleReturn.approvedRefundMinor ?: 0L
-                    if (refund > 0L) add(TaxDiscountSummaryInput(
-                        saleReturn.id, saleReturn.currencyCode, "sales_return", refund
-                    ))
-                }
-            })
-        }
+        buildTaxDiscountSummaryReportState(
+            cloudSalesDocuments, cloudPurchases, cloudReturns, startMillis, endExclusive, startText, endText, taxDetailError
+        )
     }
-    val taxDiscountSummaryError = when {
-        taxDetailError.isNotBlank() -> taxDetailError
-        taxDiscountSummaryCalculation.isFailure -> "تعذر تجميع الضرائب والخصومات بدقة؛ تم حجب الملخص بدل عرض أرقام ناقصة."
-        else -> ""
-    }
+    val taxDiscountSummaryError = taxDiscountSummaryReport.error
     val costProfitError = when {
         !cloudMode -> "تكلفة الربح التاريخية تتطلب سجلات تكلفة السحابة."
         salesDocumentsLoadError.isNotBlank() -> salesDocumentsLoadError
@@ -1587,25 +1620,7 @@ internal fun ReportsCenterScreen(
             ReportLine(row.createdAt.take(10), row.id, row.title, row.amountMinor, row.currencyCode, row.status)
         }.sortedByDescending { it.date }
         "التدفقات النقدية والصندوق" -> if (sourceErrorForReport(selectedReport).isNotBlank()) emptyList() else buildCashFlowReportLines(cloudLedgerLines, cloudGlMappings, startDate, endDate, startText, endText)
-        "ملخص الضرائب والخصومات" -> if (taxDiscountSummaryError.isNotBlank()) emptyList() else {
-            val totals = taxDiscountSummaryCalculation.getOrThrow()
-            if (totals.isEmpty()) {
-                listOf(ReportLine("${startText} — ${endText}", "ملخص", "لا توجد ضرائب أو خصومات أو مرتجعات مسجلة ضمن الفترة", 0L, "—",
-                    "لا توجد مستندات بمبالغ مسجلة؛ لم يتم استنتاج أي قيمة ضريبية."))
-            } else buildList {
-                totals.forEach { total ->
-                    val currency = total.currencyCode
-                    add(ReportLine("${startText} — ${endText}", "خصومات المبيعات", "إجمالي الخصومات الممنوحة",
-                        total.salesDiscountMinor, currency, "عدد فواتير البيع ذات الخصم: ${total.salesDiscountDocumentCount}"))
-                    add(ReportLine("${startText} — ${endText}", "ضريبة المبيعات", "إجمالي الضريبة المسجلة على المبيعات",
-                        total.salesTaxMinor, currency, "عدد فواتير البيع ذات الضريبة: ${total.salesTaxDocumentCount}"))
-                    add(ReportLine("${startText} — ${endText}", "ضريبة المشتريات", "إجمالي الضريبة المسجلة على المشتريات",
-                        total.purchaseTaxMinor, currency, "عدد فواتير الموردين ذات الضريبة: ${total.purchaseTaxDocumentCount}"))
-                    add(ReportLine("${startText} — ${endText}", "مرتجعات المبيعات", "قيمة المرتجعات المعتمدة",
-                        total.salesReturnMinor, currency, "عدد المرتجعات المعتمدة: ${total.salesReturnCount}؛ لا تمثل هذه القيمة ضريبة مستردة."))
-                }
-            }
-        }
+        "ملخص الضرائب والخصومات" -> taxDiscountSummaryReport.lines
         "الضرائب والخصومات التفصيلية" -> if (taxDetailError.isNotBlank()) emptyList() else buildList {
             cloudSalesDocuments.filter { doc ->
                 doc.saleStatus.equals("completed", true) &&
