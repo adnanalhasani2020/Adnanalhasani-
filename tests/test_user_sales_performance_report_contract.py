@@ -17,7 +17,7 @@ def test_user_sales_performance_uses_persisted_sale_actor_and_separate_currencie
     assert 'userId = row.optString("user_id")' in repository
     assert 'ReportCatalogItem("أداء المبيعات حسب المستخدم"' in screen
     assert 'UserSalesPerformanceInvoiceInput(' in screen
-    assert "calculateUserSalesPerformance(invoices)" in calculations
+    assert "internal fun calculateUserSalesPerformance(" in calculations
     assert "sumReportAmountsExactly(rows.map { it.totalMinor })" in calculations
     assert 'document.saleStatus.equals("completed", true)' in screen
     assert "Branch and warehouse performance remain separate unfinished work" in contract
