@@ -239,6 +239,7 @@ private fun buildReportsCatalog(cloudMode: Boolean): List<ReportCatalogItem> = l
             ReportCatalogItem("الخصومات على فواتير المبيعات", "الضرائب والخصومات", "commercial_sales.discount_minor", cloudMode, "يعرض الخصومات المخزنة على الفواتير المكتملة، دون افتراض نسبة خصم."),
             ReportCatalogItem("الضرائب المسجلة على المبيعات", "الضرائب والخصومات", "commercial_sales.tax_minor", cloudMode, "يعرض قيمة الضريبة المخزنة فقط؛ لا يستنتج نسبة ضريبية من الإجمالي."),
             ReportCatalogItem("الضرائب والخصومات التفصيلية", "الضرائب والخصومات", "ضرائب وخصومات فواتير البيع والشراء والمرتجعات المسجلة", cloudMode, "يعرض الضرائب والخصومات المخزنة حسب المستند والعملة؛ لا يخترع نسبًا ولا يصف الضريبة بعد المرتجعات بأنها صافية إذا لم تفصل حصة الضريبة."),
+            ReportCatalogItem("ملخص الضرائب والخصومات", "الضرائب والخصومات", "commercial_sales.discount_minor + commercial_sales.tax_minor + commercial_supplier_invoices.tax_minor + commercial_sales_returns.approved_refund_minor", cloudMode, "يجمع الخصومات وضريبة المبيعات وضريبة المشتريات وقيمة المرتجعات المعتمدة حسب العملة؛ لا يحسب صافي التزام ضريبي ولا يمثل إقرارًا ضريبيًا."),
 
             ReportCatalogItem("المبيعات حسب العميل", "المبيعات", "اسم العميل المحفوظ في سجل البيع", true, "يعرض مجموع الفواتير المكتملة المسجلة للعميل حسب العملة."),
             ReportCatalogItem("أداء المبيعات حسب المستخدم", "المستخدمون والعمليات", "commercial_sales.user_id + total_minor + currency_code", cloudMode, "يجمع الفواتير المكتملة حسب المستخدم الذي سجل عملية البيع، مع فصل العملات ومتوسط الفاتورة. يعرض معرف المستخدم عند عدم توفر اسم عرض موثوق؛ لا ينسب المبيعات إلى فرع أو مستودع لأن علاقة الموقع غير محفوظة على سجل البيع."),
@@ -837,6 +838,46 @@ internal fun ReportsCenterScreen(
         } -> "يوجد مرتجع مكتمل بلا مبلغ اعتماد أو عملة صالحة؛ تم حجب تفاصيل الضرائب والخصومات."
         else -> ""
     }
+    val taxDiscountSummaryCalculation = remember(
+        cloudSalesDocuments, cloudPurchases, cloudReturns, startMillis, endExclusive, taxDetailError
+    ) {
+        runCatching {
+            if (taxDetailError.isNotBlank()) emptyList()
+            else calculateTaxDiscountSummaryTotals(buildList {
+                cloudSalesDocuments.filter { doc ->
+                    doc.saleStatus.equals("completed", true) &&
+                        reportDateMillis(doc.createdAt)?.let { it >= startMillis && it < endExclusive } == true
+                }.forEach { doc ->
+                    if (doc.discountMinor > 0L) add(TaxDiscountSummaryInput(doc.id, doc.currencyCode, "sales_discount", doc.discountMinor))
+                    if (doc.taxMinor > 0L) add(TaxDiscountSummaryInput(doc.id, doc.currencyCode, "sales_tax", doc.taxMinor))
+                }
+                cloudPurchases.forEach { purchase ->
+                    purchase.supplierInvoices.filter { invoice ->
+                        invoice.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed") &&
+                            reportDateMillis(invoice.recordedAt)?.let { it >= startMillis && it < endExclusive } == true
+                    }.forEach { invoice ->
+                        if (invoice.taxMinor > 0L) add(TaxDiscountSummaryInput(
+                            invoice.id, invoice.currencyCode, "purchase_tax", invoice.taxMinor
+                        ))
+                    }
+                }
+                cloudReturns.filter { saleReturn ->
+                    saleReturn.status.equals("completed", true) &&
+                        reportDateMillis(saleReturn.completedAt)?.let { it >= startMillis && it < endExclusive } == true
+                }.forEach { saleReturn ->
+                    val refund = saleReturn.approvedRefundMinor ?: 0L
+                    if (refund > 0L) add(TaxDiscountSummaryInput(
+                        saleReturn.id, saleReturn.currencyCode, "sales_return", refund
+                    ))
+                }
+            })
+        }
+    }
+    val taxDiscountSummaryError = when {
+        taxDetailError.isNotBlank() -> taxDetailError
+        taxDiscountSummaryCalculation.isFailure -> "تعذر تجميع الضرائب والخصومات بدقة؛ تم حجب الملخص بدل عرض أرقام ناقصة."
+        else -> ""
+    }
     val costProfitError = when {
         !cloudMode -> "تكلفة الربح التاريخية تتطلب سجلات تكلفة السحابة."
         salesDocumentsLoadError.isNotBlank() -> salesDocumentsLoadError
@@ -1107,6 +1148,7 @@ internal fun ReportsCenterScreen(
             "ميزان المراجعة حسب الحساب", "حركة دفتر الأستاذ العام", "كشف حساب محاسبي", "تفاصيل القيود المرحلة" -> ledgerLinesLoadError
             "قائمة الدخل والميزانية العمومية" -> ledgerStatementError
             "الضرائب والخصومات التفصيلية" -> taxDetailError
+            "ملخص الضرائب والخصومات" -> taxDiscountSummaryError
             "تكلفة البضاعة والربح" -> costProfitError
             "ربحية الأصناف بعد المرتجعات" -> itemProfitabilityError
             "أداء المبيعات حسب المستخدم" -> userSalesPerformanceError
@@ -1539,6 +1581,25 @@ internal fun ReportsCenterScreen(
             ReportLine(row.createdAt.take(10), row.id, row.title, row.amountMinor, row.currencyCode, row.status)
         }.sortedByDescending { it.date }
         "التدفقات النقدية والصندوق" -> if (sourceErrorForReport(selectedReport).isNotBlank()) emptyList() else buildCashFlowReportLines(cloudLedgerLines, cloudGlMappings, startDate, endDate, startText, endText)
+        "ملخص الضرائب والخصومات" -> if (taxDiscountSummaryError.isNotBlank()) emptyList() else {
+            val totals = taxDiscountSummaryCalculation.getOrThrow()
+            if (totals.isEmpty()) {
+                listOf(ReportLine("${startText} — ${endText}", "ملخص", "لا توجد ضرائب أو خصومات أو مرتجعات مسجلة ضمن الفترة", 0L, "—",
+                    "لا توجد مستندات بمبالغ مسجلة؛ لم يتم استنتاج أي قيمة ضريبية."))
+            } else buildList {
+                totals.forEach { total ->
+                    val currency = total.currencyCode
+                    add(ReportLine("${startText} — ${endText}", "خصومات المبيعات", "إجمالي الخصومات الممنوحة",
+                        total.salesDiscountMinor, currency, "عدد فواتير البيع ذات الخصم: ${total.salesDiscountDocumentCount}"))
+                    add(ReportLine("${startText} — ${endText}", "ضريبة المبيعات", "إجمالي الضريبة المسجلة على المبيعات",
+                        total.salesTaxMinor, currency, "عدد فواتير البيع ذات الضريبة: ${total.salesTaxDocumentCount}"))
+                    add(ReportLine("${startText} — ${endText}", "ضريبة المشتريات", "إجمالي الضريبة المسجلة على المشتريات",
+                        total.purchaseTaxMinor, currency, "عدد فواتير الموردين ذات الضريبة: ${total.purchaseTaxDocumentCount}"))
+                    add(ReportLine("${startText} — ${endText}", "مرتجعات المبيعات", "قيمة المرتجعات المعتمدة",
+                        total.salesReturnMinor, currency, "عدد المرتجعات المعتمدة: ${total.salesReturnCount}؛ لا تمثل هذه القيمة ضريبة مستردة."))
+                }
+            }
+        }
         "الضرائب والخصومات التفصيلية" -> if (taxDetailError.isNotBlank()) emptyList() else buildList {
             cloudSalesDocuments.filter { doc ->
                 doc.saleStatus.equals("completed", true) &&
@@ -2004,7 +2065,7 @@ internal fun ReportsCenterScreen(
                         "التحصيلات المسجلة محليًا", "الدفعات السحابية الناجحة", "التحصيل حسب طريقة الدفع", "التحصيل حسب العميل", "المصروفات التشغيلية", "ملخص المصروفات حسب التصنيف وطريقة الصرف", "رصيد المخزون الحالي", "تنبيهات المخزون المنخفض",
                         "فواتير الشراء والمستحقات المسجلة", "المشتريات حسب المورد", "فروقات أسعار فواتير الموردين", "مستحقات فواتير الموردين", "أعمار مستحقات الموردين", "عمر مستحقات الموردين حسب تاريخ الفاتورة", "مرتجعات المبيعات وحالة التسوية", "سندات القبض والصرف", "سجل القيود المحاسبية",
                         "ميزان المراجعة حسب الحساب", "حركة دفتر الأستاذ العام", "كشف حساب محاسبي", "أرصدة العملاء وكشف الحساب", "كشف حركات الموردين",
-                        "الرصيد المحاسبي الكامل للعملاء", "أرصدة الموردين والمستحقات", "قائمة الدخل والميزانية العمومية", "التدفقات النقدية والصندوق", "تكلفة البضاعة والربح", "ربحية الأصناف بعد المرتجعات", "الضرائب والخصومات التفصيلية",
+                        "الرصيد المحاسبي الكامل للعملاء", "أرصدة الموردين والمستحقات", "قائمة الدخل والميزانية العمومية", "التدفقات النقدية والصندوق", "تكلفة البضاعة والربح", "ربحية الأصناف بعد المرتجعات", "الضرائب والخصومات التفصيلية", "ملخص الضرائب والخصومات",
                         "حركة المخزون الفعلية", "حركة المخزون حسب المستخدم", "رصيد المخزون حسب الموقع", "التقييم المالي الحالي للمخزون", "تفاصيل القيود المرحلة" -> selectedReport = report.title
                         "لوحة المؤشرات" -> selectedReport = "ملخص المبيعات حسب الفترة"
                     }
