@@ -18,7 +18,9 @@ CREATE TABLE IF NOT EXISTS public.commercial_customer_payment_requests (
   reviewed_at timestamptz,
   payment_id uuid REFERENCES public.commercial_payments(id) ON DELETE RESTRICT,
   idempotency_key text NOT NULL CHECK (length(idempotency_key) BETWEEN 8 AND 200),
+  idempotency_fingerprint text NOT NULL CHECK (length(idempotency_fingerprint)=32),
   last_action_key text NOT NULL CHECK (length(last_action_key) BETWEEN 8 AND 200),
+  last_action_fingerprint text NOT NULL CHECK (length(last_action_fingerprint)=32),
   version integer NOT NULL DEFAULT 1 CHECK (version > 0),
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
@@ -163,8 +165,7 @@ BEGIN
   SELECT * INTO v_existing FROM public.commercial_customer_payment_requests
   WHERE submitted_by=v_uid AND idempotency_key=btrim(p_idempotency_key) FOR UPDATE;
   IF FOUND THEN
-    IF v_existing.sale_id<>p_sale_id OR v_existing.amount_minor<>p_amount_minor
-       OR v_existing.customer_note<>btrim(p_customer_note) THEN
+    IF v_existing.idempotency_fingerprint<>md5(concat_ws('|',p_sale_id::text,p_amount_minor::text,btrim(p_customer_note))) THEN
       RAISE EXCEPTION 'idempotency_key_reused_with_different_request' USING ERRCODE='23505';
     END IF;
     RETURN jsonb_build_object('request_id',v_existing.id,'status',v_existing.status,'replayed',true);
@@ -204,10 +205,12 @@ BEGIN
 
   INSERT INTO public.commercial_customer_payment_requests(
     organization_id,customer_id,sale_id,submitted_by,amount_minor,currency_code,
-    customer_note,idempotency_key,last_action_key
+    customer_note,idempotency_key,idempotency_fingerprint,last_action_key,last_action_fingerprint
   ) VALUES (
     v_sale.organization_id,v_sale.customer_id,v_sale.id,v_uid,p_amount_minor,
-    v_sale.currency_code,btrim(p_customer_note),btrim(p_idempotency_key),btrim(p_idempotency_key)
+    v_sale.currency_code,btrim(p_customer_note),btrim(p_idempotency_key),
+    md5(concat_ws('|',p_sale_id::text,p_amount_minor::text,btrim(p_customer_note))),
+    btrim(p_idempotency_key),md5(concat_ws('|',p_sale_id::text,p_amount_minor::text,btrim(p_customer_note)))
   ) RETURNING * INTO v_request;
 
   INSERT INTO public.commercial_customer_payment_request_events(
@@ -256,7 +259,7 @@ BEGIN
   WHERE r.id=p_request_id FOR UPDATE OF r;
   IF NOT FOUND THEN RAISE EXCEPTION 'customer_payment_request_not_found' USING ERRCODE='P0002'; END IF;
   IF v_request.last_action_key=btrim(p_idempotency_key) THEN
-    IF v_request.amount_minor<>p_amount_minor OR v_request.customer_note<>btrim(p_customer_note) THEN
+    IF v_request.last_action_fingerprint<>md5(concat_ws('|',p_request_id::text,p_amount_minor::text,btrim(p_customer_note))) THEN
       RAISE EXCEPTION 'idempotency_key_reused_with_different_request' USING ERRCODE='23505';
     END IF;
     RETURN jsonb_build_object('request_id',v_request.id,'status',v_request.status,'replayed',true);
@@ -291,6 +294,7 @@ BEGIN
   UPDATE public.commercial_customer_payment_requests
   SET amount_minor=p_amount_minor,customer_note=btrim(p_customer_note),status='pending',
       review_note='',reviewed_by=NULL,reviewed_at=NULL,last_action_key=btrim(p_idempotency_key),
+      last_action_fingerprint=md5(concat_ws('|',p_request_id::text,p_amount_minor::text,btrim(p_customer_note))),
       version=version+1,updated_at=now()
   WHERE id=v_request.id RETURNING * INTO v_request;
   INSERT INTO public.commercial_customer_payment_request_events(
@@ -378,6 +382,9 @@ BEGIN
     RAISE EXCEPTION 'accounting_permission_required' USING ERRCODE='42501';
   END IF;
   IF v_request.last_action_key=btrim(p_idempotency_key) THEN
+    IF v_request.last_action_fingerprint<>md5(concat_ws('|',p_request_id::text,p_decision,coalesce(p_confirmed_amount_minor::text,'null'),btrim(p_review_note),p_payment_method_type)) THEN
+      RAISE EXCEPTION 'idempotency_key_reused_with_different_request' USING ERRCODE='23505';
+    END IF;
     RETURN jsonb_build_object('request_id',v_request.id,'status',v_request.status,
       'payment_id',v_request.payment_id,'replayed',true);
   END IF;
@@ -397,13 +404,13 @@ BEGIN
     UPDATE public.commercial_customer_payment_requests
     SET status='approved',payment_id=(v_payment->>'payment_id')::uuid,
         review_note=btrim(p_review_note),reviewed_by=v_uid,reviewed_at=now(),
-        last_action_key=btrim(p_idempotency_key),updated_at=now()
+        last_action_key=btrim(p_idempotency_key),last_action_fingerprint=md5(concat_ws('|',p_request_id::text,p_decision,coalesce(p_confirmed_amount_minor::text,'null'),btrim(p_review_note),p_payment_method_type)),updated_at=now()
     WHERE id=v_request.id RETURNING * INTO v_request;
     v_event:='approved';
   ELSIF p_decision='reject' THEN
     UPDATE public.commercial_customer_payment_requests
     SET status='rejected',review_note=btrim(p_review_note),reviewed_by=v_uid,
-        reviewed_at=now(),last_action_key=btrim(p_idempotency_key),updated_at=now()
+        reviewed_at=now(),last_action_key=btrim(p_idempotency_key),last_action_fingerprint=md5(concat_ws('|',p_request_id::text,p_decision,coalesce(p_confirmed_amount_minor::text,'null'),btrim(p_review_note),p_payment_method_type)),updated_at=now()
     WHERE id=v_request.id RETURNING * INTO v_request;
     v_event:='rejected';
   ELSE
