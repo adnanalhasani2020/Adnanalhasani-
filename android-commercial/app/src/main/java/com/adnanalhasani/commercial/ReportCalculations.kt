@@ -718,3 +718,69 @@ internal fun calculateSupplierLiabilityAging(
         .sortedWith(compareBy<SupplierLiabilityAgingSummary> { it.currencyCode }
             .thenBy { it.supplierName }.thenBy { it.bucket })
 }
+
+
+internal data class CustomerReceivableAgingInput(
+    val saleId: String,
+    val receiptNumber: String,
+    val customerId: String,
+    val customerName: String,
+    val invoiceDate: String,
+    val currencyCode: String,
+    val balanceMinor: Long
+)
+
+internal data class CustomerReceivableAgingSummary(
+    val customerId: String,
+    val customerName: String,
+    val currencyCode: String,
+    val bucket: String,
+    val invoiceCount: Int,
+    val balanceMinor: Long
+)
+
+/**
+ * Ages open customer receivables by sale-invoice date, not contractual due date.
+ * Return credits and executed refunds must already have been reflected by the source loader.
+ */
+internal fun calculateCustomerReceivableAging(
+    invoices: List<CustomerReceivableAgingInput>,
+    asOfDate: String
+): List<CustomerReceivableAgingSummary> {
+    val asOf = LocalDate.parse(asOfDate)
+    val seen = mutableSetOf<String>()
+    val open = invoices.mapNotNull { invoice ->
+        require(invoice.saleId.isNotBlank() && seen.add(invoice.saleId)) {
+            "معرف فاتورة عميل مفقود أو مكرر في تقرير أعمار الأرصدة."
+        }
+        require(invoice.customerId.isNotBlank() && invoice.customerName.isNotBlank() &&
+            invoice.currencyCode.matches(Regex("^[A-Z]{3}$")) && invoice.balanceMinor > 0L) {
+            "بيانات رصيد العميل أو العملة غير صالحة؛ تم حجب تقرير الأعمار."
+        }
+        val date = LocalDate.parse(invoice.invoiceDate.take(10))
+        require(!date.isAfter(asOf)) {
+            "تاريخ فاتورة العميل أحدث من تاريخ التقرير؛ تم حجب تقرير الأعمار."
+        }
+        val ageDays = ChronoUnit.DAYS.between(date, asOf)
+        val bucket = when {
+            ageDays <= 30L -> "0–30 يومًا"
+            ageDays <= 60L -> "31–60 يومًا"
+            ageDays <= 90L -> "61–90 يومًا"
+            else -> "أكثر من 90 يومًا"
+        }
+        Triple(invoice, bucket, invoice.balanceMinor)
+    }
+    return open.groupBy { Triple(it.first.customerId, it.first.currencyCode, it.second) }
+        .map { (key, rows) ->
+            CustomerReceivableAgingSummary(
+                customerId = key.first,
+                customerName = rows.first().first.customerName,
+                currencyCode = key.second,
+                bucket = key.third,
+                invoiceCount = rows.size,
+                balanceMinor = sumReportAmountsExactly(rows.map { it.third })
+            )
+        }
+        .sortedWith(compareBy<CustomerReceivableAgingSummary> { it.currencyCode }
+            .thenBy { it.customerName }.thenBy { it.bucket })
+}
