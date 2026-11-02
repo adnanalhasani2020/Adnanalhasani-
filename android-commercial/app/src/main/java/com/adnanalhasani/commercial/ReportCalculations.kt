@@ -601,3 +601,47 @@ internal fun calculateDailySalesTrend(
         }
         .sortedWith(compareBy<DailySalesTrendTotal> { it.date }.thenBy { it.currencyCode })
 }
+
+
+internal data class CustomerCollectionPaymentInput(
+    val paymentId: String,
+    val customerId: String,
+    val customerName: String,
+    val currencyCode: String,
+    val amountMinor: Long
+)
+
+internal data class CustomerCollectionSummary(
+    val customerId: String,
+    val customerName: String,
+    val currencyCode: String,
+    val paymentCount: Int,
+    val totalMinor: Long
+)
+
+internal fun calculateCustomerCollectionsByCustomer(
+    payments: List<CustomerCollectionPaymentInput>
+): List<CustomerCollectionSummary> {
+    val paymentIds = mutableSetOf<String>()
+    payments.forEach { payment ->
+        require(payment.paymentId.isNotBlank() && paymentIds.add(payment.paymentId)) {
+            "معرف دفعة مفقود أو مكرر في تقرير التحصيل حسب العميل."
+        }
+        require(payment.customerName.isNotBlank() &&
+            payment.currencyCode.matches(Regex("^[A-Z]{3}$")) && payment.amountMinor > 0L) {
+            "اسم العميل أو عملة أو مبلغ دفعة غير صالح في تقرير التحصيل حسب العميل."
+        }
+    }
+    return payments.groupBy {
+        Triple(it.customerId.ifBlank { "cash:${it.customerName}" }, it.customerName, it.currencyCode)
+    }.map { (key, rows) ->
+        CustomerCollectionSummary(
+            customerId = key.first,
+            customerName = key.second,
+            currencyCode = key.third,
+            paymentCount = rows.size,
+            totalMinor = sumReportAmountsExactly(rows.map { it.amountMinor })
+        )
+    }.sortedWith(compareBy<CustomerCollectionSummary> { it.currencyCode }
+        .thenByDescending { it.totalMinor }.thenBy { it.customerName }.thenBy { it.customerId })
+}
