@@ -426,6 +426,9 @@ internal fun calculateItemProfitability(
             require(saleLine.saleTaxMinor == 0L) {
                 "توجد مرتجعات لفواتير ضريبية ولا توجد حصة ضريبية مفصلة لكل بند؛ تم حجب ربحية الأصناف."
             }
+            require(saleLine.saleDiscountMinor == 0L) {
+                "يرتبط المرتجع بفاتورة لها خصم إجمالي غير موزع على البنود؛ تم حجب ربحية الأصناف."
+            }
             val cumulativeRefund = Math.addExact(refundedBySaleItem[item.saleItemId] ?: 0L, item.refundAmountMinor)
             require(cumulativeRefund <= saleLine.lineTotalMinor) {
                 "إجمالي مبالغ المرتجعات يتجاوز قيمة بند البيع الأصلي؛ تم حجب ربحية الأصناف."
