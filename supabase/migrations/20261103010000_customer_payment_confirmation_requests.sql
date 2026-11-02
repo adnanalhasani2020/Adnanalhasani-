@@ -237,6 +237,7 @@ DECLARE
   v_sale public.commercial_sales%ROWTYPE;
   v_due bigint;
   v_reserved numeric;
+  v_previous_amount bigint;
 BEGIN
   IF v_uid IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
   IF p_request_id IS NULL OR p_amount_minor IS NULL OR p_amount_minor<=0
@@ -253,6 +254,7 @@ BEGIN
     END IF;
     RETURN jsonb_build_object('request_id',v_request.id,'status',v_request.status,'replayed',true);
   END IF;
+  v_previous_amount:=v_request.amount_minor;
   IF v_request.status<>'change_requested' THEN
     RAISE EXCEPTION 'payment_request_not_open_for_changes' USING ERRCODE='55000';
   END IF;
@@ -286,7 +288,7 @@ BEGIN
   WHERE id=v_request.id RETURNING * INTO v_request;
   INSERT INTO public.commercial_customer_payment_request_events(
     request_id,organization_id,actor_user_id,event_type,previous_amount_minor,new_amount_minor,note
-  ) VALUES(v_request.id,v_request.organization_id,v_uid,'resubmitted',v_request.amount_minor,p_amount_minor,v_request.customer_note);
+  ) VALUES(v_request.id,v_request.organization_id,v_uid,'resubmitted',v_previous_amount,p_amount_minor,v_request.customer_note);
 
   INSERT INTO public.commercial_user_notifications(
     user_id,organization_id,notification_type,title,body,entity_type,entity_id,priority,metadata
@@ -309,7 +311,7 @@ AS $function$
 DECLARE v_uid uuid:=auth.uid(); v_result jsonb;
 BEGIN
   IF v_uid IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
-  IF p_organization_id IS NULL OR p_status NOT IN ('pending','change_requested','rejected','approved','all')
+  IF p_organization_id IS NULL OR p_status IS NULL OR p_status NOT IN ('pending','change_requested','rejected','approved','all')
      OR p_limit IS NULL OR p_limit NOT BETWEEN 1 AND 100 THEN
     RAISE EXCEPTION 'invalid_payment_request_filter' USING ERRCODE='22023';
   END IF;
@@ -352,7 +354,7 @@ DECLARE
   v_event text;
 BEGIN
   IF v_uid IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
-  IF p_request_id IS NULL OR p_decision NOT IN ('approve','reject','request_changes')
+  IF p_request_id IS NULL OR p_decision IS NULL OR p_decision NOT IN ('approve','reject','request_changes')
      OR p_review_note IS NULL OR length(p_review_note)>1000
      OR p_idempotency_key IS NULL OR length(btrim(p_idempotency_key)) NOT BETWEEN 8 AND 200
      OR (p_decision='approve' AND (p_confirmed_amount_minor IS NULL OR p_confirmed_amount_minor<=0))
