@@ -322,6 +322,7 @@ internal data class ItemProfitSaleLineInput(
     val productName: String,
     val currencyCode: String,
     val saleTaxMinor: Long,
+    val saleDiscountMinor: Long,
     val quantity: String,
     val lineTotalMinor: Long,
     val costTotalMinor: Long?,
@@ -375,7 +376,8 @@ internal fun calculateItemProfitability(
             "معرف بند البيع مفقود أو مكرر؛ تعذر ربط المرتجعات بالصنف الصحيح."
         }
         require(line.saleId.isNotBlank() && line.productName.isNotBlank() &&
-            line.currencyCode.matches(Regex("^[A-Z]{3}$")) && line.saleTaxMinor >= 0L) {
+            line.currencyCode.matches(Regex("^[A-Z]{3}$")) &&
+            line.saleTaxMinor >= 0L && line.saleDiscountMinor >= 0L) {
             "اسم الصنف أو عملة بند البيع غير صالحة."
         }
         val quantity = line.quantity.toBigDecimalOrNull()
@@ -384,6 +386,9 @@ internal fun calculateItemProfitability(
             "توجد كمية أو قيمة بيع غير صالحة في تقرير ربحية الأصناف."
         }
         if (line.inSelectedPeriod) {
+            require(line.saleDiscountMinor == 0L) {
+                "توجد خصومات إجمالية على فواتير البيع بلا توزيع محفوظ على البنود؛ تم حجب ربحية الأصناف."
+            }
             require(line.costTotalMinor != null && line.costTotalMinor >= 0L) {
                 "توجد تكلفة تاريخية مفقودة لأحد بنود البيع في الفترة؛ تم حجب ربحية الأصناف."
             }
