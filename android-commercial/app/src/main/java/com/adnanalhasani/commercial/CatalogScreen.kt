@@ -844,10 +844,12 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             return
         }
         request({
-            val poRows=JSONArray(catalogGet("/rest/v1/commercial_purchase_orders?select=id,receive_location_id&organization_id=eq."+orgId+"&id=eq."+req.purchaseOrderId+"&limit=1",active))
+            val poRows=JSONArray(catalogGet("/rest/v1/commercial_purchase_orders?select=id,receive_location_id,currency_code&organization_id=eq."+orgId+"&id=eq."+req.purchaseOrderId+"&limit=1",active))
             if(poRows.length()!=1) throw IllegalStateException("لم يتم العثور على أمر الشراء ضمن المؤسسة المستقبلة.")
-            val locationId=poRows.getJSONObject(0).optString("receive_location_id").takeUnless { it=="null" }.orEmpty()
-            if(locationId.isBlank()) throw IllegalStateException("أمر الشراء لا يحتوي موقع استلام صالحًا.")
+            val purchaseOrder=poRows.getJSONObject(0)
+            val locationId=purchaseOrder.optString("receive_location_id").takeUnless { it=="null" }.orEmpty()
+            val currencyCode=purchaseOrder.optString("currency_code").uppercase()
+            if(locationId.isBlank() || !currencyCode.matches(Regex("[A-Z]{3}"))) throw IllegalStateException("أمر الشراء لا يحتوي موقع استلام أو عملة صالحة.")
             val lineRows=JSONArray(catalogGet("/rest/v1/commercial_purchase_order_items?select=id,line_number,item_description,quantity_ordered,quantity_received,offering_id,source_selling_unit_code&organization_id=eq."+orgId+"&purchase_order_id=eq."+req.purchaseOrderId+"&offering_id=is.null&quantity_received=eq.0&order=line_number.asc",active))
             val mapRows=JSONArray(catalogGet("/rest/v1/commercial_catalog_item_offerings?select=offering_id,global_item_id&organization_id=eq."+orgId+"&location_id=eq."+locationId,active))
             val globalIds=(0 until mapRows.length()).map { mapRows.getJSONObject(it).optString("global_item_id") }.filter { it.isNotBlank() }.distinct()
@@ -855,13 +857,18 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             val encodedGlobals=java.net.URLEncoder.encode("in.("+globalIds.joinToString(",")+")","UTF-8")
             val encodedOfferings=java.net.URLEncoder.encode("in.("+offeringIds.joinToString(",")+")","UTF-8")
             val globalRows=if(globalIds.isEmpty()) JSONArray() else JSONArray(catalogGet("/rest/v1/commercial_global_catalog_items?select=id,name_ar,name_en,unit_code&id="+encodedGlobals+"&is_active=eq.true",active))
-            val activeOfferings=if(offeringIds.isEmpty()) JSONArray() else JSONArray(catalogGet("/rest/v1/commercial_offerings?select=id,location_ref,state&id="+encodedOfferings+"&state=eq.active&location_ref=eq."+locationId,active))
+            val activeOfferings=if(offeringIds.isEmpty()) JSONArray() else JSONArray(catalogGet("/rest/v1/commercial_offerings?select=id,product_id,location_ref,state,currency_code&id="+encodedOfferings+"&state=eq.active&currency_code=eq."+currencyCode+"&location_ref=eq."+locationId,active))
+            val productIds=(0 until activeOfferings.length()).map { activeOfferings.getJSONObject(it).optString("product_id") }.filter { it.isNotBlank() }.distinct()
+            val encodedProducts=java.net.URLEncoder.encode("in.("+productIds.joinToString(",")+")","UTF-8")
+            val activeProducts=if(productIds.isEmpty()) JSONArray() else JSONArray(catalogGet("/rest/v1/commercial_products?select=id,state&id="+encodedProducts+"&state=eq.active",active))
             val names=mutableMapOf<String,Pair<String,String>>()
             for(i in 0 until globalRows.length()) {
                 val row=globalRows.getJSONObject(i)
                 names[row.optString("id")]=Pair(row.optString("name_ar").ifBlank { row.optString("name_en") },row.optString("unit_code"))
             }
-            val activeIds=(0 until activeOfferings.length()).map { activeOfferings.getJSONObject(it).optString("id") }.toSet()
+            val activeProductIds=(0 until activeProducts.length()).map { activeProducts.getJSONObject(it).optString("id") }.toSet()
+            val activeIds=(0 until activeOfferings.length()).filter { activeOfferings.getJSONObject(it).optString("product_id") in activeProductIds }
+                .map { activeOfferings.getJSONObject(it).optString("id") }.toSet()
             val candidates=(0 until mapRows.length()).mapNotNull { i ->
                 val row=mapRows.getJSONObject(i)
                 val offeringId=row.optString("offering_id")
@@ -904,11 +911,17 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             catalogHttp("/rest/v1/rpc/commercial_link_purchase_order_item_offering",JSONObject()
                 .put("p_organization_id",orgId).put("p_purchase_order_id",invoiceMappingPurchaseOrderId)
                 .put("p_purchase_order_item_id",line.id).put("p_offering_id",offering.id),active)
-        }, {
+        }, { raw ->
+            val result=runCatching { JSONObject(raw) }.getOrNull()
+            val orderStatus=result?.optString("status").orEmpty()
             invoiceMappingLines=invoiceMappingLines.filterNot { it.id==line.id }
             invoiceMappingLineId=invoiceMappingLines.firstOrNull()?.id.orEmpty()
             invoiceMappingOfferingId=""
-            feedback="تم ربط بند الفاتورة بالصنف المحلي "+offering.name+". لم يتغير المخزون؛ سيُحدّث عند الاستلام فقط."
+            feedback=if(orderStatus=="submitted") {
+                "تم ربط بند الفاتورة بالصنف المحلي "+offering.name+". أعيد أمر الشراء إلى حالة الإرسال ويتطلب إعادة اعتماد؛ لم يتغير المخزون."
+            } else {
+                "تم ربط بند الفاتورة بالصنف المحلي "+offering.name+". لم يتغير المخزون؛ سيُحدّث عند الاستلام فقط."
+            }
             loadInvoicePurchaseUnmappedLines(requestRow)
         })
     }
@@ -1508,6 +1521,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                                     if(invoiceMappingRequestId==req.id) {
                                         Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
                                             Text("مطابقة البنود غير المعروفة مع أصناف المؤسسة في موقع الاستلام",fontWeight=FontWeight.SemiBold)
+                                            Text("نفّذ ربط الأصناف المعروفة أولًا. الربط اليدوي يعيد أمر الشراء المعتمد إلى حالة الإرسال ويتطلب إعادة اعتماده.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                                             if(invoiceMappingLines.isEmpty()) {
                                                 Text("لا توجد بنود غير مطابقة قابلة للربط حاليًا.",style=MaterialTheme.typography.bodySmall)
                                             } else {
