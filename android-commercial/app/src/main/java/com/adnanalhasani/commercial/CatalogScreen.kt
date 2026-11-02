@@ -1043,29 +1043,63 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                     }
                     LazyColumn(state=catalogListState,verticalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(bottom=20.dp)) {
                         item { OutlinedTextField(query,{query=it},Modifier.fillMaxWidth(),label={Text("بحث بالاسم أو الوصف أو الباركود أو الكود")},singleLine=true) }
-                        item { Row(horizontalArrangement=Arrangement.spacedBy(8.dp), verticalAlignment=Alignment.CenterVertically) {
-                            OutlinedTextField(sector,{sector=it},Modifier.weight(1f),label={Text("القطاع")},singleLine=true)
-                            OutlinedTextField(businessLevel,{businessLevel=it},Modifier.weight(1f),label={Text("مستوى النشاط")},singleLine=true)
-                        } }
                         item {
                             Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
-                                Text("ربط الأصناف بنشاط تجاري محدد (اختياري)", style=MaterialTheme.typography.labelMedium)
+                                Text("تصفية الدليل حسب النشاط التجاري", style=MaterialTheme.typography.labelMedium)
                                 Box {
-                                    OutlinedButton(onClick={activityMenuExpanded=true}, enabled=!busy) {
-                                        Text(activityNodes.firstOrNull { it.first == selectedActivityCode }?.second ?: "اختر النشاط من الدليل")
+                                    OutlinedButton(onClick={sectorMenuExpanded=true}, enabled=!busy && sectorOptions.isNotEmpty(), modifier=Modifier.fillMaxWidth()) {
+                                        Text(sectorOptions.firstOrNull { it.code.equals(sector, true) }?.pathAr ?: "كل القطاعات")
                                     }
-                                    DropdownMenu(expanded=activityMenuExpanded, onDismissRequest={activityMenuExpanded=false}) {
-                                        DropdownMenuItem(text={Text("بدون إسناد لنشاط محدد")}, onClick={selectedActivityCode=""; activityMenuExpanded=false})
-                                        activityNodes.forEach { node ->
-                                            DropdownMenuItem(text={Text(node.second)}, onClick={
-                                                selectedActivityCode=node.first
-                                                if (node.third.isNotBlank()) businessLevel=node.third
-                                                activityMenuExpanded=false
+                                    DropdownMenu(expanded=sectorMenuExpanded, onDismissRequest={sectorMenuExpanded=false}) {
+                                        DropdownMenuItem(text={Text("كل القطاعات")}, onClick={
+                                            sector=""; selectedActivityCode=""; businessLevel=""; sectorMenuExpanded=false; loadCatalog(true)
+                                        })
+                                        sectorOptions.forEach { option ->
+                                            DropdownMenuItem(text={Text(option.pathAr)}, onClick={
+                                                sector=option.code
+                                                val selectedNode=activityNodes.firstOrNull { it.code==selectedActivityCode }
+                                                if (selectedNode!=null && !catalogNodeBelongsToSector(selectedNode,option.code,activityNodes)) selectedActivityCode=""
+                                                val validLevels=activityNodes.filter { it.selectable && catalogNodeBelongsToSector(it,option.code,activityNodes) }.map { it.defaultBusinessLevelCode }.filter { it.isNotBlank() }.distinct()
+                                                if (businessLevel !in validLevels) businessLevel=""
+                                                sectorMenuExpanded=false; loadCatalog(true)
                                             })
                                         }
                                     }
                                 }
-                                Text("حدّد نشاطًا ثم اربط الأصناف؛ سيُحفظ الربط بالنشاط بعد ربطها بالمؤسسة.", style=MaterialTheme.typography.bodySmall, color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                Box {
+                                    OutlinedButton(onClick={businessLevelMenuExpanded=true}, enabled=!busy && businessLevelOptions.isNotEmpty(), modifier=Modifier.fillMaxWidth()) {
+                                        Text(businessLevel.takeIf { it.isNotBlank() }?.let { "مستوى النشاط: $it" } ?: "كل مستويات النشاط")
+                                    }
+                                    DropdownMenu(expanded=businessLevelMenuExpanded, onDismissRequest={businessLevelMenuExpanded=false}) {
+                                        DropdownMenuItem(text={Text("كل المستويات")}, onClick={businessLevel=""; businessLevelMenuExpanded=false; loadCatalog(true)})
+                                        businessLevelOptions.forEach { level ->
+                                            DropdownMenuItem(text={Text(level)}, onClick={businessLevel=level; businessLevelMenuExpanded=false; loadCatalog(true)})
+                                        }
+                                    }
+                                }
+                                Text("اختر القطاع لتصفية الأنشطة ومستوياتها من الدليل الرسمي؛ لا تُكتب الرموز يدويًا.", style=MaterialTheme.typography.bodySmall, color=MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        item {
+                            Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
+                                Text("ربط الأصناف بنشاط تجاري محدد (اختياري)", style=MaterialTheme.typography.labelMedium)
+                                Box {
+                                    OutlinedButton(onClick={activityMenuExpanded=true}, enabled=!busy && activityOptions.isNotEmpty(), modifier=Modifier.fillMaxWidth()) {
+                                        Text(activityOptions.firstOrNull { it.code == selectedActivityCode }?.pathAr ?: "اختر النشاط من الدليل")
+                                    }
+                                    DropdownMenu(expanded=activityMenuExpanded, onDismissRequest={activityMenuExpanded=false}) {
+                                        DropdownMenuItem(text={Text("بدون إسناد لنشاط محدد")}, onClick={selectedActivityCode=""; activityMenuExpanded=false; loadCatalog(true)})
+                                        activityOptions.forEach { node ->
+                                            DropdownMenuItem(text={Text(node.pathAr)}, onClick={
+                                                selectedActivityCode=node.code
+                                                if (node.defaultBusinessLevelCode.isNotBlank()) businessLevel=node.defaultBusinessLevelCode
+                                                activityMenuExpanded=false
+                                                loadCatalog(true)
+                                            })
+                                        }
+                                    }
+                                }
+                                Text("تُعرض الأنشطة والتخصصات التابعة للقطاع المختار فقط، ويُضبط المستوى المقترح من بيانات الدليل.", style=MaterialTheme.typography.bodySmall, color=MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                         item { Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
