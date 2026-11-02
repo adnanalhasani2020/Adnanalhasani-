@@ -844,12 +844,16 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             return
         }
         request({
-            val poRows=JSONArray(catalogGet("/rest/v1/commercial_purchase_orders?select=id,receive_location_id,currency_code&organization_id=eq."+orgId+"&id=eq."+req.purchaseOrderId+"&limit=1",active))
+            val poRows=JSONArray(catalogGet("/rest/v1/commercial_purchase_orders?select=id,receive_location_id,currency_code,status&organization_id=eq."+orgId+"&id=eq."+req.purchaseOrderId+"&limit=1",active))
             if(poRows.length()!=1) throw IllegalStateException("لم يتم العثور على أمر الشراء ضمن المؤسسة المستقبلة.")
             val purchaseOrder=poRows.getJSONObject(0)
             val locationId=purchaseOrder.optString("receive_location_id").takeUnless { it=="null" }.orEmpty()
             val currencyCode=purchaseOrder.optString("currency_code").uppercase()
+            val purchaseOrderStatus=purchaseOrder.optString("status")
+            if(purchaseOrderStatus !in setOf("draft","submitted","approved")) throw IllegalStateException("لا يمكن تغيير ربط الأصناف بعد استلام أمر الشراء أو إغلاقه أو إلغائه.")
             if(locationId.isBlank() || !currencyCode.matches(Regex("[A-Z]{3}"))) throw IllegalStateException("أمر الشراء لا يحتوي موقع استلام أو عملة صالحة.")
+            val supplierInvoices=JSONArray(catalogGet("/rest/v1/commercial_supplier_invoices?select=id&organization_id=eq."+orgId+"&purchase_order_id=eq."+req.purchaseOrderId+"&limit=1",active))
+            if(supplierInvoices.length()>0) throw IllegalStateException("تم تسجيل فاتورة مورد لهذا الأمر؛ لا يمكن تغيير ربط الأصناف بعد ذلك.")
             val lineRows=JSONArray(catalogGet("/rest/v1/commercial_purchase_order_items?select=id,line_number,item_description,quantity_ordered,quantity_received,offering_id,source_selling_unit_code&organization_id=eq."+orgId+"&purchase_order_id=eq."+req.purchaseOrderId+"&offering_id=is.null&quantity_received=eq.0&order=line_number.asc",active))
             val mapRows=JSONArray(catalogGet("/rest/v1/commercial_catalog_item_offerings?select=offering_id,global_item_id&organization_id=eq."+orgId+"&location_id=eq."+locationId,active))
             val globalIds=(0 until mapRows.length()).map { mapRows.getJSONObject(it).optString("global_item_id") }.filter { it.isNotBlank() }.distinct()
