@@ -18,7 +18,7 @@ def test_supplier_liability_age_report_uses_recorded_invoice_date_and_open_oblig
     assert 'dateError -> "حدد تاريخ نهاية صالحًا لحساب أعمار مستحقات الموردين."' in screen
     assert 'ChronoUnit.DAYS.between(date, asOf)' in calculations
     assert 'أكثر من 90 يومًا' in calculations
-    assert 'not days overdue' not in contract.lower()
+    assert 'not days overdue' in contract.lower()
     assert 'not contractual due-date aging' in contract.lower()
 
 
