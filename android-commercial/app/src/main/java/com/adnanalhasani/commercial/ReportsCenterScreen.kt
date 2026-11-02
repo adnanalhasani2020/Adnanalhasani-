@@ -882,6 +882,18 @@ internal fun ReportsCenterScreen(
         purchasesLoadError.isNotBlank() -> purchasesLoadError
         returnsLoadError.isNotBlank() -> returnsLoadError
         cloudSalesDocuments.any { doc ->
+            doc.saleStatus.equals("completed", true) && reportDateMillis(doc.createdAt) == null
+        } -> "توجد فاتورة بيع مكتملة بتاريخ غير صالح؛ تم حجب ملخص الضرائب والخصومات."
+        cloudPurchases.any { purchase ->
+            purchase.supplierInvoices.any { invoice ->
+                invoice.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed") &&
+                    reportDateMillis(invoice.recordedAt) == null
+            }
+        } -> "توجد فاتورة مورد غير ملغاة بتاريخ غير صالح؛ تم حجب ملخص الضرائب والخصومات."
+        cloudReturns.any { saleReturn ->
+            saleReturn.status.equals("completed", true) && reportDateMillis(saleReturn.completedAt) == null
+        } -> "يوجد مرتجع مكتمل بتاريخ غير صالح؛ تم حجب ملخص الضرائب والخصومات."
+        cloudSalesDocuments.any { doc ->
             doc.saleStatus.equals("completed", true) &&
                 reportDateMillis(doc.createdAt)?.let { it >= startMillis && it < endExclusive } == true &&
                 (doc.subtotalMinor < 0L || doc.discountMinor < 0L || doc.discountMinor > doc.subtotalMinor ||
