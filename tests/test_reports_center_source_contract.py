@@ -234,6 +234,17 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn('"ملخص المصروفات حسب التصنيف وطريقة الصرف" -> cloudExpenses.filter', self.screen)
         self.assertIn('currencyCode = row.optString("currency_code").takeUnless { it == "null" }.orEmpty()', self.repository)
 
+    def test_supplier_obligations_preserve_overpayments_and_use_exact_currency_matched_totals(self):
+        self.assertIn("calculateSupplierObligationTotals", self.calculations)
+        self.assertIn("balanceMinor = Math.subtractExact(due, paid)", self.calculations)
+        self.assertIn("invoiceCurrencyCode == row.purchaseOrderCurrencyCode", self.calculations)
+        self.assertIn("obligationCurrencyCode == row.purchaseOrderCurrencyCode", self.calculations)
+        self.assertIn('"مستحقات فواتير الموردين" -> supplierObligationsError', self.screen)
+        self.assertIn("رصيد دائن/مقدم للمورد", self.screen)
+        self.assertIn("Math.subtractExact(due, paid)", self.screen)
+        self.assertNotIn("(due - paid).coerceAtLeast(0L)", self.screen)
+        self.assertNotIn("rows.sumOf { it.third.amountDueMinor }", self.screen)
+
     def test_customer_operational_statement_validates_dates_refunds_and_exact_balances(self):
         self.assertIn("buildCustomerOperationalStatementMovements", self.screen)
         self.assertIn('"أرصدة العملاء وكشف الحساب" -> customerOperationalStatementError', self.screen)
