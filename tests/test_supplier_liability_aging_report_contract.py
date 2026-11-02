@@ -14,8 +14,7 @@ def test_supplier_liability_age_report_uses_recorded_invoice_date_and_open_oblig
     assert 'invoiceDate = invoice.recordedAt' in screen
     assert 'amountDueMinor = obligation.amountDueMinor' in screen
     assert 'amountPaidMinor = obligation.amountPaidMinor' in screen
-    assert 'calculateSupplierLiabilityAging(supplierLiabilityAgingInputs, endText)' in screen
-    assert 'dateError -> "حدد تاريخ نهاية صالحًا لحساب أعمار مستحقات الموردين."' in screen
+    assert 'calculateSupplierLiabilityAging(supplierLiabilityAgingInputs, today.toString())' in screen
     assert 'ChronoUnit.DAYS.between(date, asOf)' in calculations
     assert 'أكثر من 90 يومًا' in calculations
     assert 'not days overdue' in contract.lower()
