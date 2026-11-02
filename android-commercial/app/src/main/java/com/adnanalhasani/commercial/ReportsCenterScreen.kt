@@ -577,8 +577,6 @@ internal fun ReportsCenterScreen(
         else -> ""
     }
     val supplierLiabilityAgingInputs = supplierObligationCandidates.mapNotNull { (purchase, invoice) ->
-        val timestamp = reportDateMillis(invoice.recordedAt) ?: return@mapNotNull null
-        if (timestamp >= endExclusive) return@mapNotNull null
         val obligation = invoice.obligation ?: return@mapNotNull null
         SupplierLiabilityAgingInput(
             invoiceId = invoice.id,
@@ -591,11 +589,10 @@ internal fun ReportsCenterScreen(
             amountPaidMinor = obligation.amountPaidMinor
         )
     }
-    val supplierLiabilityAgingCalculation = remember(cloudPurchases, endText, cloudMode) {
-        runCatching { calculateSupplierLiabilityAging(supplierLiabilityAgingInputs, endText) }
+    val supplierLiabilityAgingCalculation = remember(cloudPurchases, today, cloudMode) {
+        runCatching { calculateSupplierLiabilityAging(supplierLiabilityAgingInputs, today.toString()) }
     }
     val supplierLiabilityAgingError = when {
-        dateError -> "حدد تاريخ نهاية صالحًا لحساب أعمار مستحقات الموردين."
         !cloudMode -> "أعمار مستحقات الموردين تتطلب مصادر السحابة."
         purchasesLoadError.isNotBlank() -> purchasesLoadError
         supplierInvoiceDetailError.isNotBlank() -> supplierInvoiceDetailError
@@ -952,7 +949,7 @@ internal fun ReportsCenterScreen(
             ReportCatalogItem("أداء المستخدمين والفروع والمستودعات", "المستخدمون والعمليات", "مستخدم/فرع/مستودع محفوظ على المستند", false, "لا تتوفر كل هذه الأبعاد على جميع مستندات البيع والشراء والتحصيل في نموذج البيانات الحالي؛ لن تُنسب العمليات إلى مستخدم أو فرع بالتخمين."),
             ReportCatalogItem("أعمار ديون العملاء", "العملاء والديون", "تاريخ استحقاق معتمد وتخصيصات تحصيل على مستوى الفاتورة", false, "لا يوجد تاريخ استحقاق موحد محفوظ للفواتير؛ تاريخ إنشاء الفاتورة ليس تاريخ استحقاق، لذلك لا يمكن تكوين شرائح 30/60/90 يومًا بدقة."),
             ReportCatalogItem("أعمار مستحقات الموردين", "الموردون والمستحقات", "تاريخ استحقاق تعاقدي لكل التزام", false, "جدول التزامات الموردين لا يحتوي تاريخ استحقاق أو شروط ائتمان؛ لا يجوز استخدام تاريخ تسجيل الفاتورة كموعد استحقاق مفترض."),
-            ReportCatalogItem("عمر مستحقات الموردين حسب تاريخ الفاتورة", "الموردون والمستحقات", "commercial_supplier_invoices.recorded_at + commercial_supplier_obligations", cloudMode, "يعرض الرصيد المفتوح في شرائح عمر منذ تاريخ تسجيل الفاتورة حتى تاريخ نهاية التقرير؛ هذا ليس تقرير تأخر عن موعد الاستحقاق لأن تاريخ الاستحقاق التعاقدي غير محفوظ."),
+            ReportCatalogItem("عمر مستحقات الموردين حسب تاريخ الفاتورة", "الموردون والمستحقات", "commercial_supplier_invoices.recorded_at + commercial_supplier_obligations", cloudMode, "يعرض الأرصدة المفتوحة الحالية في شرائح عمر منذ تاريخ تسجيل الفاتورة حتى اليوم؛ هذا ليس تقرير تأخر عن موعد الاستحقاق لأن تاريخ الاستحقاق التعاقدي غير محفوظ، ولا يعيد بناء رصيد تاريخ سابق."),
             ReportCatalogItem("التسوية البنكية", "الصندوق والنقدية", "كشف بنك خارجي + أسطر مطابقة وحالة تسوية", false, "دفتر الأستاذ الداخلي لا يثبت حركات البنك الفعلية؛ لا يوجد مصدر كشف بنكي مستورد ومطابقات معتمدة."),
             ReportCatalogItem("قائمة التدفقات النقدية المصنفة", "الصندوق والنقدية", "تصنيف معتمد للتدفقات التشغيلية والاستثمارية والتمويلية", false, "المتاح حاليًا حركة حسابات النقد والبنك من القيود المرحلة فقط؛ لا توجد تصنيفات تدفق معتمدة تكفي لقائمة تدفقات نقدية كاملة."),
             ReportCatalogItem("الإقرار الضريبي النظامي", "الضرائب والخصومات", "ولاية ضريبية وتسجيل المنشأة وقواعد وفترات الإقرار", false, "الحقول المسجلة للضريبة ليست إقرارًا نظاميًا؛ لم تُعتمد الولاية الضريبية أو متطلبات التسجيل والنماذج والتقريب والائتمانات."),
@@ -1167,12 +1164,12 @@ internal fun ReportsCenterScreen(
         "عمر مستحقات الموردين حسب تاريخ الفاتورة" -> if (supplierLiabilityAgingError.isNotBlank()) emptyList() else {
             supplierLiabilityAgingCalculation.getOrThrow().map { aging ->
                 ReportLine(
-                    endText,
+                    today.toString(),
                     aging.bucket,
                     aging.supplierName,
                     aging.balanceMinor,
                     aging.currencyCode,
-                    "${aging.invoiceCount} فاتورة مفتوحة · العمر محسوب من تاريخ تسجيل الفاتورة، وليس من تاريخ استحقاق تعاقدي"
+                    "${aging.invoiceCount} فاتورة مفتوحة · الرصيد الحالي حتى اليوم · العمر من تاريخ تسجيل الفاتورة وليس من تاريخ استحقاق تعاقدي"
                 )
             }
         }
