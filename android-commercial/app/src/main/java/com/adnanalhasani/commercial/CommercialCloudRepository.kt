@@ -566,7 +566,8 @@ internal data class CommercialCloudPaymentSummary(
     val amountMinor: Long,
     val status: String,
     val methodType: String,
-    val createdAt: String
+    val createdAt: String,
+    val currencyCode: String
 )
 
 internal data class CommercialCloudReturnSummary(
@@ -607,7 +608,7 @@ internal fun loadCommercialCloudSaleDocuments(context: Context): List<Commercial
     require(activityId.isNotBlank()) { "ملف النشاط غير محفوظ." }
     val (orgId, access) = commercialMasterDataAccess(context)
     val path = "/rest/v1/commercial_sales" +
-        "?select=id,customer_id,receipt_number,subtotal_minor,discount_minor,tax_minor,total_minor,payment_status,status,created_at,currency_code,customer:commercial_customers(display_name,phone,email),items:commercial_sale_items(id,product_name_snapshot,quantity,line_total_minor,unit_price_minor,unit_cost_minor,cost_total_minor,selling_quantity,selling_unit_name,selling_unit_code,quantity_in_stock_units),payments:commercial_payments(id,amount_minor,status,payment_method_type,created_at),returns:commercial_sales_returns(id,status,refund_status,restock_status,requested_refund_minor,approved_refund_minor,created_at,updated_at)" +
+        "?select=id,customer_id,receipt_number,subtotal_minor,discount_minor,tax_minor,total_minor,payment_status,status,created_at,currency_code,customer:commercial_customers(display_name,phone,email),items:commercial_sale_items(id,product_name_snapshot,quantity,line_total_minor,unit_price_minor,unit_cost_minor,cost_total_minor,selling_quantity,selling_unit_name,selling_unit_code,quantity_in_stock_units),payments:commercial_payments(id,amount_minor,status,payment_method_type,created_at,currency_code),returns:commercial_sales_returns(id,status,refund_status,restock_status,requested_refund_minor,approved_refund_minor,created_at,updated_at)" +
         "&organization_id=eq.$orgId&activity_id=eq.$activityId&order=created_at.desc,id.asc"
     val rows = commercialCloudPagedGet(path, access)
     return buildList {
@@ -657,7 +658,8 @@ internal fun loadCommercialCloudSaleDocuments(context: Context): List<Commercial
                         amountMinor = payment.optLong("amount_minor", 0L),
                         status = payment.optString("status").ifBlank { "غير محدد" },
                         methodType = payment.optString("payment_method_type").takeUnless { it == "null" }.orEmpty(),
-                        createdAt = payment.optString("created_at").takeUnless { it == "null" }.orEmpty()
+                        createdAt = payment.optString("created_at").takeUnless { it == "null" }.orEmpty(),
+                        currencyCode = payment.optString("currency_code").takeUnless { it == "null" }.orEmpty()
                     ))
                 }
             }
