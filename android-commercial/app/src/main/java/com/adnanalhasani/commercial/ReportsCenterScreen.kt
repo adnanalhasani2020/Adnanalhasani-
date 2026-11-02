@@ -364,7 +364,60 @@ internal fun calculateSupplierInvoicePriceVariance(
     )
 }
 private fun reportLineAmount(row: ReportLine, cloudMode: Boolean): String = row.displayAmount ?: if (row.currency.isBlank() || row.currency == "-") row.amount.toString() else reportMoney(row.amount, row.currency, cloudMode)
-private data class ReportCustomerMovement(val date: String, val customerId: String, val customer: String, val currency: String, val reference: String, val amount: Long, val description: String)
+internal data class ReportCustomerMovement(val date: String, val customerId: String, val customer: String, val currency: String, val reference: String, val amount: Long, val description: String)
+
+internal fun buildCustomerOperationalStatementMovements(
+    sales: List<CommercialCloudSaleDocument>
+): List<ReportCustomerMovement> = buildList {
+    sales.filter { it.saleStatus.equals("completed", true) && it.customerId.isNotBlank() }.forEach { doc ->
+        require(doc.totalMinor >= 0L && doc.currencyCode.matches(Regex("^[A-Z]{3}$"))) {
+            "فاتورة عميل بمبلغ أو عملة غير صالحة."
+        }
+        require(reportDateMillis(doc.createdAt) != null) { "تاريخ فاتورة العميل غير صالح." }
+        val customerName = doc.customerName.ifBlank { "عميل غير محدد" }
+        add(ReportCustomerMovement(
+            doc.createdAt.take(10), doc.customerId, customerName, doc.currencyCode,
+            "فاتورة #${doc.receiptNumber}", doc.totalMinor, "مدين · فاتورة مكتملة"
+        ))
+        doc.payments.filter {
+            it.status.lowercase(Locale.ROOT) in setOf("succeeded", "partially_refunded", "refunded")
+        }.forEach { payment ->
+            require(payment.amountMinor > 0L && reportDateMillis(payment.createdAt) != null) {
+                "دفعة عميل ناجحة بلا مبلغ موجب أو تاريخ تسجيل صالح."
+            }
+            add(ReportCustomerMovement(
+                payment.createdAt.take(10), doc.customerId, customerName, doc.currencyCode,
+                "تحصيل ${payment.id.ifBlank { doc.receiptNumber }}",
+                Math.negateExact(payment.amountMinor),
+                "دائن · تحصيل ${payment.status}"
+            ))
+        }
+        doc.returns.filter {
+            it.status.equals("completed", true) || it.refundStatus.equals("refunded", true)
+        }.forEach { saleReturn ->
+            require(saleReturn.status.equals("completed", true)) {
+                "تم تسجيل استرداد لمرتجع غير مكتمل؛ يلزم تسوية حالة المرتجع."
+            }
+            val approved = saleReturn.approvedRefundMinor
+                ?: throw IllegalArgumentException("مرتجع مكتمل بلا مبلغ اعتماد محفوظ.")
+            require(approved >= 0L && reportDateMillis(saleReturn.updatedAt) != null) {
+                "مرتجع مكتمل بمبلغ أو تاريخ تحديث غير صالح."
+            }
+            if (approved > 0L) {
+                add(ReportCustomerMovement(
+                    saleReturn.updatedAt.take(10), doc.customerId, customerName, doc.currencyCode,
+                    "مرتجع ${saleReturn.id}", Math.negateExact(approved), "دائن · مرتجع معتمد"
+                ))
+                if (saleReturn.refundStatus.equals("refunded", true)) {
+                    add(ReportCustomerMovement(
+                        saleReturn.updatedAt.take(10), doc.customerId, customerName, doc.currencyCode,
+                        "استرداد ${saleReturn.id}", approved, "مدين · استرداد منفذ"
+                    ))
+                }
+            }
+        }
+    }
+}
 private data class ReportSupplierMovement(val date: String, val supplierId: String, val supplier: String, val currency: String, val reference: String, val amount: Long, val description: String)
 
 @Composable
@@ -629,6 +682,20 @@ internal fun ReportsCenterScreen(
         }.isFailure -> "تجاوزت مجاميع المبيعات أو التكلفة أو المرتجعات نطاق الأرقام الدقيق، أو تعذر تسويتها؛ تم حجب الربح بدل إظهار إجمالي ملتف أو ناقص."
         else -> ""
     }
+    val customerOperationalStatementError = when {
+        !cloudMode -> "كشف العميل التشغيلي يتطلب فواتير السحابة والتحصيلات والمرتجعات."
+        salesDocumentsLoadError.isNotBlank() -> salesDocumentsLoadError
+        runCatching {
+            val movements = buildCustomerOperationalStatementMovements(cloudSalesDocuments)
+            movements.groupBy { it.customerId to it.currency }.values.forEach { customerMoves ->
+                val ordered = customerMoves.sortedWith(compareBy<ReportCustomerMovement> { it.date }.thenBy { it.reference })
+                sumReportAmountsExactly(ordered.map { it.amount })
+                var balance = 0L
+                ordered.forEach { balance = Math.addExact(balance, it.amount) }
+            }
+        }.isFailure -> "توجد فاتورة أو دفعة أو مرتجع عميل بمبلغ/تاريخ غير صالح، أو تجاوزت مجاميع كشف العميل نطاق الأرقام الدقيق؛ تم حجب الكشف."
+        else -> ""
+    }
     val customerStatementError = when {
         !cloudMode -> "كشف العميل الكامل يتطلب دفتر الأستاذ السحابي."
         ledgerLinesLoadError.isNotBlank() -> ledgerLinesLoadError
@@ -667,7 +734,7 @@ internal fun ReportsCenterScreen(
             "ملخص المبيعات حسب الفترة", "تفاصيل فواتير المبيعات", "تفاصيل بنود فواتير المبيعات",
             "المبيعات حسب الصنف", "الخصومات على فواتير المبيعات", "الضرائب المسجلة على المبيعات",
             "لوحة المؤشرات", "المبيعات حسب العميل", "المبيعات حسب حالة السداد", "متوسط قيمة الفاتورة", "مقارنة الفترات",
-            "أرصدة العملاء وكشف الحساب" -> salesDocumentsLoadError
+            "أرصدة العملاء وكشف الحساب" -> customerOperationalStatementError
             "مرتجعات المبيعات وحالة التسوية" -> returnsLoadError
             "فواتير الشراء والمستحقات المسجلة", "مستحقات فواتير الموردين" -> purchasesLoadError
             "فروقات أسعار فواتير الموردين" -> supplierInvoiceVarianceError
@@ -1052,37 +1119,31 @@ internal fun ReportsCenterScreen(
                 }
         }
         "أرصدة العملاء وكشف الحساب" -> {
-            val movements = buildList {
-                cloudSalesDocuments.filter { it.saleStatus.equals("completed", true) && it.customerId.isNotBlank() }.forEach { doc ->
-                    val customerName = doc.customerName.ifBlank { "عميل غير محدد" }
-                    val currency = doc.currencyCode.ifBlank { "غير محددة" }
-                    add(ReportCustomerMovement(doc.createdAt.take(10), doc.customerId, customerName, currency, "فاتورة #${doc.receiptNumber}", doc.totalMinor.coerceAtLeast(0L), "مدين · فاتورة مكتملة"))
-                    doc.payments.filter { it.status.lowercase(Locale.ROOT) in setOf("succeeded", "partially_refunded", "refunded") && it.amountMinor > 0L }.forEach { payment ->
-                        val date = payment.createdAt.take(10).ifBlank { doc.createdAt.take(10) }
-                        add(ReportCustomerMovement(date, doc.customerId, customerName, currency, "تحصيل ${payment.id.ifBlank { doc.receiptNumber }}", -payment.amountMinor.coerceAtLeast(0L), "دائن · تحصيل ${payment.status}"))
-                    }
-                    doc.returns.filter { it.status.equals("completed", true) && (it.approvedRefundMinor ?: 0L) > 0L }.forEach { saleReturn ->
-                        add(ReportCustomerMovement((saleReturn.updatedAt.ifBlank { saleReturn.createdAt }).take(10), doc.customerId, customerName, currency, "مرتجع ${saleReturn.id}", -(saleReturn.approvedRefundMinor ?: 0L).coerceAtLeast(0L), "دائن · مرتجع معتمد"))
-                    }
-                    doc.returns.filter { it.refundStatus.equals("refunded", true) && (it.approvedRefundMinor ?: 0L) > 0L }.forEach { saleReturn ->
-                        add(ReportCustomerMovement((saleReturn.updatedAt.ifBlank { saleReturn.createdAt }).take(10), doc.customerId, customerName, currency, "استرداد ${saleReturn.id}", (saleReturn.approvedRefundMinor ?: 0L).coerceAtLeast(0L), "مدين · استرداد منفذ"))
+            val movements = buildCustomerOperationalStatementMovements(cloudSalesDocuments)
+                .filter { movement ->
+                    customerFilter.isBlank() ||
+                        movement.customer.contains(customerFilter.trim(), true) ||
+                        movement.customerId.contains(customerFilter.trim(), true)
+                }
+            movements.groupBy { Triple(it.customerId, it.customer, it.currency) }
+                .toSortedMap(compareBy<Triple<String, String, String>> { it.second }.thenBy { it.third })
+                .flatMap { (key, customerMoves) ->
+                    val ordered = customerMoves.sortedWith(compareBy<ReportCustomerMovement> { it.date }.thenBy { it.reference })
+                    val opening = sumReportAmountsExactly(
+                        ordered.filter { reportDateMillis(it.date)?.let { ts -> ts < startMillis } == true }.map { it.amount }
+                    )
+                    val periodMoves = ordered.filter { reportDateMillis(it.date)?.let { ts -> ts >= startMillis && ts < endExclusive } == true }
+                    if (periodMoves.isEmpty() && opening == 0L) emptyList() else buildList {
+                        var balance = opening
+                        if (opening != 0L) add(ReportLine(startText, "سابق", key.second, opening, key.third, "رصيد سابق محسوب من الحركات المسجلة"))
+                        periodMoves.forEach { movement ->
+                            balance = Math.addExact(balance, movement.amount)
+                            add(ReportLine(movement.date, movement.reference, movement.customer, movement.amount, movement.currency,
+                                "${movement.description} · الرصيد: ${reportMoney(balance, movement.currency, true)}"))
+                        }
+                        add(ReportLine(endText, "ختامي", key.second, balance, key.third, "الرصيد الختامي من الفواتير والتحصيلات والمرتجعات المكتملة فقط"))
                     }
                 }
-            }.filter { movement -> customerFilter.isBlank() || movement.customer.contains(customerFilter.trim(), true) || movement.customerId.contains(customerFilter.trim(), true) }
-            movements.groupBy { Triple(it.customerId, it.customer, it.currency) }.toSortedMap(compareBy<Triple<String, String, String>> { it.second }.thenBy { it.third }).flatMap { (key, customerMoves) ->
-                val ordered = customerMoves.sortedWith(compareBy<ReportCustomerMovement> { it.date }.thenBy { it.reference })
-                val opening = ordered.filter { reportDateMillis(it.date)?.let { ts -> ts < startMillis } == true }.sumOf { it.amount }
-                val periodMoves = ordered.filter { reportDateMillis(it.date)?.let { ts -> ts >= startMillis && ts < endExclusive } == true }
-                if (periodMoves.isEmpty() && opening == 0L) emptyList() else buildList {
-                    var balance = opening
-                    if (opening != 0L) add(ReportLine(startText, "سابق", key.second, opening, key.third, "رصيد سابق محسوب من الحركات المتاحة"))
-                    periodMoves.forEach { movement ->
-                        balance = Math.addExact(balance, movement.amount)
-                        add(ReportLine(movement.date, movement.reference, movement.customer, movement.amount, movement.currency, "${movement.description} · الرصيد: ${reportMoney(balance, movement.currency, true)}"))
-                    }
-                    add(ReportLine(endText, "ختامي", key.second, balance, key.third, "الرصيد الختامي المحسوب من الحركات المتاحة؛ لا يشمل تعديلات خارج هذه المصادر"))
-                }
-            }
         }
         "سندات القبض والصرف" -> cloudPayments.filter { row ->
             val timestamp = reportDateMillis(row.createdAt)
