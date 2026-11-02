@@ -333,7 +333,11 @@ internal data class ItemProfitReturnLineInput(
     val saleItemId: String,
     val quantity: Int,
     val refundAmountMinor: Long,
+    val refundAmountPresent: Boolean,
+    val restockRequested: Boolean,
+    val restockFlagPresent: Boolean,
     val restockedQuantity: Int,
+    val restockedQuantityPresent: Boolean,
     val saleItemQuantityInStockUnits: Long
 )
 
@@ -420,8 +424,13 @@ internal fun calculateItemProfitability(
                 ?: throw IllegalArgumentException("تعذر ربط بند مرتجع ببند البيع الأصلي.")
             require(saleLine.saleId == saleReturn.saleId &&
                 saleLine.currencyCode == saleReturn.currencyCode &&
+                item.refundAmountPresent && item.restockedQuantityPresent &&
                 item.refundAmountMinor >= 0L && item.quantity > 0) {
-                "مرجع البيع أو عملة أو كمية أو مبلغ بند المرتجع لا يطابق بند البيع الأصلي."
+                "مرجع البيع أو عملة أو كمية أو مبلغ/حالة إعادة تخزين بند المرتجع غير مكتملة."
+            }
+            require(item.restockedQuantity >= 0 &&
+                (item.restockedQuantity == 0 || (item.restockFlagPresent && item.restockRequested))) {
+                "حالة إعادة التخزين لا تتطابق مع الكمية المسجلة؛ تم حجب ربحية الأصناف."
             }
             require(saleLine.saleTaxMinor == 0L) {
                 "توجد مرتجعات لفواتير ضريبية ولا توجد حصة ضريبية مفصلة لكل بند؛ تم حجب ربحية الأصناف."
