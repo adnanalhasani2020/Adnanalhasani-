@@ -89,7 +89,7 @@ class CommercialCloudOperationalScreenContractTests(unittest.TestCase):
                 self.assertIn(token, returns_screen + self.repository)
         self.assertIn('cloudOperationalPage == "returns" -> CommercialCloudReturnsScreen', self.main)
         self.assertIn("commercial_sale_return_items", self.repository)
-        self.assertIn("commercial_sales!inner(receipt_number,customer:commercial_customers(display_name))", self.repository)
+        self.assertIn("commercial_sales!inner(receipt_number,activity_id,customer:commercial_customers(display_name))", self.repository)
 
     def test_projection_columns_are_not_built_from_user_input(self):
         function = self.repository.split(

@@ -223,7 +223,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn('"فروقات أسعار فواتير الموردين" -> cloudPurchases.flatMap', self.screen)
         self.assertIn("فرق موجب = أعلى من أمر الشراء، وسالب = أقل", self.screen)
         self.assertIn("purchaseOrderItemDescription", self.repository)
-        self.assertIn('"فواتير الشراء والمستحقات المسجلة", "فروقات أسعار فواتير الموردين", "مستحقات فواتير الموردين"', self.screen)
+        self.assertIn('"فواتير الشراء والمستحقات المسجلة", "المشتريات حسب المورد", "فروقات أسعار فواتير الموردين", "مستحقات فواتير الموردين"', self.screen)
         self.assertIn("round the sum of quantity × recorded PO unit cost once", self.calculations)
         self.assertIn('ReportCatalogItem("التحصيل حسب طريقة الدفع"', self.screen)
         self.assertIn('"التحصيل حسب طريقة الدفع" -> paymentMethodAnalysisError', self.screen)
