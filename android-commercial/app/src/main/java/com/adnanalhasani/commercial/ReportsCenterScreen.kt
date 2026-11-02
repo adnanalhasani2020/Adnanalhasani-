@@ -597,6 +597,7 @@ internal fun ReportsCenterScreen(
     val supplierLiabilityAgingError = when {
         !cloudMode -> "أعمار مستحقات الموردين تتطلب مصادر السحابة."
         purchasesLoadError.isNotBlank() -> purchasesLoadError
+        supplierInvoiceDetailError.isNotBlank() -> supplierInvoiceDetailError
         supplierObligationCandidates.any { (_, invoice) -> reportDateMillis(invoice.recordedAt) == null } ->
             "توجد فاتورة مورد بتاريخ تسجيل غير صالح؛ تم حجب تقرير الأعمار."
         supplierObligationCandidates.any { (_, invoice) ->
