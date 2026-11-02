@@ -152,7 +152,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
     def test_historical_cogs_uses_stored_cost_and_only_reverses_restocked_return_cost(self):
         self.assertIn('costTotalMinor = if (item.isNull("cost_total_minor")) null', self.repository)
         self.assertIn('saleItemCostTotalMinor = if (saleItem == null || saleItem.isNull("cost_total_minor")) null', self.repository)
-        self.assertIn('item.restockedQuantity <= 0', self.screen)
+        self.assertIn('if (restockedQuantity <= 0) return 0L', self.screen)
         self.assertIn('تكلفة البنود المباعة المحفوظة', self.screen)
         self.assertIn('val costProfitError', self.screen)
 
@@ -249,7 +249,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         ):
             with self.subTest(marker=marker):
                 self.assertIn(marker, self.screen)
-        self.assertIn("لا يوجد تاريخ استحقاق أو شروط ائتمان", self.screen)
+        self.assertIn("لا يحتوي تاريخ استحقاق أو شروط ائتمان", self.screen)
         self.assertIn("لا توجد سياسة تحويل معتمدة", self.screen)
 
 if __name__ == "__main__":
