@@ -89,8 +89,8 @@ class ItemProfitabilityReportTest {
     @Test
     fun rejectsCumulativeRefundAndRestockAboveOriginalSaleLine() {
         val excessiveRefunds = listOf(
-            returned(id = "return-1", approved = 700, refund = 700),
-            returned(id = "return-2", approved = 700, refund = 700)
+            returned(id = "return-1", approved = 1_100, refund = 1_100),
+            returned(id = "return-2", approved = 1_100, refund = 1_100)
         )
         assertThrows(IllegalArgumentException::class.java) {
             calculateItemProfitability(listOf(sale()), excessiveRefunds)
