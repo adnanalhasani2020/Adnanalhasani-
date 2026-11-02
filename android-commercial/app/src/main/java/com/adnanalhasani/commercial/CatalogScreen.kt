@@ -454,8 +454,9 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         val active=token ?: return
         val orgId=org() ?: run { feedback="أدخل معرّف المؤسسة UUID أولًا."; return }
         val branch=marketBranches.firstOrNull { it.id==selectedBranchId }
-        val deviceLat=deviceLatitude?.toBigDecimalOrNull(); val deviceLon=deviceLongitude?.toBigDecimalOrNull()
-        val lat=deviceLat ?: branch?.latitude?.toBigDecimalOrNull(); val lon=deviceLon ?: branch?.longitude?.toBigDecimalOrNull()
+        val useDeviceCenter=deviceLatitude!=null && deviceLongitude!=null
+        val lat=if(useDeviceCenter) deviceLatitude?.toBigDecimalOrNull() else branch?.latitude?.toBigDecimalOrNull()
+        val lon=if(useDeviceCenter) deviceLongitude?.toBigDecimalOrNull() else branch?.longitude?.toBigDecimalOrNull()
         if(lat==null || lon==null) { feedback="حدد موقعك الحالي أو اختر فرعًا بإحداثيات محفوظة."; return }
         val radiusSteps=listOf(5000,10000,25000,50000,100000)
         val nextRadius=if(expandRadius) radiusSteps.firstOrNull { it>marketRadius } ?: marketRadius else marketRadius
@@ -555,8 +556,9 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         val active=token ?: return
         val orgId=org() ?: run { feedback="أدخل معرّف المؤسسة UUID أولًا."; return }
         val branch=marketBranches.firstOrNull { it.id==selectedBranchId }
-        val deviceLat=deviceLatitude?.toBigDecimalOrNull(); val deviceLon=deviceLongitude?.toBigDecimalOrNull()
-        val lat=deviceLat ?: branch?.latitude?.toBigDecimalOrNull(); val lon=deviceLon ?: branch?.longitude?.toBigDecimalOrNull()
+        val useDeviceCenter=deviceLatitude!=null && deviceLongitude!=null
+        val lat=if(useDeviceCenter) deviceLatitude?.toBigDecimalOrNull() else branch?.latitude?.toBigDecimalOrNull()
+        val lon=if(useDeviceCenter) deviceLongitude?.toBigDecimalOrNull() else branch?.longitude?.toBigDecimalOrNull()
         if(lat==null || lon==null || selectedCatalogIds.isEmpty()) { feedback="حدد موقعك الحالي أو اختر فرعًا بإحداثيات صحيحة، ثم حدد الأصناف."; return }
         val ids=selectedCatalogIds.toList()
         request({
@@ -926,7 +928,9 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                             ) { Text(if(coordinatesCleared) "مسح الإحداثيات" else "حفظ إحداثيات الفرع") }
                             Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
                                 OutlinedButton(onClick={loadMarketContext()},enabled=!busy) { Text("تحديث الفروع") }
-                                Button(onClick={loadNearbyFromDevice()},enabled=!busy && !locatingDevice) { Text(if(locatingDevice) "جارٍ تحديد الموقع..." else "البحث حسب موقعي الحالي") }
+                                Button(onClick={loadNearbyFromDevice()},enabled=!busy && !locatingDevice) { Text(if(locatingDevice) "جارٍ تحديد الموقع..." else "موقعي الحالي") }
+                            }
+                            Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
                                 OutlinedButton(onClick={deviceLatitude=null;deviceLongitude=null;startNearbyCatalog()},enabled=!busy && selectedBranchId.isNotBlank()) { Text("حسب موقع الفرع") }
                                 OutlinedButton(onClick={loadSelectedPriceSuggestions()},enabled=!busy && selectedCatalogIds.isNotEmpty()) { Text("أسعار استرشادية") }
                             }
