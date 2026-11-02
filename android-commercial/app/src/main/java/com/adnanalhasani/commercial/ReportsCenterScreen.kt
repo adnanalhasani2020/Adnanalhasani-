@@ -745,7 +745,7 @@ internal fun ReportsCenterScreen(
                         paymentId = payment.id,
                         customerId = document.customerId,
                         customerName = document.customerName,
-                        currencyCode = document.currencyCode,
+                        currencyCode = payment.currencyCode,
                         amountMinor = payment.amountMinor
                     )
                 }
@@ -760,7 +760,7 @@ internal fun ReportsCenterScreen(
             document.payments.any { payment ->
                 payment.status.equals("succeeded", true) &&
                     (reportDateMillis(payment.createdAt) == null || payment.amountMinor <= 0L ||
-                        !document.currencyCode.matches(Regex("^[A-Z]{3}$")))
+                        !payment.currencyCode.matches(Regex("^[A-Z]{3}$")))
             }
         } -> "توجد دفعة ناجحة بتاريخ أو مبلغ أو عملة غير صالحة؛ تم حجب تجميع التحصيل حسب العميل."
         else -> customerCollectionsCalculation.exceptionOrNull()?.message.orEmpty()
