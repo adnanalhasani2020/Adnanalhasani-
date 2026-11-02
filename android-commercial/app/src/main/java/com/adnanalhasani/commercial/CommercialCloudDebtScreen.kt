@@ -68,20 +68,6 @@ private fun cloudDebtMoney(amount: Long, currency: String): String {
     }.format(value) + " " + currency
 }
 
-private fun cloudDebtScale(currency: String): Int =
-    runCatching { Currency.getInstance(currency).defaultFractionDigits.coerceIn(0, 6) }.getOrDefault(0)
-
-private fun cloudDebtInput(amountMinor: Long, currency: String): String =
-    java.math.BigDecimal.valueOf(amountMinor).movePointLeft(cloudDebtScale(currency))
-        .stripTrailingZeros().toPlainString()
-
-internal fun parseMerchantPaymentRequestAmount(value: String, currency: String): Long? = runCatching {
-    val amount = value.trim().replace(',', '.').toBigDecimal()
-    require(amount > java.math.BigDecimal.ZERO)
-    amount.movePointRight(cloudDebtScale(currency))
-        .setScale(0, java.math.RoundingMode.UNNECESSARY).longValueExact()
-}.getOrNull()
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun CommercialCloudDebtScreen(context: Context, onBack: () -> Unit) {
