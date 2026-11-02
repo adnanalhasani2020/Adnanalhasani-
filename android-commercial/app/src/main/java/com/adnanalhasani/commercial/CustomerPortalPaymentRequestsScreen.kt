@@ -43,6 +43,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.util.Locale
+import java.math.BigDecimal
+import java.math.RoundingMode
+import java.text.NumberFormat
+import java.util.Currency
 import java.util.concurrent.Executors
 
 private val CustomerRequestInk = Color(0xFF183B35)
@@ -51,8 +55,26 @@ private val CustomerRequestMuted = Color(0xFF71817B)
 private val CustomerRequestIo = Executors.newSingleThreadExecutor()
 private val CustomerRequestMain = Handler(Looper.getMainLooper())
 
-private fun customerRequestMoney(amount: Long, currency: String): String =
-    String.format(Locale.US, "%,d %s", amount, currency)
+private fun customerRequestScale(currency: String): Int =
+    runCatching { Currency.getInstance(currency).defaultFractionDigits.coerceIn(0, 6) }.getOrDefault(0)
+
+private fun customerRequestMoney(amount: Long, currency: String): String {
+    val scale = customerRequestScale(currency)
+    val value = BigDecimal.valueOf(amount).movePointLeft(scale)
+    return NumberFormat.getNumberInstance(Locale.US).apply {
+        minimumFractionDigits = scale
+        maximumFractionDigits = scale
+    }.format(value) + " " + currency
+}
+
+private fun customerRequestInput(amount: Long, currency: String): String =
+    BigDecimal.valueOf(amount).movePointLeft(customerRequestScale(currency)).stripTrailingZeros().toPlainString()
+
+private fun parseCustomerRequestAmount(value: String, currency: String): Long? = runCatching {
+    val parsed = value.trim().replace(',', '.').toBigDecimal()
+    require(parsed > BigDecimal.ZERO)
+    parsed.movePointRight(customerRequestScale(currency)).setScale(0, RoundingMode.UNNECESSARY).longValueExact()
+}.getOrNull()
 
 private fun customerRequestStatus(status: String): String = when (status) {
     "pending" -> "قيد انتظار اعتماد التاجر"
@@ -103,7 +125,7 @@ internal fun CustomerPortalPaymentRequestsScreen(
     fun openNewRequest(sale: CustomerPortalOutstandingSale) {
         selectedSale = sale
         editingRequest = null
-        amount = sale.dueMinor.toString()
+        amount = customerRequestInput(sale.dueMinor, sale.currencyCode)
         note = ""
         error = ""
         notice = ""
@@ -117,7 +139,7 @@ internal fun CustomerPortalPaymentRequestsScreen(
         }
         selectedSale = sale
         editingRequest = request
-        amount = request.amountMinor.toString()
+        amount = customerRequestInput(request.amountMinor, request.currencyCode)
         note = request.customerNote
         error = ""
         notice = ""
@@ -243,7 +265,7 @@ internal fun CustomerPortalPaymentRequestsScreen(
                     Text("المتبقي: " + customerRequestMoney(sale.dueMinor, sale.currencyCode), color = CustomerRequestMuted, fontSize = 12.sp)
                     OutlinedTextField(
                         value = amount,
-                        onValueChange = { amount = it.filter(Char::isDigit).take(18) },
+                        onValueChange = { amount = it.filter { ch -> ch.isDigit() || ch == '.' || ch == ',' }.take(24) },
                         enabled = !submitting,
                         label = { Text("المبلغ الذي دفعته") },
                         singleLine = true,
@@ -263,9 +285,9 @@ internal fun CustomerPortalPaymentRequestsScreen(
             },
             confirmButton = {
                 Button(
-                    enabled = !submitting && (amount.toLongOrNull() ?: 0L) in 1L..sale.dueMinor,
+                    enabled = !submitting && (parseCustomerRequestAmount(amount, sale.currencyCode) ?: 0L) in 1L..sale.dueMinor,
                     onClick = {
-                        val value = amount.toLongOrNull() ?: return@Button
+                        val value = parseCustomerRequestAmount(amount, sale.currencyCode) ?: return@Button
                         val edit = editingRequest
                         val message = note
                         submitting = true
