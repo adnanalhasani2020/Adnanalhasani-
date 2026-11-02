@@ -38,6 +38,18 @@ class SupplierObligationTotalsTest {
     }
 
     @Test
+    fun doesNotMergeDifferentSuppliersThatShareTheSameDisplayName() {
+        val result = calculateSupplierObligationTotals(
+            listOf(
+                obligation(100, 0, supplierId = "supplier-a"),
+                obligation(200, 0, supplierId = "supplier-b")
+            )
+        )
+        assertEquals(2, result.size)
+        assertEquals(setOf("supplier-a", "supplier-b"), result.map { it.supplierId }.toSet())
+    }
+
+    @Test
     fun rejectsCurrencyMismatchAndNegativeAmounts() {
         assertThrows(IllegalArgumentException::class.java) {
             calculateSupplierObligationTotals(listOf(obligation(100, 80, invoiceCurrency = "USD")))
