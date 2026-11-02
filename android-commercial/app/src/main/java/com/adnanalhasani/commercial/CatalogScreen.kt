@@ -257,6 +257,21 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var invoiceMappingOfferingId by remember { mutableStateOf("") }
     var invoiceMappingLineMenuExpanded by remember { mutableStateOf(false) }
     var invoiceMappingOfferingMenuExpanded by remember { mutableStateOf(false) }
+    var invoiceMappingLocationId by remember { mutableStateOf("") }
+    var invoiceMappingWarehouses by remember { mutableStateOf<List<CatalogWarehouseOption>>(emptyList()) }
+    var invoiceMappingWarehouseId by remember { mutableStateOf("") }
+    var invoiceMappingWarehouseMenuExpanded by remember { mutableStateOf(false) }
+    var showInvoiceItemCreation by remember { mutableStateOf(false) }
+    var invoiceNewNameAr by remember { mutableStateOf("") }
+    var invoiceNewNameEn by remember { mutableStateOf("") }
+    var invoiceNewCategoryCode by remember { mutableStateOf("") }
+    var invoiceNewBaseUnitCode by remember { mutableStateOf("") }
+    var invoiceNewSaleUnitCode by remember { mutableStateOf("") }
+    var invoiceNewCategoryMenuExpanded by remember { mutableStateOf(false) }
+    var invoiceNewBaseUnitMenuExpanded by remember { mutableStateOf(false) }
+    var invoiceNewSaleUnitMenuExpanded by remember { mutableStateOf(false) }
+    var invoiceNewIdempotencyKey by remember { mutableStateOf("") }
+    var localUnitCodes by remember { mutableStateOf<Set<String>>(emptySet()) }
     var invoiceReceiveLocationId by remember { mutableStateOf("") }
     var invoiceReceiveLocationMenuExpanded by remember { mutableStateOf(false) }
     val catalogListState = rememberLazyListState()
@@ -638,15 +653,18 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         request({
             val catRaw=catalogGet("/rest/v1/commercial_global_catalog_categories?select=code,parent_code,name_ar,name_en,description_ar,description_en&is_active=eq.true&order=parent_code.asc,sort_order.asc,code.asc",active)
             val unitRaw=catalogGet("/rest/v1/commercial_global_units?select=code,name_ar,name_en,dimension,base_unit_code,factor_to_base,owner_organization_id&is_active=eq.true&order=dimension.asc,code.asc",active)
+            val localUnitRaw=catalogGet("/rest/v1/commercial_unit_of_measure?select=code&is_active=eq.true&order=code.asc",active)
             val categoryTranslationRaw=catalogGet("/rest/v1/commercial_global_entity_translations?select=entity_key,translated_value&entity_type=eq.catalog_category&field_key=eq.name&locale_code=eq.${locale.trim().ifBlank { "ar" }}",active)
             val categoryDescriptionTranslationRaw=catalogGet("/rest/v1/commercial_global_entity_translations?select=entity_key,translated_value&entity_type=eq.catalog_category&field_key=eq.description&locale_code=eq.${locale.trim().ifBlank { "ar" }}",active)
             val unitTranslationRaw=catalogGet("/rest/v1/commercial_global_entity_translations?select=entity_key,translated_value&entity_type=eq.unit&field_key=eq.name&locale_code=eq.${locale.trim().ifBlank { "ar" }}",active)
             val activityDirectoryRaw=catalogHttp("/rest/v1/rpc/commercial_list_business_activity_nodes",JSONObject(),active)
             val activityDirectory=JSONObject(activityDirectoryRaw).optJSONArray("nodes") ?: JSONArray()
-            JSONObject().put("categories",JSONArray(catRaw)).put("units",JSONArray(unitRaw))
+            JSONObject().put("categories",JSONArray(catRaw)).put("units",JSONArray(unitRaw)).put("localUnits",JSONArray(localUnitRaw))
                 .put("categoryTranslations",JSONArray(categoryTranslationRaw)).put("categoryDescriptionTranslations",JSONArray(categoryDescriptionTranslationRaw)).put("unitTranslations",JSONArray(unitTranslationRaw)).put("activityDirectory",activityDirectory).toString()
         }, { raw ->
             val result=JSONObject(raw); val cats=result.getJSONArray("categories"); val units=result.getJSONArray("units")
+            val localUnits=result.optJSONArray("localUnits") ?: JSONArray()
+            localUnitCodes=(0 until localUnits.length()).map { localUnits.getJSONObject(it).optString("code").lowercase() }.filter { it.isNotBlank() }.toSet()
             val catTr=result.getJSONArray("categoryTranslations"); val catDescTr=result.getJSONArray("categoryDescriptionTranslations"); val unitTr=result.getJSONArray("unitTranslations")
             val activityJson=result.optJSONArray("activityDirectory") ?: JSONArray()
             activityNodes=List(activityJson.length()) { i -> val node=activityJson.getJSONObject(i); CatalogActivityNode(node.optString("code"),node.optString("parent_code").takeUnless { it == "null" }.orEmpty(),node.optString("node_kind"),node.optString("path_ar",node.optString("name_ar")),node.optString("path_en",node.optString("name_en")),node.optString("default_business_level_code").takeUnless { it == "null" }.orEmpty(),node.optInt("depth",0),node.optBoolean("is_selectable",false)) }.filter { it.code.isNotBlank() }
@@ -855,6 +873,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             val supplierInvoices=JSONArray(catalogGet("/rest/v1/commercial_supplier_invoices?select=id&organization_id=eq."+orgId+"&purchase_order_id=eq."+req.purchaseOrderId+"&limit=1",active))
             if(supplierInvoices.length()>0) throw IllegalStateException("تم تسجيل فاتورة مورد لهذا الأمر؛ لا يمكن تغيير ربط الأصناف بعد ذلك.")
             val lineRows=JSONArray(catalogGet("/rest/v1/commercial_purchase_order_items?select=id,line_number,item_description,quantity_ordered,quantity_received,offering_id,source_selling_unit_code&organization_id=eq."+orgId+"&purchase_order_id=eq."+req.purchaseOrderId+"&offering_id=is.null&quantity_received=eq.0&order=line_number.asc",active))
+            val warehouseRows=JSONArray(catalogGet("/rest/v1/commercial_warehouses?select=id,name,branch_location_id&organization_id=eq."+orgId+"&branch_location_id=eq."+locationId+"&state=eq.active&order=name.asc",active))
             val mapRows=JSONArray(catalogGet("/rest/v1/commercial_catalog_item_offerings?select=offering_id,global_item_id&organization_id=eq."+orgId+"&location_id=eq."+locationId,active))
             val globalIds=(0 until mapRows.length()).map { mapRows.getJSONObject(it).optString("global_item_id") }.filter { it.isNotBlank() }.distinct()
             val offeringIds=(0 until mapRows.length()).map { mapRows.getJSONObject(it).optString("offering_id") }.filter { it.isNotBlank() }.distinct()
@@ -886,11 +905,17 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                 InvoicePurchaseUnmappedLine(row.optString("id"),row.optInt("line_number"),row.optString("item_description"),
                     row.optString("quantity_ordered"),row.optString("source_selling_unit_code").takeUnless { it=="null" }.orEmpty())
             }
-            JSONObject().put("lines",JSONArray().apply { lines.forEach { put(JSONObject().put("id",it.id).put("line_number",it.lineNumber).put("description",it.description).put("quantity",it.quantity).put("unit_code",it.unitCode)) } })
+            JSONObject().put("location_id",locationId)
+                .put("lines",JSONArray().apply { lines.forEach { put(JSONObject().put("id",it.id).put("line_number",it.lineNumber).put("description",it.description).put("quantity",it.quantity).put("unit_code",it.unitCode)) } })
                 .put("offerings",JSONArray().apply { candidates.forEach { put(JSONObject().put("id",it.id).put("global_item_id",it.globalItemId).put("name",it.name).put("unit_code",it.unitCode)) } })
+                .put("warehouses",warehouseRows)
                 .toString()
         }, { raw ->
             val result=JSONObject(raw); val lines=result.getJSONArray("lines"); val offerings=result.getJSONArray("offerings")
+            invoiceMappingLocationId=result.optString("location_id")
+            val warehouses=result.optJSONArray("warehouses") ?: JSONArray()
+            invoiceMappingWarehouses=List(warehouses.length()) { i -> val row=warehouses.getJSONObject(i); CatalogWarehouseOption(row.optString("id"),row.optString("name"),row.optString("branch_location_id")) }
+            if(invoiceMappingWarehouses.none { it.id==invoiceMappingWarehouseId }) invoiceMappingWarehouseId=invoiceMappingWarehouses.firstOrNull()?.id.orEmpty()
             invoiceMappingLines=List(lines.length()) { i -> val row=lines.getJSONObject(i); InvoicePurchaseUnmappedLine(row.optString("id"),row.optInt("line_number"),row.optString("description"),row.optString("quantity"),row.optString("unit_code")) }
             invoiceMappingOfferings=List(offerings.length()) { i -> val row=offerings.getJSONObject(i); InvoicePurchaseOffering(row.optString("id"),row.optString("global_item_id"),row.optString("name"),row.optString("unit_code")) }
             invoiceMappingRequestId=req.id
@@ -918,13 +943,110 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         }, { raw ->
             val result=runCatching { JSONObject(raw) }.getOrNull()
             val orderStatus=result?.optString("status").orEmpty()
+            val orderNeedsReapproval=result?.optBoolean("reapproval_required",false) ?: false
             invoiceMappingLines=invoiceMappingLines.filterNot { it.id==line.id }
             invoiceMappingLineId=invoiceMappingLines.firstOrNull()?.id.orEmpty()
             invoiceMappingOfferingId=""
-            feedback=if(orderStatus=="submitted") {
+            feedback=if(orderNeedsReapproval) {
                 "تم ربط بند الفاتورة بالصنف المحلي "+offering.name+". أعيد أمر الشراء إلى حالة الإرسال ويتطلب إعادة اعتماد؛ لم يتغير المخزون."
             } else {
                 "تم ربط بند الفاتورة بالصنف المحلي "+offering.name+". لم يتغير المخزون؛ سيُحدّث عند الاستلام فقط."
+            }
+            loadInvoicePurchaseUnmappedLines(requestRow)
+        })
+    }
+
+    fun openInvoiceItemCreationDialog() {
+        val line=invoiceMappingLines.firstOrNull { it.id==invoiceMappingLineId } ?: run { feedback="اختر بندًا غير مطابق أولًا."; return }
+        val orgId=org() ?: return
+        if(invoiceMappingWarehouses.isEmpty() || invoiceMappingWarehouseId.isBlank()) {
+            feedback="لا يوجد مستودع نشط مرتبط بفرع استلام أمر الشراء."
+            return
+        }
+        if(selectedActivityCode.isBlank()) {
+            feedback="اختر النشاط التجاري من الدليل أولًا."
+            return
+        }
+        val available=directoryUnits.filter { it.owner.isBlank() || it.owner==orgId }
+        val baseOptions=available.filter { it.baseCode.isBlank() && it.code.lowercase() in localUnitCodes }
+        val sourceUnit=available.firstOrNull { it.code.equals(line.unitCode,true) }
+        if(line.unitCode.isNotBlank() && sourceUnit==null) {
+            feedback="وحدة الفاتورة "+line.unitCode+" غير موجودة في دليل الوحدات النشطة؛ لم نفترض تحويلًا بديلًا."
+            return
+        }
+        val base=if(sourceUnit==null) baseOptions.firstOrNull() else if(sourceUnit.baseCode.isBlank()) baseOptions.firstOrNull { it.code==sourceUnit.code } else baseOptions.firstOrNull { it.code==sourceUnit.baseCode }
+        if(base==null) {
+            feedback="لا توجد وحدة أساس نشطة مشتركة بين دليل الوحدات ووحدات المخزون."
+            return
+        }
+        val sale=sourceUnit?.takeIf { it.baseCode.isBlank() || it.baseCode==base.code } ?: base
+        invoiceNewNameAr=line.description.trim().take(180)
+        invoiceNewNameEn=""
+        invoiceNewCategoryCode=categories.firstOrNull()?.code.orEmpty()
+        invoiceNewBaseUnitCode=base.code
+        invoiceNewSaleUnitCode=sale.code
+        invoiceNewIdempotencyKey=java.util.UUID.randomUUID().toString()
+        showInvoiceItemCreation=true
+    }
+
+    fun createInvoicePurchaseItem() {
+        val active=token ?: return
+        val orgId=org() ?: return
+        val requestRow=invoiceRequests.firstOrNull { it.id==invoiceMappingRequestId }
+        if(requestRow==null || requestRow.destinationOrganizationId!=orgId || requestRow.status!="approved") {
+            feedback="إنشاء الصنف متاح للمؤسسة المستقبلة بعد اعتماد طلب الشراء فقط."
+            return
+        }
+        val line=invoiceMappingLines.firstOrNull { it.id==invoiceMappingLineId } ?: run { feedback="اختر بند الفاتورة."; return }
+        val base=directoryUnits.firstOrNull { it.code==invoiceNewBaseUnitCode && it.baseCode.isBlank() && it.code.lowercase() in localUnitCodes }
+            ?: run { feedback="اختر وحدة أساس نشطة ومعتمدة للمخزون."; return }
+        val sale=directoryUnits.firstOrNull { it.code==invoiceNewSaleUnitCode && (it.code==base.code || it.baseCode==base.code) && (it.owner.isBlank() || it.owner==orgId) }
+            ?: run { feedback="اختر وحدة بيع متوافقة مع وحدة الأساس."; return }
+        if(line.unitCode.isNotBlank() && !line.unitCode.equals(sale.code,true)) {
+            feedback="وحدة بند الفاتورة لا تطابق وحدة البيع المختارة. لا يمكن تغيير التحويل تلقائيًا."
+            return
+        }
+        if(invoiceNewNameAr.isBlank() || invoiceNewNameEn.isBlank() || invoiceNewCategoryCode.isBlank()) {
+            feedback="أدخل الاسم العربي والإنجليزي واختر تصنيف الدليل."
+            return
+        }
+        val contextActivityId=context.getSharedPreferences("commercial_cloud_context_v1",android.content.Context.MODE_PRIVATE)
+            .getString("activity_id",null).orEmpty()
+        if(contextActivityId.isBlank()) {
+            feedback="لم يتم العثور على النشاط الحالي في سياق المؤسسة. افتح ملف النشاط ثم أعد المحاولة."
+            return
+        }
+        if(invoiceMappingWarehouseId.isBlank() || invoiceMappingLocationId.isBlank()) {
+            feedback="اختر مستودعًا نشطًا تابعًا لفرع استلام أمر الشراء."
+            return
+        }
+        val key=invoiceNewIdempotencyKey.ifBlank { java.util.UUID.randomUUID().toString().also { invoiceNewIdempotencyKey=it } }
+        request({
+            catalogHttp("/rest/v1/rpc/commercial_create_and_link_invoice_purchase_item",JSONObject()
+                .put("p_organization_id",orgId)
+                .put("p_purchase_order_id",invoiceMappingPurchaseOrderId)
+                .put("p_purchase_order_item_id",line.id)
+                .put("p_activity_id",contextActivityId)
+                .put("p_activity_node_code",selectedActivityCode.uppercase())
+                .put("p_warehouse_id",invoiceMappingWarehouseId)
+                .put("p_name_ar",invoiceNewNameAr.trim())
+                .put("p_name_en",invoiceNewNameEn.trim())
+                .put("p_category_code",invoiceNewCategoryCode.uppercase())
+                .put("p_base_unit_code",base.code)
+                .put("p_sale_unit_code",sale.code)
+                .put("p_item_type","product")
+                .put("p_local_category_id",JSONObject.NULL)
+                .put("p_idempotency_key",key),active)
+        }, { raw ->
+            val result=runCatching { JSONObject(raw) }.getOrNull()
+            val status=result?.optString("status").orEmpty()
+            val reapprovalRequired=result?.optBoolean("reapproval_required",false) ?: false
+            showInvoiceItemCreation=false
+            invoiceNewIdempotencyKey=java.util.UUID.randomUUID().toString()
+            feedback=if(reapprovalRequired) {
+                "تم إنشاء الصنف وربطه. أُعيد أمر الشراء إلى حالة الإرسال ويتطلب إعادة اعتماده. السعر غير محدد والمخزون لم يتغير."
+            } else {
+                "تم إنشاء الصنف وربطه دون سعر أو كمية افتتاحية. لن يتغير المخزون حتى تسجيل الاستلام."
             }
             loadInvoicePurchaseUnmappedLines(requestRow)
         })
@@ -1560,6 +1682,25 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                                                 Button(onClick={linkSelectedInvoicePurchaseLine()},enabled=!busy && invoiceMappingLineId.isNotBlank() && invoiceMappingOfferingId.isNotBlank(),modifier=Modifier.fillMaxWidth()) { Text("تأكيد ربط البند المحدد") }
                                             }
                                             if(invoiceMappingOfferings.isEmpty()) Text("لا توجد أصناف مهيأة لهذا الفرع/موقع الاستلام. أنشئ الصنف أو هيئه من دليل الأصناف أولًا، ثم أعد تحميل المطابقة.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                            if(invoiceMappingWarehouses.isNotEmpty()) {
+                                                Box {
+                                                    OutlinedButton(onClick={invoiceMappingWarehouseMenuExpanded=true},modifier=Modifier.fillMaxWidth()) {
+                                                        Text("مستودع الاستلام: "+(invoiceMappingWarehouses.firstOrNull { it.id==invoiceMappingWarehouseId }?.name ?: "اختر المستودع"))
+                                                    }
+                                                    DropdownMenu(expanded=invoiceMappingWarehouseMenuExpanded,onDismissRequest={invoiceMappingWarehouseMenuExpanded=false}) {
+                                                        invoiceMappingWarehouses.forEach { warehouse ->
+                                                            DropdownMenuItem(text={Text(warehouse.name)},onClick={
+                                                                invoiceMappingWarehouseId=warehouse.id
+                                                                invoiceMappingWarehouseMenuExpanded=false
+                                                            })
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            OutlinedButton(onClick={openInvoiceItemCreationDialog()},enabled=!busy && invoiceMappingLines.isNotEmpty() && invoiceMappingWarehouses.isNotEmpty() && categories.isNotEmpty() && directoryUnits.isNotEmpty(),modifier=Modifier.fillMaxWidth()) {
+                                                Icon(Icons.Default.Add,contentDescription=null)
+                                                Text("إنشاء صنف جديد وربطه بهذا البند")
+                                            }
                                             Text("لا يُنشأ صنف تلقائيًا من وصف الفاتورة ولا يُضاف مخزون عند المطابقة. اختر تطابقًا مؤكدًا؛ الاستلام هو الذي يحدّث الكمية.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                                         }
                                     }
@@ -1594,6 +1735,73 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             }
         }
     }
+    if(showInvoiceItemCreation) {
+        val orgId=org().orEmpty()
+        val baseOptions=directoryUnits.filter { (it.owner.isBlank() || it.owner==orgId) && it.baseCode.isBlank() && it.code.lowercase() in localUnitCodes }
+        val saleOptions=directoryUnits.filter { (it.owner.isBlank() || it.owner==orgId) && (it.code==invoiceNewBaseUnitCode || it.baseCode==invoiceNewBaseUnitCode) }
+        AlertDialog(
+            onDismissRequest={if(!busy) showInvoiceItemCreation=false},
+            title={Text("إنشاء صنف وربطه بأمر الشراء")},
+            text={
+                Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                    Text("أدخل بيانات الصنف المعتمدة. لا يُستنتج التصنيف أو الاسم الإنجليزي من وصف الفاتورة.",style=MaterialTheme.typography.bodySmall)
+                    OutlinedTextField(value=invoiceNewNameAr,onValueChange={invoiceNewNameAr=it.take(180)},label={Text("اسم الصنف بالعربية *")},singleLine=true,enabled=!busy,modifier=Modifier.fillMaxWidth())
+                    OutlinedTextField(value=invoiceNewNameEn,onValueChange={invoiceNewNameEn=it.take(180)},label={Text("اسم الصنف بالإنجليزية *")},singleLine=true,enabled=!busy,modifier=Modifier.fillMaxWidth())
+                    Box {
+                        OutlinedButton(onClick={invoiceNewCategoryMenuExpanded=true},modifier=Modifier.fillMaxWidth()) {
+                            Text("التصنيف: "+(categories.firstOrNull { it.code==invoiceNewCategoryCode }?.nameAr ?: "اختر تصنيف الدليل"))
+                        }
+                        DropdownMenu(expanded=invoiceNewCategoryMenuExpanded,onDismissRequest={invoiceNewCategoryMenuExpanded=false}) {
+                            categories.forEach { category ->
+                                DropdownMenuItem(text={Text(category.nameAr+" • "+category.code)},onClick={
+                                    invoiceNewCategoryCode=category.code
+                                    invoiceNewCategoryMenuExpanded=false
+                                })
+                            }
+                        }
+                    }
+                    Box {
+                        OutlinedButton(onClick={invoiceNewBaseUnitMenuExpanded=true},modifier=Modifier.fillMaxWidth()) {
+                            Text("وحدة الأساس: "+(baseOptions.firstOrNull { it.code==invoiceNewBaseUnitCode }?.let { it.code+" • "+it.nameAr } ?: "اختر وحدة الأساس"))
+                        }
+                        DropdownMenu(expanded=invoiceNewBaseUnitMenuExpanded,onDismissRequest={invoiceNewBaseUnitMenuExpanded=false}) {
+                            baseOptions.forEach { unit ->
+                                DropdownMenuItem(text={Text(unit.code+" • "+unit.nameAr)},onClick={
+                                    invoiceNewBaseUnitCode=unit.code
+                                    invoiceNewSaleUnitCode=unit.code
+                                    invoiceNewBaseUnitMenuExpanded=false
+                                })
+                            }
+                        }
+                    }
+                    Box {
+                        OutlinedButton(onClick={invoiceNewSaleUnitMenuExpanded=true},modifier=Modifier.fillMaxWidth()) {
+                            Text("وحدة الفاتورة/البيع: "+(saleOptions.firstOrNull { it.code==invoiceNewSaleUnitCode }?.let { it.code+" • "+it.nameAr } ?: "اختر وحدة متوافقة"))
+                        }
+                        DropdownMenu(expanded=invoiceNewSaleUnitMenuExpanded,onDismissRequest={invoiceNewSaleUnitMenuExpanded=false}) {
+                            saleOptions.forEach { unit ->
+                                DropdownMenuItem(text={Text(unit.code+" • "+unit.nameAr+" • "+unit.factor)},onClick={
+                                    invoiceNewSaleUnitCode=unit.code
+                                    invoiceNewSaleUnitMenuExpanded=false
+                                })
+                            }
+                        }
+                    }
+                    Text("السعر سيبقى صفرًا بحالة غير مسعّر، والرصيد الافتتاحي صفر. إنشاء الصنف وربطه لا يستلم البضاعة؛ كما يتطلب صلاحية المالك أو المسؤول.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("ملاحظة المخزون: المستودع يُحفظ في إعداد الصنف، لكن سجل الرصيد والاستلام الحاليين ما يزالان على مستوى الفرع؛ لا ينشأ رصيد مستقل للمستودع في هذه الخطوة.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    val selectedLine=invoiceMappingLines.firstOrNull { it.id==invoiceMappingLineId }
+                    if(selectedLine?.unitCode?.isNotBlank()==true) Text("وحدة بند الفاتورة: "+selectedLine.unitCode+" — يجب اختيارها كوحدة البيع نفسها.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+            confirmButton={
+                Button(onClick={createInvoicePurchaseItem()},enabled=!busy && invoiceNewNameAr.isNotBlank() && invoiceNewNameEn.isNotBlank() && invoiceNewCategoryCode.isNotBlank() && invoiceNewBaseUnitCode.isNotBlank() && invoiceNewSaleUnitCode.isNotBlank() && invoiceMappingWarehouseId.isNotBlank()) {
+                    Text(if(busy) "جارٍ الإنشاء..." else "إنشاء وربط الصنف")
+                }
+            },
+            dismissButton={TextButton(onClick={if(!busy) showInvoiceItemCreation=false}) { Text("إلغاء") }}
+        )
+    }
+
     editingProduct?.let { item ->
         CatalogProductEditDialog(item=item,busy=busy,onDismiss={editingProduct=null},onSave={payload -> updateProductDetails(item,payload)})
     }
