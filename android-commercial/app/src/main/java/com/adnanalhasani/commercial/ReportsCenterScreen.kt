@@ -257,7 +257,8 @@ internal fun calculateRestockedCostMinor(
     restockedQuantity: Int,
     saleItemQuantityInStockUnits: Long
 ): Long {
-    if (restockedQuantity <= 0) return 0L
+    require(restockedQuantity >= 0) { "كمية إعادة التخزين لا يمكن أن تكون سالبة." }
+    if (restockedQuantity == 0) return 0L
     val cost = saleItemCostTotalMinor
         ?: throw IllegalArgumentException("تكلفة بند البيع التاريخية غير متاحة للكمية المعادة للمخزون.")
     require(cost >= 0L && saleItemQuantityInStockUnits > 0L &&
