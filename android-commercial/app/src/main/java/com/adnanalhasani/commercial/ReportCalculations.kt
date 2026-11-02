@@ -4,6 +4,7 @@ import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.Instant
 import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 import java.time.ZoneId
 import java.util.Locale
 
@@ -644,4 +645,76 @@ internal fun calculateCustomerCollectionsByCustomer(
         )
     }.sortedWith(compareBy<CustomerCollectionSummary> { it.currencyCode }
         .thenByDescending { it.totalMinor }.thenBy { it.customerName }.thenBy { it.customerId })
+}
+
+
+internal data class SupplierLiabilityAgingInput(
+    val invoiceId: String,
+    val invoiceNumber: String,
+    val supplierId: String,
+    val supplierName: String,
+    val invoiceDate: String,
+    val currencyCode: String,
+    val amountDueMinor: Long,
+    val amountPaidMinor: Long
+)
+
+internal data class SupplierLiabilityAgingSummary(
+    val supplierId: String,
+    val supplierName: String,
+    val currencyCode: String,
+    val bucket: String,
+    val invoiceCount: Int,
+    val balanceMinor: Long
+)
+
+/**
+ * Ages unpaid supplier invoice obligations by invoice-recording date, not by contractual due date.
+ * The current supplier-invoice schema stores recorded_at but no supplier invoice_date/due_date.
+ */
+internal fun calculateSupplierLiabilityAging(
+    invoices: List<SupplierLiabilityAgingInput>,
+    asOfDate: String
+): List<SupplierLiabilityAgingSummary> {
+    val asOf = LocalDate.parse(asOfDate)
+    val seen = mutableSetOf<String>()
+    val open = invoices.mapNotNull { invoice ->
+        require(invoice.invoiceId.isNotBlank() && seen.add(invoice.invoiceId)) {
+            "معرف فاتورة مورد مفقود أو مكرر في تقرير أعمار المستحقات."
+        }
+        require(invoice.supplierId.isNotBlank() && invoice.supplierName.isNotBlank() &&
+            invoice.currencyCode.matches(Regex("^[A-Z]{3}$")) &&
+            invoice.amountDueMinor >= 0L && invoice.amountPaidMinor >= 0L &&
+            invoice.amountPaidMinor <= invoice.amountDueMinor) {
+            "بيانات التزام المورد أو العملة أو المبالغ غير صالحة؛ تم حجب تقرير الأعمار."
+        }
+        val date = LocalDate.parse(invoice.invoiceDate.take(10))
+        require(!date.isAfter(asOf)) {
+            "تاريخ فاتورة المورد أحدث من تاريخ التقرير؛ تم حجب تقرير الأعمار."
+        }
+        val balance = Math.subtractExact(invoice.amountDueMinor, invoice.amountPaidMinor)
+        if (balance == 0L) null else {
+            val ageDays = ChronoUnit.DAYS.between(date, asOf)
+            val bucket = when {
+                ageDays <= 30L -> "0–30 يومًا"
+                ageDays <= 60L -> "31–60 يومًا"
+                ageDays <= 90L -> "61–90 يومًا"
+                else -> "أكثر من 90 يومًا"
+            }
+            Triple(invoice, bucket, balance)
+        }
+    }
+    return open.groupBy { Triple(it.first.supplierId, it.first.currencyCode, it.second) }
+        .map { (key, rows) ->
+            SupplierLiabilityAgingSummary(
+                supplierId = key.first,
+                supplierName = rows.first().first.supplierName,
+                currencyCode = key.second,
+                bucket = key.third,
+                invoiceCount = rows.size,
+                balanceMinor = sumReportAmountsExactly(rows.map { it.third })
+            )
+        }
+        .sortedWith(compareBy<SupplierLiabilityAgingSummary> { it.currencyCode }
+            .thenBy { it.supplierName }.thenBy { it.bucket })
 }
