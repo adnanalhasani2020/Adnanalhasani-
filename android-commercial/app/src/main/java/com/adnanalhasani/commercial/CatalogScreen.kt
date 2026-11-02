@@ -966,9 +966,10 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             feedback="اختر النشاط التجاري من الدليل أولًا."
             return
         }
-        val available=directoryUnits.filter { (it.owner.isBlank() || it.owner==orgId) && it.code in localUnitCodes }
+        val available=directoryUnits.filter { it.owner.isBlank() || it.owner==orgId }
+        val baseOptions=available.filter { it.baseCode.isBlank() && it.code in localUnitCodes }
         val sourceUnit=available.firstOrNull { it.code.equals(line.unitCode,true) }
-        val base=if(sourceUnit==null) available.firstOrNull { it.baseCode.isBlank() } else if(sourceUnit.baseCode.isBlank()) sourceUnit else available.firstOrNull { it.code==sourceUnit.baseCode }
+        val base=if(sourceUnit==null) baseOptions.firstOrNull() else if(sourceUnit.baseCode.isBlank()) baseOptions.firstOrNull { it.code==sourceUnit.code } else baseOptions.firstOrNull { it.code==sourceUnit.baseCode }
         if(base==null) {
             feedback="لا توجد وحدة أساس نشطة مشتركة بين دليل الوحدات ووحدات المخزون."
             return
@@ -994,7 +995,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         val line=invoiceMappingLines.firstOrNull { it.id==invoiceMappingLineId } ?: run { feedback="اختر بند الفاتورة."; return }
         val base=directoryUnits.firstOrNull { it.code==invoiceNewBaseUnitCode && it.baseCode.isBlank() && it.code in localUnitCodes }
             ?: run { feedback="اختر وحدة أساس نشطة ومعتمدة للمخزون."; return }
-        val sale=directoryUnits.firstOrNull { it.code==invoiceNewSaleUnitCode && (it.baseCode.isBlank() && it.code==base.code || it.baseCode==base.code) }
+        val sale=directoryUnits.firstOrNull { it.code==invoiceNewSaleUnitCode && (it.code==base.code || it.baseCode==base.code) && (it.owner.isBlank() || it.owner==orgId) }
             ?: run { feedback="اختر وحدة بيع متوافقة مع وحدة الأساس."; return }
         if(line.unitCode.isNotBlank() && !line.unitCode.equals(sale.code,true)) {
             feedback="وحدة بند الفاتورة لا تطابق وحدة البيع المختارة. لا يمكن تغيير التحويل تلقائيًا."
@@ -1731,7 +1732,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     if(showInvoiceItemCreation) {
         val orgId=org().orEmpty()
         val baseOptions=directoryUnits.filter { (it.owner.isBlank() || it.owner==orgId) && it.baseCode.isBlank() && it.code in localUnitCodes }
-        val saleOptions=directoryUnits.filter { (it.owner.isBlank() || it.owner==orgId) && it.code in localUnitCodes && (it.code==invoiceNewBaseUnitCode || it.baseCode==invoiceNewBaseUnitCode) }
+        val saleOptions=directoryUnits.filter { (it.owner.isBlank() || it.owner==orgId) && (it.code==invoiceNewBaseUnitCode || it.baseCode==invoiceNewBaseUnitCode) }
         AlertDialog(
             onDismissRequest={if(!busy) showInvoiceItemCreation=false},
             title={Text("إنشاء صنف وربطه بأمر الشراء")},
