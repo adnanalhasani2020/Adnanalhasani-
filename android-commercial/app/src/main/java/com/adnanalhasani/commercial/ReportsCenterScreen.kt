@@ -595,6 +595,7 @@ internal fun ReportsCenterScreen(
         runCatching { calculateSupplierLiabilityAging(supplierLiabilityAgingInputs, endText) }
     }
     val supplierLiabilityAgingError = when {
+        dateError -> "حدد تاريخ نهاية صالحًا لحساب أعمار مستحقات الموردين."
         !cloudMode -> "أعمار مستحقات الموردين تتطلب مصادر السحابة."
         purchasesLoadError.isNotBlank() -> purchasesLoadError
         supplierInvoiceDetailError.isNotBlank() -> supplierInvoiceDetailError
