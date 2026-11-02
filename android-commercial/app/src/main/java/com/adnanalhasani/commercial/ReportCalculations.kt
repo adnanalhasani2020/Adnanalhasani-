@@ -314,3 +314,160 @@ internal fun buildCustomerOperationalStatementMovements(
         }
     }
 }
+
+
+internal data class ItemProfitSaleLineInput(
+    val saleItemId: String,
+    val productName: String,
+    val currencyCode: String,
+    val quantity: String,
+    val lineTotalMinor: Long,
+    val costTotalMinor: Long?,
+    val inSelectedPeriod: Boolean
+)
+
+internal data class ItemProfitReturnLineInput(
+    val saleItemId: String,
+    val quantity: Int,
+    val refundAmountMinor: Long,
+    val restockedQuantity: Int,
+    val saleItemQuantityInStockUnits: Long
+)
+
+internal data class ItemProfitReturnInput(
+    val returnId: String,
+    val currencyCode: String,
+    val approvedRefundMinor: Long?,
+    val items: List<ItemProfitReturnLineInput>
+)
+
+internal data class ItemProfitabilityTotals(
+    val productName: String,
+    val currencyCode: String,
+    val soldQuantity: BigDecimal,
+    val returnedQuantity: Int,
+    val salesMinor: Long,
+    val refundMinor: Long,
+    val netRevenueMinor: Long,
+    val soldCostMinor: Long,
+    val returnedCostMinor: Long,
+    val netCostMinor: Long,
+    val grossProfitMinor: Long,
+    val saleLineCount: Int
+)
+
+/**
+ * Item-level gross profitability for the selected period.
+ * Completed returns are assigned to their original sale item and currency.
+ * Returns can refer to sales from earlier periods, so all sale lines are supplied;
+ * only lines marked inSelectedPeriod contribute sales and COGS.
+ */
+internal fun calculateItemProfitability(
+    saleLines: List<ItemProfitSaleLineInput>,
+    returns: List<ItemProfitReturnInput>
+): List<ItemProfitabilityTotals> {
+    val saleById = linkedMapOf<String, ItemProfitSaleLineInput>()
+    saleLines.forEach { line ->
+        require(line.saleItemId.isNotBlank() && saleById.put(line.saleItemId, line) == null) {
+            "معرف بند البيع مفقود أو مكرر؛ تعذر ربط المرتجعات بالصنف الصحيح."
+        }
+        require(line.productName.isNotBlank() && line.currencyCode.matches(Regex("^[A-Z]{3}$"))) {
+            "اسم الصنف أو عملة بند البيع غير صالحة."
+        }
+        val quantity = line.quantity.toBigDecimalOrNull()
+            ?: throw IllegalArgumentException("توجد كمية بيع غير صالحة في تقرير ربحية الأصناف.")
+        require(quantity.signum() > 0 && line.lineTotalMinor >= 0L) {
+            "توجد كمية أو قيمة بيع غير صالحة في تقرير ربحية الأصناف."
+        }
+        if (line.inSelectedPeriod) {
+            require(line.costTotalMinor != null && line.costTotalMinor >= 0L) {
+                "توجد تكلفة تاريخية مفقودة لأحد بنود البيع في الفترة؛ تم حجب ربحية الأصناف."
+            }
+        }
+    }
+
+    val returnIds = mutableSetOf<String>()
+    val returnRevenueByItem = mutableMapOf<String, Long>()
+    val returnedCostByItem = mutableMapOf<String, Long>()
+    val returnedQuantityByItem = mutableMapOf<String, Int>()
+    returns.forEach { saleReturn ->
+        require(saleReturn.returnId.isNotBlank() && returnIds.add(saleReturn.returnId)) {
+            "معرف مرتجع مفقود أو مكرر في تقرير ربحية الأصناف."
+        }
+        require(saleReturn.currencyCode.matches(Regex("^[A-Z]{3}$"))) {
+            "عملة المرتجع غير صالحة في تقرير ربحية الأصناف."
+        }
+        val approved = saleReturn.approvedRefundMinor
+            ?: throw IllegalArgumentException("يوجد مرتجع مكتمل بلا مبلغ اعتماد محفوظ؛ تم حجب ربحية الأصناف.")
+        require(approved >= 0L && saleReturn.items.isNotEmpty()) {
+            "بيانات المرتجع المكتمل غير مكتملة أو تحتوي مبلغًا سالبًا."
+        }
+        val itemRefundTotal = sumReportAmountsExactly(saleReturn.items.map { it.refundAmountMinor })
+        require(itemRefundTotal == approved) {
+            "مجموع مبالغ بنود المرتجع لا يطابق مبلغ الاعتماد؛ تم حجب ربحية الأصناف."
+        }
+        saleReturn.items.forEach { item ->
+            val saleLine = saleById[item.saleItemId]
+                ?: throw IllegalArgumentException("تعذر ربط بند مرتجع ببند البيع الأصلي.")
+            require(saleLine.currencyCode == saleReturn.currencyCode &&
+                item.refundAmountMinor >= 0L && item.quantity > 0) {
+                "عملة أو كمية أو مبلغ بند المرتجع غير صالح أو لا يطابق بند البيع الأصلي."
+            }
+            returnRevenueByItem[item.saleItemId] = Math.addExact(
+                returnRevenueByItem[item.saleItemId] ?: 0L, item.refundAmountMinor
+            )
+            val restoredCost = calculateRestockedCostMinor(
+                saleLine.costTotalMinor,
+                item.restockedQuantity,
+                item.saleItemQuantityInStockUnits
+            )
+            returnedCostByItem[item.saleItemId] = Math.addExact(
+                returnedCostByItem[item.saleItemId] ?: 0L, restoredCost
+            )
+            returnedQuantityByItem[item.saleItemId] = Math.addExact(
+                returnedQuantityByItem[item.saleItemId] ?: 0, item.quantity
+            )
+        }
+    }
+
+    val includedSales = saleLines.filter { it.inSelectedPeriod }
+    val productKeys = (includedSales.map { it.productName to it.currencyCode } +
+        returns.flatMap { saleReturn ->
+            saleReturn.items.map { item ->
+                val saleLine = saleById.getValue(item.saleItemId)
+                saleLine.productName to saleLine.currencyCode
+            }
+        }).distinct()
+    return productKeys.map { key ->
+        val productSales = includedSales.filter { it.productName == key.first && it.currencyCode == key.second }
+        val itemIds = saleLines.filter { it.productName == key.first && it.currencyCode == key.second }
+            .map { it.saleItemId }.toSet()
+        val productReturns = returns.flatMap { it.items }.filter { it.saleItemId in itemIds }
+        val salesMinor = sumReportAmountsExactly(productSales.map { it.lineTotalMinor })
+        val soldCostMinor = sumReportAmountsExactly(productSales.map { it.costTotalMinor!! })
+        val refundMinor = sumReportAmountsExactly(productReturns.map { it.refundAmountMinor })
+        val returnedCostMinor = sumReportAmountsExactly(productReturns.map { returnedCostByItem[it.saleItemId] ?: 0L })
+        val soldQuantity = productSales.fold(BigDecimal.ZERO) { total, line ->
+            total.add(line.quantity.toBigDecimal())
+        }
+        val returnedQuantity = productReturns.fold(0) { total, item ->
+            Math.addExact(total, item.quantity)
+        }
+        val netRevenue = Math.subtractExact(salesMinor, refundMinor)
+        val netCost = Math.subtractExact(soldCostMinor, returnedCostMinor)
+        ItemProfitabilityTotals(
+            productName = key.first,
+            currencyCode = key.second,
+            soldQuantity = soldQuantity,
+            returnedQuantity = returnedQuantity,
+            salesMinor = salesMinor,
+            refundMinor = refundMinor,
+            netRevenueMinor = netRevenue,
+            soldCostMinor = soldCostMinor,
+            returnedCostMinor = returnedCostMinor,
+            netCostMinor = netCost,
+            grossProfitMinor = Math.subtractExact(netRevenue, netCost),
+            saleLineCount = productSales.size
+        )
+    }.sortedWith(compareBy<ItemProfitabilityTotals> { it.currencyCode }.thenByDescending { it.grossProfitMinor }.thenBy { it.productName })
+}
