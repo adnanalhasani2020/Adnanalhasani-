@@ -20,7 +20,9 @@ def test_supplier_invoice_has_an_android_entry_point_and_cloud_rpc():
     assert "obligation:commercial_supplier_obligations(" in repository
     assert "supplierInvoices = supplierInvoices" in repository
     assert "فواتير المورد المسجلة" in screen
-    assert "/rest/v1/rpc/commercial_record_supplier_invoice" in repository
+    assert "/rest/v1/rpc/commercial_record_supplier_invoice_with_dates" in repository
+    assert "p_invoice_date" in repository and "p_due_date" in repository
+    assert "تاريخ الفاتورة الفعلي" in dialog and "تاريخ الاستحقاق التعاقدي" in dialog
 
 
 def test_supplier_invoice_purchase_item_ids_are_projected_for_rpc_lines():
@@ -95,3 +97,29 @@ def test_supplier_invoice_line_projection_includes_saved_price_and_purchase_base
         "lines = invoiceLines",
     ):
         assert marker in repository
+
+
+def test_supplier_invoice_dates_are_required_and_verified_by_database():
+    migration = (ROOT / "supabase/migrations/20261102190000_commercial_supplier_invoice_due_dates.sql").read_text()
+    repository = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt").read_text()
+    assert "ADD COLUMN IF NOT EXISTS invoice_date date" in migration
+    assert "ADD COLUMN IF NOT EXISTS due_date date" in migration
+    assert "NEW.invoice_date > current_date" in migration
+    assert "NEW.due_date < NEW.invoice_date" in migration
+    assert "supplier_invoice_dates_required" in migration
+    assert "set_config('app.supplier_invoice_date'" in migration
+    assert "set_config('app.supplier_due_date'" in migration
+    assert "invoice_date,due_date" in repository
+    assert "invoiceDate = invoice.optString(\"invoice_date\")" in repository
+    assert "dueDate = invoice.optString(\"due_date\")" in repository
+
+
+def test_contractual_supplier_aging_uses_due_date_and_fails_closed_for_legacy_rows():
+    aging = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/SupplierDueDateAgingReport.kt").read_text()
+    screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterScreen.kt").read_text()
+    assert "LocalDate.parse(invoice.dueDate.take(10))" in aging
+    assert "ChronoUnit.DAYS.between(dueDate, asOf)" in aging
+    assert "invoice.invoiceDate.isNotBlank() && invoice.dueDate.isNotBlank()" in aging
+    assert 'ReportCatalogItem("أعمار مستحقات الموردين"' in screen
+    assert '"أعمار مستحقات الموردين" -> supplierDueDateAgingError' in screen
+    assert '"أعمار مستحقات الموردين" -> if (supplierDueDateAgingError.isNotBlank()) emptyList() else {' in screen
