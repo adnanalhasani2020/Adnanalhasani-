@@ -29,6 +29,7 @@ class InvoicePurchaseItemCreationAtomicTests(unittest.TestCase):
             "'price_minor', 0",
             "'initial_quantity', 0",
             "'stock_created', false",
+            "'reapproval_required', (v_order.status = 'approved')",
             "is_available = false",
             "pricing_status = 'unpriced'",
             "GRANT EXECUTE ON FUNCTION public.commercial_create_and_link_invoice_purchase_item",
@@ -60,6 +61,8 @@ class InvoicePurchaseItemCreationAtomicTests(unittest.TestCase):
         self.assertIn("السعر سيبقى صفرًا بحالة غير مسعّر", source)
         self.assertIn("لن يتغير المخزون حتى تسجيل الاستلام", source)
         self.assertIn("purchase_order_id", source)
+        self.assertIn("result?.optBoolean(\"reapproval_required\",false)", source)
+        self.assertIn("val requiresReapproval=invoiceMappingPurchaseOrderStatus==\"approved\"", source)
 
 
 if __name__ == "__main__":
