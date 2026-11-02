@@ -739,31 +739,15 @@ internal fun ReportsCenterScreen(
             calculateItemProfitability(allSaleLines, periodReturns)
         }
     }
-    val customerReceivableAgingInputs = cloudReceivables.map { receivable ->
-        CustomerReceivableAgingInput(
-            saleId = receivable.saleId,
-            receiptNumber = receivable.receiptNumber,
-            customerId = receivable.customerId,
-            customerName = receivable.customerName,
-            invoiceDate = receivable.createdAt,
-            currencyCode = receivable.currencyCode,
-            balanceMinor = receivable.dueMinor
+    val customerReceivableAgingReport = remember(cloudReceivables, today, cloudMode, receivablesLoadError) {
+        buildCustomerReceivableAgingReport(
+            receivables = cloudReceivables,
+            asOfDate = today.toString(),
+            cloudMode = cloudMode,
+            loadError = receivablesLoadError
         )
     }
-    val customerReceivableAgingCalculation = remember(cloudReceivables, today, cloudMode) {
-        runCatching { calculateCustomerReceivableAging(customerReceivableAgingInputs, today.toString()) }
-    }
-    val customerReceivableAgingError = when {
-        !cloudMode -> "عمر أرصدة العملاء يتطلب مصادر السحابة."
-        receivablesLoadError.isNotBlank() -> receivablesLoadError
-        cloudReceivables.any { reportDateMillis(it.createdAt) == null } ->
-            "توجد فاتورة عميل بتاريخ غير صالح؛ تم حجب تقرير الأعمار."
-        cloudReceivables.any { !it.currencyCode.matches(Regex("^[A-Z]{3}$")) || it.dueMinor <= 0L } ->
-            "توجد عملة أو قيمة رصيد عميل غير صالحة؛ تم حجب تقرير الأعمار."
-        customerReceivableAgingCalculation.isFailure ->
-            customerReceivableAgingCalculation.exceptionOrNull()?.message.orEmpty()
-        else -> ""
-    }
+    val customerReceivableAgingError = customerReceivableAgingReport.error
     val customerCollectionsCalculation = remember(cloudSalesDocuments, startMillis, endExclusive, cloudMode) {
         runCatching {
             val payments = cloudSalesDocuments.flatMap { document ->
@@ -1074,7 +1058,7 @@ internal fun ReportsCenterScreen(
             }
         }
         "عمر أرصدة العملاء حسب تاريخ الفاتورة" -> if (customerReceivableAgingError.isNotBlank()) emptyList() else {
-            customerReceivableAgingCalculation.getOrThrow().map { aging ->
+            customerReceivableAgingReport.rows.map { aging ->
                 ReportLine(
                     today.toString(),
                     aging.bucket,
