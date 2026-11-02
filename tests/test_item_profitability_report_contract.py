@@ -59,3 +59,10 @@ def test_daily_sales_trend_uses_completed_invoices_and_currency_separated_totals
     assert '"اتجاه المبيعات اليومي", "الخصومات على فواتير المبيعات"' in screen
     assert '-> selectedReport = report.title' in screen
     assert 'Daily sales trend' in contract
+
+def test_item_profitability_matches_return_to_original_sale_and_blocks_tax_inclusive_refunds():
+    calculations = CALCULATIONS.read_text(encoding="utf-8")
+    contract = CONTRACT.read_text(encoding="utf-8")
+    assert 'saleLine.saleId == saleReturn.saleId' in calculations
+    assert 'saleLine.saleTaxMinor == 0L' in calculations
+    assert 'tax-inclusive refund as net revenue' in contract
