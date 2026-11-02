@@ -86,3 +86,8 @@ Source-contract assertions were added for financial-statement gating, party-cont
 - **Customer receivable invoice age:** groups current outstanding balances by customer, currency, and invoice-age buckets (0–30, 31–60, 61–90, over 90 days), as of today. It uses the existing receivable projection after subtracting successful payments net of executed refunds and approved return credits; fully settled invoices are excluded.
 - The source loader returns current cumulative payment/return-adjusted balances, not a dated transaction history sufficient to reconstruct historical balances. The report therefore shows today's outstanding balances grouped by invoice creation date and must not be presented as a historical balance as of an earlier selected date.
 - This is not contractual due-date aging: the customer sales schema does not expose a uniform contractual due date. The existing due-date aging report remains disabled.
+
+## User sales performance
+- The cloud report "أداء المبيعات حسب المستخدم" groups completed sales in the selected period by the persisted `commercial_sales.user_id` and currency. It reports invoice count, recorded sales total, and average invoice value; it does not claim net profit or collections.
+- Sales without a persisted actor are grouped as "غير منسوب". Until a verified user display-name relationship is exposed to this report, the report shows the stored user identifier rather than guessing a person's name.
+- Branch and warehouse performance remain separate unfinished work: the current sale document projection does not persist a reliable branch/location foreign key. Stock movement source text is not treated as an authoritative substitute.
