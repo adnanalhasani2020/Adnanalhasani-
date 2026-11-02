@@ -34,6 +34,8 @@ class InventoryCostLedgerReadScopeTests(unittest.TestCase):
         for forbidden in ("INSERT INTO public.", "UPDATE public.", "DELETE FROM public."):
             self.assertNotIn(forbidden, self.sql)
         self.assertIn("FOR SELECT TO authenticated", self.sql)
+        self.assertIn("ALTER VIEW public.commercial_inventory_cost_audit_report", self.sql)
+        self.assertIn("SET (security_invoker = true)", self.sql)
 
 
 if __name__ == "__main__":
