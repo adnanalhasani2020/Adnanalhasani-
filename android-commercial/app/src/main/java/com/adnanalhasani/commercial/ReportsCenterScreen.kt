@@ -905,13 +905,17 @@ internal fun ReportsCenterScreen(
                     reportDateMillis(invoice.recordedAt)?.let { it >= startMillis && it < endExclusive } == true
             }.map { invoice ->
                 val variance = calculateSupplierInvoicePriceVariance(invoice)
+                val itemPreview = invoice.lines.take(4).joinToString("؛ ") { line ->
+                    "${line.purchaseOrderItemDescription.ifBlank { "بند" }}: ${line.quantity} × ${reportMoney(line.unitPriceMinor, invoice.currencyCode, true)} (أساس ${reportMoney(line.purchaseOrderUnitCostMinor ?: 0L, invoice.currencyCode, true)})"
+                }
+                val moreItems = if (invoice.lines.size > 4) " · وبنود أخرى: ${invoice.lines.size - 4}" else ""
                 ReportLine(
                     invoice.recordedAt.take(10),
                     "فاتورة المورد #${invoice.invoiceNumber.ifBlank { invoice.id }}",
                     purchase.supplierName,
                     variance.varianceMinor,
                     invoice.currencyCode,
-                    "أساس أمر الشراء: ${reportMoney(variance.expectedSubtotalMinor, invoice.currencyCode, true)} · الفاتورة قبل الضريبة والشحن: ${reportMoney(variance.invoiceSubtotalMinor, invoice.currencyCode, true)} · الضريبة: ${reportMoney(invoice.taxMinor, invoice.currencyCode, true)} · الشحن: ${reportMoney(invoice.freightMinor, invoice.currencyCode, true)} · البنود: ${invoice.lines.size}"
+                    "فرق موجب = أعلى من أمر الشراء، وسالب = أقل · أساس الأمر: ${reportMoney(variance.expectedSubtotalMinor, invoice.currencyCode, true)} · الفاتورة قبل الضريبة والشحن: ${reportMoney(variance.invoiceSubtotalMinor, invoice.currencyCode, true)} · الضريبة: ${reportMoney(invoice.taxMinor, invoice.currencyCode, true)} · الشحن: ${reportMoney(invoice.freightMinor, invoice.currencyCode, true)} · التفاصيل: ${itemPreview}${moreItems}"
                 )
             }
         }.sortedByDescending { it.date }
