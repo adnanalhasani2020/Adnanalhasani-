@@ -30,3 +30,14 @@ def test_item_profitability_fails_closed_on_cost_and_return_reconciliation_gaps(
     assert 'calculateRestockedCostMinor(' in calculations
     assert 'Returns can refer to sales from earlier periods' in calculations
     assert 'Item profitability after returns' in contract
+
+
+def test_supplier_purchase_summary_is_line_and_header_reconciled():
+    screen = SCREEN.read_text(encoding="utf-8")
+    calculations = CALCULATIONS.read_text(encoding="utf-8")
+    contract = CONTRACT.read_text(encoding="utf-8")
+    assert 'ReportCatalogItem("المشتريات حسب المورد"' in screen
+    assert 'SupplierPurchaseInvoiceInput(' in screen
+    assert 'calculateSupplierPurchaseSummary(' in calculations
+    assert 'sumReportAmountsExactly(invoice.lines.map { it.lineTotalMinor })' in screen
+    assert 'Purchases by supplier' in contract
