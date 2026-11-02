@@ -734,6 +734,37 @@ internal fun ReportsCenterScreen(
             calculateItemProfitability(allSaleLines, periodReturns)
         }
     }
+    val customerCollectionsCalculation = remember(cloudSalesDocuments, startMillis, endExclusive, cloudMode) {
+        runCatching {
+            val payments = cloudSalesDocuments.flatMap { document ->
+                document.payments.filter { payment ->
+                    payment.status.equals("succeeded", true) &&
+                        reportDateMillis(payment.createdAt)?.let { it >= startMillis && it < endExclusive } == true
+                }.map { payment ->
+                    CustomerCollectionPaymentInput(
+                        paymentId = payment.id,
+                        customerId = document.customerId,
+                        customerName = document.customerName,
+                        currencyCode = document.currencyCode,
+                        amountMinor = payment.amountMinor
+                    )
+                }
+            }
+            calculateCustomerCollectionsByCustomer(payments)
+        }
+    }
+    val customerCollectionsError = when {
+        !cloudMode -> "التحصيل حسب العميل يتطلب سجلات الدفعات السحابية."
+        salesDocumentsLoadError.isNotBlank() -> salesDocumentsLoadError
+        cloudSalesDocuments.any { document ->
+            document.payments.any { payment ->
+                payment.status.equals("succeeded", true) &&
+                    (reportDateMillis(payment.createdAt) == null || payment.amountMinor <= 0L ||
+                        !document.currencyCode.matches(Regex("^[A-Z]{3}$")))
+            }
+        } -> "توجد دفعة ناجحة بتاريخ أو مبلغ أو عملة غير صالحة؛ تم حجب تجميع التحصيل حسب العميل."
+        else -> customerCollectionsCalculation.exceptionOrNull()?.message.orEmpty()
+    }
     val dailySalesTrendCalculation = remember(cloudSalesDocuments, startMillis, endExclusive, cloudMode) {
         runCatching {
             val invoices = cloudSalesDocuments.filter { document ->
@@ -791,6 +822,7 @@ internal fun ReportsCenterScreen(
             "كشف حركات الموردين" -> purchasesLoadError.ifBlank { supplierPaymentsLoadError }
             "الدفعات السحابية الناجحة", "سندات القبض والصرف" -> paymentsLoadError
             "التحصيل حسب طريقة الدفع" -> paymentMethodAnalysisError
+            "التحصيل حسب العميل" -> customerCollectionsError
             "سجل القيود المحاسبية" -> journalsLoadError
             "ميزان المراجعة حسب الحساب", "حركة دفتر الأستاذ العام", "كشف حساب محاسبي", "تفاصيل القيود المرحلة" -> ledgerLinesLoadError
             "قائمة الدخل والميزانية العمومية" -> ledgerStatementError
@@ -853,6 +885,7 @@ internal fun ReportsCenterScreen(
             ReportCatalogItem("اتجاه المبيعات اليومي", "الفترات والمقارنات", "commercial_sales.completed + created_at + total_minor", cloudMode, "يعرض إجمالي المبيعات وعدد الفواتير لكل يوم وعملة منفصلة؛ لا يخلط العملات ولا يحسب الفواتير غير المكتملة."),
             ReportCatalogItem(if (cloudMode) "الدفعات السحابية الناجحة" else "التحصيلات المسجلة محليًا", "السندات والتحصيل والصرف", if (cloudMode) "commercial_payments" else "settlements_json", true, "يعرض الدفعات الناجحة فقط في السحابة؛ السندات لا تُجمع منفصلة عن الدفعة المرتبطة."),
             ReportCatalogItem("التحصيل حسب طريقة الدفع", "السندات والتحصيل والصرف", "commercial_payments.payment_method_type + amount_minor", cloudMode, "يجمع الدفعات الناجحة فقط حسب طريقة الدفع والعملة؛ لا يضيف قيود الأستاذ مرة ثانية، ويظهر طريقة الدفع غير المسجلة كفئة منفصلة."),
+            ReportCatalogItem("التحصيل حسب العميل", "العملاء والديون", "commercial_sales.customer_id + commercial_payments.succeeded", cloudMode, "يجمع الدفعات الناجحة المرتبطة بفواتير العميل حسب العميل والعملة وتاريخ الدفعة؛ لا يضم الدفعات الفاشلة أو المعلقة ولا يخلط العملات."),
             ReportCatalogItem("المصروفات التشغيلية", "الأرباح والتكاليف", if (cloudMode) "commercial_expense_vouchers" else "expenses_json", true, "تُستبعد سندات الصرف الملغاة؛ هذا تقرير مصروفات مسجلة وليس قائمة دخل."),
             ReportCatalogItem("ملخص المصروفات حسب التصنيف وطريقة الصرف", "الأرباح والتكاليف", "commercial_expense_vouchers.category + payment_method + amount_minor", cloudMode, "يجمع سندات الصرف غير الملغاة حسب التصنيف وطريقة الصرف والعملة؛ لا يخلط العملات ولا يضيف القيود المحاسبية مرة ثانية."),
             ReportCatalogItem("رصيد المخزون الحالي", "الأصناف والمخزون", if (cloudMode) "commercial_inventory_balances" else "products_json", true, "رصيد حالي فقط؛ ليس رصيدًا تاريخيًا للفترة."),
@@ -1006,6 +1039,18 @@ internal fun ReportsCenterScreen(
                     val previousTotal = previousRows.filter { it.currencyCode.ifBlank { "غير محددة" } == currency }.sumOf { it.total.toLong() }
                     ReportLine("${startText} — ${endText}", "مقارنة", "مبيعات الفترة الحالية", currentTotal, currency, "الفترة السابقة: $previousTotal · الفرق: ${currentTotal - previousTotal}")
                 }
+            }
+        }
+        "التحصيل حسب العميل" -> if (customerCollectionsError.isNotBlank()) emptyList() else {
+            customerCollectionsCalculation.getOrThrow().map { customer ->
+                ReportLine(
+                    "${startText} — ${endText}",
+                    "${customer.paymentCount} دفعة",
+                    customer.customerName,
+                    customer.totalMinor,
+                    customer.currencyCode,
+                    "دفعات ناجحة فقط · معرف العميل: ${customer.customerId}"
+                )
             }
         }
         "التحصيل حسب طريقة الدفع" -> cloudPayments.filter { row ->
@@ -1723,7 +1768,7 @@ internal fun ReportsCenterScreen(
                     when (report.title) {
                         "ملخص المبيعات حسب الفترة", "تفاصيل فواتير المبيعات", "تفاصيل بنود فواتير المبيعات", "المبيعات حسب الصنف",
                         "المبيعات حسب العميل", "المبيعات النقدية والآجلة", "المبيعات حسب حالة السداد", "متوسط قيمة الفاتورة", "مقارنة فترتين", "مقارنة الفترات", "اتجاه المبيعات اليومي", "الخصومات على فواتير المبيعات", "الضرائب المسجلة على المبيعات",
-                        "التحصيلات المسجلة محليًا", "الدفعات السحابية الناجحة", "التحصيل حسب طريقة الدفع", "المصروفات التشغيلية", "ملخص المصروفات حسب التصنيف وطريقة الصرف", "رصيد المخزون الحالي", "تنبيهات المخزون المنخفض",
+                        "التحصيلات المسجلة محليًا", "الدفعات السحابية الناجحة", "التحصيل حسب طريقة الدفع", "التحصيل حسب العميل", "المصروفات التشغيلية", "ملخص المصروفات حسب التصنيف وطريقة الصرف", "رصيد المخزون الحالي", "تنبيهات المخزون المنخفض",
                         "فواتير الشراء والمستحقات المسجلة", "المشتريات حسب المورد", "فروقات أسعار فواتير الموردين", "مستحقات فواتير الموردين", "مرتجعات المبيعات وحالة التسوية", "سندات القبض والصرف", "سجل القيود المحاسبية",
                         "ميزان المراجعة حسب الحساب", "حركة دفتر الأستاذ العام", "كشف حساب محاسبي", "أرصدة العملاء وكشف الحساب", "كشف حركات الموردين",
                         "الرصيد المحاسبي الكامل للعملاء", "أرصدة الموردين والمستحقات", "قائمة الدخل والميزانية العمومية", "التدفقات النقدية والصندوق", "تكلفة البضاعة والربح", "ربحية الأصناف بعد المرتجعات", "الضرائب والخصومات التفصيلية",
