@@ -424,7 +424,7 @@ internal fun calculateItemProfitability(
                 ?: throw IllegalArgumentException("تعذر ربط بند مرتجع ببند البيع الأصلي.")
             require(saleLine.saleId == saleReturn.saleId &&
                 saleLine.currencyCode == saleReturn.currencyCode &&
-                item.refundAmountPresent && item.restockedQuantityPresent &&
+                item.refundAmountPresent && item.restockFlagPresent && item.restockedQuantityPresent &&
                 item.refundAmountMinor >= 0L && item.quantity > 0) {
                 "مرجع البيع أو عملة أو كمية أو مبلغ/حالة إعادة تخزين بند المرتجع غير مكتملة."
             }
