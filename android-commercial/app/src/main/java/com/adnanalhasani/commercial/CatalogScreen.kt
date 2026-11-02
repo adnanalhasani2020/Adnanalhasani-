@@ -112,6 +112,24 @@ private fun catalogNodeBelongsToSector(node: CatalogActivityNode, sectorCode: St
     }
     return false
 }
+private fun catalogBusinessLevelLabel(code: String): String = when (code.lowercase()) {
+    "clinic" -> "عيادة / مركز صحي"
+    "contractor" -> "مقاول"
+    "factory" -> "مصنع"
+    "grocery" -> "بقالة"
+    "hotel" -> "فندق"
+    "manufacturer" -> "منشأة تصنيع"
+    "office" -> "مكتب"
+    "other" -> "أخرى"
+    "pharmacy" -> "صيدلية"
+    "producer" -> "منتج / مزارع"
+    "restaurant" -> "مطعم"
+    "service" -> "مقدم خدمات"
+    "shop" -> "محل تجاري"
+    "supermarket" -> "سوبرماركت"
+    "wholesale" -> "تجارة جملة"
+    else -> code
+}
 private fun catalogSectorForNode(nodeCode: String, nodes: List<CatalogActivityNode>): String {
     val byCode = nodes.associateBy { it.code }
     var current = byCode[nodeCode]
@@ -188,7 +206,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var email by remember { mutableStateOf("") }; var password by remember { mutableStateOf("") }
     var token by remember { mutableStateOf<String?>(null) }; var signedInUserId by remember { mutableStateOf("") }; var organizationId by remember { mutableStateOf(initialOrganizationId) }
     var section by remember { mutableStateOf("browse") }
-    var sector by remember { mutableStateOf("") }; var businessLevel by remember { mutableStateOf("") }
+    var sector by remember { mutableStateOf("TRADE") }; var businessLevel by remember { mutableStateOf("shop") }
     var country by remember { mutableStateOf("YE") }; var region by remember { mutableStateOf("") }; var city by remember { mutableStateOf("") }
     var locale by remember { mutableStateOf("ar") }; var query by remember { mutableStateOf("") }
     var items by remember { mutableStateOf<List<CatalogProduct>>(emptyList()) }
@@ -1068,12 +1086,12 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                                 }
                                 Box {
                                     OutlinedButton(onClick={businessLevelMenuExpanded=true}, enabled=!busy && businessLevelOptions.isNotEmpty(), modifier=Modifier.fillMaxWidth()) {
-                                        Text(businessLevel.takeIf { it.isNotBlank() }?.let { "مستوى النشاط: $it" } ?: "كل مستويات النشاط")
+                                        Text(businessLevel.takeIf { it.isNotBlank() }?.let { "مستوى النشاط: ${catalogBusinessLevelLabel(it)}" } ?: "كل مستويات النشاط")
                                     }
                                     DropdownMenu(expanded=businessLevelMenuExpanded, onDismissRequest={businessLevelMenuExpanded=false}) {
                                         DropdownMenuItem(text={Text("كل المستويات")}, onClick={businessLevel=""; businessLevelMenuExpanded=false; loadCatalog(true)})
                                         businessLevelOptions.forEach { level ->
-                                            DropdownMenuItem(text={Text(level)}, onClick={businessLevel=level; businessLevelMenuExpanded=false; loadCatalog(true)})
+                                            DropdownMenuItem(text={Text(catalogBusinessLevelLabel(level))}, onClick={businessLevel=level; businessLevelMenuExpanded=false; loadCatalog(true)})
                                         }
                                     }
                                 }
