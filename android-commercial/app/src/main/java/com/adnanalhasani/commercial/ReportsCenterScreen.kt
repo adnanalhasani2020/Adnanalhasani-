@@ -472,7 +472,7 @@ private fun buildCashFlowReportLines(
                     Triple(line, date, line.debitMinor - line.creditMinor)
                 }.sortedWith(compareBy<Triple<CommercialCloudJournalLine, LocalDate, Long>> { it.second }.thenBy { it.first.entryNumber }.thenBy { it.first.lineNumber })
             val currencies = movements.map { it.first.currencyCode }.filter { it.matches(Regex("^[A-Z]{3}$")) }.distinct().sorted()
-            buildList {
+    return buildList {
                 currencies.forEach { currency ->
                     val currencyMoves = movements.filter { it.first.currencyCode == currency }
                     currencyMoves.groupBy { it.first.accountId to it.first.accountCode }.toSortedMap(compareBy<Pair<String, String>> { it.second }.thenBy { it.first })
