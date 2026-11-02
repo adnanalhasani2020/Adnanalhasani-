@@ -286,7 +286,8 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         ):
             with self.subTest(marker=marker):
                 self.assertIn(marker, self.screen)
-        self.assertIn("لا يحتوي تاريخ استحقاق أو شروط ائتمان", self.screen)
+        self.assertIn("تاريخ الاستحقاق التعاقدي المسجل", self.screen)
+        self.assertIn("يحجب التقرير إذا بقيت فاتورة مفتوحة بلا تاريخ موثق", self.screen)
         self.assertIn("لا توجد سياسة تحويل معتمدة", self.screen)
 
 if __name__ == "__main__":
