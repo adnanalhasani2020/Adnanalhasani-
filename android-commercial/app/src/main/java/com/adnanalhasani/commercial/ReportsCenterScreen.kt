@@ -836,6 +836,12 @@ internal fun ReportsCenterScreen(
                 (saleReturn.approvedRefundMinor == null || saleReturn.approvedRefundMinor < 0L ||
                     !saleReturn.currencyCode.matches(Regex("^[A-Z]{3}$")))
         } -> "يوجد مرتجع مكتمل بلا مبلغ اعتماد أو عملة صالحة؛ تم حجب تفاصيل الضرائب والخصومات."
+        cloudReturns.any { saleReturn ->
+            saleReturn.status.equals("completed", true) &&
+                reportDateMillis(saleReturn.completedAt)?.let { it >= startMillis && it < endExclusive } == true &&
+                cloudSalesDocuments.none { sale -> sale.id == saleReturn.saleId &&
+                    sale.saleStatus.equals("completed", true) && sale.currencyCode == saleReturn.currencyCode }
+        } -> "تعذر مطابقة عملة المرتجع مع فاتورة البيع الأصلية؛ تم حجب تفاصيل الضرائب والخصومات."
         else -> ""
     }
     val taxDiscountSummaryCalculation = remember(
