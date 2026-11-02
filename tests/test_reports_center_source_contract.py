@@ -224,6 +224,19 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn('"ملخص المصروفات حسب التصنيف وطريقة الصرف" -> cloudExpenses.filter', self.screen)
         self.assertIn('currencyCode = row.optString("currency_code").takeUnless { it == "null" }.orEmpty()', self.repository)
 
+    def test_gross_profit_report_uses_exact_arithmetic_and_return_cost_snapshots(self):
+        for marker in (
+            "calculateCostProfitReportTotals",
+            "sumReportAmountsExactly",
+            "calculateRestockedCostMinor",
+            "Math.addExact",
+            "Math.subtractExact",
+            "تجاوزت مجاميع المبيعات أو التكلفة أو المرتجعات نطاق الأرقام الدقيق",
+        ):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, self.screen)
+        self.assertNotIn("}.getOrDefault(0L)", self.screen)
+
     def test_unready_financial_reports_are_visible_but_not_selectable(self):
         for marker in (
             'ReportCatalogItem("أعمار ديون العملاء"',
