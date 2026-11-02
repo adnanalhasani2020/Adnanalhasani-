@@ -33,7 +33,7 @@ class SupplierDueDateAgingReportTest {
                 invoice("today", dueDate = "2026-11-02"),
                 invoice("30", dueDate = "2026-10-03"),
                 invoice("60", dueDate = "2026-09-03"),
-                invoice("90", dueDate = "2026-08-04"),
+                invoice("90", invoiceDate = "2026-07-01", dueDate = "2026-08-04"),
                 invoice("old", invoiceDate = "2026-06-01", dueDate = "2026-07-01"),
                 invoice("sar", dueDate = "2026-10-01", currency = "SAR")
             ),
