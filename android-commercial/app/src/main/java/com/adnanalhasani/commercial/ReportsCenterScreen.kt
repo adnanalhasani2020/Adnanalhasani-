@@ -906,7 +906,7 @@ internal fun ReportsCenterScreen(
             }.map { invoice ->
                 val variance = calculateSupplierInvoicePriceVariance(invoice)
                 val itemPreview = invoice.lines.take(4).joinToString("؛ ") { line ->
-                    "${line.purchaseOrderItemDescription.ifBlank { "بند" }}: ${line.quantity} × ${reportMoney(line.unitPriceMinor, invoice.currencyCode, true)} (أساس ${reportMoney(line.purchaseOrderUnitCostMinor ?: 0L, invoice.currencyCode, true)})"
+                    "${line.purchaseOrderItemDescription.ifBlank { "بند" }}: ${line.quantity} × ${reportMoney(line.unitPriceMinor, invoice.currencyCode, true)} (أساس ${reportMoney(line.purchaseOrderUnitCostMinor!!, invoice.currencyCode, true)})"
                 }
                 val moreItems = if (invoice.lines.size > 4) " · وبنود أخرى: ${invoice.lines.size - 4}" else ""
                 ReportLine(
