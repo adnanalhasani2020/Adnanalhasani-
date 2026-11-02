@@ -492,3 +492,47 @@ internal fun calculateItemProfitability(
         )
     }.sortedWith(compareBy<ItemProfitabilityTotals> { it.currencyCode }.thenByDescending { it.grossProfitMinor }.thenBy { it.productName })
 }
+
+
+internal data class SupplierPurchaseInvoiceInput(
+    val invoiceId: String,
+    val supplierId: String,
+    val supplierName: String,
+    val currencyCode: String,
+    val totalMinor: Long
+)
+
+internal data class SupplierPurchaseSummary(
+    val supplierId: String,
+    val supplierName: String,
+    val currencyCode: String,
+    val invoiceCount: Int,
+    val totalMinor: Long
+)
+
+internal fun calculateSupplierPurchaseSummary(
+    invoices: List<SupplierPurchaseInvoiceInput>
+): List<SupplierPurchaseSummary> {
+    val invoiceIds = mutableSetOf<String>()
+    invoices.forEach { invoice ->
+        require(invoice.invoiceId.isNotBlank() && invoiceIds.add(invoice.invoiceId)) {
+            "معرف فاتورة مورد مفقود أو مكرر في ملخص المشتريات."
+        }
+        require(invoice.supplierId.isNotBlank() && invoice.supplierName.isNotBlank() &&
+            invoice.currencyCode.matches(Regex("^[A-Z]{3}$")) && invoice.totalMinor >= 0L) {
+            "بيانات مورد أو مبلغ أو عملة غير صالحة في ملخص المشتريات."
+        }
+    }
+    return invoices.groupBy { Triple(it.supplierId, it.supplierName, it.currencyCode) }
+        .map { (key, rows) ->
+            SupplierPurchaseSummary(
+                supplierId = key.first,
+                supplierName = key.second,
+                currencyCode = key.third,
+                invoiceCount = rows.size,
+                totalMinor = sumReportAmountsExactly(rows.map { it.totalMinor })
+            )
+        }
+        .sortedWith(compareBy<SupplierPurchaseSummary> { it.currencyCode }
+            .thenByDescending { it.totalMinor }.thenBy { it.supplierName }.thenBy { it.supplierId })
+}
