@@ -939,3 +939,58 @@ internal fun calculateUserSalesPerformance(
         .sortedWith(compareBy<UserSalesPerformanceTotal> { it.currencyCode }
             .thenByDescending { it.totalMinor }.thenBy { it.userId })
 }
+
+internal data class TaxDiscountSummaryInput(
+    val documentId: String,
+    val currencyCode: String,
+    val kind: String,
+    val amountMinor: Long
+)
+
+internal data class TaxDiscountSummaryTotal(
+    val currencyCode: String,
+    val salesDiscountMinor: Long,
+    val salesDiscountDocumentCount: Int,
+    val salesTaxMinor: Long,
+    val salesTaxDocumentCount: Int,
+    val purchaseTaxMinor: Long,
+    val purchaseTaxDocumentCount: Int,
+    val salesReturnMinor: Long,
+    val salesReturnCount: Int
+)
+
+/**
+ * Summarizes only recorded tax, discount, and approved return amounts.
+ * It deliberately does not calculate a net tax liability or tax refund.
+ */
+internal fun calculateTaxDiscountSummaryTotals(
+    records: List<TaxDiscountSummaryInput>
+): List<TaxDiscountSummaryTotal> {
+    val seen = mutableSetOf<String>()
+    records.forEach { row ->
+        require(row.documentId.isNotBlank() && row.kind in setOf(
+            "sales_discount", "sales_tax", "purchase_tax", "sales_return"
+        ) && seen.add(row.kind + ":" + row.documentId)) {
+            "معرف مستند مفقود أو مكرر في ملخص الضرائب والخصومات."
+        }
+        require(row.currencyCode.matches(Regex("^[A-Z]{3}$")) && row.amountMinor >= 0L) {
+            "توجد قيمة ضريبية أو خصم أو مرتجع بعملة أو مبلغ غير صالح؛ تم حجب الملخص."
+        }
+    }
+    return records.groupBy { it.currencyCode }.map { (currency, rows) ->
+        fun amount(kind: String): Long =
+            sumReportAmountsExactly(rows.filter { it.kind == kind }.map { it.amountMinor })
+        fun count(kind: String): Int = rows.count { it.kind == kind }
+        TaxDiscountSummaryTotal(
+            currencyCode = currency,
+            salesDiscountMinor = amount("sales_discount"),
+            salesDiscountDocumentCount = count("sales_discount"),
+            salesTaxMinor = amount("sales_tax"),
+            salesTaxDocumentCount = count("sales_tax"),
+            purchaseTaxMinor = amount("purchase_tax"),
+            purchaseTaxDocumentCount = count("purchase_tax"),
+            salesReturnMinor = amount("sales_return"),
+            salesReturnCount = count("sales_return")
+        )
+    }.sortedBy { it.currencyCode }
+}
