@@ -12,7 +12,6 @@ import android.os.Looper
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
-import java.util.concurrent.Executor
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -70,8 +69,7 @@ private suspend fun awaitCurrentLocation(
             manager.getCurrentLocation(
                 provider,
                 cancellation,
-                context.mainExecutor,
-                Executor { command -> command.run() }
+                context.mainExecutor
             ) { location ->
                 if (continuation.isActive) continuation.resume(location)
             }
