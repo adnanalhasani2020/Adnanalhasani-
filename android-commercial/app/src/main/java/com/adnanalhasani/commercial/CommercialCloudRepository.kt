@@ -919,6 +919,8 @@ internal data class CommercialCloudSupplierInvoiceSummary(
     val freightMinor: Long,
     val currencyCode: String,
     val recordedAt: String,
+    val invoiceDate: String,
+    val dueDate: String,
     val state: String,
     val lines: List<CommercialCloudSupplierInvoiceLineSummary>,
     val obligation: CommercialCloudSupplierObligationSummary?
@@ -943,7 +945,7 @@ internal data class CommercialCloudPurchaseDocument(
 internal fun loadCommercialCloudPurchaseDocuments(context: Context): List<CommercialCloudPurchaseDocument> {
     val (orgId, access) = commercialMasterDataAccess(context)
     val path = "/rest/v1/commercial_purchase_orders" +
-        "?select=id,supplier_id,order_number,status,ordered_at,expected_at,currency_code,notes,receive_location_id,supplier:commercial_suppliers(display_name),items:commercial_purchase_order_items(id,line_number,item_description,quantity_ordered,quantity_received,unit_cost_minor,offering_id,source_selling_unit_code,source_selling_unit_name,source_selling_quantity,source_quantity_in_stock_units),supplier_invoices:commercial_supplier_invoices(id,invoice_number,subtotal_minor,tax_minor,freight_minor,total_minor,currency_code,recorded_at,state,items:commercial_supplier_invoice_items(id,purchase_order_item_id,quantity,unit_price_minor,line_total_minor,purchase_order_item:commercial_purchase_order_items!commercial_supplier_invoice_items_purchase_order_item_id_fkey(item_description,unit_cost_minor)),obligation:commercial_supplier_obligations(id,amount_due_minor,amount_paid_minor,state,currency_code))" +
+        "?select=id,supplier_id,order_number,status,ordered_at,expected_at,currency_code,notes,receive_location_id,supplier:commercial_suppliers(display_name),items:commercial_purchase_order_items(id,line_number,item_description,quantity_ordered,quantity_received,unit_cost_minor,offering_id,source_selling_unit_code,source_selling_unit_name,source_selling_quantity,source_quantity_in_stock_units),supplier_invoices:commercial_supplier_invoices(id,invoice_number,subtotal_minor,tax_minor,freight_minor,total_minor,currency_code,recorded_at,invoice_date,due_date,state,items:commercial_supplier_invoice_items(id,purchase_order_item_id,quantity,unit_price_minor,line_total_minor,purchase_order_item:commercial_purchase_order_items!commercial_supplier_invoice_items_purchase_order_item_id_fkey(item_description,unit_cost_minor)),obligation:commercial_supplier_obligations(id,amount_due_minor,amount_paid_minor,state,currency_code))" +
         "&organization_id=eq.$orgId&order=created_at.desc.nullslast,id.asc"
     val rows = commercialCloudPagedGet(path, access)
     return buildList {
@@ -988,6 +990,8 @@ internal fun loadCommercialCloudPurchaseDocuments(context: Context): List<Commer
                         freightMinor = invoice.optLong("freight_minor", 0L),
                         currencyCode = invoice.optString("currency_code").takeUnless { it == "null" }.orEmpty(),
                         recordedAt = invoice.optString("recorded_at").takeUnless { it == "null" }.orEmpty(),
+                        invoiceDate = invoice.optString("invoice_date").takeUnless { it == "null" }.orEmpty(),
+                        dueDate = invoice.optString("due_date").takeUnless { it == "null" }.orEmpty(),
                         state = invoice.optString("state").takeUnless { it == "null" }.orEmpty(),
                         lines = invoiceLines,
                         obligation = invoice.optJSONObject("obligation")?.let { ob ->
@@ -1080,12 +1084,19 @@ internal fun recordCommercialCloudSupplierInvoice(
     lines: List<CommercialSupplierInvoiceLineInput>,
     taxMinor: Long,
     freightMinor: Long,
-    idempotencyKey: String
+    idempotencyKey: String,
+    invoiceDate: String,
+    dueDate: String
 ): JSONObject {
     require(purchaseOrderId.isNotBlank() && invoiceNumber.trim().isNotEmpty()) { "أدخل رقم فاتورة المورد." }
     require(lines.isNotEmpty()) { "أدخل كمية مفوترة واحدة على الأقل." }
     require(taxMinor >= 0 && freightMinor >= 0) { "الضريبة والشحن لا يمكن أن يكونا سالبين." }
     require(idempotencyKey.length in 8..200) { "مفتاح عملية الفاتورة غير صالح." }
+    val parsedInvoiceDate = java.time.LocalDate.parse(invoiceDate)
+    val parsedDueDate = java.time.LocalDate.parse(dueDate)
+    require(!parsedInvoiceDate.isAfter(java.time.LocalDate.now()) && !parsedDueDate.isBefore(parsedInvoiceDate)) {
+        "تاريخ الفاتورة أو الاستحقاق غير صالح."
+    }
     val (orgId, access) = commercialMasterDataAccess(context)
     val lineArray = JSONArray()
     lines.forEach { line ->
@@ -1108,8 +1119,10 @@ internal fun recordCommercialCloudSupplierInvoice(
         .put("p_tax_minor", taxMinor)
         .put("p_freight_minor", freightMinor)
         .put("p_idempotency_key", idempotencyKey)
+        .put("p_invoice_date", parsedInvoiceDate.toString())
+        .put("p_due_date", parsedDueDate.toString())
     return JSONObject(commercialCloudRequest(
-        "/rest/v1/rpc/commercial_record_supplier_invoice", "POST", payload, access
+        "/rest/v1/rpc/commercial_record_supplier_invoice_with_dates", "POST", payload, access
     ))
 }
 
