@@ -1787,6 +1787,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                         }
                     }
                     Text("السعر سيبقى صفرًا بحالة غير مسعّر، والرصيد الافتتاحي صفر. إنشاء الصنف وربطه لا يستلم البضاعة؛ كما يتطلب صلاحية المالك أو المسؤول.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("ملاحظة المخزون: المستودع يُحفظ في إعداد الصنف، لكن سجل الرصيد والاستلام الحاليين ما يزالان على مستوى الفرع؛ لا ينشأ رصيد مستقل للمستودع في هذه الخطوة.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                     val selectedLine=invoiceMappingLines.firstOrNull { it.id==invoiceMappingLineId }
                     if(selectedLine?.unitCode?.isNotBlank()==true) Text("وحدة بند الفاتورة: "+selectedLine.unitCode+" — يجب اختيارها كوحدة البيع نفسها.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                 }
