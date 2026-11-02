@@ -995,7 +995,7 @@ internal fun ReportsCenterScreen(
                 }
         }
         "أرصدة العملاء وكشف الحساب" -> {
-            val movements = buildCustomerOperationalStatementMovements(cloudSalesDocuments)
+            val movements = buildCustomerOperationalStatementMovements(cloudSalesDocuments.toCustomerStatementInputs())
                 .filter { movement ->
                     customerFilter.isBlank() ||
                         movement.customer.contains(customerFilter.trim(), true) ||
@@ -1099,7 +1099,7 @@ internal fun ReportsCenterScreen(
                     reportDateMillis(saleReturn.completedAt)?.let { it >= startMillis && it < endExclusive } == true
             }
             buildList {
-                calculateCostProfitReportTotals(periodSales, periodReturns).forEach { totals ->
+                calculateCostProfitReportTotals(periodSales.map { it.toCostProfitInput() }, periodReturns.map { it.toCostProfitInput() }).forEach { totals ->
                     val currency = totals.currencyCode
                     add(ReportLine("${startText} — ${endText}", "إيرادات", "إجمالي المبيعات بعد الخصومات", totals.grossSalesMinor, currency,
                         "إجمالي ${totals.invoiceCount} فاتورة مكتملة؛ الإيراد لا يتضمن الضريبة"))
