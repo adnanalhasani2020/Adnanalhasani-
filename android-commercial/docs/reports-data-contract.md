@@ -10,6 +10,7 @@ This document defines the source and calculation boundary for the report center.
 
 ## Implemented operational reports
 - **Completed sales:** `loadCommercialCloudSales` / local `sales_json`; only records whose sale status is `completed` contribute to sales summaries. The gross completed-sales total is not net sales because the return/refund ledger is not subtracted here.
+- **Daily sales trend:** groups completed cloud invoices by their saved creation date and ISO currency, showing invoice count and total per day. It excludes non-completed sales, validates date/amount/currency, uses checked totals, and keeps currencies separate. It is a daily sales trend, not a cash-collection trend or net-sales-after-returns statement.
 - **Invoice details and line-item sales (cloud):** `loadCommercialCloudSaleDocuments` reads the sale, line snapshots, payment status, discount, tax, and return projections from the organization's existing sales records. The item report uses captured invoice-line quantities and line totals, not current product prices.
 - **Sales discounts and recorded taxes (cloud):** uses `discount_minor` and `tax_minor` stored on completed invoices. No rate is inferred. Local reports are unavailable for these measures because the local sale model does not persist these fields.
 - **Payments (cloud):** the successful-payment report includes only rows whose payment status is `succeeded`. The status listing can show other statuses but must not be treated as collected cash. It does not add journal entries as a second payment.
