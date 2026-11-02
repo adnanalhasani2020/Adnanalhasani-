@@ -291,6 +291,18 @@ private fun List<CommercialCloudSaleDocument>.toCustomerStatementInputs(): List<
     }
 
 private fun reportLineAmount(row: ReportLine, cloudMode: Boolean): String = row.displayAmount ?: if (row.currency.isBlank() || row.currency == "-") row.amount.toString() else reportMoney(row.amount, row.currency, cloudMode)
+
+private fun SupplierDueDateAgingReportState.toReportLines(asOfDate: String): List<ReportLine> =
+    rows.map { aging ->
+        ReportLine(
+            asOfDate,
+            aging.bucket,
+            aging.supplierName,
+            aging.balanceMinor,
+            aging.currencyCode,
+            "${aging.invoiceCount} فاتورة مفتوحة · الرصيد الحالي · الشرائح محسوبة من تاريخ الاستحقاق التعاقدي المحفوظ"
+        )
+    }
 private data class ReportSupplierMovement(val date: String, val supplierId: String, val supplier: String, val currency: String, val reference: String, val amount: Long, val description: String)
 
 @Composable
