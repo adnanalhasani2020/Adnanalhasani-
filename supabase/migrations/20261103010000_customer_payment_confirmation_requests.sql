@@ -132,8 +132,7 @@ BEGIN
   JOIN public.commercial_organizations o ON o.id=r.organization_id
   JOIN public.commercial_sales s ON s.id=r.sale_id AND s.organization_id=r.organization_id
   LEFT JOIN public.commercial_payments p ON p.id=r.payment_id AND p.organization_id=r.organization_id
-  WHERE r.submitted_by=v_uid
-    AND (p_organization_id IS NULL OR r.organization_id=p_organization_id);
+  WHERE (p_organization_id IS NULL OR r.organization_id=p_organization_id);
   RETURN v_result;
 END;
 $function$;
@@ -246,8 +245,12 @@ BEGIN
      OR p_idempotency_key IS NULL OR length(btrim(p_idempotency_key)) NOT BETWEEN 8 AND 200 THEN
     RAISE EXCEPTION 'invalid_customer_payment_request_update' USING ERRCODE='22023';
   END IF;
-  SELECT * INTO v_request FROM public.commercial_customer_payment_requests
-  WHERE id=p_request_id AND submitted_by=v_uid FOR UPDATE;
+  SELECT r.* INTO v_request
+  FROM public.commercial_customer_payment_requests r
+  JOIN public.commercial_customers c
+    ON c.id=r.customer_id AND c.organization_id=r.organization_id
+   AND c.auth_user_id=v_uid AND c.state='active'
+  WHERE r.id=p_request_id FOR UPDATE OF r;
   IF NOT FOUND THEN RAISE EXCEPTION 'customer_payment_request_not_found' USING ERRCODE='P0002'; END IF;
   IF v_request.last_action_key=btrim(p_idempotency_key) THEN
     IF v_request.amount_minor<>p_amount_minor OR v_request.customer_note<>btrim(p_customer_note) THEN
