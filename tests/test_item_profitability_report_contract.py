@@ -56,4 +56,5 @@ def test_daily_sales_trend_uses_completed_invoices_and_currency_separated_totals
     assert 'DailySalesInvoiceInput(' in screen
     assert 'calculateDailySalesTrend(' in calculations
     assert 'document.saleStatus.equals("completed", true)' in screen
+    assert '"اتجاه المبيعات اليومي" -> selectedReport = report.title' in screen
     assert 'Daily sales trend' in contract
