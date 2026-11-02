@@ -176,6 +176,7 @@ internal fun calculateCostProfitReportTotals(
 }
 
 internal data class SupplierObligationInput(
+    val supplierId: String,
     val supplierName: String,
     val purchaseOrderCurrencyCode: String,
     val invoiceCurrencyCode: String,
@@ -184,6 +185,7 @@ internal data class SupplierObligationInput(
     val amountPaidMinor: Long
 )
 internal data class SupplierObligationTotals(
+    val supplierId: String,
     val supplierName: String,
     val currencyCode: String,
     val amountDueMinor: Long,
@@ -204,19 +206,20 @@ internal fun calculateSupplierObligationTotals(
             "مبلغ الالتزام أو المسدد للمورد غير صالح."
         }
     }
-    return obligations.groupBy { it.supplierName to it.purchaseOrderCurrencyCode }
+    return obligations.groupBy { Triple(it.supplierId, it.supplierName, it.purchaseOrderCurrencyCode) }
         .map { (key, rows) ->
             val due = sumReportAmountsExactly(rows.map { it.amountDueMinor })
             val paid = sumReportAmountsExactly(rows.map { it.amountPaidMinor })
             SupplierObligationTotals(
-                supplierName = key.first,
-                currencyCode = key.second,
+                supplierId = key.first,
+                supplierName = key.second,
+                currencyCode = key.third,
                 amountDueMinor = due,
                 amountPaidMinor = paid,
                 balanceMinor = Math.subtractExact(due, paid)
             )
         }
-        .sortedWith(compareBy<SupplierObligationTotals> { it.currencyCode }.thenBy { it.supplierName })
+        .sortedWith(compareBy<SupplierObligationTotals> { it.currencyCode }.thenBy { it.supplierName }.thenBy { it.supplierId })
 }
 
 internal data class CustomerStatementPaymentInput(
