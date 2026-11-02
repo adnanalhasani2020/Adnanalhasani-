@@ -1,5 +1,10 @@
 BEGIN;
 
+-- Keep the valuation report under caller privileges so its underlying RLS
+-- policies are applied instead of running with the view owner's privileges.
+ALTER VIEW public.commercial_inventory_cost_audit_report
+  SET (security_invoker = true);
+
 -- Cost-layer details expose acquisition costs and cost allocations. Keep ordinary
 -- active members able to operate stock and sales, but restrict these detailed
 -- valuation records to organization managers.
