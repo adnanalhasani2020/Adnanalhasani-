@@ -760,6 +760,13 @@ internal fun ReportsCenterScreen(
         returnsLoadError.isNotBlank() -> returnsLoadError
         cloudSalesDocuments.any { it.saleStatus.equals("completed", true) && reportDateMillis(it.createdAt) == null } ->
             "توجد فاتورة بيع مكتملة بتاريخ غير صالح؛ تعذر تحديد فترة ربحيتها."
+        cloudSalesDocuments.filter { it.saleStatus.equals("completed", true) }.any { document ->
+            document.subtotalMinor < 0L || document.discountMinor < 0L ||
+                document.discountMinor > document.subtotalMinor || document.taxMinor < 0L ||
+                !document.currencyCode.matches(Regex("^[A-Z]{3}$")) || document.lines.isEmpty() ||
+                document.lines.any { it.lineTotalMinor < 0L } ||
+                runCatching { sumReportAmountsExactly(document.lines.map { it.lineTotalMinor }) }.getOrNull() != document.subtotalMinor
+        } -> "توجد فاتورة مكتملة لا تتطابق بنودها أو عملتها أو مبالغها مع الإجمالي الفرعي؛ تم حجب ربحية الأصناف."
         cloudReturns.any { it.status.equals("completed", true) && reportDateMillis(it.completedAt) == null } ->
             "يوجد مرتجع مكتمل بتاريخ غير صالح؛ تعذر تحديد فترة أثره على الربحية."
         cloudReturns.any { it.refundStatus.equals("refunded", true) && !it.status.equals("completed", true) } ->
