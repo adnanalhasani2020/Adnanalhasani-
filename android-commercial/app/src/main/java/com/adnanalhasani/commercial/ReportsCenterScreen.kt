@@ -609,12 +609,15 @@ internal fun ReportsCenterScreen(
     val supplierInvoiceVarianceError = when {
         !cloudMode -> "فروقات أسعار فواتير الموردين تتطلب فواتير السحابة وبنودها المحفوظة."
         purchasesLoadError.isNotBlank() -> purchasesLoadError
-        cloudPurchases.flatMap { purchase ->
+        cloudPurchases.any { purchase ->
             purchase.supplierInvoices.filter { invoice ->
                 invoice.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed") &&
                     reportDateMillis(invoice.recordedAt)?.let { it >= startMillis && it < endExclusive } == true
+            }.any { invoice ->
+                invoice.currencyCode != purchase.currencyCode ||
+                    runCatching { calculateSupplierInvoicePriceVariance(invoice) }.isFailure
             }
-        }.any { invoice -> runCatching { calculateSupplierInvoicePriceVariance(invoice) }.isFailure } ->
+        } ->
             "تعذر مطابقة أحد فواتير المورد مع بنودها وأسعار أمر الشراء؛ لم يتم عرض إجمالي جزئي أو فرق سعر مضلل."
         else -> ""
     }
