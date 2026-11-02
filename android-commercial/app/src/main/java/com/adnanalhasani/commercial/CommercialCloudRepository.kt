@@ -614,35 +614,6 @@ internal fun loadCommercialCloudSaleDocuments(context: Context): List<Commercial
             val row = rows.optJSONObject(index) ?: continue
             val customer = row.optJSONObject("customer")
             val items = row.optJSONArray("items")
-            val invoiceRows = row.optJSONArray("supplier_invoices")
-            val supplierInvoices = buildList {
-                for (invoiceIndex in 0 until (invoiceRows?.length() ?: 0)) {
-                    val invoice = invoiceRows?.optJSONObject(invoiceIndex) ?: continue
-                    val invoiceId = invoice.optString("id").takeUnless { it == "null" }.orEmpty()
-                    if (invoiceId.isBlank()) continue
-                    add(CommercialCloudSupplierInvoiceSummary(
-                        id = invoiceId,
-                        invoiceNumber = invoice.optString("invoice_number").takeUnless { it == "null" }.orEmpty(),
-                        totalMinor = invoice.optLong("total_minor", 0L),
-                        subtotalMinor = invoice.optLong("subtotal_minor", 0L),
-                        taxMinor = invoice.optLong("tax_minor", 0L),
-                        freightMinor = invoice.optLong("freight_minor", 0L),
-                        currencyCode = invoice.optString("currency_code").takeUnless { it == "null" }.orEmpty(),
-                        recordedAt = invoice.optString("recorded_at").takeUnless { it == "null" }.orEmpty(),
-                        state = invoice.optString("state").takeUnless { it == "null" }.orEmpty(),
-                        obligation = (invoice.optJSONObject("obligation") ?: invoice.optJSONArray("obligation")?.optJSONObject(0))?.let { ob ->
-                            val obligationId = ob.optString("id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
-                            if (obligationId.isBlank()) null else CommercialCloudSupplierObligationSummary(
-                                id = obligationId,
-                                amountDueMinor = ob.optLong("amount_due_minor", 0L),
-                                amountPaidMinor = ob.optLong("amount_paid_minor", 0L),
-                                state = ob.optString("state").takeUnless { it == "null" }.orEmpty(),
-                                currencyCode = ob.optString("currency_code").takeUnless { it == "null" }.orEmpty()
-                            )
-                        }
-                    ))
-                }
-            }.sortedBy { it.recordedAt }
             val lines = buildList {
                 for (lineIndex in 0 until (items?.length() ?: 0)) {
                     val item = items?.optJSONObject(lineIndex) ?: continue
