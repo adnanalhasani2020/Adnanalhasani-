@@ -212,6 +212,7 @@ internal fun CommercialCloudDebtScreen(context: Context, onBack: () -> Unit) {
     }
 
     val requestTarget = selectedRequest
+    val requestCurrentDue = requestTarget?.let { target -> rows.firstOrNull { it.saleId == target.saleId }?.dueMinor }
     if (requestTarget != null) AlertDialog(
         onDismissRequest = { if (!busy) selectedRequest = null },
         title = { Text("مراجعة طلب سند قبض") },
@@ -220,6 +221,11 @@ internal fun CommercialCloudDebtScreen(context: Context, onBack: () -> Unit) {
                 Text(requestTarget.customerName, color = DebtInk, fontWeight = FontWeight.SemiBold)
                 Text("فاتورة #"+requestTarget.invoiceNumber, color = DebtMuted, fontSize = 12.sp)
                 Text("المبلغ الذي طلبه العميل: "+cloudDebtMoney(requestTarget.amountMinor, requestTarget.currencyCode), color = DebtMuted, fontSize = 12.sp)
+                Text(
+                    requestCurrentDue?.let { "المتبقي حسب النظام: "+cloudDebtMoney(it, requestTarget.currencyCode) } ?: "الفاتورة لا تظهر الآن ضمن المديونيات المستحقة.",
+                    color = if (requestCurrentDue == null || requestCurrentDue < requestTarget.amountMinor) Color(0xFF9C3028) else DebtMuted,
+                    fontSize = 12.sp
+                )
                 OutlinedTextField(
                     value = confirmedAmount,
                     onValueChange = { confirmedAmount = it.filter(Char::isDigit).take(18) },
@@ -242,6 +248,9 @@ internal fun CommercialCloudDebtScreen(context: Context, onBack: () -> Unit) {
                     minLines = 2,
                     modifier = Modifier.fillMaxWidth()
                 )
+                if (requestCurrentDue == null || requestCurrentDue < requestTarget.amountMinor) {
+                    Text("لا يمكن اعتماد الطلب لأن المتبقي الحالي أقل من المبلغ المطلوب أو لم يعد مستحقًا.", color = Color(0xFF9C3028), fontSize = 11.sp)
+                }
                 if (confirmedAmount.toLongOrNull() != requestTarget.amountMinor) {
                     Text("المبلغ الفعلي لا يطابق طلب العميل. اطلب التعديل أو ارفض الطلب؛ لا تعتمد مبلغًا مختلفًا.", color = Color(0xFF9C3028), fontSize = 11.sp)
                 }
@@ -250,7 +259,7 @@ internal fun CommercialCloudDebtScreen(context: Context, onBack: () -> Unit) {
         },
         confirmButton = {
             Button(
-                enabled = !busy && confirmedAmount.toLongOrNull() == requestTarget.amountMinor,
+                enabled = !busy && requestCurrentDue != null && requestCurrentDue >= requestTarget.amountMinor && confirmedAmount.toLongOrNull() == requestTarget.amountMinor,
                 onClick = {
                     busy = true
                     error = ""
