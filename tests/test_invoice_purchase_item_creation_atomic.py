@@ -30,6 +30,8 @@ class InvoicePurchaseItemCreationAtomicTests(unittest.TestCase):
             "'initial_quantity', 0",
             "'stock_created', false",
             "'reapproval_required', (v_order.status = 'approved')",
+            "'reapproval_required',v_reapproval_required",
+            "CREATE OR REPLACE FUNCTION commercial_private.commercial_link_purchase_order_item_offering(",
             "is_available = false",
             "pricing_status = 'unpriced'",
             "GRANT EXECUTE ON FUNCTION public.commercial_create_and_link_invoice_purchase_item",
@@ -64,7 +66,7 @@ class InvoicePurchaseItemCreationAtomicTests(unittest.TestCase):
         self.assertIn("لا ينشأ رصيد مستقل للمستودع", source)
         self.assertIn("purchase_order_id", source)
         self.assertIn("result?.optBoolean(\"reapproval_required\",false)", source)
-        self.assertIn("val requiresReapproval=invoiceMappingPurchaseOrderStatus==\"approved\"", source)
+        self.assertIn("val orderNeedsReapproval=result?.optBoolean(\"reapproval_required\",false) ?: false", source)
 
 
 if __name__ == "__main__":
