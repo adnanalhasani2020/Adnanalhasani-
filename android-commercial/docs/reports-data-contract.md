@@ -99,3 +99,7 @@ Source-contract assertions were added for financial-statement gating, party-cont
 - The cloud report "أداء المبيعات حسب المستخدم" groups completed sales in the selected period by the persisted `commercial_sales.user_id` and currency. It reports invoice count, recorded sales total, and average invoice value; it does not claim net profit or collections.
 - Sales without a persisted actor are grouped as "غير منسوب". Until a verified user display-name relationship is exposed to this report, the report shows the stored user identifier rather than guessing a person's name.
 - Branch and warehouse performance remain separate unfinished work: the current sale document projection does not persist a reliable branch/location foreign key. Stock movement source text is not treated as an authoritative substitute.
+
+## Stock movement activity by user
+- The cloud report "حركة المخزون حسب المستخدم" groups rows from `commercial_stock_movements` by persisted `created_by`, movement type, and recorded unit. It shows movement count and signed net quantity; negative quantities remain negative and no financial value is inferred.
+- Missing actors are grouped as "غير منسوب". The report keeps units separate so quantities such as pieces, kilograms, and liters are never added together. It does not infer branch or warehouse attribution from `source_ref`.

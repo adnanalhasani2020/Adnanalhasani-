@@ -27,3 +27,21 @@ def test_user_sales_performance_fails_closed_for_invalid_money_and_duplicate_inv
     calculations = CALCULATIONS.read_text(encoding="utf-8")
     assert "invoice.invoiceId.isNotBlank() && seen.add(invoice.invoiceId)" in calculations
     assert 'invoice.currencyCode.matches(Regex("^[A-Z]{3}$")) && invoice.totalMinor >= 0L' in calculations
+
+
+
+def test_stock_movement_user_report_uses_persisted_actor_and_separates_units():
+    repository = REPOSITORY.read_text(encoding="utf-8")
+    screen = SCREEN.read_text(encoding="utf-8")
+    calculations = CALCULATIONS.read_text(encoding="utf-8")
+    contract = CONTRACT.read_text(encoding="utf-8")
+
+    assert "created_at,created_by,source_ref,offering_id,movement_type,quantity_delta" in repository
+    assert 'createdBy = row.optString("created_by")' in repository
+    assert 'ReportCatalogItem("حركة المخزون حسب المستخدم"' in screen
+    assert "buildStockMovementUserReportState(" in screen
+    assert "StockMovementUserInput(" in calculations
+    assert "internal fun calculateStockMovementUserTotals(" in calculations
+    assert 'it.unitName.trim().ifBlank { "وحدة غير محددة" }' in calculations
+    assert 'movementId.isNotBlank() && seen.add(movement.movementId)' in calculations
+    assert 'by persisted `created_by`, movement type, and recorded unit' in contract

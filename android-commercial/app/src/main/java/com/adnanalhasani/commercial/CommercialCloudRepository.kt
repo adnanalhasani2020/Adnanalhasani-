@@ -792,6 +792,7 @@ internal data class CommercialCloudStockMovement(
     val saleId: String,
     val saleReceiptNumber: String,
     val saleStatus: String,
+    val createdBy: String,
     val createdAt: String
 )
 
@@ -802,7 +803,7 @@ internal fun loadCommercialCloudStockMovements(context: Context): List<Commercia
     require(activityId.isNotBlank()) { "ملف النشاط غير محفوظ." }
     val (orgId, access) = commercialMasterDataAccess(context)
     val path = "/rest/v1/commercial_stock_movements" +
-        "?select=id,sale_id,created_at,source_ref,offering_id,movement_type,quantity_delta,offering:commercial_offerings!inner(id,activity_id,product:commercial_products(name,unit_name),activity:commercial_activities!inner(organization_id)),sale:commercial_sales(receipt_number,status)" +
+        "?select=id,sale_id,created_at,created_by,source_ref,offering_id,movement_type,quantity_delta,offering:commercial_offerings!inner(id,activity_id,product:commercial_products(name,unit_name),activity:commercial_activities!inner(organization_id)),sale:commercial_sales(receipt_number,status)" +
         "&offering.activity_id=eq.$activityId&offering.activity.organization_id=eq.$orgId&order=created_at.asc,id.asc"
     val rows = commercialCloudPagedGet(path, access)
     return buildList {
@@ -826,6 +827,7 @@ internal fun loadCommercialCloudStockMovements(context: Context): List<Commercia
                 saleId = row.optString("sale_id").takeUnless { it == "null" }.orEmpty(),
                 saleReceiptNumber = sale?.optString("receipt_number").takeUnless { it == null || it == "null" }.orEmpty(),
                 saleStatus = sale?.optString("status").takeUnless { it == null || it == "null" }.orEmpty(),
+                createdBy = row.optString("created_by").takeUnless { it.isBlank() || it == "null" }.orEmpty(),
                 createdAt = row.optString("created_at").takeUnless { it == "null" }.orEmpty()
             ))
         }

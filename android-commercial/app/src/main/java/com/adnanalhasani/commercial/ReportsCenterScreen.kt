@@ -255,6 +255,7 @@ private fun buildReportsCatalog(cloudMode: Boolean): List<ReportCatalogItem> = l
             ReportCatalogItem("التقييم المالي الحالي للمخزون", "الأصناف والمخزون", "commercial_inventory_balances.unit_cost_minor + حساب المخزون المربوط", cloudMode, "يقيم كمية الموقع الحالي بتكلفة الوحدة المسجلة وبعملة حساب المخزون المربوط؛ يحجب التقييم إذا غابت التكلفة أو العملة. لا يمثل تقييمًا تاريخيًا."),
 
             ReportCatalogItem("حركة المخزون الفعلية", "الأصناف والمخزون", "commercial_stock_movements المرتبطة بنشاط المؤسسة", cloudMode, "يعرض حركات الكمية المسجلة من دفتر حركة المخزون، مع مرجع المصدر وحالة فاتورة البيع عند توفرها؛ لا يستنتج تكلفة أو قيمة مالية من الكمية."),
+            ReportCatalogItem("حركة المخزون حسب المستخدم", "المستخدمون والعمليات", "commercial_stock_movements.created_by + movement_type + quantity_delta", cloudMode, "يجمع عدد الحركات وصافي الكمية حسب المستخدم ونوع الحركة ووحدة القياس المحفوظة؛ يعرض معرف المستخدم فقط، ويفصل الوحدات ولا يستنتج تكلفة أو فرعًا أو مستودعًا."),
             ReportCatalogItem("تنبيهات المخزون المنخفض", "الأصناف والمخزون", "الرصيد وحد إعادة الطلب", true, "يعتمد على حد التنبيه المسجل لكل صنف."),
             ReportCatalogItem("فواتير الشراء والمستحقات المسجلة", "المشتريات", "commercial_purchase_orders ← supplier_invoices ← supplier_obligations", cloudMode, "يُعرض مبلغ الفاتورة والرصيد المستحق من سجل الالتزام؛ لا يُخلط مع قيمة أمر الشراء."),
             ReportCatalogItem("فروقات أسعار فواتير الموردين", "المشتريات", "commercial_supplier_invoice_items مقابل commercial_purchase_order_items.unit_cost_minor", cloudMode, "يقارن مجموع بنود فاتورة المورد بسعر الأساس المسجل في أمر الشراء، وفق تقريب القيد المحاسبي نفسه؛ يستبعد الضريبة والشحن من فرق السعر ويوقف التقرير إذا تعذر مطابقة أي بند."),
@@ -291,6 +292,57 @@ private fun buildReportsCatalog(cloudMode: Boolean): List<ReportCatalogItem> = l
             ReportCatalogItem("ربحية الأصناف بعد المرتجعات", "الأرباح والتكاليف", "commercial_sale_items + commercial_sale_return_items", cloudMode, "يحسب صافي الإيراد والتكلفة والربح لكل صنف وعملة، ويربط كل مرتجع ببند البيع الأصلي ويعكس تكلفة الكمية المعاد تخزينها؛ يحجب النتائج عند نقص تكلفة تاريخية أو عدم تطابق مبلغ اعتماد المرتجع مع بنوده، أو وجود خصم فاتورة غير موزع أو مرتجع على فاتورة ضريبية.")
 )
 private data class ReportLine(val date: String, val reference: String, val name: String, val amount: Long, val currency: String, val status: String, val displayAmount: String? = null)
+
+private data class StockMovementUserReportState(val lines: List<ReportLine>, val error: String)
+
+private fun buildStockMovementUserReportState(
+    movements: List<CommercialCloudStockMovement>,
+    startDate: LocalDate?,
+    endDate: LocalDate?,
+    cloudMode: Boolean,
+    loadError: String
+): StockMovementUserReportState {
+    if (!cloudMode) return StockMovementUserReportState(emptyList(), "تقرير حركة المخزون حسب المستخدم يتطلب سجل الحركات السحابي.")
+    if (loadError.isNotBlank()) return StockMovementUserReportState(emptyList(), loadError)
+    val start = startDate ?: return StockMovementUserReportState(emptyList(), "تاريخ بداية الفترة غير صالح.")
+    val end = endDate ?: return StockMovementUserReportState(emptyList(), "تاريخ نهاية الفترة غير صالح.")
+    if (start.isAfter(end)) return StockMovementUserReportState(emptyList(), "فترة التقرير غير صحيحة.")
+    val datedMovements = runCatching {
+        movements.map { movement -> movement to LocalDate.parse(movement.createdAt.take(10)) }
+    }.getOrElse {
+        return StockMovementUserReportState(emptyList(), "توجد حركة مخزون بتاريخ غير صالح؛ تم حجب التجميع حتى لا تُستبعد حركة من الفترة.")
+    }
+    val periodMovements = datedMovements.filter { (_, date) ->
+        !date.isBefore(start) && !date.isAfter(end)
+    }.map { it.first }
+    val totals = runCatching {
+        calculateStockMovementUserTotals(periodMovements.map { movement ->
+            StockMovementUserInput(
+                movementId = movement.id,
+                userId = movement.createdBy,
+                movementType = movement.movementType,
+                unitName = movement.unitName,
+                quantityDelta = movement.quantityDelta
+            )
+        })
+    }.getOrElse {
+        return StockMovementUserReportState(emptyList(), it.message.orEmpty().ifBlank { "تعذر حساب تقرير حركة المخزون حسب المستخدم." })
+    }
+    val lines = totals.map { row ->
+        val actorLabel = if (row.userId == "غير منسوب") "حركات غير منسوبة لمستخدم"
+            else "مستخدم ${row.userId}"
+        ReportLine(
+            "${start} — ${end}",
+            "${row.movementCount} حركة",
+            "$actorLabel · ${row.movementType}",
+            0L,
+            "-",
+            "عدد الحركات: ${row.movementCount} · نوع الحركة: ${row.movementType} · المستخدم المسجل: ${row.userId}",
+            displayAmount = row.quantityDelta.stripTrailingZeros().toPlainString() + " " + row.unitName
+        )
+    }
+    return StockMovementUserReportState(lines, "")
+}
 
 private fun CommercialCloudSupplierInvoiceSummary.toPriceVarianceInput() = SupplierInvoicePriceVarianceInput(
     currencyCode = currencyCode,
@@ -896,6 +948,11 @@ internal fun ReportsCenterScreen(
         else -> userSalesPerformanceCalculation.exceptionOrNull()?.message.orEmpty()
     }
 
+
+    val stockMovementUserReport = remember(cloudStockMovements, startDate, endDate, cloudMode, stockMovementsLoadError) {
+        buildStockMovementUserReportState(cloudStockMovements, startDate, endDate, cloudMode, stockMovementsLoadError)
+    }
+
     val dailySalesTrendCalculation = remember(cloudSalesDocuments, startMillis, endExclusive, cloudMode) {
         runCatching {
             val invoices = cloudSalesDocuments.filter { document ->
@@ -992,6 +1049,7 @@ internal fun ReportsCenterScreen(
             "أرصدة الموردين والمستحقات" -> supplierStatementError
             "المصروفات التشغيلية", "ملخص المصروفات حسب التصنيف وطريقة الصرف" -> expenseReportError
             "حركة المخزون الفعلية" -> stockMovementsLoadError
+            "حركة المخزون حسب المستخدم" -> stockMovementUserReport.error
             "رصيد المخزون الحالي", "تنبيهات المخزون المنخفض" -> stockAlertsLoadError
             else -> ""
         }
@@ -1688,6 +1746,7 @@ internal fun ReportsCenterScreen(
                     "مجموع الكميات الحالية × تكلفة الوحدة المسجلة؛ لا يتضمن تقييمًا تاريخيًا أو مطابقة دفتر الأستاذ"))
             }
         }
+        "حركة المخزون حسب المستخدم" -> stockMovementUserReport.lines
         "حركة المخزون الفعلية" -> cloudStockMovements.filter { movement ->
             reportDateMillis(movement.createdAt)?.let { it >= startMillis && it < endExclusive } == true
         }.map { movement ->
@@ -1889,7 +1948,7 @@ internal fun ReportsCenterScreen(
                         "فواتير الشراء والمستحقات المسجلة", "المشتريات حسب المورد", "فروقات أسعار فواتير الموردين", "مستحقات فواتير الموردين", "أعمار مستحقات الموردين", "عمر مستحقات الموردين حسب تاريخ الفاتورة", "مرتجعات المبيعات وحالة التسوية", "سندات القبض والصرف", "سجل القيود المحاسبية",
                         "ميزان المراجعة حسب الحساب", "حركة دفتر الأستاذ العام", "كشف حساب محاسبي", "أرصدة العملاء وكشف الحساب", "كشف حركات الموردين",
                         "الرصيد المحاسبي الكامل للعملاء", "أرصدة الموردين والمستحقات", "قائمة الدخل والميزانية العمومية", "التدفقات النقدية والصندوق", "تكلفة البضاعة والربح", "ربحية الأصناف بعد المرتجعات", "الضرائب والخصومات التفصيلية",
-                        "حركة المخزون الفعلية", "التقييم المالي الحالي للمخزون", "تفاصيل القيود المرحلة" -> selectedReport = report.title
+                        "حركة المخزون الفعلية", "حركة المخزون حسب المستخدم", "التقييم المالي الحالي للمخزون", "تفاصيل القيود المرحلة" -> selectedReport = report.title
                         "لوحة المؤشرات" -> selectedReport = "ملخص المبيعات حسب الفترة"
                     }
                 }),
