@@ -555,10 +555,16 @@ internal fun ReportsCenterScreen(
         supplierInvoiceDetailError.isNotBlank() -> supplierInvoiceDetailError
         activeSupplierInvoiceCandidates.any { (_, invoice) ->
             invoice.subtotalMinor < 0L || invoice.taxMinor < 0L || invoice.freightMinor < 0L ||
+                invoice.lines.isEmpty() ||
+                invoice.lines.any { line ->
+                    line.lineTotalMinor < 0L || line.unitPriceMinor < 0L ||
+                        line.quantity.toBigDecimalOrNull()?.signum() != 1
+                } ||
+                runCatching { sumReportAmountsExactly(invoice.lines.map { it.lineTotalMinor }) }.getOrNull() != invoice.subtotalMinor ||
                 runCatching {
                     Math.addExact(Math.addExact(invoice.subtotalMinor, invoice.taxMinor), invoice.freightMinor)
                 }.getOrNull() != invoice.totalMinor
-        } -> "توجد فاتورة مورد لا يتطابق إجماليها مع البنود والضريبة والشحن؛ تم حجب ملخص الموردين."
+        } -> "توجد فاتورة مورد لا تتطابق بنودها أو إجمالياتها مع الضريبة والشحن؛ تم حجب ملخص الموردين."
         else -> supplierPurchaseSummaryCalculation.exceptionOrNull()?.message.orEmpty()
     }
     val supplierObligationsError = when {
