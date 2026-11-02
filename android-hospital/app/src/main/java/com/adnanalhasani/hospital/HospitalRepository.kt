@@ -1,13 +1,23 @@
 package com.adnanalhasani.hospital
 
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.withContext
 
 /**
  * Repository boundary for Compose screens.
  * The DAO transaction keeps module-indexed rows and legacy records synchronized.
  */
-class HospitalRepository(private val dao: HospitalDao) {
+class HospitalRepository(private val dao: HospitalDao, database: HospitalDatabase? = null) {
+    private val localWorkflows = database?.let(::LocalWorkflowStore)
     fun allRecords(): Flow<List<HospitalRecord>> = dao.allRecords()
+
+    suspend fun localWorkflowRows(category: String): List<Pair<String, String>> =
+        withContext(Dispatchers.IO) { localWorkflows?.rows(category).orEmpty() }
+
+    suspend fun localAuditRows(): List<Pair<String, String>> = localWorkflowRows("audit")
+
+    suspend fun localFinanceOutboxRows(): List<Pair<String, String>> = localWorkflowRows("finance_outbox")
 
     fun patients(): Flow<List<PatientEntity>> = dao.patients()
 
@@ -85,17 +95,71 @@ class HospitalRepository(private val dao: HospitalDao) {
     fun upcomingVaccinations(today: String): Flow<List<VaccinationRecordEntity>> = dao.upcomingVaccinations(today)
     fun overdueVaccinations(today: String): Flow<List<VaccinationRecordEntity>> = dao.overdueVaccinations(today)
 
-    suspend fun saveRecord(record: HospitalRecord) = dao.saveRecord(record)
+    suspend fun saveRecord(record: HospitalRecord) {
+        withContext(Dispatchers.IO) { localWorkflows?.validate(record) }
+        val sourceRecordId = dao.saveRecord(record)
+        try {
+            withContext(Dispatchers.IO) { localWorkflows?.sync(record, sourceRecordId) }
+        } catch (failure: Throwable) {
+            // Keep the searchable Room record and operational SQLite projection consistent.
+            runCatching { dao.delete(sourceRecordId) }
+            throw failure
+        }
+    }
 
-    suspend fun saveClinicalVisit(record: HospitalRecord, patientId: Long, doctorId: Long) =
-        dao.saveRecord(record, linkedPatientId = patientId, linkedDoctorId = doctorId)
+    suspend fun saveClinicalVisit(record: HospitalRecord, patientId: Long, doctorId: Long) {
+        withContext(Dispatchers.IO) { localWorkflows?.validate(record) }
+        val sourceRecordId = dao.saveRecord(record, linkedPatientId = patientId, linkedDoctorId = doctorId)
+        try {
+            withContext(Dispatchers.IO) { localWorkflows?.sync(record, sourceRecordId) }
+        } catch (failure: Throwable) {
+            runCatching { dao.delete(sourceRecordId) }
+            throw failure
+        }
+    }
 
-    suspend fun updateRecord(id: Long, title: String, details: String) = dao.updateRecord(id, title, details)
+    suspend fun updateRecord(id: Long, title: String, details: String) {
+        val current = dao.recordById(id) ?: return
+        val updated = current.copy(title = title, details = details)
+        withContext(Dispatchers.IO) { localWorkflows?.validate(updated, id) }
+        dao.updateRecord(id, title, details)
+        try {
+            withContext(Dispatchers.IO) { localWorkflows?.sync(updated, id) }
+        } catch (failure: Throwable) {
+            // Restore the generic record if its local workflow projection rejects the update.
+            runCatching { dao.updateRecord(id, current.title, current.details) }
+            throw failure
+        }
+    }
 
-    suspend fun updateClinicalVisitRecord(id: Long, title: String, details: String, patientId: Long, doctorId: Long) =
+    suspend fun updateClinicalVisitRecord(id: Long, title: String, details: String, patientId: Long, doctorId: Long) {
+        val current = dao.recordById(id) ?: return
+        val currentVisit = dao.clinicalVisitBySourceRecordId(id)
+        val updated = current.copy(title = title, details = details)
+        withContext(Dispatchers.IO) { localWorkflows?.validate(updated, id) }
         dao.updateRecord(id, title, details, linkedPatientId = patientId, linkedDoctorId = doctorId)
+        try {
+            withContext(Dispatchers.IO) { localWorkflows?.sync(updated, id) }
+        } catch (failure: Throwable) {
+            runCatching {
+                dao.updateRecord(
+                    id, current.title, current.details,
+                    linkedPatientId = currentVisit?.patientId,
+                    linkedDoctorId = currentVisit?.doctorId
+                )
+            }
+            throw failure
+        }
+    }
 
     suspend fun updateEmergencyCase(id: Long, details: String, status: String) = dao.updateEmergencyCase(id, details, status)
 
-    suspend fun deleteRecord(id: Long) = dao.delete(id)
+    suspend fun deleteRecord(id: Long) {
+        val current = dao.recordById(id)
+        if (current != null) {
+            withContext(Dispatchers.IO) { localWorkflows?.validateDeletion(current) }
+        }
+        dao.delete(id)
+        if (current != null) withContext(Dispatchers.IO) { localWorkflows?.auditDeletion(current) }
+    }
 }
