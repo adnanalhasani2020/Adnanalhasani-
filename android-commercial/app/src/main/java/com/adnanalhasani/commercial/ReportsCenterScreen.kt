@@ -293,6 +293,57 @@ private fun buildReportsCatalog(cloudMode: Boolean): List<ReportCatalogItem> = l
 )
 private data class ReportLine(val date: String, val reference: String, val name: String, val amount: Long, val currency: String, val status: String, val displayAmount: String? = null)
 
+private data class StockMovementUserReportState(val lines: List<ReportLine>, val error: String)
+
+private fun buildStockMovementUserReportState(
+    movements: List<CommercialCloudStockMovement>,
+    startDate: LocalDate?,
+    endDate: LocalDate?,
+    cloudMode: Boolean,
+    loadError: String
+): StockMovementUserReportState {
+    if (!cloudMode) return StockMovementUserReportState(emptyList(), "تقرير حركة المخزون حسب المستخدم يتطلب سجل الحركات السحابي.")
+    if (loadError.isNotBlank()) return StockMovementUserReportState(emptyList(), loadError)
+    val start = startDate ?: return StockMovementUserReportState(emptyList(), "تاريخ بداية الفترة غير صالح.")
+    val end = endDate ?: return StockMovementUserReportState(emptyList(), "تاريخ نهاية الفترة غير صالح.")
+    if (start.isAfter(end)) return StockMovementUserReportState(emptyList(), "فترة التقرير غير صحيحة.")
+    val datedMovements = runCatching {
+        movements.map { movement -> movement to LocalDate.parse(movement.createdAt.take(10)) }
+    }.getOrElse {
+        return StockMovementUserReportState(emptyList(), "توجد حركة مخزون بتاريخ غير صالح؛ تم حجب التجميع حتى لا تُستبعد حركة من الفترة.")
+    }
+    val periodMovements = datedMovements.filter { (_, date) ->
+        !date.isBefore(start) && !date.isAfter(end)
+    }.map { it.first }
+    val totals = runCatching {
+        calculateStockMovementUserTotals(periodMovements.map { movement ->
+            StockMovementUserInput(
+                movementId = movement.id,
+                userId = movement.createdBy,
+                movementType = movement.movementType,
+                unitName = movement.unitName,
+                quantityDelta = movement.quantityDelta
+            )
+        })
+    }.getOrElse {
+        return StockMovementUserReportState(emptyList(), it.message.orEmpty().ifBlank { "تعذر حساب تقرير حركة المخزون حسب المستخدم." })
+    }
+    val lines = totals.map { row ->
+        val actorLabel = if (row.userId == "غير منسوب") "حركات غير منسوبة لمستخدم"
+            else "مستخدم ${row.userId}"
+        ReportLine(
+            "${start} — ${end}",
+            "${row.movementCount} حركة",
+            "$actorLabel · ${row.movementType}",
+            0L,
+            "-",
+            "عدد الحركات: ${row.movementCount} · نوع الحركة: ${row.movementType} · المستخدم المسجل: ${row.userId}",
+            displayAmount = row.quantityDelta.stripTrailingZeros().toPlainString() + " " + row.unitName
+        )
+    }
+    return StockMovementUserReportState(lines, "")
+}
+
 private fun CommercialCloudSupplierInvoiceSummary.toPriceVarianceInput() = SupplierInvoicePriceVarianceInput(
     currencyCode = currencyCode,
     subtotalMinor = subtotalMinor,
@@ -898,28 +949,8 @@ internal fun ReportsCenterScreen(
     }
 
 
-    val stockMovementUserCalculation = remember(cloudStockMovements, startMillis, endExclusive, cloudMode) {
-        runCatching {
-            val periodMovements = cloudStockMovements.filter { movement ->
-                reportDateMillis(movement.createdAt)?.let { it >= startMillis && it < endExclusive } == true
-            }
-            calculateStockMovementUserTotals(periodMovements.map { movement ->
-                StockMovementUserInput(
-                    movementId = movement.id,
-                    userId = movement.createdBy,
-                    movementType = movement.movementType,
-                    unitName = movement.unitName,
-                    quantityDelta = movement.quantityDelta
-                )
-            })
-        }
-    }
-    val stockMovementUserReportError = when {
-        !cloudMode -> "تقرير حركة المخزون حسب المستخدم يتطلب سجل الحركات السحابي."
-        stockMovementsLoadError.isNotBlank() -> stockMovementsLoadError
-        cloudStockMovements.any { reportDateMillis(it.createdAt) == null } ->
-            "توجد حركة مخزون بتاريخ غير صالح؛ تم حجب التجميع حتى لا تُستبعد حركة من الفترة."
-        else -> stockMovementUserCalculation.exceptionOrNull()?.message.orEmpty()
+    val stockMovementUserReport = remember(cloudStockMovements, startDate, endDate, cloudMode, stockMovementsLoadError) {
+        buildStockMovementUserReportState(cloudStockMovements, startDate, endDate, cloudMode, stockMovementsLoadError)
     }
 
     val dailySalesTrendCalculation = remember(cloudSalesDocuments, startMillis, endExclusive, cloudMode) {
@@ -1018,7 +1049,7 @@ internal fun ReportsCenterScreen(
             "أرصدة الموردين والمستحقات" -> supplierStatementError
             "المصروفات التشغيلية", "ملخص المصروفات حسب التصنيف وطريقة الصرف" -> expenseReportError
             "حركة المخزون الفعلية" -> stockMovementsLoadError
-            "حركة المخزون حسب المستخدم" -> stockMovementUserReportError
+            "حركة المخزون حسب المستخدم" -> stockMovementUserReport.error
             "رصيد المخزون الحالي", "تنبيهات المخزون المنخفض" -> stockAlertsLoadError
             else -> ""
         }
@@ -1715,20 +1746,7 @@ internal fun ReportsCenterScreen(
                     "مجموع الكميات الحالية × تكلفة الوحدة المسجلة؛ لا يتضمن تقييمًا تاريخيًا أو مطابقة دفتر الأستاذ"))
             }
         }
-        "حركة المخزون حسب المستخدم" -> if (stockMovementUserReportError.isNotBlank()) emptyList()
-            else stockMovementUserCalculation.getOrThrow().map { row ->
-                val actorLabel = if (row.userId == "غير منسوب") "حركات غير منسوبة لمستخدم"
-                    else "مستخدم ${row.userId}"
-                ReportLine(
-                    "${startText} — ${endText}",
-                    "${row.movementCount} حركة",
-                    "$actorLabel · ${row.movementType}",
-                    0L,
-                    "-",
-                    "عدد الحركات: ${row.movementCount} · نوع الحركة: ${row.movementType} · المستخدم المسجل: ${row.userId}",
-                    displayAmount = row.quantityDelta.stripTrailingZeros().toPlainString() + " " + row.unitName
-                )
-            }
+        "حركة المخزون حسب المستخدم" -> stockMovementUserReport.lines
         "حركة المخزون الفعلية" -> cloudStockMovements.filter { movement ->
             reportDateMillis(movement.createdAt)?.let { it >= startMillis && it < endExclusive } == true
         }.map { movement ->
