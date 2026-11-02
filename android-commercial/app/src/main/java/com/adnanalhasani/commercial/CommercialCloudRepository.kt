@@ -2086,7 +2086,8 @@ internal fun restockCommercialCloudSaleReturn(context: Context, returnId: String
 internal data class CommercialCloudRecord(
     val id: String, val title: String, val subtitle: String, val status: String,
     val amountMinor: Long = 0L, val createdAt: String = "",
-    val details: List<String> = emptyList(), val currencyCode: String = ""
+    val details: List<String> = emptyList(), val currencyCode: String = "",
+    val paymentMethodCode: String = ""
 )
 
 /** Read-only operational projections. Writes must use an approved RPC, never generic POST. */
@@ -2165,7 +2166,13 @@ internal fun loadCommercialCloudRecords(context: Context, screenKey: String): Li
                 ).distinct()
                 else -> emptyList()
             }
-            add(CommercialCloudRecord(id, title, subtitle, status, amount, row.optString("created_at").takeUnless { it == "null" }.orEmpty(), details, row.optString("currency_code").takeUnless { it == "null" }.orEmpty()))
+            add(CommercialCloudRecord(
+                id, title, subtitle, status, amount,
+                row.optString("created_at").takeUnless { it == "null" }.orEmpty(),
+                details,
+                row.optString("currency_code").takeUnless { it == "null" }.orEmpty(),
+                if (screenKey == "payments") row.optString("payment_method_type").takeUnless { it == "null" }.orEmpty() else ""
+            ))
         }
     }
 }
