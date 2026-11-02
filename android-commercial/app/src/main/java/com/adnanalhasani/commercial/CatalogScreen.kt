@@ -149,6 +149,8 @@ private data class InvoicePurchaseRequestRow(
  val purchaseOrderId: String,val createdAt: String
 )
 
+private data class InvoicePurchaseUnmappedLine(val id: String,val lineNumber: Int,val description: String,val quantity: String,val unitCode: String)
+private data class InvoicePurchaseOffering(val id: String,val globalItemId: String,val name: String,val unitCode: String)
 private data class DirectoryUnit(val code: String, val nameAr: String, val nameEn: String, val dimension: String, val baseCode: String, val factor: String, val owner: String, val localizedName: String = "")
 private data class PendingTransfer(val id: String, val source: String, val destination: String, val itemCount: Int, val createdAt: String)
 
@@ -247,6 +249,14 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var invoiceDestinationOrg by remember { mutableStateOf("") }
     var invoiceRequestKey by remember { mutableStateOf(java.util.UUID.randomUUID().toString()) }
     var invoiceRequests by remember { mutableStateOf<List<InvoicePurchaseRequestRow>>(emptyList()) }
+    var invoiceMappingRequestId by remember { mutableStateOf("") }
+    var invoiceMappingPurchaseOrderId by remember { mutableStateOf("") }
+    var invoiceMappingLines by remember { mutableStateOf<List<InvoicePurchaseUnmappedLine>>(emptyList()) }
+    var invoiceMappingOfferings by remember { mutableStateOf<List<InvoicePurchaseOffering>>(emptyList()) }
+    var invoiceMappingLineId by remember { mutableStateOf("") }
+    var invoiceMappingOfferingId by remember { mutableStateOf("") }
+    var invoiceMappingLineMenuExpanded by remember { mutableStateOf(false) }
+    var invoiceMappingOfferingMenuExpanded by remember { mutableStateOf(false) }
     var invoiceReceiveLocationId by remember { mutableStateOf("") }
     var invoiceReceiveLocationMenuExpanded by remember { mutableStateOf(false) }
     val catalogListState = rememberLazyListState()
@@ -826,6 +836,83 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             loadInvoiceRequests()
         })
     }
+    fun loadInvoicePurchaseUnmappedLines(req: InvoicePurchaseRequestRow) {
+        val active=token ?: return
+        val orgId=org() ?: run { feedback="أدخل معرّف المؤسسة UUID أولًا."; return }
+        if(req.destinationOrganizationId!=orgId || req.status!="approved" || req.purchaseOrderId.isBlank()) {
+            feedback="إدارة المطابقة متاحة للمؤسسة المستقبلة بعد الموافقة فقط."
+            return
+        }
+        request({
+            val poRows=JSONArray(catalogGet("/rest/v1/commercial_purchase_orders?select=id,receive_location_id&organization_id=eq."+orgId+"&id=eq."+req.purchaseOrderId+"&limit=1",active))
+            if(poRows.length()!=1) throw IllegalStateException("لم يتم العثور على أمر الشراء ضمن المؤسسة المستقبلة.")
+            val locationId=poRows.getJSONObject(0).optString("receive_location_id").takeUnless { it=="null" }.orEmpty()
+            if(locationId.isBlank()) throw IllegalStateException("أمر الشراء لا يحتوي موقع استلام صالحًا.")
+            val lineRows=JSONArray(catalogGet("/rest/v1/commercial_purchase_order_items?select=id,line_number,item_description,quantity_ordered,quantity_received,offering_id,source_selling_unit_code&organization_id=eq."+orgId+"&purchase_order_id=eq."+req.purchaseOrderId+"&offering_id=is.null&quantity_received=eq.0&order=line_number.asc",active))
+            val mapRows=JSONArray(catalogGet("/rest/v1/commercial_catalog_item_offerings?select=offering_id,global_item_id&organization_id=eq."+orgId+"&location_id=eq."+locationId,active))
+            val globalIds=(0 until mapRows.length()).map { mapRows.getJSONObject(it).optString("global_item_id") }.filter { it.isNotBlank() }.distinct()
+            val offeringIds=(0 until mapRows.length()).map { mapRows.getJSONObject(it).optString("offering_id") }.filter { it.isNotBlank() }.distinct()
+            val encodedGlobals=java.net.URLEncoder.encode("in.("+globalIds.joinToString(",")+")","UTF-8")
+            val encodedOfferings=java.net.URLEncoder.encode("in.("+offeringIds.joinToString(",")+")","UTF-8")
+            val globalRows=if(globalIds.isEmpty()) JSONArray() else JSONArray(catalogGet("/rest/v1/commercial_global_catalog_items?select=id,name_ar,name_en,unit_code&id="+encodedGlobals+"&is_active=eq.true",active))
+            val activeOfferings=if(offeringIds.isEmpty()) JSONArray() else JSONArray(catalogGet("/rest/v1/commercial_offerings?select=id,location_ref,state&id="+encodedOfferings+"&state=eq.active&location_ref=eq."+locationId,active))
+            val names=mutableMapOf<String,Pair<String,String>>()
+            for(i in 0 until globalRows.length()) {
+                val row=globalRows.getJSONObject(i)
+                names[row.optString("id")]=Pair(row.optString("name_ar").ifBlank { row.optString("name_en") },row.optString("unit_code"))
+            }
+            val activeIds=(0 until activeOfferings.length()).map { activeOfferings.getJSONObject(it).optString("id") }.toSet()
+            val candidates=(0 until mapRows.length()).mapNotNull { i ->
+                val row=mapRows.getJSONObject(i)
+                val offeringId=row.optString("offering_id")
+                val globalId=row.optString("global_item_id")
+                val name=names[globalId]
+                if(offeringId !in activeIds || name==null) null
+                else InvoicePurchaseOffering(offeringId,globalId,name.first.ifBlank { globalId },name.second)
+            }.distinctBy { it.id }
+            val lines=(0 until lineRows.length()).map { i ->
+                val row=lineRows.getJSONObject(i)
+                InvoicePurchaseUnmappedLine(row.optString("id"),row.optInt("line_number"),row.optString("item_description"),
+                    row.optString("quantity_ordered"),row.optString("source_selling_unit_code").takeUnless { it=="null" }.orEmpty())
+            }
+            JSONObject().put("lines",JSONArray().apply { lines.forEach { put(JSONObject().put("id",it.id).put("line_number",it.lineNumber).put("description",it.description).put("quantity",it.quantity).put("unit_code",it.unitCode)) } })
+                .put("offerings",JSONArray().apply { candidates.forEach { put(JSONObject().put("id",it.id).put("global_item_id",it.globalItemId).put("name",it.name).put("unit_code",it.unitCode)) } })
+                .toString()
+        }, { raw ->
+            val result=JSONObject(raw); val lines=result.getJSONArray("lines"); val offerings=result.getJSONArray("offerings")
+            invoiceMappingLines=List(lines.length()) { i -> val row=lines.getJSONObject(i); InvoicePurchaseUnmappedLine(row.optString("id"),row.optInt("line_number"),row.optString("description"),row.optString("quantity"),row.optString("unit_code")) }
+            invoiceMappingOfferings=List(offerings.length()) { i -> val row=offerings.getJSONObject(i); InvoicePurchaseOffering(row.optString("id"),row.optString("global_item_id"),row.optString("name"),row.optString("unit_code")) }
+            invoiceMappingRequestId=req.id
+            invoiceMappingPurchaseOrderId=req.purchaseOrderId
+            invoiceMappingLineId=invoiceMappingLines.firstOrNull()?.id.orEmpty()
+            invoiceMappingOfferingId=""
+            feedback="الأصناف غير المطابقة: "+invoiceMappingLines.size+". العروض المتاحة في موقع الاستلام: "+invoiceMappingOfferings.size+". لم يتغير المخزون."
+        })
+    }
+
+    fun linkSelectedInvoicePurchaseLine() {
+        val active=token ?: return
+        val orgId=org() ?: return
+        val requestRow=invoiceRequests.firstOrNull { it.id==invoiceMappingRequestId }
+        if(requestRow==null || requestRow.destinationOrganizationId!=orgId || requestRow.status!="approved") {
+            feedback="تعذر التحقق من صلاحية طلب المطابقة."
+            return
+        }
+        val line=invoiceMappingLines.firstOrNull { it.id==invoiceMappingLineId } ?: run { feedback="اختر بندًا غير مطابق."; return }
+        val offering=invoiceMappingOfferings.firstOrNull { it.id==invoiceMappingOfferingId } ?: run { feedback="اختر صنفًا محليًا مرتبطًا بموقع الاستلام."; return }
+        request({
+            catalogHttp("/rest/v1/rpc/commercial_link_purchase_order_item_offering",JSONObject()
+                .put("p_organization_id",orgId).put("p_purchase_order_id",invoiceMappingPurchaseOrderId)
+                .put("p_purchase_order_item_id",line.id).put("p_offering_id",offering.id),active)
+        }, {
+            invoiceMappingLines=invoiceMappingLines.filterNot { it.id==line.id }
+            invoiceMappingLineId=invoiceMappingLines.firstOrNull()?.id.orEmpty()
+            invoiceMappingOfferingId=""
+            feedback="تم ربط بند الفاتورة بالصنف المحلي "+offering.name+". لم يتغير المخزون؛ سيُحدّث عند الاستلام فقط."
+            loadInvoicePurchaseUnmappedLines(requestRow)
+        })
+    }
+
     fun transferCatalog() {
         val active=token ?: return
         if(transferSource.isBlank() || transferDestination.isBlank()) { feedback="أدخل معرّف الحساب المصدر والوجهة."; return }
@@ -1417,6 +1504,47 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                                 }
                                 if(req.destinationOrganizationId==org().orEmpty() && req.status=="approved" && req.purchaseOrderId.isNotBlank()) {
                                     OutlinedButton(onClick={mapKnownInvoicePurchaseItems(req.id)},enabled=!busy,modifier=Modifier.fillMaxWidth()) { Text("ربط الأصناف المعروفة بأمر الشراء") }
+                                    OutlinedButton(onClick={loadInvoicePurchaseUnmappedLines(req)},enabled=!busy,modifier=Modifier.fillMaxWidth()) { Text("إدارة الأصناف غير المطابقة") }
+                                    if(invoiceMappingRequestId==req.id) {
+                                        Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
+                                            Text("مطابقة البنود غير المعروفة مع أصناف المؤسسة في موقع الاستلام",fontWeight=FontWeight.SemiBold)
+                                            if(invoiceMappingLines.isEmpty()) {
+                                                Text("لا توجد بنود غير مطابقة قابلة للربط حاليًا.",style=MaterialTheme.typography.bodySmall)
+                                            } else {
+                                                Box {
+                                                    OutlinedButton(onClick={invoiceMappingLineMenuExpanded=true},modifier=Modifier.fillMaxWidth()) {
+                                                        val selectedLine=invoiceMappingLines.firstOrNull { it.id==invoiceMappingLineId }
+                                                        Text(selectedLine?.let { "البند "+it.lineNumber+": "+it.description+" • "+it.quantity+" "+it.unitCode } ?: "اختر بند الفاتورة")
+                                                    }
+                                                    DropdownMenu(expanded=invoiceMappingLineMenuExpanded,onDismissRequest={invoiceMappingLineMenuExpanded=false}) {
+                                                        invoiceMappingLines.forEach { line ->
+                                                            DropdownMenuItem(text={Text("البند "+line.lineNumber+": "+line.description+" • "+line.quantity+" "+line.unitCode)},onClick={
+                                                                invoiceMappingLineId=line.id
+                                                                invoiceMappingLineMenuExpanded=false
+                                                            })
+                                                        }
+                                                    }
+                                                }
+                                                Box {
+                                                    OutlinedButton(onClick={invoiceMappingOfferingMenuExpanded=true},enabled=invoiceMappingOfferings.isNotEmpty(),modifier=Modifier.fillMaxWidth()) {
+                                                        val selectedOffering=invoiceMappingOfferings.firstOrNull { it.id==invoiceMappingOfferingId }
+                                                        Text(selectedOffering?.let { "الصنف المحلي: "+it.name+" • "+it.unitCode } ?: "اختر صنف المؤسسة في موقع الاستلام")
+                                                    }
+                                                    DropdownMenu(expanded=invoiceMappingOfferingMenuExpanded,onDismissRequest={invoiceMappingOfferingMenuExpanded=false}) {
+                                                        invoiceMappingOfferings.forEach { offering ->
+                                                            DropdownMenuItem(text={Text(offering.name+" • "+offering.unitCode)},onClick={
+                                                                invoiceMappingOfferingId=offering.id
+                                                                invoiceMappingOfferingMenuExpanded=false
+                                                            })
+                                                        }
+                                                    }
+                                                }
+                                                Button(onClick={linkSelectedInvoicePurchaseLine()},enabled=!busy && invoiceMappingLineId.isNotBlank() && invoiceMappingOfferingId.isNotBlank(),modifier=Modifier.fillMaxWidth()) { Text("تأكيد ربط البند المحدد") }
+                                            }
+                                            if(invoiceMappingOfferings.isEmpty()) Text("لا توجد أصناف مهيأة لهذا الفرع/موقع الاستلام. أنشئ الصنف أو هيئه من دليل الأصناف أولًا، ثم أعد تحميل المطابقة.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text("لا يُنشأ صنف تلقائيًا من وصف الفاتورة ولا يُضاف مخزون عند المطابقة. اختر تطابقًا مؤكدًا؛ الاستلام هو الذي يحدّث الكمية.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                    }
                                 }
                                 Text("الموافقة لا تزيد المخزون؛ يجب استلام أمر الشراء عبر دورة الاستلام المعتادة.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                             }
