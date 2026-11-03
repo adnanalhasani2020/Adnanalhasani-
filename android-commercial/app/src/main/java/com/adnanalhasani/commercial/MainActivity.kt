@@ -241,15 +241,21 @@ private fun StoreApp(context: Context) {
     var customerPaymentOrganizationName by remember { mutableStateOf("") }
     var customerOrderFulfillmentPage by remember { mutableStateOf(false) }
     var settlingSaleNumber by remember { mutableIntStateOf(-1) }
-    val cloudContextExists = remember {
+    var cloudContextRevision by remember { mutableIntStateOf(0) }
+    var cloudReloadToken by remember { mutableIntStateOf(0) }
+    val cloudContextSnapshot = remember(cloudContextRevision) {
         val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
-        !saved.getString("organization_id", null).isNullOrBlank() &&
-            !saved.getString("activity_id", null).isNullOrBlank() &&
-            !saved.getString("location_id", null).isNullOrBlank()
+        Triple(
+            saved.getString("organization_id", null).orEmpty(),
+            saved.getString("activity_id", null).orEmpty(),
+            saved.getString("location_id", null).orEmpty()
+        )
     }
+    val cloudContextExists = cloudContextSnapshot.first.isNotBlank() &&
+        cloudContextSnapshot.second.isNotBlank() && cloudContextSnapshot.third.isNotBlank()
     val sales = remember { mutableStateListOf<SaleRecord>().apply { if (!cloudContextExists) addAll(loadSales(context)) } }
-    val settlements = remember { mutableStateListOf<SettlementRecord>().apply { addAll(loadSettlements(context)) } }
-    val expenses = remember { mutableStateListOf<ExpenseRecord>().apply { addAll(loadExpenses(context)) } }
+    val settlements = remember { mutableStateListOf<SettlementRecord>().apply { if (!cloudContextExists) addAll(loadSettlements(context)) } }
+    val expenses = remember { mutableStateListOf<ExpenseRecord>().apply { if (!cloudContextExists) addAll(loadExpenses(context)) } }
     var expenseDialog by remember { mutableStateOf(false) }
     val inventory = remember { mutableStateListOf<Product>().apply { if (!cloudContextExists) addAll(loadProducts(context)) } }
     var cloudInventoryLoaded by remember { mutableStateOf(!cloudContextExists) }
@@ -261,8 +267,21 @@ private fun StoreApp(context: Context) {
     var cloudMode by remember { mutableStateOf(cloudContextExists) }
     var nextInvoice by remember { mutableIntStateOf((sales.maxOfOrNull { it.number } ?: 1048) + 1) }
 
-    LaunchedEffect(cloudContextExists) {
-        if (!cloudContextExists) return@LaunchedEffect
+    LaunchedEffect(cloudContextSnapshot, cloudReloadToken) {
+        // Once an organization context exists, fail closed into cloud mode before any
+        // network request. A failed cloud read must never expose local-only workflows.
+        cloudMode = cloudContextExists
+        if (!cloudContextExists) {
+            cloudInventoryBusy = false
+            cloudInventoryLoaded = true
+            return@LaunchedEffect
+        }
+        inventory.clear()
+        sales.clear()
+        settlements.clear()
+        expenses.clear()
+        cloudInventoryError = ""
+        cloudNotice = ""
         cloudInventoryBusy = true
         storeCloudIo.execute {
             val inventoryResult = runCatching { loadCommercialCloudInventory(context) }
@@ -450,7 +469,10 @@ private fun StoreApp(context: Context) {
                     showExpenses -> if (cloudMode) {
                         CommercialCloudExpensesScreen(context = context, onBack = { showExpenses = false })
                     } else ExpensesScreen(expenses = expenses, onBack = { showExpenses = false }, onAdd = { expenseDialog = true })
-                    else -> if (showPersonalAccounts) PersonalAccountsScreen(onBack = { showPersonalAccounts = false }) else if (showActivityProfile) ActivityProfileScreen(onBack = { showActivityProfile = false }, onCatalog = { showActivityProfile = false; showCatalog = true }) else MoreScreen(cloudMode = cloudMode, onPersonalAccounts = { showPersonalAccounts = true }, onCustomers = {
+                    else -> if (showPersonalAccounts) PersonalAccountsScreen(onBack = { showPersonalAccounts = false }) else if (showActivityProfile) ActivityProfileScreen(
+                        onBack = { showActivityProfile = false; cloudContextRevision++ },
+                        onCatalog = { showActivityProfile = false; cloudContextRevision++; showCatalog = true }
+                    ) else MoreScreen(cloudMode = cloudMode, onPersonalAccounts = { showPersonalAccounts = true }, onCustomers = {
                     showDebts = true
                 }, onReports = { showReportsCenter = true }, onExpenses = { showExpenses = true }, onActivityProfile = { showActivityProfile = true }, onCatalog = { showCatalog = true }, onMasterData = { showMasterData = true }, onCloudOperational = { cloudOperationalPage = it }, onCloudSales = { cloudSalesPage = true }, onCloudPurchases = { cloudPurchasesPage = true }, onCloudStockAlerts = { cloudStockAlertsPage = true }, onUnitsDirectory = { cloudUnitsPage = true }, onCustomerPortal = { customerPortalPage = true }, onCustomerOrders = { customerOrderFulfillmentPage = true })
                 }
@@ -631,7 +653,12 @@ private fun StoreApp(context: Context) {
         onDismissRequest = { cloudInventoryError = "" },
         title = { Text("تعذر الاتصال بالمخزون السحابي") },
         text = { Text(cloudInventoryError) },
-        confirmButton = { TextButton(onClick = { cloudInventoryError = "" }) { Text("إغلاق") } }
+        confirmButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = { cloudInventoryError = ""; cloudReloadToken++ }, enabled = !cloudInventoryBusy) { Text("إعادة المحاولة") }
+                TextButton(onClick = { cloudInventoryError = "" }) { Text("إغلاق") }
+            }
+        }
     )
     if (cloudMode && cloudInventoryBusy) AlertDialog(
         onDismissRequest = { },
