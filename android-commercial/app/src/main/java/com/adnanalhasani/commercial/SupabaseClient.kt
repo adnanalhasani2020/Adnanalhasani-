@@ -5,7 +5,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 internal object SupabaseClient {
-    fun request(path: String, method: String, payload: JSONObject? = null, token: String? = null, readTimeoutMs: Int = 25000, mapErrors: Boolean = true): String {
+    fun request(path: String, method: String, payload: JSONObject? = null, token: String? = null, readTimeoutMs: Int = 25000, mapErrors: Boolean = true, wrapNetworkErrors: Boolean = true): String {
         val base = BuildConfig.SUPABASE_URL.trimEnd('/')
         val anon = BuildConfig.SUPABASE_ANON_KEY
         require(base.startsWith("https://") && anon.isNotBlank()) { "إعدادات اتصال Supabase غير مكتملة." }
@@ -37,11 +37,13 @@ internal object SupabaseClient {
             }
             raw
         } catch (e: java.net.SocketTimeoutException) {
+            if (!wrapNetworkErrors) throw e
             throw IllegalStateException(
                 "انتهت مهلة الاتصال ولم يتمكن التطبيق من تأكيد النتيجة. إذا كانت العملية بيعًا أو تحصيلًا، لا تبدأ عملية جديدة بمفتاح مختلف؛ أعد المحاولة للعملية المعلّقة نفسها ثم تحقق من سجل الفاتورة/الدفعة.",
                 e
             )
         } catch (e: java.io.IOException) {
+            if (!wrapNetworkErrors) throw e
             throw IllegalStateException(
                 "انقطع الاتصال قبل تأكيد النتيجة من الخادم. لا تكرر البيع أو التحصيل كعملية جديدة؛ أعد المحاولة للعملية المعلّقة نفسها وتحقق من السجل قبل أي إجراء بديل.",
                 e
@@ -52,7 +54,7 @@ internal object SupabaseClient {
     }
     
     fun requestJson(path: String, payload: JSONObject, token: String? = null): JSONObject {
-        val raw = request(path, "POST", payload, token, readTimeoutMs = 20000, mapErrors = false)
+        val raw = request(path, "POST", payload, token, readTimeoutMs = 20000, mapErrors = false, wrapNetworkErrors = false)
         return if (raw.isBlank()) JSONObject()
         else if (raw.trimStart().startsWith("{")) JSONObject(raw)
         else JSONObject().put("result", raw)
