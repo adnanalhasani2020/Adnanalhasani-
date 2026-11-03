@@ -4,7 +4,7 @@
 -- This is intentionally a gate, not a substitute for authenticated end-to-end checkout/payment tests.
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT plan(10);
+SELECT plan(11);
 
 -- Receivable arithmetic: approved return credit reduces the sale obligation once;
 -- an executed cash refund also reduces net cash paid, not the sale credit itself.
@@ -49,23 +49,39 @@ SELECT ok(
   'GL payment guard uses the same return-adjusted receivable logic'
 );
 
--- This assertion is expected to remain red until the coordinated fractional-sale
--- migration changes the canonical sale quantity and stock-unit quantity to NUMERIC.
+-- Selling quantities are decimal snapshots; inventory quantities remain exact integer base units.
 SELECT ok(
-  (SELECT data_type = 'numeric'
+  (SELECT count(*) = 3
    FROM information_schema.columns
    WHERE table_schema = 'public'
      AND table_name = 'commercial_sale_items'
-     AND column_name = 'quantity'),
-  'sale line canonical quantity supports fractional values'
+     AND (
+       (column_name = 'quantity' AND data_type = 'integer')
+       OR (column_name = 'selling_quantity' AND data_type = 'numeric')
+       OR (column_name = 'quantity_in_stock_units' AND data_type = 'bigint')
+     )),
+  'sale lines preserve decimal selling quantity and exact integer base-stock quantities'
 );
 SELECT ok(
-  (SELECT data_type = 'numeric'
-   FROM information_schema.columns
-   WHERE table_schema = 'public'
-     AND table_name = 'commercial_sale_items'
-     AND column_name = 'quantity_in_stock_units'),
-  'converted base-stock quantity supports fractional values'
+  position('v_base_qty := (v_line->>''quantity'')::numeric * v_unit.quantity_in_stock' in pg_get_functiondef(
+    'public.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint,bigint,bigint)'::regprocedure
+  )) > 0
+  AND position('v_base_qty <> trunc(v_base_qty)' in pg_get_functiondef(
+    'public.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint,bigint,bigint)'::regprocedure
+  )) > 0,
+  'fractional checkout converts through the configured factor and rejects non-integral base stock'
+);
+SELECT ok(
+  position('v_sale_item.selling_unit_code IS DISTINCT FROM v_unit_code' in pg_get_functiondef(
+    'public.commercial_request_sale_return(uuid,text,text,jsonb,text)'::regprocedure
+  )) > 0
+  AND position('v_sale_item.quantity_in_stock_units::numeric / v_sale_item.selling_quantity' in pg_get_functiondef(
+    'public.commercial_request_sale_return(uuid,text,text,jsonb,text)'::regprocedure
+  )) > 0
+  AND position('FROM public.commercial_offering_sell_units' in pg_get_functiondef(
+    'public.commercial_request_sale_return(uuid,text,text,jsonb,text)'::regprocedure
+  )) = 0,
+  'fractional returns recover the immutable unit factor from the original sale line'
 );
 
 SELECT ok(
