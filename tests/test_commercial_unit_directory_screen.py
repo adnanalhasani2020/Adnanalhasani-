@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 MAIN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt"
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialUnitDirectoryScreen.kt"
 REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt"
+SALES_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/SalesRepository.kt"
 
 
 class CommercialUnitDirectoryScreenTests(unittest.TestCase):
@@ -14,6 +15,7 @@ class CommercialUnitDirectoryScreenTests(unittest.TestCase):
         cls.main = MAIN.read_text(encoding="utf-8")
         cls.screen = SCREEN.read_text(encoding="utf-8")
         cls.repository = REPOSITORY.read_text(encoding="utf-8")
+        cls.sales_repository = SALES_REPOSITORY.read_text(encoding="utf-8")
 
     def test_screen_is_reachable_from_more_menu_and_back_navigation(self):
         self.assertIn('"دليل وحدات القياس" -> onUnitsDirectory()', self.main)
@@ -64,7 +66,7 @@ class CommercialUnitDirectoryScreenTests(unittest.TestCase):
         self.assertIn("order=department_id.asc,warehouse_id.asc", assignments)
 
     def test_sales_and_inventory_alerts_use_complete_stable_pagination(self):
-        sales = self.repository.split("internal fun loadCommercialCloudSales", 1)[1].split(
+        sales = self.sales_repository.split("internal fun loadCommercialCloudSales", 1)[1].split(
             "internal fun loadCommercialCloudSaleDocuments", 1
         )[0]
         alerts = self.repository.split("internal fun loadCommercialCloudStockAlerts", 1)[1].split(
