@@ -206,6 +206,7 @@ internal fun CommercialCloudPurchasesScreen(context: Context, onBack: () -> Unit
                             Column(Modifier.weight(1f)) {
                                 Text("أمر شراء #${order.orderNumber}", color = CloudPurchasesInk, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                                 Text(order.supplierName, color = CloudPurchasesMuted, fontSize = 12.sp)
+                                Text("موقع الاستلام: ${order.receiveLocationName.ifBlank { "غير محدد" }}", color = CloudPurchasesMuted, fontSize = 11.sp)
                             }
                             Surface(color = purchaseStatusColor(order.status).copy(alpha = 0.12f), shape = RoundedCornerShape(10.dp)) {
                                 Text(purchaseStatusLabel(order.status), color = purchaseStatusColor(order.status), fontSize = 11.sp, modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp))
