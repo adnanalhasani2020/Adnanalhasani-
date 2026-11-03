@@ -30,7 +30,7 @@ def test_customer_screen_keeps_claims_pending_until_merchant_approval():
 def test_merchant_screen_requires_amount_match_and_supports_review_decisions():
     assert "loadCommercialCloudCustomerPaymentRequests(context, \"pending\")" in MERCHANT_SCREEN
     assert "reviewCommercialCloudCustomerPaymentRequest" in MERCHANT_SCREEN
-    assert 'confirmedAmount.toLongOrNull() == requestTarget.amountMinor' in MERCHANT_SCREEN
+    assert 'parseMerchantPaymentRequestAmount(confirmedAmount, requestTarget.currencyCode) == requestTarget.amountMinor' in MERCHANT_SCREEN
     assert '"request_changes"' in MERCHANT_SCREEN
     assert '"reject"' in MERCHANT_SCREEN
     assert '"approve"' in MERCHANT_SCREEN
