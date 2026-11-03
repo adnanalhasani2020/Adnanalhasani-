@@ -40,6 +40,13 @@ class CommercialFractionalSaleQuantityTest {
     }
 
     @Test
+    fun returnMaximumUsesOnlyQuantitiesThatMapExactlyToBaseUnits() {
+        assertEquals(BigDecimal("0.5"), maxCommercialReturnQuantity(500L, 1000L))
+        assertEquals(BigDecimal("0.25"), maxCommercialReturnQuantity(5L, 12L))
+        assertEquals(BigDecimal.ZERO, maxCommercialReturnQuantity(0L, 1000L))
+    }
+
+    @Test
     fun fractionalSellingQuantityMustResolveToWholeBaseStockUnits() {
         assertEquals(
             java.math.BigInteger("500"),
