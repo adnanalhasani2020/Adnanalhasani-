@@ -58,3 +58,4 @@ def test_returns_block_mutable_unit_factors_until_snapshot_rpc_is_deployed():
     assert "returnUnitSnapshotBlocked" in screen
     assert "&& !returnUnitSnapshotBlocked" in screen
     assert "معامل الوحدة الحالي قد يختلف عن معامل الفاتورة وقت البيع" in screen
+    assert "requestCommercialCloudSaleReturn(context, target.id, requestReason, requestNote, quantities, emptyMap())" in screen
