@@ -98,5 +98,6 @@ def test_manager_queue_and_android_screen_make_fulfillment_operational():
     assert "CustomerOrderFulfillmentScreen(" in activity
     assert '"طلبات الزبائن"' in activity
     assert "MoreScreen(cloudMode = cloudMode" in activity
-    assert 'filter { cloudMode || it != "طلبات الزبائن" }' in activity
+    assert "entries.filter { cloudMode || it !in setOf(" in activity
+    assert '"طلبات الزبائن"' in activity
     assert "onCustomerOrders = { customerOrderFulfillmentPage = true }" in activity
