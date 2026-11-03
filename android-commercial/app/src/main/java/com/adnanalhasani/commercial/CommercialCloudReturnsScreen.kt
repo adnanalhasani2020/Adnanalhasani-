@@ -380,7 +380,7 @@ internal fun CommercialCloudReturnsScreen(context: Context, onBack: () -> Unit) 
                         if (qty != null && qty.signum() > 0) id to qty else null
                     }.toMap()
                     executeAction({
-                        requestCommercialCloudSaleReturn(context, target.id, requestReason, requestNote, quantities, requestedUnitCodes.toMap())
+                        requestCommercialCloudSaleReturn(context, target.id, requestReason, requestNote, quantities, emptyMap())
                     }, "تم إنشاء طلب المرتجع في قاعدة البيانات، وهو بانتظار المراجعة.")
                     requestTarget = null
                 },
