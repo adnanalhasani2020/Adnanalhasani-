@@ -244,7 +244,8 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
             with self.subTest(marker=marker):
                 self.assertIn(marker, migration)
         self.assertIn("DropdownMenu", self.composer)
-        self.assertIn("line.unit.factor", self.composer)
+        self.assertIn("BigDecimal.valueOf(unit.factor)", self.composer)
+        self.assertIn("toBigIntegerExact()", self.composer)
         self.assertIn("configureCommercialCloudSellUnit", self.composer)
 
 
