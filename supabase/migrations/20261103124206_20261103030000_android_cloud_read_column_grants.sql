@@ -1,5 +1,6 @@
 -- The cloud expense/report screens read the organization's timezone directly.
 -- Expose only this setting to authenticated clients under the existing RLS policy.
+-- Row-level security remains enabled; this grant does not bypass the existing RLS policy.
 
 GRANT SELECT (default_timezone)
 ON TABLE public.commercial_organizations
