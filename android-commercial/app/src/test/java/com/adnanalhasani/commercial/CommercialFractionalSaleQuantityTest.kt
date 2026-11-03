@@ -47,6 +47,14 @@ class CommercialFractionalSaleQuantityTest {
     }
 
     @Test
+    fun recoversReturnFactorFromTheImmutableSaleLineSnapshot() {
+        assertEquals(1000L, commercialSavedSellingUnitFactor(500L, BigDecimal("0.5")))
+        assertEquals(12L, commercialSavedSellingUnitFactor(12L, BigDecimal("1")))
+        assertNull(commercialSavedSellingUnitFactor(5L, BigDecimal("2")))
+        assertNull(commercialSavedSellingUnitFactor(0L, BigDecimal("0.5")))
+    }
+
+    @Test
     fun fractionalSellingQuantityMustResolveToWholeBaseStockUnits() {
         assertEquals(
             java.math.BigInteger("500"),
