@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterScreen.kt"
 REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt"
 CALCULATIONS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportCalculations.kt"
+EXPORT = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportExport.kt"
 CONTRACT = ROOT / "android-commercial/docs/reports-data-contract.md"
 COLLECTION_REPLAY_MIGRATION = ROOT / "supabase/migrations/20261027221500_harden_customer_collection_replay_posting.sql"
 RETURN_CURRENCY_GUARD_MIGRATION = ROOT / "supabase/migrations/20261027195426_guard_return_adjustment_currency.sql"
@@ -17,6 +18,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         cls.screen = SCREEN.read_text(encoding="utf-8")
         cls.repository = REPOSITORY.read_text(encoding="utf-8")
         cls.calculations = CALCULATIONS.read_text(encoding="utf-8")
+        cls.export = EXPORT.read_text(encoding="utf-8")
         cls.contract = CONTRACT.read_text(encoding="utf-8")
         cls.collection_replay_migration = COLLECTION_REPLAY_MIGRATION.read_text(encoding="utf-8")
         cls.return_currency_guard_migration = RETURN_CURRENCY_GUARD_MIGRATION.read_text(encoding="utf-8")
@@ -54,13 +56,13 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn("historical inventory valuation and inventory-to-GL valuation reconciliation", self.contract)
 
     def test_xlsx_export_is_real_ooxml_and_right_to_left(self):
-        self.assertIn("ZipOutputStream(output)", self.screen)
-        self.assertIn("[Content_Types].xml", self.screen)
-        self.assertIn("xl/workbook.xml", self.screen)
-        self.assertIn("xl/worksheets/sheet1.xml", self.screen)
-        self.assertIn('rightToLeft="1"', self.screen)
-        self.assertIn("inlineStr", self.screen)
-        self.assertIn('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', self.screen)
+        self.assertIn("ZipOutputStream(output)", self.export)
+        self.assertIn("[Content_Types].xml", self.export)
+        self.assertIn("xl/workbook.xml", self.export)
+        self.assertIn("xl/worksheets/sheet1.xml", self.export)
+        self.assertIn('rightToLeft="1"', self.export)
+        self.assertIn("inlineStr", self.export)
+        self.assertIn('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', self.export)
         self.assertIn("Excel XLSX", self.screen)
 
     def test_invalid_date_never_expands_sales_to_all_history(self):
@@ -78,12 +80,12 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn('label = { Text("رمز الحساب أو اسمه") }', self.screen)
 
     def test_pdf_export_has_native_renderer(self):
-        self.assertIn("writeReportPdf", self.screen)
+        self.assertIn("writeReportPdf", self.export)
         self.assertIn("application/pdf", self.screen)
         self.assertIn("Intent.ACTION_SEND", self.screen)
-        self.assertIn("StaticLayout.Builder", self.screen)
-        self.assertIn("TextDirectionHeuristics.RTL", self.screen)
-        self.assertIn("PrintManager", self.screen)
+        self.assertIn("StaticLayout.Builder", self.export)
+        self.assertIn("TextDirectionHeuristics.RTL", self.export)
+        self.assertIn("PrintManager", self.export)
         self.assertIn('Text("معاينة وطباعة")', self.screen)
 
     def test_customer_statement_uses_invoice_payments_returns_and_customer_filter(self):
