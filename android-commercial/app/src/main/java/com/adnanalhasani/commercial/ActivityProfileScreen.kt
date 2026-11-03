@@ -21,6 +21,7 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.time.LocalDate
+import java.util.UUID
 import java.util.concurrent.Executors
 
 internal fun profileSessionPreferences(context: Context) = EncryptedSharedPreferences.create(
@@ -304,8 +305,9 @@ internal fun ActivityProfileScreen(
         } else if (!created) {
             Text("الخطوة 2: إنشاء المشروع", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text("أدخل المعلومات الأساسية بدقة. سيتم إنشاء المؤسسة والنشاط والمقر الرئيسي وربطها بحسابك.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-            ProfileField("اسم النشاط *", organizationName) { organizationName = it; if (organizationSlug.isBlank()) organizationSlug = it.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-') }
+            ProfileField("اسم النشاط *", organizationName) { organizationName = it; if (organizationSlug.isBlank()) { val suggested = it.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-'); organizationSlug = suggested.ifBlank { "store-${UUID.randomUUID().toString().take(8)}" } } }
             ProfileField("الرابط المختصر بالإنجليزية *", organizationSlug) { organizationSlug = it.lowercase().trim() }
+            Text("إذا كان اسم النشاط بالعربية، نقترح رمزًا قصيرًا تلقائيًا. يمكنك تغييره إلى اسم إنجليزي مناسب.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             if (activityOptions.isNotEmpty()) {
                 ProfileChoice("النشاط التجاري من الدليل *", activityCode,
                     activityOptions.map { it.code to "${it.pathAr} • ${it.code}" }) { selectedCode ->
