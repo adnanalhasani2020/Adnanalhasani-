@@ -46,7 +46,7 @@
 - `app/src/main/AndroidManifest.xml`: تعريف التطبيق وصلاحياته ونقطة الدخول. يجب مراجعة أي تغيير صلاحيات مع متطلبات التشغيل الفعلية.
 - `app/build.gradle.kts` و`build.gradle.kts` و`settings.gradle.kts`: إعداد بناء Android والاعتماديات والمشروعات.
 - `gradle.properties`: خصائص البناء. لا تضع أسرار الإنتاج فيه ولا تضمن أن متغيرات البناء وحدها تحمي المفاتيح.
-- `docs/cloud-backed-screen-delivery.md`: سجل شرائح تسليم الشاشات السحابية وحدود التحقق.
+- `docs/architecture/README.md`, `module-boundaries.md`, and `refactoring-roadmap.md`: current modularization target, ownership rules, and execution status.\n- `docs/cloud-backed-screen-delivery.md`: سجل شرائح تسليم الشاشات السحابية وحدود التحقق.
 - `docs/commercial-documents-implementation-plan.md`: عقد سير المستندات التجاري والبوابات المتبقية.
 - `docs/warehouse-and-classification-architecture.md`: نموذج المستودعات ومواقع التخزين والتصنيفات وحالة الربط المخزني.
 
