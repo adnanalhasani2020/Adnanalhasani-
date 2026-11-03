@@ -40,12 +40,12 @@ class CommercialUnitDirectoryScreenTests(unittest.TestCase):
 
     def test_unit_directory_fetches_all_pages_in_stable_order(self):
         function = self.repository.split("internal fun loadCommercialUnitsOfMeasure", 1)[1].split(
-            "private fun commercialMasterDataAccess", 1
+            "internal fun commercialMasterDataAccess", 1
         )[0]
         self.assertIn("commercialCloudPagedGet(", function)
         self.assertIn("order=dimension.asc,code.asc", function)
         pager = self.repository.split("internal fun commercialCloudPagedGet", 1)[1].split(
-            "private fun commercialMasterDataAccess", 1
+            "internal fun commercialMasterDataAccess", 1
         )[0]
         self.assertIn("pageSize: Int = 500", pager)
         self.assertIn("require(pageSize in 1..1000)", pager)
