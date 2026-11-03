@@ -138,6 +138,7 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
     }
     val bookingEstimatedTotalResult = sumCommercialPortalLineTotalsMinor(bookingCart.map { it.third })
     val bookingEstimatedTotal = bookingEstimatedTotalResult ?: 0L
+    val bookingLineTotalsPositive = bookingCart.isNotEmpty() && bookingCart.all { it.third > 0L }
     val bookingQuantitiesValid = bookingInputsValid && bookingCart.isNotEmpty() &&
         bookingCart.map { it.first.currencyCode }.distinct().size == 1 &&
         org != null && bookingCart.all { it.first.currencyCode.equals(org.currencyCode, ignoreCase = true) }
@@ -382,7 +383,7 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
                                         }
                                     }
                                 },
-                                enabled = !submitting && !loading && (if (bookingMode) selectedOrganization?.canBook != false && offerings.any { it.itemType == "service" } && bookingResources.isNotEmpty() else selectedOrganization?.canPurchase != false && cart.isNotEmpty() && cartInputsValid && estimatedTotalResult != null && cartCurrencyValid),
+                                enabled = !submitting && !loading && (if (bookingMode) selectedOrganization?.canBook != false && offerings.any { it.itemType == "service" } && bookingResources.isNotEmpty() else selectedOrganization?.canPurchase != false && cart.isNotEmpty() && cartInputsValid && estimatedTotalResult != null && cartCurrencyValid && !unsupportedFractionalProduct),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 if (submitting) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
@@ -475,7 +476,7 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
                                 },
                                 enabled = !submitting && !loading && bookingCart.isNotEmpty() &&
                                     bookingInputsValid && bookingQuantitiesValid && bookingEstimatedTotalResult != null &&
-                                    bookingResources.any { it.id == bookingResourceId },
+                                    bookingLineTotalsPositive && bookingResources.any { it.id == bookingResourceId },
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 if (submitting) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
