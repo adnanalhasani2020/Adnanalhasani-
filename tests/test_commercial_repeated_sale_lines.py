@@ -8,10 +8,11 @@ REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/comm
 class CommercialRepeatedSaleLineTests(unittest.TestCase):
     def test_duplicate_offerings_are_aggregated_before_key_and_checkout(self):
         source = REPOSITORY.read_text(encoding="utf-8")
-        self.assertIn("internal fun aggregateCommercialCheckoutLines", source)
-        self.assertIn("val totals = linkedMapOf<Pair<String, String>, BigDecimal>()", source)
-        self.assertIn("val key = line.offeringId to line.unitCode", source)
-        self.assertIn("(totals[key] ?: BigDecimal.ZERO).add(quantity)", source)
+        quantity_math = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialQuantityMath.kt").read_text(encoding="utf-8")
+        self.assertIn("internal fun aggregateCommercialCheckoutLines", quantity_math)
+        self.assertIn("val totals = linkedMapOf<Pair<String, String>, BigDecimal>()", quantity_math)
+        self.assertIn("val key = line.offeringId to line.unitCode", quantity_math)
+        self.assertIn("(totals[key] ?: BigDecimal.ZERO).add(quantity)", quantity_math)
         self.assertGreaterEqual(source.count("val normalizedLines = aggregateCommercialCheckoutLines(lines)"), 2)
         self.assertNotIn("لا يمكن تكرار الصنف بوحدتي بيع مختلفتين", source)
 
@@ -23,13 +24,13 @@ class CommercialRepeatedSaleLineTests(unittest.TestCase):
         self.assertIn('.sortedWith(compareBy({ it.key.first }, { it.key.second }))', source)
 
     def test_aggregate_quantity_is_bounded_and_positive(self):
-        source = REPOSITORY.read_text(encoding="utf-8")
+        source = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialQuantityMath.kt").read_text(encoding="utf-8")
         self.assertIn("quantity <= BigDecimal(\"100000\")", source)
         self.assertIn("quantity.scale() <= 3", source)
         self.assertIn('require(total <= BigDecimal("100000"))', source)
 
     def test_fractional_quantities_are_preserved_and_bounded(self):
-        source = REPOSITORY.read_text(encoding="utf-8")
+        source = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialQuantityMath.kt").read_text(encoding="utf-8")
         self.assertIn("internal fun parseCommercialCheckoutQuantity", source)
         self.assertIn("line.quantity.stripTrailingZeros().toPlainString()", source)
         self.assertIn("quantity.scale() <= 3", source)
