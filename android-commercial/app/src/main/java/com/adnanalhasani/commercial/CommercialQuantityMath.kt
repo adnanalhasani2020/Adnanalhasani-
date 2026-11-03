@@ -5,6 +5,13 @@ import java.math.BigInteger
 import java.util.Currency
 import java.util.Locale
 
+/**
+ * Production Supabase currently exposes integer-only sale/return quantity RPCs.
+ * Enable only after migrations 20261103020000 and 20261103020100 are deployed
+ * and authenticated checkout/return integration tests pass.
+ */
+internal const val COMMERCIAL_CLOUD_FRACTIONAL_QUANTITY_RPC_READY = false
+
 internal data class CommercialCloudCheckoutLine(
     val offeringId: String,
     val quantity: BigDecimal,
