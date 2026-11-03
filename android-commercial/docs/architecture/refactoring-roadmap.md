@@ -55,7 +55,7 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 | REF-001 | Establish baseline build/test commands and path-sensitive test inventory | PARTIALLY DOCUMENTED | CI commands and high-risk source-contract tests recorded; exhaustive call-site/path inventory and a baseline run on this branch remain required |
 | REF-002 | Extract shared network transport and cloud error mapping from cloud repository | OPEN | One transport implementation; request behavior unchanged |
 | REF-003 | Split cloud repository by domain | OPEN | Sales, inventory, purchasing, customers, returns, expenses, accounting, portal repositories compile and tests pass |
-| REF-004 | Separate MainActivity composition/navigation from local legacy persistence and screens | OPEN | MainActivity becomes composition root; local mode remains unchanged |
+| REF-004 | Separate MainActivity composition/navigation from local legacy persistence and screens | PARTIALLY EXTRACTED | Shared and local models moved to dedicated files; next extract persistence/navigation in separate behavior-preserving slices |
 | REF-005 | Split report export infrastructure from report UI | EXTRACTED; TESTED pending CI | PDF/XLSX/print functions moved to ReportExport.kt; source-contract tests updated and XLSX unit tests added; run CI before marking tested |
 | REF-006 | Split report catalog, data builders, filters, and feature screens | OPEN | Each report family has clear owner and calculation tests |
 | REF-007 | Split catalog search, discovery, directory management, transfers, and invoice linking | OPEN | Catalog workflows remain intact |
@@ -83,6 +83,7 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 - Extracted merchant payment-request amount parsing/formatting from `ReportCalculations.kt` into `CustomerPaymentRequestAmount.kt`; updated the Python source-contract test to enforce the new ownership. Existing Kotlin unit tests remain the behavioral contract.
 - Extracted supplier-invoice price-variance models and exact aggregate-rounding calculation into `SupplierInvoicePriceVarianceCalculations.kt`; updated the report source-contract test. The existing focused Kotlin tests continue to target the moved calculation.
 - Extracted gross-profit/cost-of-sales report models and calculations, including proportional restocked-cost reversal, into `CostProfitCalculations.kt`; updated both report and item-profitability source-contract tests while keeping shared exact-sum utility in `ReportCalculations.kt`.
+- Extracted shared commercial models to `CommercialModels.kt` and local settlement/expense/sell-unit models to `LocalStoreModels.kt`; existing screens and cloud repository continue using the same package-level types.
 - No database schema, RPC, or production data was changed.
 
 ## Current limitations
