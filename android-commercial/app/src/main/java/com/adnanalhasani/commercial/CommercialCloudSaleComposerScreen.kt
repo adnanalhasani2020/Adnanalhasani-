@@ -64,7 +64,25 @@ private val CloudComposerMuted = Color(0xFF71817B)
 private val CloudComposerBorder = Color(0xFFE5EBE8)
 private data class ComposerSellUnit(val code: String, val label: String, val factor: Long, val isDefault: Boolean)
 private data class ComposerDraftLine(val id: String, val offeringId: String, val quantityText: String, val unitCode: String)
-private data class ComposerSelectedLine(val draft: ComposerDraftLine, val product: Product, val quantity: Int, val unit: ComposerSellUnit)
+private data class ComposerSelectedLine(val draft: ComposerDraftLine, val product: Product, val quantity: BigDecimal, val baseQuantity: BigInteger, val unit: ComposerSellUnit)
+
+private fun cloudComposerQuantityInput(value: String): String {
+    val out = StringBuilder()
+    var decimalSeen = false
+    var decimalDigits = 0
+    value.forEach { ch ->
+        if (ch.isDigit()) {
+            if (!decimalSeen || decimalDigits < 3) {
+                out.append(ch)
+                if (decimalSeen) decimalDigits++
+            }
+        } else if ((ch == '.' || ch == ',') && !decimalSeen) {
+            out.append('.')
+            decimalSeen = true
+        }
+    }
+    return out.toString()
+}
 
 private fun cloudComposerSellUnits(product: Product): List<ComposerSellUnit> {
     val parsed = runCatching {
@@ -132,17 +150,18 @@ internal fun CommercialCloudSaleComposerScreen(
     val visibleProducts = products.filter { it.name.contains(search, ignoreCase = true) || it.category.contains(search, ignoreCase = true) || it.barcode.contains(search, ignoreCase = true) }
     val selectedLines = invoiceLines.mapNotNull { draft ->
         val product = products.firstOrNull { it.cloudOfferingId == draft.offeringId } ?: return@mapNotNull null
-        val quantity = draft.quantityText.toIntOrNull()
+        val quantity = parseCommercialCheckoutQuantity(draft.quantityText)
         val units = cloudComposerSellUnits(product)
         val unit = units.firstOrNull { it.code == draft.unitCode }
             ?: units.firstOrNull { it.isDefault } ?: units.first()
-        if (product.cloudOfferingId.isBlank() || quantity == null || quantity <= 0) null
-        else ComposerSelectedLine(draft, product, quantity, unit)
+        val baseQuantity = quantity?.multiply(BigDecimal.valueOf(unit.factor))
+            ?.let { runCatching { it.toBigIntegerExact() }.getOrNull() }
+        if (product.cloudOfferingId.isBlank() || quantity == null || baseQuantity == null) null
+        else ComposerSelectedLine(draft, product, quantity, baseQuantity, unit)
     }
     val estimatedSubtotal = selectedLines.fold(BigInteger.ZERO) { sum, line ->
         sum + BigInteger.valueOf(line.product.cloudPriceMinor.coerceAtLeast(0L))
-            .multiply(BigInteger.valueOf(line.unit.factor))
-            .multiply(BigInteger.valueOf(line.quantity.toLong()))
+            .multiply(line.baseQuantity)
     }
     val discountMinor = discountText.toLongOrNull() ?: 0L
     val taxMinor = taxText.toLongOrNull() ?: 0L
@@ -332,14 +351,19 @@ internal fun CommercialCloudSaleComposerScreen(
                                                     units.forEach { option -> DropdownMenuItem(text = { Text("${option.label} (يساوي ${option.factor} ${product.unitCode})") }, onClick = { invoiceLines = invoiceLines.map { if (it.id == draft.id) it.copy(unitCode = option.code) else it }; unitMenuExpanded = false; error = "" }) }
                                                 }
                                             }
-                                            OutlinedTextField(value = draft.quantityText, onValueChange = { input -> invoiceLines = invoiceLines.map { if (it.id == draft.id) it.copy(quantityText = input.filter(Char::isDigit).take(6)) else it }; error = "" }, modifier = Modifier.weight(1f), singleLine = true, label = { Text("الكمية") })
-                                            Text("= ${String.format(Locale.US, "%,d", BigInteger.valueOf(product.cloudPriceMinor).multiply(BigInteger.valueOf(unit.factor)).multiply(BigInteger.valueOf(draft.quantityText.toLongOrNull() ?: 0L)))}", color = CloudComposerInk, fontSize = 11.sp)
+                                            OutlinedTextField(value = draft.quantityText, onValueChange = { input -> invoiceLines = invoiceLines.map { if (it.id == draft.id) it.copy(quantityText = cloudComposerQuantityInput(input)) else it }; error = "" }, modifier = Modifier.weight(1f), singleLine = true, label = { Text("الكمية (مثال 0.5 أو 1.25)") })
+                                            val draftQuantity = parseCommercialCheckoutQuantity(draft.quantityText)
+                                            val draftBaseQuantity = draftQuantity?.multiply(BigDecimal.valueOf(unit.factor))
+                                                ?.let { runCatching { it.toBigIntegerExact() }.getOrNull() } ?: BigInteger.ZERO
+                                            val draftLineTotal = BigInteger.valueOf(product.cloudPriceMinor.coerceAtLeast(0L)).multiply(draftBaseQuantity)
+                                            Text("= ${String.format(Locale.US, "%,d", draftLineTotal)}", color = CloudComposerInk, fontSize = 11.sp)
                                         }
                                     }
                                 }
                             }
                         }
                         Text("يمكن تكرار الصنف في أكثر من سطر مع اختيار وحدة وكمية مستقلتين لكل سطر.", color = CloudComposerMuted, fontSize = 11.sp)
+                        Text("تُقبل الكميات الكسرية حتى ثلاث منازل عشرية عندما يحولها معامل الوحدة إلى عدد صحيح من وحدات المخزون.", color = CloudComposerMuted, fontSize = 10.sp)
                     }
                 }
             }
@@ -390,7 +414,7 @@ internal fun CommercialCloudSaleComposerScreen(
                             error = "صحح الكميات في جميع سطور الفاتورة قبل المتابعة."
                         } else if (selectedLines.groupBy { it.product.cloudOfferingId }.any { (_, lines) ->
                             val requestedBaseQuantity = lines.fold(BigDecimal.ZERO) { sum, line ->
-                                sum + BigDecimal.valueOf(line.quantity.toLong()).multiply(BigDecimal.valueOf(line.unit.factor))
+                                sum + BigDecimal(line.baseQuantity)
                             }
                             requestedBaseQuantity > lines.first().product.stockPrecise
                         }) {
