@@ -60,7 +60,7 @@ internal fun PurchaseReceiptEntryDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("سيُحدّث الاستلام رصيد المخزون وسجل الحركة وأمر الشراء في معاملة واحدة.")
-                Text("موقع الاستلام: ${order.receiveLocationId ?: "غير محدد"}")
+                Text("موقع الاستلام: ${order.receiveLocationName.ifBlank { "غير محدد" }}")
                 if (eligibleLines.isEmpty()) {
                     Text(if (hasUnmappedRemaining) "لا يمكن الاستلام بأمان: يوجد بند متبقٍ غير مربوط بعنصر مخزون. اربط كل البنود المتبقية أولًا." else "لا توجد كميات متبقية للاستلام.")
                 } else {
