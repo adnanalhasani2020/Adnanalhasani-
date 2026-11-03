@@ -9,52 +9,11 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.math.BigDecimal
 import java.math.BigInteger
-import java.net.HttpURLConnection
-import java.net.URL
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.Executors
-
-private fun commercialCloudActionableError(raw: String, status: Int): String {
-    val error = runCatching { JSONObject(raw) }.getOrNull()
-    val code = error?.optString("code").orEmpty()
-    val message = listOf(error?.optString("message"), error?.optString("hint"))
-        .filter { !it.isNullOrBlank() && it != "null" }
-        .joinToString(" — ")
-    val detail = message.ifBlank { "HTTP $status" }
-    return when {
-        code == "PGRST202" || message.contains("schema cache", ignoreCase = true) ||
-            message.contains("could not find the function", ignoreCase = true) ->
-            "توقّف الإجراء لأن دالة قاعدة البيانات المطلوبة غير منشورة أو لم تُحدّث بعد. لم يؤكد الخادم تنفيذ العملية. لا تنشئ عملية بديلة بمفتاح جديد؛ أعد المحاولة بنفس العملية بعد إصلاح ترحيلات قاعدة البيانات. التفاصيل: $detail"
-        message.contains("idempotency_key_reused_with_different_request", ignoreCase = true) ||
-            message.contains("expense_idempotency_key_reused_with_different_request", ignoreCase = true) ->
-            "تم إيقاف العملية لحماية البيانات: مفتاح إعادة المحاولة مرتبط بطلب مختلف. لا تكرر الدفع أو الصرف؛ راجع السجل الموجود وأعد المحاولة بالبيانات الأصلية فقط. التفاصيل: $detail"
-        message.contains("expense_cash_or_bank_account_not_configured_for_currency", ignoreCase = true) ->
-            "لم يُحفظ سند الصرف لأن حساب الصندوق/البنك غير مربوط بالعملة المختارة في دليل الحسابات. اضبط الربط أولًا ثم أعد المحاولة؛ لم يُسجل قيد أو سند. التفاصيل: $detail"
-        message.contains("customer_credit_limit_exceeded", ignoreCase = true) ->
-            "رُفض الطلب الآجل لأن إجمالي المديونية والطلبات الآجلة المفتوحة سيتجاوز حد الائتمان المحدد لحسابك. استخدم الدفع النقدي أو اطلب من المؤسسة مراجعة حد الائتمان والرصيد المستحق."
-        message.contains("customer_account_currency_mismatch", ignoreCase = true) ->
-            "عملة حساب العميل لا تطابق عملة الأصناف المختارة. لا يمكن حفظ الطلب حتى تصحيح إعداد العملة في المؤسسة."
-        message.contains("customer_payment_journal_not_posted", ignoreCase = true) ->
-            "لم يؤكد الخادم ترحيل قيد التحصيل، لذلك رُفضت المعاملة كاملة. لا تنشئ تحصيلًا جديدًا بمفتاح مختلف؛ حدّث السجل وراجع القيد قبل إعادة المحاولة. التفاصيل: $detail"
-        message.contains("receipt_and_ar_mappings_required", ignoreCase = true) ->
-            "لم يُرحّل التحصيل لأن حساب وسيلة القبض أو ذمم العملاء غير مضبوط. راجع دليل الحسابات قبل إعادة المحاولة. التفاصيل: $detail"
-        message.contains("supplier_payment_account_not_configured_for_currency", ignoreCase = true) ->
-            "لم يُسجل تسديد المورد لأن حساب وسيلة الدفع غير مربوط بالعملة المختارة. اضبط ربط الصندوق/البنك/الشيكات أولًا ثم أعد المحاولة. التفاصيل: $detail"
-        message.contains("collection_exceeds_outstanding_balance", ignoreCase = true) ||
-            message.contains("overpayment", ignoreCase = true) ->
-            "رُفض التحصيل لأن المبلغ يتجاوز الرصيد المستحق. حدّث الفاتورة وأدخل المبلغ المتبقي الفعلي. التفاصيل: $detail"
-        message.contains("insufficient_stock", ignoreCase = true) ||
-            message.contains("insufficient_inventory", ignoreCase = true) ||
-            message.contains("stock", ignoreCase = true) && message.contains("available", ignoreCase = true) ->
-            "رُفض البيع لأن الكمية المتاحة غير كافية أو تغيّرت أثناء الحفظ. حدّث المخزون قبل المحاولة مجددًا. التفاصيل: $detail"
-        status == 401 || status == 403 || code == "42501" ->
-            "لم يُسمح بتنفيذ العملية. تحقق من تسجيل الدخول وصلاحيات المؤسسة قبل إعادة المحاولة. التفاصيل: $detail"
-        else -> "تعذر تأكيد العملية من الخادم (HTTP $status). لا تنشئ طلبًا جديدًا بمفتاح مختلف؛ استخدم إعادة المحاولة للعملية نفسها ثم تحقق من الفاتورة/الدفعة في السجل. التفاصيل: $detail"
-    }
-}
 
 internal data class CommercialCloudContext(
     val organizationId: String,
@@ -80,46 +39,6 @@ private fun commercialCloudSessionPreferences(context: Context) = EncryptedShare
     EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
 )
 
-private fun commercialCloudRequest(path: String, method: String, payload: JSONObject? = null, token: String? = null): String {
-    val base = BuildConfig.SUPABASE_URL.trimEnd('/')
-    val anon = BuildConfig.SUPABASE_ANON_KEY
-    require(base.startsWith("https://") && anon.isNotBlank()) { "إعدادات اتصال Supabase غير مكتملة." }
-    val connection = (URL("$base$path").openConnection() as HttpURLConnection).apply {
-        requestMethod = method
-        connectTimeout = 15000
-        readTimeout = 25000
-        setRequestProperty("apikey", anon)
-        setRequestProperty("Accept", "application/json")
-        if (payload != null) {
-            doOutput = true
-            setRequestProperty("Content-Type", "application/json")
-        }
-        if (token != null) setRequestProperty("Authorization", "Bearer $token")
-    }
-    return try {
-        if (payload != null) connection.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
-        val status = connection.responseCode
-        val raw = (if (status in 200..299) connection.inputStream else connection.errorStream)
-            ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
-        if (status !in 200..299) {
-            throw IllegalStateException(commercialCloudActionableError(raw, status))
-        }
-        raw
-    } catch (e: java.net.SocketTimeoutException) {
-        throw IllegalStateException(
-            "انتهت مهلة الاتصال ولم يتمكن التطبيق من تأكيد النتيجة. إذا كانت العملية بيعًا أو تحصيلًا، لا تبدأ عملية جديدة بمفتاح مختلف؛ أعد المحاولة للعملية المعلّقة نفسها ثم تحقق من سجل الفاتورة/الدفعة.",
-            e
-        )
-    } catch (e: java.io.IOException) {
-        throw IllegalStateException(
-            "انقطع الاتصال قبل تأكيد النتيجة من الخادم. لا تكرر البيع أو التحصيل كعملية جديدة؛ أعد المحاولة للعملية المعلّقة نفسها وتحقق من السجل قبل أي إجراء بديل.",
-            e
-        )
-    } finally {
-        connection.disconnect()
-    }
-}
-
 internal fun loadCommercialCloudInventory(context: Context): CommercialCloudInventory {
     val savedContext = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
     val orgId = savedContext.getString("organization_id", null).orEmpty()
@@ -134,7 +53,7 @@ internal fun loadCommercialCloudInventory(context: Context): CommercialCloudInve
     val savedRefresh = sessionPrefs.getString("refresh_token", null).orEmpty()
     require(savedRefresh.isNotBlank()) { "سجّل الدخول إلى حساب Supabase من إعداد النشاط أولًا." }
 
-    val session = JSONObject(commercialCloudRequest(
+    val session = JSONObject(SupabaseClient.request(
         "/auth/v1/token?grant_type=refresh_token", "POST",
         JSONObject().put("refresh_token", savedRefresh)
     ))
@@ -224,7 +143,7 @@ internal fun configureCommercialCloudSellUnit(
         "أدخل رمز وحدة واسمًا ومعامل تحويل صحيحًا."
     }
     val (_, access) = commercialMasterDataAccess(context)
-    return JSONObject(commercialCloudRequest(
+    return JSONObject(SupabaseClient.request(
         "/rest/v1/rpc/commercial_configure_offering_sell_unit", "POST",
         JSONObject().put("p_offering_id", offeringId)
             .put("p_unit_code", unitCode.trim())
@@ -243,11 +162,11 @@ internal fun findCommercialCloudCatalogOffering(context: Context, globalItemId: 
     val prefs = commercialCloudSessionPreferences(context)
     val refresh = prefs.getString("refresh_token", null).orEmpty()
     require(refresh.isNotBlank()) { "سجّل الدخول إلى حساب Supabase أولًا." }
-    val session = JSONObject(commercialCloudRequest("/auth/v1/token?grant_type=refresh_token", "POST", JSONObject().put("refresh_token", refresh)))
+    val session = JSONObject(SupabaseClient.request("/auth/v1/token?grant_type=refresh_token", "POST", JSONObject().put("refresh_token", refresh)))
     val access = session.optString("access_token")
     require(access.isNotBlank()) { "انتهت جلسة الحساب؛ سجّل الدخول مجددًا." }
     prefs.edit().putString("refresh_token",session.optString("refresh_token").ifBlank { refresh }).apply()
-    val rows = JSONArray(commercialCloudRequest("/rest/v1/commercial_catalog_item_offerings?select=offering_id&organization_id=eq.$orgId&global_item_id=eq.$globalItemId&location_id=eq.$locationId&limit=1","GET",token=access))
+    val rows = JSONArray(SupabaseClient.request("/rest/v1/commercial_catalog_item_offerings?select=offering_id&organization_id=eq.$orgId&global_item_id=eq.$globalItemId&location_id=eq.$locationId&limit=1","GET",token=access))
     return rows.optJSONObject(0)?.optString("offering_id")?.takeIf { it.isNotBlank() && it!="null" }
 }
 
@@ -268,7 +187,7 @@ internal fun createCommercialCloudCatalogInventoryItem(
     val prefs = commercialCloudSessionPreferences(context)
     val refresh = prefs.getString("refresh_token", null).orEmpty()
     require(refresh.isNotBlank()) { "سجّل الدخول إلى حساب Supabase أولًا." }
-    val session = JSONObject(commercialCloudRequest("/auth/v1/token?grant_type=refresh_token", "POST", JSONObject().put("refresh_token", refresh)))
+    val session = JSONObject(SupabaseClient.request("/auth/v1/token?grant_type=refresh_token", "POST", JSONObject().put("refresh_token", refresh)))
     val access = session.optString("access_token")
     require(access.isNotBlank()) { "انتهت جلسة الحساب؛ سجّل الدخول مجددًا." }
     prefs.edit().putString("refresh_token",session.optString("refresh_token").ifBlank { refresh }).apply()
@@ -278,7 +197,7 @@ internal fun createCommercialCloudCatalogInventoryItem(
         .put("p_display_name",displayName.trim()).put("p_price_minor",priceMinor).put("p_currency_code",currency)
         .put("p_initial_quantity",initialQuantity).put("p_reorder_point",reorderPoint.coerceAtLeast(0.0))
         .put("p_category_id",if(categoryId.isNotBlank()) categoryId else JSONObject.NULL).put("p_idempotency_key",idempotencyKey)
-    return commercialCloudRequest("/rest/v1/rpc/commercial_catalog_create_inventory_item_from_global","POST",payload,access)
+    return SupabaseClient.request("/rest/v1/rpc/commercial_catalog_create_inventory_item_from_global","POST",payload,access)
 }
 internal fun createCommercialCloudInventoryItem(
     context: Context,
@@ -301,7 +220,7 @@ internal fun createCommercialCloudInventoryItem(
     val sessionPrefs = commercialCloudSessionPreferences(context)
     val savedRefresh = sessionPrefs.getString("refresh_token", null).orEmpty()
     require(savedRefresh.isNotBlank()) { "سجّل الدخول إلى حساب Supabase أولًا." }
-    val session = JSONObject(commercialCloudRequest(
+    val session = JSONObject(SupabaseClient.request(
         "/auth/v1/token?grant_type=refresh_token", "POST",
         JSONObject().put("refresh_token", savedRefresh)
     ))
@@ -320,7 +239,7 @@ internal fun createCommercialCloudInventoryItem(
         .put("p_reorder_point", reorderPoint.coerceAtLeast(0.0))
         .put("p_category_id", if (categoryId.isNotBlank()) categoryId else JSONObject.NULL)
         .put("p_unit_code", unitCode.ifBlank { "each" })
-    return commercialCloudRequest("/rest/v1/rpc/commercial_create_inventory_item_with_category_and_unit", "POST", payload, access)
+    return SupabaseClient.request("/rest/v1/rpc/commercial_create_inventory_item_with_category_and_unit", "POST", payload, access)
 }
 
 
@@ -381,14 +300,14 @@ internal fun checkoutCommercialCloudSale(
     val sessionPrefs = commercialCloudSessionPreferences(context)
     val savedRefresh = sessionPrefs.getString("refresh_token", null).orEmpty()
     require(savedRefresh.isNotBlank()) { "سجّل الدخول إلى حساب Supabase أولًا." }
-    val session = JSONObject(commercialCloudRequest(
+    val session = JSONObject(SupabaseClient.request(
         "/auth/v1/token?grant_type=refresh_token", "POST",
         JSONObject().put("refresh_token", savedRefresh)
     ))
     val access = session.optString("access_token")
     require(access.isNotBlank()) { "انتهت جلسة الحساب؛ سجّل الدخول مجددًا." }
     sessionPrefs.edit().putString("refresh_token", session.optString("refresh_token").ifBlank { savedRefresh }).apply()
-    val result = JSONObject(commercialCloudRequest(
+    val result = JSONObject(SupabaseClient.request(
         "/rest/v1/rpc/commercial_checkout_sale", "POST",
         JSONObject().put("p_offering_id", offeringId)
             .put("p_location_id", locationId)
@@ -508,14 +427,14 @@ internal fun checkoutCommercialCloudSaleMulti(
     val sessionPrefs = commercialCloudSessionPreferences(context)
     val savedRefresh = sessionPrefs.getString("refresh_token", null).orEmpty()
     require(savedRefresh.isNotBlank()) { "سجّل الدخول إلى حساب Supabase أولًا." }
-    val session = JSONObject(commercialCloudRequest(
+    val session = JSONObject(SupabaseClient.request(
         "/auth/v1/token?grant_type=refresh_token", "POST",
         JSONObject().put("refresh_token", savedRefresh)
     ))
     val access = session.optString("access_token")
     require(access.isNotBlank()) { "انتهت جلسة الحساب؛ سجّل الدخول مجددًا." }
     sessionPrefs.edit().putString("refresh_token", session.optString("refresh_token").ifBlank { savedRefresh }).apply()
-    return JSONObject(commercialCloudRequest(
+    return JSONObject(SupabaseClient.request(
         "/rest/v1/rpc/commercial_checkout_sale_multi", "POST",
         JSONObject().put("p_lines", payload).put("p_location_id", locationId)
             .put("p_idempotency_key", idempotencyKey)
@@ -1113,7 +1032,7 @@ internal fun recordCommercialCloudSupplierInvoice(
         .put("p_idempotency_key", idempotencyKey)
         .put("p_invoice_date", parsedInvoiceDate.toString())
         .put("p_due_date", parsedDueDate.toString())
-    return JSONObject(commercialCloudRequest(
+    return JSONObject(SupabaseClient.request(
         "/rest/v1/rpc/commercial_record_supplier_invoice_with_dates", "POST", payload, access
     ))
 }
@@ -1154,7 +1073,7 @@ internal fun resolvePendingCommercialPurchaseReceipt(context: Context, purchaseO
     if (pendingKey.isBlank()) return false
     val (orgId, access) = commercialMasterDataAccess(context)
     val path = "/rest/v1/commercial_purchase_receipts?select=id&organization_id=eq.$orgId&idempotency_key=eq.$pendingKey&limit=1"
-    val rows = JSONArray(commercialCloudRequest(path, "GET", null, access))
+    val rows = JSONArray(SupabaseClient.request(path, "GET", null, access))
     val found = rows.length() > 0
     check(preferences.getString(preferenceKey, null) != pendingKey || preferences.edit().remove(preferenceKey).commit()) {
         "تعذر مسح مفتاح الاستلام بعد التحقق من الخادم."
@@ -1177,7 +1096,7 @@ internal fun linkCommercialCloudPurchaseOrderItemOffering(
         "مرجع أمر الشراء أو البند أو عنصر المخزون غير صالح."
     }
     val (orgId, access) = commercialMasterDataAccess(context)
-    return JSONObject(commercialCloudRequest(
+    return JSONObject(SupabaseClient.request(
         "/rest/v1/rpc/commercial_link_purchase_order_item_offering", "POST",
         JSONObject().put("p_organization_id", orgId).put("p_purchase_order_id", purchaseOrderId)
             .put("p_purchase_order_item_id", purchaseOrderItemId).put("p_offering_id", offeringId),
@@ -1188,7 +1107,7 @@ internal fun linkCommercialCloudPurchaseOrderItemOffering(
 internal fun transitionCommercialCloudPurchaseOrder(context: Context, purchaseOrderId: String, action: String): JSONObject {
     require(action in setOf("submit", "approve", "cancel", "close")) { "إجراء أمر الشراء غير صالح." }
     val (orgId, access) = commercialMasterDataAccess(context)
-    return JSONObject(commercialCloudRequest(
+    return JSONObject(SupabaseClient.request(
         "/rest/v1/rpc/commercial_transition_purchase_order", "POST",
         JSONObject().put("p_organization_id", orgId).put("p_purchase_order_id", purchaseOrderId).put("p_action", action),
         access
@@ -1219,7 +1138,7 @@ internal fun receiveCommercialCloudPurchaseOrder(
         lineArray.put(JSONObject().put("purchase_order_item_id", line.purchaseOrderItemId).put("quantity", quantity.stripTrailingZeros().toPlainString()))
     }
     val (orgId, access) = commercialMasterDataAccess(context)
-    return JSONObject(commercialCloudRequest(
+    return JSONObject(SupabaseClient.request(
         "/rest/v1/rpc/commercial_receive_purchase_order", "POST",
         JSONObject().put("p_organization_id", orgId).put("p_purchase_order_id", purchaseOrderId)
             .put("p_location_id", locationId).put("p_lines", lineArray).put("p_idempotency_key", idempotencyKey),
@@ -1244,7 +1163,7 @@ internal fun createCommercialCloudPurchaseOrder(
             .put("quantity_ordered", quantity.stripTrailingZeros().toPlainString()).put("unit_cost_minor", line.unitCostMinor))
     }
     val (orgId, access) = commercialMasterDataAccess(context)
-    return JSONObject(commercialCloudRequest(
+    return JSONObject(SupabaseClient.request(
         "/rest/v1/rpc/commercial_create_purchase_order", "POST",
         JSONObject().put("p_organization_id", orgId).put("p_supplier_id", supplierId)
             .put("p_order_number", orderNumber.trim()).put("p_currency_code", currencyCode)
@@ -1303,7 +1222,7 @@ internal fun cancelCommercialCloudExpenseVoucher(context: Context, voucherId: St
     require(reason.trim().length in 3..300) { "أدخل سبب إلغاء واضحًا (3 أحرف على الأقل)." }
     val (_, access) = commercialMasterDataAccess(context)
     val payload = JSONObject().put("p_voucher_id", voucherId).put("p_reason", reason.trim())
-    return JSONObject(commercialCloudRequest(
+    return JSONObject(SupabaseClient.request(
         "/rest/v1/rpc/commercial_cancel_expense_voucher", "POST", payload, access
     ))
 }
@@ -1406,7 +1325,7 @@ internal fun recordCommercialCloudExpense(
         .put("p_evidence_reference", evidenceReference.trim())
         .put("p_note", note.trim())
         .put("p_idempotency_key", idempotencyKey)
-    return JSONObject(commercialCloudRequest(
+    return JSONObject(SupabaseClient.request(
         "/rest/v1/rpc/commercial_record_expense", "POST", payload, access
     ))
 }
@@ -1422,7 +1341,7 @@ internal fun recordCommercialCloudSupplierPayment(
         "طريقة الدفع أو مفتاح العملية غير صالح."
     }
     val (orgId, access) = commercialMasterDataAccess(context)
-    return JSONObject(commercialCloudRequest(
+    return JSONObject(SupabaseClient.request(
         "/rest/v1/rpc/commercial_record_supplier_payment", "POST",
         JSONObject().put("p_organization_id", orgId).put("p_obligation_id", obligationId)
             .put("p_amount_minor", amountMinor).put("p_currency_code", currencyCode)
@@ -1447,7 +1366,7 @@ internal fun loadCommercialCloudSales(context: Context): List<SaleRecord> {
     val sessionPrefs = commercialCloudSessionPreferences(context)
     val savedRefresh = sessionPrefs.getString("refresh_token", null).orEmpty()
     require(savedRefresh.isNotBlank()) { "سجّل الدخول إلى حساب Supabase أولًا." }
-    val session = JSONObject(commercialCloudRequest(
+    val session = JSONObject(SupabaseClient.request(
         "/auth/v1/token?grant_type=refresh_token", "POST",
         JSONObject().put("refresh_token", savedRefresh)
     ))
@@ -1541,7 +1460,7 @@ private fun commercialCloudPagedGet(path: String, accessToken: String, pageSize:
     val rows = JSONArray()
     var offset = 0
     while (true) {
-        val page = JSONArray(commercialCloudRequest("$path&limit=$pageSize&offset=$offset", "GET", token = accessToken))
+        val page = JSONArray(SupabaseClient.request("$path&limit=$pageSize&offset=$offset", "GET", token = accessToken))
         for (index in 0 until page.length()) rows.put(page.getJSONObject(index))
         if (page.length() < pageSize) break
         offset += pageSize
@@ -1556,7 +1475,7 @@ private fun commercialMasterDataAccess(context: Context): Pair<String, String> {
     val sessionPrefs = commercialCloudSessionPreferences(context)
     val refresh = sessionPrefs.getString("refresh_token", null).orEmpty()
     require(refresh.isNotBlank()) { "سجّل الدخول إلى الحساب أولًا." }
-    val session = JSONObject(commercialCloudRequest(
+    val session = JSONObject(SupabaseClient.request(
         "/auth/v1/token?grant_type=refresh_token", "POST", JSONObject().put("refresh_token", refresh)
     ))
     val access = session.optString("access_token")
@@ -1609,7 +1528,7 @@ internal fun assignCommercialCloudOfferingCategory(
         .put("p_activity_id", activityId)
         .put("p_offering_id", offeringId)
         .put("p_category_id", categoryId)
-    commercialCloudRequest("/rest/v1/rpc/commercial_assign_offering_category", "POST", payload, access)
+    SupabaseClient.request("/rest/v1/rpc/commercial_assign_offering_category", "POST", payload, access)
 }
 
 internal fun createCommercialMasterData(
@@ -1652,7 +1571,7 @@ internal fun createCommercialMasterData(
         payload.put("name_ar", name.trim())
         if (parentId.isNotBlank()) payload.put("parent_id", parentId)
     }
-    commercialCloudRequest("/rest/v1/$table", "POST", payload, access)
+    SupabaseClient.request("/rest/v1/$table", "POST", payload, access)
 }
 
 
@@ -1683,7 +1602,7 @@ internal fun loadCommercialDepartmentWarehouseAssignments(context: Context): Lis
 internal fun assignCommercialDepartmentToWarehouse(context: Context, departmentId: String, warehouseId: String) {
     require(departmentId.isNotBlank() && warehouseId.isNotBlank()) { "اختر القسم والمستودع." }
     val (orgId, access) = commercialMasterDataAccess(context)
-    val existingRows = JSONArray(commercialCloudRequest(
+    val existingRows = JSONArray(SupabaseClient.request(
         "/rest/v1/commercial_department_warehouse_assignments?select=department_id,warehouse_id&organization_id=eq.$orgId&department_id=eq.$departmentId&warehouse_id=eq.$warehouseId&limit=1",
         "GET", token = access
     ))
@@ -1693,7 +1612,7 @@ internal fun assignCommercialDepartmentToWarehouse(context: Context, departmentI
         .put("department_id", departmentId)
         .put("warehouse_id", warehouseId)
         .put("created_by", JSONObject.NULL)
-    commercialCloudRequest("/rest/v1/commercial_department_warehouse_assignments", "POST", payload, access)
+    SupabaseClient.request("/rest/v1/commercial_department_warehouse_assignments", "POST", payload, access)
 }
 
 
@@ -1804,7 +1723,7 @@ internal fun saveCommercialInventoryCostingPolicy(context: Context, method: Stri
     require(scope != "location" || locationId.isNotBlank()) { "اختر موقع المؤسسة أولًا." }
     val (orgId, access) = commercialMasterDataAccess(context)
     val locationFilter = if (scope == "location") "location_id=eq.$locationId" else "location_id=is.null"
-    val existing = JSONArray(commercialCloudRequest(
+    val existing = JSONArray(SupabaseClient.request(
         "/rest/v1/commercial_inventory_costing_policies" +
             "?select=id&organization_id=eq.$orgId&$locationFilter&limit=1",
         "GET", token = access
@@ -1817,14 +1736,14 @@ internal fun saveCommercialInventoryCostingPolicy(context: Context, method: Stri
     if (existing.length() > 0) {
         val id = existing.optJSONObject(0)?.optString("id").orEmpty()
         require(id.isNotBlank() && id != "null") { "تعذر تحديد سياسة التكلفة الحالية." }
-        commercialCloudRequest(
+        SupabaseClient.request(
             "/rest/v1/commercial_inventory_costing_policies?id=eq.$id&organization_id=eq.$orgId",
             "PATCH", payload, access
         )
     } else {
         payload.put("organization_id", orgId)
             .put("location_id", if (scope == "location") locationId else JSONObject.NULL)
-        commercialCloudRequest("/rest/v1/commercial_inventory_costing_policies", "POST", payload, access)
+        SupabaseClient.request("/rest/v1/commercial_inventory_costing_policies", "POST", payload, access)
     }
 }
 
@@ -1998,7 +1917,7 @@ internal fun requestCommercialCloudSaleReturn(
         .put("p_reason_code", reasonCode)
         .put("p_items", items)
         .put("p_reason_note", reasonNote.trim().ifBlank { JSONObject.NULL })
-    val response = commercialCloudRequest("/rest/v1/rpc/commercial_request_sale_return", "POST", payload, access)
+    val response = SupabaseClient.request("/rest/v1/rpc/commercial_request_sale_return", "POST", payload, access)
     check(pending.edit().clear().commit()) {
         "تم تأكيد طلب المرتجع لكن تعذر تنظيف مفتاح إعادة المحاولة؛ أعد المحاولة بنفس البيانات ولا تنشئ طلبًا جديدًا."
     }
@@ -2110,7 +2029,7 @@ internal fun decideCommercialCloudSaleReturn(context: Context, returnId: String,
         .put("p_decision", decision)
         .put("p_approved_refund_minor", if (decision == "approve") approvedRefundMinor else JSONObject.NULL)
         .put("p_decision_note", note.trim().ifBlank { JSONObject.NULL })
-    commercialCloudRequest("/rest/v1/rpc/commercial_decide_sale_return", "POST", payload, access)
+    SupabaseClient.request("/rest/v1/rpc/commercial_decide_sale_return", "POST", payload, access)
 }
 
 internal fun inspectCommercialCloudSaleReturnItem(context: Context, itemId: String, condition: String, restock: Boolean, note: String) {
@@ -2121,12 +2040,12 @@ internal fun inspectCommercialCloudSaleReturnItem(context: Context, itemId: Stri
         .put("p_condition_code", condition)
         .put("p_restock", restock)
         .put("p_note", note.trim().ifBlank { JSONObject.NULL })
-    commercialCloudRequest("/rest/v1/rpc/commercial_inspect_sale_return_item", "POST", payload, access)
+    SupabaseClient.request("/rest/v1/rpc/commercial_inspect_sale_return_item", "POST", payload, access)
 }
 
 internal fun restockCommercialCloudSaleReturn(context: Context, returnId: String): String {
     val (_, access) = commercialMasterDataAccess(context)
-    return commercialCloudRequest(
+    return SupabaseClient.request(
         "/rest/v1/rpc/commercial_restock_approved_sale_return", "POST",
         JSONObject().put("p_return_id", returnId), access
     )
@@ -2328,7 +2247,7 @@ internal fun recordCommercialCloudCustomerPayment(
             "تعذر حفظ مفتاح التحصيل قبل الإرسال."
         }
     }
-    val result = JSONObject(commercialCloudRequest(
+    val result = JSONObject(SupabaseClient.request(
         "/rest/v1/rpc/commercial_record_customer_payment", "POST",
         JSONObject().put("p_sale_id", saleId)
             .put("p_amount_minor", amountMinor)
@@ -2348,7 +2267,7 @@ internal fun loadCommercialCloudCustomerReceipt(context: Context, paymentId: Str
     val path = "/rest/v1/commercial_payments" +
         "?select=id,receipt_number,amount_minor,currency_code,payment_method_type,created_at,sale:commercial_sales(receipt_number,customer:commercial_customers(display_name))" +
         "&organization_id=eq.$orgId&id=eq.$paymentId&limit=1"
-    val rows = JSONArray(commercialCloudRequest(path, "GET", null, access))
+    val rows = JSONArray(SupabaseClient.request(path, "GET", null, access))
     require(rows.length() == 1) { "لم يُعثر على سند القبض المؤكد لهذه الدفعة." }
     return rows.getJSONObject(0)
 }
@@ -2372,7 +2291,7 @@ private fun customerPortalAccessToken(context: Context): String {
     val prefs = commercialCloudSessionPreferences(context)
     val refresh = prefs.getString("refresh_token", null).orEmpty()
     require(refresh.isNotBlank()) { "سجّل الدخول إلى حساب الزبون أولًا." }
-    val session = JSONObject(commercialCloudRequest(
+    val session = JSONObject(SupabaseClient.request(
         "/auth/v1/token?grant_type=refresh_token", "POST", JSONObject().put("refresh_token", refresh)
     ))
     val access = session.optString("access_token")
@@ -2383,7 +2302,7 @@ private fun customerPortalAccessToken(context: Context): String {
 
 internal fun loadCustomerPortalOrganizations(context: Context): List<CustomerPortalOrganization> {
     val access = customerPortalAccessToken(context)
-    val result = JSONArray(commercialCloudRequest(
+    val result = JSONArray(SupabaseClient.request(
         "/rest/v1/rpc/commercial_customer_portal_list_organizations", "POST", JSONObject(), access
     ))
     val resultRows = buildList {
@@ -2400,7 +2319,7 @@ internal fun loadCustomerPortalOrganizations(context: Context): List<CustomerPor
         }
     }.toMutableList()
     val delegated = runCatching {
-        JSONArray(commercialCloudRequest(
+        JSONArray(SupabaseClient.request(
             "/rest/v1/rpc/commercial_account_list_my_active_delegations", "POST", JSONObject(), access
         ))
     }.getOrElse { error ->
@@ -2435,7 +2354,7 @@ internal fun loadCustomerPortalOfferings(context: Context, organizationId: Strin
     require(organizationId.isNotBlank()) { "اختر المؤسسة أولًا." }
     val access = customerPortalAccessToken(context)
     val delegated = delegationId.isNotBlank()
-    val result = JSONArray(commercialCloudRequest(
+    val result = JSONArray(SupabaseClient.request(
         if (delegated) "/rest/v1/rpc/commercial_account_list_delegated_offerings" else "/rest/v1/rpc/commercial_customer_portal_list_offerings", "POST",
         if (delegated) JSONObject().put("p_delegation_id", delegationId) else JSONObject().put("p_organization_id", organizationId), access
     ))
@@ -2504,7 +2423,7 @@ internal fun submitCustomerPortalOrder(
     if (delegationId.isNotBlank()) payload.put("p_delegation_id", delegationId)
     val endpoint = if (delegationId.isNotBlank()) "/rest/v1/rpc/commercial_customer_portal_create_delegated_order"
         else "/rest/v1/rpc/commercial_customer_portal_create_order"
-    val row = JSONObject(commercialCloudRequest(endpoint, "POST", payload, access))
+    val row = JSONObject(SupabaseClient.request(endpoint, "POST", payload, access))
     val orderId = row.optString("order_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
     require(orderId.isNotBlank()) { "لم يرجع الخادم تأكيدًا صالحًا للطلب؛ لا تنشئ طلبًا جديدًا بمفتاح مختلف." }
     return CustomerPortalOrderResult(orderId, row.optString("order_number"), row.optString("status"),
@@ -2524,7 +2443,7 @@ internal fun loadCustomerPortalBookingResources(context: Context, organizationId
     require(organizationId.isNotBlank()) { "اختر المؤسسة أولًا." }
     val access = customerPortalAccessToken(context)
     val delegated = delegationId.isNotBlank()
-    val rows = JSONArray(commercialCloudRequest(
+    val rows = JSONArray(SupabaseClient.request(
         if (delegated) "/rest/v1/rpc/commercial_account_list_delegated_booking_resources" else "/rest/v1/rpc/commercial_customer_portal_list_booking_resources", "POST",
         if (delegated) JSONObject().put("p_delegation_id", delegationId) else JSONObject().put("p_organization_id", organizationId), access
     ))
@@ -2558,7 +2477,7 @@ internal fun submitCustomerPortalBooking(
     if (delegationId.isNotBlank()) payload.put("p_delegation_id", delegationId)
     val endpoint = if (delegationId.isNotBlank()) "/rest/v1/rpc/commercial_customer_portal_create_delegated_booking"
         else "/rest/v1/rpc/commercial_customer_portal_create_booking"
-    val row = JSONObject(commercialCloudRequest(endpoint, "POST", payload, access))
+    val row = JSONObject(SupabaseClient.request(endpoint, "POST", payload, access))
     val bookingId = row.optString("booking_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
     require(bookingId.isNotBlank()) { "لم يرجع الخادم تأكيدًا صالحًا للحجز؛ لا تنشئ حجزًا جديدًا بمفتاح مختلف." }
     return CustomerPortalBookingResult(bookingId, row.optString("booking_number"), row.optString("order_id"),
@@ -2605,7 +2524,7 @@ internal fun submitCustomerPortalMultiServiceBooking(
     if (delegationId.isNotBlank()) payload.put("p_delegation_id", delegationId)
     val endpoint = if (delegationId.isNotBlank()) "/rest/v1/rpc/commercial_customer_portal_create_delegated_multi_booking"
         else "/rest/v1/rpc/commercial_customer_portal_create_multi_service_booking"
-    val row = JSONObject(commercialCloudRequest(endpoint, "POST", payload, customerPortalAccessToken(context)))
+    val row = JSONObject(SupabaseClient.request(endpoint, "POST", payload, customerPortalAccessToken(context)))
     val bookingId = row.optString("booking_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
     val orderId = row.optString("order_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
     require(bookingId.isNotBlank() && orderId.isNotBlank()) {
@@ -2678,7 +2597,7 @@ internal fun loadCustomerPortalHistory(context: Context, organizationId: String?
     val access = customerPortalAccessToken(context)
     val payload = JSONObject()
     if (!organizationId.isNullOrBlank()) payload.put("p_organization_id", organizationId)
-    val root = JSONObject(commercialCloudRequest(
+    val root = JSONObject(SupabaseClient.request(
         "/rest/v1/rpc/commercial_customer_portal_list_history", "POST", payload, access
     ))
     val ordersJson = root.optJSONArray("orders") ?: JSONArray()
@@ -2756,7 +2675,7 @@ internal fun loadCustomerPortalHistory(context: Context, organizationId: String?
 internal fun cancelCustomerPortalBooking(context: Context, bookingId: String, reason: String = ""): String {
     require(bookingId.isNotBlank()) { "رقم الحجز غير صالح." }
     val access = customerPortalAccessToken(context)
-    val result = JSONObject(commercialCloudRequest(
+    val result = JSONObject(SupabaseClient.request(
         "/rest/v1/rpc/commercial_customer_portal_cancel_booking",
         "POST",
         JSONObject().put("p_booking_id", bookingId).put("p_cancellation_reason", reason.take(500)),
@@ -2812,7 +2731,7 @@ internal data class CustomerOrderFulfillmentLocation(val id: String, val name: S
 
 internal fun loadCustomerOrderFulfillmentQueue(context: Context, includeHidden: Boolean = false): List<CustomerOrderFulfillmentOrder> {
     val (orgId, access) = commercialMasterDataAccess(context)
-    val rows = JSONArray(commercialCloudRequest(
+    val rows = JSONArray(SupabaseClient.request(
         "/rest/v1/rpc/commercial_customer_portal_list_organization_orders_v2", "POST",
         JSONObject().put("p_organization_id", orgId).put("p_limit", 200).put("p_include_hidden", includeHidden), access
     ))
@@ -2883,7 +2802,7 @@ internal fun fulfillCustomerPortalOrder(
     }
     require(idempotencyKey.length in 8..200) { "مفتاح إتمام الطلب غير صالح." }
     val (orgId, access) = commercialMasterDataAccess(context)
-    return JSONObject(commercialCloudRequest(
+    return JSONObject(SupabaseClient.request(
         "/rest/v1/rpc/commercial_customer_portal_fulfill_order", "POST",
         JSONObject()
             .put("p_organization_id", orgId)
@@ -2897,7 +2816,7 @@ internal fun fulfillCustomerPortalOrder(
 internal fun cancelCustomerPortalOrder(context: Context, orderId: String, reason: String = ""): String {
     require(orderId.isNotBlank()) { "رقم الطلب غير صالح." }
     val access = customerPortalAccessToken(context)
-    val result = JSONObject(commercialCloudRequest(
+    val result = JSONObject(SupabaseClient.request(
         "/rest/v1/rpc/commercial_customer_portal_cancel_order",
         "POST",
         JSONObject().put("p_order_id", orderId).put("p_cancellation_reason", reason.take(500)),
@@ -2926,7 +2845,7 @@ private fun merchantManagementContext(context: Context): Pair<String, String> = 
 
 internal fun loadMerchantBookings(context: Context, includeHidden: Boolean = false): List<MerchantBooking> {
     val (orgId, access) = merchantManagementContext(context)
-    val rows = JSONArray(commercialCloudRequest(
+    val rows = JSONArray(SupabaseClient.request(
         "/rest/v1/rpc/commercial_customer_portal_list_organization_bookings", "POST",
         JSONObject().put("p_organization_id", orgId).put("p_limit", 200).put("p_include_hidden", includeHidden), access
     ))
@@ -2955,34 +2874,34 @@ internal fun loadMerchantBookings(context: Context, includeHidden: Boolean = fal
 internal fun decideMerchantCustomerOrder(context: Context, orderId: String, decision: String, reason: String = ""): JSONObject {
     require(orderId.isNotBlank() && decision in setOf("accept","reject")) { "قرار الطلب غير صالح." }
     val (orgId, access)=merchantManagementContext(context)
-    return JSONObject(commercialCloudRequest("/rest/v1/rpc/commercial_customer_portal_decide_order","POST",
+    return JSONObject(SupabaseClient.request("/rest/v1/rpc/commercial_customer_portal_decide_order","POST",
         JSONObject().put("p_organization_id",orgId).put("p_order_id",orderId).put("p_decision",decision).put("p_reason",reason.take(500)),access))
 }
 
 internal fun setMerchantCustomerOrderHidden(context: Context, orderId: String, hidden: Boolean): JSONObject {
     require(orderId.isNotBlank()) { "رقم الطلب غير صالح." }
     val (orgId, access)=merchantManagementContext(context)
-    return JSONObject(commercialCloudRequest("/rest/v1/rpc/commercial_customer_portal_set_order_hidden","POST",
+    return JSONObject(SupabaseClient.request("/rest/v1/rpc/commercial_customer_portal_set_order_hidden","POST",
         JSONObject().put("p_organization_id",orgId).put("p_order_id",orderId).put("p_hidden",hidden),access))
 }
 
 internal fun decideMerchantCustomerBooking(context: Context, bookingId: String, decision: String, reason: String = ""): JSONObject {
     require(bookingId.isNotBlank() && decision in setOf("accept","reject")) { "قرار الحجز غير صالح." }
     val (orgId, access)=merchantManagementContext(context)
-    return JSONObject(commercialCloudRequest("/rest/v1/rpc/commercial_customer_portal_decide_booking","POST",
+    return JSONObject(SupabaseClient.request("/rest/v1/rpc/commercial_customer_portal_decide_booking","POST",
         JSONObject().put("p_organization_id",orgId).put("p_booking_id",bookingId).put("p_decision",decision).put("p_reason",reason.take(500)),access))
 }
 
 internal fun setMerchantCustomerBookingHidden(context: Context, bookingId: String, hidden: Boolean): JSONObject {
     require(bookingId.isNotBlank()) { "رقم الحجز غير صالح." }
     val (orgId, access)=merchantManagementContext(context)
-    return JSONObject(commercialCloudRequest("/rest/v1/rpc/commercial_customer_portal_set_booking_hidden","POST",
+    return JSONObject(SupabaseClient.request("/rest/v1/rpc/commercial_customer_portal_set_booking_hidden","POST",
         JSONObject().put("p_organization_id",orgId).put("p_booking_id",bookingId).put("p_hidden",hidden),access))
 }
 
 internal fun loadMerchantEditableOfferings(context: Context): List<MerchantEditableOffering> {
     val (orgId, access)=merchantManagementContext(context)
-    val rows=JSONArray(commercialCloudRequest("/rest/v1/rpc/commercial_customer_portal_list_editable_offerings","POST",
+    val rows=JSONArray(SupabaseClient.request("/rest/v1/rpc/commercial_customer_portal_list_editable_offerings","POST",
         JSONObject().put("p_organization_id",orgId),access))
     return (0 until rows.length()).map { i ->
         val row=rows.getJSONObject(i)
@@ -3000,7 +2919,7 @@ internal fun saveMerchantCustomerOrderLines(context: Context, orderId: String, l
         payload.put(JSONObject().put("offering_id",offeringId).put("quantity",quantity))
     }
     val (orgId, access)=merchantManagementContext(context)
-    return JSONObject(commercialCloudRequest("/rest/v1/rpc/commercial_customer_portal_edit_order_lines","POST",
+    return JSONObject(SupabaseClient.request("/rest/v1/rpc/commercial_customer_portal_edit_order_lines","POST",
         JSONObject().put("p_organization_id",orgId).put("p_order_id",orderId).put("p_lines",payload).put("p_reason",reason.take(500)),access))
 }
 
@@ -3391,7 +3310,7 @@ internal fun loadCustomerPortalOutstandingSales(
 ): List<CustomerPortalOutstandingSale> {
     require(organizationId.isNotBlank()) { "اختر المؤسسة أولًا." }
     val access = customerPortalAccessToken(context)
-    val rows = JSONArray(commercialCloudRequest(
+    val rows = JSONArray(SupabaseClient.request(
         "/rest/v1/rpc/commercial_customer_portal_list_outstanding_sales",
         "POST", JSONObject().put("p_organization_id", organizationId), access
     ))
@@ -3417,7 +3336,7 @@ internal fun loadCustomerPortalPaymentRequests(
 ): List<CustomerPaymentRequest> {
     require(organizationId.isNotBlank()) { "اختر المؤسسة أولًا." }
     val access = customerPortalAccessToken(context)
-    val rows = JSONArray(commercialCloudRequest(
+    val rows = JSONArray(SupabaseClient.request(
         "/rest/v1/rpc/commercial_customer_portal_list_my_payment_requests",
         "POST", JSONObject().put("p_organization_id", organizationId), access
     ))
@@ -3472,7 +3391,7 @@ internal fun submitCustomerPortalPaymentRequest(
     val fingerprint = listOf(saleId, amountMinor.toString(), customerNote).joinToString("|")
     val slot = "create:$saleId"
     val key = getCustomerPaymentRequestActionKey(context, slot, fingerprint)
-    val result = JSONObject(commercialCloudRequest(
+    val result = JSONObject(SupabaseClient.request(
         "/rest/v1/rpc/commercial_customer_portal_submit_payment_request", "POST",
         JSONObject().put("p_sale_id", saleId).put("p_amount_minor", amountMinor)
             .put("p_customer_note", customerNote).put("p_idempotency_key", key),
@@ -3490,7 +3409,7 @@ internal fun updateCustomerPortalPaymentRequest(
     val fingerprint = listOf(requestId, amountMinor.toString(), customerNote).joinToString("|")
     val slot = "update:$requestId"
     val key = getCustomerPaymentRequestActionKey(context, slot, fingerprint)
-    val result = JSONObject(commercialCloudRequest(
+    val result = JSONObject(SupabaseClient.request(
         "/rest/v1/rpc/commercial_customer_portal_update_payment_request", "POST",
         JSONObject().put("p_request_id", requestId).put("p_amount_minor", amountMinor)
             .put("p_customer_note", customerNote).put("p_idempotency_key", key),
@@ -3506,7 +3425,7 @@ internal fun loadCommercialCloudCustomerPaymentRequests(
 ): List<MerchantCustomerPaymentRequest> {
     require(status in setOf("pending", "change_requested", "rejected", "approved", "all"))
     val (organizationId, access) = commercialMasterDataAccess(context)
-    val rows = JSONArray(commercialCloudRequest(
+    val rows = JSONArray(SupabaseClient.request(
         "/rest/v1/rpc/commercial_merchant_list_customer_payment_requests", "POST",
         JSONObject().put("p_organization_id", organizationId).put("p_status", status).put("p_limit", 100),
         access
@@ -3544,7 +3463,7 @@ internal fun reviewCommercialCloudCustomerPaymentRequest(
     val slot = "review:$requestId:$decision"
     val key = getCustomerPaymentRequestActionKey(context, slot, fingerprint)
     val (_, access) = commercialMasterDataAccess(context)
-    val result = JSONObject(commercialCloudRequest(
+    val result = JSONObject(SupabaseClient.request(
         "/rest/v1/rpc/commercial_merchant_review_customer_payment_request", "POST",
         JSONObject().put("p_request_id", requestId).put("p_decision", decision)
             .put("p_confirmed_amount_minor", if (decision == "approve") confirmedAmountMinor else JSONObject.NULL)
