@@ -5,6 +5,7 @@ import android.os.Handler
 import android.os.Looper
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -59,6 +60,7 @@ internal fun CommercialCloudReturnsScreen(context: Context, onBack: () -> Unit) 
     var rows by remember { mutableStateOf<List<CommercialCloudSaleReturn>>(emptyList()) }
     var selectedId by remember { mutableStateOf("") }
     var query by remember { mutableStateOf("") }
+    var selectedStatusFilter by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
     var message by remember { mutableStateOf("") }
@@ -94,7 +96,18 @@ internal fun CommercialCloudReturnsScreen(context: Context, onBack: () -> Unit) 
             }
         }
     }
-    val filtered = rows.filter { r -> query.isBlank() || listOf(r.receiptNumber,r.customerName,r.reasonCode,r.status,r.refundStatus,r.restockStatus,r.id).any { it.contains(query.trim(), true) } }
+    val statusFilters = listOf(
+        "" to "الكل",
+        "requested" to "بانتظار القرار",
+        "approved" to "موافق عليه",
+        "completed" to "مكتمل",
+        "rejected" to "مرفوض"
+    )
+    val statusCounts = rows.groupingBy { it.status.lowercase(Locale.ROOT) }.eachCount()
+    val filtered = rows.filter { r ->
+        (selectedStatusFilter.isBlank() || r.status.equals(selectedStatusFilter, ignoreCase = true)) &&
+            (query.isBlank() || listOf(r.receiptNumber,r.customerName,r.reasonCode,r.status,r.refundStatus,r.restockStatus,r.id).any { it.contains(query.trim(), true) })
+    }
     val selected = rows.firstOrNull { it.id == selectedId }
     fun executeAction(action: () -> Unit, success: String) {
         busy = true
@@ -130,6 +143,22 @@ internal fun CommercialCloudReturnsScreen(context: Context, onBack: () -> Unit) 
                 }
             }
             item { OutlinedTextField(value=query,onValueChange={query=it},modifier=Modifier.fillMaxWidth(),singleLine=true,label={Text("ابحث بالفاتورة أو العميل أو الحالة")},leadingIcon={Icon(Icons.Default.Search,null)},shape=RoundedCornerShape(14.dp)) }
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    statusFilters.forEach { (status, title) ->
+                        val count = if (status.isBlank()) rows.size else statusCounts[status] ?: 0
+                        FilterChip(
+                            selected = selectedStatusFilter == status,
+                            onClick = { selectedStatusFilter = status },
+                            enabled = !busy,
+                            label = { Text("$title ($count)") }
+                        )
+                    }
+                }
+            }
             item {
                 Button(
                     onClick = {
