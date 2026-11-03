@@ -4,6 +4,12 @@ Baseline inspected at commit `b15ce71cd0066a3fd2eecc8195338767bc6f19f3` on `fix/
 
 This document describes the existing code, then records where responsibility should live after refactoring. Target names are proposed destinations, not claims that those files already exist.
 
+## Extracted model ownership
+
+- `CommercialModels.kt` now owns the shared `Product` and `SaleRecord` models because both the cloud repository and Compose screens consume them.
+- `LocalStoreModels.kt` now owns local-only `SettlementRecord`, `ExpenseRecord`, and local sale-unit parsing helpers. The helper visibility is package-internal so the existing MainActivity screens can keep calling the same functions.
+- The persistent SharedPreferences keys and serialization routines remain in `MainActivity.kt` for the next isolated repository extraction; no local data format or key was changed.
+
 ## Large mixed-responsibility files
 
 | Existing source | Observed responsibilities | Target ownership |
