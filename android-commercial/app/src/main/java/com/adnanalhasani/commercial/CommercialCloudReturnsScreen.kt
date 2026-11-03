@@ -51,17 +51,8 @@ private fun returnQuantityInput(value: String): String {
     }
     return out.toString()
 }
-private fun returnSellUnits(item: CommercialCloudReturnableSaleItem): List<ReturnSellUnit> {
-    val parsed = runCatching {
-        val json = JSONArray(item.sellUnitsJson)
-        List(json.length()) { i ->
-            val row = json.getJSONObject(i)
-            ReturnSellUnit(row.optString("unitCode"), row.optString("unitName").ifBlank { row.optString("unitCode") },
-                row.optLong("quantityInBase", 1L).coerceAtLeast(1L), row.optBoolean("isDefault", false))
-        }.filter { it.code.isNotBlank() }.distinctBy { it.code }
-    }.getOrDefault(emptyList())
-    return parsed.ifEmpty { listOf(ReturnSellUnit(item.sellingUnitCode, item.sellingUnitName, 1L, true)) }
-}
+private fun returnSellUnits(item: CommercialCloudReturnableSaleItem): List<ReturnSellUnit> =
+    listOf(ReturnSellUnit(item.sellingUnitCode, item.sellingUnitName, item.sellingUnitFactor, true))
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
