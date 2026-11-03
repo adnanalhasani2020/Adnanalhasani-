@@ -170,6 +170,11 @@ internal fun CommercialCloudSaleComposerScreen(
         quantity != null && unit != null &&
             quantity.multiply(BigDecimal.valueOf(unit.factor)).stripTrailingZeros().scale() > 0
     }
+    val hasFractionalSellingQuantity = selectedLines.any {
+        it.quantity.stripTrailingZeros().scale() > 0
+    }
+    val fractionalSellingQuantityBlocked =
+        !COMMERCIAL_CLOUD_FRACTIONAL_QUANTITY_RPC_READY && hasFractionalSellingQuantity
     val discountMinor = discountText.toLongOrNull() ?: 0L
     val taxMinor = taxText.toLongOrNull() ?: 0L
     val estimatedTotal = (estimatedSubtotal - BigInteger.valueOf(discountMinor) + BigInteger.valueOf(taxMinor))
@@ -412,11 +417,20 @@ internal fun CommercialCloudSaleComposerScreen(
                 }
             }
             item {
+                if (fractionalSellingQuantityBlocked) {
+                    Text(
+                        "الكميات العشرية غير مفعّلة سحابيًا مؤقتًا حتى نشر تحديث الخادم واختباره. استخدم كمية صحيحة؛ لم يتم إرسال أي عملية.",
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 12.sp
+                    )
+                }
                 Button(
                     onClick = {
                         error = ""
                         if (selectedLines.isEmpty()) {
                             error = "أدخل كمية لصنف واحد على الأقل."
+                        } else if (fractionalSellingQuantityBlocked) {
+                            error = "قاعدة الإنتاج الحالية لا تقبل كميات البيع العشرية بعد. استخدم كمية صحيحة مؤقتًا؛ لن نرسل طلبًا قد يرفضه الخادم."
                         } else if (hasNonIntegralBaseQuantity) {
                             error = "هذه الكمية لا تتحول إلى عدد صحيح من وحدة المخزون. اختر وحدة تحويل مناسبة؛ مثل 0.5 كجم عندما تكون وحدة المخزون جرامًا."
                         } else if (selectedLines.size != invoiceLines.size) {
@@ -477,7 +491,7 @@ internal fun CommercialCloudSaleComposerScreen(
                             }
                         }
                     },
-                    enabled = !loading && !submitting && products.isNotEmpty(),
+                    enabled = !loading && !submitting && products.isNotEmpty() && !fractionalSellingQuantityBlocked,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     if (submitting) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
