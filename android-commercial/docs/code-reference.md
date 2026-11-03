@@ -42,11 +42,15 @@
 
 ## 3. ملفات الاختبار والبناء
 
-- `app/src/test/java/com/adnanalhasani/commercial/SupplierInvoiceApplicationTest.kt`: اختبارات قواعد `SupplierInvoiceApplication`. نجاحها لا يثبت اختبار شبكة Supabase أو دورة شراء كاملة.\n- `app/src/main/java/com/adnanalhasani/commercial/CustomerPaymentRequestAmount.kt`: تحويل مبالغ طلبات الدفع بين الوحدات الكبرى والصغرى حسب العملة، مع رفض الدقة غير القابلة للتمثيل. اختبار السلوك: `app/src/test/java/com/adnanalhasani/commercial/CustomerPaymentRequestAmountTest.kt`.\n- `app/src/main/java/com/adnanalhasani/commercial/SupplierInvoicePriceVarianceCalculations.kt`: نماذج وحساب فرق سعر فاتورة المورد مقابل تكلفة أمر الشراء، مع تجميع دقيق وتقريب مرة واحدة. اختبار السلوك: `app/src/test/java/com/adnanalhasani/commercial/SupplierInvoicePriceVarianceReportTest.kt`.\n- `app/src/main/java/com/adnanalhasani/commercial/CostProfitCalculations.kt`: حساب صافي الإيراد وتكلفة البضاعة المباعة وتكلفة المرتجعات المعاد تخزينها والربح الإجمالي بدقة، مع منع التعويض الصفري عند غياب التكلفة. اختبار السلوك: `app/src/test/java/com/adnanalhasani/commercial/CostProfitReportTotalsTest.kt`.
+- `app/src/test/java/com/adnanalhasani/commercial/SupplierInvoiceApplicationTest.kt`: اختبارات قواعد `SupplierInvoiceApplication`. نجاحها لا يثبت اختبار شبكة Supabase أو دورة شراء كاملة.
+- `app/src/main/java/com/adnanalhasani/commercial/CustomerPaymentRequestAmount.kt`: تحويل مبالغ طلبات الدفع بين الوحدات الكبرى والصغرى حسب العملة، مع رفض الدقة غير القابلة للتمثيل. اختبار السلوك: `app/src/test/java/com/adnanalhasani/commercial/CustomerPaymentRequestAmountTest.kt`.
+- `app/src/main/java/com/adnanalhasani/commercial/SupplierInvoicePriceVarianceCalculations.kt`: نماذج وحساب فرق سعر فاتورة المورد مقابل تكلفة أمر الشراء، مع تجميع دقيق وتقريب مرة واحدة. اختبار السلوك: `app/src/test/java/com/adnanalhasani/commercial/SupplierInvoicePriceVarianceReportTest.kt`.
+- `app/src/main/java/com/adnanalhasani/commercial/CostProfitCalculations.kt`: حساب صافي الإيراد وتكلفة البضاعة المباعة وتكلفة المرتجعات المعاد تخزينها والربح الإجمالي بدقة، مع منع التعويض الصفري عند غياب التكلفة. اختبار السلوك: `app/src/test/java/com/adnanalhasani/commercial/CostProfitReportTotalsTest.kt`.
 - `app/src/main/AndroidManifest.xml`: تعريف التطبيق وصلاحياته ونقطة الدخول. يجب مراجعة أي تغيير صلاحيات مع متطلبات التشغيل الفعلية.
 - `app/build.gradle.kts` و`build.gradle.kts` و`settings.gradle.kts`: إعداد بناء Android والاعتماديات والمشروعات.
 - `gradle.properties`: خصائص البناء. لا تضع أسرار الإنتاج فيه ولا تضمن أن متغيرات البناء وحدها تحمي المفاتيح.
-- `docs/architecture/README.md`, `module-boundaries.md`, and `refactoring-roadmap.md`: current modularization target, ownership rules, and execution status.\n- `docs/cloud-backed-screen-delivery.md`: سجل شرائح تسليم الشاشات السحابية وحدود التحقق.
+- `docs/architecture/README.md`, `module-boundaries.md`, and `refactoring-roadmap.md`: current modularization target, ownership rules, and execution status.
+- `docs/cloud-backed-screen-delivery.md`: سجل شرائح تسليم الشاشات السحابية وحدود التحقق.
 - `docs/commercial-documents-implementation-plan.md`: عقد سير المستندات التجاري والبوابات المتبقية.
 - `docs/warehouse-and-classification-architecture.md`: نموذج المستودعات ومواقع التخزين والتصنيفات وحالة الربط المخزني.
 
