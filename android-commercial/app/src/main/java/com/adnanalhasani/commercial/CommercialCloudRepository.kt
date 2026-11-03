@@ -438,7 +438,7 @@ internal data class CommercialCloudCheckoutLine(
 
 /** Parse a positive selling quantity with up to three decimal places. */
 internal fun parseCommercialCheckoutQuantity(value: String): BigDecimal? {
-    var normalized = value.trim().replace(',', '.')
+    var normalized = value.trim().replace(',', '.').replace('\u066B', '.')
     if (normalized.startsWith(".")) normalized = "0$normalized"
     val ascii = buildString {
         normalized.forEach { ch ->
