@@ -38,7 +38,7 @@ internal fun formatCommercialOperationalAmount(amountMinor: Long, currencyCode: 
 
 internal fun formatCommercialOperationalAmount(amountMinor: Long, currencyCode: String, fractionDigits: Int): String {
     val code = currencyCode.trim().uppercase(Locale.ROOT)
-    if (fractionDigits !in 0..3) return amountMinor.toString() + " وحدة نقدية صغرى" + if (code.isBlank()) "" else " • $code"
+    if (fractionDigits !in 0..6) return amountMinor.toString() + " وحدة نقدية صغرى" + if (code.isBlank()) "" else " • $code"
     val amountText = BigDecimal.valueOf(amountMinor).movePointLeft(fractionDigits).toPlainString()
     val negative = amountText.startsWith("-")
     val unsigned = amountText.removePrefix("-")
