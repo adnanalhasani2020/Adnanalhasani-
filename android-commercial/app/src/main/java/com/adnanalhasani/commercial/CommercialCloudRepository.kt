@@ -46,6 +46,11 @@ private fun commercialCloudActionableError(raw: String, status: Int): String {
         message.contains("collection_exceeds_outstanding_balance", ignoreCase = true) ||
             message.contains("overpayment", ignoreCase = true) ->
             "رُفض التحصيل لأن المبلغ يتجاوز الرصيد المستحق. حدّث الفاتورة وأدخل المبلغ المتبقي الفعلي. التفاصيل: $detail"
+        message.contains("invalid refresh token", ignoreCase = true) ||
+            message.contains("refresh token not found", ignoreCase = true) ||
+            message.contains("invalid_grant", ignoreCase = true) ||
+            code == "refresh_token_not_found" ->
+            "انتهت جلسة الحساب أو لم تعد صالحة؛ سجّل الدخول مجددًا قبل متابعة العمل. التفاصيل: $detail"
         message.contains("insufficient_stock", ignoreCase = true) ||
             message.contains("insufficient_inventory", ignoreCase = true) ||
             message.contains("stock", ignoreCase = true) && message.contains("available", ignoreCase = true) ->
