@@ -48,6 +48,7 @@ internal fun PurchaseOrderEntryDialog(
 ) {
     var options by remember { mutableStateOf<CommercialPurchaseOrderOptions?>(null) }
     var loadingOptions by remember { mutableStateOf(true) }
+    var reloadOptionsToken by remember { mutableStateOf(0) }
     var supplierId by remember { mutableStateOf("") }
     var locationId by remember { mutableStateOf("") }
     var orderNumber by remember { mutableStateOf("") }
@@ -62,7 +63,9 @@ internal fun PurchaseOrderEntryDialog(
         commercialStableIdempotencyKey("purchase-create", listOf(supplierId, orderNumber.trim()))
     }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(reloadOptionsToken) {
+        loadingOptions = true
+        error = ""
         PurchaseOrderWorker.execute {
             val result = runCatching { loadCommercialCloudPurchaseOrderOptions(context) }
             PurchaseOrderMain.post {
@@ -90,7 +93,12 @@ internal fun PurchaseOrderEntryDialog(
                 if (loadingOptions) {
                     Text("جارٍ تحميل الموردين والمواقع وعناصر المخزون...")
                 } else if (available == null) {
-                    Text("تعذر تحميل خيارات أمر الشراء.")
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(error.ifBlank { "تعذر تحميل خيارات أمر الشراء." })
+                        TextButton(onClick = { reloadOptionsToken++ }, enabled = !saving) {
+                            Text("إعادة تحميل الخيارات")
+                        }
+                    }
                 } else if (available.suppliers.isEmpty() || available.locations.isEmpty() || available.offerings.isEmpty()) {
                     Text("يلزم وجود مورد نشط وموقع نشط وعنصر مخزون نشط ضمن المؤسسة قبل إنشاء أمر شراء.")
                 } else {
