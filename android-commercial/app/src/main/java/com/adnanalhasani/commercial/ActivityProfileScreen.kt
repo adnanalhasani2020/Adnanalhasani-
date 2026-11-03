@@ -23,13 +23,16 @@ import java.net.URL
 import java.time.LocalDate
 import java.util.concurrent.Executors
 
-private fun profileSessionPreferences(context: Context) = EncryptedSharedPreferences.create(
+internal fun profileSessionPreferences(context: Context) = EncryptedSharedPreferences.create(
     context,
     "ruh_catalog_auth_session",
     MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
     EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
     EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
 )
+
+internal fun hasSavedCommercialAuthSession(context: Context): Boolean =
+    runCatching { profileSessionPreferences(context).getString("refresh_token", null).orEmpty().isNotBlank() }.getOrDefault(false)
 
 private val profileIo = Executors.newSingleThreadExecutor()
 private val profileMain = Handler(Looper.getMainLooper())
@@ -69,7 +72,12 @@ private fun supabaseRequest(path: String, payload: JSONObject, token: String? = 
 }
 
 @Composable
-internal fun ActivityProfileScreen(onBack: () -> Unit, onCatalog: () -> Unit) {
+internal fun ActivityProfileScreen(
+    onBack: () -> Unit,
+    onCatalog: () -> Unit,
+    showBackButton: Boolean = true,
+    onProfileCreated: () -> Unit = {}
+) {
     val context = LocalContext.current
     var email by remember { mutableStateOf("") }
     var accountDisplayName by remember { mutableStateOf("") }
@@ -114,6 +122,34 @@ internal fun ActivityProfileScreen(onBack: () -> Unit, onCatalog: () -> Unit) {
     var busy by remember { mutableStateOf(false) }
     var feedback by remember { mutableStateOf("") }
     var created by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        val savedRefresh = runCatching { profileSessionPreferences(context).getString("refresh_token", null).orEmpty() }.getOrDefault("")
+        if (savedRefresh.isBlank()) return@LaunchedEffect
+        profileIo.execute {
+            val restored = runCatching {
+                val session = supabaseRequest(
+                    "/auth/v1/token?grant_type=refresh_token",
+                    JSONObject().put("refresh_token", savedRefresh)
+                )
+                val token = session.optString("access_token")
+                val rotated = session.optString("refresh_token")
+                require(token.isNotBlank() && rotated.isNotBlank()) { "تعذر استعادة جلسة الحساب؛ سجّل الدخول من جديد." }
+                profileSessionPreferences(context).edit().putString("refresh_token", rotated).apply()
+                token
+            }
+            profileMain.post {
+                restored.onSuccess {
+                    accessToken = it
+                    feedback = "تم استعادة جلسة حسابك."
+                }.onFailure {
+                    profileSessionPreferences(context).edit().remove("refresh_token").apply()
+                    accessToken = null
+                    feedback = "انتهت جلسة الحساب أو لم تعد صالحة. سجّل الدخول مرة أخرى."
+                }
+            }
+        }
+    }
 
     fun runRequest(action: () -> String, onSuccess: (String) -> Unit) {
         if (busy) return
@@ -168,12 +204,13 @@ internal fun ActivityProfileScreen(onBack: () -> Unit, onCatalog: () -> Unit) {
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        TextButton(onClick = onBack) { Text("← رجوع إلى المتجر") }
-        Text(if (created) "تم إنشاء ملف النشاط" else "إعداد النشاط التجاري", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text("تطبيق Android أصلي • حفظ مباشر في قاعدة بيانات Supabase", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (showBackButton) TextButton(onClick = onBack) { Text("← رجوع إلى المتجر") }
+        Text(if (created) "تم إنشاء مشروعك التجاري" else if (accessToken == null) "مرحبًا بك في متجري" else "إنشاء مشروعك التجاري", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text(if (accessToken == null) "سجّل الدخول أو أنشئ حسابًا جديدًا للبدء. بعد ذلك سنساعدك على إنشاء مشروعك وربطه بالسحابة." else "الخطوة التالية: أدخل بيانات نشاطك وموقعه ليُنشأ مشروعك في قاعدة البيانات السحابية.", color = MaterialTheme.colorScheme.onSurfaceVariant)
 
         if (accessToken == null) {
-            Text("تسجيل الدخول إلى Supabase", style = MaterialTheme.typography.titleMedium)
+            Text("الخطوة 1: حسابك", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text("يمكنك استخدام البريد وكلمة المرور، أو رمز الهاتف إذا كان مزود SMS مفعّلًا في النظام.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 FilterChip(selected = authMethod == "email", onClick = { authMethod = "email"; phoneOtpRequested = false; feedback = "" }, label = { Text("البريد وكلمة المرور") })
                 FilterChip(selected = authMethod == "phone", onClick = { authMethod = "phone"; isRegister = false; phoneOtpRequested = false; feedback = "" }, label = { Text("رمز الهاتف SMS") })
@@ -248,7 +285,8 @@ internal fun ActivityProfileScreen(onBack: () -> Unit, onCatalog: () -> Unit) {
             }
             }
         } else if (!created) {
-            Text("بيانات النشاط والمالك", style = MaterialTheme.typography.titleMedium)
+            Text("الخطوة 2: إنشاء المشروع", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text("أدخل المعلومات الأساسية بدقة. سيتم إنشاء المؤسسة والنشاط والمقر الرئيسي وربطها بحسابك.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             ProfileField("اسم النشاط *", organizationName) { organizationName = it; if (organizationSlug.isBlank()) organizationSlug = it.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-') }
             ProfileField("الرابط المختصر بالإنجليزية *", organizationSlug) { organizationSlug = it.lowercase().trim() }
             if (activityOptions.isNotEmpty()) {
@@ -362,10 +400,10 @@ internal fun ActivityProfileScreen(onBack: () -> Unit, onCatalog: () -> Unit) {
                             .putString("country_code", country)
                             .apply()
                         "تم حفظ ملف النشاط ومعرّفاته في قاعدة البيانات بنجاح."
-                    }, { feedback = it; created = it.startsWith("تم حفظ") })
+                    }, { feedback = it; created = it.startsWith("تم حفظ"); if (created) onProfileCreated() })
                 },
                 modifier = Modifier.fillMaxWidth()
-            ) { Text(if (busy) "جارٍ الحفظ في قاعدة البيانات..." else "حفظ ملف النشاط") }
+            ) { Text(if (busy) "جارٍ إنشاء المشروع..." else "إنشاء المشروع وربطه بالسحابة") }
         } else {
             Text("تم إنشاء ملف النشاط وحفظه في Supabase. يمكنك الآن اختيار الأصناف وربطها بهذا النشاط قبل تهيئة المخزون.", color = MaterialTheme.colorScheme.primary)
             Button(onClick = onCatalog, modifier = Modifier.fillMaxWidth()) { Text("اختيار أصناف النشاط") }
