@@ -1402,6 +1402,7 @@ private fun CommercialCloudReportsScreen(context: Context, onBack: () -> Unit) {
     var toText by remember { mutableStateOf(today.toString()) }
     var range by remember { mutableStateOf(today to today) }
     var presetLabel by remember { mutableStateOf("اليوم") }
+    var dateRangeEdited by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var loaded by remember { mutableStateOf(false) }
@@ -1429,13 +1430,21 @@ private fun CommercialCloudReportsScreen(context: Context, onBack: () -> Unit) {
                     reportingTimeZone = z.getOrThrow()
                     loaded = true
                 } else {
-                    error = listOfNotNull(s.exceptionOrNull(), e.exceptionOrNull(), p.exceptionOrNull(), r.exceptionOrNull()).joinToString(" • ") { it.message ?: "تعذر تحميل مصدر" }
+                    error = listOfNotNull(s.exceptionOrNull(), e.exceptionOrNull(), p.exceptionOrNull(), r.exceptionOrNull(), z.exceptionOrNull()).joinToString(" • ") { it.message ?: "تعذر تحميل مصدر" }
                 }
                 loading = false
             }
         }
     }
     LaunchedEffect(Unit) { refresh() }
+    LaunchedEffect(reportingTimeZone) {
+        if (!dateRangeEdited) {
+            val reportingToday = java.time.LocalDate.now(reportingTimeZone)
+            fromText = reportingToday.toString()
+            toText = reportingToday.toString()
+            range = reportingToday to reportingToday
+        }
+    }
     val first = runCatching { java.time.LocalDate.parse(fromText) }.getOrNull()
     val last = runCatching { java.time.LocalDate.parse(toText) }.getOrNull()
     val zone = reportingTimeZone
@@ -1454,7 +1463,7 @@ private fun CommercialCloudReportsScreen(context: Context, onBack: () -> Unit) {
         return java.math.BigDecimal.valueOf(amount).movePointLeft(scale).setScale(scale, java.math.RoundingMode.HALF_UP).toPlainString() + " " + code
     }
     fun setPreset(firstDate: java.time.LocalDate, lastDate: java.time.LocalDate, label: String) {
-        fromText = firstDate.toString(); toText = lastDate.toString(); range = firstDate to lastDate; presetLabel = label; error = ""
+        fromText = firstDate.toString(); toText = lastDate.toString(); range = firstDate to lastDate; presetLabel = label; dateRangeEdited = true; error = ""
     }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
         item {
@@ -1482,8 +1491,8 @@ private fun CommercialCloudReportsScreen(context: Context, onBack: () -> Unit) {
                         }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(fromText, { fromText = it.take(10); error = "" }, modifier = Modifier.weight(1f), singleLine = true, label = { Text("من YYYY-MM-DD") })
-                        OutlinedTextField(toText, { toText = it.take(10); error = "" }, modifier = Modifier.weight(1f), singleLine = true, label = { Text("إلى YYYY-MM-DD") })
+                        OutlinedTextField(fromText, { fromText = it.take(10); dateRangeEdited = true; error = "" }, modifier = Modifier.weight(1f), singleLine = true, label = { Text("من YYYY-MM-DD") })
+                        OutlinedTextField(toText, { toText = it.take(10); dateRangeEdited = true; error = "" }, modifier = Modifier.weight(1f), singleLine = true, label = { Text("إلى YYYY-MM-DD") })
                     }
                     Button(onClick = {
                         if (first == null || last == null) error = "أدخل التاريخين بصيغة YYYY-MM-DD."
