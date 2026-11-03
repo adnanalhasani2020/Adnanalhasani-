@@ -1,0 +1,50 @@
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+MAIN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt"
+PROFILE = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ActivityProfileScreen.kt"
+
+
+def test_first_launch_requires_authentication_and_complete_project_context():
+    main = MAIN.read_text(encoding="utf-8")
+    assert "var showEntryFlow by remember" in main
+    assert "!hasSavedCommercialAuthSession(context) || !hasCompleteEntryContext" in main
+    assert "if (showEntryFlow)" in main
+    assert "showBackButton = false" in main
+
+
+def test_project_creation_returns_to_the_cloud_dashboard_and_refreshes_context():
+    main = MAIN.read_text(encoding="utf-8")
+    profile = PROFILE.read_text(encoding="utf-8")
+    assert "onProfileCreated = {" in main
+    assert "onAuthenticated = {" in main
+    assert "hasSavedCommercialCloudContext(context)" in main
+    assert "مشروعك مرتبط بالفعل" in profile
+    assert "لن نُنشئ مشروعًا مكررًا" in profile
+    assert "store-${UUID.randomUUID().toString().take(8)}" in profile
+    assert "showEntryFlow = false" in main
+    assert "cloudContextRevision++" in main
+    assert "commercial_create_activity_profile" not in main  # The profile RPC stays encapsulated in the setup screen.
+
+
+def test_existing_auth_session_is_restored_before_project_setup():
+    profile = PROFILE.read_text(encoding="utf-8")
+    assert "internal fun hasSavedCommercialAuthSession" in profile
+    assert '"/auth/v1/token?grant_type=refresh_token"' in profile
+    assert 'putString("refresh_token", rotated)' in profile
+    assert 'remove("refresh_token")' in profile
+
+
+def test_first_run_and_navigation_guidance_are_available_without_removing_features():
+    main = MAIN.read_text(encoding="utf-8")
+    assert "إخفاء التلميحات" in main
+    assert "الانتقال إلى إضافة الأصناف" in main
+    assert "تسجيل أول عملية بيع" in main
+    assert "ReportsCenterScreen" in main
+    assert "CommercialCloudPurchasesScreen" in main
+    assert "الأصناف والمخزون والمشتريات" in main
+    assert "العملاء والمبيعات" in main
+    assert "onBackup = {" in main
+    assert "النسخ الاحتياطي لم تُربط بعد" in main
+    assert "تم تحميل بيانات المؤسسة السحابية" in main
