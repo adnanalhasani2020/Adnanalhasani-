@@ -990,6 +990,10 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     }
 
     fun createInvoicePurchaseItem() {
+        if (!COMMERCIAL_CLOUD_UNMAPPED_INVOICE_ITEM_RPC_READY) {
+            feedback = "إنشاء صنف جديد من بند فاتورة الشراء متوقف مؤقتًا؛ ترحيل الخادم المطلوب غير منشور في قاعدة الإنتاج بعد. لم يتم إرسال أي بيانات."
+            return
+        }
         val active=token ?: return
         val orgId=org() ?: return
         val requestRow=invoiceRequests.firstOrNull { it.id==invoiceMappingRequestId }
@@ -1745,6 +1749,13 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             text={
                 Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
                     Text("أدخل بيانات الصنف المعتمدة. لا يُستنتج التصنيف أو الاسم الإنجليزي من وصف الفاتورة.",style=MaterialTheme.typography.bodySmall)
+                    if (!COMMERCIAL_CLOUD_UNMAPPED_INVOICE_ITEM_RPC_READY) {
+                        Text(
+                            "هذه العملية غير متاحة سحابيًا حتى نشر ترحيل إنشاء الصنف وربطه بأمر الشراء. لن يتم إرسال أي طلب.",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                     OutlinedTextField(value=invoiceNewNameAr,onValueChange={invoiceNewNameAr=it.take(180)},label={Text("اسم الصنف بالعربية *")},singleLine=true,enabled=!busy,modifier=Modifier.fillMaxWidth())
                     OutlinedTextField(value=invoiceNewNameEn,onValueChange={invoiceNewNameEn=it.take(180)},label={Text("اسم الصنف بالإنجليزية *")},singleLine=true,enabled=!busy,modifier=Modifier.fillMaxWidth())
                     Box {
@@ -1794,7 +1805,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                 }
             },
             confirmButton={
-                Button(onClick={createInvoicePurchaseItem()},enabled=!busy && invoiceNewNameAr.isNotBlank() && invoiceNewNameEn.isNotBlank() && invoiceNewCategoryCode.isNotBlank() && invoiceNewBaseUnitCode.isNotBlank() && invoiceNewSaleUnitCode.isNotBlank() && invoiceMappingWarehouseId.isNotBlank()) {
+                Button(onClick={createInvoicePurchaseItem()},enabled=!busy && COMMERCIAL_CLOUD_UNMAPPED_INVOICE_ITEM_RPC_READY && invoiceNewNameAr.isNotBlank() && invoiceNewNameEn.isNotBlank() && invoiceNewCategoryCode.isNotBlank() && invoiceNewBaseUnitCode.isNotBlank() && invoiceNewSaleUnitCode.isNotBlank() && invoiceMappingWarehouseId.isNotBlank()) {
                     Text(if(busy) "جارٍ الإنشاء..." else "إنشاء وربط الصنف")
                 }
             },
