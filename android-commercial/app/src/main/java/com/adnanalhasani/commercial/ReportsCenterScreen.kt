@@ -1921,9 +1921,15 @@ internal fun ReportsCenterScreen(
         }.sortedByDescending { it.date }
         "رصيد المخزون حسب الموقع" -> locationInventoryReport.lines
         "حالة ربط أرصدة المخزون بالمستودعات" -> cloudWarehouseInventoryContext.map { item ->
-            val mappingLabel = when (item.mappingStatus) {
-                "mapped" -> "مربوط بمستودع واحد"
-                "unconfigured" -> "غير مهيأ"
+            val mappingLabel = when {
+                item.mappingStatus == "mapped" && item.warehouseState == "inactive" ->
+                    "مرتبط بمستودع غير نشط"
+                item.mappingStatus == "mapped" && item.warehouseState == "archived" ->
+                    "مرتبط بمستودع مؤرشف"
+                item.mappingStatus == "mapped" && item.warehouseState != "active" ->
+                    "حالة المستودع غير معروفة"
+                item.mappingStatus == "mapped" -> "مربوط بمستودع واحد"
+                item.mappingStatus == "unconfigured" -> "غير مهيأ"
                 else -> "ملتبس · أكثر من مستودع"
             }
             val warehouseLabel = if (item.mappingStatus == "mapped") {
@@ -1931,7 +1937,7 @@ internal fun ReportsCenterScreen(
             } else "لا يوجد مستودع وحيد معتمد"
             ReportLine(
                 "-", item.locationName, item.productName, 0L, "-", mappingLabel,
-                displayAmount = "المستودع: $warehouseLabel · روابط المستودع: ${item.mappedWarehouseCount} · المتاح: ${item.availableQuantity.stripTrailingZeros().toPlainString()} ${item.unitName} · الإجمالي: ${item.quantityOnHand.stripTrailingZeros().toPlainString()} · المحجوز: ${item.quantityReserved.stripTrailingZeros().toPlainString()} · حد الطلب: ${item.reorderPoint.stripTrailingZeros().toPlainString()}"
+                displayAmount = "المستودع: $warehouseLabel · حالة المستودع: ${item.warehouseState.ifBlank { "غير معروفة" }} · روابط المستودع: ${item.mappedWarehouseCount} · المتاح: ${item.availableQuantity.stripTrailingZeros().toPlainString()} ${item.unitName} · الإجمالي: ${item.quantityOnHand.stripTrailingZeros().toPlainString()} · المحجوز: ${item.quantityReserved.stripTrailingZeros().toPlainString()} · حد الطلب: ${item.reorderPoint.stripTrailingZeros().toPlainString()}"
             )
         }
         "رصيد المخزون الحالي" -> if (cloudMode) cloudStockAlerts.map { item ->
