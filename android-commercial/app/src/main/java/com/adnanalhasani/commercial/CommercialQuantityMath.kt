@@ -9,6 +9,14 @@ internal data class CommercialCloudCheckoutLine(
     val unitCode: String = "each"
 )
 
+/** Render inventory quantities without losing stored decimal precision. */
+internal fun formatCommercialStockQuantity(value: BigDecimal): String =
+    value.stripTrailingZeros().toPlainString()
+
+/** Compare the exact available quantity to the configured reorder threshold. */
+internal fun isCommercialStockLow(value: BigDecimal, threshold: Int): Boolean =
+    value <= BigDecimal.valueOf(threshold.toLong())
+
 /** Parse a positive selling quantity with up to three decimal places. */
 internal fun parseCommercialCheckoutQuantity(value: String): BigDecimal? {
     var normalized = value.trim().replace(',', '.').replace('\u066B', '.')
