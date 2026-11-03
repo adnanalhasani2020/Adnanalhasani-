@@ -318,14 +318,14 @@ internal fun CommercialCloudReturnsScreen(context: Context, onBack: () -> Unit) 
         },
         confirmButton = {
             Button(enabled = !busy && requestTarget != null &&
-                requestTarget!!.items.all {
-                    val unit = returnSellUnits(it).firstOrNull { u -> u.code == requestedUnitCodes[it.id] }
-                        ?: returnSellUnits(it).firstOrNull { u -> u.code == it.sellingUnitCode }
-                        ?: returnSellUnits(it).first()
-                    val quantity = parseCommercialCheckoutQuantity(requestedQuantities[it.id] ?: "0") ?: BigDecimal.ZERO
+                requestTarget!!.items.all { saleItem ->
+                    val unit = returnSellUnits(saleItem).firstOrNull { u -> u.code == requestedUnitCodes[saleItem.id] }
+                        ?: returnSellUnits(saleItem).firstOrNull { u -> u.code == saleItem.sellingUnitCode }
+                        ?: returnSellUnits(saleItem).first()
+                    val quantity = parseCommercialCheckoutQuantity(requestedQuantities[saleItem.id] ?: "0") ?: BigDecimal.ZERO
                     val baseQuantity = quantity.multiply(BigDecimal.valueOf(unit.factor))
                     runCatching { baseQuantity.toBigIntegerExact() }.getOrNull()
-                        ?.let { it <= java.math.BigInteger.valueOf(it.remainingQuantity.toLong()) } == true
+                        ?.let { baseQty -> baseQty <= java.math.BigInteger.valueOf(saleItem.remainingQuantity.toLong()) } == true
                 } &&
                 requestTarget!!.items.any { (parseCommercialCheckoutQuantity(requestedQuantities[it.id] ?: "0") ?: BigDecimal.ZERO).signum() > 0 },
                 onClick = {
