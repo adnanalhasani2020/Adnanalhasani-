@@ -253,7 +253,8 @@ private fun StoreApp(context: Context) {
     }
     val cloudContextExists = cloudContextSnapshot.first.isNotBlank() &&
         cloudContextSnapshot.second.isNotBlank() && cloudContextSnapshot.third.isNotBlank()
-    val cloudContextHasAny = cloudContextSnapshot.any { it.isNotBlank() }
+    val cloudContextHasAny = cloudContextSnapshot.first.isNotBlank() ||
+        cloudContextSnapshot.second.isNotBlank() || cloudContextSnapshot.third.isNotBlank()
     val sales = remember { mutableStateListOf<SaleRecord>().apply { if (!cloudContextHasAny) addAll(loadSales(context)) } }
     val settlements = remember { mutableStateListOf<SettlementRecord>().apply { if (!cloudContextHasAny) addAll(loadSettlements(context)) } }
     val expenses = remember { mutableStateListOf<ExpenseRecord>().apply { if (!cloudContextHasAny) addAll(loadExpenses(context)) } }
