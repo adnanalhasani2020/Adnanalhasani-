@@ -16,6 +16,7 @@ def test_first_launch_requires_authentication_and_complete_project_context():
 
 def test_project_creation_returns_to_the_cloud_dashboard_and_refreshes_context():
     main = MAIN.read_text(encoding="utf-8")
+    profile = PROFILE.read_text(encoding="utf-8")
     assert "onProfileCreated = {" in main
     assert "onAuthenticated = {" in main
     assert "hasSavedCommercialCloudContext(context)" in main
