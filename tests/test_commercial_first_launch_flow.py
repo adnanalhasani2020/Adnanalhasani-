@@ -19,6 +19,9 @@ def test_project_creation_returns_to_the_cloud_dashboard_and_refreshes_context()
     assert "onProfileCreated = {" in main
     assert "onAuthenticated = {" in main
     assert "hasSavedCommercialCloudContext(context)" in main
+    assert "مشروعك مرتبط بالفعل" in profile
+    assert "لن نُنشئ مشروعًا مكررًا" in profile
+    assert "store-${UUID.randomUUID().toString().take(8)}" in profile
     assert "showEntryFlow = false" in main
     assert "cloudContextRevision++" in main
     assert "commercial_create_activity_profile" not in main  # The profile RPC stays encapsulated in the setup screen.
