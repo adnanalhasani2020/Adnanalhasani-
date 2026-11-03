@@ -9,6 +9,7 @@ PURCHASES = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/comme
 COMPOSER = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudSaleComposerScreen.kt"
 MAIN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt"
 MODELS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialModels.kt"
+LOCAL_SCREENS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/LocalSalesInventoryScreens.kt"
 
 
 class CommercialCloudSalesScreenContractTests(unittest.TestCase):
@@ -20,6 +21,7 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         cls.composer = COMPOSER.read_text(encoding="utf-8")
         cls.main = MAIN.read_text(encoding="utf-8")
         cls.models = MODELS.read_text(encoding="utf-8")
+        cls.local_screens = LOCAL_SCREENS.read_text(encoding="utf-8")
 
     def test_invoice_projection_uses_existing_tables_and_columns(self):
         self.assertIn("internal fun loadCommercialCloudSaleDocuments", self.repository)
@@ -72,8 +74,8 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
 
     def test_sales_tab_links_to_detailed_cloud_invoice_history(self):
         self.assertIn("onCloudInvoices = { cloudSalesPage = true }", self.main)
-        self.assertIn("عرض تفاصيل الفواتير السحابية", self.main)
-        self.assertIn('if (cloudMode) "ملخص الفواتير المحمّلة من قاعدة البيانات"', self.main)
+        self.assertIn("عرض تفاصيل الفواتير السحابية", self.local_screens)
+        self.assertIn('if (cloudMode) "ملخص الفواتير المحمّلة من قاعدة البيانات"', self.local_screens)
 
     def test_purchase_order_projection_uses_existing_org_scoped_tables(self):
         self.assertIn("loadCommercialCloudPurchaseDocuments", self.repository)
