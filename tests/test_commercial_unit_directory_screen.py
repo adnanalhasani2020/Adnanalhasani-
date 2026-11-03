@@ -44,7 +44,7 @@ class CommercialUnitDirectoryScreenTests(unittest.TestCase):
         )[0]
         self.assertIn("commercialCloudPagedGet(", function)
         self.assertIn("order=dimension.asc,code.asc", function)
-        pager = self.repository.split("private fun commercialCloudPagedGet", 1)[1].split(
+        pager = self.repository.split("internal fun commercialCloudPagedGet", 1)[1].split(
             "private fun commercialMasterDataAccess", 1
         )[0]
         self.assertIn("pageSize: Int = 500", pager)
