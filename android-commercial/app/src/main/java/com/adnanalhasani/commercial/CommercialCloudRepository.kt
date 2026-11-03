@@ -3,8 +3,6 @@ package com.adnanalhasani.commercial
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
 import org.json.JSONArray
 import org.json.JSONObject
 import java.math.BigDecimal
@@ -30,14 +28,6 @@ internal data class CommercialCloudInventory(
 
 private val commercialCloudIo = Executors.newSingleThreadExecutor()
 private val commercialCloudMain = Handler(Looper.getMainLooper())
-
-private fun commercialCloudSessionPreferences(context: Context) = EncryptedSharedPreferences.create(
-    context,
-    "ruh_catalog_auth_session",
-    MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
-    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-)
 
 internal fun loadCommercialCloudInventory(context: Context): CommercialCloudInventory {
     val savedContext = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
