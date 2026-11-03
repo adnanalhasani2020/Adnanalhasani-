@@ -19,9 +19,9 @@ class CommercialRepeatedSaleLineTests(unittest.TestCase):
     def test_same_offering_keeps_different_selling_units_as_separate_lines(self):
         # One carton (12 stock pieces) and two individual pieces must remain distinct
         # so the server applies each unit's own conversion factor: 12 + 2 = 14.
-        source = REPOSITORY.read_text(encoding="utf-8")
-        self.assertIn('CommercialCloudCheckoutLine(key.first, quantity, key.second)', source)
-        self.assertIn('.sortedWith(compareBy({ it.key.first }, { it.key.second }))', source)
+        quantity_math = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialQuantityMath.kt").read_text(encoding="utf-8")
+        self.assertIn('CommercialCloudCheckoutLine(key.first, quantity, key.second)', quantity_math)
+        self.assertIn('.sortedWith(compareBy({ it.key.first }, { it.key.second }))', quantity_math)
 
     def test_aggregate_quantity_is_bounded_and_positive(self):
         source = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialQuantityMath.kt").read_text(encoding="utf-8")
@@ -30,11 +30,12 @@ class CommercialRepeatedSaleLineTests(unittest.TestCase):
         self.assertIn('require(total <= BigDecimal("100000"))', source)
 
     def test_fractional_quantities_are_preserved_and_bounded(self):
-        source = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialQuantityMath.kt").read_text(encoding="utf-8")
-        self.assertIn("internal fun parseCommercialCheckoutQuantity", source)
+        source = REPOSITORY.read_text(encoding="utf-8")
+        quantity_math = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialQuantityMath.kt").read_text(encoding="utf-8")
+        self.assertIn("internal fun parseCommercialCheckoutQuantity", quantity_math)
         self.assertIn("line.quantity.stripTrailingZeros().toPlainString()", source)
-        self.assertIn("quantity.scale() <= 3", source)
-        self.assertIn("BigDecimal(ascii)", source)
+        self.assertIn("quantity.scale() <= 3", quantity_math)
+        self.assertIn("BigDecimal(ascii)", quantity_math)
 
     def test_fractional_return_quantity_uses_the_same_exact_base_conversion(self):
         migration = (ROOT / "supabase/migrations/20261103020100_commercial_fractional_sell_quantity_returns.sql").read_text(encoding="utf-8")
