@@ -88,6 +88,13 @@ internal fun CommercialCloudReturnsScreen(context: Context, onBack: () -> Unit) 
     }
     val fractionalReturnQuantityBlocked =
         !COMMERCIAL_CLOUD_FRACTIONAL_QUANTITY_RPC_READY && hasFractionalReturnQuantity
+    val hasNonBaseReturnUnit = requestTarget?.items?.any { saleItem ->
+        val selectedUnit = returnSellUnits(saleItem).firstOrNull { it.code == requestedUnitCodes[saleItem.id] }
+            ?: returnSellUnits(saleItem).first()
+        selectedUnit.factor > 1L
+    } == true
+    val returnUnitSnapshotBlocked =
+        !COMMERCIAL_CLOUD_RETURN_UNIT_SNAPSHOT_RPC_READY && hasNonBaseReturnUnit
     var returnUnitMenuItemId by remember { mutableStateOf("") }
 
     LaunchedEffect(refresh) {
@@ -287,6 +294,13 @@ internal fun CommercialCloudReturnsScreen(context: Context, onBack: () -> Unit) 
                         fontSize = 12.sp
                     )
                 }
+                if (returnUnitSnapshotBlocked) {
+                    Text(
+                        "لا يمكن إرسال هذا المرتجع بأكثر من وحدة المخزون الأساسية قبل نشر حماية لقطة الوحدة الأصلية في الخادم؛ معامل الوحدة الحالي قد يختلف عن معامل الفاتورة وقت البيع.",
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 12.sp
+                    )
+                }
                 listOf(
                     "customer_request" to "طلب العميل",
                     "damaged" to "تلف",
@@ -348,7 +362,7 @@ internal fun CommercialCloudReturnsScreen(context: Context, onBack: () -> Unit) 
             }
         },
         confirmButton = {
-            Button(enabled = !busy && requestTarget != null && !fractionalReturnQuantityBlocked &&
+            Button(enabled = !busy && requestTarget != null && !fractionalReturnQuantityBlocked && !returnUnitSnapshotBlocked &&
                 requestTarget!!.items.all { saleItem ->
                     val unit = returnSellUnits(saleItem).firstOrNull { u -> u.code == requestedUnitCodes[saleItem.id] }
                         ?: returnSellUnits(saleItem).firstOrNull { u -> u.code == saleItem.sellingUnitCode }
