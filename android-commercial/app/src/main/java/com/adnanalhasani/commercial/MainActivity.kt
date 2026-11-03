@@ -678,7 +678,7 @@ private fun Dashboard(products: List<Product>, sales: List<SaleRecord>, cloudMod
                 }
             }
         }
-        item { Heading("ملخص المبيعات", "إحصاءات الفواتير المحفوظة محليًا") }
+        item { Heading("ملخص المبيعات", if (cloudMode) "إحصاءات الفواتير المحمّلة من قاعدة البيانات" else "إحصاءات الفواتير المحفوظة على هذا الجهاز") }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Metric("الفواتير", sales.size.toString(), "فاتورة محفوظة", Icons.Default.PointOfSale, Modifier.weight(1f))
@@ -697,7 +697,7 @@ private fun Dashboard(products: List<Product>, sales: List<SaleRecord>, cloudMod
                 TextButton(onClick = onInventory) { Text("عرض الكل") }
             }
         }
-        items(products.filter { it.stock <= 9 }.take(3)) { ProductRow(it) }
+        items(products.filter { isCommercialStockLow(it.stockPrecise, 9) }.take(3)) { ProductRow(it) }
         item { Heading("آخر المبيعات", "أحدث الفواتير المسجلة") }
         items(sales.take(3)) { sale -> SaleRow("فاتورة #${sale.number}", "${sale.product} · ${sale.quantity} ${sale.unitCode}", money(sale.total), sale.credit) }
         
@@ -767,7 +767,7 @@ private fun InventoryScreen(products: List<Product>, query: String, onQuery: (St
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Metric("إجمالي الأصناف", products.size.toString(), "صنف", Icons.Default.Inventory2, Modifier.weight(1f))
-                Metric("مخزون منخفض", products.count { it.stock <= (it.reorderPoint.takeIf { threshold -> threshold >= 0 } ?: 9) }.toString(), "حسب حد التنبيه", Icons.Default.WarningAmber, Modifier.weight(1f))
+                Metric("مخزون منخفض", products.count { isCommercialStockLow(it.stockPrecise, it.reorderPoint.takeIf { threshold -> threshold >= 0 } ?: 9) }.toString(), "حسب حد التنبيه", Icons.Default.WarningAmber, Modifier.weight(1f))
             }
         }
         item { Button(onClick = onAddProduct, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(8.dp)); Text("إضافة منتج") } }
@@ -780,7 +780,7 @@ private fun InventoryScreen(products: List<Product>, query: String, onQuery: (St
 @Composable
 private fun ProductRow(product: Product, onClick: () -> Unit = {}) {
     val warningThreshold = product.reorderPoint.takeIf { it >= 0 } ?: 9
-    val warning = product.stock <= warningThreshold
+    val warning = isCommercialStockLow(product.stockPrecise, warningThreshold)
     val displayImage = product.imageUrl.ifBlank { runCatching { val units = JSONArray(product.unitVariantsJson); (0 until units.length()).map { units.getJSONObject(it) }.firstOrNull { it.optBoolean("isDefault") && it.optString("imageUrl").startsWith("https://", true) }?.optString("imageUrl").orEmpty() }.getOrDefault("") }
     Card(onClick = onClick, colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, Border), modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -795,7 +795,7 @@ private fun ProductRow(product: Product, onClick: () -> Unit = {}) {
             Column(Modifier.weight(1f)) {
                 Text(product.name, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                 Text(product.description.ifBlank { product.category }, color = Muted, fontSize = 12.sp)
-                Text("المتاح للبيع: ${product.stock} ${product.unitCode.ifBlank { "EA" }}", color = if (warning) Color(0xFFB96A14) else Muted, fontSize = 11.sp)
+                Text("المتاح للبيع: ${formatCommercialStockQuantity(product.stockPrecise)} ${product.unitCode.ifBlank { "EA" }}", color = if (warning) Color(0xFFB96A14) else Muted, fontSize = 11.sp)
                 Text("حد التنبيه: ${if (product.reorderPoint >= 0) product.reorderPoint else 9}", color = Muted, fontSize = 10.sp)
                 if (product.barcode.isNotBlank() || product.catalogCode.isNotBlank()) Text(listOf(product.barcode, product.catalogCode).filter { it.isNotBlank() }.joinToString(" · "), color = Muted, fontSize = 10.sp)
                 val unitCount = runCatching { JSONArray(product.unitVariantsJson).length() }.getOrDefault(0)
