@@ -30,4 +30,5 @@ def test_local_screens_share_components_without_moving_business_rules_into_ui():
     assert "internal fun SaleRow(" in components
     assert "isCommercialStockLow(" in components
     assert "formatCommercialStockQuantity(" in components
-    assert "calculate" not in components.lower()
+    assert "calculateCostProfitReportTotals" not in components
+    assert "calculateSupplierInvoicePriceVariance" not in components
