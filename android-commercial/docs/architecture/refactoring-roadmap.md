@@ -20,12 +20,12 @@ No database migration is required for source-only organization. Do not modify Su
 
 | ID | Work package | Current state | Acceptance |
 |---|---|---|---|
-| REF-000 | Inventory repository, Android source, tests, and ownership boundaries | INVENTORIED | This inventory and module-boundary record exists |
+| REF-000 | Inventory repository, Android source, tests, and ownership boundaries | TESTED (documentation inventory) | Existing files and ownership boundaries documented; this is not a runtime test |
 | REF-001 | Establish baseline build/test commands and path-sensitive test inventory | OPEN | Reproducible baseline and list of source-contract tests |
 | REF-002 | Extract shared network transport and cloud error mapping from cloud repository | OPEN | One transport implementation; request behavior unchanged |
 | REF-003 | Split cloud repository by domain | OPEN | Sales, inventory, purchasing, customers, returns, expenses, accounting, portal repositories compile and tests pass |
 | REF-004 | Separate MainActivity composition/navigation from local legacy persistence and screens | OPEN | MainActivity becomes composition root; local mode remains unchanged |
-| REF-005 | Split report export infrastructure from report UI | OPEN | PDF/XLSX output preserved and export tests pass |
+| REF-005 | Split report export infrastructure from report UI | EXTRACTED; TESTED pending CI | PDF/XLSX/print functions moved to ReportExport.kt; source-contract tests updated and XLSX unit tests added; run CI before marking tested |
 | REF-006 | Split report catalog, data builders, filters, and feature screens | OPEN | Each report family has clear owner and calculation tests |
 | REF-007 | Split catalog search, discovery, directory management, transfers, and invoice linking | OPEN | Catalog workflows remain intact |
 | REF-008 | Split pure report calculations by business domain | OPEN | Formula parity tests pass |
@@ -43,7 +43,7 @@ No database migration is required for source-only organization. Do not modify Su
 6. REF-008 through REF-010: finish pure-domain and test organization.
 7. REF-011: run full validation and build a fresh APK from the exact final commit.
 
-## Current limitations
+## Work completed on this branch\n\n- Added the architecture overview, module-boundary inventory, and this execution ledger.\n- Extracted XLSX generation, native PDF generation, and Android print preview from `ReportsCenterScreen.kt` into `ReportExport.kt`. The functions remain `internal` so existing report UI callers keep their behavior.\n- Updated `tests/test_reports_center_source_contract.py` to validate the new export owner.\n- Added `ReportExportTest.kt` to validate Arabic RTL XLSX contents and empty-export rejection.\n- No database schema, RPC, or production data was changed.\n\n## Current limitations
 
 - The latest PR head has not been confirmed by CI after the last two commits in the prior work.
 - No authenticated Android end-to-end commercial workflow has been proven by this source inventory.
