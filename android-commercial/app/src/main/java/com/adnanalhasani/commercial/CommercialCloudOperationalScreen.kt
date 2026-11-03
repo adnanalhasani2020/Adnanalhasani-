@@ -20,6 +20,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.math.BigDecimal
+import java.text.NumberFormat
+import java.util.Currency
 import java.util.Locale
 import java.util.concurrent.Executors
 
@@ -27,6 +30,18 @@ private val CloudScreenIo = Executors.newSingleThreadExecutor()
 private val CloudScreenMain = Handler(Looper.getMainLooper())
 
 private data class CloudScreenSpec(val title: String, val subtitle: String, val key: String, val empty: String)
+
+internal fun formatCommercialOperationalAmount(amountMinor: Long, currencyCode: String): String {
+    val code = currencyCode.trim().uppercase(Locale.ROOT)
+    val fractionDigits = runCatching { Currency.getInstance(code).defaultFractionDigits }.getOrDefault(-1)
+    if (fractionDigits < 0) return amountMinor.toString() + " وحدة نقدية صغرى" + if (code.isBlank()) "" else " • $code"
+    val amount = BigDecimal.valueOf(amountMinor).movePointLeft(fractionDigits)
+    val formatter = NumberFormat.getNumberInstance(Locale.US).apply {
+        minimumFractionDigits = fractionDigits
+        maximumFractionDigits = fractionDigits
+    }
+    return formatter.format(amount) + " " + code
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -150,7 +165,7 @@ internal fun CommercialCloudOperationalScreen(
                                 Text(detail, color = Color(0xFF52665F), fontSize = 12.sp)
                             }
                         }
-                        if (row.amountMinor > 0L) Text("المبلغ: " + String.format(Locale.US, "%,d", row.amountMinor) + " وحدة نقدية صغرى" , color = Color(0xFF167D63), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        if (row.amountMinor > 0L) Text("المبلغ: " + formatCommercialOperationalAmount(row.amountMinor, row.currencyCode), color = Color(0xFF167D63), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                         if (row.createdAt.isNotBlank()) Text(row.createdAt.replace('T', ' ').take(19), color = Color(0xFF71817B), fontSize = 10.sp)
                         Text("مرجع: " + row.id.take(8), color = Color(0xFF71817B), fontSize = 10.sp)
                     }
