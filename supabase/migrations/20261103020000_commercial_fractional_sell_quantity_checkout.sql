@@ -64,7 +64,8 @@ BEGIN
 
   FOR v_line IN SELECT value FROM jsonb_array_elements(p_lines) LOOP
     IF coalesce(v_line->>'offering_id','') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-       OR coalesce(v_line->>'quantity','') !~ '^(0|[1-9][0-9]{0,5})(\.[0-9]{1,3})?
+       OR coalesce(v_line->>'quantity','') !~ '^(0|[1-9][0-9]{0,5})(\.[0-9]{1,3})?$'
+       OR coalesce(v_line->>'quantity','')::numeric <= 0 THEN
     END IF;
 
     SELECT su.quantity_in_stock, su.unit_code, su.display_name
