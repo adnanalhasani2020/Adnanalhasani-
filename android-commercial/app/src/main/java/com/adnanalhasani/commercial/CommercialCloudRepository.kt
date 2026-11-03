@@ -3249,6 +3249,111 @@ internal fun loadCommercialCloudLocationInventoryBalances(context: Context): Lis
 }
 
 
+internal data class CommercialCloudWarehouseInventoryContext(
+    val inventoryBalanceId: String,
+    val locationId: String,
+    val locationName: String,
+    val offeringId: String,
+    val productName: String,
+    val unitName: String,
+    val warehouseId: String?,
+    val warehouseCode: String,
+    val warehouseName: String,
+    val warehouseState: String,
+    val mappingStatus: String,
+    val mappedWarehouseCount: Int,
+    val quantityOnHand: BigDecimal,
+    val quantityReserved: BigDecimal,
+    val availableQuantity: BigDecimal,
+    val reorderPoint: BigDecimal
+)
+
+/**
+ * Read-only readiness projection. Quantities stay per offering/unit; this function never
+ * aggregates unlike units or mutates balances, warehouse assignments, or stock movements.
+ */
+internal fun loadCommercialCloudWarehouseInventoryContext(context: Context): List<CommercialCloudWarehouseInventoryContext> {
+    val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+    val activityId = saved.getString("activity_id", null).orEmpty()
+    require(activityId.isNotBlank()) { "ملف النشاط غير محفوظ." }
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val path = "/rest/v1/commercial_inventory_warehouse_context" +
+        "?select=inventory_balance_id,organization_id,location_id,offering_id,warehouse_id,warehouse_mapping_status,mapped_warehouse_count,quantity_on_hand,quantity_reserved,available_quantity,reorder_point,warehouse_code,warehouse_name,warehouse_state,location:commercial_organization_locations!inner(name),offering:commercial_offerings!inner(activity_id,product:commercial_products!inner(name,unit_name))" +
+        "&organization_id=eq.$orgId&offering.activity_id=eq.$activityId&order=warehouse_mapping_status.asc,location_id.asc,offering_id.asc"
+    val rows = commercialCloudPagedGet(path, access)
+    return buildList {
+        for (index in 0 until rows.length()) {
+            val row = rows.optJSONObject(index)
+                ?: throw IllegalStateException("تعذر قراءة أحد صفوف ربط المخزون بالمستودعات.")
+            val offering = row.optJSONObject("offering")
+                ?: throw IllegalStateException("يوجد رصيد مخزون بلا صنف مرتبط؛ تم حجب تقرير ربط المستودعات.")
+            if (offering.optString("activity_id") != activityId) continue
+            val location = row.optJSONObject("location")
+                ?: throw IllegalStateException("يوجد رصيد مخزون بلا موقع مؤسسي صالح؛ تم حجب التقرير.")
+            val product = offering.optJSONObject("product")
+                ?: throw IllegalStateException("يوجد رصيد مخزون بلا بيانات صنف صالحة؛ تم حجب التقرير.")
+            fun requiredText(field: String): String = row.optString(field)
+                .takeUnless { it.isBlank() || it == "null" }
+                ?: throw IllegalStateException("حقل $field مفقود في إسقاط ربط المستودعات.")
+            fun decimal(field: String): BigDecimal = runCatching { BigDecimal(row.optString(field)) }
+                .getOrElse { throw IllegalStateException("قيمة $field غير رقمية؛ تم حجب التقرير.") }
+            val balanceId = requiredText("inventory_balance_id")
+            val locationId = requiredText("location_id")
+            val offeringId = requiredText("offering_id")
+            val locationName = location.optString("name").takeUnless { it.isBlank() || it == "null" }
+                ?: throw IllegalStateException("يوجد موقع بلا اسم في تقرير ربط المستودعات.")
+            val productName = product.optString("name").takeUnless { it.isBlank() || it == "null" }
+                ?: throw IllegalStateException("يوجد صنف بلا اسم في تقرير ربط المستودعات.")
+            val unitName = product.optString("unit_name").takeUnless { it.isBlank() || it == "null" }
+                ?: "وحدة غير محددة"
+            val status = requiredText("warehouse_mapping_status")
+            require(status in setOf("mapped", "unconfigured", "ambiguous")) {
+                "حالة ربط مستودع غير معروفة؛ تم حجب التقرير."
+            }
+            val mappedCount = row.optInt("mapped_warehouse_count", -1)
+            require(
+                (status == "mapped" && mappedCount == 1) ||
+                    (status == "unconfigured" && mappedCount == 0) ||
+                    (status == "ambiguous" && mappedCount > 1)
+            ) { "عدد روابط المستودع لا يتطابق مع حالة الربط؛ تم حجب التقرير." }
+            val warehouseId = row.optString("warehouse_id").takeUnless { it.isBlank() || it == "null" }
+            val warehouseCode = row.optString("warehouse_code").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+            val warehouseName = row.optString("warehouse_name").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+            val warehouseState = row.optString("warehouse_state").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+            require(if (status == "mapped") !warehouseId.isNullOrBlank() && warehouseName.isNotBlank() else warehouseId == null) {
+                "بيانات المستودع لا تتطابق مع حالة الربط؛ تم حجب التقرير."
+            }
+            val onHand = decimal("quantity_on_hand")
+            val reserved = decimal("quantity_reserved")
+            val available = decimal("available_quantity")
+            val reorder = decimal("reorder_point")
+            require(onHand.signum() >= 0 && reserved.signum() >= 0 && reorder.signum() >= 0 &&
+                available == onHand.subtract(reserved).max(BigDecimal.ZERO)) {
+                "أحد أرصدة المخزون أو كمياته المحسوبة غير متسقة؛ تم حجب التقرير."
+            }
+            add(CommercialCloudWarehouseInventoryContext(
+                inventoryBalanceId = balanceId,
+                locationId = locationId,
+                locationName = locationName,
+                offeringId = offeringId,
+                productName = productName,
+                unitName = unitName,
+                warehouseId = warehouseId,
+                warehouseCode = warehouseCode,
+                warehouseName = warehouseName,
+                warehouseState = warehouseState,
+                mappingStatus = status,
+                mappedWarehouseCount = mappedCount,
+                quantityOnHand = onHand,
+                quantityReserved = reserved,
+                availableQuantity = available,
+                reorderPoint = reorder
+            ))
+        }
+    }
+}
+
+
 internal data class CustomerPortalOutstandingSale(
     val saleId: String, val invoiceNumber: String, val createdAt: String,
     val totalMinor: Long, val paidMinor: Long, val refundedMinor: Long,

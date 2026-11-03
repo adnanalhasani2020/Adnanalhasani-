@@ -254,6 +254,7 @@ private fun buildReportsCatalog(cloudMode: Boolean): List<ReportCatalogItem> = l
             ReportCatalogItem("ملخص المصروفات حسب التصنيف وطريقة الصرف", "الأرباح والتكاليف", "commercial_expense_vouchers.category + payment_method + amount_minor", cloudMode, "يجمع سندات الصرف غير الملغاة حسب التصنيف وطريقة الصرف والعملة؛ لا يخلط العملات ولا يضيف القيود المحاسبية مرة ثانية."),
             ReportCatalogItem("رصيد المخزون الحالي", "الأصناف والمخزون", if (cloudMode) "commercial_inventory_balances" else "products_json", true, "رصيد حالي فقط؛ ليس رصيدًا تاريخيًا للفترة."),
             ReportCatalogItem("رصيد المخزون حسب الموقع", "الأصناف والمخزون", "commercial_inventory_balances.location_id + commercial_organization_locations", cloudMode, "يعرض أرصدة كل مواقع المؤسسة حسب الموقع ووحدة القياس؛ يفصل الوحدات ويعرض الكمية الإجمالية والمحجوزة والمتاحة. لقطة حالية وليست حركة تاريخية أو تقييمًا ماليًا."),
+            ReportCatalogItem("حالة ربط أرصدة المخزون بالمستودعات", "الأصناف والمخزون", "commercial_inventory_warehouse_context", cloudMode, "يعرض كل رصيد صنف بحالته: مربوط بمستودع واحد، غير مهيأ، أو ملتبس بسبب تعدد روابط المستودعات. لا يجمع وحدات مختلفة ولا يغيّر الرصيد أو الحركات."),
             ReportCatalogItem("التقييم المالي الحالي للمخزون", "الأصناف والمخزون", "commercial_inventory_balances.unit_cost_minor + حساب المخزون المربوط", cloudMode, "يقيم كمية الموقع الحالي بتكلفة الوحدة المسجلة وبعملة حساب المخزون المربوط؛ يحجب التقييم إذا غابت التكلفة أو العملة. لا يمثل تقييمًا تاريخيًا."),
 
             ReportCatalogItem("حركة المخزون الفعلية", "الأصناف والمخزون", "commercial_stock_movements المرتبطة بنشاط المؤسسة", cloudMode, "يعرض حركات الكمية المسجلة من دفتر حركة المخزون، مع مرجع المصدر وحالة فاتورة البيع عند توفرها؛ لا يستنتج تكلفة أو قيمة مالية من الكمية."),
@@ -600,6 +601,8 @@ internal fun ReportsCenterScreen(
     var cloudStockAlerts by remember { mutableStateOf<List<CommercialCloudStockAlert>>(emptyList()) }
     var cloudLocationInventoryBalances by remember { mutableStateOf<List<CommercialCloudLocationInventoryBalance>>(emptyList()) }
     var locationInventoryLoadError by remember { mutableStateOf("") }
+    var cloudWarehouseInventoryContext by remember { mutableStateOf<List<CommercialCloudWarehouseInventoryContext>>(emptyList()) }
+    var warehouseInventoryContextLoadError by remember { mutableStateOf("") }
     var supplierFilter by remember { mutableStateOf("") }
     var cloudReturns by remember { mutableStateOf<List<CommercialCloudSaleReturn>>(emptyList()) }
     var cloudPayments by remember { mutableStateOf<List<CommercialCloudRecord>>(emptyList()) }
@@ -640,6 +643,7 @@ internal fun ReportsCenterScreen(
             val stockMovements = runCatching { loadCommercialCloudStockMovements(context) }
             val stockAlerts = runCatching { loadCommercialCloudStockAlerts(context) }
             val locationInventory = runCatching { loadCommercialCloudLocationInventoryBalances(context) }
+            val warehouseInventoryContext = runCatching { loadCommercialCloudWarehouseInventoryContext(context) }
             val returns = runCatching { loadCommercialCloudSaleReturns(context) }
             val payments = runCatching { loadCommercialCloudRecords(context, "payments") }
             val journals = runCatching { loadCommercialCloudRecords(context, "journals") }
@@ -666,6 +670,8 @@ internal fun ReportsCenterScreen(
                 stockAlertsLoadError = stockAlerts.exceptionOrNull()?.message.orEmpty()
                 cloudLocationInventoryBalances = locationInventory.getOrDefault(emptyList())
                 locationInventoryLoadError = locationInventory.exceptionOrNull()?.message.orEmpty()
+                cloudWarehouseInventoryContext = warehouseInventoryContext.getOrDefault(emptyList())
+                warehouseInventoryContextLoadError = warehouseInventoryContext.exceptionOrNull()?.message.orEmpty()
                 cloudReturns = returns.getOrDefault(emptyList())
                 returnsLoadError = returns.exceptionOrNull()?.message.orEmpty()
                 cloudPayments = payments.getOrDefault(emptyList())
@@ -1234,6 +1240,7 @@ internal fun ReportsCenterScreen(
             "حركة المخزون حسب المستخدم" -> stockMovementUserReport.error
             "رصيد المخزون الحالي", "تنبيهات المخزون المنخفض" -> stockAlertsLoadError
             "رصيد المخزون حسب الموقع" -> locationInventoryReport.error
+            "حالة ربط أرصدة المخزون بالمستودعات" -> warehouseInventoryContextLoadError
             else -> ""
         }
     }
@@ -1913,6 +1920,20 @@ internal fun ReportsCenterScreen(
                 displayAmount = movement.quantityDelta.stripTrailingZeros().toPlainString() + if (movement.unitName.isBlank()) "" else " ${movement.unitName}")
         }.sortedByDescending { it.date }
         "رصيد المخزون حسب الموقع" -> locationInventoryReport.lines
+        "حالة ربط أرصدة المخزون بالمستودعات" -> cloudWarehouseInventoryContext.map { item ->
+            val mappingLabel = when (item.mappingStatus) {
+                "mapped" -> "مربوط بمستودع واحد"
+                "unconfigured" -> "غير مهيأ"
+                else -> "ملتبس · أكثر من مستودع"
+            }
+            val warehouseLabel = if (item.mappingStatus == "mapped") {
+                item.warehouseName + if (item.warehouseCode.isBlank()) "" else " (${item.warehouseCode})"
+            } else "لا يوجد مستودع وحيد معتمد"
+            ReportLine(
+                "-", item.locationName, item.productName, 0L, "-", mappingLabel,
+                displayAmount = "المستودع: $warehouseLabel · روابط المستودع: ${item.mappedWarehouseCount} · المتاح: ${item.availableQuantity.stripTrailingZeros().toPlainString()} ${item.unitName} · الإجمالي: ${item.quantityOnHand.stripTrailingZeros().toPlainString()} · المحجوز: ${item.quantityReserved.stripTrailingZeros().toPlainString()} · حد الطلب: ${item.reorderPoint.stripTrailingZeros().toPlainString()}"
+            )
+        }
         "رصيد المخزون الحالي" -> if (cloudMode) cloudStockAlerts.map { item ->
             ReportLine("-", item.offeringId, item.productName, 0L, "-", "المتاح بعد حجز الكمية · ${item.categoryName} · حد إعادة الطلب: ${item.reorderPoint} ${item.unitName}",
                 displayAmount = java.math.BigDecimal.valueOf(item.availableQuantity).stripTrailingZeros().toPlainString() + " ${item.unitName}")
@@ -2147,7 +2168,7 @@ internal fun ReportsCenterScreen(
                         exportTitle = selectedReport
                         exportRows = buildList {
                             add(listOf("التقرير", exportTitle))
-                            add(listOf("الفترة", if (exportTitle == "التقييم المالي الحالي للمخزون") "لقطة حالية للموقع المختار؛ ليست تاريخية" else if (exportTitle == "رصيد المخزون حسب الموقع") "لقطة حالية لجميع مواقع المؤسسة؛ ليست تاريخية" else startText + " — " + endText))
+                            add(listOf("الفترة", if (exportTitle == "التقييم المالي الحالي للمخزون") "لقطة حالية للموقع المختار؛ ليست تاريخية" else if (exportTitle == "رصيد المخزون حسب الموقع" || exportTitle == "حالة ربط أرصدة المخزون بالمستودعات") "لقطة حالية لجميع مواقع المؤسسة؛ ليست تاريخية" else startText + " — " + endText))
                             add(listOf("مصدر البيانات", if (cloudMode) "السحابة" else "محلي على الجهاز"))
                             add(listOf("تاريخ التصدير", java.time.LocalDateTime.now().toString()))
                             add(listOf("التاريخ", "المرجع", "الاسم", "المبلغ/الكمية", "العملة", "الحالة"))
@@ -2159,7 +2180,7 @@ internal fun ReportsCenterScreen(
                         exportTitle = selectedReport
                         exportRows = buildList {
                             add(listOf("التقرير", exportTitle))
-                            add(listOf("الفترة", if (exportTitle == "التقييم المالي الحالي للمخزون") "لقطة حالية للموقع المختار؛ ليست تاريخية" else if (exportTitle == "رصيد المخزون حسب الموقع") "لقطة حالية لجميع مواقع المؤسسة؛ ليست تاريخية" else startText + " — " + endText))
+                            add(listOf("الفترة", if (exportTitle == "التقييم المالي الحالي للمخزون") "لقطة حالية للموقع المختار؛ ليست تاريخية" else if (exportTitle == "رصيد المخزون حسب الموقع" || exportTitle == "حالة ربط أرصدة المخزون بالمستودعات") "لقطة حالية لجميع مواقع المؤسسة؛ ليست تاريخية" else startText + " — " + endText))
                             add(listOf("مصدر البيانات", if (cloudMode) "السحابة" else "محلي على الجهاز"))
                             add(listOf("تاريخ التصدير", java.time.LocalDateTime.now().toString()))
                             add(listOf("التاريخ", "المرجع", "الاسم", "المبلغ/الكمية", "العملة", "الحالة"))
@@ -2174,7 +2195,7 @@ internal fun ReportsCenterScreen(
                             exportTitle = selectedReport
                             exportRows = buildList {
                                 add(listOf("التقرير", exportTitle))
-                                add(listOf("الفترة", if (exportTitle == "التقييم المالي الحالي للمخزون") "لقطة حالية للموقع المختار؛ ليست تاريخية" else if (exportTitle == "رصيد المخزون حسب الموقع") "لقطة حالية لجميع مواقع المؤسسة؛ ليست تاريخية" else startText + " — " + endText))
+                                add(listOf("الفترة", if (exportTitle == "التقييم المالي الحالي للمخزون") "لقطة حالية للموقع المختار؛ ليست تاريخية" else if (exportTitle == "رصيد المخزون حسب الموقع" || exportTitle == "حالة ربط أرصدة المخزون بالمستودعات") "لقطة حالية لجميع مواقع المؤسسة؛ ليست تاريخية" else startText + " — " + endText))
                                 add(listOf("مصدر البيانات", if (cloudMode) "السحابة" else "محلي على الجهاز"))
                                 add(listOf("تاريخ التصدير", java.time.LocalDateTime.now().toString()))
                                 add(listOf("التاريخ", "المرجع", "الاسم", "المبلغ/الكمية", "العملة", "الحالة"))
@@ -2194,7 +2215,7 @@ internal fun ReportsCenterScreen(
                             exportTitle = selectedReport
                             exportRows = buildList {
                                 add(listOf("التقرير", exportTitle))
-                                add(listOf("الفترة", if (exportTitle == "التقييم المالي الحالي للمخزون") "لقطة حالية للموقع المختار؛ ليست تاريخية" else if (exportTitle == "رصيد المخزون حسب الموقع") "لقطة حالية لجميع مواقع المؤسسة؛ ليست تاريخية" else startText + " — " + endText))
+                                add(listOf("الفترة", if (exportTitle == "التقييم المالي الحالي للمخزون") "لقطة حالية للموقع المختار؛ ليست تاريخية" else if (exportTitle == "رصيد المخزون حسب الموقع" || exportTitle == "حالة ربط أرصدة المخزون بالمستودعات") "لقطة حالية لجميع مواقع المؤسسة؛ ليست تاريخية" else startText + " — " + endText))
                                 add(listOf("مصدر البيانات", if (cloudMode) "السحابة" else "محلي على الجهاز"))
                                 add(listOf("تاريخ التصدير", java.time.LocalDateTime.now().toString()))
                                 add(listOf("التاريخ", "المرجع", "الاسم", "المبلغ/الكمية", "العملة", "الحالة"))
