@@ -6,7 +6,6 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 import java.time.ZoneId
-import java.util.Currency
 import java.util.Locale
 
 internal data class SupplierInvoicePriceVarianceLineInput(
@@ -995,18 +994,3 @@ internal fun calculateTaxDiscountSummaryTotals(
         )
     }.sortedBy { it.currencyCode }
 }
-
-private fun cloudDebtScale(currency: String): Int =
-    runCatching { Currency.getInstance(currency).defaultFractionDigits.coerceIn(0, 6) }.getOrDefault(0)
-
-internal fun cloudDebtInput(amountMinor: Long, currency: String): String =
-    java.math.BigDecimal.valueOf(amountMinor).movePointLeft(cloudDebtScale(currency))
-        .stripTrailingZeros().toPlainString()
-
-internal fun parseMerchantPaymentRequestAmount(value: String, currency: String): Long? = runCatching {
-    val amount = value.trim().replace(',', '.').toBigDecimal()
-    require(amount > java.math.BigDecimal.ZERO)
-    amount.movePointRight(cloudDebtScale(currency))
-        .setScale(0, java.math.RoundingMode.UNNECESSARY).longValueExact()
-}.getOrNull()
-
