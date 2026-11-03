@@ -8,6 +8,7 @@ REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/comm
 CALCULATIONS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportCalculations.kt"
 EXPORT = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportExport.kt"
 PRICE_VARIANCE_CALCULATIONS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/SupplierInvoicePriceVarianceCalculations.kt"
+COST_PROFIT_CALCULATIONS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CostProfitCalculations.kt"
 CONTRACT = ROOT / "android-commercial/docs/reports-data-contract.md"
 COLLECTION_REPLAY_MIGRATION = ROOT / "supabase/migrations/20261027221500_harden_customer_collection_replay_posting.sql"
 RETURN_CURRENCY_GUARD_MIGRATION = ROOT / "supabase/migrations/20261027195426_guard_return_adjustment_currency.sql"
@@ -21,6 +22,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         cls.calculations = CALCULATIONS.read_text(encoding="utf-8")
         cls.export = EXPORT.read_text(encoding="utf-8")
         cls.price_variance_calculations = PRICE_VARIANCE_CALCULATIONS.read_text(encoding="utf-8")
+        cls.cost_profit_calculations = COST_PROFIT_CALCULATIONS.read_text(encoding="utf-8")
         cls.contract = CONTRACT.read_text(encoding="utf-8")
         cls.collection_replay_migration = COLLECTION_REPLAY_MIGRATION.read_text(encoding="utf-8")
         cls.return_currency_guard_migration = RETURN_CURRENCY_GUARD_MIGRATION.read_text(encoding="utf-8")
@@ -158,8 +160,8 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
     def test_historical_cogs_uses_stored_cost_and_only_reverses_restocked_return_cost(self):
         self.assertIn('costTotalMinor = if (item.isNull("cost_total_minor")) null', self.repository)
         self.assertIn('saleItemCostTotalMinor = if (saleItem == null || saleItem.isNull("cost_total_minor")) null', self.repository)
-        self.assertIn('require(restockedQuantity >= 0)', self.calculations)
-        self.assertIn('calculateRestockedCostMinor', self.calculations)
+        self.assertIn('require(restockedQuantity >= 0)', self.cost_profit_calculations)
+        self.assertIn('calculateRestockedCostMinor', self.cost_profit_calculations)
         self.assertIn('تكلفة البنود المباعة المحفوظة', self.screen)
         self.assertIn('val costProfitError', self.screen)
 
@@ -275,7 +277,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
             "تجاوزت مجاميع المبيعات أو التكلفة أو المرتجعات نطاق الأرقام الدقيق",
         ):
             with self.subTest(marker=marker):
-                self.assertIn(marker, self.calculations if marker in ("calculateRestockedCostMinor", "Math.addExact", "Math.subtractExact") else self.screen)
+                self.assertIn(marker, self.cost_profit_calculations if marker in ("calculateRestockedCostMinor", "Math.addExact", "Math.subtractExact") else self.screen)
         self.assertNotIn("}.getOrDefault(0L)", self.screen)
 
     def test_unready_financial_reports_are_visible_but_not_selectable(self):
