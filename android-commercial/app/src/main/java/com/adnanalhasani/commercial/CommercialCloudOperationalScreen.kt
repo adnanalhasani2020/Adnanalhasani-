@@ -21,7 +21,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.math.BigDecimal
-import java.text.NumberFormat
 import java.util.Currency
 import java.util.Locale
 import java.util.concurrent.Executors
@@ -40,12 +39,14 @@ internal fun formatCommercialOperationalAmount(amountMinor: Long, currencyCode: 
 internal fun formatCommercialOperationalAmount(amountMinor: Long, currencyCode: String, fractionDigits: Int): String {
     val code = currencyCode.trim().uppercase(Locale.ROOT)
     if (fractionDigits !in 0..3) return amountMinor.toString() + " وحدة نقدية صغرى" + if (code.isBlank()) "" else " • $code"
-    val amount = BigDecimal.valueOf(amountMinor).movePointLeft(fractionDigits)
-    val formatter = NumberFormat.getNumberInstance(Locale.US).apply {
-        minimumFractionDigits = fractionDigits
-        maximumFractionDigits = fractionDigits
-    }
-    return formatter.format(amount) + " " + code
+    val amountText = BigDecimal.valueOf(amountMinor).movePointLeft(fractionDigits).toPlainString()
+    val negative = amountText.startsWith("-")
+    val unsigned = amountText.removePrefix("-")
+    val parts = unsigned.split(".", limit = 2)
+    val groupedInteger = parts[0].reversed().chunked(3).joinToString(",").reversed()
+    val formatted = (if (negative) "-" else "") + groupedInteger +
+        if (fractionDigits > 0) "." + parts.getOrElse(1) { "0".repeat(fractionDigits) } else ""
+    return formatted + " " + code
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
