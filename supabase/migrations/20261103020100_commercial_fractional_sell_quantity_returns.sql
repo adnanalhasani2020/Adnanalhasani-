@@ -9,7 +9,7 @@ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path TO 'pg_catalog','public'
 AS $function$
 DECLARE v_item jsonb; v_items jsonb := '[]'::jsonb; v_sale_item public.commercial_sale_items%ROWTYPE;
-        v_unit_code text; v_factor bigint; v_qty numeric; v_prior_key text;
+        v_unit_code text; v_factor bigint; v_factor_numeric numeric; v_qty numeric;
 BEGIN
   IF auth.uid() IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
   IF p_items IS NULL OR jsonb_typeof(p_items)<>'array' OR jsonb_array_length(p_items)<1 OR jsonb_array_length(p_items)>100 THEN
@@ -26,10 +26,20 @@ BEGIN
     IF NOT FOUND THEN RAISE EXCEPTION 'sale_item_not_found_for_sale' USING ERRCODE='22023'; END IF;
     IF v_item ? 'unit_code' THEN
       v_unit_code := v_item->>'unit_code';
-      SELECT quantity_in_stock INTO v_factor
-      FROM public.commercial_offering_sell_units
-      WHERE offering_id=v_sale_item.offering_id AND unit_code=v_unit_code AND is_active=true;
-      IF NOT FOUND THEN RAISE EXCEPTION 'return_sell_unit_not_configured' USING ERRCODE='22023'; END IF;
+      -- The conversion factor is immutable invoice-line data. Do not read the current
+      -- offering unit master: a manager may have changed its factor after this sale.
+      IF v_sale_item.selling_unit_code IS DISTINCT FROM v_unit_code THEN
+        RAISE EXCEPTION 'return_sell_unit_does_not_match_sale_snapshot' USING ERRCODE='22023';
+      END IF;
+      IF v_sale_item.selling_quantity IS NULL OR v_sale_item.selling_quantity<=0
+         OR v_sale_item.quantity_in_stock_units IS NULL OR v_sale_item.quantity_in_stock_units<=0 THEN
+        RAISE EXCEPTION 'sale_item_sell_unit_snapshot_invalid' USING ERRCODE='55000';
+      END IF;
+      v_factor_numeric := v_sale_item.quantity_in_stock_units::numeric / v_sale_item.selling_quantity;
+      IF v_factor_numeric<=0 OR v_factor_numeric<>trunc(v_factor_numeric) THEN
+        RAISE EXCEPTION 'sale_item_sell_unit_snapshot_invalid' USING ERRCODE='55000';
+      END IF;
+      v_factor := v_factor_numeric::bigint;
       v_qty := (v_item->>'quantity')::numeric * v_factor;
     ELSE
       v_qty := (v_item->>'quantity')::numeric;
