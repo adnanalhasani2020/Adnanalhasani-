@@ -3,6 +3,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MAIN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt"
+LOCAL_SCREENS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/LocalSalesInventoryScreens.kt"
 PROFILE = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ActivityProfileScreen.kt"
 
 
@@ -45,8 +46,8 @@ def test_existing_auth_session_is_restored_before_project_setup():
 def test_first_run_and_navigation_guidance_are_available_without_removing_features():
     main = MAIN.read_text(encoding="utf-8")
     assert "إخفاء التلميحات" in main
-    assert "الانتقال إلى إضافة الأصناف" in main
-    assert "تسجيل أول عملية بيع" in main
+    assert "الانتقال إلى إضافة الأصناف" in LOCAL_SCREENS.read_text(encoding="utf-8")
+    assert "تسجيل أول عملية بيع" in LOCAL_SCREENS.read_text(encoding="utf-8")
     assert "ReportsCenterScreen" in main
     assert "CommercialCloudPurchasesScreen" in main
     assert "الأصناف والمخزون والمشتريات" in main
