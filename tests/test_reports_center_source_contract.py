@@ -299,7 +299,7 @@ def test_cloud_dashboard_uses_organization_timezone_for_report_day_boundaries():
         ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt"
     ).read_text(encoding="utf-8")
     start = main_activity.index("private fun CommercialCloudReportsScreen")
-    end = main_activity.index("\\n@Composable", start + 50)
+    end = main_activity.index("\n@Composable", start + 50)
     reports = main_activity[start:end]
     assert "loadCommercialCloudExpenseReportingTimeZone(context)" in reports
     assert "val zone = reportingTimeZone" in reports
