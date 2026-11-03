@@ -1930,9 +1930,8 @@ internal fun ReportsCenterScreen(
                 item.warehouseName + if (item.warehouseCode.isBlank()) "" else " (${item.warehouseCode})"
             } else "لا يوجد مستودع وحيد معتمد"
             ReportLine(
-                "-", item.locationName, item.productName, 0L, "-",
-                "المستودع: $warehouseLabel · الموقع: ${item.locationName} · الحالة: $mappingLabel · روابط المستودع: ${item.mappedWarehouseCount}",
-                displayAmount = "المتاح: ${item.availableQuantity.stripTrailingZeros().toPlainString()} ${item.unitName} · الإجمالي: ${item.quantityOnHand.stripTrailingZeros().toPlainString()} · المحجوز: ${item.quantityReserved.stripTrailingZeros().toPlainString()} · حد الطلب: ${item.reorderPoint.stripTrailingZeros().toPlainString()}"
+                "-", item.locationName, item.productName, 0L, "-", mappingLabel,
+                displayAmount = "المستودع: $warehouseLabel · روابط المستودع: ${item.mappedWarehouseCount} · المتاح: ${item.availableQuantity.stripTrailingZeros().toPlainString()} ${item.unitName} · الإجمالي: ${item.quantityOnHand.stripTrailingZeros().toPlainString()} · المحجوز: ${item.quantityReserved.stripTrailingZeros().toPlainString()} · حد الطلب: ${item.reorderPoint.stripTrailingZeros().toPlainString()}"
             )
         }
         "رصيد المخزون الحالي" -> if (cloudMode) cloudStockAlerts.map { item ->
@@ -2169,7 +2168,7 @@ internal fun ReportsCenterScreen(
                         exportTitle = selectedReport
                         exportRows = buildList {
                             add(listOf("التقرير", exportTitle))
-                            add(listOf("الفترة", if (exportTitle == "التقييم المالي الحالي للمخزون") "لقطة حالية للموقع المختار؛ ليست تاريخية" else if (exportTitle == "رصيد المخزون حسب الموقع") "لقطة حالية لجميع مواقع المؤسسة؛ ليست تاريخية" else startText + " — " + endText))
+                            add(listOf("الفترة", if (exportTitle == "التقييم المالي الحالي للمخزون") "لقطة حالية للموقع المختار؛ ليست تاريخية" else if (exportTitle == "رصيد المخزون حسب الموقع" || exportTitle == "حالة ربط أرصدة المخزون بالمستودعات") "لقطة حالية لجميع مواقع المؤسسة؛ ليست تاريخية" else startText + " — " + endText))
                             add(listOf("مصدر البيانات", if (cloudMode) "السحابة" else "محلي على الجهاز"))
                             add(listOf("تاريخ التصدير", java.time.LocalDateTime.now().toString()))
                             add(listOf("التاريخ", "المرجع", "الاسم", "المبلغ/الكمية", "العملة", "الحالة"))
@@ -2181,7 +2180,7 @@ internal fun ReportsCenterScreen(
                         exportTitle = selectedReport
                         exportRows = buildList {
                             add(listOf("التقرير", exportTitle))
-                            add(listOf("الفترة", if (exportTitle == "التقييم المالي الحالي للمخزون") "لقطة حالية للموقع المختار؛ ليست تاريخية" else if (exportTitle == "رصيد المخزون حسب الموقع") "لقطة حالية لجميع مواقع المؤسسة؛ ليست تاريخية" else startText + " — " + endText))
+                            add(listOf("الفترة", if (exportTitle == "التقييم المالي الحالي للمخزون") "لقطة حالية للموقع المختار؛ ليست تاريخية" else if (exportTitle == "رصيد المخزون حسب الموقع" || exportTitle == "حالة ربط أرصدة المخزون بالمستودعات") "لقطة حالية لجميع مواقع المؤسسة؛ ليست تاريخية" else startText + " — " + endText))
                             add(listOf("مصدر البيانات", if (cloudMode) "السحابة" else "محلي على الجهاز"))
                             add(listOf("تاريخ التصدير", java.time.LocalDateTime.now().toString()))
                             add(listOf("التاريخ", "المرجع", "الاسم", "المبلغ/الكمية", "العملة", "الحالة"))
@@ -2196,7 +2195,7 @@ internal fun ReportsCenterScreen(
                             exportTitle = selectedReport
                             exportRows = buildList {
                                 add(listOf("التقرير", exportTitle))
-                                add(listOf("الفترة", if (exportTitle == "التقييم المالي الحالي للمخزون") "لقطة حالية للموقع المختار؛ ليست تاريخية" else if (exportTitle == "رصيد المخزون حسب الموقع") "لقطة حالية لجميع مواقع المؤسسة؛ ليست تاريخية" else startText + " — " + endText))
+                                add(listOf("الفترة", if (exportTitle == "التقييم المالي الحالي للمخزون") "لقطة حالية للموقع المختار؛ ليست تاريخية" else if (exportTitle == "رصيد المخزون حسب الموقع" || exportTitle == "حالة ربط أرصدة المخزون بالمستودعات") "لقطة حالية لجميع مواقع المؤسسة؛ ليست تاريخية" else startText + " — " + endText))
                                 add(listOf("مصدر البيانات", if (cloudMode) "السحابة" else "محلي على الجهاز"))
                                 add(listOf("تاريخ التصدير", java.time.LocalDateTime.now().toString()))
                                 add(listOf("التاريخ", "المرجع", "الاسم", "المبلغ/الكمية", "العملة", "الحالة"))
@@ -2216,7 +2215,7 @@ internal fun ReportsCenterScreen(
                             exportTitle = selectedReport
                             exportRows = buildList {
                                 add(listOf("التقرير", exportTitle))
-                                add(listOf("الفترة", if (exportTitle == "التقييم المالي الحالي للمخزون") "لقطة حالية للموقع المختار؛ ليست تاريخية" else if (exportTitle == "رصيد المخزون حسب الموقع") "لقطة حالية لجميع مواقع المؤسسة؛ ليست تاريخية" else startText + " — " + endText))
+                                add(listOf("الفترة", if (exportTitle == "التقييم المالي الحالي للمخزون") "لقطة حالية للموقع المختار؛ ليست تاريخية" else if (exportTitle == "رصيد المخزون حسب الموقع" || exportTitle == "حالة ربط أرصدة المخزون بالمستودعات") "لقطة حالية لجميع مواقع المؤسسة؛ ليست تاريخية" else startText + " — " + endText))
                                 add(listOf("مصدر البيانات", if (cloudMode) "السحابة" else "محلي على الجهاز"))
                                 add(listOf("تاريخ التصدير", java.time.LocalDateTime.now().toString()))
                                 add(listOf("التاريخ", "المرجع", "الاسم", "المبلغ/الكمية", "العملة", "الحالة"))
