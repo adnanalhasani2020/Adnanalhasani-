@@ -8,6 +8,7 @@ SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commerci
 PURCHASES = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudPurchasesScreen.kt"
 COMPOSER = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudSaleComposerScreen.kt"
 MAIN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt"
+MODELS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialModels.kt"
 
 
 class CommercialCloudSalesScreenContractTests(unittest.TestCase):
@@ -18,6 +19,7 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         cls.purchases = PURCHASES.read_text(encoding="utf-8")
         cls.composer = COMPOSER.read_text(encoding="utf-8")
         cls.main = MAIN.read_text(encoding="utf-8")
+        cls.models = MODELS.read_text(encoding="utf-8")
 
     def test_invoice_projection_uses_existing_tables_and_columns(self):
         self.assertIn("internal fun loadCommercialCloudSaleDocuments", self.repository)
@@ -289,7 +291,7 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         self.assertIn('.put("p_initial_payment_minor", if (paymentMode == "cash") JSONObject.NULL else initialPaymentMinor)', self.repository)
 
     def test_cloud_inventory_precision_is_preserved_for_display_and_stock_guard(self):
-        self.assertIn("val stockPrecise: BigDecimal = BigDecimal.valueOf(stock.toLong())", self.main)
+        self.assertIn("val stockPrecise: BigDecimal = BigDecimal.valueOf(stock.toLong())", self.models)
         self.assertIn('BigDecimal(row.optString("quantity_on_hand", "0"))', self.repository)
         self.assertIn('BigDecimal(row.optString("quantity_reserved", "0"))', self.repository)
         self.assertIn("val availableQuantity = runCatching", self.repository)
