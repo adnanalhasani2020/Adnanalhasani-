@@ -94,7 +94,8 @@ class CommercialCloudOperationalScreenContractTests(unittest.TestCase):
     def test_fractional_sale_returns_preserve_decimal_units_and_retry_safely(self):
         returns_screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudReturnsScreen.kt").read_text(encoding="utf-8")
         migration = (ROOT / "supabase/migrations/20261103020100_commercial_fractional_sell_quantity_returns.sql").read_text(encoding="utf-8")
-        self.assertIn("maxCommercialReturnQuantity", returns_screen + self.repository)
+        quantity_math = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialQuantityMath.kt").read_text(encoding="utf-8")
+        self.assertIn("maxCommercialReturnQuantity", returns_screen + quantity_math)
         self.assertIn("parseCommercialCheckoutQuantity", returns_screen)
         self.assertIn("quantities: Map<String, BigDecimal>", self.repository)
         self.assertIn("commercial_cloud_pending_return_v1", self.repository)
