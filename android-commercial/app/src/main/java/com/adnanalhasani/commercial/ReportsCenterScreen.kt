@@ -1922,8 +1922,12 @@ internal fun ReportsCenterScreen(
         "رصيد المخزون حسب الموقع" -> locationInventoryReport.lines
         "حالة ربط أرصدة المخزون بالمستودعات" -> cloudWarehouseInventoryContext.map { item ->
             val mappingLabel = when {
+                item.mappingStatus == "mapped" && item.warehouseState == "inactive" ->
+                    "مرتبط بمستودع غير نشط"
+                item.mappingStatus == "mapped" && item.warehouseState == "archived" ->
+                    "مرتبط بمستودع مؤرشف"
                 item.mappingStatus == "mapped" && item.warehouseState != "active" ->
-                    if (item.warehouseState == "archived") "مرتبط بمستودع مؤرشف" else "مرتبط بمستودع غير نشط"
+                    "حالة المستودع غير معروفة"
                 item.mappingStatus == "mapped" -> "مربوط بمستودع واحد"
                 item.mappingStatus == "unconfigured" -> "غير مهيأ"
                 else -> "ملتبس · أكثر من مستودع"
