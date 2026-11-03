@@ -48,7 +48,7 @@ class CatalogItemActivityMappingContractTests(unittest.TestCase):
         main = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt").read_text(encoding="utf-8")
         self.assertIn('putString("activity_code", activityCode.trim().uppercase())', profile)
         self.assertIn('Text("اختيار أصناف النشاط")', profile)
-        self.assertIn('onCatalog = { showActivityProfile = false; showCatalog = true }', main)
+        self.assertIn('onCatalog = { showActivityProfile = false; cloudContextRevision++; showCatalog = true }', main)
         self.assertIn('initialOrganizationId = context.getSharedPreferences("commercial_cloud_context_v1"', main)
         self.assertIn('initialActivityCode = context.getSharedPreferences("commercial_cloud_context_v1"', main)
         self.assertIn('mutableStateOf(initialOrganizationId)', catalog)
