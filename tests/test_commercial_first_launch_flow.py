@@ -39,3 +39,8 @@ def test_first_run_and_navigation_guidance_are_available_without_removing_featur
     assert "تسجيل أول عملية بيع" in main
     assert "ReportsCenterScreen" in main
     assert "CommercialCloudPurchasesScreen" in main
+    assert "الأصناف والمخزون والمشتريات" in main
+    assert "العملاء والمبيعات" in main
+    assert "onBackup = {" in main
+    assert "النسخ الاحتياطي لم تُربط بعد" in main
+    assert "تم تحميل بيانات المؤسسة السحابية" in main
