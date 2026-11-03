@@ -6,6 +6,11 @@ package com.adnanalhasani.commercial
  *
  * Change a gate to true only after the matching migration is deployed and
  * authenticated integration tests pass against the deployed schema.
+ *
+ * Fractional sale/return gates: 20261103020000 and 20261103020100.
+ * Payment request gate: 20261103010000.
+ * Supplier invoice due-date gate: 20261102190000.
+ * Unmapped invoice item creation gate: 20261102040000.
  */
 internal const val COMMERCIAL_CLOUD_FRACTIONAL_QUANTITY_RPC_READY = false
 internal const val COMMERCIAL_CLOUD_PAYMENT_REQUESTS_RPC_READY = false
