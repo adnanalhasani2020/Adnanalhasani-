@@ -20,6 +20,12 @@ class CommercialCloudActionableErrorTests(unittest.TestCase):
         self.assertIn("لا تبدأ عملية جديدة بمفتاح مختلف", repository)
         self.assertIn("انقطع الاتصال قبل تأكيد النتيجة من الخادم", repository)
 
+    def test_expired_refresh_session_prompts_reauthentication(self):
+        repository = REPOSITORY.read_text(encoding="utf-8")
+        self.assertIn('message.contains("invalid refresh token"', repository)
+        self.assertIn('message.contains("refresh token not found"', repository)
+        self.assertIn("انتهت جلسة الحساب أو لم تعد صالحة", repository)
+
     def test_overpayment_and_stock_race_have_specific_user_messages(self):
         repository = REPOSITORY.read_text(encoding="utf-8")
         self.assertIn("collection_exceeds_outstanding_balance", repository)
