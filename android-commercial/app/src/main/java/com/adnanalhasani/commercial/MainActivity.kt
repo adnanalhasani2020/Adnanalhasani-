@@ -207,11 +207,7 @@ private val products = emptyList<Product>()
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun StoreApp(context: Context) {
-    val savedEntryContext = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
-    val hasCompleteEntryContext = listOf("organization_id", "activity_id", "location_id").all {
-        savedEntryContext.getString(it, null).orEmpty().isNotBlank()
-    }
-    var showEntryFlow by remember { mutableStateOf(!hasSavedCommercialAuthSession(context) || !hasCompleteEntryContext) }
+    var showEntryFlow by remember { mutableStateOf(true) }
     var guideDismissed by remember {
         mutableStateOf(context.getSharedPreferences("commercial_ui_guides_v1", Context.MODE_PRIVATE).getBoolean("dismissed", false))
     }
@@ -277,7 +273,11 @@ private fun StoreApp(context: Context) {
     var cloudMode by remember { mutableStateOf(cloudContextHasAny) }
     var nextInvoice by remember { mutableIntStateOf((sales.maxOfOrNull { it.number } ?: 1048) + 1) }
 
-    LaunchedEffect(cloudContextSnapshot, cloudReloadToken) {
+    LaunchedEffect(cloudContextSnapshot, cloudReloadToken, showEntryFlow) {
+        if (showEntryFlow) {
+            cloudInventoryBusy = false
+            return@LaunchedEffect
+        }
         // Once an organization context exists, fail closed into cloud mode before any
         // network request. A failed cloud read must never expose local-only workflows.
         cloudMode = cloudContextHasAny

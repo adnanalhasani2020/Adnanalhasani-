@@ -9,7 +9,10 @@ PROFILE = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commerc
 def test_first_launch_requires_authentication_and_complete_project_context():
     main = MAIN.read_text(encoding="utf-8")
     assert "var showEntryFlow by remember" in main
-    assert "!hasSavedCommercialAuthSession(context) || !hasCompleteEntryContext" in main
+    assert "var showEntryFlow by remember { mutableStateOf(true) }" in main
+    assert "LaunchedEffect(cloudContextSnapshot, cloudReloadToken, showEntryFlow)" in main
+    assert "if (showEntryFlow)" in main
+    assert "نتحقق من جلسة حسابك قبل فتح بيانات المؤسسة." in PROFILE.read_text(encoding="utf-8")
     assert "if (showEntryFlow)" in main
     assert "showBackButton = false" in main
 

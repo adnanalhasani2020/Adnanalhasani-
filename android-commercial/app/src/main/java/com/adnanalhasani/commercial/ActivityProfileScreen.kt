@@ -131,11 +131,13 @@ internal fun ActivityProfileScreen(
     var busy by remember { mutableStateOf(false) }
     var feedback by remember { mutableStateOf("") }
     var created by remember { mutableStateOf(false) }
+    var restoringSession by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         val savedRefresh = runCatching { profileSessionPreferences(context).getString("refresh_token", null).orEmpty() }.getOrDefault("")
         if (savedRefresh.isBlank()) return@LaunchedEffect
         busy = true
+        restoringSession = true
         profileIo.execute {
             val restored = runCatching {
                 val session = supabaseRequest(
@@ -150,6 +152,7 @@ internal fun ActivityProfileScreen(
             }
             profileMain.post {
                 busy = false
+                restoringSession = false
                 restored.onSuccess {
                     accessToken = it
                     feedback = "تم استعادة جلسة حسابك."
@@ -217,10 +220,13 @@ internal fun ActivityProfileScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         if (showBackButton) TextButton(onClick = onBack) { Text("← رجوع إلى المتجر") }
-        Text(if (created) "تم إنشاء مشروعك التجاري" else if (accessToken == null) "مرحبًا بك في متجري" else "إنشاء مشروعك التجاري", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text(if (accessToken == null) "سجّل الدخول أو أنشئ حسابًا جديدًا للبدء. بعد ذلك سنساعدك على إنشاء مشروعك وربطه بالسحابة." else "الخطوة التالية: أدخل بيانات نشاطك وموقعه ليُنشأ مشروعك في قاعدة البيانات السحابية.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(if (restoringSession) "جارٍ التحقق من حسابك" else if (created) "تم إنشاء مشروعك التجاري" else if (accessToken == null) "مرحبًا بك في متجري" else "إنشاء مشروعك التجاري", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text(if (restoringSession) "نتحقق من جلسة حسابك قبل فتح بيانات المؤسسة." else if (accessToken == null) "سجّل الدخول أو أنشئ حسابًا جديدًا للبدء. بعد ذلك سنساعدك على إنشاء مشروعك وربطه بالسحابة." else "الخطوة التالية: أدخل بيانات نشاطك وموقعه ليُنشأ مشروعك في قاعدة البيانات السحابية."), color = MaterialTheme.colorScheme.onSurfaceVariant)
 
-        if (accessToken == null) {
+        if (restoringSession) {
+            CircularProgressIndicator()
+            Text("يتم التحقق من جلسة Supabase المحفوظة. لن نفتح بيانات المتجر قبل اكتمال التحقق.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else if (accessToken == null) {
             Text("الخطوة 1: حسابك", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text("يمكنك استخدام البريد وكلمة المرور، أو رمز الهاتف إذا كان مزود SMS مفعّلًا في النظام.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
