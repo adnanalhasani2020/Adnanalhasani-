@@ -549,7 +549,7 @@ internal fun checkoutCommercialCloudSaleMulti(
     require(locationId.isNotBlank()) { "معرّف موقع المخزون غير محفوظ." }
     val payload = JSONArray()
     normalizedLines.forEach { line ->
-        payload.put(JSONObject().put("offering_id", line.offeringId).put("quantity", line.quantity).put("unit_code", line.unitCode))
+        payload.put(JSONObject().put("offering_id", line.offeringId).put("quantity", line.quantity.stripTrailingZeros().toPlainString()).put("unit_code", line.unitCode))
     }
     val sessionPrefs = commercialCloudSessionPreferences(context)
     val savedRefresh = sessionPrefs.getString("refresh_token", null).orEmpty()
