@@ -28,7 +28,7 @@ No database migration is required for source-only organization. Do not modify Su
 | REF-005 | Split report export infrastructure from report UI | EXTRACTED; TESTED pending CI | PDF/XLSX/print functions moved to ReportExport.kt; source-contract tests updated and XLSX unit tests added; run CI before marking tested |
 | REF-006 | Split report catalog, data builders, filters, and feature screens | OPEN | Each report family has clear owner and calculation tests |
 | REF-007 | Split catalog search, discovery, directory management, transfers, and invoice linking | OPEN | Catalog workflows remain intact |
-| REF-008 | Split pure report calculations by business domain | OPEN | Formula parity tests pass |
+| REF-008 | Split pure report calculations by business domain | PARTIALLY EXTRACTED; TESTS PENDING CI | Payment-request amount parsing/formatting now has its own pure Kotlin owner; formula parity tests and remaining report-domain extraction still required |
 | REF-009 | Organize existing feature files and shared UI components | OPEN | No duplicated feature or model owners |
 | REF-010 | Organize tests and update code reference | OPEN | Every feature points to focused tests and current source owner |
 | REF-011 | Full regression, APK build, and release review | BLOCKED | CI green on final refactor commit; APK built from same SHA |
@@ -43,7 +43,7 @@ No database migration is required for source-only organization. Do not modify Su
 6. REF-008 through REF-010: finish pure-domain and test organization.
 7. REF-011: run full validation and build a fresh APK from the exact final commit.
 
-## Work completed on this branch\n\n- Added the architecture overview, module-boundary inventory, and this execution ledger.\n- Extracted XLSX generation, native PDF generation, and Android print preview from `ReportsCenterScreen.kt` into `ReportExport.kt`. The functions remain `internal` so existing report UI callers keep their behavior.\n- Updated `tests/test_reports_center_source_contract.py` to validate the new export owner.\n- Added `ReportExportTest.kt` to validate Arabic RTL XLSX contents, empty-export rejection, XML special-character escaping, and columns beyond `Z`.\n- No database schema, RPC, or production data was changed.\n\n## Current limitations
+## Work completed on this branch\n\n- Added the architecture overview, module-boundary inventory, and this execution ledger.\n- Extracted XLSX generation, native PDF generation, and Android print preview from `ReportsCenterScreen.kt` into `ReportExport.kt`. The functions remain `internal` so existing report UI callers keep their behavior.\n- Updated `tests/test_reports_center_source_contract.py` to validate the new export owner.\n- Added `ReportExportTest.kt` to validate Arabic RTL XLSX contents, empty-export rejection, XML special-character escaping, and columns beyond `Z`.\n- Extracted merchant payment-request amount parsing/formatting from `ReportCalculations.kt` into `CustomerPaymentRequestAmount.kt`; updated the Python source-contract test to enforce the new ownership. Existing Kotlin unit tests remain the behavioral contract.\n- No database schema, RPC, or production data was changed.\n\n## Current limitations
 
 - The latest PR head has not been confirmed by CI after the last two commits in the prior work.
 - No authenticated Android end-to-end commercial workflow has been proven by this source inventory.
