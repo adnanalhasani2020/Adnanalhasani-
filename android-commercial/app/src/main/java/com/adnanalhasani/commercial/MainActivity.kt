@@ -369,7 +369,7 @@ private fun StoreApp(context: Context) {
                         Spacer(Modifier.width(10.dp))
                         Column {
                             Text("متجري", fontWeight = FontWeight.Bold, color = Ink)
-                            Text("إدارة متجرك ببساطة", fontSize = 11.sp, color = Muted)
+                            Text(if (cloudMode) when { cloudInventoryBusy -> "جارٍ الاتصال بقاعدة البيانات..."; cloudInventoryError.isNotBlank() -> "تحقق من الاتصال السحابي"; else -> "متصل بسياق المؤسسة السحابي" } else "إدارة متجرك ببساطة", fontSize = 11.sp, color = Muted)
                         }
                     }
                 },
@@ -544,7 +544,7 @@ private fun StoreApp(context: Context) {
                         onCatalog = { showActivityProfile = false; cloudContextRevision++; showCatalog = true }
                     ) else MoreScreen(cloudMode = cloudMode, onPersonalAccounts = { showPersonalAccounts = true }, onCustomers = {
                     showDebts = true
-                }, onReports = { showReportsCenter = true }, onExpenses = { showExpenses = true }, onActivityProfile = { showActivityProfile = true }, onCatalog = { showCatalog = true }, onMasterData = { showMasterData = true }, onCloudOperational = { cloudOperationalPage = it }, onCloudSales = { cloudSalesPage = true }, onCloudPurchases = { cloudPurchasesPage = true }, onCloudStockAlerts = { cloudStockAlertsPage = true }, onUnitsDirectory = { cloudUnitsPage = true }, onCustomerPortal = { customerPortalPage = true }, onCustomerOrders = { customerOrderFulfillmentPage = true })
+                }, onReports = { showReportsCenter = true }, onExpenses = { showExpenses = true }, onActivityProfile = { showActivityProfile = true }, onCatalog = { showCatalog = true }, onMasterData = { showMasterData = true }, onCloudOperational = { cloudOperationalPage = it }, onCloudSales = { cloudSalesPage = true }, onCloudPurchases = { cloudPurchasesPage = true }, onCloudStockAlerts = { cloudStockAlertsPage = true }, onUnitsDirectory = { cloudUnitsPage = true }, onCustomerPortal = { customerPortalPage = true }, onCustomerOrders = { customerOrderFulfillmentPage = true }, onBackup = { cloudNotice = "واجهة النسخ الاحتياطي لم تُربط بعد بعملية تصدير واستعادة موثوقة. لم يتم إنشاء نسخة غير مكتملة أو الادعاء بحفظها." })
                 }
             }
         }
@@ -713,7 +713,7 @@ private fun StoreApp(context: Context) {
         saveExpenses(context, expenses)
         expenseDialog = false
     })
-    if (cloudMode && cloudNotice.isNotBlank()) AlertDialog(
+    if (cloudNotice.isNotBlank()) AlertDialog(
         onDismissRequest = { cloudNotice = "" },
         title = { Text("حالة قاعدة البيانات") },
         text = { Text(cloudNotice) },
@@ -1251,24 +1251,99 @@ private fun AddProductDialog(
 }
 
 @Composable
-private fun MoreScreen(cloudMode: Boolean, onCustomers: () -> Unit, onReports: () -> Unit, onExpenses: () -> Unit, onActivityProfile: () -> Unit, onPersonalAccounts: () -> Unit, onCatalog: () -> Unit, onMasterData: () -> Unit, onCloudOperational: (String) -> Unit, onCloudSales: () -> Unit, onCloudPurchases: () -> Unit, onCloudStockAlerts: () -> Unit, onUnitsDirectory: () -> Unit, onCustomerPortal: () -> Unit, onCustomerOrders: () -> Unit) {
-    val options = listOf("دليل الأصناف العالمي", "المستودعات والمجموعات والأقسام", "العملاء والمديونيات", "دليل العملاء السحابي", "دليل الموردين", "أوامر الشراء", "السندات والمدفوعات", "مرتجعات المبيعات", "القيود المحاسبية", "دليل الحسابات", "فواتير المبيعات السحابية", "تنبيهات المخزون السحابي", "دليل وحدات القياس", "بوابة الزبون", "طلبات الزبائن", "التقارير والأرباح", "المصروفات", "إعدادات المتجر", "الحسابات الفرعية", "النسخ الاحتياطي").filter { cloudMode || it != "طلبات الزبائن" }
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { Heading("إدارة المتجر", "الأدوات والإعدادات") }
-        items(options) { label ->
-            Card(onClick = { when (label) { "العملاء والمديونيات" -> onCustomers(); "التقارير والأرباح" -> onReports(); "المصروفات" -> onExpenses(); "إعدادات المتجر" -> onActivityProfile(); "الحسابات الفرعية" -> onPersonalAccounts(); "دليل الأصناف العالمي" -> onCatalog(); "المستودعات والمجموعات والأقسام" -> onMasterData(); "دليل العملاء السحابي" -> onCloudOperational("customers"); "دليل الموردين" -> onCloudOperational("suppliers"); "أوامر الشراء" -> onCloudPurchases(); "السندات والمدفوعات" -> onCloudOperational("payments"); "مرتجعات المبيعات" -> onCloudOperational("returns"); "القيود المحاسبية" -> onCloudOperational("journals"); "دليل الحسابات" -> onCloudOperational("accounts"); "فواتير المبيعات السحابية" -> onCloudSales(); "تنبيهات المخزون السحابي" -> onCloudStockAlerts(); "دليل وحدات القياس" -> onUnitsDirectory();
-            "بوابة الزبون" -> onCustomerPortal()
-            "طلبات الزبائن" -> onCustomerOrders()
-        } }, colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Border)) {
-                Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(38.dp).background(Mint, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) { Icon(Icons.Default.Settings, null, tint = Green) }
-                    Spacer(Modifier.width(12.dp))
-                    Text(label, modifier = Modifier.weight(1f), color = Ink, fontWeight = FontWeight.Medium)
-                    Icon(Icons.Default.ChevronLeft, null, tint = Muted)
+private fun MoreScreen(
+    cloudMode: Boolean,
+    onCustomers: () -> Unit,
+    onReports: () -> Unit,
+    onExpenses: () -> Unit,
+    onActivityProfile: () -> Unit,
+    onPersonalAccounts: () -> Unit,
+    onCatalog: () -> Unit,
+    onMasterData: () -> Unit,
+    onCloudOperational: (String) -> Unit,
+    onCloudSales: () -> Unit,
+    onCloudPurchases: () -> Unit,
+    onCloudStockAlerts: () -> Unit,
+    onUnitsDirectory: () -> Unit,
+    onCustomerPortal: () -> Unit,
+    onCustomerOrders: () -> Unit,
+    onBackup: () -> Unit
+) {
+    val sections = listOf(
+        "الأصناف والمخزون والمشتريات" to listOf(
+            "دليل الأصناف العالمي", "المستودعات والمجموعات والأقسام",
+            "دليل الموردين", "أوامر الشراء", "تنبيهات المخزون السحابي", "دليل وحدات القياس"
+        ),
+        "العملاء والمبيعات" to listOf(
+            "العملاء والمديونيات", "دليل العملاء السحابي", "فواتير المبيعات السحابية",
+            "مرتجعات المبيعات", "بوابة الزبون", "طلبات الزبائن"
+        ),
+        "الحسابات والتقارير" to listOf(
+            "السندات والمدفوعات", "القيود المحاسبية", "دليل الحسابات",
+            "التقارير والأرباح", "المصروفات"
+        ),
+        "إعدادات وأدوات المتجر" to listOf(
+            "إعدادات المتجر", "الحسابات الفرعية", "النسخ الاحتياطي"
+        )
+    ).map { (title, entries) ->
+        title to entries.filter { cloudMode || it !in setOf(
+            "دليل العملاء السحابي", "دليل الموردين", "أوامر الشراء", "السندات والمدفوعات",
+            "مرتجعات المبيعات", "القيود المحاسبية", "دليل الحسابات", "فواتير المبيعات السحابية",
+            "تنبيهات المخزون السحابي", "دليل وحدات القياس", "بوابة الزبون", "طلبات الزبائن"
+        ) }
+    }.filter { it.second.isNotEmpty() }
+
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        item { Heading("إدارة المتجر", "اختر القسم الذي تريد العمل عليه") }
+        sections.forEach { (sectionTitle, entries) ->
+            item { Heading(sectionTitle, "الأدوات المتاحة في هذا القسم") }
+            items(entries) { label ->
+                Card(
+                    onClick = {
+                        when (label) {
+                            "العملاء والمديونيات" -> onCustomers()
+                            "التقارير والأرباح" -> onReports()
+                            "المصروفات" -> onExpenses()
+                            "إعدادات المتجر" -> onActivityProfile()
+                            "الحسابات الفرعية" -> onPersonalAccounts()
+                            "دليل الأصناف العالمي" -> onCatalog()
+                            "المستودعات والمجموعات والأقسام" -> onMasterData()
+                            "دليل العملاء السحابي" -> onCloudOperational("customers")
+                            "دليل الموردين" -> onCloudOperational("suppliers")
+                            "أوامر الشراء" -> onCloudPurchases()
+                            "السندات والمدفوعات" -> onCloudOperational("payments")
+                            "مرتجعات المبيعات" -> onCloudOperational("returns")
+                            "القيود المحاسبية" -> onCloudOperational("journals")
+                            "دليل الحسابات" -> onCloudOperational("accounts")
+                            "فواتير المبيعات السحابية" -> onCloudSales()
+                            "تنبيهات المخزون السحابي" -> onCloudStockAlerts()
+                            "دليل وحدات القياس" -> onUnitsDirectory()
+                            "بوابة الزبون" -> onCustomerPortal()
+                            "طلبات الزبائن" -> onCustomerOrders()
+                            "النسخ الاحتياطي" -> onBackup()
+                        }
+                    },
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, Border)
+                ) {
+                    Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(38.dp).background(Mint, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.Settings, null, tint = Green)
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Text(label, modifier = Modifier.weight(1f), color = Ink, fontWeight = FontWeight.Medium)
+                        Icon(Icons.Default.ChevronLeft, null, tint = Muted)
+                    }
                 }
             }
         }
-        item { Text("الشاشات السحابية تعرض السجلات الفعلية المسموح بها من Supabase؛ بعض العمليات الكتابية ما زالت محجوبة حتى اعتماد إجراءاتها الآمنة.", color = Muted, fontSize = 11.sp, modifier = Modifier.padding(vertical = 12.dp)) }
+        item {
+            Text(
+                "تعمل الشاشات السحابية على سجلات Supabase الفعلية. إذا كانت عملية غير متاحة بعد، سيظهر تنبيه بدل تنفيذ عملية غير مكتملة.",
+                color = Muted, fontSize = 11.sp, modifier = Modifier.padding(vertical = 12.dp)
+            )
+        }
     }
 }
 
