@@ -18,7 +18,7 @@ def test_valid_cloud_context_fails_closed_before_cloud_reads():
     effect = source.split("LaunchedEffect(cloudContextSnapshot, cloudReloadToken)", 1)[1].split(
         "Scaffold(", 1
     )[0]
-    assert effect.index("cloudMode = cloudContextExists") < effect.index("storeCloudIo.execute")
+    assert effect.index("cloudMode = cloudContextHasAny") < effect.index("storeCloudIo.execute")
     assert "inventory.clear()" in effect
     assert "sales.clear()" in effect
     assert "settlements.clear()" in effect
@@ -30,7 +30,7 @@ def test_cloud_inventory_error_has_retry_without_falling_back_to_local_mode():
     source = MAIN.read_text(encoding="utf-8")
     assert 'Text("إعادة المحاولة")' in source
     assert "cloudReloadToken++" in source
-    assert "cloudMode = cloudContextExists" in source
+    assert "cloudMode = cloudContextHasAny" in source
 
 def test_partial_cloud_context_never_loads_or_displays_local_data():
     source = MAIN.read_text(encoding="utf-8")
