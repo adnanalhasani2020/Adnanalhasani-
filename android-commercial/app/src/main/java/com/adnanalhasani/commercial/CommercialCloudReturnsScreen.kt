@@ -24,7 +24,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.util.Locale
 import java.math.BigDecimal
-import org.json.JSONArray
 import java.util.concurrent.Executors
 
 private val ReturnInk = Color(0xFF183B35)
