@@ -49,3 +49,12 @@ def test_supplier_invoice_and_unmapped_item_creation_are_gated_until_migrations(
     assert "COMMERCIAL_CLOUD_UNMAPPED_INVOICE_ITEM_RPC_READY = false" in gates
     assert "COMMERCIAL_CLOUD_SUPPLIER_INVOICE_DATES_RPC_READY" in supplier
     assert "COMMERCIAL_CLOUD_UNMAPPED_INVOICE_ITEM_RPC_READY" in catalog
+
+def test_returns_block_mutable_unit_factors_until_snapshot_rpc_is_deployed():
+    gates = GATES.read_text(encoding="utf-8")
+    screen = RETURNS_SCREEN.read_text(encoding="utf-8")
+    assert "COMMERCIAL_CLOUD_RETURN_UNIT_SNAPSHOT_RPC_READY = false" in gates
+    assert "hasNonBaseReturnUnit" in screen
+    assert "returnUnitSnapshotBlocked" in screen
+    assert "&& !returnUnitSnapshotBlocked" in screen
+    assert "معامل الوحدة الحالي قد يختلف عن معامل الفاتورة وقت البيع" in screen
