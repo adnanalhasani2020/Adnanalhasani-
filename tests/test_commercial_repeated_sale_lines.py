@@ -37,7 +37,7 @@ class CommercialRepeatedSaleLineTests(unittest.TestCase):
 
     def test_fractional_selling_quantity_must_convert_to_whole_base_stock(self):
         migration = (ROOT / "supabase/migrations/20261103020000_commercial_fractional_sell_quantity_checkout.sql").read_text(encoding="utf-8")
-        self.assertIn(r"(\\.[0-9]{1,3})?", migration)
+        self.assertIn(r"(\.[0-9]{1,3})?", migration)
         self.assertIn("v_base_qty := (v_line->>'quantity')::numeric * v_unit.quantity_in_stock", migration)
         self.assertIn("v_base_qty <> trunc(v_base_qty)", migration)
         self.assertIn("fractional_base_stock_quantity_not_supported", migration)
