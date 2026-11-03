@@ -40,6 +40,10 @@ class PurchaseOrderOfferingLocationPickerTests(unittest.TestCase):
         self.assertIn('order.receiveLocationName.ifBlank { "غير محدد" }', self.screen)
         self.assertIn('order.receiveLocationName.ifBlank { "غير محدد" }', self.receipt)
 
+    def test_closed_purchase_orders_have_an_arabic_status_label(self):
+        self.assertIn('"closed" -> "مغلق"', self.screen)
+        self.assertIn('"closed" -> CloudPurchasesMuted', self.screen)
+
 
 if __name__ == "__main__":
     unittest.main()
