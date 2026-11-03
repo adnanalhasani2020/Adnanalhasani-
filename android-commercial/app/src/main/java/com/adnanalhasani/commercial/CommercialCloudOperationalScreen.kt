@@ -20,8 +20,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import java.math.BigDecimal
-import java.util.Currency
 import java.util.Locale
 import java.util.concurrent.Executors
 
@@ -30,24 +28,6 @@ private val CloudScreenMain = Handler(Looper.getMainLooper())
 
 private data class CloudScreenSpec(val title: String, val subtitle: String, val key: String, val empty: String)
 
-internal fun formatCommercialOperationalAmount(amountMinor: Long, currencyCode: String): String {
-    val code = currencyCode.trim().uppercase(Locale.ROOT)
-    val fractionDigits = runCatching { Currency.getInstance(code).defaultFractionDigits }.getOrDefault(-1)
-    return formatCommercialOperationalAmount(amountMinor, code, fractionDigits)
-}
-
-internal fun formatCommercialOperationalAmount(amountMinor: Long, currencyCode: String, fractionDigits: Int): String {
-    val code = currencyCode.trim().uppercase(Locale.ROOT)
-    if (fractionDigits !in 0..6) return amountMinor.toString() + " وحدة نقدية صغرى" + if (code.isBlank()) "" else " • $code"
-    val amountText = BigDecimal.valueOf(amountMinor).movePointLeft(fractionDigits).toPlainString()
-    val negative = amountText.startsWith("-")
-    val unsigned = amountText.removePrefix("-")
-    val parts = unsigned.split(".", limit = 2)
-    val groupedInteger = parts[0].reversed().chunked(3).joinToString(",").reversed()
-    val formatted = (if (negative) "-" else "") + groupedInteger +
-        if (fractionDigits > 0) "." + parts.getOrElse(1) { "0".repeat(fractionDigits) } else ""
-    return formatted + " " + code
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
