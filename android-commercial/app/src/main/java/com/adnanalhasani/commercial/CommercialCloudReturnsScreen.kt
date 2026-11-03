@@ -60,7 +60,7 @@ private fun returnSellUnits(item: CommercialCloudReturnableSaleItem): List<Retur
                 row.optLong("quantityInBase", 1L).coerceAtLeast(1L), row.optBoolean("isDefault", false))
         }.filter { it.code.isNotBlank() }.distinctBy { it.code }
     }.getOrDefault(emptyList())
-    return parsed.ifEmpty { listOf(ReturnSellUnit(item.sellingUnitCode, item.sellingUnitName, 1, true)) }
+    return parsed.ifEmpty { listOf(ReturnSellUnit(item.sellingUnitCode, item.sellingUnitName, 1L, true)) }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
