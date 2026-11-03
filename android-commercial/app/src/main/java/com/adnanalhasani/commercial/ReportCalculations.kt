@@ -999,7 +999,7 @@ internal fun calculateTaxDiscountSummaryTotals(
 private fun cloudDebtScale(currency: String): Int =
     runCatching { Currency.getInstance(currency).defaultFractionDigits.coerceIn(0, 6) }.getOrDefault(0)
 
-private fun cloudDebtInput(amountMinor: Long, currency: String): String =
+internal fun cloudDebtInput(amountMinor: Long, currency: String): String =
     java.math.BigDecimal.valueOf(amountMinor).movePointLeft(cloudDebtScale(currency))
         .stripTrailingZeros().toPlainString()
 
