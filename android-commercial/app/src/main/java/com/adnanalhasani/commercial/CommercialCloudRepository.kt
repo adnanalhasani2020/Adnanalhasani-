@@ -449,7 +449,7 @@ internal fun parseCommercialCheckoutQuantity(value: String): BigDecimal? {
             }
         }
     }
-    if (!Regex("^(0|[1-9][0-9]{0,5})(\\\\.[0-9]{1,3})?$").matches(ascii)) return null
+    if (!Regex("^(0|[1-9][0-9]{0,5})(\\.[0-9]{1,3})?$").matches(ascii)) return null
     return runCatching { BigDecimal(ascii) }
         .getOrNull()
         ?.takeIf { it.signum() > 0 && it <= BigDecimal("100000") }
