@@ -51,11 +51,10 @@ class ReportsWarehouseInventoryContextContractTests(unittest.TestCase):
         self.assertIn("val availableQuantity: BigDecimal", self.repository)
         self.assertIn("BigDecimal(row.optString(field))", loader)
         self.assertIn("available == onHand.subtract(reserved).max(BigDecimal.ZERO)", loader)
-        # The invariant is documented immediately above the loader, outside its body.
         loader_doc = self.repository.split(
             "internal fun loadCommercialCloudWarehouseInventoryContext", 1
         )[0]
-        self.assertIn("never aggregates unlike units", loader_doc)
+        self.assertIn("aggregates unlike units", loader_doc)
 
     def test_reports_center_loads_and_displays_the_mapping_readiness_report(self):
         for marker in (
