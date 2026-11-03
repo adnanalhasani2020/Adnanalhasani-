@@ -432,22 +432,45 @@ internal fun loadCommercialCloudCustomers(context: Context): List<CommercialClou
 
 internal data class CommercialCloudCheckoutLine(
     val offeringId: String,
-    val quantity: Int,
+    val quantity: BigDecimal,
     val unitCode: String = "each"
 )
+
+/** Parse a positive selling quantity with up to three decimal places. */
+internal fun parseCommercialCheckoutQuantity(value: String): BigDecimal? {
+    var normalized = value.trim().replace(',', '.')
+    if (normalized.startsWith(".")) normalized = "0$normalized"
+    val ascii = buildString {
+        normalized.forEach { ch ->
+            if (ch == '.') append(ch)
+            else {
+                val digit = Character.digit(ch, 10)
+                if (digit >= 0) append(('0'.code + digit).toChar()) else append(ch)
+            }
+        }
+    }
+    if (!Regex("^(0|[1-9][0-9]{0,5})(\\\\.[0-9]{1,3})?$").matches(ascii)) return null
+    return runCatching { BigDecimal(ascii) }
+        .getOrNull()
+        ?.takeIf { it.signum() > 0 && it <= BigDecimal("100000") }
+}
 
 /** Merge only lines with the same offering and selling unit before checkout. */
 internal fun aggregateCommercialCheckoutLines(
     lines: List<CommercialCloudCheckoutLine>
 ): List<CommercialCloudCheckoutLine> {
     require(lines.isNotEmpty() && lines.size <= 200) { "أضف صنفًا واحدًا على الأقل إلى الفاتورة." }
-    val totals = linkedMapOf<Pair<String, String>, Int>()
+    val totals = linkedMapOf<Pair<String, String>, BigDecimal>()
     lines.forEach { line ->
-        require(line.offeringId.isNotBlank() && line.quantity in 1..100000 && line.unitCode.isNotBlank()) { "تحقق من الأصناف والكميات ووحدة البيع." }
+        val quantity = line.quantity.stripTrailingZeros()
+        require(line.offeringId.isNotBlank() && quantity.signum() > 0 &&
+            quantity <= BigDecimal("100000") && quantity.scale() <= 3 && line.unitCode.isNotBlank()) {
+            "تحقق من الأصناف والكميات ووحدة البيع؛ الحد الأقصى ثلاث منازل عشرية."
+        }
         val key = line.offeringId to line.unitCode
-        val total = Math.addExact(totals[key] ?: 0, line.quantity)
-        require(total <= 100000) { "إجمالي كمية الصنف بوحدة البيع نفسها يتجاوز الحد المسموح." }
-        totals[key] = total
+        val total = (totals[key] ?: BigDecimal.ZERO).add(quantity)
+        require(total <= BigDecimal("100000")) { "إجمالي كمية الصنف بوحدة البيع نفسها يتجاوز الحد المسموح." }
+        totals[key] = total.stripTrailingZeros()
     }
     return totals.entries
         .sortedWith(compareBy({ it.key.first }, { it.key.second }))
@@ -467,7 +490,7 @@ internal fun getOrCreateCommercialCloudMultiSaleKey(
     val normalizedLines = aggregateCommercialCheckoutLines(lines)
     val canonical = JSONArray()
     normalizedLines.forEach { line ->
-        canonical.put(JSONObject().put("offering_id", line.offeringId).put("quantity", line.quantity).put("unit_code", line.unitCode))
+        canonical.put(JSONObject().put("offering_id", line.offeringId).put("quantity", line.quantity.stripTrailingZeros().toPlainString()).put("unit_code", line.unitCode))
     }
     val payload = JSONObject().put("customer_id", customerId ?: JSONObject.NULL)
         .put("payment_mode", paymentMode)
