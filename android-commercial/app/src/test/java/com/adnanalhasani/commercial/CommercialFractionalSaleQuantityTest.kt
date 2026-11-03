@@ -23,6 +23,7 @@ class CommercialFractionalSaleQuantityTest {
     fun formatsCloudOperationalAmountsUsingTheCurrencyMinorUnitScale() {
         assertEquals("1,234.56 USD", formatCommercialOperationalAmount(123456L, "USD", 2))
         assertEquals("1.234 KWD", formatCommercialOperationalAmount(1234L, "KWD", 3))
+        assertEquals("1.2345 CLF", formatCommercialOperationalAmount(12345L, "CLF", 4))
         assertEquals("12.34 YER", formatCommercialOperationalAmount(1234L, "YER", 2))
         assertEquals("1,234 JPY", formatCommercialOperationalAmount(1234L, "JPY", 0))
         assertEquals("1234 وحدة نقدية صغرى", formatCommercialOperationalAmount(1234L, "", -1))
