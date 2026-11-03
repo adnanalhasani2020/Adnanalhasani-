@@ -1896,12 +1896,9 @@ internal fun loadCommercialCloudReturnableSales(context: Context): List<Commerci
                     val itemId = item.optString("id").takeUnless { it == "null" }.orEmpty()
                     val baseQuantitySnapshot = item.optLong("quantity_in_stock_units", -1L)
                     val sellingQuantitySnapshot = runCatching { BigDecimal(item.optString("selling_quantity")) }.getOrNull()
-                    val sellingUnitFactor = sellingQuantitySnapshot?.takeIf { it.signum() > 0 && baseQuantitySnapshot > 0L }
-                        ?.let { runCatching {
-                            BigDecimal.valueOf(baseQuantitySnapshot).divide(it).toBigIntegerExact().longValueExact()
-                        }.getOrNull() }
-                        ?.takeIf { it > 0L }
-                        ?: throw IllegalStateException("بيانات وحدة البيع المحفوظة في الفاتورة غير صالحة؛ أوقفنا المرتجع لحماية المخزون.")
+                    val sellingUnitFactor = sellingQuantitySnapshot?.let {
+                        commercialSavedSellingUnitFactor(baseQuantitySnapshot, it)
+                    } ?: throw IllegalStateException("بيانات وحدة البيع المحفوظة في الفاتورة غير صالحة؛ أوقفنا المرتجع لحماية المخزون.")
                     require(baseQuantitySnapshot == qty.toLong()) {
                         "كمية المخزون المحفوظة لا تطابق بند الفاتورة؛ أوقفنا المرتجع لحماية المخزون."
                     }
