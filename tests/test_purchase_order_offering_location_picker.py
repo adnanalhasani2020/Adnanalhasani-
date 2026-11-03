@@ -18,8 +18,8 @@ class PurchaseOrderOfferingLocationPickerTests(unittest.TestCase):
         cls.receipt = RECEIPT_DIALOG.read_text(encoding="utf-8")
 
     def test_repository_loads_offering_location_ref_and_purchase_location_name(self):
-        self.assertIn("activity:commercial_activities(organization_id,state,location_ref)", self.repository)
-        self.assertIn('val locationRef = activity.optString("location_ref")', self.repository)
+        self.assertIn("location_ref,product:commercial_products(name,state),activity:commercial_activities(organization_id,state)", self.repository)
+        self.assertIn('val locationRef = row.optString("location_ref")', self.repository)
         self.assertIn("locationRef.isNotBlank()", self.repository)
         self.assertIn("val locationRef: String", self.repository)
         self.assertIn("receive_location:commercial_organization_locations!commercial_purchase_orders_receive_location_id_fkey(name)", self.repository)
