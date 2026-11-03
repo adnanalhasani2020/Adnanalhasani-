@@ -303,6 +303,9 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
                             if (unsupportedFractionalProduct) {
                                 Text("الطلب السحابي يدعم حاليًا كميات المنتجات الصحيحة فقط من 1 إلى 100000.", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
                             }
+                            if (cart.isNotEmpty() && estimatedTotalResult != null && estimatedTotal <= 0L) {
+                                Text("إجمالي الطلب يجب أن يكون أكبر من صفر؛ راجع أسعار الأصناف والكميات.", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                            }
                             cart.forEach { (item, quantity, total) ->
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                     Text("${item.name} × $quantity", color = PortalInk, modifier = Modifier.weight(1f))
@@ -389,7 +392,7 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
                                         }
                                     }
                                 },
-                                enabled = !submitting && !loading && (if (bookingMode) selectedOrganization?.canBook != false && offerings.any { it.itemType == "service" } && bookingResources.isNotEmpty() else selectedOrganization?.canPurchase != false && cart.isNotEmpty() && cartInputsValid && estimatedTotalResult != null && cartCurrencyValid && !unsupportedFractionalProduct),
+                                enabled = !submitting && !loading && (if (bookingMode) selectedOrganization?.canBook != false && offerings.any { it.itemType == "service" } && bookingResources.isNotEmpty() else selectedOrganization?.canPurchase != false && cart.isNotEmpty() && cartInputsValid && estimatedTotalResult != null && cartCurrencyValid && !unsupportedFractionalProduct && estimatedTotal > 0L),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 if (submitting) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
