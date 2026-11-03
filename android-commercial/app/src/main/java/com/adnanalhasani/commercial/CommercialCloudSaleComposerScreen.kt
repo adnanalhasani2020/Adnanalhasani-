@@ -76,7 +76,7 @@ private fun cloudComposerQuantityInput(value: String): String {
                 out.append(ch)
                 if (decimalSeen) decimalDigits++
             }
-        } else if ((ch == '.' || ch == ',') && !decimalSeen) {
+        } else if ((ch == '.' || ch == ',' || ch == '\u066B') && !decimalSeen) {
             out.append('.')
             decimalSeen = true
         }
@@ -162,6 +162,13 @@ internal fun CommercialCloudSaleComposerScreen(
     val estimatedSubtotal = selectedLines.fold(BigInteger.ZERO) { sum, line ->
         sum + BigInteger.valueOf(line.product.cloudPriceMinor.coerceAtLeast(0L))
             .multiply(line.baseQuantity)
+    }
+    val hasNonIntegralBaseQuantity = invoiceLines.any { draft ->
+        val product = products.firstOrNull { it.cloudOfferingId == draft.offeringId }
+        val quantity = parseCommercialCheckoutQuantity(draft.quantityText)
+        val unit = product?.let { cloudComposerSellUnits(it).firstOrNull { option -> option.code == draft.unitCode } }
+        quantity != null && unit != null &&
+            quantity.multiply(BigDecimal.valueOf(unit.factor)).stripTrailingZeros().scale() > 0
     }
     val discountMinor = discountText.toLongOrNull() ?: 0L
     val taxMinor = taxText.toLongOrNull() ?: 0L
@@ -410,6 +417,8 @@ internal fun CommercialCloudSaleComposerScreen(
                         error = ""
                         if (selectedLines.isEmpty()) {
                             error = "أدخل كمية لصنف واحد على الأقل."
+                        } else if (hasNonIntegralBaseQuantity) {
+                            error = "هذه الكمية لا تتحول إلى عدد صحيح من وحدة المخزون. اختر وحدة تحويل مناسبة؛ مثل 0.5 كجم عندما تكون وحدة المخزون جرامًا."
                         } else if (selectedLines.size != invoiceLines.size) {
                             error = "صحح الكميات في جميع سطور الفاتورة قبل المتابعة."
                         } else if (selectedLines.groupBy { it.product.cloudOfferingId }.any { (_, lines) ->
