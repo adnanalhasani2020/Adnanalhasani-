@@ -253,25 +253,26 @@ private fun StoreApp(context: Context) {
     }
     val cloudContextExists = cloudContextSnapshot.first.isNotBlank() &&
         cloudContextSnapshot.second.isNotBlank() && cloudContextSnapshot.third.isNotBlank()
-    val sales = remember { mutableStateListOf<SaleRecord>().apply { if (!cloudContextExists) addAll(loadSales(context)) } }
-    val settlements = remember { mutableStateListOf<SettlementRecord>().apply { if (!cloudContextExists) addAll(loadSettlements(context)) } }
-    val expenses = remember { mutableStateListOf<ExpenseRecord>().apply { if (!cloudContextExists) addAll(loadExpenses(context)) } }
+    val cloudContextHasAny = cloudContextSnapshot.any { it.isNotBlank() }
+    val sales = remember { mutableStateListOf<SaleRecord>().apply { if (!cloudContextHasAny) addAll(loadSales(context)) } }
+    val settlements = remember { mutableStateListOf<SettlementRecord>().apply { if (!cloudContextHasAny) addAll(loadSettlements(context)) } }
+    val expenses = remember { mutableStateListOf<ExpenseRecord>().apply { if (!cloudContextHasAny) addAll(loadExpenses(context)) } }
     var expenseDialog by remember { mutableStateOf(false) }
-    val inventory = remember { mutableStateListOf<Product>().apply { if (!cloudContextExists) addAll(loadProducts(context)) } }
-    var cloudInventoryLoaded by remember { mutableStateOf(!cloudContextExists) }
+    val inventory = remember { mutableStateListOf<Product>().apply { if (!cloudContextHasAny) addAll(loadProducts(context)) } }
+    var cloudInventoryLoaded by remember { mutableStateOf(!cloudContextHasAny) }
     var cloudInventoryBusy by remember { mutableStateOf(false) }
     var cloudInventoryError by remember { mutableStateOf("") }
     var cloudNotice by remember { mutableStateOf("") }
     var cloudCategories by remember { mutableStateOf<List<CommercialMasterDataRow>>(emptyList()) }
     var cloudUnits by remember { mutableStateOf<List<CommercialUnitOption>>(emptyList()) }
-    var cloudMode by remember { mutableStateOf(cloudContextExists) }
+    var cloudMode by remember { mutableStateOf(cloudContextHasAny) }
     var nextInvoice by remember { mutableIntStateOf((sales.maxOfOrNull { it.number } ?: 1048) + 1) }
 
     LaunchedEffect(cloudContextSnapshot, cloudReloadToken) {
         // Once an organization context exists, fail closed into cloud mode before any
         // network request. A failed cloud read must never expose local-only workflows.
-        cloudMode = cloudContextExists
-        if (!cloudContextExists) {
+        cloudMode = cloudContextHasAny
+        if (!cloudContextHasAny) {
             cloudInventoryBusy = false
             cloudInventoryLoaded = true
             return@LaunchedEffect
@@ -281,6 +282,12 @@ private fun StoreApp(context: Context) {
         settlements.clear()
         expenses.clear()
         cloudInventoryError = ""
+        if (!cloudContextExists) {
+            cloudInventoryBusy = false
+            cloudInventoryLoaded = true
+            cloudInventoryError = "بيانات المؤسسة السحابية غير مكتملة؛ تحقق من معرّف المؤسسة والنشاط والفرع قبل المتابعة. لم يتم استخدام البيانات المحلية."
+            return@LaunchedEffect
+        }
         cloudNotice = ""
         cloudInventoryBusy = true
         storeCloudIo.execute {
@@ -649,7 +656,7 @@ private fun StoreApp(context: Context) {
         text = { Text(cloudNotice) },
         confirmButton = { TextButton(onClick = { cloudNotice = "" }) { Text("حسنًا") } }
     )
-    if (cloudContextExists && cloudInventoryError.isNotBlank() && cloudNotice.isBlank()) AlertDialog(
+    if (cloudContextHasAny && cloudInventoryError.isNotBlank() && cloudNotice.isBlank()) AlertDialog(
         onDismissRequest = { cloudInventoryError = "" },
         title = { Text("تعذر الاتصال بالمخزون السحابي") },
         text = { Text(cloudInventoryError) },
