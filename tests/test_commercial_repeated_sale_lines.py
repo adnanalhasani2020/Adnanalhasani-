@@ -26,7 +26,7 @@ class CommercialRepeatedSaleLineTests(unittest.TestCase):
         source = REPOSITORY.read_text(encoding="utf-8")
         self.assertIn("quantity <= BigDecimal(\"100000\")", source)
         self.assertIn("quantity.scale() <= 3", source)
-        self.assertIn("require(total <= 100000)", source)
+        self.assertIn('require(total <= BigDecimal("100000"))', source)
 
     def test_fractional_quantities_are_preserved_and_bounded(self):
         source = REPOSITORY.read_text(encoding="utf-8")
