@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -29,6 +31,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -64,6 +67,7 @@ private val CloudPurchasesMain = Handler(Looper.getMainLooper())
 internal fun CommercialCloudPurchasesScreen(context: Context, onBack: () -> Unit) {
     var orders by remember { mutableStateOf<List<CommercialCloudPurchaseDocument>>(emptyList()) }
     var search by remember { mutableStateOf("") }
+    var selectedStatusFilter by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
     var reloadToken by remember { mutableIntStateOf(0) }
@@ -88,11 +92,23 @@ internal fun CommercialCloudPurchasesScreen(context: Context, onBack: () -> Unit
         }
     }
 
+    val statusFilters = listOf(
+        "" to "الكل",
+        "draft" to "مسودة",
+        "submitted" to "بانتظار الاعتماد",
+        "approved" to "معتمد",
+        "partially_received" to "استلام جزئي",
+        "received" to "مستلم",
+        "closed" to "مغلق",
+        "cancelled" to "ملغى"
+    )
+    val statusCounts = orders.groupingBy { it.status.lowercase() }.eachCount()
     val filtered = orders.filter { order ->
-        order.orderNumber.contains(search, true) ||
-            order.supplierName.contains(search, true) ||
-            order.status.contains(search, true) ||
-            order.lines.any { it.description.contains(search, true) }
+        (selectedStatusFilter.isBlank() || order.status.equals(selectedStatusFilter, ignoreCase = true)) &&
+            (order.orderNumber.contains(search, true) ||
+                order.supplierName.contains(search, true) ||
+                order.status.contains(search, true) ||
+                order.lines.any { it.description.contains(search, true) })
     }
 
     Scaffold(
@@ -123,6 +139,22 @@ internal fun CommercialCloudPurchasesScreen(context: Context, onBack: () -> Unit
                     placeholder = { Text("ابحث برقم الأمر أو المورد أو البند") },
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) }
                 )
+            }
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    statusFilters.forEach { (status, label) ->
+                        val count = if (status.isBlank()) orders.size else statusCounts[status] ?: 0
+                        FilterChip(
+                            selected = selectedStatusFilter == status,
+                            onClick = { selectedStatusFilter = status },
+                            enabled = !loading,
+                            label = { Text("$label ($count)") }
+                        )
+                    }
+                }
             }
             item {
                 Button(onClick = { createOrderOpen = true }, enabled = !loading) { Text("إنشاء أمر شراء جديد") }
