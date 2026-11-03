@@ -203,7 +203,7 @@ internal fun PurchaseOrderEntryDialog(
                         val validLines = lines.all { line ->
                             val qty = line.quantity.toBigDecimalOrNull()
                             line.offeringId.isNotBlank() && line.description.isNotBlank() &&
-                                available.offerings.firstOrNull { it.id == line.offeringId }?.locationRef == locationId &&
+                                available?.offerings?.firstOrNull { it.id == line.offeringId }?.locationRef == locationId &&
                                 qty != null && qty > java.math.BigDecimal.ZERO &&
                                 qty.stripTrailingZeros().scale() <= 6 &&
                                 (line.unitCostMinor.toLongOrNull() ?: -1L) >= 0L
