@@ -369,7 +369,7 @@ private fun StoreApp(context: Context) {
                         Spacer(Modifier.width(10.dp))
                         Column {
                             Text("متجري", fontWeight = FontWeight.Bold, color = Ink)
-                            Text(if (cloudMode) when { cloudInventoryBusy -> "جارٍ الاتصال بقاعدة البيانات..."; cloudInventoryError.isNotBlank() -> "تحقق من الاتصال السحابي"; else -> "متصل بسياق المؤسسة السحابي" } else "إدارة متجرك ببساطة", fontSize = 11.sp, color = Muted)
+                            Text(if (cloudMode) when { cloudInventoryBusy || !cloudInventoryLoaded -> "جارٍ التحقق من الاتصال بقاعدة البيانات..."; cloudInventoryError.isNotBlank() -> "تعذر تحميل المخزون السحابي"; else -> "تم تحميل بيانات المؤسسة السحابية" } else "إدارة متجرك ببساطة", fontSize = 11.sp, color = Muted)
                         }
                     }
                 },
