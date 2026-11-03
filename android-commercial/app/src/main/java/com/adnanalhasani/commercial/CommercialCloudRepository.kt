@@ -2011,14 +2011,46 @@ internal fun requestCommercialCloudSaleReturn(
         unitCodes[saleItemId]?.takeIf { it.isNotBlank() }?.let { item.put("unit_code", it) }
         items.put(item)
     }
-    val (_, access) = commercialMasterDataAccess(context)
+    val (organizationId, access) = commercialMasterDataAccess(context)
+    val canonicalItems = JSONArray()
+    selected.toSortedMap().forEach { (saleItemId, quantity) ->
+        canonicalItems.put(JSONObject()
+            .put("sale_item_id", saleItemId)
+            .put("quantity", quantity.toPlainString())
+            .put("unit_code", unitCodes[saleItemId].orEmpty()))
+    }
+    val fingerprint = JSONObject()
+        .put("organization_id", organizationId)
+        .put("sale_id", saleId)
+        .put("reason_code", reasonCode)
+        .put("reason_note", reasonNote.trim())
+        .put("items", canonicalItems)
+        .toString()
+    val pending = context.getSharedPreferences("commercial_cloud_pending_return_v1", Context.MODE_PRIVATE)
+    val storedKey = pending.getString("idempotency_key", null).orEmpty()
+    if (storedKey.isNotBlank()) {
+        require(pending.getString("fingerprint", null) == fingerprint) {
+            "يوجد طلب مرتجع سابق لم يُحسم بعد. أعد المحاولة بنفس الفاتورة والكميات والسبب أولًا."
+        }
+    }
+    val idempotencyKey = storedKey.ifBlank { UUID.randomUUID().toString() }
+    if (storedKey.isBlank()) {
+        check(pending.edit().putString("fingerprint", fingerprint)
+            .putString("idempotency_key", idempotencyKey).commit()) {
+            "تعذر حفظ مفتاح طلب المرتجع قبل الإرسال؛ لم يتم إرسال الطلب."
+        }
+    }
     val payload = JSONObject()
         .put("p_sale_id", saleId)
-        .put("p_idempotency_key", UUID.randomUUID().toString())
+        .put("p_idempotency_key", idempotencyKey)
         .put("p_reason_code", reasonCode)
         .put("p_items", items)
         .put("p_reason_note", reasonNote.trim().ifBlank { JSONObject.NULL })
-    return commercialCloudRequest("/rest/v1/rpc/commercial_request_sale_return", "POST", payload, access)
+    val response = commercialCloudRequest("/rest/v1/rpc/commercial_request_sale_return", "POST", payload, access)
+    check(pending.edit().clear().commit()) {
+        "تم تأكيد طلب المرتجع لكن تعذر تنظيف مفتاح إعادة المحاولة؛ أعد المحاولة بنفس البيانات ولا تنشئ طلبًا جديدًا."
+    }
+    return response
 }
 
 internal data class CommercialCloudReturnItem(
