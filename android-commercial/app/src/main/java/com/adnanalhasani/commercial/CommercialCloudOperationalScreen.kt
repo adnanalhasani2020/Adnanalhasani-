@@ -34,7 +34,12 @@ private data class CloudScreenSpec(val title: String, val subtitle: String, val 
 internal fun formatCommercialOperationalAmount(amountMinor: Long, currencyCode: String): String {
     val code = currencyCode.trim().uppercase(Locale.ROOT)
     val fractionDigits = runCatching { Currency.getInstance(code).defaultFractionDigits }.getOrDefault(-1)
-    if (fractionDigits < 0) return amountMinor.toString() + " وحدة نقدية صغرى" + if (code.isBlank()) "" else " • $code"
+    return formatCommercialOperationalAmount(amountMinor, code, fractionDigits)
+}
+
+internal fun formatCommercialOperationalAmount(amountMinor: Long, currencyCode: String, fractionDigits: Int): String {
+    val code = currencyCode.trim().uppercase(Locale.ROOT)
+    if (fractionDigits !in 0..3) return amountMinor.toString() + " وحدة نقدية صغرى" + if (code.isBlank()) "" else " • $code"
     val amount = BigDecimal.valueOf(amountMinor).movePointLeft(fractionDigits)
     val formatter = NumberFormat.getNumberInstance(Locale.US).apply {
         minimumFractionDigits = fractionDigits
