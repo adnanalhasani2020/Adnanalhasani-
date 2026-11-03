@@ -1857,7 +1857,7 @@ internal data class CommercialCloudReturnableSaleItem(
     val lineTotalMinor: Long,
     val sellingUnitCode: String = "each",
     val sellingUnitName: String = "حبة",
-    val sellUnitsJson: String = "[]"
+    val sellingUnitFactor: Long = 1L
 )
 
 internal data class CommercialCloudReturnableSale(
@@ -1870,7 +1870,7 @@ internal data class CommercialCloudReturnableSale(
 
 internal fun loadCommercialCloudReturnableSales(context: Context): List<CommercialCloudReturnableSale> {
     val (orgId, access) = commercialMasterDataAccess(context)
-    val path = "/rest/v1/commercial_sales?select=id,receipt_number,currency_code,created_at,customer:commercial_customers(display_name),items:commercial_sale_items(id,offering_id,product_name_snapshot,quantity,line_total_minor,selling_unit_code,selling_unit_name,selling_quantity,offering:commercial_offerings!inner(sell_units:commercial_offering_sell_units(unit_code,display_name,quantity_in_stock,is_base,is_active))),returns:commercial_sales_returns(status,items:commercial_sale_return_items(sale_item_id,quantity))&organization_id=eq.$orgId&status=eq.completed&order=created_at.desc,id.asc"
+    val path = "/rest/v1/commercial_sales?select=id,receipt_number,currency_code,created_at,customer:commercial_customers(display_name),items:commercial_sale_items(id,product_name_snapshot,quantity,quantity_in_stock_units,line_total_minor,selling_unit_code,selling_unit_name,selling_quantity),returns:commercial_sales_returns(status,items:commercial_sale_return_items(sale_item_id,quantity))&organization_id=eq.$orgId&status=eq.completed&order=created_at.desc,id.asc"
     val rows = commercialCloudPagedGet(path, access)
     return buildList {
         for (i in 0 until rows.length()) {
@@ -1893,18 +1893,18 @@ internal fun loadCommercialCloudReturnableSales(context: Context): List<Commerci
                     val item = itemRows?.optJSONObject(j) ?: continue
                     val qty = item.optInt("quantity", 0)
                     if (qty <= 0) continue
-                    val offering = item.optJSONObject("offering")
-                    val sellUnits = offering?.optJSONArray("sell_units") ?: JSONArray()
-                    val sellUnitsJson = JSONArray()
-                    for (unitIndex in 0 until sellUnits.length()) {
-                        val unit = sellUnits.optJSONObject(unitIndex) ?: continue
-                        if (!unit.optBoolean("is_active", false)) continue
-                        sellUnitsJson.put(JSONObject().put("unitCode", unit.optString("unit_code"))
-                            .put("unitName", unit.optString("display_name"))
-                            .put("quantityInBase", unit.optLong("quantity_in_stock", 1L))
-                            .put("isDefault", unit.optBoolean("is_base", false)))
-                    }
                     val itemId = item.optString("id").takeUnless { it == "null" }.orEmpty()
+                    val baseQuantitySnapshot = item.optLong("quantity_in_stock_units", -1L)
+                    val sellingQuantitySnapshot = runCatching { BigDecimal(item.optString("selling_quantity")) }.getOrNull()
+                    val sellingUnitFactor = sellingQuantitySnapshot?.takeIf { it.signum() > 0 && baseQuantitySnapshot > 0L }
+                        ?.let { runCatching {
+                            BigDecimal.valueOf(baseQuantitySnapshot).divide(it).toBigIntegerExact().longValueExact()
+                        }.getOrNull() }
+                        ?.takeIf { it > 0L }
+                        ?: throw IllegalStateException("بيانات وحدة البيع المحفوظة في الفاتورة غير صالحة؛ أوقفنا المرتجع لحماية المخزون.")
+                    require(baseQuantitySnapshot == qty.toLong()) {
+                        "كمية المخزون المحفوظة لا تطابق بند الفاتورة؛ أوقفنا المرتجع لحماية المخزون."
+                    }
                     val remaining = (qty - (alreadyRequested[itemId] ?: 0)).coerceAtLeast(0)
                     if (remaining <= 0) continue
                     add(CommercialCloudReturnableSaleItem(
@@ -1917,7 +1917,7 @@ internal fun loadCommercialCloudReturnableSales(context: Context): List<Commerci
                         lineTotalMinor = item.optLong("line_total_minor", 0L),
                         sellingUnitCode = item.optString("selling_unit_code").takeUnless { it.isBlank() || it == "null" } ?: "each",
                         sellingUnitName = item.optString("selling_unit_name").takeUnless { it.isBlank() || it == "null" } ?: "حبة",
-                        sellUnitsJson = sellUnitsJson.toString()
+                        sellingUnitFactor = sellingUnitFactor
                     ))
                 }
             }
