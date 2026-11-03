@@ -30,7 +30,7 @@ def test_customer_screen_keeps_claims_pending_until_merchant_approval():
 def test_merchant_screen_requires_amount_match_and_supports_review_decisions():
     assert "loadCommercialCloudCustomerPaymentRequests(context, \"pending\")" in MERCHANT_SCREEN
     assert "reviewCommercialCloudCustomerPaymentRequest" in MERCHANT_SCREEN
-    assert 'confirmedAmount.toLongOrNull() == requestTarget.amountMinor' in MERCHANT_SCREEN
+    assert 'parseMerchantPaymentRequestAmount(confirmedAmount, requestTarget.currencyCode) == requestTarget.amountMinor' in MERCHANT_SCREEN
     assert '"request_changes"' in MERCHANT_SCREEN
     assert '"reject"' in MERCHANT_SCREEN
     assert '"approve"' in MERCHANT_SCREEN
@@ -41,3 +41,14 @@ def test_customer_portal_and_main_activity_expose_payment_request_screen():
     assert "Icons.Default.ReceiptLong" in PORTAL_SCREEN
     assert "CustomerPortalPaymentRequestsScreen(" in MAIN
     assert "customerPaymentRequestsPage" in MAIN
+
+
+def test_merchant_confirmation_amount_uses_currency_units_not_minor_units():
+    debt = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudDebtScreen.kt").read_text(encoding="utf-8")
+    calculations = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportCalculations.kt").read_text(encoding="utf-8")
+    assert "parseMerchantPaymentRequestAmount" in debt
+    assert "internal fun parseMerchantPaymentRequestAmount" in calculations
+    assert "internal fun parseMerchantPaymentRequestAmount" not in debt
+    assert 'cloudDebtInput(request.amountMinor, request.currencyCode)' in debt
+    assert 'label = { Text("المبلغ الفعلي الذي استلمته (" + requestTarget.currencyCode + ")") }' in debt
+    assert "confirmedAmount.toLongOrNull()" not in debt
