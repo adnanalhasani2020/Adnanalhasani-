@@ -255,10 +255,12 @@ internal fun ActivityProfileScreen(
                                 val refresh = result.optString("refresh_token")
                                 require(token.isNotBlank() && refresh.isNotBlank()) { "لم تُرجع خدمة المصادقة جلسة موثقة؛ تحقق من الرمز أو إعدادات Supabase Auth." }
                                 profileSessionPreferences(context).edit().putString("refresh_token", refresh).apply()
+                                token
+                            }, { token ->
                                 accessToken = token
                                 if (hasSavedCommercialCloudContext(context)) onAuthenticated()
-                                "تم التحقق من الهاتف وتسجيل الدخول."
-                            }, { feedback = it })
+                                feedback = "تم التحقق من الهاتف وتسجيل الدخول."
+                            })
                         },
                         enabled = !busy && phoneOtp.length in 4..10,
                         modifier = Modifier.fillMaxWidth()
@@ -286,10 +288,12 @@ internal fun ActivityProfileScreen(
                         val refreshToken = session.optString("refresh_token")
                         require(refreshToken.isNotBlank()) { "لم تُرجع خدمة المصادقة رمز جلسة قابلًا للاستعادة؛ حاول تسجيل الدخول مرة أخرى." }
                         profileSessionPreferences(context).edit().putString("refresh_token", refreshToken).apply()
+                        token
+                    }, { token ->
                         accessToken = token
                         if (hasSavedCommercialCloudContext(context)) onAuthenticated()
-                        "تم تسجيل الدخول"
-                    }, { feedback = it })
+                        feedback = "تم تسجيل الدخول."
+                    })
                 },
                 modifier = Modifier.fillMaxWidth()
             ) { Text(if (busy) "جارٍ الاتصال..." else if (isRegister) "إنشاء حساب" else "تسجيل الدخول") }
