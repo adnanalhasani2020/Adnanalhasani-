@@ -745,7 +745,7 @@ internal fun loadCommercialCloudPurchaseOrderOptions(context: Context): Commerci
         }
     } }
     val offerings = commercialCloudPagedGet(
-        "/rest/v1/commercial_offerings?select=id,currency_code,state,product:commercial_products(name,state),activity:commercial_activities(organization_id,state,location_ref)&state=eq.active&order=created_at.desc",
+        "/rest/v1/commercial_offerings?select=id,currency_code,state,location_ref,product:commercial_products(name,state),activity:commercial_activities(organization_id,state)&state=eq.active&order=created_at.desc",
         access
     ).let { rows -> buildList {
         for (i in 0 until rows.length()) {
@@ -757,7 +757,7 @@ internal fun loadCommercialCloudPurchaseOrderOptions(context: Context): Commerci
             val product = row.optJSONObject("product")
             if (product?.optString("state") != "active") continue
             val productName = product.optString("name").orEmpty().ifBlank { "عنصر مخزون" }
-            val locationRef = activity.optString("location_ref").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+            val locationRef = row.optString("location_ref").takeUnless { it.isBlank() || it == "null" }.orEmpty()
             if (id.isNotBlank() && locationRef.isNotBlank() && currency.matches(Regex("^[A-Z]{3}$"))) {
                 add(CommercialPurchaseOfferingOption(id, productName, currency, locationRef))
             }
