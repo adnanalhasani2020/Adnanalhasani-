@@ -44,6 +44,12 @@ class PurchaseOrderOfferingLocationPickerTests(unittest.TestCase):
         self.assertIn('"closed" -> "مغلق"', self.screen)
         self.assertIn('"closed" -> CloudPurchasesMuted', self.screen)
 
+    def test_order_options_failure_can_be_retried_without_reopening_dialog(self):
+        self.assertIn("var reloadOptionsToken by remember { mutableStateOf(0) }", self.dialog)
+        self.assertIn("LaunchedEffect(reloadOptionsToken)", self.dialog)
+        self.assertIn('Text("إعادة تحميل الخيارات")', self.dialog)
+        self.assertIn("onClick = { reloadOptionsToken++ }", self.dialog)
+
 
 if __name__ == "__main__":
     unittest.main()
