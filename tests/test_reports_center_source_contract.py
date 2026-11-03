@@ -19,6 +19,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
     def setUpClass(cls):
         cls.screen = SCREEN.read_text(encoding="utf-8")
         cls.repository = REPOSITORY.read_text(encoding="utf-8")
+        cls.sales_repository = SALES_REPOSITORY.read_text(encoding="utf-8")
         cls.calculations = CALCULATIONS.read_text(encoding="utf-8")
         cls.export = EXPORT.read_text(encoding="utf-8")
         cls.price_variance_calculations = PRICE_VARIANCE_CALCULATIONS.read_text(encoding="utf-8")
@@ -158,8 +159,8 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn('بلا ربط صالح بمورد وعملة مطابقين', self.screen)
 
     def test_historical_cogs_uses_stored_cost_and_only_reverses_restocked_return_cost(self):
-        self.assertIn('costTotalMinor = if (item.isNull("cost_total_minor")) null', self.repository)
-        self.assertIn('saleItemCostTotalMinor = if (saleItem == null || saleItem.isNull("cost_total_minor")) null', self.repository)
+        self.assertIn('costTotalMinor = if (item.isNull("cost_total_minor")) null', self.sales_repository)
+        self.assertIn('saleItemCostTotalMinor = if (saleItem == null || saleItem.isNull("cost_total_minor")) null', self.sales_repository)
         self.assertIn('require(restockedQuantity >= 0)', self.cost_profit_calculations)
         self.assertIn('calculateRestockedCostMinor', self.cost_profit_calculations)
         self.assertIn('تكلفة البنود المباعة المحفوظة', self.screen)
