@@ -54,107 +54,8 @@ class MainActivity : ComponentActivity() {
 
 private fun money(value: Int): String = String.format(Locale.US, "%,d ر.ي", value)
 
-private const val STORE_PREFS = "commercial_store_local_v1"
-private const val PRODUCTS_KEY = "products_json"
-private const val SALES_KEY = "sales_json"
-private const val SETTLEMENTS_KEY = "settlements_json"
-private const val EXPENSES_KEY = "expenses_json"
-
-private fun scopedStoreKey(context: Context, key: String): String {
-    val organizationId = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
-        .getString("organization_id", null).orEmpty()
-    return if (organizationId.isBlank()) key else "${key}_${organizationId}"
-}
-
-private fun loadProducts(context: Context): List<Product> {
-    val saved = context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).getString(scopedStoreKey(context, PRODUCTS_KEY), null)
-        ?: return products
-    return runCatching {
-        val json = JSONArray(saved)
-        List(json.length()) { i ->
-            val item = json.getJSONObject(i)
-            Product(item.getString("name"), item.getString("category"), item.getInt("stock"), item.getString("price"), item.optInt("costPrice", 0), item.optString("catalogCode", ""), item.optString("barcode", ""), item.optString("unitCode", "EA"), item.optString("imageUrl", ""), item.optString("description", ""), item.optString("brand", ""), item.optString("manufacturer", ""), item.optString("countryOfManufacture", ""), item.optLong("createdAt", System.currentTimeMillis()), item.optString("createdBy", ""), item.optString("unitVariantsJson", "[]"), reorderPoint = item.optInt("reorderPoint", -1))
-        }
-    }.getOrElse { products }
-}
-
-private fun saveProducts(context: Context, items: List<Product>) {
-    val json = JSONArray()
-    items.forEach { item ->
-        json.put(JSONObject().put("name", item.name).put("category", item.category)
-            .put("stock", item.stock).put("price", item.price).put("costPrice", item.costPrice).put("catalogCode", item.catalogCode).put("barcode", item.barcode).put("unitCode", item.unitCode).put("imageUrl", item.imageUrl).put("description", item.description).put("brand", item.brand).put("manufacturer", item.manufacturer).put("countryOfManufacture", item.countryOfManufacture).put("createdAt", item.createdAt).put("createdBy", item.createdBy).put("unitVariantsJson", item.unitVariantsJson).put("reorderPoint", item.reorderPoint))
-    }
-    context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).edit().putString(scopedStoreKey(context, PRODUCTS_KEY), json.toString()).apply()
-}
-
-private fun loadSales(context: Context): List<SaleRecord> {
-    val saved = context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).getString(scopedStoreKey(context, SALES_KEY), null) ?: return emptyList()
-    return runCatching {
-        val json = JSONArray(saved)
-        List(json.length()) { i ->
-            val item = json.getJSONObject(i)
-            SaleRecord(item.getInt("number"), item.getString("product"), item.getInt("quantity"),
-                item.getInt("total"), item.getBoolean("credit"), item.optString("customer", ""), item.optInt("paid", 0), item.optLong("createdAt", 0L), item.optInt("unitCost", 0), item.optString("unitCode", "EA"), item.optInt("baseQuantitySold", item.optInt("quantity", 1)), item.optString("currencyCode", "YER").ifBlank { "YER" }, item.optString("status", "completed").ifBlank { "completed" })
-        }
-    }.getOrElse { emptyList() }
-}
-
-private fun loadSettlements(context: Context): List<SettlementRecord> {
-    val saved = context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).getString(scopedStoreKey(context, SETTLEMENTS_KEY), null) ?: return emptyList()
-    return runCatching {
-        val json = JSONArray(saved)
-        List(json.length()) { i ->
-            val item = json.getJSONObject(i)
-            SettlementRecord(item.getInt("invoiceNumber"), item.optString("customer", ""), item.getInt("amount"), item.optLong("timestamp", 0L))
-        }
-    }.getOrElse { emptyList() }
-}
-
-private fun loadExpenses(context: Context): List<ExpenseRecord> {
-    val saved = context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).getString(scopedStoreKey(context, EXPENSES_KEY), null) ?: return emptyList()
-    return runCatching {
-        val json = JSONArray(saved)
-        List(json.length()) { i ->
-            val item = json.getJSONObject(i)
-            ExpenseRecord(item.optLong("id", i.toLong()), item.optString("category", "أخرى"),
-                item.getInt("amount"), item.optString("note", ""), item.optLong("timestamp", 0L))
-        }
-    }.getOrElse { emptyList() }
-}
-
-private fun saveExpenses(context: Context, items: List<ExpenseRecord>) {
-    val json = JSONArray()
-    items.forEach { item ->
-        json.put(JSONObject().put("id", item.id).put("category", item.category)
-            .put("amount", item.amount).put("note", item.note).put("timestamp", item.timestamp))
-    }
-    context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).edit().putString(scopedStoreKey(context, EXPENSES_KEY), json.toString()).apply()
-}
-
-private fun saveSettlements(context: Context, items: List<SettlementRecord>) {
-    val json = JSONArray()
-    items.forEach { item ->
-        json.put(JSONObject().put("invoiceNumber", item.invoiceNumber).put("customer", item.customer)
-            .put("amount", item.amount).put("timestamp", item.timestamp))
-    }
-    context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).edit().putString(scopedStoreKey(context, SETTLEMENTS_KEY), json.toString()).apply()
-}
-
-private fun saveSales(context: Context, items: List<SaleRecord>) {
-    val json = JSONArray()
-    items.forEach { item ->
-        json.put(JSONObject().put("number", item.number).put("product", item.product)
-            .put("quantity", item.quantity).put("total", item.total).put("credit", item.credit)
-            .put("customer", item.customer).put("paid", item.paid).put("createdAt", item.createdAt).put("unitCost", item.unitCost).put("unitCode", item.unitCode).put("baseQuantitySold", item.baseQuantitySold).put("currencyCode", item.currencyCode).put("status", item.status))
-    }
-    context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE).edit().putString(scopedStoreKey(context, SALES_KEY), json.toString()).apply()
-}
 private val storeCloudIo = Executors.newSingleThreadExecutor()
 private val storeCloudMain = Handler(Looper.getMainLooper())
-
-// Do not seed fake inventory into a real store. Products must be added by the user
-// or loaded from the authenticated organization's Supabase inventory.
-private val products = emptyList<Product>()
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -211,11 +112,11 @@ private fun StoreApp(context: Context) {
         cloudContextSnapshot.second.isNotBlank() && cloudContextSnapshot.third.isNotBlank()
     val cloudContextHasAny = cloudContextSnapshot.first.isNotBlank() ||
         cloudContextSnapshot.second.isNotBlank() || cloudContextSnapshot.third.isNotBlank()
-    val sales = remember { mutableStateListOf<SaleRecord>().apply { if (!cloudContextHasAny) addAll(loadSales(context)) } }
-    val settlements = remember { mutableStateListOf<SettlementRecord>().apply { if (!cloudContextHasAny) addAll(loadSettlements(context)) } }
-    val expenses = remember { mutableStateListOf<ExpenseRecord>().apply { if (!cloudContextHasAny) addAll(loadExpenses(context)) } }
+    val sales = remember { mutableStateListOf<SaleRecord>().apply { if (!cloudContextHasAny) addAll(LocalStoreRepository.loadSales(context)) } }
+    val settlements = remember { mutableStateListOf<SettlementRecord>().apply { if (!cloudContextHasAny) addAll(LocalStoreRepository.loadSettlements(context)) } }
+    val expenses = remember { mutableStateListOf<ExpenseRecord>().apply { if (!cloudContextHasAny) addAll(LocalStoreRepository.loadExpenses(context)) } }
     var expenseDialog by remember { mutableStateOf(false) }
-    val inventory = remember { mutableStateListOf<Product>().apply { if (!cloudContextHasAny) addAll(loadProducts(context)) } }
+    val inventory = remember { mutableStateListOf<Product>().apply { if (!cloudContextHasAny) addAll(LocalStoreRepository.loadProducts(context)) } }
     var cloudInventoryLoaded by remember { mutableStateOf(!cloudContextHasAny) }
     var cloudInventoryBusy by remember { mutableStateOf(false) }
     var cloudInventoryError by remember { mutableStateOf("") }
@@ -478,7 +379,7 @@ private fun StoreApp(context: Context) {
                             val mapped = Product(name = catalogItem.name, category = catalogItem.category, stock = 0, price = "0 ر.ي", catalogCode = catalogItem.catalogCode, barcode = catalogItem.barcode.ifBlank { catalogItem.availableUnits.firstOrNull { it.isDefault && it.barcode.isNotBlank() }?.barcode.orEmpty() }, unitCode = catalogItem.unitCode, imageUrl = catalogItem.imageUrl, description = catalogItem.description, brand = catalogItem.brand, manufacturer = catalogItem.manufacturer, countryOfManufacture = catalogItem.countryOfManufacture, createdBy = catalogItem.importedBy, unitVariantsJson = JSONArray().also { rows -> catalogItem.availableUnits.forEach { unit -> rows.put(JSONObject().put("unitCode",unit.unitCode).put("unitName",unit.unitName).put("role",unit.role).put("quantityInBase",unit.quantityInBase).put("barcode",unit.barcode).put("sku",unit.sku).put("netQuantity",unit.netQuantity).put("netUnitCode",unit.netUnitCode).put("packageName",unit.packageName).put("imageUrl",unit.imageUrl).put("isDefault",unit.isDefault)) } }.toString())
                             if (existing >= 0) inventory[existing] = inventory[existing].copy(name = mapped.name, category = mapped.category, catalogCode = mapped.catalogCode, barcode = mapped.barcode, unitCode = mapped.unitCode, imageUrl = mapped.imageUrl, description = mapped.description, brand = mapped.brand, manufacturer = mapped.manufacturer, countryOfManufacture = mapped.countryOfManufacture, unitVariantsJson = mapped.unitVariantsJson)
                             else inventory.add(mapped)
-                            saveProducts(context, inventory)
+                            LocalStoreRepository.saveProducts(context, inventory)
                             tab = 2
                             showCatalog = false
                         }
@@ -509,7 +410,7 @@ private fun StoreApp(context: Context) {
                 cloudNotice = "تعديل الصنف أو رصيده محجوب مؤقتًا حتى نوصل عملية التعديل إلى سجل حركات المخزون على الخادم. لم تُحفظ تغييرات محلية."
             } else {
                 inventory[editingProductIndex] = inventory[editingProductIndex].copy(name = name, category = category, stock = stock, price = money(price), costPrice = costPrice)
-                saveProducts(context, inventory)
+                LocalStoreRepository.saveProducts(context, inventory)
             }
             editingProductIndex = -1
         },
@@ -518,7 +419,7 @@ private fun StoreApp(context: Context) {
                 cloudNotice = "حذف الأصناف السحابية يحتاج إيقاف العرض وحفظ أثر تدقيقي؛ لم يتم حذف أي بيانات."
             } else {
                 inventory.removeAt(editingProductIndex)
-                saveProducts(context, inventory)
+                LocalStoreRepository.saveProducts(context, inventory)
             }
             editingProductIndex = -1
         }
@@ -571,7 +472,7 @@ private fun StoreApp(context: Context) {
                 }
             } else {
                 inventory.add(Product(name, category, stock, money(price), costPrice, unitCode = unitName))
-                saveProducts(context, inventory)
+                LocalStoreRepository.saveProducts(context, inventory)
                 addProduct = false
             }
         }
@@ -633,10 +534,10 @@ private fun StoreApp(context: Context) {
                 }
             } else {
                 inventory[productIndex] = currentProduct.copy(stock = currentProduct.stock - baseQuantity)
-                saveProducts(context, inventory)
+                LocalStoreRepository.saveProducts(context, inventory)
                 val soldUnitCost = if (quantity > 0) kotlin.math.round(currentProduct.costPrice.toDouble() * baseQuantity / quantity).toInt() else currentProduct.costPrice
                 sales.add(0, SaleRecord(nextInvoice, product, quantity, quantity * unitPrice, credit, customer, 0, System.currentTimeMillis(), soldUnitCost, unitCode, baseQuantity))
-                saveSales(context, sales)
+                LocalStoreRepository.saveSales(context, sales)
                 nextInvoice = maxOf(nextInvoice + 1, (sales.maxOfOrNull { it.number } ?: 1048) + 1)
                 newSale = false
             }
@@ -654,15 +555,15 @@ private fun StoreApp(context: Context) {
                 val current = sales[saleIndex]
                 sales[saleIndex] = current.copy(paid = (current.paid + amount).coerceAtMost(current.total))
                 settlements.add(0, SettlementRecord(current.number, current.customer, amount))
-                saveSales(context, sales)
-                saveSettlements(context, settlements)
+                LocalStoreRepository.saveSales(context, sales)
+                LocalStoreRepository.saveSettlements(context, settlements)
                 settlingSaleNumber = -1
             }
         ) else settlingSaleNumber = -1
     }
     if (expenseDialog) ExpenseEntryDialog(onDismiss = { expenseDialog = false }, onSave = { category, amount, note ->
         expenses.add(0, ExpenseRecord(System.currentTimeMillis(), category, amount, note))
-        saveExpenses(context, expenses)
+        LocalStoreRepository.saveExpenses(context, expenses)
         expenseDialog = false
     })
     if (cloudNotice.isNotBlank()) AlertDialog(
