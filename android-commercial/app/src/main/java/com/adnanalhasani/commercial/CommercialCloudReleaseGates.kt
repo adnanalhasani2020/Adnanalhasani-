@@ -13,6 +13,7 @@ package com.adnanalhasani.commercial
  * Unmapped invoice item creation gate: 20261102040000.
  */
 internal const val COMMERCIAL_CLOUD_FRACTIONAL_QUANTITY_RPC_READY = false
+internal const val COMMERCIAL_CLOUD_RETURN_UNIT_SNAPSHOT_RPC_READY = false
 internal const val COMMERCIAL_CLOUD_PAYMENT_REQUESTS_RPC_READY = false
 internal const val COMMERCIAL_CLOUD_SUPPLIER_INVOICE_DATES_RPC_READY = false
 internal const val COMMERCIAL_CLOUD_UNMAPPED_INVOICE_ITEM_RPC_READY = false
