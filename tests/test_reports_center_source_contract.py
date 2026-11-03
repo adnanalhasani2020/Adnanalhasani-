@@ -7,6 +7,7 @@ SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commerci
 REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt"
 CALCULATIONS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportCalculations.kt"
 EXPORT = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportExport.kt"
+PRICE_VARIANCE_CALCULATIONS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/SupplierInvoicePriceVarianceCalculations.kt"
 CONTRACT = ROOT / "android-commercial/docs/reports-data-contract.md"
 COLLECTION_REPLAY_MIGRATION = ROOT / "supabase/migrations/20261027221500_harden_customer_collection_replay_posting.sql"
 RETURN_CURRENCY_GUARD_MIGRATION = ROOT / "supabase/migrations/20261027195426_guard_return_adjustment_currency.sql"
@@ -19,6 +20,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         cls.repository = REPOSITORY.read_text(encoding="utf-8")
         cls.calculations = CALCULATIONS.read_text(encoding="utf-8")
         cls.export = EXPORT.read_text(encoding="utf-8")
+        cls.price_variance_calculations = PRICE_VARIANCE_CALCULATIONS.read_text(encoding="utf-8")
         cls.contract = CONTRACT.read_text(encoding="utf-8")
         cls.collection_replay_migration = COLLECTION_REPLAY_MIGRATION.read_text(encoding="utf-8")
         cls.return_currency_guard_migration = RETURN_CURRENCY_GUARD_MIGRATION.read_text(encoding="utf-8")
@@ -226,7 +228,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn("فرق موجب = أعلى من أمر الشراء، وسالب = أقل", self.screen)
         self.assertIn("purchaseOrderItemDescription", self.repository)
         self.assertIn('"فواتير الشراء والمستحقات المسجلة", "المشتريات حسب المورد", "فروقات أسعار فواتير الموردين", "مستحقات فواتير الموردين"', self.screen)
-        self.assertIn("round the sum of quantity × recorded PO unit cost once", self.calculations)
+        self.assertIn("round the sum of quantity × recorded PO unit cost once", self.price_variance_calculations)
         self.assertIn('ReportCatalogItem("التحصيل حسب طريقة الدفع"', self.screen)
         self.assertIn('"التحصيل حسب طريقة الدفع" -> paymentMethodAnalysisError', self.screen)
         self.assertIn('"التحصيل حسب طريقة الدفع" -> cloudPayments.filter', self.screen)
