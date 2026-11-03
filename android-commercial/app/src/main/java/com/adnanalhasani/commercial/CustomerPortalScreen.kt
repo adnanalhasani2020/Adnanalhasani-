@@ -118,6 +118,9 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
     val cartCurrencyValid = cart.isNotEmpty() && org != null &&
         cart.map { it.first.currencyCode }.distinct().size == 1 &&
         cart.all { it.first.currencyCode.equals(org.currencyCode, ignoreCase = true) }
+    val unsupportedFractionalProduct = cart.any { (_, raw, _) ->
+        parseCommercialCheckoutQuantity(raw)?.stripTrailingZeros()?.scale()?.let { it > 0 } == true
+    }
 
     val serviceOfferings = offerings.filter { it.itemType == "service" }
     val bookingInputsValid = serviceOfferings.all { service ->
@@ -316,8 +319,7 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
                             OutlinedTextField(value = note, onValueChange = { note = it.take(1000) }, label = { Text("ملاحظة للطلب (اختياري)") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
                             Button(
                                 onClick = {
-                                    val invalid = cart.any { (_, text, _) -> text.toBigDecimalOrNull()?.let { it <= java.math.BigDecimal.ZERO || it.scale().coerceAtLeast(0) > 3 } != false } ||
-                                        cart.map { it.first.currencyCode }.distinct().size != 1
+                                    val invalid = !cartInputsValid || !cartCurrencyValid
                                     if (bookingMode) {
                                         val service = offerings.firstOrNull { it.id == bookingOfferingId && it.itemType == "service" }
                                         val startsValid = runCatching { java.time.OffsetDateTime.parse(startsAt).toInstant().isAfter(java.time.Instant.now()) }.getOrDefault(false)
