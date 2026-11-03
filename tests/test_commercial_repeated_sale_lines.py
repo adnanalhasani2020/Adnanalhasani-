@@ -37,7 +37,7 @@ class CommercialRepeatedSaleLineTests(unittest.TestCase):
 
     def test_fractional_return_quantity_uses_the_same_exact_base_conversion(self):
         migration = (ROOT / "supabase/migrations/20261103020100_commercial_fractional_sell_quantity_returns.sql").read_text(encoding="utf-8")
-        self.assertIn(r"(\\.[0-9]{1,3})?", migration)
+        self.assertIn(r"(\.[0-9]{1,3})?", migration)
         self.assertIn("v_qty := (v_item->>'quantity')::numeric * v_factor", migration)
         self.assertIn("v_qty <> trunc(v_qty)", migration)
         self.assertIn("fractional_base_return_quantity_not_supported", migration)
