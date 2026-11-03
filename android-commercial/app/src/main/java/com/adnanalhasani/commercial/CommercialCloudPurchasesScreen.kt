@@ -394,12 +394,14 @@ private fun purchaseStatusLabel(value: String): String = when (value.lowercase()
     "approved", "open" -> "معتمد"
     "partially_received", "partial" -> "استلام جزئي"
     "received", "completed" -> "مستلم"
+    "closed" -> "مغلق"
     "cancelled", "canceled" -> "ملغى"
     else -> value.ifBlank { "غير محدد" }
 }
 
 private fun purchaseStatusColor(value: String): Color = when (value.lowercase()) {
     "received", "completed" -> Color(0xFF167D63)
+    "closed" -> CloudPurchasesMuted
     "approved", "open", "partially_received", "partial" -> Color(0xFFB36B00)
     "cancelled", "canceled" -> Color(0xFFB3261E)
     else -> CloudPurchasesMuted
