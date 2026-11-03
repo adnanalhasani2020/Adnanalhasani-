@@ -21,10 +21,10 @@ def test_activity_profile_sends_all_required_cloud_rpc_arguments():
         "p_timezone",
         "p_locale",
         "p_currency_code",
-        "p_locations",
     ]
     for argument in required:
         assert f'.put("{argument}"' in source
+    assert 'payload.put("p_locations", locations)' in source
     assert 'supabaseRequest("/rest/v1/rpc/commercial_create_activity_profile", payload, token)' in source
 
 
