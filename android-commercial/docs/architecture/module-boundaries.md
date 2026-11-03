@@ -14,7 +14,7 @@ This document describes the existing code, then records where responsibility sho
 
 | Existing source | Observed responsibilities | Target ownership |
 |---|---|---|
-| `MainActivity.kt` | Activity entry, app composition, navigation/state, local product/sale/settlement/expense models and persistence, local screens/dialogs, cloud report entry | `app/`, `ui/navigation/`, `feature/dashboard/`, `data/local/`, and the matching feature packages |
+| `MainActivity.kt` | Activity entry, app composition, navigation/state, local screens/dialogs, cloud report entry | `app/`, `ui/navigation/`, `feature/dashboard/`, and the matching feature packages. Shared/local models now live in `CommercialModels.kt` and `LocalStoreModels.kt`; SharedPreferences persistence now lives in `LocalStoreRepository.kt`. |
 | `CommercialCloudRepository.kt` | HTTP transport/session, inventory, sales, customers, purchases, supplier invoices/payments, expenses, returns, receivables, customer portal, bookings, accounting reads, warehouse balances, payment requests | `core/network/`, `core/auth/`, and domain repositories under `data/repository/` |
 | `ReportsCenterScreen.kt` | Report catalog, report data builders, filters, report UI, PDF printing, XLSX generation, accounting/report aggregation | `feature/reports/`, `domain/calculation/`, `core/export/` |
 | `CatalogScreen.kt` | Catalog search, market context, nearby discovery, price suggestions, category/unit/product creation, invoice-purchase linking, catalog transfers, ruling review | `feature/catalog/` plus catalog repository/data adapters |
