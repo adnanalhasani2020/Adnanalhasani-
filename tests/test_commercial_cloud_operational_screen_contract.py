@@ -91,6 +91,17 @@ class CommercialCloudOperationalScreenContractTests(unittest.TestCase):
         self.assertIn("commercial_sale_return_items", self.repository)
         self.assertIn("commercial_sales!inner(receipt_number,activity_id,customer:commercial_customers(display_name))", self.repository)
 
+    def test_fractional_sale_returns_preserve_decimal_units_and_retry_safely(self):
+        returns_screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudReturnsScreen.kt").read_text(encoding="utf-8")
+        migration = (ROOT / "supabase/migrations/20261103020100_commercial_fractional_sell_quantity_returns.sql").read_text(encoding="utf-8")
+        self.assertIn("maxCommercialReturnQuantity", returns_screen + self.repository)
+        self.assertIn("parseCommercialCheckoutQuantity", returns_screen)
+        self.assertIn("quantities: Map<String, BigDecimal>", self.repository)
+        self.assertIn("commercial_cloud_pending_return_v1", self.repository)
+        self.assertIn("quantity.toPlainString()", self.repository)
+        self.assertIn("v_qty <> trunc(v_qty)", migration)
+        self.assertIn("fractional_base_return_quantity_not_supported", migration)
+
     def test_projection_columns_are_not_built_from_user_input(self):
         function = self.repository.split(
             "internal fun loadCommercialCloudRecords", 1
