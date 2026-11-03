@@ -102,6 +102,12 @@ class CommercialCloudOperationalScreenContractTests(unittest.TestCase):
         self.assertIn("quantity.toPlainString()", self.repository)
         self.assertIn("v_qty <> trunc(v_qty)", migration)
         self.assertIn("fractional_base_return_quantity_not_supported", migration)
+        self.assertIn("quantity_in_stock_units", self.repository)
+        self.assertIn("sellingUnitFactor = sellingUnitFactor", self.repository)
+        self.assertIn("item.sellingUnitFactor", returns_screen)
+        self.assertIn("v_sale_item.selling_unit_code IS DISTINCT FROM v_unit_code", migration)
+        self.assertIn("v_sale_item.quantity_in_stock_units::numeric / v_sale_item.selling_quantity", migration)
+        self.assertNotIn("FROM public.commercial_offering_sell_units", migration)
 
     def test_projection_columns_are_not_built_from_user_input(self):
         function = self.repository.split(
