@@ -1396,7 +1396,8 @@ private fun ReportsScreen(sales: List<SaleRecord>, settlements: List<SettlementR
 
 @Composable
 private fun CommercialCloudReportsScreen(context: Context, onBack: () -> Unit) {
-    val today = remember { java.time.LocalDate.now() }
+    var reportingTimeZone by remember { mutableStateOf(java.time.ZoneId.of("UTC")) }
+    val today = remember(reportingTimeZone) { java.time.LocalDate.now(reportingTimeZone) }
     var fromText by remember { mutableStateOf(today.toString()) }
     var toText by remember { mutableStateOf(today.toString()) }
     var range by remember { mutableStateOf(today to today) }
@@ -1418,12 +1419,14 @@ private fun CommercialCloudReportsScreen(context: Context, onBack: () -> Unit) {
             val e = runCatching { loadCommercialCloudExpenses(context) }
             val p = runCatching { loadCommercialCloudRecords(context, "payments") }
             val r = runCatching { loadCommercialCloudSaleReturns(context) }
+            val z = runCatching { loadCommercialCloudExpenseReportingTimeZone(context) }
             main.post {
-                if (s.isSuccess && e.isSuccess && p.isSuccess && r.isSuccess) {
+                if (s.isSuccess && e.isSuccess && p.isSuccess && r.isSuccess && z.isSuccess) {
                     sales.apply { clear(); addAll(s.getOrThrow()) }
                     expenses.apply { clear(); addAll(e.getOrThrow()) }
                     payments.apply { clear(); addAll(p.getOrThrow()) }
                     returns.apply { clear(); addAll(r.getOrThrow()) }
+                    reportingTimeZone = z.getOrThrow()
                     loaded = true
                 } else {
                     error = listOfNotNull(s.exceptionOrNull(), e.exceptionOrNull(), p.exceptionOrNull(), r.exceptionOrNull()).joinToString(" • ") { it.message ?: "تعذر تحميل مصدر" }
@@ -1435,7 +1438,7 @@ private fun CommercialCloudReportsScreen(context: Context, onBack: () -> Unit) {
     LaunchedEffect(Unit) { refresh() }
     val first = runCatching { java.time.LocalDate.parse(fromText) }.getOrNull()
     val last = runCatching { java.time.LocalDate.parse(toText) }.getOrNull()
-    val zone = java.time.ZoneId.systemDefault()
+    val zone = reportingTimeZone
     val startMs = range.first.atStartOfDay(zone).toInstant().toEpochMilli()
     val endMs = range.second.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
     fun timestamp(value: String): Long? = runCatching { java.time.Instant.parse(value).toEpochMilli() }.getOrNull()
@@ -1468,7 +1471,7 @@ private fun CommercialCloudReportsScreen(context: Context, onBack: () -> Unit) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                         listOf("اليوم", "الأسبوع", "الشهر", "السنة").forEach { p ->
                             TextButton(onClick = {
-                                val now = java.time.LocalDate.now()
+                                val now = java.time.LocalDate.now(reportingTimeZone)
                                 when (p) {
                                     "اليوم" -> setPreset(now, now, p)
                                     "الأسبوع" -> setPreset(now.with(java.time.DayOfWeek.MONDAY), now, p)
