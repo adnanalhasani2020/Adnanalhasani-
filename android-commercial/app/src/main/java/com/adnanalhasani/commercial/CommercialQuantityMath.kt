@@ -2,6 +2,8 @@ package com.adnanalhasani.commercial
 
 import java.math.BigDecimal
 import java.math.BigInteger
+import java.util.Currency
+import java.util.Locale
 
 internal data class CommercialCloudCheckoutLine(
     val offeringId: String,
@@ -77,4 +79,25 @@ internal fun commercialSavedSellingUnitFactor(baseQuantity: Long, sellingQuantit
             .toBigIntegerExact()
             .longValueExact()
     }.getOrNull()?.takeIf { it > 0L }
+}
+
+/** Format a server amount_minor value using the currency's ISO minor-unit scale. */
+internal fun formatCommercialOperationalAmount(amountMinor: Long, currencyCode: String): String {
+    val code = currencyCode.trim().uppercase(Locale.ROOT)
+    val fractionDigits = runCatching { Currency.getInstance(code).defaultFractionDigits }.getOrDefault(-1)
+    return formatCommercialOperationalAmount(amountMinor, code, fractionDigits)
+}
+
+/** Pure formatter overload so currency arithmetic can be tested on the JVM without Android runtime stubs. */
+internal fun formatCommercialOperationalAmount(amountMinor: Long, currencyCode: String, fractionDigits: Int): String {
+    val code = currencyCode.trim().uppercase(Locale.ROOT)
+    if (fractionDigits !in 0..6) return amountMinor.toString() + " وحدة نقدية صغرى" + if (code.isBlank()) "" else " • $code"
+    val amountText = BigDecimal.valueOf(amountMinor).movePointLeft(fractionDigits).toPlainString()
+    val negative = amountText.startsWith("-")
+    val unsigned = amountText.removePrefix("-")
+    val parts = unsigned.split(".", limit = 2)
+    val groupedInteger = parts[0].reversed().chunked(3).joinToString(",").reversed()
+    val formatted = (if (negative) "-" else "") + groupedInteger +
+        if (fractionDigits > 0) "." + parts.getOrElse(1) { "0".repeat(fractionDigits) } else ""
+    return formatted + " " + code
 }
