@@ -4,6 +4,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterScreen.kt"
 REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt"
 CALCULATIONS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportCalculations.kt"
+COST_PROFIT_CALCULATIONS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CostProfitCalculations.kt"
 CONTRACT = ROOT / "android-commercial/docs/reports-data-contract.md"
 
 
@@ -23,11 +24,12 @@ def test_item_profitability_uses_original_sale_item_ids_and_scoped_completed_ret
 
 def test_item_profitability_fails_closed_on_cost_and_return_reconciliation_gaps():
     calculations = CALCULATIONS.read_text(encoding="utf-8")
+    cost_profit_calculations = COST_PROFIT_CALCULATIONS.read_text(encoding="utf-8")
     contract = CONTRACT.read_text(encoding="utf-8")
     assert 'line.costTotalMinor != null && line.costTotalMinor >= 0L' in calculations
     assert 'itemRefundTotal == approved' in calculations
     assert 'saleById[item.saleItemId]' in calculations
-    assert 'calculateRestockedCostMinor(' in calculations
+    assert 'calculateRestockedCostMinor(' in cost_profit_calculations
     assert 'Returns can refer to sales from earlier periods' in calculations
     assert 'Item profitability after returns' in contract
 
