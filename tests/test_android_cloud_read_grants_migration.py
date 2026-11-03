@@ -2,7 +2,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MIGRATION = ROOT / "supabase/migrations/20261103030000_android_cloud_read_column_grants.sql"
+MIGRATION = ROOT / "supabase/migrations/20261103124206_20261103124206_20261103030000_android_cloud_read_column_grants.sql"
 
 
 def test_reports_receive_only_the_organization_timezone_column():
