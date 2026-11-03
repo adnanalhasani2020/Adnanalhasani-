@@ -139,7 +139,7 @@ class ReceivablesAndExpenseIntegrityTests(unittest.TestCase):
         self.assertIn("commercialCloudPagedGet(path, access)", expenses_block)
         self.assertNotIn("limit=", expenses_block)
 
-        paging_start = source.index("private fun commercialCloudPagedGet(")
+        paging_start = source.index("internal fun commercialCloudPagedGet(")
         paging_end = source.index("\ninternal fun ", paging_start + 1)
         paging_block = source[paging_start:paging_end]
         self.assertIn('!path.contains("limit=")', paging_block)
