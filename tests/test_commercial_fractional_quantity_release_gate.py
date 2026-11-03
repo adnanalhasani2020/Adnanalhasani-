@@ -14,7 +14,7 @@ class CommercialFractionalQuantityReleaseGateTests(unittest.TestCase):
     def test_pgtap_plan_matches_assertion_count(self):
         match = re.search(r"SELECT\s+plan\((\d+)\);", self.sql, re.IGNORECASE)
         self.assertIsNotNone(match)
-        assertions = len(re.findall(r"SELECT\\s+(?:ok|is)\\s*\\(", self.sql, re.IGNORECASE))
+        assertions = len(re.findall(r"SELECT\s+(?:ok|is)\s*\(", self.sql, re.IGNORECASE))
         self.assertEqual(int(match.group(1)), assertions)
 
     def test_sale_quantity_contract_keeps_base_units_integer(self):
@@ -24,7 +24,7 @@ class CommercialFractionalQuantityReleaseGateTests(unittest.TestCase):
         self.assertNotIn("column_name = 'quantity' AND data_type = 'numeric'", self.sql)
 
     def test_checkout_release_gate_checks_exact_conversion(self):
-        self.assertIn("v_base_qty := (v_line->>'quantity')::numeric * v_unit.quantity_in_stock", self.sql)
+        self.assertIn("v_base_qty := (v_line->>''quantity'')::numeric * v_unit.quantity_in_stock", self.sql)
         self.assertIn("v_base_qty <> trunc(v_base_qty)", self.sql)
 
     def test_return_release_gate_uses_original_invoice_unit_snapshot(self):
