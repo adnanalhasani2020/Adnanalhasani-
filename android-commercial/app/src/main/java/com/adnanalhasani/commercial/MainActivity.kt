@@ -207,6 +207,14 @@ private val products = emptyList<Product>()
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun StoreApp(context: Context) {
+    val savedEntryContext = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+    val hasCompleteEntryContext = listOf("organization_id", "activity_id", "location_id").all {
+        savedEntryContext.getString(it, null).orEmpty().isNotBlank()
+    }
+    var showEntryFlow by remember { mutableStateOf(!hasSavedCommercialAuthSession(context) || !hasCompleteEntryContext) }
+    var guideDismissed by remember {
+        mutableStateOf(context.getSharedPreferences("commercial_ui_guides_v1", Context.MODE_PRIVATE).getBoolean("dismissed", false))
+    }
     var tab by remember { mutableIntStateOf(0) }
     var query by remember { mutableStateOf("") }
     var newSale by remember { mutableStateOf(false) }
@@ -307,6 +315,9 @@ private fun StoreApp(context: Context) {
                 }.onFailure {
                     inventory.clear()
                     cloudInventoryError = it.message ?: "تعذر تحميل المخزون من قاعدة البيانات."
+                    if (cloudInventoryError.contains("سجّل الدخول") || cloudInventoryError.contains("انتهت جلسة")) {
+                        showEntryFlow = true
+                    }
                 }
                 categoriesResult.onSuccess { cloudCategories = it }
                     .onFailure { cloudNotice = "تعذر تحميل تصنيفات الأصناف: " + (it.message ?: "خطأ غير معروف") }
@@ -319,13 +330,29 @@ private fun StoreApp(context: Context) {
                 }.onFailure {
                     sales.clear()
                     cloudNotice = "تعذر تحميل سجل المبيعات من الخادم؛ أخفينا البيانات المحلية حتى لا تختلط بسجلات المؤسسة: " + (it.message ?: "خطأ غير معروف")
+                    if (cloudNotice.contains("سجّل الدخول") || cloudNotice.contains("انتهت جلسة")) {
+                        showEntryFlow = true
+                    }
                 }
             }
         }
     }
+    if (showEntryFlow) {
+        ActivityProfileScreen(
+            onBack = {},
+            onCatalog = { showEntryFlow = false; cloudContextRevision++; showCatalog = true },
+            showBackButton = false,
+            onProfileCreated = {
+                showEntryFlow = false
+                cloudContextRevision++
+                tab = 0
+            }
+        )
+    } else {
     Scaffold(
         containerColor = Canvas,
         topBar = {
+            Column {
             TopAppBar(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -342,6 +369,34 @@ private fun StoreApp(context: Context) {
                 actions = { IconButton(onClick = { showNotifications = true }) { Icon(Icons.Default.NotificationsNone, "الإشعارات", tint = Ink) } },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Canvas)
             )
+            if (!guideDismissed) {
+                val hint = when (tab) {
+                    0 -> "ابدأ من هنا: أضف أصناف متجرك أولًا، ثم سجّل أول عملية بيع."
+                    1 -> "في المبيعات أنشئ الفاتورة، راجع الأصناف والكميات، ثم أكّد الحفظ."
+                    2 -> "في المخزون أضف الأصناف وحدد وحداتها وأسعارها وكمياتها الافتتاحية."
+                    else -> "من «المزيد» تصل إلى العملاء والمشتريات والمصروفات والتقارير وإعدادات النشاط."
+                }
+                Surface(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                    color = Mint,
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, top = 7.dp, bottom = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Lightbulb, contentDescription = null, tint = Green)
+                        Spacer(Modifier.width(8.dp))
+                        Text(hint, modifier = Modifier.weight(1f), color = Ink, fontSize = 12.sp)
+                        IconButton(onClick = {
+                            guideDismissed = true
+                            context.getSharedPreferences("commercial_ui_guides_v1", Context.MODE_PRIVATE)
+                                .edit().putBoolean("dismissed", true).apply()
+                        }) { Icon(Icons.Default.Close, contentDescription = "إخفاء التلميحات", tint = Muted) }
+                    }
+                }
+            }
+            }
         },
         bottomBar = {
             NavigationBar(containerColor = Color.White) {
@@ -681,11 +736,43 @@ private fun StoreApp(context: Context) {
         confirmButton = { Button(onClick = { newSale = false; tab = 2; addProduct = true }) { Text("إضافة منتج") } },
         dismissButton = { TextButton(onClick = { newSale = false }) { Text("إغلاق") } }
     )
+    }
 }
 
 @Composable
 private fun Dashboard(products: List<Product>, sales: List<SaleRecord>, cloudMode: Boolean, onNewSale: () -> Unit, onInventory: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(15.dp)) {
+        if (products.isEmpty()) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Mint),
+                    shape = RoundedCornerShape(18.dp),
+                    border = BorderStroke(1.dp, Border)
+                ) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("لنبدأ بتجهيز متجرك", color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                        Text("1) أضف الأصناف من المخزون. 2) حدّد الوحدة والسعر والكمية الافتتاحية. 3) انتقل إلى المبيعات لتسجيل أول فاتورة. بياناتك السحابية ستظهر هنا بعد تحميلها.", color = Muted, fontSize = 13.sp)
+                        Button(onClick = onInventory, modifier = Modifier.fillMaxWidth()) { Text("الانتقال إلى إضافة الأصناف") }
+                    }
+                }
+            }
+        } else if (sales.isEmpty()) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Mint),
+                    shape = RoundedCornerShape(18.dp),
+                    border = BorderStroke(1.dp, Border)
+                ) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("مخزونك جاهز — الخطوة التالية البيع", color = Ink, fontWeight = FontWeight.Bold)
+                        Text("افتح شاشة المبيعات، اختر «فاتورة جديدة»، ثم راجع الكميات والأسعار قبل تأكيد العملية.", color = Muted, fontSize = 13.sp)
+                        Button(onClick = onNewSale, modifier = Modifier.fillMaxWidth()) { Text("تسجيل أول عملية بيع") }
+                    }
+                }
+            }
+        }
         item {
             Card(colors = CardDefaults.cardColors(containerColor = Ink), shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(20.dp)) {
