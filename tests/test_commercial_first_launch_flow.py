@@ -8,6 +8,9 @@ PROFILE = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commerc
 
 def test_first_launch_requires_authentication_and_complete_project_context():
     main = MAIN.read_text(encoding="utf-8")
+    profile = PROFILE.read_text(encoding="utf-8")
+    assert "restoringSession = true" in profile
+    assert "CircularProgressIndicator()" in profile
     assert "var showEntryFlow by remember" in main
     assert "var showEntryFlow by remember { mutableStateOf(true) }" in main
     assert "LaunchedEffect(cloudContextSnapshot, cloudReloadToken, showEntryFlow)" in main
