@@ -59,3 +59,14 @@ internal fun maxCommercialReturnQuantity(remainingBaseUnits: Long, factor: Long)
     val allowedMilliUnits = maxMilliUnits.divide(representableStep).multiply(representableStep)
     return BigDecimal(allowedMilliUnits, 3).stripTrailingZeros()
 }
+
+/** Recover the exact conversion factor saved by a completed sale line. */
+internal fun commercialSavedSellingUnitFactor(baseQuantity: Long, sellingQuantity: BigDecimal): Long? {
+    if (baseQuantity <= 0L || sellingQuantity.signum() <= 0) return null
+    return runCatching {
+        BigDecimal.valueOf(baseQuantity)
+            .divide(sellingQuantity)
+            .toBigIntegerExact()
+            .longValueExact()
+    }.getOrNull()?.takeIf { it > 0L }
+}
