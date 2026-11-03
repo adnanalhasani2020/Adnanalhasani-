@@ -73,11 +73,13 @@ internal fun PurchaseOrderEntryDialog(
     }
 
     val available = options
-    val selectedCurrency = lines.firstOrNull { it.offeringId.isNotBlank() }?.let { line ->
-        available?.offerings?.firstOrNull { it.id == line.offeringId }?.currencyCode
+    val selectedCurrency = lines.firstNotNullOfOrNull { line ->
+        available?.offerings?.firstOrNull { it.id == line.offeringId }
+            ?.takeIf { it.locationRef == locationId }?.currencyCode
     }.orEmpty()
     val currenciesMatch = lines.filter { it.offeringId.isNotBlank() }.all { line ->
-        available?.offerings?.firstOrNull { it.id == line.offeringId }?.currencyCode == selectedCurrency
+        available?.offerings?.firstOrNull { it.id == line.offeringId }
+            ?.let { it.locationRef == locationId && it.currencyCode == selectedCurrency } == true
     }
 
     AlertDialog(
