@@ -27,7 +27,7 @@ class PurchaseOrderOfferingLocationPickerTests(unittest.TestCase):
 
     def test_order_dialog_only_offers_items_for_selected_receiving_location(self):
         self.assertIn("it.locationRef == locationId", self.dialog)
-        self.assertIn("available.offerings.firstOrNull { it.id == line.offeringId }?.locationRef == locationId", self.dialog)
+        self.assertIn("available?.offerings?.firstOrNull { it.id == line.offeringId }?.locationRef == locationId", self.dialog)
         self.assertIn("val mismatchedLocationLines = lines.count", self.dialog)
         self.assertIn("تغيّر موقع الاستلام أو توجد بنود من موقع آخر", self.dialog)
         self.assertIn("لا توجد عناصر مخزون نشطة مرتبطة بموقع الاستلام المحدد", self.dialog)
