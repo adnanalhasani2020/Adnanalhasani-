@@ -16,12 +16,43 @@ Work in small, independently reviewable slices. Every slice must:
 
 No database migration is required for source-only organization. Do not modify Supabase production data as part of this refactor.
 
+## REF-001 baseline commands and path-sensitive tests
+
+The Android project has no checked-in Gradle wrapper in `android-commercial/`. The repository CI installs Gradle 8.9 and JDK 17, so use the same commands locally or in CI:
+
+```bash
+# Android unit tests
+gradle -p android-commercial --no-daemon testDebugUnitTest
+
+# Debug APK
+gradle -p android-commercial --no-daemon assembleDebug
+
+# Focused report source contract (also exercises report export ownership)
+python -m unittest discover -s tests -p "test_reports_center_source_contract.py"
+
+# Full Python repository suite (CI installs pytest first)
+python -m pytest -q tests hospital/tests
+```
+
+Workflow coverage inspected on this branch:
+- `.github/workflows/android-commercial-build.yml`: builds the commercial debug APK on PRs touching `android-commercial/**`; it does not run unit tests.
+- `.github/workflows/android-commercial.yml`: on PRs touching commercial source, the report source-contract test, Android unit tests, and APK build run.
+- `.github/workflows/python-tests.yml`: runs `tests` and `hospital/tests` on PRs.
+
+High-risk path-sensitive source contracts confirmed in `tests/` (this is a targeted list, not yet an exhaustive inventory):
+- Main entry/auth/local flows: `test_commercial_first_launch_flow.py`, `test_customer_payment_request_android_contract.py`, `test_commercial_cloud_expense_vouchers.py`, `test_commercial_cloud_sales_screen_contract.py`, `test_commercial_cloud_operational_screen_contract.py`.
+- Cloud repository and customer/payment flows: `test_customer_portal_order_fulfillment_contract.py`, `test_customer_portal_multi_service_booking_contract.py`, `test_commercial_repeated_sale_lines.py`, `test_commercial_invoice_source_of_truth.py`, `test_commercial_unit_directory_screen.py`, `test_commercial_cloud_stock_alerts_contract.py`.
+- Reports/calculations: `test_reports_center_source_contract.py`, `test_item_profitability_report_contract.py`, `test_customer_collections_report_contract.py`, `test_customer_receivable_aging_report_contract.py`, `test_supplier_liability_aging_report_contract.py`, `test_tax_discounts_summary_report_contract.py`, `test_user_sales_performance_report_contract.py`, `test_reports_warehouse_inventory_context_contract.py`.
+- Catalog workflows: `test_catalog_activity_filtered_discovery_contract.py`, `test_catalog_activity_hierarchy_selectors.py`, `test_catalog_current_device_location.py`, `test_catalog_discovery_pagination_migration.py`, `test_catalog_unpriced_linking_contract.py`, `test_nearby_catalog_inventory_setup_contract.py`.
+
+Before moving a declaration, search both Kotlin callers and Python source-contract assertions. Update the source owner in those contracts in the same change. The inventory is intentionally not marked complete until every test referencing the four large source files has been reviewed and the baseline commands have actually run.
+
 ## Work packages
 
 | ID | Work package | Current state | Acceptance |
 |---|---|---|---|
 | REF-000 | Inventory repository, Android source, tests, and ownership boundaries | TESTED (documentation inventory) | Existing files and ownership boundaries documented; this is not a runtime test |
-| REF-001 | Establish baseline build/test commands and path-sensitive test inventory | IN PROGRESS | Commands and workflow triggers documented; complete path-sensitive test inventory still required |
+| REF-001 | Establish baseline build/test commands and path-sensitive test inventory | PARTIALLY DOCUMENTED | CI commands and high-risk source-contract tests recorded; exhaustive call-site/path inventory and a baseline run on this branch remain required |
 | REF-002 | Extract shared network transport and cloud error mapping from cloud repository | OPEN | One transport implementation; request behavior unchanged |
 | REF-003 | Split cloud repository by domain | OPEN | Sales, inventory, purchasing, customers, returns, expenses, accounting, portal repositories compile and tests pass |
 | REF-004 | Separate MainActivity composition/navigation from local legacy persistence and screens | OPEN | MainActivity becomes composition root; local mode remains unchanged |
@@ -43,7 +74,18 @@ No database migration is required for source-only organization. Do not modify Su
 6. REF-008 through REF-010: finish pure-domain and test organization.
 7. REF-011: run full validation and build a fresh APK from the exact final commit.
 
-## Work completed on this branch\n\n- Added the architecture overview, module-boundary inventory, and this execution ledger.\n- Extracted XLSX generation, native PDF generation, and Android print preview from `ReportsCenterScreen.kt` into `ReportExport.kt`. The functions remain `internal` so existing report UI callers keep their behavior.\n- Updated `tests/test_reports_center_source_contract.py` to validate the new export owner.\n- Added `ReportExportTest.kt` to validate Arabic RTL XLSX contents, empty-export rejection, XML special-character escaping, and columns beyond `Z`.\n- Extracted merchant payment-request amount parsing/formatting from `ReportCalculations.kt` into `CustomerPaymentRequestAmount.kt`; updated the Python source-contract test to enforce the new ownership. Existing Kotlin unit tests remain the behavioral contract.\n- Extracted supplier-invoice price-variance models and exact aggregate-rounding calculation into `SupplierInvoicePriceVarianceCalculations.kt`; updated the report source-contract test. The existing focused Kotlin tests continue to target the moved calculation.\n- Extracted gross-profit/cost-of-sales report models and calculations, including proportional restocked-cost reversal, into `CostProfitCalculations.kt`; updated both report and item-profitability source-contract tests while keeping shared exact-sum utility in `ReportCalculations.kt`.\n- No database schema, RPC, or production data was changed.\n\n## Current limitations
+## Work completed on this branch
+
+- Added the architecture overview, module-boundary inventory, and this execution ledger.
+- Extracted XLSX generation, native PDF generation, and Android print preview from `ReportsCenterScreen.kt` into `ReportExport.kt`. The functions remain `internal` so existing report UI callers keep their behavior.
+- Updated `tests/test_reports_center_source_contract.py` to validate the new export owner.
+- Added `ReportExportTest.kt` to validate Arabic RTL XLSX contents, empty-export rejection, XML special-character escaping, and columns beyond `Z`.
+- Extracted merchant payment-request amount parsing/formatting from `ReportCalculations.kt` into `CustomerPaymentRequestAmount.kt`; updated the Python source-contract test to enforce the new ownership. Existing Kotlin unit tests remain the behavioral contract.
+- Extracted supplier-invoice price-variance models and exact aggregate-rounding calculation into `SupplierInvoicePriceVarianceCalculations.kt`; updated the report source-contract test. The existing focused Kotlin tests continue to target the moved calculation.
+- Extracted gross-profit/cost-of-sales report models and calculations, including proportional restocked-cost reversal, into `CostProfitCalculations.kt`; updated both report and item-profitability source-contract tests while keeping shared exact-sum utility in `ReportCalculations.kt`.
+- No database schema, RPC, or production data was changed.
+
+## Current limitations
 
 - The latest PR head has not been confirmed by CI after the last two commits in the prior work.
 - No authenticated Android end-to-end commercial workflow has been proven by this source inventory.
