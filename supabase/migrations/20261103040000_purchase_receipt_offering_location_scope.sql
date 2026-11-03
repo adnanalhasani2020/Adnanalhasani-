@@ -21,7 +21,8 @@ BEGIN
     INTO v_receive_location
   FROM public.commercial_purchase_orders
   WHERE id = NEW.purchase_order_id
-    AND organization_id = NEW.organization_id;
+    AND organization_id = NEW.organization_id
+  FOR SHARE;
 
   IF NOT FOUND THEN
     RAISE EXCEPTION 'purchase_order_not_found' USING ERRCODE='P0002';
