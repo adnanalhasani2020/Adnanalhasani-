@@ -707,7 +707,12 @@ internal fun commercialStableIdempotencyKey(prefix: String, parts: List<String>)
 
 internal data class CommercialPurchaseSupplierOption(val id: String, val name: String)
 internal data class CommercialPurchaseLocationOption(val id: String, val name: String)
-internal data class CommercialPurchaseOfferingOption(val id: String, val name: String, val currencyCode: String)
+internal data class CommercialPurchaseOfferingOption(
+    val id: String,
+    val name: String,
+    val currencyCode: String,
+    val locationRef: String
+)
 
 internal data class CommercialPurchaseOrderOptions(
     val suppliers: List<CommercialPurchaseSupplierOption>,
@@ -740,7 +745,7 @@ internal fun loadCommercialCloudPurchaseOrderOptions(context: Context): Commerci
         }
     } }
     val offerings = commercialCloudPagedGet(
-        "/rest/v1/commercial_offerings?select=id,currency_code,state,product:commercial_products(name,state),activity:commercial_activities(organization_id,state)&state=eq.active&order=created_at.desc",
+        "/rest/v1/commercial_offerings?select=id,currency_code,state,location_ref,product:commercial_products(name,state),activity:commercial_activities(organization_id,state)&state=eq.active&order=created_at.desc",
         access
     ).let { rows -> buildList {
         for (i in 0 until rows.length()) {
@@ -752,7 +757,10 @@ internal fun loadCommercialCloudPurchaseOrderOptions(context: Context): Commerci
             val product = row.optJSONObject("product")
             if (product?.optString("state") != "active") continue
             val productName = product.optString("name").orEmpty().ifBlank { "عنصر مخزون" }
-            if (id.isNotBlank() && currency.matches(Regex("^[A-Z]{3}$"))) add(CommercialPurchaseOfferingOption(id, productName, currency))
+            val locationRef = row.optString("location_ref").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+            if (id.isNotBlank() && locationRef.isNotBlank() && currency.matches(Regex("^[A-Z]{3}$"))) {
+                add(CommercialPurchaseOfferingOption(id, productName, currency, locationRef))
+            }
         }
     } }
     return CommercialPurchaseOrderOptions(suppliers, locations, offerings)
@@ -918,6 +926,7 @@ internal data class CommercialCloudPurchaseDocument(
     val currencyCode: String,
     val notes: String,
     val receiveLocationId: String?,
+    val receiveLocationName: String,
     val lines: List<CommercialCloudPurchaseLine>,
     val supplierInvoices: List<CommercialCloudSupplierInvoiceSummary>
 )
@@ -926,7 +935,7 @@ internal data class CommercialCloudPurchaseDocument(
 internal fun loadCommercialCloudPurchaseDocuments(context: Context): List<CommercialCloudPurchaseDocument> {
     val (orgId, access) = commercialMasterDataAccess(context)
     val path = "/rest/v1/commercial_purchase_orders" +
-        "?select=id,supplier_id,order_number,status,ordered_at,expected_at,currency_code,notes,receive_location_id,supplier:commercial_suppliers(display_name),items:commercial_purchase_order_items(id,line_number,item_description,quantity_ordered,quantity_received,unit_cost_minor,offering_id,source_selling_unit_code,source_selling_unit_name,source_selling_quantity,source_quantity_in_stock_units),supplier_invoices:commercial_supplier_invoices(id,invoice_number,subtotal_minor,tax_minor,freight_minor,total_minor,currency_code,recorded_at,invoice_date,due_date,state,items:commercial_supplier_invoice_items(id,purchase_order_item_id,quantity,unit_price_minor,line_total_minor,purchase_order_item:commercial_purchase_order_items!commercial_supplier_invoice_items_purchase_order_item_id_fkey(item_description,unit_cost_minor)),obligation:commercial_supplier_obligations(id,amount_due_minor,amount_paid_minor,state,currency_code))" +
+        "?select=id,supplier_id,order_number,status,ordered_at,expected_at,currency_code,notes,receive_location_id,receive_location:commercial_organization_locations!commercial_purchase_orders_receive_location_id_fkey(name),supplier:commercial_suppliers(display_name),items:commercial_purchase_order_items(id,line_number,item_description,quantity_ordered,quantity_received,unit_cost_minor,offering_id,source_selling_unit_code,source_selling_unit_name,source_selling_quantity,source_quantity_in_stock_units),supplier_invoices:commercial_supplier_invoices(id,invoice_number,subtotal_minor,tax_minor,freight_minor,total_minor,currency_code,recorded_at,invoice_date,due_date,state,items:commercial_supplier_invoice_items(id,purchase_order_item_id,quantity,unit_price_minor,line_total_minor,purchase_order_item:commercial_purchase_order_items!commercial_supplier_invoice_items_purchase_order_item_id_fkey(item_description,unit_cost_minor)),obligation:commercial_supplier_obligations(id,amount_due_minor,amount_paid_minor,state,currency_code))" +
         "&organization_id=eq.$orgId&order=created_at.desc.nullslast,id.asc"
     val rows = commercialCloudPagedGet(path, access)
     return buildList {
@@ -1017,6 +1026,8 @@ internal fun loadCommercialCloudPurchaseDocuments(context: Context): List<Commer
                 currencyCode = row.optString("currency_code").takeUnless { it == "null" }.orEmpty(),
                 notes = row.optString("notes").takeUnless { it == "null" }.orEmpty(),
                 receiveLocationId = row.optString("receive_location_id").takeUnless { it.isBlank() || it == "null" },
+                receiveLocationName = row.optJSONObject("receive_location")?.optString("name")
+                    .takeUnless { it.isNullOrBlank() || it == "null" }.orEmpty(),
                 lines = lines,
                 supplierInvoices = supplierInvoices
             ))

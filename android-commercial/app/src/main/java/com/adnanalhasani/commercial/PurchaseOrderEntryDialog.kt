@@ -48,6 +48,7 @@ internal fun PurchaseOrderEntryDialog(
 ) {
     var options by remember { mutableStateOf<CommercialPurchaseOrderOptions?>(null) }
     var loadingOptions by remember { mutableStateOf(true) }
+    var reloadOptionsToken by remember { mutableStateOf(0) }
     var supplierId by remember { mutableStateOf("") }
     var locationId by remember { mutableStateOf("") }
     var orderNumber by remember { mutableStateOf("") }
@@ -62,7 +63,9 @@ internal fun PurchaseOrderEntryDialog(
         commercialStableIdempotencyKey("purchase-create", listOf(supplierId, orderNumber.trim()))
     }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(reloadOptionsToken) {
+        loadingOptions = true
+        error = ""
         PurchaseOrderWorker.execute {
             val result = runCatching { loadCommercialCloudPurchaseOrderOptions(context) }
             PurchaseOrderMain.post {
@@ -73,11 +76,13 @@ internal fun PurchaseOrderEntryDialog(
     }
 
     val available = options
-    val selectedCurrency = lines.firstOrNull { it.offeringId.isNotBlank() }?.let { line ->
-        available?.offerings?.firstOrNull { it.id == line.offeringId }?.currencyCode
+    val selectedCurrency = lines.firstNotNullOfOrNull { line ->
+        available?.offerings?.firstOrNull { it.id == line.offeringId }
+            ?.takeIf { it.locationRef == locationId }?.currencyCode
     }.orEmpty()
     val currenciesMatch = lines.filter { it.offeringId.isNotBlank() }.all { line ->
-        available?.offerings?.firstOrNull { it.id == line.offeringId }?.currencyCode == selectedCurrency
+        available?.offerings?.firstOrNull { it.id == line.offeringId }
+            ?.let { it.locationRef == locationId && it.currencyCode == selectedCurrency } == true
     }
 
     AlertDialog(
@@ -88,7 +93,12 @@ internal fun PurchaseOrderEntryDialog(
                 if (loadingOptions) {
                     Text("جارٍ تحميل الموردين والمواقع وعناصر المخزون...")
                 } else if (available == null) {
-                    Text("تعذر تحميل خيارات أمر الشراء.")
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(error.ifBlank { "تعذر تحميل خيارات أمر الشراء." })
+                        TextButton(onClick = { reloadOptionsToken++ }, enabled = !saving) {
+                            Text("إعادة تحميل الخيارات")
+                        }
+                    }
                 } else if (available.suppliers.isEmpty() || available.locations.isEmpty() || available.offerings.isEmpty()) {
                     Text("يلزم وجود مورد نشط وموقع نشط وعنصر مخزون نشط ضمن المؤسسة قبل إنشاء أمر شراء.")
                 } else {
@@ -121,10 +131,22 @@ internal fun PurchaseOrderEntryDialog(
                                         DropdownMenuItem(text = { Text(location.name) }, onClick = {
                                             locationId = location.id
                                             locationMenuExpanded = false
+                                            error = ""
                                         })
                                     }
                                 }
                             }
+                            val mismatchedLocationLines = lines.count { line ->
+                                line.offeringId.isNotBlank() &&
+                                    available.offerings.firstOrNull { it.id == line.offeringId }?.locationRef != locationId
+                            }
+                            if (mismatchedLocationLines > 0) {
+                                Text(
+                                    "تغيّر موقع الاستلام أو توجد بنود من موقع آخر. أعد اختيار عنصر مخزون تابع للموقع المحدد لكل بند قبل الحفظ.",
+                                    color = androidx.compose.ui.graphics.Color(0xFF9B5B00)
+                                )
+                            }
+                            Text("تُعرض عناصر المخزون التابعة لموقع الاستلام المحدد فقط.")
                             OutlinedTextField(
                                 value = notes, onValueChange = { if (!attempted) notes = it },
                                 label = { Text("ملاحظات (اختياري)") }, modifier = Modifier.fillMaxWidth(),
@@ -139,13 +161,19 @@ internal fun PurchaseOrderEntryDialog(
                                     Text("عنصر المخزون: ${available.offerings.firstOrNull { it.id == line.offeringId }?.name ?: "اختر العنصر"}")
                                 }
                                 DropdownMenu(expanded = line.offeringMenuExpanded, onDismissRequest = { line.offeringMenuExpanded = false }) {
-                                    available.offerings.filter { selectedCurrency.isBlank() || it.currencyCode == selectedCurrency }.forEach { offering ->
+                                    available.offerings.filter {
+                                        it.locationRef == locationId &&
+                                            (selectedCurrency.isBlank() || it.currencyCode == selectedCurrency)
+                                    }.forEach { offering ->
                                         DropdownMenuItem(text = { Text("${offering.name} · ${offering.currencyCode}") }, onClick = {
                                             line.offeringId = offering.id
                                             line.description = offering.name
                                             line.offeringMenuExpanded = false
                                         })
                                     }
+                                }
+                                if (available.offerings.none { it.locationRef == locationId }) {
+                                    Text("لا توجد عناصر مخزون نشطة مرتبطة بموقع الاستلام المحدد.", color = androidx.compose.ui.graphics.Color(0xFF9B5B00))
                                 }
                                 OutlinedTextField(
                                     value = line.description, onValueChange = { if (!attempted) line.description = it },
@@ -182,8 +210,10 @@ internal fun PurchaseOrderEntryDialog(
                     if (!attempted) {
                         val validLines = lines.all { line ->
                             val qty = line.quantity.toBigDecimalOrNull()
-                            line.offeringId.isNotBlank() && line.description.isNotBlank() && qty != null &&
-                                qty > java.math.BigDecimal.ZERO && qty.stripTrailingZeros().scale() <= 6 &&
+                            line.offeringId.isNotBlank() && line.description.isNotBlank() &&
+                                available?.offerings?.firstOrNull { it.id == line.offeringId }?.locationRef == locationId &&
+                                qty != null && qty > java.math.BigDecimal.ZERO &&
+                                qty.stripTrailingZeros().scale() <= 6 &&
                                 (line.unitCostMinor.toLongOrNull() ?: -1L) >= 0L
                         }
                         when {
