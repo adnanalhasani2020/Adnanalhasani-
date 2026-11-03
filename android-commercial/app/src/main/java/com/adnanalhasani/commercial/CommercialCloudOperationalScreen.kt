@@ -28,6 +28,7 @@ private val CloudScreenMain = Handler(Looper.getMainLooper())
 
 private data class CloudScreenSpec(val title: String, val subtitle: String, val key: String, val empty: String)
 
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun CommercialCloudOperationalScreen(
@@ -150,7 +151,7 @@ internal fun CommercialCloudOperationalScreen(
                                 Text(detail, color = Color(0xFF52665F), fontSize = 12.sp)
                             }
                         }
-                        if (row.amountMinor > 0L) Text("المبلغ: " + String.format(Locale.US, "%,d", row.amountMinor) + " وحدة نقدية صغرى" , color = Color(0xFF167D63), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        if (row.amountMinor > 0L) Text("المبلغ: " + formatCommercialOperationalAmount(row.amountMinor, row.currencyCode), color = Color(0xFF167D63), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                         if (row.createdAt.isNotBlank()) Text(row.createdAt.replace('T', ' ').take(19), color = Color(0xFF71817B), fontSize = 10.sp)
                         Text("مرجع: " + row.id.take(8), color = Color(0xFF71817B), fontSize = 10.sp)
                     }
