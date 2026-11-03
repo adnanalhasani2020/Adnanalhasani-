@@ -34,6 +34,13 @@ internal fun profileSessionPreferences(context: Context) = EncryptedSharedPrefer
 internal fun hasSavedCommercialAuthSession(context: Context): Boolean =
     runCatching { profileSessionPreferences(context).getString("refresh_token", null).orEmpty().isNotBlank() }.getOrDefault(false)
 
+internal fun hasSavedCommercialCloudContext(context: Context): Boolean {
+    val prefs = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+    return listOf("organization_id", "activity_id", "location_id").all {
+        prefs.getString(it, null).orEmpty().isNotBlank()
+    }
+}
+
 private val profileIo = Executors.newSingleThreadExecutor()
 private val profileMain = Handler(Looper.getMainLooper())
 
@@ -76,7 +83,8 @@ internal fun ActivityProfileScreen(
     onBack: () -> Unit,
     onCatalog: () -> Unit,
     showBackButton: Boolean = true,
-    onProfileCreated: () -> Unit = {}
+    onProfileCreated: () -> Unit = {},
+    onAuthenticated: () -> Unit = {}
 ) {
     val context = LocalContext.current
     var email by remember { mutableStateOf("") }
@@ -126,6 +134,7 @@ internal fun ActivityProfileScreen(
     LaunchedEffect(Unit) {
         val savedRefresh = runCatching { profileSessionPreferences(context).getString("refresh_token", null).orEmpty() }.getOrDefault("")
         if (savedRefresh.isBlank()) return@LaunchedEffect
+        busy = true
         profileIo.execute {
             val restored = runCatching {
                 val session = supabaseRequest(
@@ -139,11 +148,13 @@ internal fun ActivityProfileScreen(
                 token
             }
             profileMain.post {
+                busy = false
                 restored.onSuccess {
                     accessToken = it
                     feedback = "تم استعادة جلسة حسابك."
+                    if (hasSavedCommercialCloudContext(context)) onAuthenticated()
                 }.onFailure {
-                    profileSessionPreferences(context).edit().remove("refresh_token").apply()
+                    runCatching { profileSessionPreferences(context).edit().remove("refresh_token").apply() }
                     accessToken = null
                     feedback = "انتهت جلسة الحساب أو لم تعد صالحة. سجّل الدخول مرة أخرى."
                 }
@@ -244,6 +255,7 @@ internal fun ActivityProfileScreen(
                                 require(token.isNotBlank() && refresh.isNotBlank()) { "لم تُرجع خدمة المصادقة جلسة موثقة؛ تحقق من الرمز أو إعدادات Supabase Auth." }
                                 profileSessionPreferences(context).edit().putString("refresh_token", refresh).apply()
                                 accessToken = token
+                                if (hasSavedCommercialCloudContext(context)) onAuthenticated()
                                 "تم التحقق من الهاتف وتسجيل الدخول."
                             }, { feedback = it })
                         },
@@ -271,10 +283,10 @@ internal fun ActivityProfileScreen(
                             throw IllegalStateException("لم تُرجع خدمة المصادقة جلسة صالحة.")
                         }
                         val refreshToken = session.optString("refresh_token")
-                        if (refreshToken.isNotBlank()) {
-                            profileSessionPreferences(context).edit().putString("refresh_token", refreshToken).apply()
-                        }
+                        require(refreshToken.isNotBlank()) { "لم تُرجع خدمة المصادقة رمز جلسة قابلًا للاستعادة؛ حاول تسجيل الدخول مرة أخرى." }
+                        profileSessionPreferences(context).edit().putString("refresh_token", refreshToken).apply()
                         accessToken = token
+                        if (hasSavedCommercialCloudContext(context)) onAuthenticated()
                         "تم تسجيل الدخول"
                     }, { feedback = it })
                 },
@@ -284,6 +296,11 @@ internal fun ActivityProfileScreen(
                 Text(if (isRegister) "لدي حساب بالفعل — تسجيل الدخول" else "إنشاء حساب جديد")
             }
             }
+        } else if (hasSavedCommercialCloudContext(context)) {
+            Text("مشروعك مرتبط بالفعل", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text("هذا الحساب مرتبط بمشروع ونشاط وموقع محفوظة في قاعدة البيانات. لن نُنشئ مشروعًا مكررًا من هذه الشاشة.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Button(onClick = onCatalog, modifier = Modifier.fillMaxWidth()) { Text("اختيار أصناف النشاط") }
+            if (showBackButton) OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("العودة إلى المتجر") }
         } else if (!created) {
             Text("الخطوة 2: إنشاء المشروع", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text("أدخل المعلومات الأساسية بدقة. سيتم إنشاء المؤسسة والنشاط والمقر الرئيسي وربطها بحسابك.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
