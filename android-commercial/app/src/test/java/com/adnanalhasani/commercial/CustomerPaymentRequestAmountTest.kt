@@ -9,7 +9,7 @@ class CustomerPaymentRequestAmountTest {
     fun parsesMerchantAmountInCurrencyMajorUnits() {
         assertEquals(1250L, parseMerchantPaymentRequestAmount("12.50", "USD"))
         assertEquals(1250L, parseMerchantPaymentRequestAmount("12,50", "USD"))
-        assertEquals(500L, parseMerchantPaymentRequestAmount("500", "YER"))
+        assertEquals(500L, parseMerchantPaymentRequestAmount("500", "JPY"))
         assertNull(parseMerchantPaymentRequestAmount("0.00", "USD"))
     }
 
