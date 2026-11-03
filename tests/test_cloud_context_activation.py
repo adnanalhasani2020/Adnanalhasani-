@@ -31,3 +31,12 @@ def test_cloud_inventory_error_has_retry_without_falling_back_to_local_mode():
     assert 'Text("إعادة المحاولة")' in source
     assert "cloudReloadToken++" in source
     assert "cloudMode = cloudContextExists" in source
+
+def test_partial_cloud_context_never_loads_or_displays_local_data():
+    source = MAIN.read_text(encoding="utf-8")
+    assert "val cloudContextHasAny = cloudContextSnapshot.any { it.isNotBlank() }" in source
+    assert "mutableStateOf(cloudContextHasAny)" in source
+    assert "if (!cloudContextHasAny) addAll(loadSales(context))" in source
+    assert "if (!cloudContextExists) {" in source
+    assert "بيانات المؤسسة السحابية غير مكتملة" in source
+    assert "cloudContextHasAny && cloudInventoryError.isNotBlank()" in source
