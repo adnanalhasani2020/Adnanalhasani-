@@ -53,7 +53,7 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 |---|---|---|---|
 | REF-000 | Inventory repository, Android source, tests, and ownership boundaries | TESTED (documentation inventory) | Existing files and ownership boundaries documented; this is not a runtime test |
 | REF-001 | Establish baseline build/test commands and path-sensitive test inventory | PARTIALLY DOCUMENTED | CI commands and high-risk source-contract tests recorded; exhaustive call-site/path inventory and a baseline run on this branch remain required |
-| REF-002 | Extract shared network transport and cloud error mapping from cloud repository | OPEN | One transport implementation; request behavior unchanged |
+| REF-002 | Extract shared network transport and cloud error mapping from cloud repository | PARTIALLY EXTRACTED; TESTS PENDING CI | Shared `SupabaseClient` and `CloudErrorMapper` now own HTTP transport and actionable backend errors; request behavior must be confirmed by focused tests and CI |
 | REF-003 | Split cloud repository by domain | OPEN | Sales, inventory, purchasing, customers, returns, expenses, accounting, portal repositories compile and tests pass |
 | REF-004 | Separate MainActivity composition/navigation from local legacy persistence and screens | PARTIALLY EXTRACTED | Shared and local models moved to dedicated files; next extract persistence/navigation in separate behavior-preserving slices |
 | REF-005 | Split report export infrastructure from report UI | EXTRACTED; TESTED pending CI | PDF/XLSX/print functions moved to ReportExport.kt; source-contract tests updated and XLSX unit tests added; run CI before marking tested |
@@ -86,6 +86,7 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 - Extracted shared commercial models to `CommercialModels.kt` and local settlement/expense/sell-unit models to `LocalStoreModels.kt`; existing screens and cloud repository continue using the same package-level types.
 - Extracted the unchanged SharedPreferences/JSON persistence routines to `LocalStoreRepository.kt`; MainActivity now calls the repository explicitly. Existing preference keys, JSON fields, and organization scoping are preserved. Added `tests/test_local_store_repository_contract.py` to guard the legacy persistence schema and local/cloud loading gates.
 - Extracted the local dashboard, sales list, and inventory list into `DashboardScreen.kt`, `LocalSalesScreen.kt`, and `LocalInventoryScreen.kt`; shared UI rows/metrics now live in `StoreUiComponents.kt`. The existing local color palette and legacy YER formatter remain in `StoreUiTheme.kt` and `StoreUiFormatting.kt`. Added `tests/test_local_commercial_screens_contract.py` and updated earlier source-contract tests to follow the new screen owners.
+- Extracted the HTTP request executor to `SupabaseClient.kt` and actionable server error mapping to `CloudErrorMapper.kt`; all 64 repository call sites now use the single transport object. Added a focused transport contract test and updated the actionable-error test paths.
 - No database schema, RPC, or production data was changed.
 
 ## Current limitations
