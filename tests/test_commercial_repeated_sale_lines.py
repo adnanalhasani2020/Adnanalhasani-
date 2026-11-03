@@ -35,6 +35,14 @@ class CommercialRepeatedSaleLineTests(unittest.TestCase):
         self.assertIn("quantity.scale() <= 3", source)
         self.assertIn("BigDecimal(ascii)", source)
 
+    def test_fractional_return_quantity_uses_the_same_exact_base_conversion(self):
+        migration = (ROOT / "supabase/migrations/20261103020100_commercial_fractional_sell_quantity_returns.sql").read_text(encoding="utf-8")
+        self.assertIn(r"(\\.[0-9]{1,3})?", migration)
+        self.assertIn("v_qty := (v_item->>'quantity')::numeric * v_factor", migration)
+        self.assertIn("v_qty <> trunc(v_qty)", migration)
+        self.assertIn("fractional_base_return_quantity_not_supported", migration)
+        self.assertIn("'quantity',v_qty::bigint", migration)
+
     def test_fractional_selling_quantity_must_convert_to_whole_base_stock(self):
         migration = (ROOT / "supabase/migrations/20261103020000_commercial_fractional_sell_quantity_checkout.sql").read_text(encoding="utf-8")
         self.assertIn(r"(\.[0-9]{1,3})?", migration)
