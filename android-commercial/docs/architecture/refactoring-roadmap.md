@@ -85,7 +85,7 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 - Extracted gross-profit/cost-of-sales report models and calculations, including proportional restocked-cost reversal, into `CostProfitCalculations.kt`; updated both report and item-profitability source-contract tests while keeping shared exact-sum utility in `ReportCalculations.kt`.
 - Extracted shared commercial models to `CommercialModels.kt` and local settlement/expense/sell-unit models to `LocalStoreModels.kt`; existing screens and cloud repository continue using the same package-level types.
 - Extracted the unchanged SharedPreferences/JSON persistence routines to `LocalStoreRepository.kt`; MainActivity now calls the repository explicitly. Existing preference keys, JSON fields, and organization scoping are preserved. Added `tests/test_local_store_repository_contract.py` to guard the legacy persistence schema and local/cloud loading gates.
-- Extracted the local dashboard, sales list, inventory list, and their shared UI rows/metrics into `LocalSalesInventoryScreens.kt`; moved the existing local color palette and legacy YER formatter to `StoreUiTheme.kt` and `StoreUiFormatting.kt`. Updated source-contract tests to follow the new screen owner.
+- Extracted the local dashboard, sales list, and inventory list into `DashboardScreen.kt`, `LocalSalesScreen.kt`, and `LocalInventoryScreen.kt`; shared UI rows/metrics now live in `StoreUiComponents.kt`. The existing local color palette and legacy YER formatter remain in `StoreUiTheme.kt` and `StoreUiFormatting.kt`. Updated source-contract tests to follow the new screen owners.
 - No database schema, RPC, or production data was changed.
 
 ## Current limitations
