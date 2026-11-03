@@ -346,6 +346,13 @@ private fun StoreApp(context: Context) {
                 showEntryFlow = false
                 cloudContextRevision++
                 tab = 0
+            },
+            onAuthenticated = {
+                if (hasSavedCommercialCloudContext(context)) {
+                    showEntryFlow = false
+                    cloudContextRevision++
+                    tab = 0
+                }
             }
         )
     } else {
