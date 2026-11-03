@@ -9,7 +9,7 @@ PURCHASES = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/comme
 COMPOSER = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudSaleComposerScreen.kt"
 MAIN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt"
 MODELS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialModels.kt"
-LOCAL_SCREENS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/LocalSalesInventoryScreens.kt"
+LOCAL_SCREENS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/LocalSalesScreen.kt"
 
 
 class CommercialCloudSalesScreenContractTests(unittest.TestCase):
