@@ -91,6 +91,24 @@ class CommercialCloudOperationalScreenContractTests(unittest.TestCase):
         self.assertIn("commercial_sale_return_items", self.repository)
         self.assertIn("commercial_sales!inner(receipt_number,activity_id,customer:commercial_customers(display_name))", self.repository)
 
+    def test_fractional_sale_returns_preserve_decimal_units_and_retry_safely(self):
+        returns_screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudReturnsScreen.kt").read_text(encoding="utf-8")
+        migration = (ROOT / "supabase/migrations/20261103020100_commercial_fractional_sell_quantity_returns.sql").read_text(encoding="utf-8")
+        quantity_math = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialQuantityMath.kt").read_text(encoding="utf-8")
+        self.assertIn("maxCommercialReturnQuantity", returns_screen + quantity_math)
+        self.assertIn("parseCommercialCheckoutQuantity", returns_screen)
+        self.assertIn("quantities: Map<String, BigDecimal>", self.repository)
+        self.assertIn("commercial_cloud_pending_return_v1", self.repository)
+        self.assertIn("quantity.toPlainString()", self.repository)
+        self.assertIn("v_qty <> trunc(v_qty)", migration)
+        self.assertIn("fractional_base_return_quantity_not_supported", migration)
+        self.assertIn("quantity_in_stock_units", self.repository)
+        self.assertIn("sellingUnitFactor = sellingUnitFactor", self.repository)
+        self.assertIn("item.sellingUnitFactor", returns_screen)
+        self.assertIn("v_sale_item.selling_unit_code IS DISTINCT FROM v_unit_code", migration)
+        self.assertIn("v_sale_item.quantity_in_stock_units::numeric / v_sale_item.selling_quantity", migration)
+        self.assertNotIn("FROM public.commercial_offering_sell_units", migration)
+
     def test_projection_columns_are_not_built_from_user_input(self):
         function = self.repository.split(
             "internal fun loadCommercialCloudRecords", 1

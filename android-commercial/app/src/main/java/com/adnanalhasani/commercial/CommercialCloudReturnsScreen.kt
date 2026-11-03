@@ -23,7 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.util.Locale
-import org.json.JSONArray
+import java.math.BigDecimal
 import java.util.concurrent.Executors
 
 private val ReturnInk = Color(0xFF183B35)
@@ -32,18 +32,26 @@ private val ReturnMuted = Color(0xFF71817B)
 private val ReturnIo = Executors.newSingleThreadExecutor()
 private val ReturnMain = Handler(Looper.getMainLooper())
 
-private data class ReturnSellUnit(val code: String, val label: String, val factor: Int, val isDefault: Boolean)
-private fun returnSellUnits(item: CommercialCloudReturnableSaleItem): List<ReturnSellUnit> {
-    val parsed = runCatching {
-        val json = JSONArray(item.sellUnitsJson)
-        List(json.length()) { i ->
-            val row = json.getJSONObject(i)
-            ReturnSellUnit(row.optString("unitCode"), row.optString("unitName").ifBlank { row.optString("unitCode") },
-                row.optInt("quantityInBase", 1).coerceAtLeast(1), row.optBoolean("isDefault", false))
-        }.filter { it.code.isNotBlank() }.distinctBy { it.code }
-    }.getOrDefault(emptyList())
-    return parsed.ifEmpty { listOf(ReturnSellUnit(item.sellingUnitCode, item.sellingUnitName, 1, true)) }
+private data class ReturnSellUnit(val code: String, val label: String, val factor: Long, val isDefault: Boolean)
+private fun returnQuantityInput(value: String): String {
+    val out = StringBuilder()
+    var decimalSeen = false
+    var decimalDigits = 0
+    value.forEach { ch ->
+        if (ch.isDigit()) {
+            if (!decimalSeen || decimalDigits < 3) {
+                out.append(ch)
+                if (decimalSeen) decimalDigits++
+            }
+        } else if ((ch == '.' || ch == ',' || ch == '\u066B') && !decimalSeen) {
+            out.append('.')
+            decimalSeen = true
+        }
+    }
+    return out.toString()
 }
+private fun returnSellUnits(item: CommercialCloudReturnableSaleItem): List<ReturnSellUnit> =
+    listOf(ReturnSellUnit(item.sellingUnitCode, item.sellingUnitName, item.sellingUnitFactor, true))
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -266,7 +274,7 @@ internal fun CommercialCloudReturnsScreen(context: Context, onBack: () -> Unit) 
                         val selectedUnit = units.firstOrNull { it.code == requestedUnitCodes[saleItem.id] }
                             ?: units.firstOrNull { it.code == saleItem.sellingUnitCode }
                             ?: units.first()
-                        val remainingInUnit = saleItem.remainingQuantity / selectedUnit.factor
+                        val remainingInUnit = maxCommercialReturnQuantity(saleItem.remainingQuantity.toLong(), selectedUnit.factor)
                         Text("المباع: ${saleItem.soldQuantity} ${saleItem.sellingUnitName} · المتبقي للإرجاع: ${saleItem.remainingQuantity} وحدة مخزون · قيمة السطر: ${money(saleItem.lineTotalMinor, requestTarget!!.currencyCode)}", color = ReturnMuted, fontSize = 11.sp)
                         if (units.size > 1) {
                             Box {
@@ -284,13 +292,13 @@ internal fun CommercialCloudReturnsScreen(context: Context, onBack: () -> Unit) 
                                 }
                             }
                         }
-                        Text("يمكن إرجاع حتى ${remainingInUnit} ${selectedUnit.label} بهذه الوحدة.", color = ReturnMuted, fontSize = 11.sp)
+                        Text("يمكن إرجاع حتى ${remainingInUnit.toPlainString()} ${selectedUnit.label} بهذه الوحدة.", color = ReturnMuted, fontSize = 11.sp)
                         OutlinedTextField(
                             value = requestedQuantities[saleItem.id] ?: "0",
                             onValueChange = { value ->
-                                requestedQuantities[saleItem.id] = value.filter(Char::isDigit).take(9)
+                                requestedQuantities[saleItem.id] = returnQuantityInput(value)
                             },
-                            label = { Text("الكمية المراد إرجاعها (0 إلى ${remainingInUnit})") },
+                            label = { Text("الكمية المراد إرجاعها (0 إلى ${remainingInUnit.toPlainString()})") },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true
                         )
@@ -300,18 +308,21 @@ internal fun CommercialCloudReturnsScreen(context: Context, onBack: () -> Unit) 
         },
         confirmButton = {
             Button(enabled = !busy && requestTarget != null &&
-                requestTarget!!.items.all {
-                    val unit = returnSellUnits(it).firstOrNull { u -> u.code == requestedUnitCodes[it.id] }
-                        ?: returnSellUnits(it).firstOrNull { u -> u.code == it.sellingUnitCode }
-                        ?: returnSellUnits(it).first()
-                    (requestedQuantities[it.id]?.toIntOrNull() ?: 0).toLong() * unit.factor <= it.remainingQuantity
+                requestTarget!!.items.all { saleItem ->
+                    val unit = returnSellUnits(saleItem).firstOrNull { u -> u.code == requestedUnitCodes[saleItem.id] }
+                        ?: returnSellUnits(saleItem).firstOrNull { u -> u.code == saleItem.sellingUnitCode }
+                        ?: returnSellUnits(saleItem).first()
+                    val quantity = parseCommercialCheckoutQuantity(requestedQuantities[saleItem.id] ?: "0") ?: BigDecimal.ZERO
+                    val baseQuantity = quantity.multiply(BigDecimal.valueOf(unit.factor))
+                    runCatching { baseQuantity.toBigIntegerExact() }.getOrNull()
+                        ?.let { baseQty -> baseQty <= java.math.BigInteger.valueOf(saleItem.remainingQuantity.toLong()) } == true
                 } &&
-                requestTarget!!.items.any { (requestedQuantities[it.id]?.toIntOrNull() ?: 0) > 0 },
+                requestTarget!!.items.any { (parseCommercialCheckoutQuantity(requestedQuantities[it.id] ?: "0") ?: BigDecimal.ZERO).signum() > 0 },
                 onClick = {
                     val target = requestTarget!!
                     val quantities = requestedQuantities.mapNotNull { (id, raw) ->
-                        val qty = raw.toIntOrNull() ?: 0
-                        if (qty > 0) id to qty else null
+                        val qty = parseCommercialCheckoutQuantity(raw)
+                        if (qty != null && qty.signum() > 0) id to qty else null
                     }.toMap()
                     executeAction({
                         requestCommercialCloudSaleReturn(context, target.id, requestReason, requestNote, quantities, requestedUnitCodes.toMap())

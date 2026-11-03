@@ -218,7 +218,8 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         self.assertIn("commercial_checkout_sale_multi", self.repository)
         self.assertIn("getOrCreateCommercialCloudMultiSaleKey", self.repository)
         self.assertIn("aggregateCommercialCheckoutLines(lines)", self.repository)
-        self.assertIn("Math.addExact(totals[key] ?: 0, line.quantity)", self.repository)
+        quantity_math = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialQuantityMath.kt").read_text(encoding="utf-8")
+        self.assertIn("(totals[key] ?: BigDecimal.ZERO).add(quantity)", quantity_math)
         self.assertIn('"unit_code", line.unitCode', self.repository)
         self.assertIn("configureCommercialCloudSellUnit", self.repository)
         self.assertIn("sell_units:commercial_offering_sell_units", self.repository)
@@ -244,9 +245,20 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
             with self.subTest(marker=marker):
                 self.assertIn(marker, migration)
         self.assertIn("DropdownMenu", self.composer)
-        self.assertIn("line.unit.factor", self.composer)
+        self.assertIn("BigDecimal.valueOf(unit.factor)", self.composer)
+        self.assertIn("toBigIntegerExact()", self.composer)
         self.assertIn("configureCommercialCloudSellUnit", self.composer)
 
+
+
+    def test_fractional_quantity_entry_is_visible_and_converted_before_stock_validation(self):
+        self.assertIn("parseCommercialCheckoutQuantity(draft.quantityText)", self.composer)
+        self.assertIn("BigDecimal.valueOf(unit.factor)", self.composer)
+        self.assertIn("toBigIntegerExact()", self.composer)
+        self.assertIn("baseQuantity: BigInteger", self.composer)
+        self.assertIn("0.5 أو 1.25", self.composer)
+        self.assertIn("sum + BigDecimal(line.baseQuantity)", self.composer)
+        self.assertIn("quantity.stripTrailingZeros().toPlainString()", self.repository)
 
     def test_same_offering_can_have_multiple_independent_invoice_lines(self):
         self.assertIn("var invoiceLines by remember { mutableStateOf<List<ComposerDraftLine>>(emptyList()) }", self.composer)
