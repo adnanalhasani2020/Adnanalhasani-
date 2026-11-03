@@ -93,7 +93,12 @@ internal fun CommercialCloudDebtScreen(context: Context, onBack: () -> Unit) {
         requestError = ""
         DebtIo.execute {
             val result = runCatching { loadCommercialCloudReceivables(context) }
-            val requestResult = runCatching { loadCommercialCloudCustomerPaymentRequests(context, "pending") }
+            val requestResult = runCatching {
+                check(COMMERCIAL_CLOUD_PAYMENT_REQUESTS_RPC_READY) {
+                    "طلبات سندات القبض غير متاحة سحابيًا حتى نشر ترحيل قاعدة البيانات واختبارها."
+                }
+                loadCommercialCloudCustomerPaymentRequests(context, "pending")
+            }
             DebtMain.post {
                 busy = false
                 result.onSuccess { rows = it }
