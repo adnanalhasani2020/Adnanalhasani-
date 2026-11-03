@@ -84,7 +84,7 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 - Extracted supplier-invoice price-variance models and exact aggregate-rounding calculation into `SupplierInvoicePriceVarianceCalculations.kt`; updated the report source-contract test. The existing focused Kotlin tests continue to target the moved calculation.
 - Extracted gross-profit/cost-of-sales report models and calculations, including proportional restocked-cost reversal, into `CostProfitCalculations.kt`; updated both report and item-profitability source-contract tests while keeping shared exact-sum utility in `ReportCalculations.kt`.
 - Extracted shared commercial models to `CommercialModels.kt` and local settlement/expense/sell-unit models to `LocalStoreModels.kt`; existing screens and cloud repository continue using the same package-level types.
-- Extracted the unchanged SharedPreferences/JSON persistence routines to `LocalStoreRepository.kt`; MainActivity now calls the repository explicitly. Existing preference keys, JSON fields, and organization scoping are preserved.
+- Extracted the unchanged SharedPreferences/JSON persistence routines to `LocalStoreRepository.kt`; MainActivity now calls the repository explicitly. Existing preference keys, JSON fields, and organization scoping are preserved. Added `tests/test_local_store_repository_contract.py` to guard the legacy persistence schema and local/cloud loading gates.
 - No database schema, RPC, or production data was changed.
 
 ## Current limitations
