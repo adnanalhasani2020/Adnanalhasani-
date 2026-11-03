@@ -1,0 +1,62 @@
+package com.adnanalhasani.commercial
+
+import java.math.BigDecimal
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Test
+
+class CommercialFractionalSaleQuantityTest {
+    @Test
+    fun parsesDecimalAndLocalizedSellingQuantities() {
+        assertEquals(BigDecimal("0.5"), parseCommercialCheckoutQuantity("0.5"))
+        assertEquals(BigDecimal("1.25"), parseCommercialCheckoutQuantity("1,25"))
+        assertEquals(BigDecimal("0.5"), parseCommercialCheckoutQuantity(".5"))
+        assertEquals(BigDecimal("1.25"), parseCommercialCheckoutQuantity("١.٢٥"))
+        assertEquals(BigDecimal("0.75"), parseCommercialCheckoutQuantity("٠٫٧٥"))
+    }
+
+    @Test
+    fun rejectsInvalidOrOverPreciseSellingQuantities() {
+        assertNull(parseCommercialCheckoutQuantity("0"))
+        assertNull(parseCommercialCheckoutQuantity("-0.5"))
+        assertNull(parseCommercialCheckoutQuantity("1.2345"))
+        assertNull(parseCommercialCheckoutQuantity("100000.1"))
+        assertNull(parseCommercialCheckoutQuantity("1e2"))
+        assertNull(parseCommercialCheckoutQuantity("abc"))
+    }
+
+    @Test
+    fun aggregatesFractionalQuantitiesWithoutFloatingPointRounding() {
+        val lines = aggregateCommercialCheckoutLines(
+            listOf(
+                CommercialCloudCheckoutLine("offering-1", BigDecimal("0.5"), "kg"),
+                CommercialCloudCheckoutLine("offering-1", BigDecimal("0.25"), "kg"),
+                CommercialCloudCheckoutLine("offering-1", BigDecimal("1"), "each")
+            )
+        )
+        assertEquals(2, lines.size)
+        assertEquals(BigDecimal("0.75"), lines.first { it.unitCode == "kg" }.quantity)
+        assertEquals(BigDecimal("1"), lines.first { it.unitCode == "each" }.quantity)
+    }
+
+    @Test
+    fun returnMaximumUsesOnlyQuantitiesThatMapExactlyToBaseUnits() {
+        assertEquals(BigDecimal("0.5"), maxCommercialReturnQuantity(500L, 1000L))
+        assertEquals(BigDecimal("0.25"), maxCommercialReturnQuantity(5L, 12L))
+        assertEquals(BigDecimal.ZERO, maxCommercialReturnQuantity(0L, 1000L))
+    }
+
+    @Test
+    fun fractionalSellingQuantityMustResolveToWholeBaseStockUnits() {
+        assertEquals(
+            java.math.BigInteger("500"),
+            BigDecimal("0.5").multiply(BigDecimal("1000")).toBigIntegerExact()
+        )
+        try {
+            BigDecimal("0.5").multiply(BigDecimal.ONE).toBigIntegerExact()
+            throw AssertionError("A half base unit must not be silently rounded.")
+        } catch (_: ArithmeticException) {
+            // The checkout must reject fractions that cannot map to whole stock units.
+        }
+    }
+}

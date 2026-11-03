@@ -8,6 +8,7 @@ import androidx.security.crypto.MasterKey
 import org.json.JSONArray
 import org.json.JSONObject
 import java.math.BigDecimal
+import java.math.BigInteger
 import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.charset.StandardCharsets
@@ -432,22 +433,45 @@ internal fun loadCommercialCloudCustomers(context: Context): List<CommercialClou
 
 internal data class CommercialCloudCheckoutLine(
     val offeringId: String,
-    val quantity: Int,
+    val quantity: BigDecimal,
     val unitCode: String = "each"
 )
+
+/** Parse a positive selling quantity with up to three decimal places. */
+internal fun parseCommercialCheckoutQuantity(value: String): BigDecimal? {
+    var normalized = value.trim().replace(',', '.').replace('\u066B', '.')
+    if (normalized.startsWith(".")) normalized = "0$normalized"
+    val ascii = buildString {
+        normalized.forEach { ch ->
+            if (ch == '.') append(ch)
+            else {
+                val digit = Character.digit(ch, 10)
+                if (digit >= 0) append(('0'.code + digit).toChar()) else append(ch)
+            }
+        }
+    }
+    if (!Regex("^(0|[1-9][0-9]{0,5})(\\.[0-9]{1,3})?$").matches(ascii)) return null
+    return runCatching { BigDecimal(ascii) }
+        .getOrNull()
+        ?.takeIf { it.signum() > 0 && it <= BigDecimal("100000") }
+}
 
 /** Merge only lines with the same offering and selling unit before checkout. */
 internal fun aggregateCommercialCheckoutLines(
     lines: List<CommercialCloudCheckoutLine>
 ): List<CommercialCloudCheckoutLine> {
     require(lines.isNotEmpty() && lines.size <= 200) { "أضف صنفًا واحدًا على الأقل إلى الفاتورة." }
-    val totals = linkedMapOf<Pair<String, String>, Int>()
+    val totals = linkedMapOf<Pair<String, String>, BigDecimal>()
     lines.forEach { line ->
-        require(line.offeringId.isNotBlank() && line.quantity in 1..100000 && line.unitCode.isNotBlank()) { "تحقق من الأصناف والكميات ووحدة البيع." }
+        val quantity = line.quantity.stripTrailingZeros()
+        require(line.offeringId.isNotBlank() && quantity.signum() > 0 &&
+            quantity <= BigDecimal("100000") && quantity.scale() <= 3 && line.unitCode.isNotBlank()) {
+            "تحقق من الأصناف والكميات ووحدة البيع؛ الحد الأقصى ثلاث منازل عشرية."
+        }
         val key = line.offeringId to line.unitCode
-        val total = Math.addExact(totals[key] ?: 0, line.quantity)
-        require(total <= 100000) { "إجمالي كمية الصنف بوحدة البيع نفسها يتجاوز الحد المسموح." }
-        totals[key] = total
+        val total = (totals[key] ?: BigDecimal.ZERO).add(quantity)
+        require(total <= BigDecimal("100000")) { "إجمالي كمية الصنف بوحدة البيع نفسها يتجاوز الحد المسموح." }
+        totals[key] = total.stripTrailingZeros()
     }
     return totals.entries
         .sortedWith(compareBy({ it.key.first }, { it.key.second }))
@@ -467,7 +491,7 @@ internal fun getOrCreateCommercialCloudMultiSaleKey(
     val normalizedLines = aggregateCommercialCheckoutLines(lines)
     val canonical = JSONArray()
     normalizedLines.forEach { line ->
-        canonical.put(JSONObject().put("offering_id", line.offeringId).put("quantity", line.quantity).put("unit_code", line.unitCode))
+        canonical.put(JSONObject().put("offering_id", line.offeringId).put("quantity", line.quantity.stripTrailingZeros().toPlainString()).put("unit_code", line.unitCode))
     }
     val payload = JSONObject().put("customer_id", customerId ?: JSONObject.NULL)
         .put("payment_mode", paymentMode)
@@ -526,7 +550,7 @@ internal fun checkoutCommercialCloudSaleMulti(
     require(locationId.isNotBlank()) { "معرّف موقع المخزون غير محفوظ." }
     val payload = JSONArray()
     normalizedLines.forEach { line ->
-        payload.put(JSONObject().put("offering_id", line.offeringId).put("quantity", line.quantity).put("unit_code", line.unitCode))
+        payload.put(JSONObject().put("offering_id", line.offeringId).put("quantity", line.quantity.stripTrailingZeros().toPlainString()).put("unit_code", line.unitCode))
     }
     val sessionPrefs = commercialCloudSessionPreferences(context)
     val savedRefresh = sessionPrefs.getString("refresh_token", null).orEmpty()
@@ -1958,33 +1982,76 @@ internal fun loadCommercialCloudReturnableSales(context: Context): List<Commerci
     }
 }
 
+internal fun maxCommercialReturnQuantity(remainingBaseUnits: Long, factor: Long): BigDecimal {
+    if (remainingBaseUnits <= 0L || factor <= 0L) return BigDecimal.ZERO
+    val thousand = BigInteger.valueOf(1000L)
+    val factorValue = BigInteger.valueOf(factor)
+    val maxMilliUnits = BigInteger.valueOf(remainingBaseUnits).multiply(thousand).divide(factorValue)
+    val representableStep = thousand.divide(factorValue.gcd(thousand))
+    val allowedMilliUnits = maxMilliUnits.divide(representableStep).multiply(representableStep)
+    return BigDecimal(allowedMilliUnits, 3).stripTrailingZeros()
+}
+
 internal fun requestCommercialCloudSaleReturn(
     context: Context,
     saleId: String,
     reasonCode: String,
     reasonNote: String,
-    quantities: Map<String, Int>,
+    quantities: Map<String, BigDecimal>,
     unitCodes: Map<String, String> = emptyMap()
 ): String {
     require(saleId.isNotBlank()) { "اختر الفاتورة أولًا." }
     require(reasonCode in setOf("customer_request", "damaged", "wrong_item", "not_as_described", "duplicate_charge", "other")) { "سبب المرتجع غير صالح." }
-    val selected = quantities.filterValues { it > 0 }
+    val selected = quantities.mapValues { it.value.stripTrailingZeros() }.filterValues { it.signum() > 0 }
     require(selected.isNotEmpty()) { "أدخل كمية مرتجعة لصنف واحد على الأقل." }
     val items = JSONArray()
     selected.forEach { (saleItemId, quantity) ->
-        require(saleItemId.isNotBlank() && quantity > 0) { "كمية المرتجع غير صالحة." }
-        val item = JSONObject().put("sale_item_id", saleItemId).put("quantity", quantity).put("restock", true)
+        require(saleItemId.isNotBlank() && quantity <= BigDecimal("100000") && quantity.scale() <= 3) { "كمية المرتجع غير صالحة؛ الحد الأقصى ثلاث منازل عشرية." }
+        val item = JSONObject().put("sale_item_id", saleItemId)
+            .put("quantity", quantity.toPlainString()).put("restock", true)
         unitCodes[saleItemId]?.takeIf { it.isNotBlank() }?.let { item.put("unit_code", it) }
         items.put(item)
     }
-    val (_, access) = commercialMasterDataAccess(context)
+    val (organizationId, access) = commercialMasterDataAccess(context)
+    val canonicalItems = JSONArray()
+    selected.toSortedMap().forEach { (saleItemId, quantity) ->
+        canonicalItems.put(JSONObject()
+            .put("sale_item_id", saleItemId)
+            .put("quantity", quantity.toPlainString())
+            .put("unit_code", unitCodes[saleItemId].orEmpty()))
+    }
+    val fingerprint = JSONObject()
+        .put("organization_id", organizationId)
+        .put("sale_id", saleId)
+        .put("reason_code", reasonCode)
+        .put("reason_note", reasonNote.trim())
+        .put("items", canonicalItems)
+        .toString()
+    val pending = context.getSharedPreferences("commercial_cloud_pending_return_v1", Context.MODE_PRIVATE)
+    val storedKey = pending.getString("idempotency_key", null).orEmpty()
+    if (storedKey.isNotBlank()) {
+        require(pending.getString("fingerprint", null) == fingerprint) {
+            "يوجد طلب مرتجع سابق لم يُحسم بعد. أعد المحاولة بنفس الفاتورة والكميات والسبب أولًا."
+        }
+    }
+    val idempotencyKey = storedKey.ifBlank { UUID.randomUUID().toString() }
+    if (storedKey.isBlank()) {
+        check(pending.edit().putString("fingerprint", fingerprint)
+            .putString("idempotency_key", idempotencyKey).commit()) {
+            "تعذر حفظ مفتاح طلب المرتجع قبل الإرسال؛ لم يتم إرسال الطلب."
+        }
+    }
     val payload = JSONObject()
         .put("p_sale_id", saleId)
-        .put("p_idempotency_key", UUID.randomUUID().toString())
+        .put("p_idempotency_key", idempotencyKey)
         .put("p_reason_code", reasonCode)
         .put("p_items", items)
         .put("p_reason_note", reasonNote.trim().ifBlank { JSONObject.NULL })
-    return commercialCloudRequest("/rest/v1/rpc/commercial_request_sale_return", "POST", payload, access)
+    val response = commercialCloudRequest("/rest/v1/rpc/commercial_request_sale_return", "POST", payload, access)
+    check(pending.edit().clear().commit()) {
+        "تم تأكيد طلب المرتجع لكن تعذر تنظيف مفتاح إعادة المحاولة؛ أعد المحاولة بنفس البيانات ولا تنشئ طلبًا جديدًا."
+    }
+    return response
 }
 
 internal data class CommercialCloudReturnItem(
