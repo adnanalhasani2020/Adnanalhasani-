@@ -16,6 +16,7 @@ class PurchaseReceiptOfferingLocationScopeTests(unittest.TestCase):
         self.assertIn("commercial_guard_purchase_order_item_receiving_location", self.sql)
         self.assertIn("v_offering_location IS DISTINCT FROM v_receive_location::text", self.sql)
         self.assertIn("purchase_offering_receiving_location_mismatch", self.sql)
+        self.assertIn("organization_id = NEW.organization_id\\n  FOR SHARE", self.sql)
 
     def test_receiving_branch_cannot_change_away_from_linked_offerings(self):
         self.assertIn("commercial_purchase_order_receiving_location_change_guard", self.sql)
