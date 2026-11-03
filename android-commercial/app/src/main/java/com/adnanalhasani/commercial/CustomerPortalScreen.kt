@@ -297,6 +297,12 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
                                 Text("مراجعة الطلب", color = PortalInk, fontWeight = FontWeight.Bold)
                             }
                             if (cart.isEmpty()) Text("أدخل كمية أكبر من صفر لصنف واحد على الأقل.", color = PortalMuted, fontSize = 12.sp)
+                            if (productOfferings.any { quantities[it.id].orEmpty().isNotBlank() } && !cartInputsValid) {
+                                Text("بعض الكميات غير صالحة أو تتجاوز الحد المسموح؛ صححها قبل إرسال الطلب.", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                            }
+                            if (unsupportedFractionalProduct) {
+                                Text("الطلب السحابي يدعم حاليًا كميات المنتجات الصحيحة فقط من 1 إلى 100000.", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                            }
                             cart.forEach { (item, quantity, total) ->
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                     Text("${item.name} × $quantity", color = PortalInk, modifier = Modifier.weight(1f))
@@ -306,7 +312,7 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
                             HorizontalDivider(color = PortalBorder)
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text("الإجمالي التقديري", color = PortalMuted)
-                                if (estimatedTotalResult == null) Text("تعذر حساب الإجمالي بأمان", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                                if (cart.isNotEmpty() && estimatedTotalResult == null) Text("تعذر حساب الإجمالي بأمان", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
                                 else Text(portalMoney(estimatedTotal, org.currencyCode), color = PortalGreen, fontWeight = FontWeight.Bold)
                             }
                             Text("الإجمالي النهائي يُحسب ويُتحقق منه داخل قاعدة البيانات عند الإرسال.", color = PortalMuted, fontSize = 11.sp)
@@ -398,7 +404,14 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
                             Text("فاتورة الحجز الذكية", color = PortalInk, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                             if (bookingCart.isEmpty()) {
                                 Text("أدخل كمية أكبر من صفر لخدمة واحدة على الأقل.", color = PortalMuted, fontSize = 12.sp)
-                            } else {
+                            }
+                            if (serviceOfferings.any { quantities[it.id].orEmpty().isNotBlank() } && !bookingInputsValid) {
+                                Text("بعض كميات الخدمات غير صالحة أو تتجاوز الحد المسموح؛ صححها قبل تأكيد الحجز.", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                            }
+                            if (bookingCart.any { it.third <= 0L }) {
+                                Text("قيمة أحد بنود الحجز أقل من أصغر وحدة نقدية؛ عدّل الكمية أو اختر خدمة أخرى.", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                            }
+                            if (bookingCart.isNotEmpty()) {
                                 bookingCart.forEach { (service, quantity, total) ->
                                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                                         Column(Modifier.weight(1f)) {
