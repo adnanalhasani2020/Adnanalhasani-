@@ -9,6 +9,7 @@ This document describes the existing code, then records where responsibility sho
 - `CommercialModels.kt` now owns the shared `Product` and `SaleRecord` models because both the cloud repository and Compose screens consume them.
 - `LocalStoreModels.kt` now owns local-only `SettlementRecord`, `ExpenseRecord`, and local sale-unit parsing helpers. The helper visibility is package-internal so the existing MainActivity screens can keep calling the same functions.
 - `LocalStoreRepository.kt` now owns the existing SharedPreferences keys, organization-scoped key selection, and JSON load/save routines for products, sales, settlements, and expenses. The JSON field names, preference file name, fallback behavior, and `.apply()` persistence semantics were preserved.
+- `LocalSalesInventoryScreens.kt` now owns the local dashboard, sales list, inventory list, and their shared row/metric/header composables. `StoreUiTheme.kt` and `StoreUiFormatting.kt` own the shared local UI palette and legacy currency formatter.
 
 ## Large mixed-responsibility files
 
