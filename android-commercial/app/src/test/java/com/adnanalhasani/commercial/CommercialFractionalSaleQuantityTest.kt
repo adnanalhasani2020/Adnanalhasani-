@@ -22,7 +22,7 @@ class CommercialFractionalSaleQuantityTest {
     @Test
     fun formatsCloudOperationalAmountsUsingTheCurrencyMinorUnitScale() {
         assertEquals("1,234.56 USD", formatCommercialOperationalAmount(123456L, "USD"))
-        assertEquals("1,234 KWD", formatCommercialOperationalAmount(1234L, "KWD"))
+        assertEquals("1.234 KWD", formatCommercialOperationalAmount(1234L, "KWD"))
         assertEquals("1,234 YER", formatCommercialOperationalAmount(1234L, "YER"))
         assertEquals("1234 وحدة نقدية صغرى", formatCommercialOperationalAmount(1234L, ""))
     }
