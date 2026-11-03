@@ -7,6 +7,19 @@ import org.junit.Test
 
 class CommercialFractionalSaleQuantityTest {
     @Test
+    fun formatsFractionalInventoryAndComparesReorderThresholdPrecisely() {
+        assertEquals("0.5", formatCommercialStockQuantity(BigDecimal("0.5000")))
+        assertEquals("1.25", formatCommercialStockQuantity(BigDecimal("1.2500")))
+        assertEquals("2", formatCommercialStockQuantity(BigDecimal("2.000")))
+        assertEquals("0", formatCommercialStockQuantity(BigDecimal.ZERO))
+
+        assertEquals(false, isCommercialStockLow(BigDecimal("9.5"), 9))
+        assertEquals(true, isCommercialStockLow(BigDecimal("9.0001"), 10))
+        assertEquals(true, isCommercialStockLow(BigDecimal("9"), 9))
+        assertEquals(true, isCommercialStockLow(BigDecimal("0.5"), 9))
+    }
+
+    @Test
     fun parsesDecimalAndLocalizedSellingQuantities() {
         assertEquals(BigDecimal("0.5"), parseCommercialCheckoutQuantity("0.5"))
         assertEquals(BigDecimal("1.25"), parseCommercialCheckoutQuantity("1,25"))
