@@ -3,7 +3,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MAIN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt"
-LOCAL_SCREENS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/LocalSalesInventoryScreens.kt"
+LOCAL_SCREENS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/DashboardScreen.kt"
 PROFILE = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ActivityProfileScreen.kt"
 
 
