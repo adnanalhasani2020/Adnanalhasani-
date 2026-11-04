@@ -238,3 +238,11 @@
 - `CatalogInvoiceMappingMapper.kt` maps the prepared invoice-mapping payload into location, warehouse, unmatched-line, and offering models.
 - `CatalogScreen.kt` retains purchase-order eligibility and lock checks, REST orchestration, active catalog filtering, and mapping state.
 - `CatalogInvoiceMappingMapperTest.kt` covers the response fields and empty collections.
+
+
+### Reports ledger validation extraction (2026-11-04)
+- Moved the existing financial-statement source validation block into `ReportLedgerValidation.kt` as a pure function.
+- Preserved fail-closed error precedence, required GL mapping keys, supplier control-account roles, end-date filtering, invalid-date rejection, entry/currency balancing, account-type allowlist, and ISO currency validation.
+- `ReportsCenterScreen.kt` still owns all cloud loads, Compose state, and rendering; it now delegates only this validation decision.
+- Added `ReportLedgerValidationTest.kt` for cloud-mode gating, source-error precedence, missing mappings/roles, malformed dates, empty windows, unbalanced/unknown/invalid-currency entries, and a valid balanced ledger.
+- No database, RPC, report formula, or export contract was changed.
