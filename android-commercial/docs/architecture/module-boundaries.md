@@ -224,3 +224,6 @@ The catalog screen owns interaction and request orchestration. JSON-to-domain ma
 
 
 - `ReportProfitabilityRows.kt` owns row presentation for item profitability and historical cost/profit. Calculation formulas remain in their domain calculation files; the mapper must not substitute current purchase costs for historical sale-line costs.
+
+
+- `ReportsResultSection.kt` owns read-only result cards, empty-state presentation, and export/print action composition. It consumes already-filtered rows and uses callbacks for export state and feedback; file creation/share lifecycle and rendering stay in their dedicated owners.
