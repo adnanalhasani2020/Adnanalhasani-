@@ -289,3 +289,9 @@
 - `ReportLedgerRows.kt` owns row assembly for the income statement/balance sheet, trial balance, general-ledger movement/account statement, posted journal detail, and journal register reports.
 - `ReportsCenterScreen.kt` delegates these report selections to the ledger row builder after the inventory builder declines ownership; ledger validation, source projections, and account/date filters remain explicit inputs.
 - The extraction preserves posted-ledger source semantics, account classification, debit/credit directions, currency grouping, balance equation checks, and account-query requirements.
+
+
+### Customer/supplier statement row extraction (2026-11-04)
+- `ReportPartyStatementRows.kt` owns row assembly for the full customer control-account statement, supplier control-account statement, and operational customer statement.
+- It consumes loaded party-account links, control-account mappings, posted ledger lines, sales/purchase projections, and date/name filters. It does not fetch data or mutate receivables/payables.
+- The extraction preserves account-role/currency scoping, posted-ledger date ordering, opening/period/closing balances, exact amount summation, and refund-aware customer movement construction.
