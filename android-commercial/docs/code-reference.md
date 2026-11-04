@@ -342,3 +342,10 @@
 ### Reports filter presentation extraction (2026-11-04)
 - `ReportsFilterSection.kt` owns supplier/customer party filters, generic row/currency/status filters, and the explicit ledger-account query field.
 - `ReportsCenterScreen.kt` supplies selected report/state and receives filter changes through callbacks; the existing row-filtering and account-query requirements remain in the screen/domain pipeline.
+
+
+### Reports center data orchestration extraction (2026-11-04)
+- `ReportsCenterData.kt` owns the report-data preparation pipeline: date validation/window boundaries, report-specific source validation, calculation orchestration, catalog filtering, selected-row dispatch/filtering, and summary totals.
+- `ReportsCenterScreen.kt` now owns only Compose screen composition and event wiring; it consumes the prepared `ReportsCenterData` snapshot and delegates period/filter/catalog/result UI to focused components.
+- Cloud retrieval remains in `ReportsCloudData.kt`; interactive state remains in `ReportsCenterUiState.kt`; per-family row builders and export lifecycle remain in their dedicated files.
+- The report data coordinator is intentionally read-only and consumes existing local/cloud projections. No query scope, RPC, schema, accounting formula, or production data was changed by this extraction.
