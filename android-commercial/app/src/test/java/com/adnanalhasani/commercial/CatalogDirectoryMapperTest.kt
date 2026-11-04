@@ -36,7 +36,7 @@ class CatalogDirectoryMapperTest {
         assertEquals("GROCERY", parsed.activityNodes.last().code)
         assertEquals("Food localized", parsed.categories.first().localizedName)
         assertEquals("Localized description", parsed.categories.first().localizedDescription)
-        assertEquals("", parsed.categories.last().parentCode)
+        assertEquals("FOOD", parsed.categories.last().parentCode)
         assertEquals("KG", parsed.units.single().code)
         assertEquals("كجم", parsed.units.single().localizedName)
         assertEquals("1", parsed.units.single().factor)
