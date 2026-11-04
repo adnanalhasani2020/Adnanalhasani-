@@ -44,8 +44,9 @@ internal fun buildLedgerReportRows(
                         .filterKeys { it.third in setOf("revenue", "contra_revenue", "cogs", "expense") }
                         .toSortedMap(compareBy<Triple<String, String, String>> { it.third }.thenBy { it.second }.thenBy { it.first })
                         .forEach { (key, rows) ->
-                            val raw = rows.sumOf { if (key.third == "revenue") it.creditMinor - it.debitMinor else it.debitMinor - it.creditMinor }
-                            val amount = if (key.third == "revenue") raw else -raw
+                            val amount = sumReportAmountsExactly(rows.map {
+                                Math.subtractExact(it.creditMinor, it.debitMinor)
+                            })
                             add(ReportLine("${startText} — ${endText}", "حساب ${key.first}", key.second, amount, currency,
                                 "تفصيل حساب قائمة الدخل · التصنيف ${key.third} · دفتر الأستاذ المرحل"))
                         }
@@ -53,14 +54,17 @@ internal fun buildLedgerReportRows(
                     val contraRevenue = reportAccountNet(periodRows, "contra_revenue")
                     val cogs = reportAccountNet(periodRows, "cogs")
                     val operatingExpenses = reportAccountNet(periodRows, "expense")
-                    val netRevenue = revenue - contraRevenue
-                    val grossProfit = netRevenue - cogs
-                    val netProfit = grossProfit - operatingExpenses
+                    val netRevenue = Math.subtractExact(revenue, contraRevenue)
+                    val grossProfit = Math.subtractExact(netRevenue, cogs)
+                    val netProfit = Math.subtractExact(grossProfit, operatingExpenses)
                     val previousRows = previousPeriod.filter { it.currencyCode == currency }
                     if (previousRows.isNotEmpty()) {
-                        val previousRevenue = reportAccountNet(previousRows, "revenue") - reportAccountNet(previousRows, "contra_revenue")
-                        val previousGrossProfit = previousRevenue - reportAccountNet(previousRows, "cogs")
-                        val previousNetProfit = previousGrossProfit - reportAccountNet(previousRows, "expense")
+                        val previousRevenue = Math.subtractExact(
+                            reportAccountNet(previousRows, "revenue"),
+                            reportAccountNet(previousRows, "contra_revenue")
+                        )
+                        val previousGrossProfit = Math.subtractExact(previousRevenue, reportAccountNet(previousRows, "cogs"))
+                        val previousNetProfit = Math.subtractExact(previousGrossProfit, reportAccountNet(previousRows, "expense"))
                         add(ReportLine("${previousStart} — ${previousEnd}", "مقارنة الفترة السابقة", "صافي الإيرادات للفترة السابقة", previousRevenue, currency,
                             "الفترة السابقة مساوية للمدة المحددة؛ من القيود المرحلة فقط"))
                         add(ReportLine("${previousStart} — ${previousEnd}", "مقارنة الفترة السابقة", "مجمل الربح للفترة السابقة", previousGrossProfit, currency,
@@ -69,27 +73,38 @@ internal fun buildLedgerReportRows(
                             "النتيجة السابقة من حسابات الإيرادات والمصروفات المرحلة"))
                     }
                     add(ReportLine(startText + " — " + endText, "قائمة الدخل", "الإيرادات المسجلة", revenue, currency, "مصدرها حسابات الإيرادات المرحلة"))
-                    if (contraRevenue != 0L) add(ReportLine(startText + " — " + endText, "قائمة الدخل", "المرتجعات/الخصومات المسجلة كحساب مقابل للإيراد", -contraRevenue, currency, "يعتمد على تصنيف الحساب في دفتر الأستاذ"))
+                    if (contraRevenue != 0L) add(ReportLine(startText + " — " + endText, "قائمة الدخل", "المرتجعات/الخصومات المسجلة كحساب مقابل للإيراد", Math.negateExact(contraRevenue), currency, "يعتمد على تصنيف الحساب في دفتر الأستاذ"))
                     add(ReportLine(startText + " — " + endText, "قائمة الدخل", "صافي الإيرادات", netRevenue, currency, "الإيرادات ناقص الحسابات المقابلة للإيراد"))
-                    add(ReportLine(startText + " — " + endText, "قائمة الدخل", "تكلفة البضاعة المباعة", -cogs, currency, "حسابات التكلفة المرحلة فقط"))
+                    add(ReportLine(startText + " — " + endText, "قائمة الدخل", "تكلفة البضاعة المباعة", Math.negateExact(cogs), currency, "حسابات التكلفة المرحلة فقط"))
                     add(ReportLine(startText + " — " + endText, "قائمة الدخل", "مجمل الربح", grossProfit, currency, "صافي الإيرادات ناقص تكلفة البضاعة"))
-                    add(ReportLine(startText + " — " + endText, "قائمة الدخل", "المصروفات التشغيلية والأخرى", -operatingExpenses, currency, "حسابات المصروفات المرحلة"))
+                    add(ReportLine(startText + " — " + endText, "قائمة الدخل", "المصروفات التشغيلية والأخرى", Math.negateExact(operatingExpenses), currency, "حسابات المصروفات المرحلة"))
                     add(ReportLine(startText + " — " + endText, "قائمة الدخل", "صافي الربح/الخسارة للفترة", netProfit, currency, "لا يتضمن حسابات مجهولة النوع؛ تم التحقق من اتزان القيود"))
                     cumulativeRows.groupBy { Triple(it.accountId, it.accountName.ifBlank { it.accountCode }, reportStatementClass(it)) }
                         .filterKeys { it.third in setOf("asset", "liability", "equity") }
                         .toSortedMap(compareBy<Triple<String, String, String>> { it.third }.thenBy { it.second }.thenBy { it.first })
                         .forEach { (key, rows) ->
-                            val amount = rows.sumOf { if (key.third == "asset") it.debitMinor - it.creditMinor else it.creditMinor - it.debitMinor }
+                            val amount = sumReportAmountsExactly(rows.map { line ->
+                                if (key.third == "asset") Math.subtractExact(line.debitMinor, line.creditMinor)
+                                else Math.subtractExact(line.creditMinor, line.debitMinor)
+                            })
                             add(ReportLine(endText, "حساب ${key.first}", key.second, amount, currency,
                                 "رصيد حساب ${key.third} حتى تاريخ التقرير · دفتر الأستاذ المرحل"))
                         }
                     val assets = reportAccountNet(cumulativeRows, "asset")
                     val liabilities = reportAccountNet(cumulativeRows, "liability")
                     val equity = reportAccountNet(cumulativeRows, "equity")
-                    val cumulativeIncome = reportAccountNet(cumulativeRows, "revenue") - reportAccountNet(cumulativeRows, "contra_revenue") -
-                        reportAccountNet(cumulativeRows, "cogs") - reportAccountNet(cumulativeRows, "expense")
-                    val totalEquity = equity + cumulativeIncome
-                    val equationDifference = assets - liabilities - totalEquity
+                    val cumulativeIncome = Math.subtractExact(
+                        Math.subtractExact(
+                            Math.subtractExact(
+                                reportAccountNet(cumulativeRows, "revenue"),
+                                reportAccountNet(cumulativeRows, "contra_revenue")
+                            ),
+                            reportAccountNet(cumulativeRows, "cogs")
+                        ),
+                        reportAccountNet(cumulativeRows, "expense")
+                    )
+                    val totalEquity = Math.addExact(equity, cumulativeIncome)
+                    val equationDifference = Math.subtractExact(Math.subtractExact(assets, liabilities), totalEquity)
                     add(ReportLine(endText, "الميزانية العمومية", "إجمالي الأصول", assets, currency, "رصيد حتى تاريخ التقرير"))
                     add(ReportLine(endText, "الميزانية العمومية", "إجمالي الالتزامات", liabilities, currency, "رصيد حتى تاريخ التقرير"))
                     add(ReportLine(endText, "الميزانية العمومية", "حقوق الملكية المسجلة", equity, currency, "لا يشمل نتيجة الفترات غير المقفلة"))
@@ -107,16 +122,17 @@ internal fun buildLedgerReportRows(
             }
             val accountRows = throughEnd.groupBy { Triple(it.accountId, it.accountName.ifBlank { "حساب غير معروف" }, it.currencyCode.ifBlank { "غير محددة" }) }
                 .map { (key, rows) ->
-                    val debit = rows.sumOf { it.debitMinor }
-                    val credit = rows.sumOf { it.creditMinor }
-                    ReportLine(endText, key.first, key.second, debit - credit, key.third,
+                    val debit = sumReportAmountsExactly(rows.map { it.debitMinor })
+                    val credit = sumReportAmountsExactly(rows.map { it.creditMinor })
+                    ReportLine(endText, key.first, key.second, Math.subtractExact(debit, credit), key.third,
                         "مدين: ${reportMoney(debit, key.third, true)} · دائن: ${reportMoney(credit, key.third, true)}")
                 }
             val totals = throughEnd.groupBy { it.currencyCode.ifBlank { "غير محددة" } }.map { (currency, rows) ->
-                val debit = rows.sumOf { it.debitMinor }
-                val credit = rows.sumOf { it.creditMinor }
-                ReportLine(endText, "إجمالي", "إجمالي الميزان", debit - credit, currency,
-                    "إجمالي المدين: ${reportMoney(debit, currency, true)} · إجمالي الدائن: ${reportMoney(credit, currency, true)} · الفرق: ${reportMoney(debit - credit, currency, true)}")
+                val debit = sumReportAmountsExactly(rows.map { it.debitMinor })
+                val credit = sumReportAmountsExactly(rows.map { it.creditMinor })
+                val difference = Math.subtractExact(debit, credit)
+                ReportLine(endText, "إجمالي", "إجمالي الميزان", difference, currency,
+                    "إجمالي المدين: ${reportMoney(debit, currency, true)} · إجمالي الدائن: ${reportMoney(credit, currency, true)} · الفرق: ${reportMoney(difference, currency, true)}")
             }
             accountRows.sortedBy { it.reference } + totals
         }
@@ -129,7 +145,7 @@ internal fun buildLedgerReportRows(
                         listOf(line.accountId, line.accountCode, line.accountName).any { it.contains(accountQuery, true) }))
             }.map { line ->
                 ReportLine(line.entryDate.take(10), line.entryNumber.ifBlank { line.entryId }, "${line.accountCode} · ${line.accountName}",
-                    line.debitMinor - line.creditMinor, line.currencyCode,
+                    Math.subtractExact(line.debitMinor, line.creditMinor), line.currencyCode,
                     "قيد ${line.entryNumber} · مدين: ${line.debitMinor} · دائن: ${line.creditMinor} · مصدر: ${line.sourceType} ${line.sourceId}")
             }.sortedByDescending { it.date }
         }
@@ -138,7 +154,7 @@ internal fun buildLedgerReportRows(
             timestamp != null && timestamp >= startMillis && timestamp < endExclusive
         }.map { line ->
             ReportLine(line.entryDate.take(10), "${line.entryNumber.ifBlank { line.entryId }} · سطر ${line.lineNumber}",
-                "${line.accountCode} · ${line.accountName}", line.debitMinor - line.creditMinor, line.currencyCode,
+                "${line.accountCode} · ${line.accountName}", Math.subtractExact(line.debitMinor, line.creditMinor), line.currencyCode,
                 "مدين: ${reportMoney(line.debitMinor, line.currencyCode, true)} · دائن: ${reportMoney(line.creditMinor, line.currencyCode, true)} · ${line.entryDescription} · المصدر: ${line.sourceType} ${line.sourceId}")
         }.sortedWith(compareBy<ReportLine> { it.date }.thenBy { it.reference })
         "سجل القيود المحاسبية" -> cloudJournals.filter { row ->
