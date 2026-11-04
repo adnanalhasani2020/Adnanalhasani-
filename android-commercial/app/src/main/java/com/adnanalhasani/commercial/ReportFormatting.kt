@@ -18,3 +18,10 @@ internal fun reportMoney(amount: Long, currency: String, cloudMinorUnits: Boolea
 internal fun reportDateMillis(value: String): Long? =
     runCatching { Instant.parse(value).toEpochMilli() }.getOrNull()
         ?: runCatching { LocalDate.parse(value.take(10)).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() }.getOrNull()
+
+/** Returns an exclusive upper timestamp without overflowing at LocalDate.MAX. */
+internal fun reportEndExclusiveMillis(endDate: LocalDate?, zone: ZoneId): Long =
+    endDate?.let { date ->
+        if (date == LocalDate.MAX) Long.MAX_VALUE
+        else date.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+    } ?: Long.MAX_VALUE
