@@ -3,6 +3,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterScreen.kt"
 DATA_STATE = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterData.kt"
+MAPPERS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportDomainMappers.kt"
 CATALOG = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCatalog.kt"
 CATALOG_SECTION = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCatalogSection.kt"
 REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReturnsRepository.kt"
@@ -12,7 +13,7 @@ CONTRACT = ROOT / "android-commercial/docs/reports-data-contract.md"
 
 
 def test_item_profitability_uses_original_sale_item_ids_and_scoped_completed_returns():
-    screen = SCREEN.read_text(encoding="utf-8") + DATA_STATE.read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8")
+    screen = SCREEN.read_text(encoding="utf-8") + DATA_STATE.read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8") + MAPPERS.read_text(encoding="utf-8")
     repository = REPOSITORY.read_text(encoding="utf-8")
     calculations = CALCULATIONS.read_text(encoding="utf-8")
     assert 'ReportCatalogItem("ربحية الأصناف بعد المرتجعات"' in screen
