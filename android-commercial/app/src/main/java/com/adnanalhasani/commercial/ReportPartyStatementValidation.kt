@@ -1,5 +1,7 @@
 package com.adnanalhasani.commercial
 
+import java.time.LocalDate
+
 /**
  * Validates source links required by full customer and supplier control-account statements.
  * Row assembly remains in ReportPartyStatementRows.
@@ -10,7 +12,9 @@ internal fun reportCustomerStatementValidationError(
     ledgerLinesLoadError: String,
     partyAccountsLoadError: String,
     partyAccounts: List<CommercialCloudPartyAccountLink>,
-    glMappings: List<CommercialCloudGlAccountMapping>
+    glMappings: List<CommercialCloudGlAccountMapping>,
+    startDate: LocalDate?,
+    endDate: LocalDate?
 ): String = when {
     !cloudMode -> "كشف العميل الكامل يتطلب دفتر الأستاذ السحابي."
     ledgerLinesLoadError.isNotBlank() -> ledgerLinesLoadError
@@ -28,6 +32,15 @@ internal fun reportCustomerStatementValidationError(
                 link.partyAccountId == line.partyAccountId && link.currencyCode == line.currencyCode
             })
     } -> "توجد حركات على حساب مراقبة العملاء بلا ربط صالح بعميل وعملة مطابقين؛ تعذر اعتماد الكشف الكامل."
+    !reportPartyStatementArithmeticIsExact(
+        ledgerLines = ledgerLines,
+        partyAccounts = partyAccounts,
+        controlAccountIdsByCurrency = glMappings.filter { it.mappingKey == "accounts_receivable" }
+            .groupBy({ it.currencyCode }, { it.ledgerAccountId }).mapValues { it.value.toSet() },
+        startDate = startDate,
+        endDate = endDate,
+        customerSide = true
+    ) -> "تجاوزت حركات أو أرصدة كشف العملاء نطاق الأرقام الدقيق؛ تم حجب الكشف."
     else -> ""
 }
 
@@ -38,7 +51,9 @@ internal fun reportSupplierStatementValidationError(
     partyAccountsLoadError: String,
     controlAccountsLoadError: String,
     partyAccounts: List<CommercialCloudPartyAccountLink>,
-    supplierControlAccounts: List<CommercialCloudSupplierControlAccount>
+    supplierControlAccounts: List<CommercialCloudSupplierControlAccount>,
+    startDate: LocalDate?,
+    endDate: LocalDate?
 ): String = when {
     !cloudMode -> "كشف المورد الكامل يتطلب دفتر الأستاذ السحابي."
     ledgerLinesLoadError.isNotBlank() -> ledgerLinesLoadError
@@ -57,5 +72,54 @@ internal fun reportSupplierStatementValidationError(
                 link.partyAccountId == line.partyAccountId && link.currencyCode == line.currencyCode
             })
     } -> "توجد حركات على حساب مراقبة الموردين بلا ربط صالح بمورد وعملة مطابقين؛ تعذر اعتماد الكشف الكامل."
+    !reportPartyStatementArithmeticIsExact(
+        ledgerLines = ledgerLines,
+        partyAccounts = partyAccounts,
+        controlAccountIdsByCurrency = supplierControlAccounts.filter { it.accountRole == "accounts_payable" }
+            .groupBy({ it.currencyCode }, { it.ledgerAccountId }).mapValues { it.value.toSet() },
+        startDate = startDate,
+        endDate = endDate,
+        customerSide = false
+    ) -> "تجاوزت حركات أو أرصدة كشف الموردين نطاق الأرقام الدقيق؛ تم حجب الكشف."
     else -> ""
 }
+
+
+/** Preflights the same opening and running-balance arithmetic used by party statement rows. */
+private fun reportPartyStatementArithmeticIsExact(
+    ledgerLines: List<CommercialCloudJournalLine>,
+    partyAccounts: List<CommercialCloudPartyAccountLink>,
+    controlAccountIdsByCurrency: Map<String, Set<String>>,
+    startDate: LocalDate?,
+    endDate: LocalDate?,
+    customerSide: Boolean
+): Boolean = runCatching {
+    partyAccounts.groupBy { it.partyId to it.currencyCode }.forEach { (party, links) ->
+        val partyAccountIds = links.map { it.partyAccountId }.toSet()
+        val controlAccountIds = controlAccountIdsByCurrency[party.second].orEmpty()
+        val movements = ledgerLines.filter {
+            it.partyAccountId in partyAccountIds &&
+                it.accountId in controlAccountIds &&
+                it.currencyCode == party.second
+        }.mapNotNull { line ->
+            val date = runCatching { LocalDate.parse(line.entryDate.take(10)) }.getOrNull()
+                ?: return@mapNotNull null
+            val amount = if (customerSide) {
+                Math.subtractExact(line.debitMinor, line.creditMinor)
+            } else {
+                Math.subtractExact(line.creditMinor, line.debitMinor)
+            }
+            Triple(date, line.entryNumber, amount)
+        }.sortedWith(compareBy<Triple<LocalDate, String, Long>> { it.first }.thenBy { it.second })
+
+        val opening = movements.filter { it.first < (startDate ?: LocalDate.MIN) }
+            .fold(0L) { total, movement -> Math.addExact(total, movement.third) }
+        var balance = opening
+        movements.filter {
+            startDate != null && endDate != null &&
+                !it.first.isBefore(startDate) && !it.first.isAfter(endDate)
+        }.forEach { movement ->
+            balance = Math.addExact(balance, movement.third)
+        }
+    }
+}.isSuccess
