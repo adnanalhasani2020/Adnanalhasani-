@@ -255,3 +255,11 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 - The section receives UI state and explicit callbacks; it does not issue HTTP/RPC requests or handle Android location permissions. The owning screen retains coordinate persistence, branch/warehouse loading, nearby pagination orchestration, price-suggestion loading, catalog setup, and selection-to-organization linking.
 - Updated coordinate, foreground-location, nearby-discovery, and inventory-setup source contracts to follow the new presentation/state owners.
 - Catalog browsing is now split across dedicated market presentation and state owners; the main catalog product list and activity filters remain in `CatalogScreen.kt` and are the next presentation extraction target.
+
+
+## 2026-11-04 — Catalog product result presentation extraction
+
+- Extracted the global catalog result card into `CatalogProductResultCard.kt`, including metadata, package images, rulings, source links, selection control, and inventory-link action presentation.
+- The card uses explicit callbacks for selection, feedback, source navigation, ruling review, inventory creation, and product editing. It does not own network requests or edit workflow state.
+- Kept the catalog result query, activity filters, pagination, bulk unpriced-link workflow, and product edit dialog orchestration in `CatalogScreen.kt`.
+- Added a source-ownership guard and updated the universal catalog contract to read the extracted presentation owners.
