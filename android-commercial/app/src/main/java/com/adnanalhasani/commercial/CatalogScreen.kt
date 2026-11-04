@@ -1,10 +1,5 @@
 package com.adnanalhasani.commercial
 
-import android.Manifest
-import android.content.pm.PackageManager
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.ui.platform.LocalContext
@@ -17,7 +12,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -77,7 +71,6 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var nearbyPageLoadFailed by marketUiState::nearbyPageLoadFailed
     var nearbyLoadGeneration by marketUiState::nearbyLoadGeneration
     var marketPriceHints by marketUiState::marketPriceHints
-    val locationScope = rememberCoroutineScope()
     val nearbyListState = rememberLazyListState()
     var invoiceSaleId by invoiceTransferState::invoiceSaleId
     var invoiceDestinationOrg by invoiceTransferState::invoiceDestinationOrg
@@ -216,40 +209,12 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         onLoadNearbyPage = { expand -> marketWorkflow.loadNearbyCatalog(expand) }
     )
 
-    suspend fun updateNearbyFromDevice() {
-        locatingDevice = true
-        try {
-            val location = getFreshCatalogDeviceLocation(context)
-            deviceLatitude = location.latitude.toString()
-            deviceLongitude = location.longitude.toString()
-            feedback = "تم تحديد موقعك لهذه الجلسة فقط. لا يتم حفظ الإحداثيات في ملفك أو تتبعك في الخلفية."
-            marketWorkflow.startNearbyCatalog()
-        } catch (error: Exception) {
-            feedback = error.message ?: "تعذر تحديد موقع الجهاز. تحقق من تشغيل خدمات الموقع."
-        } finally {
-            locatingDevice = false
-        }
-    }
-
-    val deviceLocationPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (granted) {
-            locationScope.launch { updateNearbyFromDevice() }
-        } else {
-            feedback = "لم تمنح إذن الموقع. يمكنك متابعة البحث باستخدام إحداثيات الفرع المحفوظة."
-        }
-    }
-
-    fun loadNearbyFromDevice() {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-            locationScope.launch { updateNearbyFromDevice() }
-        } else {
-            deviceLocationPermissionLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
-        }
-    }
-
-
+    val requestDeviceLocation = CatalogDeviceLocationController(
+        context = context,
+        state = marketUiState,
+        onStartNearbyCatalog = marketWorkflow::startNearbyCatalog,
+        onFeedback = { feedback = it }
+    )
 
     val directoryWorkflow = CatalogDirectoryWorkflow(
         accessToken = { token },
@@ -398,7 +363,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                         },
                         onSaveCoordinates=marketWorkflow::saveBranchCoordinates,
                         onLoadMarketContext=marketWorkflow::loadMarketContext,
-                        onLoadNearbyFromDevice=::loadNearbyFromDevice,
+                        onLoadNearbyFromDevice=requestDeviceLocation,
                         onLoadSelectedPriceSuggestions=marketWorkflow::loadSelectedPriceSuggestions,
                         onCreateProduct={section="product"},
                         onConfigureSelectedCatalogItems=marketWorkflow::configureSelectedCatalogItems,
