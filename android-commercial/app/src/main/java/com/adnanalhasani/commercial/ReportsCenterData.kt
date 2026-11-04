@@ -347,39 +347,23 @@ internal fun rememberReportsCenterData(
         }.isFailure -> "توجد فاتورة أو دفعة أو مرتجع عميل بمبلغ/تاريخ غير صالح، أو تجاوزت مجاميع كشف العميل نطاق الأرقام الدقيق؛ تم حجب الكشف."
         else -> ""
     }
-    val customerStatementError = when {
-        !cloudMode -> "كشف العميل الكامل يتطلب دفتر الأستاذ السحابي."
-        ledgerLinesLoadError.isNotBlank() -> ledgerLinesLoadError
-        cloudLedgerLines.isEmpty() -> "لا توجد قيود مرحلة في دفتر الأستاذ؛ لا يمكن إنشاء كشف حساب محاسبي."
-        customerPartyAccountsLoadError.isNotBlank() -> customerPartyAccountsLoadError
-        cloudCustomerPartyAccounts.isEmpty() -> "لا توجد روابط لحسابات مراقبة العملاء في دليل الحسابات."
-        cloudGlMappings.none { it.mappingKey == "accounts_receivable" && it.currencyCode.matches(Regex("^[A-Z]{3}$")) } -> "حساب مراقبة العملاء غير مربوط بعملة صالحة في دليل الحسابات."
-        cloudCustomerPartyAccounts.any { link -> cloudGlMappings.none { it.mappingKey == "accounts_receivable" && it.currencyCode == link.currencyCode } } -> "توجد عملة عميل بلا حساب مراقبة عملاء مطابق؛ تعذر اعتماد الكشف."
-        cloudLedgerLines.any { line ->
-            line.accountId in cloudGlMappings.filter { it.mappingKey == "accounts_receivable" }.map { it.ledgerAccountId }.toSet() &&
-                (line.partyAccountId.isBlank() || cloudCustomerPartyAccounts.none { link ->
-                    link.partyAccountId == line.partyAccountId && link.currencyCode == line.currencyCode
-                })
-        } -> "توجد حركات على حساب مراقبة العملاء بلا ربط صالح بعميل وعملة مطابقين؛ تعذر اعتماد الكشف الكامل."
-        else -> ""
-    }
-    val supplierStatementError = when {
-        !cloudMode -> "كشف المورد الكامل يتطلب دفتر الأستاذ السحابي."
-        ledgerLinesLoadError.isNotBlank() -> ledgerLinesLoadError
-        cloudLedgerLines.isEmpty() -> "لا توجد قيود مرحلة في دفتر الأستاذ؛ لا يمكن إنشاء كشف حساب محاسبي."
-        supplierPartyAccountsLoadError.isNotBlank() -> supplierPartyAccountsLoadError
-        supplierControlAccountsLoadError.isNotBlank() -> supplierControlAccountsLoadError
-        cloudSupplierPartyAccounts.isEmpty() -> "لا توجد روابط لحسابات مراقبة الموردين في دليل الحسابات."
-        cloudSupplierControlAccounts.none { it.accountRole == "accounts_payable" && it.currencyCode.matches(Regex("^[A-Z]{3}$")) } -> "حساب مراقبة الموردين غير مربوط بعملة صالحة في دليل الحسابات."
-        cloudSupplierPartyAccounts.any { link -> cloudSupplierControlAccounts.none { it.accountRole == "accounts_payable" && it.currencyCode == link.currencyCode } } -> "توجد عملة مورد بلا حساب مراقبة موردين مطابق؛ تعذر اعتماد الكشف."
-        cloudLedgerLines.any { line ->
-            line.accountId in cloudSupplierControlAccounts.filter { it.accountRole == "accounts_payable" }.map { it.ledgerAccountId }.toSet() &&
-                (line.partyAccountId.isBlank() || cloudSupplierPartyAccounts.none { link ->
-                    link.partyAccountId == line.partyAccountId && link.currencyCode == line.currencyCode
-                })
-        } -> "توجد حركات على حساب مراقبة الموردين بلا ربط صالح بمورد وعملة مطابقين؛ تعذر اعتماد الكشف الكامل."
-        else -> ""
-    }
+    val customerStatementError = reportCustomerStatementValidationError(
+        cloudMode = cloudMode,
+        ledgerLines = cloudLedgerLines,
+        ledgerLinesLoadError = ledgerLinesLoadError,
+        partyAccountsLoadError = customerPartyAccountsLoadError,
+        partyAccounts = cloudCustomerPartyAccounts,
+        glMappings = cloudGlMappings
+    )
+    val supplierStatementError = reportSupplierStatementValidationError(
+        cloudMode = cloudMode,
+        ledgerLines = cloudLedgerLines,
+        ledgerLinesLoadError = ledgerLinesLoadError,
+        partyAccountsLoadError = supplierPartyAccountsLoadError,
+        controlAccountsLoadError = supplierControlAccountsLoadError,
+        partyAccounts = cloudSupplierPartyAccounts,
+        supplierControlAccounts = cloudSupplierControlAccounts
+    )
     val itemProfitabilityCalculation = remember(cloudSalesDocuments, cloudReturns, startMillis, endExclusive, cloudMode) {
         runCatching {
             val allSaleLines = cloudSalesDocuments.filter { it.saleStatus.equals("completed", true) }.flatMap { document ->
