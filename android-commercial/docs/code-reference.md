@@ -161,3 +161,5 @@
 - `CatalogCloudTransport.kt` retains the catalog call-site helpers but delegates both GET and POST requests to the shared `SupabaseClient`.
 - Catalog session reads/writes now use `commercialCloudSessionPreferences`; the duplicate encrypted-preference factory and direct `HttpURLConnection` implementations were removed from `CatalogScreen.kt`.
 - Catalog HTTP requests retain the 15-second connect timeout and 25-second read timeout through the shared client, with the shared actionable backend/network error handling. RPC names, paths, payloads, tokens, and query scopes are unchanged.
+
+- `app/src/test/java/com/adnanalhasani/commercial/ReportInventoryLinesTest.kt`: verifies location report quantity mapping, fractional stock movement formatting, date-window filtering, and fail-closed error states for the extracted inventory report mappers.
