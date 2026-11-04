@@ -196,3 +196,11 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 - Kept the RPC request, page size, offset progression, de-duplication, loading state, and user feedback in `CatalogScreen.kt`. Pagination still advances by the returned row count and still treats a full 100-row page as potentially having more results.
 - Added JVM tests for nested units/rulings, localized display overrides with original raw values retained, and empty pages; added a Python ownership guard.
 - No RPC name or payload, database schema, item model, or catalog business rule was changed.
+
+
+## 2026-11-04 — Catalog directory mapping extraction
+
+- Extracted the combined catalog master-data response parser into `CatalogDirectoryMapper.kt`: local unit codes, activity-directory nodes, translated categories/descriptions, and translated global units.
+- Kept the seven existing catalog directory GET/RPC calls, locale selection, initial activity/sector inference, screen state updates, user feedback, and subsequent market-context loading in `CatalogScreen.kt`.
+- Added `CatalogDirectoryMapperTest.kt` for translations, null/default fields, activity-node filtering, local-unit normalization, empty optional collections, and malformed required data.
+- The response keys and domain model constructors remain unchanged; no RPC, SQL, unit conversion, or catalog-selection behavior was intentionally changed.
