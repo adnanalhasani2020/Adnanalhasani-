@@ -163,7 +163,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn('الأصول − الالتزامات − حقوق الملكية', self.screen)
         self.assertIn('ReportCatalogItem("قائمة الدخل والميزانية العمومية"', self.catalog)
         self.assertIn('ReportCatalogItem("التدفقات النقدية والصندوق"', self.catalog)
-        self.assertIn("val invalidPostedDate = cloudLedgerLines.any", self.screen)
+        self.assertIn("val invalidPostedDate = ledgerLines.any", self.screen)
         self.assertIn("مقارنة الفترة السابقة", self.screen)
 
     def test_customer_and_supplier_statements_use_party_linked_posted_journal_lines(self):
