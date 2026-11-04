@@ -336,22 +336,23 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     fun transferCatalog() = transferWorkflow.transferCatalog()
     fun loadPendingTransfers() = transferWorkflow.loadPendingTransfers()
     fun respondToTransfer(id: String, accept: Boolean) = transferWorkflow.respondToTransfer(id, accept)
-    fun reviewRuling(rulingId: String) {
-        val active=token ?: return
-        val orgId=org() ?: run { feedback="أدخل معرّف المؤسسة UUID أولًا."; return }
-        request({
-            catalogHttp("/rest/v1/rpc/commercial_catalog_review_ruling",JSONObject()
-                .put("p_organization_id",orgId).put("p_ruling_id",rulingId),active)
-        }, { feedback="تم تسجيل مراجعة المصدر: $it"; loadCatalog() })
-    }
-    fun updateProductDetails(item: CatalogProduct, payload: JSONObject) {
-        val active=token ?: return
-        val orgId=org() ?: run { feedback="أدخل معرّف المؤسسة UUID أولًا."; return }
-        request({
-            catalogHttp("/rest/v1/rpc/commercial_catalog_update_product_details",JSONObject()
-                .put("p_organization_id",orgId).put("p_product_id",item.id).put("p_product",payload),active)
-        }, { feedback="تم تحديث تفاصيل الصنف ${item.catalogCode} مع الحفاظ على وحداته واستهدافه وأحكامه."; editingProduct=null; loadCatalog() })
-    }
+    val productMaintenanceWorkflow = CatalogProductMaintenanceWorkflow(
+        accessToken = { token },
+        organizationId = { org() },
+        request = { action, onSuccess, onFailure -> request(action, onSuccess, onFailure) },
+        onFeedback = { feedback = it },
+        onProductUpdated = { item, _ ->
+            feedback = "تم تحديث تفاصيل الصنف ${item.catalogCode} مع الحفاظ على وحداته واستهدافه وأحكامه."
+            editingProduct = null
+            loadCatalog()
+        },
+        onRulingReviewed = { result ->
+            feedback = "تم تسجيل مراجعة المصدر: $result"
+            loadCatalog()
+        }
+    )
+    fun reviewRuling(rulingId: String) = productMaintenanceWorkflow.reviewRuling(rulingId)
+    fun updateProductDetails(item: CatalogProduct, payload: JSONObject) = productMaintenanceWorkflow.updateProductDetails(item, payload)
 
     Column(Modifier.fillMaxSize().padding(horizontal=14.dp)) {
         Row(verticalAlignment=Alignment.CenterVertically) {
