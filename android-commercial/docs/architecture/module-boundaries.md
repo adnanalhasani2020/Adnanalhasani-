@@ -191,3 +191,6 @@ The catalog screen owns interaction and request orchestration. JSON-to-domain ma
 
 
 - `ReportsPeriodControls.kt` owns only the period-preset and manual date-range controls. Date validation, date-window calculations, and report filtering remain in `ReportsCenterScreen.kt`/report domain helpers.
+
+
+- `ReportsExportLaunchers.kt` owns Android document-picker lifecycle, stream writing, sharing, and the date/source guards for export actions. `ReportExport.kt` owns the actual PDF/XLSX/print renderers; the screen owns export-row selection and metadata.
