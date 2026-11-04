@@ -149,6 +149,9 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn("تجاوزت مجاميع أو أرصدة دفتر الأستاذ نطاق الأرقام الدقيق؛ تم حجب التقرير.", self.screen)
 
     def test_party_statement_arithmetic_is_preflighted_exactly(self):
+        self.assertNotIn("sumOf", PARTY_ROWS.read_text(encoding="utf-8"))
+        self.assertIn("Math.subtractExact(line.debitMinor, line.creditMinor)", PARTY_ROWS.read_text(encoding="utf-8"))
+        self.assertIn("sumReportAmountsExactly", PARTY_ROWS.read_text(encoding="utf-8"))
         self.assertIn("reportPartyStatementArithmeticIsExact", self.screen)
         self.assertIn("Math.subtractExact(line.debitMinor, line.creditMinor)", self.screen)
         self.assertIn("Math.subtractExact(line.creditMinor, line.debitMinor)", self.screen)
@@ -247,6 +250,9 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn('val costProfitError', self.screen)
 
     def test_cash_report_uses_mapped_cash_accounts_and_posted_ledger_only(self):
+        self.assertNotIn("sumOf", FINANCIAL_REPORT_LINES.read_text(encoding="utf-8"))
+        self.assertIn("Math.subtractExact(line.debitMinor, line.creditMinor)", FINANCIAL_REPORT_LINES.read_text(encoding="utf-8"))
+        self.assertIn("sumReportAmountsExactly", FINANCIAL_REPORT_LINES.read_text(encoding="utf-8"))
         self.assertIn('loadCommercialCloudGlAccountMappings(context)', self.screen)
         self.assertIn('val cashKeys = setOf("cash", "bank", "card_clearing", "other_receipts", "check_clearing", "other_disbursements")', self.screen)
         self.assertIn('رصيد افتتاحي', self.screen)
