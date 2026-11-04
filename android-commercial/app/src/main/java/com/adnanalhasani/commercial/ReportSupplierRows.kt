@@ -12,7 +12,8 @@ internal fun buildSupplierReportRows(
     endExclusive: Long,
     startText: String,
     endText: String,
-    supplierObligationInputs: List<SupplierObligationInput>
+    supplierObligationInputs: List<SupplierObligationInput>,
+    supplierMovementInputs: List<ReportSupplierMovement>
 ): List<ReportLine>? = when (selectedReport) {
         "فروقات أسعار فواتير الموردين" -> cloudPurchases.flatMap { purchase ->
             purchase.supplierInvoices.filter { invoice ->
@@ -62,37 +63,32 @@ internal fun buildSupplierReportRows(
                 "إجمالي الالتزامات: ${reportMoney(totals.amountDueMinor, totals.currencyCode, true)} · المسدد: ${reportMoney(totals.amountPaidMinor, totals.currencyCode, true)} · ${balanceLabel}: ${reportMoney(totals.balanceMinor, totals.currencyCode, true)}"
             )
         }.sortedByDescending { it.amount }
-        "كشف حركات الموردين" -> {
-            val invoiceMovements = cloudPurchases.flatMap { purchase ->
-                purchase.supplierInvoices.filter { invoice ->
-                    invoice.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed") &&
-                        invoice.obligation != null && invoice.obligation.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed") &&
-                        invoice.obligation.amountDueMinor > 0L && invoice.obligation.currencyCode.matches(Regex("^[A-Z]{3}$"))
-                }.map { invoice ->
-                    val obligation = invoice.obligation!!
-                    ReportSupplierMovement(invoice.recordedAt.take(10), purchase.supplierId, purchase.supplierName, obligation.currencyCode,
-                        "فاتورة مورد ${invoice.invoiceNumber.ifBlank { invoice.id }}", obligation.amountDueMinor, "مدين · التزام فاتورة مسجل")
+        "كشف حركات الموردين" -> supplierMovementInputs
+            .groupBy { Triple(it.supplierId, it.supplier, it.currency) }
+            .toSortedMap(compareBy<Triple<String, String, String>> { it.second }.thenBy { it.third }.thenBy { it.first })
+            .flatMap { (key, supplierMoves) ->
+                val ordered = supplierMoves.sortedWith(
+                    compareBy<ReportSupplierMovement> { it.date }.thenBy { it.reference }
+                )
+                val opening = sumReportAmountsExactly(
+                    ordered.filter { reportDateMillis(it.date)?.let { timestamp -> timestamp < startMillis } == true }
+                        .map { it.amount }
+                )
+                val periodMoves = ordered.filter {
+                    reportDateMillis(it.date)?.let { timestamp -> timestamp >= startMillis && timestamp < endExclusive } == true
                 }
-            }
-            val paymentMovements = cloudSupplierPayments.map { payment ->
-                ReportSupplierMovement(payment.recordedAt.take(10), payment.supplierId, payment.supplierName, payment.currencyCode,
-                    "دفعة ${payment.id}", -payment.amountMinor, "دائن · سداد مرحل · فاتورة ${payment.invoiceNumber.ifBlank { payment.supplierInvoiceId }} · ${payment.paymentMethod}")
-            }
-            (invoiceMovements + paymentMovements).filter { movement -> supplierFilter.isBlank() || movement.supplier.contains(supplierFilter.trim(), true) }
-                .groupBy { Triple(it.supplierId, it.supplier, it.currency) }.toSortedMap(compareBy<Triple<String, String, String>> { it.second }.thenBy { it.third }.thenBy { it.first }).flatMap { (key, supplierMoves) ->
-                    val ordered = supplierMoves.sortedWith(compareBy<ReportSupplierMovement> { it.date }.thenBy { it.reference })
-                    val opening = ordered.filter { reportDateMillis(it.date)?.let { ts -> ts < startMillis } == true }.sumOf { it.amount }
-                    val periodMoves = ordered.filter { reportDateMillis(it.date)?.let { ts -> ts >= startMillis && ts < endExclusive } == true }
-                    if (periodMoves.isEmpty() && opening == 0L) emptyList() else buildList {
-                        var balance = opening
-                        if (opening != 0L) add(ReportLine(startText, "افتتاحي", key.second, opening, key.third, "رصيد افتتاحي وفق الفواتير والدفعات المحملة · المورد: ${key.first}"))
-                        periodMoves.forEach { movement ->
-                            balance = Math.addExact(balance, movement.amount)
-                            add(ReportLine(movement.date, movement.reference, movement.supplier, movement.amount, movement.currency, "${movement.description} · الرصيد الجزئي: ${reportMoney(balance, movement.currency, true)} · المورد: ${movement.supplierId}"))
-                        }
-                        add(ReportLine(endText, "ختامي", key.second, balance, key.third, "رصيد جزئي للفواتير والدفعات فقط؛ لا يشمل مرتجعات أو تسويات غير محملة · المورد: ${key.first}"))
+                if (periodMoves.isEmpty() && opening == 0L) emptyList() else buildList {
+                    var balance = opening
+                    if (opening != 0L) add(ReportLine(startText, "افتتاحي", key.second, opening, key.third,
+                        "رصيد افتتاحي وفق الفواتير والدفعات المحملة · المورد: ${key.first}"))
+                    periodMoves.forEach { movement ->
+                        balance = Math.addExact(balance, movement.amount)
+                        add(ReportLine(movement.date, movement.reference, movement.supplier, movement.amount, movement.currency,
+                            "${movement.description} · الرصيد الجزئي: ${reportMoney(balance, movement.currency, true)} · المورد: ${movement.supplierId}"))
                     }
+                    add(ReportLine(endText, "ختامي", key.second, balance, key.third,
+                        "رصيد جزئي للفواتير والدفعات فقط؛ لا يشمل مرتجعات أو تسويات غير محملة · المورد: ${key.first}"))
                 }
-        }
+            }
         else -> null
 }

@@ -321,6 +321,17 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertNotIn("(due - paid).coerceAtLeast(0L)", self.screen)
         self.assertNotIn("rows.sumOf { it.third.amountDueMinor }", self.screen)
 
+
+    def test_supplier_movement_statement_preflights_exact_opening_and_running_balances(self):
+        self.assertIn("buildSupplierMovementInputs(", self.screen)
+        self.assertIn('"كشف حركات الموردين" -> supplierMovementError', self.screen)
+        self.assertIn('selectedReport == "كشف حركات الموردين" && sourceErrorForReport(selectedReport).isNotBlank()', self.screen)
+        self.assertIn("reportSupplierMovementValidationError(", self.screen)
+        self.assertIn("Math.addExact(balance, movement.amount)", self.screen)
+        self.assertIn("sumReportAmountsExactly(", self.screen)
+        self.assertIn("it.amount == Long.MIN_VALUE", self.screen)
+        self.assertIn("تجاوزت حركات أو أرصدة كشف الموردين نطاق الأرقام الدقيق", self.screen)
+
     def test_customer_operational_statement_validates_dates_refunds_and_exact_balances(self):
         self.assertIn("buildCustomerOperationalStatementMovements", self.screen)
         self.assertIn('"أرصدة العملاء وكشف الحساب" -> customerOperationalStatementError', self.screen)

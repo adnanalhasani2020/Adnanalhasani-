@@ -6,6 +6,7 @@ SCREEN = ANDROID / "ReportsCenterScreen.kt"
 DATA_STATE = ANDROID / "ReportsCenterData.kt"
 ROWS = ANDROID / "ReportSupplierRows.kt"
 VALIDATION = ANDROID / "ReportSupplierValidation.kt"
+MAPPERS = ANDROID / "ReportDomainMappers.kt"
 
 
 def test_supplier_report_row_assembly_has_a_dedicated_owner():
@@ -25,7 +26,8 @@ def test_supplier_report_row_assembly_has_a_dedicated_owner():
         assert marker not in screen
     assert "calculateSupplierInvoicePriceVariance" in rows
     assert "calculateSupplierObligationTotals" in rows
-    assert "cloudSupplierPayments" in rows
+    assert "supplierMovementInputs" in rows
+    assert "sumReportAmountsExactly" in rows
     assert "supplierFilter" in rows
     assert "Math.addExact" in rows
 
@@ -39,6 +41,7 @@ def test_supplier_invoice_and_obligation_validation_has_a_dedicated_owner():
         "reportSupplierInvoiceDetailValidationError(",
         "reportSupplierPurchaseSummaryValidationError(",
         "reportSupplierObligationsValidationError(",
+        "reportSupplierMovementValidationError(",
     ):
         assert marker in data
         assert marker in validation
@@ -51,4 +54,6 @@ def test_supplier_invoice_and_obligation_validation_has_a_dedicated_owner():
     ):
         assert marker in validation
     assert "calculateSupplierObligationTotals(supplierObligationInputs)" in validation
+    assert "reportSupplierMovementValidationError(" in validation
+    assert "buildSupplierMovementInputs(" in MAPPERS.read_text(encoding="utf-8")
     assert "calculateSupplierInvoicePriceVariance(invoice.toPriceVarianceInput())" in validation

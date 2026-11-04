@@ -243,3 +243,46 @@ internal fun List<Pair<CommercialCloudPurchaseDocument, CommercialCloudSupplierI
             amountPaidMinor = obligation.amountPaidMinor
         )
     }
+
+
+/** Builds the shared supplier invoice/payment movement projection used by validation and rows. */
+internal fun buildSupplierMovementInputs(
+    purchases: List<CommercialCloudPurchaseDocument>,
+    payments: List<CommercialCloudSupplierPaymentMovement>,
+    supplierFilter: String
+): List<ReportSupplierMovement> {
+    val invoiceMovements = purchases.flatMap { purchase ->
+        purchase.supplierInvoices.filter { invoice ->
+            invoice.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed") &&
+                invoice.obligation != null &&
+                invoice.obligation.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed") &&
+                invoice.obligation.amountDueMinor > 0L &&
+                invoice.obligation.currencyCode.matches(Regex("^[A-Z]{3}$"))
+        }.map { invoice ->
+            val obligation = invoice.obligation!!
+            ReportSupplierMovement(
+                invoice.recordedAt.take(10),
+                purchase.supplierId,
+                purchase.supplierName,
+                obligation.currencyCode,
+                "فاتورة مورد ${invoice.invoiceNumber.ifBlank { invoice.id }}",
+                obligation.amountDueMinor,
+                "مدين · التزام فاتورة مسجل"
+            )
+        }
+    }
+    val paymentMovements = payments.map { payment ->
+        ReportSupplierMovement(
+            payment.recordedAt.take(10),
+            payment.supplierId,
+            payment.supplierName,
+            payment.currencyCode,
+            "دفعة ${payment.id}",
+            -payment.amountMinor,
+            "دائن · سداد مرحل · فاتورة ${payment.invoiceNumber.ifBlank { payment.supplierInvoiceId }} · ${payment.paymentMethod}"
+        )
+    }
+    return (invoiceMovements + paymentMovements).filter { movement ->
+        supplierFilter.isBlank() || movement.supplier.contains(supplierFilter.trim(), true)
+    }
+}
