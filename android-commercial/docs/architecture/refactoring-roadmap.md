@@ -283,3 +283,6 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 
 
 - Added `ReportsCenterUiState.kt` as the single owner for report filter/selection/export-feedback state; `ReportsCenterScreen.kt` now consumes the state holders through delegated properties. The report-row orchestration and Compose presentation remain to be decomposed.
+
+
+- Extracted the report period preset/manual date input UI to `ReportsPeriodControls.kt`; the component emits range changes through callbacks while date validation and report filtering remain with the screen. Added a source-ownership test.
