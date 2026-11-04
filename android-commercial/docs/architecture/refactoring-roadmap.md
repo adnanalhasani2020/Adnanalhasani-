@@ -289,3 +289,6 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 
 
 - Extracted Android document-picker callbacks and CSV/XLSX/PDF stream/share lifecycle into `ReportsExportLaunchers.kt`; native document rendering remains in `ReportExport.kt`, and report-row selection remains in the screen. Added an ownership test and moved source-contract assertions to the new owner.
+
+
+- Extracted report category chips, catalog cards, source-readiness labels, and report-title selection mapping to `ReportsCatalogSection.kt` using a `LazyListScope` extension. The screen now passes state and callbacks; catalog definitions and calculations remain in their existing owners.
