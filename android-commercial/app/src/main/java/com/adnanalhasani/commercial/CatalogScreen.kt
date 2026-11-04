@@ -325,6 +325,15 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     fun transferCatalog() = transferWorkflow.transferCatalog()
     fun loadPendingTransfers() = transferWorkflow.loadPendingTransfers()
     fun respondToTransfer(id: String, accept: Boolean) = transferWorkflow.respondToTransfer(id, accept)
+    val productLinkWorkflow = CatalogProductLinkWorkflow(
+        accessToken = { token },
+        organizationId = { org() },
+        selectedCatalogIds = { selectedCatalogIds },
+        selectedActivityCode = { selectedActivityCode },
+        request = { action, onSuccess, onFailure -> request(action, onSuccess, onFailure) },
+        onSelectionCleared = { selectedCatalogIds = emptySet() },
+        onFeedback = { feedback = it }
+    )
     val productMaintenanceWorkflow = CatalogProductMaintenanceWorkflow(
         accessToken = { token },
         organizationId = { org() },
@@ -424,36 +433,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                                 Text("تم تحديد ${selectedCatalogIds.size} صنفًا", fontWeight=FontWeight.SemiBold)
                                 Text("سيتم ربطها بدليل المؤسسة دون تسعير، وستبقى غير متاحة للبيع حتى ضبط أسعارها.", style=MaterialTheme.typography.bodySmall)
                                 Row(horizontalArrangement=Arrangement.spacedBy(8.dp), verticalAlignment=Alignment.CenterVertically) {
-                                    Button(onClick={
-                                        val active=token
-                                        val orgId=org()
-                                        if(active==null || orgId==null) { feedback="أدخل معرّف المؤسسة الصحيح وسجّل الدخول."; return@Button }
-                                        if(selectedCatalogIds.size>100) { feedback="الحد الأقصى للعملية الواحدة 100 صنف."; return@Button }
-                                        val ids=selectedCatalogIds.toList()
-                                        request({
-                                            catalogHttp("/rest/v1/rpc/commercial_catalog_link_unpriced_items",
-                                                JSONObject().put("p_organization_id",orgId).put("p_global_item_ids",JSONArray(ids)),active)
-                                        }, { raw ->
-                                            val result=runCatching { JSONObject(raw) }.getOrNull()
-                                            val added=result?.optInt("newly_linked_count",-1) ?: -1
-                                            val existing=result?.optInt("already_linked_count",-1) ?: -1
-                                            if (selectedActivityCode.isBlank()) {
-                                                selectedCatalogIds=emptySet()
-                                                feedback=if(added>=0 && existing>=0) "تم ربط $added صنفًا جديدًا؛ $existing كان مرتبطًا مسبقًا. لم تُضبط أسعار ولم تُفعّل للبيع." else "اكتملت عملية الربط دون تسعير. الأصناف الجديدة غير متاحة للبيع."
-                                            } else {
-                                                request({
-                                                    catalogHttp("/rest/v1/rpc/commercial_catalog_assign_items_to_activity",
-                                                        JSONObject().put("p_organization_id",orgId).put("p_activity_node_code",selectedActivityCode).put("p_global_item_ids",JSONArray(ids)),active)
-                                                }, { mappingRaw ->
-                                                    val mapped=runCatching { JSONObject(mappingRaw) }.getOrNull()
-                                                    selectedCatalogIds=emptySet()
-                                                    feedback="تم ربط $added صنفًا جديدًا ($existing موجود مسبقًا)، وإسناد ${mapped?.optInt("newly_assigned_count",0) ?: 0} صنف للنشاط المحدد. الأصناف غير مسعّرة وغير متاحة للبيع."
-                                                }, { failure ->
-                                                    feedback="تم ربط الأصناف بدليل المؤسسة لكنها لم تُسند للنشاط: ${failure.message ?: "خطأ غير معروف"}. أعد المحاولة مع بقاء التحديد."
-                                                })
-                                            }
-                                        })
-                                    }, enabled=!busy && selectedCatalogIds.size<=100) { Text("موافق — ربط بدون تسعير") }
+                                    Button(onClick={productLinkWorkflow.linkSelectedItems()}, enabled=!busy && selectedCatalogIds.size<=100) { Text("موافق — ربط بدون تسعير") }
                                     TextButton(onClick={selectedCatalogIds=emptySet()}, enabled=!busy) { Text("إلغاء التحديد") }
                                 }
                             }
