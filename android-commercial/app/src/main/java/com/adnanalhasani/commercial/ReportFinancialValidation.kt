@@ -69,10 +69,15 @@ internal fun reportCashFlowValidationError(
                 movements.filter { it.first.currencyCode == currency }
                     .groupBy { it.first.accountId to it.first.accountCode }
                     .values.forEach { accountMoves ->
-                        val opening = accountMoves.filter { it.second < (startDate ?: LocalDate.MIN) }
+                        val orderedAccountMoves = accountMoves.sortedWith(
+                            compareBy<Triple<CommercialCloudJournalLine, LocalDate, Long>> { it.second }
+                                .thenBy { it.first.entryNumber }
+                                .thenBy { it.first.lineNumber }
+                        )
+                        val opening = orderedAccountMoves.filter { it.second < (startDate ?: LocalDate.MIN) }
                             .fold(0L) { total, move -> Math.addExact(total, move.third) }
                         var balance = opening
-                        val periodMoves = accountMoves.filter {
+                        val periodMoves = orderedAccountMoves.filter {
                             startDate != null && endDate != null &&
                                 !it.second.isBefore(startDate) && !it.second.isAfter(endDate)
                         }
