@@ -40,6 +40,7 @@ SUPPLIER_VALIDATION = ROOT / "android-commercial/app/src/main/java/com/adnanalha
 PROFITABILITY_VALIDATION = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportProfitabilityValidation.kt"
 OPERATIONAL_VALIDATION = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportOperationalValidation.kt"
 FINANCIAL_VALIDATION = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportFinancialValidation.kt"
+TAX_VALIDATION = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportTaxValidation.kt"
 PRICE_VARIANCE_CALCULATIONS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/SupplierInvoicePriceVarianceCalculations.kt"
 COST_PROFIT_CALCULATIONS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CostProfitCalculations.kt"
 CONTRACT = ROOT / "android-commercial/docs/reports-data-contract.md"
@@ -51,7 +52,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.sales_rows = SALES_ROWS.read_text(encoding="utf-8")
-        cls.screen = SCREEN.read_text(encoding="utf-8") + DATA_STATE.read_text(encoding="utf-8") + CLOUD_DATA.read_text(encoding="utf-8") + PERIOD_CONTROLS.read_text(encoding="utf-8") + EXPORT_LAUNCHERS.read_text(encoding="utf-8") + CATALOG_SECTION.read_text(encoding="utf-8") + INVENTORY_ROWS.read_text(encoding="utf-8") + LEDGER_ROWS.read_text(encoding="utf-8") + LEDGER_CLASSIFICATION.read_text(encoding="utf-8") + PARTY_ROWS.read_text(encoding="utf-8") + SALES_ROWS.read_text(encoding="utf-8") + SUPPLIER_ROWS.read_text(encoding="utf-8") + OPERATIONAL_ROWS.read_text(encoding="utf-8") + DERIVED_ROWS.read_text(encoding="utf-8") + TAX_ROWS.read_text(encoding="utf-8") + PROFITABILITY_ROWS.read_text(encoding="utf-8") + RESULT_SECTION.read_text(encoding="utf-8") + FILTER_SECTION.read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8") + INVENTORY_REPORT_LINES.read_text(encoding="utf-8") + FINANCIAL_REPORT_LINES.read_text(encoding="utf-8") + DOMAIN_MAPPERS.read_text(encoding="utf-8") + LEDGER_VALIDATION.read_text(encoding="utf-8") + SUPPLIER_VALIDATION.read_text(encoding="utf-8") + PROFITABILITY_VALIDATION.read_text(encoding="utf-8") + OPERATIONAL_VALIDATION.read_text(encoding="utf-8") + FINANCIAL_VALIDATION.read_text(encoding="utf-8") + PARTY_VALIDATION.read_text(encoding="utf-8")
+        cls.screen = SCREEN.read_text(encoding="utf-8") + DATA_STATE.read_text(encoding="utf-8") + CLOUD_DATA.read_text(encoding="utf-8") + PERIOD_CONTROLS.read_text(encoding="utf-8") + EXPORT_LAUNCHERS.read_text(encoding="utf-8") + CATALOG_SECTION.read_text(encoding="utf-8") + INVENTORY_ROWS.read_text(encoding="utf-8") + LEDGER_ROWS.read_text(encoding="utf-8") + LEDGER_CLASSIFICATION.read_text(encoding="utf-8") + PARTY_ROWS.read_text(encoding="utf-8") + SALES_ROWS.read_text(encoding="utf-8") + SUPPLIER_ROWS.read_text(encoding="utf-8") + OPERATIONAL_ROWS.read_text(encoding="utf-8") + DERIVED_ROWS.read_text(encoding="utf-8") + TAX_ROWS.read_text(encoding="utf-8") + PROFITABILITY_ROWS.read_text(encoding="utf-8") + RESULT_SECTION.read_text(encoding="utf-8") + FILTER_SECTION.read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8") + INVENTORY_REPORT_LINES.read_text(encoding="utf-8") + FINANCIAL_REPORT_LINES.read_text(encoding="utf-8") + DOMAIN_MAPPERS.read_text(encoding="utf-8") + LEDGER_VALIDATION.read_text(encoding="utf-8") + SUPPLIER_VALIDATION.read_text(encoding="utf-8") + PROFITABILITY_VALIDATION.read_text(encoding="utf-8") + OPERATIONAL_VALIDATION.read_text(encoding="utf-8") + FINANCIAL_VALIDATION.read_text(encoding="utf-8") + PARTY_VALIDATION.read_text(encoding="utf-8") + TAX_VALIDATION.read_text(encoding="utf-8")
         cls.catalog = CATALOG.read_text(encoding="utf-8")
         cls.repository = REPOSITORY.read_text(encoding="utf-8")
         cls.inventory_repository = INVENTORY_REPOSITORY.read_text(encoding="utf-8")
@@ -365,6 +366,14 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn('"لوحة المؤشرات", "المبيعات حسب العميل", "المبيعات حسب حالة السداد", "متوسط قيمة الفاتورة", "مقارنة الفترات", "مقارنة فترتين" ->', self.screen)
         self.assertIn("salesDocumentsLoadError.ifBlank { salesRowsArithmeticError }", self.screen)
         self.assertIn('"أرصدة العملاء وكشف الحساب" -> customerOperationalStatementError', self.screen)
+
+    def test_sales_discount_and_recorded_tax_reports_use_sales_only_validation(self):
+        self.assertIn("reportSalesTaxDiscountValidationError(", self.screen)
+        self.assertIn('"الخصومات على فواتير المبيعات", "الضرائب المسجلة على المبيعات" -> salesTaxDiscountError', self.screen)
+        self.assertIn("salesDocumentsLoadError", TAX_VALIDATION.read_text(encoding="utf-8"))
+        self.assertIn("doc.discountMinor > doc.subtotalMinor", TAX_VALIDATION.read_text(encoding="utf-8"))
+        self.assertIn("doc.taxMinor < 0L", TAX_VALIDATION.read_text(encoding="utf-8"))
+        self.assertNotIn("purchasesLoadError", TAX_VALIDATION.read_text(encoding="utf-8").split("internal fun reportSalesTaxDiscountValidationError", 1)[1])
 
     def test_customer_operational_statement_validates_dates_refunds_and_exact_balances(self):
         self.assertIn("buildCustomerOperationalStatementMovements", self.screen)
