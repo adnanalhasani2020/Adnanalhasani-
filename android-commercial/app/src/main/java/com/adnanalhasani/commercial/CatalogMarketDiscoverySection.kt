@@ -33,7 +33,6 @@ internal fun CatalogMarketDiscoverySection(
     onSaveCoordinates: (String?, String?) -> Unit,
     onLoadMarketContext: () -> Unit,
     onLoadNearbyFromDevice: () -> Unit,
-    onStartNearbyCatalog: () -> Unit,
     onLoadSelectedPriceSuggestions: () -> Unit,
     onCreateProduct: () -> Unit,
     onConfigureSelectedCatalogItems: () -> Unit,
