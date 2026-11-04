@@ -325,3 +325,13 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 
 
 - Extracted supplier/customer, row, currency, status, and ledger-account filter controls into `ReportsFilterSection.kt`; added an ownership test. Filter application remains with the screen's selected-row pipeline.
+
+
+## 2026-11-04 — Reports center decomposition
+
+- Reduced `ReportsCenterScreen.kt` from approximately 1,700 lines to a focused ~215-line Compose composition root.
+- Extracted cloud loading, interactive state, period controls, filter controls, report catalog cards, result cards/export actions, and Android export launchers.
+- Extracted inventory, ledger, party statements, sales, supplier, operational, derived performance/aging/collection, detailed tax, and profitability report row builders/mappers into focused files.
+- Added source-ownership tests for each extracted responsibility and updated source-contract tests to follow the new owners without removing assertions.
+- Added `ReportsCenterData.kt` as the report data orchestration owner for date/source validation, calculation coordination, catalog filtering, selected-row dispatch/filtering, and summary totals.
+- Remaining follow-up: review whether the data orchestration owner should be split further by domain after CI confirms this boundary refactor; no production schema, RPC, or accounting formulas were changed.
