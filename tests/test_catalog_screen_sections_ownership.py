@@ -59,8 +59,10 @@ class CatalogScreenSectionsOwnershipTests(unittest.TestCase):
 
     def test_product_result_card_has_a_dedicated_presentation_owner(self):
         screen = SCREEN.read_text(encoding="utf-8")
+        browse = SCREEN.with_name("CatalogBrowseSection.kt").read_text(encoding="utf-8")
         card = SCREEN.with_name("CatalogProductResultCard.kt").read_text(encoding="utf-8")
-        self.assertIn("CatalogProductResultCard(", screen)
+        self.assertIn("CatalogBrowseSection(", screen)
+        self.assertIn("CatalogProductResultCard(", browse)
         self.assertIn("internal fun CatalogProductResultCard(", card)
         self.assertIn("onSelectionChange: (Boolean) -> Unit", card)
         self.assertIn("onAddToInventory: (CatalogProduct, String, String, String, String, String) -> Unit", card)
