@@ -36,7 +36,7 @@ internal class CatalogDirectoryWorkflow(
         }, { raw ->
             val directory = parseCatalogDirectory(raw)
             onLocalUnitCodes(directory.localUnitCodes)
-            onActivityNodes(directory.directory.activityNodes)
+            onActivityNodes(directory.activityNodes)
             onCategories(directory.categories)
             onUnits(directory.units)
             if (initialActivityCode().isNotBlank()) {
@@ -44,7 +44,7 @@ internal class CatalogDirectoryWorkflow(
                 if (inferredSector.isNotBlank()) onSector(inferredSector)
                 directory.activityNodes.firstOrNull { it.code.equals(initialActivityCode, true) }?.defaultBusinessLevelCode?.takeIf { it.isNotBlank() }?.let { onBusinessLevel(it) }
             }
-            onFeedback("تم تحميل ${directory.categories.size} تصنيفًا و${directory.units.size} وحدة قياس و${directory.directory.activityNodes.count { it.nodeKind.equals("sector", true) }} قطاعًا و${directory.directory.activityNodes.count { it.nodeKind.equals("activity", true) }} نشاطًا و${directory.directory.activityNodes.count { it.nodeKind.equals("specialization", true) }} تخصصًا."
+            onFeedback("تم تحميل ${directory.categories.size} تصنيفًا و${directory.units.size} وحدة قياس و${directory.directory.activityNodes.count { it.nodeKind.equals("sector", true) }} قطاعًا و${directory.directory.activityNodes.count { it.nodeKind.equals("activity", true) }} نشاطًا و${directory.directory.activityNodes.count { it.nodeKind.equals("specialization", true) }} تخصصًا.")
             onDirectoriesLoaded()
         })
     }
