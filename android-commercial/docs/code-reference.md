@@ -142,3 +142,9 @@
 - `ReportFinancialLines.kt` owns the pure row assembly for the ledger cash-flow report and the tax/discount summary, including the fail-closed source-error state.
 - `ReportsCenterScreen.kt` retains the report controls, data loading, report selection, and rendering; shared `reportMoney` and `reportDateMillis` helpers are exposed internally for the extracted mapper.
 - The extraction preserves posted-ledger source filtering, currency grouping, opening/closing balance logic, document-date windows, and the existing exact arithmetic/error handling.
+
+
+### Catalog activity hierarchy extraction (2026-11-04)
+- `CatalogActivityHierarchy.kt` owns the activity-directory node model and pure parent-chain/sector/business-level selector helpers.
+- `CatalogScreen.kt` retains activity-directory loading/parsing, selected activity state, menus, RPC calls, catalog discovery, editing, transfers, and invoice-purchase linking.
+- The extraction does not change activity codes, RPC parameters, default business-level selection, or the relationship between global catalog items and organization offerings.
