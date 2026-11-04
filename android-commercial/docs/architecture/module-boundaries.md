@@ -250,3 +250,9 @@ The catalog screen owns interaction and request orchestration. JSON-to-domain ma
 - `ReportProfitabilityValidation.kt` owns both historical cost/profit validation and item-profitability invoice/return integrity gates; calculation orchestration remains in `ReportsCenterData.kt`.
 - `ReportsCenterData.kt` retains loaded source projections, calculation orchestration, and report-to-error routing; calculation formulas and row builders remain in their existing owners.
 - The extraction preserves cloud-mode/source-error precedence, period-scoped checks where originally applicable, Arabic error messages, and exact-balance validation for operational customer movements.
+
+
+### Reports financial source validation extraction (2026-11-05)
+
+- `ReportFinancialValidation.kt` owns current-inventory valuation readiness and cash-flow source/integrity gates. Cash-flow validation preflights the exact subtraction, opening-balance, running-balance, and debit/credit movement arithmetic used by `ReportFinancialLines.kt`.
+- `ReportsCenterData.kt` retains only report-title routing to the validation functions. Row assembly remains in `ReportInventoryRows.kt` and `ReportFinancialLines.kt`; no financial formulas or source queries were moved.
