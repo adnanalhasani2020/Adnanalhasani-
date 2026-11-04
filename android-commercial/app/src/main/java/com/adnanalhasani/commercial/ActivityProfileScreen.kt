@@ -10,26 +10,25 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import org.json.JSONArray
 import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
 import java.time.LocalDate
+import java.util.UUID
 import java.util.concurrent.Executors
 
-private fun profileSessionPreferences(context: Context) = EncryptedSharedPreferences.create(
-    context,
-    "ruh_catalog_auth_session",
-    MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
-    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-)
+internal fun hasSavedCommercialAuthSession(context: Context): Boolean =
+    runCatching { commercialCloudSessionPreferences(context).getString("refresh_token", null).orEmpty().isNotBlank() }.getOrDefault(false)
+
+internal fun hasSavedCommercialCloudContext(context: Context): Boolean {
+    val prefs = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+    return listOf("organization_id", "activity_id", "location_id").all {
+        prefs.getString(it, null).orEmpty().isNotBlank()
+    }
+}
 
 private val profileIo = Executors.newSingleThreadExecutor()
 private val profileMain = Handler(Looper.getMainLooper())
@@ -38,38 +37,15 @@ private data class BusinessActivityOption(
     val code: String, val nameAr: String, val nameEn: String, val pathAr: String, val defaultBusinessLevelCode: String
 )
 
-private fun supabaseRequest(path: String, payload: JSONObject, token: String? = null): JSONObject {
-    val base = BuildConfig.SUPABASE_URL.trimEnd('/')
-    val anon = BuildConfig.SUPABASE_ANON_KEY
-    require(base.startsWith("https://") && anon.isNotBlank()) {
-        "أضف SUPABASE_URL وSUPABASE_ANON_KEY في إعدادات بناء Android أولًا."
-    }
-    val connection = (URL("$base$path").openConnection() as HttpURLConnection).apply {
-        requestMethod = "POST"
-        connectTimeout = 15000
-        readTimeout = 20000
-        doOutput = true
-        setRequestProperty("apikey", anon)
-        setRequestProperty("Content-Type", "application/json")
-        setRequestProperty("Accept", "application/json")
-        if (token != null) setRequestProperty("Authorization", "Bearer $token")
-    }
-    return try {
-        connection.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
-        val stream = if (connection.responseCode in 200..299) connection.inputStream else connection.errorStream
-        val raw = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
-        if (connection.responseCode !in 200..299) {
-            val detail = runCatching { JSONObject(raw).optString("message") }.getOrDefault("")
-            throw IllegalStateException(detail.ifBlank { "تعذر إكمال الطلب إلى Supabase (HTTP ${connection.responseCode})." })
-        }
-        if (raw.isBlank()) JSONObject() else if (raw.trimStart().startsWith("{")) JSONObject(raw) else JSONObject().put("result", raw)
-    } finally {
-        connection.disconnect()
-    }
-}
 
 @Composable
-internal fun ActivityProfileScreen(onBack: () -> Unit, onCatalog: () -> Unit) {
+internal fun ActivityProfileScreen(
+    onBack: () -> Unit,
+    onCatalog: () -> Unit,
+    showBackButton: Boolean = true,
+    onProfileCreated: () -> Unit = {},
+    onAuthenticated: () -> Unit = {}
+) {
     val context = LocalContext.current
     var email by remember { mutableStateOf("") }
     var accountDisplayName by remember { mutableStateOf("") }
@@ -114,6 +90,40 @@ internal fun ActivityProfileScreen(onBack: () -> Unit, onCatalog: () -> Unit) {
     var busy by remember { mutableStateOf(false) }
     var feedback by remember { mutableStateOf("") }
     var created by remember { mutableStateOf(false) }
+    var restoringSession by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        val savedRefresh = runCatching { commercialCloudSessionPreferences(context).getString("refresh_token", null).orEmpty() }.getOrDefault("")
+        if (savedRefresh.isBlank()) return@LaunchedEffect
+        busy = true
+        restoringSession = true
+        profileIo.execute {
+            val restored = runCatching {
+                val session = SupabaseClient.requestJson(
+                    "/auth/v1/token?grant_type=refresh_token",
+                    JSONObject().put("refresh_token", savedRefresh)
+                )
+                val token = session.optString("access_token")
+                val rotated = session.optString("refresh_token")
+                require(token.isNotBlank() && rotated.isNotBlank()) { "تعذر استعادة جلسة الحساب؛ سجّل الدخول من جديد." }
+                commercialCloudSessionPreferences(context).edit().putString("refresh_token", rotated).apply()
+                token
+            }
+            profileMain.post {
+                busy = false
+                restoringSession = false
+                restored.onSuccess {
+                    accessToken = it
+                    feedback = "تم استعادة جلسة حسابك."
+                    if (hasSavedCommercialCloudContext(context)) onAuthenticated()
+                }.onFailure {
+                    runCatching { commercialCloudSessionPreferences(context).edit().remove("refresh_token").apply() }
+                    accessToken = null
+                    feedback = "انتهت جلسة الحساب أو لم تعد صالحة. سجّل الدخول مرة أخرى."
+                }
+            }
+        }
+    }
 
     fun runRequest(action: () -> String, onSuccess: (String) -> Unit) {
         if (busy) return
@@ -133,7 +143,7 @@ internal fun ActivityProfileScreen(onBack: () -> Unit, onCatalog: () -> Unit) {
         activityDirectoryLoaded = false
         profileIo.execute {
             val result = runCatching {
-                supabaseRequest("/rest/v1/rpc/commercial_list_business_activity_nodes", JSONObject(), token)
+                SupabaseClient.requestJson("/rest/v1/rpc/commercial_list_business_activity_nodes", JSONObject(), token)
             }
             profileMain.post {
                 result.onSuccess { response ->
@@ -168,12 +178,16 @@ internal fun ActivityProfileScreen(onBack: () -> Unit, onCatalog: () -> Unit) {
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        TextButton(onClick = onBack) { Text("← رجوع إلى المتجر") }
-        Text(if (created) "تم إنشاء ملف النشاط" else "إعداد النشاط التجاري", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text("تطبيق Android أصلي • حفظ مباشر في قاعدة بيانات Supabase", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (showBackButton) TextButton(onClick = onBack) { Text("← رجوع إلى المتجر") }
+        Text(if (restoringSession) "جارٍ التحقق من حسابك" else if (created) "تم إنشاء مشروعك التجاري" else if (accessToken == null) "مرحبًا بك في متجري" else "إنشاء مشروعك التجاري", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text(if (restoringSession) "نتحقق من جلسة حسابك قبل فتح بيانات المؤسسة." else if (accessToken == null) "سجّل الدخول أو أنشئ حسابًا جديدًا للبدء. بعد ذلك سنساعدك على إنشاء مشروعك وربطه بالسحابة." else "الخطوة التالية: أدخل بيانات نشاطك وموقعه ليُنشأ مشروعك في قاعدة البيانات السحابية.", color = MaterialTheme.colorScheme.onSurfaceVariant)
 
-        if (accessToken == null) {
-            Text("تسجيل الدخول إلى Supabase", style = MaterialTheme.typography.titleMedium)
+        if (restoringSession) {
+            CircularProgressIndicator()
+            Text("يتم التحقق من جلسة Supabase المحفوظة. لن نفتح بيانات المتجر قبل اكتمال التحقق.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else if (accessToken == null) {
+            Text("الخطوة 1: حسابك", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text("يمكنك استخدام البريد وكلمة المرور، أو رمز الهاتف إذا كان مزود SMS مفعّلًا في النظام.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 FilterChip(selected = authMethod == "email", onClick = { authMethod = "email"; phoneOtpRequested = false; feedback = "" }, label = { Text("البريد وكلمة المرور") })
                 FilterChip(selected = authMethod == "phone", onClick = { authMethod = "phone"; isRegister = false; phoneOtpRequested = false; feedback = "" }, label = { Text("رمز الهاتف SMS") })
@@ -187,7 +201,7 @@ internal fun ActivityProfileScreen(onBack: () -> Unit, onCatalog: () -> Unit) {
                             runRequest({
                                 val normalized = authPhone.trim()
                                 require(normalized.matches(Regex("^\\+[1-9][0-9]{7,14}$"))) { "أدخل رقم الهاتف بصيغة دولية صحيحة، مثل +967…" }
-                                supabaseRequest("/auth/v1/otp", JSONObject().put("phone", normalized).put("create_user", false).put("channel", "sms"))
+                                SupabaseClient.requestJson("/auth/v1/otp", JSONObject().put("phone", normalized).put("create_user", false).put("channel", "sms"))
                                 phoneOtpRequested = true
                                 "تم طلب رمز SMS. أدخل الرمز المرسل إلى الرقم نفسه."
                             }, { feedback = it })
@@ -201,14 +215,17 @@ internal fun ActivityProfileScreen(onBack: () -> Unit, onCatalog: () -> Unit) {
                         onClick = {
                             runRequest({
                                 require(phoneOtp.length in 4..10) { "أدخل رمز التحقق كما وصلك." }
-                                val result = supabaseRequest("/auth/v1/verify", JSONObject().put("phone", authPhone.trim()).put("token", phoneOtp).put("type", "sms"))
+                                val result = SupabaseClient.requestJson("/auth/v1/verify", JSONObject().put("phone", authPhone.trim()).put("token", phoneOtp).put("type", "sms"))
                                 val token = result.optString("access_token")
                                 val refresh = result.optString("refresh_token")
                                 require(token.isNotBlank() && refresh.isNotBlank()) { "لم تُرجع خدمة المصادقة جلسة موثقة؛ تحقق من الرمز أو إعدادات Supabase Auth." }
-                                profileSessionPreferences(context).edit().putString("refresh_token", refresh).apply()
+                                commercialCloudSessionPreferences(context).edit().putString("refresh_token", refresh).apply()
+                                token
+                            }, { token ->
                                 accessToken = token
-                                "تم التحقق من الهاتف وتسجيل الدخول."
-                            }, { feedback = it })
+                                if (hasSavedCommercialCloudContext(context)) onAuthenticated()
+                                feedback = "تم التحقق من الهاتف وتسجيل الدخول."
+                            })
                         },
                         enabled = !busy && phoneOtp.length in 4..10,
                         modifier = Modifier.fillMaxWidth()
@@ -226,7 +243,7 @@ internal fun ActivityProfileScreen(onBack: () -> Unit, onCatalog: () -> Unit) {
                         val route = if (isRegister) "/auth/v1/signup" else "/auth/v1/token?grant_type=password"
                         val authPayload = JSONObject().put("email", email).put("password", password)
                         if (isRegister) authPayload.put("data", JSONObject().put("display_name", accountDisplayName.trim()))
-                        val result = supabaseRequest(route, authPayload)
+                        val result = SupabaseClient.requestJson(route, authPayload)
                         val session = result.optJSONObject("session") ?: result
                         val token = session.optString("access_token")
                         if (token.isBlank()) {
@@ -234,12 +251,14 @@ internal fun ActivityProfileScreen(onBack: () -> Unit, onCatalog: () -> Unit) {
                             throw IllegalStateException("لم تُرجع خدمة المصادقة جلسة صالحة.")
                         }
                         val refreshToken = session.optString("refresh_token")
-                        if (refreshToken.isNotBlank()) {
-                            profileSessionPreferences(context).edit().putString("refresh_token", refreshToken).apply()
-                        }
+                        require(refreshToken.isNotBlank()) { "لم تُرجع خدمة المصادقة رمز جلسة قابلًا للاستعادة؛ حاول تسجيل الدخول مرة أخرى." }
+                        commercialCloudSessionPreferences(context).edit().putString("refresh_token", refreshToken).apply()
+                        token
+                    }, { token ->
                         accessToken = token
-                        "تم تسجيل الدخول"
-                    }, { feedback = it })
+                        if (hasSavedCommercialCloudContext(context)) onAuthenticated()
+                        feedback = "تم تسجيل الدخول."
+                    })
                 },
                 modifier = Modifier.fillMaxWidth()
             ) { Text(if (busy) "جارٍ الاتصال..." else if (isRegister) "إنشاء حساب" else "تسجيل الدخول") }
@@ -247,10 +266,17 @@ internal fun ActivityProfileScreen(onBack: () -> Unit, onCatalog: () -> Unit) {
                 Text(if (isRegister) "لدي حساب بالفعل — تسجيل الدخول" else "إنشاء حساب جديد")
             }
             }
+        } else if (hasSavedCommercialCloudContext(context)) {
+            Text("مشروعك مرتبط بالفعل", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text("هذا الحساب مرتبط بمشروع ونشاط وموقع محفوظة في قاعدة البيانات. لن نُنشئ مشروعًا مكررًا من هذه الشاشة.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Button(onClick = onCatalog, modifier = Modifier.fillMaxWidth()) { Text("اختيار أصناف النشاط") }
+            if (showBackButton) OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("العودة إلى المتجر") }
         } else if (!created) {
-            Text("بيانات النشاط والمالك", style = MaterialTheme.typography.titleMedium)
-            ProfileField("اسم النشاط *", organizationName) { organizationName = it; if (organizationSlug.isBlank()) organizationSlug = it.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-') }
+            Text("الخطوة 2: إنشاء المشروع", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text("أدخل المعلومات الأساسية بدقة. سيتم إنشاء المؤسسة والنشاط والمقر الرئيسي وربطها بحسابك.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            ProfileField("اسم النشاط *", organizationName) { organizationName = it; if (organizationSlug.isBlank()) { val suggested = it.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-'); organizationSlug = suggested.ifBlank { "store-${UUID.randomUUID().toString().take(8)}" } } }
             ProfileField("الرابط المختصر بالإنجليزية *", organizationSlug) { organizationSlug = it.lowercase().trim() }
+            Text("إذا كان اسم النشاط بالعربية، نقترح رمزًا قصيرًا تلقائيًا. يمكنك تغييره إلى اسم إنجليزي مناسب.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             if (activityOptions.isNotEmpty()) {
                 ProfileChoice("النشاط التجاري من الدليل *", activityCode,
                     activityOptions.map { it.code to "${it.pathAr} • ${it.code}" }) { selectedCode ->
@@ -346,7 +372,7 @@ internal fun ActivityProfileScreen(onBack: () -> Unit, onCatalog: () -> Unit) {
                             if (name.isNotBlank()) locations.put(JSONObject().put("name", name.trim()).put("location_type", branchTypes[index]).put("parent_index", branchParents[index]))
                         }
                         payload.put("p_locations", locations)
-                        val result = supabaseRequest("/rest/v1/rpc/commercial_create_activity_profile", payload, token)
+                        val result = SupabaseClient.requestJson("/rest/v1/rpc/commercial_create_activity_profile", payload, token)
                         val organizationId = result.optString("organization_id")
                         val activityId = result.optString("activity_id")
                         val locationId = result.optString("location_id")
@@ -362,10 +388,10 @@ internal fun ActivityProfileScreen(onBack: () -> Unit, onCatalog: () -> Unit) {
                             .putString("country_code", country)
                             .apply()
                         "تم حفظ ملف النشاط ومعرّفاته في قاعدة البيانات بنجاح."
-                    }, { feedback = it; created = it.startsWith("تم حفظ") })
+                    }, { feedback = it; created = it.startsWith("تم حفظ"); if (created) onProfileCreated() })
                 },
                 modifier = Modifier.fillMaxWidth()
-            ) { Text(if (busy) "جارٍ الحفظ في قاعدة البيانات..." else "حفظ ملف النشاط") }
+            ) { Text(if (busy) "جارٍ إنشاء المشروع..." else "إنشاء المشروع وربطه بالسحابة") }
         } else {
             Text("تم إنشاء ملف النشاط وحفظه في Supabase. يمكنك الآن اختيار الأصناف وربطها بهذا النشاط قبل تهيئة المخزون.", color = MaterialTheme.colorScheme.primary)
             Button(onClick = onCatalog, modifier = Modifier.fillMaxWidth()) { Text("اختيار أصناف النشاط") }

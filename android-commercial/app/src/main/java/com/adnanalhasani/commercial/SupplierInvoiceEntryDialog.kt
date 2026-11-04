@@ -55,6 +55,12 @@ internal fun SupplierInvoiceEntryDialog(
             ) {
                 item {
                     Text("المورد: ${order.supplierName} · العملة: ${order.currencyCode}")
+                    if (!COMMERCIAL_CLOUD_SUPPLIER_INVOICE_DATES_RPC_READY) {
+                        Text(
+                            "تسجيل فاتورة المورد مع تاريخ الفاتورة والاستحقاق متوقف مؤقتًا؛ دالة الخادم المطلوبة غير منشورة في قاعدة الإنتاج بعد. لن يتم إرسال أو حفظ أي بيانات.",
+                            color = Color(0xFFB3261E)
+                        )
+                    }
                     OutlinedTextField(
                         value = invoiceNumber,
                         onValueChange = { invoiceNumber = it },
@@ -110,7 +116,7 @@ internal fun SupplierInvoiceEntryDialog(
             }
         },
         confirmButton = {
-            TextButton(enabled = !saving, onClick = {
+            TextButton(enabled = !saving && COMMERCIAL_CLOUD_SUPPLIER_INVOICE_DATES_RPC_READY, onClick = {
                 val number = invoiceNumber.trim()
                 val taxValue = tax.toLongOrNull()
                 val freightValue = freight.toLongOrNull()

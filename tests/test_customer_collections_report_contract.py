@@ -2,13 +2,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterScreen.kt"
-REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt"
+CATALOG = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCatalog.kt"
+REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/SalesRepository.kt"
 CALCULATIONS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportCalculations.kt"
 CONTRACT = ROOT / "android-commercial/docs/reports-data-contract.md"
 
 
 def test_customer_collections_report_uses_successful_nested_payments_and_currency():
-    screen = SCREEN.read_text(encoding="utf-8")
+    screen = SCREEN.read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8")
     calculations = CALCULATIONS.read_text(encoding="utf-8")
     contract = CONTRACT.read_text(encoding="utf-8")
     assert 'ReportCatalogItem("التحصيل حسب العميل"' in screen
@@ -23,7 +24,7 @@ def test_customer_collections_report_uses_successful_nested_payments_and_currenc
 
 
 def test_customer_collections_report_blocks_invalid_successful_payment_sources():
-    screen = SCREEN.read_text(encoding="utf-8")
+    screen = SCREEN.read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8")
     calculations = CALCULATIONS.read_text(encoding="utf-8")
     assert 'reportDateMillis(payment.createdAt) == null' in screen
     assert 'payment.amountMinor <= 0L' in screen

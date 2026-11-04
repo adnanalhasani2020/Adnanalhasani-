@@ -3,6 +3,8 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt"
+EXPENSE_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ExpenseRepository.kt"
+CUSTOMER_ACCOUNTS_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CustomerAccountsRepository.kt"
 EXPENSE_SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudExpensesScreen.kt"
 EXPENSE_INVARIANT = ROOT / "supabase/migrations/20261026210000_expense_voucher_commit_integrity.sql"
 COLLECTION_GUARD = ROOT / "supabase/migrations/20261026213000_customer_collection_respects_returns.sql"
@@ -10,7 +12,7 @@ COLLECTION_GUARD = ROOT / "supabase/migrations/20261026213000_customer_collectio
 
 class ReceivablesAndExpenseIntegrityTests(unittest.TestCase):
     def test_receivables_fetch_finalized_returns_and_subtract_approved_credit_once(self):
-        source = REPOSITORY.read_text(encoding="utf-8")
+        source = CUSTOMER_ACCOUNTS_REPOSITORY.read_text(encoding="utf-8")
         start = source.index("internal fun loadCommercialCloudReceivables(")
         end = source.index("\ninternal fun recordCommercialCloudCustomerPayment(", start)
         block = source[start:end]
@@ -62,7 +64,7 @@ class ReceivablesAndExpenseIntegrityTests(unittest.TestCase):
         self.assertIn("ENABLE ROW LEVEL SECURITY", migration)
 
     def test_daily_expense_total_uses_organization_timezone_not_device_date(self):
-        repository = REPOSITORY.read_text(encoding="utf-8")
+        repository = EXPENSE_REPOSITORY.read_text(encoding="utf-8")
         screen = EXPENSE_SCREEN.read_text(encoding="utf-8")
         self.assertIn("loadCommercialCloudExpenseReportingTimeZone", repository)
         self.assertIn("default_timezone", repository)
@@ -71,7 +73,7 @@ class ReceivablesAndExpenseIntegrityTests(unittest.TestCase):
         self.assertNotIn('SimpleDateFormat("yyyy-MM-dd", Locale.US).format(java.util.Date())', screen)
 
     def test_receivable_model_subtracts_executed_refunds_and_approved_return_credit(self):
-        source = REPOSITORY.read_text(encoding="utf-8")
+        source = CUSTOMER_ACCOUNTS_REPOSITORY.read_text(encoding="utf-8")
         start = source.index("data class CommercialCloudReceivable(")
         end = source.index("\ninternal fun loadCommercialCloudReceivables(", start)
         model = source[start:end]
@@ -128,18 +130,19 @@ class ReceivablesAndExpenseIntegrityTests(unittest.TestCase):
 
     def test_customer_and_expense_queries_do_not_predefine_pagination_limits(self):
         source = REPOSITORY.read_text(encoding="utf-8")
+        expense_source = EXPENSE_REPOSITORY.read_text(encoding="utf-8")
         customers_start = source.index("internal fun loadCommercialCloudCustomers(")
         customers_end = source.index("\ninternal fun ", customers_start + 1)
         customers_block = source[customers_start:customers_end]
-        expenses_start = source.index("internal fun loadCommercialCloudExpenses(")
-        expenses_end = source.index("\ninternal fun ", expenses_start + 1)
-        expenses_block = source[expenses_start:expenses_end]
+        expenses_start = expense_source.index("internal fun loadCommercialCloudExpenses(")
+        expenses_end = expense_source.index("\nprivate fun commercialExpensePendingPreferences", expenses_start)
+        expenses_block = expense_source[expenses_start:expenses_end]
         self.assertIn("commercialCloudPagedGet(path, access)", customers_block)
         self.assertNotIn("limit=", customers_block)
         self.assertIn("commercialCloudPagedGet(path, access)", expenses_block)
         self.assertNotIn("limit=", expenses_block)
 
-        paging_start = source.index("private fun commercialCloudPagedGet(")
+        paging_start = source.index("internal fun commercialCloudPagedGet(")
         paging_end = source.index("\ninternal fun ", paging_start + 1)
         paging_block = source[paging_start:paging_end]
         self.assertIn('!path.contains("limit=")', paging_block)

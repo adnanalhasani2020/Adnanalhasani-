@@ -5,6 +5,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 CHECKOUT = ROOT / "supabase/migrations/20261025100000_commercial_checkout_response_paid_balance.sql"
 REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt"
+SALES_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/SalesRepository.kt"
 
 
 class CommercialInvoiceSourceOfTruthTests(unittest.TestCase):
@@ -12,6 +13,7 @@ class CommercialInvoiceSourceOfTruthTests(unittest.TestCase):
     def setUpClass(cls):
         cls.checkout = CHECKOUT.read_text(encoding="utf-8")
         cls.repository = REPOSITORY.read_text(encoding="utf-8")
+        cls.sales_repository = SALES_REPOSITORY.read_text(encoding="utf-8")
 
     def test_sale_is_the_single_invoice_record(self):
         self.assertIn("'invoice_id',v_sale", self.checkout)
@@ -21,7 +23,7 @@ class CommercialInvoiceSourceOfTruthTests(unittest.TestCase):
         self.assertNotIn("INSERT INTO public.commercial_documents", self.checkout)
 
     def test_invoice_history_reads_saved_sale_and_line_records(self):
-        projection = self.repository.split(
+        projection = self.sales_repository.split(
             "internal fun loadCommercialCloudSaleDocuments", 1
         )[1].split("internal fun loadCommercialCloudSales", 1)[0]
         self.assertIn("/rest/v1/commercial_sales", projection)

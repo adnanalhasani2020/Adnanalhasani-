@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_supplier_invoice_has_an_android_entry_point_and_cloud_rpc():
     screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudPurchasesScreen.kt").read_text()
     dialog = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/SupplierInvoiceEntryDialog.kt").read_text()
-    repository = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt").read_text()
+    repository = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/PurchaseRepository.kt").read_text()
 
     assert 'Text("تسجيل فاتورة المورد")' in screen
     assert "SupplierInvoiceEntryDialog(" in screen
@@ -26,7 +26,7 @@ def test_supplier_invoice_has_an_android_entry_point_and_cloud_rpc():
 
 
 def test_supplier_invoice_purchase_item_ids_are_projected_for_rpc_lines():
-    repository = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt").read_text()
+    repository = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/PurchaseRepository.kt").read_text()
 
     # The dialog sends each selected line ID to the RPC; omitting id from the nested
     # PostgREST select silently produced empty IDs and every save failed server-side.
@@ -81,7 +81,7 @@ def test_supplier_invoice_minor_unit_rounding_is_consistent_per_line():
 
 
 def test_invoice_transfer_purchase_order_projection_preserves_source_units():
-    repository = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt").read_text(encoding="utf-8")
+    repository = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/PurchaseRepository.kt").read_text(encoding="utf-8")
     screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudPurchasesScreen.kt").read_text(encoding="utf-8")
     for field in ("source_selling_unit_code", "source_selling_unit_name", "source_selling_quantity", "source_quantity_in_stock_units"):
         assert field in repository
@@ -89,7 +89,7 @@ def test_invoice_transfer_purchase_order_projection_preserves_source_units():
     assert "وحدة فاتورة المصدر:" in screen
 
 def test_supplier_invoice_line_projection_includes_saved_price_and_purchase_baseline():
-    repository = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt").read_text(encoding="utf-8")
+    repository = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/PurchaseRepository.kt").read_text(encoding="utf-8")
     for marker in (
         "purchase_order_item_id,quantity,unit_price_minor,line_total_minor",
         "commercial_supplier_invoice_items_purchase_order_item_id_fkey",
@@ -101,7 +101,7 @@ def test_supplier_invoice_line_projection_includes_saved_price_and_purchase_base
 
 def test_supplier_invoice_dates_are_required_and_verified_by_database():
     migration = (ROOT / "supabase/migrations/20261102190000_commercial_supplier_invoice_due_dates.sql").read_text()
-    repository = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt").read_text()
+    repository = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/PurchaseRepository.kt").read_text()
     assert "ADD COLUMN IF NOT EXISTS invoice_date date" in migration
     assert "ADD COLUMN IF NOT EXISTS due_date date" in migration
     assert "NEW.invoice_date > current_date" in migration
@@ -116,7 +116,7 @@ def test_supplier_invoice_dates_are_required_and_verified_by_database():
 
 def test_contractual_supplier_aging_uses_due_date_and_fails_closed_for_legacy_rows():
     aging = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/SupplierDueDateAgingReport.kt").read_text()
-    screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterScreen.kt").read_text()
+    screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterScreen.kt").read_text() + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCatalog.kt").read_text()
     assert "LocalDate.parse(invoice.dueDate.take(10))" in aging
     assert "rememberSupplierDueDateAgingReport(" in aging
     assert "ChronoUnit.DAYS.between(dueDate, asOf)" in aging

@@ -83,6 +83,18 @@ internal fun CommercialCloudReturnsScreen(context: Context, onBack: () -> Unit) 
     var requestNote by remember { mutableStateOf("") }
     val requestedQuantities = remember { mutableStateMapOf<String, String>() }
     val requestedUnitCodes = remember { mutableStateMapOf<String, String>() }
+    val hasFractionalReturnQuantity = requestedQuantities.values.any { raw ->
+        parseCommercialCheckoutQuantity(raw)?.stripTrailingZeros()?.scale()?.let { it > 0 } == true
+    }
+    val fractionalReturnQuantityBlocked =
+        !COMMERCIAL_CLOUD_FRACTIONAL_QUANTITY_RPC_READY && hasFractionalReturnQuantity
+    val hasNonBaseReturnUnit = requestTarget?.items?.any { saleItem ->
+        val selectedUnit = returnSellUnits(saleItem).firstOrNull { it.code == requestedUnitCodes[saleItem.id] }
+            ?: returnSellUnits(saleItem).first()
+        selectedUnit.factor > 1L
+    } == true
+    val returnUnitSnapshotBlocked =
+        !COMMERCIAL_CLOUD_RETURN_UNIT_SNAPSHOT_RPC_READY && hasNonBaseReturnUnit
     var returnUnitMenuItemId by remember { mutableStateOf("") }
 
     LaunchedEffect(refresh) {
@@ -275,6 +287,20 @@ internal fun CommercialCloudReturnsScreen(context: Context, onBack: () -> Unit) 
             ) {
                 Text("الفاتورة #${requestTarget!!.receiptNumber} · ${requestTarget!!.customerName}", fontWeight = FontWeight.SemiBold)
                 Text("اختر سبب المرتجع وحدد كمية كل صنف. التحقق النهائي من الكميات المرتجعة يتم في قاعدة البيانات.", color = ReturnMuted, fontSize = 11.sp)
+                if (fractionalReturnQuantityBlocked) {
+                    Text(
+                        "قاعدة الإنتاج الحالية لا تقبل كميات مرتجعة عشرية بعد. استخدم كمية صحيحة مؤقتًا؛ لم يتم إرسال أي طلب.",
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 12.sp
+                    )
+                }
+                if (returnUnitSnapshotBlocked) {
+                    Text(
+                        "لا يمكن إرسال هذا المرتجع بأكثر من وحدة المخزون الأساسية قبل نشر حماية لقطة الوحدة الأصلية في الخادم؛ معامل الوحدة الحالي قد يختلف عن معامل الفاتورة وقت البيع.",
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 12.sp
+                    )
+                }
                 listOf(
                     "customer_request" to "طلب العميل",
                     "damaged" to "تلف",
@@ -336,7 +362,7 @@ internal fun CommercialCloudReturnsScreen(context: Context, onBack: () -> Unit) 
             }
         },
         confirmButton = {
-            Button(enabled = !busy && requestTarget != null &&
+            Button(enabled = !busy && requestTarget != null && !fractionalReturnQuantityBlocked && !returnUnitSnapshotBlocked &&
                 requestTarget!!.items.all { saleItem ->
                     val unit = returnSellUnits(saleItem).firstOrNull { u -> u.code == requestedUnitCodes[saleItem.id] }
                         ?: returnSellUnits(saleItem).firstOrNull { u -> u.code == saleItem.sellingUnitCode }
@@ -354,7 +380,7 @@ internal fun CommercialCloudReturnsScreen(context: Context, onBack: () -> Unit) 
                         if (qty != null && qty.signum() > 0) id to qty else null
                     }.toMap()
                     executeAction({
-                        requestCommercialCloudSaleReturn(context, target.id, requestReason, requestNote, quantities, requestedUnitCodes.toMap())
+                        requestCommercialCloudSaleReturn(context, target.id, requestReason, requestNote, quantities, emptyMap())
                     }, "تم إنشاء طلب المرتجع في قاعدة البيانات، وهو بانتظار المراجعة.")
                     requestTarget = null
                 },

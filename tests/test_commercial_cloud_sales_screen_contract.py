@@ -4,30 +4,44 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt"
+PURCHASE_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/PurchaseRepository.kt"
+SUPPLIER_PAYMENT_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/SupplierPaymentRepository.kt"
+SALES_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/SalesRepository.kt"
+CATALOG_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogRepository.kt"
+CUSTOMER_ACCOUNTS_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CustomerAccountsRepository.kt"
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudSalesScreen.kt"
 PURCHASES = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudPurchasesScreen.kt"
 COMPOSER = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudSaleComposerScreen.kt"
-MAIN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt"
+MAIN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/StoreApp.kt"
+MODELS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialModels.kt"
+LOCAL_SCREENS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/LocalSalesScreen.kt"
 
 
 class CommercialCloudSalesScreenContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.repository = REPOSITORY.read_text(encoding="utf-8")
+        cls.purchase_repository = PURCHASE_REPOSITORY.read_text(encoding="utf-8")
+        cls.supplier_payment_repository = SUPPLIER_PAYMENT_REPOSITORY.read_text(encoding="utf-8")
+        cls.sales_repository = SALES_REPOSITORY.read_text(encoding="utf-8")
+        cls.catalog_repository = CATALOG_REPOSITORY.read_text(encoding="utf-8")
+        cls.customer_accounts_repository = CUSTOMER_ACCOUNTS_REPOSITORY.read_text(encoding="utf-8")
         cls.screen = SCREEN.read_text(encoding="utf-8")
         cls.purchases = PURCHASES.read_text(encoding="utf-8")
         cls.composer = COMPOSER.read_text(encoding="utf-8")
-        cls.main = MAIN.read_text(encoding="utf-8")
+        cls.main = MAIN.read_text(encoding="utf-8") + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt").read_text(encoding="utf-8") + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/LocalOperationalScreens.kt").read_text(encoding="utf-8") + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/LocalProductDialogs.kt").read_text(encoding="utf-8") + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/LocalOperationalScreens.kt").read_text(encoding="utf-8")
+        cls.models = MODELS.read_text(encoding="utf-8")
+        cls.local_screens = LOCAL_SCREENS.read_text(encoding="utf-8")
 
     def test_invoice_projection_uses_existing_tables_and_columns(self):
-        self.assertIn("internal fun loadCommercialCloudSaleDocuments", self.repository)
+        self.assertIn("internal fun loadCommercialCloudSaleDocuments", self.sales_repository)
         for field in (
             "receipt_number", "total_minor", "payment_status", "currency_code",
             "commercial_customers(display_name)",
             "commercial_sale_items(product_name_snapshot,quantity,line_total_minor,unit_price_minor)",
         ):
             with self.subTest(field=field):
-                self.assertIn(field, self.repository)
+                self.assertIn(field, self.sales_repository)
 
     def test_multiline_checkout_links_customer_atomically_and_scopes_validation(self):
         migration = (ROOT / "supabase/migrations/20261024200000_commercial_multiline_cash_checkout.sql").read_text()
@@ -37,7 +51,7 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         self.assertIn("'customer_id', p_customer_id", migration)
         self.assertIn("internal fun loadCommercialCloudCustomers(context: Context)", self.repository)
         self.assertIn("loadCommercialCloudCustomers(context)", self.composer)
-        self.assertIn("p_customer_id", self.repository)
+        self.assertIn("p_customer_id", self.sales_repository)
         self.assertIn("ربط الفاتورة بالعميل", self.composer)
         self.assertIn("checkoutCommercialCloudSaleMulti(context, requestLines, key, customerId,", self.composer)
         self.assertIn("paymentModeForRequest", self.composer)
@@ -49,12 +63,12 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         self.assertIn("customer_required_for_credit_sale", migration)
         self.assertIn("initial_payment_exceeds_invoice_total", migration)
         self.assertIn("'outstanding_minor',(v_total-v_initial_payment)::bigint", migration)
-        self.assertIn("p_payment_mode", self.repository)
+        self.assertIn("p_payment_mode", self.sales_repository)
         self.assertIn("آجل / دين", self.composer)
         self.assertIn("اختر العميل قبل تسجيل البيع الآجل", self.composer)
 
     def test_invoice_projection_is_scoped_to_current_organization_and_activity(self):
-        projection = self.repository.split(
+        projection = self.sales_repository.split(
             "internal fun loadCommercialCloudSaleDocuments", 1
         )[1].split("internal fun loadCommercialCloudSales", 1)[0]
         self.assertIn("organization_id=eq.$orgId", projection)
@@ -70,14 +84,14 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
 
     def test_sales_tab_links_to_detailed_cloud_invoice_history(self):
         self.assertIn("onCloudInvoices = { cloudSalesPage = true }", self.main)
-        self.assertIn("عرض تفاصيل الفواتير السحابية", self.main)
-        self.assertIn('if (cloudMode) "ملخص الفواتير المحمّلة من قاعدة البيانات"', self.main)
+        self.assertIn("عرض تفاصيل الفواتير السحابية", self.local_screens)
+        self.assertIn('if (cloudMode) "ملخص الفواتير المحمّلة من قاعدة البيانات"', self.local_screens)
 
     def test_purchase_order_projection_uses_existing_org_scoped_tables(self):
-        self.assertIn("loadCommercialCloudPurchaseDocuments", self.repository)
+        self.assertIn("loadCommercialCloudPurchaseDocuments", self.purchase_repository)
         for field in ("commercial_purchase_order_items(", "commercial_suppliers(display_name)", "quantity_ordered", "quantity_received", "unit_cost_minor", "organization_id=eq.$orgId"):
             with self.subTest(field=field):
-                self.assertIn(field, self.repository)
+                self.assertIn(field, self.purchase_repository)
         self.assertIn("cloudPurchasesPage -> CommercialCloudPurchasesScreen", self.main)
         self.assertIn('"أوامر الشراء" -> onCloudPurchases()', self.main)
 
@@ -89,8 +103,8 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         ):
             with self.subTest(marker=marker):
                 self.assertIn(marker, self.purchases)
-        self.assertIn("commercial_receive_purchase_order", self.repository)
-        self.assertIn("commercial_record_supplier_payment", self.repository)
+        self.assertIn("commercial_receive_purchase_order", self.purchase_repository)
+        self.assertIn("commercial_record_supplier_payment", self.supplier_payment_repository)
 
     def test_invoice_screen_supports_status_filters_and_currency_safe_totals(self):
         for marker in ('selectedStatus', '"paid" to "مدفوعة"', '"partial" to "مدفوعة جزئيًا"', '"due" to "مستحقة"', 'groupBy { it.currencyCode', 'بوحدة الصرف الصغرى'):
@@ -113,12 +127,12 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
     def test_invoice_unit_price_uses_saved_selling_quantity_and_base_quantity(self):
         # The historical line total remains untouched; only the displayed unit price
         # is converted using the immutable per-line quantities saved at checkout.
-        self.assertIn("quantity_in_stock_units)", self.repository)
-        self.assertIn("val sellingQuantity = runCatching { java.math.BigDecimal(sellingQuantityText) }", self.repository)
-        self.assertIn("java.math.BigDecimal.valueOf(stockQuantity)", self.repository)
-        self.assertIn(".divide(sellingQuantity, 0, java.math.RoundingMode.HALF_UP)", self.repository)
-        self.assertIn("unitPriceMinor = sellingUnitPrice", self.repository)
-        self.assertIn('lineTotalMinor = item.optLong("line_total_minor", 0L)', self.repository)
+        self.assertIn("quantity_in_stock_units)", self.sales_repository)
+        self.assertIn("val sellingQuantity = runCatching { java.math.BigDecimal(sellingQuantityText) }", self.sales_repository)
+        self.assertIn("java.math.BigDecimal.valueOf(stockQuantity)", self.sales_repository)
+        self.assertIn(".divide(sellingQuantity, 0, java.math.RoundingMode.HALF_UP)", self.sales_repository)
+        self.assertIn("unitPriceMinor = sellingUnitPrice", self.sales_repository)
+        self.assertIn('lineTotalMinor = item.optLong("line_total_minor", 0L)', self.sales_repository)
 
     def test_invoice_timestamps_parse_iso8601_offsets_before_local_display(self):
         self.assertIn("java.time.Instant.parse(value)", self.screen)
@@ -136,15 +150,15 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         # Validate projection fields independently; query parameter order is not a contract.
         for field in ("payment_status", "status", "created_at"):
             with self.subTest(field=field):
-                self.assertIn(field, self.repository)
-        self.assertIn('saleStatus = row.optString("status")', self.repository)
+                self.assertIn(field, self.sales_repository)
+        self.assertIn('saleStatus = row.optString("status")', self.sales_repository)
         self.assertIn('saleStatus in setOf("cancelled", "canceled")', self.screen)
         self.assertIn('"refunded" to "مستردة"', self.screen)
         self.assertIn('"refunded", "partially_refunded"', self.screen)
 
 
     def test_sales_summary_uses_confirmed_cloud_payments_for_partial_balances(self):
-        sales_projection = self.repository.split(
+        sales_projection = self.sales_repository.split(
             "internal fun loadCommercialCloudSales", 1
         )[1].split("internal data class CommercialMasterDataRow", 1)[0]
         self.assertIn("payments:commercial_payments(amount_minor,status)", sales_projection)
@@ -157,12 +171,12 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
     def test_cloud_customer_debts_use_server_projection_and_collection_rpc(self):
         self.assertIn("CommercialCloudDebtScreen(context = context", self.main)
         self.assertIn("showDebts = true", self.main)
-        self.assertIn("internal fun loadCommercialCloudReceivables", self.repository)
-        self.assertIn("payments:commercial_payments(amount_minor,status)", self.repository)
-        self.assertIn('payment.optString("status") in setOf("succeeded", "partially_refunded", "refunded")', self.repository)
-        self.assertIn("internal fun recordCommercialCloudCustomerPayment", self.repository)
-        self.assertIn("/rest/v1/rpc/commercial_record_customer_payment", self.repository)
-        self.assertIn("getSharedPreferences(\"commercial_cloud_pending_collection_v1\"", self.repository)
+        self.assertIn("internal fun loadCommercialCloudReceivables", self.customer_accounts_repository)
+        self.assertIn("payments:commercial_payments(amount_minor,status)", self.customer_accounts_repository)
+        self.assertIn('payment.optString("status") in setOf("succeeded", "partially_refunded", "refunded")', self.customer_accounts_repository)
+        self.assertIn("internal fun recordCommercialCloudCustomerPayment", self.customer_accounts_repository)
+        self.assertIn("/rest/v1/rpc/commercial_record_customer_payment", self.customer_accounts_repository)
+        self.assertIn("getSharedPreferences(\"commercial_cloud_pending_collection_v1\"", self.customer_accounts_repository)
 
     def test_customer_collection_migration_is_atomic_authorized_and_idempotent(self):
         migration = (ROOT / "supabase/migrations/20261024220000_commercial_customer_collection_rpc.sql").read_text(encoding="utf-8")
@@ -195,10 +209,10 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
     def test_invoice_discount_and_tax_are_sent_to_server_and_bound_to_retry_key(self):
         self.assertIn('var discountText by remember { mutableStateOf("0") }', self.composer)
         self.assertIn('var taxText by remember { mutableStateOf("0") }', self.composer)
-        self.assertIn('p_discount_minor', self.repository)
-        self.assertIn('p_tax_minor', self.repository)
-        self.assertIn('"discount_minor", discountMinor', self.repository)
-        self.assertIn('"tax_minor", taxMinor', self.repository)
+        self.assertIn('p_discount_minor', self.sales_repository)
+        self.assertIn('p_tax_minor', self.sales_repository)
+        self.assertIn('"discount_minor", discountMinor', self.sales_repository)
+        self.assertIn('"tax_minor", taxMinor', self.sales_repository)
         self.assertIn('discountMinor > estimatedSubtotal.min(BigInteger.valueOf(Long.MAX_VALUE)).toLong()', self.composer)
         migration = (ROOT / "supabase/migrations/20261025190000_commercial_checkout_discount_tax_snapshots.sql").read_text(encoding="utf-8")
         for marker in (
@@ -215,15 +229,15 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
                 self.assertIn(marker, migration)
 
     def test_multi_line_checkout_guards_duplicate_lines_and_uses_stable_retry_key(self):
-        self.assertIn("commercial_checkout_sale_multi", self.repository)
-        self.assertIn("getOrCreateCommercialCloudMultiSaleKey", self.repository)
-        self.assertIn("aggregateCommercialCheckoutLines(lines)", self.repository)
+        self.assertIn("commercial_checkout_sale_multi", self.sales_repository)
+        self.assertIn("getOrCreateCommercialCloudMultiSaleKey", self.sales_repository)
+        self.assertIn("aggregateCommercialCheckoutLines(lines)", self.sales_repository)
         quantity_math = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialQuantityMath.kt").read_text(encoding="utf-8")
         self.assertIn("(totals[key] ?: BigDecimal.ZERO).add(quantity)", quantity_math)
-        self.assertIn('"unit_code", line.unitCode', self.repository)
-        self.assertIn("configureCommercialCloudSellUnit", self.repository)
-        self.assertIn("sell_units:commercial_offering_sell_units", self.repository)
-        self.assertIn("prefs.getString(\"payload\", null) == payload", self.repository)
+        self.assertIn('"unit_code", line.unitCode', self.sales_repository)
+        self.assertIn("configureCommercialCloudSellUnit", self.catalog_repository)
+        self.assertIn("sell_units:commercial_offering_sell_units", self.catalog_repository)
+        self.assertIn("prefs.getString(\"payload\", null) == payload", self.sales_repository)
         migration = (ROOT / "supabase/migrations/20261024200000_commercial_multiline_cash_checkout.sql").read_text(encoding="utf-8")
         self.assertIn("FOR UPDATE", migration)
         self.assertIn("p_idempotency_key", migration)
@@ -258,7 +272,7 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         self.assertIn("baseQuantity: BigInteger", self.composer)
         self.assertIn("0.5 أو 1.25", self.composer)
         self.assertIn("sum + BigDecimal(line.baseQuantity)", self.composer)
-        self.assertIn("quantity.stripTrailingZeros().toPlainString()", self.repository)
+        self.assertIn("quantity.stripTrailingZeros().toPlainString()", self.sales_repository)
 
     def test_same_offering_can_have_multiple_independent_invoice_lines(self):
         self.assertIn("var invoiceLines by remember { mutableStateOf<List<ComposerDraftLine>>(emptyList()) }", self.composer)
@@ -268,13 +282,13 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         self.assertIn("val requestLines = selectedLines.map { CommercialCloudCheckoutLine(it.product.cloudOfferingId, it.quantity, it.unit.code) }", self.composer)
 
     def test_invoice_history_loads_and_displays_discount_and_tax_snapshots(self):
-        projection = self.repository.split("internal fun loadCommercialCloudSaleDocuments", 1)[1].split("internal fun loadCommercialCloudSales", 1)[0]
+        projection = self.sales_repository.split("internal fun loadCommercialCloudSaleDocuments", 1)[1].split("internal fun loadCommercialCloudSales", 1)[0]
         for marker in ("subtotal_minor", "discount_minor", "tax_minor"):
             with self.subTest(marker=marker):
                 self.assertIn(marker, projection)
-        self.assertIn("val subtotalMinor: Long", self.repository)
-        self.assertIn("val discountMinor: Long", self.repository)
-        self.assertIn("val taxMinor: Long", self.repository)
+        self.assertIn("val subtotalMinor: Long", self.sales_repository)
+        self.assertIn("val discountMinor: Long", self.sales_repository)
+        self.assertIn("val taxMinor: Long", self.sales_repository)
         for marker in ("الإجمالي قبل الخصم:", "الخصم:", "الضريبة:"):
             with self.subTest(marker=marker):
                 self.assertIn(marker, self.screen)
@@ -285,20 +299,20 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         self.assertIn('val paymentModeForRequest = if (paymentMode == "cash") "cash" else "credit"', self.composer)
         self.assertIn('paymentMode != "partial" || (initialPaymentMinor != null && initialPaymentMinor > 0L && BigInteger.valueOf(initialPaymentMinor) < estimatedTotal)', self.composer)
         self.assertIn('paymentMode != "credit" || !customerId.isNullOrBlank()', self.composer)
-        self.assertIn('.put("p_payment_mode", paymentMode)', self.repository)
-        self.assertIn('.put("p_initial_payment_minor", if (paymentMode == "cash") JSONObject.NULL else initialPaymentMinor)', self.repository)
+        self.assertIn('.put("p_payment_mode", paymentMode)', self.sales_repository)
+        self.assertIn('.put("p_initial_payment_minor", if (paymentMode == "cash") JSONObject.NULL else initialPaymentMinor)', self.sales_repository)
 
     def test_cloud_inventory_precision_is_preserved_for_display_and_stock_guard(self):
-        self.assertIn("val stockPrecise: BigDecimal = BigDecimal.valueOf(stock.toLong())", self.main)
-        self.assertIn('BigDecimal(row.optString("quantity_on_hand", "0"))', self.repository)
-        self.assertIn('BigDecimal(row.optString("quantity_reserved", "0"))', self.repository)
-        self.assertIn("val availableQuantity = runCatching", self.repository)
-        self.assertIn("stockPrecise = availableQuantity", self.repository)
+        self.assertIn("val stockPrecise: BigDecimal = BigDecimal.valueOf(stock.toLong())", self.models)
+        self.assertIn('BigDecimal(row.optString("quantity_on_hand", "0"))', self.catalog_repository)
+        self.assertIn('BigDecimal(row.optString("quantity_reserved", "0"))', self.catalog_repository)
+        self.assertIn("val availableQuantity = runCatching", self.catalog_repository)
+        self.assertIn("stockPrecise = availableQuantity", self.catalog_repository)
         self.assertIn('product.stockPrecise.stripTrailingZeros().toPlainString()', self.composer)
         self.assertIn("lines.first().product.stockPrecise", self.composer)
         self.assertNotIn("lines.first().product.stock.toLong()", self.composer)
     def test_cloud_mode_never_falls_back_to_local_sales(self):
-        self.assertIn("if (!cloudContextExists) addAll(loadSales(context))", self.main)
+        self.assertIn("if (!cloudContextHasAny) addAll(LocalStoreRepository.loadSales(context))", self.main)
         sales_load = self.main.split("salesResult.onSuccess", 1)[1].split("Scaffold(", 1)[0]
         self.assertIn("sales.clear()", sales_load)
         self.assertIn("أخفينا البيانات المحلية حتى لا تختلط بسجلات المؤسسة", sales_load)

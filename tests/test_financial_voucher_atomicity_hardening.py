@@ -7,6 +7,8 @@ CANCELLATION = ROOT / "supabase/migrations/20261026170000_commercial_expense_vou
 COLLECTION = ROOT / "supabase/migrations/20261024220000_commercial_customer_collection_rpc.sql"
 EXPENSE = ROOT / "supabase/migrations/20261026121906_commercial_cloud_expense_vouchers.sql"
 ANDROID_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt"
+EXPENSE_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ExpenseRepository.kt"
+CUSTOMER_ACCOUNTS_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CustomerAccountsRepository.kt"
 
 
 class FinancialVoucherAtomicityHardeningTests(unittest.TestCase):
@@ -54,13 +56,12 @@ class FinancialVoucherAtomicityHardeningTests(unittest.TestCase):
 
     def test_android_keeps_expense_and_collection_retry_keys_until_server_confirmation(self):
         repository = ANDROID_REPOSITORY.read_text(encoding="utf-8")
-        expense_start = repository.index("internal fun recordCommercialCloudExpense(")
-        expense_end = repository.index("internal fun recordCommercialCloudSupplierPayment(", expense_start)
-        expense_block = repository[expense_start:expense_end]
+        expense_block = EXPENSE_REPOSITORY.read_text(encoding="utf-8")
+        customer_accounts = CUSTOMER_ACCOUNTS_REPOSITORY.read_text(encoding="utf-8")
         self.assertIn("p_idempotency_key", expense_block)
-        collection_start = repository.index("internal fun recordCommercialCloudCustomerPayment(")
-        collection_end = repository.index("/** Fetch the server-issued numbered receipt", collection_start)
-        collection_block = repository[collection_start:collection_end]
+        collection_start = customer_accounts.index("internal fun recordCommercialCloudCustomerPayment(")
+        collection_end = customer_accounts.index("/** Fetch the server-issued numbered receipt", collection_start)
+        collection_block = customer_accounts[collection_start:collection_end]
         self.assertIn("commercial_cloud_pending_collection_v1", collection_block)
         self.assertIn("check(prefs.edit().clear().commit())", collection_block)
 

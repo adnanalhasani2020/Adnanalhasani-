@@ -105,6 +105,14 @@ internal fun CustomerPortalPaymentRequestsScreen(
     var notice by remember { mutableStateOf("") }
 
     LaunchedEffect(refresh, organizationId) {
+        if (!COMMERCIAL_CLOUD_PAYMENT_REQUESTS_RPC_READY) {
+            loading = false
+            outstanding = emptyList()
+            requests = emptyList()
+            error = "خدمة طلب سندات القبض لم تُنشر في قاعدة الإنتاج بعد. لن يتم إرسال أي طلب حتى تكتمل ترحيلات الخادم واختبارات الحسابين."
+            notice = ""
+            return@LaunchedEffect
+        }
         loading = true
         error = ""
         CustomerRequestIo.execute {
