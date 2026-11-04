@@ -166,3 +166,10 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 - Extracted the login form UI into `CatalogLoginPanel.kt`, with controlled email/password values and a login callback.
 - Kept authentication request creation, token validation, refresh-token persistence, session state updates, and feedback in the existing screen workflow.
 - Added a source-contract assertion for the new component owner. No authentication endpoint, token key, encryption preference, or login validation rule changed.
+
+
+## 2026-11-04 — Local sale and product dialog extraction
+
+- Moved `SaleEntryDialog`, `EditProductDialog`, and `AddProductDialog` from `MainActivity.kt` to `LocalProductDialogs.kt`.
+- Preserved their public package-level signatures and call sites, including cloud-mode parameters passed into the product dialog.
+- Added a source-contract check confirming the new file owns all three composables and MainActivity no longer declares them. No sales arithmetic, unit conversion, local persistence, or cloud API was modified.
