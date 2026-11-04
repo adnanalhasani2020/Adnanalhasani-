@@ -68,20 +68,20 @@ def test_daily_sales_trend_uses_completed_invoices_and_currency_separated_totals
     assert 'Daily sales trend' in contract
 
 def test_item_profitability_matches_return_to_original_sale_and_blocks_tax_inclusive_refunds():
-    calculations = CALCULATIONS.read_text(encoding="utf-8")
+    cost_profit_calculations = COST_PROFIT_CALCULATIONS.read_text(encoding="utf-8")
     contract = CONTRACT.read_text(encoding="utf-8")
     assert 'saleLine.saleId == saleReturn.saleId' in cost_profit_calculations
     assert 'saleLine.saleTaxMinor == 0L' in cost_profit_calculations
     assert 'tax-inclusive refund as net revenue' in contract
 
 def test_item_profitability_does_not_invent_invoice_discount_allocation():
-    calculations = CALCULATIONS.read_text(encoding="utf-8")
+    cost_profit_calculations = COST_PROFIT_CALCULATIONS.read_text(encoding="utf-8")
     contract = CONTRACT.read_text(encoding="utf-8")
     assert 'line.saleDiscountMinor == 0L' in cost_profit_calculations
     assert 'does not distribute them by an invented proportional rule' in contract
 
 def test_item_profitability_blocks_returns_from_discounted_historical_sales():
-    calculations = CALCULATIONS.read_text(encoding="utf-8")
+    cost_profit_calculations = COST_PROFIT_CALCULATIONS.read_text(encoding="utf-8")
     assert 'saleLine.saleDiscountMinor == 0L' in cost_profit_calculations
     assert 'يرتبط المرتجع بفاتورة لها خصم إجمالي غير موزع' in cost_profit_calculations
 
@@ -92,7 +92,7 @@ def test_item_profitability_reconciles_sale_lines_to_invoice_subtotal():
     assert 'document.discountMinor > document.subtotalMinor' in screen
 
 def test_item_profitability_requires_explicit_return_item_amount_and_restock_fields():
-    calculations = CALCULATIONS.read_text(encoding="utf-8")
+    cost_profit_calculations = COST_PROFIT_CALCULATIONS.read_text(encoding="utf-8")
     repository = REPOSITORY.read_text(encoding="utf-8")
     assert 'refundAmountPresent = item.has("refund_amount_minor")' in repository
     assert 'restockFlagPresent = item.has("restock")' in repository
