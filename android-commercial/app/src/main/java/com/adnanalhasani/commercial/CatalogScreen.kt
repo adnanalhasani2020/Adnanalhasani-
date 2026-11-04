@@ -705,6 +705,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         categories = categories,
         directoryUnits = directoryUnits,
         localUnitCodes = localUnitCodes,
+        organizationId = organizationId.trim(),
         mappingLines = invoiceMappingLines,
         selectedLineId = invoiceMappingLineId,
         busy = busy,
