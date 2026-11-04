@@ -36,7 +36,7 @@ def test_reports_cloud_projection_has_a_single_non_ui_owner():
         "loadCommercialCloudSupplierPartyAccounts(context)",
         "loadCommercialCloudExpenses(context)",
     ):
-        assert loader in cloud_data
+        assert cloud_data.count(loader) == 1
         assert loader not in screen
 
 
@@ -49,3 +49,31 @@ def test_failed_cloud_projections_are_cleared_and_keep_source_errors():
     assert "withContext(Dispatchers.IO)" in cloud_data
     assert "data = loaded" in cloud_data
     assert "loading = false" in cloud_data
+
+
+def test_every_cloud_projection_failure_triggers_the_shared_retry_signal():
+    cloud_data = CLOUD_DATA.read_text(encoding="utf-8")
+    errors_block = cloud_data.split("val errors = listOf(", 1)[1].split(").filterNotNull()", 1)[0]
+
+    for source in (
+        "salesDocuments",
+        "receivables",
+        "purchases",
+        "supplierPayments",
+        "stockMovements",
+        "stockAlerts",
+        "locationInventory",
+        "warehouseInventoryContext",
+        "returns",
+        "payments",
+        "journals",
+        "ledgerLines",
+        "supplierControlAccounts",
+        "glMappings",
+        "customerPartyAccounts",
+        "supplierPartyAccounts",
+        "expenses",
+    ):
+        assert f"{source}.exceptionOrNull()" in errors_block
+
+    assert "loadError = errors.firstOrNull()?.message" in cloud_data
