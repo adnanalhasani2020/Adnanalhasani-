@@ -8,7 +8,7 @@ PROFILE = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commerc
 
 
 def test_first_launch_requires_authentication_and_complete_project_context():
-    main = MAIN.read_text(encoding="utf-8")
+    main = MAIN.read_text(encoding="utf-8") + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt").read_text(encoding="utf-8")
     profile = PROFILE.read_text(encoding="utf-8")
     assert "restoringSession = true" in profile
     assert "CircularProgressIndicator()" in profile
