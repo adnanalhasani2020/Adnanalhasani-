@@ -126,21 +126,13 @@ internal fun rememberReportsCenterData(
         } -> "توجد دفعة ناجحة بمبلغ أو عملة غير صالحة؛ تم حجب التجميع حتى لا يظهر إجمالي ناقص."
         else -> ""
     }
-    val supplierInvoiceVarianceError = when {
-        !cloudMode -> "فروقات أسعار فواتير الموردين تتطلب فواتير السحابة وبنودها المحفوظة."
-        purchasesLoadError.isNotBlank() -> purchasesLoadError
-        cloudPurchases.any { purchase ->
-            purchase.supplierInvoices.filter { invoice ->
-                invoice.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed") &&
-                    reportDateMillis(invoice.recordedAt)?.let { it >= startMillis && it < endExclusive } == true
-            }.any { invoice ->
-                invoice.currencyCode != purchase.currencyCode ||
-                    runCatching { calculateSupplierInvoicePriceVariance(invoice.toPriceVarianceInput()) }.isFailure
-            }
-        } ->
-            "تعذر مطابقة أحد فواتير المورد مع بنودها وأسعار أمر الشراء؛ لم يتم عرض إجمالي جزئي أو فرق سعر مضلل."
-        else -> ""
-    }
+    val supplierInvoiceVarianceError = reportSupplierInvoiceVarianceError(
+        cloudMode = cloudMode,
+        purchasesLoadError = purchasesLoadError,
+        cloudPurchases = cloudPurchases,
+        startMillis = startMillis,
+        endExclusive = endExclusive
+    )
     val activeSupplierInvoiceCandidates = cloudPurchases.flatMap { purchase ->
         purchase.supplierInvoices.filter { invoice ->
             invoice.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed")
@@ -164,20 +156,11 @@ internal fun rememberReportsCenterData(
             amountPaidMinor = obligation.amountPaidMinor
         )
     }
-    val supplierInvoiceDetailError = when {
-        !cloudMode -> "تفاصيل فواتير الشراء تتطلب مصادر السحابة."
-        purchasesLoadError.isNotBlank() -> purchasesLoadError
-        activeSupplierInvoiceCandidates.any { (_, invoice) -> reportDateMillis(invoice.recordedAt) == null } ->
-            "توجد فاتورة مورد بتاريخ تسجيل غير صالح؛ تعذر تحديد الفترة بدقة."
-        activeSupplierInvoiceCandidates.any { (purchase, invoice) ->
-            val obligation = invoice.obligation
-            invoice.totalMinor < 0L || !purchase.currencyCode.matches(Regex("^[A-Z]{3}$")) ||
-                invoice.currencyCode != purchase.currencyCode ||
-                (obligation != null && (obligation.currencyCode != purchase.currencyCode ||
-                    obligation.amountDueMinor < 0L || obligation.amountPaidMinor < 0L))
-        } -> "توجد فاتورة أو مستحق مورد بمبلغ أو عملة غير متطابقة؛ تم حجب التقرير."
-        else -> ""
-    }
+    val supplierInvoiceDetailError = reportSupplierInvoiceDetailValidationError(
+        cloudMode = cloudMode,
+        purchasesLoadError = purchasesLoadError,
+        activeSupplierInvoiceCandidates = activeSupplierInvoiceCandidates
+    )
     val supplierPurchaseSummaryCalculation = remember(cloudPurchases, startMillis, endExclusive, cloudMode) {
         runCatching {
             val invoices = cloudPurchases.flatMap { purchase ->
@@ -197,33 +180,21 @@ internal fun rememberReportsCenterData(
             calculateSupplierPurchaseSummary(invoices)
         }
     }
-    val supplierPurchaseSummaryError = when {
-        !cloudMode -> "ملخص المشتريات حسب المورد يتطلب فواتير السحابة."
-        purchasesLoadError.isNotBlank() -> purchasesLoadError
-        supplierInvoiceDetailError.isNotBlank() -> supplierInvoiceDetailError
-        activeSupplierInvoiceCandidates.any { (_, invoice) ->
-            invoice.subtotalMinor < 0L || invoice.taxMinor < 0L || invoice.freightMinor < 0L ||
-                invoice.lines.isEmpty() ||
-                invoice.lines.any { line ->
-                    line.lineTotalMinor < 0L || line.unitPriceMinor < 0L ||
-                        line.quantity.toBigDecimalOrNull()?.signum() != 1
-                } ||
-                runCatching { sumReportAmountsExactly(invoice.lines.map { it.lineTotalMinor }) }.getOrNull() != invoice.subtotalMinor ||
-                runCatching {
-                    Math.addExact(Math.addExact(invoice.subtotalMinor, invoice.taxMinor), invoice.freightMinor)
-                }.getOrNull() != invoice.totalMinor
-        } -> "توجد فاتورة مورد لا تتطابق بنودها أو إجمالياتها مع الضريبة والشحن؛ تم حجب ملخص الموردين."
-        else -> supplierPurchaseSummaryCalculation.exceptionOrNull()?.message.orEmpty()
-    }
-    val supplierObligationsError = when {
-        !cloudMode -> "مستحقات فواتير الموردين تتطلب مصادر السحابة."
-        purchasesLoadError.isNotBlank() -> purchasesLoadError
-        supplierObligationCandidates.any { (_, invoice) -> reportDateMillis(invoice.recordedAt) == null } ->
-            "توجد فاتورة التزام مورد بتاريخ غير صالح؛ لا يمكن حساب الرصيد حتى نهاية الفترة."
-        runCatching { calculateSupplierObligationTotals(supplierObligationInputs) }.isFailure ->
-            "تعذر مطابقة عملات الالتزامات أو تجاوزت مجاميعها نطاق الأرقام الدقيق؛ تم حجب المستحقات."
-        else -> ""
-    }
+    val supplierPurchaseSummaryError = reportSupplierPurchaseSummaryValidationError(
+        cloudMode = cloudMode,
+        purchasesLoadError = purchasesLoadError,
+        supplierInvoiceDetailError = supplierInvoiceDetailError,
+        activeSupplierInvoiceCandidates = activeSupplierInvoiceCandidates,
+        startMillis = startMillis,
+        endExclusive = endExclusive,
+        calculationError = supplierPurchaseSummaryCalculation.exceptionOrNull()?.message.orEmpty()
+    )
+    val supplierObligationsError = reportSupplierObligationsValidationError(
+        cloudMode = cloudMode,
+        purchasesLoadError = purchasesLoadError,
+        supplierObligationCandidates = supplierObligationCandidates,
+        supplierObligationInputs = supplierObligationInputs
+    )
     val supplierLiabilityAgingReport = remember(cloudPurchases, today, cloudMode, purchasesLoadError, supplierInvoiceDetailError) {
         buildSupplierLiabilityAgingReport(
             purchases = cloudPurchases,
