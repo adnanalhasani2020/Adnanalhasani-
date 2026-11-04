@@ -197,46 +197,16 @@ internal fun ReportsCenterScreen(
     val startMillis = startDate?.atStartOfDay(zone)?.toInstant()?.toEpochMilli() ?: Long.MIN_VALUE
     val endExclusive = endDate?.plusDays(1)?.atStartOfDay(zone)?.toInstant()?.toEpochMilli() ?: Long.MAX_VALUE
 
-    val ledgerStatementError = if (!cloudMode) "القوائم المالية تتطلب دفتر الأستاذ السحابي." else run {
-        val invalidPostedDate = cloudLedgerLines.any { line ->
-            runCatching { LocalDate.parse(line.entryDate.take(10)) }.getOrNull() == null
-        }
-        val throughEnd = cloudLedgerLines.filter { line ->
-            val date = runCatching { LocalDate.parse(line.entryDate.take(10)) }.getOrNull()
-            date != null && endDate != null && !date.isAfter(endDate)
-        }
-        val requiredGlMappings = setOf("accounts_receivable", "sales_revenue", "sales_returns", "sales_discounts", "sales_tax_payable", "inventory", "cost_of_goods_sold")
-        val missingGlMappings = requiredGlMappings - cloudGlMappings.map { it.mappingKey }.toSet()
-        val requiredSupplierRoles = setOf("inventory_asset", "accounts_payable", "goods_received_not_invoiced", "purchase_price_variance", "purchase_tax_freight_expense")
-        val missingSupplierRoles = requiredSupplierRoles - cloudSupplierControlAccounts.map { it.accountRole }.toSet()
-        when {
-            ledgerLinesLoadError.isNotBlank() -> ledgerLinesLoadError
-            glMappingsLoadError.isNotBlank() -> glMappingsLoadError
-            missingGlMappings.isNotEmpty() -> "خرائط حسابات المبيعات والذمم والمخزون غير مكتملة: ${missingGlMappings.sorted().joinToString()}."
-            invalidPostedDate -> "توجد قيود مرحلة بتاريخ غير صالح؛ لا يمكن استبعادها بأمان من القوائم المالية."
-            supplierControlAccountsLoadError.isNotBlank() -> supplierControlAccountsLoadError
-            missingSupplierRoles.isNotEmpty() -> "خرائط حسابات المشتريات والموردين غير مكتملة: ${missingSupplierRoles.sorted().joinToString()}."
-            throughEnd.isEmpty() -> "لا توجد قيود مرحلة ضمن الفترة؛ لا يمكن اعتماد القوائم المالية."
-            else -> {
-            val unbalanced = throughEnd.groupBy { it.entryId to it.currencyCode }.any { (_, lines) ->
-                lines.sumOf { it.debitMinor } != lines.sumOf { it.creditMinor }
-            }
-            val unknown = throughEnd.any { line ->
-                line.accountType.lowercase(Locale.ROOT).replace('-', '_').replace(' ', '_') !in setOf(
-                    "asset", "assets", "liability", "liabilities", "equity", "revenue", "income",
-                    "expense", "expenses", "cost_of_goods_sold", "cost_of_sales", "contra_revenue"
-                )
-            }
-            val invalidCurrency = throughEnd.any { !it.currencyCode.matches(Regex("^[A-Z]{3}$")) }
-            when {
-                unbalanced -> "توجد قيود مرحلة غير متزنة حسب العملة؛ تم حجب القوائم."
-                unknown -> "توجد حسابات بأنواع غير معروفة؛ يلزم تصنيف دليل الحسابات قبل اعتماد القوائم."
-                invalidCurrency -> "توجد سطور أستاذ بلا رمز عملة ISO صالح؛ تم حجب القوائم لمنع خلط العملات."
-                else -> ""
-            }
-            }
-        }
-    }
+    val ledgerStatementError = reportLedgerStatementValidationError(
+        cloudMode = cloudMode,
+        ledgerLines = cloudLedgerLines,
+        endDate = endDate,
+        ledgerLinesLoadError = ledgerLinesLoadError,
+        glMappingsLoadError = glMappingsLoadError,
+        glMappingKeys = cloudGlMappings.map { it.mappingKey }.toSet(),
+        supplierControlAccountsLoadError = supplierControlAccountsLoadError,
+        supplierAccountRoles = cloudSupplierControlAccounts.map { it.accountRole }.toSet()
+    )
     val expenseReportError = when {
         !cloudMode -> expensesLoadError
         expensesLoadError.isNotBlank() -> expensesLoadError
