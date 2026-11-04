@@ -283,3 +283,9 @@
 - `ReportInventoryRows.kt` owns selected-row assembly for current inventory valuation, inventory movement, stock-by-user, location balance, warehouse-mapping readiness, current stock, and low-stock alert reports.
 - `ReportsCenterScreen.kt` dispatches to this builder first and continues with other report families when it returns `null`; source readiness and date-window inputs are passed from the existing screen state.
 - Existing cost/currency checks, quantity precision, current-snapshot wording, and inventory source scopes are preserved.
+
+
+### Posted-ledger report row assembly extraction (2026-11-04)
+- `ReportLedgerRows.kt` owns row assembly for the income statement/balance sheet, trial balance, general-ledger movement/account statement, posted journal detail, and journal register reports.
+- `ReportsCenterScreen.kt` delegates these report selections to the ledger row builder after the inventory builder declines ownership; ledger validation, source projections, and account/date filters remain explicit inputs.
+- The extraction preserves posted-ledger source semantics, account classification, debit/credit directions, currency grouping, balance equation checks, and account-query requirements.
