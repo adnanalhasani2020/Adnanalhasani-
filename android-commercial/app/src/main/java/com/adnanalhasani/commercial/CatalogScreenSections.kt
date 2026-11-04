@@ -274,20 +274,16 @@ internal fun CatalogProductFormSection(state: CatalogProductFormState, categorie
 }
 
 @Composable
-internal fun CatalogInvoiceTransferSection(state: CatalogInvoiceTransferState, marketBranches: List<CatalogBranchOption>, selectedBranchId: String, categories: List<CatalogCategory>, directoryUnits: List<DirectoryUnit>, organizationId: String, busy: Boolean, onRequestInvoiceAsPurchase: () -> Unit, onLoadInvoiceRequests: () -> Unit, onReviewInvoicePurchaseRequest: (String, Boolean) -> Unit, onMapKnownInvoicePurchaseItems: (String) -> Unit, onLoadInvoicePurchaseUnmappedLines: (InvoicePurchaseRequestRow) -> Unit, onLinkSelectedInvoicePurchaseLine: () -> Unit, onOpenInvoiceItemCreationDialog: () -> Unit) {
+internal fun CatalogInvoiceTransferSection(state: CatalogInvoiceTransferState, marketBranches: List<CatalogBranchOption>, selectedBranchId: String, invoiceRequests: List<InvoicePurchaseRequestRow>, invoiceMappingLines: List<InvoicePurchaseUnmappedLine>, invoiceMappingOfferings: List<InvoicePurchaseOffering>, invoiceMappingWarehouses: List<CatalogWarehouseOption>, categories: List<CatalogCategory>, directoryUnits: List<DirectoryUnit>, organizationId: String, busy: Boolean, onRequestInvoiceAsPurchase: () -> Unit, onLoadInvoiceRequests: () -> Unit, onReviewInvoicePurchaseRequest: (String, Boolean) -> Unit, onMapKnownInvoicePurchaseItems: (String) -> Unit, onLoadInvoicePurchaseUnmappedLines: (InvoicePurchaseRequestRow) -> Unit, onLinkSelectedInvoicePurchaseLine: () -> Unit, onOpenInvoiceItemCreationDialog: () -> Unit) {
     var invoiceSaleId by state::invoiceSaleId
     var invoiceDestinationOrg by state::invoiceDestinationOrg
     var invoiceReceiveLocationMenuExpanded by state::invoiceReceiveLocationMenuExpanded
     var invoiceReceiveLocationId by state::invoiceReceiveLocationId
-    var invoiceRequests by state::invoiceRequests
     var invoiceMappingRequestId by state::invoiceMappingRequestId
-    var invoiceMappingLines by state::invoiceMappingLines
     var invoiceMappingLineId by state::invoiceMappingLineId
     var invoiceMappingLineMenuExpanded by state::invoiceMappingLineMenuExpanded
-    var invoiceMappingOfferings by state::invoiceMappingOfferings
     var invoiceMappingOfferingMenuExpanded by state::invoiceMappingOfferingMenuExpanded
     var invoiceMappingOfferingId by state::invoiceMappingOfferingId
-    var invoiceMappingWarehouses by state::invoiceMappingWarehouses
     var invoiceMappingWarehouseMenuExpanded by state::invoiceMappingWarehouseMenuExpanded
     var invoiceMappingWarehouseId by state::invoiceMappingWarehouseId
     LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(bottom=20.dp)) {

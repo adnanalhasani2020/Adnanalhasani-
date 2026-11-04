@@ -86,17 +86,17 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var invoiceSaleId by invoiceTransferState::invoiceSaleId
     var invoiceDestinationOrg by invoiceTransferState::invoiceDestinationOrg
     var invoiceRequestKey by remember { mutableStateOf(java.util.UUID.randomUUID().toString()) }
-    var invoiceRequests by invoiceTransferState::invoiceRequests
+    var invoiceRequests by remember { mutableStateOf<List<InvoicePurchaseRequestRow>>(emptyList()) }
     var invoiceMappingRequestId by invoiceTransferState::invoiceMappingRequestId
     var invoiceMappingPurchaseOrderId by remember { mutableStateOf("") }
-    var invoiceMappingLines by invoiceTransferState::invoiceMappingLines
-    var invoiceMappingOfferings by invoiceTransferState::invoiceMappingOfferings
+    var invoiceMappingLines by remember { mutableStateOf<List<InvoicePurchaseUnmappedLine>>(emptyList()) }
+    var invoiceMappingOfferings by remember { mutableStateOf<List<InvoicePurchaseOffering>>(emptyList()) }
     var invoiceMappingLineId by invoiceTransferState::invoiceMappingLineId
     var invoiceMappingOfferingId by invoiceTransferState::invoiceMappingOfferingId
     var invoiceMappingLineMenuExpanded by invoiceTransferState::invoiceMappingLineMenuExpanded
     var invoiceMappingOfferingMenuExpanded by invoiceTransferState::invoiceMappingOfferingMenuExpanded
     var invoiceMappingLocationId by remember { mutableStateOf("") }
-    var invoiceMappingWarehouses by invoiceTransferState::invoiceMappingWarehouses
+    var invoiceMappingWarehouses by remember { mutableStateOf<List<CatalogWarehouseOption>>(emptyList()) }
     var invoiceMappingWarehouseId by invoiceTransferState::invoiceMappingWarehouseId
     var invoiceMappingWarehouseMenuExpanded by invoiceTransferState::invoiceMappingWarehouseMenuExpanded
     var showInvoiceItemCreation by remember { mutableStateOf(false) }
@@ -1217,7 +1217,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                 "category" -> CatalogCategorySection(categoryCodeState, parentCodeState, categoryNameArState, categoryNameEnState, categoryDescriptionArState, categoryDescriptionEnState, categoryTranslationsState, categories, locale, busy, ::createCategory, ::loadDirectories)
                 "unit" -> CatalogUnitSection(unitShortCodeState, unitNameArState, unitNameEnState, unitDimensionState, unitBaseCodeState, unitFactorState, unitDecimalsState, unitTranslationsState, directoryUnits, busy, ::createUnit, ::loadDirectories)
                 "product" -> CatalogProductFormSection(productFormState, categories, directoryUnits, busy, ::createProduct)
-                "invoice_transfer" -> CatalogInvoiceTransferSection(invoiceTransferState, marketBranches, selectedBranchId, categories, directoryUnits, organizationId.trim(), busy, ::requestInvoiceAsPurchase, ::loadInvoiceRequests, ::reviewInvoicePurchaseRequest, ::mapKnownInvoicePurchaseItems, ::loadInvoicePurchaseUnmappedLines, ::linkSelectedInvoicePurchaseLine, ::openInvoiceItemCreationDialog)
+                "invoice_transfer" -> CatalogInvoiceTransferSection(invoiceTransferState, marketBranches, selectedBranchId, invoiceRequests, invoiceMappingLines, invoiceMappingOfferings, invoiceMappingWarehouses, categories, directoryUnits, organizationId.trim(), busy, ::requestInvoiceAsPurchase, ::loadInvoiceRequests, ::reviewInvoicePurchaseRequest, ::mapKnownInvoicePurchaseItems, ::loadInvoicePurchaseUnmappedLines, ::linkSelectedInvoicePurchaseLine, ::openInvoiceItemCreationDialog)
                 "transfer" -> CatalogTransferSection(transferSourceState, transferDestinationState, transferIdsState, pendingTransfers, busy, ::transferCatalog, ::loadPendingTransfers, ::respondToTransfer)
             }
         }
