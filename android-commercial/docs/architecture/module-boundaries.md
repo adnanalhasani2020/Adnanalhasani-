@@ -93,3 +93,11 @@ The UI must not become the authority for tenant access, balances, prices, postin
 - Preserve local/cloud separation and fail-closed behavior.
 - Do not introduce a second source of truth for products, offerings, units, locations, balances, or ledger entries.
 - Do not relocate source files until source-contract tests and build configuration have been checked for path-sensitive assumptions.
+
+
+## Reports extraction progress — 2026-11-04
+
+- Completed: `ReportsCatalog.kt` owns the report catalog model and catalog builder.
+- Completed: `ReportInventoryLines.kt` owns the common report row model and pure inventory report mapping for location balances and stock movements by user.
+- Still in `ReportsCenterScreen.kt`: report data loading, filter state, report selection, financial/customer/supplier calculations orchestration, Compose rendering, and export integration.
+- Do not move calculation rules into Compose UI. Keep reusable calculations in `ReportCalculations.kt` or focused pure calculation files; keep PDF/XLSX/print rendering in `ReportExport.kt`.
