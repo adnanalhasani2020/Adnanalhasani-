@@ -200,3 +200,6 @@ The catalog screen owns interaction and request orchestration. JSON-to-domain ma
 
 
 - `ReportInventoryRows.kt` owns row assembly for inventory-specific report selections. It consumes already-loaded projections and returns `null` for report families it does not own; it does not load data, mutate inventory, or change cost/quantity rules.
+
+
+- `ReportLedgerRows.kt` owns selected-row assembly for posted-ledger financial statements and ledger activity reports. It consumes validated ledger projections and report filters; it does not fetch or post journal entries or relax ledger validation.
