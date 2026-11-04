@@ -307,3 +307,6 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 
 
 - Extracted supplier invoice price variance, recorded invoices/obligations, obligation totals, and supplier movement report rows into `ReportSupplierRows.kt`; added a source-ownership test. Remaining dispatch branches include performance/trend/aging/collections, returns, payment records, detailed tax, cost/profit, and expense rows.
+
+
+- Extracted payment, settlement, return-status, and expense report rows into `ReportOperationalRows.kt`; added a source-ownership test. Remaining main-switch branches include performance/trend/aging/collections, detailed tax, profitability, supplier purchase summaries/aging, and a few orchestration-only cases.
