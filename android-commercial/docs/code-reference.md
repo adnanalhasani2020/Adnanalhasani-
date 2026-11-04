@@ -136,3 +136,9 @@
 - `ReportsCenterScreen.kt` retains report selection, data loading, filtering, screen state, rendering, and export orchestration; it consumes the extracted internal report mapping functions.
 - `ReportCalculations.kt` remains the owner of reusable exact arithmetic and aggregation rules. The extraction did not change formulas, query scopes, quantity precision, or report labels.
 - Source-contract tests now read the new owner file for moved helpers; this is a source-location update, not a relaxation of the report assertions.
+
+
+### Financial report row assembly extraction (2026-11-04)
+- `ReportFinancialLines.kt` owns the pure row assembly for the ledger cash-flow report and the tax/discount summary, including the fail-closed source-error state.
+- `ReportsCenterScreen.kt` retains the report controls, data loading, report selection, and rendering; shared `reportMoney` and `reportDateMillis` helpers are exposed internally for the extracted mapper.
+- The extraction preserves posted-ledger source filtering, currency grouping, opening/closing balance logic, document-date windows, and the existing exact arithmetic/error handling.
