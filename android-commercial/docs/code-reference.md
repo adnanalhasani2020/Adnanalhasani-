@@ -155,3 +155,9 @@
 - `CatalogScreen.kt` continues to own Compose state, screen rendering, data loading, RPC calls, and user workflows; it consumes the extracted models without changing their fields or defaults.
 - The models are package-internal so existing callers and dialogs retain access. No database schema, RPC contract, or persisted data changed.
 - `tests/test_catalog_models_ownership.py` guards the single model owner and the screen's existing model contract.
+
+
+### Catalog transport consolidation (2026-11-04)
+- `CatalogCloudTransport.kt` retains the catalog call-site helpers but delegates both GET and POST requests to the shared `SupabaseClient`.
+- Catalog session reads/writes now use `commercialCloudSessionPreferences`; the duplicate encrypted-preference factory and direct `HttpURLConnection` implementations were removed from `CatalogScreen.kt`.
+- Catalog HTTP requests retain the 15-second connect timeout and 25-second read timeout through the shared client, with the shared actionable backend/network error handling. RPC names, paths, payloads, tokens, and query scopes are unchanged.
