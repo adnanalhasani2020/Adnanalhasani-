@@ -4,6 +4,7 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 import java.math.BigDecimal
+import java.util.UUID
 
 internal data class CommercialCloudReturnableSaleItem(
     val id: String,
