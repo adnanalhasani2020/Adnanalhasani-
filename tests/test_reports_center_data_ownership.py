@@ -86,3 +86,11 @@ def test_party_statement_validation_owns_exact_balance_preflight():
     assert "endDate = endDate" in data
     assert "reportCustomerStatementValidationError(" in data
     assert "reportSupplierStatementValidationError(" in data
+
+
+def test_reports_center_uses_safe_exclusive_end_date_boundary_and_no_dead_sales_projection():
+    data = DATA.read_text(encoding="utf-8")
+    formatting = (ANDROID / "ReportFormatting.kt").read_text(encoding="utf-8")
+    assert "reportEndExclusiveMillis(endDate, zone)" in data
+    assert "if (date == LocalDate.MAX) Long.MAX_VALUE" in formatting
+    assert "val salesByCurrency =" not in data

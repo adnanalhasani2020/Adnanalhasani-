@@ -427,3 +427,8 @@
 
 ### Reports-center source-error routing correction
 - Sales reports now use `salesDocumentsLoadError` followed by their own arithmetic-preflight error. The customer operational statement integrity error is reserved for `أرصدة العملاء وكشف الحساب` and no longer blocks unrelated sales summaries or comparisons.
+
+
+### Reports-center date boundaries
+- The exclusive upper timestamp is calculated by `reportEndExclusiveMillis`; `LocalDate.MAX` maps to `Long.MAX_VALUE` rather than overflowing on `plusDays(1)`.
+- `ReportsCenterData.kt` no longer builds the unused local `salesByCurrency` projection; the displayed currency summary remains owned by the exact `calculateReportCurrencyTotals` path.

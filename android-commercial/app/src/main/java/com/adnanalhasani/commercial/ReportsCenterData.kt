@@ -95,7 +95,7 @@ internal fun rememberReportsCenterData(
     val dateError = startDate == null || endDate == null || startDate.isAfter(endDate)
     val zone = remember { ZoneId.systemDefault() }
     val startMillis = startDate?.atStartOfDay(zone)?.toInstant()?.toEpochMilli() ?: Long.MIN_VALUE
-    val endExclusive = endDate?.plusDays(1)?.atStartOfDay(zone)?.toInstant()?.toEpochMilli() ?: Long.MAX_VALUE
+    val endExclusive = reportEndExclusiveMillis(endDate, zone)
 
     val ledgerStatementError = reportLedgerStatementValidationError(
         cloudMode = cloudMode,
@@ -389,7 +389,6 @@ internal fun rememberReportsCenterData(
     }
     val inPeriodSettlements = if (cloudMode) emptyList() else settlements.filter { it.timestamp >= startMillis && it.timestamp < endExclusive }
     val inPeriodExpenses = if (cloudMode) emptyList() else expenses.filter { it.timestamp >= startMillis && it.timestamp < endExclusive }
-    val salesByCurrency = inPeriodSales.groupBy { it.currencyCode.ifBlank { "غير محددة" } }.toSortedMap()
     val stockLow = products.filter { it.stock <= (it.reorderPoint.takeIf { n -> n >= 0 } ?: 9) }
     val salesRowsCalculation = runCatching {
         buildSalesReportRows(
