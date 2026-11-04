@@ -188,3 +188,11 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 - Extracted market-context, nearby-catalog, and aggregated price-suggestion response mapping into `CatalogMarketData.kt`.
 - Added Kotlin unit coverage for missing branch coordinates, warehouse association, nearby item mapping, and price-hint formatting.
 - Kept location permission handling, pagination, RPC calls, selection state, and user-facing feedback in `CatalogScreen.kt`; no RPC, database, or business-rule contract was changed.
+
+
+## 2026-11-04 — Catalog discovery product mapping extraction
+
+- Moved the catalog discovery-page JSON-to-`CatalogProduct` mapping, including localized display fallbacks, unit options, raw metadata, expiry/tracking flags, and rulings, into `CatalogProductMapper.kt`.
+- Kept the RPC request, page size, offset progression, de-duplication, loading state, and user feedback in `CatalogScreen.kt`. Pagination still advances by the returned row count and still treats a full 100-row page as potentially having more results.
+- Added JVM tests for nested units/rulings, localized display overrides with original raw values retained, and empty pages; added a Python ownership guard.
+- No RPC name or payload, database schema, item model, or catalog business rule was changed.
