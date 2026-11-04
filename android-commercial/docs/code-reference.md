@@ -307,3 +307,9 @@
 - `ReportSupplierRows.kt` owns row assembly for supplier invoice price variance, recorded invoices/obligations, supplier obligation totals, and supplier movement statements.
 - It consumes existing purchase/invoice projections, posted supplier-payment movements, the current date window, and the supplier-name filter.
 - The extraction preserves canceled-invoice exclusions, invoice/order currency and price-variance validation, obligation arithmetic, posted-payment signs, and opening/period/closing movement balances.
+
+
+### Operational payment/return/expense report rows extraction (2026-11-04)
+- `ReportOperationalRows.kt` owns row assembly for payment-method totals, successful cloud payments, local settlements, sales-return settlement status, receipt/payment records, and operating-expense summaries/details.
+- It consumes the existing local/cloud projections and report period; canceled expense vouchers and unsuccessful payments remain excluded under the original rules.
+- The extraction does not create payments, process refunds, cancel vouchers, or write ledger entries.
