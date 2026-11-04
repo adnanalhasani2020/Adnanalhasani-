@@ -8,7 +8,7 @@ REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/comm
 def test_supabase_transport_keeps_headers_timeouts_and_disconnect_behavior():
     client = CLIENT.read_text(encoding="utf-8")
     assert "connectTimeout = 15000" in client
-    assert "readTimeout = 25000" in client
+    assert "readTimeoutMs: Int = 25000" in client
     assert 'setRequestProperty("apikey", anon)' in client
     assert 'setRequestProperty("Accept", "application/json")' in client
     assert 'setRequestProperty("Content-Type", "application/json")' in client
