@@ -116,12 +116,14 @@ def test_supplier_invoice_dates_are_required_and_verified_by_database():
 
 def test_contractual_supplier_aging_uses_due_date_and_fails_closed_for_legacy_rows():
     aging = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/SupplierDueDateAgingReport.kt").read_text()
-    screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterScreen.kt").read_text() + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCatalog.kt").read_text()
+    screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterScreen.kt").read_text() + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterData.kt").read_text() + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCatalog.kt").read_text()
     assert "LocalDate.parse(invoice.dueDate.take(10))" in aging
     assert "rememberSupplierDueDateAgingReport(" in aging
     assert "ChronoUnit.DAYS.between(dueDate, asOf)" in aging
     assert "invoice.invoiceDate.isNotBlank() && invoice.dueDate.isNotBlank()" in aging
     assert 'ReportCatalogItem("أعمار مستحقات الموردين"' in screen
     assert '"أعمار مستحقات الموردين" -> supplierDueDateAgingError' in screen
-    assert '"أعمار مستحقات الموردين", "عمر مستحقات الموردين حسب تاريخ الفاتورة"' in screen
-    assert '"أعمار مستحقات الموردين" -> if (supplierDueDateAgingError.isNotBlank()) emptyList()' in screen
+    assert 'ReportCatalogItem("عمر مستحقات الموردين حسب تاريخ الفاتورة"' in screen
+    derived_rows = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportDerivedRows.kt").read_text()
+    assert "internal fun buildSupplierDueDateAgingRows(" in derived_rows
+    assert "if (error.isNotBlank()) emptyList() else report.toReportLines(asOfDate)" in derived_rows

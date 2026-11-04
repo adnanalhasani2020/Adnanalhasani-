@@ -5,6 +5,9 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/InventoryRepository.kt"
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterScreen.kt"
+ROWS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportInventoryRows.kt"
+DATA_STATE = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterData.kt"
+CLOUD_DATA = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCloudData.kt"
 PROJECTION = ROOT / "supabase/migrations/20261031070000_inventory_warehouse_context_projection.sql"
 
 
@@ -12,7 +15,8 @@ class ReportsWarehouseInventoryContextContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.repository = REPOSITORY.read_text(encoding="utf-8")
-        cls.screen = SCREEN.read_text(encoding="utf-8") + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCatalog.kt").read_text(encoding="utf-8")
+        cls.screen = SCREEN.read_text(encoding="utf-8") + DATA_STATE.read_text(encoding="utf-8") + CLOUD_DATA.read_text(encoding="utf-8") + ROWS.read_text(encoding="utf-8") + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCatalog.kt").read_text(encoding="utf-8")
+        cls.inventory_rows = ROWS.read_text(encoding="utf-8")
         cls.projection = PROJECTION.read_text(encoding="utf-8")
 
     def test_report_reads_existing_read_only_warehouse_projection(self):
@@ -77,9 +81,9 @@ class ReportsWarehouseInventoryContextContractTests(unittest.TestCase):
                 self.assertIn(marker, self.screen)
 
     def test_report_does_not_claim_to_post_or_move_stock(self):
-        report = self.screen.split(
+        report = self.inventory_rows.split(
             '"حالة ربط أرصدة المخزون بالمستودعات" -> cloudWarehouseInventoryContext.map', 1
-        )[1].split("else -> emptyList()", 1)[0]
+        )[1].split("else -> null", 1)[0]
         self.assertNotIn("commercialCloudRequest(", report)
         self.assertIn("لا يجمع وحدات مختلفة ولا يغيّر الرصيد أو الحركات", self.screen)
 

@@ -58,7 +58,7 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 | REF-003 | Split cloud repository by domain | PARTIALLY EXTRACTED; CATALOG AND MASTER DATA EXTRACTED IN THIS SLICE | Inventory, sales, purchases, supplier payments, expenses, returns, customer portal, payment requests, and accounting reads and customer receivables, catalog inventory access, and master-data workflows have dedicated repositories; shared session/paging helpers and allowlisted operational records remain in the legacy repository |
 | REF-004 | Separate MainActivity composition/navigation from local legacy persistence and screens | PARTIALLY EXTRACTED | Shared and local models moved to dedicated files; next extract persistence/navigation in separate behavior-preserving slices |
 | REF-005 | Split report export infrastructure from report UI | EXTRACTED; TESTED pending CI | PDF/XLSX/print functions moved to ReportExport.kt; source-contract tests updated and XLSX unit tests added; run CI before marking tested |
-| REF-006 | Split report catalog, data builders, filters, and feature screens | OPEN | Each report family has clear owner and calculation tests |
+| REF-006 | Split report catalog, cloud data, row builders, filters, and feature screens | IN PROGRESS — catalog, inventory/financial row helpers, formatting, validation, domain mappers, export, cloud data loading, and interactive UI state have dedicated owners; the large report-row orchestration and Compose presentation remain | Each report family has clear owner and calculation tests; screen becomes a coordinator rather than a mixed-responsibility implementation |
 | REF-007 | Split catalog search, discovery, directory management, transfers, and invoice linking | IN PROGRESS — category, unit, product-authoring, invoice-review, and transfer presentation sections extracted; browse/discovery remains in the screen | Each catalog workflow has a focused UI owner and the existing request/business rules remain unchanged |
 | REF-008 | Split pure report calculations by business domain | PARTIALLY EXTRACTED; TESTS PENDING CI | Payment-request amount parsing/formatting now has its own pure Kotlin owner; formula parity tests and remaining report-domain extraction still required |
 | REF-009 | Organize existing feature files and shared UI components | OPEN | No duplicated feature or model owners |
@@ -271,3 +271,67 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 - Kept query/filter state, selection updates, RPC-triggering callbacks, pagination, and inventory-linking workflows in `CatalogScreen.kt`; the new component is presentation-only and callback-driven.
 - Updated source-contract tests to follow the extracted market state, product card, and browse presentation owners.
 - No RPC payload, database migration, or production data changed.
+
+
+## 2026-11-04 — Reports cloud data extraction
+
+- Added `ReportsCloudData.kt` as the owner of cloud report projections and refresh lifecycle.
+- Replaced the screen's individual mutable cloud-result fields and inline IO/handler refresh block with one immutable `ReportsCloudData` snapshot, while retaining local aliases so the existing report calculations and presentation remain unchanged.
+- Kept each source independently guarded, cleared failed projections, retained source-specific error messages, and preserved sequential loading and existing repository loader calls.
+- Updated the source-contract aggregation and module/code-reference ownership documentation. No report formula, query scope, RPC, SQL migration, or production data was changed.
+- REF-006 remains in progress: the large report-row selection/orchestration block and Compose presentation still require separate ownership before this refactor can be considered complete.
+
+
+- Added `ReportsCenterUiState.kt` as the single owner for report filter/selection/export-feedback state; `ReportsCenterScreen.kt` now consumes the state holders through delegated properties. The report-row orchestration and Compose presentation remain to be decomposed.
+
+
+- Extracted the report period preset/manual date input UI to `ReportsPeriodControls.kt`; the component emits range changes through callbacks while date validation and report filtering remain with the screen. Added a source-ownership test.
+
+
+- Extracted Android document-picker callbacks and CSV/XLSX/PDF stream/share lifecycle into `ReportsExportLaunchers.kt`; native document rendering remains in `ReportExport.kt`, and report-row selection remains in the screen. Added an ownership test and moved source-contract assertions to the new owner.
+
+
+- Extracted report category chips, catalog cards, source-readiness labels, and report-title selection mapping to `ReportsCatalogSection.kt` using a `LazyListScope` extension. The screen now passes state and callbacks; catalog definitions and calculations remain in their existing owners.
+
+
+- Extracted the inventory report branches from the large selected-row switch into `ReportInventoryRows.kt` and added a source-ownership test. The screen delegates inventory report selections to this builder; remaining sales, purchase, party/ledger, expense, and financial statement row assembly still needs decomposition.
+
+
+- Extracted the income statement/balance sheet, trial balance, general-ledger movement/account statement, posted journal detail, and journal register row branches into `ReportLedgerRows.kt`. Added a source-ownership test; remaining sales, purchase, party statement, customer/supplier operational, and expense row assembly still needs decomposition.
+
+
+- Extracted full customer/supplier control-account statements and the operational customer statement into `ReportPartyStatementRows.kt`; added a source-ownership test. Sales, purchase, supplier operational movement, and expense row families remain in the main dispatch and are the next extraction targets.
+
+
+- Extracted sales summaries, invoice details/lines, customer/item/payment breakdowns, tax/discount rows, average invoice values, and period comparisons into `ReportSalesRows.kt`; added a source-ownership test. User-performance/daily-trend/aging/collection cases and purchase/expense/return families remain for subsequent extraction.
+
+
+- Extracted supplier invoice price variance, recorded invoices/obligations, obligation totals, and supplier movement report rows into `ReportSupplierRows.kt`; added a source-ownership test. Remaining dispatch branches include performance/trend/aging/collections, returns, payment records, detailed tax, cost/profit, and expense rows.
+
+
+- Extracted payment, settlement, return-status, and expense report rows into `ReportOperationalRows.kt`; added a source-ownership test. Remaining main-switch branches include performance/trend/aging/collections, detailed tax, profitability, supplier purchase summaries/aging, and a few orchestration-only cases.
+
+
+- Extracted row mapping for user sales performance, daily sales trend, customer receivable aging/collections, supplier purchase summaries, and supplier aging into `ReportDerivedRows.kt`; added a source-ownership test. Remaining report switch logic is now mostly detailed tax, cost/profit, cash-flow summary, and orchestration.
+
+
+- Extracted detailed tax/discount row mapping into `ReportTaxRows.kt`; added an ownership test. Tax source validation and the existing tax/discount summary calculator remain in their existing owners.
+
+
+- Extracted item-profitability and historical cost/profit report row mapping into `ReportProfitabilityRows.kt`; added an ownership test. The exact calculation owners remain unchanged.
+
+
+- Extracted selected-result cards, empty-state messaging, export metadata generation, and CSV/XLSX/PDF/print action composition into `ReportsResultSection.kt`; added an ownership test. Screen orchestration and remaining filter/source state remain for the final coordinator cleanup.
+
+
+- Extracted supplier/customer, row, currency, status, and ledger-account filter controls into `ReportsFilterSection.kt`; added an ownership test. Filter application remains with the screen's selected-row pipeline.
+
+
+## 2026-11-04 — Reports center decomposition
+
+- Reduced `ReportsCenterScreen.kt` from approximately 1,700 lines to a focused ~215-line Compose composition root.
+- Extracted cloud loading, interactive state, period controls, filter controls, report catalog cards, result cards/export actions, and Android export launchers.
+- Extracted inventory, ledger, party statements, sales, supplier, operational, derived performance/aging/collection, detailed tax, and profitability report row builders/mappers into focused files.
+- Added source-ownership tests for each extracted responsibility and updated source-contract tests to follow the new owners without removing assertions.
+- Added `ReportsCenterData.kt` as the report data orchestration owner for date/source validation, calculation coordination, catalog filtering, selected-row dispatch/filtering, and summary totals.
+- Remaining follow-up: review whether the data orchestration owner should be split further by domain after CI confirms this boundary refactor; no production schema, RPC, or accounting formulas were changed.

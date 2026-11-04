@@ -127,7 +127,7 @@
 
 ### Reports catalog extraction (2026-11-04)
 - `ReportsCatalog.kt` owns `ReportCatalogItem` and `buildReportsCatalog(cloudMode)`.
-- `ReportsCenterScreen.kt` consumes the catalog and retains report loading, filtering, calculation orchestration, presentation, and export integration.
+- `ReportsCenterScreen.kt` consumes the catalog and retains filter state, calculation orchestration, presentation, and export integration. `ReportsCloudData.kt` owns the cloud report projections and refresh lifecycle.
 - Keep catalog labels, source descriptions, supported flags, and readiness notes together in `ReportsCatalog.kt`; do not duplicate the catalog in screen code.
 
 
@@ -246,3 +246,106 @@
 - `ReportsCenterScreen.kt` still owns all cloud loads, Compose state, and rendering; it now delegates only this validation decision.
 - Added `ReportLedgerValidationTest.kt` for cloud-mode gating, source-error precedence, missing mappings/roles, malformed dates, empty windows, unbalanced/unknown/invalid-currency entries, and a valid balanced ledger.
 - No database, RPC, report formula, or export contract was changed.
+
+
+### Reports cloud data extraction (2026-11-04)
+- `ReportsCloudData.kt` owns the immutable snapshot of cloud report projections, per-source load errors, and the refresh lifecycle used by the commercial reports center.
+- `ReportsCenterScreen.kt` consumes the snapshot and retains report selection, date/filter state, report-row orchestration, Compose presentation, and export integration.
+- Each projection remains independently guarded with `runCatching`; failed sources are cleared and expose their own error so report availability continues to fail closed. The loader preserves the existing source functions and sequential retrieval order.
+- This is a source-ownership change only. No query scope, RPC, report formula, database schema, or production data changed.
+
+
+### Reports center UI state extraction (2026-11-04)
+- `ReportsCenterUiState.kt` owns the Compose mutable state for report selection, date range, search/filter controls, export payload/title, feedback, supplier filter, and cloud refresh key.
+- `ReportsCenterScreen.kt` keeps stable delegated local properties so existing calculations, event handlers, and rendering retain their names and behavior while state creation has one owner.
+- The state owner contains no report calculations, repository calls, or export I/O.
+
+
+### Reports period controls extraction (2026-11-04)
+- `ReportsPeriodControls.kt` owns the period-preset chips and editable start/end date fields as a presentation component.
+- `ReportsCenterScreen.kt` retains date parsing, invalid-range handling, report-window filtering, and the selected period state; the component communicates changes only through callbacks.
+- Existing presets and their date boundaries are preserved. No report query or calculation was moved into the UI component.
+
+
+### Reports Android export lifecycle extraction (2026-11-04)
+- `ReportsExportLaunchers.kt` owns Android document-picker launchers, CSV/XLSX/PDF stream writing, PDF sharing, and export-source/date guards.
+- `ReportExport.kt` continues to own the pure/native PDF/XLSX/print rendering implementation; the launcher owner delegates to it.
+- `ReportsCenterScreen.kt` builds the selected report's export rows and invokes the launchers through stable aliases. Export metadata and error feedback remain in the screen state.
+
+
+### Reports catalog presentation extraction (2026-11-04)
+- `ReportsCatalogSection.kt` owns the report category chips, catalog cards, source-readiness labels, and title-to-selection mapping as a `LazyListScope` section.
+- `ReportsCenterScreen.kt` supplies the current catalog/filter/source state and receives the selected report through a callback; it retains report calculations and result rendering.
+- The component does not load sources or decide report support. It respects the catalog's supported flag, date validity, loading state, and per-report source error.
+
+
+### Inventory report row assembly extraction (2026-11-04)
+- `ReportInventoryRows.kt` owns selected-row assembly for current inventory valuation, inventory movement, stock-by-user, location balance, warehouse-mapping readiness, current stock, and low-stock alert reports.
+- `ReportsCenterScreen.kt` dispatches to this builder first and continues with other report families when it returns `null`; source readiness and date-window inputs are passed from the existing screen state.
+- Existing cost/currency checks, quantity precision, current-snapshot wording, and inventory source scopes are preserved.
+
+
+### Posted-ledger report row assembly extraction (2026-11-04)
+- `ReportLedgerRows.kt` owns row assembly for the income statement/balance sheet, trial balance, general-ledger movement/account statement, posted journal detail, and journal register reports.
+- `ReportsCenterScreen.kt` delegates these report selections to the ledger row builder after the inventory builder declines ownership; ledger validation, source projections, and account/date filters remain explicit inputs.
+- The extraction preserves posted-ledger source semantics, account classification, debit/credit directions, currency grouping, balance equation checks, and account-query requirements.
+
+
+### Customer/supplier statement row extraction (2026-11-04)
+- `ReportPartyStatementRows.kt` owns row assembly for the full customer control-account statement, supplier control-account statement, and operational customer statement.
+- It consumes loaded party-account links, control-account mappings, posted ledger lines, sales/purchase projections, and date/name filters. It does not fetch data or mutate receivables/payables.
+- The extraction preserves account-role/currency scoping, posted-ledger date ordering, opening/period/closing balances, exact amount summation, and refund-aware customer movement construction.
+
+
+### Sales report row assembly extraction (2026-11-04)
+- `ReportSalesRows.kt` owns row assembly for sales summaries, invoice details/lines, sales by item/customer/payment state, discounts/tax, average invoice value, and period comparison.
+- `ReportsCenterScreen.kt` delegates those selections to the sales row builder using the existing local/cloud projections and validated period boundaries.
+- Completed-sale filters, cloud/local source separation, invoice line snapshots, currency grouping, and equal-duration comparison windows are preserved.
+
+
+### Supplier report row assembly extraction (2026-11-04)
+- `ReportSupplierRows.kt` owns row assembly for supplier invoice price variance, recorded invoices/obligations, supplier obligation totals, and supplier movement statements.
+- It consumes existing purchase/invoice projections, posted supplier-payment movements, the current date window, and the supplier-name filter.
+- The extraction preserves canceled-invoice exclusions, invoice/order currency and price-variance validation, obligation arithmetic, posted-payment signs, and opening/period/closing movement balances.
+
+
+### Operational payment/return/expense report rows extraction (2026-11-04)
+- `ReportOperationalRows.kt` owns row assembly for payment-method totals, successful cloud payments, local settlements, sales-return settlement status, receipt/payment records, and operating-expense summaries/details.
+- It consumes the existing local/cloud projections and report period; canceled expense vouchers and unsuccessful payments remain excluded under the original rules.
+- The extraction does not create payments, process refunds, cancel vouchers, or write ledger entries.
+
+
+### Derived performance/aging/collection row mapping extraction (2026-11-04)
+- `ReportDerivedRows.kt` owns presentation-row mapping for user sales performance, daily sales trend, customer receivable aging, customer collections, supplier purchase summaries, and supplier aging reports.
+- The helpers receive existing calculation results and source-error states; a failed calculation remains fail-closed and does not get rendered as a partial report.
+- The calculation formulas and source-validation rules remain in their existing domain/report owners.
+
+
+### Detailed tax/discount report row extraction (2026-11-04)
+- `ReportTaxRows.kt` owns the detailed tax/discount row projection from completed sales, non-canceled supplier invoices, and completed returns.
+- The existing `taxDetailError` gate is applied before building rows; approved return value remains a return amount and is not mislabeled as a separately calculated tax refund.
+- No tax formula, tax rate, or tax liability is inferred by the mapper.
+
+
+### Profitability report row mapping extraction (2026-11-04)
+- `ReportProfitabilityRows.kt` owns display-row mapping for item profitability and historical cost-of-goods/gross-profit reports.
+- It consumes the existing item-profitability calculation result and cost-profit source projections; the exact formulas and validation remain in `ReportCalculations.kt` and `CostProfitCalculations.kt`.
+- Historical line costs, approved refunds, restocked-cost reversal, and the existing fail-closed error gates are preserved.
+
+
+### Reports result presentation/export actions extraction (2026-11-04)
+- `ReportsResultSection.kt` owns selected-report result cards, empty-state messaging, CSV/XLSX/PDF/print actions, and the common export-row metadata builder.
+- `ReportsCenterScreen.kt` supplies validated rows and source/date readiness, then receives export metadata/error updates through callbacks.
+- Android document-picker and share lifecycle remains in `ReportsExportLaunchers.kt`; native PDF/XLSX/print rendering remains in `ReportExport.kt`.
+
+
+### Reports filter presentation extraction (2026-11-04)
+- `ReportsFilterSection.kt` owns supplier/customer party filters, generic row/currency/status filters, and the explicit ledger-account query field.
+- `ReportsCenterScreen.kt` supplies selected report/state and receives filter changes through callbacks; the existing row-filtering and account-query requirements remain in the screen/domain pipeline.
+
+
+### Reports center data orchestration extraction (2026-11-04)
+- `ReportsCenterData.kt` owns the report-data preparation pipeline: date validation/window boundaries, report-specific source validation, calculation orchestration, catalog filtering, selected-row dispatch/filtering, and summary totals.
+- `ReportsCenterScreen.kt` now owns only Compose screen composition and event wiring; it consumes the prepared `ReportsCenterData` snapshot and delegates period/filter/catalog/result UI to focused components.
+- Cloud retrieval remains in `ReportsCloudData.kt`; interactive state remains in `ReportsCenterUiState.kt`; per-family row builders and export lifecycle remain in their dedicated files.
+- The report data coordinator is intentionally read-only and consumes existing local/cloud projections. No query scope, RPC, schema, accounting formula, or production data was changed by this extraction.

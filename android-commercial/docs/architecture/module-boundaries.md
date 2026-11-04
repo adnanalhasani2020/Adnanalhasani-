@@ -17,12 +17,12 @@ This document describes the existing code, then records where responsibility sho
 |---|---|---|
 | `MainActivity.kt` | Activity entry, app composition, navigation/state, local screens/dialogs, cloud report entry | `app/`, `ui/navigation/`, `feature/dashboard/`, and the matching feature packages. Shared/local models now live in `CommercialModels.kt` and `LocalStoreModels.kt`; SharedPreferences persistence now lives in `LocalStoreRepository.kt`. |
 | `CommercialCloudRepository.kt` | Shared context/token/paging helpers, customer options, and allowlisted operational record reads | `SupabaseClient.kt` owns HTTP transport; `CatalogRepository.kt`, `MasterDataRepository.kt`, `InventoryRepository.kt`, `SalesRepository.kt`, `PurchaseRepository.kt`, `SupplierPaymentRepository.kt`, `ExpenseRepository.kt`, `ReturnsRepository.kt`, `CustomerPortalRepository.kt`, `CustomerAccountsRepository.kt`, and `AccountingRepository.kt` own extracted domains |
-| `ReportsCenterScreen.kt` | Report catalog, report data builders, filters, report UI, PDF printing, XLSX generation, accounting/report aggregation | `feature/reports/`, `domain/calculation/`, `core/export/` |
+| `ReportsCenterScreen.kt` | Report selection, date/filter state, row orchestration, report UI, export actions | `feature/reports/`, `domain/calculation/`, `core/export/`; cloud projections now belong to `ReportsCloudData.kt` |
 | `CatalogScreen.kt` | Catalog search, market context, nearby discovery, price suggestions, category/unit/product creation, invoice-purchase linking, catalog transfers, ruling review | `feature/catalog/` plus catalog repository/data adapters |
 | `ReportCalculations.kt` | Pure calculation models and functions for profitability, statements, aging, daily sales, inventory and performance | Split by calculation domain under `domain/calculation/`; preserve formulas and tests |
 | `ActivityProfileScreen.kt` | Authentication/profile onboarding and business activity setup | `feature/settings/` or `feature/onboarding/`, backed by `core/auth/` and profile repository |
 
-## Existing domain screens to preserve and group
+| `ReportsCloudData.kt` | Immutable cloud report projections, per-source load errors, and refresh lifecycle | Keep data retrieval and refresh ownership outside Compose report presentation; preserve existing repository query scopes and fail-closed source errors |\n\n## Existing domain screens to preserve and group
 
 ### Sales
 - `CommercialCloudSalesScreen.kt`
@@ -163,7 +163,7 @@ The catalog screen owns interaction and request orchestration. JSON-to-domain ma
 
 ### Reports ledger-validation boundary (2026-11-04)
 - `ReportLedgerValidation.kt` owns the pure fail-closed validation that gates financial statement rendering: cloud-mode requirement, source-load errors, required GL/supplier mappings, posted-entry dates, balanced entries by currency, known account types, and ISO currency codes.
-- `ReportsCenterScreen.kt` retains data loading and state ownership, and passes the existing ledger projections and load errors to the validator.
+- `ReportsCenterScreen.kt` retains report calculation orchestration and passes the existing ledger projections and load errors to the validator. Cloud projections are owned by `ReportsCloudData.kt`; interactive Compose state is owned by `ReportsCenterUiState.kt`.
 - Validation precedence, Arabic feedback, required mapping/role keys, date cutoff, and per-entry/per-currency balance checks are preserved. The validator does not fetch data, mutate state, or calculate statement totals.
 - `ReportLedgerValidationTest.kt` covers the failure gates and the valid balanced-ledger path.
 
@@ -177,3 +177,62 @@ The catalog screen owns interaction and request orchestration. JSON-to-domain ma
 - `CatalogProductFormState.kt` owns product-authoring form state; `CatalogScreenSections.kt` owns the product form presentation. The existing create-product action remains in `CatalogScreen.kt`.
 
 - `CatalogInvoiceTransferState.kt` owns the invoice-review and matching presentation state; `CatalogScreenSections.kt` owns the invoice-to-purchase review section. Existing action functions and RPC calls remain in `CatalogScreen.kt`.
+
+
+### Reports cloud data boundary — 2026-11-04
+- `ReportsCloudData.kt` owns cloud report loading, the immutable projection snapshot, and source-specific error state. It calls the existing repository loader functions only; it does not introduce a new transport or alter organization scoping.
+- `ReportsCenterScreen.kt` consumes the snapshot through stable local aliases and retains date/filter state, report calculation orchestration, selected-row filtering, UI, and export integration.
+- A failed source continues to produce an empty projection and a source-specific error. Do not present stale rows as freshly loaded data or make an unsupported report selectable.
+
+
+### Reports center UI state boundary — 2026-11-04
+- `ReportsCenterUiState.kt` owns mutable interactive state for period selection, search and row filters, selected report/category, export metadata, feedback, supplier filter, and refresh key.
+- `ReportsCenterScreen.kt` consumes those holders through delegated local properties. Do not move report formulas, repository calls, or export side effects into the state class.
+
+
+- `ReportsPeriodControls.kt` owns only the period-preset and manual date-range controls. Date validation, date-window calculations, and report filtering remain in `ReportsCenterScreen.kt`/report domain helpers.
+
+
+- `ReportsExportLaunchers.kt` owns Android document-picker lifecycle, stream writing, sharing, and the date/source guards for export actions. `ReportExport.kt` owns the actual PDF/XLSX/print renderers; the screen owns export-row selection and metadata.
+
+
+- `ReportsCatalogSection.kt` owns only the report category/catalog presentation and title-selection mapping. It consumes `ReportCatalogItem` and source-readiness inputs; catalog definitions remain in `ReportsCatalog.kt`, while report data and calculations remain outside the UI section.
+
+
+- `ReportInventoryRows.kt` owns row assembly for inventory-specific report selections. It consumes already-loaded projections and returns `null` for report families it does not own; it does not load data, mutate inventory, or change cost/quantity rules.
+
+
+- `ReportLedgerRows.kt` owns selected-row assembly for posted-ledger financial statements and ledger activity reports. It consumes validated ledger projections and report filters; it does not fetch or post journal entries or relax ledger validation.
+
+
+- `ReportPartyStatementRows.kt` owns customer/supplier statement row assembly from already-loaded party-account and posted-ledger projections, plus the operational customer statement. It does not perform collections, supplier payments, or ledger posting.
+
+
+- `ReportSalesRows.kt` owns pure row assembly for sales-period, invoice-detail, and period-comparison reports. It consumes existing sales projections and date boundaries; it does not load sales, mutate invoices, or calculate authoritative balances.
+
+
+- `ReportSupplierRows.kt` owns supplier report row assembly from loaded purchase, invoice, obligation, and posted-payment projections. It does not create supplier payments or alter purchase/invoice lifecycle state.
+
+
+- `ReportOperationalRows.kt` owns display-row assembly for payment, settlement, return, and expense reports. It is read-only and must not initiate collections, refunds, expense cancellation, or journal posting.
+
+
+- `ReportDerivedRows.kt` maps existing domain calculation/report states into `ReportLine` rows. It does not calculate totals, load source data, or relax validation errors.
+
+
+- `ReportTaxRows.kt` owns presentation rows for detailed recorded taxes/discounts from existing sales, supplier invoices, and completed returns. It does not calculate tax rates or a net tax liability.
+
+
+- `ReportProfitabilityRows.kt` owns row presentation for item profitability and historical cost/profit. Calculation formulas remain in their domain calculation files; the mapper must not substitute current purchase costs for historical sale-line costs.
+
+
+- `ReportsResultSection.kt` owns read-only result cards, empty-state presentation, and export/print action composition. It consumes already-filtered rows and uses callbacks for export state and feedback; file creation/share lifecycle and rendering stay in their dedicated owners.
+
+
+- `ReportsFilterSection.kt` owns only report filter controls. It does not apply filters or widen report queries; the screen/report row pipeline remains responsible for filtering and ledger account scoping.
+
+
+### Reports center coordinator boundary — 2026-11-04
+- `ReportsCenterScreen.kt` is the Compose composition root and event coordinator; it no longer owns report source loading, validation/calculation orchestration, report row construction, or document export implementation.
+- `ReportsCenterData.kt` owns date/source validation, calculation orchestration, selected report dispatch, selected-row filtering, and summary totals. It is UI-free apart from Compose `remember` lifecycle.
+- `ReportsCloudData.kt` owns cloud projection loading; `ReportsCenterUiState.kt` owns interactive state; `ReportsPeriodControls.kt`, `ReportsFilterSection.kt`, `ReportsCatalogSection.kt`, and `ReportsResultSection.kt` own UI sections; report-family row files own row mapping; export launchers/renderers remain separate.
