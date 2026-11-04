@@ -7,6 +7,18 @@ import androidx.compose.runtime.setValue
 /** State for invoice-to-purchase review and catalog item matching. */
 internal class CatalogInvoiceTransferState {
     var invoiceRequestKey by mutableStateOf(java.util.UUID.randomUUID().toString())
+    var mappingPurchaseOrderId by mutableStateOf("")
+    var mappingLocationId by mutableStateOf("")
+    var showItemCreation by mutableStateOf(false)
+    var newNameAr by mutableStateOf("")
+    var newNameEn by mutableStateOf("")
+    var newCategoryCode by mutableStateOf("")
+    var newBaseUnitCode by mutableStateOf("")
+    var newSaleUnitCode by mutableStateOf("")
+    var newCategoryMenuExpanded by mutableStateOf(false)
+    var newBaseUnitMenuExpanded by mutableStateOf(false)
+    var newSaleUnitMenuExpanded by mutableStateOf(false)
+    var newIdempotencyKey by mutableStateOf("")
     var invoiceSaleId by mutableStateOf("")
     var invoiceDestinationOrg by mutableStateOf("")
     var invoiceReceiveLocationMenuExpanded by mutableStateOf(false)
