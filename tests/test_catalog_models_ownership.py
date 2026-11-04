@@ -79,3 +79,15 @@ def test_catalog_market_response_parsing_has_a_dedicated_owner():
 
     assert "val page = parseNearbyCatalogItems(raw)" in screen
     assert "val hints = parseCatalogMarketPriceHints(raw)" in screen
+
+
+
+def test_catalog_discovery_product_mapping_has_a_dedicated_owner():
+    screen = SCREEN.read_text(encoding="utf-8")
+    mapper = (ANDROID / "CatalogProductMapper.kt").read_text(encoding="utf-8")
+
+    assert "parseCatalogProducts(raw, signedInUserId)" in screen
+    assert "internal fun parseCatalogProducts(" in mapper
+    assert "val pageItems=List(json.length())" not in screen
+    assert "catalogOffset = requestedOffset + pageItems.size" in screen
+    assert "catalogHasMore = pageItems.size == 100" in screen
