@@ -5,6 +5,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterScreen.kt"
 REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt"
+EXPENSE_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ExpenseRepository.kt"
 CALCULATIONS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportCalculations.kt"
 EXPORT = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportExport.kt"
 PRICE_VARIANCE_CALCULATIONS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/SupplierInvoicePriceVarianceCalculations.kt"
@@ -19,6 +20,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
     def setUpClass(cls):
         cls.screen = SCREEN.read_text(encoding="utf-8")
         cls.repository = REPOSITORY.read_text(encoding="utf-8")
+        cls.expense_repository = EXPENSE_REPOSITORY.read_text(encoding="utf-8")
         cls.sales_repository = SALES_REPOSITORY.read_text(encoding="utf-8")
         cls.calculations = CALCULATIONS.read_text(encoding="utf-8")
         cls.export = EXPORT.read_text(encoding="utf-8")
@@ -239,7 +241,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn('ReportCatalogItem("ملخص المصروفات حسب التصنيف وطريقة الصرف"', self.screen)
         self.assertIn('"ملخص المصروفات حسب التصنيف وطريقة الصرف" -> expenseReportError', self.screen)
         self.assertIn('"ملخص المصروفات حسب التصنيف وطريقة الصرف" -> cloudExpenses.filter', self.screen)
-        self.assertIn('currencyCode = row.optString("currency_code").takeUnless { it == "null" }.orEmpty()', self.repository)
+        self.assertIn('currencyCode = row.optString("currency_code").takeUnless { it == "null" }.orEmpty()', self.expense_repository)
 
     def test_supplier_obligations_preserve_overpayments_and_use_exact_currency_matched_totals(self):
         self.assertIn("calculateSupplierObligationTotals", self.calculations)
