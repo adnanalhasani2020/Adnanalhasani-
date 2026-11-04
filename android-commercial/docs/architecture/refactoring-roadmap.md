@@ -310,3 +310,6 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 
 
 - Extracted payment, settlement, return-status, and expense report rows into `ReportOperationalRows.kt`; added a source-ownership test. Remaining main-switch branches include performance/trend/aging/collections, detailed tax, profitability, supplier purchase summaries/aging, and a few orchestration-only cases.
+
+
+- Extracted row mapping for user sales performance, daily sales trend, customer receivable aging/collections, supplier purchase summaries, and supplier aging into `ReportDerivedRows.kt`; added a source-ownership test. Remaining report switch logic is now mostly detailed tax, cost/profit, cash-flow summary, and orchestration.
