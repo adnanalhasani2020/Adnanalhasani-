@@ -11,6 +11,7 @@ SUPPLIER_PAYMENT_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/a
 PURCHASE_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/PurchaseRepository.kt"
 SALES_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/SalesRepository.kt"
 EXPENSE_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ExpenseRepository.kt"
+ACCOUNTING_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/AccountingRepository.kt"
 CALCULATIONS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportCalculations.kt"
 EXPORT = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportExport.kt"
 PRICE_VARIANCE_CALCULATIONS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/SupplierInvoicePriceVarianceCalculations.kt"
@@ -30,6 +31,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         cls.supplier_payment_repository = SUPPLIER_PAYMENT_REPOSITORY.read_text(encoding="utf-8")
         cls.purchase_repository = PURCHASE_REPOSITORY.read_text(encoding="utf-8")
         cls.expense_repository = EXPENSE_REPOSITORY.read_text(encoding="utf-8")
+        cls.accounting_repository = ACCOUNTING_REPOSITORY.read_text(encoding="utf-8")
         cls.sales_repository = SALES_REPOSITORY.read_text(encoding="utf-8")
         cls.calculations = CALCULATIONS.read_text(encoding="utf-8")
         cls.export = EXPORT.read_text(encoding="utf-8")
@@ -51,7 +53,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
                 self.assertIn(source, self.screen)
 
     def test_ledger_projection_is_organization_scoped_and_posted_only(self):
-        loader = self.repository.split(
+        loader = self.accounting_repository.split(
             "internal fun loadCommercialCloudPostedJournalLines", 1
         )[1]
         self.assertIn("status=eq.posted", loader)
@@ -159,7 +161,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
     def test_customer_and_supplier_statements_use_party_linked_posted_journal_lines(self):
         self.assertIn('loadCommercialCloudCustomerPartyAccounts(context)', self.screen)
         self.assertIn('loadCommercialCloudSupplierPartyAccounts(context)', self.screen)
-        self.assertIn('partyAccountId = line.optString("party_account_id")', self.repository)
+        self.assertIn('partyAccountId = line.optString("party_account_id")', self.accounting_repository)
         self.assertIn('"الرصيد المحاسبي الكامل للعملاء" -> if (customerStatementError.isNotBlank()) emptyList()', self.screen)
         self.assertIn('"أرصدة الموردين والمستحقات" -> if (supplierStatementError.isNotBlank()) emptyList()', self.screen)
         self.assertIn('link.partyAccountId == line.partyAccountId && link.currencyCode == line.currencyCode', self.screen)
