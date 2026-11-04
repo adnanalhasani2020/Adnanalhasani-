@@ -9,9 +9,6 @@ import java.math.BigDecimal
 import java.util.Locale
 import java.util.concurrent.Executors
 
-private val commercialCloudIo = Executors.newSingleThreadExecutor()
-private val commercialCloudMain = Handler(Looper.getMainLooper())
-
 internal data class CommercialCloudContext(
     val organizationId: String,
     val activityId: String,
