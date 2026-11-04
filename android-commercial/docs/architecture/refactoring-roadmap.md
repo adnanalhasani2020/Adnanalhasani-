@@ -136,3 +136,11 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 - Extracted catalog HTTP request wrappers into `CatalogCloudTransport.kt`, delegating to `SupabaseClient` with the existing 25-second read timeout; removed the duplicate catalog-specific HTTP implementation and encrypted session preference factory from `CatalogScreen.kt`.
 - Reused `commercialCloudSessionPreferences` for catalog login/session restore, keeping the same encrypted preference file and keys.
 - Added source-contract assertions for the shared transport/session owner. No RPC name, request payload, SQL migration, or database data was changed.
+
+
+## 2026-11-04 — Report domain mapper extraction
+
+- Extracted supplier invoice price-variance input mapping, sale/return cost-profit input mapping, customer statement input mapping, supplier aging row mapping, report-line formatting, and supplier movement row model into `ReportDomainMappers.kt`.
+- Kept all existing mapping fields, filters, and call-site names; the extracted functions are package-internal for use by the report screen.
+- Updated the report source-contract test and added a dedicated ownership test.
+- No report formulas, SQL, RPCs, data scopes, exports, or persisted data changed. The remaining large report screen still owns loading, filters, state, selected-row projection, and Compose rendering.
