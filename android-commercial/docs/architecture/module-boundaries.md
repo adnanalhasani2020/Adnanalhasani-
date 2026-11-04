@@ -147,3 +147,9 @@ The catalog screen owns interaction and request orchestration. JSON-to-domain ma
 
 - `CatalogDirectoryMapper.kt` owns pure JSON-to-domain mapping for catalog categories, category translations/descriptions, global units, localized unit names, local unit-code membership, and business activity hierarchy nodes.
 - `CatalogScreen.kt` retains all directory network calls, locale/query selection, initial activity inference, Compose state updates, feedback, and follow-up market-context loading. The mapper must not issue requests or change the directory RPC/REST response contract.
+
+
+### Catalog workflow response boundary
+
+- `CatalogWorkflowMappers.kt` owns pure JSON mapping for invoice-purchase request rows and pending catalog-transfer rows.
+- `CatalogScreen.kt` retains the request endpoints, organization scoping, ordering/limits, action orchestration, refreshes, and feedback. Mapping extraction must not change approval/rejection actions or invoice-to-purchase linking semantics.
