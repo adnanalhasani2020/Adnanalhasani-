@@ -55,7 +55,7 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 | REF-000 | Inventory repository, Android source, tests, and ownership boundaries | TESTED (documentation inventory) | Existing files and ownership boundaries documented; this is not a runtime test |
 | REF-001 | Establish baseline build/test commands and path-sensitive test inventory | PARTIALLY DOCUMENTED | CI commands and high-risk source-contract tests recorded; exhaustive call-site/path inventory and a baseline run on this branch remain required |
 | REF-002 | Extract shared network transport and cloud error mapping from cloud repository | PARTIALLY EXTRACTED; TESTS PENDING CI | Shared `SupabaseClient` and `CloudErrorMapper` now own HTTP transport and actionable backend errors; request behavior must be confirmed by focused tests and CI |
-| REF-003 | Split cloud repository by domain | PARTIALLY EXTRACTED; TESTS PENDING CI | Customer payment-request workflows now have a dedicated repository; remaining inventory, returns, customer portal, and accounting domains still reside in the legacy repository |
+| REF-003 | Split cloud repository by domain | PARTIALLY EXTRACTED; TESTS PENDING CI | Customer payment-request workflows now have a dedicated repository; remaining inventory, customer portal, and accounting domains still reside in the legacy repository |
 | REF-004 | Separate MainActivity composition/navigation from local legacy persistence and screens | PARTIALLY EXTRACTED | Shared and local models moved to dedicated files; next extract persistence/navigation in separate behavior-preserving slices |
 | REF-005 | Split report export infrastructure from report UI | EXTRACTED; TESTED pending CI | PDF/XLSX/print functions moved to ReportExport.kt; source-contract tests updated and XLSX unit tests added; run CI before marking tested |
 | REF-006 | Split report catalog, data builders, filters, and feature screens | OPEN | Each report family has clear owner and calculation tests |
@@ -93,6 +93,7 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 - Moved expense voucher currency/time-zone context, listing, cancellation, idempotency-key persistence, and recording into `ExpenseRepository.kt`; updated expense, voucher atomicity, receivables/expense integrity, and report source-contract tests. Supplier-payment recording remains in the legacy repository pending its own domain extraction.
 - Moved purchase-order options, order creation/transitions, receipt workflows, supplier invoice models/recording, and their pending idempotency keys into `PurchaseRepository.kt`; updated purchase workflow, supplier invoice, sales screen contract, and report source-contract tests.
 - Moved posted supplier-payment movement reads and supplier payment recording into `SupplierPaymentRepository.kt`; updated report and purchase-screen source contracts. The purchase and payment flows retain their existing RPC names and shared transport.
+- Moved returnable sale projections, return request/inspection/decision flows, refund state, and restocking into `ReturnsRepository.kt`; updated operational-screen and report contracts. Decimal quantity validation and existing RPCs remain unchanged.
 - No database schema, RPC, or production data was changed.
 
 ## Current limitations
