@@ -60,6 +60,32 @@ class ReportFinancialValidationTest {
     }
 
     @Test
+    fun openingBalancePreflightUsesSameSortedOrderAsCashFlowRows() {
+        val error = cashError(
+            lines = listOf(
+                line(date = "2026-01-01", entryNumber = "3", debit = Long.MAX_VALUE),
+                line(date = "2026-01-01", entryNumber = "1", debit = Long.MAX_VALUE),
+                line(date = "2026-01-01", entryNumber = "2", credit = Long.MAX_VALUE)
+            ),
+            startDate = LocalDate.parse("2026-01-02")
+        )
+        assertEquals("", error)
+    }
+
+    @Test
+    fun runningBalancePreflightUsesSameSortedOrderAsCashFlowRows() {
+        val error = cashError(
+            lines = listOf(
+                line(date = "2026-01-02", entryNumber = "3", debit = Long.MAX_VALUE),
+                line(date = "2026-01-02", entryNumber = "1", debit = Long.MAX_VALUE),
+                line(date = "2026-01-02", entryNumber = "2", credit = Long.MAX_VALUE)
+            ),
+            startDate = LocalDate.parse("2026-01-02")
+        )
+        assertEquals("", error)
+    }
+
+    @Test
     fun rejectsCurrentInventoryValuationOverflow() {
         val alerts = listOf(
             stockAlert(cost = Long.MAX_VALUE),
@@ -95,11 +121,12 @@ class ReportFinancialValidationTest {
 
     private fun line(
         date: String = "2026-01-10",
+        entryNumber: String = "1",
         debit: Long = 0L,
         credit: Long = 0L
     ) = CommercialCloudJournalLine(
         entryId = "entry",
-        entryNumber = "1",
+        entryNumber = entryNumber,
         entryDate = date,
         entryDescription = "",
         sourceType = "test",
