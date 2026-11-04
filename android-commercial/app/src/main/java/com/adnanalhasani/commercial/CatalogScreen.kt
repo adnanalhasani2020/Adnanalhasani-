@@ -300,14 +300,11 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     fun updateProductDetails(item: CatalogProduct, payload: JSONObject) = productMaintenanceWorkflow.updateProductDetails(item, payload)
 
     Column(Modifier.fillMaxSize().padding(horizontal=14.dp)) {
-        Row(verticalAlignment=Alignment.CenterVertically) {
-            IconButton(onClick=onBack) { Icon(Icons.Default.ArrowBack,contentDescription="رجوع") }
-            Column(Modifier.weight(1f)) {
-                Text("دليل الأصناف والوحدات",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold)
-                Text("دليل متعدد الأنشطة والمستويات والمناطق",color=MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.bodySmall)
-            }
-            if (token != null) TextButton(onClick = { authWorkflow.logout() }) { Text("تسجيل الخروج") }
-        }
+        CatalogScreenHeader(
+            onBack = onBack,
+            signedIn = token != null,
+            onLogout = { authWorkflow.logout() }
+        )
         if (restoringSession) {
             Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         } else if(token==null) {
