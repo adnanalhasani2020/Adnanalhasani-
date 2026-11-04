@@ -78,7 +78,7 @@ def test_delegation_functions_are_not_callable_anonymously():
 
 
 def test_android_portal_routes_delegated_actions_to_guarded_rpcs():
-    repository = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt").read_text(encoding="utf-8")
+    repository = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CustomerPortalRepository.kt").read_text(encoding="utf-8")
     portal = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CustomerPortalScreen.kt").read_text(encoding="utf-8")
     activity = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt").read_text(encoding="utf-8")
     screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/PersonalAccountsScreen.kt").read_text(encoding="utf-8")
@@ -120,7 +120,7 @@ def test_personal_accounts_screen_has_direct_email_password_auth_and_session_con
 
 
 def test_delegated_portal_respects_purchase_and_booking_flags():
-    repository = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt").read_text(encoding="utf-8")
+    repository = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CustomerPortalRepository.kt").read_text(encoding="utf-8")
     portal = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CustomerPortalScreen.kt").read_text(encoding="utf-8")
     assert "commercial_account_list_my_active_delegations" in repository
     assert "permissions.optBoolean(\"purchase\", false)" in repository
@@ -188,7 +188,7 @@ def test_parent_can_view_consolidated_spend_by_child_and_institution():
 
 
 def test_customer_portal_falls_back_when_delegation_rpc_is_not_deployed():
-    repository = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt").read_text(encoding="utf-8")
+    repository = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CustomerPortalRepository.kt").read_text(encoding="utf-8")
     assert 'detail.contains("PGRST202"' in repository
     assert 'detail.contains("Could not find the function"' in repository
     assert 'else throw error' in repository
@@ -196,7 +196,7 @@ def test_customer_portal_falls_back_when_delegation_rpc_is_not_deployed():
 
 def test_merchant_order_queue_shows_selected_child_alias_and_icon():
     sql = MERCHANT_ALIASES.read_text(encoding="utf-8")
-    repository = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt").read_text(encoding="utf-8")
+    repository = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CustomerPortalRepository.kt").read_text(encoding="utf-8")
     screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CustomerOrderFulfillmentScreen.kt").read_text(encoding="utf-8")
     assert "'delegated_display_name'" in sql
     assert "'delegated_icon_key'" in sql
