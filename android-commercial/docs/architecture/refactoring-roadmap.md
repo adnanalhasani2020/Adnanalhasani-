@@ -159,3 +159,10 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 - Moved the report-local account-type normalization, statement classification, and account-net aggregation helpers into `ReportLedgerClassification.kt`.
 - Kept the exact classification branches, contra-revenue name checks, COGS aliases, and debit/credit sign rules.
 - Added Kotlin tests for classification and balance direction. The report screen now calls the extracted helpers; no ledger query, journal validation, currency grouping, or displayed report label was changed.
+
+
+## 2026-11-04 — Catalog login panel extraction
+
+- Extracted the login form UI into `CatalogLoginPanel.kt`, with controlled email/password values and a login callback.
+- Kept authentication request creation, token validation, refresh-token persistence, session state updates, and feedback in the existing screen workflow.
+- Added a source-contract assertion for the new component owner. No authentication endpoint, token key, encryption preference, or login validation rule changed.
