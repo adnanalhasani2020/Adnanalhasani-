@@ -301,3 +301,9 @@
 - `ReportSalesRows.kt` owns row assembly for sales summaries, invoice details/lines, sales by item/customer/payment state, discounts/tax, average invoice value, and period comparison.
 - `ReportsCenterScreen.kt` delegates those selections to the sales row builder using the existing local/cloud projections and validated period boundaries.
 - Completed-sale filters, cloud/local source separation, invoice line snapshots, currency grouping, and equal-duration comparison windows are preserved.
+
+
+### Supplier report row assembly extraction (2026-11-04)
+- `ReportSupplierRows.kt` owns row assembly for supplier invoice price variance, recorded invoices/obligations, supplier obligation totals, and supplier movement statements.
+- It consumes existing purchase/invoice projections, posted supplier-payment movements, the current date window, and the supplier-name filter.
+- The extraction preserves canceled-invoice exclusions, invoice/order currency and price-variance validation, obligation arithmetic, posted-payment signs, and opening/period/closing movement balances.
