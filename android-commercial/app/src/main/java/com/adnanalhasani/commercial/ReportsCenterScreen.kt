@@ -17,8 +17,6 @@ import android.text.TextPaint
 import android.net.Uri
 import android.os.CancellationSignal
 import android.os.ParcelFileDescriptor
-import android.os.Handler
-import android.os.Looper
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -45,7 +43,6 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import java.util.concurrent.Executors
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
@@ -54,8 +51,6 @@ private val ReportGreen = Color(0xFF167D63)
 private val ReportMint = Color(0xFFE8F5EF)
 private val ReportMuted = Color(0xFF71817B)
 private val ReportBorder = Color(0xFFE5EBE8)
-private val ReportIo = Executors.newSingleThreadExecutor()
-private val ReportMain = Handler(Looper.getMainLooper())
 
 @Composable
 internal fun ReportsCenterScreen(
@@ -83,112 +78,45 @@ internal fun ReportsCenterScreen(
     var exportRows by remember { mutableStateOf<List<List<String>>>(emptyList()) }
     var exportTitle by remember { mutableStateOf("تقرير متجري") }
     var error by remember { mutableStateOf("") }
-    var cloudSalesDocuments by remember { mutableStateOf<List<CommercialCloudSaleDocument>>(emptyList()) }
-    var cloudReceivables by remember { mutableStateOf<List<CommercialCloudReceivable>>(emptyList()) }
-    var receivablesLoadError by remember { mutableStateOf("") }
-    var cloudPurchases by remember { mutableStateOf<List<CommercialCloudPurchaseDocument>>(emptyList()) }
-    var cloudSupplierPayments by remember { mutableStateOf<List<CommercialCloudSupplierPaymentMovement>>(emptyList()) }
-    var cloudStockMovements by remember { mutableStateOf<List<CommercialCloudStockMovement>>(emptyList()) }
-    var cloudStockAlerts by remember { mutableStateOf<List<CommercialCloudStockAlert>>(emptyList()) }
-    var cloudLocationInventoryBalances by remember { mutableStateOf<List<CommercialCloudLocationInventoryBalance>>(emptyList()) }
-    var locationInventoryLoadError by remember { mutableStateOf("") }
-    var cloudWarehouseInventoryContext by remember { mutableStateOf<List<CommercialCloudWarehouseInventoryContext>>(emptyList()) }
-    var warehouseInventoryContextLoadError by remember { mutableStateOf("") }
-    var supplierFilter by remember { mutableStateOf("") }
-    var cloudReturns by remember { mutableStateOf<List<CommercialCloudSaleReturn>>(emptyList()) }
-    var cloudPayments by remember { mutableStateOf<List<CommercialCloudRecord>>(emptyList()) }
-    var cloudJournals by remember { mutableStateOf<List<CommercialCloudRecord>>(emptyList()) }
-    var cloudLedgerLines by remember { mutableStateOf<List<CommercialCloudJournalLine>>(emptyList()) }
-    var cloudSupplierControlAccounts by remember { mutableStateOf<List<CommercialCloudSupplierControlAccount>>(emptyList()) }
-    var cloudGlMappings by remember { mutableStateOf<List<CommercialCloudGlAccountMapping>>(emptyList()) }
-    var glMappingsLoadError by remember { mutableStateOf("") }
-    var cloudCustomerPartyAccounts by remember { mutableStateOf<List<CommercialCloudPartyAccountLink>>(emptyList()) }
-    var cloudSupplierPartyAccounts by remember { mutableStateOf<List<CommercialCloudPartyAccountLink>>(emptyList()) }
-    var customerPartyAccountsLoadError by remember { mutableStateOf("") }
-    var supplierPartyAccountsLoadError by remember { mutableStateOf("") }
-    var supplierControlAccountsLoadError by remember { mutableStateOf("") }
-    var cloudExpenses by remember { mutableStateOf<List<CommercialCloudExpenseVoucher>>(emptyList()) }
-    var cloudLoading by remember { mutableStateOf(false) }
-    var cloudLoadError by remember { mutableStateOf("") }
-    var salesDocumentsLoadError by remember { mutableStateOf("") }
-    var purchasesLoadError by remember { mutableStateOf("") }
-    var returnsLoadError by remember { mutableStateOf("") }
-    var paymentsLoadError by remember { mutableStateOf("") }
-    var journalsLoadError by remember { mutableStateOf("") }
-    var ledgerLinesLoadError by remember { mutableStateOf("") }
-    var expensesLoadError by remember { mutableStateOf("") }
-    var supplierPaymentsLoadError by remember { mutableStateOf("") }
-    var stockMovementsLoadError by remember { mutableStateOf("") }
-    var stockAlertsLoadError by remember { mutableStateOf("") }
     var cloudReload by remember { mutableIntStateOf(0) }
-
-    LaunchedEffect(cloudMode, cloudReload) {
-        if (!cloudMode) return@LaunchedEffect
-        cloudLoading = true
-        cloudLoadError = ""
-        ReportIo.execute {
-            val salesDocuments = runCatching { loadCommercialCloudSaleDocuments(context) }
-            val receivables = runCatching { loadCommercialCloudReceivables(context) }
-            val purchases = runCatching { loadCommercialCloudPurchaseDocuments(context) }
-            val supplierPayments = runCatching { loadCommercialCloudSupplierPaymentMovements(context) }
-            val stockMovements = runCatching { loadCommercialCloudStockMovements(context) }
-            val stockAlerts = runCatching { loadCommercialCloudStockAlerts(context) }
-            val locationInventory = runCatching { loadCommercialCloudLocationInventoryBalances(context) }
-            val warehouseInventoryContext = runCatching { loadCommercialCloudWarehouseInventoryContext(context) }
-            val returns = runCatching { loadCommercialCloudSaleReturns(context) }
-            val payments = runCatching { loadCommercialCloudRecords(context, "payments") }
-            val journals = runCatching { loadCommercialCloudRecords(context, "journals") }
-            val ledgerLines = runCatching { loadCommercialCloudPostedJournalLines(context) }
-            val supplierControlAccounts = runCatching { loadCommercialCloudSupplierControlAccounts(context) }
-            val glMappings = runCatching { loadCommercialCloudGlAccountMappings(context) }
-            val customerPartyAccounts = runCatching { loadCommercialCloudCustomerPartyAccounts(context) }
-            val supplierPartyAccounts = runCatching { loadCommercialCloudSupplierPartyAccounts(context) }
-            val expenses = runCatching { loadCommercialCloudExpenses(context) }
-            ReportMain.post {
-                cloudLoading = false
-                // Clear failed projections rather than silently showing stale results as fresh.
-                cloudSalesDocuments = salesDocuments.getOrDefault(emptyList())
-                salesDocumentsLoadError = salesDocuments.exceptionOrNull()?.message.orEmpty()
-                cloudReceivables = receivables.getOrDefault(emptyList())
-                receivablesLoadError = receivables.exceptionOrNull()?.message.orEmpty()
-                cloudPurchases = purchases.getOrDefault(emptyList())
-                purchasesLoadError = purchases.exceptionOrNull()?.message.orEmpty()
-                cloudSupplierPayments = supplierPayments.getOrDefault(emptyList())
-                supplierPaymentsLoadError = supplierPayments.exceptionOrNull()?.message.orEmpty()
-                cloudStockMovements = stockMovements.getOrDefault(emptyList())
-                stockMovementsLoadError = stockMovements.exceptionOrNull()?.message.orEmpty()
-                cloudStockAlerts = stockAlerts.getOrDefault(emptyList())
-                stockAlertsLoadError = stockAlerts.exceptionOrNull()?.message.orEmpty()
-                cloudLocationInventoryBalances = locationInventory.getOrDefault(emptyList())
-                locationInventoryLoadError = locationInventory.exceptionOrNull()?.message.orEmpty()
-                cloudWarehouseInventoryContext = warehouseInventoryContext.getOrDefault(emptyList())
-                warehouseInventoryContextLoadError = warehouseInventoryContext.exceptionOrNull()?.message.orEmpty()
-                cloudReturns = returns.getOrDefault(emptyList())
-                returnsLoadError = returns.exceptionOrNull()?.message.orEmpty()
-                cloudPayments = payments.getOrDefault(emptyList())
-                paymentsLoadError = payments.exceptionOrNull()?.message.orEmpty()
-                cloudJournals = journals.getOrDefault(emptyList())
-                journalsLoadError = journals.exceptionOrNull()?.message.orEmpty()
-                cloudLedgerLines = ledgerLines.getOrDefault(emptyList())
-                ledgerLinesLoadError = ledgerLines.exceptionOrNull()?.message.orEmpty()
-                cloudSupplierControlAccounts = supplierControlAccounts.getOrDefault(emptyList())
-                supplierControlAccountsLoadError = supplierControlAccounts.exceptionOrNull()?.message.orEmpty()
-                cloudGlMappings = glMappings.getOrDefault(emptyList())
-                glMappingsLoadError = glMappings.exceptionOrNull()?.message.orEmpty()
-                cloudCustomerPartyAccounts = customerPartyAccounts.getOrDefault(emptyList())
-                customerPartyAccountsLoadError = customerPartyAccounts.exceptionOrNull()?.message.orEmpty()
-                cloudSupplierPartyAccounts = supplierPartyAccounts.getOrDefault(emptyList())
-                supplierPartyAccountsLoadError = supplierPartyAccounts.exceptionOrNull()?.message.orEmpty()
-                cloudExpenses = expenses.getOrDefault(emptyList())
-                expensesLoadError = expenses.exceptionOrNull()?.message.orEmpty()
-                val errors = listOf(
-                    salesDocuments.exceptionOrNull(), purchases.exceptionOrNull(), returns.exceptionOrNull(), payments.exceptionOrNull(),
-                    journals.exceptionOrNull(), ledgerLines.exceptionOrNull(), expenses.exceptionOrNull()
-                ).filterNotNull()
-                cloudLoadError = errors.firstOrNull()?.message ?: if (errors.isNotEmpty()) "تعذر تحميل بعض مصادر التقارير." else ""
-            }
-        }
-    }
+    val cloudData = rememberReportsCloudData(context, cloudMode, cloudReload)
+    val cloudSalesDocuments = cloudData.salesDocuments
+    val cloudReceivables = cloudData.receivables
+    val receivablesLoadError = cloudData.receivablesLoadError
+    val cloudPurchases = cloudData.purchases
+    val cloudSupplierPayments = cloudData.supplierPayments
+    val cloudStockMovements = cloudData.stockMovements
+    val cloudStockAlerts = cloudData.stockAlerts
+    val cloudLocationInventoryBalances = cloudData.locationInventoryBalances
+    val locationInventoryLoadError = cloudData.locationInventoryLoadError
+    val cloudWarehouseInventoryContext = cloudData.warehouseInventoryContext
+    val warehouseInventoryContextLoadError = cloudData.warehouseInventoryContextLoadError
+    var supplierFilter by remember { mutableStateOf("") }
+    val cloudReturns = cloudData.returns
+    val cloudPayments = cloudData.payments
+    val cloudJournals = cloudData.journals
+    val cloudLedgerLines = cloudData.ledgerLines
+    val cloudSupplierControlAccounts = cloudData.supplierControlAccounts
+    val cloudGlMappings = cloudData.glMappings
+    val glMappingsLoadError = cloudData.glMappingsLoadError
+    val cloudCustomerPartyAccounts = cloudData.customerPartyAccounts
+    val cloudSupplierPartyAccounts = cloudData.supplierPartyAccounts
+    val customerPartyAccountsLoadError = cloudData.customerPartyAccountsLoadError
+    val supplierPartyAccountsLoadError = cloudData.supplierPartyAccountsLoadError
+    val supplierControlAccountsLoadError = cloudData.supplierControlAccountsLoadError
+    val cloudExpenses = cloudData.expenses
+    val cloudLoading = cloudData.loading
+    val cloudLoadError = cloudData.loadError
+    val salesDocumentsLoadError = cloudData.salesDocumentsLoadError
+    val purchasesLoadError = cloudData.purchasesLoadError
+    val returnsLoadError = cloudData.returnsLoadError
+    val paymentsLoadError = cloudData.paymentsLoadError
+    val journalsLoadError = cloudData.journalsLoadError
+    val ledgerLinesLoadError = cloudData.ledgerLinesLoadError
+    val expensesLoadError = cloudData.expensesLoadError
+    val supplierPaymentsLoadError = cloudData.supplierPaymentsLoadError
+    val stockMovementsLoadError = cloudData.stockMovementsLoadError
+    val stockAlertsLoadError = cloudData.stockAlertsLoadError
 
     val startDate = runCatching { LocalDate.parse(startText) }.getOrNull()
     val endDate = runCatching { LocalDate.parse(endText) }.getOrNull()
