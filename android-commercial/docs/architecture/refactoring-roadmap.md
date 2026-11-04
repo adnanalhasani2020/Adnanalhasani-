@@ -144,3 +144,11 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 - Kept all existing mapping fields, filters, and call-site names; the extracted functions are package-internal for use by the report screen.
 - Updated the report source-contract test and added a dedicated ownership test.
 - No report formulas, SQL, RPCs, data scopes, exports, or persisted data changed. The remaining large report screen still owns loading, filters, state, selected-row projection, and Compose rendering.
+
+
+## 2026-11-04 — Report formatting extraction
+
+- Moved currency scale resolution, report money formatting, and report date parsing from `ReportsCenterScreen.kt` into `ReportFormatting.kt`.
+- Kept helper names and signatures stable so report rows and exports continue using the same formatting contract.
+- Added Kotlin unit coverage for currencies with two and zero fraction digits, local whole-unit display, ISO instant/date-only parsing, and invalid currency fallback.
+- Restored date/time imports still required by report-period filtering in the Compose screen. No date-window, financial calculation, or export behavior was intentionally changed.
