@@ -5,6 +5,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterScreen.kt"
 REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt"
+SUPPLIER_PAYMENT_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/SupplierPaymentRepository.kt"
 PURCHASE_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/PurchaseRepository.kt"
 SALES_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/SalesRepository.kt"
 EXPENSE_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ExpenseRepository.kt"
@@ -22,6 +23,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
     def setUpClass(cls):
         cls.screen = SCREEN.read_text(encoding="utf-8")
         cls.repository = REPOSITORY.read_text(encoding="utf-8")
+        cls.supplier_payment_repository = SUPPLIER_PAYMENT_REPOSITORY.read_text(encoding="utf-8")
         cls.purchase_repository = PURCHASE_REPOSITORY.read_text(encoding="utf-8")
         cls.expense_repository = EXPENSE_REPOSITORY.read_text(encoding="utf-8")
         cls.sales_repository = SALES_REPOSITORY.read_text(encoding="utf-8")
@@ -109,9 +111,9 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
     def test_supplier_statement_uses_unique_posted_payment_rows_not_journal_totals(self):
         self.assertIn('"كشف حركات الموردين" ->', self.screen)
         self.assertIn("loadCommercialCloudSupplierPaymentMovements(context)", self.screen)
-        start = self.repository.index("internal fun loadCommercialCloudSupplierPaymentMovements(")
+        start = self.supplier_payment_repository.index("internal fun loadCommercialCloudSupplierPaymentMovements(")
         end = self.repository.index("\ninternal data class CommercialCloudPurchaseLine(", start)
-        loader = self.repository[start:end]
+        loader = self.supplier_payment_repository[start:end]
         self.assertIn("commercial_supplier_payments", loader)
         self.assertIn("journal.status=eq.posted", loader)
         self.assertIn('val id = row.optString("id")', loader)
