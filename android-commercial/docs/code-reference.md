@@ -226,3 +226,9 @@
 - `CatalogDirectoryMapper.kt` owns the combined directory response parser for categories, translations, units, local unit codes, and activity hierarchy nodes.
 - `CatalogScreen.kt` continues to own request orchestration, locale selection, initial activity inference, screen state, and feedback.
 - `CatalogDirectoryMapperTest.kt` covers translated and fallback fields, activity-node filtering, local-unit normalization, empty collections, and malformed required arrays.
+
+
+### Catalog invoice and transfer mapping extraction (2026-11-04)
+- `CatalogWorkflowMappers.kt` owns pure mapping for invoice-purchase request lists and pending catalog-transfer lists.
+- `CatalogScreen.kt` retains request URLs, organization scoping, sorting/limits, actions, and feedback.
+- `CatalogWorkflowMappersTest.kt` covers request/transfer field mapping, optional purchase-order IDs, and empty responses.
