@@ -182,3 +182,9 @@
 - `ReportLedgerClassification.kt` owns normalization of ledger account types, income-statement/balance-sheet classification, and debit/credit normal-balance aggregation.
 - `ReportsCenterScreen.kt` consumes the shared helpers while retaining the same account classification rules and statement row construction.
 - `ReportLedgerClassificationTest.kt` covers account-type aliases, contra-revenue and COGS detection, unknown account types, and debit/credit balance direction.
+
+
+### Catalog login panel extraction (2026-11-04)
+- `CatalogLoginPanel.kt` owns the login form presentation, validation enablement, and security guidance text.
+- `CatalogScreen.kt` retains authentication request orchestration, encrypted refresh-token persistence, session state, and feedback handling; the login panel receives callbacks and does not access credentials storage or network APIs.
+- `tests/test_catalog_models_ownership.py` guards the panel call site and the dedicated composable owner.
