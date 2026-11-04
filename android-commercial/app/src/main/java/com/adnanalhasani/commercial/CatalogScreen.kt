@@ -820,7 +820,6 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                         onSaveCoordinates=marketWorkflow::saveBranchCoordinates,
                         onLoadMarketContext=marketWorkflow::loadMarketContext,
                         onLoadNearbyFromDevice=::loadNearbyFromDevice,
-                        onStartNearbyCatalog=marketWorkflow::startNearbyCatalog,
                         onLoadSelectedPriceSuggestions=marketWorkflow::loadSelectedPriceSuggestions,
                         onCreateProduct={section="product"},
                         onConfigureSelectedCatalogItems=marketWorkflow::configureSelectedCatalogItems,
