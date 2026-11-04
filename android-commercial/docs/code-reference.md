@@ -316,6 +316,13 @@
 - Completed-sale filters, cloud/local source separation, invoice line snapshots, currency grouping, and equal-duration comparison windows are preserved.
 
 
+### Supplier invoice and obligation validation extraction (2026-11-05)
+- `ReportSupplierValidation.kt` owns the source-readiness and integrity checks for supplier invoice variance, invoice details, supplier purchase summaries, and supplier obligations.
+- `ReportsCenterData.kt` retains the active-invoice/obligation projections and obligation input preparation, then delegates validation decisions to the focused owner.
+- Existing source-error precedence, canceled-invoice exclusions, date-window rules, ISO currency checks, invoice line/subtotal/tax/freight reconciliation, exact arithmetic, and Arabic errors are preserved. Calculation formulas remain in `SupplierInvoicePriceVarianceCalculations.kt` and `ReportCalculations.kt`; row assembly remains in `ReportSupplierRows.kt`.
+- `tests/test_report_supplier_rows_ownership.py` and `tests/test_reports_center_data_ownership.py` guard the new owner and coordinator call sites.
+
+
 ### Supplier report row assembly extraction (2026-11-04)
 - `ReportSupplierRows.kt` owns row assembly for supplier invoice price variance, recorded invoices/obligations, supplier obligation totals, and supplier movement statements.
 - It consumes existing purchase/invoice projections, posted supplier-payment movements, the current date window, and the supplier-name filter.
