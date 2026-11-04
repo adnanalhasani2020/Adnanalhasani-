@@ -564,13 +564,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         request({
             catalogGet("/rest/v1/commercial_invoice_purchase_requests?select=id,source_organization_id,destination_organization_id,source_invoice_number,currency_code,total_minor,status,destination_purchase_order_id,created_at&or=(source_organization_id.eq."+orgId+",destination_organization_id.eq."+orgId+")&order=created_at.desc&limit=50",active)
         }, { raw ->
-            val rows=JSONArray(raw)
-            invoiceRequests=List(rows.length()) { i ->
-                val row=rows.getJSONObject(i)
-                InvoicePurchaseRequestRow(row.optString("id"),row.optString("source_organization_id"),row.optString("destination_organization_id"),
-                    row.optString("source_invoice_number"),row.optString("currency_code"),row.optLong("total_minor"),row.optString("status"),
-                    row.optString("destination_purchase_order_id").takeUnless { it=="null" }.orEmpty(),row.optString("created_at"))
-            }
+            invoiceRequests=parseInvoicePurchaseRequests(raw)
             feedback="طلبات تحويل الفواتير: "+invoiceRequests.size
         })
     }
@@ -834,8 +828,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         request({
             catalogGet("/rest/v1/commercial_catalog_transfers?select=id,source_organization_id,destination_organization_id,item_count,status,created_at&destination_organization_id=eq.$orgId&status=eq.pending&order=created_at.desc",active)
         }, { raw ->
-            val json=JSONArray(raw)
-            pendingTransfers=List(json.length()) { i -> val v=json.getJSONObject(i); PendingTransfer(v.optString("id"),v.optString("source_organization_id"),v.optString("destination_organization_id"),v.optInt("item_count"),v.optString("created_at")) }
+            pendingTransfers=parsePendingCatalogTransfers(raw)
             feedback="طلبات النقل الواردة: ${pendingTransfers.size}"
         })
     }
