@@ -181,3 +181,10 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 - Extracted More, expenses, expense entry, local reports, legacy cloud reports, debt, and settlement composables to `LocalOperationalScreens.kt`.
 - Reduced `MainActivity.kt` from 613 lines after earlier extractions to a 32-line Android entry point plus the shared cloud executor/handler.
 - Added source-contract tests that enforce the thin activity boundary and ensure every moved composable has one owner. Existing function names and call sites are preserved; no local/cloud data workflow was intentionally changed.
+
+
+### Completed follow-up — catalog market parsing
+
+- Extracted market-context, nearby-catalog, and aggregated price-suggestion response mapping into `CatalogMarketData.kt`.
+- Added Kotlin unit coverage for missing branch coordinates, warehouse association, nearby item mapping, and price-hint formatting.
+- Kept location permission handling, pagination, RPC calls, selection state, and user-facing feedback in `CatalogScreen.kt`; no RPC, database, or business-rule contract was changed.

@@ -207,3 +207,9 @@
 - `StorePalette.kt` owns the shared Compose colors used by the activity, local operational screens, product dialogs, and app shell.
 - Extracted the existing color values unchanged from the former activity file. This prevents extracted UI files from depending on private declarations in `MainActivity.kt`.
 - `tests/test_local_commercial_screens_contract.py` verifies the single palette owner.
+
+
+### Catalog market response mapping
+
+- `CatalogMarketData.kt` owns parsing of branch/warehouse market context, aggregated nearby-catalog rows, and aggregated price-guidance rows.
+- `CatalogScreen.kt` keeps orchestration, location permission handling, pagination, and UI state; it delegates response mapping to the pure parser functions.

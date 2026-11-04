@@ -62,3 +62,19 @@ def test_catalog_login_ui_has_a_dedicated_composable_owner():
     assert "تسجيل الدخول إلى حساب Supabase" in login
     assert "لا تستخدم مفتاح service_role في التطبيق" in login
     assert "OutlinedTextField(email," not in screen
+
+
+
+def test_catalog_market_response_parsing_has_a_dedicated_owner():
+    screen = SCREEN.read_text(encoding="utf-8")
+    market_data = (ANDROID / "CatalogMarketData.kt").read_text(encoding="utf-8")
+
+    for name in (
+        "parseCatalogMarketContext",
+        "parseNearbyCatalogItems",
+        "parseCatalogMarketPriceHints",
+    ):
+        assert f"{name}(" in market_data
+        assert f"{name}(" in screen
+
+    assert "JSONArray(raw)" not in screen

@@ -288,9 +288,9 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             val warehouses=catalogGet("/rest/v1/commercial_warehouses?select=id,name,branch_location_id&organization_id=eq."+orgId+"&state=eq.active&order=name.asc",active)
             JSONObject().put("branches",JSONArray(branches)).put("warehouses",JSONArray(warehouses)).toString()
         }, { raw ->
-            val result=JSONObject(raw); val bs=result.getJSONArray("branches"); val ws=result.getJSONArray("warehouses")
-            marketBranches=List(bs.length()) { i -> val row=bs.getJSONObject(i); CatalogBranchOption(row.optString("id"),row.optString("name"),row.optString("latitude").takeUnless { it=="null" }.orEmpty(),row.optString("longitude").takeUnless { it=="null" }.orEmpty()) }
-            marketWarehouses=List(ws.length()) { i -> val row=ws.getJSONObject(i); CatalogWarehouseOption(row.optString("id"),row.optString("name"),row.optString("branch_location_id")) }
+            val marketContext = parseCatalogMarketContext(raw)
+            marketBranches = marketContext.branches
+            marketWarehouses = marketContext.warehouses
             if(selectedBranchId.isBlank()) selectedBranchId=marketBranches.firstOrNull()?.id.orEmpty()
             if(selectedWarehouseId.isBlank() || marketWarehouses.none { it.id==selectedWarehouseId && it.branchId==selectedBranchId }) selectedWarehouseId=marketWarehouses.firstOrNull { it.branchId==selectedBranchId }?.id.orEmpty()
             val selectedBranch=marketBranches.firstOrNull { it.id==selectedBranchId }
@@ -374,9 +374,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                 .put("p_latitude",lat.toPlainString()).put("p_longitude",lon.toPlainString()).put("p_radius_m",nextRadius)
                 .put("p_offset",requestedOffset).put("p_limit",30),active)
         }, { raw ->
-            val rows=JSONArray(raw)
-            val page=List(rows.length()) { i -> val row=rows.getJSONObject(i); NearbyCatalogItem(row.optString("global_item_id"),
-                row.optString("product_name"),row.optString("popularity_band"),row.optString("merchant_count_band")) }
+            val page = parseNearbyCatalogItems(raw)
             if(expandRadius) marketRadius=nextRadius
             nearbyOffset=requestedOffset+rows.length()
             nearbyHasMore=rows.length()==30
@@ -472,13 +470,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                 .put("p_global_item_ids",JSONArray(ids)).put("p_latitude",lat.toPlainString()).put("p_longitude",lon.toPlainString())
                 .put("p_radius_m",marketRadius.coerceAtLeast(1000)).put("p_currency_code",currencyCode.uppercase()),active)
         }, { raw ->
-            val rows=JSONArray(raw); val hints=mutableMapOf<String,String>()
-            for(i in 0 until rows.length()) {
-                val row=rows.getJSONObject(i)
-                hints[row.optString("global_item_id")]=row.optString("currency_code")+" • وسيط "+row.optLong("suggested_median_minor")+
-                    " • نطاق ربعي "+row.optLong("lower_quartile_minor")+"–"+row.optLong("upper_quartile_minor")+
-                    " • تجار "+row.optString("merchant_count_band")
-            }
+            val hints = parseCatalogMarketPriceHints(raw)
             marketPriceHints=hints
             feedback=if(hints.isEmpty()) "لا توجد أسعار استرشادية مؤهلة؛ لم يتم اختلاق أي سعر." else "وصلت أسعار مجمعة لـ "+hints.size+" صنفًا من مجموعات تضم خمسة تجار مستقلين على الأقل."
         })

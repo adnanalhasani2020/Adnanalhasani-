@@ -131,3 +131,8 @@ The UI must not become the authority for tenant access, balances, prices, postin
 
 
 - `MainActivity.kt` is limited to Android startup and application theme composition. Local operational screen rendering lives in `LocalOperationalScreens.kt`; local sale/product form dialogs live in `LocalProductDialogs.kt`. Shared app state and persistence remain in `StoreApp.kt` and `LocalStoreRepository.kt`.
+
+
+### Catalog market data boundary
+
+The catalog screen owns interaction and request orchestration. JSON-to-domain mapping for market branches/warehouses, nearby discovery, and price suggestions belongs to `CatalogMarketData.kt`. This keeps response parsing independently testable without moving location permissions, pagination, or state transitions out of the screen.
