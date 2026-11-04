@@ -58,7 +58,7 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 | REF-003 | Split cloud repository by domain | PARTIALLY EXTRACTED; CATALOG AND MASTER DATA EXTRACTED IN THIS SLICE | Inventory, sales, purchases, supplier payments, expenses, returns, customer portal, payment requests, and accounting reads and customer receivables, catalog inventory access, and master-data workflows have dedicated repositories; shared session/paging helpers and allowlisted operational records remain in the legacy repository |
 | REF-004 | Separate MainActivity composition/navigation from local legacy persistence and screens | PARTIALLY EXTRACTED | Shared and local models moved to dedicated files; next extract persistence/navigation in separate behavior-preserving slices |
 | REF-005 | Split report export infrastructure from report UI | EXTRACTED; TESTED pending CI | PDF/XLSX/print functions moved to ReportExport.kt; source-contract tests updated and XLSX unit tests added; run CI before marking tested |
-| REF-006 | Split report catalog, data builders, filters, and feature screens | OPEN | Each report family has clear owner and calculation tests |
+| REF-006 | Split report catalog, cloud data, row builders, filters, and feature screens | IN PROGRESS — catalog, inventory/financial row helpers, formatting, validation, domain mappers, export, and cloud data loading have dedicated owners; the large report-row orchestration and Compose presentation remain | Each report family has clear owner and calculation tests; screen becomes a coordinator rather than a mixed-responsibility implementation |
 | REF-007 | Split catalog search, discovery, directory management, transfers, and invoice linking | IN PROGRESS — category, unit, product-authoring, invoice-review, and transfer presentation sections extracted; browse/discovery remains in the screen | Each catalog workflow has a focused UI owner and the existing request/business rules remain unchanged |
 | REF-008 | Split pure report calculations by business domain | PARTIALLY EXTRACTED; TESTS PENDING CI | Payment-request amount parsing/formatting now has its own pure Kotlin owner; formula parity tests and remaining report-domain extraction still required |
 | REF-009 | Organize existing feature files and shared UI components | OPEN | No duplicated feature or model owners |
@@ -271,3 +271,12 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 - Kept query/filter state, selection updates, RPC-triggering callbacks, pagination, and inventory-linking workflows in `CatalogScreen.kt`; the new component is presentation-only and callback-driven.
 - Updated source-contract tests to follow the extracted market state, product card, and browse presentation owners.
 - No RPC payload, database migration, or production data changed.
+
+
+## 2026-11-04 — Reports cloud data extraction
+
+- Added `ReportsCloudData.kt` as the owner of cloud report projections and refresh lifecycle.
+- Replaced the screen's individual mutable cloud-result fields and inline IO/handler refresh block with one immutable `ReportsCloudData` snapshot, while retaining local aliases so the existing report calculations and presentation remain unchanged.
+- Kept each source independently guarded, cleared failed projections, retained source-specific error messages, and preserved sequential loading and existing repository loader calls.
+- Updated the source-contract aggregation and module/code-reference ownership documentation. No report formula, query scope, RPC, SQL migration, or production data was changed.
+- REF-006 remains in progress: the large report-row selection/orchestration block and Compose presentation still require separate ownership before this refactor can be considered complete.
