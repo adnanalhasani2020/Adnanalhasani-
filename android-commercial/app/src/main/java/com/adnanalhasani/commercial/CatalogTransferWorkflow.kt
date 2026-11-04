@@ -33,7 +33,7 @@ internal class CatalogTransferWorkflow(
                     .put("p_global_item_ids", if (ids.length() == 0) JSONObject.NULL else ids),
                 active
             )
-        }, { onFeedback("اكتملت عملية نقل روابط الدليل: $it") })
+        }, { onFeedback("اكتملت عملية نقل روابط الدليل: $it") }, null)
     }
 
     fun loadPendingTransfers() {
@@ -51,7 +51,7 @@ internal class CatalogTransferWorkflow(
             val transfers = parsePendingCatalogTransfers(raw)
             onPendingTransfers(transfers)
             onFeedback("طلبات النقل الواردة: ${transfers.size}")
-        })
+        }, null)
     }
 
     fun respondToTransfer(id: String, accept: Boolean) {
@@ -65,6 +65,6 @@ internal class CatalogTransferWorkflow(
         }, {
             onFeedback(if (accept) "تم قبول طلب النقل: $it" else "تم رفض طلب النقل: $it")
             loadPendingTransfers()
-        })
+        }, null)
     }
 }
