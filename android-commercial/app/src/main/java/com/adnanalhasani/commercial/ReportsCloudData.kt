@@ -86,23 +86,24 @@ internal fun rememberReportsCloudData(
         data = data.copy(loading = true, loadError = "")
 
         val loaded = withContext(Dispatchers.IO) {
-            val salesDocuments = runCatching { loadCommercialCloudSaleDocuments(context) }
-            val receivables = runCatching { loadCommercialCloudReceivables(context) }
-            val purchases = runCatching { loadCommercialCloudPurchaseDocuments(context) }
-            val supplierPayments = runCatching { loadCommercialCloudSupplierPaymentMovements(context) }
-            val stockMovements = runCatching { loadCommercialCloudStockMovements(context) }
-            val stockAlerts = runCatching { loadCommercialCloudStockAlerts(context) }
-            val locationInventory = runCatching { loadCommercialCloudLocationInventoryBalances(context) }
-            val warehouseInventoryContext = runCatching { loadCommercialCloudWarehouseInventoryContext(context) }
-            val returns = runCatching { loadCommercialCloudSaleReturns(context) }
-            val payments = runCatching { loadCommercialCloudRecords(context, "payments") }
-            val journals = runCatching { loadCommercialCloudRecords(context, "journals") }
-            val ledgerLines = runCatching { loadCommercialCloudPostedJournalLines(context) }
-            val supplierControlAccounts = runCatching { loadCommercialCloudSupplierControlAccounts(context) }
-            val glMappings = runCatching { loadCommercialCloudGlAccountMappings(context) }
-            val customerPartyAccounts = runCatching { loadCommercialCloudCustomerPartyAccounts(context) }
-            val supplierPartyAccounts = runCatching { loadCommercialCloudSupplierPartyAccounts(context) }
-            val expenses = runCatching { loadCommercialCloudExpenses(context) }
+            val salesDocuments = loadReportProjection { loadCommercialCloudSaleDocuments(context) }
+            val receivables = loadReportProjection { loadCommercialCloudReceivables(context) }
+            val purchases = loadReportProjection { loadCommercialCloudPurchaseDocuments(context) }
+            val supplierPayments = loadReportProjection { loadCommercialCloudSupplierPaymentMovements(context) }
+            val stockMovements = loadReportProjection { loadCommercialCloudStockMovements(context) }
+            val stockAlerts = loadReportProjection { loadCommercialCloudStockAlerts(context) }
+            val locationInventory = loadReportProjection { loadCommercialCloudLocationInventoryBalances(context) }
+            val warehouseInventoryContext = loadReportProjection { loadCommercialCloudWarehouseInventoryContext(context) }
+            val returns = loadReportProjection { loadCommercialCloudSaleReturns(context) }
+            val payments = loadReportProjection { loadCommercialCloudRecords(context, "payments") }
+            val journals = loadReportProjection { loadCommercialCloudRecords(context, "journals") }
+            val ledgerLines = loadReportProjection { loadCommercialCloudPostedJournalLines(context) }
+            val supplierControlAccounts = loadReportProjection { loadCommercialCloudSupplierControlAccounts(context) }
+            val glMappings = loadReportProjection { loadCommercialCloudGlAccountMappings(context) }
+            val customerPartyAccounts = loadReportProjection { loadCommercialCloudCustomerPartyAccounts(context) }
+            val supplierPartyAccounts = loadReportProjection { loadCommercialCloudSupplierPartyAccounts(context) }
+            val expenses = loadReportProjection { loadCommercialCloudExpenses(context) }
+            currentCoroutineContext().ensureActive()
 
             // Include every projection in the screen-level retry signal. Some reports
             // depend only on specialized sources, so omitting them here hid failures
