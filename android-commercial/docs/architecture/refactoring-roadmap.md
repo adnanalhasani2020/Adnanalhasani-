@@ -292,3 +292,6 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 
 
 - Extracted report category chips, catalog cards, source-readiness labels, and report-title selection mapping to `ReportsCatalogSection.kt` using a `LazyListScope` extension. The screen now passes state and callbacks; catalog definitions and calculations remain in their existing owners.
+
+
+- Extracted the inventory report branches from the large selected-row switch into `ReportInventoryRows.kt` and added a source-ownership test. The screen delegates inventory report selections to this builder; remaining sales, purchase, party/ledger, expense, and financial statement row assembly still needs decomposition.
