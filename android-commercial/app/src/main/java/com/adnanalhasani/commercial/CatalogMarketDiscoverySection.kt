@@ -23,6 +23,11 @@ internal fun CatalogMarketDiscoverySection(
     selectedActivityCode: String,
     nearbyListState: androidx.compose.foundation.lazy.LazyListState,
     onToggleCatalogItem: (String) -> Unit,
+    onSelectBranch: (CatalogBranchOption) -> Unit,
+    onSelectWarehouse: (String) -> Unit,
+    onBranchLatitudeChange: (String) -> Unit,
+    onBranchLongitudeChange: (String) -> Unit,
+    onUseBranchLocation: () -> Unit,
     onSaveCoordinates: (String?, String?) -> Unit,
     onLoadMarketContext: () -> Unit,
     onLoadNearbyFromDevice: () -> Unit,
@@ -41,13 +46,7 @@ internal fun CatalogMarketDiscoverySection(
                                         Text(state.marketBranches.firstOrNull { it.id==state.selectedBranchId }?.name ?: "اختر الفرع")
                                     }
                                     DropdownMenu(expanded=state.branchMenuExpanded,onDismissRequest={state.branchMenuExpanded=false}) {
-                                        state.marketBranches.forEach { branch -> DropdownMenuItem(text={Text(branch.name)},onClick={
-                                            state.selectedBranchId=branch.id
-                                            state.branchLatitude=branch.latitude
-                                            state.branchLongitude=branch.longitude
-                                            state.selectedWarehouseId=state.marketWarehouses.firstOrNull { it.branchId==branch.id }?.id.orEmpty()
-                                            state.nearbyMarketItems=emptyList(); state.nearbyOffset=0; state.nearbyHasMore=true; state.nearbyLoadGeneration++; state.marketRadius=5000; state.marketPriceHints=emptyMap(); state.branchMenuExpanded=false
-                                        }) }
+                                        state.marketBranches.forEach { branch -> DropdownMenuItem(text={Text(branch.name)},onClick={onSelectBranch(branch)}) }
                                     }
                                 }
                                 Box(Modifier.weight(1f)) {
@@ -56,7 +55,7 @@ internal fun CatalogMarketDiscoverySection(
                                     }
                                     DropdownMenu(expanded=state.warehouseMenuExpanded,onDismissRequest={state.warehouseMenuExpanded=false}) {
                                         state.marketWarehouses.filter { it.branchId==state.selectedBranchId }.forEach { warehouse ->
-                                            DropdownMenuItem(text={Text(warehouse.name)},onClick={state.selectedWarehouseId=warehouse.id;state.warehouseMenuExpanded=false})
+                                            DropdownMenuItem(text={Text(warehouse.name)},onClick={onSelectWarehouse(warehouse.id)})
                                         }
                                     }
                                 }
@@ -64,8 +63,8 @@ internal fun CatalogMarketDiscoverySection(
                             Text("إحداثيات الفرع المحدد",fontWeight=FontWeight.SemiBold)
                             Text("أدخل إحداثيات الموقع يدويًا لاستخدام اكتشاف السوق القريب. اترك الحقلين فارغين لمسح الموقع.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                             Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                                OutlinedTextField(state.branchLatitude,{state.branchLatitude=it},Modifier.weight(1f),label={Text("خط العرض Latitude")},singleLine=true)
-                                OutlinedTextField(state.branchLongitude,{state.branchLongitude=it},Modifier.weight(1f),label={Text("خط الطول Longitude")},singleLine=true)
+                                OutlinedTextField(state.branchLatitude,onBranchLatitudeChange,Modifier.weight(1f),label={Text("خط العرض Latitude")},singleLine=true)
+                                OutlinedTextField(state.branchLongitude,onBranchLongitudeChange,Modifier.weight(1f),label={Text("خط الطول Longitude")},singleLine=true)
                             }
                             val parsedLatitude=state.branchLatitude.trim().takeIf { it.isNotEmpty() }?.toBigDecimalOrNull()
                             val parsedLongitude=state.branchLongitude.trim().takeIf { it.isNotEmpty() }?.toBigDecimalOrNull()
@@ -85,7 +84,7 @@ internal fun CatalogMarketDiscoverySection(
                                 Button(onClick={onLoadNearbyFromDevice()},enabled=!busy && !state.locatingDevice) { Text(if(state.locatingDevice) "جارٍ تحديد الموقع..." else "موقعي الحالي") }
                             }
                             Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-                                OutlinedButton(onClick={state.deviceLatitude=null;state.deviceLongitude=null;onStartNearbyCatalog()},enabled=!busy && state.selectedBranchId.isNotBlank()) { Text("حسب موقع الفرع") }
+                                OutlinedButton(onClick=onUseBranchLocation,enabled=!busy && state.selectedBranchId.isNotBlank()) { Text("حسب موقع الفرع") }
                                 OutlinedButton(onClick={onLoadSelectedPriceSuggestions()},enabled=!busy && selectedCatalogIds.isNotEmpty()) { Text("أسعار استرشادية") }
                             }
                             OutlinedButton(
