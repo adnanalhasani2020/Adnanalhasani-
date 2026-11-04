@@ -90,13 +90,26 @@ internal fun rememberReportsCloudData(
             val supplierPartyAccounts = runCatching { loadCommercialCloudSupplierPartyAccounts(context) }
             val expenses = runCatching { loadCommercialCloudExpenses(context) }
 
+            // Include every projection in the screen-level retry signal. Some reports
+            // depend only on specialized sources, so omitting them here hid failures
+            // from the shared retry banner even though their individual reports failed.
             val errors = listOf(
                 salesDocuments.exceptionOrNull(),
+                receivables.exceptionOrNull(),
                 purchases.exceptionOrNull(),
+                supplierPayments.exceptionOrNull(),
+                stockMovements.exceptionOrNull(),
+                stockAlerts.exceptionOrNull(),
+                locationInventory.exceptionOrNull(),
+                warehouseInventoryContext.exceptionOrNull(),
                 returns.exceptionOrNull(),
                 payments.exceptionOrNull(),
                 journals.exceptionOrNull(),
                 ledgerLines.exceptionOrNull(),
+                supplierControlAccounts.exceptionOrNull(),
+                glMappings.exceptionOrNull(),
+                customerPartyAccounts.exceptionOrNull(),
+                supplierPartyAccounts.exceptionOrNull(),
                 expenses.exceptionOrNull()
             ).filterNotNull()
 
