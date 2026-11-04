@@ -221,3 +221,6 @@ The catalog screen owns interaction and request orchestration. JSON-to-domain ma
 
 
 - `ReportTaxRows.kt` owns presentation rows for detailed recorded taxes/discounts from existing sales, supplier invoices, and completed returns. It does not calculate tax rates or a net tax liability.
+
+
+- `ReportProfitabilityRows.kt` owns row presentation for item profitability and historical cost/profit. Calculation formulas remain in their domain calculation files; the mapper must not substitute current purchase costs for historical sale-line costs.
