@@ -104,3 +104,6 @@ The UI must not become the authority for tenant access, balances, prices, postin
 
 
 - `ReportFinancialLines.kt` owns pure row assembly for cash-flow and tax/discount summaries. It may consume the internal report date/money formatters but must not load data or own Compose state.
+
+
+- `CatalogActivityHierarchy.kt` owns the pure activity hierarchy model and selector helpers. `CatalogScreen.kt` remains the UI/data orchestration owner; do not move RPC calls or Compose state into the hierarchy helper.
