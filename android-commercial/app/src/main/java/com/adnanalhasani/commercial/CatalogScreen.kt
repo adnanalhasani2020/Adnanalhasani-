@@ -3,8 +3,6 @@ package com.adnanalhasani.commercial
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.ui.platform.LocalContext
-import android.os.Handler
-import android.os.Looper
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
@@ -16,10 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.json.JSONObject
-import java.util.concurrent.Executors
 
-private val catalogIo = Executors.newSingleThreadExecutor()
-private val catalogMain = Handler(Looper.getMainLooper())
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -127,12 +122,15 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var transferIds by transferFormState.transferIds
 
     fun request(action: () -> String, onSuccess: (String) -> Unit, onFailure: ((Throwable) -> Unit)? = null) {
-        if (busy) return
-        busy = true; feedback = ""
-        catalogIo.execute {
-            val result = runCatching(action)
-            catalogMain.post { busy = false; result.onSuccess(onSuccess).onFailure { error -> if (onFailure != null) onFailure(error) else feedback = error.message ?: "تعذر إكمال العملية."; restoringSession = false } }
-        }
+        CatalogRequestDispatcher.request(
+            isBusy = busy,
+            setBusy = { busy = it },
+            setFeedback = { feedback = it },
+            setRestoringSession = { restoringSession = it },
+            action = action,
+            onSuccess = onSuccess,
+            onFailure = onFailure
+        )
     }
     val invoiceWorkflow = CatalogInvoiceWorkflow(
         context = context,
