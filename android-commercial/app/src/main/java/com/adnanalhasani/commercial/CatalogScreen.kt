@@ -39,19 +39,24 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var email by remember { mutableStateOf("") }; var password by remember { mutableStateOf("") }
     var token by remember { mutableStateOf<String?>(null) }; var signedInUserId by remember { mutableStateOf("") }; var organizationId by remember { mutableStateOf(initialOrganizationId) }
     var section by remember { mutableStateOf("browse") }
-    var sector by remember { mutableStateOf("TRADE") }; var businessLevel by remember { mutableStateOf("shop") }
-    var country by remember { mutableStateOf("YE") }; var region by remember { mutableStateOf("") }; var city by remember { mutableStateOf("") }
-    var locale by remember { mutableStateOf("ar") }; var query by remember { mutableStateOf("") }
-    var items by remember { mutableStateOf<List<CatalogProduct>>(emptyList()) }
-    var catalogOffset by remember { mutableIntStateOf(0) }
-    var catalogHasMore by remember { mutableStateOf(true) }
-    var catalogPageLoadFailed by remember { mutableStateOf(false) }
-    var selectedCatalogIds by remember { mutableStateOf<Set<String>>(emptySet()) }
-    var activityNodes by remember { mutableStateOf<List<CatalogActivityNode>>(emptyList()) }
-    var selectedActivityCode by remember { mutableStateOf(initialActivityCode.uppercase()) }
-    var sectorMenuExpanded by remember { mutableStateOf(false) }
-    var businessLevelMenuExpanded by remember { mutableStateOf(false) }
-    var activityMenuExpanded by remember { mutableStateOf(false) }
+    val browseUiState = remember(initialActivityCode) { CatalogBrowseUiState(initialActivityCode) }
+    var sector by browseUiState::sector
+    var businessLevel by browseUiState::businessLevel
+    var country by browseUiState::country
+    var region by browseUiState::region
+    var city by browseUiState::city
+    var locale by browseUiState::locale
+    var query by browseUiState::query
+    var items by browseUiState::items
+    var catalogOffset by browseUiState::catalogOffset
+    var catalogHasMore by browseUiState::catalogHasMore
+    var catalogPageLoadFailed by browseUiState::catalogPageLoadFailed
+    var selectedCatalogIds by browseUiState::selectedCatalogIds
+    var activityNodes by browseUiState::activityNodes
+    var selectedActivityCode by browseUiState::selectedActivityCode
+    var sectorMenuExpanded by browseUiState::sectorMenuExpanded
+    var businessLevelMenuExpanded by browseUiState::businessLevelMenuExpanded
+    var activityMenuExpanded by browseUiState::activityMenuExpanded
     val sectorOptions = remember(activityNodes) { activityNodes.filter { it.nodeKind.equals("sector", true) }.sortedBy { it.pathAr } }
     val activityOptions = remember(activityNodes, sector) { activityNodes.filter { it.selectable && !it.nodeKind.equals("sector", true) && catalogNodeBelongsToSector(it, sector, activityNodes) }.sortedBy { it.pathAr } }
     val businessLevelOptions = remember(activityOptions) { activityOptions.map { it.defaultBusinessLevelCode }.filter { it.isNotBlank() }.distinct().sorted() }
