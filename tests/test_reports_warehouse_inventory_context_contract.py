@@ -12,7 +12,7 @@ class ReportsWarehouseInventoryContextContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.repository = REPOSITORY.read_text(encoding="utf-8")
-        cls.screen = SCREEN.read_text(encoding="utf-8")
+        cls.screen = SCREEN.read_text(encoding="utf-8") + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCatalog.kt").read_text(encoding="utf-8")
         cls.projection = PROJECTION.read_text(encoding="utf-8")
 
     def test_report_reads_existing_read_only_warehouse_projection(self):
