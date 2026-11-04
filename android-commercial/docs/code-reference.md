@@ -418,3 +418,8 @@
 ### Supplier movement statement validation
 - Supplier movement inputs are projected once and shared by the validation and row owners.
 - The report blocks `Long.MIN_VALUE` payment negation and overflow in opening/running balances instead of showing wrapped supplier balances.
+
+
+### Ledger report arithmetic
+- Income statement, balance sheet, trial balance, account classification, and ledger movement rows now use exact debit/credit arithmetic and exact totals.
+- The selected ledger report is preflighted once; overflow suppresses its rows and surfaces an explicit Arabic error.
