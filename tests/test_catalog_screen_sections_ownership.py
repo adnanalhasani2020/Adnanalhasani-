@@ -57,6 +57,15 @@ class CatalogScreenSectionsOwnershipTests(unittest.TestCase):
         self.assertNotIn("commercial_update_location_coordinates", market_section)
         self.assertNotIn("catalogHttp(", market_section)
 
+    def test_product_result_card_has_a_dedicated_presentation_owner(self):
+        screen = SCREEN.read_text(encoding="utf-8")
+        card = SCREEN.with_name("CatalogProductResultCard.kt").read_text(encoding="utf-8")
+        self.assertIn("CatalogProductResultCard(", screen)
+        self.assertIn("internal fun CatalogProductResultCard(", card)
+        self.assertIn("onSelectionChange: (Boolean) -> Unit", card)
+        self.assertIn("onAddToInventory: (CatalogProduct, String, String, String, String, String) -> Unit", card)
+        self.assertNotIn("catalogHttp(", card)
+
     def test_transfer_presentation_is_separate_and_keeps_actions_callback_driven(self):
         screen = SCREEN.read_text(encoding="utf-8")
         sections = SECTIONS.read_text(encoding="utf-8")

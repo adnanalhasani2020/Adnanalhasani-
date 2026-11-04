@@ -37,7 +37,7 @@ internal fun CatalogProductResultCard(
                                     if(item.imageUrl.startsWith("https://",true)) AsyncImage(model=item.imageUrl,contentDescription=item.name,modifier=Modifier.fillMaxWidth().heightIn(max=180.dp),contentScale=ContentScale.Fit)
                                     Row(verticalAlignment=Alignment.Top) {
                                         Checkbox(
-                                            checked=item.id in selected,
+                                            checked=selected,
                                             onCheckedChange=onSelectionChange,
                                             enabled=!busy
                                         )
