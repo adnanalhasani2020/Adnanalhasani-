@@ -119,7 +119,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn("require(!dateError) { \"لا يمكن تصدير تقرير بفترة غير صالحة.\" }", self.screen)
         self.assertIn("require(!cloudMode || (!cloudLoading && selectedReportSourceError.isBlank()))", self.screen)
         self.assertIn("val selectedRows = if (dateError || (cloudMode && (cloudLoading || selectedReportSourceError.isNotBlank()))) emptyList()", self.screen)
-        self.assertIn("val inPeriodSales = if (dateError) emptyList()", self.screen)
+        self.assertIn("if (dateError) emptyList() else sales.filter", self.screen)
         self.assertIn("val sourceErrorForReport: (String) -> String", self.screen)
         self.assertIn("val currencyTotalCalculation = runCatching", self.screen)
         self.assertIn("calculateReportCurrencyTotals(amounts)", self.screen)
@@ -133,7 +133,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn("sumReportAmountsExactly", self.sales_rows)
         self.assertIn("sumReportCountsExactly", self.sales_rows)
         self.assertIn("Math.subtractExact(currentTotal, previousTotal)", self.sales_rows)
-        self.assertIn("val salesRowsCalculation = runCatching", self.screen)
+        self.assertIn("val (salesRowsCalculation, salesRowsCalculationError) = remember(", self.screen)
         self.assertIn("salesRowsCalculation.getOrNull()", self.screen)
         self.assertIn("تجاوزت مجاميع تقرير المبيعات نطاق الأرقام الدقيق؛ تم حجب التقرير.", self.screen)
 
@@ -147,7 +147,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn("sumReportAmountsExactly", self.screen)
         self.assertIn("Math.addExact(equity, cumulativeIncome)", self.screen)
         self.assertIn("Math.subtractExact(Math.subtractExact(assets, liabilities), totalEquity)", self.screen)
-        self.assertIn("val ledgerRowsCalculation = runCatching", self.screen)
+        self.assertIn("val (ledgerRowsCalculation, ledgerRowsCalculationError) = remember(", self.screen)
         self.assertIn("ledgerRowsCalculation.getOrNull()", self.screen)
         self.assertIn("تجاوزت مجاميع أو أرصدة دفتر الأستاذ نطاق الأرقام الدقيق؛ تم حجب التقرير.", self.screen)
 
