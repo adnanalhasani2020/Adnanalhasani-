@@ -94,6 +94,7 @@ internal fun ReportsCenterScreen(
     val selectedRows = reportData.selectedRows
     val selectedReportSourceError = reportData.selectedReportSourceError
     val currencyTotal = reportData.currencyTotal
+    val currencyTotalError = reportData.currencyTotalError
 
     val exportLaunchers = rememberReportsExportLaunchers(
         context = context,
@@ -120,8 +121,12 @@ internal fun ReportsCenterScreen(
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("ملخص المبيعات المكتملة", color = Color(0xFFBFD9D0), fontSize = 13.sp)
                     Text(when { dateError -> "لا يمكن حساب الملخص: تحقق من الفترة المحددة"; cloudMode && cloudLoading -> "جارٍ تحميل مصادر المبيعات"; cloudMode && salesDocumentsLoadError.isNotBlank() -> "تعذر حساب الملخص بسبب فشل تحميل مصدر المبيعات"; else -> "عدد الفواتير: ${if (cloudMode) inPeriodCloudSalesDocuments.size else inPeriodSales.size}" }, color = Color.White, fontWeight = FontWeight.SemiBold)
-                    if (!dateError && (!cloudMode || (!cloudLoading && salesDocumentsLoadError.isBlank()))) currencyTotal.toSortedMap().forEach { (currency, total) ->
-                        Text(reportMoney(total, currency, cloudMode), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    if (currencyTotalError.isNotBlank()) {
+                        Text(currencyTotalError, color = Color(0xFFFFD6A5), fontSize = 12.sp)
+                    } else if (!dateError && (!cloudMode || (!cloudLoading && salesDocumentsLoadError.isBlank()))) {
+                        currencyTotal.toSortedMap().forEach { (currency, total) ->
+                            Text(reportMoney(total, currency, cloudMode), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
                     Text("الفترة: ${startText} — ${endText}", color = Color(0xFFBFD9D0), fontSize = 11.sp)
                 }
