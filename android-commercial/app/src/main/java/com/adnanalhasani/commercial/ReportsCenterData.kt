@@ -468,7 +468,9 @@ internal fun rememberReportsCenterData(
         startText = startText,
         endText = endText,
         zone = zone
-    ) ?: buildSupplierReportRows(
+    ) ?: (if (selectedReport == "كشف حركات الموردين" && sourceErrorForReport(selectedReport).isNotBlank()) {
+        emptyList()
+    } else buildSupplierReportRows(
         selectedReport = selectedReport,
         cloudPurchases = cloudPurchases,
         cloudSupplierPayments = cloudSupplierPayments,
@@ -479,7 +481,7 @@ internal fun rememberReportsCenterData(
         endText = endText,
         supplierObligationInputs = supplierObligationInputs,
         supplierMovementInputs = supplierMovementInputs
-    ) ?: salesRowsCalculation.getOrNull() ?: when (selectedReport) {
+    )) ?: salesRowsCalculation.getOrNull() ?: when (selectedReport) {
         "أداء المبيعات حسب المستخدم" -> buildUserSalesPerformanceRows(userSalesPerformanceCalculation, userSalesPerformanceError)
         "اتجاه المبيعات اليومي" -> buildDailySalesTrendRows(dailySalesTrendCalculation, dailySalesTrendError)
         "عمر أرصدة العملاء حسب تاريخ الفاتورة" -> buildCustomerReceivableAgingRows(customerReceivableAgingReport, customerReceivableAgingError, today.toString())
