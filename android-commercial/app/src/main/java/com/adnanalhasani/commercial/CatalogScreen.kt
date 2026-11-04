@@ -111,31 +111,8 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var categoryDescriptionEn by directoryFormState.categoryDescriptionEn
     var categoryTranslations by directoryFormState.categoryTranslations
 
-    var nameAr by productFormState::nameAr; var nameEn by productFormState::nameEn
-    var descriptionAr by productFormState::descriptionAr; var descriptionEn by productFormState::descriptionEn; var extraTranslations by productFormState::extraTranslations
-    var productCategory by productFormState::productCategory; var itemType by productFormState::itemType
-    var unitCode by productFormState::unitCode; var barcode by productFormState::barcode
-    var brand by productFormState::brand; var manufacturer by productFormState::manufacturer
-    var origin by productFormState::origin; var model by productFormState::model; var partNumber by productFormState::partNumber
-    var imageUrl by productFormState::imageUrl; var imageAlt by productFormState::imageAlt
-    var ingredients by productFormState::ingredients; var materialComposition by productFormState::materialComposition
-    var recipe by productFormState::recipe; var recipeIngredientsText by productFormState::recipeIngredientsText; var recipeYieldQty by productFormState::recipeYieldQty; var recipeYieldUnit by productFormState::recipeYieldUnit; var recipePrepMinutes by productFormState::recipePrepMinutes; var recipeCookMinutes by productFormState::recipeCookMinutes; var recipeSource by productFormState::recipeSource; var recipeAllergenNotes by productFormState::recipeAllergenNotes; var specifications by productFormState::specifications; var customAttributesJson by productFormState::customAttributesJson
-    var allergens by productFormState::allergens; var storage by productFormState::storage
-    var usage by productFormState::usage; var warnings by productFormState::warnings
-    var shelfLife by productFormState::shelfLife; var expiryRequired by productFormState::expiryRequired
-    var batchTracked by productFormState::batchTracked; var serialTracked by productFormState::serialTracked
-    var prescriptionOnly by productFormState::prescriptionOnly
-    var extraUnitCode by productFormState::extraUnitCode; var extraUnitQty by productFormState::extraUnitQty
-    var extraUnitBarcode by productFormState::extraUnitBarcode; var extraUnitSku by productFormState::extraUnitSku; var extraUnitPackage by productFormState::extraUnitPackage; var extraUnitNetQuantity by productFormState::extraUnitNetQuantity; var extraUnitNetUnitCode by productFormState::extraUnitNetUnitCode; var extraUnitImageUrl by productFormState::extraUnitImageUrl; var extraUnitsText by productFormState::extraUnitsText
-    var currencyCode by productFormState::currencyCode; var sectors by productFormState::sectors
-    var levels by productFormState::levels; var regionCountry by productFormState::regionCountry
-    var regionCode by productFormState::regionCode; var regionCity by productFormState::regionCity
-    var regionExcluded by productFormState::regionExcluded; var extraRegionRules by productFormState::extraRegionRules
-    var rulingDomain by productFormState::rulingDomain; var authority by productFormState::authority
-    var religion by productFormState::religion; var jurisdiction by productFormState::jurisdiction
-    var rulingOutcome by productFormState::rulingOutcome; var rulingRationale by productFormState::rulingRationale
-    var rulingSourceTitle by productFormState::rulingSourceTitle; var rulingSourceUrl by productFormState::rulingSourceUrl
-    var rulingConfidence by productFormState::rulingConfidence; var extraRulingsText by productFormState::extraRulingsText
+    var currencyCode by productFormState::currencyCode
+
 
     var unitShortCode by directoryFormState.unitShortCode
     var unitNameAr by directoryFormState.unitNameAr
