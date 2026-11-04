@@ -158,7 +158,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
 
     def test_financial_statements_require_balanced_posted_ledger_and_separate_currencies(self):
         self.assertIn('val ledgerStatementError', self.screen)
-        self.assertIn('throughEnd.groupBy { it.entryId to it.currencyCode }', self.screen)
+        self.assertIn('throughEnd.groupBy { it.entryId to it.currencyCode }', LEDGER_VALIDATION.read_text(encoding="utf-8"))
         self.assertIn('إجمالي الأصول', self.screen)
         self.assertIn('الأصول − الالتزامات − حقوق الملكية', self.screen)
         self.assertIn('ReportCatalogItem("قائمة الدخل والميزانية العمومية"', self.catalog)
