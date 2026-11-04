@@ -368,18 +368,12 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                         onConfigureSelectedCatalogItems=marketWorkflow::configureSelectedCatalogItems,
                         onLoadNearbyCatalog={ expand -> marketWorkflow.loadNearbyCatalog(expand) }
                     )
-                    if (selectedCatalogIds.isNotEmpty()) {
-                        Card(Modifier.fillMaxWidth(), colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.secondaryContainer)) {
-                            Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement=Arrangement.spacedBy(6.dp)) {
-                                Text("تم تحديد ${selectedCatalogIds.size} صنفًا", fontWeight=FontWeight.SemiBold)
-                                Text("سيتم ربطها بدليل المؤسسة دون تسعير، وستبقى غير متاحة للبيع حتى ضبط أسعارها.", style=MaterialTheme.typography.bodySmall)
-                                Row(horizontalArrangement=Arrangement.spacedBy(8.dp), verticalAlignment=Alignment.CenterVertically) {
-                                    Button(onClick={productLinkWorkflow.linkSelectedItems()}, enabled=!busy && selectedCatalogIds.size<=100) { Text("موافق — ربط بدون تسعير") }
-                                    TextButton(onClick={selectedCatalogIds=emptySet()}, enabled=!busy) { Text("إلغاء التحديد") }
-                                }
-                            }
-                        }
-                    }
+                    CatalogSelectionSummaryCard(
+                        selectedCount = selectedCatalogIds.size,
+                        busy = busy,
+                        onConfirm = productLinkWorkflow::linkSelectedItems,
+                        onClear = { selectedCatalogIds = emptySet() }
+                    )
                     CatalogBrowseSection(
                         items=items,
                         categories=categories,
