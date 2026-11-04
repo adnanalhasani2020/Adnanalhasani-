@@ -308,9 +308,9 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         ):
             with self.subTest(marker=marker):
                 self.assertIn(marker, self.catalog)
-        self.assertIn("تاريخ الاستحقاق التعاقدي المسجل", self.screen)
-        self.assertIn("يحجب التقرير إذا بقيت فاتورة مفتوحة بلا تاريخ موثق", self.screen)
-        self.assertIn("لا توجد سياسة تحويل معتمدة", self.screen)
+        self.assertIn("تاريخ الاستحقاق التعاقدي المسجل", self.catalog)
+        self.assertIn("يحجب التقرير إذا بقيت فاتورة مفتوحة بلا تاريخ موثق", self.catalog)
+        self.assertIn("لا توجد سياسة تحويل معتمدة", self.catalog)
 
 
     def test_report_catalog_has_a_dedicated_source_owner(self):
