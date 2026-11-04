@@ -325,3 +325,9 @@
 - `ReportTaxRows.kt` owns the detailed tax/discount row projection from completed sales, non-canceled supplier invoices, and completed returns.
 - The existing `taxDetailError` gate is applied before building rows; approved return value remains a return amount and is not mislabeled as a separately calculated tax refund.
 - No tax formula, tax rate, or tax liability is inferred by the mapper.
+
+
+### Profitability report row mapping extraction (2026-11-04)
+- `ReportProfitabilityRows.kt` owns display-row mapping for item profitability and historical cost-of-goods/gross-profit reports.
+- It consumes the existing item-profitability calculation result and cost-profit source projections; the exact formulas and validation remain in `ReportCalculations.kt` and `CostProfitCalculations.kt`.
+- Historical line costs, approved refunds, restocked-cost reversal, and the existing fail-closed error gates are preserved.
