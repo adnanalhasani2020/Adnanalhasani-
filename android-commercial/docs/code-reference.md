@@ -347,6 +347,13 @@
 - No tax formula, tax rate, or tax liability is inferred by the mapper.
 
 
+### Historical cost/profit validation extraction (2026-11-05)
+- `ReportProfitabilityValidation.kt` owns source readiness and integrity checks for historical cost/profit reporting.
+- `ReportsCenterData.kt` passes loaded sales/return projections, source errors, and the selected period to the validator.
+- The original validation precedence, missing historical-cost checks, restocked-return cost requirements, original-sale/currency matching, tax-return limitation, and exact arithmetic gate remain unchanged. Calculations stay in `CostProfitCalculations.kt`; input mapping stays in `ReportDomainMappers.kt`; row presentation stays in `ReportProfitabilityRows.kt`.
+- `tests/test_report_profitability_rows_ownership.py` and `tests/test_reports_center_data_ownership.py` guard the new owner.
+
+
 ### Profitability report row mapping extraction (2026-11-04)
 - `ReportProfitabilityRows.kt` owns display-row mapping for item profitability and historical cost-of-goods/gross-profit reports.
 - It consumes the existing item-profitability calculation result and cost-profit source projections; the exact formulas and validation remain in `ReportCalculations.kt` and `CostProfitCalculations.kt`.
