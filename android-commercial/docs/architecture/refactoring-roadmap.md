@@ -322,3 +322,6 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 
 
 - Extracted selected-result cards, empty-state messaging, export metadata generation, and CSV/XLSX/PDF/print action composition into `ReportsResultSection.kt`; added an ownership test. Screen orchestration and remaining filter/source state remain for the final coordinator cleanup.
+
+
+- Extracted supplier/customer, row, currency, status, and ledger-account filter controls into `ReportsFilterSection.kt`; added an ownership test. Filter application remains with the screen's selected-row pipeline.
