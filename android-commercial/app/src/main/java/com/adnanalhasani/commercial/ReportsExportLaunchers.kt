@@ -33,7 +33,7 @@ internal fun rememberReportsExportLaunchers(
             context.contentResolver.openOutputStream(uri)?.use { stream ->
                 OutputStreamWriter(stream, Charsets.UTF_8).use { writer ->
                     writer.write("\uFEFF")
-                    writer.write(exportRows.joinToString("\r\n") { row -> row.joinToString(",") { cell -> "\"\u0024{cell.replace("\"", "\"\"")}\"" } })
+                    writer.write(exportRows.joinToString("\r\n") { row -> row.joinToString(",") { cell -> "\"\${cell.replace("\"", "\"\"")}\"" } })
                 }
             } ?: throw IllegalStateException("تعذر فتح ملف التصدير.")
         }.onFailure { onError("تعذر تصدير التقرير: ${it.message ?: "خطأ غير معروف"}") }
