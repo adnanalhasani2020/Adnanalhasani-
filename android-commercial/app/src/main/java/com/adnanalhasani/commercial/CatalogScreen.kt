@@ -95,7 +95,6 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     val catalogListState = rememberLazyListState()
     var categories by directoryDataState::categories
     var directoryUnits by directoryDataState::directoryUnits
-    var pendingTransfers by remember { mutableStateOf<List<PendingTransfer>>(emptyList()) }
     var busy by sessionUiState::busy
     var restoringSession by sessionUiState::restoringSession
     var feedback by sessionUiState::feedback
@@ -122,6 +121,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var unitTranslations by directoryFormState.unitTranslations
 
     val transferFormState = remember { CatalogTransferFormState() }
+    var pendingTransfers by transferFormState.pendingTransfers
     var transferSource by transferFormState.transferSource
     var transferDestination by transferFormState.transferDestination
     var transferIds by transferFormState.transferIds
