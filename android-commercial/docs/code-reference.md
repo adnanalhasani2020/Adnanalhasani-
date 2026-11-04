@@ -313,3 +313,9 @@
 - `ReportOperationalRows.kt` owns row assembly for payment-method totals, successful cloud payments, local settlements, sales-return settlement status, receipt/payment records, and operating-expense summaries/details.
 - It consumes the existing local/cloud projections and report period; canceled expense vouchers and unsuccessful payments remain excluded under the original rules.
 - The extraction does not create payments, process refunds, cancel vouchers, or write ledger entries.
+
+
+### Derived performance/aging/collection row mapping extraction (2026-11-04)
+- `ReportDerivedRows.kt` owns presentation-row mapping for user sales performance, daily sales trend, customer receivable aging, customer collections, supplier purchase summaries, and supplier aging reports.
+- The helpers receive existing calculation results and source-error states; a failed calculation remains fail-closed and does not get rendered as a partial report.
+- The calculation formulas and source-validation rules remain in their existing domain/report owners.
