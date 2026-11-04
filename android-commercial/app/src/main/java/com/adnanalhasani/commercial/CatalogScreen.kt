@@ -85,7 +85,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     val nearbyListState = rememberLazyListState()
     var invoiceSaleId by invoiceTransferState::invoiceSaleId
     var invoiceDestinationOrg by invoiceTransferState::invoiceDestinationOrg
-    var invoiceRequestKey by remember { mutableStateOf(java.util.UUID.randomUUID().toString()) }
+    var invoiceRequestKey by invoiceTransferState::invoiceRequestKey
     var invoiceRequests by remember { mutableStateOf<List<InvoicePurchaseRequestRow>>(emptyList()) }
     var invoiceMappingRequestId by invoiceTransferState::invoiceMappingRequestId
     var invoiceMappingPurchaseOrderId by remember { mutableStateOf("") }
@@ -162,6 +162,16 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             catalogMain.post { busy = false; result.onSuccess(onSuccess).onFailure { error -> if (onFailure != null) onFailure(error) else feedback = error.message ?: "تعذر إكمال العملية."; restoringSession = false } }
         }
     }
+    val invoiceWorkflow = CatalogInvoiceWorkflow(
+        state = invoiceTransferState,
+        accessToken = { token },
+        organizationId = { org() },
+        marketBranches = { marketBranches },
+        selectedBranchId = { selectedBranchId },
+        request = { action, onSuccess, onFailure -> request(action, onSuccess, onFailure) },
+        onFeedback = { feedback = it },
+        onRequestsLoaded = { invoiceRequests = it }
+    )
     LaunchedEffect(Unit) {
         val savedRefresh = runCatching { commercialCloudSessionPreferences(context).getString("refresh_token", null) }.getOrNull()
         if (!savedRefresh.isNullOrBlank()) {
@@ -421,59 +431,6 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             catalogHttp("/rest/v1/rpc/commercial_catalog_create_product",JSONObject().put("p_organization_id",orgId).put("p_product",product)
                 .put("p_units",unitRows).put("p_sectors",sectorArray).put("p_business_levels",levelRows).put("p_regions",regionRows).put("p_rulings",rulingRows),active)
         }, { feedback="تم حفظ الصنف وتفاصيل وحداته ونطاق ظهوره ومعلومات الحكم المرتبطة به: $it"; section="browse"; loadCatalog() })
-    }
-    fun loadInvoiceRequests() {
-        val active=token ?: return
-        val orgId=org() ?: run { feedback="أدخل معرّف المؤسسة UUID أولًا."; return }
-        request({
-            catalogGet("/rest/v1/commercial_invoice_purchase_requests?select=id,source_organization_id,destination_organization_id,source_invoice_number,currency_code,total_minor,status,destination_purchase_order_id,created_at&or=(source_organization_id.eq."+orgId+",destination_organization_id.eq."+orgId+")&order=created_at.desc&limit=50",active)
-        }, { raw ->
-            invoiceRequests=parseInvoicePurchaseRequests(raw)
-            feedback="طلبات تحويل الفواتير: "+invoiceRequests.size
-        })
-    }
-    fun requestInvoiceAsPurchase() {
-        val active=token ?: return
-        val source=org() ?: run { feedback="أدخل معرّف المؤسسة البائعة UUID أولًا."; return }
-        if(invoiceSaleId.isBlank() || invoiceDestinationOrg.isBlank()) { feedback="أدخل معرّف فاتورة البيع ومعرّف المؤسسة المستقبلة."; return }
-        if(source==invoiceDestinationOrg.trim()) { feedback="لا يمكن تحويل الفاتورة إلى المؤسسة نفسها."; return }
-        val key=invoiceRequestKey
-        request({
-            catalogHttp("/rest/v1/rpc/commercial_request_invoice_as_purchase",JSONObject()
-                .put("p_source_organization_id",source).put("p_destination_organization_id",invoiceDestinationOrg.trim())
-                .put("p_sale_id",invoiceSaleId.trim()).put("p_request_key",key),active)
-        }, { raw ->
-            val result=runCatching { JSONObject(raw) }.getOrNull()
-            feedback="تم إرسال الطلب: "+(result?.optString("state") ?: raw)+". لن يتغير مخزون المؤسسة المستقبلة قبل الاستلام."
-            invoiceRequestKey=java.util.UUID.randomUUID().toString()
-            loadInvoiceRequests()
-        })
-    }
-    fun reviewInvoicePurchaseRequest(id: String, approve: Boolean) {
-        val active=token ?: return
-        val receiveLocation=invoiceReceiveLocationId.ifBlank { selectedBranchId }
-        if(approve && (receiveLocation.isBlank() || marketBranches.none { it.id==receiveLocation })) {
-            feedback="اختر فرع استلام نشطًا تابعًا للمؤسسة المستقبلة قبل الموافقة."
-            return
-        }
-        request({
-            catalogHttp("/rest/v1/rpc/commercial_review_invoice_purchase_request",JSONObject()
-                .put("p_request_id",id).put("p_decision",if(approve) "approve" else "reject")
-                .put("p_review_note",JSONObject.NULL)
-                .put("p_receive_location_id",if(approve) receiveLocation else JSONObject.NULL),active)
-        }, {
-            feedback=if(approve) "تمت الموافقة وإنشاء أمر شراء مسودة في الفرع المحدد. الاستلام منفصل." else "تم رفض طلب تحويل الفاتورة."
-            loadInvoiceRequests()
-        })
-    }
-
-    fun mapKnownInvoicePurchaseItems(id: String) {
-        val active=token ?: return
-        request({ catalogHttp("/rest/v1/rpc/commercial_invoice_purchase_map_known_items",JSONObject().put("p_request_id",id),active) }, { raw ->
-            val result=runCatching { JSONObject(raw) }.getOrNull()
-            feedback="تم ربط "+(result?.optInt("mapped_lines",0) ?: 0)+" صنفًا مطابقًا بشكل موثوق. الأصناف غير المطابقة: "+(result?.optInt("unmapped_lines",0) ?: 0)+". لم يتغير المخزون."
-            loadInvoiceRequests()
-        })
     }
     fun loadInvoicePurchaseUnmappedLines(req: InvoicePurchaseRequestRow) {
         val active=token ?: return
@@ -943,7 +900,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                 "category" -> CatalogCategorySection(categoryCodeState, parentCodeState, categoryNameArState, categoryNameEnState, categoryDescriptionArState, categoryDescriptionEnState, categoryTranslationsState, categories, locale, busy, ::createCategory, ::loadDirectories)
                 "unit" -> CatalogUnitSection(unitShortCodeState, unitNameArState, unitNameEnState, unitDimensionState, unitBaseCodeState, unitFactorState, unitDecimalsState, unitTranslationsState, directoryUnits, busy, ::createUnit, ::loadDirectories)
                 "product" -> CatalogProductFormSection(productFormState, categories, directoryUnits, busy, ::createProduct)
-                "invoice_transfer" -> CatalogInvoiceTransferSection(invoiceTransferState, marketBranches, selectedBranchId, invoiceRequests, invoiceMappingLines, invoiceMappingOfferings, invoiceMappingWarehouses, categories, directoryUnits, organizationId.trim(), busy, ::requestInvoiceAsPurchase, ::loadInvoiceRequests, ::reviewInvoicePurchaseRequest, ::mapKnownInvoicePurchaseItems, ::loadInvoicePurchaseUnmappedLines, ::linkSelectedInvoicePurchaseLine, ::openInvoiceItemCreationDialog)
+                "invoice_transfer" -> CatalogInvoiceTransferSection(invoiceTransferState, marketBranches, selectedBranchId, invoiceRequests, invoiceMappingLines, invoiceMappingOfferings, invoiceMappingWarehouses, categories, directoryUnits, organizationId.trim(), busy, invoiceWorkflow::requestInvoiceAsPurchase, invoiceWorkflow::loadInvoiceRequests, invoiceWorkflow::reviewInvoicePurchaseRequest, invoiceWorkflow::mapKnownInvoicePurchaseItems, ::loadInvoicePurchaseUnmappedLines, ::linkSelectedInvoicePurchaseLine, ::openInvoiceItemCreationDialog)
                 "transfer" -> CatalogTransferSection(transferSourceState, transferDestinationState, transferIdsState, pendingTransfers, busy, ::transferCatalog, ::loadPendingTransfers, ::respondToTransfer)
             }
         }
