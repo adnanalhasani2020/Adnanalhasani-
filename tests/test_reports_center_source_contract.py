@@ -15,6 +15,7 @@ EXPENSE_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhas
 ACCOUNTING_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/AccountingRepository.kt"
 CALCULATIONS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportCalculations.kt"
 EXPORT = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportExport.kt"
+REPORT_FORMATTING = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportFormatting.kt"
 INVENTORY_REPORT_LINES = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportInventoryLines.kt"
 FINANCIAL_REPORT_LINES = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportFinancialLines.kt"
 DOMAIN_MAPPERS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportDomainMappers.kt"
@@ -40,6 +41,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         cls.sales_repository = SALES_REPOSITORY.read_text(encoding="utf-8")
         cls.calculations = CALCULATIONS.read_text(encoding="utf-8")
         cls.export = EXPORT.read_text(encoding="utf-8")
+        cls.report_formatting = REPORT_FORMATTING.read_text(encoding="utf-8")
         cls.price_variance_calculations = PRICE_VARIANCE_CALCULATIONS.read_text(encoding="utf-8")
         cls.cost_profit_calculations = COST_PROFIT_CALCULATIONS.read_text(encoding="utf-8")
         cls.contract = CONTRACT.read_text(encoding="utf-8")
