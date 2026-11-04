@@ -117,7 +117,10 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn("val selectedRows = if (dateError || (cloudMode && (cloudLoading || selectedReportSourceError.isNotBlank()))) emptyList()", self.screen)
         self.assertIn("val inPeriodSales = if (dateError) emptyList()", self.screen)
         self.assertIn("val sourceErrorForReport: (String) -> String", self.screen)
-        self.assertIn("val currencyTotal = if (dateError || (cloudMode && (cloudLoading || salesDocumentsLoadError.isNotBlank()))) emptyMap()", self.screen)
+        self.assertIn("val currencyTotalCalculation = runCatching", self.screen)
+        self.assertIn("calculateReportCurrencyTotals(amounts)", self.screen)
+        self.assertIn("تجاوز إجمالي المبيعات نطاق الأرقام الدقيق؛ تم إخفاء ملخص العملات.", self.screen)
+        self.assertIn("currencyTotalError = currencyTotalError", self.screen)
         self.assertIn("لا يمكن حساب الملخص: تحقق من الفترة المحددة", self.screen)
 
     def test_ledger_account_statement_requires_account_filter(self):
