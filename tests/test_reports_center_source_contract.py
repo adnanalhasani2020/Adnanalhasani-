@@ -214,6 +214,10 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn('رصيد ختامي', self.screen)
         self.assertIn('توجد قيود مرحلة بتاريخ غير صالح؛ لا يمكن ضمان الرصيد الافتتاحي.', self.screen)
         self.assertIn('currencyMoves.groupBy { it.first.accountId to it.first.accountCode }', self.screen)
+        self.assertIn('Math.subtractExact(line.debitMinor, line.creditMinor)', self.screen)
+        self.assertIn('Math.addExact(total, move.third)', self.screen)
+        self.assertIn('Math.negateExact(move.third)', self.screen)
+        self.assertIn('تجاوزت حركات النقد أو أرصدته الافتتاحية/الختامية نطاق الأرقام الدقيق', self.screen)
 
     def test_customer_collection_idempotent_replay_requires_posted_journal(self):
         self.assertIn("customer_payment_journal_not_posted", self.collection_replay_migration)
