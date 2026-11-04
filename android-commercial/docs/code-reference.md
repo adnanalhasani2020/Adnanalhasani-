@@ -259,3 +259,9 @@
 - `ReportsCenterUiState.kt` owns the Compose mutable state for report selection, date range, search/filter controls, export payload/title, feedback, supplier filter, and cloud refresh key.
 - `ReportsCenterScreen.kt` keeps stable delegated local properties so existing calculations, event handlers, and rendering retain their names and behavior while state creation has one owner.
 - The state owner contains no report calculations, repository calls, or export I/O.
+
+
+### Reports period controls extraction (2026-11-04)
+- `ReportsPeriodControls.kt` owns the period-preset chips and editable start/end date fields as a presentation component.
+- `ReportsCenterScreen.kt` retains date parsing, invalid-range handling, report-window filtering, and the selected period state; the component communicates changes only through callbacks.
+- Existing presets and their date boundaries are preserved. No report query or calculation was moved into the UI component.
