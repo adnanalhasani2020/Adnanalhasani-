@@ -226,7 +226,7 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         self.assertIn("aggregateCommercialCheckoutLines(lines)", self.sales_repository)
         quantity_math = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialQuantityMath.kt").read_text(encoding="utf-8")
         self.assertIn("(totals[key] ?: BigDecimal.ZERO).add(quantity)", quantity_math)
-        self.assertIn('"unit_code", line.unitCode', self.repository)
+        self.assertIn('"unit_code", line.unitCode', self.sales_repository)
         self.assertIn("configureCommercialCloudSellUnit", self.repository)
         self.assertIn("sell_units:commercial_offering_sell_units", self.repository)
         self.assertIn("prefs.getString(\"payload\", null) == payload", self.sales_repository)
