@@ -647,72 +647,600 @@ internal fun ReportsCenterScreen(
         endText = endText,
         sourceErrorForReport = sourceErrorForReport
     ) ?: when (selectedReport) {
-        "التقييم المالي الحالي للمخزون" -> if (sourceErrorForReport(selectedReport).isNotBlank()) emptyList() else {
-            val currency = cloudGlMappings.first { it.mappingKey == "inventory" }.currencyCode
-            buildList {
-                var totalValue = 0L
-                cloudStockAlerts.sortedBy { it.productName }.forEach { item ->
-                    val value = runCatching {
-                        item.quantityOnHand.multiply(java.math.BigDecimal.valueOf(item.unitCostMinor ?: 0L))
-                            .setScale(0, java.math.RoundingMode.HALF_UP).longValueExact()
-                    }.getOrElse { throw IllegalStateException("تجاوزت قيمة المخزون نطاق الأرقام المدعوم.") }
-                    totalValue = Math.addExact(totalValue, value)
-                    add(ReportLine("حالي", item.offeringId, item.productName, value, currency,
-                        "الكمية: ${item.quantityOnHand.stripTrailingZeros().toPlainString()} ${item.unitName} · تكلفة الوحدة المسجلة: ${reportMoney(item.unitCostMinor ?: 0L, currency, true)} · قيمة حالية فقط"))
-                }
-                add(ReportLine(endText, "إجمالي", "إجمالي قيمة المخزون الحالي", totalValue, currency,
-                    "مجموع الكميات الحالية × تكلفة الوحدة المسجلة؛ لا يتضمن تقييمًا تاريخيًا أو مطابقة دفتر الأستاذ"))
-            }
+        "ملخص المبيعات حسب الفترة" -> if (cloudMode) inPeriodCloudSalesDocuments.groupBy { it.currencyCode.ifBlank { "غير محددة" } }.map { (currency, rows) ->
+            val total = rows.sumOf { it.totalMinor }
+            ReportLine("${startText} — ${endText}", "ملخص", "إجمالي المبيعات المكتملة", total, currency, "${rows.size} فاتورة · متوسط ${reportMoney(if (rows.isEmpty()) 0L else total / rows.size, currency, true)}")
+        } else inPeriodSales.groupBy { it.currencyCode.ifBlank { "غير محددة" } }.map { (currency, rows) ->
+            ReportLine("${startText} — ${endText}", "ملخص", "إجمالي المبيعات المكتملة", rows.sumOf { it.total.toLong() }, currency, "${rows.size} فاتورة · متوسط ${if (rows.isEmpty()) 0L else rows.sumOf { it.total.toLong() } / rows.size}")
         }
-        "حركة المخزون حسب المستخدم" -> stockMovementUserReport.lines
-        "حركة المخزون الفعلية" -> cloudStockMovements.filter { movement ->
-            reportDateMillis(movement.createdAt)?.let { it >= startMillis && it < endExclusive } == true
-        }.map { movement ->
-            val movementTypeLabel = when (movement.movementType.lowercase()) {
-                "opening" -> "رصيد افتتاحي"
-                "sale" -> "بيع"
-                "receipt" -> "توريد / استلام"
-                "adjustment" -> "تسوية مخزون"
-                "return" -> "مرتجع"
-                else -> movement.movementType
+        "تفاصيل فواتير المبيعات" -> if (cloudMode) cloudSalesDocuments.filter { doc ->
+            val timestamp = reportDateMillis(doc.createdAt)
+            timestamp != null && timestamp >= startMillis && timestamp < endExclusive
+        }.sortedByDescending { it.createdAt }.map { doc ->
+            ReportLine(doc.createdAt.take(10), "فاتورة #${doc.receiptNumber}", doc.customerName.ifBlank { "عميل غير محدد" },
+                doc.totalMinor, doc.currencyCode, "الفاتورة: ${doc.saleStatus} · السداد: ${doc.paymentStatus} · بنود: ${doc.lines.size}")
+        } else inPeriodSales.sortedByDescending { it.createdAt }.map {
+            ReportLine(Instant.ofEpochMilli(it.createdAt).atZone(zone).toLocalDate().toString(), "فاتورة #${it.number}", it.product, it.total.toLong(), it.currencyCode, if (it.credit) "آجل" else "نقدي")
+        }
+        "تفاصيل بنود فواتير المبيعات" -> cloudSalesDocuments.filter { doc ->
+            doc.saleStatus.equals("completed", true) && (reportDateMillis(doc.createdAt)?.let { it >= startMillis && it < endExclusive } == true)
+        }.flatMap { doc ->
+            if (doc.lines.isEmpty()) listOf(ReportLine(doc.createdAt.take(10), "فاتورة #${doc.receiptNumber}", doc.customerName, doc.totalMinor, doc.currencyCode, "لا توجد بنود متاحة لهذه الفاتورة"))
+            else doc.lines.mapIndexed { index, line ->
+                ReportLine(doc.createdAt.take(10), "فاتورة #${doc.receiptNumber} · ${index + 1}", line.productName, line.lineTotalMinor, doc.currencyCode,
+                    "العميل: ${doc.customerName} · الكمية: ${line.quantity} · سعر الوحدة: ${reportMoney(line.unitPriceMinor, doc.currencyCode, true)} · السداد: ${doc.paymentStatus}")
             }
-            ReportLine(movement.createdAt.take(10), movement.sourceReference.ifBlank { movement.id }, movement.productName, 0L, "-",
-                "نوع الحركة: $movementTypeLabel · المصدر: ${movement.saleId.ifBlank { movement.sourceReference }} ${movement.saleStatus}",
-                displayAmount = movement.quantityDelta.stripTrailingZeros().toPlainString() + if (movement.unitName.isBlank()) "" else " ${movement.unitName}")
         }.sortedByDescending { it.date }
-        "رصيد المخزون حسب الموقع" -> locationInventoryReport.lines
-        "حالة ربط أرصدة المخزون بالمستودعات" -> cloudWarehouseInventoryContext.map { item ->
-            val mappingLabel = when {
-                item.mappingStatus == "mapped" && item.warehouseState == "inactive" ->
-                    "مرتبط بمستودع غير نشط"
-                item.mappingStatus == "mapped" && item.warehouseState == "archived" ->
-                    "مرتبط بمستودع مؤرشف"
-                item.mappingStatus == "mapped" && item.warehouseState != "active" ->
-                    "حالة المستودع غير معروفة"
-                item.mappingStatus == "mapped" -> "مربوط بمستودع واحد"
-                item.mappingStatus == "unconfigured" -> "غير مهيأ"
-                else -> "ملتبس · أكثر من مستودع"
+        "المبيعات حسب الصنف" -> if (cloudMode) cloudSalesDocuments.filter { doc ->
+            doc.saleStatus.equals("completed", true) && (reportDateMillis(doc.createdAt)?.let { it >= startMillis && it < endExclusive } == true)
+        }.flatMap { doc -> doc.lines.map { line -> Triple(line.productName, doc.currencyCode, line) } }
+            .groupBy { it.first to it.second }.map { (key, rows) ->
+                ReportLine("-", "-", key.first, rows.sumOf { it.third.lineTotalMinor }, key.second,
+                    "${rows.sumOf { it.third.quantity.toBigDecimalOrNull() ?: java.math.BigDecimal.ZERO }} وحدة · بنود فعلية")
+            }.sortedByDescending { it.amount }
+        else inPeriodSales.groupBy { it.product to it.currencyCode }.map { (key, rows) ->
+            ReportLine("-", "-", key.first, rows.sumOf { it.total.toLong() }, key.second, "${rows.sumOf { it.quantity }} وحدة · ${rows.size} فاتورة")
+        }.sortedByDescending { it.amount }
+        "الخصومات على فواتير المبيعات" -> cloudSalesDocuments.filter { doc ->
+            doc.saleStatus.equals("completed", true) && (reportDateMillis(doc.createdAt)?.let { it >= startMillis && it < endExclusive } == true)
+        }.filter { it.discountMinor > 0L }.map { doc ->
+            ReportLine(doc.createdAt.take(10), "فاتورة #${doc.receiptNumber}", doc.customerName, doc.discountMinor, doc.currencyCode, "خصم مسجل على الفاتورة")
+        }.sortedByDescending { it.date }
+        "الضرائب المسجلة على المبيعات" -> cloudSalesDocuments.filter { doc ->
+            doc.saleStatus.equals("completed", true) && (reportDateMillis(doc.createdAt)?.let { it >= startMillis && it < endExclusive } == true)
+        }.filter { it.taxMinor > 0L }.map { doc ->
+            ReportLine(doc.createdAt.take(10), "فاتورة #${doc.receiptNumber}", doc.customerName, doc.taxMinor, doc.currencyCode, "ضريبة مسجلة على الفاتورة")
+        }.sortedByDescending { it.date }
+        "أداء المبيعات حسب المستخدم" -> if (userSalesPerformanceError.isNotBlank()) emptyList()
+            else userSalesPerformanceCalculation.getOrThrow().map { row ->
+                val actorLabel = if (row.userId == "غير منسوب") "مبيعات غير منسوبة لمستخدم"
+                    else "مستخدم ${row.userId}"
+                ReportLine(
+                    "-",
+                    row.userId,
+                    actorLabel,
+                    row.totalMinor,
+                    row.currencyCode,
+                    "${row.invoiceCount} فاتورة مكتملة · متوسط الفاتورة ${reportMoney(row.averageInvoiceMinor, row.currencyCode, true)}"
+                )
             }
-            val warehouseLabel = if (item.mappingStatus == "mapped") {
-                item.warehouseName + if (item.warehouseCode.isBlank()) "" else " (${item.warehouseCode})"
-            } else "لا يوجد مستودع وحيد معتمد"
+        "المبيعات حسب العميل" -> if (cloudMode) inPeriodCloudSalesDocuments.groupBy { it.customerName.ifBlank { "عميل غير محدد" } to it.currencyCode }.map { (key, rows) ->
+            ReportLine("-", "-", key.first, rows.sumOf { it.totalMinor }, key.second, "${rows.size} فاتورة")
+        }.sortedByDescending { it.amount } else inPeriodSales.groupBy { it.customer.ifBlank { "عميل غير محدد" } to it.currencyCode }.map { (key, rows) ->
+            ReportLine("-", "-", key.first, rows.sumOf { it.total.toLong() }, key.second, "${rows.size} فاتورة")
+        }.sortedByDescending { it.amount }
+        "المبيعات حسب حالة السداد" -> inPeriodCloudSalesDocuments.groupBy { it.paymentStatus.ifBlank { "غير محدد" } to it.currencyCode }.map { (key, rows) ->
+            ReportLine("-", "-", key.first, rows.sumOf { it.totalMinor }, key.second, "${rows.size} فاتورة")
+        }.sortedByDescending { it.amount }
+        "المبيعات النقدية والآجلة" -> inPeriodSales.groupBy { (if (it.credit) "آجل" else "نقدي") to it.currencyCode }.map { (key, rows) ->
+            ReportLine("-", "-", key.first, rows.sumOf { it.total.toLong() }, key.second, "${rows.size} فاتورة")
+        }.sortedByDescending { it.amount }
+        "متوسط قيمة الفاتورة" -> if (cloudMode) inPeriodCloudSalesDocuments.groupBy { it.currencyCode.ifBlank { "غير محددة" } }.map { (currency, rows) ->
+            val total = rows.sumOf { it.totalMinor }
+            ReportLine("-", "-", "متوسط قيمة الفاتورة", if (rows.isEmpty()) 0L else total / rows.size, currency, "${rows.size} فاتورة · الإجمالي ${reportMoney(total, currency, true)}")
+        } else inPeriodSales.groupBy { it.currencyCode.ifBlank { "غير محددة" } }.map { (currency, rows) ->
+            ReportLine("-", "-", "متوسط قيمة الفاتورة", if (rows.isEmpty()) 0L else rows.sumOf { it.total.toLong() } / rows.size, currency, "${rows.size} فاتورة · إجمالي ${rows.sumOf { it.total.toLong() }}")
+        }
+        "اتجاه المبيعات اليومي" -> if (dailySalesTrendError.isNotBlank()) emptyList() else {
+            dailySalesTrendCalculation.getOrThrow().map { day ->
+                ReportLine(
+                    day.date,
+                    "${day.invoiceCount} فاتورة",
+                    "إجمالي مبيعات اليوم",
+                    day.totalMinor,
+                    day.currencyCode,
+                    "إجمالي الفواتير المكتملة في هذا اليوم · العملة: ${day.currencyCode}"
+                )
+            }
+        }
+        "مقارنة فترتين", "مقارنة الفترات" -> {
+            val days = if (startDate != null && endDate != null) java.time.temporal.ChronoUnit.DAYS.between(startDate, endDate).toInt() + 1 else 0
+            val previousStart = startDate?.minusDays(days.toLong())
+            val previousEnd = startDate?.minusDays(1)
+            if (cloudMode) {
+                val previousCloudRows = if (previousStart != null && previousEnd != null) cloudSalesDocuments.filter { doc ->
+                    doc.saleStatus.equals("completed", true) &&
+                        (reportDateMillis(doc.createdAt)?.let { it >= previousStart.atStartOfDay(zone).toInstant().toEpochMilli() && it < previousEnd.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli() } == true)
+                } else emptyList()
+                (inPeriodCloudSalesDocuments.map { it.currencyCode.ifBlank { "غير محددة" } } + previousCloudRows.map { it.currencyCode.ifBlank { "غير محددة" } }).distinct().sorted().map { currency ->
+                    val currentTotal = inPeriodCloudSalesDocuments.filter { it.currencyCode.ifBlank { "غير محددة" } == currency }.sumOf { it.totalMinor }
+                    val previousTotal = previousCloudRows.filter { it.currencyCode.ifBlank { "غير محددة" } == currency }.sumOf { it.totalMinor }
+                    ReportLine("${startText} — ${endText}", "مقارنة", "مبيعات الفترة الحالية", currentTotal, currency,
+                        "الفترة السابقة: ${reportMoney(previousTotal, currency, true)} · الفرق: ${reportMoney(currentTotal - previousTotal, currency, true)}")
+                }
+            } else {
+                val previousRows = if (previousStart != null && previousEnd != null) sales.filter {
+                    it.createdAt >= previousStart.atStartOfDay(zone).toInstant().toEpochMilli() &&
+                        it.createdAt < previousEnd.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli() &&
+                        it.status.equals("completed", true)
+                } else emptyList()
+                (inPeriodSales.map { it.currencyCode.ifBlank { "غير محددة" } } + previousRows.map { it.currencyCode.ifBlank { "غير محددة" } }).distinct().sorted().map { currency ->
+                    val currentTotal = inPeriodSales.filter { it.currencyCode.ifBlank { "غير محددة" } == currency }.sumOf { it.total.toLong() }
+                    val previousTotal = previousRows.filter { it.currencyCode.ifBlank { "غير محددة" } == currency }.sumOf { it.total.toLong() }
+                    ReportLine("${startText} — ${endText}", "مقارنة", "مبيعات الفترة الحالية", currentTotal, currency, "الفترة السابقة: $previousTotal · الفرق: ${currentTotal - previousTotal}")
+                }
+            }
+        }
+        "عمر أرصدة العملاء حسب تاريخ الفاتورة" -> if (customerReceivableAgingError.isNotBlank()) emptyList() else {
+            customerReceivableAgingReport.rows.map { aging ->
+                ReportLine(
+                    today.toString(),
+                    aging.bucket,
+                    aging.customerName,
+                    aging.balanceMinor,
+                    aging.currencyCode,
+                    "${aging.invoiceCount} فاتورة مفتوحة · الرصيد الحالي بعد المرتجعات والاستردادات · العمر من تاريخ الفاتورة وليس الاستحقاق"
+                )
+            }
+        }
+        "التحصيل حسب العميل" -> if (customerCollectionsError.isNotBlank()) emptyList() else {
+            customerCollectionsCalculation.getOrThrow().map { customer ->
+                ReportLine(
+                    "${startText} — ${endText}",
+                    "${customer.paymentCount} دفعة",
+                    customer.customerName,
+                    customer.totalMinor,
+                    customer.currencyCode,
+                    "دفعات ناجحة فقط · ${if (customer.customerId.isBlank()) "لا يوجد معرف عميل محفوظ" else "معرف العميل: ${customer.customerId}"}"
+                )
+            }
+        }
+        "التحصيل حسب طريقة الدفع" -> cloudPayments.filter { row ->
+            val timestamp = reportDateMillis(row.createdAt)
+            timestamp != null && timestamp >= startMillis && timestamp < endExclusive &&
+                row.status.equals("succeeded", true)
+        }.groupBy { it.paymentMethodCode.ifBlank { "غير محددة" } to it.currencyCode }.map { (key, rows) ->
+            val total = rows.fold(0L) { sum, row -> Math.addExact(sum, row.amountMinor) }
             ReportLine(
-                "-", item.locationName, item.productName, 0L, "-", mappingLabel,
-                displayAmount = "المستودع: $warehouseLabel · حالة المستودع: ${item.warehouseState.ifBlank { "غير معروفة" }} · روابط المستودع: ${item.mappedWarehouseCount} · المتاح: ${item.availableQuantity.stripTrailingZeros().toPlainString()} ${item.unitName} · الإجمالي: ${item.quantityOnHand.stripTrailingZeros().toPlainString()} · المحجوز: ${item.quantityReserved.stripTrailingZeros().toPlainString()} · حد الطلب: ${item.reorderPoint.stripTrailingZeros().toPlainString()}"
+                "${startText} — ${endText}",
+                "تجميع",
+                key.first,
+                total,
+                key.second,
+                "عدد الدفعات: ${rows.size} · دفعات ناجحة فقط · المصدر: commercial_payments"
             )
+        }.sortedWith(compareBy<ReportLine> { it.currency }.thenBy { it.name })
+        "الدفعات السحابية الناجحة" -> cloudPayments.filter { row ->
+            val timestamp = reportDateMillis(row.createdAt)
+            timestamp != null && timestamp >= startMillis && timestamp < endExclusive &&
+                row.status.equals("succeeded", true)
+        }.map { row ->
+            ReportLine(row.createdAt.take(10), row.id, row.title, row.amountMinor, row.currencyCode, row.status)
         }
-        "رصيد المخزون الحالي" -> if (cloudMode) cloudStockAlerts.map { item ->
-            ReportLine("-", item.offeringId, item.productName, 0L, "-", "المتاح بعد حجز الكمية · ${item.categoryName} · حد إعادة الطلب: ${item.reorderPoint} ${item.unitName}",
-                displayAmount = java.math.BigDecimal.valueOf(item.availableQuantity).stripTrailingZeros().toPlainString() + " ${item.unitName}")
-        } else products.map {
-            ReportLine("-", it.catalogCode.ifBlank { it.barcode }, it.name, it.stock.toLong(), "-", "${it.unitCode} · سعر ${it.price}")
+        "التحصيلات المسجلة محليًا" -> inPeriodSettlements.map {
+            ReportLine(Instant.ofEpochMilli(it.timestamp).atZone(zone).toLocalDate().toString(), "فاتورة #${it.invoiceNumber}", it.customer, it.amount.toLong(), "YER", "تحصيل محلي")
         }
-        "تنبيهات المخزون المنخفض" -> if (cloudMode) cloudStockAlerts.filter { it.availableQuantity <= it.reorderPoint }.map { item ->
-            ReportLine("-", item.offeringId, item.productName, 0L, "-", "حد إعادة الطلب: ${item.reorderPoint} ${item.unitName} · ${item.categoryName}",
-                displayAmount = java.math.BigDecimal.valueOf(item.availableQuantity).stripTrailingZeros().toPlainString() + " ${item.unitName}")
-        } else stockLow.map {
-            ReportLine("-", it.catalogCode.ifBlank { it.barcode }, it.name, it.stock.toLong(), "-", "حد التنبيه ${it.reorderPoint.takeIf { n -> n >= 0 } ?: 9} ${it.unitCode}")
+        "المشتريات حسب المورد" -> if (supplierPurchaseSummaryError.isNotBlank()) emptyList() else {
+            supplierPurchaseSummaryCalculation.getOrThrow().map { summary ->
+                ReportLine(
+                    "${startText} — ${endText}",
+                    "${summary.invoiceCount} فاتورة",
+                    summary.supplierName,
+                    summary.totalMinor,
+                    summary.currencyCode,
+                    "إجمالي فواتير المورد غير الملغاة · معرف المورد: ${summary.supplierId}"
+                )
+            }
         }
+        "فروقات أسعار فواتير الموردين" -> cloudPurchases.flatMap { purchase ->
+            purchase.supplierInvoices.filter { invoice ->
+                invoice.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed") &&
+                    reportDateMillis(invoice.recordedAt)?.let { it >= startMillis && it < endExclusive } == true
+            }.map { invoice ->
+                val variance = calculateSupplierInvoicePriceVariance(invoice.toPriceVarianceInput())
+                val itemPreview = invoice.lines.take(4).joinToString("؛ ") { line ->
+                    "${line.purchaseOrderItemDescription.ifBlank { "بند" }}: ${line.quantity} × ${reportMoney(line.unitPriceMinor, invoice.currencyCode, true)} (أساس ${reportMoney(line.purchaseOrderUnitCostMinor!!, invoice.currencyCode, true)})"
+                }
+                val moreItems = if (invoice.lines.size > 4) " · وبنود أخرى: ${invoice.lines.size - 4}" else ""
+                ReportLine(
+                    invoice.recordedAt.take(10),
+                    "فاتورة المورد #${invoice.invoiceNumber.ifBlank { invoice.id }}",
+                    purchase.supplierName,
+                    variance.varianceMinor,
+                    invoice.currencyCode,
+                    "فرق موجب = أعلى من أمر الشراء، وسالب = أقل · أساس الأمر: ${reportMoney(variance.expectedSubtotalMinor, invoice.currencyCode, true)} · الفاتورة قبل الضريبة والشحن: ${reportMoney(variance.invoiceSubtotalMinor, invoice.currencyCode, true)} · الضريبة: ${reportMoney(invoice.taxMinor, invoice.currencyCode, true)} · الشحن: ${reportMoney(invoice.freightMinor, invoice.currencyCode, true)} · التفاصيل: ${itemPreview}${moreItems}"
+                )
+            }
+        }.sortedByDescending { it.date }
+        "فواتير الشراء والمستحقات المسجلة" -> cloudPurchases.flatMap { purchase ->
+            purchase.supplierInvoices.filter { invoice ->
+                val timestamp = reportDateMillis(invoice.recordedAt)
+                timestamp != null && timestamp >= startMillis && timestamp < endExclusive &&
+                    invoice.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed")
+            }.map { invoice ->
+                val due = invoice.obligation?.amountDueMinor
+                val paid = invoice.obligation?.amountPaidMinor
+                ReportLine(invoice.recordedAt.take(10), invoice.invoiceNumber.ifBlank { purchase.orderNumber }, purchase.supplierName,
+                    invoice.totalMinor, invoice.currencyCode.ifBlank { purchase.currencyCode },
+                    if (due != null && paid != null) {
+                        val balance = Math.subtractExact(due, paid)
+                        if (balance >= 0L) "المستحق: ${reportMoney(balance, invoice.currencyCode, true)} · ${invoice.state}"
+                        else "رصيد دائن/مقدم للمورد: ${reportMoney(balance, invoice.currencyCode, true)} · ${invoice.state}"
+                    } else invoice.state)
+            }
+        }.sortedByDescending { it.date }
+        "عمر مستحقات الموردين حسب تاريخ الفاتورة" -> if (supplierLiabilityAgingError.isNotBlank()) emptyList() else {
+            supplierLiabilityAgingReport.rows.map { aging ->
+                ReportLine(
+                    today.toString(),
+                    aging.bucket,
+                    aging.supplierName,
+                    aging.balanceMinor,
+                    aging.currencyCode,
+                    "${aging.invoiceCount} فاتورة مفتوحة · الرصيد الحالي حتى اليوم · العمر من تاريخ تسجيل الفاتورة وليس من تاريخ استحقاق تعاقدي"
+                )
+            }
+        }
+        "أعمار مستحقات الموردين" -> if (supplierDueDateAgingError.isNotBlank()) emptyList()
+            else supplierDueDateAgingReport.toReportLines(today.toString())
+        "مستحقات فواتير الموردين" -> calculateSupplierObligationTotals(supplierObligationInputs).map { totals ->
+            val balanceLabel = if (totals.balanceMinor >= 0L) "المستحق للمورد" else "رصيد دائن/مقدم للمورد"
+            ReportLine(
+                endText,
+                totals.supplierId,
+                totals.supplierName,
+                totals.balanceMinor,
+                totals.currencyCode,
+                "إجمالي الالتزامات: ${reportMoney(totals.amountDueMinor, totals.currencyCode, true)} · المسدد: ${reportMoney(totals.amountPaidMinor, totals.currencyCode, true)} · ${balanceLabel}: ${reportMoney(totals.balanceMinor, totals.currencyCode, true)}"
+            )
+        }.sortedByDescending { it.amount }
+        "كشف حركات الموردين" -> {
+            val invoiceMovements = cloudPurchases.flatMap { purchase ->
+                purchase.supplierInvoices.filter { invoice ->
+                    invoice.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed") &&
+                        invoice.obligation != null && invoice.obligation.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed") &&
+                        invoice.obligation.amountDueMinor > 0L && invoice.obligation.currencyCode.matches(Regex("^[A-Z]{3}$"))
+                }.map { invoice ->
+                    val obligation = invoice.obligation!!
+                    ReportSupplierMovement(invoice.recordedAt.take(10), purchase.supplierId, purchase.supplierName, obligation.currencyCode,
+                        "فاتورة مورد ${invoice.invoiceNumber.ifBlank { invoice.id }}", obligation.amountDueMinor, "مدين · التزام فاتورة مسجل")
+                }
+            }
+            val paymentMovements = cloudSupplierPayments.map { payment ->
+                ReportSupplierMovement(payment.recordedAt.take(10), payment.supplierId, payment.supplierName, payment.currencyCode,
+                    "دفعة ${payment.id}", -payment.amountMinor, "دائن · سداد مرحل · فاتورة ${payment.invoiceNumber.ifBlank { payment.supplierInvoiceId }} · ${payment.paymentMethod}")
+            }
+            (invoiceMovements + paymentMovements).filter { movement -> supplierFilter.isBlank() || movement.supplier.contains(supplierFilter.trim(), true) }
+                .groupBy { Triple(it.supplierId, it.supplier, it.currency) }.toSortedMap(compareBy<Triple<String, String, String>> { it.second }.thenBy { it.third }.thenBy { it.first }).flatMap { (key, supplierMoves) ->
+                    val ordered = supplierMoves.sortedWith(compareBy<ReportSupplierMovement> { it.date }.thenBy { it.reference })
+                    val opening = ordered.filter { reportDateMillis(it.date)?.let { ts -> ts < startMillis } == true }.sumOf { it.amount }
+                    val periodMoves = ordered.filter { reportDateMillis(it.date)?.let { ts -> ts >= startMillis && ts < endExclusive } == true }
+                    if (periodMoves.isEmpty() && opening == 0L) emptyList() else buildList {
+                        var balance = opening
+                        if (opening != 0L) add(ReportLine(startText, "افتتاحي", key.second, opening, key.third, "رصيد افتتاحي وفق الفواتير والدفعات المحملة · المورد: ${key.first}"))
+                        periodMoves.forEach { movement ->
+                            balance = Math.addExact(balance, movement.amount)
+                            add(ReportLine(movement.date, movement.reference, movement.supplier, movement.amount, movement.currency, "${movement.description} · الرصيد الجزئي: ${reportMoney(balance, movement.currency, true)} · المورد: ${movement.supplierId}"))
+                        }
+                        add(ReportLine(endText, "ختامي", key.second, balance, key.third, "رصيد جزئي للفواتير والدفعات فقط؛ لا يشمل مرتجعات أو تسويات غير محملة · المورد: ${key.first}"))
+                    }
+                }
+        }
+        "مرتجعات المبيعات وحالة التسوية" -> cloudReturns.filter { row ->
+            val timestamp = reportDateMillis(row.createdAt)
+            timestamp != null && timestamp >= startMillis && timestamp < endExclusive
+        }.map { row ->
+            val approved = if (row.status in setOf("approved", "completed")) (row.approvedRefundMinor ?: 0L) else 0L
+            ReportLine(row.createdAt.take(10), row.receiptNumber, row.customerName, approved, row.currencyCode,
+                "الطلب: ${row.status} · الاسترداد: ${row.refundStatus} · المخزون: ${row.restockStatus}")
+        }.sortedByDescending { it.date }
+        "الرصيد المحاسبي الكامل للعملاء" -> if (customerStatementError.isNotBlank()) emptyList() else {
+            val names = cloudSalesDocuments.filter { it.customerId.isNotBlank() }
+                .associate { it.customerId to it.customerName.ifBlank { it.customerId } }
+            cloudCustomerPartyAccounts.filter { customerFilter.isBlank() || (names[it.partyId] ?: it.partyId).contains(customerFilter.trim(), true) || it.partyId.contains(customerFilter.trim(), true) }
+                .groupBy { it.partyId to it.currencyCode }.flatMap { (party, links) ->
+                    val accountIds = links.map { it.partyAccountId }.toSet()
+                    val controlAccountIds = cloudGlMappings.filter {
+                        it.mappingKey == "accounts_receivable" && it.currencyCode == party.second
+                    }.map { it.ledgerAccountId }.toSet()
+                    val movements = cloudLedgerLines.filter {
+                        it.partyAccountId in accountIds && it.accountId in controlAccountIds && it.currencyCode == party.second
+                    }
+                        .mapNotNull { line ->
+                            val date = runCatching { LocalDate.parse(line.entryDate.take(10)) }.getOrNull() ?: return@mapNotNull null
+                            Triple(line, date, line.debitMinor - line.creditMinor)
+                        }.sortedWith(compareBy<Triple<CommercialCloudJournalLine, LocalDate, Long>> { it.second }.thenBy { it.first.entryNumber }.thenBy { it.first.lineNumber })
+                    val opening = movements.filter { it.second < (startDate ?: LocalDate.MIN) }.sumOf { it.third }
+                    val period = movements.filter { startDate != null && endDate != null && !it.second.isBefore(startDate) && !it.second.isAfter(endDate) }
+                    if (period.isEmpty() && opening == 0L) emptyList() else buildList {
+                        var balance = opening
+                        val name = names[party.first] ?: party.first
+                        if (opening != 0L) add(ReportLine(startText, "رصيد سابق", name, opening, party.second, "رصيد افتتاحي من دفتر الأستاذ · العميل ${party.first}"))
+                        period.forEach { (line, date, amount) ->
+                            balance = Math.addExact(balance, amount)
+                            add(ReportLine(date.toString(), "قيد ${line.entryNumber} · سطر ${line.lineNumber}", name, amount, party.second,
+                                "${line.entryDescription} · المصدر ${line.sourceType}:${line.sourceId} · الرصيد ${reportMoney(balance, party.second, true)}"))
+                        }
+                        add(ReportLine(endText, "رصيد ختامي", name, balance, party.second, "رصيد حساب مراقبة العميل من القيود المرحلة · ${party.first}"))
+                    }
+                }
+        }
+        "أرصدة الموردين والمستحقات" -> if (supplierStatementError.isNotBlank()) emptyList() else {
+            val names = cloudPurchases.filter { it.supplierId.isNotBlank() }
+                .associate { it.supplierId to it.supplierName.ifBlank { it.supplierId } }
+            cloudSupplierPartyAccounts.filter { supplierFilter.isBlank() || (names[it.partyId] ?: it.partyId).contains(supplierFilter.trim(), true) || it.partyId.contains(supplierFilter.trim(), true) }
+                .groupBy { it.partyId to it.currencyCode }.flatMap { (party, links) ->
+                    val accountIds = links.map { it.partyAccountId }.toSet()
+                    val controlAccountIds = cloudSupplierControlAccounts.filter {
+                        it.accountRole == "accounts_payable" && it.currencyCode == party.second
+                    }.map { it.ledgerAccountId }.toSet()
+                    val movements = cloudLedgerLines.filter {
+                        it.partyAccountId in accountIds && it.accountId in controlAccountIds && it.currencyCode == party.second
+                    }
+                        .mapNotNull { line ->
+                            val date = runCatching { LocalDate.parse(line.entryDate.take(10)) }.getOrNull() ?: return@mapNotNull null
+                            Triple(line, date, line.creditMinor - line.debitMinor)
+                        }.sortedWith(compareBy<Triple<CommercialCloudJournalLine, LocalDate, Long>> { it.second }.thenBy { it.first.entryNumber }.thenBy { it.first.lineNumber })
+                    val opening = movements.filter { it.second < (startDate ?: LocalDate.MIN) }.sumOf { it.third }
+                    val period = movements.filter { startDate != null && endDate != null && !it.second.isBefore(startDate) && !it.second.isAfter(endDate) }
+                    if (period.isEmpty() && opening == 0L) emptyList() else buildList {
+                        var balance = opening
+                        val name = names[party.first] ?: party.first
+                        if (opening != 0L) add(ReportLine(startText, "رصيد سابق", name, opening, party.second, "رصيد افتتاحي من دفتر الأستاذ · المورد ${party.first}"))
+                        period.forEach { (line, date, amount) ->
+                            balance = Math.addExact(balance, amount)
+                            add(ReportLine(date.toString(), "قيد ${line.entryNumber} · سطر ${line.lineNumber}", name, amount, party.second,
+                                "${line.entryDescription} · المصدر ${line.sourceType}:${line.sourceId} · الرصيد ${reportMoney(balance, party.second, true)}"))
+                        }
+                        add(ReportLine(endText, "رصيد ختامي", name, balance, party.second, "رصيد حساب مراقبة المورد من القيود المرحلة · ${party.first}"))
+                    }
+                }
+        }
+        "أرصدة العملاء وكشف الحساب" -> {
+            val movements = buildCustomerOperationalStatementMovements(cloudSalesDocuments.toCustomerStatementInputs())
+                .filter { movement ->
+                    customerFilter.isBlank() ||
+                        movement.customer.contains(customerFilter.trim(), true) ||
+                        movement.customerId.contains(customerFilter.trim(), true)
+                }
+            movements.groupBy { Triple(it.customerId, it.customer, it.currency) }
+                .toSortedMap(compareBy<Triple<String, String, String>> { it.second }.thenBy { it.third })
+                .flatMap { (key, customerMoves) ->
+                    val ordered = customerMoves.sortedWith(compareBy<ReportCustomerMovement> { it.date }.thenBy { it.reference })
+                    val opening = sumReportAmountsExactly(
+                        ordered.filter { reportDateMillis(it.date)?.let { ts -> ts < startMillis } == true }.map { it.amount }
+                    )
+                    val periodMoves = ordered.filter { reportDateMillis(it.date)?.let { ts -> ts >= startMillis && ts < endExclusive } == true }
+                    if (periodMoves.isEmpty() && opening == 0L) emptyList() else buildList {
+                        var balance = opening
+                        if (opening != 0L) add(ReportLine(startText, "سابق", key.second, opening, key.third, "رصيد سابق محسوب من الحركات المسجلة"))
+                        periodMoves.forEach { movement ->
+                            balance = Math.addExact(balance, movement.amount)
+                            add(ReportLine(movement.date, movement.reference, movement.customer, movement.amount, movement.currency,
+                                "${movement.description} · الرصيد: ${reportMoney(balance, movement.currency, true)}"))
+                        }
+                        add(ReportLine(endText, "ختامي", key.second, balance, key.third, "الرصيد الختامي من الفواتير والتحصيلات والمرتجعات المكتملة فقط"))
+                    }
+                }
+        }
+        "سندات القبض والصرف" -> cloudPayments.filter { row ->
+            val timestamp = reportDateMillis(row.createdAt)
+            timestamp != null && timestamp >= startMillis && timestamp < endExclusive
+        }.map { row ->
+            ReportLine(row.createdAt.take(10), row.id, row.title, row.amountMinor, row.currencyCode, row.status)
+        }.sortedByDescending { it.date }
+        "التدفقات النقدية والصندوق" -> if (sourceErrorForReport(selectedReport).isNotBlank()) emptyList() else buildCashFlowReportLines(cloudLedgerLines, cloudGlMappings, startDate, endDate, startText, endText)
+        "ملخص الضرائب والخصومات" -> taxDiscountSummaryReport.lines
+        "الضرائب والخصومات التفصيلية" -> if (taxDetailError.isNotBlank()) emptyList() else buildList {
+            cloudSalesDocuments.filter { doc ->
+                doc.saleStatus.equals("completed", true) &&
+                    reportDateMillis(doc.createdAt)?.let { it >= startMillis && it < endExclusive } == true
+            }.forEach { doc ->
+                if (doc.discountMinor != 0L) add(ReportLine(doc.createdAt.take(10), "فاتورة بيع #${doc.receiptNumber}", doc.customerName, -doc.discountMinor, doc.currencyCode,
+                    "خصم مسجل على الفاتورة · مصدر commercial_sales.discount_minor"))
+                if (doc.taxMinor != 0L) add(ReportLine(doc.createdAt.take(10), "فاتورة بيع #${doc.receiptNumber}", doc.customerName, doc.taxMinor, doc.currencyCode,
+                    "ضريبة مسجلة قبل تسوية المرتجعات · مصدر commercial_sales.tax_minor"))
+            }
+            cloudPurchases.forEach { purchase ->
+                purchase.supplierInvoices.filter { invoice ->
+                    reportDateMillis(invoice.recordedAt)?.let { it >= startMillis && it < endExclusive } == true &&
+                        invoice.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed")
+                }.forEach { invoice ->
+                    if (invoice.taxMinor != 0L) add(ReportLine(invoice.recordedAt.take(10), "فاتورة شراء #${invoice.invoiceNumber.ifBlank { invoice.id }}", purchase.supplierName, invoice.taxMinor, invoice.currencyCode.ifBlank { purchase.currencyCode },
+                        "ضريبة شراء مسجلة · commercial_supplier_invoices.tax_minor"))
+                }
+            }
+            cloudReturns.filter { saleReturn ->
+                saleReturn.status.equals("completed", true) &&
+                    reportDateMillis(saleReturn.completedAt)?.let { it >= startMillis && it < endExclusive } == true
+            }.forEach { saleReturn ->
+                add(ReportLine(saleReturn.completedAt.take(10), "مرتجع #${saleReturn.id}", saleReturn.customerName, -saleReturn.approvedRefundMinor!!, saleReturn.currencyCode,
+                    "قيمة مرتجع معتمد؛ لا تفصل حصة الضريبة لأن مصدر المرتجع لا يخزنها منفصلة"))
+            }
+        }.sortedByDescending { it.date }
+        "ربحية الأصناف بعد المرتجعات" -> if (itemProfitabilityError.isNotBlank()) emptyList() else {
+            itemProfitabilityCalculation.getOrThrow().map { item ->
+                ReportLine(
+                    "${startText} — ${endText}",
+                    "ربحية صنف",
+                    item.productName,
+                    item.grossProfitMinor,
+                    item.currencyCode,
+                    "الإيراد: ${reportMoney(item.salesMinor, item.currencyCode, true)} · المرتجعات المعتمدة: ${reportMoney(item.refundMinor, item.currencyCode, true)} · صافي الإيراد: ${reportMoney(item.netRevenueMinor, item.currencyCode, true)} · تكلفة البيع: ${reportMoney(item.soldCostMinor, item.currencyCode, true)} · تكلفة المرتجع المعاد تخزينه: ${reportMoney(item.returnedCostMinor, item.currencyCode, true)} · صافي التكلفة: ${reportMoney(item.netCostMinor, item.currencyCode, true)} · عدد بنود البيع: ${item.saleLineCount}",
+                    displayAmount = "الكمية المباعة: ${item.soldQuantity.stripTrailingZeros().toPlainString()} · الكمية المرتجعة: ${item.returnedQuantity}"
+                )
+            }
+        }
+        "تكلفة البضاعة والربح" -> if (costProfitError.isNotBlank()) emptyList() else {
+            val periodSales = cloudSalesDocuments.filter { doc ->
+                doc.saleStatus.equals("completed", true) &&
+                    reportDateMillis(doc.createdAt)?.let { it >= startMillis && it < endExclusive } == true
+            }
+            val periodReturns = cloudReturns.filter { saleReturn ->
+                saleReturn.status.equals("completed", true) &&
+                    reportDateMillis(saleReturn.completedAt)?.let { it >= startMillis && it < endExclusive } == true
+            }
+            buildList {
+                calculateCostProfitReportTotals(periodSales.map { it.toCostProfitInput() }, periodReturns.map { it.toCostProfitInput() }).forEach { totals ->
+                    val currency = totals.currencyCode
+                    add(ReportLine("${startText} — ${endText}", "إيرادات", "إجمالي المبيعات بعد الخصومات", totals.grossSalesMinor, currency,
+                        "إجمالي ${totals.invoiceCount} فاتورة مكتملة؛ الإيراد لا يتضمن الضريبة"))
+                    if (totals.returnRevenueMinor != 0L) add(ReportLine("${startText} — ${endText}", "مرتجعات", "مبالغ المرتجعات المعتمدة", -totals.returnRevenueMinor, currency,
+                        "مرتجعات مكتملة ضمن الفترة فقط؛ تم التحقق من ربط الفاتورة والعملة"))
+                    add(ReportLine("${startText} — ${endText}", "صافي الإيرادات", "صافي الإيرادات بعد المرتجعات", totals.netRevenueMinor, currency,
+                        "من الفواتير المكتملة ناقص الخصومات والمرتجعات المعتمدة"))
+                    add(ReportLine("${startText} — ${endText}", "تكلفة البضاعة", "تكلفة البنود المباعة المحفوظة", -totals.soldCostMinor, currency,
+                        "لقطات cost_total_minor المسجلة عند البيع؛ لا تستخدم تكلفة الشراء الحالية"))
+                    if (totals.returnedCostMinor != 0L) add(ReportLine("${startText} — ${endText}", "عكس تكلفة المرتجع", "تكلفة الكمية التي أعيد تخزينها", totals.returnedCostMinor, currency,
+                        "محسوبة من تكلفة بند البيع التاريخية والكمية المعاد تخزينها"))
+                    add(ReportLine("${startText} — ${endText}", "تكلفة صافية", "تكلفة البضاعة بعد المرتجعات المعاد تخزينها", -totals.netCostMinor, currency,
+                        "تكلفة البيع ناقص تكلفة المرتجعات التي أعيد تخزينها"))
+                    add(ReportLine("${startText} — ${endText}", "مجمل الربح", "مجمل الربح بعد الخصومات والمرتجعات", totals.grossProfitMinor, currency,
+                        "إيرادات صافية ناقص تكلفة تاريخية صافية؛ لا يمثل صافي الربح بعد المصروفات التشغيلية"))
+                }
+            }
+        }
+        "قائمة الدخل والميزانية العمومية" -> if (ledgerStatementError.isNotBlank()) emptyList() else {
+            val throughEnd = cloudLedgerLines.filter { line ->
+                val date = runCatching { LocalDate.parse(line.entryDate.take(10)) }.getOrNull()
+                date != null && endDate != null && !date.isAfter(endDate)
+            }
+            val inPeriod = throughEnd.filter { line ->
+                val date = runCatching { LocalDate.parse(line.entryDate.take(10)) }.getOrNull()
+                date != null && startDate != null && endDate != null &&
+                    !date.isBefore(startDate) && !date.isAfter(endDate)
+            }
+            val periodDays = if (startDate != null && endDate != null)
+                java.time.temporal.ChronoUnit.DAYS.between(startDate, endDate).coerceAtLeast(0L) + 1L else 0L
+            val previousStart = if (startDate != null && periodDays > 0L) runCatching { startDate.minusDays(periodDays) }.getOrNull() else null
+            val previousEnd = if (startDate != null) runCatching { startDate.minusDays(1) }.getOrNull() else null
+            val previousPeriod = if (previousStart != null && previousEnd != null) throughEnd.filter { line ->
+                val date = runCatching { LocalDate.parse(line.entryDate.take(10)) }.getOrNull()
+                date != null && !date.isBefore(previousStart) && !date.isAfter(previousEnd)
+            } else emptyList()
+            val currencies = (throughEnd.map { it.currencyCode } + inPeriod.map { it.currencyCode })
+                .filter { it.matches(Regex("^[A-Z]{3}$")) }.distinct().sorted()
+            buildList {
+                currencies.forEach { currency ->
+                    val periodRows = inPeriod.filter { it.currencyCode == currency }
+                    val cumulativeRows = throughEnd.filter { it.currencyCode == currency }
+                    periodRows.groupBy { Triple(it.accountId, it.accountName.ifBlank { it.accountCode }, reportStatementClass(it)) }
+                        .filterKeys { it.third in setOf("revenue", "contra_revenue", "cogs", "expense") }
+                        .toSortedMap(compareBy<Triple<String, String, String>> { it.third }.thenBy { it.second }.thenBy { it.first })
+                        .forEach { (key, rows) ->
+                            val raw = rows.sumOf { if (key.third == "revenue") it.creditMinor - it.debitMinor else it.debitMinor - it.creditMinor }
+                            val amount = if (key.third == "revenue") raw else -raw
+                            add(ReportLine("${startText} — ${endText}", "حساب ${key.first}", key.second, amount, currency,
+                                "تفصيل حساب قائمة الدخل · التصنيف ${key.third} · دفتر الأستاذ المرحل"))
+                        }
+                    val revenue = reportAccountNet(periodRows, "revenue")
+                    val contraRevenue = reportAccountNet(periodRows, "contra_revenue")
+                    val cogs = reportAccountNet(periodRows, "cogs")
+                    val operatingExpenses = reportAccountNet(periodRows, "expense")
+                    val netRevenue = revenue - contraRevenue
+                    val grossProfit = netRevenue - cogs
+                    val netProfit = grossProfit - operatingExpenses
+                    val previousRows = previousPeriod.filter { it.currencyCode == currency }
+                    if (previousRows.isNotEmpty()) {
+                        val previousRevenue = reportAccountNet(previousRows, "revenue") - reportAccountNet(previousRows, "contra_revenue")
+                        val previousGrossProfit = previousRevenue - reportAccountNet(previousRows, "cogs")
+                        val previousNetProfit = previousGrossProfit - reportAccountNet(previousRows, "expense")
+                        add(ReportLine("${previousStart} — ${previousEnd}", "مقارنة الفترة السابقة", "صافي الإيرادات للفترة السابقة", previousRevenue, currency,
+                            "الفترة السابقة مساوية للمدة المحددة؛ من القيود المرحلة فقط"))
+                        add(ReportLine("${previousStart} — ${previousEnd}", "مقارنة الفترة السابقة", "مجمل الربح للفترة السابقة", previousGrossProfit, currency,
+                            "صافي الإيرادات السابقة ناقص تكلفة البضاعة المرحلة"))
+                        add(ReportLine("${previousStart} — ${previousEnd}", "مقارنة الفترة السابقة", "صافي الربح/الخسارة للفترة السابقة", previousNetProfit, currency,
+                            "النتيجة السابقة من حسابات الإيرادات والمصروفات المرحلة"))
+                    }
+                    add(ReportLine(startText + " — " + endText, "قائمة الدخل", "الإيرادات المسجلة", revenue, currency, "مصدرها حسابات الإيرادات المرحلة"))
+                    if (contraRevenue != 0L) add(ReportLine(startText + " — " + endText, "قائمة الدخل", "المرتجعات/الخصومات المسجلة كحساب مقابل للإيراد", -contraRevenue, currency, "يعتمد على تصنيف الحساب في دفتر الأستاذ"))
+                    add(ReportLine(startText + " — " + endText, "قائمة الدخل", "صافي الإيرادات", netRevenue, currency, "الإيرادات ناقص الحسابات المقابلة للإيراد"))
+                    add(ReportLine(startText + " — " + endText, "قائمة الدخل", "تكلفة البضاعة المباعة", -cogs, currency, "حسابات التكلفة المرحلة فقط"))
+                    add(ReportLine(startText + " — " + endText, "قائمة الدخل", "مجمل الربح", grossProfit, currency, "صافي الإيرادات ناقص تكلفة البضاعة"))
+                    add(ReportLine(startText + " — " + endText, "قائمة الدخل", "المصروفات التشغيلية والأخرى", -operatingExpenses, currency, "حسابات المصروفات المرحلة"))
+                    add(ReportLine(startText + " — " + endText, "قائمة الدخل", "صافي الربح/الخسارة للفترة", netProfit, currency, "لا يتضمن حسابات مجهولة النوع؛ تم التحقق من اتزان القيود"))
+                    cumulativeRows.groupBy { Triple(it.accountId, it.accountName.ifBlank { it.accountCode }, reportStatementClass(it)) }
+                        .filterKeys { it.third in setOf("asset", "liability", "equity") }
+                        .toSortedMap(compareBy<Triple<String, String, String>> { it.third }.thenBy { it.second }.thenBy { it.first })
+                        .forEach { (key, rows) ->
+                            val amount = rows.sumOf { if (key.third == "asset") it.debitMinor - it.creditMinor else it.creditMinor - it.debitMinor }
+                            add(ReportLine(endText, "حساب ${key.first}", key.second, amount, currency,
+                                "رصيد حساب ${key.third} حتى تاريخ التقرير · دفتر الأستاذ المرحل"))
+                        }
+                    val assets = reportAccountNet(cumulativeRows, "asset")
+                    val liabilities = reportAccountNet(cumulativeRows, "liability")
+                    val equity = reportAccountNet(cumulativeRows, "equity")
+                    val cumulativeIncome = reportAccountNet(cumulativeRows, "revenue") - reportAccountNet(cumulativeRows, "contra_revenue") -
+                        reportAccountNet(cumulativeRows, "cogs") - reportAccountNet(cumulativeRows, "expense")
+                    val totalEquity = equity + cumulativeIncome
+                    val equationDifference = assets - liabilities - totalEquity
+                    add(ReportLine(endText, "الميزانية العمومية", "إجمالي الأصول", assets, currency, "رصيد حتى تاريخ التقرير"))
+                    add(ReportLine(endText, "الميزانية العمومية", "إجمالي الالتزامات", liabilities, currency, "رصيد حتى تاريخ التقرير"))
+                    add(ReportLine(endText, "الميزانية العمومية", "حقوق الملكية المسجلة", equity, currency, "لا يشمل نتيجة الفترات غير المقفلة"))
+                    add(ReportLine(endText, "الميزانية العمومية", "نتائج متراكمة غير مقفلة", cumulativeIncome, currency, "إيرادات ومصروفات مرحّلة منذ بداية دفتر الأستاذ"))
+                    add(ReportLine(endText, "الميزانية العمومية", "إجمالي حقوق الملكية شاملاً النتائج غير المقفلة", totalEquity, currency, "حقوق الملكية المسجلة + صافي النتائج المتراكمة"))
+                    add(ReportLine(endText, "اختبار المعادلة", "الأصول − الالتزامات − حقوق الملكية", equationDifference, currency,
+                        if (equationDifference == 0L) "متزن حسابيًا حسب دفتر الأستاذ المحمل" else "فرق يحتاج إلى مطابقة؛ لا تعتمد الميزانية حتى تفسيره"))
+                }
+            }
+        }
+        "ميزان المراجعة حسب الحساب" -> {
+            val throughEnd = cloudLedgerLines.filter { line ->
+                val date = runCatching { LocalDate.parse(line.entryDate.take(10)) }.getOrNull()
+                date != null && endDate != null && !date.isAfter(endDate)
+            }
+            val accountRows = throughEnd.groupBy { Triple(it.accountId, it.accountName.ifBlank { "حساب غير معروف" }, it.currencyCode.ifBlank { "غير محددة" }) }
+                .map { (key, rows) ->
+                    val debit = rows.sumOf { it.debitMinor }
+                    val credit = rows.sumOf { it.creditMinor }
+                    ReportLine(endText, key.first, key.second, debit - credit, key.third,
+                        "مدين: ${reportMoney(debit, key.third, true)} · دائن: ${reportMoney(credit, key.third, true)}")
+                }
+            val totals = throughEnd.groupBy { it.currencyCode.ifBlank { "غير محددة" } }.map { (currency, rows) ->
+                val debit = rows.sumOf { it.debitMinor }
+                val credit = rows.sumOf { it.creditMinor }
+                ReportLine(endText, "إجمالي", "إجمالي الميزان", debit - credit, currency,
+                    "إجمالي المدين: ${reportMoney(debit, currency, true)} · إجمالي الدائن: ${reportMoney(credit, currency, true)} · الفرق: ${reportMoney(debit - credit, currency, true)}")
+            }
+            accountRows.sortedBy { it.reference } + totals
+        }
+        "حركة دفتر الأستاذ العام", "كشف حساب محاسبي" -> {
+            val accountQuery = accountFilter.trim()
+            cloudLedgerLines.filter { line ->
+                val timestamp = reportDateMillis(line.entryDate)
+                timestamp != null && timestamp >= startMillis && timestamp < endExclusive &&
+                    (selectedReport != "كشف حساب محاسبي" || (accountQuery.isNotBlank() &&
+                        listOf(line.accountId, line.accountCode, line.accountName).any { it.contains(accountQuery, true) }))
+            }.map { line ->
+                ReportLine(line.entryDate.take(10), line.entryNumber.ifBlank { line.entryId }, "${line.accountCode} · ${line.accountName}",
+                    line.debitMinor - line.creditMinor, line.currencyCode,
+                    "قيد ${line.entryNumber} · مدين: ${line.debitMinor} · دائن: ${line.creditMinor} · مصدر: ${line.sourceType} ${line.sourceId}")
+            }.sortedByDescending { it.date }
+        }
+        "تفاصيل القيود المرحلة" -> cloudLedgerLines.filter { line ->
+            val timestamp = reportDateMillis(line.entryDate)
+            timestamp != null && timestamp >= startMillis && timestamp < endExclusive
+        }.map { line ->
+            ReportLine(line.entryDate.take(10), "${line.entryNumber.ifBlank { line.entryId }} · سطر ${line.lineNumber}",
+                "${line.accountCode} · ${line.accountName}", line.debitMinor - line.creditMinor, line.currencyCode,
+                "مدين: ${reportMoney(line.debitMinor, line.currencyCode, true)} · دائن: ${reportMoney(line.creditMinor, line.currencyCode, true)} · ${line.entryDescription} · المصدر: ${line.sourceType} ${line.sourceId}")
+        }.sortedWith(compareBy<ReportLine> { it.date }.thenBy { it.reference })
+        "سجل القيود المحاسبية" -> cloudJournals.filter { row ->
+            val timestamp = reportDateMillis(row.createdAt)
+            timestamp != null && timestamp >= startMillis && timestamp < endExclusive
+        }.map { row ->
+            ReportLine(row.createdAt.take(10), row.id, row.title, 0L, "", row.status + " · " + row.subtitle)
+        }.sortedByDescending { it.date }
+        "ملخص المصروفات حسب التصنيف وطريقة الصرف" -> cloudExpenses.filter { expense ->
+            expense.canceledAt.isBlank() &&
+                reportDateMillis(expense.recordedAt)?.let { it >= startMillis && it < endExclusive } == true
+        }.groupBy { Triple(it.category, it.paymentMethod.ifBlank { "غير محددة" }, it.currencyCode) }
+            .map { (key, rows) ->
+                val total = rows.fold(0L) { sum, expense -> Math.addExact(sum, expense.amountMinor) }
+                ReportLine(
+                    "${startText} — ${endText}",
+                    "تجميع",
+                    key.first,
+                    total,
+                    key.third,
+                    "طريقة الصرف: ${key.second} · عدد السندات: ${rows.size} · سندات غير ملغاة فقط"
+                )
+            }.sortedWith(compareBy<ReportLine> { it.currency }.thenBy { it.name })
+        "المصروفات التشغيلية" -> (if (cloudMode) cloudExpenses.filter { it.canceledAt.isBlank() && (reportDateMillis(it.recordedAt)?.let { ts -> ts >= startMillis && ts < endExclusive } == true) }.map {
+            ReportLine(it.recordedAt.take(10), it.id, it.category, it.amountMinor, it.currencyCode, it.paymentMethod)
+        } else inPeriodExpenses.map {
+            ReportLine(Instant.ofEpochMilli(it.timestamp).atZone(zone).toLocalDate().toString(), "مصروف #${it.id}", it.category, it.amount.toLong(), "YER", it.note)
+        })
         else -> emptyList()
     }
     // Invalid dates must never widen a report to the full history.
