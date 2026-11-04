@@ -37,9 +37,9 @@ internal fun buildPartyStatementReportRows(
                     }
                         .mapNotNull { line ->
                             val date = runCatching { LocalDate.parse(line.entryDate.take(10)) }.getOrNull() ?: return@mapNotNull null
-                            Triple(line, date, line.debitMinor - line.creditMinor)
+                            Triple(line, date, Math.subtractExact(line.debitMinor, line.creditMinor))
                         }.sortedWith(compareBy<Triple<CommercialCloudJournalLine, LocalDate, Long>> { it.second }.thenBy { it.first.entryNumber }.thenBy { it.first.lineNumber })
-                    val opening = movements.filter { it.second < (startDate ?: LocalDate.MIN) }.sumOf { it.third }
+                    val opening = sumReportAmountsExactly(movements.filter { it.second < (startDate ?: LocalDate.MIN) }.map { it.third })
                     val period = movements.filter { startDate != null && endDate != null && !it.second.isBefore(startDate) && !it.second.isAfter(endDate) }
                     if (period.isEmpty() && opening == 0L) emptyList() else buildList {
                         var balance = opening
@@ -68,9 +68,9 @@ internal fun buildPartyStatementReportRows(
                     }
                         .mapNotNull { line ->
                             val date = runCatching { LocalDate.parse(line.entryDate.take(10)) }.getOrNull() ?: return@mapNotNull null
-                            Triple(line, date, line.creditMinor - line.debitMinor)
+                            Triple(line, date, Math.subtractExact(line.creditMinor, line.debitMinor))
                         }.sortedWith(compareBy<Triple<CommercialCloudJournalLine, LocalDate, Long>> { it.second }.thenBy { it.first.entryNumber }.thenBy { it.first.lineNumber })
-                    val opening = movements.filter { it.second < (startDate ?: LocalDate.MIN) }.sumOf { it.third }
+                    val opening = sumReportAmountsExactly(movements.filter { it.second < (startDate ?: LocalDate.MIN) }.map { it.third })
                     val period = movements.filter { startDate != null && endDate != null && !it.second.isBefore(startDate) && !it.second.isAfter(endDate) }
                     if (period.isEmpty() && opening == 0L) emptyList() else buildList {
                         var balance = opening
