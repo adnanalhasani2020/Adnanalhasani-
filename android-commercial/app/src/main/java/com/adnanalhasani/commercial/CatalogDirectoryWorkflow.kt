@@ -27,8 +27,8 @@ internal class CatalogDirectoryWorkflow(
             val unitRaw=catalogGet("/rest/v1/commercial_global_units?select=code,name_ar,name_en,dimension,base_unit_code,factor_to_base,owner_organization_id&is_active=eq.true&order=dimension.asc,code.asc",active)
             val localUnitRaw=catalogGet("/rest/v1/commercial_unit_of_measure?select=code&is_active=eq.true&order=code.asc",active)
             val categoryTranslationRaw=catalogGet("/rest/v1/commercial_global_entity_translations?select=entity_key,translated_value&entity_type=eq.catalog_category&field_key=eq.name&locale_code=eq.${locale().trim().ifBlank { "ar" }}",active)
-            val categoryDescriptionTranslationRaw=catalogGet("/rest/v1/commercial_global_entity_translations?select=entity_key,translated_value&entity_type=eq.catalog_category&field_key=eq.description&locale_code=eq.${locale.trim().ifBlank { "ar" }}",active)
-            val unitTranslationRaw=catalogGet("/rest/v1/commercial_global_entity_translations?select=entity_key,translated_value&entity_type=eq.unit&field_key=eq.name&locale_code=eq.${locale.trim().ifBlank { "ar" }}",active)
+            val categoryDescriptionTranslationRaw=catalogGet("/rest/v1/commercial_global_entity_translations?select=entity_key,translated_value&entity_type=eq.catalog_category&field_key=eq.description&locale_code=eq.${locale().trim().ifBlank { "ar" }}",active)
+            val unitTranslationRaw=catalogGet("/rest/v1/commercial_global_entity_translations?select=entity_key,translated_value&entity_type=eq.unit&field_key=eq.name&locale_code=eq.${locale().trim().ifBlank { "ar" }}",active)
             val activityDirectoryRaw=catalogHttp("/rest/v1/rpc/commercial_list_business_activity_nodes",JSONObject(),active)
             val activityDirectory=JSONObject(activityDirectoryRaw).optJSONArray("nodes") ?: JSONArray()
             JSONObject().put("categories",JSONArray(catRaw)).put("units",JSONArray(unitRaw)).put("localUnits",JSONArray(localUnitRaw))
@@ -36,15 +36,15 @@ internal class CatalogDirectoryWorkflow(
         }, { raw ->
             val directory = parseCatalogDirectory(raw)
             onLocalUnitCodes(directory.localUnitCodes)
-            onActivityNodes(directory.activityNodes)
+            onActivityNodes(directory.directory.activityNodes)
             onCategories(directory.categories)
             onUnits(directory.units)
             if (initialActivityCode().isNotBlank()) {
-                val inferredSector = catalogSectorForNode(initialActivityCode().uppercase(), activityNodes)
+                val inferredSector = catalogSectorForNode(initialActivityCode().uppercase(), directory.activityNodes)
                 if (inferredSector.isNotBlank()) onSector(inferredSector)
-                activityNodes.firstOrNull { it.code.equals(initialActivityCode, true) }?.defaultBusinessLevelCode?.takeIf { it.isNotBlank() }?.let { onBusinessLevel(it) }
+                directory.activityNodes.firstOrNull { it.code.equals(initialActivityCode, true) }?.defaultBusinessLevelCode?.takeIf { it.isNotBlank() }?.let { onBusinessLevel(it) }
             }
-            onFeedback("تم تحميل ${directory.categories.size} تصنيفًا و${directory.units.size} وحدة قياس و${directory.activityNodes.count { it.nodeKind.equals("sector", true) }} قطاعًا و${directory.activityNodes.count { it.nodeKind.equals("activity", true) }} نشاطًا و${directory.activityNodes.count { it.nodeKind.equals("specialization", true) }} تخصصًا."
+            onFeedback("تم تحميل ${directory.categories.size} تصنيفًا و${directory.units.size} وحدة قياس و${directory.directory.activityNodes.count { it.nodeKind.equals("sector", true) }} قطاعًا و${directory.directory.activityNodes.count { it.nodeKind.equals("activity", true) }} نشاطًا و${directory.directory.activityNodes.count { it.nodeKind.equals("specialization", true) }} تخصصًا."
             onDirectoriesLoaded()
         })
     }
