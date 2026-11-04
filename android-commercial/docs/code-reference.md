@@ -376,3 +376,10 @@
 - `ReportsCenterScreen.kt` now owns only Compose screen composition and event wiring; it consumes the prepared `ReportsCenterData` snapshot and delegates period/filter/catalog/result UI to focused components.
 - Cloud retrieval remains in `ReportsCloudData.kt`; interactive state remains in `ReportsCenterUiState.kt`; per-family row builders and export lifecycle remain in their dedicated files.
 - The report data coordinator is intentionally read-only and consumes existing local/cloud projections. No query scope, RPC, schema, accounting formula, or production data was changed by this extraction.
+
+
+### Reports validation ownership (2026-11-05)
+- `ReportOperationalValidation.kt` owns fail-closed checks for operating expenses, payment-method analysis, operational customer statements, customer collections, user sales performance, and daily sales trends.
+- `ReportProfitabilityValidation.kt` owns both historical cost/profit checks and item-profitability invoice/return integrity checks.
+- `ReportsCenterData.kt` retains loaded projections, date-window inputs, calculation orchestration, and report/error routing; calculations and row builders remain in their existing owners.
+- Source ownership guards were updated. No Android build or test suite is claimed as executed for this change.
