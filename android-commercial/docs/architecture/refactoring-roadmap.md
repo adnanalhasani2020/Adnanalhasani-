@@ -173,3 +173,11 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 - Moved `SaleEntryDialog`, `EditProductDialog`, and `AddProductDialog` from `MainActivity.kt` to `LocalProductDialogs.kt`.
 - Preserved their public package-level signatures and call sites, including cloud-mode parameters passed into the product dialog.
 - Added a source-contract check confirming the new file owns all three composables and MainActivity no longer declares them. No sales arithmetic, unit conversion, local persistence, or cloud API was modified.
+
+
+## 2026-11-04 — MainActivity entry-point completion
+
+- Extracted the three local sale/product dialogs to `LocalProductDialogs.kt`.
+- Extracted More, expenses, expense entry, local reports, legacy cloud reports, debt, and settlement composables to `LocalOperationalScreens.kt`.
+- Reduced `MainActivity.kt` from 613 lines after earlier extractions to a 32-line Android entry point plus the shared cloud executor/handler.
+- Added source-contract tests that enforce the thin activity boundary and ensure every moved composable has one owner. Existing function names and call sites are preserved; no local/cloud data workflow was intentionally changed.
