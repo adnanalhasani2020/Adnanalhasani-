@@ -283,3 +283,9 @@ The catalog screen owns interaction and request orchestration. JSON-to-domain ma
 - `ReportSalesRows.kt` uses exact `Long` aggregation for all sales summary groupings and exact subtraction for period comparisons; local quantity counts use exact `Int` aggregation.
 - `ReportsCenterData.kt` preflights the selected sales row builder once, caches the result for dispatch, and surfaces a fail-closed error through the existing sales source-error route if any aggregate overflows.
 - Local cash/credit report source behavior remains unchanged; its arithmetic overflow is routed independently from cloud-only sales source validation.
+
+
+### Party control-account statement arithmetic (2026-11-05)
+
+- `ReportPartyStatementValidation.kt` now preflights the same currency- and party-scoped debit/credit movement, opening-balance, and period running-balance arithmetic used by `ReportPartyStatementRows.kt`.
+- Customer and supplier statement validation receives the selected date window and fails closed on exact `Long` overflow before row assembly. Existing source/link error precedence is retained.
