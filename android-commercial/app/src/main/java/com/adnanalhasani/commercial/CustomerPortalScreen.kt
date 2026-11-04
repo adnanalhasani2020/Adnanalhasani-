@@ -23,7 +23,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import java.util.Locale
 import java.util.concurrent.Executors
 
 private val PortalInk = Color(0xFF183B35)
@@ -34,7 +33,7 @@ private val portalExecutor = Executors.newSingleThreadExecutor()
 private val portalMain = Handler(Looper.getMainLooper())
 
 private fun portalMoney(amount: Long, currency: String) =
-    String.format(Locale.US, "%,d %s", amount, currency)
+    formatCommercialOperationalAmount(amount, currency)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -100,33 +99,49 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
     }
 
     val org = selectedOrganization
-    val cart = offerings.mapNotNull { item ->
-        val text = quantities[item.id].orEmpty()
-        val quantity = text.toBigDecimalOrNull()
-        if (quantity == null || quantity <= java.math.BigDecimal.ZERO) null
-        else Triple(item, text, kotlin.math.round(quantity.toDouble() * item.priceMinor).toLong())
+    val productOfferings = offerings.filter { it.itemType == "product" }
+    val cartInputsValid = productOfferings.all { item ->
+        val raw = quantities[item.id].orEmpty()
+        raw.isBlank() || parseCommercialCheckoutQuantity(raw)?.let {
+            commercialPortalLineTotalMinor(it, item.priceMinor) != null
+        } == true
     }
-    val estimatedTotal = cart.sumOf { it.third }
-    val bookingCart = offerings.filter { it.itemType == "service" }.mapNotNull { service ->
-        val text = quantities[service.id].orEmpty()
-        val quantity = text.toBigDecimalOrNull()
-        if (quantity == null || quantity <= java.math.BigDecimal.ZERO) null
-        else Triple(service, text, kotlin.math.round(quantity.toDouble() * service.priceMinor).toLong())
+    val cart = productOfferings.mapNotNull { item ->
+        val raw = quantities[item.id].orEmpty()
+        if (raw.isBlank()) return@mapNotNull null
+        val quantity = parseCommercialCheckoutQuantity(raw) ?: return@mapNotNull null
+        val lineTotal = commercialPortalLineTotalMinor(quantity, item.priceMinor) ?: return@mapNotNull null
+        Triple(item, raw, lineTotal)
     }
-    val bookingEstimatedTotal = bookingCart.sumOf { it.third }
-    val bookingQuantitiesValid = offerings.filter { it.itemType == "service" }.all { service ->
+    val estimatedTotalResult = sumCommercialPortalLineTotalsMinor(cart.map { it.third })
+    val estimatedTotal = estimatedTotalResult ?: 0L
+    val cartCurrencyValid = cart.isNotEmpty() && org != null &&
+        cart.map { it.first.currencyCode }.distinct().size == 1 &&
+        cart.all { it.first.currencyCode.equals(org.currencyCode, ignoreCase = true) }
+    val unsupportedFractionalProduct = cart.any { (_, raw, _) ->
+        parseCommercialCheckoutQuantity(raw)?.stripTrailingZeros()?.scale()?.let { it > 0 } == true
+    }
+
+    val serviceOfferings = offerings.filter { it.itemType == "service" }
+    val bookingInputsValid = serviceOfferings.all { service ->
         val raw = quantities[service.id].orEmpty()
-        raw.isBlank() || raw.toBigDecimalOrNull()?.let {
-            it > java.math.BigDecimal.ZERO && it.scale().coerceAtLeast(0) <= 3 && it <= java.math.BigDecimal("100000")
-        } == true
-    } && bookingCart.all { (_, text, _) ->
-        text.toBigDecimalOrNull()?.let { it > java.math.BigDecimal.ZERO && it.scale().coerceAtLeast(0) <= 3 && it <= java.math.BigDecimal("100000") } == true
-    } && bookingCart.map { it.first.currencyCode }.distinct().size <= 1
-    val unsupportedFractionalProduct = cart.any { (item, text, _) ->
-        item.itemType == "product" && text.toBigDecimalOrNull()?.let { quantity ->
-            quantity.stripTrailingZeros().scale() > 0 || quantity > java.math.BigDecimal("100000")
+        raw.isBlank() || parseCommercialCheckoutQuantity(raw)?.let {
+            commercialPortalLineTotalMinor(it, service.priceMinor) != null
         } == true
     }
+    val bookingCart = serviceOfferings.mapNotNull { service ->
+        val raw = quantities[service.id].orEmpty()
+        if (raw.isBlank()) return@mapNotNull null
+        val quantity = parseCommercialCheckoutQuantity(raw) ?: return@mapNotNull null
+        val lineTotal = commercialPortalLineTotalMinor(quantity, service.priceMinor) ?: return@mapNotNull null
+        Triple(service, raw, lineTotal)
+    }
+    val bookingEstimatedTotalResult = sumCommercialPortalLineTotalsMinor(bookingCart.map { it.third })
+    val bookingEstimatedTotal = bookingEstimatedTotalResult ?: 0L
+    val bookingLineTotalsPositive = bookingCart.isNotEmpty() && bookingCart.all { it.third > 0L }
+    val bookingQuantitiesValid = bookingInputsValid && bookingCart.isNotEmpty() &&
+        bookingCart.map { it.first.currencyCode }.distinct().size == 1 &&
+        org != null && bookingCart.all { it.first.currencyCode.equals(org.currencyCode, ignoreCase = true) }
 
     Scaffold(
         topBar = {
@@ -217,7 +232,7 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
                                         OutlinedTextField(
                                             value = quantities[service.id].orEmpty(),
                                             onValueChange = { value ->
-                                                quantities = quantities.toMutableMap().apply { put(service.id, value.filter { it.isDigit() || it == '.' }.take(12)) }
+                                                quantities = quantities.toMutableMap().apply { put(service.id, value.filter { it.isDigit() || it in ".,٫" }.take(12)) }
                                                 error = ""
                                             },
                                             label = { Text("الكمية (اتركها فارغة إذا لم تختر الخدمة)") },
@@ -263,7 +278,7 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
                             OutlinedTextField(
                                 value = quantities[item.id].orEmpty(),
                                 onValueChange = { value ->
-                                    quantities = quantities.toMutableMap().apply { put(item.id, value.filter { it.isDigit() || it == '.' }.take(12)) }
+                                    quantities = quantities.toMutableMap().apply { put(item.id, value.filter { it.isDigit() || it in ".,٫" }.take(12)) }
                                     error = ""
                                 },
                                 label = { Text("الكمية") },
@@ -282,6 +297,15 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
                                 Text("مراجعة الطلب", color = PortalInk, fontWeight = FontWeight.Bold)
                             }
                             if (cart.isEmpty()) Text("أدخل كمية أكبر من صفر لصنف واحد على الأقل.", color = PortalMuted, fontSize = 12.sp)
+                            if (productOfferings.any { quantities[it.id].orEmpty().isNotBlank() } && !cartInputsValid) {
+                                Text("بعض الكميات غير صالحة أو تتجاوز الحد المسموح؛ صححها قبل إرسال الطلب.", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                            }
+                            if (unsupportedFractionalProduct) {
+                                Text("الطلب السحابي يدعم حاليًا كميات المنتجات الصحيحة فقط من 1 إلى 100000.", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                            }
+                            if (cart.isNotEmpty() && estimatedTotalResult != null && estimatedTotal <= 0L) {
+                                Text("إجمالي الطلب يجب أن يكون أكبر من صفر؛ راجع أسعار الأصناف والكميات.", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                            }
                             cart.forEach { (item, quantity, total) ->
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                     Text("${item.name} × $quantity", color = PortalInk, modifier = Modifier.weight(1f))
@@ -291,7 +315,8 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
                             HorizontalDivider(color = PortalBorder)
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text("الإجمالي التقديري", color = PortalMuted)
-                                Text(portalMoney(estimatedTotal, org.currencyCode), color = PortalGreen, fontWeight = FontWeight.Bold)
+                                if (cart.isNotEmpty() && estimatedTotalResult == null) Text("تعذر حساب الإجمالي بأمان", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                                else Text(portalMoney(estimatedTotal, org.currencyCode), color = PortalGreen, fontWeight = FontWeight.Bold)
                             }
                             Text("الإجمالي النهائي يُحسب ويُتحقق منه داخل قاعدة البيانات عند الإرسال.", color = PortalMuted, fontSize = 11.sp)
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -304,8 +329,7 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
                             OutlinedTextField(value = note, onValueChange = { note = it.take(1000) }, label = { Text("ملاحظة للطلب (اختياري)") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
                             Button(
                                 onClick = {
-                                    val invalid = cart.any { (_, text, _) -> text.toBigDecimalOrNull()?.let { it <= java.math.BigDecimal.ZERO || it.scale().coerceAtLeast(0) > 3 } != false } ||
-                                        cart.map { it.first.currencyCode }.distinct().size != 1
+                                    val invalid = !cartInputsValid || !cartCurrencyValid
                                     if (bookingMode) {
                                         val service = offerings.firstOrNull { it.id == bookingOfferingId && it.itemType == "service" }
                                         val startsValid = runCatching { java.time.OffsetDateTime.parse(startsAt).toInstant().isAfter(java.time.Instant.now()) }.getOrDefault(false)
@@ -329,8 +353,12 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
                                                 }
                                             }
                                         }
-                                    } else if (cart.isEmpty() || invalid) {
-                                        error = "تحقق من الكميات (حتى 3 منازل عشرية) وتأكد من اختيار أصناف بعملة واحدة."
+                                    } else if (cart.isEmpty() || invalid || !cartInputsValid) {
+                                        error = "تحقق من كل الكميات المدخلة (حتى 3 منازل عشرية) وتأكد من صلاحية حساب البنود."
+                                    } else if (estimatedTotalResult == null) {
+                                        error = "تعذر حساب إجمالي الطلب بسبب تجاوز الحد الحسابي. قلل الكميات أو عدد البنود."
+                                    } else if (!cartCurrencyValid) {
+                                        error = "يجب أن تتطابق عملة جميع الأصناف مع عملة المؤسسة."
                                     } else if (unsupportedFractionalProduct) {
                                         error = "البيع السحابي يدعم حاليًا كميات المنتجات الصحيحة من 1 إلى 100000 فقط. عدّل الكمية؛ لن يتم إنشاء طلب غير قابل للإتمام."
                                     } else if (estimatedTotal <= 0L) {
@@ -364,7 +392,7 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
                                         }
                                     }
                                 },
-                                enabled = !submitting && !loading && (if (bookingMode) selectedOrganization?.canBook != false && offerings.any { it.itemType == "service" } && bookingResources.isNotEmpty() else selectedOrganization?.canPurchase != false && cart.isNotEmpty()),
+                                enabled = !submitting && !loading && (if (bookingMode) selectedOrganization?.canBook != false && offerings.any { it.itemType == "service" } && bookingResources.isNotEmpty() else selectedOrganization?.canPurchase != false && cart.isNotEmpty() && cartInputsValid && estimatedTotalResult != null && cartCurrencyValid && !unsupportedFractionalProduct && estimatedTotal > 0L),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 if (submitting) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
@@ -379,7 +407,14 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
                             Text("فاتورة الحجز الذكية", color = PortalInk, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                             if (bookingCart.isEmpty()) {
                                 Text("أدخل كمية أكبر من صفر لخدمة واحدة على الأقل.", color = PortalMuted, fontSize = 12.sp)
-                            } else {
+                            }
+                            if (serviceOfferings.any { quantities[it.id].orEmpty().isNotBlank() } && !bookingInputsValid) {
+                                Text("بعض كميات الخدمات غير صالحة أو تتجاوز الحد المسموح؛ صححها قبل تأكيد الحجز.", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                            }
+                            if (bookingCart.any { it.third <= 0L }) {
+                                Text("قيمة أحد بنود الحجز أقل من أصغر وحدة نقدية؛ عدّل الكمية أو اختر خدمة أخرى.", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                            }
+                            if (bookingCart.isNotEmpty()) {
                                 bookingCart.forEach { (service, quantity, total) ->
                                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                                         Column(Modifier.weight(1f)) {
@@ -393,7 +428,8 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
                             HorizontalDivider(color = PortalBorder)
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text("الإجمالي التقديري", color = PortalMuted)
-                                Text(portalMoney(bookingEstimatedTotal, org.currencyCode), color = PortalGreen, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                                if (bookingEstimatedTotalResult == null && bookingCart.isNotEmpty()) Text("تعذر حساب الإجمالي بأمان", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                                else Text(portalMoney(bookingEstimatedTotal, org.currencyCode), color = PortalGreen, fontWeight = FontWeight.Bold, fontSize = 17.sp)
                             }
                             Text("كل البنود تُحفظ تحت حجز واحد. السعر والإجمالي النهائيان يُعاد احتسابهما والتحقق منهما داخل قاعدة البيانات.", color = PortalMuted, fontSize = 11.sp)
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -412,7 +448,9 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
                                         error = "اختر خدمة واحدة على الأقل، وتأكد من أن الكميات موجبة وبحد أقصى 3 منازل عشرية وبعملة واحدة."
                                     } else if (bookingResourceId.isBlank() || bookingResources.none { it.id == bookingResourceId } || !startsValid || !endsValid) {
                                         error = "اختر موردًا نشطًا وأدخل وقت بداية ونهاية صالحين في المستقبل مع المنطقة الزمنية."
-                                    } else if (bookingEstimatedTotal <= 0L) {
+                                    } else if (bookingEstimatedTotalResult == null) {
+                                        error = "تعذر حساب إجمالي الحجز بسبب تجاوز الحد الحسابي. قلل الكميات أو عدد الخدمات."
+                                    } else if (bookingCart.any { it.third <= 0L } || bookingEstimatedTotal <= 0L) {
                                         error = "إجمالي الحجز يجب أن يكون أكبر من صفر."
                                     } else {
                                         submitting = true
@@ -453,7 +491,8 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
                                     }
                                 },
                                 enabled = !submitting && !loading && bookingCart.isNotEmpty() &&
-                                    bookingQuantitiesValid && bookingResources.any { it.id == bookingResourceId },
+                                    bookingInputsValid && bookingQuantitiesValid && bookingEstimatedTotalResult != null &&
+                                    bookingLineTotalsPositive && bookingResources.any { it.id == bookingResourceId },
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 if (submitting) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)

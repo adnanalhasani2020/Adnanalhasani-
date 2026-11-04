@@ -2,6 +2,7 @@ package com.adnanalhasani.commercial
 
 import java.math.BigDecimal
 import java.math.BigInteger
+import java.math.RoundingMode
 import java.util.Currency
 import java.util.Locale
 
@@ -100,4 +101,24 @@ internal fun formatCommercialOperationalAmount(amountMinor: Long, currencyCode: 
     val formatted = (if (negative) "-" else "") + groupedInteger +
         if (fractionDigits > 0) "." + parts.getOrElse(1) { "0".repeat(fractionDigits) } else ""
     return formatted + " " + code
+}
+
+
+/** Calculate a customer-portal line total in minor units without binary floating-point drift. */
+internal fun commercialPortalLineTotalMinor(quantity: BigDecimal, priceMinor: Long): Long? {
+    if (quantity.signum() <= 0 || priceMinor < 0) return null
+    return runCatching {
+        quantity.multiply(BigDecimal.valueOf(priceMinor))
+            .setScale(0, RoundingMode.HALF_UP)
+            .longValueExact()
+    }.getOrNull()
+}
+
+/** Sum validated customer-portal line totals, rejecting missing values and Long overflow. */
+internal fun sumCommercialPortalLineTotalsMinor(values: List<Long?>): Long? {
+    if (values.isEmpty() || values.any { it == null }) return null
+    return runCatching {
+        values.fold(BigInteger.ZERO) { total, value -> total.add(BigInteger.valueOf(value!!)) }
+            .longValueExact()
+    }.getOrNull()
 }

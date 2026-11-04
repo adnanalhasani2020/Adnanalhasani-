@@ -22,6 +22,14 @@ class CommercialCloudActionableErrorTests(unittest.TestCase):
         self.assertIn("لا تبدأ عملية جديدة بمفتاح مختلف", client)
         self.assertIn("انقطع الاتصال قبل تأكيد النتيجة من الخادم", client)
 
+    def test_expired_refresh_session_prompts_reauthentication(self):
+        error_mapper = ERROR_MAPPER.read_text(encoding="utf-8")
+        self.assertIn('message.contains("invalid refresh token"', error_mapper)
+        self.assertIn('message.contains("refresh token not found"', error_mapper)
+        self.assertIn('message.contains("invalid_grant"', error_mapper)
+        self.assertIn('code == "refresh_token_not_found"', error_mapper)
+        self.assertIn("انتهت جلسة الحساب أو لم تعد صالحة", error_mapper)
+
     def test_overpayment_and_stock_race_have_specific_user_messages(self):
         error_mapper = ERROR_MAPPER.read_text(encoding="utf-8")
         self.assertIn("collection_exceeds_outstanding_balance", error_mapper)

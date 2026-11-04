@@ -30,6 +30,26 @@ class CommercialFractionalSaleQuantityTest {
     }
 
     @Test
+    fun calculatesCustomerPortalLineTotalsWithHalfUpRoundingAndSafeOverflow() {
+        assertEquals(62L, commercialPortalLineTotalMinor(BigDecimal("0.5"), 123L))
+        assertEquals(1L, commercialPortalLineTotalMinor(BigDecimal("0.5"), 1L))
+        assertEquals(0L, commercialPortalLineTotalMinor(BigDecimal("0.1"), 1L))
+        assertEquals(0L, commercialPortalLineTotalMinor(BigDecimal("1"), 0L))
+        assertNull(commercialPortalLineTotalMinor(BigDecimal.ZERO, 100L))
+        assertNull(commercialPortalLineTotalMinor(BigDecimal("-1"), 100L))
+        assertNull(commercialPortalLineTotalMinor(BigDecimal.ONE, -1L))
+        assertNull(commercialPortalLineTotalMinor(BigDecimal("100000"), Long.MAX_VALUE))
+    }
+
+    @Test
+    fun sumsCustomerPortalLineTotalsWithoutOverflowOrMissingValues() {
+        assertEquals(300L, sumCommercialPortalLineTotalsMinor(listOf(100L, 200L)))
+        assertNull(sumCommercialPortalLineTotalsMinor(emptyList()))
+        assertNull(sumCommercialPortalLineTotalsMinor(listOf(100L, null)))
+        assertNull(sumCommercialPortalLineTotalsMinor(listOf(Long.MAX_VALUE, 1L)))
+    }
+
+    @Test
     fun parsesDecimalAndLocalizedSellingQuantities() {
         assertEquals(BigDecimal("0.5"), parseCommercialCheckoutQuantity("0.5"))
         assertEquals(BigDecimal("1.25"), parseCommercialCheckoutQuantity("1,25"))
