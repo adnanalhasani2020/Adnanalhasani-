@@ -271,3 +271,9 @@
 - `ReportsExportLaunchers.kt` owns Android document-picker launchers, CSV/XLSX/PDF stream writing, PDF sharing, and export-source/date guards.
 - `ReportExport.kt` continues to own the pure/native PDF/XLSX/print rendering implementation; the launcher owner delegates to it.
 - `ReportsCenterScreen.kt` builds the selected report's export rows and invokes the launchers through stable aliases. Export metadata and error feedback remain in the screen state.
+
+
+### Reports catalog presentation extraction (2026-11-04)
+- `ReportsCatalogSection.kt` owns the report category chips, catalog cards, source-readiness labels, and title-to-selection mapping as a `LazyListScope` section.
+- `ReportsCenterScreen.kt` supplies the current catalog/filter/source state and receives the selected report through a callback; it retains report calculations and result rendering.
+- The component does not load sources or decide report support. It respects the catalog's supported flag, date validity, loading state, and per-report source error.
