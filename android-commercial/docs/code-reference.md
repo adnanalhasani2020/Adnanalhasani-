@@ -148,3 +148,10 @@
 - `CatalogActivityHierarchy.kt` owns the activity-directory node model and pure parent-chain/sector/business-level selector helpers.
 - `CatalogScreen.kt` retains activity-directory loading/parsing, selected activity state, menus, RPC calls, catalog discovery, editing, transfers, and invoice-purchase linking.
 - The extraction does not change activity codes, RPC parameters, default business-level selection, or the relationship between global catalog items and organization offerings.
+
+
+### Catalog domain model extraction (2026-11-04)
+- `CatalogModels.kt` owns the shared catalog data models: products, units, rulings, categories, branch/warehouse options, nearby-market rows, invoice-purchase mapping rows, directory units, and pending transfers.
+- `CatalogScreen.kt` continues to own Compose state, screen rendering, data loading, RPC calls, and user workflows; it consumes the extracted models without changing their fields or defaults.
+- The models are package-internal so existing callers and dialogs retain access. No database schema, RPC contract, or persisted data changed.
+- `tests/test_catalog_models_ownership.py` guards the single model owner and the screen's existing model contract.
