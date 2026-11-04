@@ -78,7 +78,6 @@ internal fun rememberReportsCenterData(
     val locationInventoryLoadError = cloudData.locationInventoryLoadError
     val cloudWarehouseInventoryContext = cloudData.warehouseInventoryContext
     val warehouseInventoryContextLoadError = cloudData.warehouseInventoryContextLoadError
-    var supplierFilter by uiState.supplierFilter
     val cloudReturns = cloudData.returns
     val cloudPayments = cloudData.payments
     val cloudJournals = cloudData.journals
