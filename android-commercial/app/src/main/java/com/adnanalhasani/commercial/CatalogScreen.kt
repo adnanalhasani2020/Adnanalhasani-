@@ -87,26 +87,15 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var invoiceDestinationOrg by invoiceTransferState::invoiceDestinationOrg
     var invoiceRequests by invoiceTransferState::invoiceRequests
     var invoiceMappingRequestId by invoiceTransferState::invoiceMappingRequestId
-    var invoiceMappingPurchaseOrderId by invoiceTransferState::mappingPurchaseOrderId
     var invoiceMappingLines by invoiceTransferState::mappingLines
     var invoiceMappingOfferings by invoiceTransferState::mappingOfferings
     var invoiceMappingLineId by invoiceTransferState::invoiceMappingLineId
     var invoiceMappingOfferingId by invoiceTransferState::invoiceMappingOfferingId
     var invoiceMappingLineMenuExpanded by invoiceTransferState::invoiceMappingLineMenuExpanded
     var invoiceMappingOfferingMenuExpanded by invoiceTransferState::invoiceMappingOfferingMenuExpanded
-    var invoiceMappingLocationId by invoiceTransferState::mappingLocationId
     var invoiceMappingWarehouses by invoiceTransferState::mappingWarehouses
     var invoiceMappingWarehouseId by invoiceTransferState::invoiceMappingWarehouseId
     var invoiceMappingWarehouseMenuExpanded by invoiceTransferState::invoiceMappingWarehouseMenuExpanded
-    var showInvoiceItemCreation by invoiceTransferState::showItemCreation
-    var invoiceNewNameAr by invoiceTransferState::newNameAr
-    var invoiceNewNameEn by invoiceTransferState::newNameEn
-    var invoiceNewCategoryCode by invoiceTransferState::newCategoryCode
-    var invoiceNewBaseUnitCode by invoiceTransferState::newBaseUnitCode
-    var invoiceNewSaleUnitCode by invoiceTransferState::newSaleUnitCode
-    var invoiceNewCategoryMenuExpanded by invoiceTransferState::newCategoryMenuExpanded
-    var invoiceNewBaseUnitMenuExpanded by invoiceTransferState::newBaseUnitMenuExpanded
-    var invoiceNewSaleUnitMenuExpanded by invoiceTransferState::newSaleUnitMenuExpanded
     var localUnitCodes by remember { mutableStateOf<Set<String>>(emptySet()) }
     var invoiceReceiveLocationId by invoiceTransferState::invoiceReceiveLocationId
     var invoiceReceiveLocationMenuExpanded by invoiceTransferState::invoiceReceiveLocationMenuExpanded
