@@ -131,3 +131,8 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 - Added `tests/test_catalog_models_ownership.py` to assert one owner for these models and preserve the existing screen signature.
 - No RPC, SQL migration, database data, or UI workflow was changed.
 - Remaining catalog work is still substantial: separate catalog discovery/data loading, product authoring, market discovery/pricing, invoice-purchase linking, and transfer/review workflows. Do not mark REF-007 complete from this model-only extraction.
+
+
+- Extracted catalog HTTP request wrappers into `CatalogCloudTransport.kt`, delegating to `SupabaseClient` with the existing 25-second read timeout; removed the duplicate catalog-specific HTTP implementation and encrypted session preference factory from `CatalogScreen.kt`.
+- Reused `commercialCloudSessionPreferences` for catalog login/session restore, keeping the same encrypted preference file and keys.
+- Added source-contract assertions for the shared transport/session owner. No RPC name, request payload, SQL migration, or database data was changed.
