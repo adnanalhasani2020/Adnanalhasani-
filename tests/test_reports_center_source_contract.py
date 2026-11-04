@@ -62,7 +62,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         cls.expense_repository = EXPENSE_REPOSITORY.read_text(encoding="utf-8")
         cls.accounting_repository = ACCOUNTING_REPOSITORY.read_text(encoding="utf-8")
         cls.sales_repository = SALES_REPOSITORY.read_text(encoding="utf-8")
-        cls.calculations = CALCULATIONS.read_text(encoding="utf-8")
+        cls.calculations = CALCULATIONS.read_text(encoding="utf-8") + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CustomerStatementCalculations.kt").read_text(encoding="utf-8") + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportInventoryCalculations.kt").read_text(encoding="utf-8") + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportAgingCalculations.kt").read_text(encoding="utf-8")
         cls.export = EXPORT.read_text(encoding="utf-8")
         cls.report_formatting = REPORT_FORMATTING.read_text(encoding="utf-8")
         cls.price_variance_calculations = PRICE_VARIANCE_CALCULATIONS.read_text(encoding="utf-8")
@@ -316,7 +316,8 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
     def test_financial_report_calculations_are_pure_and_testable_without_android_runtime(self):
         self.assertNotIn("android.os.", self.calculations)
         self.assertNotIn("androidx.compose", self.calculations)
-        self.assertIn("reportCalculationDateMillis", self.calculations)
+        self.assertIn("reportDateMillis", self.report_formatting)
+        self.assertNotIn("reportCalculationDateMillis", self.calculations)
 
     def test_supplier_invoice_price_variance_uses_saved_lines_and_purchase_baseline(self):
         self.assertIn("CommercialCloudSupplierInvoiceLineSummary", self.purchase_repository)
