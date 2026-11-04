@@ -47,3 +47,7 @@ def test_catalog_uses_the_shared_supabase_transport_and_session_store():
     assert "EncryptedSharedPreferences" not in screen
     assert "HttpURLConnection" not in screen
     assert "fun commercialCloudSessionPreferences" in session
+
+
+if __name__ == "__main__":
+    unittest.main()
