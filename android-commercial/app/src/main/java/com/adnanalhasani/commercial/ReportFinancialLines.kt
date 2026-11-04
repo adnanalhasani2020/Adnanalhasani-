@@ -36,7 +36,7 @@ internal fun buildCashFlowReportLines(
                                     "${line.entryDescription} · ${line.sourceType}:${line.sourceId} · الحساب ${line.accountCode} · الرصيد المتحرك ${reportMoney(balance, currency, true)}"))
                             }
                             val debitMovements = sumReportAmountsExactly(periodMoves.mapNotNull { it.third.takeIf { amount -> amount > 0L } })
-                            val creditMovements = sumReportAmountsExactly(periodMoves.mapNotNull { it.third.takeIf { amount -> amount < 0L }?.let(Math::negateExact) })
+                            val creditMovements = sumReportAmountsExactly(periodMoves.mapNotNull { it.third.takeIf { amount -> amount < 0L }?.let { amount -> Math.negateExact(amount) } })
                             add(ReportLine("${startText} — ${endText}", "إجمالي الحركة المدينة", accountName, debitMovements, currency,
                                 "إجمالي الزيادات المدينة على حساب النقد/البنك خلال الفترة؛ قد تشمل تحويلات داخلية"))
                             add(ReportLine("${startText} — ${endText}", "إجمالي الحركة الدائنة", accountName, -creditMovements, currency,
