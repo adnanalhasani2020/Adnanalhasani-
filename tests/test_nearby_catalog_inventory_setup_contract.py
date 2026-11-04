@@ -37,7 +37,7 @@ class NearbyCatalogInventorySetupContractTests(unittest.TestCase):
         self.assertIn("var nearbyLoadGeneration by remember", self.screen)
         self.assertIn("val nearbyListState = rememberLazyListState()", self.screen)
         self.assertIn("fun startNearbyCatalog()", self.screen)
-        self.assertIn("nearbyHasMore=rows.length()==30", self.screen)
+        self.assertIn("nearbyHasMore=page.size==30", self.screen)
         self.assertIn("snapshotFlow", self.screen)
         self.assertIn("if(nearbyHasMore) loadNearbyCatalog(false) else loadNearbyCatalog(true)", self.screen)
         self.assertIn("LazyColumn(state=nearbyListState", self.screen)
