@@ -180,7 +180,7 @@ internal fun ActivityProfileScreen(
     ) {
         if (showBackButton) TextButton(onClick = onBack) { Text("← رجوع إلى المتجر") }
         Text(if (restoringSession) "جارٍ التحقق من حسابك" else if (created) "تم إنشاء مشروعك التجاري" else if (accessToken == null) "مرحبًا بك في متجري" else "إنشاء مشروعك التجاري", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text(if (restoringSession) "نتحقق من جلسة حسابك قبل فتح بيانات المؤسسة." else if (accessToken == null) "سجّل الدخول أو أنشئ حسابًا جديدًا للبدء. بعد ذلك سنساعدك على إنشاء مشروعك وربطه بالسحابة." else "الخطوة التالية: أدخل بيانات نشاطك وموقعه ليُنشأ مشروعك في قاعدة البيانات السحابية."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(if (restoringSession) "نتحقق من جلسة حسابك قبل فتح بيانات المؤسسة." else if (accessToken == null) "سجّل الدخول أو أنشئ حسابًا جديدًا للبدء. بعد ذلك سنساعدك على إنشاء مشروعك وربطه بالسحابة." else "الخطوة التالية: أدخل بيانات نشاطك وموقعه ليُنشأ مشروعك في قاعدة البيانات السحابية.", color = MaterialTheme.colorScheme.onSurfaceVariant)
 
         if (restoringSession) {
             CircularProgressIndicator()
