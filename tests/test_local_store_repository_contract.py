@@ -43,4 +43,4 @@ def test_main_activity_delegates_local_storage_without_changing_local_mode_gate(
     ):
         assert f"LocalStoreRepository.{operation}(" in main
     assert "if (!cloudContextHasAny) addAll(LocalStoreRepository.loadSales(context))" in main
-    assert "if (!cloudContextExists) addAll(LocalStoreRepository.loadProducts(context))" in main
+    assert "if (!cloudContextHasAny) addAll(LocalStoreRepository.loadProducts(context))" in main
