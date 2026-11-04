@@ -315,6 +315,7 @@ internal fun rememberReportsCenterData(
         calculationError = itemProfitabilityCalculation.exceptionOrNull()?.message.orEmpty()
     )
     var salesRowsArithmeticError = ""
+    var ledgerRowsArithmeticError = ""
     val sourceErrorForReport: (String) -> String = { title ->
         when (title) {
             "ملخص المبيعات حسب الفترة", "تفاصيل فواتير المبيعات", "تفاصيل بنود فواتير المبيعات",
@@ -335,8 +336,8 @@ internal fun rememberReportsCenterData(
             "التحصيل حسب العميل" -> customerCollectionsError
             "عمر أرصدة العملاء حسب تاريخ الفاتورة" -> customerReceivableAgingError
             "سجل القيود المحاسبية" -> journalsLoadError
-            "ميزان المراجعة حسب الحساب", "حركة دفتر الأستاذ العام", "كشف حساب محاسبي", "تفاصيل القيود المرحلة" -> ledgerLinesLoadError
-            "قائمة الدخل والميزانية العمومية" -> ledgerStatementError
+            "ميزان المراجعة حسب الحساب", "حركة دفتر الأستاذ العام", "كشف حساب محاسبي", "تفاصيل القيود المرحلة" -> ledgerLinesLoadError.ifBlank { ledgerRowsArithmeticError }
+            "قائمة الدخل والميزانية العمومية" -> ledgerStatementError.ifBlank { ledgerRowsArithmeticError }
             "الضرائب والخصومات التفصيلية" -> taxDetailError
             "ملخص الضرائب والخصومات" -> taxDiscountSummaryError
             "تكلفة البضاعة والربح" -> costProfitError
@@ -409,6 +410,24 @@ internal fun rememberReportsCenterData(
     if (salesRowsCalculation.isFailure) {
         salesRowsArithmeticError = "تجاوزت مجاميع تقرير المبيعات نطاق الأرقام الدقيق؛ تم حجب التقرير."
     }
+    val ledgerRowsCalculation = runCatching {
+        buildLedgerReportRows(
+            selectedReport = selectedReport,
+            ledgerStatementError = ledgerStatementError,
+            cloudLedgerLines = cloudLedgerLines,
+            cloudJournals = cloudJournals,
+            startDate = startDate,
+            endDate = endDate,
+            startMillis = startMillis,
+            endExclusive = endExclusive,
+            startText = startText,
+            endText = endText,
+            accountFilter = accountFilter
+        )
+    }
+    if (ledgerRowsCalculation.isFailure) {
+        ledgerRowsArithmeticError = "تجاوزت مجاميع أو أرصدة دفتر الأستاذ نطاق الأرقام الدقيق؛ تم حجب التقرير."
+    }
     val selectedRowsUnvalidated = buildInventoryReportRows(
         selectedReport = selectedReport,
         cloudMode = cloudMode,
@@ -424,19 +443,7 @@ internal fun rememberReportsCenterData(
         endExclusive = endExclusive,
         endText = endText,
         sourceErrorForReport = sourceErrorForReport
-    ) ?: buildLedgerReportRows(
-        selectedReport = selectedReport,
-        ledgerStatementError = ledgerStatementError,
-        cloudLedgerLines = cloudLedgerLines,
-        cloudJournals = cloudJournals,
-        startDate = startDate,
-        endDate = endDate,
-        startMillis = startMillis,
-        endExclusive = endExclusive,
-        startText = startText,
-        endText = endText,
-        accountFilter = accountFilter
-    ) ?: buildPartyStatementReportRows(
+    ) ?: ledgerRowsCalculation.getOrNull() ?: buildPartyStatementReportRows(
         selectedReport = selectedReport,
         startText = startText,
         endText = endText,
