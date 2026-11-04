@@ -319,3 +319,9 @@
 - `ReportDerivedRows.kt` owns presentation-row mapping for user sales performance, daily sales trend, customer receivable aging, customer collections, supplier purchase summaries, and supplier aging reports.
 - The helpers receive existing calculation results and source-error states; a failed calculation remains fail-closed and does not get rendered as a partial report.
 - The calculation formulas and source-validation rules remain in their existing domain/report owners.
+
+
+### Detailed tax/discount report row extraction (2026-11-04)
+- `ReportTaxRows.kt` owns the detailed tax/discount row projection from completed sales, non-canceled supplier invoices, and completed returns.
+- The existing `taxDetailError` gate is applied before building rows; approved return value remains a return amount and is not mislabeled as a separately calculated tax refund.
+- No tax formula, tax rate, or tax liability is inferred by the mapper.
