@@ -101,3 +101,6 @@ The UI must not become the authority for tenant access, balances, prices, postin
 - Completed: `ReportInventoryLines.kt` owns the common report row model and pure inventory report mapping for location balances and stock movements by user.
 - Still in `ReportsCenterScreen.kt`: report data loading, filter state, report selection, financial/customer/supplier calculations orchestration, Compose rendering, and export integration.
 - Do not move calculation rules into Compose UI. Keep reusable calculations in `ReportCalculations.kt` or focused pure calculation files; keep PDF/XLSX/print rendering in `ReportExport.kt`.
+
+
+- `ReportFinancialLines.kt` owns pure row assembly for cash-flow and tax/discount summaries. It may consume the internal report date/money formatters but must not load data or own Compose state.
