@@ -183,6 +183,7 @@ The catalog screen owns interaction and request orchestration. JSON-to-domain ma
 - `ReportsCloudData.kt` owns cloud report loading, the immutable projection snapshot, and source-specific error state. It calls the existing repository loader functions only; it does not introduce a new transport or alter organization scoping.
 - `ReportsCenterScreen.kt` consumes the snapshot through stable local aliases and retains date/filter state, report calculation orchestration, selected-row filtering, UI, and export integration.
 - A failed source continues to produce an empty projection and a source-specific error. Do not present stale rows as freshly loaded data or make an unsupported report selectable.
+- The sequential loader checks coroutine cancellation before every blocking repository call and rethrows `CancellationException`; cancellation stops later source requests, while an already-running synchronous HTTP request can finish only within the existing connection/read timeout.
 
 
 ### Reports center UI state boundary — 2026-11-04

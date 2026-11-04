@@ -43,7 +43,10 @@ def test_reports_cloud_projection_has_a_single_non_ui_owner():
 def test_failed_cloud_projections_are_cleared_and_keep_source_errors():
     cloud_data = CLOUD_DATA.read_text(encoding="utf-8")
 
-    assert "runCatching" in cloud_data
+    assert "loadReportProjection" in cloud_data
+    assert "CancellationException" in cloud_data
+    assert "currentCoroutineContext().ensureActive()" in cloud_data
+    assert "catch (cancelled: CancellationException)" in cloud_data
     assert ".getOrDefault(emptyList())" in cloud_data
     assert "exceptionOrNull()?.message.orEmpty()" in cloud_data
     assert "withContext(Dispatchers.IO)" in cloud_data
@@ -77,3 +80,15 @@ def test_every_cloud_projection_failure_triggers_the_shared_retry_signal():
         assert f"{source}.exceptionOrNull()" in errors_block
 
     assert "loadError = errors.firstOrNull()?.message" in cloud_data
+
+
+def test_canceled_refresh_does_not_start_later_source_requests():
+    cloud_data = CLOUD_DATA.read_text(encoding="utf-8")
+
+    assert "private suspend inline fun <T> loadReportProjection" in cloud_data
+    assert "currentCoroutineContext().ensureActive()" in cloud_data
+    assert "throw cancelled" in cloud_data
+    assert cloud_data.count("loadReportProjection { loadCommercialCloud") == 17
+    assert cloud_data.index("val expenses = loadReportProjection") < cloud_data.index(
+        "currentCoroutineContext().ensureActive()", cloud_data.index("val expenses = loadReportProjection")
+    )
