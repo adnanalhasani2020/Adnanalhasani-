@@ -20,7 +20,17 @@ def test_pure_report_mappers_have_a_single_non_ui_owner():
         "ReportSupplierMovement",
     ):
         assert marker in mappers
-        assert marker not in screen
+
+    for declaration in (
+        "fun CommercialCloudSupplierInvoiceSummary.toPriceVarianceInput",
+        "fun CommercialCloudSaleDocument.toCostProfitInput",
+        "fun CommercialCloudSaleReturn.toCostProfitInput",
+        "fun List<CommercialCloudSaleDocument>.toCustomerStatementInputs",
+        "fun reportLineAmount(",
+        "fun SupplierDueDateAgingReportState.toReportLines",
+        "data class ReportSupplierMovement",
+    ):
+        assert declaration not in screen
 
 
 def test_report_screen_consumes_the_extracted_mapper_contracts():
