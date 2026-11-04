@@ -116,3 +116,6 @@ The UI must not become the authority for tenant access, balances, prices, postin
 
 
 - `ReportDomainMappers.kt` owns pure conversions and row projection between cloud document models, report calculation inputs, and `ReportLine` values. It must not load data, own Compose state, or introduce business formulas; those remain in the domain calculation files.
+
+
+- `ReportFormatting.kt` owns pure date/timestamp and currency display formatting. Report UI and export callers may reuse it; it does not load data or perform financial aggregation.
