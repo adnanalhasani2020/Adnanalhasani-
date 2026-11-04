@@ -176,3 +176,9 @@
 - `ReportFormatting.kt` owns currency fraction-digit resolution, minor-unit/local money formatting, and ISO instant/date-only timestamp parsing.
 - `ReportsCenterScreen.kt` retains report filters and UI but calls these shared package-level helpers.
 - `ReportFormattingTest.kt` covers currency exponent handling (USD/JPY), local whole-unit formatting, instant/date-only parsing, and invalid currency fallback.
+
+
+### Report ledger classification extraction (2026-11-04)
+- `ReportLedgerClassification.kt` owns normalization of ledger account types, income-statement/balance-sheet classification, and debit/credit normal-balance aggregation.
+- `ReportsCenterScreen.kt` consumes the shared helpers while retaining the same account classification rules and statement row construction.
+- `ReportLedgerClassificationTest.kt` covers account-type aliases, contra-revenue and COGS detection, unknown account types, and debit/credit balance direction.
