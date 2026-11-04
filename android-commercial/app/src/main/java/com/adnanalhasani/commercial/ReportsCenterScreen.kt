@@ -57,6 +57,7 @@ internal fun ReportsCenterScreen(
     var error by uiState.error
     var cloudReload by uiState.cloudReload
     val cloudData = rememberReportsCloudData(context, cloudMode, cloudReload)
+    var supplierFilter by uiState.supplierFilter
     val reportData = rememberReportsCenterData(
         today = today,
         cloudMode = cloudMode,
