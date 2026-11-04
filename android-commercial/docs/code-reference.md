@@ -391,5 +391,5 @@
 
 
 ### Report calculation input mapping (2026-11-05)
-- `ReportDomainMappers.kt` owns cloud-to-calculation input projections for item profitability, customer collections, user sales performance, and daily sales trends.
+- `ReportDomainMappers.kt` owns cloud-to-calculation input projections for item profitability, customer collections, user sales performance, daily sales trends, and supplier purchase summaries.
 - `ReportsCenterData.kt` retains calculation lifecycle/orchestration and calls those pure mappers. Calculation formulas and report row builders remain in their dedicated files.
