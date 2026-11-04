@@ -17,6 +17,7 @@ CALCULATIONS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/co
 EXPORT = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportExport.kt"
 INVENTORY_REPORT_LINES = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportInventoryLines.kt"
 FINANCIAL_REPORT_LINES = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportFinancialLines.kt"
+DOMAIN_MAPPERS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportDomainMappers.kt"
 PRICE_VARIANCE_CALCULATIONS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/SupplierInvoicePriceVarianceCalculations.kt"
 COST_PROFIT_CALCULATIONS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CostProfitCalculations.kt"
 CONTRACT = ROOT / "android-commercial/docs/reports-data-contract.md"
@@ -27,7 +28,7 @@ RETURN_CURRENCY_GUARD_MIGRATION = ROOT / "supabase/migrations/20261027195426_gua
 class ReportsCenterSourceContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.screen = SCREEN.read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8") + INVENTORY_REPORT_LINES.read_text(encoding="utf-8") + FINANCIAL_REPORT_LINES.read_text(encoding="utf-8")
+        cls.screen = SCREEN.read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8") + INVENTORY_REPORT_LINES.read_text(encoding="utf-8") + FINANCIAL_REPORT_LINES.read_text(encoding="utf-8") + DOMAIN_MAPPERS.read_text(encoding="utf-8")
         cls.catalog = CATALOG.read_text(encoding="utf-8")
         cls.repository = REPOSITORY.read_text(encoding="utf-8")
         cls.inventory_repository = INVENTORY_REPOSITORY.read_text(encoding="utf-8")
