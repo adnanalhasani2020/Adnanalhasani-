@@ -127,29 +127,9 @@ internal fun rememberReportsCenterData(
         startMillis = startMillis,
         endExclusive = endExclusive
     )
-    val activeSupplierInvoiceCandidates = cloudPurchases.flatMap { purchase ->
-        purchase.supplierInvoices.filter { invoice ->
-            invoice.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed")
-        }.map { invoice -> purchase to invoice }
-    }
-    val supplierObligationCandidates = activeSupplierInvoiceCandidates.filter { (_, invoice) ->
-        invoice.obligation != null &&
-            invoice.obligation.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed")
-    }
-    val supplierObligationInputs = supplierObligationCandidates.mapNotNull { (purchase, invoice) ->
-        val timestamp = reportDateMillis(invoice.recordedAt) ?: return@mapNotNull null
-        if (timestamp >= endExclusive) return@mapNotNull null
-        val obligation = invoice.obligation ?: return@mapNotNull null
-        SupplierObligationInput(
-            supplierId = purchase.supplierId,
-            supplierName = purchase.supplierName.ifBlank { "مورد غير محدد" },
-            purchaseOrderCurrencyCode = purchase.currencyCode,
-            invoiceCurrencyCode = invoice.currencyCode,
-            obligationCurrencyCode = obligation.currencyCode,
-            amountDueMinor = obligation.amountDueMinor,
-            amountPaidMinor = obligation.amountPaidMinor
-        )
-    }
+    val activeSupplierInvoiceCandidates = cloudPurchases.activeSupplierInvoiceCandidates()
+    val supplierObligationCandidates = activeSupplierInvoiceCandidates.activeSupplierObligationCandidates()
+    val supplierObligationInputs = supplierObligationCandidates.toSupplierObligationInputs(endExclusive)
     val supplierInvoiceDetailError = reportSupplierInvoiceDetailValidationError(
         cloudMode = cloudMode,
         purchasesLoadError = purchasesLoadError,
