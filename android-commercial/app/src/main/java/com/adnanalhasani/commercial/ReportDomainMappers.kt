@@ -1,5 +1,7 @@
 package com.adnanalhasani.commercial
 
+import java.util.Locale
+
 internal fun CommercialCloudSupplierInvoiceSummary.toPriceVarianceInput() = SupplierInvoicePriceVarianceInput(
     currencyCode = currencyCode,
     subtotalMinor = subtotalMinor,
@@ -182,4 +184,25 @@ internal fun List<CommercialCloudSaleDocument>.toDailySalesInvoiceInputs(
             currencyCode = document.currencyCode,
             totalMinor = document.totalMinor
         )
+    }
+
+
+/** Maps active supplier invoices in the selected period into summary calculation inputs. */
+internal fun List<CommercialCloudPurchaseDocument>.toSupplierPurchaseInvoiceInputs(
+    startMillis: Long,
+    endExclusive: Long
+): List<SupplierPurchaseInvoiceInput> =
+    flatMap { purchase ->
+        purchase.supplierInvoices.filter { invoice ->
+            invoice.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed") &&
+                reportDateMillis(invoice.recordedAt)?.let { it >= startMillis && it < endExclusive } == true
+        }.map { invoice ->
+            SupplierPurchaseInvoiceInput(
+                invoiceId = invoice.id,
+                supplierId = purchase.supplierId,
+                supplierName = purchase.supplierName,
+                currencyCode = invoice.currencyCode,
+                totalMinor = invoice.totalMinor
+            )
+        }
     }
