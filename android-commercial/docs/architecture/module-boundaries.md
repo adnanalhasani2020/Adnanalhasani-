@@ -194,3 +194,6 @@ The catalog screen owns interaction and request orchestration. JSON-to-domain ma
 
 
 - `ReportsExportLaunchers.kt` owns Android document-picker lifecycle, stream writing, sharing, and the date/source guards for export actions. `ReportExport.kt` owns the actual PDF/XLSX/print renderers; the screen owns export-row selection and metadata.
+
+
+- `ReportsCatalogSection.kt` owns only the report category/catalog presentation and title-selection mapping. It consumes `ReportCatalogItem` and source-readiness inputs; catalog definitions remain in `ReportsCatalog.kt`, while report data and calculations remain outside the UI section.
