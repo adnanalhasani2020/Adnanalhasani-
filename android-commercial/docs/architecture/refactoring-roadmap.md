@@ -313,3 +313,6 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 
 
 - Extracted row mapping for user sales performance, daily sales trend, customer receivable aging/collections, supplier purchase summaries, and supplier aging into `ReportDerivedRows.kt`; added a source-ownership test. Remaining report switch logic is now mostly detailed tax, cost/profit, cash-flow summary, and orchestration.
+
+
+- Extracted detailed tax/discount row mapping into `ReportTaxRows.kt`; added an ownership test. Tax source validation and the existing tax/discount summary calculator remain in their existing owners.
