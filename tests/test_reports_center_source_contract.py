@@ -312,6 +312,14 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn("يحجب التقرير إذا بقيت فاتورة مفتوحة بلا تاريخ موثق", self.screen)
         self.assertIn("لا توجد سياسة تحويل معتمدة", self.screen)
 
+
+    def test_report_catalog_has_a_dedicated_source_owner(self):
+        self.assertIn("internal data class ReportCatalogItem", self.catalog)
+        self.assertIn("internal fun buildReportsCatalog", self.catalog)
+        self.assertNotIn("private data class ReportCatalogItem", self.screen)
+        self.assertNotIn("private fun buildReportsCatalog", self.screen)
+        self.assertIn("buildReportsCatalog(cloudMode)", self.screen)
+
 if __name__ == "__main__":
     unittest.main()
 
@@ -329,9 +337,3 @@ def test_cloud_dashboard_uses_organization_timezone_for_report_day_boundaries():
     assert "ZoneId.systemDefault()" not in reports
     assert "z.exceptionOrNull()" in reports
     assert "if (!dateRangeEdited)" in reports
-
-
-    def test_report_catalog_has_a_dedicated_source_owner(self):
-        self.assertIn("internal data class ReportCatalogItem", self.catalog)
-        self.assertIn("internal fun buildReportsCatalog", self.catalog)
-        self.assertNotIn("buildReportsCatalog", self.screen)
