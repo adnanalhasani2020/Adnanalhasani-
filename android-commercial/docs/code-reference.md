@@ -253,3 +253,9 @@
 - `ReportsCenterScreen.kt` consumes the snapshot and retains report selection, date/filter state, report-row orchestration, Compose presentation, and export integration.
 - Each projection remains independently guarded with `runCatching`; failed sources are cleared and expose their own error so report availability continues to fail closed. The loader preserves the existing source functions and sequential retrieval order.
 - This is a source-ownership change only. No query scope, RPC, report formula, database schema, or production data changed.
+
+
+### Reports center UI state extraction (2026-11-04)
+- `ReportsCenterUiState.kt` owns the Compose mutable state for report selection, date range, search/filter controls, export payload/title, feedback, supplier filter, and cloud refresh key.
+- `ReportsCenterScreen.kt` keeps stable delegated local properties so existing calculations, event handlers, and rendering retain their names and behavior while state creation has one owner.
+- The state owner contains no report calculations, repository calls, or export I/O.
