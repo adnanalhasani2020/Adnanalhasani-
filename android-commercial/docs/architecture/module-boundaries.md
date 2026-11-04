@@ -136,3 +136,8 @@ The UI must not become the authority for tenant access, balances, prices, postin
 ### Catalog market data boundary
 
 The catalog screen owns interaction and request orchestration. JSON-to-domain mapping for market branches/warehouses, nearby discovery, and price suggestions belongs to `CatalogMarketData.kt`. This keeps response parsing independently testable without moving location permissions, pagination, or state transitions out of the screen.
+
+
+### Catalog discovery product mapping boundary
+
+`CatalogProductMapper.kt` owns conversion of the paginated catalog-discovery JSON response into the existing `CatalogProduct` model, including localized display fallbacks and nested unit/ruling data. `CatalogScreen.kt` retains the RPC request, pagination, de-duplication, loading/error state, and user feedback. The mapper must not change the catalog RPC contract or conflate global catalog items with organization offerings and local inventory.
