@@ -33,4 +33,22 @@ internal class CatalogMarketUiState {
     var nearbyPageLoadFailed by mutableStateOf(false)
     var nearbyLoadGeneration by mutableIntStateOf(0)
     var marketPriceHints by mutableStateOf<Map<String, String>>(emptyMap())
+    /**
+     * Applies the complete UI-state transition when the active market branch changes.
+     * Nearby results and pagination are reset so data from the previous branch is not reused.
+     */
+    fun selectBranch(branch: CatalogBranchOption) {
+        selectedBranchId = branch.id
+        branchLatitude = branch.latitude
+        branchLongitude = branch.longitude
+        selectedWarehouseId = marketWarehouses.firstOrNull { it.branchId == branch.id }?.id.orEmpty()
+        nearbyMarketItems = emptyList()
+        nearbyOffset = 0
+        nearbyHasMore = true
+        nearbyLoadGeneration++
+        marketRadius = 5000
+        marketPriceHints = emptyMap()
+        branchMenuExpanded = false
+    }
+
 }
