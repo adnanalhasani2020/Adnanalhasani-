@@ -1,7 +1,7 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-REPOSITORY = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt").read_text(encoding="utf-8")
+PORTAL_REPOSITORY = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CustomerPortalRepository.kt").read_text(encoding="utf-8")
 PAYMENT_REPOSITORY = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CustomerPaymentRequestsRepository.kt").read_text(encoding="utf-8")
 CUSTOMER_SCREEN = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CustomerPortalPaymentRequestsScreen.kt").read_text(encoding="utf-8")
 MERCHANT_SCREEN = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudDebtScreen.kt").read_text(encoding="utf-8")
@@ -15,7 +15,7 @@ def test_customer_repository_uses_authenticated_portal_rpcs_and_retry_keys():
     assert '"/rest/v1/rpc/commercial_customer_portal_submit_payment_request"' in PAYMENT_REPOSITORY
     assert '"/rest/v1/rpc/commercial_customer_portal_update_payment_request"' in PAYMENT_REPOSITORY
     assert 'customerPortalAccessToken(context)' in PAYMENT_REPOSITORY
-    assert 'internal fun customerPortalAccessToken(context: Context)' in REPOSITORY
+    assert 'internal fun customerPortalAccessToken(context: Context)' in PORTAL_REPOSITORY
     assert 'commercial_customer_payment_request_keys_v1' in PAYMENT_REPOSITORY
     assert 'getCustomerPaymentRequestActionKey' in PAYMENT_REPOSITORY
 

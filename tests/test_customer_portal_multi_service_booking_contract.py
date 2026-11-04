@@ -2,7 +2,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = ROOT / "supabase/migrations/20261027200000_customer_portal_multi_service_booking.sql"
-REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt"
+REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CustomerPortalRepository.kt"
 PORTAL = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CustomerPortalScreen.kt"
 HISTORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CustomerPortalHistoryScreen.kt"
 DATABASE_TEST = ROOT / "supabase/tests/database/customer_portal_multi_service_booking_test.sql"
