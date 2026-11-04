@@ -213,3 +213,10 @@
 
 - `CatalogMarketData.kt` owns parsing of branch/warehouse market context, aggregated nearby-catalog rows, and aggregated price-guidance rows.
 - `CatalogScreen.kt` keeps orchestration, location permission handling, pagination, and UI state; it delegates response mapping to the pure parser functions.
+
+
+### Catalog discovery mapper
+- `CatalogProductMapper.kt` owns mapping of catalog discovery page responses into the existing `CatalogProduct` model.
+- `CatalogScreen.kt` retains request orchestration, page offset/has-more decisions, item de-duplication, and UI feedback.
+- `CatalogProductMapperTest.kt` covers nested units/rulings, localized display fallback, raw-value retention, and empty pages.
+- `tests/test_catalog_models_ownership.py` enforces the mapper boundary.
