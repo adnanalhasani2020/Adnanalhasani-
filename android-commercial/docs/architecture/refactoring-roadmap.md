@@ -295,3 +295,6 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 
 
 - Extracted the inventory report branches from the large selected-row switch into `ReportInventoryRows.kt` and added a source-ownership test. The screen delegates inventory report selections to this builder; remaining sales, purchase, party/ledger, expense, and financial statement row assembly still needs decomposition.
+
+
+- Extracted the income statement/balance sheet, trial balance, general-ledger movement/account statement, posted journal detail, and journal register row branches into `ReportLedgerRows.kt`. Added a source-ownership test; remaining sales, purchase, party statement, customer/supplier operational, and expense row assembly still needs decomposition.
