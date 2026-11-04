@@ -24,6 +24,9 @@ def test_pure_report_mappers_have_a_single_non_ui_owner():
         "toUserSalesPerformanceInputs",
         "toDailySalesInvoiceInputs",
         "toSupplierPurchaseInvoiceInputs",
+        "activeSupplierInvoiceCandidates",
+        "activeSupplierObligationCandidates",
+        "toSupplierObligationInputs",
         "reportLineAmount",
         "toReportLines",
         "ReportSupplierMovement",
@@ -41,6 +44,9 @@ def test_pure_report_mappers_have_a_single_non_ui_owner():
         "fun List<CommercialCloudSaleDocument>.toUserSalesPerformanceInputs",
         "fun List<CommercialCloudSaleDocument>.toDailySalesInvoiceInputs",
         "fun List<CommercialCloudPurchaseDocument>.toSupplierPurchaseInvoiceInputs",
+        "fun List<CommercialCloudPurchaseDocument>.activeSupplierInvoiceCandidates",
+        "fun List<Pair<CommercialCloudPurchaseDocument, CommercialCloudSupplierInvoiceSummary>>.activeSupplierObligationCandidates",
+        "fun List<Pair<CommercialCloudPurchaseDocument, CommercialCloudSupplierInvoiceSummary>>.toSupplierObligationInputs",
         "fun reportLineAmount(",
         "fun SupplierDueDateAgingReportState.toReportLines",
         "data class ReportSupplierMovement",
@@ -61,5 +67,8 @@ def test_report_screen_consumes_the_extracted_mapper_contracts():
     assert "toUserSalesPerformanceInputs(startMillis, endExclusive)" in data
     assert "toDailySalesInvoiceInputs(startMillis, endExclusive)" in data
     assert "toSupplierPurchaseInvoiceInputs(startMillis, endExclusive)" in data
+    assert "cloudPurchases.activeSupplierInvoiceCandidates()" in data
+    assert "activeSupplierInvoiceCandidates.activeSupplierObligationCandidates()" in data
+    assert "supplierObligationCandidates.toSupplierObligationInputs(endExclusive)" in data
     assert "reportLineAmount(row, cloudMode)" in results
     assert "report.toReportLines(asOfDate)" in derived_rows
