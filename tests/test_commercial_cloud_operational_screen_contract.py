@@ -18,7 +18,7 @@ class CommercialCloudOperationalScreenContractTests(unittest.TestCase):
         cls.repository = REPOSITORY.read_text(encoding="utf-8")
         cls.returns_repository = RETURNS_REPOSITORY.read_text(encoding="utf-8")
         cls.screen = SCREEN.read_text(encoding="utf-8")
-        cls.main = MAIN.read_text(encoding="utf-8") + MAIN_ACTIVITY.read_text(encoding="utf-8") + MAIN_ACTIVITY.read_text(encoding="utf-8")
+        cls.main = MAIN.read_text(encoding="utf-8") + MAIN_ACTIVITY.read_text(encoding="utf-8") + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/LocalOperationalScreens.kt").read_text(encoding="utf-8")
 
     def test_operational_queries_are_explicitly_allowlisted(self):
         function = self.repository.split(
