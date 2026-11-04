@@ -323,32 +323,19 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         }
     )
     fun createProduct() = productWorkflow.createProduct()
-    fun transferCatalog() {
-        val active=token ?: return
-        if(transferSource.isBlank() || transferDestination.isBlank()) { feedback="أدخل معرّف الحساب المصدر والوجهة."; return }
-        request({
-            val ids=JSONArray(); transferIds.split(",").map { it.trim() }.filter { it.isNotBlank() }.forEach { ids.put(it) }
-            catalogHttp("/rest/v1/rpc/commercial_catalog_send_transfer",JSONObject().put("p_source_organization_id",transferSource.trim())
-                .put("p_destination_organization_id",transferDestination.trim()).put("p_global_item_ids",if(ids.length()==0) JSONObject.NULL else ids),active)
-        }, { feedback="اكتملت عملية نقل روابط الدليل: $it" })
-    }
-    fun loadPendingTransfers() {
-        val active=token ?: return
-        val orgId=org() ?: run { feedback="أدخل معرّف المؤسسة المستقبلة في الحقل العلوي أولًا."; return }
-        request({
-            catalogGet("/rest/v1/commercial_catalog_transfers?select=id,source_organization_id,destination_organization_id,item_count,status,created_at&destination_organization_id=eq.$orgId&status=eq.pending&order=created_at.desc",active)
-        }, { raw ->
-            pendingTransfers=parsePendingCatalogTransfers(raw)
-            feedback="طلبات النقل الواردة: ${pendingTransfers.size}"
-        })
-    }
-    fun respondToTransfer(id: String, accept: Boolean) {
-        val active=token ?: return
-        request({
-            catalogHttp("/rest/v1/rpc/${if(accept) "commercial_catalog_accept_transfer" else "commercial_catalog_reject_transfer"}",
-                JSONObject().put("p_transfer_id",id),active)
-        }, { feedback=if(accept) "تم قبول طلب النقل: $it" else "تم رفض طلب النقل: $it"; loadPendingTransfers() })
-    }
+    val transferWorkflow = CatalogTransferWorkflow(
+        accessToken = { token },
+        organizationId = { org() },
+        transferSource = { transferSource },
+        transferDestination = { transferDestination },
+        transferIds = { transferIds },
+        request = { action, onSuccess, onFailure -> request(action, onSuccess, onFailure) },
+        onPendingTransfers = { pendingTransfers = it },
+        onFeedback = { feedback = it }
+    )
+    fun transferCatalog() = transferWorkflow.transferCatalog()
+    fun loadPendingTransfers() = transferWorkflow.loadPendingTransfers()
+    fun respondToTransfer(id: String, accept: Boolean) = transferWorkflow.respondToTransfer(id, accept)
     fun reviewRuling(rulingId: String) {
         val active=token ?: return
         val orgId=org() ?: run { feedback="أدخل معرّف المؤسسة UUID أولًا."; return }
