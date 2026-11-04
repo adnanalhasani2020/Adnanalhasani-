@@ -7,6 +7,7 @@ REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/comm
 PURCHASE_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/PurchaseRepository.kt"
 SUPPLIER_PAYMENT_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/SupplierPaymentRepository.kt"
 SALES_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/SalesRepository.kt"
+CATALOG_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogRepository.kt"
 CUSTOMER_ACCOUNTS_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CustomerAccountsRepository.kt"
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudSalesScreen.kt"
 PURCHASES = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudPurchasesScreen.kt"
@@ -23,6 +24,7 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         cls.purchase_repository = PURCHASE_REPOSITORY.read_text(encoding="utf-8")
         cls.supplier_payment_repository = SUPPLIER_PAYMENT_REPOSITORY.read_text(encoding="utf-8")
         cls.sales_repository = SALES_REPOSITORY.read_text(encoding="utf-8")
+        cls.catalog_repository = CATALOG_REPOSITORY.read_text(encoding="utf-8")
         cls.customer_accounts_repository = CUSTOMER_ACCOUNTS_REPOSITORY.read_text(encoding="utf-8")
         cls.screen = SCREEN.read_text(encoding="utf-8")
         cls.purchases = PURCHASES.read_text(encoding="utf-8")
@@ -233,8 +235,8 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         quantity_math = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialQuantityMath.kt").read_text(encoding="utf-8")
         self.assertIn("(totals[key] ?: BigDecimal.ZERO).add(quantity)", quantity_math)
         self.assertIn('"unit_code", line.unitCode', self.sales_repository)
-        self.assertIn("configureCommercialCloudSellUnit", self.repository)
-        self.assertIn("sell_units:commercial_offering_sell_units", self.repository)
+        self.assertIn("configureCommercialCloudSellUnit", self.catalog_repository)
+        self.assertIn("sell_units:commercial_offering_sell_units", self.catalog_repository)
         self.assertIn("prefs.getString(\"payload\", null) == payload", self.sales_repository)
         migration = (ROOT / "supabase/migrations/20261024200000_commercial_multiline_cash_checkout.sql").read_text(encoding="utf-8")
         self.assertIn("FOR UPDATE", migration)
@@ -302,10 +304,10 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
 
     def test_cloud_inventory_precision_is_preserved_for_display_and_stock_guard(self):
         self.assertIn("val stockPrecise: BigDecimal = BigDecimal.valueOf(stock.toLong())", self.models)
-        self.assertIn('BigDecimal(row.optString("quantity_on_hand", "0"))', self.repository)
-        self.assertIn('BigDecimal(row.optString("quantity_reserved", "0"))', self.repository)
-        self.assertIn("val availableQuantity = runCatching", self.repository)
-        self.assertIn("stockPrecise = availableQuantity", self.repository)
+        self.assertIn('BigDecimal(row.optString("quantity_on_hand", "0"))', self.catalog_repository)
+        self.assertIn('BigDecimal(row.optString("quantity_reserved", "0"))', self.catalog_repository)
+        self.assertIn("val availableQuantity = runCatching", self.catalog_repository)
+        self.assertIn("stockPrecise = availableQuantity", self.catalog_repository)
         self.assertIn('product.stockPrecise.stripTrailingZeros().toPlainString()', self.composer)
         self.assertIn("lines.first().product.stockPrecise", self.composer)
         self.assertNotIn("lines.first().product.stock.toLong()", self.composer)
