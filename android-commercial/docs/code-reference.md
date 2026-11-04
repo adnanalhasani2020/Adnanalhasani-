@@ -432,3 +432,8 @@
 ### Reports-center date boundaries
 - The exclusive upper timestamp is calculated by `reportEndExclusiveMillis`; `LocalDate.MAX` maps to `Long.MAX_VALUE` rather than overflowing on `plusDays(1)`.
 - `ReportsCenterData.kt` no longer builds the unused local `salesByCurrency` projection; the displayed currency summary remains owned by the exact `calculateReportCurrencyTotals` path.
+
+
+### Cash-flow preflight ordering parity
+- `ReportFinancialValidation.kt` sorts each cash/bank account's movements by entry date, entry number, and line number before checking opening and running balances, matching `ReportFinancialLines.kt` exactly.
+- This prevents validation from rejecting a sequence that the report builder can safely represent, or validating a different intermediate-balance sequence from the one displayed.
