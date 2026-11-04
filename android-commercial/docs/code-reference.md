@@ -127,7 +127,7 @@
 
 ### Reports catalog extraction (2026-11-04)
 - `ReportsCatalog.kt` owns `ReportCatalogItem` and `buildReportsCatalog(cloudMode)`.
-- `ReportsCenterScreen.kt` consumes the catalog and retains report loading, filtering, calculation orchestration, presentation, and export integration.
+- `ReportsCenterScreen.kt` consumes the catalog and retains filter state, calculation orchestration, presentation, and export integration. `ReportsCloudData.kt` owns the cloud report projections and refresh lifecycle.
 - Keep catalog labels, source descriptions, supported flags, and readiness notes together in `ReportsCatalog.kt`; do not duplicate the catalog in screen code.
 
 
@@ -246,3 +246,10 @@
 - `ReportsCenterScreen.kt` still owns all cloud loads, Compose state, and rendering; it now delegates only this validation decision.
 - Added `ReportLedgerValidationTest.kt` for cloud-mode gating, source-error precedence, missing mappings/roles, malformed dates, empty windows, unbalanced/unknown/invalid-currency entries, and a valid balanced ledger.
 - No database, RPC, report formula, or export contract was changed.
+
+
+### Reports cloud data extraction (2026-11-04)
+- `ReportsCloudData.kt` owns the immutable snapshot of cloud report projections, per-source load errors, and the refresh lifecycle used by the commercial reports center.
+- `ReportsCenterScreen.kt` consumes the snapshot and retains report selection, date/filter state, report-row orchestration, Compose presentation, and export integration.
+- Each projection remains independently guarded with `runCatching`; failed sources are cleared and expose their own error so report availability continues to fail closed. The loader preserves the existing source functions and sequential retrieval order.
+- This is a source-ownership change only. No query scope, RPC, report formula, database schema, or production data changed.
