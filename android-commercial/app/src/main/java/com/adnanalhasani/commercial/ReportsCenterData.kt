@@ -215,7 +215,9 @@ internal fun rememberReportsCenterData(
         ledgerLinesLoadError = ledgerLinesLoadError,
         partyAccountsLoadError = customerPartyAccountsLoadError,
         partyAccounts = cloudCustomerPartyAccounts,
-        glMappings = cloudGlMappings
+        glMappings = cloudGlMappings,
+        startDate = startDate,
+        endDate = endDate
     )
     val supplierStatementError = reportSupplierStatementValidationError(
         cloudMode = cloudMode,
@@ -224,7 +226,9 @@ internal fun rememberReportsCenterData(
         partyAccountsLoadError = supplierPartyAccountsLoadError,
         controlAccountsLoadError = supplierControlAccountsLoadError,
         partyAccounts = cloudSupplierPartyAccounts,
-        supplierControlAccounts = cloudSupplierControlAccounts
+        supplierControlAccounts = cloudSupplierControlAccounts,
+        startDate = startDate,
+        endDate = endDate
     )
     val itemProfitabilityCalculation = remember(cloudSalesDocuments, cloudReturns, startMillis, endExclusive, cloudMode) {
         runCatching {
