@@ -17,12 +17,12 @@ This document describes the existing code, then records where responsibility sho
 |---|---|---|
 | `MainActivity.kt` | Activity entry, app composition, navigation/state, local screens/dialogs, cloud report entry | `app/`, `ui/navigation/`, `feature/dashboard/`, and the matching feature packages. Shared/local models now live in `CommercialModels.kt` and `LocalStoreModels.kt`; SharedPreferences persistence now lives in `LocalStoreRepository.kt`. |
 | `CommercialCloudRepository.kt` | Shared context/token/paging helpers, customer options, and allowlisted operational record reads | `SupabaseClient.kt` owns HTTP transport; `CatalogRepository.kt`, `MasterDataRepository.kt`, `InventoryRepository.kt`, `SalesRepository.kt`, `PurchaseRepository.kt`, `SupplierPaymentRepository.kt`, `ExpenseRepository.kt`, `ReturnsRepository.kt`, `CustomerPortalRepository.kt`, `CustomerAccountsRepository.kt`, and `AccountingRepository.kt` own extracted domains |
-| `ReportsCenterScreen.kt` | Report catalog, report data builders, filters, report UI, PDF printing, XLSX generation, accounting/report aggregation | `feature/reports/`, `domain/calculation/`, `core/export/` |
+| `ReportsCenterScreen.kt` | Report selection, date/filter state, row orchestration, report UI, export actions | `feature/reports/`, `domain/calculation/`, `core/export/`; cloud projections now belong to `ReportsCloudData.kt` |
 | `CatalogScreen.kt` | Catalog search, market context, nearby discovery, price suggestions, category/unit/product creation, invoice-purchase linking, catalog transfers, ruling review | `feature/catalog/` plus catalog repository/data adapters |
 | `ReportCalculations.kt` | Pure calculation models and functions for profitability, statements, aging, daily sales, inventory and performance | Split by calculation domain under `domain/calculation/`; preserve formulas and tests |
 | `ActivityProfileScreen.kt` | Authentication/profile onboarding and business activity setup | `feature/settings/` or `feature/onboarding/`, backed by `core/auth/` and profile repository |
 
-## Existing domain screens to preserve and group
+| `ReportsCloudData.kt` | Immutable cloud report projections, per-source load errors, and refresh lifecycle | Keep data retrieval and refresh ownership outside Compose report presentation; preserve existing repository query scopes and fail-closed source errors |\n\n## Existing domain screens to preserve and group
 
 ### Sales
 - `CommercialCloudSalesScreen.kt`
@@ -177,3 +177,9 @@ The catalog screen owns interaction and request orchestration. JSON-to-domain ma
 - `CatalogProductFormState.kt` owns product-authoring form state; `CatalogScreenSections.kt` owns the product form presentation. The existing create-product action remains in `CatalogScreen.kt`.
 
 - `CatalogInvoiceTransferState.kt` owns the invoice-review and matching presentation state; `CatalogScreenSections.kt` owns the invoice-to-purchase review section. Existing action functions and RPC calls remain in `CatalogScreen.kt`.
+
+
+### Reports cloud data boundary — 2026-11-04
+- `ReportsCloudData.kt` owns cloud report loading, the immutable projection snapshot, and source-specific error state. It calls the existing repository loader functions only; it does not introduce a new transport or alter organization scoping.
+- `ReportsCenterScreen.kt` consumes the snapshot through stable local aliases and retains date/filter state, report calculation orchestration, selected-row filtering, UI, and export integration.
+- A failed source continues to produce an empty projection and a source-specific error. Do not present stale rows as freshly loaded data or make an unsupported report selectable.
