@@ -197,3 +197,6 @@ The catalog screen owns interaction and request orchestration. JSON-to-domain ma
 
 
 - `ReportsCatalogSection.kt` owns only the report category/catalog presentation and title-selection mapping. It consumes `ReportCatalogItem` and source-readiness inputs; catalog definitions remain in `ReportsCatalog.kt`, while report data and calculations remain outside the UI section.
+
+
+- `ReportInventoryRows.kt` owns row assembly for inventory-specific report selections. It consumes already-loaded projections and returns `null` for report families it does not own; it does not load data, mutate inventory, or change cost/quantity rules.
