@@ -17,9 +17,12 @@ class CatalogDiscoveryPaginationMigrationTests(unittest.TestCase):
 
     def test_android_catalog_loads_more_when_scrolling_near_end(self):
         screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogScreen.kt").read_text(encoding="utf-8")
-        self.assertIn("rememberLazyListState()", screen)
-        self.assertIn("snapshotFlow {", screen)
-        self.assertIn("state=catalogListState", screen)
+        browse = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogBrowseSection.kt").read_text(encoding="utf-8")
+        source = screen + browse
+        self.assertIn("rememberLazyListState()", source)
+        self.assertIn("snapshotFlow {", source)
+        self.assertIn("listState=catalogListState", source)
+        self.assertIn("state=listState", source)
         self.assertIn("loadCatalog(reset = false)", screen)
         self.assertIn(".distinctBy { it.id }", screen)
 

@@ -982,6 +982,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                         sectorOptions=sectorOptions,
                         sector=sector,
                         onSectorSelected={ selectedCode ->
+                            sectorMenuExpanded=false
                             if(selectedCode.isBlank()) {
                                 sector=""; selectedActivityCode=""; businessLevel=""
                             } else {
@@ -997,12 +998,13 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                         onSectorMenuExpandedChange={sectorMenuExpanded=it},
                         businessLevelOptions=businessLevelOptions,
                         businessLevel=businessLevel,
-                        onBusinessLevelSelected={businessLevel=it;loadCatalog(true)},
+                        onBusinessLevelSelected={businessLevel=it;businessLevelMenuExpanded=false;loadCatalog(true)},
                         businessLevelMenuExpanded=businessLevelMenuExpanded,
                         onBusinessLevelMenuExpandedChange={businessLevelMenuExpanded=it},
                         activityOptions=activityOptions,
                         selectedActivityCode=selectedActivityCode,
                         onActivitySelected={ node ->
+                            activityMenuExpanded=false
                             selectedActivityCode=node?.code.orEmpty()
                             if(node!=null && node.defaultBusinessLevelCode.isNotBlank()) businessLevel=node.defaultBusinessLevelCode
                             loadCatalog(true)
