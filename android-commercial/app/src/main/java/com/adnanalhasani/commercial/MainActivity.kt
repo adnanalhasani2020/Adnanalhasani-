@@ -44,8 +44,8 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private val storeCloudIo = Executors.newSingleThreadExecutor()
-private val storeCloudMain = Handler(Looper.getMainLooper())
+internal val storeCloudIo = Executors.newSingleThreadExecutor()
+internal val storeCloudMain = Handler(Looper.getMainLooper())
 
 @OptIn(ExperimentalMaterial3Api::class)
 
