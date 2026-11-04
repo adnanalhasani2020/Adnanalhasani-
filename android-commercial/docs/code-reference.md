@@ -383,3 +383,8 @@
 - `ReportProfitabilityValidation.kt` owns both historical cost/profit checks and item-profitability invoice/return integrity checks.
 - `ReportsCenterData.kt` retains loaded projections, date-window inputs, calculation orchestration, and report/error routing; calculations and row builders remain in their existing owners.
 - Source ownership guards were updated. No Android build or test suite is claimed as executed for this change.
+
+
+### Financial report validation (2026-11-05)
+- `ReportFinancialValidation.kt` owns the current inventory valuation source gate and the cash-flow source/integrity gate, including overflow preflight for every exact arithmetic step used by cash-flow row assembly.
+- `ReportsCenterData.kt` delegates those checks while retaining report dispatch. `ReportFinancialLines.kt` and `ReportInventoryRows.kt` remain the row builders.
