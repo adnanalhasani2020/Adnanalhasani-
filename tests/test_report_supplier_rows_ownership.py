@@ -5,6 +5,7 @@ ANDROID = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commerc
 SCREEN = ANDROID / "ReportsCenterScreen.kt"
 DATA_STATE = ANDROID / "ReportsCenterData.kt"
 ROWS = ANDROID / "ReportSupplierRows.kt"
+VALIDATION = ANDROID / "ReportSupplierValidation.kt"
 
 
 def test_supplier_report_row_assembly_has_a_dedicated_owner():
@@ -27,3 +28,27 @@ def test_supplier_report_row_assembly_has_a_dedicated_owner():
     assert "cloudSupplierPayments" in rows
     assert "supplierFilter" in rows
     assert "Math.addExact" in rows
+
+
+def test_supplier_invoice_and_obligation_validation_has_a_dedicated_owner():
+    data = DATA_STATE.read_text(encoding="utf-8")
+    validation = VALIDATION.read_text(encoding="utf-8")
+
+    for marker in (
+        "reportSupplierInvoiceVarianceError(",
+        "reportSupplierInvoiceDetailValidationError(",
+        "reportSupplierPurchaseSummaryValidationError(",
+        "reportSupplierObligationsValidationError(",
+    ):
+        assert marker in data
+        assert marker in validation
+        assert marker not in SCREEN.read_text(encoding="utf-8")
+    for marker in (
+        "توجد فاتورة مورد بتاريخ تسجيل غير صالح؛ تعذر تحديد الفترة بدقة.",
+        "توجد فاتورة أو مستحق مورد بمبلغ أو عملة غير متطابقة؛ تم حجب التقرير.",
+        "توجد فاتورة مورد لا تتطابق بنودها أو إجمالياتها مع الضريبة والشحن؛ تم حجب ملخص الموردين.",
+        "تعذر مطابقة عملات الالتزامات أو تجاوزت مجاميعها نطاق الأرقام الدقيق؛ تم حجب المستحقات.",
+    ):
+        assert marker in validation
+    assert "calculateSupplierObligationTotals(supplierObligationInputs)" in validation
+    assert "calculateSupplierInvoicePriceVariance(invoice.toPriceVarianceInput())" in validation
