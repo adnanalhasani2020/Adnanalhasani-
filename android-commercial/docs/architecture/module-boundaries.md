@@ -341,3 +341,13 @@ The source-ownership contract test now also guards that every projection alias i
 - The currency summary aggregation is memoized against its exact source/readiness inputs.
 - Each `remember` key includes the values consumed by its calculation, including selected report, date boundaries/text, row/account filters, and relevant source snapshots. Source validation and report readiness remain eager and unchanged; this is recomposition caching, not lazy source loading.
 - Existing overflow handling and Arabic fail-closed messages are preserved. The focused source-contract test checks the memoization dependencies and error routing.
+
+
+### Report calculation domain ownership — 2026-11-05
+
+- `ReportCalculations.kt` retains shared exact integer aggregation, supplier obligation totals, supplier purchase summaries, daily sales trends, customer collections, user sales performance, tax/discount summaries, and currency totals.
+- `CostProfitCalculations.kt` owns both aggregate cost/profit calculations and item-level profitability; the two reports retain their distinct financial rules and input contracts.
+- `ReportAgingCalculations.kt` owns invoice-date supplier liability aging and customer receivable aging. Contractual supplier due-date aging remains a separate calculation in `SupplierDueDateAgingReport.kt` because it uses saved due dates and different aging buckets.
+- `CustomerStatementCalculations.kt` owns customer operational statement movement construction. It reuses `reportDateMillis` from `ReportFormatting.kt` rather than maintaining a duplicate timestamp parser.
+- `ReportInventoryCalculations.kt` owns location inventory balance aggregation and stock movement totals by recorded actor, movement type, and unit. `ReportInventoryLines.kt` remains the row/state mapping layer.
+- Existing calculation call sites and package-level function names remain unchanged; calculation rules, source projections, and local/cloud boundaries are preserved.
