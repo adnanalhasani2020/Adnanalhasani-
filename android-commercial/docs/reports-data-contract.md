@@ -110,3 +110,8 @@ Source-contract assertions were added for financial-statement gating, party-cont
 - The cloud report "رصيد المخزون حسب الموقع" reads organization-scoped rows from `commercial_inventory_balances` and resolves each `location_id` against `commercial_organization_locations`. It includes every location in the organization, not only the currently selected location.
 - Results are grouped by location and recorded unit. On-hand, reserved, and available quantities are shown separately; different units are never summed together. Negative available quantity is preserved rather than clamped so over-reservation remains visible.
 - This is a current balance snapshot, not a dated movement report, sales performance report, or financial inventory valuation. It does not attribute sales to a location.
+
+
+### Sales-only discount and recorded-tax reports
+- The dedicated sales discount and recorded-tax report validator checks completed invoice dates and in-period subtotal, discount, tax, and currency integrity.
+- These two reports depend only on the sales-document source; purchase and return source failures remain scoped to the detailed tax/discount and combined summary reports that actually consume those sources.
