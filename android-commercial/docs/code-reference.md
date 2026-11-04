@@ -220,3 +220,9 @@
 - `CatalogScreen.kt` retains request orchestration, page offset/has-more decisions, item de-duplication, and UI feedback.
 - `CatalogProductMapperTest.kt` covers nested units/rulings, localized display fallback, raw-value retention, and empty pages.
 - `tests/test_catalog_models_ownership.py` enforces the mapper boundary.
+
+
+### Catalog directory mapping extraction (2026-11-04)
+- `CatalogDirectoryMapper.kt` owns the combined directory response parser for categories, translations, units, local unit codes, and activity hierarchy nodes.
+- `CatalogScreen.kt` continues to own request orchestration, locale selection, initial activity inference, screen state, and feedback.
+- `CatalogDirectoryMapperTest.kt` covers translated and fallback fields, activity-node filtering, local-unit normalization, empty collections, and malformed required arrays.
