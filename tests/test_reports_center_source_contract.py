@@ -5,6 +5,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterScreen.kt"
 REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt"
+PURCHASE_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/PurchaseRepository.kt"
 SALES_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/SalesRepository.kt"
 EXPENSE_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ExpenseRepository.kt"
 CALCULATIONS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportCalculations.kt"
@@ -21,6 +22,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
     def setUpClass(cls):
         cls.screen = SCREEN.read_text(encoding="utf-8")
         cls.repository = REPOSITORY.read_text(encoding="utf-8")
+        cls.purchase_repository = PURCHASE_REPOSITORY.read_text(encoding="utf-8")
         cls.expense_repository = EXPENSE_REPOSITORY.read_text(encoding="utf-8")
         cls.sales_repository = SALES_REPOSITORY.read_text(encoding="utf-8")
         cls.calculations = CALCULATIONS.read_text(encoding="utf-8")
@@ -223,16 +225,16 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn("reportCalculationDateMillis", self.calculations)
 
     def test_supplier_invoice_price_variance_uses_saved_lines_and_purchase_baseline(self):
-        self.assertIn("CommercialCloudSupplierInvoiceLineSummary", self.repository)
-        self.assertIn("purchase_order_item_id,quantity,unit_price_minor,line_total_minor", self.repository)
-        self.assertIn("commercial_supplier_invoice_items_purchase_order_item_id_fkey", self.repository)
-        self.assertIn("purchaseOrderUnitCostMinor", self.repository)
+        self.assertIn("CommercialCloudSupplierInvoiceLineSummary", self.purchase_repository)
+        self.assertIn("purchase_order_item_id,quantity,unit_price_minor,line_total_minor", self.purchase_repository)
+        self.assertIn("commercial_supplier_invoice_items_purchase_order_item_id_fkey", self.purchase_repository)
+        self.assertIn("purchaseOrderUnitCostMinor", self.purchase_repository)
         self.assertIn("calculateSupplierInvoicePriceVariance", self.screen)
         self.assertIn('ReportCatalogItem("فروقات أسعار فواتير الموردين"', self.screen)
         self.assertIn('"فروقات أسعار فواتير الموردين" -> supplierInvoiceVarianceError', self.screen)
         self.assertIn('"فروقات أسعار فواتير الموردين" -> cloudPurchases.flatMap', self.screen)
         self.assertIn("فرق موجب = أعلى من أمر الشراء، وسالب = أقل", self.screen)
-        self.assertIn("purchaseOrderItemDescription", self.repository)
+        self.assertIn("purchaseOrderItemDescription", self.purchase_repository)
         self.assertIn('"فواتير الشراء والمستحقات المسجلة", "المشتريات حسب المورد", "فروقات أسعار فواتير الموردين", "مستحقات فواتير الموردين"', self.screen)
         self.assertIn("round the sum of quantity × recorded PO unit cost once", self.price_variance_calculations)
         self.assertIn('ReportCatalogItem("التحصيل حسب طريقة الدفع"', self.screen)
