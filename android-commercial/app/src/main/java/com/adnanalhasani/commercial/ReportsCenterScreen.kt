@@ -1218,39 +1218,13 @@ internal fun ReportsCenterScreen(
                 val date = runCatching { LocalDate.parse(line.entryDate.take(10)) }.getOrNull()
                 date != null && !date.isBefore(previousStart) && !date.isAfter(previousEnd)
             } else emptyList()
-            fun normalizedType(line: CommercialCloudJournalLine): String =
-                line.accountType.lowercase(Locale.ROOT).replace('-', '_').replace(' ', '_')
-            fun statementClass(line: CommercialCloudJournalLine): String = when (normalizedType(line)) {
-                "asset", "assets" -> "asset"
-                "liability", "liabilities" -> "liability"
-                "equity" -> "equity"
-                "revenue", "income" -> if (
-                    line.normalBalance.equals("debit", true) ||
-                    line.accountName.contains("مردودات", true) ||
-                    line.accountName.contains("خصومات", true) ||
-                    line.accountName.contains("sales return", true) ||
-                    line.accountName.contains("sales discount", true)
-                ) "contra_revenue" else "revenue"
-                "contra_revenue" -> "contra_revenue"
-                "cost_of_goods_sold", "cost_of_sales" -> "cogs"
-                "expense", "expenses" -> if (
-                    line.accountName.contains("تكلفة البضاعة المباعة", true) ||
-                    line.accountName.contains("cost of goods sold", true) ||
-                    line.accountName.contains("تكلفة المبيعات", true) ||
-                    line.accountCode == "5000"
-                ) "cogs" else "expense"
-                else -> "unknown"
-            }
             val currencies = (throughEnd.map { it.currencyCode } + inPeriod.map { it.currencyCode })
                 .filter { it.matches(Regex("^[A-Z]{3}$")) }.distinct().sorted()
             buildList {
                 currencies.forEach { currency ->
                     val periodRows = inPeriod.filter { it.currencyCode == currency }
                     val cumulativeRows = throughEnd.filter { it.currencyCode == currency }
-                    fun accountNet(lines: List<CommercialCloudJournalLine>, cls: String): Long =
-                        lines.filter { statementClass(it) == cls }
-                            .sumOf { if (cls in setOf("asset", "expense", "cogs", "contra_revenue")) it.debitMinor - it.creditMinor else it.creditMinor - it.debitMinor }
-                    periodRows.groupBy { Triple(it.accountId, it.accountName.ifBlank { it.accountCode }, statementClass(it)) }
+                    periodRows.groupBy { Triple(it.accountId, it.accountName.ifBlank { it.accountCode }, reportStatementClass(it)) }
                         .filterKeys { it.third in setOf("revenue", "contra_revenue", "cogs", "expense") }
                         .toSortedMap(compareBy<Triple<String, String, String>> { it.third }.thenBy { it.second }.thenBy { it.first })
                         .forEach { (key, rows) ->
@@ -1259,18 +1233,18 @@ internal fun ReportsCenterScreen(
                             add(ReportLine("${startText} — ${endText}", "حساب ${key.first}", key.second, amount, currency,
                                 "تفصيل حساب قائمة الدخل · التصنيف ${key.third} · دفتر الأستاذ المرحل"))
                         }
-                    val revenue = accountNet(periodRows, "revenue")
-                    val contraRevenue = accountNet(periodRows, "contra_revenue")
-                    val cogs = accountNet(periodRows, "cogs")
-                    val operatingExpenses = accountNet(periodRows, "expense")
+                    val revenue = reportAccountNet(periodRows, "revenue")
+                    val contraRevenue = reportAccountNet(periodRows, "contra_revenue")
+                    val cogs = reportAccountNet(periodRows, "cogs")
+                    val operatingExpenses = reportAccountNet(periodRows, "expense")
                     val netRevenue = revenue - contraRevenue
                     val grossProfit = netRevenue - cogs
                     val netProfit = grossProfit - operatingExpenses
                     val previousRows = previousPeriod.filter { it.currencyCode == currency }
                     if (previousRows.isNotEmpty()) {
-                        val previousRevenue = accountNet(previousRows, "revenue") - accountNet(previousRows, "contra_revenue")
-                        val previousGrossProfit = previousRevenue - accountNet(previousRows, "cogs")
-                        val previousNetProfit = previousGrossProfit - accountNet(previousRows, "expense")
+                        val previousRevenue = reportAccountNet(previousRows, "revenue") - reportAccountNet(previousRows, "contra_revenue")
+                        val previousGrossProfit = previousRevenue - reportAccountNet(previousRows, "cogs")
+                        val previousNetProfit = previousGrossProfit - reportAccountNet(previousRows, "expense")
                         add(ReportLine("${previousStart} — ${previousEnd}", "مقارنة الفترة السابقة", "صافي الإيرادات للفترة السابقة", previousRevenue, currency,
                             "الفترة السابقة مساوية للمدة المحددة؛ من القيود المرحلة فقط"))
                         add(ReportLine("${previousStart} — ${previousEnd}", "مقارنة الفترة السابقة", "مجمل الربح للفترة السابقة", previousGrossProfit, currency,
@@ -1285,7 +1259,7 @@ internal fun ReportsCenterScreen(
                     add(ReportLine(startText + " — " + endText, "قائمة الدخل", "مجمل الربح", grossProfit, currency, "صافي الإيرادات ناقص تكلفة البضاعة"))
                     add(ReportLine(startText + " — " + endText, "قائمة الدخل", "المصروفات التشغيلية والأخرى", -operatingExpenses, currency, "حسابات المصروفات المرحلة"))
                     add(ReportLine(startText + " — " + endText, "قائمة الدخل", "صافي الربح/الخسارة للفترة", netProfit, currency, "لا يتضمن حسابات مجهولة النوع؛ تم التحقق من اتزان القيود"))
-                    cumulativeRows.groupBy { Triple(it.accountId, it.accountName.ifBlank { it.accountCode }, statementClass(it)) }
+                    cumulativeRows.groupBy { Triple(it.accountId, it.accountName.ifBlank { it.accountCode }, reportStatementClass(it)) }
                         .filterKeys { it.third in setOf("asset", "liability", "equity") }
                         .toSortedMap(compareBy<Triple<String, String, String>> { it.third }.thenBy { it.second }.thenBy { it.first })
                         .forEach { (key, rows) ->
@@ -1293,11 +1267,11 @@ internal fun ReportsCenterScreen(
                             add(ReportLine(endText, "حساب ${key.first}", key.second, amount, currency,
                                 "رصيد حساب ${key.third} حتى تاريخ التقرير · دفتر الأستاذ المرحل"))
                         }
-                    val assets = accountNet(cumulativeRows, "asset")
-                    val liabilities = accountNet(cumulativeRows, "liability")
-                    val equity = accountNet(cumulativeRows, "equity")
-                    val cumulativeIncome = accountNet(cumulativeRows, "revenue") - accountNet(cumulativeRows, "contra_revenue") -
-                        accountNet(cumulativeRows, "cogs") - accountNet(cumulativeRows, "expense")
+                    val assets = reportAccountNet(cumulativeRows, "asset")
+                    val liabilities = reportAccountNet(cumulativeRows, "liability")
+                    val equity = reportAccountNet(cumulativeRows, "equity")
+                    val cumulativeIncome = reportAccountNet(cumulativeRows, "revenue") - reportAccountNet(cumulativeRows, "contra_revenue") -
+                        reportAccountNet(cumulativeRows, "cogs") - reportAccountNet(cumulativeRows, "expense")
                     val totalEquity = equity + cumulativeIncome
                     val equationDifference = assets - liabilities - totalEquity
                     add(ReportLine(endText, "الميزانية العمومية", "إجمالي الأصول", assets, currency, "رصيد حتى تاريخ التقرير"))
