@@ -88,12 +88,14 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var invoiceMappingWarehouses by invoiceTransferState::mappingWarehouses
     var invoiceMappingWarehouseId by invoiceTransferState::invoiceMappingWarehouseId
     var invoiceMappingWarehouseMenuExpanded by invoiceTransferState::invoiceMappingWarehouseMenuExpanded
-    var localUnitCodes by remember { mutableStateOf<Set<String>>(emptySet()) }
+    val directoryDataState = remember { CatalogDirectoryDataState() }
+    var localUnitCodes by directoryDataState::localUnitCodes
     var invoiceReceiveLocationId by invoiceTransferState::invoiceReceiveLocationId
     var invoiceReceiveLocationMenuExpanded by invoiceTransferState::invoiceReceiveLocationMenuExpanded
     val catalogListState = rememberLazyListState()
-    var categories by remember { mutableStateOf<List<CatalogCategory>>(emptyList()) }
-    var directoryUnits by remember { mutableStateOf<List<DirectoryUnit>>(emptyList()) }; var pendingTransfers by remember { mutableStateOf<List<PendingTransfer>>(emptyList()) }
+    var categories by directoryDataState::categories
+    var directoryUnits by directoryDataState::directoryUnits
+    var pendingTransfers by remember { mutableStateOf<List<PendingTransfer>>(emptyList()) }
     var busy by sessionUiState::busy
     var restoringSession by sessionUiState::restoringSession
     var feedback by sessionUiState::feedback
