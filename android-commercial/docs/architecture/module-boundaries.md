@@ -209,3 +209,6 @@ The catalog screen owns interaction and request orchestration. JSON-to-domain ma
 
 
 - `ReportSalesRows.kt` owns pure row assembly for sales-period, invoice-detail, and period-comparison reports. It consumes existing sales projections and date boundaries; it does not load sales, mutate invoices, or calculate authoritative balances.
+
+
+- `ReportSupplierRows.kt` owns supplier report row assembly from loaded purchase, invoice, obligation, and posted-payment projections. It does not create supplier payments or alter purchase/invoice lifecycle state.
