@@ -42,6 +42,7 @@ private val catalogMain = Handler(Looper.getMainLooper())
 internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct, String, String, String, String, String) -> Unit, initialOrganizationId: String = "", initialActivityCode: String = "", requireCloudInventoryContext: Boolean = false) {
     val context = LocalContext.current
     val productFormState = remember { CatalogProductFormState() }
+    val invoiceTransferState = remember { CatalogInvoiceTransferState() }
     var email by remember { mutableStateOf("") }; var password by remember { mutableStateOf("") }
     var token by remember { mutableStateOf<String?>(null) }; var signedInUserId by remember { mutableStateOf("") }; var organizationId by remember { mutableStateOf(initialOrganizationId) }
     var section by remember { mutableStateOf("browse") }
@@ -82,22 +83,22 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var nearbyLoadGeneration by remember { mutableIntStateOf(0) }
     val nearbyListState = rememberLazyListState()
     var marketPriceHints by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
-    var invoiceSaleId by remember { mutableStateOf("") }
-    var invoiceDestinationOrg by remember { mutableStateOf("") }
+    var invoiceSaleId by invoiceTransferState::invoiceSaleId
+    var invoiceDestinationOrg by invoiceTransferState::invoiceDestinationOrg
     var invoiceRequestKey by remember { mutableStateOf(java.util.UUID.randomUUID().toString()) }
-    var invoiceRequests by remember { mutableStateOf<List<InvoicePurchaseRequestRow>>(emptyList()) }
-    var invoiceMappingRequestId by remember { mutableStateOf("") }
+    var invoiceRequests by invoiceTransferState::invoiceRequests
+    var invoiceMappingRequestId by invoiceTransferState::invoiceMappingRequestId
     var invoiceMappingPurchaseOrderId by remember { mutableStateOf("") }
-    var invoiceMappingLines by remember { mutableStateOf<List<InvoicePurchaseUnmappedLine>>(emptyList()) }
-    var invoiceMappingOfferings by remember { mutableStateOf<List<InvoicePurchaseOffering>>(emptyList()) }
-    var invoiceMappingLineId by remember { mutableStateOf("") }
-    var invoiceMappingOfferingId by remember { mutableStateOf("") }
-    var invoiceMappingLineMenuExpanded by remember { mutableStateOf(false) }
-    var invoiceMappingOfferingMenuExpanded by remember { mutableStateOf(false) }
+    var invoiceMappingLines by invoiceTransferState::invoiceMappingLines
+    var invoiceMappingOfferings by invoiceTransferState::invoiceMappingOfferings
+    var invoiceMappingLineId by invoiceTransferState::invoiceMappingLineId
+    var invoiceMappingOfferingId by invoiceTransferState::invoiceMappingOfferingId
+    var invoiceMappingLineMenuExpanded by invoiceTransferState::invoiceMappingLineMenuExpanded
+    var invoiceMappingOfferingMenuExpanded by invoiceTransferState::invoiceMappingOfferingMenuExpanded
     var invoiceMappingLocationId by remember { mutableStateOf("") }
-    var invoiceMappingWarehouses by remember { mutableStateOf<List<CatalogWarehouseOption>>(emptyList()) }
-    var invoiceMappingWarehouseId by remember { mutableStateOf("") }
-    var invoiceMappingWarehouseMenuExpanded by remember { mutableStateOf(false) }
+    var invoiceMappingWarehouses by invoiceTransferState::invoiceMappingWarehouses
+    var invoiceMappingWarehouseId by invoiceTransferState::invoiceMappingWarehouseId
+    var invoiceMappingWarehouseMenuExpanded by invoiceTransferState::invoiceMappingWarehouseMenuExpanded
     var showInvoiceItemCreation by remember { mutableStateOf(false) }
     var invoiceNewNameAr by remember { mutableStateOf("") }
     var invoiceNewNameEn by remember { mutableStateOf("") }
@@ -109,8 +110,8 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var invoiceNewSaleUnitMenuExpanded by remember { mutableStateOf(false) }
     var invoiceNewIdempotencyKey by remember { mutableStateOf("") }
     var localUnitCodes by remember { mutableStateOf<Set<String>>(emptySet()) }
-    var invoiceReceiveLocationId by remember { mutableStateOf("") }
-    var invoiceReceiveLocationMenuExpanded by remember { mutableStateOf(false) }
+    var invoiceReceiveLocationId by invoiceTransferState::invoiceReceiveLocationId
+    var invoiceReceiveLocationMenuExpanded by invoiceTransferState::invoiceReceiveLocationMenuExpanded
     val catalogListState = rememberLazyListState()
     var categories by remember { mutableStateOf<List<CatalogCategory>>(emptyList()) }
     var directoryUnits by remember { mutableStateOf<List<DirectoryUnit>>(emptyList()) }; var pendingTransfers by remember { mutableStateOf<List<PendingTransfer>>(emptyList()) }
@@ -1216,118 +1217,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                 "category" -> CatalogCategorySection(categoryCodeState, parentCodeState, categoryNameArState, categoryNameEnState, categoryDescriptionArState, categoryDescriptionEnState, categoryTranslationsState, categories, locale, busy, ::createCategory, ::loadDirectories)
                 "unit" -> CatalogUnitSection(unitShortCodeState, unitNameArState, unitNameEnState, unitDimensionState, unitBaseCodeState, unitFactorState, unitDecimalsState, unitTranslationsState, directoryUnits, busy, ::createUnit, ::loadDirectories)
                 "product" -> CatalogProductFormSection(productFormState, categories, directoryUnits, busy, ::createProduct)
-                "invoice_transfer" -> LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(bottom=20.dp)) {
-                    item { Text("تحويل فاتورة البيع إلى أمر شراء لدى المؤسسة المستقبلة",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold) }
-                    item { Text("أدخل UUID فاتورة البيع المكتملة وUUID المؤسسة المستقبلة. لن يُنشأ أمر الشراء إلا بعد موافقة مالك/مدير المؤسسة المستقبلة.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
-                    item { OutlinedTextField(invoiceSaleId,{invoiceSaleId=it.trim()},Modifier.fillMaxWidth(),label={Text("معرّف فاتورة البيع UUID")},singleLine=true) }
-                    item { OutlinedTextField(invoiceDestinationOrg,{invoiceDestinationOrg=it.trim()},Modifier.fillMaxWidth(),label={Text("معرّف المؤسسة المستقبلة UUID")},singleLine=true) }
-                    item { Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                        Button(onClick={requestInvoiceAsPurchase()},enabled=!busy && invoiceSaleId.isNotBlank() && invoiceDestinationOrg.isNotBlank(),modifier=Modifier.weight(1f)) { Text("إرسال للموافقة") }
-                        OutlinedButton(onClick={loadInvoiceRequests()},enabled=!busy) { Text("تحديث الطلبات") }
-                    } }
-                    item {
-                        Column(verticalArrangement=Arrangement.spacedBy(4.dp)) {
-                            Text("فرع الاستلام للموافقة الواردة",fontWeight=FontWeight.SemiBold)
-                            Box {
-                                OutlinedButton(onClick={invoiceReceiveLocationMenuExpanded=true},enabled=!busy && marketBranches.isNotEmpty(),modifier=Modifier.fillMaxWidth()) {
-                                    Text(marketBranches.firstOrNull { it.id==invoiceReceiveLocationId }?.name
-                                        ?: marketBranches.firstOrNull { it.id==selectedBranchId }?.name ?: "اختر فرع الاستلام")
-                                }
-                                DropdownMenu(expanded=invoiceReceiveLocationMenuExpanded,onDismissRequest={invoiceReceiveLocationMenuExpanded=false}) {
-                                    marketBranches.forEach { branch ->
-                                        DropdownMenuItem(text={Text(branch.name)},onClick={
-                                            invoiceReceiveLocationId=branch.id
-                                            invoiceReceiveLocationMenuExpanded=false
-                                        })
-                                    }
-                                }
-                            }
-                            Text("تُستخدم الوجهة المختارة عند الموافقة؛ لا يُنقل المخزون إلا عند تنفيذ الاستلام.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                    items(invoiceRequests,key={it.id}) { req ->
-                        Card(Modifier.fillMaxWidth()) {
-                            Column(Modifier.fillMaxWidth().padding(10.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
-                                Text("فاتورة رقم "+req.invoiceNumber+" • "+req.currencyCode+" "+req.totalMinor,fontWeight=FontWeight.SemiBold)
-                                Text("الحالة: "+req.status+" • طلب: "+req.id,style=MaterialTheme.typography.bodySmall)
-                                Text("المصدر: "+req.sourceOrganizationId,style=MaterialTheme.typography.bodySmall)
-                                Text("المستقبل: "+req.destinationOrganizationId,style=MaterialTheme.typography.bodySmall)
-                                if(req.purchaseOrderId.isNotBlank()) Text("أمر الشراء: "+req.purchaseOrderId,style=MaterialTheme.typography.bodySmall)
-                                if(req.destinationOrganizationId==org().orEmpty() && req.status=="pending") {
-                                    Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                                        Button(onClick={reviewInvoicePurchaseRequest(req.id,true)},enabled=!busy,modifier=Modifier.weight(1f)) { Text("موافقة وإنشاء أمر شراء") }
-                                        OutlinedButton(onClick={reviewInvoicePurchaseRequest(req.id,false)},enabled=!busy,modifier=Modifier.weight(1f)) { Text("رفض") }
-                                    }
-                                }
-                                if(req.destinationOrganizationId==org().orEmpty() && req.status=="approved" && req.purchaseOrderId.isNotBlank()) {
-                                    OutlinedButton(onClick={mapKnownInvoicePurchaseItems(req.id)},enabled=!busy,modifier=Modifier.fillMaxWidth()) { Text("ربط الأصناف المعروفة بأمر الشراء") }
-                                    OutlinedButton(onClick={loadInvoicePurchaseUnmappedLines(req)},enabled=!busy,modifier=Modifier.fillMaxWidth()) { Text("إدارة الأصناف غير المطابقة") }
-                                    if(invoiceMappingRequestId==req.id) {
-                                        Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
-                                            Text("مطابقة البنود غير المعروفة مع أصناف المؤسسة في موقع الاستلام",fontWeight=FontWeight.SemiBold)
-                                            Text("نفّذ ربط الأصناف المعروفة أولًا. الربط اليدوي يعيد أمر الشراء المعتمد إلى حالة الإرسال ويتطلب إعادة اعتماده.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                                            if(invoiceMappingLines.isEmpty()) {
-                                                Text("لا توجد بنود غير مطابقة قابلة للربط حاليًا.",style=MaterialTheme.typography.bodySmall)
-                                            } else {
-                                                Box {
-                                                    OutlinedButton(onClick={invoiceMappingLineMenuExpanded=true},modifier=Modifier.fillMaxWidth()) {
-                                                        val selectedLine=invoiceMappingLines.firstOrNull { it.id==invoiceMappingLineId }
-                                                        Text(selectedLine?.let { "البند "+it.lineNumber+": "+it.description+" • "+it.quantity+" "+it.unitCode } ?: "اختر بند الفاتورة")
-                                                    }
-                                                    DropdownMenu(expanded=invoiceMappingLineMenuExpanded,onDismissRequest={invoiceMappingLineMenuExpanded=false}) {
-                                                        invoiceMappingLines.forEach { line ->
-                                                            DropdownMenuItem(text={Text("البند "+line.lineNumber+": "+line.description+" • "+line.quantity+" "+line.unitCode)},onClick={
-                                                                invoiceMappingLineId=line.id
-                                                                invoiceMappingLineMenuExpanded=false
-                                                            })
-                                                        }
-                                                    }
-                                                }
-                                                Box {
-                                                    OutlinedButton(onClick={invoiceMappingOfferingMenuExpanded=true},enabled=invoiceMappingOfferings.isNotEmpty(),modifier=Modifier.fillMaxWidth()) {
-                                                        val selectedOffering=invoiceMappingOfferings.firstOrNull { it.id==invoiceMappingOfferingId }
-                                                        Text(selectedOffering?.let { "الصنف المحلي: "+it.name+" • "+it.unitCode } ?: "اختر صنف المؤسسة في موقع الاستلام")
-                                                    }
-                                                    DropdownMenu(expanded=invoiceMappingOfferingMenuExpanded,onDismissRequest={invoiceMappingOfferingMenuExpanded=false}) {
-                                                        invoiceMappingOfferings.forEach { offering ->
-                                                            DropdownMenuItem(text={Text(offering.name+" • "+offering.unitCode)},onClick={
-                                                                invoiceMappingOfferingId=offering.id
-                                                                invoiceMappingOfferingMenuExpanded=false
-                                                            })
-                                                        }
-                                                    }
-                                                }
-                                                Button(onClick={linkSelectedInvoicePurchaseLine()},enabled=!busy && invoiceMappingLineId.isNotBlank() && invoiceMappingOfferingId.isNotBlank(),modifier=Modifier.fillMaxWidth()) { Text("تأكيد ربط البند المحدد") }
-                                            }
-                                            if(invoiceMappingOfferings.isEmpty()) Text("لا توجد أصناف مهيأة لهذا الفرع/موقع الاستلام. أنشئ الصنف أو هيئه من دليل الأصناف أولًا، ثم أعد تحميل المطابقة.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                                            if(invoiceMappingWarehouses.isNotEmpty()) {
-                                                Box {
-                                                    OutlinedButton(onClick={invoiceMappingWarehouseMenuExpanded=true},modifier=Modifier.fillMaxWidth()) {
-                                                        Text("مستودع الاستلام: "+(invoiceMappingWarehouses.firstOrNull { it.id==invoiceMappingWarehouseId }?.name ?: "اختر المستودع"))
-                                                    }
-                                                    DropdownMenu(expanded=invoiceMappingWarehouseMenuExpanded,onDismissRequest={invoiceMappingWarehouseMenuExpanded=false}) {
-                                                        invoiceMappingWarehouses.forEach { warehouse ->
-                                                            DropdownMenuItem(text={Text(warehouse.name)},onClick={
-                                                                invoiceMappingWarehouseId=warehouse.id
-                                                                invoiceMappingWarehouseMenuExpanded=false
-                                                            })
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                            OutlinedButton(onClick={openInvoiceItemCreationDialog()},enabled=!busy && invoiceMappingLines.isNotEmpty() && invoiceMappingWarehouses.isNotEmpty() && categories.isNotEmpty() && directoryUnits.isNotEmpty(),modifier=Modifier.fillMaxWidth()) {
-                                                Icon(Icons.Default.Add,contentDescription=null)
-                                                Text("إنشاء صنف جديد وربطه بهذا البند")
-                                            }
-                                            Text("لا يُنشأ صنف تلقائيًا من وصف الفاتورة ولا يُضاف مخزون عند المطابقة. اختر تطابقًا مؤكدًا؛ الاستلام هو الذي يحدّث الكمية.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                                        }
-                                    }
-                                }
-                                Text("الموافقة لا تزيد المخزون؛ يجب استلام أمر الشراء عبر دورة الاستلام المعتادة.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                    }
-                }
+                "invoice_transfer" -> CatalogInvoiceTransferSection(invoiceTransferState, marketBranches, selectedBranchId, categories, directoryUnits, organizationId, busy, ::requestInvoiceAsPurchase, ::loadInvoiceRequests, ::reviewInvoicePurchaseRequest, ::mapKnownInvoicePurchaseItems, ::loadInvoicePurchaseUnmappedLines, ::linkSelectedInvoicePurchaseLine, ::openInvoiceItemCreationDialog)
                 "transfer" -> CatalogTransferSection(transferSourceState, transferDestinationState, transferIdsState, pendingTransfers, busy, ::transferCatalog, ::loadPendingTransfers, ::respondToTransfer)
             }
         }
