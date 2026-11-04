@@ -265,3 +265,9 @@
 - `ReportsPeriodControls.kt` owns the period-preset chips and editable start/end date fields as a presentation component.
 - `ReportsCenterScreen.kt` retains date parsing, invalid-range handling, report-window filtering, and the selected period state; the component communicates changes only through callbacks.
 - Existing presets and their date boundaries are preserved. No report query or calculation was moved into the UI component.
+
+
+### Reports Android export lifecycle extraction (2026-11-04)
+- `ReportsExportLaunchers.kt` owns Android document-picker launchers, CSV/XLSX/PDF stream writing, PDF sharing, and export-source/date guards.
+- `ReportExport.kt` continues to own the pure/native PDF/XLSX/print rendering implementation; the launcher owner delegates to it.
+- `ReportsCenterScreen.kt` builds the selected report's export rows and invokes the launchers through stable aliases. Export metadata and error feedback remain in the screen state.
