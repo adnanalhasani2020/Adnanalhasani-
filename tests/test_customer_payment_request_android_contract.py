@@ -10,13 +10,14 @@ MAIN = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercia
 
 
 def test_customer_repository_uses_authenticated_portal_rpcs_and_retry_keys():
-    assert '"/rest/v1/rpc/commercial_customer_portal_list_outstanding_sales"' in REPOSITORY
-    assert '"/rest/v1/rpc/commercial_customer_portal_list_my_payment_requests"' in REPOSITORY
-    assert '"/rest/v1/rpc/commercial_customer_portal_submit_payment_request"' in REPOSITORY
-    assert '"/rest/v1/rpc/commercial_customer_portal_update_payment_request"' in REPOSITORY
-    assert 'customerPortalAccessToken(context)' in REPOSITORY
-    assert 'commercial_customer_payment_request_keys_v1' in REPOSITORY
-    assert 'getCustomerPaymentRequestActionKey' in REPOSITORY
+    assert '"/rest/v1/rpc/commercial_customer_portal_list_outstanding_sales"' in PAYMENT_REPOSITORY
+    assert '"/rest/v1/rpc/commercial_customer_portal_list_my_payment_requests"' in PAYMENT_REPOSITORY
+    assert '"/rest/v1/rpc/commercial_customer_portal_submit_payment_request"' in PAYMENT_REPOSITORY
+    assert '"/rest/v1/rpc/commercial_customer_portal_update_payment_request"' in PAYMENT_REPOSITORY
+    assert 'customerPortalAccessToken(context)' in PAYMENT_REPOSITORY
+    assert 'internal fun customerPortalAccessToken(context: Context)' in REPOSITORY
+    assert 'commercial_customer_payment_request_keys_v1' in PAYMENT_REPOSITORY
+    assert 'getCustomerPaymentRequestActionKey' in PAYMENT_REPOSITORY
 
 
 def test_customer_screen_keeps_claims_pending_until_merchant_approval():
