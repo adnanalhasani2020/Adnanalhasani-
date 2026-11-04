@@ -6,6 +6,8 @@ ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/InventoryRepository.kt"
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterScreen.kt"
 ROWS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportInventoryRows.kt"
+DATA_STATE = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterData.kt"
+CLOUD_DATA = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCloudData.kt"
 PROJECTION = ROOT / "supabase/migrations/20261031070000_inventory_warehouse_context_projection.sql"
 
 
@@ -13,7 +15,7 @@ class ReportsWarehouseInventoryContextContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.repository = REPOSITORY.read_text(encoding="utf-8")
-        cls.screen = SCREEN.read_text(encoding="utf-8") + ROWS.read_text(encoding="utf-8") + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCatalog.kt").read_text(encoding="utf-8")
+        cls.screen = SCREEN.read_text(encoding="utf-8") + DATA_STATE.read_text(encoding="utf-8") + CLOUD_DATA.read_text(encoding="utf-8") + ROWS.read_text(encoding="utf-8") + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCatalog.kt").read_text(encoding="utf-8")
         cls.inventory_rows = ROWS.read_text(encoding="utf-8")
         cls.projection = PROJECTION.read_text(encoding="utf-8")
 
