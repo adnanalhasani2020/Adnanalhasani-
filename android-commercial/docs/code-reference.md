@@ -201,3 +201,9 @@
 - `LocalOperationalScreens.kt` owns the local More, expenses, legacy reports, cloud legacy reports, debts, expense-entry, and settlement UI.
 - `LocalProductDialogs.kt` owns local sale, add-product, and edit-product dialogs.
 - `tests/test_local_commercial_screens_contract.py` verifies the thin activity boundary and the single owner of each extracted composable.
+
+
+### Shared store palette extraction (2026-11-04)
+- `StorePalette.kt` owns the shared Compose colors used by the activity, local operational screens, product dialogs, and app shell.
+- Extracted the existing color values unchanged from the former activity file. This prevents extracted UI files from depending on private declarations in `MainActivity.kt`.
+- `tests/test_local_commercial_screens_contract.py` verifies the single palette owner.
