@@ -951,17 +951,36 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         if (restoringSession) {
             Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         } else if(token==null) {
-            LazyColumn(verticalArrangement=Arrangement.spacedBy(10.dp),contentPadding=PaddingValues(bottom=18.dp)) {
-                item { Text("تسجيل الدخول إلى حساب Supabase",style=MaterialTheme.typography.titleMedium) }
-                item { OutlinedTextField(email,{email=it.trim()},Modifier.fillMaxWidth(),label={Text("البريد الإلكتروني")},singleLine=true) }
-                item { OutlinedTextField(password,{password=it},Modifier.fillMaxWidth(),label={Text("كلمة المرور")},singleLine=true) }
-                item { Button(onClick={request({
-                    val raw=catalogHttp("/auth/v1/token?grant_type=password",JSONObject().put("email",email).put("password",password))
-                    val session=JSONObject(raw); val access=session.optString("access_token"); val refresh=session.optString("refresh_token"); if(access.isBlank() || refresh.isBlank()) throw IllegalStateException("لم تُرجع خدمة المصادقة جلسة صالحة.")
-                    "${access}|${refresh}|${session.optJSONObject("user")?.optString("id").orEmpty()}"
-                },{sessionValue -> val parts=sessionValue.split("|",limit=3); token=parts[0]; commercialCloudSessionPreferences(context).edit().putString("refresh_token",parts.getOrNull(1).orEmpty()).apply(); signedInUserId=parts.getOrNull(2).orEmpty(); password=""; feedback="تم تسجيل الدخول. ستُستعاد الجلسة تلقائيًا عند فتح الدليل لاحقًا."})},enabled=!busy && email.contains("@") && password.isNotBlank(),modifier=Modifier.fillMaxWidth()) { Text(if(busy) "جارٍ تسجيل الدخول..." else "تسجيل الدخول") } }
-                item { Text("تُحفظ بيانات تجديد الجلسة مشفرة على الجهاز، ولا تُحفظ كلمة المرور. لا تستخدم مفتاح service_role في التطبيق.",color=MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.bodySmall) }
-            }
+            CatalogLoginPanel(
+                email = email,
+                onEmailChange = { email = it.trim() },
+                password = password,
+                onPasswordChange = { password = it },
+                busy = busy,
+                onLogin = {
+                    request({
+                        val raw = catalogHttp(
+                            "/auth/v1/token?grant_type=password",
+                            JSONObject().put("email", email).put("password", password)
+                        )
+                        val session = JSONObject(raw)
+                        val access = session.optString("access_token")
+                        val refresh = session.optString("refresh_token")
+                        if (access.isBlank() || refresh.isBlank()) {
+                            throw IllegalStateException("لم تُرجع خدمة المصادقة جلسة صالحة.")
+                        }
+                        "${access}|${refresh}|${session.optJSONObject("user")?.optString("id").orEmpty()}"
+                    }, { sessionValue ->
+                        val parts = sessionValue.split("|", limit = 3)
+                        token = parts[0]
+                        commercialCloudSessionPreferences(context).edit()
+                            .putString("refresh_token", parts.getOrNull(1).orEmpty()).apply()
+                        signedInUserId = parts.getOrNull(2).orEmpty()
+                        password = ""
+                        feedback = "تم تسجيل الدخول. ستُستعاد الجلسة تلقائيًا عند فتح الدليل لاحقًا."
+                    })
+                }
+            )
         } else {
             OutlinedTextField(organizationId,{organizationId=it.trim()},Modifier.fillMaxWidth(),label={Text("معرّف المؤسسة UUID")},singleLine=true)
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(4.dp)) {
