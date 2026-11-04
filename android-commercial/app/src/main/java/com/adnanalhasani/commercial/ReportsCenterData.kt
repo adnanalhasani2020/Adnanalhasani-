@@ -131,6 +131,11 @@ internal fun rememberReportsCenterData(
     val activeSupplierInvoiceCandidates = cloudPurchases.activeSupplierInvoiceCandidates()
     val supplierObligationCandidates = activeSupplierInvoiceCandidates.activeSupplierObligationCandidates()
     val supplierObligationInputs = supplierObligationCandidates.toSupplierObligationInputs(endExclusive)
+    val supplierMovementInputs = buildSupplierMovementInputs(
+        purchases = cloudPurchases,
+        payments = cloudSupplierPayments,
+        supplierFilter = supplierFilter
+    )
     val supplierInvoiceDetailError = reportSupplierInvoiceDetailValidationError(
         cloudMode = cloudMode,
         purchasesLoadError = purchasesLoadError,
@@ -157,6 +162,13 @@ internal fun rememberReportsCenterData(
         purchasesLoadError = purchasesLoadError,
         supplierObligationCandidates = supplierObligationCandidates,
         supplierObligationInputs = supplierObligationInputs
+    )
+    val supplierMovementError = reportSupplierMovementValidationError(
+        purchasesLoadError = purchasesLoadError,
+        supplierPaymentsLoadError = supplierPaymentsLoadError,
+        movements = supplierMovementInputs,
+        startMillis = startMillis,
+        endExclusive = endExclusive
     )
     val supplierLiabilityAgingReport = remember(cloudPurchases, today, cloudMode, purchasesLoadError, supplierInvoiceDetailError) {
         buildSupplierLiabilityAgingReport(
@@ -317,7 +329,7 @@ internal fun rememberReportsCenterData(
             "عمر مستحقات الموردين حسب تاريخ الفاتورة" -> supplierLiabilityAgingError
             "أعمار مستحقات الموردين" -> supplierDueDateAgingError
             "فروقات أسعار فواتير الموردين" -> supplierInvoiceVarianceError
-            "كشف حركات الموردين" -> purchasesLoadError.ifBlank { supplierPaymentsLoadError }
+            "كشف حركات الموردين" -> supplierMovementError
             "الدفعات السحابية الناجحة", "سندات القبض والصرف" -> paymentsLoadError
             "التحصيل حسب طريقة الدفع" -> paymentMethodAnalysisError
             "التحصيل حسب العميل" -> customerCollectionsError
@@ -465,7 +477,8 @@ internal fun rememberReportsCenterData(
         endExclusive = endExclusive,
         startText = startText,
         endText = endText,
-        supplierObligationInputs = supplierObligationInputs
+        supplierObligationInputs = supplierObligationInputs,
+        supplierMovementInputs = supplierMovementInputs
     ) ?: salesRowsCalculation.getOrNull() ?: when (selectedReport) {
         "أداء المبيعات حسب المستخدم" -> buildUserSalesPerformanceRows(userSalesPerformanceCalculation, userSalesPerformanceError)
         "اتجاه المبيعات اليومي" -> buildDailySalesTrendRows(dailySalesTrendCalculation, dailySalesTrendError)
