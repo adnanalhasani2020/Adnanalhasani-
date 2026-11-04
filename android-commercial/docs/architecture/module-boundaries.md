@@ -227,3 +227,6 @@ The catalog screen owns interaction and request orchestration. JSON-to-domain ma
 
 
 - `ReportsResultSection.kt` owns read-only result cards, empty-state presentation, and export/print action composition. It consumes already-filtered rows and uses callbacks for export state and feedback; file creation/share lifecycle and rendering stay in their dedicated owners.
+
+
+- `ReportsFilterSection.kt` owns only report filter controls. It does not apply filters or widen report queries; the screen/report row pipeline remains responsible for filtering and ledger account scoping.
