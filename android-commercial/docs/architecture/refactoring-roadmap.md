@@ -119,3 +119,6 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 
 
 - Continued report decomposition: extracted the shared report row model and inventory report mappers to `ReportInventoryLines.kt`, then extracted cash-flow and tax/discount report row assembly to `ReportFinancialLines.kt`. Report selection, loading, filters, Compose presentation, and export integration remain in `ReportsCenterScreen.kt`.
+
+
+- Continued catalog decomposition: extracted the activity hierarchy node model and pure sector/parent-chain/business-level selector helpers into `CatalogActivityHierarchy.kt`; updated the selector contract test to follow the new owner. Catalog data loading, RPCs, and Compose interactions remain in `CatalogScreen.kt`.
