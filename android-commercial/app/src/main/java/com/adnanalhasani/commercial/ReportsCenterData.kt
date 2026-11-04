@@ -232,44 +232,15 @@ internal fun rememberReportsCenterData(
         )
     }
     val taxDiscountSummaryError = taxDiscountSummaryReport.error
-    val costProfitError = when {
-        !cloudMode -> "تكلفة الربح التاريخية تتطلب سجلات تكلفة السحابة."
-        salesDocumentsLoadError.isNotBlank() -> salesDocumentsLoadError
-        returnsLoadError.isNotBlank() -> returnsLoadError
-        cloudSalesDocuments.any { doc ->
-            doc.saleStatus.equals("completed", true) &&
-                reportDateMillis(doc.createdAt)?.let { it >= startMillis && it < endExclusive } == true &&
-                (doc.lines.isEmpty() || doc.lines.any { it.costTotalMinor == null || it.costTotalMinor < 0L })
-        } -> "توجد بنود مبيعات في الفترة بلا تكلفة تاريخية مسجلة؛ لا يمكن اعتماد الربح."
-        cloudReturns.any { saleReturn ->
-            saleReturn.status.equals("completed", true) &&
-                reportDateMillis(saleReturn.completedAt)?.let { it >= startMillis && it < endExclusive } == true &&
-                (saleReturn.approvedRefundMinor == null ||
-                    saleReturn.items.any { it.restockedQuantity > 0 && (it.saleItemCostTotalMinor == null || it.saleItemQuantityInStockUnits <= 0L) })
-        } -> "توجد مرتجعات مكتملة تفتقد مبلغ اعتماد أو تكلفة البند التاريخية اللازمة لتسوية الربح."
-        cloudReturns.any { saleReturn ->
-            saleReturn.status.equals("completed", true) &&
-                reportDateMillis(saleReturn.completedAt)?.let { it >= startMillis && it < endExclusive } == true &&
-                cloudSalesDocuments.none { it.id == saleReturn.saleId && it.currencyCode == saleReturn.currencyCode }
-        } -> "تعذر مطابقة عملة أو فاتورة أحد المرتجعات مع سجل البيع الأصلي؛ تم حجب الربح."
-        cloudReturns.any { saleReturn ->
-            saleReturn.status.equals("completed", true) &&
-                reportDateMillis(saleReturn.completedAt)?.let { it >= startMillis && it < endExclusive } == true &&
-                cloudSalesDocuments.any { it.id == saleReturn.saleId && it.taxMinor > 0L }
-        } -> "توجد مرتجعات لفواتير ضريبية؛ لم تُفصل حصة الضريبة في مبلغ الاسترداد، لذلك حُجب صافي الربح."
-        runCatching {
-            val periodSales = cloudSalesDocuments.filter { doc ->
-                doc.saleStatus.equals("completed", true) &&
-                    reportDateMillis(doc.createdAt)?.let { it >= startMillis && it < endExclusive } == true
-            }
-            val periodReturns = cloudReturns.filter { saleReturn ->
-                saleReturn.status.equals("completed", true) &&
-                    reportDateMillis(saleReturn.completedAt)?.let { it >= startMillis && it < endExclusive } == true
-            }
-            calculateCostProfitReportTotals(periodSales.map { it.toCostProfitInput() }, periodReturns.map { it.toCostProfitInput() })
-        }.isFailure -> "تجاوزت مجاميع المبيعات أو التكلفة أو المرتجعات نطاق الأرقام الدقيق، أو تعذر تسويتها؛ تم حجب الربح بدل إظهار إجمالي ملتف أو ناقص."
-        else -> ""
-    }
+    val costProfitError = reportCostProfitValidationError(
+        cloudMode = cloudMode,
+        salesDocumentsLoadError = salesDocumentsLoadError,
+        returnsLoadError = returnsLoadError,
+        cloudSalesDocuments = cloudSalesDocuments,
+        cloudReturns = cloudReturns,
+        startMillis = startMillis,
+        endExclusive = endExclusive
+    )
     val customerOperationalStatementError = when {
         !cloudMode -> "كشف العميل التشغيلي يتطلب فواتير السحابة والتحصيلات والمرتجعات."
         salesDocumentsLoadError.isNotBlank() -> salesDocumentsLoadError
