@@ -40,12 +40,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.io.FileOutputStream
 import java.io.OutputStreamWriter
-import java.time.Instant
-import java.time.LocalDate
-import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import java.util.Currency
 import java.util.concurrent.Executors
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -57,21 +53,6 @@ private val ReportMuted = Color(0xFF71817B)
 private val ReportBorder = Color(0xFFE5EBE8)
 private val ReportIo = Executors.newSingleThreadExecutor()
 private val ReportMain = Handler(Looper.getMainLooper())
-
-private fun reportCurrencyScale(code: String): Int =
-    runCatching { Currency.getInstance(code).defaultFractionDigits.coerceIn(0, 6) }.getOrDefault(0)
-
-internal fun reportMoney(amount: Long, currency: String, cloudMinorUnits: Boolean): String {
-    val value = if (cloudMinorUnits) java.math.BigDecimal.valueOf(amount).movePointLeft(reportCurrencyScale(currency))
-    else java.math.BigDecimal.valueOf(amount)
-    return value.setScale(if (cloudMinorUnits) reportCurrencyScale(currency) else 0, java.math.RoundingMode.HALF_UP)
-        .toPlainString() + " " + currency
-}
-
-internal fun reportDateMillis(value: String): Long? =
-    runCatching { Instant.parse(value).toEpochMilli() }.getOrNull()
-        ?: runCatching { LocalDate.parse(value.take(10)).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() }.getOrNull()
-
 
 @Composable
 internal fun ReportsCenterScreen(
