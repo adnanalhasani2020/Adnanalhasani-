@@ -301,3 +301,6 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 
 
 - Extracted full customer/supplier control-account statements and the operational customer statement into `ReportPartyStatementRows.kt`; added a source-ownership test. Sales, purchase, supplier operational movement, and expense row families remain in the main dispatch and are the next extraction targets.
+
+
+- Extracted sales summaries, invoice details/lines, customer/item/payment breakdowns, tax/discount rows, average invoice values, and period comparisons into `ReportSalesRows.kt`; added a source-ownership test. User-performance/daily-trend/aging/collection cases and purchase/expense/return families remain for subsequent extraction.
