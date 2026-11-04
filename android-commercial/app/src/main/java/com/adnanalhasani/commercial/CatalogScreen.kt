@@ -41,6 +41,7 @@ private val catalogMain = Handler(Looper.getMainLooper())
 @Composable
 internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct, String, String, String, String, String) -> Unit, initialOrganizationId: String = "", initialActivityCode: String = "", requireCloudInventoryContext: Boolean = false) {
     val context = LocalContext.current
+    val productFormState = remember { CatalogProductFormState() }
     var email by remember { mutableStateOf("") }; var password by remember { mutableStateOf("") }
     var token by remember { mutableStateOf<String?>(null) }; var signedInUserId by remember { mutableStateOf("") }; var organizationId by remember { mutableStateOf(initialOrganizationId) }
     var section by remember { mutableStateOf("browse") }
@@ -119,31 +120,31 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     val categoryNameArState = remember { mutableStateOf("") }; var categoryNameAr by categoryNameArState; val categoryNameEnState = remember { mutableStateOf("") }; var categoryNameEn by categoryNameEnState
     val categoryDescriptionArState = remember { mutableStateOf("") }; var categoryDescriptionAr by categoryDescriptionArState; val categoryDescriptionEnState = remember { mutableStateOf("") }; var categoryDescriptionEn by categoryDescriptionEnState; val categoryTranslationsState = remember { mutableStateOf("") }; var categoryTranslations by categoryTranslationsState
 
-    var nameAr by remember { mutableStateOf("") }; var nameEn by remember { mutableStateOf("") }
-    var descriptionAr by remember { mutableStateOf("") }; var descriptionEn by remember { mutableStateOf("") }; var extraTranslations by remember { mutableStateOf("") }
-    var productCategory by remember { mutableStateOf("") }; var itemType by remember { mutableStateOf("product") }
-    var unitCode by remember { mutableStateOf("EA") }; var barcode by remember { mutableStateOf("") }
-    var brand by remember { mutableStateOf("") }; var manufacturer by remember { mutableStateOf("") }
-    var origin by remember { mutableStateOf("") }; var model by remember { mutableStateOf("") }; var partNumber by remember { mutableStateOf("") }
-    var imageUrl by remember { mutableStateOf("") }; var imageAlt by remember { mutableStateOf("") }
-    var ingredients by remember { mutableStateOf("") }; var materialComposition by remember { mutableStateOf("") }
-    var recipe by remember { mutableStateOf("") }; var recipeIngredientsText by remember { mutableStateOf("") }; var recipeYieldQty by remember { mutableStateOf("") }; var recipeYieldUnit by remember { mutableStateOf("EA") }; var recipePrepMinutes by remember { mutableStateOf("") }; var recipeCookMinutes by remember { mutableStateOf("") }; var recipeSource by remember { mutableStateOf("") }; var recipeAllergenNotes by remember { mutableStateOf("") }; var specifications by remember { mutableStateOf("") }; var customAttributesJson by remember { mutableStateOf("{}") }
-    var allergens by remember { mutableStateOf("") }; var storage by remember { mutableStateOf("") }
-    var usage by remember { mutableStateOf("") }; var warnings by remember { mutableStateOf("") }
-    var shelfLife by remember { mutableStateOf("") }; var expiryRequired by remember { mutableStateOf(false) }
-    var batchTracked by remember { mutableStateOf(false) }; var serialTracked by remember { mutableStateOf(false) }
-    var prescriptionOnly by remember { mutableStateOf(false) }
-    var extraUnitCode by remember { mutableStateOf("") }; var extraUnitQty by remember { mutableStateOf("1") }
-    var extraUnitBarcode by remember { mutableStateOf("") }; var extraUnitSku by remember { mutableStateOf("") }; var extraUnitPackage by remember { mutableStateOf("") }; var extraUnitNetQuantity by remember { mutableStateOf("") }; var extraUnitNetUnitCode by remember { mutableStateOf("") }; var extraUnitImageUrl by remember { mutableStateOf("") }; var extraUnitsText by remember { mutableStateOf("") }
-    var currencyCode by remember { mutableStateOf("YER") }; var sectors by remember { mutableStateOf("retail") }
-    var levels by remember { mutableStateOf("shop") }; var regionCountry by remember { mutableStateOf("") }
-    var regionCode by remember { mutableStateOf("") }; var regionCity by remember { mutableStateOf("") }
-    var regionExcluded by remember { mutableStateOf(false) }; var extraRegionRules by remember { mutableStateOf("") }
-    var rulingDomain by remember { mutableStateOf("religious") }; var authority by remember { mutableStateOf("") }
-    var religion by remember { mutableStateOf("") }; var jurisdiction by remember { mutableStateOf("") }
-    var rulingOutcome by remember { mutableStateOf("unknown") }; var rulingRationale by remember { mutableStateOf("") }
-    var rulingSourceTitle by remember { mutableStateOf("") }; var rulingSourceUrl by remember { mutableStateOf("") }
-    var rulingConfidence by remember { mutableStateOf("unverified") }; var extraRulingsText by remember { mutableStateOf("") }
+    var nameAr by productFormState::nameAr; var nameEn by productFormState::nameEn
+    var descriptionAr by productFormState::descriptionAr; var descriptionEn by productFormState::descriptionEn; var extraTranslations by productFormState::extraTranslations
+    var productCategory by productFormState::productCategory; var itemType by productFormState::itemType
+    var unitCode by productFormState::unitCode; var barcode by productFormState::barcode
+    var brand by productFormState::brand; var manufacturer by productFormState::manufacturer
+    var origin by productFormState::origin; var model by productFormState::model; var partNumber by productFormState::partNumber
+    var imageUrl by productFormState::imageUrl; var imageAlt by productFormState::imageAlt
+    var ingredients by productFormState::ingredients; var materialComposition by productFormState::materialComposition
+    var recipe by productFormState::recipe; var recipeIngredientsText by productFormState::recipeIngredientsText; var recipeYieldQty by productFormState::recipeYieldQty; var recipeYieldUnit by productFormState::recipeYieldUnit; var recipePrepMinutes by productFormState::recipePrepMinutes; var recipeCookMinutes by productFormState::recipeCookMinutes; var recipeSource by productFormState::recipeSource; var recipeAllergenNotes by productFormState::recipeAllergenNotes; var specifications by productFormState::specifications; var customAttributesJson by productFormState::customAttributesJson
+    var allergens by productFormState::allergens; var storage by productFormState::storage
+    var usage by productFormState::usage; var warnings by productFormState::warnings
+    var shelfLife by productFormState::shelfLife; var expiryRequired by productFormState::expiryRequired
+    var batchTracked by productFormState::batchTracked; var serialTracked by productFormState::serialTracked
+    var prescriptionOnly by productFormState::prescriptionOnly
+    var extraUnitCode by productFormState::extraUnitCode; var extraUnitQty by productFormState::extraUnitQty
+    var extraUnitBarcode by productFormState::extraUnitBarcode; var extraUnitSku by productFormState::extraUnitSku; var extraUnitPackage by productFormState::extraUnitPackage; var extraUnitNetQuantity by productFormState::extraUnitNetQuantity; var extraUnitNetUnitCode by productFormState::extraUnitNetUnitCode; var extraUnitImageUrl by productFormState::extraUnitImageUrl; var extraUnitsText by productFormState::extraUnitsText
+    var currencyCode by productFormState::currencyCode; var sectors by productFormState::sectors
+    var levels by productFormState::levels; var regionCountry by productFormState::regionCountry
+    var regionCode by productFormState::regionCode; var regionCity by productFormState::regionCity
+    var regionExcluded by productFormState::regionExcluded; var extraRegionRules by productFormState::extraRegionRules
+    var rulingDomain by productFormState::rulingDomain; var authority by productFormState::authority
+    var religion by productFormState::religion; var jurisdiction by productFormState::jurisdiction
+    var rulingOutcome by productFormState::rulingOutcome; var rulingRationale by productFormState::rulingRationale
+    var rulingSourceTitle by productFormState::rulingSourceTitle; var rulingSourceUrl by productFormState::rulingSourceUrl
+    var rulingConfidence by productFormState::rulingConfidence; var extraRulingsText by productFormState::extraRulingsText
 
     val unitShortCodeState = remember { mutableStateOf("") }; var unitShortCode by unitShortCodeState; val unitNameArState = remember { mutableStateOf("") }; var unitNameAr by unitNameArState
     val unitNameEnState = remember { mutableStateOf("") }; var unitNameEn by unitNameEnState; val unitDimensionState = remember { mutableStateOf("count") }; var unitDimension by unitDimensionState
@@ -1214,103 +1215,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                 }
                 "category" -> CatalogCategorySection(categoryCodeState, parentCodeState, categoryNameArState, categoryNameEnState, categoryDescriptionArState, categoryDescriptionEnState, categoryTranslationsState, categories, locale, busy, ::createCategory, ::loadDirectories)
                 "unit" -> CatalogUnitSection(unitShortCodeState, unitNameArState, unitNameEnState, unitDimensionState, unitBaseCodeState, unitFactorState, unitDecimalsState, unitTranslationsState, directoryUnits, busy, ::createUnit, ::loadDirectories)
-                "product" -> LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(bottom=20.dp)) {
-                    item { Text("بيانات الصنف الأساسية",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold) }
-                    item { OutlinedTextField(nameAr,{nameAr=it},Modifier.fillMaxWidth(),label={Text("اسم الصنف بالعربية *")},singleLine=true) }
-                    item { OutlinedTextField(nameEn,{nameEn=it},Modifier.fillMaxWidth(),label={Text("Product name in English *")},singleLine=true) }
-                    item {
-                        if(categories.isEmpty()) OutlinedTextField(productCategory,{productCategory=it.uppercase()},Modifier.fillMaxWidth(),label={Text("كود التصنيف * (حدّث الأدلة أولًا للاختيار)")},singleLine=true)
-                        else {
-                            var expanded by remember { mutableStateOf(false) }
-                            ExposedDropdownMenuBox(expanded=expanded,onExpandedChange={expanded=it}) {
-                                OutlinedTextField(value=categories.firstOrNull{it.code==productCategory}?.let{"${it.code} — ${it.nameAr}"} ?: productCategory,
-                                    onValueChange={},readOnly=true,label={Text("التصنيف *")},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expanded=expanded)},
-                                    modifier=Modifier.fillMaxWidth().menuAnchor())
-                                ExposedDropdownMenu(expanded=expanded,onDismissRequest={expanded=false}) {
-                                    categories.forEach { cat -> DropdownMenuItem(text={Text("${cat.code} — ${cat.localizedName.ifBlank { cat.nameAr }}")},onClick={productCategory=cat.code;expanded=false}) }
-                                }
-                            }
-                        }
-                    }
-                    item { OutlinedTextField(itemType,{itemType=it},Modifier.fillMaxWidth(),label={Text("نوع العنصر: product/service/digital/material/asset")},singleLine=true) }
-                    item { OutlinedTextField(descriptionAr,{descriptionAr=it},Modifier.fillMaxWidth(),label={Text("الوصف العربي")}) }
-                    item { OutlinedTextField(descriptionEn,{descriptionEn=it},Modifier.fillMaxWidth(),label={Text("English description")}) }
-                    item { OutlinedTextField(extraTranslations,{extraTranslations=it},Modifier.fillMaxWidth().heightIn(min=90.dp),label={Text("ترجمات إضافية لكل لغة — سطر لكل ترجمة: locale|field|value")},placeholder={Text("fr|name|Nom du produit\nfr|description|Description du produit")}) }
-                    item { Text("الباركود والوحدات والعبوات",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold) }
-                    item {
-                        if(directoryUnits.isEmpty()) OutlinedTextField(unitCode,{unitCode=it.uppercase()},Modifier.fillMaxWidth(),label={Text("وحدة الأساس * (حدّث الأدلة أولًا للاختيار)")},singleLine=true)
-                        else {
-                            var expanded by remember { mutableStateOf(false) }
-                            ExposedDropdownMenuBox(expanded=expanded,onExpandedChange={expanded=it}) {
-                                OutlinedTextField(value=directoryUnits.firstOrNull{it.code==unitCode}?.let{"${it.code} — ${it.nameAr}"} ?: unitCode,
-                                    onValueChange={},readOnly=true,label={Text("وحدة الأساس *")},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expanded=expanded)},
-                                    modifier=Modifier.fillMaxWidth().menuAnchor())
-                                ExposedDropdownMenu(expanded=expanded,onDismissRequest={expanded=false}) {
-                                    directoryUnits.forEach { unit -> DropdownMenuItem(text={Text("${unit.code} — ${unit.nameAr} (${unit.dimension})")},onClick={unitCode=unit.code;expanded=false}) }
-                                }
-                            }
-                        }
-                    }
-                    item { OutlinedTextField(barcode,{barcode=it.filter(Char::isDigit).take(14)},Modifier.fillMaxWidth(),label={Text("GTIN / الباركود الأساسي (8–14 رقمًا)")},singleLine=true) }
-                    item { OutlinedTextField(extraUnitCode,{extraUnitCode=it.uppercase()},Modifier.fillMaxWidth(),label={Text("وحدة عبوة إضافية (اختياري)")},singleLine=true) }
-                    item { OutlinedTextField(extraUnitQty,{extraUnitQty=it},Modifier.fillMaxWidth(),label={Text("كم وحدة أساس داخل العبوة")},singleLine=true) }
-                    item { OutlinedTextField(extraUnitPackage,{extraUnitPackage=it},Modifier.fillMaxWidth(),label={Text("اسم العبوة (كرتون/علبة/شريط)")},singleLine=true) }
-                    item { OutlinedTextField(extraUnitBarcode,{extraUnitBarcode=it},Modifier.fillMaxWidth(),label={Text("باركود العبوة الإضافية")},singleLine=true) }
-                    item { OutlinedTextField(extraUnitSku,{extraUnitSku=it},Modifier.fillMaxWidth(),label={Text("SKU للعبوة الإضافية")},singleLine=true) }
-                    item { Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) { OutlinedTextField(extraUnitNetQuantity,{extraUnitNetQuantity=it},Modifier.weight(1f),label={Text("الكمية الصافية")},singleLine=true); OutlinedTextField(extraUnitNetUnitCode,{extraUnitNetUnitCode=it.uppercase()},Modifier.weight(1f),label={Text("وحدة الصافي")},singleLine=true) } }
-                    item { OutlinedTextField(extraUnitImageUrl,{extraUnitImageUrl=it},Modifier.fillMaxWidth(),label={Text("رابط صورة العبوة HTTPS (اختياري)")},singleLine=true) }
-                    item { OutlinedTextField(extraUnitsText,{extraUnitsText=it},Modifier.fillMaxWidth().heightIn(min=80.dp),label={Text("عبوات إضافية متعددة — سطر: unit_code|role|qty_in_base|barcode|sku|package_name|net_quantity|net_unit_code|image_url")}) }
-                    item { Text("العلامة والمصنع والمواصفات",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold) }
-                    item { OutlinedTextField(brand,{brand=it},Modifier.fillMaxWidth(),label={Text("العلامة التجارية")},singleLine=true) }
-                    item { OutlinedTextField(manufacturer,{manufacturer=it},Modifier.fillMaxWidth(),label={Text("الشركة المصنعة")},singleLine=true) }
-                    item { OutlinedTextField(origin,{origin=it},Modifier.fillMaxWidth(),label={Text("بلد الصناعة")},singleLine=true) }
-                    item { OutlinedTextField(model,{model=it},Modifier.fillMaxWidth(),label={Text("رقم الطراز")},singleLine=true) }
-                    item { OutlinedTextField(partNumber,{partNumber=it},Modifier.fillMaxWidth(),label={Text("رقم القطعة")},singleLine=true) }
-                    item { OutlinedTextField(imageUrl,{imageUrl=it},Modifier.fillMaxWidth(),label={Text("رابط صورة HTTPS خارجي")},singleLine=true) }
-                    item { OutlinedTextField(imageAlt,{imageAlt=it},Modifier.fillMaxWidth(),label={Text("وصف الصورة")},singleLine=true) }
-                    item { OutlinedTextField(ingredients,{ingredients=it},Modifier.fillMaxWidth(),label={Text("المكونات مفصولة بفواصل")}) }
-                    item { OutlinedTextField(materialComposition,{materialComposition=it},Modifier.fillMaxWidth(),label={Text("تركيب المواد مفصول بفواصل")}) }
-                    item { OutlinedTextField(recipe,{recipe=it},Modifier.fillMaxWidth(),label={Text("الوصفة / طريقة التحضير")}) }
-                    item { OutlinedTextField(recipeIngredientsText,{recipeIngredientsText=it},Modifier.fillMaxWidth().heightIn(min=90.dp),label={Text("مكونات الوصفة — سطر: name|quantity|unit_code|note")}) }
-                    item { OutlinedTextField(recipeYieldQty,{recipeYieldQty=it},Modifier.fillMaxWidth(),label={Text("كمية الناتج من الوصفة")},singleLine=true) }
-                    item { OutlinedTextField(recipeYieldUnit,{recipeYieldUnit=it.uppercase()},Modifier.fillMaxWidth(),label={Text("وحدة الناتج")},singleLine=true) }
-                    item { Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) { OutlinedTextField(recipePrepMinutes,{recipePrepMinutes=it.filter(Char::isDigit)},Modifier.weight(1f),label={Text("دقائق التحضير")},singleLine=true); OutlinedTextField(recipeCookMinutes,{recipeCookMinutes=it.filter(Char::isDigit)},Modifier.weight(1f),label={Text("دقائق الطبخ")},singleLine=true) } }
-                    item { OutlinedTextField(recipeAllergenNotes,{recipeAllergenNotes=it},Modifier.fillMaxWidth(),label={Text("ملاحظات الحساسية للوصفة")}) }
-                    item { OutlinedTextField(recipeSource,{recipeSource=it},Modifier.fillMaxWidth(),label={Text("مصدر الوصفة / المرجع")},singleLine=true) }
-                    item { OutlinedTextField(specifications,{specifications=it},Modifier.fillMaxWidth(),label={Text("المواصفات الإضافية")}) }
-                    item { OutlinedTextField(customAttributesJson,{customAttributesJson=it},Modifier.fillMaxWidth().heightIn(min=90.dp),label={Text("حقول مخصصة إضافية (JSON object)")},placeholder={Text("{\"color\":\"black\",\"model\":\"X1\"}")}) }
-                    item { OutlinedTextField(allergens,{allergens=it},Modifier.fillMaxWidth(),label={Text("مسببات الحساسية مفصولة بفواصل")}) }
-                    item { OutlinedTextField(storage,{storage=it},Modifier.fillMaxWidth(),label={Text("تعليمات التخزين")}) }
-                    item { OutlinedTextField(usage,{usage=it},Modifier.fillMaxWidth(),label={Text("تعليمات الاستخدام")}) }
-                    item { OutlinedTextField(warnings,{warnings=it},Modifier.fillMaxWidth(),label={Text("التحذيرات")}) }
-                    item { OutlinedTextField(shelfLife,{shelfLife=it.filter(Char::isDigit).take(6)},Modifier.fillMaxWidth(),label={Text("مدة الصلاحية بالأيام")},singleLine=true) }
-                    item { Row(verticalAlignment=Alignment.CenterVertically) { Checkbox(expiryRequired,{expiryRequired=it}); Text("يتطلب تاريخ صلاحية") } }
-                    item { Row(verticalAlignment=Alignment.CenterVertically) { Checkbox(batchTracked,{batchTracked=it}); Text("تتبع رقم التشغيلة") } }
-                    item { Row(verticalAlignment=Alignment.CenterVertically) { Checkbox(serialTracked,{serialTracked=it}); Text("تتبع الرقم التسلسلي") } }
-                    item { Row(verticalAlignment=Alignment.CenterVertically) { Checkbox(prescriptionOnly,{prescriptionOnly=it}); Text("يتطلب وصفة طبية (بعد التحقق)") } }
-                    item { OutlinedTextField(currencyCode,{currencyCode=it.uppercase()},Modifier.fillMaxWidth(),label={Text("رمز العملة لحساب المؤسسة")},singleLine=true) }
-                    item { Text("القطاعات ومستويات النشاط والمناطق",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold) }
-                    item { OutlinedTextField(sectors,{sectors=it},Modifier.fillMaxWidth(),label={Text("القطاعات مفصولة بفواصل (فارغ = عام)")}) }
-                    item { OutlinedTextField(levels,{levels=it},Modifier.fillMaxWidth(),label={Text("مستويات النشاط مفصولة بفواصل (فارغ = عام)")}) }
-                    item { OutlinedTextField(regionCountry,{regionCountry=it.uppercase()},Modifier.fillMaxWidth(),label={Text("دولة الإظهار (اختياري)")},singleLine=true) }
-                    item { OutlinedTextField(regionCode,{regionCode=it},Modifier.fillMaxWidth(),label={Text("رمز المنطقة / المحافظة")},singleLine=true) }
-                    item { OutlinedTextField(regionCity,{regionCity=it},Modifier.fillMaxWidth(),label={Text("المدينة")},singleLine=true) }
-                    item { Row(verticalAlignment=Alignment.CenterVertically) { Checkbox(regionExcluded,{regionExcluded=it}); Text("استثناء هذه المنطقة بدل تضمينها") } }
-                    item { OutlinedTextField(extraRegionRules,{extraRegionRules=it},Modifier.fillMaxWidth().heightIn(min=80.dp),label={Text("مناطق إضافية متعددة — سطر: country|region|city|include أو exclude")}) }
-                    item { Text("الحكم الديني / الطبي / التنظيمي (اختياري، لا يُعد فتوى أو تشخيصًا)",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold) }
-                    item { OutlinedTextField(rulingDomain,{rulingDomain=it},Modifier.fillMaxWidth(),label={Text("النطاق: religious / medical / regulatory / dietary")},singleLine=true) }
-                    item { OutlinedTextField(authority,{authority=it},Modifier.fillMaxWidth(),label={Text("رمز الجهة أو المرجع (مطلوب لتسجيل الحكم)")},singleLine=true) }
-                    item { OutlinedTextField(religion,{religion=it},Modifier.fillMaxWidth(),label={Text("رمز الدين عند الحكم الديني")},singleLine=true) }
-                    item { OutlinedTextField(jurisdiction,{jurisdiction=it},Modifier.fillMaxWidth(),label={Text("الدولة / الاختصاص القضائي")},singleLine=true) }
-                    item { OutlinedTextField(rulingOutcome,{rulingOutcome=it},Modifier.fillMaxWidth(),label={Text("النتيجة: permitted/prohibited/conditional/unknown/...")},singleLine=true) }
-                    item { OutlinedTextField(rulingRationale,{rulingRationale=it},Modifier.fillMaxWidth(),label={Text("التعليل / الشروط")}) }
-                    item { OutlinedTextField(rulingSourceTitle,{rulingSourceTitle=it},Modifier.fillMaxWidth(),label={Text("عنوان المصدر")},singleLine=true) }
-                    item { OutlinedTextField(rulingSourceUrl,{rulingSourceUrl=it},Modifier.fillMaxWidth(),label={Text("رابط المصدر HTTPS")},singleLine=true) }
-                    item { OutlinedTextField(rulingConfidence,{rulingConfidence=it},Modifier.fillMaxWidth(),label={Text("الحالة الأولية: unverified أو reported؛ المراجعة لها إجراء منفصل")},singleLine=true) }
-                    item { OutlinedTextField(extraRulingsText,{extraRulingsText=it},Modifier.fillMaxWidth().heightIn(min=90.dp),label={Text("أحكام إضافية متعددة — domain|authority|religion|jurisdiction|outcome|source_title|source_url|confidence|rationale")}) }
-                    item { Button(onClick={createProduct()},enabled=!busy && nameAr.isNotBlank() && nameEn.isNotBlank() && productCategory.isNotBlank() && unitCode.isNotBlank(),modifier=Modifier.fillMaxWidth()) { Text("حفظ الصنف وكل تفاصيله") } }
-                    item { Text("يُحفظ سجل الصنف والوحدات والاستهداف والأحكام في معاملة واحدة. لا يُعتمد أي حكم طبي أو ديني تلقائيًا؛ ارفع الثقة بعد مراجعة مصدر موثوق.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
-                }
+                "product" -> CatalogProductFormSection(productFormState, categories, directoryUnits, busy, ::createProduct)
                 "invoice_transfer" -> LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(bottom=20.dp)) {
                     item { Text("تحويل فاتورة البيع إلى أمر شراء لدى المؤسسة المستقبلة",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold) }
                     item { Text("أدخل UUID فاتورة البيع المكتملة وUUID المؤسسة المستقبلة. لن يُنشأ أمر الشراء إلا بعد موافقة مالك/مدير المؤسسة المستقبلة.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
