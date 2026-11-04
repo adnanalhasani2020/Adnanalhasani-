@@ -115,3 +115,14 @@ def test_catalog_invoice_and_transfer_response_mappers_have_dedicated_owner():
     assert "internal fun parsePendingCatalogTransfers(raw: String)" in mapper
     assert "InvoicePurchaseRequestRow(row.optString" not in screen
     assert "PendingTransfer(v.optString" not in screen
+
+
+def test_catalog_invoice_mapping_response_has_a_dedicated_mapper():
+    screen = SCREEN.read_text(encoding="utf-8")
+    mapper = (ANDROID / "CatalogInvoiceMappingMapper.kt").read_text(encoding="utf-8")
+
+    assert "parseCatalogInvoiceMapping(raw)" in screen
+    assert "internal fun parseCatalogInvoiceMapping(raw: String)" in mapper
+    assert "invoiceMappingLines = mapping.lines" in screen
+    assert "InvoicePurchaseUnmappedLine(row.optString" not in screen
+    assert "CatalogWarehouseOption(row.optString" not in screen
