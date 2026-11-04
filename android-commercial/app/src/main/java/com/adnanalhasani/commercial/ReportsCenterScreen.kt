@@ -1,7 +1,6 @@
 package com.adnanalhasani.commercial
 
 import android.content.Context
-import android.content.Intent
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
@@ -14,11 +13,8 @@ import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextDirectionHeuristics
 import android.text.TextPaint
-import android.net.Uri
 import android.os.CancellationSignal
 import android.os.ParcelFileDescriptor
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -37,7 +33,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.io.FileOutputStream
-import java.io.OutputStreamWriter
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -1326,40 +1321,19 @@ internal fun ReportsCenterScreen(
             (currencyFilter.isBlank() || row.currency.contains(currencyFilter.trim(), true)) &&
             (movementStatement || statusFilter.isBlank() || row.status.contains(statusFilter.trim(), true))
     }
-    val csvLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri: Uri? ->
-        if (uri != null) runCatching {
-            require(!dateError) { "لا يمكن تصدير تقرير بفترة غير صالحة." }
-            require(!cloudMode || (!cloudLoading && selectedReportSourceError.isBlank())) { "تعذر التصدير لأن مصدر هذا التقرير غير مكتمل." }
-            context.contentResolver.openOutputStream(uri)?.use { stream ->
-                OutputStreamWriter(stream, Charsets.UTF_8).use { writer ->
-                    writer.write("\uFEFF")
-                    writer.write(exportRows.joinToString("\r\n") { row -> row.joinToString(",") { cell -> "\"${cell.replace("\"", "\"\"")}\"" } })
-                }
-            } ?: throw IllegalStateException("تعذر فتح ملف التصدير.")
-        }.onFailure { error = "تعذر تصدير التقرير: ${it.message ?: "خطأ غير معروف"}" }
-    }
-    val xlsxLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")) { uri: Uri? ->
-        if (uri != null) runCatching {
-            require(!dateError) { "لا يمكن تصدير تقرير بفترة غير صالحة." }
-            require(!cloudMode || (!cloudLoading && selectedReportSourceError.isBlank())) { "تعذر التصدير لأن مصدر هذا التقرير غير مكتمل." }
-            context.contentResolver.openOutputStream(uri)?.use { writeReportXlsx(it, exportRows) }
-                ?: throw IllegalStateException("تعذر فتح ملف Excel.")
-        }.onFailure { error = "تعذر تصدير XLSX: ${it.message ?: "خطأ غير معروف"}" }
-    }
-    val pdfLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri: Uri? ->
-        if (uri != null) runCatching {
-            require(!dateError) { "لا يمكن تصدير تقرير بفترة غير صالحة." }
-            require(!cloudMode || (!cloudLoading && selectedReportSourceError.isBlank())) { "تعذر التصدير لأن مصدر هذا التقرير غير مكتمل." }
-            context.contentResolver.openOutputStream(uri)?.use { writeReportPdf(it, exportRows) }
-                ?: throw IllegalStateException("تعذر فتح ملف PDF.")
-            val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                type = "application/pdf"
-                putExtra(Intent.EXTRA_STREAM, uri)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-            context.startActivity(Intent.createChooser(shareIntent, "مشاركة تقرير متجري"))
-        }.onFailure { error = "تعذر إنشاء أو مشاركة PDF: ${it.message ?: "خطأ غير معروف"}" }
-    }
+    val exportLaunchers = rememberReportsExportLaunchers(
+        context = context,
+        dateError = dateError,
+        cloudMode = cloudMode,
+        cloudLoading = cloudLoading,
+        selectedReportSourceError = selectedReportSourceError,
+        exportRows = exportRows,
+        onError = { error = it }
+    )
+    val csvLauncher = exportLaunchers.csv
+    val xlsxLauncher = exportLaunchers.xlsx
+    val pdfLauncher = exportLaunchers.pdf
+
     val currencyTotal = if (dateError || (cloudMode && (cloudLoading || salesDocumentsLoadError.isNotBlank()))) emptyMap() else if (cloudMode) inPeriodCloudSalesDocuments.groupBy { it.currencyCode.ifBlank { "غير محددة" } }.mapValues { (_, rows) -> rows.sumOf { it.totalMinor } }
         else inPeriodSales.groupBy { it.currencyCode.ifBlank { "غير محددة" } }.mapValues { (_, rows) -> rows.sumOf { it.total.toLong() } }
 
