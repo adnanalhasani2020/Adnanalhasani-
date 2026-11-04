@@ -408,3 +408,8 @@
 ### Sales report aggregate arithmetic
 - Sales summary, customer/item/payment-state breakdowns, invoice averages, and period comparisons use exact aggregation and exact differences.
 - `ReportsCenterData.kt` preflights and reuses the selected sales-row result; overflow hides the affected report and exposes an Arabic error instead of wrapping totals.
+
+
+### Party statement arithmetic validation
+- Customer and supplier control-account statements now preflight debit/credit deltas, opening balances, and period running balances with exact arithmetic before rows render.
+- Overflow produces a report-specific Arabic error and prevents partial/wrapped statement balances.

@@ -76,3 +76,13 @@ def test_operational_and_item_profitability_validations_have_single_domain_owner
         assert marker in data
     assert '"التقييم المالي الحالي للمخزون" -> when {' not in data
     assert '"التدفقات النقدية والصندوق" -> when {' not in data
+
+
+def test_party_statement_validation_owns_exact_balance_preflight():
+    data = DATA.read_text(encoding="utf-8")
+    validation = (ANDROID / "ReportPartyStatementValidation.kt").read_text(encoding="utf-8")
+    assert "reportPartyStatementArithmeticIsExact(" in validation
+    assert "startDate = startDate" in data
+    assert "endDate = endDate" in data
+    assert "reportCustomerStatementValidationError(" in data
+    assert "reportSupplierStatementValidationError(" in data
