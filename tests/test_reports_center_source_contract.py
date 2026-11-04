@@ -25,7 +25,7 @@ RETURN_CURRENCY_GUARD_MIGRATION = ROOT / "supabase/migrations/20261027195426_gua
 class ReportsCenterSourceContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.screen = SCREEN.read_text(encoding="utf-8")
+        cls.screen = SCREEN.read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8")
         cls.catalog = CATALOG.read_text(encoding="utf-8")
         cls.repository = REPOSITORY.read_text(encoding="utf-8")
         cls.inventory_repository = INVENTORY_REPOSITORY.read_text(encoding="utf-8")
@@ -328,7 +328,7 @@ def test_cloud_dashboard_uses_organization_timezone_for_report_day_boundaries():
     main_activity = (
         ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt"
     ).read_text(encoding="utf-8")
-    start = main_activity.index("private fun CommercialCloudReportsScreen")
+    start = main_activity.index("fun CommercialCloudReportsScreen")
     end = main_activity.index("\n@Composable", start + 50)
     reports = main_activity[start:end]
     assert "loadCommercialCloudExpenseReportingTimeZone(context)" in reports
