@@ -5,6 +5,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogScreen.kt"
 SECTIONS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogScreenSections.kt"
 PRODUCT_STATE = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogProductFormState.kt"
+INVOICE_STATE = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogInvoiceTransferState.kt"
 
 
 class CatalogScreenSectionsOwnershipTests(unittest.TestCase):
@@ -26,6 +27,15 @@ class CatalogScreenSectionsOwnershipTests(unittest.TestCase):
         self.assertIn("internal class CatalogProductFormState", state)
         self.assertIn("internal fun CatalogProductFormSection(", sections)
         self.assertIn("onCreateProduct: () -> Unit", sections)
+
+    def test_invoice_purchase_review_has_separate_presentation_and_state(self):
+        screen = SCREEN.read_text(encoding="utf-8")
+        sections = SECTIONS.read_text(encoding="utf-8")
+        state = INVOICE_STATE.read_text(encoding="utf-8")
+        self.assertIn('"invoice_transfer" -> CatalogInvoiceTransferSection(', screen)
+        self.assertIn("internal fun CatalogInvoiceTransferSection(", sections)
+        self.assertIn("internal class CatalogInvoiceTransferState", state)
+        self.assertIn("onReviewInvoicePurchaseRequest: (String, Boolean) -> Unit", sections)
 
     def test_transfer_presentation_is_separate_and_keeps_actions_callback_driven(self):
         screen = SCREEN.read_text(encoding="utf-8")

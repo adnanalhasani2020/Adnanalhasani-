@@ -59,7 +59,7 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 | REF-004 | Separate MainActivity composition/navigation from local legacy persistence and screens | PARTIALLY EXTRACTED | Shared and local models moved to dedicated files; next extract persistence/navigation in separate behavior-preserving slices |
 | REF-005 | Split report export infrastructure from report UI | EXTRACTED; TESTED pending CI | PDF/XLSX/print functions moved to ReportExport.kt; source-contract tests updated and XLSX unit tests added; run CI before marking tested |
 | REF-006 | Split report catalog, data builders, filters, and feature screens | OPEN | Each report family has clear owner and calculation tests |
-| REF-007 | Split catalog search, discovery, directory management, transfers, and invoice linking | IN PROGRESS — category, unit, product-authoring, and transfer presentation sections extracted; browse and invoice workflows remain in the screen | Each catalog workflow has a focused UI owner and the existing request/business rules remain unchanged |
+| REF-007 | Split catalog search, discovery, directory management, transfers, and invoice linking | IN PROGRESS — category, unit, product-authoring, invoice-review, and transfer presentation sections extracted; browse/discovery remains in the screen | Each catalog workflow has a focused UI owner and the existing request/business rules remain unchanged |
 | REF-008 | Split pure report calculations by business domain | PARTIALLY EXTRACTED; TESTS PENDING CI | Payment-request amount parsing/formatting now has its own pure Kotlin owner; formula parity tests and remaining report-domain extraction still required |
 | REF-009 | Organize existing feature files and shared UI components | OPEN | No duplicated feature or model owners |
 | REF-010 | Organize tests and update code reference | OPEN | Every feature points to focused tests and current source owner |
@@ -238,3 +238,5 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 - `CatalogScreen.kt` remains responsible for browse/discovery, product authoring, and invoice-to-purchase workflows; REF-007 remains in progress until those sections are separated and focused tests/builds pass.
 
 - Follow-up extraction: `CatalogProductFormState.kt` now owns the product-authoring form state, and `CatalogScreenSections.kt` owns its presentation. The screen retains the existing product creation action and RPC orchestration.
+
+- Follow-up extraction: `CatalogInvoiceTransferState.kt` owns invoice-review and matching UI state; `CatalogScreenSections.kt` owns the invoice-to-purchase review presentation. Request creation, approvals, matching actions, and all RPC orchestration remain in `CatalogScreen.kt`.

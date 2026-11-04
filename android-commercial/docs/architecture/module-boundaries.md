@@ -175,3 +175,5 @@ The catalog screen owns interaction and request orchestration. JSON-to-domain ma
 - The extracted sections receive state holders and callbacks; they do not own transport or business authorization.
 
 - `CatalogProductFormState.kt` owns product-authoring form state; `CatalogScreenSections.kt` owns the product form presentation. The existing create-product action remains in `CatalogScreen.kt`.
+
+- `CatalogInvoiceTransferState.kt` owns the invoice-review and matching presentation state; `CatalogScreenSections.kt` owns the invoice-to-purchase review section. Existing action functions and RPC calls remain in `CatalogScreen.kt`.
