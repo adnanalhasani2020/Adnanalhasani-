@@ -307,7 +307,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
             'ReportCatalogItem("تجميع القوائم المالية متعددة العملات"',
         ):
             with self.subTest(marker=marker):
-                self.assertIn(marker, self.screen)
+                self.assertIn(marker, self.catalog)
         self.assertIn("تاريخ الاستحقاق التعاقدي المسجل", self.screen)
         self.assertIn("يحجب التقرير إذا بقيت فاتورة مفتوحة بلا تاريخ موثق", self.screen)
         self.assertIn("لا توجد سياسة تحويل معتمدة", self.screen)
