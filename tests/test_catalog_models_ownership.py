@@ -103,3 +103,15 @@ def test_catalog_directory_response_mapping_has_a_dedicated_owner():
     assert "val directory = parseCatalogDirectory(raw)" in screen
     assert "val categoryNames=buildMap" not in screen
     assert "CatalogActivityNode(node.optString" not in screen
+
+
+def test_catalog_invoice_and_transfer_response_mappers_have_dedicated_owner():
+    screen = SCREEN.read_text(encoding="utf-8")
+    mapper = (ANDROID / "CatalogWorkflowMappers.kt").read_text(encoding="utf-8")
+
+    assert "parseInvoicePurchaseRequests(raw)" in screen
+    assert "parsePendingCatalogTransfers(raw)" in screen
+    assert "internal fun parseInvoicePurchaseRequests(raw: String)" in mapper
+    assert "internal fun parsePendingCatalogTransfers(raw: String)" in mapper
+    assert "InvoicePurchaseRequestRow(row.optString" not in screen
+    assert "PendingTransfer(v.optString" not in screen
