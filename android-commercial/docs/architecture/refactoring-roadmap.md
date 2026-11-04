@@ -220,3 +220,11 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 - Kept purchase-order validation, supplier-invoice lock checks, all REST reads and filtering, active offering/product eligibility, candidate construction, mapping selection defaults, and user feedback in `CatalogScreen.kt`.
 - Added `CatalogInvoiceMappingMapperTest.kt` for mapped fields and empty optional collections, plus a source-ownership guard.
 - No endpoint, organization/location scope, eligibility condition, invoice matching action, or inventory behavior was intentionally changed.
+
+
+## 2026-11-04 — Reports ledger-validation extraction
+
+- Extracted the financial-statement source validation from `ReportsCenterScreen.kt` into `ReportLedgerValidation.kt`.
+- Kept cloud data loading, Compose state, filter state, report selection, calculations, and rendering in their existing owners.
+- Added `ReportLedgerValidationTest.kt` covering fail-closed validation and the valid balanced-ledger case.
+- The extraction preserves validation ordering and all existing checks; it does not alter SQL/RPC contracts or financial formulas.
