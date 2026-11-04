@@ -20,6 +20,7 @@ internal fun CatalogMarketDiscoverySection(
     state: CatalogMarketUiState,
     selectedCatalogIds: Set<String>,
     busy: Boolean,
+    selectedActivityCode: String,
     nearbyListState: androidx.compose.foundation.lazy.LazyListState,
     onToggleCatalogItem: (String) -> Unit,
     onSaveCoordinates: (String?, String?) -> Unit,
@@ -76,7 +77,7 @@ internal fun CatalogMarketDiscoverySection(
                             )
                             Button(
                                 onClick={onSaveCoordinates(parsedLatitude?.toPlainString(), parsedLongitude?.toPlainString())},
-                                enabled=!busy && state.state.selectedBranchId.isNotBlank() && coordinatesValid,
+                                enabled=!busy && state.selectedBranchId.isNotBlank() && coordinatesValid,
                                 modifier=Modifier.fillMaxWidth()
                             ) { Text(if(coordinatesCleared) "مسح الإحداثيات" else "حفظ إحداثيات الفرع") }
                             Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
@@ -94,7 +95,7 @@ internal fun CatalogMarketDiscoverySection(
                             ) { Text("إنشاء صنف جديد") }
                             Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
                                 Button(onClick={onConfigureSelectedCatalogItems()},enabled=!busy && selectedCatalogIds.isNotEmpty() && selectedCatalogIds.size<=100 && selectedActivityCode.isNotBlank() && state.selectedBranchId.isNotBlank() && state.selectedWarehouseId.isNotBlank()) { Text("تهيئة المختار للفرع") }
-                                OutlinedButton(onClick={onLoadNearbyCatalog(false)},enabled=!busy && state.nearbyHasMore && !nearbyPageLoadFailed) { Text("تحميل المزيد") }
+                                OutlinedButton(onClick={onLoadNearbyCatalog(false)},enabled=!busy && state.nearbyHasMore && !state.nearbyPageLoadFailed) { Text("تحميل المزيد") }
                                 if(nearbyPageLoadFailed) OutlinedButton(onClick={onLoadNearbyCatalog(!state.nearbyHasMore)},enabled=!busy) { Text("إعادة المحاولة") }
                                 OutlinedButton(onClick={onLoadNearbyCatalog(true)},enabled=!busy && state.marketRadius<100000 && !state.nearbyHasMore) { Text("توسيع النطاق") }
                             }
