@@ -4,6 +4,8 @@ ROOT = Path(__file__).resolve().parents[1]
 ANDROID = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial"
 SCREEN = ANDROID / "ReportsCenterScreen.kt"
 DATA = ANDROID / "ReportsCenterData.kt"
+OPERATIONAL_VALIDATION = ANDROID / "ReportOperationalValidation.kt"
+PROFITABILITY_VALIDATION = ANDROID / "ReportProfitabilityValidation.kt"
 
 
 def test_reports_center_screen_is_a_thin_coordinator_over_report_data_state():
@@ -42,3 +44,27 @@ def test_reports_center_screen_is_a_thin_coordinator_over_report_data_state():
         assert marker not in screen
     assert "ReportsCenterData(" in data
     assert "sourceErrorForReport: (String) -> String" in data
+
+
+
+def test_operational_and_item_profitability_validations_have_single_domain_owners():
+    data = DATA.read_text(encoding="utf-8")
+    operational = OPERATIONAL_VALIDATION.read_text(encoding="utf-8")
+    profitability = PROFITABILITY_VALIDATION.read_text(encoding="utf-8")
+
+    for marker in (
+        "reportCustomerOperationalStatementValidationError(",
+        "reportCustomerCollectionsValidationError(",
+        "reportUserSalesPerformanceValidationError(",
+        "reportDailySalesTrendValidationError(",
+        "reportExpenseValidationError(",
+        "reportPaymentMethodAnalysisValidationError(",
+    ):
+        assert marker in operational
+        assert marker in data
+    assert "buildCustomerOperationalStatementMovements" in operational
+    assert "reportItemProfitabilityValidationError(" in profitability
+    assert "reportItemProfitabilityValidationError(" in data
+    assert "val customerOperationalStatementError = when {" not in data
+    assert "val customerCollectionsError = when {" not in data
+    assert "val itemProfitabilityError = when {" not in data
