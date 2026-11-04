@@ -423,3 +423,7 @@
 ### Ledger report arithmetic
 - Income statement, balance sheet, trial balance, account classification, and ledger movement rows now use exact debit/credit arithmetic and exact totals.
 - The selected ledger report is preflighted once; overflow suppresses its rows and surfaces an explicit Arabic error.
+
+
+### Reports-center source-error routing correction
+- Sales reports now use `salesDocumentsLoadError` followed by their own arithmetic-preflight error. The customer operational statement integrity error is reserved for `أرصدة العملاء وكشف الحساب` and no longer blocks unrelated sales summaries or comparisons.

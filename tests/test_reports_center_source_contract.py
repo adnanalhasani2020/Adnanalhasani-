@@ -353,6 +353,11 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn("it.amount == Long.MIN_VALUE", self.screen)
         self.assertIn("تجاوزت حركات أو أرصدة كشف الموردين نطاق الأرقام الدقيق", self.screen)
 
+    def test_sales_reports_use_sales_source_errors_not_customer_statement_errors(self):
+        self.assertIn('"لوحة المؤشرات", "المبيعات حسب العميل", "المبيعات حسب حالة السداد", "متوسط قيمة الفاتورة", "مقارنة الفترات", "مقارنة فترتين" ->', self.screen)
+        self.assertIn("salesDocumentsLoadError.ifBlank { salesRowsArithmeticError }", self.screen)
+        self.assertIn('"أرصدة العملاء وكشف الحساب" -> customerOperationalStatementError', self.screen)
+
     def test_customer_operational_statement_validates_dates_refunds_and_exact_balances(self):
         self.assertIn("buildCustomerOperationalStatementMovements", self.screen)
         self.assertIn('"أرصدة العملاء وكشف الحساب" -> customerOperationalStatementError', self.screen)
