@@ -128,6 +128,7 @@ def test_legacy_purchase_lines_require_explicit_inventory_mapping_before_receipt
 
 def test_android_purchase_workflow_is_connected_to_server_rpcs():
     repository = REPOSITORY.read_text(encoding="utf-8")
+    supplier_payment_repository = SUPPLIER_PAYMENT_REPOSITORY.read_text(encoding="utf-8")
     screen = SCREEN.read_text(encoding="utf-8")
     order_dialog = ORDER_DIALOG.read_text(encoding="utf-8")
     receipt_dialog = RECEIPT_DIALOG.read_text(encoding="utf-8")
@@ -136,11 +137,11 @@ def test_android_purchase_workflow_is_connected_to_server_rpcs():
         "/rest/v1/rpc/commercial_create_purchase_order",
         "/rest/v1/rpc/commercial_transition_purchase_order",
         "/rest/v1/rpc/commercial_receive_purchase_order",
-        "/rest/v1/rpc/commercial_record_supplier_payment",
         "/rest/v1/rpc/commercial_link_purchase_order_item_offering",
         "items:commercial_purchase_order_items(id,line_number,item_description,quantity_ordered,quantity_received,unit_cost_minor,offering_id,source_selling_unit_code,source_selling_unit_name,source_selling_quantity,source_quantity_in_stock_units)",
     ):
         assert marker in repository
+    assert "/rest/v1/rpc/commercial_record_supplier_payment" in supplier_payment_repository
     for marker in (
         "إنشاء أمر شراء جديد",
         "إرسال للاعتماد",
