@@ -199,6 +199,13 @@ internal fun rememberReportsCenterData(
         startMillis = startMillis,
         endExclusive = endExclusive
     )
+    val salesTaxDiscountError = reportSalesTaxDiscountValidationError(
+        cloudMode = cloudMode,
+        salesDocumentsLoadError = salesDocumentsLoadError,
+        cloudSalesDocuments = cloudSalesDocuments,
+        startMillis = startMillis,
+        endExclusive = endExclusive
+    )
     val taxDiscountSummaryReport = remember(
         cloudSalesDocuments, cloudPurchases, cloudReturns, startMillis, endExclusive, startText, endText, taxDetailError
     ) {
@@ -319,9 +326,9 @@ internal fun rememberReportsCenterData(
     val sourceErrorForReport: (String) -> String = { title ->
         when (title) {
             "ملخص المبيعات حسب الفترة", "تفاصيل فواتير المبيعات", "تفاصيل بنود فواتير المبيعات",
-            "المبيعات حسب الصنف", "الخصومات على فواتير المبيعات", "الضرائب المسجلة على المبيعات",
-            "لوحة المؤشرات", "المبيعات حسب العميل", "المبيعات حسب حالة السداد", "متوسط قيمة الفاتورة", "مقارنة الفترات", "مقارنة فترتين" ->
+            "المبيعات حسب الصنف", "لوحة المؤشرات", "المبيعات حسب العميل", "المبيعات حسب حالة السداد", "متوسط قيمة الفاتورة", "مقارنة الفترات", "مقارنة فترتين" ->
                 salesDocumentsLoadError.ifBlank { salesRowsArithmeticError }
+            "الخصومات على فواتير المبيعات", "الضرائب المسجلة على المبيعات" -> salesTaxDiscountError
             "أرصدة العملاء وكشف الحساب" -> customerOperationalStatementError
             "المبيعات النقدية والآجلة" -> salesRowsArithmeticError
             "مرتجعات المبيعات وحالة التسوية" -> returnsLoadError
