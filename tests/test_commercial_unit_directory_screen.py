@@ -7,6 +7,7 @@ MAIN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialUnitDirectoryScreen.kt"
 REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt"
 SALES_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/SalesRepository.kt"
+INVENTORY_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/InventoryRepository.kt"
 
 
 class CommercialUnitDirectoryScreenTests(unittest.TestCase):
@@ -16,6 +17,7 @@ class CommercialUnitDirectoryScreenTests(unittest.TestCase):
         cls.screen = SCREEN.read_text(encoding="utf-8")
         cls.repository = REPOSITORY.read_text(encoding="utf-8")
         cls.sales_repository = SALES_REPOSITORY.read_text(encoding="utf-8")
+        cls.inventory_repository = INVENTORY_REPOSITORY.read_text(encoding="utf-8")
 
     def test_screen_is_reachable_from_more_menu_and_back_navigation(self):
         self.assertIn('"دليل وحدات القياس" -> onUnitsDirectory()', self.main)
@@ -69,8 +71,8 @@ class CommercialUnitDirectoryScreenTests(unittest.TestCase):
         sales = self.sales_repository.split("internal fun loadCommercialCloudSales", 1)[1].split(
             "internal fun loadCommercialCloudSaleDocuments", 1
         )[0]
-        alerts = self.repository.split("internal fun loadCommercialCloudStockAlerts", 1)[1].split(
-            "internal data class CommercialCloudRecord", 1
+        alerts = self.inventory_repository.split("internal fun loadCommercialCloudStockAlerts", 1)[1].split(
+            "internal data class CommercialInventoryCostingPolicyState", 1
         )[0]
         self.assertIn("commercialCloudPagedGet(path, access)", sales)
         self.assertIn("order=created_at.desc,id.asc", sales)

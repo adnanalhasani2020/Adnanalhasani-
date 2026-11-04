@@ -5,6 +5,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterScreen.kt"
 REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt"
+INVENTORY_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/InventoryRepository.kt"
 RETURNS_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReturnsRepository.kt"
 SUPPLIER_PAYMENT_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/SupplierPaymentRepository.kt"
 PURCHASE_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/PurchaseRepository.kt"
@@ -24,6 +25,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
     def setUpClass(cls):
         cls.screen = SCREEN.read_text(encoding="utf-8")
         cls.repository = REPOSITORY.read_text(encoding="utf-8")
+        cls.inventory_repository = INVENTORY_REPOSITORY.read_text(encoding="utf-8")
         cls.returns_repository = RETURNS_REPOSITORY.read_text(encoding="utf-8")
         cls.supplier_payment_repository = SUPPLIER_PAYMENT_REPOSITORY.read_text(encoding="utf-8")
         cls.purchase_repository = PURCHASE_REPOSITORY.read_text(encoding="utf-8")
@@ -123,9 +125,9 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
 
     def test_inventory_movement_report_uses_scoped_source_and_preserves_fractional_quantity(self):
         self.assertIn('"حركة المخزون الفعلية" ->', self.screen)
-        start = self.repository.index("internal fun loadCommercialCloudStockMovements(")
-        end = self.repository.index("\ninternal data class CommercialMasterDataRow(", start)
-        loader = self.repository[start:end]
+        start = self.inventory_repository.index("internal fun loadCommercialCloudStockMovements(")
+        end = self.inventory_repository.index("\ninternal data class CommercialCloudStockAlert(", start)
+        loader = self.inventory_repository[start:end]
         self.assertIn("commercial_stock_movements", loader)
         self.assertIn("offering.activity.organization_id=eq.$orgId", loader)
         self.assertIn("quantity_delta", loader)
@@ -204,8 +206,8 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn("pg_advisory_xact_lock", self.return_currency_guard_migration)
 
     def test_inventory_value_uses_saved_unit_cost_and_mapped_currency(self):
-        self.assertIn("unitCostMinor: Long?", self.repository)
-        self.assertIn("quantityOnHand: java.math.BigDecimal", self.repository)
+        self.assertIn("unitCostMinor: Long?", self.inventory_repository)
+        self.assertIn("quantityOnHand: java.math.BigDecimal", self.inventory_repository)
         self.assertIn('it.mappingKey == "inventory"', self.screen)
         self.assertIn("التقييم المالي الحالي للمخزون", self.screen)
 
@@ -213,8 +215,8 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn("loadCommercialCloudStockAlerts(context)", self.screen)
         self.assertIn("loadCommercialCloudStockMovements(context)", self.screen)
         self.assertIn("cloudStockAlerts.filter { it.availableQuantity <= it.reorderPoint }", self.screen)
-        self.assertIn("offering.activity.organization_id=eq.$orgId", self.repository)
-        self.assertIn("commercial_stock_movements", self.repository)
+        self.assertIn("offering.activity.organization_id=eq.$orgId", self.inventory_repository)
+        self.assertIn("commercial_stock_movements", self.inventory_repository)
 
     def test_csv_contains_period_source_timestamp_and_arabic_bom(self):
         self.assertIn('writer.write("\\uFEFF")', self.screen)

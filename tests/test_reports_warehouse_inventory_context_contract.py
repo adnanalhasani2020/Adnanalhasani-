@@ -3,7 +3,7 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt"
+REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/InventoryRepository.kt"
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterScreen.kt"
 PROJECTION = ROOT / "supabase/migrations/20261031070000_inventory_warehouse_context_projection.sql"
 
@@ -18,7 +18,7 @@ class ReportsWarehouseInventoryContextContractTests(unittest.TestCase):
     def test_report_reads_existing_read_only_warehouse_projection(self):
         loader = self.repository.split(
             "internal fun loadCommercialCloudWarehouseInventoryContext", 1
-        )[1].split("internal data class CustomerPortalOutstandingSale", 1)[0]
+        )[1].split("internal fun loadCommercialCloudWarehouseInventoryContext", 1)[1]
         self.assertIn("commercial_inventory_warehouse_context", loader)
         self.assertIn("organization_id=eq.$orgId", loader)
         self.assertIn("offering.activity_id=eq.$activityId", loader)
@@ -30,7 +30,7 @@ class ReportsWarehouseInventoryContextContractTests(unittest.TestCase):
     def test_mapping_states_and_counts_are_validated_fail_closed(self):
         loader = self.repository.split(
             "internal fun loadCommercialCloudWarehouseInventoryContext", 1
-        )[1].split("internal data class CustomerPortalOutstandingSale", 1)[0]
+        )[1].split("internal fun loadCommercialCloudWarehouseInventoryContext", 1)[1]
         for marker in (
             'setOf("mapped", "unconfigured", "ambiguous")',
             'status == "mapped" && mappedCount == 1',
@@ -45,7 +45,7 @@ class ReportsWarehouseInventoryContextContractTests(unittest.TestCase):
     def test_quantities_use_bigdecimal_and_are_not_aggregated_across_units(self):
         loader = self.repository.split(
             "internal fun loadCommercialCloudWarehouseInventoryContext", 1
-        )[1].split("internal data class CustomerPortalOutstandingSale", 1)[0]
+        )[1].split("internal fun loadCommercialCloudWarehouseInventoryContext", 1)[1]
         self.assertIn("val quantityOnHand: BigDecimal", self.repository)
         self.assertIn("val quantityReserved: BigDecimal", self.repository)
         self.assertIn("val availableQuantity: BigDecimal", self.repository)

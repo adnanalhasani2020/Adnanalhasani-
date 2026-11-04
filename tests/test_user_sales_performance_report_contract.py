@@ -3,6 +3,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt"
 SALES_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/SalesRepository.kt"
+INVENTORY_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/InventoryRepository.kt"
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterScreen.kt"
 CALCULATIONS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportCalculations.kt"
 CONTRACT = ROOT / "android-commercial/docs/reports-data-contract.md"
@@ -32,7 +33,7 @@ def test_user_sales_performance_fails_closed_for_invalid_money_and_duplicate_inv
 
 
 def test_stock_movement_user_report_uses_persisted_actor_and_separates_units():
-    repository = REPOSITORY.read_text(encoding="utf-8")
+    repository = INVENTORY_REPOSITORY.read_text(encoding="utf-8")
     screen = SCREEN.read_text(encoding="utf-8")
     calculations = CALCULATIONS.read_text(encoding="utf-8")
     contract = CONTRACT.read_text(encoding="utf-8")
@@ -50,7 +51,7 @@ def test_stock_movement_user_report_uses_persisted_actor_and_separates_units():
 
 
 def test_location_inventory_report_uses_organization_locations_and_separates_units():
-    repository = REPOSITORY.read_text(encoding="utf-8")
+    repository = INVENTORY_REPOSITORY.read_text(encoding="utf-8")
     screen = SCREEN.read_text(encoding="utf-8")
     calculations = CALCULATIONS.read_text(encoding="utf-8")
     contract = CONTRACT.read_text(encoding="utf-8")
