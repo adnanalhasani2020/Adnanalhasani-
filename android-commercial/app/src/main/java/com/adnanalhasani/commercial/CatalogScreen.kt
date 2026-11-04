@@ -10,15 +10,11 @@ import android.net.Uri
 import androidx.compose.ui.platform.LocalContext
 import android.os.Handler
 import android.os.Looper
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.snapshotFlow
@@ -27,10 +23,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.layout.ContentScale
-import coil.compose.AsyncImage
 import androidx.compose.ui.unit.dp
-import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.Executors
 
@@ -286,8 +279,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         onSector = { sector = it },
         onBusinessLevel = { businessLevel = it },
         onFeedback = { feedback = it },
-        onDirectoriesLoaded = { marketWorkflow.loadMarketContext() },
-        onReloadDirectories = { directoryWorkflow.loadDirectories() }
+        onDirectoriesLoaded = { marketWorkflow.loadMarketContext() }
     )
 
     fun loadDirectories() = directoryWorkflow.loadDirectories()
