@@ -2,13 +2,6 @@ package com.adnanalhasani.commercial
 
 import java.time.LocalDate
 
-import java.math.BigDecimal
-import java.math.RoundingMode
-import java.time.Instant
-import java.time.LocalDate
-import java.time.temporal.ChronoUnit
-import java.time.ZoneId
-import java.util.Locale
 
 internal fun sumReportAmountsExactly(values: Iterable<Long>): Long =
     values.fold(0L) { total, value -> Math.addExact(total, value) }
