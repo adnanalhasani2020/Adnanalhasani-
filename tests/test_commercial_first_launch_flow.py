@@ -44,7 +44,7 @@ def test_existing_auth_session_is_restored_before_project_setup():
 
 
 def test_first_run_and_navigation_guidance_are_available_without_removing_features():
-    main = MAIN.read_text(encoding="utf-8")
+    main = MAIN.read_text(encoding="utf-8") + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt").read_text(encoding="utf-8")
     assert "إخفاء التلميحات" in main
     assert "الانتقال إلى إضافة الأصناف" in LOCAL_SCREENS.read_text(encoding="utf-8")
     assert "تسجيل أول عملية بيع" in LOCAL_SCREENS.read_text(encoding="utf-8")
