@@ -325,6 +325,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
     def test_supplier_movement_statement_preflights_exact_opening_and_running_balances(self):
         self.assertIn("buildSupplierMovementInputs(", self.screen)
         self.assertIn('"كشف حركات الموردين" -> supplierMovementError', self.screen)
+        self.assertIn('selectedReport == "كشف حركات الموردين" && sourceErrorForReport(selectedReport).isNotBlank()', self.screen)
         self.assertIn("reportSupplierMovementValidationError(", self.screen)
         self.assertIn("Math.addExact(balance, movement.amount)", self.screen)
         self.assertIn("sumReportAmountsExactly(", self.screen)
