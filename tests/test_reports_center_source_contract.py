@@ -7,6 +7,7 @@ SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commerci
 CLOUD_DATA = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCloudData.kt"
 PERIOD_CONTROLS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsPeriodControls.kt"
 EXPORT_LAUNCHERS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsExportLaunchers.kt"
+CATALOG_SECTION = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCatalogSection.kt"
 CATALOG = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCatalog.kt"
 REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt"
 INVENTORY_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/InventoryRepository.kt"
@@ -33,7 +34,7 @@ RETURN_CURRENCY_GUARD_MIGRATION = ROOT / "supabase/migrations/20261027195426_gua
 class ReportsCenterSourceContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.screen = SCREEN.read_text(encoding="utf-8") + CLOUD_DATA.read_text(encoding="utf-8") + PERIOD_CONTROLS.read_text(encoding="utf-8") + EXPORT_LAUNCHERS.read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8") + INVENTORY_REPORT_LINES.read_text(encoding="utf-8") + FINANCIAL_REPORT_LINES.read_text(encoding="utf-8") + DOMAIN_MAPPERS.read_text(encoding="utf-8") + LEDGER_VALIDATION.read_text(encoding="utf-8")
+        cls.screen = SCREEN.read_text(encoding="utf-8") + CLOUD_DATA.read_text(encoding="utf-8") + PERIOD_CONTROLS.read_text(encoding="utf-8") + EXPORT_LAUNCHERS.read_text(encoding="utf-8") + CATALOG_SECTION.read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8") + INVENTORY_REPORT_LINES.read_text(encoding="utf-8") + FINANCIAL_REPORT_LINES.read_text(encoding="utf-8") + DOMAIN_MAPPERS.read_text(encoding="utf-8") + LEDGER_VALIDATION.read_text(encoding="utf-8")
         cls.catalog = CATALOG.read_text(encoding="utf-8")
         cls.repository = REPOSITORY.read_text(encoding="utf-8")
         cls.inventory_repository = INVENTORY_REPOSITORY.read_text(encoding="utf-8")
