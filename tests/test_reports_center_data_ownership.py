@@ -16,7 +16,10 @@ def test_reports_center_screen_is_a_thin_coordinator_over_report_data_state():
     assert "val currencyTotal = reportData.currencyTotal" in screen
     for marker in (
         "reportLedgerStatementValidationError(",
-        "supplierInvoiceDetailError = when",
+        "reportSupplierInvoiceVarianceError(",
+        "reportSupplierInvoiceDetailValidationError(",
+        "reportSupplierPurchaseSummaryValidationError(",
+        "reportSupplierObligationsValidationError(",
         "reportTaxDetailValidationError(",
         "reportCustomerStatementValidationError(",
         "reportSupplierStatementValidationError(",
