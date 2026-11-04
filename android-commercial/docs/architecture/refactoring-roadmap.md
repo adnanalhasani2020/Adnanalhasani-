@@ -59,7 +59,7 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 | REF-004 | Separate MainActivity composition/navigation from local legacy persistence and screens | PARTIALLY EXTRACTED | Shared and local models moved to dedicated files; next extract persistence/navigation in separate behavior-preserving slices |
 | REF-005 | Split report export infrastructure from report UI | EXTRACTED; TESTED pending CI | PDF/XLSX/print functions moved to ReportExport.kt; source-contract tests updated and XLSX unit tests added; run CI before marking tested |
 | REF-006 | Split report catalog, data builders, filters, and feature screens | OPEN | Each report family has clear owner and calculation tests |
-| REF-007 | Split catalog search, discovery, directory management, transfers, and invoice linking | OPEN | Catalog workflows remain intact |
+| REF-007 | Split catalog search, discovery, directory management, transfers, and invoice linking | IN PROGRESS — directory and transfer presentation sections extracted; browse, product authoring, and invoice workflows remain in the screen | Each catalog workflow has a focused UI owner and the existing request/business rules remain unchanged |
 | REF-008 | Split pure report calculations by business domain | PARTIALLY EXTRACTED; TESTS PENDING CI | Payment-request amount parsing/formatting now has its own pure Kotlin owner; formula parity tests and remaining report-domain extraction still required |
 | REF-009 | Organize existing feature files and shared UI components | OPEN | No duplicated feature or model owners |
 | REF-010 | Organize tests and update code reference | OPEN | Every feature points to focused tests and current source owner |
@@ -228,3 +228,11 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 - Kept cloud data loading, Compose state, filter state, report selection, calculations, and rendering in their existing owners.
 - Added `ReportLedgerValidationTest.kt` covering fail-closed validation and the valid balanced-ledger case.
 - The extraction preserves validation ordering and all existing checks; it does not alter SQL/RPC contracts or financial formulas.
+
+
+## 2026-11-04 — Catalog screen decomposition slice 1
+
+- Extracted the category editor, unit editor, and catalog-transfer request list from `CatalogScreen.kt` into `CatalogScreenSections.kt`.
+- The screen retains workflow orchestration and passes existing Compose state holders and action callbacks to the presentation sections.
+- The extracted components do not create network clients, issue RPCs, or change approval/transfer behavior.
+- `CatalogScreen.kt` remains responsible for browse/discovery, product authoring, and invoice-to-purchase workflows; REF-007 remains in progress until those sections are separated and focused tests/builds pass.

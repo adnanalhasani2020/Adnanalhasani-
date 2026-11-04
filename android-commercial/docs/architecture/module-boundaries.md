@@ -166,3 +166,10 @@ The catalog screen owns interaction and request orchestration. JSON-to-domain ma
 - `ReportsCenterScreen.kt` retains data loading and state ownership, and passes the existing ledger projections and load errors to the validator.
 - Validation precedence, Arabic feedback, required mapping/role keys, date cutoff, and per-entry/per-currency balance checks are preserved. The validator does not fetch data, mutate state, or calculate statement totals.
 - `ReportLedgerValidationTest.kt` covers the failure gates and the valid balanced-ledger path.
+
+
+### Catalog screen presentation extraction — 2026-11-04
+
+- `CatalogScreenSections.kt` owns the category editor, unit editor, and transfer-request presentation.
+- `CatalogScreen.kt` continues to own authentication, network requests, state transitions, discovery, product authoring, and invoice purchase workflows.
+- The extracted sections receive state holders and callbacks; they do not own transport or business authorization.
