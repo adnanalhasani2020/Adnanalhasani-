@@ -126,3 +126,12 @@ def test_catalog_invoice_mapping_response_has_a_dedicated_mapper():
     assert "invoiceMappingLines = mapping.lines" in screen
     assert "InvoicePurchaseUnmappedLine(row.optString" not in screen
     assert "CatalogWarehouseOption(row.optString" not in screen
+
+def test_catalog_market_unit_validation_has_a_dedicated_owner():
+    screen = SCREEN.read_text(encoding="utf-8")
+    configuration = (ANDROID / "CatalogMarketConfiguration.kt").read_text(encoding="utf-8")
+
+    assert "buildCatalogConfigurationItems(selectedIds, JSONArray(unitRaw))" in screen
+    assert "internal fun buildCatalogConfigurationItems(" in configuration
+    assert "val baseCandidates" not in screen
+    assert "commercial_catalog_product_units" in screen
