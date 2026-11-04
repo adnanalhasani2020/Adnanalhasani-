@@ -3,10 +3,15 @@ package com.adnanalhasani.commercial
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateListOf
 
 /** State for invoice-to-purchase review and catalog item matching. */
 internal class CatalogInvoiceTransferState {
     var invoiceRequestKey by mutableStateOf(java.util.UUID.randomUUID().toString())
+    var invoiceRequests by mutableStateOf<List<InvoicePurchaseRequestRow>>(emptyList())
+    var mappingLines by mutableStateOf<List<InvoicePurchaseUnmappedLine>>(emptyList())
+    var mappingOfferings by mutableStateOf<List<InvoicePurchaseOffering>>(emptyList())
+    var mappingWarehouses by mutableStateOf<List<CatalogWarehouseOption>>(emptyList())
     var mappingPurchaseOrderId by mutableStateOf("")
     var mappingLocationId by mutableStateOf("")
     var showItemCreation by mutableStateOf(false)
