@@ -6,6 +6,7 @@ SALES_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasan
 INVENTORY_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/InventoryRepository.kt"
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterScreen.kt"
 DATA_STATE = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterData.kt"
+MAPPERS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportDomainMappers.kt"
 INVENTORY_REPORT_LINES = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportInventoryLines.kt"
 CATALOG = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCatalog.kt"
 CALCULATIONS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportCalculations.kt"
@@ -15,7 +16,7 @@ CONTRACT = ROOT / "android-commercial/docs/reports-data-contract.md"
 
 def test_user_sales_performance_uses_persisted_sale_actor_and_separate_currencies():
     repository = SALES_REPOSITORY.read_text(encoding="utf-8")
-    screen = SCREEN.read_text(encoding="utf-8") + DATA_STATE.read_text(encoding="utf-8") + INVENTORY_REPORT_LINES.read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8")
+    screen = SCREEN.read_text(encoding="utf-8") + DATA_STATE.read_text(encoding="utf-8") + INVENTORY_REPORT_LINES.read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8") + MAPPERS.read_text(encoding="utf-8")
     calculations = CALCULATIONS.read_text(encoding="utf-8")
     contract = CONTRACT.read_text(encoding="utf-8")
 
