@@ -7,7 +7,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
 /**
@@ -53,6 +56,17 @@ internal data class ReportsCloudData(
     val stockMovementsLoadError: String = "",
     val stockAlertsLoadError: String = ""
 )
+
+private suspend inline fun <T> loadReportProjection(crossinline load: () -> T): Result<T> {
+    currentCoroutineContext().ensureActive()
+    return try {
+        Result.success(load())
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (error: Exception) {
+        Result.failure(error)
+    }
+}
 
 /**
  * Owns cloud report retrieval and refresh lifecycle. Each source is isolated:
