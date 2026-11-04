@@ -715,81 +715,13 @@ internal fun ReportsCenterScreen(
         endDate = endDate,
         zone = zone
     ) ?: when (selectedReport) {
-        "أداء المبيعات حسب المستخدم" -> if (userSalesPerformanceError.isNotBlank()) emptyList()
-            else userSalesPerformanceCalculation.getOrThrow().map { row ->
-                val actorLabel = if (row.userId == "غير منسوب") "مبيعات غير منسوبة لمستخدم"
-                    else "مستخدم ${row.userId}"
-                ReportLine(
-                    "-",
-                    row.userId,
-                    actorLabel,
-                    row.totalMinor,
-                    row.currencyCode,
-                    "${row.invoiceCount} فاتورة مكتملة · متوسط الفاتورة ${reportMoney(row.averageInvoiceMinor, row.currencyCode, true)}"
-                )
-            }
-        "اتجاه المبيعات اليومي" -> if (dailySalesTrendError.isNotBlank()) emptyList() else {
-            dailySalesTrendCalculation.getOrThrow().map { day ->
-                ReportLine(
-                    day.date,
-                    "${day.invoiceCount} فاتورة",
-                    "إجمالي مبيعات اليوم",
-                    day.totalMinor,
-                    day.currencyCode,
-                    "إجمالي الفواتير المكتملة في هذا اليوم · العملة: ${day.currencyCode}"
-                )
-            }
-        }
-        "عمر أرصدة العملاء حسب تاريخ الفاتورة" -> if (customerReceivableAgingError.isNotBlank()) emptyList() else {
-            customerReceivableAgingReport.rows.map { aging ->
-                ReportLine(
-                    today.toString(),
-                    aging.bucket,
-                    aging.customerName,
-                    aging.balanceMinor,
-                    aging.currencyCode,
-                    "${aging.invoiceCount} فاتورة مفتوحة · الرصيد الحالي بعد المرتجعات والاستردادات · العمر من تاريخ الفاتورة وليس الاستحقاق"
-                )
-            }
-        }
-        "التحصيل حسب العميل" -> if (customerCollectionsError.isNotBlank()) emptyList() else {
-            customerCollectionsCalculation.getOrThrow().map { customer ->
-                ReportLine(
-                    "${startText} — ${endText}",
-                    "${customer.paymentCount} دفعة",
-                    customer.customerName,
-                    customer.totalMinor,
-                    customer.currencyCode,
-                    "دفعات ناجحة فقط · ${if (customer.customerId.isBlank()) "لا يوجد معرف عميل محفوظ" else "معرف العميل: ${customer.customerId}"}"
-                )
-            }
-        }
-        "المشتريات حسب المورد" -> if (supplierPurchaseSummaryError.isNotBlank()) emptyList() else {
-            supplierPurchaseSummaryCalculation.getOrThrow().map { summary ->
-                ReportLine(
-                    "${startText} — ${endText}",
-                    "${summary.invoiceCount} فاتورة",
-                    summary.supplierName,
-                    summary.totalMinor,
-                    summary.currencyCode,
-                    "إجمالي فواتير المورد غير الملغاة · معرف المورد: ${summary.supplierId}"
-                )
-            }
-        }
-        "عمر مستحقات الموردين حسب تاريخ الفاتورة" -> if (supplierLiabilityAgingError.isNotBlank()) emptyList() else {
-            supplierLiabilityAgingReport.rows.map { aging ->
-                ReportLine(
-                    today.toString(),
-                    aging.bucket,
-                    aging.supplierName,
-                    aging.balanceMinor,
-                    aging.currencyCode,
-                    "${aging.invoiceCount} فاتورة مفتوحة · الرصيد الحالي حتى اليوم · العمر من تاريخ تسجيل الفاتورة وليس من تاريخ استحقاق تعاقدي"
-                )
-            }
-        }
-        "أعمار مستحقات الموردين" -> if (supplierDueDateAgingError.isNotBlank()) emptyList()
-            else supplierDueDateAgingReport.toReportLines(today.toString())
+        "أداء المبيعات حسب المستخدم" -> buildUserSalesPerformanceRows(userSalesPerformanceCalculation, userSalesPerformanceError)
+        "اتجاه المبيعات اليومي" -> buildDailySalesTrendRows(dailySalesTrendCalculation, dailySalesTrendError)
+        "عمر أرصدة العملاء حسب تاريخ الفاتورة" -> buildCustomerReceivableAgingRows(customerReceivableAgingReport, customerReceivableAgingError, today.toString())
+        "التحصيل حسب العميل" -> buildCustomerCollectionsRows(customerCollectionsCalculation, customerCollectionsError, startText, endText)
+        "المشتريات حسب المورد" -> buildSupplierPurchaseSummaryRows(supplierPurchaseSummaryCalculation, supplierPurchaseSummaryError, startText, endText)
+        "عمر مستحقات الموردين حسب تاريخ الفاتورة" -> buildSupplierLiabilityAgingRows(supplierLiabilityAgingReport, supplierLiabilityAgingError, today.toString())
+        "أعمار مستحقات الموردين" -> buildSupplierDueDateAgingRows(supplierDueDateAgingReport, supplierDueDateAgingError, today.toString())
         "التدفقات النقدية والصندوق" -> if (sourceErrorForReport(selectedReport).isNotBlank()) emptyList() else buildCashFlowReportLines(cloudLedgerLines, cloudGlMappings, startDate, endDate, startText, endText)
         "ملخص الضرائب والخصومات" -> taxDiscountSummaryReport.lines
         "الضرائب والخصومات التفصيلية" -> if (taxDetailError.isNotBlank()) emptyList() else buildList {
