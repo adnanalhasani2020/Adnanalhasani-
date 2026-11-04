@@ -426,9 +426,9 @@ internal fun rememberReportsCenterData(
     val stockLow = remember(products) {
         products.filter { it.stock <= (it.reorderPoint.takeIf { n -> n >= 0 } ?: 9) }
     }
-    val (salesRowsCalculation, salesRowsArithmeticError) = remember(
+    val (salesRowsCalculation, salesRowsCalculationError) = remember(
         selectedReport, cloudMode, inPeriodCloudSalesDocuments, inPeriodSales, cloudSalesDocuments,
-        sales, startMillis, endExclusive, startText, startDate, endDate, zone
+        sales, startMillis, endExclusive, startText, endText, startDate, endDate, zone
     ) {
         val calculation = runCatching {
             buildSalesReportRows(
@@ -451,7 +451,7 @@ internal fun rememberReportsCenterData(
             "تجاوزت مجاميع تقرير المبيعات نطاق الأرقام الدقيق؛ تم حجب التقرير."
         } else ""
     }
-    val (ledgerRowsCalculation, ledgerRowsArithmeticError) = remember(
+    val (ledgerRowsCalculation, ledgerRowsCalculationError) = remember(
         selectedReport, ledgerStatementError, cloudLedgerLines, cloudJournals, startDate, endDate,
         startMillis, endExclusive, startText, endText, accountFilter
     ) {
@@ -474,6 +474,8 @@ internal fun rememberReportsCenterData(
             "تجاوزت مجاميع أو أرصدة دفتر الأستاذ نطاق الأرقام الدقيق؛ تم حجب التقرير."
         } else ""
     }
+    salesRowsArithmeticError = salesRowsCalculationError
+    ledgerRowsArithmeticError = ledgerRowsCalculationError
     val selectedRowsUnvalidated = buildInventoryReportRows(
         selectedReport = selectedReport,
         cloudMode = cloudMode,
