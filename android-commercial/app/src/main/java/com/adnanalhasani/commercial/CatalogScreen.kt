@@ -97,9 +97,14 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var directoryUnits by remember { mutableStateOf<List<DirectoryUnit>>(emptyList()) }; var pendingTransfers by remember { mutableStateOf<List<PendingTransfer>>(emptyList()) }
     var busy by remember { mutableStateOf(false) }; var restoringSession by remember { mutableStateOf(true) }; var feedback by remember { mutableStateOf("") }; var editingProduct by remember { mutableStateOf<CatalogProduct?>(null) }
 
-    val categoryCodeState = remember { mutableStateOf("") }; var categoryCode by categoryCodeState; val parentCodeState = remember { mutableStateOf("") }; var parentCode by parentCodeState
-    val categoryNameArState = remember { mutableStateOf("") }; var categoryNameAr by categoryNameArState; val categoryNameEnState = remember { mutableStateOf("") }; var categoryNameEn by categoryNameEnState
-    val categoryDescriptionArState = remember { mutableStateOf("") }; var categoryDescriptionAr by categoryDescriptionArState; val categoryDescriptionEnState = remember { mutableStateOf("") }; var categoryDescriptionEn by categoryDescriptionEnState; val categoryTranslationsState = remember { mutableStateOf("") }; var categoryTranslations by categoryTranslationsState
+    val directoryFormState = remember { CatalogDirectoryFormState() }
+    var categoryCode by directoryFormState.categoryCode
+    var parentCode by directoryFormState.parentCode
+    var categoryNameAr by directoryFormState.categoryNameAr
+    var categoryNameEn by directoryFormState.categoryNameEn
+    var categoryDescriptionAr by directoryFormState.categoryDescriptionAr
+    var categoryDescriptionEn by directoryFormState.categoryDescriptionEn
+    var categoryTranslations by directoryFormState.categoryTranslations
 
     var nameAr by productFormState::nameAr; var nameEn by productFormState::nameEn
     var descriptionAr by productFormState::descriptionAr; var descriptionEn by productFormState::descriptionEn; var extraTranslations by productFormState::extraTranslations
@@ -127,12 +132,19 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var rulingSourceTitle by productFormState::rulingSourceTitle; var rulingSourceUrl by productFormState::rulingSourceUrl
     var rulingConfidence by productFormState::rulingConfidence; var extraRulingsText by productFormState::extraRulingsText
 
-    val unitShortCodeState = remember { mutableStateOf("") }; var unitShortCode by unitShortCodeState; val unitNameArState = remember { mutableStateOf("") }; var unitNameAr by unitNameArState
-    val unitNameEnState = remember { mutableStateOf("") }; var unitNameEn by unitNameEnState; val unitDimensionState = remember { mutableStateOf("count") }; var unitDimension by unitDimensionState
-    val unitFactorState = remember { mutableStateOf("1") }; var unitFactor by unitFactorState; val unitBaseCodeState = remember { mutableStateOf("EA") }; var unitBaseCode by unitBaseCodeState
-    val unitDecimalsState = remember { mutableStateOf("0") }; var unitDecimals by unitDecimalsState; val unitTranslationsState = remember { mutableStateOf("") }; var unitTranslations by unitTranslationsState
-    val transferSourceState = remember { mutableStateOf("") }; var transferSource by transferSourceState; val transferDestinationState = remember { mutableStateOf("") }; var transferDestination by transferDestinationState
-    val transferIdsState = remember { mutableStateOf("") }; var transferIds by transferIdsState
+    var unitShortCode by directoryFormState.unitShortCode
+    var unitNameAr by directoryFormState.unitNameAr
+    var unitNameEn by directoryFormState.unitNameEn
+    var unitDimension by directoryFormState.unitDimension
+    var unitFactor by directoryFormState.unitFactor
+    var unitBaseCode by directoryFormState.unitBaseCode
+    var unitDecimals by directoryFormState.unitDecimals
+    var unitTranslations by directoryFormState.unitTranslations
+
+    val transferFormState = remember { CatalogTransferFormState() }
+    var transferSource by transferFormState.transferSource
+    var transferDestination by transferFormState.transferDestination
+    var transferIds by transferFormState.transferIds
 
     fun request(action: () -> String, onSuccess: (String) -> Unit, onFailure: ((Throwable) -> Unit)? = null) {
         if (busy) return
@@ -504,8 +516,8 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                         onEditProduct={editingProduct=it}
                     )
                 }
-                "category" -> CatalogCategorySection(categoryCodeState, parentCodeState, categoryNameArState, categoryNameEnState, categoryDescriptionArState, categoryDescriptionEnState, categoryTranslationsState, categories, locale, busy, ::createCategory, ::loadDirectories)
-                "unit" -> CatalogUnitSection(unitShortCodeState, unitNameArState, unitNameEnState, unitDimensionState, unitBaseCodeState, unitFactorState, unitDecimalsState, unitTranslationsState, directoryUnits, busy, ::createUnit, ::loadDirectories)
+                "category" -> CatalogCategorySection(directoryFormState.categoryCode, directoryFormState.parentCode, directoryFormState.categoryNameAr, directoryFormState.categoryNameEn, directoryFormState.categoryDescriptionAr, directoryFormState.categoryDescriptionEn, directoryFormState.categoryTranslations, categories, locale, busy, ::createCategory, ::loadDirectories)
+                "unit" -> CatalogUnitSection(directoryFormState.unitShortCode, directoryFormState.unitNameAr, directoryFormState.unitNameEn, directoryFormState.unitDimension, directoryFormState.unitBaseCode, directoryFormState.unitFactor, directoryFormState.unitDecimals, directoryFormState.unitTranslations, directoryUnits, busy, ::createUnit, ::loadDirectories)
                 "product" -> CatalogProductFormSection(productFormState, categories, directoryUnits, busy, ::createProduct)
                 "invoice_transfer" -> CatalogInvoiceTransferSection(invoiceTransferState, marketBranches, selectedBranchId, invoiceRequests, invoiceMappingLines, invoiceMappingOfferings, invoiceMappingWarehouses, categories, directoryUnits, organizationId.trim(), busy, invoiceWorkflow::requestInvoiceAsPurchase, invoiceWorkflow::loadInvoiceRequests, invoiceWorkflow::reviewInvoicePurchaseRequest, invoiceWorkflow::mapKnownInvoicePurchaseItems, invoiceWorkflow::loadInvoicePurchaseUnmappedLines, invoiceWorkflow::linkSelectedInvoicePurchaseLine, invoiceWorkflow::openInvoiceItemCreationDialog)
                 "transfer" -> CatalogTransferSection(transferSourceState, transferDestinationState, transferIdsState, pendingTransfers, busy, ::transferCatalog, ::loadPendingTransfers, ::respondToTransfer)
