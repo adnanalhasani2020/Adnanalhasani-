@@ -11,6 +11,9 @@ import java.util.Locale
 internal fun sumReportAmountsExactly(values: Iterable<Long>): Long =
     values.fold(0L) { total, value -> Math.addExact(total, value) }
 
+internal fun sumReportCountsExactly(values: Iterable<Int>): Int =
+    values.fold(0) { total, value -> Math.addExact(total, value) }
+
 internal data class SupplierObligationInput(
     val supplierId: String,
     val supplierName: String,
