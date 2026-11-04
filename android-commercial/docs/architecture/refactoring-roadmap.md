@@ -304,3 +304,6 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 
 
 - Extracted sales summaries, invoice details/lines, customer/item/payment breakdowns, tax/discount rows, average invoice values, and period comparisons into `ReportSalesRows.kt`; added a source-ownership test. User-performance/daily-trend/aging/collection cases and purchase/expense/return families remain for subsequent extraction.
+
+
+- Extracted supplier invoice price variance, recorded invoices/obligations, obligation totals, and supplier movement report rows into `ReportSupplierRows.kt`; added a source-ownership test. Remaining dispatch branches include performance/trend/aging/collections, returns, payment records, detailed tax, cost/profit, and expense rows.
