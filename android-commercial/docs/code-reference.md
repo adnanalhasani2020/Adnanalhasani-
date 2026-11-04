@@ -232,3 +232,9 @@
 - `CatalogWorkflowMappers.kt` owns pure mapping for invoice-purchase request lists and pending catalog-transfer lists.
 - `CatalogScreen.kt` retains request URLs, organization scoping, sorting/limits, actions, and feedback.
 - `CatalogWorkflowMappersTest.kt` covers request/transfer field mapping, optional purchase-order IDs, and empty responses.
+
+
+### Catalog invoice mapping response extraction (2026-11-04)
+- `CatalogInvoiceMappingMapper.kt` maps the prepared invoice-mapping payload into location, warehouse, unmatched-line, and offering models.
+- `CatalogScreen.kt` retains purchase-order eligibility and lock checks, REST orchestration, active catalog filtering, and mapping state.
+- `CatalogInvoiceMappingMapperTest.kt` covers the response fields and empty collections.
