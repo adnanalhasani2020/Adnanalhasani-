@@ -141,6 +141,8 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn("Math.subtractExact(line.creditMinor, line.debitMinor)", self.screen)
         self.assertIn("Math.addExact(total, movement.third)", self.screen)
         self.assertIn("Math.addExact(balance, movement.third)", self.screen)
+        self.assertIn("line.entryNumber to line.lineNumber", self.screen)
+        self.assertIn(".thenBy { it.second.second }", self.screen)
         self.assertIn("تجاوزت حركات أو أرصدة كشف العملاء نطاق الأرقام الدقيق", self.screen)
         self.assertIn("تجاوزت حركات أو أرصدة كشف الموردين نطاق الأرقام الدقيق", self.screen)
 

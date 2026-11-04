@@ -109,8 +109,12 @@ private fun reportPartyStatementArithmeticIsExact(
             } else {
                 Math.subtractExact(line.creditMinor, line.debitMinor)
             }
-            Triple(date, line.entryNumber, amount)
-        }.sortedWith(compareBy<Triple<LocalDate, String, Long>> { it.first }.thenBy { it.second })
+            Triple(date, line.entryNumber to line.lineNumber, amount)
+        }.sortedWith(
+            compareBy<Triple<LocalDate, Pair<String, Int>, Long>> { it.first }
+                .thenBy { it.second.first }
+                .thenBy { it.second.second }
+        )
 
         val opening = movements.filter { it.first < (startDate ?: LocalDate.MIN) }
             .fold(0L) { total, movement -> Math.addExact(total, movement.third) }
