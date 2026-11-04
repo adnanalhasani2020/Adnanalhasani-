@@ -319,3 +319,6 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 
 
 - Extracted item-profitability and historical cost/profit report row mapping into `ReportProfitabilityRows.kt`; added an ownership test. The exact calculation owners remain unchanged.
+
+
+- Extracted selected-result cards, empty-state messaging, export metadata generation, and CSV/XLSX/PDF/print action composition into `ReportsResultSection.kt`; added an ownership test. Screen orchestration and remaining filter/source state remain for the final coordinator cleanup.
