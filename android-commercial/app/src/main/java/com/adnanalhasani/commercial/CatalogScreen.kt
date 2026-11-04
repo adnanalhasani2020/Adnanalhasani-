@@ -265,8 +265,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         }
     }
 
-    lateinit var directoryWorkflow: CatalogDirectoryWorkflow
-    directoryWorkflow = CatalogDirectoryWorkflow(
+    val directoryWorkflow = CatalogDirectoryWorkflow(
         accessToken = { token },
         organizationId = { org() },
         locale = { locale },
