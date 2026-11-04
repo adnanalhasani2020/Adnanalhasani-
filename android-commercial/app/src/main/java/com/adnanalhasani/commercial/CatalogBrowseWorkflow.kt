@@ -33,7 +33,7 @@ internal class CatalogBrowseWorkflow(
             onFeedback("أدخل معرّف المؤسسة UUID أولًا.")
             return
         }
-        if (!reset && (!hasMore() || busy() || pageLoadFailed())) return
+        if (busy() || (!reset && (!hasMore() || pageLoadFailed()))) return
         setPageLoadFailed(false)
         val requestedOffset = if (reset) 0 else currentOffset()
         if (reset) {
