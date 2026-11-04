@@ -206,3 +206,6 @@ The catalog screen owns interaction and request orchestration. JSON-to-domain ma
 
 
 - `ReportPartyStatementRows.kt` owns customer/supplier statement row assembly from already-loaded party-account and posted-ledger projections, plus the operational customer statement. It does not perform collections, supplier payments, or ledger posting.
+
+
+- `ReportSalesRows.kt` owns pure row assembly for sales-period, invoice-detail, and period-comparison reports. It consumes existing sales projections and date boundaries; it does not load sales, mutate invoices, or calculate authoritative balances.
