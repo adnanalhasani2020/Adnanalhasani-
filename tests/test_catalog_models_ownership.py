@@ -51,3 +51,14 @@ def test_catalog_uses_the_shared_supabase_transport_and_session_store():
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_catalog_login_ui_has_a_dedicated_composable_owner():
+    screen = SCREEN.read_text(encoding="utf-8")
+    login = (ANDROID / "CatalogLoginPanel.kt").read_text(encoding="utf-8")
+
+    assert "CatalogLoginPanel(" in screen
+    assert "internal fun CatalogLoginPanel(" in login
+    assert "تسجيل الدخول إلى حساب Supabase" in login
+    assert "لا تستخدم مفتاح service_role في التطبيق" in login
+    assert "OutlinedTextField(email," not in screen
