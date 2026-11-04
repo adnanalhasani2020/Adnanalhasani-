@@ -3,12 +3,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MAIN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/StoreApp.kt"
+OPERATIONAL = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/LocalOperationalScreens.kt"
+PRODUCT_DIALOGS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/LocalProductDialogs.kt"
 LOCAL_SCREENS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/DashboardScreen.kt"
 PROFILE = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ActivityProfileScreen.kt"
 
 
 def test_first_launch_requires_authentication_and_complete_project_context():
-    main = MAIN.read_text(encoding="utf-8") + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt").read_text(encoding="utf-8") + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/LocalOperationalScreens.kt").read_text(encoding="utf-8")
+    main = MAIN.read_text(encoding="utf-8") + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt").read_text(encoding="utf-8") + OPERATIONAL.read_text(encoding="utf-8") + PRODUCT_DIALOGS.read_text(encoding="utf-8") + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/LocalOperationalScreens.kt").read_text(encoding="utf-8")
     profile = PROFILE.read_text(encoding="utf-8")
     assert "restoringSession = true" in profile
     assert "CircularProgressIndicator()" in profile
@@ -22,7 +24,7 @@ def test_first_launch_requires_authentication_and_complete_project_context():
 
 
 def test_project_creation_returns_to_the_cloud_dashboard_and_refreshes_context():
-    main = MAIN.read_text(encoding="utf-8")
+    main = MAIN.read_text(encoding="utf-8") + OPERATIONAL.read_text(encoding="utf-8") + PRODUCT_DIALOGS.read_text(encoding="utf-8")
     profile = PROFILE.read_text(encoding="utf-8")
     assert "onProfileCreated = {" in main
     assert "onAuthenticated = {" in main
