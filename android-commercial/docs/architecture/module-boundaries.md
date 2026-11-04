@@ -125,3 +125,6 @@ The UI must not become the authority for tenant access, balances, prices, postin
 
 
 - `CatalogLoginPanel.kt` is presentation-only. Authentication requests, access/refresh token handling, encrypted preference writes, and session restoration remain in the catalog screen's workflow and shared session utilities.
+
+
+- `LocalProductDialogs.kt` owns presentation and form state for local sale/product dialogs. Persistence and parent navigation/state remain with the existing application workflow and `LocalStoreRepository`.
