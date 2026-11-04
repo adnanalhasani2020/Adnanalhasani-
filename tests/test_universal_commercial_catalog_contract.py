@@ -17,6 +17,7 @@ class UniversalCommercialCatalogContractTests(unittest.TestCase):
         cls.update_rpc = (MIGRATIONS / "20261023231054_catalog_update_rpc.sql").read_text(encoding="utf-8")
         cls.android = (ANDROID / "CatalogScreen.kt").read_text(encoding="utf-8")
         cls.main = (ANDROID / "MainActivity.kt").read_text(encoding="utf-8")
+        cls.models = (ANDROID / "CommercialModels.kt").read_text(encoding="utf-8")
         cls.edit_dialog = (ANDROID / "CatalogProductEditDialog.kt").read_text(encoding="utf-8")
 
     def test_extends_existing_masters_without_parallel_product_or_unit_masters(self):
@@ -93,8 +94,8 @@ class UniversalCommercialCatalogContractTests(unittest.TestCase):
             self.assertIn(field, self.main)
         self.assertIn("إنشاء وربط بالمخزون", self.android)
         self.assertIn("quantityIsWholeBaseUnits", self.main)
-        self.assertIn("baseQuantitySold", self.main)
-        self.assertIn("unitVariantsJson", self.main)
+        self.assertIn("baseQuantitySold", self.models)
+        self.assertIn("unitVariantsJson", self.models)
         self.assertIn("commercial_catalog_create_product", self.android)
         self.assertIn("commercial_catalog_send_transfer", self.android)
 
