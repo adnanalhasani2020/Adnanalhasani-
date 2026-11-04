@@ -46,7 +46,7 @@ internal class CatalogDirectoryWorkflow(
             }
             onFeedback("تم تحميل ${directory.categories.size} تصنيفًا و${directory.units.size} وحدة قياس و${directory.activityNodes.count { it.nodeKind.equals("sector", true) }} قطاعًا و${directory.activityNodes.count { it.nodeKind.equals("activity", true) }} نشاطًا و${directory.activityNodes.count { it.nodeKind.equals("specialization", true) }} تخصصًا.")
             onDirectoriesLoaded()
-        })
+        }, null)
     }
     fun createCategory(categoryCode: String, parentCode: String, nameAr: String, nameEn: String, descriptionAr: String, descriptionEn: String, translations: String) {
         val active=accessToken() ?: return; val orgId=organizationId() ?: run { onFeedback("أدخل معرّف المؤسسة UUID أولًا."); return }
@@ -57,7 +57,7 @@ internal class CatalogDirectoryWorkflow(
                 .put("p_description_ar",descriptionAr.ifBlank { JSONObject.NULL })
                 .put("p_description_en",descriptionEn.ifBlank { JSONObject.NULL }).put("p_sort_order",100)
                 .put("p_translations",JSONArray().also { rows -> translations.lineSequence().map { it.trim() }.filter { it.isNotBlank() }.forEach { line -> val parts=line.split("|",limit=3); if(parts.size==3 && parts.all { it.isNotBlank() }) rows.put(JSONObject().put("locale_code",parts[0].trim().lowercase()).put("field_key",parts[1].trim().lowercase()).put("translated_value",parts[2].trim()).put("source_language",parts[0].trim().lowercase())) } }),active)
-        }, { onFeedback("تم إنشاء التصنيف: $it"); onReloadDirectories() })
+        }, { onFeedback("تم إنشاء التصنيف: $it"); onReloadDirectories() }, null)
     }
     fun createUnit(code: String, nameAr: String, nameEn: String, dimension: String, factor: String, baseCode: String, decimals: String, translations: String) {
         val active=accessToken() ?: return; val orgId=organizationId() ?: run { onFeedback("أدخل معرّف المؤسسة UUID أولًا."); return }
@@ -67,6 +67,6 @@ internal class CatalogDirectoryWorkflow(
                 .put("p_dimension",dimension).put("p_factor_to_base",factor.toBigDecimalOrNull()?.toPlainString() ?: throw IllegalArgumentException("معامل التحويل غير صحيح."))
                 .put("p_base_unit_code",baseCode).put("p_decimal_places",decimals.toIntOrNull() ?: 0)
                 .put("p_translations",JSONArray().also { rows -> translations.lineSequence().map { it.trim() }.filter { it.isNotBlank() }.forEach { line -> val parts=line.split("|",limit=3); if(parts.size==3 && parts.all { it.isNotBlank() }) rows.put(JSONObject().put("locale_code",parts[0].trim().lowercase()).put("field_key",parts[1].trim().lowercase()).put("translated_value",parts[2].trim()).put("source_language",parts[0].trim().lowercase())) } }),active)
-        }, { onFeedback("تم إنشاء وحدة الحساب الخاصة بالمؤسسة: $it"); onReloadDirectories() })
+        }, { onFeedback("تم إنشاء وحدة الحساب الخاصة بالمؤسسة: $it"); onReloadDirectories() }, null)
     }
 }
