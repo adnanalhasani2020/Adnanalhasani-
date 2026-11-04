@@ -157,21 +157,9 @@ internal fun rememberReportsCenterData(
     )
     val supplierPurchaseSummaryCalculation = remember(cloudPurchases, startMillis, endExclusive, cloudMode) {
         runCatching {
-            val invoices = cloudPurchases.flatMap { purchase ->
-                purchase.supplierInvoices.filter { invoice ->
-                    invoice.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed") &&
-                        reportDateMillis(invoice.recordedAt)?.let { it >= startMillis && it < endExclusive } == true
-                }.map { invoice ->
-                    SupplierPurchaseInvoiceInput(
-                        invoiceId = invoice.id,
-                        supplierId = purchase.supplierId,
-                        supplierName = purchase.supplierName,
-                        currencyCode = invoice.currencyCode,
-                        totalMinor = invoice.totalMinor
-                    )
-                }
-            }
-            calculateSupplierPurchaseSummary(invoices)
+            calculateSupplierPurchaseSummary(
+                cloudPurchases.toSupplierPurchaseInvoiceInputs(startMillis, endExclusive)
+            )
         }
     }
     val supplierPurchaseSummaryError = reportSupplierPurchaseSummaryValidationError(
