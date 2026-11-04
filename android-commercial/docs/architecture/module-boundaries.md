@@ -242,3 +242,10 @@ The catalog screen owns interaction and request orchestration. JSON-to-domain ma
 - `ReportsCenterScreen.kt` is the Compose composition root and event coordinator; it no longer owns report source loading, validation/calculation orchestration, report row construction, or document export implementation.
 - `ReportsCenterData.kt` owns date/source validation, calculation orchestration, selected report dispatch, selected-row filtering, and summary totals. It is UI-free apart from Compose `remember` lifecycle.
 - `ReportsCloudData.kt` owns cloud projection loading; `ReportsCenterUiState.kt` owns interactive state; `ReportsPeriodControls.kt`, `ReportsFilterSection.kt`, `ReportsCatalogSection.kt`, and `ReportsResultSection.kt` own UI sections; report-family row files own row mapping; export launchers/renderers remain separate.
+
+
+### Reports operational validation extraction (2026-11-05)
+
+- `ReportOperationalValidation.kt` owns fail-closed validation for operational expenses, payment-method analysis, operational customer statements, customer collections, user sales performance, and daily sales trends.
+- `ReportsCenterData.kt` retains loaded source projections, calculation orchestration, and report-to-error routing; calculation formulas and row builders remain in their existing owners.
+- The extraction preserves cloud-mode/source-error precedence, period-scoped checks where originally applicable, Arabic error messages, and exact-balance validation for operational customer movements.
