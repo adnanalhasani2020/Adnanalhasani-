@@ -223,6 +223,32 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         }
     }
 
+    fun saveMarketBranchCoordinates(latitude: String?, longitude: String?) {
+        val active=token
+        val orgId=org()
+        if(active==null || orgId==null || selectedBranchId.isBlank()) {
+            feedback="اختر مؤسسة وفرعًا صالحين أولًا."
+            return
+        }
+        request({
+            catalogHttp("/rest/v1/rpc/commercial_update_location_coordinates",JSONObject()
+                .put("p_organization_id",orgId)
+                .put("p_location_id",selectedBranchId)
+                .put("p_latitude",latitude ?: JSONObject.NULL)
+                .put("p_longitude",longitude ?: JSONObject.NULL),active)
+        }, { raw ->
+            val result=JSONObject(raw)
+            val savedLat=result.optString("latitude").takeUnless { it=="null" }.orEmpty()
+            val savedLon=result.optString("longitude").takeUnless { it=="null" }.orEmpty()
+            marketBranches=marketBranches.map { branch ->
+                if(branch.id==selectedBranchId) branch.copy(latitude=savedLat,longitude=savedLon) else branch
+            }
+            branchLatitude=savedLat
+            branchLongitude=savedLon
+            feedback=if(savedLat.isBlank()) "تم مسح إحداثيات الفرع." else "تم حفظ إحداثيات الفرع وتسجيل التغيير في سجل التدقيق."
+        })
+    }
+
     fun loadMarketContext() {
         val active=token ?: return
         val orgId=org() ?: run { feedback="أدخل معرّف المؤسسة UUID أولًا."; return }
@@ -887,117 +913,24 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             if(feedback.isNotBlank()) Text(feedback,color=if(feedback.startsWith("تم")||feedback.startsWith("اكتملت")) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,style=MaterialTheme.typography.bodySmall)
             when(section) {
                 "browse" -> {
-                    Card(Modifier.fillMaxWidth()) {
-                        Column(Modifier.fillMaxWidth().padding(10.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                            Text("الفرع والمستودع واكتشاف السوق",fontWeight=FontWeight.SemiBold)
-                            Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                                Box(Modifier.weight(1f)) {
-                                    OutlinedButton(onClick={branchMenuExpanded=true},modifier=Modifier.fillMaxWidth(),enabled=!busy) {
-                                        Text(marketBranches.firstOrNull { it.id==selectedBranchId }?.name ?: "اختر الفرع")
-                                    }
-                                    DropdownMenu(expanded=branchMenuExpanded,onDismissRequest={branchMenuExpanded=false}) {
-                                        marketBranches.forEach { branch -> DropdownMenuItem(text={Text(branch.name)},onClick={
-                                            selectedBranchId=branch.id
-                                            branchLatitude=branch.latitude
-                                            branchLongitude=branch.longitude
-                                            selectedWarehouseId=marketWarehouses.firstOrNull { it.branchId==branch.id }?.id.orEmpty()
-                                            nearbyMarketItems=emptyList(); nearbyOffset=0; nearbyHasMore=true; nearbyLoadGeneration++; marketRadius=5000; marketPriceHints=emptyMap(); branchMenuExpanded=false
-                                        }) }
-                                    }
-                                }
-                                Box(Modifier.weight(1f)) {
-                                    OutlinedButton(onClick={warehouseMenuExpanded=true},modifier=Modifier.fillMaxWidth(),enabled=!busy && selectedBranchId.isNotBlank()) {
-                                        Text(marketWarehouses.firstOrNull { it.id==selectedWarehouseId }?.name ?: "اختر المستودع")
-                                    }
-                                    DropdownMenu(expanded=warehouseMenuExpanded,onDismissRequest={warehouseMenuExpanded=false}) {
-                                        marketWarehouses.filter { it.branchId==selectedBranchId }.forEach { warehouse ->
-                                            DropdownMenuItem(text={Text(warehouse.name)},onClick={selectedWarehouseId=warehouse.id;warehouseMenuExpanded=false})
-                                        }
-                                    }
-                                }
-                            }
-                            Text("إحداثيات الفرع المحدد",fontWeight=FontWeight.SemiBold)
-                            Text("أدخل إحداثيات الموقع يدويًا لاستخدام اكتشاف السوق القريب. اترك الحقلين فارغين لمسح الموقع.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                            Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                                OutlinedTextField(branchLatitude,{branchLatitude=it},Modifier.weight(1f),label={Text("خط العرض Latitude")},singleLine=true)
-                                OutlinedTextField(branchLongitude,{branchLongitude=it},Modifier.weight(1f),label={Text("خط الطول Longitude")},singleLine=true)
-                            }
-                            val parsedLatitude=branchLatitude.trim().takeIf { it.isNotEmpty() }?.toBigDecimalOrNull()
-                            val parsedLongitude=branchLongitude.trim().takeIf { it.isNotEmpty() }?.toBigDecimalOrNull()
-                            val coordinatesCleared=branchLatitude.isBlank() && branchLongitude.isBlank()
-                            val coordinatesValid=coordinatesCleared || (
-                                parsedLatitude!=null && parsedLongitude!=null &&
-                                parsedLatitude >= java.math.BigDecimal("-90") && parsedLatitude <= java.math.BigDecimal("90") &&
-                                parsedLongitude >= java.math.BigDecimal("-180") && parsedLongitude <= java.math.BigDecimal("180")
-                            )
-                            Button(
-                                onClick={
-                                    val active=token
-                                    val orgId=org()
-                                    if(active==null || orgId==null || selectedBranchId.isBlank()) { feedback="اختر مؤسسة وفرعًا صالحين أولًا."; return@Button }
-                                    request({
-                                        catalogHttp("/rest/v1/rpc/commercial_update_location_coordinates",JSONObject()
-                                            .put("p_organization_id",orgId)
-                                            .put("p_location_id",selectedBranchId)
-                                            .put("p_latitude",parsedLatitude?.toPlainString() ?: JSONObject.NULL)
-                                            .put("p_longitude",parsedLongitude?.toPlainString() ?: JSONObject.NULL),active)
-                                    }, { raw ->
-                                        val result=JSONObject(raw)
-                                        val savedLat=result.optString("latitude").takeUnless { it=="null" }.orEmpty()
-                                        val savedLon=result.optString("longitude").takeUnless { it=="null" }.orEmpty()
-                                        marketBranches=marketBranches.map { branch ->
-                                            if(branch.id==selectedBranchId) branch.copy(latitude=savedLat,longitude=savedLon) else branch
-                                        }
-                                        branchLatitude=savedLat
-                                        branchLongitude=savedLon
-                                        feedback=if(savedLat.isBlank()) "تم مسح إحداثيات الفرع." else "تم حفظ إحداثيات الفرع وتسجيل التغيير في سجل التدقيق."
-                                    })
-                                },
-                                enabled=!busy && selectedBranchId.isNotBlank() && coordinatesValid,
-                                modifier=Modifier.fillMaxWidth()
-                            ) { Text(if(coordinatesCleared) "مسح الإحداثيات" else "حفظ إحداثيات الفرع") }
-                            Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-                                OutlinedButton(onClick={loadMarketContext()},enabled=!busy) { Text("تحديث الفروع") }
-                                Button(onClick={loadNearbyFromDevice()},enabled=!busy && !locatingDevice) { Text(if(locatingDevice) "جارٍ تحديد الموقع..." else "موقعي الحالي") }
-                            }
-                            Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-                                OutlinedButton(onClick={deviceLatitude=null;deviceLongitude=null;startNearbyCatalog()},enabled=!busy && selectedBranchId.isNotBlank()) { Text("حسب موقع الفرع") }
-                                OutlinedButton(onClick={loadSelectedPriceSuggestions()},enabled=!busy && selectedCatalogIds.isNotEmpty()) { Text("أسعار استرشادية") }
-                            }
-                            OutlinedButton(
-                                onClick={section="product"},
-                                enabled=!busy,
-                                modifier=Modifier.fillMaxWidth()
-                            ) { Text("إنشاء صنف جديد") }
-                            Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-                                Button(onClick={configureSelectedCatalogItems()},enabled=!busy && selectedCatalogIds.isNotEmpty() && selectedCatalogIds.size<=100 && selectedActivityCode.isNotBlank() && selectedBranchId.isNotBlank() && selectedWarehouseId.isNotBlank()) { Text("تهيئة المختار للفرع") }
-                                OutlinedButton(onClick={loadNearbyCatalog(false)},enabled=!busy && nearbyHasMore && !nearbyPageLoadFailed) { Text("تحميل المزيد") }
-                                if(nearbyPageLoadFailed) OutlinedButton(onClick={loadNearbyCatalog(!nearbyHasMore)},enabled=!busy) { Text("إعادة المحاولة") }
-                                OutlinedButton(onClick={loadNearbyCatalog(true)},enabled=!busy && marketRadius<100000 && !nearbyHasMore) { Text("توسيع النطاق") }
-                            }
-                            if(nearbyMarketItems.isNotEmpty()) {
-                                Text("الأكثر استخدامًا في السوق القريب • نطاق "+(marketRadius/1000)+" كم",fontWeight=FontWeight.SemiBold)
-                                LazyColumn(state=nearbyListState,modifier=Modifier.fillMaxWidth().heightIn(min=48.dp,max=220.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
-                                    items(nearbyMarketItems,key={it.id}) { market ->
-                                        FilterChip(
-                                            selected=market.id in selectedCatalogIds,
-                                            onClick={
-                                                selectedCatalogIds=if(market.id in selectedCatalogIds) selectedCatalogIds-market.id
-                                                else if(selectedCatalogIds.size<100) selectedCatalogIds+market.id
-                                                else selectedCatalogIds
-                                            },
-                                            label={Text(market.name+" • "+market.popularityBand+" • تجار "+market.merchantCountBand)}
-                                        )
-                                    }
-                                    if(busy) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
-                                    if(!nearbyHasMore && marketRadius<100000) item { Text("اسحب قائمة السوق لتوسيع البحث إلى المنطقة التالية.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
-                                    if(marketRadius>=100000 && !nearbyHasMore) item { Text("وصل البحث إلى أقصى نطاق 100 كم.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
-                                }
-                            }
-                            Text(if(deviceLatitude!=null && deviceLongitude!=null) "مركز البحث: موقع الجهاز الحالي لهذه الجلسة. استخدم «حسب موقع الفرع» للعودة إلى إحداثيات الفرع." else "مركز البحث الافتراضي: إحداثيات الفرع المحفوظة. يمكنك اختيار موقع الجهاز بإذن اختياري لمرة واحدة.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text("لا يعمل الموقع في الخلفية ولا تُحفظ إحداثيات الجهاز. الأسعار لا تظهر إلا عند توافر بيانات مجمعة موثوقة من خمسة تجار مستقلين على الأقل.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
+                    CatalogMarketDiscoverySection(
+                        state=marketUiState,
+                        selectedCatalogIds=selectedCatalogIds,
+                        busy=busy,
+                        nearbyListState=nearbyListState,
+                        onToggleCatalogItem={id ->
+                            selectedCatalogIds=if(id in selectedCatalogIds) selectedCatalogIds-id
+                            else if(selectedCatalogIds.size<100) selectedCatalogIds+id else selectedCatalogIds
+                        },
+                        onSaveCoordinates=::saveMarketBranchCoordinates,
+                        onLoadMarketContext=::loadMarketContext,
+                        onLoadNearbyFromDevice=::loadNearbyFromDevice,
+                        onStartNearbyCatalog=::startNearbyCatalog,
+                        onLoadSelectedPriceSuggestions=::loadSelectedPriceSuggestions,
+                        onCreateProduct={section="product"},
+                        onConfigureSelectedCatalogItems=::configureSelectedCatalogItems,
+                        onLoadNearbyCatalog=::loadNearbyCatalog
+                    )
                     if (selectedCatalogIds.isNotEmpty()) {
                         Card(Modifier.fillMaxWidth(), colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.secondaryContainer)) {
                             Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement=Arrangement.spacedBy(6.dp)) {

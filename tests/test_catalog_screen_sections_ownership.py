@@ -46,6 +46,17 @@ class CatalogScreenSectionsOwnershipTests(unittest.TestCase):
         self.assertIn("var selectedBranchId", state_file)
         self.assertNotIn("var nearbyMarketItems by remember", screen)
 
+    def test_market_discovery_presentation_is_callback_driven(self):
+        screen = SCREEN.read_text(encoding="utf-8")
+        sections = SECTIONS.read_text(encoding="utf-8")
+        market_section = SCREEN.with_name("CatalogMarketDiscoverySection.kt").read_text(encoding="utf-8")
+        self.assertIn("CatalogMarketDiscoverySection(", screen)
+        self.assertIn("internal fun CatalogMarketDiscoverySection(", market_section)
+        self.assertIn("onSaveCoordinates: (String?, String?) -> Unit", market_section)
+        self.assertIn("onLoadNearbyCatalog: (Boolean) -> Unit", market_section)
+        self.assertNotIn("commercial_update_location_coordinates", market_section)
+        self.assertNotIn("catalogHttp(", market_section)
+
     def test_transfer_presentation_is_separate_and_keeps_actions_callback_driven(self):
         screen = SCREEN.read_text(encoding="utf-8")
         sections = SECTIONS.read_text(encoding="utf-8")
