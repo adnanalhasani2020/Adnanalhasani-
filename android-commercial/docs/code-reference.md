@@ -413,3 +413,8 @@
 ### Party statement arithmetic validation
 - Customer and supplier control-account statements now preflight debit/credit deltas, opening balances, and period running balances with exact arithmetic before rows render.
 - Overflow produces a report-specific Arabic error and prevents partial/wrapped statement balances.
+
+
+### Supplier movement statement validation
+- Supplier movement inputs are projected once and shared by the validation and row owners.
+- The report blocks `Long.MIN_VALUE` payment negation and overflow in opening/running balances instead of showing wrapped supplier balances.
