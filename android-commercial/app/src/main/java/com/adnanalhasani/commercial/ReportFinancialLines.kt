@@ -17,7 +17,7 @@ internal fun buildCashFlowReportLines(
             val movements = cloudLedgerLines.filter { it.accountId in cashAccountIds }
                 .mapNotNull { line ->
                     val date = runCatching { LocalDate.parse(line.entryDate.take(10)) }.getOrNull() ?: return@mapNotNull null
-                    Triple(line, date, line.debitMinor - line.creditMinor)
+                    Triple(line, date, Math.subtractExact(line.debitMinor, line.creditMinor))
                 }.sortedWith(compareBy<Triple<CommercialCloudJournalLine, LocalDate, Long>> { it.second }.thenBy { it.first.entryNumber }.thenBy { it.first.lineNumber })
             val currencies = movements.map { it.first.currencyCode }.filter { it.matches(Regex("^[A-Z]{3}$")) }.distinct().sorted()
     return buildList {
@@ -25,7 +25,7 @@ internal fun buildCashFlowReportLines(
                     val currencyMoves = movements.filter { it.first.currencyCode == currency }
                     currencyMoves.groupBy { it.first.accountId to it.first.accountCode }.toSortedMap(compareBy<Pair<String, String>> { it.second }.thenBy { it.first })
                         .forEach { (accountKey, accountMoves) ->
-                            val opening = accountMoves.filter { it.second < (startDate ?: LocalDate.MIN) }.sumOf { it.third }
+                            val opening = sumReportAmountsExactly(accountMoves.filter { it.second < (startDate ?: LocalDate.MIN) }.map { it.third })
                             val periodMoves = accountMoves.filter { startDate != null && endDate != null && !it.second.isBefore(startDate) && !it.second.isAfter(endDate) }
                             var balance = opening
                             val accountName = accountMoves.firstOrNull()?.first?.accountName?.ifBlank { accountKey.second } ?: accountKey.second
@@ -35,8 +35,8 @@ internal fun buildCashFlowReportLines(
                                 add(ReportLine(date.toString(), "قيد ${line.entryNumber} · سطر ${line.lineNumber}", accountName, amount, currency,
                                     "${line.entryDescription} · ${line.sourceType}:${line.sourceId} · الحساب ${line.accountCode} · الرصيد المتحرك ${reportMoney(balance, currency, true)}"))
                             }
-                            val debitMovements = periodMoves.sumOf { if (it.third > 0L) it.third else 0L }
-                            val creditMovements = periodMoves.sumOf { if (it.third < 0L) -it.third else 0L }
+                            val debitMovements = sumReportAmountsExactly(periodMoves.mapNotNull { it.third.takeIf { amount -> amount > 0L } })
+                            val creditMovements = sumReportAmountsExactly(periodMoves.mapNotNull { it.third.takeIf { amount -> amount < 0L }?.let(Math::negateExact) })
                             add(ReportLine("${startText} — ${endText}", "إجمالي الحركة المدينة", accountName, debitMovements, currency,
                                 "إجمالي الزيادات المدينة على حساب النقد/البنك خلال الفترة؛ قد تشمل تحويلات داخلية"))
                             add(ReportLine("${startText} — ${endText}", "إجمالي الحركة الدائنة", accountName, -creditMovements, currency,
