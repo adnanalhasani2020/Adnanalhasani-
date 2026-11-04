@@ -163,28 +163,17 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         request = { action, onSuccess, onFailure -> request(action, onSuccess, onFailure) },
         onFeedback = { feedback = it }
     )
-    LaunchedEffect(Unit) {
-        val savedRefresh = runCatching { commercialCloudSessionPreferences(context).getString("refresh_token", null) }.getOrNull()
-        if (!savedRefresh.isNullOrBlank()) {
-            request({
-                val raw = catalogHttp("/auth/v1/token?grant_type=refresh_token", JSONObject().put("refresh_token", savedRefresh))
-                val session = JSONObject(raw)
-                val access = session.optString("access_token")
-                val refresh = session.optString("refresh_token").ifBlank { savedRefresh }
-                if (access.isBlank()) throw IllegalStateException("انتهت الجلسة؛ سجّل الدخول مجددًا.")
-                "${access}|${refresh}|${session.optJSONObject("user")?.optString("id").orEmpty()}"
-            }, { sessionValue ->
-                val parts = sessionValue.split("|", limit = 3)
-                token = parts[0]
-                commercialCloudSessionPreferences(context).edit().putString("refresh_token", parts.getOrNull(1).orEmpty()).apply()
-                signedInUserId = parts.getOrNull(2).orEmpty()
-                feedback = "تم استعادة جلستك السابقة."
-                restoringSession = false
-            })
-        } else {
-            restoringSession = false
-        }
-    }
+    val authWorkflow = CatalogAuthWorkflow(
+        context = context,
+        request = { action, onSuccess, onFailure -> request(action, onSuccess, onFailure) },
+        accessToken = { token = it },
+        signedInUserId = { signedInUserId = it },
+        password = { password = it },
+        feedback = { feedback = it },
+        restoringSession = { restoringSession = it },
+        organizationId = { organizationId = it }
+    )
+    LaunchedEffect(Unit) { authWorkflow.restoreSession() }
 
     fun org(): String? = organizationId.trim().takeIf { it.isNotBlank() }
 
@@ -361,10 +350,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                 Text("دليل الأصناف والوحدات",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold)
                 Text("دليل متعدد الأنشطة والمستويات والمناطق",color=MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.bodySmall)
             }
-            if (token != null) TextButton(onClick = {
-                runCatching { commercialCloudSessionPreferences(context).edit().clear().apply() }
-                token = null; signedInUserId = ""; organizationId = ""; feedback = "تم تسجيل الخروج."
-            }) { Text("تسجيل الخروج") }
+            if (token != null) TextButton(onClick = { authWorkflow.logout() }) { Text("تسجيل الخروج") }
         }
         if (restoringSession) {
             Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
@@ -375,29 +361,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                 password = password,
                 onPasswordChange = { password = it },
                 busy = busy,
-                onLogin = {
-                    request({
-                        val raw = catalogHttp(
-                            "/auth/v1/token?grant_type=password",
-                            JSONObject().put("email", email).put("password", password)
-                        )
-                        val session = JSONObject(raw)
-                        val access = session.optString("access_token")
-                        val refresh = session.optString("refresh_token")
-                        if (access.isBlank() || refresh.isBlank()) {
-                            throw IllegalStateException("لم تُرجع خدمة المصادقة جلسة صالحة.")
-                        }
-                        "${access}|${refresh}|${session.optJSONObject("user")?.optString("id").orEmpty()}"
-                    }, { sessionValue ->
-                        val parts = sessionValue.split("|", limit = 3)
-                        token = parts[0]
-                        commercialCloudSessionPreferences(context).edit()
-                            .putString("refresh_token", parts.getOrNull(1).orEmpty()).apply()
-                        signedInUserId = parts.getOrNull(2).orEmpty()
-                        password = ""
-                        feedback = "تم تسجيل الدخول. ستُستعاد الجلسة تلقائيًا عند فتح الدليل لاحقًا."
-                    })
-                }
+                onLogin = { authWorkflow.login(email, password) }
             )
         } else {
             OutlinedTextField(organizationId,{organizationId=it.trim()},Modifier.fillMaxWidth(),label={Text("معرّف المؤسسة UUID")},singleLine=true)
