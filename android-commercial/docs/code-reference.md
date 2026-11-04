@@ -291,6 +291,12 @@
 - The extraction preserves posted-ledger source semantics, account classification, debit/credit directions, currency grouping, balance equation checks, and account-query requirements.
 
 
+### Detailed tax report source validation extraction (2026-11-05)
+- `ReportTaxValidation.kt` owns the source-readiness and record-integrity gates for the detailed recorded-tax/discount report.
+- `ReportsCenterData.kt` supplies the already-loaded sales, purchase, return projections, source errors, and selected date window.
+- The original fail-closed precedence, canceled-invoice exclusions, date checks, amount/currency validation, and return-to-sale currency matching remain unchanged. Tax row presentation remains in `ReportTaxRows.kt`; no tax rate or liability formula was introduced.
+
+
 ### Customer/supplier statement validation extraction (2026-11-05)
 - `ReportPartyStatementValidation.kt` owns the source-readiness gates for full customer and supplier control-account statements.
 - `ReportsCenterData.kt` passes the existing loaded ledger, party-link, GL mapping, supplier-control-account projections and source errors to the pure validators.
