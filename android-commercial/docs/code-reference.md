@@ -331,3 +331,9 @@
 - `ReportProfitabilityRows.kt` owns display-row mapping for item profitability and historical cost-of-goods/gross-profit reports.
 - It consumes the existing item-profitability calculation result and cost-profit source projections; the exact formulas and validation remain in `ReportCalculations.kt` and `CostProfitCalculations.kt`.
 - Historical line costs, approved refunds, restocked-cost reversal, and the existing fail-closed error gates are preserved.
+
+
+### Reports result presentation/export actions extraction (2026-11-04)
+- `ReportsResultSection.kt` owns selected-report result cards, empty-state messaging, CSV/XLSX/PDF/print actions, and the common export-row metadata builder.
+- `ReportsCenterScreen.kt` supplies validated rows and source/date readiness, then receives export metadata/error updates through callbacks.
+- Android document-picker and share lifecycle remains in `ReportsExportLaunchers.kt`; native PDF/XLSX/print rendering remains in `ReportExport.kt`.
