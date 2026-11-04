@@ -668,13 +668,12 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                 .put("warehouses",warehouseRows)
                 .toString()
         }, { raw ->
-            val result=JSONObject(raw); val lines=result.getJSONArray("lines"); val offerings=result.getJSONArray("offerings")
-            invoiceMappingLocationId=result.optString("location_id")
-            val warehouses=result.optJSONArray("warehouses") ?: JSONArray()
-            invoiceMappingWarehouses=List(warehouses.length()) { i -> val row=warehouses.getJSONObject(i); CatalogWarehouseOption(row.optString("id"),row.optString("name"),row.optString("branch_location_id")) }
+            val mapping = parseCatalogInvoiceMapping(raw)
+            invoiceMappingLocationId = mapping.locationId
+            invoiceMappingWarehouses = mapping.warehouses
             if(invoiceMappingWarehouses.none { it.id==invoiceMappingWarehouseId }) invoiceMappingWarehouseId=invoiceMappingWarehouses.firstOrNull()?.id.orEmpty()
-            invoiceMappingLines=List(lines.length()) { i -> val row=lines.getJSONObject(i); InvoicePurchaseUnmappedLine(row.optString("id"),row.optInt("line_number"),row.optString("description"),row.optString("quantity"),row.optString("unit_code")) }
-            invoiceMappingOfferings=List(offerings.length()) { i -> val row=offerings.getJSONObject(i); InvoicePurchaseOffering(row.optString("id"),row.optString("global_item_id"),row.optString("name"),row.optString("unit_code")) }
+            invoiceMappingLines = mapping.lines
+            invoiceMappingOfferings = mapping.offerings
             invoiceMappingRequestId=req.id
             invoiceMappingPurchaseOrderId=req.purchaseOrderId
             invoiceMappingLineId=invoiceMappingLines.firstOrNull()?.id.orEmpty()
