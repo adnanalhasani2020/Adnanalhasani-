@@ -32,6 +32,19 @@ class ReportFormattingTest {
     }
 
     @Test
+    fun maximumEndDateUsesUnboundedExclusiveTimestampWithoutOverflow() {
+        assertEquals(Long.MAX_VALUE, reportEndExclusiveMillis(LocalDate.MAX, ZoneId.of("UTC")))
+        assertEquals(Long.MAX_VALUE, reportEndExclusiveMillis(null, ZoneId.of("UTC")))
+    }
+
+    @Test
+    fun ordinaryEndDateIncludesTheEntireSelectedDay() {
+        val date = LocalDate.parse("2026-11-04")
+        val expected = date.plusDays(1).atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli()
+        assertEquals(expected, reportEndExclusiveMillis(date, ZoneId.of("UTC")))
+    }
+
+    @Test
     fun invalidCurrencyUsesZeroFractionDigitsWithoutCrashing() {
         assertEquals("123 INVALID", reportMoney(123L, "INVALID", true))
     }
