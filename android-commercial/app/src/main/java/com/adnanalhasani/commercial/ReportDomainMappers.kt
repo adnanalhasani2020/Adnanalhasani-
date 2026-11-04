@@ -278,7 +278,7 @@ internal fun buildSupplierMovementInputs(
             payment.supplierName,
             payment.currencyCode,
             "دفعة ${payment.id}",
-            Math.negateExact(payment.amountMinor),
+            -payment.amountMinor,
             "دائن · سداد مرحل · فاتورة ${payment.invoiceNumber.ifBlank { payment.supplierInvoiceId }} · ${payment.paymentMethod}"
         )
     }
