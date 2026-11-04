@@ -170,3 +170,9 @@
 - `ReportsCenterScreen.kt` continues to own Compose state, loading, report selection, date/filter orchestration, and rendering; it calls the extracted internal mappers.
 - The extraction preserves model fields, filtering predicates, row labels, money formatting calls, and calculation entry points. It does not change report formulas or data sources.
 - `tests/test_report_domain_mappers_ownership.py` guards the mapper owner and screen call sites; the broader report source contract now reads the mapper file.
+
+
+### Report formatting extraction (2026-11-04)
+- `ReportFormatting.kt` owns currency fraction-digit resolution, minor-unit/local money formatting, and ISO instant/date-only timestamp parsing.
+- `ReportsCenterScreen.kt` retains report filters and UI but calls these shared package-level helpers.
+- `ReportFormattingTest.kt` covers currency exponent handling (USD/JPY), local whole-unit formatting, instant/date-only parsing, and invalid currency fallback.
