@@ -4,6 +4,8 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogScreen.kt"
 CONFIGURATION = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogMarketConfiguration.kt"
+MARKET_UI = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogMarketDiscoverySection.kt"
+MARKET_STATE = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogMarketUiState.kt"
 SCHEMA = ROOT / "supabase/migrations/20261023231027_universal_commercial_catalog.sql"
 SETUP = ROOT / "supabase/migrations/20261029040000_catalog_setup_privacy_discovery.sql"
 
@@ -11,7 +13,7 @@ SETUP = ROOT / "supabase/migrations/20261029040000_catalog_setup_privacy_discove
 class NearbyCatalogInventorySetupContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.screen = SCREEN.read_text(encoding="utf-8")
+        cls.screen = SCREEN.read_text(encoding="utf-8") + MARKET_UI.read_text(encoding="utf-8") + MARKET_STATE.read_text(encoding="utf-8")
         cls.configuration = CONFIGURATION.read_text(encoding="utf-8")
         cls.schema = SCHEMA.read_text(encoding="utf-8")
         cls.setup = SETUP.read_text(encoding="utf-8")
@@ -35,8 +37,8 @@ class NearbyCatalogInventorySetupContractTests(unittest.TestCase):
         self.assertIn('.put("sale_unit_code", sale.optString("unit_code"))', self.configuration)
 
     def test_nearby_results_keep_scroll_pagination_radius_expansion_and_selection(self):
-        self.assertIn("var nearbyHasMore by remember", self.screen)
-        self.assertIn("var nearbyLoadGeneration by remember", self.screen)
+        self.assertIn("var nearbyHasMore by mutableStateOf", self.screen)
+        self.assertIn("var nearbyLoadGeneration by mutableIntStateOf", self.screen)
         self.assertIn("val nearbyListState = rememberLazyListState()", self.screen)
         self.assertIn("fun startNearbyCatalog()", self.screen)
         self.assertIn("nearbyHasMore=page.size==30", self.screen)
@@ -45,10 +47,10 @@ class NearbyCatalogInventorySetupContractTests(unittest.TestCase):
         self.assertIn("LazyColumn(state=nearbyListState", self.screen)
         self.assertIn("FilterChip(", self.screen)
         self.assertIn("selectedCatalogIds.size<100", self.screen)
-        self.assertIn("nearbyHasMore=true; nearbyLoadGeneration++", self.screen)
+        self.assertIn("state.nearbyHasMore=true; state.nearbyLoadGeneration++", self.screen)
 
     def test_nearby_pagination_failure_has_explicit_retry_without_auto_retry_loop(self):
-        self.assertIn("var nearbyPageLoadFailed by remember", self.screen)
+        self.assertIn("var nearbyPageLoadFailed by mutableStateOf", self.screen)
         self.assertIn("nearbyPageLoadFailed=true", self.screen)
         self.assertIn("nearbyPageLoadFailed || marketRadius>=100000", self.screen)
         self.assertIn('Text("إعادة المحاولة")', self.screen)
@@ -57,7 +59,7 @@ class NearbyCatalogInventorySetupContractTests(unittest.TestCase):
     def test_catalog_selection_is_capped_at_one_hundred_across_both_lists(self):
         self.assertIn("selectedCatalogIds.size < 100 -> selectedCatalogIds + item.id", self.screen)
         self.assertIn("الحد الأقصى للعملية الواحدة 100 صنف", self.screen)
-        self.assertIn("else if(selectedCatalogIds.size<100) selectedCatalogIds+market.id", self.screen)
+        self.assertIn("else if(selectedCatalogIds.size<100) selectedCatalogIds+id", self.screen)
 
     def test_configure_rpc_remains_authoritative_and_does_not_create_stock_or_price(self):
         self.assertIn('commercial_catalog_configure_items', self.screen)

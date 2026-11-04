@@ -41,6 +41,8 @@ private val catalogMain = Handler(Looper.getMainLooper())
 @Composable
 internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct, String, String, String, String, String) -> Unit, initialOrganizationId: String = "", initialActivityCode: String = "", requireCloudInventoryContext: Boolean = false) {
     val context = LocalContext.current
+    val productFormState = remember { CatalogProductFormState() }
+    val invoiceTransferState = remember { CatalogInvoiceTransferState() }
     var email by remember { mutableStateOf("") }; var password by remember { mutableStateOf("") }
     var token by remember { mutableStateOf<String?>(null) }; var signedInUserId by remember { mutableStateOf("") }; var organizationId by remember { mutableStateOf(initialOrganizationId) }
     var section by remember { mutableStateOf("browse") }
@@ -60,43 +62,43 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     val sectorOptions = remember(activityNodes) { activityNodes.filter { it.nodeKind.equals("sector", true) }.sortedBy { it.pathAr } }
     val activityOptions = remember(activityNodes, sector) { activityNodes.filter { it.selectable && !it.nodeKind.equals("sector", true) && catalogNodeBelongsToSector(it, sector, activityNodes) }.sortedBy { it.pathAr } }
     val businessLevelOptions = remember(activityOptions) { activityOptions.map { it.defaultBusinessLevelCode }.filter { it.isNotBlank() }.distinct().sorted() }
-    var marketBranches by remember { mutableStateOf<List<CatalogBranchOption>>(emptyList()) }
-    var marketWarehouses by remember { mutableStateOf<List<CatalogWarehouseOption>>(emptyList()) }
-    var selectedBranchId by remember { mutableStateOf("") }
-    var selectedWarehouseId by remember { mutableStateOf("") }
-    var branchLatitude by remember { mutableStateOf("") }
-    var branchLongitude by remember { mutableStateOf("") }
-    var branchMenuExpanded by remember { mutableStateOf(false) }
-    var warehouseMenuExpanded by remember { mutableStateOf(false) }
-    var nearbyMarketItems by remember { mutableStateOf<List<NearbyCatalogItem>>(emptyList()) }
-    var marketRadius by remember { mutableIntStateOf(5000) }
-    // Device coordinates are opt-in, foreground-only and kept in memory for this screen session.
-    var deviceLatitude by remember { mutableStateOf<String?>(null) }
-    var deviceLongitude by remember { mutableStateOf<String?>(null) }
-    var locatingDevice by remember { mutableStateOf(false) }
+    val marketUiState = remember { CatalogMarketUiState() }
+    var marketBranches by marketUiState::marketBranches
+    var marketWarehouses by marketUiState::marketWarehouses
+    var selectedBranchId by marketUiState::selectedBranchId
+    var selectedWarehouseId by marketUiState::selectedWarehouseId
+    var branchLatitude by marketUiState::branchLatitude
+    var branchLongitude by marketUiState::branchLongitude
+    var branchMenuExpanded by marketUiState::branchMenuExpanded
+    var warehouseMenuExpanded by marketUiState::warehouseMenuExpanded
+    var nearbyMarketItems by marketUiState::nearbyMarketItems
+    var marketRadius by marketUiState::marketRadius
+    var deviceLatitude by marketUiState::deviceLatitude
+    var deviceLongitude by marketUiState::deviceLongitude
+    var locatingDevice by marketUiState::locatingDevice
+    var nearbyOffset by marketUiState::nearbyOffset
+    var nearbyHasMore by marketUiState::nearbyHasMore
+    var nearbyPageLoadFailed by marketUiState::nearbyPageLoadFailed
+    var nearbyLoadGeneration by marketUiState::nearbyLoadGeneration
+    var marketPriceHints by marketUiState::marketPriceHints
     val locationScope = rememberCoroutineScope()
-    var nearbyOffset by remember { mutableIntStateOf(0) }
-    var nearbyHasMore by remember { mutableStateOf(true) }
-    var nearbyPageLoadFailed by remember { mutableStateOf(false) }
-    var nearbyLoadGeneration by remember { mutableIntStateOf(0) }
     val nearbyListState = rememberLazyListState()
-    var marketPriceHints by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
-    var invoiceSaleId by remember { mutableStateOf("") }
-    var invoiceDestinationOrg by remember { mutableStateOf("") }
+    var invoiceSaleId by invoiceTransferState::invoiceSaleId
+    var invoiceDestinationOrg by invoiceTransferState::invoiceDestinationOrg
     var invoiceRequestKey by remember { mutableStateOf(java.util.UUID.randomUUID().toString()) }
     var invoiceRequests by remember { mutableStateOf<List<InvoicePurchaseRequestRow>>(emptyList()) }
-    var invoiceMappingRequestId by remember { mutableStateOf("") }
+    var invoiceMappingRequestId by invoiceTransferState::invoiceMappingRequestId
     var invoiceMappingPurchaseOrderId by remember { mutableStateOf("") }
     var invoiceMappingLines by remember { mutableStateOf<List<InvoicePurchaseUnmappedLine>>(emptyList()) }
     var invoiceMappingOfferings by remember { mutableStateOf<List<InvoicePurchaseOffering>>(emptyList()) }
-    var invoiceMappingLineId by remember { mutableStateOf("") }
-    var invoiceMappingOfferingId by remember { mutableStateOf("") }
-    var invoiceMappingLineMenuExpanded by remember { mutableStateOf(false) }
-    var invoiceMappingOfferingMenuExpanded by remember { mutableStateOf(false) }
+    var invoiceMappingLineId by invoiceTransferState::invoiceMappingLineId
+    var invoiceMappingOfferingId by invoiceTransferState::invoiceMappingOfferingId
+    var invoiceMappingLineMenuExpanded by invoiceTransferState::invoiceMappingLineMenuExpanded
+    var invoiceMappingOfferingMenuExpanded by invoiceTransferState::invoiceMappingOfferingMenuExpanded
     var invoiceMappingLocationId by remember { mutableStateOf("") }
     var invoiceMappingWarehouses by remember { mutableStateOf<List<CatalogWarehouseOption>>(emptyList()) }
-    var invoiceMappingWarehouseId by remember { mutableStateOf("") }
-    var invoiceMappingWarehouseMenuExpanded by remember { mutableStateOf(false) }
+    var invoiceMappingWarehouseId by invoiceTransferState::invoiceMappingWarehouseId
+    var invoiceMappingWarehouseMenuExpanded by invoiceTransferState::invoiceMappingWarehouseMenuExpanded
     var showInvoiceItemCreation by remember { mutableStateOf(false) }
     var invoiceNewNameAr by remember { mutableStateOf("") }
     var invoiceNewNameEn by remember { mutableStateOf("") }
@@ -108,49 +110,49 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var invoiceNewSaleUnitMenuExpanded by remember { mutableStateOf(false) }
     var invoiceNewIdempotencyKey by remember { mutableStateOf("") }
     var localUnitCodes by remember { mutableStateOf<Set<String>>(emptySet()) }
-    var invoiceReceiveLocationId by remember { mutableStateOf("") }
-    var invoiceReceiveLocationMenuExpanded by remember { mutableStateOf(false) }
+    var invoiceReceiveLocationId by invoiceTransferState::invoiceReceiveLocationId
+    var invoiceReceiveLocationMenuExpanded by invoiceTransferState::invoiceReceiveLocationMenuExpanded
     val catalogListState = rememberLazyListState()
     var categories by remember { mutableStateOf<List<CatalogCategory>>(emptyList()) }
     var directoryUnits by remember { mutableStateOf<List<DirectoryUnit>>(emptyList()) }; var pendingTransfers by remember { mutableStateOf<List<PendingTransfer>>(emptyList()) }
     var busy by remember { mutableStateOf(false) }; var restoringSession by remember { mutableStateOf(true) }; var feedback by remember { mutableStateOf("") }; var editingProduct by remember { mutableStateOf<CatalogProduct?>(null) }
 
-    var categoryCode by remember { mutableStateOf("") }; var parentCode by remember { mutableStateOf("") }
-    var categoryNameAr by remember { mutableStateOf("") }; var categoryNameEn by remember { mutableStateOf("") }
-    var categoryDescriptionAr by remember { mutableStateOf("") }; var categoryDescriptionEn by remember { mutableStateOf("") }; var categoryTranslations by remember { mutableStateOf("") }
+    val categoryCodeState = remember { mutableStateOf("") }; var categoryCode by categoryCodeState; val parentCodeState = remember { mutableStateOf("") }; var parentCode by parentCodeState
+    val categoryNameArState = remember { mutableStateOf("") }; var categoryNameAr by categoryNameArState; val categoryNameEnState = remember { mutableStateOf("") }; var categoryNameEn by categoryNameEnState
+    val categoryDescriptionArState = remember { mutableStateOf("") }; var categoryDescriptionAr by categoryDescriptionArState; val categoryDescriptionEnState = remember { mutableStateOf("") }; var categoryDescriptionEn by categoryDescriptionEnState; val categoryTranslationsState = remember { mutableStateOf("") }; var categoryTranslations by categoryTranslationsState
 
-    var nameAr by remember { mutableStateOf("") }; var nameEn by remember { mutableStateOf("") }
-    var descriptionAr by remember { mutableStateOf("") }; var descriptionEn by remember { mutableStateOf("") }; var extraTranslations by remember { mutableStateOf("") }
-    var productCategory by remember { mutableStateOf("") }; var itemType by remember { mutableStateOf("product") }
-    var unitCode by remember { mutableStateOf("EA") }; var barcode by remember { mutableStateOf("") }
-    var brand by remember { mutableStateOf("") }; var manufacturer by remember { mutableStateOf("") }
-    var origin by remember { mutableStateOf("") }; var model by remember { mutableStateOf("") }; var partNumber by remember { mutableStateOf("") }
-    var imageUrl by remember { mutableStateOf("") }; var imageAlt by remember { mutableStateOf("") }
-    var ingredients by remember { mutableStateOf("") }; var materialComposition by remember { mutableStateOf("") }
-    var recipe by remember { mutableStateOf("") }; var recipeIngredientsText by remember { mutableStateOf("") }; var recipeYieldQty by remember { mutableStateOf("") }; var recipeYieldUnit by remember { mutableStateOf("EA") }; var recipePrepMinutes by remember { mutableStateOf("") }; var recipeCookMinutes by remember { mutableStateOf("") }; var recipeSource by remember { mutableStateOf("") }; var recipeAllergenNotes by remember { mutableStateOf("") }; var specifications by remember { mutableStateOf("") }; var customAttributesJson by remember { mutableStateOf("{}") }
-    var allergens by remember { mutableStateOf("") }; var storage by remember { mutableStateOf("") }
-    var usage by remember { mutableStateOf("") }; var warnings by remember { mutableStateOf("") }
-    var shelfLife by remember { mutableStateOf("") }; var expiryRequired by remember { mutableStateOf(false) }
-    var batchTracked by remember { mutableStateOf(false) }; var serialTracked by remember { mutableStateOf(false) }
-    var prescriptionOnly by remember { mutableStateOf(false) }
-    var extraUnitCode by remember { mutableStateOf("") }; var extraUnitQty by remember { mutableStateOf("1") }
-    var extraUnitBarcode by remember { mutableStateOf("") }; var extraUnitSku by remember { mutableStateOf("") }; var extraUnitPackage by remember { mutableStateOf("") }; var extraUnitNetQuantity by remember { mutableStateOf("") }; var extraUnitNetUnitCode by remember { mutableStateOf("") }; var extraUnitImageUrl by remember { mutableStateOf("") }; var extraUnitsText by remember { mutableStateOf("") }
-    var currencyCode by remember { mutableStateOf("YER") }; var sectors by remember { mutableStateOf("retail") }
-    var levels by remember { mutableStateOf("shop") }; var regionCountry by remember { mutableStateOf("") }
-    var regionCode by remember { mutableStateOf("") }; var regionCity by remember { mutableStateOf("") }
-    var regionExcluded by remember { mutableStateOf(false) }; var extraRegionRules by remember { mutableStateOf("") }
-    var rulingDomain by remember { mutableStateOf("religious") }; var authority by remember { mutableStateOf("") }
-    var religion by remember { mutableStateOf("") }; var jurisdiction by remember { mutableStateOf("") }
-    var rulingOutcome by remember { mutableStateOf("unknown") }; var rulingRationale by remember { mutableStateOf("") }
-    var rulingSourceTitle by remember { mutableStateOf("") }; var rulingSourceUrl by remember { mutableStateOf("") }
-    var rulingConfidence by remember { mutableStateOf("unverified") }; var extraRulingsText by remember { mutableStateOf("") }
+    var nameAr by productFormState::nameAr; var nameEn by productFormState::nameEn
+    var descriptionAr by productFormState::descriptionAr; var descriptionEn by productFormState::descriptionEn; var extraTranslations by productFormState::extraTranslations
+    var productCategory by productFormState::productCategory; var itemType by productFormState::itemType
+    var unitCode by productFormState::unitCode; var barcode by productFormState::barcode
+    var brand by productFormState::brand; var manufacturer by productFormState::manufacturer
+    var origin by productFormState::origin; var model by productFormState::model; var partNumber by productFormState::partNumber
+    var imageUrl by productFormState::imageUrl; var imageAlt by productFormState::imageAlt
+    var ingredients by productFormState::ingredients; var materialComposition by productFormState::materialComposition
+    var recipe by productFormState::recipe; var recipeIngredientsText by productFormState::recipeIngredientsText; var recipeYieldQty by productFormState::recipeYieldQty; var recipeYieldUnit by productFormState::recipeYieldUnit; var recipePrepMinutes by productFormState::recipePrepMinutes; var recipeCookMinutes by productFormState::recipeCookMinutes; var recipeSource by productFormState::recipeSource; var recipeAllergenNotes by productFormState::recipeAllergenNotes; var specifications by productFormState::specifications; var customAttributesJson by productFormState::customAttributesJson
+    var allergens by productFormState::allergens; var storage by productFormState::storage
+    var usage by productFormState::usage; var warnings by productFormState::warnings
+    var shelfLife by productFormState::shelfLife; var expiryRequired by productFormState::expiryRequired
+    var batchTracked by productFormState::batchTracked; var serialTracked by productFormState::serialTracked
+    var prescriptionOnly by productFormState::prescriptionOnly
+    var extraUnitCode by productFormState::extraUnitCode; var extraUnitQty by productFormState::extraUnitQty
+    var extraUnitBarcode by productFormState::extraUnitBarcode; var extraUnitSku by productFormState::extraUnitSku; var extraUnitPackage by productFormState::extraUnitPackage; var extraUnitNetQuantity by productFormState::extraUnitNetQuantity; var extraUnitNetUnitCode by productFormState::extraUnitNetUnitCode; var extraUnitImageUrl by productFormState::extraUnitImageUrl; var extraUnitsText by productFormState::extraUnitsText
+    var currencyCode by productFormState::currencyCode; var sectors by productFormState::sectors
+    var levels by productFormState::levels; var regionCountry by productFormState::regionCountry
+    var regionCode by productFormState::regionCode; var regionCity by productFormState::regionCity
+    var regionExcluded by productFormState::regionExcluded; var extraRegionRules by productFormState::extraRegionRules
+    var rulingDomain by productFormState::rulingDomain; var authority by productFormState::authority
+    var religion by productFormState::religion; var jurisdiction by productFormState::jurisdiction
+    var rulingOutcome by productFormState::rulingOutcome; var rulingRationale by productFormState::rulingRationale
+    var rulingSourceTitle by productFormState::rulingSourceTitle; var rulingSourceUrl by productFormState::rulingSourceUrl
+    var rulingConfidence by productFormState::rulingConfidence; var extraRulingsText by productFormState::extraRulingsText
 
-    var unitShortCode by remember { mutableStateOf("") }; var unitNameAr by remember { mutableStateOf("") }
-    var unitNameEn by remember { mutableStateOf("") }; var unitDimension by remember { mutableStateOf("count") }
-    var unitFactor by remember { mutableStateOf("1") }; var unitBaseCode by remember { mutableStateOf("EA") }
-    var unitDecimals by remember { mutableStateOf("0") }; var unitTranslations by remember { mutableStateOf("") }
-    var transferSource by remember { mutableStateOf("") }; var transferDestination by remember { mutableStateOf("") }
-    var transferIds by remember { mutableStateOf("") }
+    val unitShortCodeState = remember { mutableStateOf("") }; var unitShortCode by unitShortCodeState; val unitNameArState = remember { mutableStateOf("") }; var unitNameAr by unitNameArState
+    val unitNameEnState = remember { mutableStateOf("") }; var unitNameEn by unitNameEnState; val unitDimensionState = remember { mutableStateOf("count") }; var unitDimension by unitDimensionState
+    val unitFactorState = remember { mutableStateOf("1") }; var unitFactor by unitFactorState; val unitBaseCodeState = remember { mutableStateOf("EA") }; var unitBaseCode by unitBaseCodeState
+    val unitDecimalsState = remember { mutableStateOf("0") }; var unitDecimals by unitDecimalsState; val unitTranslationsState = remember { mutableStateOf("") }; var unitTranslations by unitTranslationsState
+    val transferSourceState = remember { mutableStateOf("") }; var transferSource by transferSourceState; val transferDestinationState = remember { mutableStateOf("") }; var transferDestination by transferDestinationState
+    val transferIdsState = remember { mutableStateOf("") }; var transferIds by transferIdsState
 
     fun request(action: () -> String, onSuccess: (String) -> Unit, onFailure: ((Throwable) -> Unit)? = null) {
         if (busy) return
@@ -219,6 +221,32 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                 loadCatalog(reset = false)
             }
         }
+    }
+
+    fun saveMarketBranchCoordinates(latitude: String?, longitude: String?) {
+        val active=token
+        val orgId=org()
+        if(active==null || orgId==null || selectedBranchId.isBlank()) {
+            feedback="اختر مؤسسة وفرعًا صالحين أولًا."
+            return
+        }
+        request({
+            catalogHttp("/rest/v1/rpc/commercial_update_location_coordinates",JSONObject()
+                .put("p_organization_id",orgId)
+                .put("p_location_id",selectedBranchId)
+                .put("p_latitude",latitude ?: JSONObject.NULL)
+                .put("p_longitude",longitude ?: JSONObject.NULL),active)
+        }, { raw ->
+            val result=JSONObject(raw)
+            val savedLat=result.optString("latitude").takeUnless { it=="null" }.orEmpty()
+            val savedLon=result.optString("longitude").takeUnless { it=="null" }.orEmpty()
+            marketBranches=marketBranches.map { branch ->
+                if(branch.id==selectedBranchId) branch.copy(latitude=savedLat,longitude=savedLon) else branch
+            }
+            branchLatitude=savedLat
+            branchLongitude=savedLon
+            feedback=if(savedLat.isBlank()) "تم مسح إحداثيات الفرع." else "تم حفظ إحداثيات الفرع وتسجيل التغيير في سجل التدقيق."
+        })
     }
 
     fun loadMarketContext() {
@@ -885,117 +913,25 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             if(feedback.isNotBlank()) Text(feedback,color=if(feedback.startsWith("تم")||feedback.startsWith("اكتملت")) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,style=MaterialTheme.typography.bodySmall)
             when(section) {
                 "browse" -> {
-                    Card(Modifier.fillMaxWidth()) {
-                        Column(Modifier.fillMaxWidth().padding(10.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                            Text("الفرع والمستودع واكتشاف السوق",fontWeight=FontWeight.SemiBold)
-                            Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                                Box(Modifier.weight(1f)) {
-                                    OutlinedButton(onClick={branchMenuExpanded=true},modifier=Modifier.fillMaxWidth(),enabled=!busy) {
-                                        Text(marketBranches.firstOrNull { it.id==selectedBranchId }?.name ?: "اختر الفرع")
-                                    }
-                                    DropdownMenu(expanded=branchMenuExpanded,onDismissRequest={branchMenuExpanded=false}) {
-                                        marketBranches.forEach { branch -> DropdownMenuItem(text={Text(branch.name)},onClick={
-                                            selectedBranchId=branch.id
-                                            branchLatitude=branch.latitude
-                                            branchLongitude=branch.longitude
-                                            selectedWarehouseId=marketWarehouses.firstOrNull { it.branchId==branch.id }?.id.orEmpty()
-                                            nearbyMarketItems=emptyList(); nearbyOffset=0; nearbyHasMore=true; nearbyLoadGeneration++; marketRadius=5000; marketPriceHints=emptyMap(); branchMenuExpanded=false
-                                        }) }
-                                    }
-                                }
-                                Box(Modifier.weight(1f)) {
-                                    OutlinedButton(onClick={warehouseMenuExpanded=true},modifier=Modifier.fillMaxWidth(),enabled=!busy && selectedBranchId.isNotBlank()) {
-                                        Text(marketWarehouses.firstOrNull { it.id==selectedWarehouseId }?.name ?: "اختر المستودع")
-                                    }
-                                    DropdownMenu(expanded=warehouseMenuExpanded,onDismissRequest={warehouseMenuExpanded=false}) {
-                                        marketWarehouses.filter { it.branchId==selectedBranchId }.forEach { warehouse ->
-                                            DropdownMenuItem(text={Text(warehouse.name)},onClick={selectedWarehouseId=warehouse.id;warehouseMenuExpanded=false})
-                                        }
-                                    }
-                                }
-                            }
-                            Text("إحداثيات الفرع المحدد",fontWeight=FontWeight.SemiBold)
-                            Text("أدخل إحداثيات الموقع يدويًا لاستخدام اكتشاف السوق القريب. اترك الحقلين فارغين لمسح الموقع.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                            Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                                OutlinedTextField(branchLatitude,{branchLatitude=it},Modifier.weight(1f),label={Text("خط العرض Latitude")},singleLine=true)
-                                OutlinedTextField(branchLongitude,{branchLongitude=it},Modifier.weight(1f),label={Text("خط الطول Longitude")},singleLine=true)
-                            }
-                            val parsedLatitude=branchLatitude.trim().takeIf { it.isNotEmpty() }?.toBigDecimalOrNull()
-                            val parsedLongitude=branchLongitude.trim().takeIf { it.isNotEmpty() }?.toBigDecimalOrNull()
-                            val coordinatesCleared=branchLatitude.isBlank() && branchLongitude.isBlank()
-                            val coordinatesValid=coordinatesCleared || (
-                                parsedLatitude!=null && parsedLongitude!=null &&
-                                parsedLatitude >= java.math.BigDecimal("-90") && parsedLatitude <= java.math.BigDecimal("90") &&
-                                parsedLongitude >= java.math.BigDecimal("-180") && parsedLongitude <= java.math.BigDecimal("180")
-                            )
-                            Button(
-                                onClick={
-                                    val active=token
-                                    val orgId=org()
-                                    if(active==null || orgId==null || selectedBranchId.isBlank()) { feedback="اختر مؤسسة وفرعًا صالحين أولًا."; return@Button }
-                                    request({
-                                        catalogHttp("/rest/v1/rpc/commercial_update_location_coordinates",JSONObject()
-                                            .put("p_organization_id",orgId)
-                                            .put("p_location_id",selectedBranchId)
-                                            .put("p_latitude",parsedLatitude?.toPlainString() ?: JSONObject.NULL)
-                                            .put("p_longitude",parsedLongitude?.toPlainString() ?: JSONObject.NULL),active)
-                                    }, { raw ->
-                                        val result=JSONObject(raw)
-                                        val savedLat=result.optString("latitude").takeUnless { it=="null" }.orEmpty()
-                                        val savedLon=result.optString("longitude").takeUnless { it=="null" }.orEmpty()
-                                        marketBranches=marketBranches.map { branch ->
-                                            if(branch.id==selectedBranchId) branch.copy(latitude=savedLat,longitude=savedLon) else branch
-                                        }
-                                        branchLatitude=savedLat
-                                        branchLongitude=savedLon
-                                        feedback=if(savedLat.isBlank()) "تم مسح إحداثيات الفرع." else "تم حفظ إحداثيات الفرع وتسجيل التغيير في سجل التدقيق."
-                                    })
-                                },
-                                enabled=!busy && selectedBranchId.isNotBlank() && coordinatesValid,
-                                modifier=Modifier.fillMaxWidth()
-                            ) { Text(if(coordinatesCleared) "مسح الإحداثيات" else "حفظ إحداثيات الفرع") }
-                            Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-                                OutlinedButton(onClick={loadMarketContext()},enabled=!busy) { Text("تحديث الفروع") }
-                                Button(onClick={loadNearbyFromDevice()},enabled=!busy && !locatingDevice) { Text(if(locatingDevice) "جارٍ تحديد الموقع..." else "موقعي الحالي") }
-                            }
-                            Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-                                OutlinedButton(onClick={deviceLatitude=null;deviceLongitude=null;startNearbyCatalog()},enabled=!busy && selectedBranchId.isNotBlank()) { Text("حسب موقع الفرع") }
-                                OutlinedButton(onClick={loadSelectedPriceSuggestions()},enabled=!busy && selectedCatalogIds.isNotEmpty()) { Text("أسعار استرشادية") }
-                            }
-                            OutlinedButton(
-                                onClick={section="product"},
-                                enabled=!busy,
-                                modifier=Modifier.fillMaxWidth()
-                            ) { Text("إنشاء صنف جديد") }
-                            Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-                                Button(onClick={configureSelectedCatalogItems()},enabled=!busy && selectedCatalogIds.isNotEmpty() && selectedCatalogIds.size<=100 && selectedActivityCode.isNotBlank() && selectedBranchId.isNotBlank() && selectedWarehouseId.isNotBlank()) { Text("تهيئة المختار للفرع") }
-                                OutlinedButton(onClick={loadNearbyCatalog(false)},enabled=!busy && nearbyHasMore && !nearbyPageLoadFailed) { Text("تحميل المزيد") }
-                                if(nearbyPageLoadFailed) OutlinedButton(onClick={loadNearbyCatalog(!nearbyHasMore)},enabled=!busy) { Text("إعادة المحاولة") }
-                                OutlinedButton(onClick={loadNearbyCatalog(true)},enabled=!busy && marketRadius<100000 && !nearbyHasMore) { Text("توسيع النطاق") }
-                            }
-                            if(nearbyMarketItems.isNotEmpty()) {
-                                Text("الأكثر استخدامًا في السوق القريب • نطاق "+(marketRadius/1000)+" كم",fontWeight=FontWeight.SemiBold)
-                                LazyColumn(state=nearbyListState,modifier=Modifier.fillMaxWidth().heightIn(min=48.dp,max=220.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
-                                    items(nearbyMarketItems,key={it.id}) { market ->
-                                        FilterChip(
-                                            selected=market.id in selectedCatalogIds,
-                                            onClick={
-                                                selectedCatalogIds=if(market.id in selectedCatalogIds) selectedCatalogIds-market.id
-                                                else if(selectedCatalogIds.size<100) selectedCatalogIds+market.id
-                                                else selectedCatalogIds
-                                            },
-                                            label={Text(market.name+" • "+market.popularityBand+" • تجار "+market.merchantCountBand)}
-                                        )
-                                    }
-                                    if(busy) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
-                                    if(!nearbyHasMore && marketRadius<100000) item { Text("اسحب قائمة السوق لتوسيع البحث إلى المنطقة التالية.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
-                                    if(marketRadius>=100000 && !nearbyHasMore) item { Text("وصل البحث إلى أقصى نطاق 100 كم.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
-                                }
-                            }
-                            Text(if(deviceLatitude!=null && deviceLongitude!=null) "مركز البحث: موقع الجهاز الحالي لهذه الجلسة. استخدم «حسب موقع الفرع» للعودة إلى إحداثيات الفرع." else "مركز البحث الافتراضي: إحداثيات الفرع المحفوظة. يمكنك اختيار موقع الجهاز بإذن اختياري لمرة واحدة.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text("لا يعمل الموقع في الخلفية ولا تُحفظ إحداثيات الجهاز. الأسعار لا تظهر إلا عند توافر بيانات مجمعة موثوقة من خمسة تجار مستقلين على الأقل.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
+                    CatalogMarketDiscoverySection(
+                        state=marketUiState,
+                        selectedCatalogIds=selectedCatalogIds,
+                        busy=busy,
+                        selectedActivityCode=selectedActivityCode,
+                        nearbyListState=nearbyListState,
+                        onToggleCatalogItem={id ->
+                            selectedCatalogIds=if(id in selectedCatalogIds) selectedCatalogIds-id
+                            else if(selectedCatalogIds.size<100) selectedCatalogIds+id else selectedCatalogIds
+                        },
+                        onSaveCoordinates=::saveMarketBranchCoordinates,
+                        onLoadMarketContext=::loadMarketContext,
+                        onLoadNearbyFromDevice=::loadNearbyFromDevice,
+                        onStartNearbyCatalog=::startNearbyCatalog,
+                        onLoadSelectedPriceSuggestions=::loadSelectedPriceSuggestions,
+                        onCreateProduct={section="product"},
+                        onConfigureSelectedCatalogItems=::configureSelectedCatalogItems,
+                        onLoadNearbyCatalog=::loadNearbyCatalog
+                    )
                     if (selectedCatalogIds.isNotEmpty()) {
                         Card(Modifier.fillMaxWidth(), colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.secondaryContainer)) {
                             Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement=Arrangement.spacedBy(6.dp)) {
@@ -1037,453 +973,85 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                             }
                         }
                     }
-                    LazyColumn(state=catalogListState,verticalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(bottom=20.dp)) {
-                        item { OutlinedTextField(query,{query=it},Modifier.fillMaxWidth(),label={Text("بحث بالاسم أو الوصف أو الباركود أو الكود")},singleLine=true) }
-                        item {
-                            Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
-                                Text("تصفية الدليل حسب النشاط التجاري", style=MaterialTheme.typography.labelMedium)
-                                Box {
-                                    OutlinedButton(onClick={sectorMenuExpanded=true}, enabled=!busy && sectorOptions.isNotEmpty(), modifier=Modifier.fillMaxWidth()) {
-                                        Text(sectorOptions.firstOrNull { it.code.equals(sector, true) }?.pathAr ?: "كل القطاعات")
-                                    }
-                                    DropdownMenu(expanded=sectorMenuExpanded, onDismissRequest={sectorMenuExpanded=false}) {
-                                        DropdownMenuItem(text={Text("كل القطاعات")}, onClick={
-                                            sector=""; selectedActivityCode=""; businessLevel=""; sectorMenuExpanded=false; loadCatalog(true)
-                                        })
-                                        sectorOptions.forEach { option ->
-                                            DropdownMenuItem(text={Text(option.pathAr)}, onClick={
-                                                sector=option.code
-                                                val selectedNode=activityNodes.firstOrNull { it.code==selectedActivityCode }
-                                                if (selectedNode!=null && !catalogNodeBelongsToSector(selectedNode,option.code,activityNodes)) selectedActivityCode=""
-                                                val validLevels=activityNodes.filter { it.selectable && catalogNodeBelongsToSector(it,option.code,activityNodes) }.map { it.defaultBusinessLevelCode }.filter { it.isNotBlank() }.distinct()
-                                                if (businessLevel !in validLevels) businessLevel=""
-                                                sectorMenuExpanded=false; loadCatalog(true)
-                                            })
-                                        }
-                                    }
-                                }
-                                Box {
-                                    OutlinedButton(onClick={businessLevelMenuExpanded=true}, enabled=!busy && businessLevelOptions.isNotEmpty(), modifier=Modifier.fillMaxWidth()) {
-                                        Text(businessLevel.takeIf { it.isNotBlank() }?.let { "مستوى النشاط: ${catalogBusinessLevelLabel(it)}" } ?: "كل مستويات النشاط")
-                                    }
-                                    DropdownMenu(expanded=businessLevelMenuExpanded, onDismissRequest={businessLevelMenuExpanded=false}) {
-                                        DropdownMenuItem(text={Text("كل المستويات")}, onClick={businessLevel=""; businessLevelMenuExpanded=false; loadCatalog(true)})
-                                        businessLevelOptions.forEach { level ->
-                                            DropdownMenuItem(text={Text(catalogBusinessLevelLabel(level))}, onClick={businessLevel=level; businessLevelMenuExpanded=false; loadCatalog(true)})
-                                        }
-                                    }
-                                }
-                                Text("اختر القطاع لتصفية الأنشطة ومستوياتها من الدليل الرسمي؛ لا تُكتب الرموز يدويًا.", style=MaterialTheme.typography.bodySmall, color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    CatalogBrowseSection(
+                        items=items,
+                        categories=categories,
+                        directoryUnits=directoryUnits,
+                        query=query,
+                        onQueryChange={query=it},
+                        sectorOptions=sectorOptions,
+                        sector=sector,
+                        onSectorSelected={ selectedCode ->
+                            sectorMenuExpanded=false
+                            if(selectedCode.isBlank()) {
+                                sector=""; selectedActivityCode=""; businessLevel=""
+                            } else {
+                                sector=selectedCode
+                                val selectedNode=activityNodes.firstOrNull { it.code==selectedActivityCode }
+                                if(selectedNode!=null && !catalogNodeBelongsToSector(selectedNode,selectedCode,activityNodes)) selectedActivityCode=""
+                                val validLevels=activityNodes.filter { it.selectable && catalogNodeBelongsToSector(it,selectedCode,activityNodes) }.map { it.defaultBusinessLevelCode }.filter { it.isNotBlank() }.distinct()
+                                if(businessLevel !in validLevels) businessLevel=""
                             }
-                        }
-                        item {
-                            Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
-                                Text("ربط الأصناف بنشاط تجاري محدد (اختياري)", style=MaterialTheme.typography.labelMedium)
-                                Box {
-                                    OutlinedButton(onClick={activityMenuExpanded=true}, enabled=!busy && activityOptions.isNotEmpty(), modifier=Modifier.fillMaxWidth()) {
-                                        Text(activityOptions.firstOrNull { it.code == selectedActivityCode }?.pathAr ?: "اختر النشاط من الدليل")
-                                    }
-                                    DropdownMenu(expanded=activityMenuExpanded, onDismissRequest={activityMenuExpanded=false}) {
-                                        DropdownMenuItem(text={Text("بدون إسناد لنشاط محدد")}, onClick={selectedActivityCode=""; activityMenuExpanded=false; loadCatalog(true)})
-                                        activityOptions.forEach { node ->
-                                            DropdownMenuItem(text={Text(node.pathAr)}, onClick={
-                                                selectedActivityCode=node.code
-                                                if (node.defaultBusinessLevelCode.isNotBlank()) businessLevel=node.defaultBusinessLevelCode
-                                                activityMenuExpanded=false
-                                                loadCatalog(true)
-                                            })
-                                        }
-                                    }
-                                }
-                                Text("تُعرض الأنشطة والتخصصات التابعة للقطاع المختار فقط، ويُضبط المستوى المقترح من بيانات الدليل.", style=MaterialTheme.typography.bodySmall, color=MaterialTheme.colorScheme.onSurfaceVariant)
+                            loadCatalog(true)
+                        },
+                        sectorMenuExpanded=sectorMenuExpanded,
+                        onSectorMenuExpandedChange={sectorMenuExpanded=it},
+                        businessLevelOptions=businessLevelOptions,
+                        businessLevel=businessLevel,
+                        onBusinessLevelSelected={businessLevel=it;businessLevelMenuExpanded=false;loadCatalog(true)},
+                        businessLevelMenuExpanded=businessLevelMenuExpanded,
+                        onBusinessLevelMenuExpandedChange={businessLevelMenuExpanded=it},
+                        activityOptions=activityOptions,
+                        selectedActivityCode=selectedActivityCode,
+                        onActivitySelected={ node ->
+                            activityMenuExpanded=false
+                            selectedActivityCode=node?.code.orEmpty()
+                            if(node!=null && node.defaultBusinessLevelCode.isNotBlank()) businessLevel=node.defaultBusinessLevelCode
+                            loadCatalog(true)
+                        },
+                        activityMenuExpanded=activityMenuExpanded,
+                        onActivityMenuExpandedChange={activityMenuExpanded=it},
+                        country=country,
+                        onCountryChange={country=it.uppercase()},
+                        region=region,
+                        onRegionChange={region=it},
+                        city=city,
+                        onCityChange={city=it},
+                        locale=locale,
+                        onLocaleChange={locale=it},
+                        busy=busy,
+                        onSearch={loadCatalog()},
+                        onRefreshDirectories=::loadDirectories,
+                        listState=catalogListState,
+                        selectedCatalogIds=selectedCatalogIds,
+                        marketPriceHints=marketPriceHints,
+                        organizationId=organizationId.trim(),
+                        requireCloudInventoryContext=requireCloudInventoryContext,
+                        selectedBranchId=selectedBranchId,
+                        selectedWarehouseId=selectedWarehouseId,
+                        onSelectionChange={item,checked ->
+                            selectedCatalogIds = when {
+                                !checked -> selectedCatalogIds - item.id
+                                item.id in selectedCatalogIds -> selectedCatalogIds
+                                selectedCatalogIds.size < 100 -> selectedCatalogIds + item.id
+                                else -> { feedback="الحد الأقصى للعملية الواحدة 100 صنف. أزل تحديد صنف قبل إضافة آخر."; selectedCatalogIds }
                             }
-                        }
-                        item { Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(country,{country=it.uppercase()},Modifier.weight(1f),label={Text("الدولة")},singleLine=true)
-                            OutlinedTextField(region,{region=it},Modifier.weight(1f),label={Text("المنطقة")},singleLine=true)
-                            OutlinedTextField(city,{city=it},Modifier.weight(1f),label={Text("المدينة")},singleLine=true)
-                        } }
-                        item { Row(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.CenterVertically) {
-                            OutlinedTextField(locale,{locale=it},Modifier.weight(1f),label={Text("اللغة")},singleLine=true)
-                            Button(onClick={loadCatalog()},enabled=!busy) { Icon(Icons.Default.Search,null); Text("بحث") }
-                            OutlinedButton(onClick={loadDirectories()},enabled=!busy) { Text("تحديث الأدلة") }
-                        } }
-                        items(items,key={it.id}) { item ->
-                            Card(colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface),border=BorderStroke(1.dp,MaterialTheme.colorScheme.outlineVariant)) {
-                                Column(Modifier.fillMaxWidth().padding(12.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
-                                    if(item.imageUrl.startsWith("https://",true)) AsyncImage(model=item.imageUrl,contentDescription=item.name,modifier=Modifier.fillMaxWidth().heightIn(max=180.dp),contentScale=ContentScale.Fit)
-                                    Row(verticalAlignment=Alignment.Top) {
-                                        Checkbox(
-                                            checked=item.id in selectedCatalogIds,
-                                            onCheckedChange={checked ->
-                                                selectedCatalogIds = when {
-                                                    !checked -> selectedCatalogIds - item.id
-                                                    item.id in selectedCatalogIds -> selectedCatalogIds
-                                                    selectedCatalogIds.size < 100 -> selectedCatalogIds + item.id
-                                                    else -> { feedback="الحد الأقصى للعملية الواحدة 100 صنف. أزل تحديد صنف قبل إضافة آخر."; selectedCatalogIds }
-                                                }
-                                            },
-                                            enabled=!busy
-                                        )
-                                        Column(Modifier.weight(1f)) {
-                                            Text(item.name.ifBlank { item.catalogCode },fontWeight=FontWeight.SemiBold)
-                                            Text("${item.category} • ${item.catalogCode}",color=MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.bodySmall)
-                                        }
-                                        if(item.recommendationScore>0) AssistChip(onClick={},label={Text("مقترح +${item.recommendationScore}")})
-                                    }
-                                    if(item.description.isNotBlank()) Text(item.description,style=MaterialTheme.typography.bodySmall)
-                                    val facts=listOf(
-                                        item.brand.takeIf{it.isNotBlank()}?.let{"العلامة: $it"},
-                                        item.manufacturer.takeIf{it.isNotBlank()}?.let{"المصنّع: $it"},
-                                        item.countryOfManufacture.takeIf{it.isNotBlank()}?.let{"بلد الصناعة: $it"},
-                                        item.modelNumber.takeIf{it.isNotBlank()}?.let{"رقم الطراز: $it"},
-                                        item.partNumber.takeIf{it.isNotBlank()}?.let{"رقم القطعة: $it"},
-                                        item.imageAlt.takeIf{it.isNotBlank()}?.let{"وصف الصورة: $it"},
-                                        item.barcode.takeIf{it.isNotBlank()}?.let{"الباركود الأساسي: $it"},
-                                        "وحدة الأساس/البيع: ${item.unitCode}",
-                                        item.availableUnits.takeIf{it.isNotEmpty()}?.joinToString("، "){u->"${u.packageName.ifBlank{u.unitName.ifBlank{u.unitCode}}} × ${u.quantityInBase}${if(u.barcode.isNotBlank()) " (باركود ${u.barcode})" else ""}"}?.let{"العبوات: $it"},
-                                        marketPriceHints[item.id]?.let{"سعر استرشادي مجمّع: "+it},
-                                        item.createdAt.takeIf{it.isNotBlank()}?.let{"تاريخ إدخال سجل الدليل: $it"},
-                                        item.createdBy.takeIf{it.isNotBlank()}?.let{"معرّف مدخل سجل الدليل: $it"},
-                                        item.imageUrl.takeIf{it.isNotBlank()}?.let{"رابط الصورة الخارجية: $it"},
-                                        item.materialComposition.takeIf{it.isNotBlank()}?.let{"تركيب المواد: $it"},
-                                        item.ingredients.takeIf{it.isNotBlank()}?.let{"المكونات: $it"},
-                                        item.recipe.takeIf{it.isNotBlank()}?.let{"الوصفة: $it"},
-                                        item.specifications.takeIf{it.isNotBlank()}?.let{"المواصفات: $it"},
-                                        item.allergens.takeIf{it.isNotBlank()}?.let{"مسببات الحساسية: $it"},
-                                        item.storageInstructions.takeIf{it.isNotBlank()}?.let{"التخزين: $it"},
-                                        item.usageInstructions.takeIf{it.isNotBlank()}?.let{"الاستخدام: $it"},
-                                        item.warnings.takeIf{it.isNotBlank()}?.let{"تحذيرات: $it"},
-                                        item.shelfLifeDays?.let{"مدة الصلاحية بالأيام: $it"},
-                                        if(item.requiresExpiryDate) "يتطلب تاريخ صلاحية" else null,
-                                        if(item.isBatchTracked) "يتطلب تتبع رقم التشغيلة" else null,
-                                        if(item.isSerialTracked) "يتطلب تتبع الرقم التسلسلي" else null,
-                                        item.attributesSchema.takeIf{it.isNotBlank() && it!="{}"}?.let{"حقول إضافية: $it"},
-                                        if(item.prescriptionOnly) "صنف يتطلب وصفة طبية — تحقق من التصنيف المحلي" else null
-                                    ).filterNotNull()
-                                    facts.forEach{Text(it,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
-                                    item.rulings.forEach { ruling ->
-                                        HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant)
-                                        Text("الحكم ${ruling.domain}: ${ruling.outcome} • الجهة: ${ruling.authority} • الحالة: ${ruling.confidence}",fontWeight=FontWeight.SemiBold,style=MaterialTheme.typography.bodySmall)
-                                        if(ruling.religion.isNotBlank()) Text("الدين/المذهب: ${ruling.religion}",style=MaterialTheme.typography.bodySmall)
-                                        if(ruling.jurisdiction.isNotBlank()) Text("الاختصاص: ${ruling.jurisdiction}",style=MaterialTheme.typography.bodySmall)
-                                        if(ruling.rationale.isNotBlank()) Text(ruling.rationale,style=MaterialTheme.typography.bodySmall)
-                                        if(ruling.sourceTitle.isNotBlank()) Text("المصدر: ${ruling.sourceTitle}",style=MaterialTheme.typography.bodySmall)
-                                        if(ruling.sourceUrl.isNotBlank()) Text("رابط المصدر: ${ruling.sourceUrl}",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.primary)
-                                        if(ruling.sourceUrl.startsWith("https://",true)) TextButton(onClick={
-                                            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(ruling.sourceUrl))) }
-                                                .onFailure { feedback="تعذر فتح رابط المصدر: ${it.message.orEmpty()}" }
-                                        }) { Text("فتح المصدر") }
-                                        if(ruling.effectiveFrom.isNotBlank() || ruling.effectiveTo.isNotBlank()) Text("فترة السريان: ${ruling.effectiveFrom.ifBlank { "غير محدد" }} — ${ruling.effectiveTo.ifBlank { "مفتوح" }}",style=MaterialTheme.typography.labelSmall)
-                                        if(ruling.reviewedAt.isNotBlank()) Text("تاريخ المراجعة: ${ruling.reviewedAt}",style=MaterialTheme.typography.labelSmall)
-                                        if((ruling.confidence=="unverified" || ruling.confidence=="reported") && ruling.sourceTitle.isNotBlank() && ruling.sourceUrl.startsWith("https://",true)) {
-                                            OutlinedButton(onClick={reviewRuling(ruling.id)},enabled=!busy,modifier=Modifier.fillMaxWidth()) { Text("تسجيل مراجعة المصدر (مالك/مدير)") }
-                                        }
-                                    }
-                                    item.availableUnits.filter { it.imageUrl.startsWith("https://",true) }.forEach { unit ->
-                                        Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                                            AsyncImage(model=unit.imageUrl,contentDescription=unit.packageName.ifBlank { unit.unitCode },modifier=Modifier.size(64.dp),contentScale=ContentScale.Crop)
-                                            Column(Modifier.weight(1f)) {
-                                                Text("صورة العبوة: ${unit.packageName.ifBlank { unit.unitCode }}",style=MaterialTheme.typography.bodySmall,fontWeight=FontWeight.SemiBold)
-                                                Text(unit.imageUrl,style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                                            }
-                                        }
-                                    }
-                                    Text("معرّف الصنف: ${item.id}",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.End) { TextButton(onClick={
- val baseUnit=item.availableUnits.firstOrNull { it.role.equals("base",true) && it.quantityInBase.toBigDecimalOrNull()?.compareTo(java.math.BigDecimal.ONE)==0 }
- val saleUnit=item.availableUnits.firstOrNull { it.isDefault } ?: item.availableUnits.firstOrNull { it.role.equals("sale",true) } ?: baseUnit
- if(!requireCloudInventoryContext) {
-  onAddToInventory(item,selectedBranchId,selectedWarehouseId,selectedActivityCode,baseUnit?.unitCode.orEmpty(),saleUnit?.unitCode.orEmpty())
- } else if(selectedActivityCode.isBlank() || selectedBranchId.isBlank() || selectedWarehouseId.isBlank()) {
-  feedback="اختر النشاط والفرع والمستودع أولًا قبل إنشاء الصنف بالمخزون."
- } else if(baseUnit==null || saleUnit==null) {
-  feedback="لا يمكن إنشاء الصنف: دليل الوحدات لا يحتوي وحدة أساس ووحدة بيع بمعامل تحويل موثوق."
- } else onAddToInventory(item,selectedBranchId,selectedWarehouseId,selectedActivityCode,baseUnit.unitCode,saleUnit.unitCode)
-}) { Icon(Icons.Default.Add,null); Text("إنشاء وربط بالمخزون") } }
-                    if(item.ownerOrganizationId.isNotBlank() && item.ownerOrganizationId==organizationId.trim()) {
-                        OutlinedButton(onClick={editingProduct=item},enabled=!busy,modifier=Modifier.fillMaxWidth()) { Text("تعديل بيانات الصنف") }
-                    }
-                                }
-                            }
-                        }
-                        if(items.isEmpty()) item { Text("ابحث عن أصناف أو اضغط تحديث الأدلة لعرض التصنيفات والوحدات المتاحة.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
-                        if(categories.isNotEmpty()) item { Text("دليل التصنيفات: ${categories.size} تصنيفًا محمّلًا",style=MaterialTheme.typography.bodySmall) }
-                        if(directoryUnits.isNotEmpty()) item { Text("دليل الوحدات: ${directoryUnits.size} وحدة محمّلة",style=MaterialTheme.typography.bodySmall) }
-                    }
+                        },
+                        onFeedback={feedback=it},
+                        onOpenSource={url ->
+                            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(url))) }
+                                .onFailure { feedback="تعذر فتح رابط المصدر: ${it.message.orEmpty()}" }
+                        },
+                        onReviewRuling=::reviewRuling,
+                        onAddToInventory=onAddToInventory,
+                        onEditProduct={editingProduct=it}
+                    )
                 }
-                "category" -> LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(bottom=20.dp)) {
-                    item { Text("إضافة مستوى تصنيف جديد — اترك التصنيف الأب فارغًا لإنشاء جذر.",style=MaterialTheme.typography.bodySmall) }
-                    item { OutlinedTextField(categoryCode,{categoryCode=it.uppercase()},Modifier.fillMaxWidth(),label={Text("كود التصنيف")},singleLine=true) }
-                    item { OutlinedTextField(parentCode,{parentCode=it.uppercase()},Modifier.fillMaxWidth(),label={Text("كود التصنيف الأب (اختياري)")},singleLine=true) }
-                    item { OutlinedTextField(categoryNameAr,{categoryNameAr=it},Modifier.fillMaxWidth(),label={Text("الاسم بالعربية")},singleLine=true) }
-                    item { OutlinedTextField(categoryNameEn,{categoryNameEn=it},Modifier.fillMaxWidth(),label={Text("Name in English")},singleLine=true) }
-                    item { OutlinedTextField(categoryDescriptionAr,{categoryDescriptionAr=it},Modifier.fillMaxWidth(),label={Text("الوصف العربي")}) }
-                    item { OutlinedTextField(categoryDescriptionEn,{categoryDescriptionEn=it},Modifier.fillMaxWidth(),label={Text("English description")}) }
-                    item { OutlinedTextField(categoryTranslations,{categoryTranslations=it},Modifier.fillMaxWidth().heightIn(min=80.dp),label={Text("ترجمات إضافية: locale|field|value")}) }
-                    item { Button(onClick={createCategory()},enabled=!busy && categoryCode.isNotBlank() && categoryNameAr.isNotBlank() && categoryNameEn.isNotBlank(),modifier=Modifier.fillMaxWidth()) { Text("حفظ التصنيف") } }
-                    item { OutlinedButton(onClick={loadDirectories()},enabled=!busy,modifier=Modifier.fillMaxWidth()) { Text("تحميل التصنيفات والوحدات") } }
-                    items(categories,key={it.code}) { cat -> Column(verticalArrangement=Arrangement.spacedBy(2.dp)) { Text("${cat.code}  •  ${cat.localizedName.ifBlank { cat.nameAr }} / ${cat.nameEn}${if(cat.parentCode.isNotBlank()) "  ←  ${cat.parentCode}" else "  •  جذر"}",style=MaterialTheme.typography.bodySmall); val desc=cat.localizedDescription.ifBlank { if(locale.startsWith("en")) cat.descriptionEn else cat.descriptionAr }; if(desc.isNotBlank()) Text(desc,style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant) } }
-                }
-                "unit" -> LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(bottom=20.dp)) {
-                    item { Text("إنشاء وحدة خاصة بالمؤسسة. رمز الوحدة سيُسبق تلقائيًا برمز المؤسسة لمنع تعارض الرموز عالميًا.",style=MaterialTheme.typography.bodySmall) }
-                    item { OutlinedTextField(unitShortCode,{unitShortCode=it.uppercase()},Modifier.fillMaxWidth(),label={Text("الرمز المختصر")},singleLine=true) }
-                    item { OutlinedTextField(unitNameAr,{unitNameAr=it},Modifier.fillMaxWidth(),label={Text("اسم الوحدة بالعربية")},singleLine=true) }
-                    item { OutlinedTextField(unitNameEn,{unitNameEn=it},Modifier.fillMaxWidth(),label={Text("Unit name in English")},singleLine=true) }
-                    item { OutlinedTextField(unitDimension,{unitDimension=it.lowercase()},Modifier.fillMaxWidth(),label={Text("البعد (مثل count, mass, length, volume, area)")},singleLine=true) }
-                    item {
-                        val canonicalUnits=directoryUnits.filter { it.baseCode.isBlank() }
-                        if(canonicalUnits.isEmpty()) OutlinedTextField(unitBaseCode,{unitBaseCode=it.uppercase()},Modifier.fillMaxWidth(),label={Text("رمز وحدة الأساس (حمّل الأدلة أولًا)")},singleLine=true)
-                        else {
-                            var expanded by remember { mutableStateOf(false) }
-                            ExposedDropdownMenuBox(expanded=expanded,onExpandedChange={expanded=it}) {
-                                OutlinedTextField(value=canonicalUnits.firstOrNull{it.code==unitBaseCode}?.let{"${it.code} — ${it.localizedName.ifBlank { it.nameAr }}"} ?: unitBaseCode,
-                                    onValueChange={},readOnly=true,label={Text("وحدة الأساس القياسية")},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expanded=expanded)},
-                                    modifier=Modifier.fillMaxWidth().menuAnchor())
-                                ExposedDropdownMenu(expanded=expanded,onDismissRequest={expanded=false}) {
-                                    canonicalUnits.forEach { unit -> DropdownMenuItem(text={Text("${unit.code} — ${unit.localizedName.ifBlank { unit.nameAr }} (${unit.dimension})")},onClick={unitBaseCode=unit.code;unitDimension=unit.dimension;expanded=false}) }
-                                }
-                            }
-                        }
-                    }
-                    item { OutlinedTextField(unitFactor,{unitFactor=it},Modifier.fillMaxWidth(),label={Text("كم تساوي وحدة الأساس؟")},singleLine=true) }
-                    item { OutlinedTextField(unitDecimals,{unitDecimals=it.filter(Char::isDigit)},Modifier.fillMaxWidth(),label={Text("عدد المنازل العشرية (0–6)")},singleLine=true) }
-                    item { OutlinedTextField(unitTranslations,{unitTranslations=it},Modifier.fillMaxWidth().heightIn(min=80.dp),label={Text("ترجمات إضافية: locale|field|value")}) }
-                    item { Button(onClick={createUnit()},enabled=!busy && unitShortCode.isNotBlank() && unitNameAr.isNotBlank() && unitNameEn.isNotBlank(),modifier=Modifier.fillMaxWidth()) { Text("حفظ وحدة القياس") } }
-                    item { OutlinedButton(onClick={loadDirectories()},enabled=!busy,modifier=Modifier.fillMaxWidth()) { Text("تحديث دليل الوحدات") } }
-                    items(directoryUnits,key={it.code}) { u -> Text("${u.code} • ${u.nameAr} / ${u.nameEn} • ${u.dimension} • ${u.factor} ${u.baseCode}${if(u.owner.isNotBlank()) " • وحدة مؤسسة" else ""}",style=MaterialTheme.typography.bodySmall) }
-                }
-                "product" -> LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(bottom=20.dp)) {
-                    item { Text("بيانات الصنف الأساسية",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold) }
-                    item { OutlinedTextField(nameAr,{nameAr=it},Modifier.fillMaxWidth(),label={Text("اسم الصنف بالعربية *")},singleLine=true) }
-                    item { OutlinedTextField(nameEn,{nameEn=it},Modifier.fillMaxWidth(),label={Text("Product name in English *")},singleLine=true) }
-                    item {
-                        if(categories.isEmpty()) OutlinedTextField(productCategory,{productCategory=it.uppercase()},Modifier.fillMaxWidth(),label={Text("كود التصنيف * (حدّث الأدلة أولًا للاختيار)")},singleLine=true)
-                        else {
-                            var expanded by remember { mutableStateOf(false) }
-                            ExposedDropdownMenuBox(expanded=expanded,onExpandedChange={expanded=it}) {
-                                OutlinedTextField(value=categories.firstOrNull{it.code==productCategory}?.let{"${it.code} — ${it.nameAr}"} ?: productCategory,
-                                    onValueChange={},readOnly=true,label={Text("التصنيف *")},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expanded=expanded)},
-                                    modifier=Modifier.fillMaxWidth().menuAnchor())
-                                ExposedDropdownMenu(expanded=expanded,onDismissRequest={expanded=false}) {
-                                    categories.forEach { cat -> DropdownMenuItem(text={Text("${cat.code} — ${cat.localizedName.ifBlank { cat.nameAr }}")},onClick={productCategory=cat.code;expanded=false}) }
-                                }
-                            }
-                        }
-                    }
-                    item { OutlinedTextField(itemType,{itemType=it},Modifier.fillMaxWidth(),label={Text("نوع العنصر: product/service/digital/material/asset")},singleLine=true) }
-                    item { OutlinedTextField(descriptionAr,{descriptionAr=it},Modifier.fillMaxWidth(),label={Text("الوصف العربي")}) }
-                    item { OutlinedTextField(descriptionEn,{descriptionEn=it},Modifier.fillMaxWidth(),label={Text("English description")}) }
-                    item { OutlinedTextField(extraTranslations,{extraTranslations=it},Modifier.fillMaxWidth().heightIn(min=90.dp),label={Text("ترجمات إضافية لكل لغة — سطر لكل ترجمة: locale|field|value")},placeholder={Text("fr|name|Nom du produit\nfr|description|Description du produit")}) }
-                    item { Text("الباركود والوحدات والعبوات",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold) }
-                    item {
-                        if(directoryUnits.isEmpty()) OutlinedTextField(unitCode,{unitCode=it.uppercase()},Modifier.fillMaxWidth(),label={Text("وحدة الأساس * (حدّث الأدلة أولًا للاختيار)")},singleLine=true)
-                        else {
-                            var expanded by remember { mutableStateOf(false) }
-                            ExposedDropdownMenuBox(expanded=expanded,onExpandedChange={expanded=it}) {
-                                OutlinedTextField(value=directoryUnits.firstOrNull{it.code==unitCode}?.let{"${it.code} — ${it.nameAr}"} ?: unitCode,
-                                    onValueChange={},readOnly=true,label={Text("وحدة الأساس *")},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expanded=expanded)},
-                                    modifier=Modifier.fillMaxWidth().menuAnchor())
-                                ExposedDropdownMenu(expanded=expanded,onDismissRequest={expanded=false}) {
-                                    directoryUnits.forEach { unit -> DropdownMenuItem(text={Text("${unit.code} — ${unit.nameAr} (${unit.dimension})")},onClick={unitCode=unit.code;expanded=false}) }
-                                }
-                            }
-                        }
-                    }
-                    item { OutlinedTextField(barcode,{barcode=it.filter(Char::isDigit).take(14)},Modifier.fillMaxWidth(),label={Text("GTIN / الباركود الأساسي (8–14 رقمًا)")},singleLine=true) }
-                    item { OutlinedTextField(extraUnitCode,{extraUnitCode=it.uppercase()},Modifier.fillMaxWidth(),label={Text("وحدة عبوة إضافية (اختياري)")},singleLine=true) }
-                    item { OutlinedTextField(extraUnitQty,{extraUnitQty=it},Modifier.fillMaxWidth(),label={Text("كم وحدة أساس داخل العبوة")},singleLine=true) }
-                    item { OutlinedTextField(extraUnitPackage,{extraUnitPackage=it},Modifier.fillMaxWidth(),label={Text("اسم العبوة (كرتون/علبة/شريط)")},singleLine=true) }
-                    item { OutlinedTextField(extraUnitBarcode,{extraUnitBarcode=it},Modifier.fillMaxWidth(),label={Text("باركود العبوة الإضافية")},singleLine=true) }
-                    item { OutlinedTextField(extraUnitSku,{extraUnitSku=it},Modifier.fillMaxWidth(),label={Text("SKU للعبوة الإضافية")},singleLine=true) }
-                    item { Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) { OutlinedTextField(extraUnitNetQuantity,{extraUnitNetQuantity=it},Modifier.weight(1f),label={Text("الكمية الصافية")},singleLine=true); OutlinedTextField(extraUnitNetUnitCode,{extraUnitNetUnitCode=it.uppercase()},Modifier.weight(1f),label={Text("وحدة الصافي")},singleLine=true) } }
-                    item { OutlinedTextField(extraUnitImageUrl,{extraUnitImageUrl=it},Modifier.fillMaxWidth(),label={Text("رابط صورة العبوة HTTPS (اختياري)")},singleLine=true) }
-                    item { OutlinedTextField(extraUnitsText,{extraUnitsText=it},Modifier.fillMaxWidth().heightIn(min=80.dp),label={Text("عبوات إضافية متعددة — سطر: unit_code|role|qty_in_base|barcode|sku|package_name|net_quantity|net_unit_code|image_url")}) }
-                    item { Text("العلامة والمصنع والمواصفات",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold) }
-                    item { OutlinedTextField(brand,{brand=it},Modifier.fillMaxWidth(),label={Text("العلامة التجارية")},singleLine=true) }
-                    item { OutlinedTextField(manufacturer,{manufacturer=it},Modifier.fillMaxWidth(),label={Text("الشركة المصنعة")},singleLine=true) }
-                    item { OutlinedTextField(origin,{origin=it},Modifier.fillMaxWidth(),label={Text("بلد الصناعة")},singleLine=true) }
-                    item { OutlinedTextField(model,{model=it},Modifier.fillMaxWidth(),label={Text("رقم الطراز")},singleLine=true) }
-                    item { OutlinedTextField(partNumber,{partNumber=it},Modifier.fillMaxWidth(),label={Text("رقم القطعة")},singleLine=true) }
-                    item { OutlinedTextField(imageUrl,{imageUrl=it},Modifier.fillMaxWidth(),label={Text("رابط صورة HTTPS خارجي")},singleLine=true) }
-                    item { OutlinedTextField(imageAlt,{imageAlt=it},Modifier.fillMaxWidth(),label={Text("وصف الصورة")},singleLine=true) }
-                    item { OutlinedTextField(ingredients,{ingredients=it},Modifier.fillMaxWidth(),label={Text("المكونات مفصولة بفواصل")}) }
-                    item { OutlinedTextField(materialComposition,{materialComposition=it},Modifier.fillMaxWidth(),label={Text("تركيب المواد مفصول بفواصل")}) }
-                    item { OutlinedTextField(recipe,{recipe=it},Modifier.fillMaxWidth(),label={Text("الوصفة / طريقة التحضير")}) }
-                    item { OutlinedTextField(recipeIngredientsText,{recipeIngredientsText=it},Modifier.fillMaxWidth().heightIn(min=90.dp),label={Text("مكونات الوصفة — سطر: name|quantity|unit_code|note")}) }
-                    item { OutlinedTextField(recipeYieldQty,{recipeYieldQty=it},Modifier.fillMaxWidth(),label={Text("كمية الناتج من الوصفة")},singleLine=true) }
-                    item { OutlinedTextField(recipeYieldUnit,{recipeYieldUnit=it.uppercase()},Modifier.fillMaxWidth(),label={Text("وحدة الناتج")},singleLine=true) }
-                    item { Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) { OutlinedTextField(recipePrepMinutes,{recipePrepMinutes=it.filter(Char::isDigit)},Modifier.weight(1f),label={Text("دقائق التحضير")},singleLine=true); OutlinedTextField(recipeCookMinutes,{recipeCookMinutes=it.filter(Char::isDigit)},Modifier.weight(1f),label={Text("دقائق الطبخ")},singleLine=true) } }
-                    item { OutlinedTextField(recipeAllergenNotes,{recipeAllergenNotes=it},Modifier.fillMaxWidth(),label={Text("ملاحظات الحساسية للوصفة")}) }
-                    item { OutlinedTextField(recipeSource,{recipeSource=it},Modifier.fillMaxWidth(),label={Text("مصدر الوصفة / المرجع")},singleLine=true) }
-                    item { OutlinedTextField(specifications,{specifications=it},Modifier.fillMaxWidth(),label={Text("المواصفات الإضافية")}) }
-                    item { OutlinedTextField(customAttributesJson,{customAttributesJson=it},Modifier.fillMaxWidth().heightIn(min=90.dp),label={Text("حقول مخصصة إضافية (JSON object)")},placeholder={Text("{\"color\":\"black\",\"model\":\"X1\"}")}) }
-                    item { OutlinedTextField(allergens,{allergens=it},Modifier.fillMaxWidth(),label={Text("مسببات الحساسية مفصولة بفواصل")}) }
-                    item { OutlinedTextField(storage,{storage=it},Modifier.fillMaxWidth(),label={Text("تعليمات التخزين")}) }
-                    item { OutlinedTextField(usage,{usage=it},Modifier.fillMaxWidth(),label={Text("تعليمات الاستخدام")}) }
-                    item { OutlinedTextField(warnings,{warnings=it},Modifier.fillMaxWidth(),label={Text("التحذيرات")}) }
-                    item { OutlinedTextField(shelfLife,{shelfLife=it.filter(Char::isDigit).take(6)},Modifier.fillMaxWidth(),label={Text("مدة الصلاحية بالأيام")},singleLine=true) }
-                    item { Row(verticalAlignment=Alignment.CenterVertically) { Checkbox(expiryRequired,{expiryRequired=it}); Text("يتطلب تاريخ صلاحية") } }
-                    item { Row(verticalAlignment=Alignment.CenterVertically) { Checkbox(batchTracked,{batchTracked=it}); Text("تتبع رقم التشغيلة") } }
-                    item { Row(verticalAlignment=Alignment.CenterVertically) { Checkbox(serialTracked,{serialTracked=it}); Text("تتبع الرقم التسلسلي") } }
-                    item { Row(verticalAlignment=Alignment.CenterVertically) { Checkbox(prescriptionOnly,{prescriptionOnly=it}); Text("يتطلب وصفة طبية (بعد التحقق)") } }
-                    item { OutlinedTextField(currencyCode,{currencyCode=it.uppercase()},Modifier.fillMaxWidth(),label={Text("رمز العملة لحساب المؤسسة")},singleLine=true) }
-                    item { Text("القطاعات ومستويات النشاط والمناطق",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold) }
-                    item { OutlinedTextField(sectors,{sectors=it},Modifier.fillMaxWidth(),label={Text("القطاعات مفصولة بفواصل (فارغ = عام)")}) }
-                    item { OutlinedTextField(levels,{levels=it},Modifier.fillMaxWidth(),label={Text("مستويات النشاط مفصولة بفواصل (فارغ = عام)")}) }
-                    item { OutlinedTextField(regionCountry,{regionCountry=it.uppercase()},Modifier.fillMaxWidth(),label={Text("دولة الإظهار (اختياري)")},singleLine=true) }
-                    item { OutlinedTextField(regionCode,{regionCode=it},Modifier.fillMaxWidth(),label={Text("رمز المنطقة / المحافظة")},singleLine=true) }
-                    item { OutlinedTextField(regionCity,{regionCity=it},Modifier.fillMaxWidth(),label={Text("المدينة")},singleLine=true) }
-                    item { Row(verticalAlignment=Alignment.CenterVertically) { Checkbox(regionExcluded,{regionExcluded=it}); Text("استثناء هذه المنطقة بدل تضمينها") } }
-                    item { OutlinedTextField(extraRegionRules,{extraRegionRules=it},Modifier.fillMaxWidth().heightIn(min=80.dp),label={Text("مناطق إضافية متعددة — سطر: country|region|city|include أو exclude")}) }
-                    item { Text("الحكم الديني / الطبي / التنظيمي (اختياري، لا يُعد فتوى أو تشخيصًا)",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold) }
-                    item { OutlinedTextField(rulingDomain,{rulingDomain=it},Modifier.fillMaxWidth(),label={Text("النطاق: religious / medical / regulatory / dietary")},singleLine=true) }
-                    item { OutlinedTextField(authority,{authority=it},Modifier.fillMaxWidth(),label={Text("رمز الجهة أو المرجع (مطلوب لتسجيل الحكم)")},singleLine=true) }
-                    item { OutlinedTextField(religion,{religion=it},Modifier.fillMaxWidth(),label={Text("رمز الدين عند الحكم الديني")},singleLine=true) }
-                    item { OutlinedTextField(jurisdiction,{jurisdiction=it},Modifier.fillMaxWidth(),label={Text("الدولة / الاختصاص القضائي")},singleLine=true) }
-                    item { OutlinedTextField(rulingOutcome,{rulingOutcome=it},Modifier.fillMaxWidth(),label={Text("النتيجة: permitted/prohibited/conditional/unknown/...")},singleLine=true) }
-                    item { OutlinedTextField(rulingRationale,{rulingRationale=it},Modifier.fillMaxWidth(),label={Text("التعليل / الشروط")}) }
-                    item { OutlinedTextField(rulingSourceTitle,{rulingSourceTitle=it},Modifier.fillMaxWidth(),label={Text("عنوان المصدر")},singleLine=true) }
-                    item { OutlinedTextField(rulingSourceUrl,{rulingSourceUrl=it},Modifier.fillMaxWidth(),label={Text("رابط المصدر HTTPS")},singleLine=true) }
-                    item { OutlinedTextField(rulingConfidence,{rulingConfidence=it},Modifier.fillMaxWidth(),label={Text("الحالة الأولية: unverified أو reported؛ المراجعة لها إجراء منفصل")},singleLine=true) }
-                    item { OutlinedTextField(extraRulingsText,{extraRulingsText=it},Modifier.fillMaxWidth().heightIn(min=90.dp),label={Text("أحكام إضافية متعددة — domain|authority|religion|jurisdiction|outcome|source_title|source_url|confidence|rationale")}) }
-                    item { Button(onClick={createProduct()},enabled=!busy && nameAr.isNotBlank() && nameEn.isNotBlank() && productCategory.isNotBlank() && unitCode.isNotBlank(),modifier=Modifier.fillMaxWidth()) { Text("حفظ الصنف وكل تفاصيله") } }
-                    item { Text("يُحفظ سجل الصنف والوحدات والاستهداف والأحكام في معاملة واحدة. لا يُعتمد أي حكم طبي أو ديني تلقائيًا؛ ارفع الثقة بعد مراجعة مصدر موثوق.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
-                }
-                "invoice_transfer" -> LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(bottom=20.dp)) {
-                    item { Text("تحويل فاتورة البيع إلى أمر شراء لدى المؤسسة المستقبلة",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold) }
-                    item { Text("أدخل UUID فاتورة البيع المكتملة وUUID المؤسسة المستقبلة. لن يُنشأ أمر الشراء إلا بعد موافقة مالك/مدير المؤسسة المستقبلة.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
-                    item { OutlinedTextField(invoiceSaleId,{invoiceSaleId=it.trim()},Modifier.fillMaxWidth(),label={Text("معرّف فاتورة البيع UUID")},singleLine=true) }
-                    item { OutlinedTextField(invoiceDestinationOrg,{invoiceDestinationOrg=it.trim()},Modifier.fillMaxWidth(),label={Text("معرّف المؤسسة المستقبلة UUID")},singleLine=true) }
-                    item { Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                        Button(onClick={requestInvoiceAsPurchase()},enabled=!busy && invoiceSaleId.isNotBlank() && invoiceDestinationOrg.isNotBlank(),modifier=Modifier.weight(1f)) { Text("إرسال للموافقة") }
-                        OutlinedButton(onClick={loadInvoiceRequests()},enabled=!busy) { Text("تحديث الطلبات") }
-                    } }
-                    item {
-                        Column(verticalArrangement=Arrangement.spacedBy(4.dp)) {
-                            Text("فرع الاستلام للموافقة الواردة",fontWeight=FontWeight.SemiBold)
-                            Box {
-                                OutlinedButton(onClick={invoiceReceiveLocationMenuExpanded=true},enabled=!busy && marketBranches.isNotEmpty(),modifier=Modifier.fillMaxWidth()) {
-                                    Text(marketBranches.firstOrNull { it.id==invoiceReceiveLocationId }?.name
-                                        ?: marketBranches.firstOrNull { it.id==selectedBranchId }?.name ?: "اختر فرع الاستلام")
-                                }
-                                DropdownMenu(expanded=invoiceReceiveLocationMenuExpanded,onDismissRequest={invoiceReceiveLocationMenuExpanded=false}) {
-                                    marketBranches.forEach { branch ->
-                                        DropdownMenuItem(text={Text(branch.name)},onClick={
-                                            invoiceReceiveLocationId=branch.id
-                                            invoiceReceiveLocationMenuExpanded=false
-                                        })
-                                    }
-                                }
-                            }
-                            Text("تُستخدم الوجهة المختارة عند الموافقة؛ لا يُنقل المخزون إلا عند تنفيذ الاستلام.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                    items(invoiceRequests,key={it.id}) { req ->
-                        Card(Modifier.fillMaxWidth()) {
-                            Column(Modifier.fillMaxWidth().padding(10.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
-                                Text("فاتورة رقم "+req.invoiceNumber+" • "+req.currencyCode+" "+req.totalMinor,fontWeight=FontWeight.SemiBold)
-                                Text("الحالة: "+req.status+" • طلب: "+req.id,style=MaterialTheme.typography.bodySmall)
-                                Text("المصدر: "+req.sourceOrganizationId,style=MaterialTheme.typography.bodySmall)
-                                Text("المستقبل: "+req.destinationOrganizationId,style=MaterialTheme.typography.bodySmall)
-                                if(req.purchaseOrderId.isNotBlank()) Text("أمر الشراء: "+req.purchaseOrderId,style=MaterialTheme.typography.bodySmall)
-                                if(req.destinationOrganizationId==org().orEmpty() && req.status=="pending") {
-                                    Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                                        Button(onClick={reviewInvoicePurchaseRequest(req.id,true)},enabled=!busy,modifier=Modifier.weight(1f)) { Text("موافقة وإنشاء أمر شراء") }
-                                        OutlinedButton(onClick={reviewInvoicePurchaseRequest(req.id,false)},enabled=!busy,modifier=Modifier.weight(1f)) { Text("رفض") }
-                                    }
-                                }
-                                if(req.destinationOrganizationId==org().orEmpty() && req.status=="approved" && req.purchaseOrderId.isNotBlank()) {
-                                    OutlinedButton(onClick={mapKnownInvoicePurchaseItems(req.id)},enabled=!busy,modifier=Modifier.fillMaxWidth()) { Text("ربط الأصناف المعروفة بأمر الشراء") }
-                                    OutlinedButton(onClick={loadInvoicePurchaseUnmappedLines(req)},enabled=!busy,modifier=Modifier.fillMaxWidth()) { Text("إدارة الأصناف غير المطابقة") }
-                                    if(invoiceMappingRequestId==req.id) {
-                                        Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
-                                            Text("مطابقة البنود غير المعروفة مع أصناف المؤسسة في موقع الاستلام",fontWeight=FontWeight.SemiBold)
-                                            Text("نفّذ ربط الأصناف المعروفة أولًا. الربط اليدوي يعيد أمر الشراء المعتمد إلى حالة الإرسال ويتطلب إعادة اعتماده.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                                            if(invoiceMappingLines.isEmpty()) {
-                                                Text("لا توجد بنود غير مطابقة قابلة للربط حاليًا.",style=MaterialTheme.typography.bodySmall)
-                                            } else {
-                                                Box {
-                                                    OutlinedButton(onClick={invoiceMappingLineMenuExpanded=true},modifier=Modifier.fillMaxWidth()) {
-                                                        val selectedLine=invoiceMappingLines.firstOrNull { it.id==invoiceMappingLineId }
-                                                        Text(selectedLine?.let { "البند "+it.lineNumber+": "+it.description+" • "+it.quantity+" "+it.unitCode } ?: "اختر بند الفاتورة")
-                                                    }
-                                                    DropdownMenu(expanded=invoiceMappingLineMenuExpanded,onDismissRequest={invoiceMappingLineMenuExpanded=false}) {
-                                                        invoiceMappingLines.forEach { line ->
-                                                            DropdownMenuItem(text={Text("البند "+line.lineNumber+": "+line.description+" • "+line.quantity+" "+line.unitCode)},onClick={
-                                                                invoiceMappingLineId=line.id
-                                                                invoiceMappingLineMenuExpanded=false
-                                                            })
-                                                        }
-                                                    }
-                                                }
-                                                Box {
-                                                    OutlinedButton(onClick={invoiceMappingOfferingMenuExpanded=true},enabled=invoiceMappingOfferings.isNotEmpty(),modifier=Modifier.fillMaxWidth()) {
-                                                        val selectedOffering=invoiceMappingOfferings.firstOrNull { it.id==invoiceMappingOfferingId }
-                                                        Text(selectedOffering?.let { "الصنف المحلي: "+it.name+" • "+it.unitCode } ?: "اختر صنف المؤسسة في موقع الاستلام")
-                                                    }
-                                                    DropdownMenu(expanded=invoiceMappingOfferingMenuExpanded,onDismissRequest={invoiceMappingOfferingMenuExpanded=false}) {
-                                                        invoiceMappingOfferings.forEach { offering ->
-                                                            DropdownMenuItem(text={Text(offering.name+" • "+offering.unitCode)},onClick={
-                                                                invoiceMappingOfferingId=offering.id
-                                                                invoiceMappingOfferingMenuExpanded=false
-                                                            })
-                                                        }
-                                                    }
-                                                }
-                                                Button(onClick={linkSelectedInvoicePurchaseLine()},enabled=!busy && invoiceMappingLineId.isNotBlank() && invoiceMappingOfferingId.isNotBlank(),modifier=Modifier.fillMaxWidth()) { Text("تأكيد ربط البند المحدد") }
-                                            }
-                                            if(invoiceMappingOfferings.isEmpty()) Text("لا توجد أصناف مهيأة لهذا الفرع/موقع الاستلام. أنشئ الصنف أو هيئه من دليل الأصناف أولًا، ثم أعد تحميل المطابقة.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                                            if(invoiceMappingWarehouses.isNotEmpty()) {
-                                                Box {
-                                                    OutlinedButton(onClick={invoiceMappingWarehouseMenuExpanded=true},modifier=Modifier.fillMaxWidth()) {
-                                                        Text("مستودع الاستلام: "+(invoiceMappingWarehouses.firstOrNull { it.id==invoiceMappingWarehouseId }?.name ?: "اختر المستودع"))
-                                                    }
-                                                    DropdownMenu(expanded=invoiceMappingWarehouseMenuExpanded,onDismissRequest={invoiceMappingWarehouseMenuExpanded=false}) {
-                                                        invoiceMappingWarehouses.forEach { warehouse ->
-                                                            DropdownMenuItem(text={Text(warehouse.name)},onClick={
-                                                                invoiceMappingWarehouseId=warehouse.id
-                                                                invoiceMappingWarehouseMenuExpanded=false
-                                                            })
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                            OutlinedButton(onClick={openInvoiceItemCreationDialog()},enabled=!busy && invoiceMappingLines.isNotEmpty() && invoiceMappingWarehouses.isNotEmpty() && categories.isNotEmpty() && directoryUnits.isNotEmpty(),modifier=Modifier.fillMaxWidth()) {
-                                                Icon(Icons.Default.Add,contentDescription=null)
-                                                Text("إنشاء صنف جديد وربطه بهذا البند")
-                                            }
-                                            Text("لا يُنشأ صنف تلقائيًا من وصف الفاتورة ولا يُضاف مخزون عند المطابقة. اختر تطابقًا مؤكدًا؛ الاستلام هو الذي يحدّث الكمية.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                                        }
-                                    }
-                                }
-                                Text("الموافقة لا تزيد المخزون؛ يجب استلام أمر الشراء عبر دورة الاستلام المعتادة.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                    }
-                }
-                "transfer" -> LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(bottom=20.dp)) {
-                    item { Text("النقل متاح فقط إذا كنت مالكًا أو مديرًا في الحساب المصدر والوجهة. اترك قائمة UUID فارغة لنقل كل روابط الدليل.",style=MaterialTheme.typography.bodySmall) }
-                    item { OutlinedTextField(transferSource,{transferSource=it.trim()},Modifier.fillMaxWidth(),label={Text("معرّف الحساب المصدر UUID")},singleLine=true) }
-                    item { OutlinedTextField(transferDestination,{transferDestination=it.trim()},Modifier.fillMaxWidth(),label={Text("معرّف الحساب الوجهة UUID")},singleLine=true) }
-                    item { OutlinedTextField(transferIds,{transferIds=it},Modifier.fillMaxWidth(),label={Text("معرّفات الأصناف UUID مفصولة بفواصل (اختياري)")}) }
-                    item { Button(onClick={transferCatalog()},enabled=!busy && transferSource.isNotBlank() && transferDestination.isNotBlank(),modifier=Modifier.fillMaxWidth()) { Text("إرسال طلب نقل الدليل") } }
-                    item { OutlinedButton(onClick={loadPendingTransfers()},enabled=!busy,modifier=Modifier.fillMaxWidth()) { Text("تحميل طلبات النقل الواردة لهذا الحساب") } }
-                    items(pendingTransfers,key={it.id}) { transfer ->
-                        Card(border=BorderStroke(1.dp,MaterialTheme.colorScheme.outlineVariant)) {
-                            Column(Modifier.fillMaxWidth().padding(12.dp),verticalArrangement=Arrangement.spacedBy(5.dp)) {
-                                Text("طلب نقل • ${transfer.itemCount} صنف",fontWeight=FontWeight.SemiBold)
-                                Text("المصدر: ${transfer.source}",style=MaterialTheme.typography.bodySmall)
-                                Text("رقم الطلب: ${transfer.id}",style=MaterialTheme.typography.bodySmall)
-                                Text("تاريخ الطلب: ${transfer.createdAt}",style=MaterialTheme.typography.bodySmall)
-                                Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                                    Button(onClick={respondToTransfer(transfer.id,true)},enabled=!busy,modifier=Modifier.weight(1f)) { Text("قبول النقل") }
-                                    OutlinedButton(onClick={respondToTransfer(transfer.id,false)},enabled=!busy,modifier=Modifier.weight(1f)) { Text("رفض") }
-                                }
-                            }
-                        }
-                    }
-                }
+                "category" -> CatalogCategorySection(categoryCodeState, parentCodeState, categoryNameArState, categoryNameEnState, categoryDescriptionArState, categoryDescriptionEnState, categoryTranslationsState, categories, locale, busy, ::createCategory, ::loadDirectories)
+                "unit" -> CatalogUnitSection(unitShortCodeState, unitNameArState, unitNameEnState, unitDimensionState, unitBaseCodeState, unitFactorState, unitDecimalsState, unitTranslationsState, directoryUnits, busy, ::createUnit, ::loadDirectories)
+                "product" -> CatalogProductFormSection(productFormState, categories, directoryUnits, busy, ::createProduct)
+                "invoice_transfer" -> CatalogInvoiceTransferSection(invoiceTransferState, marketBranches, selectedBranchId, invoiceRequests, invoiceMappingLines, invoiceMappingOfferings, invoiceMappingWarehouses, categories, directoryUnits, organizationId.trim(), busy, ::requestInvoiceAsPurchase, ::loadInvoiceRequests, ::reviewInvoicePurchaseRequest, ::mapKnownInvoicePurchaseItems, ::loadInvoicePurchaseUnmappedLines, ::linkSelectedInvoicePurchaseLine, ::openInvoiceItemCreationDialog)
+                "transfer" -> CatalogTransferSection(transferSourceState, transferDestinationState, transferIdsState, pendingTransfers, busy, ::transferCatalog, ::loadPendingTransfers, ::respondToTransfer)
             }
         }
     }

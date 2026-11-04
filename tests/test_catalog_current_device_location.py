@@ -4,6 +4,8 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogScreen.kt"
 LOCATION = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogDeviceLocation.kt"
+MARKET_UI = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogMarketDiscoverySection.kt"
+MARKET_STATE = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogMarketUiState.kt"
 MANIFEST = ROOT / "android-commercial/app/src/main/AndroidManifest.xml"
 
 
@@ -25,7 +27,7 @@ class CatalogCurrentDeviceLocationTests(unittest.TestCase):
         self.assertNotIn("ACCESS_BACKGROUND_LOCATION", source)
 
     def test_nearby_and_price_suggestions_use_opt_in_device_center(self):
-        source = SCREEN.read_text(encoding="utf-8")
+        source = SCREEN.read_text(encoding="utf-8") + MARKET_UI.read_text(encoding="utf-8") + MARKET_STATE.read_text(encoding="utf-8")
         self.assertIn("rememberLauncherForActivityResult", source)
         self.assertIn("getFreshCatalogDeviceLocation(context)", source)
         self.assertIn("deviceLatitude = location.latitude.toString()", source)
@@ -33,12 +35,12 @@ class CatalogCurrentDeviceLocationTests(unittest.TestCase):
         self.assertIn("val lat=if(useDeviceCenter) deviceLatitude?.toBigDecimalOrNull() else branch?.latitude?.toBigDecimalOrNull()", source)
         self.assertIn('"/rest/v1/rpc/commercial_catalog_nearby_popularity"', source)
         self.assertIn('"/rest/v1/rpc/commercial_catalog_price_suggestions"', source)
-        self.assertIn("deviceLatitude=null;deviceLongitude=null;startNearbyCatalog()", source)
+        self.assertIn("state.deviceLatitude=null;state.deviceLongitude=null;onStartNearbyCatalog()", source)
         self.assertIn("val useDeviceCenter=deviceLatitude!=null && deviceLongitude!=null", source)
         self.assertIn("nearbyMarketItems=(nearbyMarketItems+page).distinctBy { it.id }", source)
 
     def test_device_location_is_session_only_and_not_background_tracked(self):
-        source = SCREEN.read_text(encoding="utf-8")
+        source = SCREEN.read_text(encoding="utf-8") + MARKET_STATE.read_text(encoding="utf-8")
         self.assertIn("Device coordinates are opt-in, foreground-only and kept in memory", source)
         self.assertIn("لا يتم حفظ الإحداثيات في ملفك أو تتبعك في الخلفية", source)
         self.assertNotIn("ACCESS_BACKGROUND_LOCATION", source)

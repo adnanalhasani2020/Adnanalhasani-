@@ -59,7 +59,7 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 | REF-004 | Separate MainActivity composition/navigation from local legacy persistence and screens | PARTIALLY EXTRACTED | Shared and local models moved to dedicated files; next extract persistence/navigation in separate behavior-preserving slices |
 | REF-005 | Split report export infrastructure from report UI | EXTRACTED; TESTED pending CI | PDF/XLSX/print functions moved to ReportExport.kt; source-contract tests updated and XLSX unit tests added; run CI before marking tested |
 | REF-006 | Split report catalog, data builders, filters, and feature screens | OPEN | Each report family has clear owner and calculation tests |
-| REF-007 | Split catalog search, discovery, directory management, transfers, and invoice linking | OPEN | Catalog workflows remain intact |
+| REF-007 | Split catalog search, discovery, directory management, transfers, and invoice linking | IN PROGRESS — category, unit, product-authoring, invoice-review, and transfer presentation sections extracted; browse/discovery remains in the screen | Each catalog workflow has a focused UI owner and the existing request/business rules remain unchanged |
 | REF-008 | Split pure report calculations by business domain | PARTIALLY EXTRACTED; TESTS PENDING CI | Payment-request amount parsing/formatting now has its own pure Kotlin owner; formula parity tests and remaining report-domain extraction still required |
 | REF-009 | Organize existing feature files and shared UI components | OPEN | No duplicated feature or model owners |
 | REF-010 | Organize tests and update code reference | OPEN | Every feature points to focused tests and current source owner |
@@ -228,3 +228,46 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 - Kept cloud data loading, Compose state, filter state, report selection, calculations, and rendering in their existing owners.
 - Added `ReportLedgerValidationTest.kt` covering fail-closed validation and the valid balanced-ledger case.
 - The extraction preserves validation ordering and all existing checks; it does not alter SQL/RPC contracts or financial formulas.
+
+
+## 2026-11-04 — Catalog screen decomposition slice 1
+
+- Extracted the category editor, unit editor, and catalog-transfer request list from `CatalogScreen.kt` into `CatalogScreenSections.kt`.
+- The screen retains workflow orchestration and passes existing Compose state holders and action callbacks to the presentation sections.
+- The extracted components do not create network clients, issue RPCs, or change approval/transfer behavior.
+- `CatalogScreen.kt` remains responsible for browse/discovery, product authoring, and invoice-to-purchase workflows; REF-007 remains in progress until those sections are separated and focused tests/builds pass.
+
+- Follow-up extraction: `CatalogProductFormState.kt` now owns the product-authoring form state, and `CatalogScreenSections.kt` owns its presentation. The screen retains the existing product creation action and RPC orchestration.
+
+- Follow-up extraction: `CatalogInvoiceTransferState.kt` owns invoice-review and matching UI state; `CatalogScreenSections.kt` owns the invoice-to-purchase review presentation. Request creation, approvals, matching actions, and all RPC orchestration remain in `CatalogScreen.kt`.
+
+
+## 2026-11-04 — Catalog market UI state ownership
+
+- Moved branch/warehouse selection, branch coordinates, nearby-market results and pagination state, location-session values, and aggregated price-hint state into `CatalogMarketUiState.kt`.
+- Kept permission prompts, foreground location acquisition, UI rendering, RPC/REST orchestration, and catalog configuration actions in `CatalogScreen.kt`; this is a state-ownership step, not completion of the browse/discovery presentation extraction.
+- Added a source-ownership guard for the new market state owner. No network contract, database schema, or production data changed.
+
+
+## 2026-11-04 — Catalog nearby-market presentation extraction
+
+- Extracted the branch/warehouse selector, coordinate editor, nearby-market controls, and nearby popularity list into `CatalogMarketDiscoverySection.kt`.
+- The section receives UI state and explicit callbacks; it does not issue HTTP/RPC requests or handle Android location permissions. The owning screen retains coordinate persistence, branch/warehouse loading, nearby pagination orchestration, price-suggestion loading, catalog setup, and selection-to-organization linking.
+- Updated coordinate, foreground-location, nearby-discovery, and inventory-setup source contracts to follow the new presentation/state owners.
+- Catalog browsing is now split across dedicated market presentation and state owners; the main catalog product list and activity filters remain in `CatalogScreen.kt` and are the next presentation extraction target.
+
+
+## 2026-11-04 — Catalog product result presentation extraction
+
+- Extracted the global catalog result card into `CatalogProductResultCard.kt`, including metadata, package images, rulings, source links, selection control, and inventory-link action presentation.
+- The card uses explicit callbacks for selection, feedback, source navigation, ruling review, inventory creation, and product editing. It does not own network requests or edit workflow state.
+- Kept the catalog result query, activity filters, pagination, bulk unpriced-link workflow, and product edit dialog orchestration in `CatalogScreen.kt`.
+- Added a source-ownership guard and updated the universal catalog contract to read the extracted presentation owners.
+
+
+## 2026-11-04 — Catalog browse presentation extraction
+
+- Extracted catalog browse filters and the paginated global result list into `CatalogBrowseSection.kt`.
+- Kept query/filter state, selection updates, RPC-triggering callbacks, pagination, and inventory-linking workflows in `CatalogScreen.kt`; the new component is presentation-only and callback-driven.
+- Updated source-contract tests to follow the extracted market state, product card, and browse presentation owners.
+- No RPC payload, database migration, or production data changed.
