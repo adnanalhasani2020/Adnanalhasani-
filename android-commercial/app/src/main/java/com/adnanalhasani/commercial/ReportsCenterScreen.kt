@@ -64,21 +64,22 @@ internal fun ReportsCenterScreen(
     onOpenExistingReports: () -> Unit
 ) {
     val today = remember { LocalDate.now() }
-    var selectedPeriod by remember { mutableStateOf("الشهر الحالي") }
-    var startText by remember { mutableStateOf(today.withDayOfMonth(1).toString()) }
-    var endText by remember { mutableStateOf(today.toString()) }
-    var search by remember { mutableStateOf("") }
-    var rowFilter by remember { mutableStateOf("") }
-    var currencyFilter by remember { mutableStateOf("") }
-    var statusFilter by remember { mutableStateOf("") }
-    var accountFilter by remember { mutableStateOf("") }
-    var customerFilter by remember { mutableStateOf("") }
-    var selectedCategory by remember { mutableStateOf("الكل") }
-    var selectedReport by remember { mutableStateOf("ملخص المبيعات حسب الفترة") }
-    var exportRows by remember { mutableStateOf<List<List<String>>>(emptyList()) }
-    var exportTitle by remember { mutableStateOf("تقرير متجري") }
-    var error by remember { mutableStateOf("") }
-    var cloudReload by remember { mutableIntStateOf(0) }
+    val uiState = remember { ReportsCenterUiState(today) }
+    var selectedPeriod by uiState.selectedPeriod
+    var startText by uiState.startText
+    var endText by uiState.endText
+    var search by uiState.search
+    var rowFilter by uiState.rowFilter
+    var currencyFilter by uiState.currencyFilter
+    var statusFilter by uiState.statusFilter
+    var accountFilter by uiState.accountFilter
+    var customerFilter by uiState.customerFilter
+    var selectedCategory by uiState.selectedCategory
+    var selectedReport by uiState.selectedReport
+    var exportRows by uiState.exportRows
+    var exportTitle by uiState.exportTitle
+    var error by uiState.error
+    var cloudReload by uiState.cloudReload
     val cloudData = rememberReportsCloudData(context, cloudMode, cloudReload)
     val cloudSalesDocuments = cloudData.salesDocuments
     val cloudReceivables = cloudData.receivables
@@ -91,7 +92,7 @@ internal fun ReportsCenterScreen(
     val locationInventoryLoadError = cloudData.locationInventoryLoadError
     val cloudWarehouseInventoryContext = cloudData.warehouseInventoryContext
     val warehouseInventoryContextLoadError = cloudData.warehouseInventoryContextLoadError
-    var supplierFilter by remember { mutableStateOf("") }
+    var supplierFilter by uiState.supplierFilter
     val cloudReturns = cloudData.returns
     val cloudPayments = cloudData.payments
     val cloudJournals = cloudData.journals
