@@ -388,3 +388,8 @@
 ### Financial report validation (2026-11-05)
 - `ReportFinancialValidation.kt` owns the current inventory valuation source gate and the cash-flow source/integrity gate, including overflow preflight for every exact arithmetic step used by cash-flow row assembly.
 - `ReportsCenterData.kt` delegates those checks while retaining report dispatch. `ReportFinancialLines.kt` and `ReportInventoryRows.kt` remain the row builders.
+
+
+### Report calculation input mapping (2026-11-05)
+- `ReportDomainMappers.kt` owns cloud-to-calculation input projections for item profitability, customer collections, user sales performance, daily sales trends, and supplier purchase summaries.
+- `ReportsCenterData.kt` retains calculation lifecycle/orchestration and calls those pure mappers. Calculation formulas and report row builders remain in their dedicated files.

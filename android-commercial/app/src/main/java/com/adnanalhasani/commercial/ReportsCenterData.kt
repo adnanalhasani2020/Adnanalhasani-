@@ -157,21 +157,9 @@ internal fun rememberReportsCenterData(
     )
     val supplierPurchaseSummaryCalculation = remember(cloudPurchases, startMillis, endExclusive, cloudMode) {
         runCatching {
-            val invoices = cloudPurchases.flatMap { purchase ->
-                purchase.supplierInvoices.filter { invoice ->
-                    invoice.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed") &&
-                        reportDateMillis(invoice.recordedAt)?.let { it >= startMillis && it < endExclusive } == true
-                }.map { invoice ->
-                    SupplierPurchaseInvoiceInput(
-                        invoiceId = invoice.id,
-                        supplierId = purchase.supplierId,
-                        supplierName = purchase.supplierName,
-                        currencyCode = invoice.currencyCode,
-                        totalMinor = invoice.totalMinor
-                    )
-                }
-            }
-            calculateSupplierPurchaseSummary(invoices)
+            calculateSupplierPurchaseSummary(
+                cloudPurchases.toSupplierPurchaseInvoiceInputs(startMillis, endExclusive)
+            )
         }
     }
     val supplierPurchaseSummaryError = reportSupplierPurchaseSummaryValidationError(
@@ -259,48 +247,10 @@ internal fun rememberReportsCenterData(
     )
     val itemProfitabilityCalculation = remember(cloudSalesDocuments, cloudReturns, startMillis, endExclusive, cloudMode) {
         runCatching {
-            val allSaleLines = cloudSalesDocuments.filter { it.saleStatus.equals("completed", true) }.flatMap { document ->
-                val inPeriod = reportDateMillis(document.createdAt)?.let { it >= startMillis && it < endExclusive } == true
-                document.lines.map { line ->
-                    ItemProfitSaleLineInput(
-                        saleItemId = line.id,
-                        saleId = document.id,
-                        productName = line.productName,
-                        currencyCode = document.currencyCode,
-                        saleTaxMinor = document.taxMinor,
-                        saleDiscountMinor = document.discountMinor,
-                        quantity = line.quantity,
-                        lineTotalMinor = line.lineTotalMinor,
-                        costTotalMinor = line.costTotalMinor,
-                        inSelectedPeriod = inPeriod
-                    )
-                }
-            }
-            val periodReturns = cloudReturns.filter { saleReturn ->
-                saleReturn.status.equals("completed", true) &&
-                    reportDateMillis(saleReturn.completedAt)?.let { it >= startMillis && it < endExclusive } == true
-            }.map { saleReturn ->
-                ItemProfitReturnInput(
-                    returnId = saleReturn.id,
-                    saleId = saleReturn.saleId,
-                    currencyCode = saleReturn.currencyCode,
-                    approvedRefundMinor = saleReturn.approvedRefundMinor,
-                    items = saleReturn.items.map { item ->
-                        ItemProfitReturnLineInput(
-                            saleItemId = item.saleItemId,
-                            quantity = item.quantity,
-                            refundAmountMinor = item.refundAmountMinor,
-                            refundAmountPresent = item.refundAmountPresent,
-                            restockRequested = item.restock,
-                            restockFlagPresent = item.restockFlagPresent,
-                            restockedQuantity = item.restockedQuantity,
-                            restockedQuantityPresent = item.restockedQuantityPresent,
-                            saleItemQuantityInStockUnits = item.saleItemQuantityInStockUnits
-                        )
-                    }
-                )
-            }
-            calculateItemProfitability(allSaleLines, periodReturns)
+            calculateItemProfitability(
+                saleLines = cloudSalesDocuments.toItemProfitSaleLineInputs(startMillis, endExclusive),
+                returns = cloudReturns.toItemProfitReturnInputs(startMillis, endExclusive)
+            )
         }
     }
     val customerReceivableAgingReport = remember(cloudReceivables, today, cloudMode, receivablesLoadError) {
@@ -314,21 +264,9 @@ internal fun rememberReportsCenterData(
     val customerReceivableAgingError = customerReceivableAgingReport.error
     val customerCollectionsCalculation = remember(cloudSalesDocuments, startMillis, endExclusive, cloudMode) {
         runCatching {
-            val payments = cloudSalesDocuments.flatMap { document ->
-                document.payments.filter { payment ->
-                    payment.status.equals("succeeded", true) &&
-                        reportDateMillis(payment.createdAt)?.let { it >= startMillis && it < endExclusive } == true
-                }.map { payment ->
-                    CustomerCollectionPaymentInput(
-                        paymentId = payment.id,
-                        customerId = document.customerId,
-                        customerName = document.customerName,
-                        currencyCode = payment.currencyCode,
-                        amountMinor = payment.amountMinor
-                    )
-                }
-            }
-            calculateCustomerCollectionsByCustomer(payments)
+            calculateCustomerCollectionsByCustomer(
+                cloudSalesDocuments.toCustomerCollectionPaymentInputs(startMillis, endExclusive)
+            )
         }
     }
     val customerCollectionsError = reportCustomerCollectionsValidationError(
@@ -339,17 +277,9 @@ internal fun rememberReportsCenterData(
     )
     val userSalesPerformanceCalculation = remember(cloudSalesDocuments, startMillis, endExclusive, cloudMode) {
         runCatching {
-            calculateUserSalesPerformance(cloudSalesDocuments.filter { document ->
-                document.saleStatus.equals("completed", true) &&
-                    reportDateMillis(document.createdAt)?.let { it >= startMillis && it < endExclusive } == true
-            }.map { document ->
-                UserSalesPerformanceInvoiceInput(
-                    invoiceId = document.id,
-                    userId = document.userId,
-                    currencyCode = document.currencyCode,
-                    totalMinor = document.totalMinor
-                )
-            })
+            calculateUserSalesPerformance(
+                cloudSalesDocuments.toUserSalesPerformanceInputs(startMillis, endExclusive)
+            )
         }
     }
     val userSalesPerformanceError = reportUserSalesPerformanceValidationError(
@@ -368,18 +298,9 @@ internal fun rememberReportsCenterData(
 
     val dailySalesTrendCalculation = remember(cloudSalesDocuments, startMillis, endExclusive, cloudMode) {
         runCatching {
-            val invoices = cloudSalesDocuments.filter { document ->
-                document.saleStatus.equals("completed", true) &&
-                    reportDateMillis(document.createdAt)?.let { it >= startMillis && it < endExclusive } == true
-            }.map { document ->
-                DailySalesInvoiceInput(
-                    invoiceId = document.id,
-                    date = document.createdAt.take(10),
-                    currencyCode = document.currencyCode,
-                    totalMinor = document.totalMinor
-                )
-            }
-            calculateDailySalesTrend(invoices)
+            calculateDailySalesTrend(
+                cloudSalesDocuments.toDailySalesInvoiceInputs(startMillis, endExclusive)
+            )
         }
     }
     val dailySalesTrendError = reportDailySalesTrendValidationError(
