@@ -5,6 +5,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt"
 PURCHASE_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/PurchaseRepository.kt"
+SUPPLIER_PAYMENT_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/SupplierPaymentRepository.kt"
 SALES_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/SalesRepository.kt"
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudSalesScreen.kt"
 PURCHASES = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudPurchasesScreen.kt"
@@ -19,6 +20,7 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
     def setUpClass(cls):
         cls.repository = REPOSITORY.read_text(encoding="utf-8")
         cls.purchase_repository = PURCHASE_REPOSITORY.read_text(encoding="utf-8")
+        cls.supplier_payment_repository = SUPPLIER_PAYMENT_REPOSITORY.read_text(encoding="utf-8")
         cls.sales_repository = SALES_REPOSITORY.read_text(encoding="utf-8")
         cls.screen = SCREEN.read_text(encoding="utf-8")
         cls.purchases = PURCHASES.read_text(encoding="utf-8")
@@ -98,7 +100,7 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
             with self.subTest(marker=marker):
                 self.assertIn(marker, self.purchases)
         self.assertIn("commercial_receive_purchase_order", self.purchase_repository)
-        self.assertIn("commercial_record_supplier_payment", self.repository)
+        self.assertIn("commercial_record_supplier_payment", self.supplier_payment_repository)
 
     def test_invoice_screen_supports_status_filters_and_currency_safe_totals(self):
         for marker in ('selectedStatus', '"paid" to "مدفوعة"', '"partial" to "مدفوعة جزئيًا"', '"due" to "مستحقة"', 'groupBy { it.currencyCode', 'بوحدة الصرف الصغرى'):
