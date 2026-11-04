@@ -128,3 +128,6 @@ The UI must not become the authority for tenant access, balances, prices, postin
 
 
 - `LocalProductDialogs.kt` owns presentation and form state for local sale/product dialogs. Persistence and parent navigation/state remain with the existing application workflow and `LocalStoreRepository`.
+
+
+- `MainActivity.kt` is limited to Android startup and application theme composition. Local operational screen rendering lives in `LocalOperationalScreens.kt`; local sale/product form dialogs live in `LocalProductDialogs.kt`. Shared app state and persistence remain in `StoreApp.kt` and `LocalStoreRepository.kt`.
