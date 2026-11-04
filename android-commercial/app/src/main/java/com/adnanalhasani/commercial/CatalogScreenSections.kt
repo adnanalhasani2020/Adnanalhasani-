@@ -19,6 +19,7 @@ internal fun CatalogCategorySection(categoryCodeState: MutableState<String>, par
     var categoryDescriptionAr by categoryDescriptionArState
     var categoryDescriptionEn by categoryDescriptionEnState
     var categoryTranslations by categoryTranslationsState
+    LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(bottom=20.dp)) {
                     item { Text("إضافة مستوى تصنيف جديد — اترك التصنيف الأب فارغًا لإنشاء جذر.",style=MaterialTheme.typography.bodySmall) }
                     item { OutlinedTextField(categoryCode,{categoryCode=it.uppercase()},Modifier.fillMaxWidth(),label={Text("كود التصنيف")},singleLine=true) }
                     item { OutlinedTextField(parentCode,{parentCode=it.uppercase()},Modifier.fillMaxWidth(),label={Text("كود التصنيف الأب (اختياري)")},singleLine=true) }
@@ -33,6 +34,7 @@ internal fun CatalogCategorySection(categoryCodeState: MutableState<String>, par
                 }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun CatalogUnitSection(unitShortCodeState: MutableState<String>, unitNameArState: MutableState<String>, unitNameEnState: MutableState<String>, unitDimensionState: MutableState<String>, unitBaseCodeState: MutableState<String>, unitFactorState: MutableState<String>, unitDecimalsState: MutableState<String>, unitTranslationsState: MutableState<String>, directoryUnits: List<DirectoryUnit>, busy: Boolean, onCreateUnit: () -> Unit, onLoadDirectories: () -> Unit) {
     var unitShortCode by unitShortCodeState
@@ -43,6 +45,7 @@ internal fun CatalogUnitSection(unitShortCodeState: MutableState<String>, unitNa
     var unitFactor by unitFactorState
     var unitDecimals by unitDecimalsState
     var unitTranslations by unitTranslationsState
+    LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(bottom=20.dp)) {
                     item { Text("إنشاء وحدة خاصة بالمؤسسة. رمز الوحدة سيُسبق تلقائيًا برمز المؤسسة لمنع تعارض الرموز عالميًا.",style=MaterialTheme.typography.bodySmall) }
                     item { OutlinedTextField(unitShortCode,{unitShortCode=it.uppercase()},Modifier.fillMaxWidth(),label={Text("الرمز المختصر")},singleLine=true) }
                     item { OutlinedTextField(unitNameAr,{unitNameAr=it},Modifier.fillMaxWidth(),label={Text("اسم الوحدة بالعربية")},singleLine=true) }
@@ -77,6 +80,7 @@ internal fun CatalogTransferSection(transferSourceState: MutableState<String>, t
     var transferSource by transferSourceState
     var transferDestination by transferDestinationState
     var transferIds by transferIdsState
+    LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(bottom=20.dp)) {
                     item { Text("النقل متاح فقط إذا كنت مالكًا أو مديرًا في الحساب المصدر والوجهة. اترك قائمة UUID فارغة لنقل كل روابط الدليل.",style=MaterialTheme.typography.bodySmall) }
                     item { OutlinedTextField(transferSource,{transferSource=it.trim()},Modifier.fillMaxWidth(),label={Text("معرّف الحساب المصدر UUID")},singleLine=true) }
                     item { OutlinedTextField(transferDestination,{transferDestination=it.trim()},Modifier.fillMaxWidth(),label={Text("معرّف الحساب الوجهة UUID")},singleLine=true) }
