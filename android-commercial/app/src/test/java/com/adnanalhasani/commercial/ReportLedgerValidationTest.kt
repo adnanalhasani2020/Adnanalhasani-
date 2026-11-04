@@ -76,6 +76,23 @@ class ReportLedgerValidationTest {
     }
 
     @Test
+    fun rejectsBalancedLedgerTotalsThatOverflowLong() {
+        val error = validate(
+            ledgerLines = listOf(
+                line(entryId = "large-entry", debit = Long.MAX_VALUE),
+                line(entryId = "large-entry", debit = 1L),
+                line(entryId = "large-entry", type = "revenue", credit = Long.MAX_VALUE),
+                line(entryId = "large-entry", type = "revenue", credit = 1L)
+            )
+        )
+
+        assertEquals(
+            "تجاوزت مجاميع المدين أو الدائن نطاق الأرقام الدقيق؛ تم حجب القوائم.",
+            error
+        )
+    }
+
+    @Test
     fun acceptsBalancedKnownLedgerLinesWithCompleteMappings() {
         assertEquals(
             "",

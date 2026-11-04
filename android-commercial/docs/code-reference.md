@@ -291,6 +291,13 @@
 - The extraction preserves posted-ledger source semantics, account classification, debit/credit directions, currency grouping, balance equation checks, and account-query requirements.
 
 
+### Customer/supplier statement validation extraction (2026-11-05)
+- `ReportPartyStatementValidation.kt` owns the source-readiness gates for full customer and supplier control-account statements.
+- `ReportsCenterData.kt` passes the existing loaded ledger, party-link, GL mapping, supplier-control-account projections and source errors to the pure validators.
+- Validation precedence, Arabic errors, account-role/mapping checks, and party/currency link checks are preserved; row construction remains in `ReportPartyStatementRows.kt`.
+- `tests/test_report_party_statement_rows_ownership.py` and `tests/test_reports_center_data_ownership.py` guard the new owner and coordinator call sites.
+
+
 ### Customer/supplier statement row extraction (2026-11-04)
 - `ReportPartyStatementRows.kt` owns row assembly for the full customer control-account statement, supplier control-account statement, and operational customer statement.
 - It consumes loaded party-account links, control-account mappings, posted ledger lines, sales/purchase projections, and date/name filters. It does not fetch data or mutate receivables/payables.
