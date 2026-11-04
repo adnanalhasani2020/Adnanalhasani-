@@ -277,3 +277,9 @@
 - `ReportsCatalogSection.kt` owns the report category chips, catalog cards, source-readiness labels, and title-to-selection mapping as a `LazyListScope` section.
 - `ReportsCenterScreen.kt` supplies the current catalog/filter/source state and receives the selected report through a callback; it retains report calculations and result rendering.
 - The component does not load sources or decide report support. It respects the catalog's supported flag, date validity, loading state, and per-report source error.
+
+
+### Inventory report row assembly extraction (2026-11-04)
+- `ReportInventoryRows.kt` owns selected-row assembly for current inventory valuation, inventory movement, stock-by-user, location balance, warehouse-mapping readiness, current stock, and low-stock alert reports.
+- `ReportsCenterScreen.kt` dispatches to this builder first and continues with other report families when it returns `null`; source readiness and date-window inputs are passed from the existing screen state.
+- Existing cost/currency checks, quantity precision, current-snapshot wording, and inventory source scopes are preserved.
