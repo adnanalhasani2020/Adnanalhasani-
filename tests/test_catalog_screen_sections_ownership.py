@@ -37,6 +37,15 @@ class CatalogScreenSectionsOwnershipTests(unittest.TestCase):
         self.assertIn("internal class CatalogInvoiceTransferState", state)
         self.assertIn("onReviewInvoicePurchaseRequest: (String, Boolean) -> Unit", sections)
 
+    def test_market_discovery_state_has_a_dedicated_owner(self):
+        screen = SCREEN.read_text(encoding="utf-8")
+        state_file = SCREEN.with_name("CatalogMarketUiState.kt").read_text(encoding="utf-8")
+        self.assertIn("val marketUiState = remember { CatalogMarketUiState() }", screen)
+        self.assertIn("internal class CatalogMarketUiState", state_file)
+        self.assertIn("var nearbyMarketItems", state_file)
+        self.assertIn("var selectedBranchId", state_file)
+        self.assertNotIn("var nearbyMarketItems by remember", screen)
+
     def test_transfer_presentation_is_separate_and_keeps_actions_callback_driven(self):
         screen = SCREEN.read_text(encoding="utf-8")
         sections = SECTIONS.read_text(encoding="utf-8")

@@ -240,3 +240,10 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 - Follow-up extraction: `CatalogProductFormState.kt` now owns the product-authoring form state, and `CatalogScreenSections.kt` owns its presentation. The screen retains the existing product creation action and RPC orchestration.
 
 - Follow-up extraction: `CatalogInvoiceTransferState.kt` owns invoice-review and matching UI state; `CatalogScreenSections.kt` owns the invoice-to-purchase review presentation. Request creation, approvals, matching actions, and all RPC orchestration remain in `CatalogScreen.kt`.
+
+
+## 2026-11-04 — Catalog market UI state ownership
+
+- Moved branch/warehouse selection, branch coordinates, nearby-market results and pagination state, location-session values, and aggregated price-hint state into `CatalogMarketUiState.kt`.
+- Kept permission prompts, foreground location acquisition, UI rendering, RPC/REST orchestration, and catalog configuration actions in `CatalogScreen.kt`; this is a state-ownership step, not completion of the browse/discovery presentation extraction.
+- Added a source-ownership guard for the new market state owner. No network contract, database schema, or production data changed.

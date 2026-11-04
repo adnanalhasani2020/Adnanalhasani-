@@ -62,27 +62,27 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     val sectorOptions = remember(activityNodes) { activityNodes.filter { it.nodeKind.equals("sector", true) }.sortedBy { it.pathAr } }
     val activityOptions = remember(activityNodes, sector) { activityNodes.filter { it.selectable && !it.nodeKind.equals("sector", true) && catalogNodeBelongsToSector(it, sector, activityNodes) }.sortedBy { it.pathAr } }
     val businessLevelOptions = remember(activityOptions) { activityOptions.map { it.defaultBusinessLevelCode }.filter { it.isNotBlank() }.distinct().sorted() }
-    var marketBranches by remember { mutableStateOf<List<CatalogBranchOption>>(emptyList()) }
-    var marketWarehouses by remember { mutableStateOf<List<CatalogWarehouseOption>>(emptyList()) }
-    var selectedBranchId by remember { mutableStateOf("") }
-    var selectedWarehouseId by remember { mutableStateOf("") }
-    var branchLatitude by remember { mutableStateOf("") }
-    var branchLongitude by remember { mutableStateOf("") }
-    var branchMenuExpanded by remember { mutableStateOf(false) }
-    var warehouseMenuExpanded by remember { mutableStateOf(false) }
-    var nearbyMarketItems by remember { mutableStateOf<List<NearbyCatalogItem>>(emptyList()) }
-    var marketRadius by remember { mutableIntStateOf(5000) }
-    // Device coordinates are opt-in, foreground-only and kept in memory for this screen session.
-    var deviceLatitude by remember { mutableStateOf<String?>(null) }
-    var deviceLongitude by remember { mutableStateOf<String?>(null) }
-    var locatingDevice by remember { mutableStateOf(false) }
+    val marketUiState = remember { CatalogMarketUiState() }
+    var marketBranches by marketUiState::marketBranches
+    var marketWarehouses by marketUiState::marketWarehouses
+    var selectedBranchId by marketUiState::selectedBranchId
+    var selectedWarehouseId by marketUiState::selectedWarehouseId
+    var branchLatitude by marketUiState::branchLatitude
+    var branchLongitude by marketUiState::branchLongitude
+    var branchMenuExpanded by marketUiState::branchMenuExpanded
+    var warehouseMenuExpanded by marketUiState::warehouseMenuExpanded
+    var nearbyMarketItems by marketUiState::nearbyMarketItems
+    var marketRadius by marketUiState::marketRadius
+    var deviceLatitude by marketUiState::deviceLatitude
+    var deviceLongitude by marketUiState::deviceLongitude
+    var locatingDevice by marketUiState::locatingDevice
+    var nearbyOffset by marketUiState::nearbyOffset
+    var nearbyHasMore by marketUiState::nearbyHasMore
+    var nearbyPageLoadFailed by marketUiState::nearbyPageLoadFailed
+    var nearbyLoadGeneration by marketUiState::nearbyLoadGeneration
+    var marketPriceHints by marketUiState::marketPriceHints
     val locationScope = rememberCoroutineScope()
-    var nearbyOffset by remember { mutableIntStateOf(0) }
-    var nearbyHasMore by remember { mutableStateOf(true) }
-    var nearbyPageLoadFailed by remember { mutableStateOf(false) }
-    var nearbyLoadGeneration by remember { mutableIntStateOf(0) }
     val nearbyListState = rememberLazyListState()
-    var marketPriceHints by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var invoiceSaleId by invoiceTransferState::invoiceSaleId
     var invoiceDestinationOrg by invoiceTransferState::invoiceDestinationOrg
     var invoiceRequestKey by remember { mutableStateOf(java.util.UUID.randomUUID().toString()) }
