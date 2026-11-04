@@ -71,7 +71,7 @@ def test_database_regression_checks_cover_security_and_atomic_checkout():
 def test_manager_queue_and_android_screen_make_fulfillment_operational():
     queue = ORDER_QUEUE.read_text(encoding="utf-8").lower()
     screen = SCREEN.read_text(encoding="utf-8")
-    activity = ACTIVITY.read_text(encoding="utf-8") + MAIN_ACTIVITY.read_text(encoding="utf-8")
+    activity = ACTIVITY.read_text(encoding="utf-8") + MAIN_ACTIVITY.read_text(encoding="utf-8") + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/LocalOperationalScreens.kt").read_text(encoding="utf-8")
     for marker in (
         "commercial_customer_portal_list_organization_orders",
         "customer_order_management_permission_required",
