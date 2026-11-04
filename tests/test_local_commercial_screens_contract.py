@@ -40,3 +40,36 @@ def test_local_sale_and_product_dialogs_have_a_dedicated_owner():
     for name in ("SaleEntryDialog", "EditProductDialog", "AddProductDialog"):
         assert f"internal fun {name}(" in dialogs
         assert f"internal fun {name}(" not in main
+
+
+def test_main_activity_is_only_the_android_entry_point():
+    main = MAIN.read_text(encoding="utf-8")
+    assert "class MainActivity : ComponentActivity" in main
+    assert "StoreApp(applicationContext)" in main
+    for name in (
+        "SaleEntryDialog",
+        "EditProductDialog",
+        "AddProductDialog",
+        "MoreScreen",
+        "ExpensesScreen",
+        "ExpenseEntryDialog",
+        "ReportsScreen",
+        "CommercialCloudReportsScreen",
+        "DebtScreen",
+        "SettlementDialog",
+    ):
+        assert f"fun {name}(" not in main
+
+
+def test_local_operational_screens_have_a_dedicated_owner():
+    screens = (ANDROID / "LocalOperationalScreens.kt").read_text(encoding="utf-8")
+    for name in (
+        "MoreScreen",
+        "ExpensesScreen",
+        "ExpenseEntryDialog",
+        "ReportsScreen",
+        "CommercialCloudReportsScreen",
+        "DebtScreen",
+        "SettlementDialog",
+    ):
+        assert f"internal fun {name}(" in screens
