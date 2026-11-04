@@ -152,3 +152,10 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 - Kept helper names and signatures stable so report rows and exports continue using the same formatting contract.
 - Added Kotlin unit coverage for currencies with two and zero fraction digits, local whole-unit display, ISO instant/date-only parsing, and invalid currency fallback.
 - Restored date/time imports still required by report-period filtering in the Compose screen. No date-window, financial calculation, or export behavior was intentionally changed.
+
+
+## 2026-11-04 — Report ledger classification extraction
+
+- Moved the report-local account-type normalization, statement classification, and account-net aggregation helpers into `ReportLedgerClassification.kt`.
+- Kept the exact classification branches, contra-revenue name checks, COGS aliases, and debit/credit sign rules.
+- Added Kotlin tests for classification and balance direction. The report screen now calls the extracted helpers; no ledger query, journal validation, currency grouping, or displayed report label was changed.
