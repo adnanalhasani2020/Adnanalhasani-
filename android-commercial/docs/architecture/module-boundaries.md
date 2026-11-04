@@ -153,3 +153,9 @@ The catalog screen owns interaction and request orchestration. JSON-to-domain ma
 
 - `CatalogWorkflowMappers.kt` owns pure JSON mapping for invoice-purchase request rows and pending catalog-transfer rows.
 - `CatalogScreen.kt` retains the request endpoints, organization scoping, ordering/limits, action orchestration, refreshes, and feedback. Mapping extraction must not change approval/rejection actions or invoice-to-purchase linking semantics.
+
+
+### Catalog invoice-mapping response boundary
+
+- `CatalogInvoiceMappingMapper.kt` owns only the final prepared response-to-model conversion for location, warehouses, unmatched purchase lines, and candidate offerings.
+- `CatalogScreen.kt` retains all purchase-order/supplier-invoice validation, REST orchestration, active offering/product filtering, candidate eligibility, selected mapping state, and feedback. Do not move or relax those business checks as part of this parser extraction.
