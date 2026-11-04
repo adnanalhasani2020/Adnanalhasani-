@@ -114,7 +114,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn('"كشف حركات الموردين" ->', self.screen)
         self.assertIn("loadCommercialCloudSupplierPaymentMovements(context)", self.screen)
         start = self.supplier_payment_repository.index("internal fun loadCommercialCloudSupplierPaymentMovements(")
-        end = self.repository.index("\ninternal data class CommercialCloudPurchaseLine(", start)
+        end = self.supplier_payment_repository.index("\ninternal fun recordCommercialCloudSupplierPayment(", start)
         loader = self.supplier_payment_repository[start:end]
         self.assertIn("commercial_supplier_payments", loader)
         self.assertIn("journal.status=eq.posted", loader)
@@ -124,7 +124,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
     def test_inventory_movement_report_uses_scoped_source_and_preserves_fractional_quantity(self):
         self.assertIn('"حركة المخزون الفعلية" ->', self.screen)
         start = self.repository.index("internal fun loadCommercialCloudStockMovements(")
-        end = self.repository.index("\ninternal data class CommercialCloudSupplierPaymentMovement(", start)
+        end = self.repository.index("\ninternal data class CommercialMasterDataRow(", start)
         loader = self.repository[start:end]
         self.assertIn("commercial_stock_movements", loader)
         self.assertIn("offering.activity.organization_id=eq.$orgId", loader)
