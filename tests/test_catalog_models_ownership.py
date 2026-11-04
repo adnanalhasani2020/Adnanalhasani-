@@ -33,7 +33,7 @@ def test_catalog_screen_keeps_existing_model_contracts():
     screen = SCREEN.read_text(encoding="utf-8")
     assert "internal fun CatalogScreen(" in screen
     assert "CatalogProduct" in screen
-    assert "CatalogUnit" in screen
+    assert "availableUnits: List<CatalogUnit>" in MODELS.read_text(encoding="utf-8")
 
 def test_catalog_uses_the_shared_supabase_transport_and_session_store():
     screen = SCREEN.read_text(encoding="utf-8")
