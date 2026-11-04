@@ -289,3 +289,10 @@ The catalog screen owns interaction and request orchestration. JSON-to-domain ma
 
 - `ReportPartyStatementValidation.kt` now preflights the same currency- and party-scoped debit/credit movement, opening-balance, and period running-balance arithmetic used by `ReportPartyStatementRows.kt`.
 - Customer and supplier statement validation receives the selected date window and fails closed on exact `Long` overflow before row assembly. Existing source/link error precedence is retained.
+
+
+### Supplier movement statement exactness (2026-11-05)
+
+- `ReportDomainMappers.kt` owns the shared supplier invoice/payment movement projection consumed by both validation and row assembly.
+- `ReportSupplierValidation.kt` preflights unrepresentable payment negation, opening movement totals, and selected-period running balances with exact arithmetic. `ReportSupplierRows.kt` uses the same projected movements and exact opening aggregation.
+- Existing purchase-source then supplier-payment-source error precedence and supplier-name filtering are retained.
