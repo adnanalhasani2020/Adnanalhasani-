@@ -8,6 +8,8 @@ REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/comm
 RETURNS_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReturnsRepository.kt"
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudOperationalScreen.kt"
 MAIN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/StoreApp.kt"
+MAIN_ACTIVITY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt"
+MAIN_ACTIVITY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt"
 
 
 class CommercialCloudOperationalScreenContractTests(unittest.TestCase):
@@ -16,7 +18,7 @@ class CommercialCloudOperationalScreenContractTests(unittest.TestCase):
         cls.repository = REPOSITORY.read_text(encoding="utf-8")
         cls.returns_repository = RETURNS_REPOSITORY.read_text(encoding="utf-8")
         cls.screen = SCREEN.read_text(encoding="utf-8")
-        cls.main = MAIN.read_text(encoding="utf-8")
+        cls.main = MAIN.read_text(encoding="utf-8") + MAIN_ACTIVITY.read_text(encoding="utf-8") + MAIN_ACTIVITY.read_text(encoding="utf-8")
 
     def test_operational_queries_are_explicitly_allowlisted(self):
         function = self.repository.split(

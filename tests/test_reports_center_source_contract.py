@@ -4,6 +4,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterScreen.kt"
+CATALOG = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCatalog.kt"
 REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt"
 INVENTORY_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/InventoryRepository.kt"
 RETURNS_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReturnsRepository.kt"
@@ -24,7 +25,8 @@ RETURN_CURRENCY_GUARD_MIGRATION = ROOT / "supabase/migrations/20261027195426_gua
 class ReportsCenterSourceContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.screen = SCREEN.read_text(encoding="utf-8")
+        cls.screen = SCREEN.read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8")
+        cls.catalog = CATALOG.read_text(encoding="utf-8")
         cls.repository = REPOSITORY.read_text(encoding="utf-8")
         cls.inventory_repository = INVENTORY_REPOSITORY.read_text(encoding="utf-8")
         cls.returns_repository = RETURNS_REPOSITORY.read_text(encoding="utf-8")
@@ -64,11 +66,11 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn("credit_minor", loader)
 
     def test_limited_customer_and_supplier_statements_are_not_mislabeled_as_full_financial_statements(self):
-        self.assertIn('ReportCatalogItem("أرصدة العملاء وكشف الحساب"', self.screen)
-        self.assertIn('ReportCatalogItem("كشف حركات الموردين"', self.screen)
-        self.assertIn('ReportCatalogItem("الرصيد المحاسبي الكامل للعملاء"', self.screen)
-        self.assertIn('ReportCatalogItem("أرصدة الموردين والمستحقات", "الموردون والمستحقات", "سطور دفتر الأستاذ المرحلة المرتبطة بحساب مراقبة المورد", cloudMode', self.screen)
-        self.assertIn('ReportCatalogItem("الرصيد المحاسبي الكامل للعملاء", "العملاء والديون", "سطور دفتر الأستاذ المرحلة المرتبطة بحساب مراقبة العميل", cloudMode', self.screen)
+        self.assertIn('ReportCatalogItem("أرصدة العملاء وكشف الحساب"', self.catalog)
+        self.assertIn('ReportCatalogItem("كشف حركات الموردين"', self.catalog)
+        self.assertIn('ReportCatalogItem("الرصيد المحاسبي الكامل للعملاء"', self.catalog)
+        self.assertIn('ReportCatalogItem("أرصدة الموردين والمستحقات", "الموردون والمستحقات", "سطور دفتر الأستاذ المرحلة المرتبطة بحساب مراقبة المورد", cloudMode', self.catalog)
+        self.assertIn('ReportCatalogItem("الرصيد المحاسبي الكامل للعملاء", "العملاء والديون", "سطور دفتر الأستاذ المرحلة المرتبطة بحساب مراقبة العميل", cloudMode', self.catalog)
         self.assertIn("Full customer ledger statement", self.contract)
         self.assertIn("Full supplier ledger statement", self.contract)
         self.assertIn("historical inventory valuation and inventory-to-GL valuation reconciliation", self.contract)
@@ -93,7 +95,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn("لا يمكن حساب الملخص: تحقق من الفترة المحددة", self.screen)
 
     def test_ledger_account_statement_requires_account_filter(self):
-        self.assertIn('ReportCatalogItem("كشف حساب محاسبي"', self.screen)
+        self.assertIn('ReportCatalogItem("كشف حساب محاسبي"', self.catalog)
         self.assertIn('selectedReport != "كشف حساب محاسبي" || (accountQuery.isNotBlank()', self.screen)
         self.assertIn('label = { Text("رمز الحساب أو اسمه") }', self.screen)
 
@@ -153,8 +155,8 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn('throughEnd.groupBy { it.entryId to it.currencyCode }', self.screen)
         self.assertIn('إجمالي الأصول', self.screen)
         self.assertIn('الأصول − الالتزامات − حقوق الملكية', self.screen)
-        self.assertIn('ReportCatalogItem("قائمة الدخل والميزانية العمومية"', self.screen)
-        self.assertIn('ReportCatalogItem("التدفقات النقدية والصندوق"', self.screen)
+        self.assertIn('ReportCatalogItem("قائمة الدخل والميزانية العمومية"', self.catalog)
+        self.assertIn('ReportCatalogItem("التدفقات النقدية والصندوق"', self.catalog)
         self.assertIn("val invalidPostedDate = cloudLedgerLines.any", self.screen)
         self.assertIn("مقارنة الفترة السابقة", self.screen)
 
@@ -238,18 +240,18 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn("commercial_supplier_invoice_items_purchase_order_item_id_fkey", self.purchase_repository)
         self.assertIn("purchaseOrderUnitCostMinor", self.purchase_repository)
         self.assertIn("calculateSupplierInvoicePriceVariance", self.screen)
-        self.assertIn('ReportCatalogItem("فروقات أسعار فواتير الموردين"', self.screen)
+        self.assertIn('ReportCatalogItem("فروقات أسعار فواتير الموردين"', self.catalog)
         self.assertIn('"فروقات أسعار فواتير الموردين" -> supplierInvoiceVarianceError', self.screen)
         self.assertIn('"فروقات أسعار فواتير الموردين" -> cloudPurchases.flatMap', self.screen)
         self.assertIn("فرق موجب = أعلى من أمر الشراء، وسالب = أقل", self.screen)
         self.assertIn("purchaseOrderItemDescription", self.purchase_repository)
         self.assertIn('"فواتير الشراء والمستحقات المسجلة", "المشتريات حسب المورد", "فروقات أسعار فواتير الموردين", "مستحقات فواتير الموردين"', self.screen)
         self.assertIn("round the sum of quantity × recorded PO unit cost once", self.price_variance_calculations)
-        self.assertIn('ReportCatalogItem("التحصيل حسب طريقة الدفع"', self.screen)
+        self.assertIn('ReportCatalogItem("التحصيل حسب طريقة الدفع"', self.catalog)
         self.assertIn('"التحصيل حسب طريقة الدفع" -> paymentMethodAnalysisError', self.screen)
         self.assertIn('"التحصيل حسب طريقة الدفع" -> cloudPayments.filter', self.screen)
         self.assertIn("paymentMethodCode", self.repository)
-        self.assertIn('ReportCatalogItem("ملخص المصروفات حسب التصنيف وطريقة الصرف"', self.screen)
+        self.assertIn('ReportCatalogItem("ملخص المصروفات حسب التصنيف وطريقة الصرف"', self.catalog)
         self.assertIn('"ملخص المصروفات حسب التصنيف وطريقة الصرف" -> expenseReportError', self.screen)
         self.assertIn('"ملخص المصروفات حسب التصنيف وطريقة الصرف" -> cloudExpenses.filter', self.screen)
         self.assertIn('currencyCode = row.optString("currency_code").takeUnless { it == "null" }.orEmpty()', self.expense_repository)
@@ -305,10 +307,18 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
             'ReportCatalogItem("تجميع القوائم المالية متعددة العملات"',
         ):
             with self.subTest(marker=marker):
-                self.assertIn(marker, self.screen)
-        self.assertIn("تاريخ الاستحقاق التعاقدي المسجل", self.screen)
-        self.assertIn("يحجب التقرير إذا بقيت فاتورة مفتوحة بلا تاريخ موثق", self.screen)
-        self.assertIn("لا توجد سياسة تحويل معتمدة", self.screen)
+                self.assertIn(marker, self.catalog)
+        self.assertIn("تاريخ الاستحقاق التعاقدي المسجل", self.catalog)
+        self.assertIn("يحجب التقرير إذا بقيت فاتورة مفتوحة بلا تاريخ موثق", self.catalog)
+        self.assertIn("لا توجد سياسة تحويل معتمدة", self.catalog)
+
+
+    def test_report_catalog_has_a_dedicated_source_owner(self):
+        self.assertIn("internal data class ReportCatalogItem", self.catalog)
+        self.assertIn("internal fun buildReportsCatalog", self.catalog)
+        self.assertNotIn("private data class ReportCatalogItem", self.screen)
+        self.assertNotIn("private fun buildReportsCatalog", self.screen)
+        self.assertIn("buildReportsCatalog(cloudMode)", self.screen)
 
 if __name__ == "__main__":
     unittest.main()
@@ -318,7 +328,7 @@ def test_cloud_dashboard_uses_organization_timezone_for_report_day_boundaries():
     main_activity = (
         ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt"
     ).read_text(encoding="utf-8")
-    start = main_activity.index("private fun CommercialCloudReportsScreen")
+    start = main_activity.index("fun CommercialCloudReportsScreen")
     end = main_activity.index("\n@Composable", start + 50)
     reports = main_activity[start:end]
     assert "loadCommercialCloudExpenseReportingTimeZone(context)" in reports

@@ -44,16 +44,16 @@ class CommercialWarehouseFoundationContractTests(unittest.TestCase):
         self.assertIn("FROM anon", self.sql)
 
     def test_master_data_label_falls_back_to_english_when_arabic_is_missing(self):
-        repository = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt").read_text(encoding="utf-8")
+        repository = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MasterDataRepository.kt").read_text(encoding="utf-8")
         self.assertIn('row.optString("name_ar")', repository)
         self.assertIn('row.optString("name_en")', repository)
         self.assertIn('ifBlank { row.optString("name_en")', repository)
 
     def test_inventory_category_labels_ignore_null_arabic_values_and_fall_back_to_english(self):
-        repository = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt").read_text(encoding="utf-8")
-        self.assertIn('category.optString("name_ar").takeUnless { it == "null" }.orEmpty()', repository)
-        self.assertIn('category.optString("name_en").takeUnless { it == "null" }.orEmpty()', repository)
-        self.assertIn('ifBlank { category.optString("name_en")', repository)
+        repository = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MasterDataRepository.kt").read_text(encoding="utf-8")
+        self.assertIn('row.optString("name_ar").takeUnless { it == "null" }.orEmpty()', repository)
+        self.assertIn('row.optString("name_en").takeUnless { it == "null" }.orEmpty()', repository)
+        self.assertIn('ifBlank { row.optString("name_en")', repository)
 
     def test_does_not_change_existing_stock_balances_or_checkout(self):
         self.assertNotIn("UPDATE public.commercial_inventory_balances", self.sql)
