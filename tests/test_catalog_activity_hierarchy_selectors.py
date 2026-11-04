@@ -16,7 +16,7 @@ class CatalogActivityHierarchySelectorTests(unittest.TestCase):
         self.assertIn("data class CatalogActivityNode", self.source)
         self.assertIn('node.optString("parent_code")', self.source)
         self.assertIn('node.optString("node_kind")', self.source)
-        self.assertIn('node.optBoolean("is_selectable",false)', self.source)
+        self.assertIn('node.optBoolean("is_selectable", false)', self.source)
         self.assertIn('node.optString("default_business_level_code")', self.source)
 
     def test_sector_filter_walks_parent_chain_and_prevents_cycles(self):
