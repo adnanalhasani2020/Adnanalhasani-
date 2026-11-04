@@ -333,3 +333,11 @@ A full read-through of `ReportsCenterData.kt`, `ReportsCloudData.kt`, and `Repor
 The current screen loads the projections together because the catalog and shared screen summary coexist with selected-report rendering, while `ReportsCenterData` eagerly prepares validation/calculation state and dispatches selected rows from the same snapshot. A per-report lazy-loading change is therefore **not** a safe cleanup-only optimization: it would require an explicit dependency model, request cancellation/versioning for rapid report switching, and preservation of the shared retry/error behavior. Do not remove or skip any of these 17 loads without that separate design and targeted behavior tests.
 
 The source-ownership contract test now also guards that every projection alias is consumed beyond its declaration, so a future removal or orphaning is visible during review.
+
+
+### Reports coordinator recomposition memoization (2026-11-05)
+
+- `ReportsCenterData.kt` now memoizes date-filtered local/cloud sales, local settlements/expenses, low-stock products, supplier invoice/obligation candidate projections, supplier movement inputs, GL mapping-key/role sets, and the selected sales/ledger row calculations.
+- The currency summary aggregation is memoized against its exact source/readiness inputs.
+- Each `remember` key includes the values consumed by its calculation, including selected report, date boundaries/text, row/account filters, and relevant source snapshots. Source validation and report readiness remain eager and unchanged; this is recomposition caching, not lazy source loading.
+- Existing overflow handling and Arabic fail-closed messages are preserved. The focused source-contract test checks the memoization dependencies and error routing.
