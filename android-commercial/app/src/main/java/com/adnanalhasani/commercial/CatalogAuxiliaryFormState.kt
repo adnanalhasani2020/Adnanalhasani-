@@ -22,9 +22,10 @@ internal class CatalogDirectoryFormState {
     val unitTranslations = mutableStateOf("")
 }
 
-/** Screen-scoped state for catalog transfer form inputs. */
+/** Screen-scoped transfer inputs and incoming transfer results. */
 internal class CatalogTransferFormState {
     val transferSource = mutableStateOf("")
     val transferDestination = mutableStateOf("")
     val transferIds = mutableStateOf("")
+    val pendingTransfers = mutableStateOf<List<PendingTransfer>>(emptyList())
 }
