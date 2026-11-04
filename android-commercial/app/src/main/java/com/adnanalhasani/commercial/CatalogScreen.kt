@@ -85,30 +85,28 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     val nearbyListState = rememberLazyListState()
     var invoiceSaleId by invoiceTransferState::invoiceSaleId
     var invoiceDestinationOrg by invoiceTransferState::invoiceDestinationOrg
-    var invoiceRequestKey by invoiceTransferState::invoiceRequestKey
-    var invoiceRequests by remember { mutableStateOf<List<InvoicePurchaseRequestRow>>(emptyList()) }
+    var invoiceRequests by invoiceTransferState::invoiceRequests
     var invoiceMappingRequestId by invoiceTransferState::invoiceMappingRequestId
-    var invoiceMappingPurchaseOrderId by remember { mutableStateOf("") }
-    var invoiceMappingLines by remember { mutableStateOf<List<InvoicePurchaseUnmappedLine>>(emptyList()) }
-    var invoiceMappingOfferings by remember { mutableStateOf<List<InvoicePurchaseOffering>>(emptyList()) }
+    var invoiceMappingPurchaseOrderId by invoiceTransferState::mappingPurchaseOrderId
+    var invoiceMappingLines by invoiceTransferState::mappingLines
+    var invoiceMappingOfferings by invoiceTransferState::mappingOfferings
     var invoiceMappingLineId by invoiceTransferState::invoiceMappingLineId
     var invoiceMappingOfferingId by invoiceTransferState::invoiceMappingOfferingId
     var invoiceMappingLineMenuExpanded by invoiceTransferState::invoiceMappingLineMenuExpanded
     var invoiceMappingOfferingMenuExpanded by invoiceTransferState::invoiceMappingOfferingMenuExpanded
-    var invoiceMappingLocationId by remember { mutableStateOf("") }
-    var invoiceMappingWarehouses by remember { mutableStateOf<List<CatalogWarehouseOption>>(emptyList()) }
+    var invoiceMappingLocationId by invoiceTransferState::mappingLocationId
+    var invoiceMappingWarehouses by invoiceTransferState::mappingWarehouses
     var invoiceMappingWarehouseId by invoiceTransferState::invoiceMappingWarehouseId
     var invoiceMappingWarehouseMenuExpanded by invoiceTransferState::invoiceMappingWarehouseMenuExpanded
-    var showInvoiceItemCreation by remember { mutableStateOf(false) }
-    var invoiceNewNameAr by remember { mutableStateOf("") }
-    var invoiceNewNameEn by remember { mutableStateOf("") }
-    var invoiceNewCategoryCode by remember { mutableStateOf("") }
-    var invoiceNewBaseUnitCode by remember { mutableStateOf("") }
-    var invoiceNewSaleUnitCode by remember { mutableStateOf("") }
-    var invoiceNewCategoryMenuExpanded by remember { mutableStateOf(false) }
-    var invoiceNewBaseUnitMenuExpanded by remember { mutableStateOf(false) }
-    var invoiceNewSaleUnitMenuExpanded by remember { mutableStateOf(false) }
-    var invoiceNewIdempotencyKey by remember { mutableStateOf("") }
+    var showInvoiceItemCreation by invoiceTransferState::showItemCreation
+    var invoiceNewNameAr by invoiceTransferState::newNameAr
+    var invoiceNewNameEn by invoiceTransferState::newNameEn
+    var invoiceNewCategoryCode by invoiceTransferState::newCategoryCode
+    var invoiceNewBaseUnitCode by invoiceTransferState::newBaseUnitCode
+    var invoiceNewSaleUnitCode by invoiceTransferState::newSaleUnitCode
+    var invoiceNewCategoryMenuExpanded by invoiceTransferState::newCategoryMenuExpanded
+    var invoiceNewBaseUnitMenuExpanded by invoiceTransferState::newBaseUnitMenuExpanded
+    var invoiceNewSaleUnitMenuExpanded by invoiceTransferState::newSaleUnitMenuExpanded
     var localUnitCodes by remember { mutableStateOf<Set<String>>(emptySet()) }
     var invoiceReceiveLocationId by invoiceTransferState::invoiceReceiveLocationId
     var invoiceReceiveLocationMenuExpanded by invoiceTransferState::invoiceReceiveLocationMenuExpanded
@@ -163,14 +161,18 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         }
     }
     val invoiceWorkflow = CatalogInvoiceWorkflow(
+        context = context,
         state = invoiceTransferState,
         accessToken = { token },
         organizationId = { org() },
         marketBranches = { marketBranches },
         selectedBranchId = { selectedBranchId },
+        selectedActivityCode = { selectedActivityCode },
+        directoryUnits = { directoryUnits },
+        localUnitCodes = { localUnitCodes },
+        categories = { categories },
         request = { action, onSuccess, onFailure -> request(action, onSuccess, onFailure) },
-        onFeedback = { feedback = it },
-        onRequestsLoaded = { invoiceRequests = it }
+        onFeedback = { feedback = it }
     )
     LaunchedEffect(Unit) {
         val savedRefresh = runCatching { commercialCloudSessionPreferences(context).getString("refresh_token", null) }.getOrNull()
@@ -432,213 +434,6 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                 .put("p_units",unitRows).put("p_sectors",sectorArray).put("p_business_levels",levelRows).put("p_regions",regionRows).put("p_rulings",rulingRows),active)
         }, { feedback="تم حفظ الصنف وتفاصيل وحداته ونطاق ظهوره ومعلومات الحكم المرتبطة به: $it"; section="browse"; loadCatalog() })
     }
-    fun loadInvoicePurchaseUnmappedLines(req: InvoicePurchaseRequestRow) {
-        val active=token ?: return
-        val orgId=org() ?: run { feedback="أدخل معرّف المؤسسة UUID أولًا."; return }
-        if(req.destinationOrganizationId!=orgId || req.status!="approved" || req.purchaseOrderId.isBlank()) {
-            feedback="إدارة المطابقة متاحة للمؤسسة المستقبلة بعد الموافقة فقط."
-            return
-        }
-        request({
-            val poRows=JSONArray(catalogGet("/rest/v1/commercial_purchase_orders?select=id,receive_location_id,currency_code,status&organization_id=eq."+orgId+"&id=eq."+req.purchaseOrderId+"&limit=1",active))
-            if(poRows.length()!=1) throw IllegalStateException("لم يتم العثور على أمر الشراء ضمن المؤسسة المستقبلة.")
-            val purchaseOrder=poRows.getJSONObject(0)
-            val locationId=purchaseOrder.optString("receive_location_id").takeUnless { it=="null" }.orEmpty()
-            val currencyCode=purchaseOrder.optString("currency_code").uppercase()
-            val purchaseOrderStatus=purchaseOrder.optString("status")
-            if(purchaseOrderStatus !in setOf("draft","submitted","approved")) throw IllegalStateException("لا يمكن تغيير ربط الأصناف بعد استلام أمر الشراء أو إغلاقه أو إلغائه.")
-            if(locationId.isBlank() || !currencyCode.matches(Regex("[A-Z]{3}"))) throw IllegalStateException("أمر الشراء لا يحتوي موقع استلام أو عملة صالحة.")
-            val supplierInvoices=JSONArray(catalogGet("/rest/v1/commercial_supplier_invoices?select=id&organization_id=eq."+orgId+"&purchase_order_id=eq."+req.purchaseOrderId+"&limit=1",active))
-            if(supplierInvoices.length()>0) throw IllegalStateException("تم تسجيل فاتورة مورد لهذا الأمر؛ لا يمكن تغيير ربط الأصناف بعد ذلك.")
-            val lineRows=JSONArray(catalogGet("/rest/v1/commercial_purchase_order_items?select=id,line_number,item_description,quantity_ordered,quantity_received,offering_id,source_selling_unit_code&organization_id=eq."+orgId+"&purchase_order_id=eq."+req.purchaseOrderId+"&offering_id=is.null&quantity_received=eq.0&order=line_number.asc",active))
-            val warehouseRows=JSONArray(catalogGet("/rest/v1/commercial_warehouses?select=id,name,branch_location_id&organization_id=eq."+orgId+"&branch_location_id=eq."+locationId+"&state=eq.active&order=name.asc",active))
-            val mapRows=JSONArray(catalogGet("/rest/v1/commercial_catalog_item_offerings?select=offering_id,global_item_id&organization_id=eq."+orgId+"&location_id=eq."+locationId,active))
-            val globalIds=(0 until mapRows.length()).map { mapRows.getJSONObject(it).optString("global_item_id") }.filter { it.isNotBlank() }.distinct()
-            val offeringIds=(0 until mapRows.length()).map { mapRows.getJSONObject(it).optString("offering_id") }.filter { it.isNotBlank() }.distinct()
-            val encodedGlobals=java.net.URLEncoder.encode("in.("+globalIds.joinToString(",")+")","UTF-8")
-            val encodedOfferings=java.net.URLEncoder.encode("in.("+offeringIds.joinToString(",")+")","UTF-8")
-            val globalRows=if(globalIds.isEmpty()) JSONArray() else JSONArray(catalogGet("/rest/v1/commercial_global_catalog_items?select=id,name_ar,name_en,unit_code&id="+encodedGlobals+"&is_active=eq.true",active))
-            val activeOfferings=if(offeringIds.isEmpty()) JSONArray() else JSONArray(catalogGet("/rest/v1/commercial_offerings?select=id,product_id,location_ref,state,currency_code&id="+encodedOfferings+"&state=eq.active&currency_code=eq."+currencyCode+"&location_ref=eq."+locationId,active))
-            val productIds=(0 until activeOfferings.length()).map { activeOfferings.getJSONObject(it).optString("product_id") }.filter { it.isNotBlank() }.distinct()
-            val encodedProducts=java.net.URLEncoder.encode("in.("+productIds.joinToString(",")+")","UTF-8")
-            val activeProducts=if(productIds.isEmpty()) JSONArray() else JSONArray(catalogGet("/rest/v1/commercial_products?select=id,state&id="+encodedProducts+"&state=eq.active",active))
-            val names=mutableMapOf<String,Pair<String,String>>()
-            for(i in 0 until globalRows.length()) {
-                val row=globalRows.getJSONObject(i)
-                names[row.optString("id")]=Pair(row.optString("name_ar").ifBlank { row.optString("name_en") },row.optString("unit_code"))
-            }
-            val activeProductIds=(0 until activeProducts.length()).map { activeProducts.getJSONObject(it).optString("id") }.toSet()
-            val activeIds=(0 until activeOfferings.length()).filter { activeOfferings.getJSONObject(it).optString("product_id") in activeProductIds }
-                .map { activeOfferings.getJSONObject(it).optString("id") }.toSet()
-            val candidates=(0 until mapRows.length()).mapNotNull { i ->
-                val row=mapRows.getJSONObject(i)
-                val offeringId=row.optString("offering_id")
-                val globalId=row.optString("global_item_id")
-                val name=names[globalId]
-                if(offeringId !in activeIds || name==null) null
-                else JSONObject().put("id",offeringId).put("global_item_id",globalId)
-                    .put("name",name.first.ifBlank { globalId }).put("unit_code",name.second)
-            }.distinctBy { it.optString("id") }
-            val lines=JSONArray().apply {
-                for(i in 0 until lineRows.length()) {
-                    val row=lineRows.getJSONObject(i)
-                    put(JSONObject().put("id",row.optString("id"))
-                        .put("line_number",row.optInt("line_number"))
-                        .put("description",row.optString("item_description"))
-                        .put("quantity",row.optString("quantity_ordered"))
-                        .put("unit_code",row.optString("source_selling_unit_code").takeUnless { it=="null" }.orEmpty()))
-                }
-            }
-            JSONObject().put("location_id",locationId)
-                .put("lines",lines)
-                .put("offerings",JSONArray().apply { candidates.forEach { put(it) } })
-                .put("warehouses",warehouseRows)
-                .toString()
-        }, { raw ->
-            val mapping = parseCatalogInvoiceMapping(raw)
-            invoiceMappingLocationId = mapping.locationId
-            invoiceMappingWarehouses = mapping.warehouses
-            if(invoiceMappingWarehouses.none { it.id==invoiceMappingWarehouseId }) invoiceMappingWarehouseId=invoiceMappingWarehouses.firstOrNull()?.id.orEmpty()
-            invoiceMappingLines = mapping.lines
-            invoiceMappingOfferings = mapping.offerings
-            invoiceMappingRequestId=req.id
-            invoiceMappingPurchaseOrderId=req.purchaseOrderId
-            invoiceMappingLineId=invoiceMappingLines.firstOrNull()?.id.orEmpty()
-            invoiceMappingOfferingId=""
-            feedback="الأصناف غير المطابقة: "+invoiceMappingLines.size+". العروض المتاحة في موقع الاستلام: "+invoiceMappingOfferings.size+". لم يتغير المخزون."
-        })
-    }
-
-    fun linkSelectedInvoicePurchaseLine() {
-        val active=token ?: return
-        val orgId=org() ?: return
-        val requestRow=invoiceRequests.firstOrNull { it.id==invoiceMappingRequestId }
-        if(requestRow==null || requestRow.destinationOrganizationId!=orgId || requestRow.status!="approved") {
-            feedback="تعذر التحقق من صلاحية طلب المطابقة."
-            return
-        }
-        val line=invoiceMappingLines.firstOrNull { it.id==invoiceMappingLineId } ?: run { feedback="اختر بندًا غير مطابق."; return }
-        val offering=invoiceMappingOfferings.firstOrNull { it.id==invoiceMappingOfferingId } ?: run { feedback="اختر صنفًا محليًا مرتبطًا بموقع الاستلام."; return }
-        request({
-            catalogHttp("/rest/v1/rpc/commercial_link_purchase_order_item_offering",JSONObject()
-                .put("p_organization_id",orgId).put("p_purchase_order_id",invoiceMappingPurchaseOrderId)
-                .put("p_purchase_order_item_id",line.id).put("p_offering_id",offering.id),active)
-        }, { raw ->
-            val result=runCatching { JSONObject(raw) }.getOrNull()
-            val orderStatus=result?.optString("status").orEmpty()
-            val orderNeedsReapproval=result?.optBoolean("reapproval_required",false) ?: false
-            invoiceMappingLines=invoiceMappingLines.filterNot { it.id==line.id }
-            invoiceMappingLineId=invoiceMappingLines.firstOrNull()?.id.orEmpty()
-            invoiceMappingOfferingId=""
-            feedback=if(orderNeedsReapproval) {
-                "تم ربط بند الفاتورة بالصنف المحلي "+offering.name+". أعيد أمر الشراء إلى حالة الإرسال ويتطلب إعادة اعتماد؛ لم يتغير المخزون."
-            } else {
-                "تم ربط بند الفاتورة بالصنف المحلي "+offering.name+". لم يتغير المخزون؛ سيُحدّث عند الاستلام فقط."
-            }
-            loadInvoicePurchaseUnmappedLines(requestRow)
-        })
-    }
-
-    fun openInvoiceItemCreationDialog() {
-        val line=invoiceMappingLines.firstOrNull { it.id==invoiceMappingLineId } ?: run { feedback="اختر بندًا غير مطابق أولًا."; return }
-        val orgId=org() ?: return
-        if(invoiceMappingWarehouses.isEmpty() || invoiceMappingWarehouseId.isBlank()) {
-            feedback="لا يوجد مستودع نشط مرتبط بفرع استلام أمر الشراء."
-            return
-        }
-        if(selectedActivityCode.isBlank()) {
-            feedback="اختر النشاط التجاري من الدليل أولًا."
-            return
-        }
-        val available=directoryUnits.filter { it.owner.isBlank() || it.owner==orgId }
-        val baseOptions=available.filter { it.baseCode.isBlank() && it.code.lowercase() in localUnitCodes }
-        val sourceUnit=available.firstOrNull { it.code.equals(line.unitCode,true) }
-        if(line.unitCode.isNotBlank() && sourceUnit==null) {
-            feedback="وحدة الفاتورة "+line.unitCode+" غير موجودة في دليل الوحدات النشطة؛ لم نفترض تحويلًا بديلًا."
-            return
-        }
-        val base=if(sourceUnit==null) baseOptions.firstOrNull() else if(sourceUnit.baseCode.isBlank()) baseOptions.firstOrNull { it.code==sourceUnit.code } else baseOptions.firstOrNull { it.code==sourceUnit.baseCode }
-        if(base==null) {
-            feedback="لا توجد وحدة أساس نشطة مشتركة بين دليل الوحدات ووحدات المخزون."
-            return
-        }
-        val sale=sourceUnit?.takeIf { it.baseCode.isBlank() || it.baseCode==base.code } ?: base
-        invoiceNewNameAr=line.description.trim().take(180)
-        invoiceNewNameEn=""
-        invoiceNewCategoryCode=categories.firstOrNull()?.code.orEmpty()
-        invoiceNewBaseUnitCode=base.code
-        invoiceNewSaleUnitCode=sale.code
-        invoiceNewIdempotencyKey=java.util.UUID.randomUUID().toString()
-        showInvoiceItemCreation=true
-    }
-
-    fun createInvoicePurchaseItem() {
-        if (!COMMERCIAL_CLOUD_UNMAPPED_INVOICE_ITEM_RPC_READY) {
-            feedback = "إنشاء صنف جديد من بند فاتورة الشراء متوقف مؤقتًا؛ ترحيل الخادم المطلوب غير منشور في قاعدة الإنتاج بعد. لم يتم إرسال أي بيانات."
-            return
-        }
-        val active=token ?: return
-        val orgId=org() ?: return
-        val requestRow=invoiceRequests.firstOrNull { it.id==invoiceMappingRequestId }
-        if(requestRow==null || requestRow.destinationOrganizationId!=orgId || requestRow.status!="approved") {
-            feedback="إنشاء الصنف متاح للمؤسسة المستقبلة بعد اعتماد طلب الشراء فقط."
-            return
-        }
-        val line=invoiceMappingLines.firstOrNull { it.id==invoiceMappingLineId } ?: run { feedback="اختر بند الفاتورة."; return }
-        val base=directoryUnits.firstOrNull { it.code==invoiceNewBaseUnitCode && it.baseCode.isBlank() && it.code.lowercase() in localUnitCodes }
-            ?: run { feedback="اختر وحدة أساس نشطة ومعتمدة للمخزون."; return }
-        val sale=directoryUnits.firstOrNull { it.code==invoiceNewSaleUnitCode && (it.code==base.code || it.baseCode==base.code) && (it.owner.isBlank() || it.owner==orgId) }
-            ?: run { feedback="اختر وحدة بيع متوافقة مع وحدة الأساس."; return }
-        if(line.unitCode.isNotBlank() && !line.unitCode.equals(sale.code,true)) {
-            feedback="وحدة بند الفاتورة لا تطابق وحدة البيع المختارة. لا يمكن تغيير التحويل تلقائيًا."
-            return
-        }
-        if(invoiceNewNameAr.isBlank() || invoiceNewNameEn.isBlank() || invoiceNewCategoryCode.isBlank()) {
-            feedback="أدخل الاسم العربي والإنجليزي واختر تصنيف الدليل."
-            return
-        }
-        val contextActivityId=context.getSharedPreferences("commercial_cloud_context_v1",android.content.Context.MODE_PRIVATE)
-            .getString("activity_id",null).orEmpty()
-        if(contextActivityId.isBlank()) {
-            feedback="لم يتم العثور على النشاط الحالي في سياق المؤسسة. افتح ملف النشاط ثم أعد المحاولة."
-            return
-        }
-        if(invoiceMappingWarehouseId.isBlank() || invoiceMappingLocationId.isBlank()) {
-            feedback="اختر مستودعًا نشطًا تابعًا لفرع استلام أمر الشراء."
-            return
-        }
-        val key=invoiceNewIdempotencyKey.ifBlank { java.util.UUID.randomUUID().toString().also { invoiceNewIdempotencyKey=it } }
-        request({
-            catalogHttp("/rest/v1/rpc/commercial_create_and_link_invoice_purchase_item",JSONObject()
-                .put("p_organization_id",orgId)
-                .put("p_purchase_order_id",invoiceMappingPurchaseOrderId)
-                .put("p_purchase_order_item_id",line.id)
-                .put("p_activity_id",contextActivityId)
-                .put("p_activity_node_code",selectedActivityCode.uppercase())
-                .put("p_warehouse_id",invoiceMappingWarehouseId)
-                .put("p_name_ar",invoiceNewNameAr.trim())
-                .put("p_name_en",invoiceNewNameEn.trim())
-                .put("p_category_code",invoiceNewCategoryCode.uppercase())
-                .put("p_base_unit_code",base.code)
-                .put("p_sale_unit_code",sale.code)
-                .put("p_item_type","product")
-                .put("p_local_category_id",JSONObject.NULL)
-                .put("p_idempotency_key",key),active)
-        }, { raw ->
-            val result=runCatching { JSONObject(raw) }.getOrNull()
-            val status=result?.optString("status").orEmpty()
-            val reapprovalRequired=result?.optBoolean("reapproval_required",false) ?: false
-            showInvoiceItemCreation=false
-            invoiceNewIdempotencyKey=java.util.UUID.randomUUID().toString()
-            feedback=if(reapprovalRequired) {
-                "تم إنشاء الصنف وربطه. أُعيد أمر الشراء إلى حالة الإرسال ويتطلب إعادة اعتماده. السعر غير محدد والمخزون لم يتغير."
-            } else {
-                "تم إنشاء الصنف وربطه دون سعر أو كمية افتتاحية. لن يتغير المخزون حتى تسجيل الاستلام."
-            }
-            loadInvoicePurchaseUnmappedLines(requestRow)
-        })
-    }
-
     fun transferCatalog() {
         val active=token ?: return
         if(transferSource.isBlank() || transferDestination.isBlank()) { feedback="أدخل معرّف الحساب المصدر والوجهة."; return }
@@ -900,84 +695,21 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                 "category" -> CatalogCategorySection(categoryCodeState, parentCodeState, categoryNameArState, categoryNameEnState, categoryDescriptionArState, categoryDescriptionEnState, categoryTranslationsState, categories, locale, busy, ::createCategory, ::loadDirectories)
                 "unit" -> CatalogUnitSection(unitShortCodeState, unitNameArState, unitNameEnState, unitDimensionState, unitBaseCodeState, unitFactorState, unitDecimalsState, unitTranslationsState, directoryUnits, busy, ::createUnit, ::loadDirectories)
                 "product" -> CatalogProductFormSection(productFormState, categories, directoryUnits, busy, ::createProduct)
-                "invoice_transfer" -> CatalogInvoiceTransferSection(invoiceTransferState, marketBranches, selectedBranchId, invoiceRequests, invoiceMappingLines, invoiceMappingOfferings, invoiceMappingWarehouses, categories, directoryUnits, organizationId.trim(), busy, invoiceWorkflow::requestInvoiceAsPurchase, invoiceWorkflow::loadInvoiceRequests, invoiceWorkflow::reviewInvoicePurchaseRequest, invoiceWorkflow::mapKnownInvoicePurchaseItems, ::loadInvoicePurchaseUnmappedLines, ::linkSelectedInvoicePurchaseLine, ::openInvoiceItemCreationDialog)
+                "invoice_transfer" -> CatalogInvoiceTransferSection(invoiceTransferState, marketBranches, selectedBranchId, invoiceRequests, invoiceMappingLines, invoiceMappingOfferings, invoiceMappingWarehouses, categories, directoryUnits, organizationId.trim(), busy, invoiceWorkflow::requestInvoiceAsPurchase, invoiceWorkflow::loadInvoiceRequests, invoiceWorkflow::reviewInvoicePurchaseRequest, invoiceWorkflow::mapKnownInvoicePurchaseItems, invoiceWorkflow::loadInvoicePurchaseUnmappedLines, invoiceWorkflow::linkSelectedInvoicePurchaseLine, invoiceWorkflow::openInvoiceItemCreationDialog)
                 "transfer" -> CatalogTransferSection(transferSourceState, transferDestinationState, transferIdsState, pendingTransfers, busy, ::transferCatalog, ::loadPendingTransfers, ::respondToTransfer)
             }
         }
     }
-    if(showInvoiceItemCreation) {
-        val orgId=org().orEmpty()
-        val baseOptions=directoryUnits.filter { (it.owner.isBlank() || it.owner==orgId) && it.baseCode.isBlank() && it.code.lowercase() in localUnitCodes }
-        val saleOptions=directoryUnits.filter { (it.owner.isBlank() || it.owner==orgId) && (it.code==invoiceNewBaseUnitCode || it.baseCode==invoiceNewBaseUnitCode) }
-        AlertDialog(
-            onDismissRequest={if(!busy) showInvoiceItemCreation=false},
-            title={Text("إنشاء صنف وربطه بأمر الشراء")},
-            text={
-                Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                    Text("أدخل بيانات الصنف المعتمدة. لا يُستنتج التصنيف أو الاسم الإنجليزي من وصف الفاتورة.",style=MaterialTheme.typography.bodySmall)
-                    if (!COMMERCIAL_CLOUD_UNMAPPED_INVOICE_ITEM_RPC_READY) {
-                        Text(
-                            "هذه العملية غير متاحة سحابيًا حتى نشر ترحيل إنشاء الصنف وربطه بأمر الشراء. لن يتم إرسال أي طلب.",
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                    OutlinedTextField(value=invoiceNewNameAr,onValueChange={invoiceNewNameAr=it.take(180)},label={Text("اسم الصنف بالعربية *")},singleLine=true,enabled=!busy,modifier=Modifier.fillMaxWidth())
-                    OutlinedTextField(value=invoiceNewNameEn,onValueChange={invoiceNewNameEn=it.take(180)},label={Text("اسم الصنف بالإنجليزية *")},singleLine=true,enabled=!busy,modifier=Modifier.fillMaxWidth())
-                    Box {
-                        OutlinedButton(onClick={invoiceNewCategoryMenuExpanded=true},modifier=Modifier.fillMaxWidth()) {
-                            Text("التصنيف: "+(categories.firstOrNull { it.code==invoiceNewCategoryCode }?.nameAr ?: "اختر تصنيف الدليل"))
-                        }
-                        DropdownMenu(expanded=invoiceNewCategoryMenuExpanded,onDismissRequest={invoiceNewCategoryMenuExpanded=false}) {
-                            categories.forEach { category ->
-                                DropdownMenuItem(text={Text(category.nameAr+" • "+category.code)},onClick={
-                                    invoiceNewCategoryCode=category.code
-                                    invoiceNewCategoryMenuExpanded=false
-                                })
-                            }
-                        }
-                    }
-                    Box {
-                        OutlinedButton(onClick={invoiceNewBaseUnitMenuExpanded=true},modifier=Modifier.fillMaxWidth()) {
-                            Text("وحدة الأساس: "+(baseOptions.firstOrNull { it.code==invoiceNewBaseUnitCode }?.let { it.code+" • "+it.nameAr } ?: "اختر وحدة الأساس"))
-                        }
-                        DropdownMenu(expanded=invoiceNewBaseUnitMenuExpanded,onDismissRequest={invoiceNewBaseUnitMenuExpanded=false}) {
-                            baseOptions.forEach { unit ->
-                                DropdownMenuItem(text={Text(unit.code+" • "+unit.nameAr)},onClick={
-                                    invoiceNewBaseUnitCode=unit.code
-                                    invoiceNewSaleUnitCode=unit.code
-                                    invoiceNewBaseUnitMenuExpanded=false
-                                })
-                            }
-                        }
-                    }
-                    Box {
-                        OutlinedButton(onClick={invoiceNewSaleUnitMenuExpanded=true},modifier=Modifier.fillMaxWidth()) {
-                            Text("وحدة الفاتورة/البيع: "+(saleOptions.firstOrNull { it.code==invoiceNewSaleUnitCode }?.let { it.code+" • "+it.nameAr } ?: "اختر وحدة متوافقة"))
-                        }
-                        DropdownMenu(expanded=invoiceNewSaleUnitMenuExpanded,onDismissRequest={invoiceNewSaleUnitMenuExpanded=false}) {
-                            saleOptions.forEach { unit ->
-                                DropdownMenuItem(text={Text(unit.code+" • "+unit.nameAr+" • "+unit.factor)},onClick={
-                                    invoiceNewSaleUnitCode=unit.code
-                                    invoiceNewSaleUnitMenuExpanded=false
-                                })
-                            }
-                        }
-                    }
-                    Text("السعر سيبقى صفرًا بحالة غير مسعّر، والرصيد الافتتاحي صفر. إنشاء الصنف وربطه لا يستلم البضاعة؛ كما يتطلب صلاحية المالك أو المسؤول.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("ملاحظة المخزون: المستودع يُحفظ في إعداد الصنف، لكن سجل الرصيد والاستلام الحاليين ما يزالان على مستوى الفرع؛ لا ينشأ رصيد مستقل للمستودع في هذه الخطوة.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                    val selectedLine=invoiceMappingLines.firstOrNull { it.id==invoiceMappingLineId }
-                    if(selectedLine?.unitCode?.isNotBlank()==true) Text("وحدة بند الفاتورة: "+selectedLine.unitCode+" — يجب اختيارها كوحدة البيع نفسها.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            },
-            confirmButton={
-                Button(onClick={createInvoicePurchaseItem()},enabled=!busy && COMMERCIAL_CLOUD_UNMAPPED_INVOICE_ITEM_RPC_READY && invoiceNewNameAr.isNotBlank() && invoiceNewNameEn.isNotBlank() && invoiceNewCategoryCode.isNotBlank() && invoiceNewBaseUnitCode.isNotBlank() && invoiceNewSaleUnitCode.isNotBlank() && invoiceMappingWarehouseId.isNotBlank()) {
-                    Text(if(busy) "جارٍ الإنشاء..." else "إنشاء وربط الصنف")
-                }
-            },
-            dismissButton={TextButton(onClick={if(!busy) showInvoiceItemCreation=false}) { Text("إلغاء") }}
-        )
-    }
+    CatalogInvoiceItemCreationDialog(
+        state = invoiceTransferState,
+        categories = categories,
+        directoryUnits = directoryUnits,
+        localUnitCodes = localUnitCodes,
+        mappingLines = invoiceMappingLines,
+        selectedLineId = invoiceMappingLineId,
+        busy = busy,
+        onCreate = invoiceWorkflow::createInvoicePurchaseItem
+    )
 
     editingProduct?.let { item ->
         CatalogProductEditDialog(item=item,busy=busy,onDismiss={editingProduct=null},onSave={payload -> updateProductDetails(item,payload)})
