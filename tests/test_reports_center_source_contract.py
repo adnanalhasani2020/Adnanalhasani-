@@ -148,6 +148,14 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn("ledgerRowsCalculation.getOrNull()", self.screen)
         self.assertIn("تجاوزت مجاميع أو أرصدة دفتر الأستاذ نطاق الأرقام الدقيق؛ تم حجب التقرير.", self.screen)
 
+    def test_cash_flow_preflight_uses_same_ledger_line_order_as_row_builder(self):
+        validation = FINANCIAL_VALIDATION.read_text(encoding="utf-8")
+        rows = FINANCIAL_REPORT_LINES.read_text(encoding="utf-8")
+        self.assertIn("val orderedAccountMoves = accountMoves.sortedWith(", validation)
+        self.assertIn(".thenBy { it.first.entryNumber }", validation)
+        self.assertIn(".thenBy { it.first.lineNumber }", validation)
+        self.assertIn("}.sortedWith(compareBy<Triple<CommercialCloudJournalLine, LocalDate, Long>> { it.second }.thenBy { it.first.entryNumber }.thenBy { it.first.lineNumber })", rows)
+
     def test_party_statement_arithmetic_is_preflighted_exactly(self):
         self.assertNotIn("sumOf", PARTY_ROWS.read_text(encoding="utf-8"))
         self.assertIn("Math.subtractExact(line.debitMinor, line.creditMinor)", PARTY_ROWS.read_text(encoding="utf-8"))
