@@ -6,7 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 class CatalogInventoryTransferContract(unittest.TestCase):
     def test_setup_and_market_controls_are_connected(self):
         sql=(ROOT/"supabase/migrations/20261029040000_catalog_setup_privacy_discovery.sql").read_text(encoding="utf-8")
-        kt=(ROOT/"android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogScreen.kt").read_text(encoding="utf-8")
+        kt=(ROOT/"android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogScreen.kt").read_text(encoding="utf-8") + (ROOT/"android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogScreenSections.kt").read_text(encoding="utf-8")
         self.assertIn("commercial_catalog_configure_items",kt)
         self.assertIn("commercial_catalog_nearby_popularity",kt)
         self.assertIn("commercial_catalog_price_suggestions",kt)

@@ -11,7 +11,7 @@ class CommercialInvoiceNotificationAndRpcContractTests(unittest.TestCase):
     def setUpClass(cls):
         cls.sql = "\n".join(p.read_text(encoding="utf-8") for p in MIGRATIONS.glob("*.sql"))
         android = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial"
-        cls.catalog = (android / "CatalogScreen.kt").read_text(encoding="utf-8")
+        cls.catalog = (android / "CatalogScreen.kt").read_text(encoding="utf-8") + (android / "CatalogScreenSections.kt").read_text(encoding="utf-8")
         cls.notifications = (android / "CommercialNotificationsScreen.kt").read_text(encoding="utf-8")
 
     def test_android_catalog_and_notification_rpc_names_have_database_definitions(self):
