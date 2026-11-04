@@ -163,7 +163,7 @@ The catalog screen owns interaction and request orchestration. JSON-to-domain ma
 
 ### Reports ledger-validation boundary (2026-11-04)
 - `ReportLedgerValidation.kt` owns the pure fail-closed validation that gates financial statement rendering: cloud-mode requirement, source-load errors, required GL/supplier mappings, posted-entry dates, balanced entries by currency, known account types, and ISO currency codes.
-- `ReportsCenterScreen.kt` retains data loading and state ownership, and passes the existing ledger projections and load errors to the validator.
+- `ReportsCenterScreen.kt` retains report calculation orchestration and passes the existing ledger projections and load errors to the validator. Cloud projections are owned by `ReportsCloudData.kt`; interactive Compose state is owned by `ReportsCenterUiState.kt`.
 - Validation precedence, Arabic feedback, required mapping/role keys, date cutoff, and per-entry/per-currency balance checks are preserved. The validator does not fetch data, mutate state, or calculate statement totals.
 - `ReportLedgerValidationTest.kt` covers the failure gates and the valid balanced-ledger path.
 
@@ -183,3 +183,8 @@ The catalog screen owns interaction and request orchestration. JSON-to-domain ma
 - `ReportsCloudData.kt` owns cloud report loading, the immutable projection snapshot, and source-specific error state. It calls the existing repository loader functions only; it does not introduce a new transport or alter organization scoping.
 - `ReportsCenterScreen.kt` consumes the snapshot through stable local aliases and retains date/filter state, report calculation orchestration, selected-row filtering, UI, and export integration.
 - A failed source continues to produce an empty projection and a source-specific error. Do not present stale rows as freshly loaded data or make an unsupported report selectable.
+
+
+### Reports center UI state boundary — 2026-11-04
+- `ReportsCenterUiState.kt` owns mutable interactive state for period selection, search and row filters, selected report/category, export metadata, feedback, supplier filter, and refresh key.
+- `ReportsCenterScreen.kt` consumes those holders through delegated local properties. Do not move report formulas, repository calls, or export side effects into the state class.
