@@ -7,6 +7,7 @@ CATALOG = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commerc
 CALCULATIONS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportCalculations.kt"
 AGING = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportAgingCalculations.kt"
 CONTRACT = ROOT / "android-commercial/docs/reports-data-contract.md"
+DERIVED_ROWS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportDerivedRows.kt"
 
 
 def test_supplier_liability_age_report_uses_recorded_invoice_date_and_open_obligation():
@@ -30,4 +31,6 @@ def test_contractual_supplier_due_date_aging_is_enabled_from_saved_invoice_dates
     screen = SCREEN.read_text(encoding="utf-8") + DATA_STATE.read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8")
     assert 'ReportCatalogItem("أعمار مستحقات الموردين", "الموردون والمستحقات", "commercial_supplier_invoices.invoice_date + due_date + commercial_supplier_obligations", cloudMode' in screen
     assert '"أعمار مستحقات الموردين" -> supplierDueDateAgingError' in screen
-    assert '"أعمار مستحقات الموردين" -> if (supplierDueDateAgingError.isNotBlank()) emptyList()' in screen
+    derived_rows = DERIVED_ROWS.read_text(encoding="utf-8")
+    assert "internal fun buildSupplierDueDateAgingRows(" in derived_rows
+    assert "if (error.isNotBlank()) emptyList() else report.toReportLines(asOfDate)" in derived_rows
