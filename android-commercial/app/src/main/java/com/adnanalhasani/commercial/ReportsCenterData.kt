@@ -106,26 +106,20 @@ internal fun rememberReportsCenterData(
         supplierControlAccountsLoadError = supplierControlAccountsLoadError,
         supplierAccountRoles = cloudSupplierControlAccounts.map { it.accountRole }.toSet()
     )
-    val expenseReportError = when {
-        !cloudMode -> expensesLoadError
-        expensesLoadError.isNotBlank() -> expensesLoadError
-        cloudExpenses.any { expense ->
-            expense.canceledAt.isBlank() &&
-                reportDateMillis(expense.recordedAt)?.let { it >= startMillis && it < endExclusive } == true &&
-                (expense.amountMinor <= 0L || !expense.currencyCode.matches(Regex("^[A-Z]{3}$")))
-        } -> "توجد مصروفات مسجلة بمبلغ أو عملة غير صالحة؛ تم حجب التقرير بدل افتراض عملة أو إجمالي غير موثوق."
-        else -> ""
-    }
-    val paymentMethodAnalysisError = when {
-        !cloudMode -> "تحليل التحصيل حسب طريقة الدفع يتطلب سجل الدفعات السحابي."
-        paymentsLoadError.isNotBlank() -> paymentsLoadError
-        cloudPayments.any { row ->
-            row.status.equals("succeeded", true) &&
-                reportDateMillis(row.createdAt)?.let { it >= startMillis && it < endExclusive } == true &&
-                (row.amountMinor <= 0L || !row.currencyCode.matches(Regex("^[A-Z]{3}$")))
-        } -> "توجد دفعة ناجحة بمبلغ أو عملة غير صالحة؛ تم حجب التجميع حتى لا يظهر إجمالي ناقص."
-        else -> ""
-    }
+    val expenseReportError = reportExpenseValidationError(
+        cloudMode = cloudMode,
+        expensesLoadError = expensesLoadError,
+        cloudExpenses = cloudExpenses,
+        startMillis = startMillis,
+        endExclusive = endExclusive
+    )
+    val paymentMethodAnalysisError = reportPaymentMethodAnalysisValidationError(
+        cloudMode = cloudMode,
+        paymentsLoadError = paymentsLoadError,
+        cloudPayments = cloudPayments,
+        startMillis = startMillis,
+        endExclusive = endExclusive
+    )
     val supplierInvoiceVarianceError = reportSupplierInvoiceVarianceError(
         cloudMode = cloudMode,
         purchasesLoadError = purchasesLoadError,
@@ -241,20 +235,11 @@ internal fun rememberReportsCenterData(
         startMillis = startMillis,
         endExclusive = endExclusive
     )
-    val customerOperationalStatementError = when {
-        !cloudMode -> "كشف العميل التشغيلي يتطلب فواتير السحابة والتحصيلات والمرتجعات."
-        salesDocumentsLoadError.isNotBlank() -> salesDocumentsLoadError
-        runCatching {
-            val movements = buildCustomerOperationalStatementMovements(cloudSalesDocuments.toCustomerStatementInputs())
-            movements.groupBy { it.customerId to it.currency }.values.forEach { customerMoves ->
-                val ordered = customerMoves.sortedWith(compareBy<ReportCustomerMovement> { it.date }.thenBy { it.reference })
-                sumReportAmountsExactly(ordered.map { it.amount })
-                var balance = 0L
-                ordered.forEach { balance = Math.addExact(balance, it.amount) }
-            }
-        }.isFailure -> "توجد فاتورة أو دفعة أو مرتجع عميل بمبلغ/تاريخ غير صالح، أو تجاوزت مجاميع كشف العميل نطاق الأرقام الدقيق؛ تم حجب الكشف."
-        else -> ""
-    }
+    val customerOperationalStatementError = reportCustomerOperationalStatementValidationError(
+        cloudMode = cloudMode,
+        salesDocumentsLoadError = salesDocumentsLoadError,
+        cloudSalesDocuments = cloudSalesDocuments
+    )
     val customerStatementError = reportCustomerStatementValidationError(
         cloudMode = cloudMode,
         ledgerLines = cloudLedgerLines,
@@ -346,18 +331,12 @@ internal fun rememberReportsCenterData(
             calculateCustomerCollectionsByCustomer(payments)
         }
     }
-    val customerCollectionsError = when {
-        !cloudMode -> "التحصيل حسب العميل يتطلب سجلات الدفعات السحابية."
-        salesDocumentsLoadError.isNotBlank() -> salesDocumentsLoadError
-        cloudSalesDocuments.any { document ->
-            document.payments.any { payment ->
-                payment.status.equals("succeeded", true) &&
-                    (reportDateMillis(payment.createdAt) == null || payment.amountMinor <= 0L ||
-                        !payment.currencyCode.matches(Regex("^[A-Z]{3}$")))
-            }
-        } -> "توجد دفعة ناجحة بتاريخ أو مبلغ أو عملة غير صالحة؛ تم حجب تجميع التحصيل حسب العميل."
-        else -> customerCollectionsCalculation.exceptionOrNull()?.message.orEmpty()
-    }
+    val customerCollectionsError = reportCustomerCollectionsValidationError(
+        cloudMode = cloudMode,
+        salesDocumentsLoadError = salesDocumentsLoadError,
+        cloudSalesDocuments = cloudSalesDocuments,
+        calculationError = customerCollectionsCalculation.exceptionOrNull()?.message.orEmpty()
+    )
     val userSalesPerformanceCalculation = remember(cloudSalesDocuments, startMillis, endExclusive, cloudMode) {
         runCatching {
             calculateUserSalesPerformance(cloudSalesDocuments.filter { document ->
@@ -373,17 +352,12 @@ internal fun rememberReportsCenterData(
             })
         }
     }
-    val userSalesPerformanceError = when {
-        !cloudMode -> "أداء المبيعات حسب المستخدم يتطلب سجلات السحابة."
-        salesDocumentsLoadError.isNotBlank() -> salesDocumentsLoadError
-        cloudSalesDocuments.any { document ->
-            document.saleStatus.equals("completed", true) &&
-                (reportDateMillis(document.createdAt) == null ||
-                    !document.currencyCode.matches(Regex("^[A-Z]{3}$")) || document.totalMinor < 0L)
-        } -> "توجد فاتورة مكتملة بتاريخ أو عملة أو مبلغ غير صالح؛ تم حجب تقرير أداء المستخدمين."
-        else -> userSalesPerformanceCalculation.exceptionOrNull()?.message.orEmpty()
-    }
-
+    val userSalesPerformanceError = reportUserSalesPerformanceValidationError(
+        cloudMode = cloudMode,
+        salesDocumentsLoadError = salesDocumentsLoadError,
+        cloudSalesDocuments = cloudSalesDocuments,
+        calculationError = userSalesPerformanceCalculation.exceptionOrNull()?.message.orEmpty()
+    )
 
     val locationInventoryReport = remember(cloudLocationInventoryBalances, locationInventoryLoadError) {
         buildLocationInventoryReportState(cloudLocationInventoryBalances, locationInventoryLoadError)
@@ -408,14 +382,12 @@ internal fun rememberReportsCenterData(
             calculateDailySalesTrend(invoices)
         }
     }
-    val dailySalesTrendError = when {
-        !cloudMode -> "الاتجاه اليومي للمبيعات يتطلب سجلات السحابة."
-        salesDocumentsLoadError.isNotBlank() -> salesDocumentsLoadError
-        cloudSalesDocuments.any { it.saleStatus.equals("completed", true) &&
-            (reportDateMillis(it.createdAt) == null || !it.currencyCode.matches(Regex("^[A-Z]{3}$")) || it.totalMinor < 0L) } ->
-            "توجد فاتورة مكتملة بتاريخ أو عملة أو مبلغ غير صالح؛ تم حجب الاتجاه اليومي."
-        else -> dailySalesTrendCalculation.exceptionOrNull()?.message.orEmpty()
-    }
+    val dailySalesTrendError = reportDailySalesTrendValidationError(
+        cloudMode = cloudMode,
+        salesDocumentsLoadError = salesDocumentsLoadError,
+        cloudSalesDocuments = cloudSalesDocuments,
+        calculationError = dailySalesTrendCalculation.exceptionOrNull()?.message.orEmpty()
+    )
     val itemProfitabilityError = when {
         !cloudMode -> "ربحية الأصناف بعد المرتجعات تتطلب سجلات السحابة."
         salesDocumentsLoadError.isNotBlank() -> salesDocumentsLoadError
