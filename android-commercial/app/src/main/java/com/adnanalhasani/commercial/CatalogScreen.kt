@@ -917,6 +917,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                         state=marketUiState,
                         selectedCatalogIds=selectedCatalogIds,
                         busy=busy,
+                        selectedActivityCode=selectedActivityCode,
                         nearbyListState=nearbyListState,
                         onToggleCatalogItem={id ->
                             selectedCatalogIds=if(id in selectedCatalogIds) selectedCatalogIds-id
