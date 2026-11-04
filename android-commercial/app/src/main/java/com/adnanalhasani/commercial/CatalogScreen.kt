@@ -7,7 +7,6 @@ import android.os.Handler
 import android.os.Looper
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
@@ -103,7 +102,6 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     var categoryTranslations by directoryFormState.categoryTranslations
 
     var currencyCode by productFormState::currencyCode
-
 
     var unitShortCode by directoryFormState.unitShortCode
     var unitNameAr by directoryFormState.unitNameAr
