@@ -203,3 +203,6 @@ The catalog screen owns interaction and request orchestration. JSON-to-domain ma
 
 
 - `ReportLedgerRows.kt` owns selected-row assembly for posted-ledger financial statements and ledger activity reports. It consumes validated ledger projections and report filters; it does not fetch or post journal entries or relax ledger validation.
+
+
+- `ReportPartyStatementRows.kt` owns customer/supplier statement row assembly from already-loaded party-account and posted-ledger projections, plus the operational customer statement. It does not perform collections, supplier payments, or ledger posting.
