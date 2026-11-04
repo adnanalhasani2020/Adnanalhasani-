@@ -29,11 +29,12 @@ internal fun reportStatementClass(line: CommercialCloudJournalLine): String =
     }
 
 internal fun reportAccountNet(lines: List<CommercialCloudJournalLine>, accountClass: String): Long =
-    lines.filter { reportStatementClass(it) == accountClass }
-        .sumOf {
+    sumReportAmountsExactly(
+        lines.filter { reportStatementClass(it) == accountClass }.map { line ->
             if (accountClass in setOf("asset", "expense", "cogs", "contra_revenue")) {
-                it.debitMinor - it.creditMinor
+                Math.subtractExact(line.debitMinor, line.creditMinor)
             } else {
-                it.creditMinor - it.debitMinor
+                Math.subtractExact(line.creditMinor, line.debitMinor)
             }
         }
+    )
