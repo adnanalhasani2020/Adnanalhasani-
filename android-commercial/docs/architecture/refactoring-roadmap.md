@@ -116,3 +116,6 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 - Updated report source-contract tests to read the new owner file while preserving the original behavioral assertions.
 - No database migrations, Supabase RPCs, query scopes, report formulas, or export behavior were changed in this slice.
 - Validation is running on the updated branch; do not mark the slice complete or merge PR #715 until all required CI checks pass.
+
+
+- Continued report decomposition: extracted the shared report row model and inventory report mappers to `ReportInventoryLines.kt`, then extracted cash-flow and tax/discount report row assembly to `ReportFinancialLines.kt`. Report selection, loading, filters, Compose presentation, and export integration remain in `ReportsCenterScreen.kt`.
