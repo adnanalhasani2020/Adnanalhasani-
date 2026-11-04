@@ -4,6 +4,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt"
+PURCHASE_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/PurchaseRepository.kt"
 SALES_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/SalesRepository.kt"
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudSalesScreen.kt"
 PURCHASES = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudPurchasesScreen.kt"
@@ -17,6 +18,7 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.repository = REPOSITORY.read_text(encoding="utf-8")
+        cls.purchase_repository = PURCHASE_REPOSITORY.read_text(encoding="utf-8")
         cls.sales_repository = SALES_REPOSITORY.read_text(encoding="utf-8")
         cls.screen = SCREEN.read_text(encoding="utf-8")
         cls.purchases = PURCHASES.read_text(encoding="utf-8")
@@ -80,10 +82,10 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         self.assertIn('if (cloudMode) "ملخص الفواتير المحمّلة من قاعدة البيانات"', self.local_screens)
 
     def test_purchase_order_projection_uses_existing_org_scoped_tables(self):
-        self.assertIn("loadCommercialCloudPurchaseDocuments", self.repository)
+        self.assertIn("loadCommercialCloudPurchaseDocuments", self.purchase_repository)
         for field in ("commercial_purchase_order_items(", "commercial_suppliers(display_name)", "quantity_ordered", "quantity_received", "unit_cost_minor", "organization_id=eq.$orgId"):
             with self.subTest(field=field):
-                self.assertIn(field, self.repository)
+                self.assertIn(field, self.purchase_repository)
         self.assertIn("cloudPurchasesPage -> CommercialCloudPurchasesScreen", self.main)
         self.assertIn('"أوامر الشراء" -> onCloudPurchases()', self.main)
 
@@ -95,7 +97,7 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         ):
             with self.subTest(marker=marker):
                 self.assertIn(marker, self.purchases)
-        self.assertIn("commercial_receive_purchase_order", self.repository)
+        self.assertIn("commercial_receive_purchase_order", self.purchase_repository)
         self.assertIn("commercial_record_supplier_payment", self.repository)
 
     def test_invoice_screen_supports_status_filters_and_currency_safe_totals(self):
