@@ -212,3 +212,11 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 - Kept both existing REST request URLs, organization filters, sorting, limits, action callbacks, feedback, and refresh behavior in `CatalogScreen.kt`.
 - Added `CatalogWorkflowMappersTest.kt` for request field mapping, nullable purchase-order references, transfer fields, and empty responses.
 - Added a source-ownership guard. No RPC/REST contract, status transition, transfer action, or invoice workflow behavior was intentionally changed.
+
+
+## 2026-11-04 — Catalog invoice-mapping response extraction
+
+- Extracted the prepared invoice-item mapping payload parser into `CatalogInvoiceMappingMapper.kt`, covering the receive location, warehouse options, unmapped purchase lines, and eligible catalog offerings.
+- Kept purchase-order validation, supplier-invoice lock checks, all REST reads and filtering, active offering/product eligibility, candidate construction, mapping selection defaults, and user feedback in `CatalogScreen.kt`.
+- Added `CatalogInvoiceMappingMapperTest.kt` for mapped fields and empty optional collections, plus a source-ownership guard.
+- No endpoint, organization/location scope, eligibility condition, invoice matching action, or inventory behavior was intentionally changed.
