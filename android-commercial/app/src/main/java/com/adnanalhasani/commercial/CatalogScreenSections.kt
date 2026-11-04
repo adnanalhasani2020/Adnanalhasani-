@@ -171,7 +171,7 @@ internal fun CatalogProductFormSection(state: CatalogProductFormState, categorie
     var rulingSourceUrl by state::rulingSourceUrl
     var rulingConfidence by state::rulingConfidence
     var extraRulingsText by state::extraRulingsText
-    
+    LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(bottom=20.dp)) {
                     item { Text("بيانات الصنف الأساسية",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold) }
                     item { OutlinedTextField(nameAr,{nameAr=it},Modifier.fillMaxWidth(),label={Text("اسم الصنف بالعربية *")},singleLine=true) }
                     item { OutlinedTextField(nameEn,{nameEn=it},Modifier.fillMaxWidth(),label={Text("Product name in English *")},singleLine=true) }
