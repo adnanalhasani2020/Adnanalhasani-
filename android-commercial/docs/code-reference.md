@@ -163,3 +163,10 @@
 - Catalog HTTP requests retain the 15-second connect timeout and 25-second read timeout through the shared client, with the shared actionable backend/network error handling. RPC names, paths, payloads, tokens, and query scopes are unchanged.
 
 - `app/src/test/java/com/adnanalhasani/commercial/ReportInventoryLinesTest.kt`: verifies location report quantity mapping, fractional stock movement formatting, date-window filtering, and fail-closed error states for the extracted inventory report mappers.
+
+
+### Report domain mapper extraction (2026-11-04)
+- `ReportDomainMappers.kt` owns pure conversions from cloud sale, return, supplier invoice, and supplier aging models into calculation/report inputs and presentation rows.
+- `ReportsCenterScreen.kt` continues to own Compose state, loading, report selection, date/filter orchestration, and rendering; it calls the extracted internal mappers.
+- The extraction preserves model fields, filtering predicates, row labels, money formatting calls, and calculation entry points. It does not change report formulas or data sources.
+- `tests/test_report_domain_mappers_ownership.py` guards the mapper owner and screen call sites; the broader report source contract now reads the mapper file.
