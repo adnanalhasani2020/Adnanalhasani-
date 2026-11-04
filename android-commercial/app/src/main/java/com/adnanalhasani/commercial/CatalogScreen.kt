@@ -655,16 +655,22 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                 val globalId=row.optString("global_item_id")
                 val name=names[globalId]
                 if(offeringId !in activeIds || name==null) null
-                else InvoicePurchaseOffering(offeringId,globalId,name.first.ifBlank { globalId },name.second)
-            }.distinctBy { it.id }
-            val lines=(0 until lineRows.length()).map { i ->
-                val row=lineRows.getJSONObject(i)
-                InvoicePurchaseUnmappedLine(row.optString("id"),row.optInt("line_number"),row.optString("item_description"),
-                    row.optString("quantity_ordered"),row.optString("source_selling_unit_code").takeUnless { it=="null" }.orEmpty())
+                else JSONObject().put("id",offeringId).put("global_item_id",globalId)
+                    .put("name",name.first.ifBlank { globalId }).put("unit_code",name.second)
+            }.distinctBy { it.optString("id") }
+            val lines=JSONArray().apply {
+                for(i in 0 until lineRows.length()) {
+                    val row=lineRows.getJSONObject(i)
+                    put(JSONObject().put("id",row.optString("id"))
+                        .put("line_number",row.optInt("line_number"))
+                        .put("description",row.optString("item_description"))
+                        .put("quantity",row.optString("quantity_ordered"))
+                        .put("unit_code",row.optString("source_selling_unit_code").takeUnless { it=="null" }.orEmpty()))
+                }
             }
             JSONObject().put("location_id",locationId)
-                .put("lines",JSONArray().apply { lines.forEach { put(JSONObject().put("id",it.id).put("line_number",it.lineNumber).put("description",it.description).put("quantity",it.quantity).put("unit_code",it.unitCode)) } })
-                .put("offerings",JSONArray().apply { candidates.forEach { put(JSONObject().put("id",it.id).put("global_item_id",it.globalItemId).put("name",it.name).put("unit_code",it.unitCode)) } })
+                .put("lines",lines)
+                .put("offerings",JSONArray().apply { candidates.forEach { put(it) } })
                 .put("warehouses",warehouseRows)
                 .toString()
         }, { raw ->
