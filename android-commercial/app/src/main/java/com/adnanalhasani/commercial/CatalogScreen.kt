@@ -8,8 +8,6 @@ import androidx.core.content.ContextCompat
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.ui.platform.LocalContext
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
 import android.os.Handler
 import android.os.Looper
 import androidx.compose.foundation.BorderStroke
@@ -34,172 +32,10 @@ import coil.compose.AsyncImage
 import androidx.compose.ui.unit.dp
 import org.json.JSONArray
 import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
 import java.util.concurrent.Executors
-
-internal data class CatalogUnit(val unitCode: String, val role: String, val quantityInBase: String, val barcode: String, val packageName: String, val imageUrl: String, val isDefault: Boolean, val unitName: String = "", val sku: String = "", val netQuantity: String = "", val netUnitCode: String = "")
-internal data class CatalogRuling(val id: String, val domain: String, val authority: String, val religion: String, val jurisdiction: String, val outcome: String, val rationale: String, val sourceTitle: String, val sourceUrl: String, val confidence: String, val effectiveFrom: String, val effectiveTo: String, val reviewedAt: String)
-internal data class CatalogProduct(
-    val id: String,
-    val catalogCode: String,
-    val name: String,
-    val description: String,
-    val categoryCode: String,
-    val category: String,
-    val brand: String,
-    val manufacturer: String,
-    val countryOfManufacture: String,
-    val imageUrl: String,
-    val prescriptionOnly: Boolean,
-    val recommendationScore: Int,
-    val barcode: String = "",
-    val unitCode: String = "EA",
-    val availableUnits: List<CatalogUnit> = emptyList(),
-    val createdBy: String = "",
-    val createdAt: String = "",
-    val importedBy: String = "",
-    val attributesSchema: String = "",
-    val modelNumber: String = "",
-    val partNumber: String = "",
-    val imageAlt: String = "",
-    val materialComposition: String = "",
-    val ingredients: String = "",
-    val recipe: String = "",
-    val specifications: String = "",
-    val allergens: String = "",
-    val storageInstructions: String = "",
-    val usageInstructions: String = "",
-    val warnings: String = "",
-    val shelfLifeDays: Int? = null,
-    val requiresExpiryDate: Boolean = false,
-    val isBatchTracked: Boolean = false,
-    val isSerialTracked: Boolean = false,
-    val rulings: List<CatalogRuling> = emptyList(),
-    val ownerOrganizationId: String = "",
-    val nameAr: String = "",
-    val nameEn: String = "",
-    val descriptionAr: String = "",
-    val descriptionEn: String = "",
-    val itemType: String = "product",
-    val barcodeGtin: String = "",
-    val rawMaterialComposition: String = "[]",
-    val rawIngredients: String = "[]",
-    val rawRecipe: String = "{}",
-    val rawSpecifications: String = "{}",
-    val rawAllergens: String = "[]",
-    val rawAttributesSchema: String = "{}",
-    val rawBrand: String = "",
-    val rawManufacturer: String = "",
-    val rawCountryOfManufacture: String = "",
-    val rawModelNumber: String = "",
-    val rawPartNumber: String = "",
-    val rawImageAlt: String = "",
-    val rawStorageInstructions: String = "",
-    val rawUsageInstructions: String = "",
-    val rawWarnings: String = ""
-)
-private data class CatalogCategory(val code: String, val parentCode: String, val nameAr: String, val nameEn: String, val localizedName: String = "", val descriptionAr: String = "", val descriptionEn: String = "", val localizedDescription: String = "")
-private data class CatalogActivityNode(val code: String, val parentCode: String, val nodeKind: String, val pathAr: String, val pathEn: String, val defaultBusinessLevelCode: String, val depth: Int, val selectable: Boolean)
-private fun catalogNodeBelongsToSector(node: CatalogActivityNode, sectorCode: String, nodes: List<CatalogActivityNode>): Boolean {
-    if (sectorCode.isBlank()) return true
-    val byCode = nodes.associateBy { it.code }
-    var current: CatalogActivityNode? = node
-    val visited = mutableSetOf<String>()
-    while (current != null && visited.add(current.code)) {
-        if (current.code.equals(sectorCode, ignoreCase = true)) return true
-        current = byCode[current.parentCode]
-    }
-    return false
-}
-private fun catalogBusinessLevelLabel(code: String): String = when (code.lowercase()) {
-    "clinic" -> "عيادة / مركز صحي"
-    "contractor" -> "مقاول"
-    "factory" -> "مصنع"
-    "grocery" -> "بقالة"
-    "hotel" -> "فندق"
-    "manufacturer" -> "منشأة تصنيع"
-    "office" -> "مكتب"
-    "other" -> "أخرى"
-    "pharmacy" -> "صيدلية"
-    "producer" -> "منتج / مزارع"
-    "restaurant" -> "مطعم"
-    "service" -> "مقدم خدمات"
-    "shop" -> "محل تجاري"
-    "supermarket" -> "سوبرماركت"
-    "wholesale" -> "تجارة جملة"
-    else -> code
-}
-private fun catalogSectorForNode(nodeCode: String, nodes: List<CatalogActivityNode>): String {
-    val byCode = nodes.associateBy { it.code }
-    var current = byCode[nodeCode]
-    val visited = mutableSetOf<String>()
-    while (current != null && visited.add(current.code)) {
-        if (current.nodeKind.equals("sector", ignoreCase = true)) return current.code
-        current = byCode[current.parentCode]
-    }
-    return ""
-}
-private data class CatalogBranchOption(val id: String, val name: String, val latitude: String, val longitude: String)
-private data class CatalogWarehouseOption(val id: String, val name: String, val branchId: String)
-private data class NearbyCatalogItem(val id: String, val name: String, val popularityBand: String, val merchantCountBand: String)
-private data class InvoicePurchaseRequestRow(
- val id: String,val sourceOrganizationId: String,val destinationOrganizationId: String,
- val invoiceNumber: String,val currencyCode: String,val totalMinor: Long,val status: String,
- val purchaseOrderId: String,val createdAt: String
-)
-
-private data class InvoicePurchaseUnmappedLine(val id: String,val lineNumber: Int,val description: String,val quantity: String,val unitCode: String)
-private data class InvoicePurchaseOffering(val id: String,val globalItemId: String,val name: String,val unitCode: String)
-private data class DirectoryUnit(val code: String, val nameAr: String, val nameEn: String, val dimension: String, val baseCode: String, val factor: String, val owner: String, val localizedName: String = "")
-private data class PendingTransfer(val id: String, val source: String, val destination: String, val itemCount: Int, val createdAt: String)
 
 private val catalogIo = Executors.newSingleThreadExecutor()
 private val catalogMain = Handler(Looper.getMainLooper())
-
-private fun catalogSessionPreferences(context: android.content.Context) = EncryptedSharedPreferences.create(
-    context,
-    "ruh_catalog_auth_session",
-    MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
-    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-)
-
-private fun catalogHttp(path: String, payload: JSONObject, token: String? = null): String {
-    val base = BuildConfig.SUPABASE_URL.trimEnd('/')
-    val anon = BuildConfig.SUPABASE_ANON_KEY
-    require(base.startsWith("https://") && anon.isNotBlank()) { "تحقق من إعداد SUPABASE_URL وSUPABASE_ANON_KEY." }
-    val connection = (URL("$base$path").openConnection() as HttpURLConnection).apply {
-        requestMethod = "POST"; connectTimeout = 15000; readTimeout = 25000; doOutput = true
-        setRequestProperty("apikey", anon); setRequestProperty("Content-Type", "application/json"); setRequestProperty("Accept", "application/json")
-        if (token != null) setRequestProperty("Authorization", "Bearer $token")
-    }
-    return try {
-        connection.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
-        val code = connection.responseCode
-        val raw = (if (code in 200..299) connection.inputStream else connection.errorStream)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
-        if (code !in 200..299) {
-            val error = runCatching { JSONObject(raw) }.getOrNull()
-            throw IllegalStateException(listOf(error?.optString("message"), error?.optString("hint")).filter { !it.isNullOrBlank() && it != "null" }.joinToString(" — ").ifBlank { "فشل الطلب إلى Supabase (HTTP $code)." })
-        }
-        raw
-    } finally { connection.disconnect() }
-}
-
-private fun catalogGet(path: String, token: String): String {
-    val base = BuildConfig.SUPABASE_URL.trimEnd('/')
-    val connection = (URL("$base$path").openConnection() as HttpURLConnection).apply {
-        requestMethod = "GET"; connectTimeout = 15000; readTimeout = 25000
-        setRequestProperty("apikey", BuildConfig.SUPABASE_ANON_KEY)
-        setRequestProperty("Authorization", "Bearer $token"); setRequestProperty("Accept", "application/json")
-    }
-    return try {
-        val code = connection.responseCode
-        val raw = (if (code in 200..299) connection.inputStream else connection.errorStream)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
-        if (code !in 200..299) throw IllegalStateException(runCatching { JSONObject(raw).optString("message") }.getOrDefault("").ifBlank { "تعذر تحميل الدليل (HTTP $code)." })
-        raw
-    } finally { connection.disconnect() }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -325,7 +161,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         }
     }
     LaunchedEffect(Unit) {
-        val savedRefresh = runCatching { catalogSessionPreferences(context).getString("refresh_token", null) }.getOrNull()
+        val savedRefresh = runCatching { commercialCloudSessionPreferences(context).getString("refresh_token", null) }.getOrNull()
         if (!savedRefresh.isNullOrBlank()) {
             request({
                 val raw = catalogHttp("/auth/v1/token?grant_type=refresh_token", JSONObject().put("refresh_token", savedRefresh))
@@ -337,7 +173,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             }, { sessionValue ->
                 val parts = sessionValue.split("|", limit = 3)
                 token = parts[0]
-                catalogSessionPreferences(context).edit().putString("refresh_token", parts.getOrNull(1).orEmpty()).apply()
+                commercialCloudSessionPreferences(context).edit().putString("refresh_token", parts.getOrNull(1).orEmpty()).apply()
                 signedInUserId = parts.getOrNull(2).orEmpty()
                 feedback = "تم استعادة جلستك السابقة."
                 restoringSession = false
@@ -1108,24 +944,43 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                 Text("دليل متعدد الأنشطة والمستويات والمناطق",color=MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.bodySmall)
             }
             if (token != null) TextButton(onClick = {
-                runCatching { catalogSessionPreferences(context).edit().clear().apply() }
+                runCatching { commercialCloudSessionPreferences(context).edit().clear().apply() }
                 token = null; signedInUserId = ""; organizationId = ""; feedback = "تم تسجيل الخروج."
             }) { Text("تسجيل الخروج") }
         }
         if (restoringSession) {
             Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         } else if(token==null) {
-            LazyColumn(verticalArrangement=Arrangement.spacedBy(10.dp),contentPadding=PaddingValues(bottom=18.dp)) {
-                item { Text("تسجيل الدخول إلى حساب Supabase",style=MaterialTheme.typography.titleMedium) }
-                item { OutlinedTextField(email,{email=it.trim()},Modifier.fillMaxWidth(),label={Text("البريد الإلكتروني")},singleLine=true) }
-                item { OutlinedTextField(password,{password=it},Modifier.fillMaxWidth(),label={Text("كلمة المرور")},singleLine=true) }
-                item { Button(onClick={request({
-                    val raw=catalogHttp("/auth/v1/token?grant_type=password",JSONObject().put("email",email).put("password",password))
-                    val session=JSONObject(raw); val access=session.optString("access_token"); val refresh=session.optString("refresh_token"); if(access.isBlank() || refresh.isBlank()) throw IllegalStateException("لم تُرجع خدمة المصادقة جلسة صالحة.")
-                    "${access}|${refresh}|${session.optJSONObject("user")?.optString("id").orEmpty()}"
-                },{sessionValue -> val parts=sessionValue.split("|",limit=3); token=parts[0]; catalogSessionPreferences(context).edit().putString("refresh_token",parts.getOrNull(1).orEmpty()).apply(); signedInUserId=parts.getOrNull(2).orEmpty(); password=""; feedback="تم تسجيل الدخول. ستُستعاد الجلسة تلقائيًا عند فتح الدليل لاحقًا."})},enabled=!busy && email.contains("@") && password.isNotBlank(),modifier=Modifier.fillMaxWidth()) { Text(if(busy) "جارٍ تسجيل الدخول..." else "تسجيل الدخول") } }
-                item { Text("تُحفظ بيانات تجديد الجلسة مشفرة على الجهاز، ولا تُحفظ كلمة المرور. لا تستخدم مفتاح service_role في التطبيق.",color=MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.bodySmall) }
-            }
+            CatalogLoginPanel(
+                email = email,
+                onEmailChange = { email = it.trim() },
+                password = password,
+                onPasswordChange = { password = it },
+                busy = busy,
+                onLogin = {
+                    request({
+                        val raw = catalogHttp(
+                            "/auth/v1/token?grant_type=password",
+                            JSONObject().put("email", email).put("password", password)
+                        )
+                        val session = JSONObject(raw)
+                        val access = session.optString("access_token")
+                        val refresh = session.optString("refresh_token")
+                        if (access.isBlank() || refresh.isBlank()) {
+                            throw IllegalStateException("لم تُرجع خدمة المصادقة جلسة صالحة.")
+                        }
+                        "${access}|${refresh}|${session.optJSONObject("user")?.optString("id").orEmpty()}"
+                    }, { sessionValue ->
+                        val parts = sessionValue.split("|", limit = 3)
+                        token = parts[0]
+                        commercialCloudSessionPreferences(context).edit()
+                            .putString("refresh_token", parts.getOrNull(1).orEmpty()).apply()
+                        signedInUserId = parts.getOrNull(2).orEmpty()
+                        password = ""
+                        feedback = "تم تسجيل الدخول. ستُستعاد الجلسة تلقائيًا عند فتح الدليل لاحقًا."
+                    })
+                }
+            )
         } else {
             OutlinedTextField(organizationId,{organizationId=it.trim()},Modifier.fillMaxWidth(),label={Text("معرّف المؤسسة UUID")},singleLine=true)
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(4.dp)) {

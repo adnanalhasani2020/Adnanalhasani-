@@ -45,7 +45,6 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import java.util.Currency
 import java.util.concurrent.Executors
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -57,359 +56,6 @@ private val ReportMuted = Color(0xFF71817B)
 private val ReportBorder = Color(0xFFE5EBE8)
 private val ReportIo = Executors.newSingleThreadExecutor()
 private val ReportMain = Handler(Looper.getMainLooper())
-
-private fun reportCurrencyScale(code: String): Int =
-    runCatching { Currency.getInstance(code).defaultFractionDigits.coerceIn(0, 6) }.getOrDefault(0)
-
-private fun reportMoney(amount: Long, currency: String, cloudMinorUnits: Boolean): String {
-    val value = if (cloudMinorUnits) java.math.BigDecimal.valueOf(amount).movePointLeft(reportCurrencyScale(currency))
-    else java.math.BigDecimal.valueOf(amount)
-    return value.setScale(if (cloudMinorUnits) reportCurrencyScale(currency) else 0, java.math.RoundingMode.HALF_UP)
-        .toPlainString() + " " + currency
-}
-
-private fun reportDateMillis(value: String): Long? =
-    runCatching { Instant.parse(value).toEpochMilli() }.getOrNull()
-        ?: runCatching { LocalDate.parse(value.take(10)).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() }.getOrNull()
-
-
-private data class ReportCatalogItem(val title: String, val category: String, val source: String, val supported: Boolean, val note: String)
-
-private fun buildReportsCatalog(cloudMode: Boolean): List<ReportCatalogItem> = listOf(
-            ReportCatalogItem("لوحة المؤشرات", "لوحة المعلومات", if (cloudMode) "مبيعات السحابة المحملة" else "المبيعات والمصروفات المحلية", true, "مؤشرات تشغيلية وليست قوائم مالية معتمدة."),
-            ReportCatalogItem("ملخص المبيعات حسب الفترة", "المبيعات", if (cloudMode) "commercial_sales عبر مستودع السحابة" else "sales_json على الجهاز", true, "الفواتير المكتملة فقط؛ فصل حسب العملة."),
-            ReportCatalogItem("تفاصيل فواتير المبيعات", "المبيعات", if (cloudMode) "فواتير السحابة" else "sales_json على الجهاز", true, "تفاصيل الفاتورة المتاحة في نموذج التطبيق."),
-            ReportCatalogItem("تفاصيل بنود فواتير المبيعات", "المبيعات", "commercial_sales + commercial_sale_items", cloudMode, "يعرض لقطة كل بند من الفاتورة الأصلية، الكمية وسعر الوحدة وإجمالي البند؛ لا يستخدم أسعار الصنف الحالية."),
-            ReportCatalogItem("المبيعات حسب الصنف", "المبيعات", if (cloudMode) "commercial_sale_items" else "sales_json", true, "يعرض بنود الفواتير السحابية الفعلية؛ في المحلي يمثل كل سجل بيع الصنف المسجل فيه."),
-            ReportCatalogItem("الخصومات على فواتير المبيعات", "الضرائب والخصومات", "commercial_sales.discount_minor", cloudMode, "يعرض الخصومات المخزنة على الفواتير المكتملة، دون افتراض نسبة خصم."),
-            ReportCatalogItem("الضرائب المسجلة على المبيعات", "الضرائب والخصومات", "commercial_sales.tax_minor", cloudMode, "يعرض قيمة الضريبة المخزنة فقط؛ لا يستنتج نسبة ضريبية من الإجمالي."),
-            ReportCatalogItem("الضرائب والخصومات التفصيلية", "الضرائب والخصومات", "ضرائب وخصومات فواتير البيع والشراء والمرتجعات المسجلة", cloudMode, "يعرض الضرائب والخصومات المخزنة حسب المستند والعملة؛ لا يخترع نسبًا ولا يصف الضريبة بعد المرتجعات بأنها صافية إذا لم تفصل حصة الضريبة."),
-            ReportCatalogItem("ملخص الضرائب والخصومات", "الضرائب والخصومات", "commercial_sales.discount_minor + commercial_sales.tax_minor + commercial_supplier_invoices.tax_minor + commercial_sales_returns.approved_refund_minor", cloudMode, "يجمع الخصومات وضريبة المبيعات وضريبة المشتريات وقيمة المرتجعات المعتمدة حسب العملة؛ لا يحسب صافي التزام ضريبي ولا يمثل إقرارًا ضريبيًا."),
-
-            ReportCatalogItem("المبيعات حسب العميل", "المبيعات", "اسم العميل المحفوظ في سجل البيع", true, "يعرض مجموع الفواتير المكتملة المسجلة للعميل حسب العملة."),
-            ReportCatalogItem("أداء المبيعات حسب المستخدم", "المستخدمون والعمليات", "commercial_sales.user_id + total_minor + currency_code", cloudMode, "يجمع الفواتير المكتملة حسب المستخدم الذي سجل عملية البيع، مع فصل العملات ومتوسط الفاتورة. يعرض معرف المستخدم عند عدم توفر اسم عرض موثوق؛ لا ينسب المبيعات إلى فرع أو مستودع لأن علاقة الموقع غير محفوظة على سجل البيع."),
-            ReportCatalogItem(if (cloudMode) "المبيعات حسب حالة السداد" else "المبيعات النقدية والآجلة", "المبيعات", "نوع البيع المحلي أو حالة السداد الفعلية في الفاتورة السحابية", true, "في السحابة يصنف حسب حالة السداد المسجلة، ولا يستنتج طريقة الدفع من مجرد إجمالي الفاتورة."),
-            ReportCatalogItem("متوسط قيمة الفاتورة", "المبيعات", "إجمالي الفواتير المكتملة وعددها", true, "متوسط تشغيلي منفصل حسب العملة."),
-            ReportCatalogItem("مقارنة الفترات", "الفترات والمقارنات", "سجلات المبيعات المكتملة المؤرخة", true, "يقارن الفترة الحالية بفترة سابقة مساوية لها في عدد الأيام حسب العملة."),
-            ReportCatalogItem("اتجاه المبيعات اليومي", "الفترات والمقارنات", "commercial_sales.completed + created_at + total_minor", cloudMode, "يعرض إجمالي المبيعات وعدد الفواتير لكل يوم وعملة منفصلة؛ لا يخلط العملات ولا يحسب الفواتير غير المكتملة."),
-            ReportCatalogItem(if (cloudMode) "الدفعات السحابية الناجحة" else "التحصيلات المسجلة محليًا", "السندات والتحصيل والصرف", if (cloudMode) "commercial_payments" else "settlements_json", true, "يعرض الدفعات الناجحة فقط في السحابة؛ السندات لا تُجمع منفصلة عن الدفعة المرتبطة."),
-            ReportCatalogItem("التحصيل حسب طريقة الدفع", "السندات والتحصيل والصرف", "commercial_payments.payment_method_type + amount_minor", cloudMode, "يجمع الدفعات الناجحة فقط حسب طريقة الدفع والعملة؛ لا يضيف قيود الأستاذ مرة ثانية، ويظهر طريقة الدفع غير المسجلة كفئة منفصلة."),
-            ReportCatalogItem("التحصيل حسب العميل", "العملاء والديون", "commercial_sales.customer_id + commercial_payments.succeeded", cloudMode, "يجمع الدفعات الناجحة المرتبطة بفواتير العميل حسب العميل والعملة وتاريخ الدفعة؛ لا يضم الدفعات الفاشلة أو المعلقة ولا يخلط العملات."),
-            ReportCatalogItem("المصروفات التشغيلية", "الأرباح والتكاليف", if (cloudMode) "commercial_expense_vouchers" else "expenses_json", true, "تُستبعد سندات الصرف الملغاة؛ هذا تقرير مصروفات مسجلة وليس قائمة دخل."),
-            ReportCatalogItem("ملخص المصروفات حسب التصنيف وطريقة الصرف", "الأرباح والتكاليف", "commercial_expense_vouchers.category + payment_method + amount_minor", cloudMode, "يجمع سندات الصرف غير الملغاة حسب التصنيف وطريقة الصرف والعملة؛ لا يخلط العملات ولا يضيف القيود المحاسبية مرة ثانية."),
-            ReportCatalogItem("رصيد المخزون الحالي", "الأصناف والمخزون", if (cloudMode) "commercial_inventory_balances" else "products_json", true, "رصيد حالي فقط؛ ليس رصيدًا تاريخيًا للفترة."),
-            ReportCatalogItem("رصيد المخزون حسب الموقع", "الأصناف والمخزون", "commercial_inventory_balances.location_id + commercial_organization_locations", cloudMode, "يعرض أرصدة كل مواقع المؤسسة حسب الموقع ووحدة القياس؛ يفصل الوحدات ويعرض الكمية الإجمالية والمحجوزة والمتاحة. لقطة حالية وليست حركة تاريخية أو تقييمًا ماليًا."),
-            ReportCatalogItem("حالة ربط أرصدة المخزون بالمستودعات", "الأصناف والمخزون", "commercial_inventory_warehouse_context", cloudMode, "يعرض كل رصيد صنف بحالته: مربوط بمستودع واحد، غير مهيأ، أو ملتبس بسبب تعدد روابط المستودعات. لا يجمع وحدات مختلفة ولا يغيّر الرصيد أو الحركات."),
-            ReportCatalogItem("التقييم المالي الحالي للمخزون", "الأصناف والمخزون", "commercial_inventory_balances.unit_cost_minor + حساب المخزون المربوط", cloudMode, "يقيم كمية الموقع الحالي بتكلفة الوحدة المسجلة وبعملة حساب المخزون المربوط؛ يحجب التقييم إذا غابت التكلفة أو العملة. لا يمثل تقييمًا تاريخيًا."),
-
-            ReportCatalogItem("حركة المخزون الفعلية", "الأصناف والمخزون", "commercial_stock_movements المرتبطة بنشاط المؤسسة", cloudMode, "يعرض حركات الكمية المسجلة من دفتر حركة المخزون، مع مرجع المصدر وحالة فاتورة البيع عند توفرها؛ لا يستنتج تكلفة أو قيمة مالية من الكمية."),
-            ReportCatalogItem("حركة المخزون حسب المستخدم", "المستخدمون والعمليات", "commercial_stock_movements.created_by + movement_type + quantity_delta", cloudMode, "يجمع عدد الحركات وصافي الكمية حسب المستخدم ونوع الحركة ووحدة القياس المحفوظة؛ يعرض معرف المستخدم فقط، ويفصل الوحدات ولا يستنتج تكلفة أو فرعًا أو مستودعًا."),
-            ReportCatalogItem("تنبيهات المخزون المنخفض", "الأصناف والمخزون", "الرصيد وحد إعادة الطلب", true, "يعتمد على حد التنبيه المسجل لكل صنف."),
-            ReportCatalogItem("فواتير الشراء والمستحقات المسجلة", "المشتريات", "commercial_purchase_orders ← supplier_invoices ← supplier_obligations", cloudMode, "يُعرض مبلغ الفاتورة والرصيد المستحق من سجل الالتزام؛ لا يُخلط مع قيمة أمر الشراء."),
-            ReportCatalogItem("فروقات أسعار فواتير الموردين", "المشتريات", "commercial_supplier_invoice_items مقابل commercial_purchase_order_items.unit_cost_minor", cloudMode, "يقارن مجموع بنود فاتورة المورد بسعر الأساس المسجل في أمر الشراء، وفق تقريب القيد المحاسبي نفسه؛ يستبعد الضريبة والشحن من فرق السعر ويوقف التقرير إذا تعذر مطابقة أي بند."),
-            ReportCatalogItem("المشتريات حسب المورد", "المشتريات", "commercial_supplier_invoices.total_minor", cloudMode, "يجمع إجمالي فواتير الموردين غير الملغاة ضمن الفترة حسب المورد والعملة؛ يتحقق من تطابق الإجمالي مع المجموع الفرعي والضريبة والشحن ولا يخلط العملات."),
-            ReportCatalogItem("مستحقات فواتير الموردين", "الموردون والمستحقات", "commercial_supplier_obligations المرتبطة بالفواتير", cloudMode, "مجموع الالتزامات المسجلة ناقص المبالغ المسددة المسجلة فقط؛ لا يمثل رصيد المورد الشامل إذا وجدت تسويات أو مرتجعات خارج هذا المصدر."),
-            ReportCatalogItem("مرتجعات المبيعات وحالة التسوية", "المرتجعات", "commercial_sales_returns + عناصر المرتجع", cloudMode, "يفصل حالة الموافقة عن الاسترداد الفعلي وإعادة التخزين؛ لا تُعامل الطلبات المعلقة كمرتجعات منفذة."),
-            ReportCatalogItem("أرصدة العملاء وكشف الحساب", "العملاء والديون", "فواتير العملاء المكتملة + التحصيلات الناجحة + المرتجعات المعتمدة والاستردادات المنفذة", cloudMode, "يعرض كشف حركة للفواتير المكتملة والتحصيلات والمرتجعات والاستردادات المسجلة في مصادر السحابة، مع رصيد افتتاحي وحركة ورصيد ختامي حسب العميل والعملة."),
-            ReportCatalogItem("الرصيد المحاسبي الكامل للعملاء", "العملاء والديون", "سطور دفتر الأستاذ المرحلة المرتبطة بحساب مراقبة العميل", cloudMode, "يعرض حركات حساب مراقبة العميل من القيود المرحلة فقط؛ يمنع اعتماده إذا تعذر تحميل روابط حسابات الأطراف."),
-            ReportCatalogItem("كشف حركات الموردين", "الموردون والمستحقات", "فواتير المورد ذات الالتزام + دفعات الموردين ذات القيد المرحل", cloudMode, "يعرض الفواتير والدفعات الفريدة حسب المورد والعملة، مع رصيد افتتاحي وختامي مستنتج من هذين المصدرين فقط؛ لا يمثل رصيد المورد النهائي عند وجود مرتجعات أو تسويات غير محملة."),
-            ReportCatalogItem("أرصدة الموردين والمستحقات", "الموردون والمستحقات", "سطور دفتر الأستاذ المرحلة المرتبطة بحساب مراقبة المورد", cloudMode, "يعرض كشف المورد من دفتر الأستاذ فقط؛ تُضمن المرتجعات والتسويات فقط إذا رُحلت إلى حساب الطرف الصحيح."),
-            ReportCatalogItem("سندات القبض والصرف", "السندات والتحصيل والصرف", "commercial_payments وحالة كل دفعة", cloudMode, "يعرض حالة كل دفعة؛ لحساب التحصيل الفعلي استخدم تقرير الدفعات الناجحة فقط، ولا تجمع القيد والدفعة مرتين."),
-            ReportCatalogItem("سجل القيود المحاسبية", "المحاسبة والمالية", "commercial_journal_entries", cloudMode, "قائمة قراءة فقط لحالات القيود ومصادرها."),
-            ReportCatalogItem("تفاصيل القيود المرحلة", "المحاسبة والمالية", "سطور القيود المرحلة مع دليل الحسابات والمصدر", cloudMode, "يعرض كل سطر مدينًا ودائنًا بعملته، ورقم القيد والحساب ومصدر الحركة؛ يستبعد المسودات والقيود غير المرحلة."),
-            ReportCatalogItem("ميزان المراجعة حسب الحساب", "المحاسبة والمالية", "commercial_journal_lines + commercial_ledger_accounts + القيود المرحلة", cloudMode, "رصيد حتى نهاية التاريخ المحدد، مع إظهار المدين والدائن والفروقات حسب العملة."),
-            ReportCatalogItem("حركة دفتر الأستاذ العام", "المحاسبة والمالية", "سطور القيود المرحلة ومصادرها", cloudMode, "تفاصيل سطور القيود المرحلة ضمن الفترة."),
-            ReportCatalogItem("كشف حساب محاسبي", "المحاسبة والمالية", "سطور دفتر الأستاذ المرحلة حسب الحساب", cloudMode, "يتطلب إدخال رمز الحساب أو اسمه؛ يعرض الحركات المرحلة فقط ضمن الفترة والعملة المسجلة."),
-
-            ReportCatalogItem("قائمة الدخل والميزانية العمومية", "المحاسبة والمالية", "commercial_journal_lines + دليل الحسابات؛ القيود المرحلة فقط", cloudMode, "يعرض قائمة دخل للفترة وميزانية حتى تاريخ النهاية منفصلتين حسب العملة؛ يحجب النتائج إذا كانت القيود غير متزنة أو أنواع الحسابات غير معروفة."),
-            ReportCatalogItem("التدفقات النقدية والصندوق", "الصندوق والنقدية", "سطور دفتر الأستاذ المرحلة لحسابات النقد والبنك المربوطة", cloudMode, "يحسب صافي حركة الحسابات النقدية حسب العملة من القيود المرحلة فقط؛ التحويل بين حسابين نقديين يظهر كتغير داخلي دون تضخيم صافي النقد."),
-
-            ReportCatalogItem("الضرائب والخصومات", "الضرائب والخصومات", "تفاصيل الضرائب والخصومات من المستندات", false, "لا تُخمن النسب أو مبالغ الضريبة إذا لم تسجل في المصدر."),
-            ReportCatalogItem("أداء المستخدمين والفروع والمستودعات", "المستخدمون والعمليات", "مستخدم/فرع/مستودع محفوظ على المستند", false, "لا تتوفر كل هذه الأبعاد على جميع مستندات البيع والشراء والتحصيل في نموذج البيانات الحالي؛ لن تُنسب العمليات إلى مستخدم أو فرع بالتخمين."),
-            ReportCatalogItem("أعمار ديون العملاء", "العملاء والديون", "تاريخ استحقاق معتمد وتخصيصات تحصيل على مستوى الفاتورة", false, "لا يوجد تاريخ استحقاق موحد محفوظ للفواتير؛ تاريخ إنشاء الفاتورة ليس تاريخ استحقاق، لذلك لا يمكن تكوين شرائح 30/60/90 يومًا بدقة."),
-            ReportCatalogItem("عمر أرصدة العملاء حسب تاريخ الفاتورة", "العملاء والديون", "فواتير العملاء المكتملة + التحصيلات + المرتجعات المعتمدة والاستردادات المنفذة", cloudMode, "يعرض الأرصدة المفتوحة الحالية بعد عكس المرتجعات المعتمدة والاستردادات المنفذة في شرائح عمر منذ تاريخ إنشاء الفاتورة حتى اليوم؛ لا يمثل أيام التأخر عن استحقاق تعاقدي ولا يعيد بناء رصيد تاريخ سابق."),
-            ReportCatalogItem("أعمار مستحقات الموردين", "الموردون والمستحقات", "commercial_supplier_invoices.invoice_date + due_date + commercial_supplier_obligations", cloudMode, "يقيس التأخر عن تاريخ الاستحقاق التعاقدي المسجل، ويفصل غير المستحق ومستحق اليوم وشرائح التأخر؛ يحجب التقرير إذا بقيت فاتورة مفتوحة بلا تاريخ موثق."),
-            ReportCatalogItem("عمر مستحقات الموردين حسب تاريخ الفاتورة", "الموردون والمستحقات", "commercial_supplier_invoices.recorded_at + commercial_supplier_obligations", cloudMode, "يعرض الأرصدة المفتوحة الحالية في شرائح عمر منذ تاريخ تسجيل الفاتورة حتى اليوم؛ هذا ليس تقرير تأخر عن موعد الاستحقاق لأن تاريخ الاستحقاق التعاقدي غير محفوظ، ولا يعيد بناء رصيد تاريخ سابق."),
-            ReportCatalogItem("التسوية البنكية", "الصندوق والنقدية", "كشف بنك خارجي + أسطر مطابقة وحالة تسوية", false, "دفتر الأستاذ الداخلي لا يثبت حركات البنك الفعلية؛ لا يوجد مصدر كشف بنكي مستورد ومطابقات معتمدة."),
-            ReportCatalogItem("قائمة التدفقات النقدية المصنفة", "الصندوق والنقدية", "تصنيف معتمد للتدفقات التشغيلية والاستثمارية والتمويلية", false, "المتاح حاليًا حركة حسابات النقد والبنك من القيود المرحلة فقط؛ لا توجد تصنيفات تدفق معتمدة تكفي لقائمة تدفقات نقدية كاملة."),
-            ReportCatalogItem("الإقرار الضريبي النظامي", "الضرائب والخصومات", "ولاية ضريبية وتسجيل المنشأة وقواعد وفترات الإقرار", false, "الحقول المسجلة للضريبة ليست إقرارًا نظاميًا؛ لم تُعتمد الولاية الضريبية أو متطلبات التسجيل والنماذج والتقريب والائتمانات."),
-            ReportCatalogItem("تقييم المخزون التاريخي ومطابقته مع الأستاذ", "الأصناف والمخزون", "طبقات تكلفة تاريخية وحركات وأرصدة حسب المستودع + حساب المخزون", false, "الرصيد الحالي لا يعيد بناء قيمة تاريخية، ودفتر الكميات/التكلفة لم يكتمل على مستوى المستودع مع مطابقة حساب المخزون."),
-            ReportCatalogItem("تجميع القوائم المالية متعددة العملات", "الإدارة الشاملة", "أسعار صرف معتمدة بتاريخ الغرض وسياسة ترجمة وفروق عملة", false, "لا توجد سياسة تحويل معتمدة أو مصدر أسعار صرف مؤرخ لغرض التقارير؛ لن تُجمع العملات أو تُحوّل بسعر حالي عشوائي."),
-
-            ReportCatalogItem("تكلفة البضاعة والربح", "الأرباح والتكاليف", "commercial_sale_items.cost_total_minor + المرتجعات المكتملة", cloudMode, "يعتمد على لقطة التكلفة المحفوظة مع بند البيع، ويعكس تكلفة البضاعة المرتجعة التي أعيد تخزينها؛ يحجب الربح إذا كانت التكلفة أو تسوية الضريبة غير مكتملة."),
-            ReportCatalogItem("ربحية الأصناف بعد المرتجعات", "الأرباح والتكاليف", "commercial_sale_items + commercial_sale_return_items", cloudMode, "يحسب صافي الإيراد والتكلفة والربح لكل صنف وعملة، ويربط كل مرتجع ببند البيع الأصلي ويعكس تكلفة الكمية المعاد تخزينها؛ يحجب النتائج عند نقص تكلفة تاريخية أو عدم تطابق مبلغ اعتماد المرتجع مع بنوده، أو وجود خصم فاتورة غير موزع أو مرتجع على فاتورة ضريبية.")
-)
-private data class ReportLine(val date: String, val reference: String, val name: String, val amount: Long, val currency: String, val status: String, val displayAmount: String? = null)
-
-private data class LocationInventoryReportState(val lines: List<ReportLine>, val error: String)
-
-private fun buildLocationInventoryReportState(
-    balances: List<CommercialCloudLocationInventoryBalance>,
-    loadError: String
-): LocationInventoryReportState {
-    if (loadError.isNotBlank()) return LocationInventoryReportState(emptyList(), loadError)
-    val totals = runCatching {
-        calculateLocationInventoryBalanceTotals(balances.map { row ->
-            LocationInventoryBalanceInput(
-                locationId = row.locationId,
-                locationName = row.locationName,
-                locationType = row.locationType,
-                offeringId = row.offeringId,
-                unitName = row.unitName,
-                quantityOnHand = row.quantityOnHand,
-                quantityReserved = row.quantityReserved
-            )
-        })
-    }.getOrElse {
-        return LocationInventoryReportState(emptyList(), it.message.orEmpty().ifBlank { "تعذر حساب أرصدة المخزون حسب الموقع." })
-    }
-    val lines = totals.map { row ->
-        val typeLabel = row.locationType.ifBlank { "نوع موقع غير محدد" }
-        ReportLine(
-            "حالي",
-            row.locationId,
-            row.locationName,
-            0L,
-            "-",
-            "$typeLabel · ${row.offeringCount} صنف · محجوز ${row.quantityReserved.stripTrailingZeros().toPlainString()} ${row.unitName}",
-            displayAmount = "متاح ${row.quantityAvailable.stripTrailingZeros().toPlainString()} ${row.unitName} · إجمالي ${row.quantityOnHand.stripTrailingZeros().toPlainString()} ${row.unitName}"
-        )
-    }
-    return LocationInventoryReportState(lines, "")
-}
-
-private data class StockMovementUserReportState(val lines: List<ReportLine>, val error: String)
-
-private fun buildStockMovementUserReportState(
-    movements: List<CommercialCloudStockMovement>,
-    startDate: LocalDate?,
-    endDate: LocalDate?,
-    cloudMode: Boolean,
-    loadError: String
-): StockMovementUserReportState {
-    if (!cloudMode) return StockMovementUserReportState(emptyList(), "تقرير حركة المخزون حسب المستخدم يتطلب سجل الحركات السحابي.")
-    if (loadError.isNotBlank()) return StockMovementUserReportState(emptyList(), loadError)
-    val start = startDate ?: return StockMovementUserReportState(emptyList(), "تاريخ بداية الفترة غير صالح.")
-    val end = endDate ?: return StockMovementUserReportState(emptyList(), "تاريخ نهاية الفترة غير صالح.")
-    if (start.isAfter(end)) return StockMovementUserReportState(emptyList(), "فترة التقرير غير صحيحة.")
-    val datedMovements = runCatching {
-        movements.map { movement -> movement to LocalDate.parse(movement.createdAt.take(10)) }
-    }.getOrElse {
-        return StockMovementUserReportState(emptyList(), "توجد حركة مخزون بتاريخ غير صالح؛ تم حجب التجميع حتى لا تُستبعد حركة من الفترة.")
-    }
-    val periodMovements = datedMovements.filter { (_, date) ->
-        !date.isBefore(start) && !date.isAfter(end)
-    }.map { it.first }
-    val totals = runCatching {
-        calculateStockMovementUserTotals(periodMovements.map { movement ->
-            StockMovementUserInput(
-                movementId = movement.id,
-                userId = movement.createdBy,
-                movementType = movement.movementType,
-                unitName = movement.unitName,
-                quantityDelta = movement.quantityDelta
-            )
-        })
-    }.getOrElse {
-        return StockMovementUserReportState(emptyList(), it.message.orEmpty().ifBlank { "تعذر حساب تقرير حركة المخزون حسب المستخدم." })
-    }
-    val lines = totals.map { row ->
-        val actorLabel = if (row.userId == "غير منسوب") "حركات غير منسوبة لمستخدم"
-            else "مستخدم ${row.userId}"
-        ReportLine(
-            "${start} — ${end}",
-            "${row.movementCount} حركة",
-            "$actorLabel · ${row.movementType}",
-            0L,
-            "-",
-            "عدد الحركات: ${row.movementCount} · نوع الحركة: ${row.movementType} · المستخدم المسجل: ${row.userId}",
-            displayAmount = row.quantityDelta.stripTrailingZeros().toPlainString() + " " + row.unitName
-        )
-    }
-    return StockMovementUserReportState(lines, "")
-}
-
-private fun CommercialCloudSupplierInvoiceSummary.toPriceVarianceInput() = SupplierInvoicePriceVarianceInput(
-    currencyCode = currencyCode,
-    subtotalMinor = subtotalMinor,
-    taxMinor = taxMinor,
-    freightMinor = freightMinor,
-    totalMinor = totalMinor,
-    lines = lines.map { line ->
-        SupplierInvoicePriceVarianceLineInput(
-            quantity = line.quantity,
-            unitPriceMinor = line.unitPriceMinor,
-            lineTotalMinor = line.lineTotalMinor,
-            purchaseOrderUnitCostMinor = line.purchaseOrderUnitCostMinor
-        )
-    }
-)
-
-private fun CommercialCloudSaleDocument.toCostProfitInput() = CostProfitSaleInput(
-    currencyCode = currencyCode,
-    subtotalMinor = subtotalMinor,
-    discountMinor = discountMinor,
-    lines = lines.map { CostProfitSaleLineInput(it.costTotalMinor) }
-)
-
-private fun CommercialCloudSaleReturn.toCostProfitInput() = CostProfitReturnInput(
-    currencyCode = currencyCode,
-    approvedRefundMinor = approvedRefundMinor,
-    items = items.map { item ->
-        CostProfitReturnItemInput(
-            saleItemCostTotalMinor = item.saleItemCostTotalMinor,
-            restockedQuantity = item.restockedQuantity,
-            saleItemQuantityInStockUnits = item.saleItemQuantityInStockUnits
-        )
-    }
-)
-
-private fun List<CommercialCloudSaleDocument>.toCustomerStatementInputs(): List<CustomerStatementInvoiceInput> =
-    filter { it.saleStatus.equals("completed", true) && it.customerId.isNotBlank() }.map { doc ->
-        CustomerStatementInvoiceInput(
-            customerId = doc.customerId,
-            receiptNumber = doc.receiptNumber,
-            customerName = doc.customerName,
-            totalMinor = doc.totalMinor,
-            currencyCode = doc.currencyCode,
-            createdAt = doc.createdAt,
-            payments = doc.payments.map { payment ->
-                CustomerStatementPaymentInput(payment.id, payment.amountMinor, payment.status, payment.createdAt)
-            },
-            returns = doc.returns.map { saleReturn ->
-                CustomerStatementReturnInput(
-                    saleReturn.id,
-                    saleReturn.status,
-                    saleReturn.refundStatus,
-                    saleReturn.approvedRefundMinor,
-                    saleReturn.updatedAt
-                )
-            }
-        )
-    }
-
-private fun reportLineAmount(row: ReportLine, cloudMode: Boolean): String = row.displayAmount ?: if (row.currency.isBlank() || row.currency == "-") row.amount.toString() else reportMoney(row.amount, row.currency, cloudMode)
-
-private fun SupplierDueDateAgingReportState.toReportLines(asOfDate: String): List<ReportLine> =
-    rows.map { aging ->
-        ReportLine(
-            asOfDate,
-            aging.bucket,
-            aging.supplierName,
-            aging.balanceMinor,
-            aging.currencyCode,
-            "${aging.invoiceCount} فاتورة مفتوحة · الرصيد الحالي · الشرائح محسوبة من تاريخ الاستحقاق التعاقدي المحفوظ"
-        )
-    }
-private data class ReportSupplierMovement(val date: String, val supplierId: String, val supplier: String, val currency: String, val reference: String, val amount: Long, val description: String)
-
-private fun buildCashFlowReportLines(
-    cloudLedgerLines: List<CommercialCloudJournalLine>,
-    cloudGlMappings: List<CommercialCloudGlAccountMapping>,
-    startDate: LocalDate?,
-    endDate: LocalDate?,
-    startText: String,
-    endText: String
-): List<ReportLine> {
-    val cashKeys = setOf("cash", "bank", "card_clearing", "other_receipts", "check_clearing", "other_disbursements")
-            val cashAccountIds = cloudGlMappings.filter { it.mappingKey in cashKeys }.map { it.ledgerAccountId }.toSet()
-            val movements = cloudLedgerLines.filter { it.accountId in cashAccountIds }
-                .mapNotNull { line ->
-                    val date = runCatching { LocalDate.parse(line.entryDate.take(10)) }.getOrNull() ?: return@mapNotNull null
-                    Triple(line, date, line.debitMinor - line.creditMinor)
-                }.sortedWith(compareBy<Triple<CommercialCloudJournalLine, LocalDate, Long>> { it.second }.thenBy { it.first.entryNumber }.thenBy { it.first.lineNumber })
-            val currencies = movements.map { it.first.currencyCode }.filter { it.matches(Regex("^[A-Z]{3}$")) }.distinct().sorted()
-    return buildList {
-                currencies.forEach { currency ->
-                    val currencyMoves = movements.filter { it.first.currencyCode == currency }
-                    currencyMoves.groupBy { it.first.accountId to it.first.accountCode }.toSortedMap(compareBy<Pair<String, String>> { it.second }.thenBy { it.first })
-                        .forEach { (accountKey, accountMoves) ->
-                            val opening = accountMoves.filter { it.second < (startDate ?: LocalDate.MIN) }.sumOf { it.third }
-                            val periodMoves = accountMoves.filter { startDate != null && endDate != null && !it.second.isBefore(startDate) && !it.second.isAfter(endDate) }
-                            var balance = opening
-                            val accountName = accountMoves.firstOrNull()?.first?.accountName?.ifBlank { accountKey.second } ?: accountKey.second
-                            add(ReportLine(startText, "رصيد افتتاحي", accountName, opening, currency, "حساب النقد/البنك ${accountKey.second} · رصيد من القيود المرحلة قبل الفترة"))
-                            periodMoves.forEach { (line, date, amount) ->
-                                balance = Math.addExact(balance, amount)
-                                add(ReportLine(date.toString(), "قيد ${line.entryNumber} · سطر ${line.lineNumber}", accountName, amount, currency,
-                                    "${line.entryDescription} · ${line.sourceType}:${line.sourceId} · الحساب ${line.accountCode} · الرصيد المتحرك ${reportMoney(balance, currency, true)}"))
-                            }
-                            val debitMovements = periodMoves.sumOf { if (it.third > 0L) it.third else 0L }
-                            val creditMovements = periodMoves.sumOf { if (it.third < 0L) -it.third else 0L }
-                            add(ReportLine("${startText} — ${endText}", "إجمالي الحركة المدينة", accountName, debitMovements, currency,
-                                "إجمالي الزيادات المدينة على حساب النقد/البنك خلال الفترة؛ قد تشمل تحويلات داخلية"))
-                            add(ReportLine("${startText} — ${endText}", "إجمالي الحركة الدائنة", accountName, -creditMovements, currency,
-                                "إجمالي التخفيضات الدائنة على حساب النقد/البنك خلال الفترة؛ قد تشمل تحويلات داخلية"))
-                            add(ReportLine(endText, "رصيد ختامي", accountName, balance, currency, "الرصيد الافتتاحي + الحركة المرحلة · حساب ${accountKey.second}"))
-                        }
-                }
-            }
-}
-
-private data class TaxDiscountSummaryReportState(val lines: List<ReportLine>, val error: String)
-
-private fun buildTaxDiscountSummaryReportState(
-    sales: List<CommercialCloudSaleDocument>,
-    purchases: List<CommercialCloudPurchaseDocument>,
-    returns: List<CommercialCloudSaleReturn>,
-    startMillis: Long,
-    endExclusive: Long,
-    startText: String,
-    endText: String,
-    sourceError: String
-): TaxDiscountSummaryReportState {
-    if (sourceError.isNotBlank()) return TaxDiscountSummaryReportState(emptyList(), sourceError)
-    val totals = runCatching {
-        calculateTaxDiscountSummaryTotals(buildList {
-            sales.filter { doc ->
-                doc.saleStatus.equals("completed", true) &&
-                    reportDateMillis(doc.createdAt)?.let { it >= startMillis && it < endExclusive } == true
-            }.forEach { doc ->
-                if (doc.discountMinor > 0L) add(TaxDiscountSummaryInput(doc.id, doc.currencyCode, "sales_discount", doc.discountMinor))
-                if (doc.taxMinor > 0L) add(TaxDiscountSummaryInput(doc.id, doc.currencyCode, "sales_tax", doc.taxMinor))
-            }
-            purchases.forEach { purchase ->
-                purchase.supplierInvoices.filter { invoice ->
-                    invoice.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed") &&
-                        reportDateMillis(invoice.recordedAt)?.let { it >= startMillis && it < endExclusive } == true
-                }.forEach { invoice ->
-                    if (invoice.taxMinor > 0L) add(TaxDiscountSummaryInput(
-                        invoice.id, invoice.currencyCode, "purchase_tax", invoice.taxMinor
-                    ))
-                }
-            }
-            returns.filter { saleReturn ->
-                saleReturn.status.equals("completed", true) &&
-                    reportDateMillis(saleReturn.completedAt)?.let { it >= startMillis && it < endExclusive } == true
-            }.forEach { saleReturn ->
-                val refund = saleReturn.approvedRefundMinor ?: 0L
-                if (refund > 0L) add(TaxDiscountSummaryInput(
-                    saleReturn.id, saleReturn.currencyCode, "sales_return", refund
-                ))
-            }
-        })
-    }.getOrElse {
-        return TaxDiscountSummaryReportState(emptyList(), "تعذر تجميع الضرائب والخصومات بدقة؛ تم حجب الملخص بدل عرض أرقام ناقصة.")
-    }
-    val period = startText + " — " + endText
-    val lines = if (totals.isEmpty()) {
-        listOf(ReportLine(period, "ملخص", "لا توجد ضرائب أو خصومات أو مرتجعات مسجلة ضمن الفترة", 0L, "—",
-            "لا توجد مستندات بمبالغ مسجلة؛ لم يتم استنتاج أي قيمة ضريبية."))
-    } else buildList {
-        totals.forEach { total ->
-            val currency = total.currencyCode
-            add(ReportLine(period, "خصومات المبيعات", "إجمالي الخصومات الممنوحة",
-                total.salesDiscountMinor, currency, "عدد فواتير البيع ذات الخصم: " + total.salesDiscountDocumentCount))
-            add(ReportLine(period, "ضريبة المبيعات", "إجمالي الضريبة المسجلة على المبيعات",
-                total.salesTaxMinor, currency, "عدد فواتير البيع ذات الضريبة: " + total.salesTaxDocumentCount))
-            add(ReportLine(period, "ضريبة المشتريات", "إجمالي الضريبة المسجلة على المشتريات",
-                total.purchaseTaxMinor, currency, "عدد فواتير الموردين ذات الضريبة: " + total.purchaseTaxDocumentCount))
-            add(ReportLine(period, "مرتجعات المبيعات", "قيمة المرتجعات المعتمدة",
-                total.salesReturnMinor, currency, "عدد المرتجعات المعتمدة: " + total.salesReturnCount + "؛ لا تمثل هذه القيمة ضريبة مستردة."))
-        }
-    }
-    return TaxDiscountSummaryReportState(lines, "")
-}
 
 @Composable
 internal fun ReportsCenterScreen(
@@ -1572,39 +1218,13 @@ internal fun ReportsCenterScreen(
                 val date = runCatching { LocalDate.parse(line.entryDate.take(10)) }.getOrNull()
                 date != null && !date.isBefore(previousStart) && !date.isAfter(previousEnd)
             } else emptyList()
-            fun normalizedType(line: CommercialCloudJournalLine): String =
-                line.accountType.lowercase(Locale.ROOT).replace('-', '_').replace(' ', '_')
-            fun statementClass(line: CommercialCloudJournalLine): String = when (normalizedType(line)) {
-                "asset", "assets" -> "asset"
-                "liability", "liabilities" -> "liability"
-                "equity" -> "equity"
-                "revenue", "income" -> if (
-                    line.normalBalance.equals("debit", true) ||
-                    line.accountName.contains("مردودات", true) ||
-                    line.accountName.contains("خصومات", true) ||
-                    line.accountName.contains("sales return", true) ||
-                    line.accountName.contains("sales discount", true)
-                ) "contra_revenue" else "revenue"
-                "contra_revenue" -> "contra_revenue"
-                "cost_of_goods_sold", "cost_of_sales" -> "cogs"
-                "expense", "expenses" -> if (
-                    line.accountName.contains("تكلفة البضاعة المباعة", true) ||
-                    line.accountName.contains("cost of goods sold", true) ||
-                    line.accountName.contains("تكلفة المبيعات", true) ||
-                    line.accountCode == "5000"
-                ) "cogs" else "expense"
-                else -> "unknown"
-            }
             val currencies = (throughEnd.map { it.currencyCode } + inPeriod.map { it.currencyCode })
                 .filter { it.matches(Regex("^[A-Z]{3}$")) }.distinct().sorted()
             buildList {
                 currencies.forEach { currency ->
                     val periodRows = inPeriod.filter { it.currencyCode == currency }
                     val cumulativeRows = throughEnd.filter { it.currencyCode == currency }
-                    fun accountNet(lines: List<CommercialCloudJournalLine>, cls: String): Long =
-                        lines.filter { statementClass(it) == cls }
-                            .sumOf { if (cls in setOf("asset", "expense", "cogs", "contra_revenue")) it.debitMinor - it.creditMinor else it.creditMinor - it.debitMinor }
-                    periodRows.groupBy { Triple(it.accountId, it.accountName.ifBlank { it.accountCode }, statementClass(it)) }
+                    periodRows.groupBy { Triple(it.accountId, it.accountName.ifBlank { it.accountCode }, reportStatementClass(it)) }
                         .filterKeys { it.third in setOf("revenue", "contra_revenue", "cogs", "expense") }
                         .toSortedMap(compareBy<Triple<String, String, String>> { it.third }.thenBy { it.second }.thenBy { it.first })
                         .forEach { (key, rows) ->
@@ -1613,18 +1233,18 @@ internal fun ReportsCenterScreen(
                             add(ReportLine("${startText} — ${endText}", "حساب ${key.first}", key.second, amount, currency,
                                 "تفصيل حساب قائمة الدخل · التصنيف ${key.third} · دفتر الأستاذ المرحل"))
                         }
-                    val revenue = accountNet(periodRows, "revenue")
-                    val contraRevenue = accountNet(periodRows, "contra_revenue")
-                    val cogs = accountNet(periodRows, "cogs")
-                    val operatingExpenses = accountNet(periodRows, "expense")
+                    val revenue = reportAccountNet(periodRows, "revenue")
+                    val contraRevenue = reportAccountNet(periodRows, "contra_revenue")
+                    val cogs = reportAccountNet(periodRows, "cogs")
+                    val operatingExpenses = reportAccountNet(periodRows, "expense")
                     val netRevenue = revenue - contraRevenue
                     val grossProfit = netRevenue - cogs
                     val netProfit = grossProfit - operatingExpenses
                     val previousRows = previousPeriod.filter { it.currencyCode == currency }
                     if (previousRows.isNotEmpty()) {
-                        val previousRevenue = accountNet(previousRows, "revenue") - accountNet(previousRows, "contra_revenue")
-                        val previousGrossProfit = previousRevenue - accountNet(previousRows, "cogs")
-                        val previousNetProfit = previousGrossProfit - accountNet(previousRows, "expense")
+                        val previousRevenue = reportAccountNet(previousRows, "revenue") - reportAccountNet(previousRows, "contra_revenue")
+                        val previousGrossProfit = previousRevenue - reportAccountNet(previousRows, "cogs")
+                        val previousNetProfit = previousGrossProfit - reportAccountNet(previousRows, "expense")
                         add(ReportLine("${previousStart} — ${previousEnd}", "مقارنة الفترة السابقة", "صافي الإيرادات للفترة السابقة", previousRevenue, currency,
                             "الفترة السابقة مساوية للمدة المحددة؛ من القيود المرحلة فقط"))
                         add(ReportLine("${previousStart} — ${previousEnd}", "مقارنة الفترة السابقة", "مجمل الربح للفترة السابقة", previousGrossProfit, currency,
@@ -1639,7 +1259,7 @@ internal fun ReportsCenterScreen(
                     add(ReportLine(startText + " — " + endText, "قائمة الدخل", "مجمل الربح", grossProfit, currency, "صافي الإيرادات ناقص تكلفة البضاعة"))
                     add(ReportLine(startText + " — " + endText, "قائمة الدخل", "المصروفات التشغيلية والأخرى", -operatingExpenses, currency, "حسابات المصروفات المرحلة"))
                     add(ReportLine(startText + " — " + endText, "قائمة الدخل", "صافي الربح/الخسارة للفترة", netProfit, currency, "لا يتضمن حسابات مجهولة النوع؛ تم التحقق من اتزان القيود"))
-                    cumulativeRows.groupBy { Triple(it.accountId, it.accountName.ifBlank { it.accountCode }, statementClass(it)) }
+                    cumulativeRows.groupBy { Triple(it.accountId, it.accountName.ifBlank { it.accountCode }, reportStatementClass(it)) }
                         .filterKeys { it.third in setOf("asset", "liability", "equity") }
                         .toSortedMap(compareBy<Triple<String, String, String>> { it.third }.thenBy { it.second }.thenBy { it.first })
                         .forEach { (key, rows) ->
@@ -1647,11 +1267,11 @@ internal fun ReportsCenterScreen(
                             add(ReportLine(endText, "حساب ${key.first}", key.second, amount, currency,
                                 "رصيد حساب ${key.third} حتى تاريخ التقرير · دفتر الأستاذ المرحل"))
                         }
-                    val assets = accountNet(cumulativeRows, "asset")
-                    val liabilities = accountNet(cumulativeRows, "liability")
-                    val equity = accountNet(cumulativeRows, "equity")
-                    val cumulativeIncome = accountNet(cumulativeRows, "revenue") - accountNet(cumulativeRows, "contra_revenue") -
-                        accountNet(cumulativeRows, "cogs") - accountNet(cumulativeRows, "expense")
+                    val assets = reportAccountNet(cumulativeRows, "asset")
+                    val liabilities = reportAccountNet(cumulativeRows, "liability")
+                    val equity = reportAccountNet(cumulativeRows, "equity")
+                    val cumulativeIncome = reportAccountNet(cumulativeRows, "revenue") - reportAccountNet(cumulativeRows, "contra_revenue") -
+                        reportAccountNet(cumulativeRows, "cogs") - reportAccountNet(cumulativeRows, "expense")
                     val totalEquity = equity + cumulativeIncome
                     val equationDifference = assets - liabilities - totalEquity
                     add(ReportLine(endText, "الميزانية العمومية", "إجمالي الأصول", assets, currency, "رصيد حتى تاريخ التقرير"))

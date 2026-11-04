@@ -1,7 +1,7 @@
 # مرجع ملفات الكود — تطبيق متجري التجاري
 
 **الحالة:** مرجع وصفي للكود الموجود في الفرع `main`، وليس شهادة جاهزية إنتاجية.  
-**آخر مطابقة:** 2026-11-03.  
+**آخر مطابقة:** 2026-11-04.  
 **النطاق:** ملفات `android-commercial/` فقط. لا يغطي هذا الملف كل ملفات المستودع متعدد التطبيقات.  
 **قاعدة التوثيق:** عند التعارض، الكود والترحيلات والاختبارات الحالية أدلة على التنفيذ؛ وثائق الخطة تشرح المقصود، ولا تثبت أن ترحيلات Supabase مطبقة على البيئة الحية.
 
@@ -17,8 +17,9 @@
 
 | الملف | المسؤولية الموثقة | حدود يجب مراعاتها |
 |---|---|---|
-| `MainActivity.kt` | نقطة دخول التطبيق، التنقل بين الشاشات، لوحة المؤشرات، ونماذج البيانات المحلية القديمة للمبيعات والمنتجات والتسويات والمصروفات، مع فتح المسارات السحابية. | وجود تخزين محلي في هذا الملف لا يعني مزامنته مع السحابة. نموذج `Product.stock` الحالي عدد صحيح؛ لا تعتمد عليه لتمثيل كميات كسرية. |
-| `CommercialCloudRepository.kt` | طبقة الاتصال الأساسية مع Supabase؛ إدارة طلبات HTTP والجلسة المحفوظة المشفرة، تحميل بيانات المخزون والعملاء والمبيعات والمشتريات، إنشاء البيع متعدد البنود، ومهام الاستلام وفواتير المورد والتحصيل والمصروفات والمرتجعات بحسب دوال الملف. | مصدر الحقيقة للقيود والرصيد والصلاحيات هو الخادم. يجب الحفاظ على مفاتيح idempotency وعدم إعادة الطلبات غير المحسومة بمفتاح جديد. قراءة رصيد المخزون السحابي تحفظ القيمة الدقيقة في `Product.stockPrecise` باستخدام `BigDecimal`؛ يبقى `Product.stock` عددًا صحيحًا للتوافق فقط. الفجوة المتبقية في الكمية الكسرية هي إدخال كمية البيع وتحويلها وقبولها عبر RPC من طرف إلى طرف. |
+| `MainActivity.kt` | نقطة دخول Android فقط؛ يهيئ `ComponentActivity` ويستدعي `StoreApp`. | لا تضاف إليه حالة الشاشات أو التنقل أو تحميل بيانات المتجر؛ هذه مسؤولية `StoreApp.kt`. |
+| `StoreApp.kt` | تركيب التطبيق وحالة التنقل والسياق السحابي وتحميل بيانات المتجر ومسارات الدخول والميزات. | يحافظ على حاجز منع خلط المحلي بالسحابي؛ الشاشات المساعدة أصبحت مكونات مستقلة وتُستدعى عبر نفس callbacks. |
+| `CommercialCloudRepository.kt` | مساعدات سياق المؤسسة والجلسة والصفحات، خيارات العملاء، وقراءات السجلات التشغيلية المسموح بها. | لا يحمل الآن منطق الدليل أو الوحدات أو المخزون أو المشتريات أو المبيعات أو الذمم أو البوابة أو الأستاذ؛ راجع المستودعات المتخصصة. لا تنشئ عميل Supabase أو مخزن جلسة آخر. |
 | `CommercialCloudSaleComposerScreen.kt` | محرر فاتورة البيع السحابي متعدد الأصناف، اختيار وحدة البيع، إدخال الكمية ومراجعة الإجماليات قبل الإرسال. | كمية السطر تقبل عددًا صحيحًا فقط في النسخة التي تمت مراجعتها؛ لا توصف واجهة البيع بأنها تدعم الكسور من طرف إلى طرف. تحقق الخادم هو الحاكم للسعر والتوفر. |
 | `CommercialCloudSalesScreen.kt` | قائمة مستندات البيع السحابية وعرض التفاصيل، ومشاركة/طباعة ملخص الفاتورة المحفوظة. | الطباعة والمشاركة تعرضان نتيجة موجودة؛ لا تُعدّان دليلًا مستقلًا على سلامة القيود أو المخزون. |
 | `CommercialCloudDebtScreen.kt` | عرض ذمم العملاء وتسجيل التحصيل الجزئي وعرض بيانات السند المرتبط. | الرصيد المعروض يجب أن يراعي التحصيلات والاستردادات والمرتجعات المعتمدة. فحص تعريف دالة التحصيل الحية في 2026-11-03 أكد وجود حارس الرصيد بعد المرتجعات؛ لا يزال اختبار القبول المالي من جلسة Android مصادَق عليها مطلوبًا قبل اعتماد الدورة كاملة. يجب عدم إعادة إدخال قراءة جدول الاستردادات الداخلي من العميل. |
@@ -40,13 +41,47 @@
 | `CommercialCloudExpensesScreen.kt` | تسجيل وعرض سندات المصروفات السحابية وتحديث القائمة بعد العملية. | الترحيل `20261026121906_commercial_cloud_expense_vouchers.sql` يحدد مسار RPC؛ وجوده في Git لا يثبت نشره. يجب اختبار الإلغاء والعكس والتدقيق مع مستخدم مصادق عليه. |
 | `CommercialCloudOperationalScreen.kt` | عرض التقارير التشغيلية اليومية المتاحة للمبيعات والتحصيلات والمصروفات والرصيد المستحق وبعض مؤشرات الربح. | هذه تقارير تشغيلية وليست بديلًا عن القوائم المالية الموحدة أو ميزان المراجعة؛ لا تعلن اكتمال المحاسبة دون مطابقة القيود والذمم والمخزون والتسويات. |
 
+| `SupabaseClient.kt` | عميل HTTP واحد لطلبات Supabase، بما فيها الرؤوس والمهل الزمنية ومعالجة انقطاع الاتصال. | لا تنشئ عميلًا موازيًا أو تغير سياسة إعادة المحاولة/التحقق من النتيجة دون اختبارات؛ الجلسة تظل في طبقتها الحالية. |
+| `CommercialCloudSession.kt` | إنشاء مخزن الجلسة المشفر المشترك الذي يستخدمه إعداد النشاط ومستودع السحابة. | يحافظ على اسم ملف التفضيلات ومخطط التشفير الحالي حتى لا تضيع الجلسات المحفوظة. |
+| `CloudErrorMapper.kt` | تحويل رموز وأخطاء PostgREST والعمليات التجارية إلى رسائل قابلة للتصرف. | لا يقرر نجاح العملية؛ يوضح فقط سبب رفض الخادم أو عدم تأكيد النتيجة. |
+| `CatalogRepository.kt` | تحميل المخزون السحابي الدقيق، إعداد وحدات البيع، ربط دليل الأصناف بعروض النشاط/الموقع، وإنشاء عرض المخزون من الصنف العالمي أو الإنشاء المباشر. | يحافظ على الفرق بين الصنف العالمي وعرض النشاط ورصيد المخزون المحلي، وعلى `BigDecimal` في الرصيد الدقيق. |
+| `MasterDataRepository.kt` | دليل وحدات القياس، تصنيفات الأصناف، المستودعات، مواقع التخزين، الأقسام، وربط الأقسام بالمستودعات. | يستخدم مساعدات الجلسة والصفحات المشتركة؛ لا ينشئ مخططًا جديدًا أو يغيّر أرصدة المخزون. |
+| `CustomerAccountsRepository.kt` | إسقاط الذمم المفتوحة حسب النشاط والعميل، التحصيل الجزئي، مفتاح إعادة محاولة التحصيل، وجلب سند القبض المرقّم من الخادم. | التحصيل لا يكتمل إلا عبر RPC المحاسبي الحالي؛ تُخصم المرتجعات المعتمدة والاستردادات المنفذة مرة واحدة، ولا تُقرأ جداول الاسترداد الداخلية من العميل. |
+| `AccountingRepository.kt` | حسابات الأستاذ العام، خرائط الحسابات، حسابات مراقبة العملاء والموردين، وربط حسابات الأطراف وسطور القيود المرحلة. | قراءات محاسبية مقيدة بالمؤسسة والقيود المرحلة؛ لا تنشئ قيودًا ولا تعيد ترحيلها من التقارير. |
+| `CustomerPortalRepository.kt` | طلبات العميل والحجوزات متعددة الخدمات وسجل البوابة، وإدارة التاجر للطلبات والحجوزات والتنفيذ والإخفاء وتعديل البنود. | يستخدم جلسة العميل الموثقة وسياق المؤسسة المشترك؛ لا يسجل تحصيل العميل مباشرة ولا يتجاوز موافقة التاجر أو RPC. |
+| `InventoryRepository.kt` | حركات المخزون وتنبيهات إعادة الطلب وسياسات تقييم التكلفة وطبقات التكلفة وأرصدة المواقع وسياق ربط المستودعات. | قراءات مخزنية فقط؛ تحافظ على `BigDecimal` والكميات والوحدات ولا تنفذ تسويات أو تحركات من شاشة التقارير. |
+| `ReturnsRepository.kt` | فواتير البيع القابلة للإرجاع، طلبات المرتجعات، الفحص، قرار رد المبلغ، وإعادة التخزين. | يحافظ على حدود الكمية العشرية وحالة المرتجع ومفاتيح العمليات؛ اعتماد الكميات والأرصدة يبقى في RPC وقاعدة البيانات. |
+| `SupplierPaymentRepository.kt` | قراءة دفعات الموردين المرحلة وتسجيل دفعة مورد عبر RPC المحاسبي مع التحقق من المبلغ والطريقة والمستند المؤيد. | لا تسجل المصروف أو فاتورة المورد؛ الدفعة مرتبطة بالتزام المورد وتُقرأ من السجلات المرحلة فقط. |
+| `PurchaseRepository.kt` | أوامر الشراء والاستلام، فواتير الموردين وتفاصيل بنودها، خيارات المورد والمستودع، ومفاتيح منع التكرار. | يحافظ على RPCs الحالية وحقول الفاتورة والاستلام والربط بالدليل؛ لا يغير أسماء الجداول أو الأعمدة. |
+| `ExpenseRepository.kt` | سندات المصروفات السحابية، عملة المؤسسة والمنطقة الزمنية للتقارير، الإلغاء، وتسجيل المصروف بمفتاح منع تكرار. | لا يغيّر مصدر العملة أو المنطقة الزمنية إلى إعداد الجهاز؛ يستعمل إعداد المؤسسة من الخادم. |
+| `SalesRepository.kt` | بيع الفواتير الفردية والمتعددة، مفاتيح منع التكرار، سجل فواتير البيع السحابي وملخصات البيع. | يحافظ على RPCs الحالية وحقول الفاتورة والدفعات والمرتجعات كما هي؛ يستخدم مساعدات الاتصال والصفحات المشتركة. |
+| `CustomerPaymentRequestsRepository.kt` | طلبات الدفع من بوابة العميل ومراجعتها من التاجر، مع مفاتيح إعادة المحاولة والنماذج الخاصة بها. | لا يسجل تحصيلًا مباشرة؛ اعتماد التاجر هو الذي يستدعي مسار التحصيل المحاسبي الحالي. |
+| `CommercialModels.kt` | نماذج `Product` و`SaleRecord` المشتركة بين الواجهة ومستودع السحابة. | `Product.stock` حقل توافق صحيح العدد؛ استخدم `stockPrecise` عند التعامل مع الرصيد الدقيق. |
+| `LocalStoreModels.kt` | نماذج التسويات والمصروفات المحلية، ونموذج وحدة البيع المحلية ومحللات وحدات المنتج. | لا تمثل هذه النماذج دفتر الأستاذ السحابي ولا تزامنًا تلقائيًا؛ لا تغير صيغة JSON المخزنة أو قواعد التحويل دون اختبارات ترحيل. |
+| `LocalStoreRepository.kt` | تحميل وحفظ المنتجات والمبيعات والتسويات والمصروفات المحلية في SharedPreferences مع عزل المفاتيح حسب المؤسسة عند توفرها. | يحافظ على أسماء المفاتيح وحقول JSON القديمة؛ لا يعني التخزين المحلي مزامنة سحابية أو دفترًا ماليًا معتمدًا. |
+
+اختبار عقد التخزين: `tests/test_local_store_repository_contract.py`.
+
+| `DashboardScreen.kt` | لوحة المتجر المحلية ومؤشرات المبيعات والمخزون. | تعرض البيانات المتاحة في وضع المتجر المحلي فقط؛ لا تستبدل لوحة المؤشرات السحابية. |
+| `LocalSalesScreen.kt` | شاشة المبيعات المحلية والفواتير المحفوظة على الجهاز. | لا تستخدم بياناتها لتأكيد عمليات البيع السحابية أو قيود الخادم. |
+| `LocalInventoryScreen.kt` | شاشة المخزون المحلي والبحث عن الأصناف. | دليل الأصناف العالمي وعروض المؤسسة ومخزونها السحابي تبقى في مساراتها المنفصلة. |
+| `StoreUiComponents.kt` | بطاقات المؤشرات والعناوين وصفوف المنتجات والمبيعات المشتركة بين الشاشات المحلية. | مكونات عرض فقط؛ قواعد المخزون والبيع لا توضع هنا. |
+
+اختبارات حدود الشاشات المحلية: `tests/test_local_commercial_screens_contract.py`.
+| `StoreUiTheme.kt` | ألوان واجهات المتجر المحلية المشتركة. | تعديل الألوان هنا ينعكس على الشاشات المحلية التي تستخدمها. |
+| `StoreUiFormatting.kt` | تنسيق المبالغ المحلية القديمة بوحدة الريال اليمني. | لا تستخدمه لتنسيق مبالغ Supabase الصغرى متعددة العملات؛ تلك لها قواعدها المستقلة. |
+
 ## 3. ملفات الاختبار والبناء
 
 - `app/src/test/java/com/adnanalhasani/commercial/SupplierInvoiceApplicationTest.kt`: اختبارات قواعد `SupplierInvoiceApplication`. نجاحها لا يثبت اختبار شبكة Supabase أو دورة شراء كاملة.
+- `app/src/main/java/com/adnanalhasani/commercial/CustomerPaymentRequestAmount.kt`: تحويل مبالغ طلبات الدفع بين الوحدات الكبرى والصغرى حسب العملة، مع رفض الدقة غير القابلة للتمثيل. اختبار السلوك: `app/src/test/java/com/adnanalhasani/commercial/CustomerPaymentRequestAmountTest.kt`.
+- `app/src/main/java/com/adnanalhasani/commercial/SupplierInvoicePriceVarianceCalculations.kt`: نماذج وحساب فرق سعر فاتورة المورد مقابل تكلفة أمر الشراء، مع تجميع دقيق وتقريب مرة واحدة. اختبار السلوك: `app/src/test/java/com/adnanalhasani/commercial/SupplierInvoicePriceVarianceReportTest.kt`.
+- `app/src/main/java/com/adnanalhasani/commercial/CostProfitCalculations.kt`: حساب صافي الإيراد وتكلفة البضاعة المباعة وتكلفة المرتجعات المعاد تخزينها والربح الإجمالي بدقة، مع منع التعويض الصفري عند غياب التكلفة. اختبار السلوك: `app/src/test/java/com/adnanalhasani/commercial/CostProfitReportTotalsTest.kt`.
 - `app/src/main/AndroidManifest.xml`: تعريف التطبيق وصلاحياته ونقطة الدخول. يجب مراجعة أي تغيير صلاحيات مع متطلبات التشغيل الفعلية.
 - `app/build.gradle.kts` و`build.gradle.kts` و`settings.gradle.kts`: إعداد بناء Android والاعتماديات والمشروعات.
 - `gradle.properties`: خصائص البناء. لا تضع أسرار الإنتاج فيه ولا تضمن أن متغيرات البناء وحدها تحمي المفاتيح.
-- `docs/architecture/README.md`, `module-boundaries.md`, and `refactoring-roadmap.md`: current modularization target, ownership rules, and execution status.\n- `docs/cloud-backed-screen-delivery.md`: سجل شرائح تسليم الشاشات السحابية وحدود التحقق.
+- `docs/architecture/README.md`, `module-boundaries.md`, and `refactoring-roadmap.md`: current modularization target, ownership rules, and execution status.
+- `docs/cloud-backed-screen-delivery.md`: سجل شرائح تسليم الشاشات السحابية وحدود التحقق.
 - `docs/commercial-documents-implementation-plan.md`: عقد سير المستندات التجاري والبوابات المتبقية.
 - `docs/warehouse-and-classification-architecture.md`: نموذج المستودعات ومواقع التخزين والتصنيفات وحالة الربط المخزني.
 
@@ -88,3 +123,87 @@
 ## 7. حدود هذه الوثيقة
 
 هذه خريطة مسؤوليات الملفات ومسارات العمل التجارية مبنية على أسماء الملفات والرموز والوثائق الحالية؛ ليست شرحًا لكل سطر من ملفات Kotlin، ولا تدقيقًا لكل ملفات المستودع البالغ عددها مئات الملفات. لم يتم تغيير سلوك التطبيق في هذه الوثيقة، ولم تُطبّق migrations على Supabase الحية، ولم تُنفّذ عملية بيع/شراء/استرداد حية كجزء من إنشاء هذا المرجع. يجب أن تظل هذه الحدود صريحة في تقارير الحالة.
+
+
+### Reports catalog extraction (2026-11-04)
+- `ReportsCatalog.kt` owns `ReportCatalogItem` and `buildReportsCatalog(cloudMode)`.
+- `ReportsCenterScreen.kt` consumes the catalog and retains report loading, filtering, calculation orchestration, presentation, and export integration.
+- Keep catalog labels, source descriptions, supported flags, and readiness notes together in `ReportsCatalog.kt`; do not duplicate the catalog in screen code.
+
+
+### Inventory report mapping extraction (2026-11-04)
+- `ReportInventoryLines.kt` owns the shared `ReportLine` presentation model and the pure mapping/state builders for location inventory and stock-movement-by-user reports.
+- `ReportsCenterScreen.kt` retains report selection, data loading, filtering, screen state, rendering, and export orchestration; it consumes the extracted internal report mapping functions.
+- `ReportCalculations.kt` remains the owner of reusable exact arithmetic and aggregation rules. The extraction did not change formulas, query scopes, quantity precision, or report labels.
+- Source-contract tests now read the new owner file for moved helpers; this is a source-location update, not a relaxation of the report assertions.
+
+
+### Financial report row assembly extraction (2026-11-04)
+- `ReportFinancialLines.kt` owns the pure row assembly for the ledger cash-flow report and the tax/discount summary, including the fail-closed source-error state.
+- `ReportsCenterScreen.kt` retains the report controls, data loading, report selection, and rendering; shared `reportMoney` and `reportDateMillis` helpers are exposed internally for the extracted mapper.
+- The extraction preserves posted-ledger source filtering, currency grouping, opening/closing balance logic, document-date windows, and the existing exact arithmetic/error handling.
+
+
+### Catalog activity hierarchy extraction (2026-11-04)
+- `CatalogActivityHierarchy.kt` owns the activity-directory node model and pure parent-chain/sector/business-level selector helpers.
+- `CatalogScreen.kt` retains activity-directory loading/parsing, selected activity state, menus, RPC calls, catalog discovery, editing, transfers, and invoice-purchase linking.
+- The extraction does not change activity codes, RPC parameters, default business-level selection, or the relationship between global catalog items and organization offerings.
+
+
+### Catalog domain model extraction (2026-11-04)
+- `CatalogModels.kt` owns the shared catalog data models: products, units, rulings, categories, branch/warehouse options, nearby-market rows, invoice-purchase mapping rows, directory units, and pending transfers.
+- `CatalogScreen.kt` continues to own Compose state, screen rendering, data loading, RPC calls, and user workflows; it consumes the extracted models without changing their fields or defaults.
+- The models are package-internal so existing callers and dialogs retain access. No database schema, RPC contract, or persisted data changed.
+- `tests/test_catalog_models_ownership.py` guards the single model owner and the screen's existing model contract.
+
+
+### Catalog transport consolidation (2026-11-04)
+- `CatalogCloudTransport.kt` retains the catalog call-site helpers but delegates both GET and POST requests to the shared `SupabaseClient`.
+- Catalog session reads/writes now use `commercialCloudSessionPreferences`; the duplicate encrypted-preference factory and direct `HttpURLConnection` implementations were removed from `CatalogScreen.kt`.
+- Catalog HTTP requests retain the 15-second connect timeout and 25-second read timeout through the shared client, with the shared actionable backend/network error handling. RPC names, paths, payloads, tokens, and query scopes are unchanged.
+
+- `app/src/test/java/com/adnanalhasani/commercial/ReportInventoryLinesTest.kt`: verifies location report quantity mapping, fractional stock movement formatting, date-window filtering, and fail-closed error states for the extracted inventory report mappers.
+
+
+### Report domain mapper extraction (2026-11-04)
+- `ReportDomainMappers.kt` owns pure conversions from cloud sale, return, supplier invoice, and supplier aging models into calculation/report inputs and presentation rows.
+- `ReportsCenterScreen.kt` continues to own Compose state, loading, report selection, date/filter orchestration, and rendering; it calls the extracted internal mappers.
+- The extraction preserves model fields, filtering predicates, row labels, money formatting calls, and calculation entry points. It does not change report formulas or data sources.
+- `tests/test_report_domain_mappers_ownership.py` guards the mapper owner and screen call sites; the broader report source contract now reads the mapper file.
+
+
+### Report formatting extraction (2026-11-04)
+- `ReportFormatting.kt` owns currency fraction-digit resolution, minor-unit/local money formatting, and ISO instant/date-only timestamp parsing.
+- `ReportsCenterScreen.kt` retains report filters and UI but calls these shared package-level helpers.
+- `ReportFormattingTest.kt` covers currency exponent handling (USD/JPY), local whole-unit formatting, instant/date-only parsing, and invalid currency fallback.
+
+
+### Report ledger classification extraction (2026-11-04)
+- `ReportLedgerClassification.kt` owns normalization of ledger account types, income-statement/balance-sheet classification, and debit/credit normal-balance aggregation.
+- `ReportsCenterScreen.kt` consumes the shared helpers while retaining the same account classification rules and statement row construction.
+- `ReportLedgerClassificationTest.kt` covers account-type aliases, contra-revenue and COGS detection, unknown account types, and debit/credit balance direction.
+
+
+### Catalog login panel extraction (2026-11-04)
+- `CatalogLoginPanel.kt` owns the login form presentation, validation enablement, and security guidance text.
+- `CatalogScreen.kt` retains authentication request orchestration, encrypted refresh-token persistence, session state, and feedback handling; the login panel receives callbacks and does not access credentials storage or network APIs.
+- `tests/test_catalog_models_ownership.py` guards the panel call site and the dedicated composable owner.
+
+
+### Local sale and product dialog extraction (2026-11-04)
+- `LocalProductDialogs.kt` owns `SaleEntryDialog`, `EditProductDialog`, and `AddProductDialog`.
+- The dialogs retain their existing parameters, local validation, unit selection, and callbacks. `MainActivity.kt` continues to invoke the same composables; no local storage contract or cloud operation was changed.
+- `tests/test_local_commercial_screens_contract.py` guards the single owner for these dialogs.
+
+
+### MainActivity and local operational screen extraction (2026-11-04)
+- `MainActivity.kt` now contains only the Android activity lifecycle, Compose theme setup, and shared cloud executor/handler declarations.
+- `LocalOperationalScreens.kt` owns the local More, expenses, legacy reports, cloud legacy reports, debts, expense-entry, and settlement UI.
+- `LocalProductDialogs.kt` owns local sale, add-product, and edit-product dialogs.
+- `tests/test_local_commercial_screens_contract.py` verifies the thin activity boundary and the single owner of each extracted composable.
+
+
+### Shared store palette extraction (2026-11-04)
+- `StorePalette.kt` owns the shared Compose colors used by the activity, local operational screens, product dialogs, and app shell.
+- Extracted the existing color values unchanged from the former activity file. This prevents extracted UI files from depending on private declarations in `MainActivity.kt`.
+- `tests/test_local_commercial_screens_contract.py` verifies the single palette owner.

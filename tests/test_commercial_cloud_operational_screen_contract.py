@@ -5,16 +5,20 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt"
+RETURNS_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReturnsRepository.kt"
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudOperationalScreen.kt"
-MAIN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt"
+MAIN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/StoreApp.kt"
+MAIN_ACTIVITY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt"
+MAIN_ACTIVITY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt"
 
 
 class CommercialCloudOperationalScreenContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.repository = REPOSITORY.read_text(encoding="utf-8")
+        cls.returns_repository = RETURNS_REPOSITORY.read_text(encoding="utf-8")
         cls.screen = SCREEN.read_text(encoding="utf-8")
-        cls.main = MAIN.read_text(encoding="utf-8")
+        cls.main = MAIN.read_text(encoding="utf-8") + MAIN_ACTIVITY.read_text(encoding="utf-8") + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/LocalOperationalScreens.kt").read_text(encoding="utf-8")
 
     def test_operational_queries_are_explicitly_allowlisted(self):
         function = self.repository.split(
@@ -86,10 +90,10 @@ class CommercialCloudOperationalScreenContractTests(unittest.TestCase):
             "commercial_sales_returns",
         ):
             with self.subTest(token=token):
-                self.assertIn(token, returns_screen + self.repository)
+                self.assertIn(token, returns_screen + self.returns_repository)
         self.assertIn('cloudOperationalPage == "returns" -> CommercialCloudReturnsScreen', self.main)
-        self.assertIn("commercial_sale_return_items", self.repository)
-        self.assertIn("commercial_sales!inner(receipt_number,activity_id,customer:commercial_customers(display_name))", self.repository)
+        self.assertIn("commercial_sale_return_items", self.returns_repository)
+        self.assertIn("commercial_sales!inner(receipt_number,activity_id,customer:commercial_customers(display_name))", self.returns_repository)
 
     def test_fractional_sale_returns_preserve_decimal_units_and_retry_safely(self):
         returns_screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudReturnsScreen.kt").read_text(encoding="utf-8")
@@ -97,13 +101,13 @@ class CommercialCloudOperationalScreenContractTests(unittest.TestCase):
         quantity_math = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialQuantityMath.kt").read_text(encoding="utf-8")
         self.assertIn("maxCommercialReturnQuantity", returns_screen + quantity_math)
         self.assertIn("parseCommercialCheckoutQuantity", returns_screen)
-        self.assertIn("quantities: Map<String, BigDecimal>", self.repository)
-        self.assertIn("commercial_cloud_pending_return_v1", self.repository)
-        self.assertIn("quantity.toPlainString()", self.repository)
+        self.assertIn("quantities: Map<String, BigDecimal>", self.returns_repository)
+        self.assertIn("commercial_cloud_pending_return_v1", self.returns_repository)
+        self.assertIn("quantity.toPlainString()", self.returns_repository)
         self.assertIn("v_qty <> trunc(v_qty)", migration)
         self.assertIn("fractional_base_return_quantity_not_supported", migration)
-        self.assertIn("quantity_in_stock_units", self.repository)
-        self.assertIn("sellingUnitFactor = sellingUnitFactor", self.repository)
+        self.assertIn("quantity_in_stock_units", self.returns_repository)
+        self.assertIn("sellingUnitFactor = sellingUnitFactor", self.returns_repository)
         self.assertIn("item.sellingUnitFactor", returns_screen)
         self.assertIn("v_sale_item.selling_unit_code IS DISTINCT FROM v_unit_code", migration)
         self.assertIn("v_sale_item.quantity_in_stock_units::numeric / v_sale_item.selling_quantity", migration)

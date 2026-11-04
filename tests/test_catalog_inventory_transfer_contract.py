@@ -72,7 +72,7 @@ def test_activity_profile_supports_supabase_phone_sms_otp():
 def test_catalog_inventory_creation_is_atomic_idempotent_and_explicitly_mapped():
     sql=(ROOT/"supabase/migrations/20261029060000_catalog_create_inventory_atomic.sql").read_text(encoding="utf-8")
     kt=(ROOT/"android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogScreen.kt").read_text(encoding="utf-8")
-    main=(ROOT/"android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt").read_text(encoding="utf-8")
+    main=(ROOT/"android-commercial/app/src/main/java/com/adnanalhasani/commercial/StoreApp.kt").read_text(encoding="utf-8")
     assert "commercial_create_inventory_item_with_category_and_unit" in sql
     assert "commercial_catalog_item_offerings" in sql
     assert "commercial_catalog_inventory_creation_requests" in sql

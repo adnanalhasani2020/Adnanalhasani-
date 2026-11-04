@@ -25,7 +25,7 @@ def test_activity_profile_sends_all_required_cloud_rpc_arguments():
     for argument in required:
         assert f'.put("{argument}"' in source
     assert 'payload.put("p_locations", locations)' in source
-    assert 'supabaseRequest("/rest/v1/rpc/commercial_create_activity_profile", payload, token)' in source
+    assert 'SupabaseClient.requestJson("/rest/v1/rpc/commercial_create_activity_profile", payload, token)' in source
 
 
 def test_activity_profile_persists_all_three_cloud_context_identifiers():

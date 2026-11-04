@@ -45,7 +45,7 @@ class CatalogItemActivityMappingContractTests(unittest.TestCase):
     def test_new_activity_onboarding_opens_catalog_with_saved_activity_context(self):
         profile = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ActivityProfileScreen.kt").read_text(encoding="utf-8")
         catalog = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogScreen.kt").read_text(encoding="utf-8")
-        main = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt").read_text(encoding="utf-8")
+        main = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/StoreApp.kt").read_text(encoding="utf-8")
         self.assertIn('putString("activity_code", activityCode.trim().uppercase())', profile)
         self.assertIn('Text("اختيار أصناف النشاط")', profile)
         self.assertIn('onCatalog = { showActivityProfile = false; cloudContextRevision++; showCatalog = true }', main)

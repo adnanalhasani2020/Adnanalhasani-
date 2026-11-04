@@ -4,12 +4,19 @@ Baseline inspected at commit `b15ce71cd0066a3fd2eecc8195338767bc6f19f3` on `fix/
 
 This document describes the existing code, then records where responsibility should live after refactoring. Target names are proposed destinations, not claims that those files already exist.
 
+## Extracted model ownership
+
+- `CommercialModels.kt` now owns the shared `Product` and `SaleRecord` models because both the cloud repository and Compose screens consume them.
+- `LocalStoreModels.kt` now owns local-only `SettlementRecord`, `ExpenseRecord`, and local sale-unit parsing helpers. The helper visibility is package-internal so the existing MainActivity screens can keep calling the same functions.
+- `LocalStoreRepository.kt` now owns the existing SharedPreferences keys, organization-scoped key selection, and JSON load/save routines for products, sales, settlements, and expenses. The JSON field names, preference file name, fallback behavior, and `.apply()` persistence semantics were preserved.
+- `DashboardScreen.kt`, `LocalSalesScreen.kt`, and `LocalInventoryScreen.kt` now own their respective local feature screens. `StoreUiComponents.kt` owns shared metric/header/product/sale rows; `StoreUiTheme.kt` and `StoreUiFormatting.kt` own the shared local UI palette and legacy currency formatter.
+
 ## Large mixed-responsibility files
 
 | Existing source | Observed responsibilities | Target ownership |
 |---|---|---|
-| `MainActivity.kt` | Activity entry, app composition, navigation/state, local product/sale/settlement/expense models and persistence, local screens/dialogs, cloud report entry | `app/`, `ui/navigation/`, `feature/dashboard/`, `data/local/`, and the matching feature packages |
-| `CommercialCloudRepository.kt` | HTTP transport/session, inventory, sales, customers, purchases, supplier invoices/payments, expenses, returns, receivables, customer portal, bookings, accounting reads, warehouse balances, payment requests | `core/network/`, `core/auth/`, and domain repositories under `data/repository/` |
+| `MainActivity.kt` | Activity entry, app composition, navigation/state, local screens/dialogs, cloud report entry | `app/`, `ui/navigation/`, `feature/dashboard/`, and the matching feature packages. Shared/local models now live in `CommercialModels.kt` and `LocalStoreModels.kt`; SharedPreferences persistence now lives in `LocalStoreRepository.kt`. |
+| `CommercialCloudRepository.kt` | Shared context/token/paging helpers, customer options, and allowlisted operational record reads | `SupabaseClient.kt` owns HTTP transport; `CatalogRepository.kt`, `MasterDataRepository.kt`, `InventoryRepository.kt`, `SalesRepository.kt`, `PurchaseRepository.kt`, `SupplierPaymentRepository.kt`, `ExpenseRepository.kt`, `ReturnsRepository.kt`, `CustomerPortalRepository.kt`, `CustomerAccountsRepository.kt`, and `AccountingRepository.kt` own extracted domains |
 | `ReportsCenterScreen.kt` | Report catalog, report data builders, filters, report UI, PDF printing, XLSX generation, accounting/report aggregation | `feature/reports/`, `domain/calculation/`, `core/export/` |
 | `CatalogScreen.kt` | Catalog search, market context, nearby discovery, price suggestions, category/unit/product creation, invoice-purchase linking, catalog transfers, ruling review | `feature/catalog/` plus catalog repository/data adapters |
 | `ReportCalculations.kt` | Pure calculation models and functions for profitability, statements, aging, daily sales, inventory and performance | Split by calculation domain under `domain/calculation/`; preserve formulas and tests |
@@ -86,3 +93,41 @@ The UI must not become the authority for tenant access, balances, prices, postin
 - Preserve local/cloud separation and fail-closed behavior.
 - Do not introduce a second source of truth for products, offerings, units, locations, balances, or ledger entries.
 - Do not relocate source files until source-contract tests and build configuration have been checked for path-sensitive assumptions.
+
+
+## Reports extraction progress — 2026-11-04
+
+- Completed: `ReportsCatalog.kt` owns the report catalog model and catalog builder.
+- Completed: `ReportInventoryLines.kt` owns the common report row model and pure inventory report mapping for location balances and stock movements by user.
+- Still in `ReportsCenterScreen.kt`: report data loading, filter state, report selection, financial/customer/supplier calculations orchestration, Compose rendering, and export integration.
+- Do not move calculation rules into Compose UI. Keep reusable calculations in `ReportCalculations.kt` or focused pure calculation files; keep PDF/XLSX/print rendering in `ReportExport.kt`.
+
+
+- `ReportFinancialLines.kt` owns pure row assembly for cash-flow and tax/discount summaries. It may consume the internal report date/money formatters but must not load data or own Compose state.
+
+
+- `CatalogActivityHierarchy.kt` owns the pure activity hierarchy model and selector helpers. `CatalogScreen.kt` remains the UI/data orchestration owner; do not move RPC calls or Compose state into the hierarchy helper.
+
+
+- `CatalogModels.kt` owns catalog-domain data structures shared by catalog UI/dialogs. `CatalogScreen.kt` owns screen state and workflow orchestration; `CatalogActivityHierarchy.kt` owns pure activity-tree selection helpers; `CatalogRepository.kt` owns catalog inventory/offering data access. Keep global catalog items, organization offerings, and local stock as distinct concepts.
+
+
+- `CatalogCloudTransport.kt` is a thin catalog adapter over the one shared `SupabaseClient`; it must not create a second HTTP stack or session preference store. Catalog calls keep their existing RPC names, payloads, tokens, and organization/location filters.
+
+
+- `ReportDomainMappers.kt` owns pure conversions and row projection between cloud document models, report calculation inputs, and `ReportLine` values. It must not load data, own Compose state, or introduce business formulas; those remain in the domain calculation files.
+
+
+- `ReportFormatting.kt` owns pure date/timestamp and currency display formatting. Report UI and export callers may reuse it; it does not load data or perform financial aggregation.
+
+
+- `ReportLedgerClassification.kt` owns pure ledger account classification and account-net aggregation. It does not fetch journal data, validate ledger balance, choose currencies, or render report rows.
+
+
+- `CatalogLoginPanel.kt` is presentation-only. Authentication requests, access/refresh token handling, encrypted preference writes, and session restoration remain in the catalog screen's workflow and shared session utilities.
+
+
+- `LocalProductDialogs.kt` owns presentation and form state for local sale/product dialogs. Persistence and parent navigation/state remain with the existing application workflow and `LocalStoreRepository`.
+
+
+- `MainActivity.kt` is limited to Android startup and application theme composition. Local operational screen rendering lives in `LocalOperationalScreens.kt`; local sale/product form dialogs live in `LocalProductDialogs.kt`. Shared app state and persistence remain in `StoreApp.kt` and `LocalStoreRepository.kt`.

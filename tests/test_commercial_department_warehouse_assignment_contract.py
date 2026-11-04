@@ -3,7 +3,7 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt"
+REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MasterDataRepository.kt"
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MasterDataScreen.kt"
 MIGRATION = ROOT / "supabase/migrations/20261024001000_commercial_warehouse_category_department_foundation.sql"
 
@@ -25,9 +25,7 @@ class DepartmentWarehouseAssignmentContractTests(unittest.TestCase):
         self.assertIn('organization_id=eq.$orgId', function)
 
     def test_assignment_writes_use_existing_table_and_tenant_scope(self):
-        function = self.repository.split("internal fun assignCommercialDepartmentToWarehouse", 1)[1].split(
-            "internal data class CommercialCloudStockAlert", 1
-        )[0]
+        function = self.repository.split("internal fun assignCommercialDepartmentToWarehouse", 1)[1]
         self.assertIn('.put("organization_id", orgId)', function)
         self.assertIn('.put("department_id", departmentId)', function)
         self.assertIn('.put("warehouse_id", warehouseId)', function)
@@ -47,7 +45,7 @@ class DepartmentWarehouseAssignmentContractTests(unittest.TestCase):
         self.assertNotIn("CREATE TABLE", self.repository)
         self.assertNotIn("commercial_inventory_balances", self.repository.split(
             "internal fun assignCommercialDepartmentToWarehouse", 1
-        )[1].split("internal data class CommercialCloudStockAlert", 1)[0])
+        )[1])
 
 
 if __name__ == "__main__":

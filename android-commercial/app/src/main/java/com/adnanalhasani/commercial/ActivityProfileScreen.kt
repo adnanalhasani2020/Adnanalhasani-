@@ -10,30 +10,18 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import org.json.JSONArray
 import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
 import java.time.LocalDate
 import java.util.UUID
 import java.util.concurrent.Executors
 
-internal fun profileSessionPreferences(context: Context) = EncryptedSharedPreferences.create(
-    context,
-    "ruh_catalog_auth_session",
-    MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
-    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-)
-
 internal fun hasSavedCommercialAuthSession(context: Context): Boolean =
-    runCatching { profileSessionPreferences(context).getString("refresh_token", null).orEmpty().isNotBlank() }.getOrDefault(false)
+    runCatching { commercialCloudSessionPreferences(context).getString("refresh_token", null).orEmpty().isNotBlank() }.getOrDefault(false)
 
 internal fun hasSavedCommercialCloudContext(context: Context): Boolean {
     val prefs = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
@@ -49,35 +37,6 @@ private data class BusinessActivityOption(
     val code: String, val nameAr: String, val nameEn: String, val pathAr: String, val defaultBusinessLevelCode: String
 )
 
-private fun supabaseRequest(path: String, payload: JSONObject, token: String? = null): JSONObject {
-    val base = BuildConfig.SUPABASE_URL.trimEnd('/')
-    val anon = BuildConfig.SUPABASE_ANON_KEY
-    require(base.startsWith("https://") && anon.isNotBlank()) {
-        "أضف SUPABASE_URL وSUPABASE_ANON_KEY في إعدادات بناء Android أولًا."
-    }
-    val connection = (URL("$base$path").openConnection() as HttpURLConnection).apply {
-        requestMethod = "POST"
-        connectTimeout = 15000
-        readTimeout = 20000
-        doOutput = true
-        setRequestProperty("apikey", anon)
-        setRequestProperty("Content-Type", "application/json")
-        setRequestProperty("Accept", "application/json")
-        if (token != null) setRequestProperty("Authorization", "Bearer $token")
-    }
-    return try {
-        connection.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
-        val stream = if (connection.responseCode in 200..299) connection.inputStream else connection.errorStream
-        val raw = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
-        if (connection.responseCode !in 200..299) {
-            val detail = runCatching { JSONObject(raw).optString("message") }.getOrDefault("")
-            throw IllegalStateException(detail.ifBlank { "تعذر إكمال الطلب إلى Supabase (HTTP ${connection.responseCode})." })
-        }
-        if (raw.isBlank()) JSONObject() else if (raw.trimStart().startsWith("{")) JSONObject(raw) else JSONObject().put("result", raw)
-    } finally {
-        connection.disconnect()
-    }
-}
 
 @Composable
 internal fun ActivityProfileScreen(
@@ -134,20 +93,20 @@ internal fun ActivityProfileScreen(
     var restoringSession by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        val savedRefresh = runCatching { profileSessionPreferences(context).getString("refresh_token", null).orEmpty() }.getOrDefault("")
+        val savedRefresh = runCatching { commercialCloudSessionPreferences(context).getString("refresh_token", null).orEmpty() }.getOrDefault("")
         if (savedRefresh.isBlank()) return@LaunchedEffect
         busy = true
         restoringSession = true
         profileIo.execute {
             val restored = runCatching {
-                val session = supabaseRequest(
+                val session = SupabaseClient.requestJson(
                     "/auth/v1/token?grant_type=refresh_token",
                     JSONObject().put("refresh_token", savedRefresh)
                 )
                 val token = session.optString("access_token")
                 val rotated = session.optString("refresh_token")
                 require(token.isNotBlank() && rotated.isNotBlank()) { "تعذر استعادة جلسة الحساب؛ سجّل الدخول من جديد." }
-                profileSessionPreferences(context).edit().putString("refresh_token", rotated).apply()
+                commercialCloudSessionPreferences(context).edit().putString("refresh_token", rotated).apply()
                 token
             }
             profileMain.post {
@@ -158,7 +117,7 @@ internal fun ActivityProfileScreen(
                     feedback = "تم استعادة جلسة حسابك."
                     if (hasSavedCommercialCloudContext(context)) onAuthenticated()
                 }.onFailure {
-                    runCatching { profileSessionPreferences(context).edit().remove("refresh_token").apply() }
+                    runCatching { commercialCloudSessionPreferences(context).edit().remove("refresh_token").apply() }
                     accessToken = null
                     feedback = "انتهت جلسة الحساب أو لم تعد صالحة. سجّل الدخول مرة أخرى."
                 }
@@ -184,7 +143,7 @@ internal fun ActivityProfileScreen(
         activityDirectoryLoaded = false
         profileIo.execute {
             val result = runCatching {
-                supabaseRequest("/rest/v1/rpc/commercial_list_business_activity_nodes", JSONObject(), token)
+                SupabaseClient.requestJson("/rest/v1/rpc/commercial_list_business_activity_nodes", JSONObject(), token)
             }
             profileMain.post {
                 result.onSuccess { response ->
@@ -221,7 +180,7 @@ internal fun ActivityProfileScreen(
     ) {
         if (showBackButton) TextButton(onClick = onBack) { Text("← رجوع إلى المتجر") }
         Text(if (restoringSession) "جارٍ التحقق من حسابك" else if (created) "تم إنشاء مشروعك التجاري" else if (accessToken == null) "مرحبًا بك في متجري" else "إنشاء مشروعك التجاري", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text(if (restoringSession) "نتحقق من جلسة حسابك قبل فتح بيانات المؤسسة." else if (accessToken == null) "سجّل الدخول أو أنشئ حسابًا جديدًا للبدء. بعد ذلك سنساعدك على إنشاء مشروعك وربطه بالسحابة." else "الخطوة التالية: أدخل بيانات نشاطك وموقعه ليُنشأ مشروعك في قاعدة البيانات السحابية."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(if (restoringSession) "نتحقق من جلسة حسابك قبل فتح بيانات المؤسسة." else if (accessToken == null) "سجّل الدخول أو أنشئ حسابًا جديدًا للبدء. بعد ذلك سنساعدك على إنشاء مشروعك وربطه بالسحابة." else "الخطوة التالية: أدخل بيانات نشاطك وموقعه ليُنشأ مشروعك في قاعدة البيانات السحابية.", color = MaterialTheme.colorScheme.onSurfaceVariant)
 
         if (restoringSession) {
             CircularProgressIndicator()
@@ -242,7 +201,7 @@ internal fun ActivityProfileScreen(
                             runRequest({
                                 val normalized = authPhone.trim()
                                 require(normalized.matches(Regex("^\\+[1-9][0-9]{7,14}$"))) { "أدخل رقم الهاتف بصيغة دولية صحيحة، مثل +967…" }
-                                supabaseRequest("/auth/v1/otp", JSONObject().put("phone", normalized).put("create_user", false).put("channel", "sms"))
+                                SupabaseClient.requestJson("/auth/v1/otp", JSONObject().put("phone", normalized).put("create_user", false).put("channel", "sms"))
                                 phoneOtpRequested = true
                                 "تم طلب رمز SMS. أدخل الرمز المرسل إلى الرقم نفسه."
                             }, { feedback = it })
@@ -256,11 +215,11 @@ internal fun ActivityProfileScreen(
                         onClick = {
                             runRequest({
                                 require(phoneOtp.length in 4..10) { "أدخل رمز التحقق كما وصلك." }
-                                val result = supabaseRequest("/auth/v1/verify", JSONObject().put("phone", authPhone.trim()).put("token", phoneOtp).put("type", "sms"))
+                                val result = SupabaseClient.requestJson("/auth/v1/verify", JSONObject().put("phone", authPhone.trim()).put("token", phoneOtp).put("type", "sms"))
                                 val token = result.optString("access_token")
                                 val refresh = result.optString("refresh_token")
                                 require(token.isNotBlank() && refresh.isNotBlank()) { "لم تُرجع خدمة المصادقة جلسة موثقة؛ تحقق من الرمز أو إعدادات Supabase Auth." }
-                                profileSessionPreferences(context).edit().putString("refresh_token", refresh).apply()
+                                commercialCloudSessionPreferences(context).edit().putString("refresh_token", refresh).apply()
                                 token
                             }, { token ->
                                 accessToken = token
@@ -284,7 +243,7 @@ internal fun ActivityProfileScreen(
                         val route = if (isRegister) "/auth/v1/signup" else "/auth/v1/token?grant_type=password"
                         val authPayload = JSONObject().put("email", email).put("password", password)
                         if (isRegister) authPayload.put("data", JSONObject().put("display_name", accountDisplayName.trim()))
-                        val result = supabaseRequest(route, authPayload)
+                        val result = SupabaseClient.requestJson(route, authPayload)
                         val session = result.optJSONObject("session") ?: result
                         val token = session.optString("access_token")
                         if (token.isBlank()) {
@@ -293,7 +252,7 @@ internal fun ActivityProfileScreen(
                         }
                         val refreshToken = session.optString("refresh_token")
                         require(refreshToken.isNotBlank()) { "لم تُرجع خدمة المصادقة رمز جلسة قابلًا للاستعادة؛ حاول تسجيل الدخول مرة أخرى." }
-                        profileSessionPreferences(context).edit().putString("refresh_token", refreshToken).apply()
+                        commercialCloudSessionPreferences(context).edit().putString("refresh_token", refreshToken).apply()
                         token
                     }, { token ->
                         accessToken = token
@@ -413,7 +372,7 @@ internal fun ActivityProfileScreen(
                             if (name.isNotBlank()) locations.put(JSONObject().put("name", name.trim()).put("location_type", branchTypes[index]).put("parent_index", branchParents[index]))
                         }
                         payload.put("p_locations", locations)
-                        val result = supabaseRequest("/rest/v1/rpc/commercial_create_activity_profile", payload, token)
+                        val result = SupabaseClient.requestJson("/rest/v1/rpc/commercial_create_activity_profile", payload, token)
                         val organizationId = result.optString("organization_id")
                         val activityId = result.optString("activity_id")
                         val locationId = result.optString("location_id")

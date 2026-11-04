@@ -2,12 +2,15 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MAIN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt"
+MAIN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/StoreApp.kt"
+OPERATIONAL = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/LocalOperationalScreens.kt"
+PRODUCT_DIALOGS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/LocalProductDialogs.kt"
+LOCAL_SCREENS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/DashboardScreen.kt"
 PROFILE = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ActivityProfileScreen.kt"
 
 
 def test_first_launch_requires_authentication_and_complete_project_context():
-    main = MAIN.read_text(encoding="utf-8")
+    main = MAIN.read_text(encoding="utf-8") + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt").read_text(encoding="utf-8") + OPERATIONAL.read_text(encoding="utf-8") + PRODUCT_DIALOGS.read_text(encoding="utf-8") + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/LocalOperationalScreens.kt").read_text(encoding="utf-8")
     profile = PROFILE.read_text(encoding="utf-8")
     assert "restoringSession = true" in profile
     assert "CircularProgressIndicator()" in profile
@@ -21,7 +24,7 @@ def test_first_launch_requires_authentication_and_complete_project_context():
 
 
 def test_project_creation_returns_to_the_cloud_dashboard_and_refreshes_context():
-    main = MAIN.read_text(encoding="utf-8")
+    main = MAIN.read_text(encoding="utf-8") + OPERATIONAL.read_text(encoding="utf-8") + PRODUCT_DIALOGS.read_text(encoding="utf-8")
     profile = PROFILE.read_text(encoding="utf-8")
     assert "onProfileCreated = {" in main
     assert "onAuthenticated = {" in main
@@ -43,10 +46,10 @@ def test_existing_auth_session_is_restored_before_project_setup():
 
 
 def test_first_run_and_navigation_guidance_are_available_without_removing_features():
-    main = MAIN.read_text(encoding="utf-8")
+    main = MAIN.read_text(encoding="utf-8") + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt").read_text(encoding="utf-8") + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/LocalOperationalScreens.kt").read_text(encoding="utf-8")
     assert "إخفاء التلميحات" in main
-    assert "الانتقال إلى إضافة الأصناف" in main
-    assert "تسجيل أول عملية بيع" in main
+    assert "الانتقال إلى إضافة الأصناف" in LOCAL_SCREENS.read_text(encoding="utf-8")
+    assert "تسجيل أول عملية بيع" in LOCAL_SCREENS.read_text(encoding="utf-8")
     assert "ReportsCenterScreen" in main
     assert "CommercialCloudPurchasesScreen" in main
     assert "الأصناف والمخزون والمشتريات" in main
