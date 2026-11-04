@@ -8,8 +8,8 @@ import androidx.compose.runtime.mutableStateOf
 /**
  * Session-only state for catalog branch selection and nearby-market discovery.
  *
- * Network requests, location permission handling, and business actions remain
- * owned by the catalog workflow; this class only owns the corresponding UI state.
+ * Network requests remain owned by catalog workflows, while foreground location
+ * permission handling is isolated in the device-location controller.
  */
 internal class CatalogMarketUiState {
     var marketBranches by mutableStateOf<List<CatalogBranchOption>>(emptyList())
