@@ -204,3 +204,11 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 - Kept the seven existing catalog directory GET/RPC calls, locale selection, initial activity/sector inference, screen state updates, user feedback, and subsequent market-context loading in `CatalogScreen.kt`.
 - Added `CatalogDirectoryMapperTest.kt` for translations, null/default fields, activity-node filtering, local-unit normalization, empty optional collections, and malformed required data.
 - The response keys and domain model constructors remain unchanged; no RPC, SQL, unit conversion, or catalog-selection behavior was intentionally changed.
+
+
+## 2026-11-04 — Catalog workflow response mapping extraction
+
+- Extracted invoice-purchase request and pending catalog-transfer JSON mapping into `CatalogWorkflowMappers.kt`.
+- Kept both existing REST request URLs, organization filters, sorting, limits, action callbacks, feedback, and refresh behavior in `CatalogScreen.kt`.
+- Added `CatalogWorkflowMappersTest.kt` for request field mapping, nullable purchase-order references, transfer fields, and empty responses.
+- Added a source-ownership guard. No RPC/REST contract, status transition, transfer action, or invoice workflow behavior was intentionally changed.
