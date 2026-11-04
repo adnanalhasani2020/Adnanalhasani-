@@ -230,3 +230,9 @@ The catalog screen owns interaction and request orchestration. JSON-to-domain ma
 
 
 - `ReportsFilterSection.kt` owns only report filter controls. It does not apply filters or widen report queries; the screen/report row pipeline remains responsible for filtering and ledger account scoping.
+
+
+### Reports center coordinator boundary — 2026-11-04
+- `ReportsCenterScreen.kt` is the Compose composition root and event coordinator; it no longer owns report source loading, validation/calculation orchestration, report row construction, or document export implementation.
+- `ReportsCenterData.kt` owns date/source validation, calculation orchestration, selected report dispatch, selected-row filtering, and summary totals. It is UI-free apart from Compose `remember` lifecycle.
+- `ReportsCloudData.kt` owns cloud projection loading; `ReportsCenterUiState.kt` owns interactive state; `ReportsPeriodControls.kt`, `ReportsFilterSection.kt`, `ReportsCatalogSection.kt`, and `ReportsResultSection.kt` own UI sections; report-family row files own row mapping; export launchers/renderers remain separate.
