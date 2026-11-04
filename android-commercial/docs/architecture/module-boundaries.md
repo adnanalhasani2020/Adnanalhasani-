@@ -119,3 +119,6 @@ The UI must not become the authority for tenant access, balances, prices, postin
 
 
 - `ReportFormatting.kt` owns pure date/timestamp and currency display formatting. Report UI and export callers may reuse it; it does not load data or perform financial aggregation.
+
+
+- `ReportLedgerClassification.kt` owns pure ledger account classification and account-net aggregation. It does not fetch journal data, validate ledger balance, choose currencies, or render report rows.
