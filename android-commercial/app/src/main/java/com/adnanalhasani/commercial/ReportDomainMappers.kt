@@ -206,3 +206,40 @@ internal fun List<CommercialCloudPurchaseDocument>.toSupplierPurchaseInvoiceInpu
             )
         }
     }
+
+
+/** Selects non-cancelled supplier invoices; retained as the shared source for validation and calculations. */
+internal fun List<CommercialCloudPurchaseDocument>.activeSupplierInvoiceCandidates():
+    List<Pair<CommercialCloudPurchaseDocument, CommercialCloudSupplierInvoiceSummary>> =
+    flatMap { purchase ->
+        purchase.supplierInvoices.filter { invoice ->
+            invoice.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed")
+        }.map { invoice -> purchase to invoice }
+    }
+
+/** Selects active supplier obligations from the already filtered invoice candidates. */
+internal fun List<Pair<CommercialCloudPurchaseDocument, CommercialCloudSupplierInvoiceSummary>>.activeSupplierObligationCandidates():
+    List<Pair<CommercialCloudPurchaseDocument, CommercialCloudSupplierInvoiceSummary>> =
+    filter { (_, invoice) ->
+        invoice.obligation != null &&
+            invoice.obligation.state.lowercase(Locale.ROOT) !in setOf("cancelled", "canceled", "void", "reversed")
+    }
+
+/** Maps active obligations recorded before the selected period end to calculation inputs. */
+internal fun List<Pair<CommercialCloudPurchaseDocument, CommercialCloudSupplierInvoiceSummary>>.toSupplierObligationInputs(
+    endExclusive: Long
+): List<SupplierObligationInput> =
+    mapNotNull { (purchase, invoice) ->
+        val timestamp = reportDateMillis(invoice.recordedAt) ?: return@mapNotNull null
+        if (timestamp >= endExclusive) return@mapNotNull null
+        val obligation = invoice.obligation ?: return@mapNotNull null
+        SupplierObligationInput(
+            supplierId = purchase.supplierId,
+            supplierName = purchase.supplierName.ifBlank { "مورد غير محدد" },
+            purchaseOrderCurrencyCode = purchase.currencyCode,
+            invoiceCurrencyCode = invoice.currencyCode,
+            obligationCurrencyCode = obligation.currencyCode,
+            amountDueMinor = obligation.amountDueMinor,
+            amountPaidMinor = obligation.amountPaidMinor
+        )
+    }
