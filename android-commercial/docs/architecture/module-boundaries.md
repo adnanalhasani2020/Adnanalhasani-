@@ -110,3 +110,6 @@ The UI must not become the authority for tenant access, balances, prices, postin
 
 
 - `CatalogModels.kt` owns catalog-domain data structures shared by catalog UI/dialogs. `CatalogScreen.kt` owns screen state and workflow orchestration; `CatalogActivityHierarchy.kt` owns pure activity-tree selection helpers; `CatalogRepository.kt` owns catalog inventory/offering data access. Keep global catalog items, organization offerings, and local stock as distinct concepts.
+
+
+- `CatalogCloudTransport.kt` is a thin catalog adapter over the one shared `SupabaseClient`; it must not create a second HTTP stack or session preference store. Catalog calls keep their existing RPC names, payloads, tokens, and organization/location filters.
