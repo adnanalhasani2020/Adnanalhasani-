@@ -296,3 +296,10 @@ The catalog screen owns interaction and request orchestration. JSON-to-domain ma
 - `ReportDomainMappers.kt` owns the shared supplier invoice/payment movement projection consumed by both validation and row assembly.
 - `ReportSupplierValidation.kt` preflights unrepresentable payment negation, opening movement totals, and selected-period running balances with exact arithmetic. `ReportSupplierRows.kt` uses the same projected movements and exact opening aggregation.
 - Existing purchase-source then supplier-payment-source error precedence and supplier-name filtering are retained.
+
+
+### Ledger report arithmetic exactness (2026-11-05)
+
+- `ReportLedgerClassification.kt` computes per-account net balances with exact debit/credit subtraction and exact aggregation.
+- `ReportLedgerRows.kt` uses exact arithmetic for income statement detail/net profit, balance-sheet equation, trial-balance debit/credit totals, and ledger-line net amounts.
+- `ReportsCenterData.kt` preflights and caches the selected ledger-row result; arithmetic overflow is routed as a report-specific error and the failed row builder is not invoked a second time.
