@@ -295,3 +295,9 @@
 - `ReportPartyStatementRows.kt` owns row assembly for the full customer control-account statement, supplier control-account statement, and operational customer statement.
 - It consumes loaded party-account links, control-account mappings, posted ledger lines, sales/purchase projections, and date/name filters. It does not fetch data or mutate receivables/payables.
 - The extraction preserves account-role/currency scoping, posted-ledger date ordering, opening/period/closing balances, exact amount summation, and refund-aware customer movement construction.
+
+
+### Sales report row assembly extraction (2026-11-04)
+- `ReportSalesRows.kt` owns row assembly for sales summaries, invoice details/lines, sales by item/customer/payment state, discounts/tax, average invoice value, and period comparison.
+- `ReportsCenterScreen.kt` delegates those selections to the sales row builder using the existing local/cloud projections and validated period boundaries.
+- Completed-sale filters, cloud/local source separation, invoice line snapshots, currency grouping, and equal-duration comparison windows are preserved.
