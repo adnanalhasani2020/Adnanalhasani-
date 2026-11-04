@@ -393,3 +393,8 @@
 ### Report calculation input mapping (2026-11-05)
 - `ReportDomainMappers.kt` owns cloud-to-calculation input projections for item profitability, customer collections, user sales performance, daily sales trends, and supplier purchase summaries.
 - `ReportsCenterData.kt` retains calculation lifecycle/orchestration and calls those pure mappers. Calculation formulas and report row builders remain in their dedicated files.
+
+
+### Supplier obligation input mapping (2026-11-05)
+- `ReportDomainMappers.kt` owns active supplier invoice/obligation candidate selection and mapping into obligation calculation inputs.
+- `ReportsCenterData.kt` retains report validation/calculate orchestration and reuses the shared active-invoice candidates for invoice-detail validation.
