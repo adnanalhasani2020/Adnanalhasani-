@@ -298,12 +298,14 @@ internal fun rememberReportsCenterData(
         cloudReturns = cloudReturns,
         calculationError = itemProfitabilityCalculation.exceptionOrNull()?.message.orEmpty()
     )
+    var salesRowsArithmeticError = ""
     val sourceErrorForReport: (String) -> String = { title ->
         when (title) {
             "ملخص المبيعات حسب الفترة", "تفاصيل فواتير المبيعات", "تفاصيل بنود فواتير المبيعات",
             "المبيعات حسب الصنف", "الخصومات على فواتير المبيعات", "الضرائب المسجلة على المبيعات",
-            "لوحة المؤشرات", "المبيعات حسب العميل", "المبيعات حسب حالة السداد", "متوسط قيمة الفاتورة", "مقارنة الفترات",
-            "أرصدة العملاء وكشف الحساب" -> customerOperationalStatementError
+            "لوحة المؤشرات", "المبيعات حسب العميل", "المبيعات حسب حالة السداد", "متوسط قيمة الفاتورة", "مقارنة الفترات", "مقارنة فترتين",
+            "أرصدة العملاء وكشف الحساب" -> customerOperationalStatementError.ifBlank { salesRowsArithmeticError }
+            "المبيعات النقدية والآجلة" -> salesRowsArithmeticError
             "مرتجعات المبيعات وحالة التسوية" -> returnsLoadError
             "فواتير الشراء والمستحقات المسجلة" -> supplierInvoiceDetailError
             "المشتريات حسب المورد" -> supplierPurchaseSummaryError
@@ -371,6 +373,26 @@ internal fun rememberReportsCenterData(
     val inPeriodExpenses = if (cloudMode) emptyList() else expenses.filter { it.timestamp >= startMillis && it.timestamp < endExclusive }
     val salesByCurrency = inPeriodSales.groupBy { it.currencyCode.ifBlank { "غير محددة" } }.toSortedMap()
     val stockLow = products.filter { it.stock <= (it.reorderPoint.takeIf { n -> n >= 0 } ?: 9) }
+    val salesRowsCalculation = runCatching {
+        buildSalesReportRows(
+            selectedReport = selectedReport,
+            cloudMode = cloudMode,
+            inPeriodCloudSalesDocuments = inPeriodCloudSalesDocuments,
+            inPeriodSales = inPeriodSales,
+            cloudSalesDocuments = cloudSalesDocuments,
+            sales = sales,
+            startMillis = startMillis,
+            endExclusive = endExclusive,
+            startText = startText,
+            endText = endText,
+            startDate = startDate,
+            endDate = endDate,
+            zone = zone
+        )
+    }
+    if (salesRowsCalculation.isFailure) {
+        salesRowsArithmeticError = "تجاوزت مجاميع تقرير المبيعات نطاق الأرقام الدقيق؛ تم حجب التقرير."
+    }
     val selectedRowsUnvalidated = buildInventoryReportRows(
         selectedReport = selectedReport,
         cloudMode = cloudMode,
@@ -440,21 +462,7 @@ internal fun rememberReportsCenterData(
         startText = startText,
         endText = endText,
         supplierObligationInputs = supplierObligationInputs
-    ) ?: buildSalesReportRows(
-        selectedReport = selectedReport,
-        cloudMode = cloudMode,
-        inPeriodCloudSalesDocuments = inPeriodCloudSalesDocuments,
-        inPeriodSales = inPeriodSales,
-        cloudSalesDocuments = cloudSalesDocuments,
-        sales = sales,
-        startMillis = startMillis,
-        endExclusive = endExclusive,
-        startText = startText,
-        endText = endText,
-        startDate = startDate,
-        endDate = endDate,
-        zone = zone
-    ) ?: when (selectedReport) {
+    ) ?: salesRowsCalculation.getOrNull() ?: when (selectedReport) {
         "أداء المبيعات حسب المستخدم" -> buildUserSalesPerformanceRows(userSalesPerformanceCalculation, userSalesPerformanceError)
         "اتجاه المبيعات اليومي" -> buildDailySalesTrendRows(dailySalesTrendCalculation, dailySalesTrendError)
         "عمر أرصدة العملاء حسب تاريخ الفاتورة" -> buildCustomerReceivableAgingRows(customerReceivableAgingReport, customerReceivableAgingError, today.toString())

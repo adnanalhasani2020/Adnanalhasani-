@@ -21,10 +21,10 @@ internal fun buildSalesReportRows(
     zone: ZoneId
 ): List<ReportLine>? = when (selectedReport) {
         "ملخص المبيعات حسب الفترة" -> if (cloudMode) inPeriodCloudSalesDocuments.groupBy { it.currencyCode.ifBlank { "غير محددة" } }.map { (currency, rows) ->
-            val total = rows.sumOf { it.totalMinor }
+            val total = sumReportAmountsExactly(rows.map { it.totalMinor })
             ReportLine("${startText} — ${endText}", "ملخص", "إجمالي المبيعات المكتملة", total, currency, "${rows.size} فاتورة · متوسط ${reportMoney(if (rows.isEmpty()) 0L else total / rows.size, currency, true)}")
         } else inPeriodSales.groupBy { it.currencyCode.ifBlank { "غير محددة" } }.map { (currency, rows) ->
-            ReportLine("${startText} — ${endText}", "ملخص", "إجمالي المبيعات المكتملة", rows.sumOf { it.total.toLong() }, currency, "${rows.size} فاتورة · متوسط ${if (rows.isEmpty()) 0L else rows.sumOf { it.total.toLong() } / rows.size}")
+            ReportLine("${startText} — ${endText}", "ملخص", "إجمالي المبيعات المكتملة", sumReportAmountsExactly(rows.map { it.total.toLong() }), currency, "${rows.size} فاتورة · متوسط ${if (rows.isEmpty()) 0L else sumReportAmountsExactly(rows.map { it.total.toLong() }) / rows.size}")
         }
         "تفاصيل فواتير المبيعات" -> if (cloudMode) cloudSalesDocuments.filter { doc ->
             val timestamp = reportDateMillis(doc.createdAt)
@@ -48,11 +48,11 @@ internal fun buildSalesReportRows(
             doc.saleStatus.equals("completed", true) && (reportDateMillis(doc.createdAt)?.let { it >= startMillis && it < endExclusive } == true)
         }.flatMap { doc -> doc.lines.map { line -> Triple(line.productName, doc.currencyCode, line) } }
             .groupBy { it.first to it.second }.map { (key, rows) ->
-                ReportLine("-", "-", key.first, rows.sumOf { it.third.lineTotalMinor }, key.second,
-                    "${rows.sumOf { it.third.quantity.toBigDecimalOrNull() ?: java.math.BigDecimal.ZERO }} وحدة · بنود فعلية")
+                ReportLine("-", "-", key.first, sumReportAmountsExactly(rows.map { it.third.lineTotalMinor }), key.second,
+                    "${rows.fold(java.math.BigDecimal.ZERO) { total, row -> total.add(row.third.quantity.toBigDecimalOrNull() ?: java.math.BigDecimal.ZERO) }} وحدة · بنود فعلية")
             }.sortedByDescending { it.amount }
         else inPeriodSales.groupBy { it.product to it.currencyCode }.map { (key, rows) ->
-            ReportLine("-", "-", key.first, rows.sumOf { it.total.toLong() }, key.second, "${rows.sumOf { it.quantity }} وحدة · ${rows.size} فاتورة")
+            ReportLine("-", "-", key.first, sumReportAmountsExactly(rows.map { it.total.toLong() }), key.second, "${sumReportCountsExactly(rows.map { it.quantity })} وحدة · ${rows.size} فاتورة")
         }.sortedByDescending { it.amount }
         "الخصومات على فواتير المبيعات" -> cloudSalesDocuments.filter { doc ->
             doc.saleStatus.equals("completed", true) && (reportDateMillis(doc.createdAt)?.let { it >= startMillis && it < endExclusive } == true)
@@ -65,21 +65,21 @@ internal fun buildSalesReportRows(
             ReportLine(doc.createdAt.take(10), "فاتورة #${doc.receiptNumber}", doc.customerName, doc.taxMinor, doc.currencyCode, "ضريبة مسجلة على الفاتورة")
         }.sortedByDescending { it.date }
         "المبيعات حسب العميل" -> if (cloudMode) inPeriodCloudSalesDocuments.groupBy { it.customerName.ifBlank { "عميل غير محدد" } to it.currencyCode }.map { (key, rows) ->
-            ReportLine("-", "-", key.first, rows.sumOf { it.totalMinor }, key.second, "${rows.size} فاتورة")
+            ReportLine("-", "-", key.first, sumReportAmountsExactly(rows.map { it.totalMinor }), key.second, "${rows.size} فاتورة")
         }.sortedByDescending { it.amount } else inPeriodSales.groupBy { it.customer.ifBlank { "عميل غير محدد" } to it.currencyCode }.map { (key, rows) ->
-            ReportLine("-", "-", key.first, rows.sumOf { it.total.toLong() }, key.second, "${rows.size} فاتورة")
+            ReportLine("-", "-", key.first, sumReportAmountsExactly(rows.map { it.total.toLong() }), key.second, "${rows.size} فاتورة")
         }.sortedByDescending { it.amount }
         "المبيعات حسب حالة السداد" -> inPeriodCloudSalesDocuments.groupBy { it.paymentStatus.ifBlank { "غير محدد" } to it.currencyCode }.map { (key, rows) ->
-            ReportLine("-", "-", key.first, rows.sumOf { it.totalMinor }, key.second, "${rows.size} فاتورة")
+            ReportLine("-", "-", key.first, sumReportAmountsExactly(rows.map { it.totalMinor }), key.second, "${rows.size} فاتورة")
         }.sortedByDescending { it.amount }
         "المبيعات النقدية والآجلة" -> inPeriodSales.groupBy { (if (it.credit) "آجل" else "نقدي") to it.currencyCode }.map { (key, rows) ->
-            ReportLine("-", "-", key.first, rows.sumOf { it.total.toLong() }, key.second, "${rows.size} فاتورة")
+            ReportLine("-", "-", key.first, sumReportAmountsExactly(rows.map { it.total.toLong() }), key.second, "${rows.size} فاتورة")
         }.sortedByDescending { it.amount }
         "متوسط قيمة الفاتورة" -> if (cloudMode) inPeriodCloudSalesDocuments.groupBy { it.currencyCode.ifBlank { "غير محددة" } }.map { (currency, rows) ->
-            val total = rows.sumOf { it.totalMinor }
+            val total = sumReportAmountsExactly(rows.map { it.totalMinor })
             ReportLine("-", "-", "متوسط قيمة الفاتورة", if (rows.isEmpty()) 0L else total / rows.size, currency, "${rows.size} فاتورة · الإجمالي ${reportMoney(total, currency, true)}")
         } else inPeriodSales.groupBy { it.currencyCode.ifBlank { "غير محددة" } }.map { (currency, rows) ->
-            ReportLine("-", "-", "متوسط قيمة الفاتورة", if (rows.isEmpty()) 0L else rows.sumOf { it.total.toLong() } / rows.size, currency, "${rows.size} فاتورة · إجمالي ${rows.sumOf { it.total.toLong() }}")
+            ReportLine("-", "-", "متوسط قيمة الفاتورة", if (rows.isEmpty()) 0L else sumReportAmountsExactly(rows.map { it.total.toLong() }) / rows.size, currency, "${rows.size} فاتورة · إجمالي ${sumReportAmountsExactly(rows.map { it.total.toLong() })}")
         }
         "مقارنة فترتين", "مقارنة الفترات" -> {
             val days = if (startDate != null && endDate != null) java.time.temporal.ChronoUnit.DAYS.between(startDate, endDate).toInt() + 1 else 0
@@ -91,10 +91,10 @@ internal fun buildSalesReportRows(
                         (reportDateMillis(doc.createdAt)?.let { it >= previousStart.atStartOfDay(zone).toInstant().toEpochMilli() && it < previousEnd.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli() } == true)
                 } else emptyList()
                 (inPeriodCloudSalesDocuments.map { it.currencyCode.ifBlank { "غير محددة" } } + previousCloudRows.map { it.currencyCode.ifBlank { "غير محددة" } }).distinct().sorted().map { currency ->
-                    val currentTotal = inPeriodCloudSalesDocuments.filter { it.currencyCode.ifBlank { "غير محددة" } == currency }.sumOf { it.totalMinor }
-                    val previousTotal = previousCloudRows.filter { it.currencyCode.ifBlank { "غير محددة" } == currency }.sumOf { it.totalMinor }
+                    val currentTotal = sumReportAmountsExactly(inPeriodCloudSalesDocuments.filter { it.currencyCode.ifBlank { "غير محددة" } == currency }.map { it.totalMinor })
+                    val previousTotal = sumReportAmountsExactly(previousCloudRows.filter { it.currencyCode.ifBlank { "غير محددة" } == currency }.map { it.totalMinor })
                     ReportLine("${startText} — ${endText}", "مقارنة", "مبيعات الفترة الحالية", currentTotal, currency,
-                        "الفترة السابقة: ${reportMoney(previousTotal, currency, true)} · الفرق: ${reportMoney(currentTotal - previousTotal, currency, true)}")
+                        "الفترة السابقة: ${reportMoney(previousTotal, currency, true)} · الفرق: ${reportMoney(Math.subtractExact(currentTotal, previousTotal), currency, true)}")
                 }
             } else {
                 val previousRows = if (previousStart != null && previousEnd != null) sales.filter {
@@ -103,9 +103,9 @@ internal fun buildSalesReportRows(
                         it.status.equals("completed", true)
                 } else emptyList()
                 (inPeriodSales.map { it.currencyCode.ifBlank { "غير محددة" } } + previousRows.map { it.currencyCode.ifBlank { "غير محددة" } }).distinct().sorted().map { currency ->
-                    val currentTotal = inPeriodSales.filter { it.currencyCode.ifBlank { "غير محددة" } == currency }.sumOf { it.total.toLong() }
-                    val previousTotal = previousRows.filter { it.currencyCode.ifBlank { "غير محددة" } == currency }.sumOf { it.total.toLong() }
-                    ReportLine("${startText} — ${endText}", "مقارنة", "مبيعات الفترة الحالية", currentTotal, currency, "الفترة السابقة: $previousTotal · الفرق: ${currentTotal - previousTotal}")
+                    val currentTotal = sumReportAmountsExactly(inPeriodSales.filter { it.currencyCode.ifBlank { "غير محددة" } == currency }.map { it.total.toLong() })
+                    val previousTotal = sumReportAmountsExactly(previousRows.filter { it.currencyCode.ifBlank { "غير محددة" } == currency }.map { it.total.toLong() })
+                    ReportLine("${startText} — ${endText}", "مقارنة", "مبيعات الفترة الحالية", currentTotal, currency, "الفترة السابقة: $previousTotal · الفرق: ${Math.subtractExact(currentTotal, previousTotal)}")
                 }
             }
         }
