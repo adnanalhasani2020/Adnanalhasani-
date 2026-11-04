@@ -32,3 +32,11 @@ def test_local_screens_share_components_without_moving_business_rules_into_ui():
     assert "formatCommercialStockQuantity(" in components
     assert "calculateCostProfitReportTotals" not in components
     assert "calculateSupplierInvoicePriceVariance" not in components
+
+
+def test_local_sale_and_product_dialogs_have_a_dedicated_owner():
+    main = MAIN.read_text(encoding="utf-8")
+    dialogs = (ANDROID / "LocalProductDialogs.kt").read_text(encoding="utf-8")
+    for name in ("SaleEntryDialog", "EditProductDialog", "AddProductDialog"):
+        assert f"internal fun {name}(" in dialogs
+        assert f"internal fun {name}(" not in main
