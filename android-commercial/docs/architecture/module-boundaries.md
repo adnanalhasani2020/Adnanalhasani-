@@ -215,3 +215,6 @@ The catalog screen owns interaction and request orchestration. JSON-to-domain ma
 
 
 - `ReportOperationalRows.kt` owns display-row assembly for payment, settlement, return, and expense reports. It is read-only and must not initiate collections, refunds, expense cancellation, or journal posting.
+
+
+- `ReportDerivedRows.kt` maps existing domain calculation/report states into `ReportLine` rows. It does not calculate totals, load source data, or relax validation errors.
