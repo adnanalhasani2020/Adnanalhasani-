@@ -199,30 +199,31 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         onFeedback = { feedback = it }
     )
 
-    fun loadCatalog(reset: Boolean = true) {
-        val active = token ?: return
-        val orgId = org() ?: run { feedback = "أدخل معرّف المؤسسة UUID أولًا."; return }
-        if (!reset && (!catalogHasMore || busy || catalogPageLoadFailed)) return
-        catalogPageLoadFailed = false
-        val requestedOffset = if (reset) 0 else catalogOffset
-        if (reset) { catalogOffset = 0; catalogHasMore = true; items = emptyList() }
-        request({
-            val payload = JSONObject().put("p_organization_id",orgId)
-                .put("p_activity_node_code",selectedActivityCode.trim().uppercase().ifBlank { JSONObject.NULL })
-                .put("p_sector_code",sector.trim().ifBlank { JSONObject.NULL })
-                .put("p_business_level_code",businessLevel.trim().ifBlank { JSONObject.NULL })
-                .put("p_country_code",country.trim().ifBlank { JSONObject.NULL })
-                .put("p_region_code",region.trim().ifBlank { JSONObject.NULL }).put("p_city",city.trim().ifBlank { JSONObject.NULL })
-                 .put("p_locale_code",locale.trim().lowercase().ifBlank { "ar" }).put("p_query",query.trim().ifBlank { JSONObject.NULL }).put("p_limit",100).put("p_offset",requestedOffset)
-            catalogHttp("/rest/v1/rpc/commercial_catalog_discover_products_page",payload,active)
-        }, { raw ->
-            val pageItems=parseCatalogProducts(raw, signedInUserId)
-            items = if (reset) pageItems.distinctBy { it.id } else (items + pageItems).distinctBy { it.id }
-            catalogOffset = requestedOffset + pageItems.size
-            catalogHasMore = pageItems.size == 100
-            feedback = if (catalogHasMore) "تم تحميل ${items.size} صنفًا؛ اسحب إلى الأسفل لتحميل المزيد." else "اكتمل تحميل ${items.size} صنفًا مطابقًا."
-        }, { catalogPageLoadFailed = true })
-    }
+    val browseWorkflow = CatalogBrowseWorkflow(
+        accessToken = { token },
+        organizationId = { org() },
+        activityCode = { selectedActivityCode },
+        sector = { sector },
+        businessLevel = { businessLevel },
+        country = { country },
+        region = { region },
+        city = { city },
+        locale = { locale },
+        query = { query },
+        signedInUserId = { signedInUserId },
+        currentItems = { items },
+        currentOffset = { catalogOffset },
+        hasMore = { catalogHasMore },
+        pageLoadFailed = { catalogPageLoadFailed },
+        busy = { busy },
+        setItems = { items = it },
+        setOffset = { catalogOffset = it },
+        setHasMore = { catalogHasMore = it },
+        setPageLoadFailed = { catalogPageLoadFailed = it },
+        request = { action, onSuccess, onFailure -> request(action, onSuccess, onFailure) },
+        onFeedback = { feedback = it }
+    )
+    fun loadCatalog(reset: Boolean = true) = browseWorkflow.loadCatalog(reset)
     LaunchedEffect(section, items.size, catalogHasMore, busy, catalogPageLoadFailed) {
         if (section != "browse" || busy || !catalogHasMore || catalogPageLoadFailed || items.isEmpty()) return@LaunchedEffect
         snapshotFlow {
