@@ -73,3 +73,12 @@ def test_local_operational_screens_have_a_dedicated_owner():
         "SettlementDialog",
     ):
         assert f"internal fun {name}(" in screens
+
+
+def test_shared_store_palette_has_a_single_owner():
+    palette = (ANDROID / "StorePalette.kt").read_text(encoding="utf-8")
+    main = MAIN.read_text(encoding="utf-8")
+    for name in ("Ink", "Green", "Mint", "Canvas", "Muted", "Orange", "Border"):
+        assert f"internal val {name} =" in palette
+    assert "private val Green =" not in main
+    assert "private val Canvas =" not in main
