@@ -753,9 +753,6 @@ internal fun ReportsCenterScreen(
         exportRows = exportRows,
         onError = { error = it }
     )
-    val csvLauncher = exportLaunchers.csv
-    val xlsxLauncher = exportLaunchers.xlsx
-    val pdfLauncher = exportLaunchers.pdf
 
     val currencyTotal = if (dateError || (cloudMode && (cloudLoading || salesDocumentsLoadError.isNotBlank()))) emptyMap() else if (cloudMode) inPeriodCloudSalesDocuments.groupBy { it.currencyCode.ifBlank { "غير محددة" } }.mapValues { (_, rows) -> rows.sumOf { it.totalMinor } }
         else inPeriodSales.groupBy { it.currencyCode.ifBlank { "غير محددة" } }.mapValues { (_, rows) -> rows.sumOf { it.total.toLong() } }
@@ -856,93 +853,20 @@ internal fun ReportsCenterScreen(
             locationInventoryLoadError = locationInventoryLoadError,
             onReportSelected = { selectedReport = it }
         )
-        if (selectedReport != "ملخص المبيعات" && selectedRows.isNotEmpty()) {
-            item {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(selectedReport, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = ReportInk)
-                        Text("عدد السجلات: ${selectedRows.size}", fontSize = 11.sp, color = ReportMuted)
-                    }
-                    OutlinedButton(onClick = {
-                        exportTitle = selectedReport
-                        exportRows = buildList {
-                            add(listOf("التقرير", exportTitle))
-                            add(listOf("الفترة", if (exportTitle == "التقييم المالي الحالي للمخزون") "لقطة حالية للموقع المختار؛ ليست تاريخية" else if (exportTitle == "رصيد المخزون حسب الموقع" || exportTitle == "حالة ربط أرصدة المخزون بالمستودعات") "لقطة حالية لجميع مواقع المؤسسة؛ ليست تاريخية" else startText + " — " + endText))
-                            add(listOf("مصدر البيانات", if (cloudMode) "السحابة" else "محلي على الجهاز"))
-                            add(listOf("تاريخ التصدير", java.time.LocalDateTime.now().toString()))
-                            add(listOf("التاريخ", "المرجع", "الاسم", "المبلغ/الكمية", "العملة", "الحالة"))
-                            selectedRows.forEach { row -> add(listOf(row.date, row.reference, row.name, reportLineAmount(row, cloudMode), row.currency, row.status)) }
-                        }
-                        csvLauncher.launch("mutajri-report-${selectedReport.hashCode()}.csv")
-                    }) { Icon(Icons.Default.FileDownload, null); Spacer(Modifier.width(4.dp)); Text("تصدير CSV") }
-                    OutlinedButton(onClick = {
-                        exportTitle = selectedReport
-                        exportRows = buildList {
-                            add(listOf("التقرير", exportTitle))
-                            add(listOf("الفترة", if (exportTitle == "التقييم المالي الحالي للمخزون") "لقطة حالية للموقع المختار؛ ليست تاريخية" else if (exportTitle == "رصيد المخزون حسب الموقع" || exportTitle == "حالة ربط أرصدة المخزون بالمستودعات") "لقطة حالية لجميع مواقع المؤسسة؛ ليست تاريخية" else startText + " — " + endText))
-                            add(listOf("مصدر البيانات", if (cloudMode) "السحابة" else "محلي على الجهاز"))
-                            add(listOf("تاريخ التصدير", java.time.LocalDateTime.now().toString()))
-                            add(listOf("التاريخ", "المرجع", "الاسم", "المبلغ/الكمية", "العملة", "الحالة"))
-                            selectedRows.forEach { row -> add(listOf(row.date, row.reference, row.name, reportLineAmount(row, cloudMode), row.currency, row.status)) }
-                        }
-                        xlsxLauncher.launch("mutajri-report-${selectedReport.hashCode()}.xlsx")
-                    }) { Icon(Icons.Default.TableChart, null); Spacer(Modifier.width(4.dp)); Text("Excel XLSX") }
-                    OutlinedButton(onClick = {
-                        if (dateError || (cloudMode && (cloudLoading || selectedReportSourceError.isNotBlank()))) {
-                            error = "لا يمكن تصدير التقرير: تحقق من الفترة واكتمال مصادر هذا التقرير."
-                        } else {
-                            exportTitle = selectedReport
-                            exportRows = buildList {
-                                add(listOf("التقرير", exportTitle))
-                                add(listOf("الفترة", if (exportTitle == "التقييم المالي الحالي للمخزون") "لقطة حالية للموقع المختار؛ ليست تاريخية" else if (exportTitle == "رصيد المخزون حسب الموقع" || exportTitle == "حالة ربط أرصدة المخزون بالمستودعات") "لقطة حالية لجميع مواقع المؤسسة؛ ليست تاريخية" else startText + " — " + endText))
-                                add(listOf("مصدر البيانات", if (cloudMode) "السحابة" else "محلي على الجهاز"))
-                                add(listOf("تاريخ التصدير", java.time.LocalDateTime.now().toString()))
-                                add(listOf("التاريخ", "المرجع", "الاسم", "المبلغ/الكمية", "العملة", "الحالة"))
-                                selectedRows.forEach { row ->
-                                    add(listOf(row.date, row.reference, row.name,
-                                        reportLineAmount(row, cloudMode),
-                                        row.currency, row.status))
-                                }
-                            }
-                            pdfLauncher.launch("mutajri-report-${selectedReport.hashCode()}.pdf")
-                        }
-                    }) { Icon(Icons.Default.PictureAsPdf, null); Spacer(Modifier.width(4.dp)); Text("PDF ومشاركة") }
-                    OutlinedButton(onClick = {
-                        if (dateError || (cloudMode && (cloudLoading || selectedReportSourceError.isNotBlank()))) {
-                            error = "لا يمكن طباعة التقرير: تحقق من الفترة واكتمال مصادر هذا التقرير."
-                        } else {
-                            exportTitle = selectedReport
-                            exportRows = buildList {
-                                add(listOf("التقرير", exportTitle))
-                                add(listOf("الفترة", if (exportTitle == "التقييم المالي الحالي للمخزون") "لقطة حالية للموقع المختار؛ ليست تاريخية" else if (exportTitle == "رصيد المخزون حسب الموقع" || exportTitle == "حالة ربط أرصدة المخزون بالمستودعات") "لقطة حالية لجميع مواقع المؤسسة؛ ليست تاريخية" else startText + " — " + endText))
-                                add(listOf("مصدر البيانات", if (cloudMode) "السحابة" else "محلي على الجهاز"))
-                                add(listOf("تاريخ التصدير", java.time.LocalDateTime.now().toString()))
-                                add(listOf("التاريخ", "المرجع", "الاسم", "المبلغ/الكمية", "العملة", "الحالة"))
-                                selectedRows.forEach { row ->
-                                    add(listOf(row.date, row.reference, row.name,
-                                        reportLineAmount(row, cloudMode),
-                                        row.currency, row.status))
-                                }
-                            }
-                            runCatching { printReport(context, selectedReport, exportRows) }
-                                .onFailure { error = "تعذرت معاينة الطباعة: ${it.message ?: "خطأ غير معروف"}" }
-                        }
-                    }) { Icon(Icons.Default.Print, null); Spacer(Modifier.width(4.dp)); Text("معاينة وطباعة") }
-                }
-            }
-            items(selectedRows) { row ->
-                Card(colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, ReportBorder), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(row.name, fontWeight = FontWeight.SemiBold, color = ReportInk)
-                        Text("${row.reference} · ${row.date}", color = ReportMuted, fontSize = 11.sp)
-                        Text(reportLineAmount(row, cloudMode), color = ReportGreen, fontWeight = FontWeight.Bold)
-                        if (row.status.isNotBlank()) Text(row.status, color = ReportMuted, fontSize = 11.sp)
-                    }
-                }
-            }
-        } else if (selectedReport != "ملخص المبيعات" && !dateError) {
-            item { Text("لا توجد بيانات لهذا التقرير ضمن الفترة المحددة.", color = ReportMuted, modifier = Modifier.padding(8.dp)) }
-        }
+        reportsResultSection(
+            context = context,
+            selectedReport = selectedReport,
+            selectedRows = selectedRows,
+            dateError = dateError,
+            cloudMode = cloudMode,
+            cloudLoading = cloudLoading,
+            selectedReportSourceError = selectedReportSourceError,
+            startText = startText,
+            endText = endText,
+            launchers = exportLaunchers,
+            onExportStateChanged = { title, rows -> exportTitle = title; exportRows = rows },
+            onError = { error = it }
+        )
         if (cloudMode && cloudLoading) item {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
