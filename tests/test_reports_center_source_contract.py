@@ -50,6 +50,7 @@ RETURN_CURRENCY_GUARD_MIGRATION = ROOT / "supabase/migrations/20261027195426_gua
 class ReportsCenterSourceContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        cls.sales_rows = SALES_ROWS.read_text(encoding="utf-8")
         cls.screen = SCREEN.read_text(encoding="utf-8") + DATA_STATE.read_text(encoding="utf-8") + CLOUD_DATA.read_text(encoding="utf-8") + PERIOD_CONTROLS.read_text(encoding="utf-8") + EXPORT_LAUNCHERS.read_text(encoding="utf-8") + CATALOG_SECTION.read_text(encoding="utf-8") + INVENTORY_ROWS.read_text(encoding="utf-8") + LEDGER_ROWS.read_text(encoding="utf-8") + PARTY_ROWS.read_text(encoding="utf-8") + SALES_ROWS.read_text(encoding="utf-8") + SUPPLIER_ROWS.read_text(encoding="utf-8") + OPERATIONAL_ROWS.read_text(encoding="utf-8") + DERIVED_ROWS.read_text(encoding="utf-8") + TAX_ROWS.read_text(encoding="utf-8") + PROFITABILITY_ROWS.read_text(encoding="utf-8") + RESULT_SECTION.read_text(encoding="utf-8") + FILTER_SECTION.read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8") + INVENTORY_REPORT_LINES.read_text(encoding="utf-8") + FINANCIAL_REPORT_LINES.read_text(encoding="utf-8") + DOMAIN_MAPPERS.read_text(encoding="utf-8") + LEDGER_VALIDATION.read_text(encoding="utf-8") + SUPPLIER_VALIDATION.read_text(encoding="utf-8") + PROFITABILITY_VALIDATION.read_text(encoding="utf-8") + OPERATIONAL_VALIDATION.read_text(encoding="utf-8") + FINANCIAL_VALIDATION.read_text(encoding="utf-8")
         cls.catalog = CATALOG.read_text(encoding="utf-8")
         cls.repository = REPOSITORY.read_text(encoding="utf-8")
@@ -122,6 +123,16 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn("تجاوز إجمالي المبيعات نطاق الأرقام الدقيق؛ تم إخفاء ملخص العملات.", self.screen)
         self.assertIn("currencyTotalError = currencyTotalError", self.screen)
         self.assertIn("لا يمكن حساب الملخص: تحقق من الفترة المحددة", self.screen)
+
+
+    def test_sales_report_aggregates_use_exact_arithmetic_and_fail_closed_preflight(self):
+        self.assertNotIn("sumOf", self.sales_rows)
+        self.assertIn("sumReportAmountsExactly", self.sales_rows)
+        self.assertIn("sumReportCountsExactly", self.sales_rows)
+        self.assertIn("Math.subtractExact(currentTotal, previousTotal)", self.sales_rows)
+        self.assertIn("val salesRowsCalculation = runCatching", self.screen)
+        self.assertIn("salesRowsCalculation.getOrNull()", self.screen)
+        self.assertIn("تجاوزت مجاميع تقرير المبيعات نطاق الأرقام الدقيق؛ تم حجب التقرير.", self.screen)
 
     def test_ledger_account_statement_requires_account_filter(self):
         self.assertIn('ReportCatalogItem("كشف حساب محاسبي"', self.catalog)
