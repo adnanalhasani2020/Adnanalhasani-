@@ -96,6 +96,6 @@ internal class CatalogProductWorkflow(
             val sectorArray=JSONArray(); state.sectors.split(",").map { it.trim().lowercase() }.filter { it.isNotBlank() }.forEach { sectorArray.put(it) }
             catalogHttp("/rest/v1/rpc/commercial_catalog_create_product",JSONObject().put("p_organization_id",orgId).put("p_product",product)
                 .put("p_units",unitRows).put("p_sectors",sectorArray).put("p_business_levels",levelRows).put("p_regions",regionRows).put("p_rulings",rulingRows),active)
-        }, { onCreated(it) })
+        }, { onCreated(it) }, null)
     }
 }
