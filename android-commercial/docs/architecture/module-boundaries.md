@@ -207,6 +207,7 @@ The catalog screen owns interaction and request orchestration. JSON-to-domain ma
 
 - `ReportPartyStatementRows.kt` owns customer/supplier statement row assembly from already-loaded party-account and posted-ledger projections, plus the operational customer statement. It does not perform collections, supplier payments, or ledger posting.
 - `ReportPartyStatementValidation.kt` owns fail-closed source/link validation for full customer and supplier control-account statements. It preserves source-error precedence and mapping/currency/party-link checks; it does not assemble rows or load data.
+- `ReportTaxValidation.kt` owns fail-closed source validation for the detailed recorded-tax/discount report, including source errors, valid dates, amount/currency integrity, and return-to-sale currency matching. It does not calculate tax or build presentation rows.
 
 
 - `ReportSalesRows.kt` owns pure row assembly for sales-period, invoice-detail, and period-comparison reports. It consumes existing sales projections and date boundaries; it does not load sales, mutate invoices, or calculate authoritative balances.
