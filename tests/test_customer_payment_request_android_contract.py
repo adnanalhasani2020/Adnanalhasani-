@@ -6,7 +6,7 @@ PAYMENT_REPOSITORY = (ROOT / "android-commercial/app/src/main/java/com/adnanalha
 CUSTOMER_SCREEN = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CustomerPortalPaymentRequestsScreen.kt").read_text(encoding="utf-8")
 MERCHANT_SCREEN = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudDebtScreen.kt").read_text(encoding="utf-8")
 PORTAL_SCREEN = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CustomerPortalScreen.kt").read_text(encoding="utf-8")
-MAIN = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt").read_text(encoding="utf-8")
+MAIN = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/StoreApp.kt").read_text(encoding="utf-8")
 
 
 def test_customer_repository_uses_authenticated_portal_rpcs_and_retry_keys():

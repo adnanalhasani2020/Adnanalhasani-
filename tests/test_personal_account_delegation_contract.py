@@ -80,7 +80,7 @@ def test_delegation_functions_are_not_callable_anonymously():
 def test_android_portal_routes_delegated_actions_to_guarded_rpcs():
     repository = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CustomerPortalRepository.kt").read_text(encoding="utf-8")
     portal = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CustomerPortalScreen.kt").read_text(encoding="utf-8")
-    activity = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt").read_text(encoding="utf-8")
+    activity = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/StoreApp.kt").read_text(encoding="utf-8")
     screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/PersonalAccountsScreen.kt").read_text(encoding="utf-8")
     assert "commercial_account_list_my_active_delegations" in repository
     assert "commercial_account_create_delegation" in screen
@@ -154,7 +154,7 @@ def test_delegated_report_includes_order_type_booking_time_and_line_items():
 def test_notifications_are_private_and_accessible_from_the_app_bell():
     sql = NOTIFICATIONS.read_text(encoding="utf-8")
     screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialNotificationsScreen.kt").read_text(encoding="utf-8")
-    activity = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt").read_text(encoding="utf-8")
+    activity = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/StoreApp.kt").read_text(encoding="utf-8")
     assert "WHERE user_id=v_uid" in sql
     assert "WHERE id=p_notification_id AND user_id=v_uid" in sql
     assert "REVOKE ALL ON FUNCTION public.commercial_user_notifications_list_my(integer) FROM PUBLIC, anon" in sql

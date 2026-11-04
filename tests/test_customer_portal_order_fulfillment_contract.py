@@ -6,7 +6,7 @@ DATABASE_TEST = ROOT / "supabase/tests/database/customer_portal_order_fulfillmen
 REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CustomerPortalRepository.kt"
 PORTAL = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CustomerPortalScreen.kt"
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CustomerOrderFulfillmentScreen.kt"
-ACTIVITY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt"
+ACTIVITY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/StoreApp.kt"
 ORDER_QUEUE = ROOT / "supabase/migrations/20261026261000_customer_portal_order_management.sql"
 
 
