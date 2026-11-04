@@ -334,19 +334,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                             selectedCatalogIds=if(id in selectedCatalogIds) selectedCatalogIds-id
                             else if(selectedCatalogIds.size<100) selectedCatalogIds+id else selectedCatalogIds
                         },
-                        onSelectBranch={branch ->
-                            selectedBranchId=branch.id
-                            branchLatitude=branch.latitude
-                            branchLongitude=branch.longitude
-                            selectedWarehouseId=marketWarehouses.firstOrNull { it.branchId==branch.id }?.id.orEmpty()
-                            nearbyMarketItems=emptyList()
-                            nearbyOffset=0
-                            nearbyHasMore=true
-                            nearbyLoadGeneration++
-                            marketRadius=5000
-                            marketPriceHints=emptyMap()
-                            branchMenuExpanded=false
-                        },
+                        onSelectBranch = marketUiState::selectBranch,
                         onSelectWarehouse={warehouseId ->
                             selectedWarehouseId=warehouseId
                             warehouseMenuExpanded=false
