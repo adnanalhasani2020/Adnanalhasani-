@@ -15,7 +15,7 @@ def test_activity_profile_context_is_reloaded_when_returning_to_store():
 
 def test_valid_cloud_context_fails_closed_before_cloud_reads():
     source = MAIN.read_text(encoding="utf-8")
-    effect = source.split("LaunchedEffect(cloudContextSnapshot, cloudReloadToken)", 1)[1].split(
+    effect = source.split("LaunchedEffect(cloudContextSnapshot, cloudReloadToken, showEntryFlow)", 1)[1].split(
         "Scaffold(", 1
     )[0]
     assert effect.index("cloudMode = cloudContextHasAny") < effect.index("storeCloudIo.execute")
@@ -37,7 +37,7 @@ def test_partial_cloud_context_never_loads_or_displays_local_data():
     assert "val cloudContextHasAny = cloudContextSnapshot.first.isNotBlank()" in source
     assert "cloudContextSnapshot.second.isNotBlank() || cloudContextSnapshot.third.isNotBlank()" in source
     assert "mutableStateOf(cloudContextHasAny)" in source
-    assert "if (!cloudContextHasAny) addAll(loadSales(context))" in source
+    assert "if (!cloudContextHasAny) addAll(LocalStoreRepository.loadSales(context))" in source
     assert "if (!cloudContextExists) {" in source
     assert "بيانات المؤسسة السحابية غير مكتملة" in source
     assert "cloudContextHasAny && cloudInventoryError.isNotBlank()" in source
