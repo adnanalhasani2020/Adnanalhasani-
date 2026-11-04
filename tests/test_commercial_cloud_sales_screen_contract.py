@@ -29,7 +29,7 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         cls.screen = SCREEN.read_text(encoding="utf-8")
         cls.purchases = PURCHASES.read_text(encoding="utf-8")
         cls.composer = COMPOSER.read_text(encoding="utf-8")
-        cls.main = MAIN.read_text(encoding="utf-8") + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt").read_text(encoding="utf-8") + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/LocalOperationalScreens.kt").read_text(encoding="utf-8")
+        cls.main = MAIN.read_text(encoding="utf-8") + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt").read_text(encoding="utf-8") + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/LocalOperationalScreens.kt").read_text(encoding="utf-8") + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/LocalProductDialogs.kt").read_text(encoding="utf-8") + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/LocalOperationalScreens.kt").read_text(encoding="utf-8")
         cls.models = MODELS.read_text(encoding="utf-8")
         cls.local_screens = LOCAL_SCREENS.read_text(encoding="utf-8")
 
