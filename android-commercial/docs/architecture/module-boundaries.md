@@ -276,3 +276,10 @@ The catalog screen owns interaction and request orchestration. JSON-to-domain ma
 - `ReportCalculations.kt` owns exact per-currency aggregation for the reports-center sales summary through `calculateReportCurrencyTotals`.
 - `ReportsCenterData.kt` catches overflow and exposes a dedicated summary error; `ReportsCenterScreen.kt` suppresses wrapped totals and displays the error rather than presenting an incorrect amount.
 - Currency buckets and the existing blank-currency fallback are preserved. No report filters or source queries are changed.
+
+
+### Sales report aggregate exactness (2026-11-05)
+
+- `ReportSalesRows.kt` uses exact `Long` aggregation for all sales summary groupings and exact subtraction for period comparisons; local quantity counts use exact `Int` aggregation.
+- `ReportsCenterData.kt` preflights the selected sales row builder once, caches the result for dispatch, and surfaces a fail-closed error through the existing sales source-error route if any aggregate overflows.
+- Local cash/credit report source behavior remains unchanged; its arithmetic overflow is routed independently from cloud-only sales source validation.
