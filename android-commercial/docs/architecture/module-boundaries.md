@@ -256,3 +256,10 @@ The catalog screen owns interaction and request orchestration. JSON-to-domain ma
 
 - `ReportFinancialValidation.kt` owns current-inventory valuation readiness and cash-flow source/integrity gates. Cash-flow validation preflights the exact subtraction, opening-balance, running-balance, and debit/credit movement arithmetic used by `ReportFinancialLines.kt`.
 - `ReportsCenterData.kt` retains only report-title routing to the validation functions. Row assembly remains in `ReportInventoryRows.kt` and `ReportFinancialLines.kt`; no financial formulas or source queries were moved.
+
+
+### Report calculation input mapping extraction (2026-11-05)
+
+- `ReportDomainMappers.kt` now owns pure projections from saved cloud sales/returns into item-profitability, customer-collection, user-performance, and daily-sales calculation inputs.
+- `ReportsCenterData.kt` retains Compose `remember` lifecycles and calculation invocation; formulas, period predicates, and row assembly remain in their existing owners.
+- The mapping preserves completed/succeeded status filters, date-window boundaries, all-sale-lines availability for historical return linkage, and original source field mappings.
