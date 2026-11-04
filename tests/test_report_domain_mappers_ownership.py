@@ -4,6 +4,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 ANDROID = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial"
 SCREEN = ANDROID / "ReportsCenterScreen.kt"
+DATA_STATE = ANDROID / "ReportsCenterData.kt"
 MAPPERS = ANDROID / "ReportDomainMappers.kt"
 
 
@@ -34,9 +35,9 @@ def test_pure_report_mappers_have_a_single_non_ui_owner():
 
 
 def test_report_screen_consumes_the_extracted_mapper_contracts():
-    screen = SCREEN.read_text(encoding="utf-8")
-    assert "toPriceVarianceInput()" in screen
-    assert "toCostProfitInput()" in screen
-    assert "toCustomerStatementInputs()" in screen
-    assert "reportLineAmount(row, cloudMode)" in screen
-    assert "toReportLines(today.toString())" in screen
+    data = DATA_STATE.read_text(encoding="utf-8")
+    assert "toPriceVarianceInput()" in data
+    assert "toCostProfitInput()" in data
+    assert "toCustomerStatementInputs()" in data
+    assert "reportLineAmount(row, cloudMode)" in data
+    assert "toReportLines(today.toString())" in data

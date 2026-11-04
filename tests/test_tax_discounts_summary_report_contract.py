@@ -9,7 +9,7 @@ CONTRACT = ROOT / "android-commercial/docs/reports-data-contract.md"
 
 
 def test_tax_discount_summary_is_registered_and_uses_existing_validated_sources():
-    screen = SCREEN.read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8") + FINANCIAL_LINES.read_text(encoding="utf-8")
+    screen = SCREEN.read_text(encoding="utf-8") + ROOT.joinpath("android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterData.kt").read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8") + FINANCIAL_LINES.read_text(encoding="utf-8")
     contract = CONTRACT.read_text(encoding="utf-8")
 
     assert 'ReportCatalogItem("ملخص الضرائب والخصومات"' in screen
@@ -40,7 +40,7 @@ def test_tax_discount_calculation_keeps_currency_and_categories_separate():
 
 
 def test_summary_does_not_label_returns_as_tax_refunds_or_claim_official_tax_liability():
-    screen = SCREEN.read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8") + FINANCIAL_LINES.read_text(encoding="utf-8")
+    screen = SCREEN.read_text(encoding="utf-8") + ROOT.joinpath("android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterData.kt").read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8") + FINANCIAL_LINES.read_text(encoding="utf-8")
     contract = CONTRACT.read_text(encoding="utf-8")
     assert "لا تمثل هذه القيمة ضريبة مستردة" in screen
     assert "لا يحسب صافي التزام ضريبي ولا يمثل إقرارًا ضريبيًا" in screen

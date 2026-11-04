@@ -37,7 +37,7 @@ def test_item_profitability_fails_closed_on_cost_and_return_reconciliation_gaps(
 
 
 def test_supplier_purchase_summary_is_line_and_header_reconciled():
-    screen = SCREEN.read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8")
+    screen = SCREEN.read_text(encoding="utf-8") + DATA_STATE.read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8")
     calculations = CALCULATIONS.read_text(encoding="utf-8")
     contract = CONTRACT.read_text(encoding="utf-8")
     assert 'ReportCatalogItem("المشتريات حسب المورد"' in screen
@@ -47,13 +47,13 @@ def test_supplier_purchase_summary_is_line_and_header_reconciled():
     assert 'Purchases by supplier' in contract
 
 def test_item_profitability_rejects_unbounded_completed_dates_and_refund_state_mismatch():
-    screen = SCREEN.read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8")
+    screen = SCREEN.read_text(encoding="utf-8") + DATA_STATE.read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8")
     assert 'completed", true) && reportDateMillis(it.createdAt) == null' in screen
     assert 'completed", true) && reportDateMillis(it.completedAt) == null' in screen
     assert 'it.refundStatus.equals("refunded", true) && !it.status.equals("completed", true)' in screen
 
 def test_daily_sales_trend_uses_completed_invoices_and_currency_separated_totals():
-    screen = SCREEN.read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8")
+    screen = SCREEN.read_text(encoding="utf-8") + DATA_STATE.read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8")
     calculations = CALCULATIONS.read_text(encoding="utf-8")
     contract = CONTRACT.read_text(encoding="utf-8")
     assert 'ReportCatalogItem("اتجاه المبيعات اليومي"' in screen
@@ -83,7 +83,7 @@ def test_item_profitability_blocks_returns_from_discounted_historical_sales():
     assert 'يرتبط المرتجع بفاتورة لها خصم إجمالي غير موزع' in calculations
 
 def test_item_profitability_reconciles_sale_lines_to_invoice_subtotal():
-    screen = SCREEN.read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8")
+    screen = SCREEN.read_text(encoding="utf-8") + DATA_STATE.read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8")
     assert 'sumReportAmountsExactly(document.lines.map { it.lineTotalMinor })' in screen
     assert 'document.lines.isEmpty()' in screen
     assert 'document.discountMinor > document.subtotalMinor' in screen

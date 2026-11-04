@@ -3,7 +3,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = ROOT / "supabase/migrations/20261101030000_inventory_receipt_ledger_semantics.sql"
-REPORTS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterScreen.kt"
+REPORTS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportInventoryRows.kt"
 INTEGER_RECEIVING = ROOT / "supabase/migrations/20261026250000_commercial_integer_purchase_receiving.sql"
 
 
