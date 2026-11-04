@@ -2,7 +2,6 @@ package com.adnanalhasani.commercial
 
 import android.content.Context
 import androidx.activity.result.ActivityResultLauncher
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,7 +17,6 @@ import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.TableChart
-import androidx.compose.material3.BorderStroke
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -33,14 +31,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 internal fun buildReportExportRows(
-    title: String,
+    exportTitle: String,
     startText: String,
     endText: String,
     cloudMode: Boolean,
     rows: List<ReportLine>
 ): List<List<String>> = buildList {
-    add(listOf("التقرير", title))
-    add(listOf("الفترة", if (title == "التقييم المالي الحالي للمخزون") "لقطة حالية للموقع المختار؛ ليست تاريخية" else if (title == "رصيد المخزون حسب الموقع" || title == "حالة ربط أرصدة المخزون بالمستودعات") "لقطة حالية لجميع مواقع المؤسسة؛ ليست تاريخية" else startText + " — " + endText))
+    add(listOf("التقرير", exportTitle))
+    add(listOf("الفترة", if (exportTitle == "التقييم المالي الحالي للمخزون") "لقطة حالية للموقع المختار؛ ليست تاريخية" else if (exportTitle == "رصيد المخزون حسب الموقع" || exportTitle == "حالة ربط أرصدة المخزون بالمستودعات") "لقطة حالية لجميع مواقع المؤسسة؛ ليست تاريخية" else startText + " — " + endText))
     add(listOf("مصدر البيانات", if (cloudMode) "السحابة" else "محلي على الجهاز"))
     add(listOf("تاريخ التصدير", java.time.LocalDateTime.now().toString()))
     add(listOf("التاريخ", "المرجع", "الاسم", "المبلغ/الكمية", "العملة", "الحالة"))
