@@ -200,18 +200,23 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         onFeedback = { feedback = it }
     )
     fun loadCatalog(reset: Boolean = true) = browseWorkflow.loadCatalog(reset)
-    LaunchedEffect(section, items.size, catalogHasMore, busy, catalogPageLoadFailed) {
-        if (section != "browse" || busy || !catalogHasMore || catalogPageLoadFailed || items.isEmpty()) return@LaunchedEffect
-        snapshotFlow {
-            val lastVisible = catalogListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
-            val total = catalogListState.layoutInfo.totalItemsCount
-            lastVisible to total
-        }.collect { (lastVisible, total) ->
-            if (total > 0 && lastVisible >= total - 5 && !busy && catalogHasMore && !catalogPageLoadFailed) {
-                loadCatalog(reset = false)
-            }
-        }
-    }
+    CatalogPaginationEffects(
+        section = section,
+        catalogItemCount = items.size,
+        catalogHasMore = catalogHasMore,
+        catalogBusy = busy,
+        catalogPageLoadFailed = catalogPageLoadFailed,
+        catalogListState = catalogListState,
+        nearbyItemCount = nearbyMarketItems.size,
+        nearbyHasMore = nearbyHasMore,
+        nearbyLoadGeneration = nearbyLoadGeneration,
+        nearbyBusy = busy,
+        nearbyPageLoadFailed = nearbyPageLoadFailed,
+        nearbyRadius = marketRadius,
+        nearbyListState = nearbyListState,
+        onLoadCatalogPage = { loadCatalog(reset = false) },
+        onLoadNearbyPage = { expand -> marketWorkflow.loadNearbyCatalog(expand) }
+    )
 
     suspend fun updateNearbyFromDevice() {
         locatingDevice = true
@@ -246,18 +251,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         }
     }
 
-    LaunchedEffect(section, nearbyMarketItems.size, nearbyHasMore, nearbyLoadGeneration, busy, marketRadius) {
-        if(section!="browse" || nearbyMarketItems.isEmpty() || busy || nearbyPageLoadFailed || marketRadius>=100000) return@LaunchedEffect
-        snapshotFlow {
-            val lastVisible=nearbyListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
-            val total=nearbyListState.layoutInfo.totalItemsCount
-            Triple(lastVisible,total,nearbyListState.isScrollInProgress)
-        }.collect { (lastVisible,total,scrolling) ->
-            if(scrolling && total>0 && lastVisible>=total-2 && !busy) {
-                if(nearbyHasMore) marketWorkflow.loadNearbyCatalog(false) else marketWorkflow.loadNearbyCatalog(true)
-            }
-        }
-    }
+
 
     val directoryWorkflow = CatalogDirectoryWorkflow(
         accessToken = { token },
