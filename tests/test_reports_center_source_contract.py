@@ -5,6 +5,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterScreen.kt"
 CLOUD_DATA = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCloudData.kt"
+DATA_STATE = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterData.kt"
 PERIOD_CONTROLS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsPeriodControls.kt"
 EXPORT_LAUNCHERS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsExportLaunchers.kt"
 CATALOG_SECTION = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCatalogSection.kt"
@@ -45,7 +46,7 @@ RETURN_CURRENCY_GUARD_MIGRATION = ROOT / "supabase/migrations/20261027195426_gua
 class ReportsCenterSourceContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.screen = SCREEN.read_text(encoding="utf-8") + CLOUD_DATA.read_text(encoding="utf-8") + PERIOD_CONTROLS.read_text(encoding="utf-8") + EXPORT_LAUNCHERS.read_text(encoding="utf-8") + CATALOG_SECTION.read_text(encoding="utf-8") + INVENTORY_ROWS.read_text(encoding="utf-8") + LEDGER_ROWS.read_text(encoding="utf-8") + PARTY_ROWS.read_text(encoding="utf-8") + SALES_ROWS.read_text(encoding="utf-8") + SUPPLIER_ROWS.read_text(encoding="utf-8") + OPERATIONAL_ROWS.read_text(encoding="utf-8") + DERIVED_ROWS.read_text(encoding="utf-8") + TAX_ROWS.read_text(encoding="utf-8") + PROFITABILITY_ROWS.read_text(encoding="utf-8") + RESULT_SECTION.read_text(encoding="utf-8") + FILTER_SECTION.read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8") + INVENTORY_REPORT_LINES.read_text(encoding="utf-8") + FINANCIAL_REPORT_LINES.read_text(encoding="utf-8") + DOMAIN_MAPPERS.read_text(encoding="utf-8") + LEDGER_VALIDATION.read_text(encoding="utf-8")
+        cls.screen = SCREEN.read_text(encoding="utf-8") + DATA_STATE.read_text(encoding="utf-8") + CLOUD_DATA.read_text(encoding="utf-8") + PERIOD_CONTROLS.read_text(encoding="utf-8") + EXPORT_LAUNCHERS.read_text(encoding="utf-8") + CATALOG_SECTION.read_text(encoding="utf-8") + INVENTORY_ROWS.read_text(encoding="utf-8") + LEDGER_ROWS.read_text(encoding="utf-8") + PARTY_ROWS.read_text(encoding="utf-8") + SALES_ROWS.read_text(encoding="utf-8") + SUPPLIER_ROWS.read_text(encoding="utf-8") + OPERATIONAL_ROWS.read_text(encoding="utf-8") + DERIVED_ROWS.read_text(encoding="utf-8") + TAX_ROWS.read_text(encoding="utf-8") + PROFITABILITY_ROWS.read_text(encoding="utf-8") + RESULT_SECTION.read_text(encoding="utf-8") + FILTER_SECTION.read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8") + INVENTORY_REPORT_LINES.read_text(encoding="utf-8") + FINANCIAL_REPORT_LINES.read_text(encoding="utf-8") + DOMAIN_MAPPERS.read_text(encoding="utf-8") + LEDGER_VALIDATION.read_text(encoding="utf-8")
         cls.catalog = CATALOG.read_text(encoding="utf-8")
         cls.repository = REPOSITORY.read_text(encoding="utf-8")
         cls.inventory_repository = INVENTORY_REPOSITORY.read_text(encoding="utf-8")
