@@ -188,3 +188,6 @@ The catalog screen owns interaction and request orchestration. JSON-to-domain ma
 ### Reports center UI state boundary — 2026-11-04
 - `ReportsCenterUiState.kt` owns mutable interactive state for period selection, search and row filters, selected report/category, export metadata, feedback, supplier filter, and refresh key.
 - `ReportsCenterScreen.kt` consumes those holders through delegated local properties. Do not move report formulas, repository calls, or export side effects into the state class.
+
+
+- `ReportsPeriodControls.kt` owns only the period-preset and manual date-range controls. Date validation, date-window calculations, and report filtering remain in `ReportsCenterScreen.kt`/report domain helpers.
