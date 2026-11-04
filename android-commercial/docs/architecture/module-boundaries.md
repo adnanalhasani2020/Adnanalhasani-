@@ -212,3 +212,6 @@ The catalog screen owns interaction and request orchestration. JSON-to-domain ma
 
 
 - `ReportSupplierRows.kt` owns supplier report row assembly from loaded purchase, invoice, obligation, and posted-payment projections. It does not create supplier payments or alter purchase/invoice lifecycle state.
+
+
+- `ReportOperationalRows.kt` owns display-row assembly for payment, settlement, return, and expense reports. It is read-only and must not initiate collections, refunds, expense cancellation, or journal posting.
