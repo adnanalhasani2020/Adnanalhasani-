@@ -304,3 +304,32 @@ The catalog screen owns interaction and request orchestration. JSON-to-domain ma
 - `ReportLedgerClassification.kt` computes per-account net balances with exact debit/credit subtraction and exact aggregation.
 - `ReportLedgerRows.kt` uses exact arithmetic for income statement detail/net profit, balance-sheet equation, trial-balance debit/credit totals, and ledger-line net amounts.
 - `ReportsCenterData.kt` preflights and caches the selected ledger-row result; arithmetic overflow is routed as a report-specific error and the failed row builder is not invoked a second time.
+
+
+### Reports cloud source dependency audit (2026-11-05)
+
+A full read-through of `ReportsCenterData.kt`, `ReportsCloudData.kt`, and `ReportsCenterScreen.kt` confirms that **all 17 cloud projections currently have live consumers**. None is safe to remove as an unused fetch:
+
+| Projection | Current report/readiness consumers |
+|---|---|
+| Sales documents | Sales-period and invoice reports, sales summary, discounts/tax, cost/profit, item profitability, customer operational statement, collections, user performance, daily trend, and the screen-level completed-sales summary |
+| Receivables | Customer receivable aging by invoice date |
+| Purchases | Supplier invoices, purchase summary, obligations, supplier aging, price variance/movements, supplier statements, and detailed tax/discount reports |
+| Supplier payments | Supplier movement statement, together with purchase invoices |
+| Stock movements | Actual stock movement report and movement-by-user report |
+| Stock alerts | Current stock, low-stock alerts, and current inventory valuation readiness |
+| Location inventory balances | Inventory balance by location |
+| Warehouse inventory context | Warehouse/location inventory-link status report |
+| Returns | Sales return/settlement, tax/discount, cost/profit, and item-profitability reports |
+| Payments | Successful cloud payments/vouchers and payment-method analysis |
+| Journals | Posted journal register |
+| Posted ledger lines | Trial balance, general-ledger movement, account statement, posted-entry detail, financial statements, cash flow, and party control-account statements |
+| Supplier control accounts | Supplier statement validation and supplier control-account mapping readiness |
+| GL mappings | Financial statement validation, current inventory valuation, cash-flow validation, and customer/supplier statement mapping |
+| Customer party accounts | Full customer control-account statement validation and row assembly |
+| Supplier party accounts | Full supplier control-account statement validation and row assembly |
+| Expenses | Operational expenses and expense summaries by category/payment method |
+
+The current screen loads the projections together because the catalog and shared screen summary coexist with selected-report rendering, while `ReportsCenterData` eagerly prepares validation/calculation state and dispatches selected rows from the same snapshot. A per-report lazy-loading change is therefore **not** a safe cleanup-only optimization: it would require an explicit dependency model, request cancellation/versioning for rapid report switching, and preservation of the shared retry/error behavior. Do not remove or skip any of these 17 loads without that separate design and targeted behavior tests.
+
+The source-ownership contract test now also guards that every projection alias is consumed beyond its declaration, so a future removal or orphaning is visible during review.
