@@ -36,9 +36,9 @@ class CatalogItemActivityMappingContractTests(unittest.TestCase):
     def test_android_auto_loads_activity_directory_and_uses_default_business_level(self):
         screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogScreen.kt").read_text(encoding="utf-8")
         self.assertIn('LaunchedEffect(token, organizationId)', screen)
-        self.assertIn('node.optString("default_business_level_code")', screen)
-        self.assertIn('node.optString("default_business_level_code")', screen)
-        self.assertIn("CatalogActivityNode", screen)
+        directory_mapper = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogDirectoryMapper.kt").read_text(encoding="utf-8")
+        self.assertIn('node.optString("default_business_level_code")', directory_mapper)
+        self.assertIn("CatalogActivityNode", directory_mapper)
         self.assertIn("businessLevel = it", screen)
         self.assertIn('commercial_list_business_activity_nodes', screen)
 

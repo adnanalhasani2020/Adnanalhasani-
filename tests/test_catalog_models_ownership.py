@@ -33,7 +33,7 @@ def test_catalog_screen_keeps_existing_model_contracts():
     screen = SCREEN.read_text(encoding="utf-8")
     assert "internal fun CatalogScreen(" in screen
     assert "CatalogProduct" in screen
-    assert "CatalogUnit" in screen
+    assert "availableUnits: List<CatalogUnit>" in MODELS.read_text(encoding="utf-8")
 
 def test_catalog_uses_the_shared_supabase_transport_and_session_store():
     screen = SCREEN.read_text(encoding="utf-8")
@@ -62,3 +62,76 @@ def test_catalog_login_ui_has_a_dedicated_composable_owner():
     assert "تسجيل الدخول إلى حساب Supabase" in login
     assert "لا تستخدم مفتاح service_role في التطبيق" in login
     assert "OutlinedTextField(email," not in screen
+
+
+
+def test_catalog_market_response_parsing_has_a_dedicated_owner():
+    screen = SCREEN.read_text(encoding="utf-8")
+    market_data = (ANDROID / "CatalogMarketData.kt").read_text(encoding="utf-8")
+
+    for name in (
+        "parseCatalogMarketContext",
+        "parseNearbyCatalogItems",
+        "parseCatalogMarketPriceHints",
+    ):
+        assert f"{name}(" in market_data
+        assert f"{name}(" in screen
+
+    assert "val page = parseNearbyCatalogItems(raw)" in screen
+    assert "val hints = parseCatalogMarketPriceHints(raw)" in screen
+
+
+
+def test_catalog_discovery_product_mapping_has_a_dedicated_owner():
+    screen = SCREEN.read_text(encoding="utf-8")
+    mapper = (ANDROID / "CatalogProductMapper.kt").read_text(encoding="utf-8")
+
+    assert "parseCatalogProducts(raw, signedInUserId)" in screen
+    assert "internal fun parseCatalogProducts(" in mapper
+    assert "val pageItems=List(json.length())" not in screen
+    assert "catalogOffset = requestedOffset + pageItems.size" in screen
+    assert "catalogHasMore = pageItems.size == 100" in screen
+
+
+def test_catalog_directory_response_mapping_has_a_dedicated_owner():
+    screen = SCREEN.read_text(encoding="utf-8")
+    mapper = (ANDROID / "CatalogDirectoryMapper.kt").read_text(encoding="utf-8")
+
+    assert "parseCatalogDirectory(raw)" in screen
+    assert "internal fun parseCatalogDirectory(raw: String)" in mapper
+    assert "CatalogDirectoryData" in mapper
+    assert "val directory = parseCatalogDirectory(raw)" in screen
+    assert "val categoryNames=buildMap" not in screen
+    assert "CatalogActivityNode(node.optString" not in screen
+
+
+def test_catalog_invoice_and_transfer_response_mappers_have_dedicated_owner():
+    screen = SCREEN.read_text(encoding="utf-8")
+    mapper = (ANDROID / "CatalogWorkflowMappers.kt").read_text(encoding="utf-8")
+
+    assert "parseInvoicePurchaseRequests(raw)" in screen
+    assert "parsePendingCatalogTransfers(raw)" in screen
+    assert "internal fun parseInvoicePurchaseRequests(raw: String)" in mapper
+    assert "internal fun parsePendingCatalogTransfers(raw: String)" in mapper
+    assert "InvoicePurchaseRequestRow(row.optString" not in screen
+    assert "PendingTransfer(v.optString" not in screen
+
+
+def test_catalog_invoice_mapping_response_has_a_dedicated_mapper():
+    screen = SCREEN.read_text(encoding="utf-8")
+    mapper = (ANDROID / "CatalogInvoiceMappingMapper.kt").read_text(encoding="utf-8")
+
+    assert "parseCatalogInvoiceMapping(raw)" in screen
+    assert "internal fun parseCatalogInvoiceMapping(raw: String)" in mapper
+    assert "invoiceMappingLines = mapping.lines" in screen
+    assert "InvoicePurchaseUnmappedLine(row.optString" not in screen
+    assert "CatalogWarehouseOption(row.optString" not in screen
+
+def test_catalog_market_unit_validation_has_a_dedicated_owner():
+    screen = SCREEN.read_text(encoding="utf-8")
+    configuration = (ANDROID / "CatalogMarketConfiguration.kt").read_text(encoding="utf-8")
+
+    assert "buildCatalogConfigurationItems(selectedIds, JSONArray(unitRaw))" in screen
+    assert "internal fun buildCatalogConfigurationItems(" in configuration
+    assert "val baseCandidates" not in screen
+    assert "commercial_catalog_product_units" in screen

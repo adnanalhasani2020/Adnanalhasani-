@@ -4,18 +4,19 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogScreen.kt"
 HIERARCHY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogActivityHierarchy.kt"
+DIRECTORY_MAPPER = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogDirectoryMapper.kt"
 
 
 class CatalogActivityHierarchySelectorTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.source = SCREEN.read_text(encoding="utf-8") + HIERARCHY.read_text(encoding="utf-8")
+        cls.source = SCREEN.read_text(encoding="utf-8") + HIERARCHY.read_text(encoding="utf-8") + DIRECTORY_MAPPER.read_text(encoding="utf-8")
 
     def test_directory_nodes_keep_parent_kind_and_selectability(self):
         self.assertIn("data class CatalogActivityNode", self.source)
         self.assertIn('node.optString("parent_code")', self.source)
         self.assertIn('node.optString("node_kind")', self.source)
-        self.assertIn('node.optBoolean("is_selectable",false)', self.source)
+        self.assertIn('node.optBoolean("is_selectable", false)', self.source)
         self.assertIn('node.optString("default_business_level_code")', self.source)
 
     def test_sector_filter_walks_parent_chain_and_prevents_cycles(self):

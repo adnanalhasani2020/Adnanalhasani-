@@ -207,3 +207,42 @@
 - `StorePalette.kt` owns the shared Compose colors used by the activity, local operational screens, product dialogs, and app shell.
 - Extracted the existing color values unchanged from the former activity file. This prevents extracted UI files from depending on private declarations in `MainActivity.kt`.
 - `tests/test_local_commercial_screens_contract.py` verifies the single palette owner.
+
+
+### Catalog market response mapping
+
+- `CatalogMarketData.kt` owns parsing of branch/warehouse market context, aggregated nearby-catalog rows, and aggregated price-guidance rows.
+- `CatalogScreen.kt` keeps orchestration, location permission handling, pagination, and UI state; it delegates response mapping to the pure parser functions.
+
+
+### Catalog discovery mapper
+- `CatalogProductMapper.kt` owns mapping of catalog discovery page responses into the existing `CatalogProduct` model.
+- `CatalogScreen.kt` retains request orchestration, page offset/has-more decisions, item de-duplication, and UI feedback.
+- `CatalogProductMapperTest.kt` covers nested units/rulings, localized display fallback, raw-value retention, and empty pages.
+- `tests/test_catalog_models_ownership.py` enforces the mapper boundary.
+
+
+### Catalog directory mapping extraction (2026-11-04)
+- `CatalogDirectoryMapper.kt` owns the combined directory response parser for categories, translations, units, local unit codes, and activity hierarchy nodes.
+- `CatalogScreen.kt` continues to own request orchestration, locale selection, initial activity inference, screen state, and feedback.
+- `CatalogDirectoryMapperTest.kt` covers translated and fallback fields, activity-node filtering, local-unit normalization, empty collections, and malformed required arrays.
+
+
+### Catalog invoice and transfer mapping extraction (2026-11-04)
+- `CatalogWorkflowMappers.kt` owns pure mapping for invoice-purchase request lists and pending catalog-transfer lists.
+- `CatalogScreen.kt` retains request URLs, organization scoping, sorting/limits, actions, and feedback.
+- `CatalogWorkflowMappersTest.kt` covers request/transfer field mapping, optional purchase-order IDs, and empty responses.
+
+
+### Catalog invoice mapping response extraction (2026-11-04)
+- `CatalogInvoiceMappingMapper.kt` maps the prepared invoice-mapping payload into location, warehouse, unmatched-line, and offering models.
+- `CatalogScreen.kt` retains purchase-order eligibility and lock checks, REST orchestration, active catalog filtering, and mapping state.
+- `CatalogInvoiceMappingMapperTest.kt` covers the response fields and empty collections.
+
+
+### Reports ledger validation extraction (2026-11-04)
+- Moved the existing financial-statement source validation block into `ReportLedgerValidation.kt` as a pure function.
+- Preserved fail-closed error precedence, required GL mapping keys, supplier control-account roles, end-date filtering, invalid-date rejection, entry/currency balancing, account-type allowlist, and ISO currency validation.
+- `ReportsCenterScreen.kt` still owns all cloud loads, Compose state, and rendering; it now delegates only this validation decision.
+- Added `ReportLedgerValidationTest.kt` for cloud-mode gating, source-error precedence, missing mappings/roles, malformed dates, empty windows, unbalanced/unknown/invalid-currency entries, and a valid balanced ledger.
+- No database, RPC, report formula, or export contract was changed.

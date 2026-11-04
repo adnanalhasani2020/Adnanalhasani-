@@ -181,3 +181,50 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 - Extracted More, expenses, expense entry, local reports, legacy cloud reports, debt, and settlement composables to `LocalOperationalScreens.kt`.
 - Reduced `MainActivity.kt` from 613 lines after earlier extractions to a 32-line Android entry point plus the shared cloud executor/handler.
 - Added source-contract tests that enforce the thin activity boundary and ensure every moved composable has one owner. Existing function names and call sites are preserved; no local/cloud data workflow was intentionally changed.
+
+
+### Completed follow-up — catalog market parsing
+
+- Extracted market-context, nearby-catalog, and aggregated price-suggestion response mapping into `CatalogMarketData.kt`.
+- Added Kotlin unit coverage for missing branch coordinates, warehouse association, nearby item mapping, and price-hint formatting.
+- Kept location permission handling, pagination, RPC calls, selection state, and user-facing feedback in `CatalogScreen.kt`; no RPC, database, or business-rule contract was changed.
+
+
+## 2026-11-04 — Catalog discovery product mapping extraction
+
+- Moved the catalog discovery-page JSON-to-`CatalogProduct` mapping, including localized display fallbacks, unit options, raw metadata, expiry/tracking flags, and rulings, into `CatalogProductMapper.kt`.
+- Kept the RPC request, page size, offset progression, de-duplication, loading state, and user feedback in `CatalogScreen.kt`. Pagination still advances by the returned row count and still treats a full 100-row page as potentially having more results.
+- Added JVM tests for nested units/rulings, localized display overrides with original raw values retained, and empty pages; added a Python ownership guard.
+- No RPC name or payload, database schema, item model, or catalog business rule was changed.
+
+
+## 2026-11-04 — Catalog directory mapping extraction
+
+- Extracted the combined catalog master-data response parser into `CatalogDirectoryMapper.kt`: local unit codes, activity-directory nodes, translated categories/descriptions, and translated global units.
+- Kept the seven existing catalog directory GET/RPC calls, locale selection, initial activity/sector inference, screen state updates, user feedback, and subsequent market-context loading in `CatalogScreen.kt`.
+- Added `CatalogDirectoryMapperTest.kt` for translations, null/default fields, activity-node filtering, local-unit normalization, empty optional collections, and malformed required data.
+- The response keys and domain model constructors remain unchanged; no RPC, SQL, unit conversion, or catalog-selection behavior was intentionally changed.
+
+
+## 2026-11-04 — Catalog workflow response mapping extraction
+
+- Extracted invoice-purchase request and pending catalog-transfer JSON mapping into `CatalogWorkflowMappers.kt`.
+- Kept both existing REST request URLs, organization filters, sorting, limits, action callbacks, feedback, and refresh behavior in `CatalogScreen.kt`.
+- Added `CatalogWorkflowMappersTest.kt` for request field mapping, nullable purchase-order references, transfer fields, and empty responses.
+- Added a source-ownership guard. No RPC/REST contract, status transition, transfer action, or invoice workflow behavior was intentionally changed.
+
+
+## 2026-11-04 — Catalog invoice-mapping response extraction
+
+- Extracted the prepared invoice-item mapping payload parser into `CatalogInvoiceMappingMapper.kt`, covering the receive location, warehouse options, unmapped purchase lines, and eligible catalog offerings.
+- Kept purchase-order validation, supplier-invoice lock checks, all REST reads and filtering, active offering/product eligibility, candidate construction, mapping selection defaults, and user feedback in `CatalogScreen.kt`.
+- Added `CatalogInvoiceMappingMapperTest.kt` for mapped fields and empty optional collections, plus a source-ownership guard.
+- No endpoint, organization/location scope, eligibility condition, invoice matching action, or inventory behavior was intentionally changed.
+
+
+## 2026-11-04 — Reports ledger-validation extraction
+
+- Extracted the financial-statement source validation from `ReportsCenterScreen.kt` into `ReportLedgerValidation.kt`.
+- Kept cloud data loading, Compose state, filter state, report selection, calculations, and rendering in their existing owners.
+- Added `ReportLedgerValidationTest.kt` covering fail-closed validation and the valid balanced-ledger case.
+- The extraction preserves validation ordering and all existing checks; it does not alter SQL/RPC contracts or financial formulas.

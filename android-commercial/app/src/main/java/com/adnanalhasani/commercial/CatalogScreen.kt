@@ -201,69 +201,10 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                  .put("p_locale_code",locale.trim().lowercase().ifBlank { "ar" }).put("p_query",query.trim().ifBlank { JSONObject.NULL }).put("p_limit",100).put("p_offset",requestedOffset)
             catalogHttp("/rest/v1/rpc/commercial_catalog_discover_products_page",payload,active)
         }, { raw ->
-            val json=JSONArray(raw)
-            val pageItems=List(json.length()) { i ->
-                val row=json.getJSONObject(i)
-                val localized=row.optJSONObject("localized_details") ?: JSONObject()
-                CatalogProduct(
-                    id=row.optString("product_id"),catalogCode=row.optString("catalog_code"),name=row.optString("product_name"),
-                    description=row.optString("short_description"),categoryCode=row.optString("category_code"),category=row.optString("category_name"),
-                    brand=localized.optString("brand").takeUnless { it.isBlank() || it == "null" } ?: row.optString("brand"),
-                    manufacturer=localized.optString("manufacturer_name").takeUnless { it.isBlank() || it == "null" } ?: row.optString("manufacturer_name"),
-                    countryOfManufacture=localized.optString("country_of_manufacture").takeUnless { it.isBlank() || it == "null" } ?: row.optString("country_of_manufacture"),
-                    imageUrl=row.optString("image_url"),prescriptionOnly=row.optBoolean("is_prescription_only",false),
-                    recommendationScore=row.optInt("recommendation_score"),barcode=row.optString("barcode"),unitCode=row.optString("unit_code").ifBlank { "EA" },
-                    availableUnits=row.optJSONArray("available_units")?.let { arr -> List(arr.length()) { j ->
-                        val u=arr.getJSONObject(j); CatalogUnit(u.optString("unit_code"),u.optString("unit_role"),u.optString("quantity_in_base","1"),u.optString("barcode"),u.optString("package_name").takeUnless { it == "null" }.orEmpty(),u.optString("image_url").takeUnless { it == "null" }.orEmpty(),u.optBoolean("is_default"),u.optString("unit_name").takeUnless { it == "null" }.orEmpty(),u.optString("sku").takeUnless { it == "null" }.orEmpty(),u.optString("net_quantity").takeUnless { it == "null" }.orEmpty(),u.optString("net_unit_code").takeUnless { it == "null" }.orEmpty())
-                    } } ?: emptyList(),createdBy=row.optString("created_by"),createdAt=row.optString("created_at"),importedBy=signedInUserId,
-                    attributesSchema=localized.optString("attributes_schema").takeUnless { it.isBlank() || it == "null" } ?: row.optJSONObject("attributes_schema")?.toString().orEmpty(),modelNumber=localized.optString("model_number").takeUnless { it.isBlank() || it == "null" } ?: row.optString("model_number").takeUnless { it == "null" }.orEmpty(),partNumber=localized.optString("part_number").takeUnless { it.isBlank() || it == "null" } ?: row.optString("part_number").takeUnless { it == "null" }.orEmpty(),imageAlt=localized.optString("image_alt").takeUnless { it.isBlank() || it == "null" } ?: row.optString("image_alt").takeUnless { it == "null" }.orEmpty(),
-                    materialComposition=localized.optString("material_composition").takeUnless { it.isBlank() || it == "null" } ?: row.optJSONArray("material_composition")?.let { arr -> List(arr.length()) { arr.get(it).toString() }.joinToString(", ") }.orEmpty(),
-                    ingredients=localized.optString("ingredients").takeUnless { it.isBlank() || it == "null" } ?: row.optJSONArray("ingredients")?.let { arr -> List(arr.length()) { arr.get(it).toString() }.joinToString(", ") }.orEmpty(),
-                    recipe=localized.optString("recipe").takeUnless { it.isBlank() || it == "null" } ?: row.optJSONObject("recipe")?.let { rec ->
-                        listOf(rec.optString("instructions").takeUnless { it == "null" || it.isBlank() },
-                            rec.optJSONArray("ingredients")?.let { ing -> List(ing.length()) { ingredientIndex -> val ingredient=ing.getJSONObject(ingredientIndex); "${ingredient.optString("ingredient_name")} ${ingredient.optString("quantity")} ${ingredient.optString("unit_code")}" }.joinToString(", ") })
-                            .filterNotNull().joinToString(" • ")
-                    }.orEmpty(),
-                    specifications=localized.optString("specifications").takeUnless { it.isBlank() || it == "null" } ?: row.optJSONObject("specifications")?.toString().orEmpty(),
-                    allergens=localized.optString("allergens").takeUnless { it.isBlank() || it == "null" } ?: row.optJSONArray("allergens")?.let { arr -> List(arr.length()) { arr.get(it).toString() }.joinToString(", ") }.orEmpty(),
-                    storageInstructions=localized.optString("storage_instructions").takeUnless { it.isBlank() || it == "null" } ?: row.optString("storage_instructions").takeUnless { it == "null" }.orEmpty(),
-                    usageInstructions=localized.optString("usage_instructions").takeUnless { it.isBlank() || it == "null" } ?: row.optString("usage_instructions").takeUnless { it == "null" }.orEmpty(),
-                    warnings=localized.optString("warnings").takeUnless { it.isBlank() || it == "null" } ?: row.optString("warnings").takeUnless { it == "null" }.orEmpty(),
-                    shelfLifeDays=if(row.isNull("shelf_life_days")) null else row.optInt("shelf_life_days"),
-                    requiresExpiryDate=row.optBoolean("requires_expiry_date",false),isBatchTracked=row.optBoolean("is_batch_tracked",false),
-                    isSerialTracked=row.optBoolean("is_serial_tracked",false),
-                    ownerOrganizationId=row.optString("owner_organization_id").takeUnless { it == "null" }.orEmpty(),
-                    nameAr=row.optString("name_ar"),nameEn=row.optString("name_en"),
-                    descriptionAr=row.optString("description_ar").takeUnless { it == "null" }.orEmpty(),
-                    descriptionEn=row.optString("description_en").takeUnless { it == "null" }.orEmpty(),
-                    itemType=row.optString("item_type","product"),barcodeGtin=row.optString("barcode_gtin").takeUnless { it == "null" }.orEmpty(),
-                    rawMaterialComposition=row.optJSONArray("material_composition")?.toString() ?: "[]",
-                    rawIngredients=row.optJSONArray("ingredients")?.toString() ?: "[]",
-                    rawRecipe=row.optJSONObject("recipe")?.toString() ?: "{}",
-                    rawSpecifications=row.optJSONObject("specifications")?.toString() ?: "{}",
-                    rawAllergens=row.optJSONArray("allergens")?.toString() ?: "[]",
-                    rawAttributesSchema=row.optJSONObject("attributes_schema")?.toString() ?: "{}",
-                    rawBrand=row.optString("brand").takeUnless { it == "null" }.orEmpty(),
-                    rawManufacturer=row.optString("manufacturer_name").takeUnless { it == "null" }.orEmpty(),
-                    rawCountryOfManufacture=row.optString("country_of_manufacture").takeUnless { it == "null" }.orEmpty(),
-                    rawModelNumber=row.optString("model_number").takeUnless { it == "null" }.orEmpty(),
-                    rawPartNumber=row.optString("part_number").takeUnless { it == "null" }.orEmpty(),
-                    rawImageAlt=row.optString("image_alt").takeUnless { it == "null" }.orEmpty(),
-                    rawStorageInstructions=row.optString("storage_instructions").takeUnless { it == "null" }.orEmpty(),
-                    rawUsageInstructions=row.optString("usage_instructions").takeUnless { it == "null" }.orEmpty(),
-                    rawWarnings=row.optString("warnings").takeUnless { it == "null" }.orEmpty(),
-                    rulings=row.optJSONArray("rulings")?.let { arr -> List(arr.length()) { i -> val ruling=arr.getJSONObject(i); CatalogRuling(
-                        ruling.optString("ruling_id"),ruling.optString("ruling_domain"),ruling.optString("authority_code"),
-                        ruling.optString("religion_code").takeUnless { it == "null" }.orEmpty(),ruling.optString("jurisdiction_code").takeUnless { it == "null" }.orEmpty(),
-                        ruling.optString("outcome"),ruling.optString("rationale").takeUnless { it == "null" }.orEmpty(),
-                        ruling.optString("source_title").takeUnless { it == "null" }.orEmpty(),ruling.optString("source_url").takeUnless { it == "null" }.orEmpty(),
-                        ruling.optString("confidence"),ruling.optString("effective_from").takeUnless { it == "null" }.orEmpty(),ruling.optString("effective_to").takeUnless { it == "null" }.orEmpty(),ruling.optString("reviewed_at").takeUnless { it == "null" }.orEmpty()
-                    ) } } ?: emptyList()
-                )
-            }
+            val pageItems=parseCatalogProducts(raw, signedInUserId)
             items = if (reset) pageItems.distinctBy { it.id } else (items + pageItems).distinctBy { it.id }
-            catalogOffset = requestedOffset + json.length()
-            catalogHasMore = json.length() == 100
+            catalogOffset = requestedOffset + pageItems.size
+            catalogHasMore = pageItems.size == 100
             feedback = if (catalogHasMore) "تم تحميل ${items.size} صنفًا؛ اسحب إلى الأسفل لتحميل المزيد." else "اكتمل تحميل ${items.size} صنفًا مطابقًا."
         }, { catalogPageLoadFailed = true })
     }
@@ -288,9 +229,9 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             val warehouses=catalogGet("/rest/v1/commercial_warehouses?select=id,name,branch_location_id&organization_id=eq."+orgId+"&state=eq.active&order=name.asc",active)
             JSONObject().put("branches",JSONArray(branches)).put("warehouses",JSONArray(warehouses)).toString()
         }, { raw ->
-            val result=JSONObject(raw); val bs=result.getJSONArray("branches"); val ws=result.getJSONArray("warehouses")
-            marketBranches=List(bs.length()) { i -> val row=bs.getJSONObject(i); CatalogBranchOption(row.optString("id"),row.optString("name"),row.optString("latitude").takeUnless { it=="null" }.orEmpty(),row.optString("longitude").takeUnless { it=="null" }.orEmpty()) }
-            marketWarehouses=List(ws.length()) { i -> val row=ws.getJSONObject(i); CatalogWarehouseOption(row.optString("id"),row.optString("name"),row.optString("branch_location_id")) }
+            val marketContext = parseCatalogMarketContext(raw)
+            marketBranches = marketContext.branches
+            marketWarehouses = marketContext.warehouses
             if(selectedBranchId.isBlank()) selectedBranchId=marketBranches.firstOrNull()?.id.orEmpty()
             if(selectedWarehouseId.isBlank() || marketWarehouses.none { it.id==selectedWarehouseId && it.branchId==selectedBranchId }) selectedWarehouseId=marketWarehouses.firstOrNull { it.branchId==selectedBranchId }?.id.orEmpty()
             val selectedBranch=marketBranches.firstOrNull { it.id==selectedBranchId }
@@ -313,39 +254,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             // Product-unit RLS inherits visibility from the global catalog item.
             val filter=java.net.URLEncoder.encode("in.("+selectedIds.joinToString(",")+")","UTF-8")
             val unitRaw=catalogGet("/rest/v1/commercial_catalog_product_units?select=product_id,unit_code,unit_role,quantity_in_base,is_default&is_active=eq.true&product_id=$filter&order=product_id.asc,is_default.desc,created_at.asc",active)
-            val unitRows=JSONArray(unitRaw)
-            val grouped=mutableMapOf<String,MutableList<JSONObject>>()
-            for(i in 0 until unitRows.length()) {
-                val row=unitRows.getJSONObject(i)
-                grouped.getOrPut(row.optString("product_id")) { mutableListOf() }.add(row)
-            }
-            val payloadItems=JSONArray()
-            for(id in selectedIds) {
-                val units=grouped[id].orEmpty()
-                val baseCandidates=units.filter {
-                    it.optString("unit_role").equals("base",true) &&
-                        it.optString("quantity_in_base").toBigDecimalOrNull()?.compareTo(java.math.BigDecimal.ONE)==0
-                }
-                if(baseCandidates.size!=1) {
-                    throw IllegalStateException("الصنف $id لا يملك وحدة أساس واحدة موثوقة في الدليل؛ راجع بيانات وحداته قبل التهيئة.")
-                }
-                // The catalog authoring contract marks the base unit as the product's sole default.
-                // Therefore, only a sale-role default can be preferred as the sale unit.
-                val saleCandidates=units.filter { it.optString("unit_role").equals("sale",true) }
-                val defaultSaleCandidates=saleCandidates.filter { it.optBoolean("is_default",false) }
-                if(defaultSaleCandidates.size>1 || (defaultSaleCandidates.isEmpty() && saleCandidates.size>1)) {
-                    throw IllegalStateException("وحدات الصنف $id تحتوي أكثر من وحدة بيع افتراضية أو مرشحة؛ يلزم تصحيح الدليل قبل التهيئة.")
-                }
-                val base=baseCandidates.single()
-                val sale=defaultSaleCandidates.singleOrNull() ?: saleCandidates.singleOrNull() ?: base
-                val saleFactor=sale.optString("quantity_in_base").toBigDecimalOrNull()
-                if(saleFactor==null || saleFactor<=java.math.BigDecimal.ZERO || sale.optString("unit_code").isBlank()) {
-                    throw IllegalStateException("معامل تحويل وحدة البيع للصنف $id غير صالح؛ لم يتم اختلاق معامل بديل.")
-                }
-                payloadItems.put(JSONObject().put("global_item_id",id)
-                    .put("base_unit_code",base.optString("unit_code"))
-                    .put("sale_unit_code",sale.optString("unit_code")))
-            }
+            val payloadItems=buildCatalogConfigurationItems(selectedIds, JSONArray(unitRaw))
             catalogHttp("/rest/v1/rpc/commercial_catalog_configure_items",JSONObject().put("p_organization_id",orgId)
                 .put("p_activity_node_code",selectedActivityCode).put("p_branch_location_id",selectedBranchId)
                 .put("p_warehouse_id",selectedWarehouseId).put("p_items",payloadItems),active)
@@ -374,12 +283,10 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                 .put("p_latitude",lat.toPlainString()).put("p_longitude",lon.toPlainString()).put("p_radius_m",nextRadius)
                 .put("p_offset",requestedOffset).put("p_limit",30),active)
         }, { raw ->
-            val rows=JSONArray(raw)
-            val page=List(rows.length()) { i -> val row=rows.getJSONObject(i); NearbyCatalogItem(row.optString("global_item_id"),
-                row.optString("product_name"),row.optString("popularity_band"),row.optString("merchant_count_band")) }
+            val page = parseNearbyCatalogItems(raw)
             if(expandRadius) marketRadius=nextRadius
-            nearbyOffset=requestedOffset+rows.length()
-            nearbyHasMore=rows.length()==30
+            nearbyOffset=requestedOffset+page.size
+            nearbyHasMore=page.size==30
             nearbyMarketItems=(nearbyMarketItems+page).distinctBy { it.id }
             nearbyLoadGeneration++
             nearbyPageLoadFailed=false
@@ -472,13 +379,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                 .put("p_global_item_ids",JSONArray(ids)).put("p_latitude",lat.toPlainString()).put("p_longitude",lon.toPlainString())
                 .put("p_radius_m",marketRadius.coerceAtLeast(1000)).put("p_currency_code",currencyCode.uppercase()),active)
         }, { raw ->
-            val rows=JSONArray(raw); val hints=mutableMapOf<String,String>()
-            for(i in 0 until rows.length()) {
-                val row=rows.getJSONObject(i)
-                hints[row.optString("global_item_id")]=row.optString("currency_code")+" • وسيط "+row.optLong("suggested_median_minor")+
-                    " • نطاق ربعي "+row.optLong("lower_quartile_minor")+"–"+row.optLong("upper_quartile_minor")+
-                    " • تجار "+row.optString("merchant_count_band")
-            }
+            val hints = parseCatalogMarketPriceHints(raw)
             marketPriceHints=hints
             feedback=if(hints.isEmpty()) "لا توجد أسعار استرشادية مؤهلة؛ لم يتم اختلاق أي سعر." else "وصلت أسعار مجمعة لـ "+hints.size+" صنفًا من مجموعات تضم خمسة تجار مستقلين على الأقل."
         })
@@ -498,22 +399,16 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             JSONObject().put("categories",JSONArray(catRaw)).put("units",JSONArray(unitRaw)).put("localUnits",JSONArray(localUnitRaw))
                 .put("categoryTranslations",JSONArray(categoryTranslationRaw)).put("categoryDescriptionTranslations",JSONArray(categoryDescriptionTranslationRaw)).put("unitTranslations",JSONArray(unitTranslationRaw)).put("activityDirectory",activityDirectory).toString()
         }, { raw ->
-            val result=JSONObject(raw); val cats=result.getJSONArray("categories"); val units=result.getJSONArray("units")
-            val localUnits=result.optJSONArray("localUnits") ?: JSONArray()
-            localUnitCodes=(0 until localUnits.length()).map { localUnits.getJSONObject(it).optString("code").lowercase() }.filter { it.isNotBlank() }.toSet()
-            val catTr=result.getJSONArray("categoryTranslations"); val catDescTr=result.getJSONArray("categoryDescriptionTranslations"); val unitTr=result.getJSONArray("unitTranslations")
-            val activityJson=result.optJSONArray("activityDirectory") ?: JSONArray()
-            activityNodes=List(activityJson.length()) { i -> val node=activityJson.getJSONObject(i); CatalogActivityNode(node.optString("code"),node.optString("parent_code").takeUnless { it == "null" }.orEmpty(),node.optString("node_kind"),node.optString("path_ar",node.optString("name_ar")),node.optString("path_en",node.optString("name_en")),node.optString("default_business_level_code").takeUnless { it == "null" }.orEmpty(),node.optInt("depth",0),node.optBoolean("is_selectable",false)) }.filter { it.code.isNotBlank() }
+            val directory = parseCatalogDirectory(raw)
+            localUnitCodes = directory.localUnitCodes
+            activityNodes = directory.activityNodes
+            categories = directory.categories
+            directoryUnits = directory.units
             if (initialActivityCode.isNotBlank()) {
                 val inferredSector = catalogSectorForNode(initialActivityCode.uppercase(), activityNodes)
                 if (inferredSector.isNotBlank()) sector = inferredSector
                 activityNodes.firstOrNull { it.code.equals(initialActivityCode, true) }?.defaultBusinessLevelCode?.takeIf { it.isNotBlank() }?.let { businessLevel = it }
             }
-            val categoryNames=buildMap { for(i in 0 until catTr.length()) { val v=catTr.getJSONObject(i); put(v.optString("entity_key"),v.optString("translated_value")) } }
-            val categoryDescriptions=buildMap { for(i in 0 until catDescTr.length()) { val v=catDescTr.getJSONObject(i); put(v.optString("entity_key"),v.optString("translated_value")) } }
-            val unitNames=buildMap { for(i in 0 until unitTr.length()) { val v=unitTr.getJSONObject(i); put(v.optString("entity_key"),v.optString("translated_value")) } }
-            categories=List(cats.length()) { i -> val v=cats.getJSONObject(i); val code=v.optString("code"); CatalogCategory(code,v.optString("parent_code").takeUnless { it == "null" }.orEmpty(),v.optString("name_ar"),v.optString("name_en"),categoryNames[code].orEmpty(),v.optString("description_ar").takeUnless { it == "null" }.orEmpty(),v.optString("description_en").takeUnless { it == "null" }.orEmpty(),categoryDescriptions[code].orEmpty()) }
-            directoryUnits=List(units.length()) { i -> val v=units.getJSONObject(i); val code=v.optString("code"); DirectoryUnit(code,v.optString("name_ar"),v.optString("name_en"),v.optString("dimension"),v.optString("base_unit_code").takeUnless { it == "null" }.orEmpty(),v.optString("factor_to_base").takeUnless { it == "null" }.orEmpty(),v.optString("owner_organization_id").takeUnless { it == "null" }.orEmpty(),unitNames[code].orEmpty()) }
             feedback="تم تحميل ${categories.size} تصنيفًا و${directoryUnits.size} وحدة قياس و${sectorOptions.size} قطاعًا و${activityNodes.count { it.nodeKind.equals("activity", true) }} نشاطًا و${activityNodes.count { it.nodeKind.equals("specialization", true) }} تخصصًا."
             loadMarketContext()
         })
@@ -637,13 +532,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         request({
             catalogGet("/rest/v1/commercial_invoice_purchase_requests?select=id,source_organization_id,destination_organization_id,source_invoice_number,currency_code,total_minor,status,destination_purchase_order_id,created_at&or=(source_organization_id.eq."+orgId+",destination_organization_id.eq."+orgId+")&order=created_at.desc&limit=50",active)
         }, { raw ->
-            val rows=JSONArray(raw)
-            invoiceRequests=List(rows.length()) { i ->
-                val row=rows.getJSONObject(i)
-                InvoicePurchaseRequestRow(row.optString("id"),row.optString("source_organization_id"),row.optString("destination_organization_id"),
-                    row.optString("source_invoice_number"),row.optString("currency_code"),row.optLong("total_minor"),row.optString("status"),
-                    row.optString("destination_purchase_order_id").takeUnless { it=="null" }.orEmpty(),row.optString("created_at"))
-            }
+            invoiceRequests=parseInvoicePurchaseRequests(raw)
             feedback="طلبات تحويل الفواتير: "+invoiceRequests.size
         })
     }
@@ -734,26 +623,31 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                 val globalId=row.optString("global_item_id")
                 val name=names[globalId]
                 if(offeringId !in activeIds || name==null) null
-                else InvoicePurchaseOffering(offeringId,globalId,name.first.ifBlank { globalId },name.second)
-            }.distinctBy { it.id }
-            val lines=(0 until lineRows.length()).map { i ->
-                val row=lineRows.getJSONObject(i)
-                InvoicePurchaseUnmappedLine(row.optString("id"),row.optInt("line_number"),row.optString("item_description"),
-                    row.optString("quantity_ordered"),row.optString("source_selling_unit_code").takeUnless { it=="null" }.orEmpty())
+                else JSONObject().put("id",offeringId).put("global_item_id",globalId)
+                    .put("name",name.first.ifBlank { globalId }).put("unit_code",name.second)
+            }.distinctBy { it.optString("id") }
+            val lines=JSONArray().apply {
+                for(i in 0 until lineRows.length()) {
+                    val row=lineRows.getJSONObject(i)
+                    put(JSONObject().put("id",row.optString("id"))
+                        .put("line_number",row.optInt("line_number"))
+                        .put("description",row.optString("item_description"))
+                        .put("quantity",row.optString("quantity_ordered"))
+                        .put("unit_code",row.optString("source_selling_unit_code").takeUnless { it=="null" }.orEmpty()))
+                }
             }
             JSONObject().put("location_id",locationId)
-                .put("lines",JSONArray().apply { lines.forEach { put(JSONObject().put("id",it.id).put("line_number",it.lineNumber).put("description",it.description).put("quantity",it.quantity).put("unit_code",it.unitCode)) } })
-                .put("offerings",JSONArray().apply { candidates.forEach { put(JSONObject().put("id",it.id).put("global_item_id",it.globalItemId).put("name",it.name).put("unit_code",it.unitCode)) } })
+                .put("lines",lines)
+                .put("offerings",JSONArray().apply { candidates.forEach { put(it) } })
                 .put("warehouses",warehouseRows)
                 .toString()
         }, { raw ->
-            val result=JSONObject(raw); val lines=result.getJSONArray("lines"); val offerings=result.getJSONArray("offerings")
-            invoiceMappingLocationId=result.optString("location_id")
-            val warehouses=result.optJSONArray("warehouses") ?: JSONArray()
-            invoiceMappingWarehouses=List(warehouses.length()) { i -> val row=warehouses.getJSONObject(i); CatalogWarehouseOption(row.optString("id"),row.optString("name"),row.optString("branch_location_id")) }
+            val mapping = parseCatalogInvoiceMapping(raw)
+            invoiceMappingLocationId = mapping.locationId
+            invoiceMappingWarehouses = mapping.warehouses
             if(invoiceMappingWarehouses.none { it.id==invoiceMappingWarehouseId }) invoiceMappingWarehouseId=invoiceMappingWarehouses.firstOrNull()?.id.orEmpty()
-            invoiceMappingLines=List(lines.length()) { i -> val row=lines.getJSONObject(i); InvoicePurchaseUnmappedLine(row.optString("id"),row.optInt("line_number"),row.optString("description"),row.optString("quantity"),row.optString("unit_code")) }
-            invoiceMappingOfferings=List(offerings.length()) { i -> val row=offerings.getJSONObject(i); InvoicePurchaseOffering(row.optString("id"),row.optString("global_item_id"),row.optString("name"),row.optString("unit_code")) }
+            invoiceMappingLines = mapping.lines
+            invoiceMappingOfferings = mapping.offerings
             invoiceMappingRequestId=req.id
             invoiceMappingPurchaseOrderId=req.purchaseOrderId
             invoiceMappingLineId=invoiceMappingLines.firstOrNull()?.id.orEmpty()
@@ -907,8 +801,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         request({
             catalogGet("/rest/v1/commercial_catalog_transfers?select=id,source_organization_id,destination_organization_id,item_count,status,created_at&destination_organization_id=eq.$orgId&status=eq.pending&order=created_at.desc",active)
         }, { raw ->
-            val json=JSONArray(raw)
-            pendingTransfers=List(json.length()) { i -> val v=json.getJSONObject(i); PendingTransfer(v.optString("id"),v.optString("source_organization_id"),v.optString("destination_organization_id"),v.optInt("item_count"),v.optString("created_at")) }
+            pendingTransfers=parsePendingCatalogTransfers(raw)
             feedback="طلبات النقل الواردة: ${pendingTransfers.size}"
         })
     }

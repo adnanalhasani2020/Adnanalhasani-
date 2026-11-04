@@ -131,3 +131,38 @@ The UI must not become the authority for tenant access, balances, prices, postin
 
 
 - `MainActivity.kt` is limited to Android startup and application theme composition. Local operational screen rendering lives in `LocalOperationalScreens.kt`; local sale/product form dialogs live in `LocalProductDialogs.kt`. Shared app state and persistence remain in `StoreApp.kt` and `LocalStoreRepository.kt`.
+
+
+### Catalog market data boundary
+
+The catalog screen owns interaction and request orchestration. JSON-to-domain mapping for market branches/warehouses, nearby discovery, and price suggestions belongs to `CatalogMarketData.kt`. This keeps response parsing independently testable without moving location permissions, pagination, or state transitions out of the screen.
+
+
+### Catalog discovery product mapping boundary
+
+`CatalogProductMapper.kt` owns conversion of the paginated catalog-discovery JSON response into the existing `CatalogProduct` model, including localized display fallbacks and nested unit/ruling data. `CatalogScreen.kt` retains the RPC request, pagination, de-duplication, loading/error state, and user feedback. The mapper must not change the catalog RPC contract or conflate global catalog items with organization offerings and local inventory.
+
+
+### Catalog directory response boundary
+
+- `CatalogDirectoryMapper.kt` owns pure JSON-to-domain mapping for catalog categories, category translations/descriptions, global units, localized unit names, local unit-code membership, and business activity hierarchy nodes.
+- `CatalogScreen.kt` retains all directory network calls, locale/query selection, initial activity inference, Compose state updates, feedback, and follow-up market-context loading. The mapper must not issue requests or change the directory RPC/REST response contract.
+
+
+### Catalog workflow response boundary
+
+- `CatalogWorkflowMappers.kt` owns pure JSON mapping for invoice-purchase request rows and pending catalog-transfer rows.
+- `CatalogScreen.kt` retains the request endpoints, organization scoping, ordering/limits, action orchestration, refreshes, and feedback. Mapping extraction must not change approval/rejection actions or invoice-to-purchase linking semantics.
+
+
+### Catalog invoice-mapping response boundary
+
+- `CatalogInvoiceMappingMapper.kt` owns only the final prepared response-to-model conversion for location, warehouses, unmatched purchase lines, and candidate offerings.
+- `CatalogScreen.kt` retains all purchase-order/supplier-invoice validation, REST orchestration, active offering/product filtering, candidate eligibility, selected mapping state, and feedback. Do not move or relax those business checks as part of this parser extraction.
+
+
+### Reports ledger-validation boundary (2026-11-04)
+- `ReportLedgerValidation.kt` owns the pure fail-closed validation that gates financial statement rendering: cloud-mode requirement, source-load errors, required GL/supplier mappings, posted-entry dates, balanced entries by currency, known account types, and ISO currency codes.
+- `ReportsCenterScreen.kt` retains data loading and state ownership, and passes the existing ledger projections and load errors to the validator.
+- Validation precedence, Arabic feedback, required mapping/role keys, date cutoff, and per-entry/per-currency balance checks are preserved. The validator does not fetch data, mutate state, or calculate statement totals.
+- `ReportLedgerValidationTest.kt` covers the failure gates and the valid balanced-ledger path.
