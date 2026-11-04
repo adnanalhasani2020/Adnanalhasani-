@@ -8,8 +8,6 @@ import androidx.core.content.ContextCompat
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.ui.platform.LocalContext
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
 import android.os.Handler
 import android.os.Looper
 import androidx.compose.foundation.BorderStroke
@@ -34,56 +32,10 @@ import coil.compose.AsyncImage
 import androidx.compose.ui.unit.dp
 import org.json.JSONArray
 import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
 import java.util.concurrent.Executors
 
 private val catalogIo = Executors.newSingleThreadExecutor()
 private val catalogMain = Handler(Looper.getMainLooper())
-
-private fun catalogSessionPreferences(context: android.content.Context) = EncryptedSharedPreferences.create(
-    context,
-    "ruh_catalog_auth_session",
-    MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
-    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-)
-
-private fun catalogHttp(path: String, payload: JSONObject, token: String? = null): String {
-    val base = BuildConfig.SUPABASE_URL.trimEnd('/')
-    val anon = BuildConfig.SUPABASE_ANON_KEY
-    require(base.startsWith("https://") && anon.isNotBlank()) { "تحقق من إعداد SUPABASE_URL وSUPABASE_ANON_KEY." }
-    val connection = (URL("$base$path").openConnection() as HttpURLConnection).apply {
-        requestMethod = "POST"; connectTimeout = 15000; readTimeout = 25000; doOutput = true
-        setRequestProperty("apikey", anon); setRequestProperty("Content-Type", "application/json"); setRequestProperty("Accept", "application/json")
-        if (token != null) setRequestProperty("Authorization", "Bearer $token")
-    }
-    return try {
-        connection.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
-        val code = connection.responseCode
-        val raw = (if (code in 200..299) connection.inputStream else connection.errorStream)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
-        if (code !in 200..299) {
-            val error = runCatching { JSONObject(raw) }.getOrNull()
-            throw IllegalStateException(listOf(error?.optString("message"), error?.optString("hint")).filter { !it.isNullOrBlank() && it != "null" }.joinToString(" — ").ifBlank { "فشل الطلب إلى Supabase (HTTP $code)." })
-        }
-        raw
-    } finally { connection.disconnect() }
-}
-
-private fun catalogGet(path: String, token: String): String {
-    val base = BuildConfig.SUPABASE_URL.trimEnd('/')
-    val connection = (URL("$base$path").openConnection() as HttpURLConnection).apply {
-        requestMethod = "GET"; connectTimeout = 15000; readTimeout = 25000
-        setRequestProperty("apikey", BuildConfig.SUPABASE_ANON_KEY)
-        setRequestProperty("Authorization", "Bearer $token"); setRequestProperty("Accept", "application/json")
-    }
-    return try {
-        val code = connection.responseCode
-        val raw = (if (code in 200..299) connection.inputStream else connection.errorStream)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
-        if (code !in 200..299) throw IllegalStateException(runCatching { JSONObject(raw).optString("message") }.getOrDefault("").ifBlank { "تعذر تحميل الدليل (HTTP $code)." })
-        raw
-    } finally { connection.disconnect() }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -209,7 +161,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         }
     }
     LaunchedEffect(Unit) {
-        val savedRefresh = runCatching { catalogSessionPreferences(context).getString("refresh_token", null) }.getOrNull()
+        val savedRefresh = runCatching { commercialCloudSessionPreferences(context).getString("refresh_token", null) }.getOrNull()
         if (!savedRefresh.isNullOrBlank()) {
             request({
                 val raw = catalogHttp("/auth/v1/token?grant_type=refresh_token", JSONObject().put("refresh_token", savedRefresh))
@@ -221,7 +173,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             }, { sessionValue ->
                 val parts = sessionValue.split("|", limit = 3)
                 token = parts[0]
-                catalogSessionPreferences(context).edit().putString("refresh_token", parts.getOrNull(1).orEmpty()).apply()
+                commercialCloudSessionPreferences(context).edit().putString("refresh_token", parts.getOrNull(1).orEmpty()).apply()
                 signedInUserId = parts.getOrNull(2).orEmpty()
                 feedback = "تم استعادة جلستك السابقة."
                 restoringSession = false
@@ -992,7 +944,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                 Text("دليل متعدد الأنشطة والمستويات والمناطق",color=MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.bodySmall)
             }
             if (token != null) TextButton(onClick = {
-                runCatching { catalogSessionPreferences(context).edit().clear().apply() }
+                runCatching { commercialCloudSessionPreferences(context).edit().clear().apply() }
                 token = null; signedInUserId = ""; organizationId = ""; feedback = "تم تسجيل الخروج."
             }) { Text("تسجيل الخروج") }
         }
@@ -1007,7 +959,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                     val raw=catalogHttp("/auth/v1/token?grant_type=password",JSONObject().put("email",email).put("password",password))
                     val session=JSONObject(raw); val access=session.optString("access_token"); val refresh=session.optString("refresh_token"); if(access.isBlank() || refresh.isBlank()) throw IllegalStateException("لم تُرجع خدمة المصادقة جلسة صالحة.")
                     "${access}|${refresh}|${session.optJSONObject("user")?.optString("id").orEmpty()}"
-                },{sessionValue -> val parts=sessionValue.split("|",limit=3); token=parts[0]; catalogSessionPreferences(context).edit().putString("refresh_token",parts.getOrNull(1).orEmpty()).apply(); signedInUserId=parts.getOrNull(2).orEmpty(); password=""; feedback="تم تسجيل الدخول. ستُستعاد الجلسة تلقائيًا عند فتح الدليل لاحقًا."})},enabled=!busy && email.contains("@") && password.isNotBlank(),modifier=Modifier.fillMaxWidth()) { Text(if(busy) "جارٍ تسجيل الدخول..." else "تسجيل الدخول") } }
+                },{sessionValue -> val parts=sessionValue.split("|",limit=3); token=parts[0]; commercialCloudSessionPreferences(context).edit().putString("refresh_token",parts.getOrNull(1).orEmpty()).apply(); signedInUserId=parts.getOrNull(2).orEmpty(); password=""; feedback="تم تسجيل الدخول. ستُستعاد الجلسة تلقائيًا عند فتح الدليل لاحقًا."})},enabled=!busy && email.contains("@") && password.isNotBlank(),modifier=Modifier.fillMaxWidth()) { Text(if(busy) "جارٍ تسجيل الدخول..." else "تسجيل الدخول") } }
                 item { Text("تُحفظ بيانات تجديد الجلسة مشفرة على الجهاز، ولا تُحفظ كلمة المرور. لا تستخدم مفتاح service_role في التطبيق.",color=MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.bodySmall) }
             }
         } else {
