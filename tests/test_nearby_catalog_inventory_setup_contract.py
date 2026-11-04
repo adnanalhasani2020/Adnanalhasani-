@@ -3,6 +3,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogScreen.kt"
+CONFIGURATION = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogMarketConfiguration.kt"
 SCHEMA = ROOT / "supabase/migrations/20261023231027_universal_commercial_catalog.sql"
 SETUP = ROOT / "supabase/migrations/20261029040000_catalog_setup_privacy_discovery.sql"
 
@@ -11,6 +12,7 @@ class NearbyCatalogInventorySetupContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.screen = SCREEN.read_text(encoding="utf-8")
+        cls.configuration = CONFIGURATION.read_text(encoding="utf-8")
         cls.schema = SCHEMA.read_text(encoding="utf-8")
         cls.setup = SETUP.read_text(encoding="utf-8")
 
@@ -18,19 +20,19 @@ class NearbyCatalogInventorySetupContractTests(unittest.TestCase):
         self.assertIn("val selectedIds=selectedCatalogIds.toList()", self.screen)
         self.assertIn("commercial_catalog_product_units?select=product_id,unit_code,unit_role,quantity_in_base,is_default", self.screen)
         self.assertIn('product_id=$filter', self.screen)
-        self.assertIn('grouped.getOrPut(row.optString("product_id"))', self.screen)
-        self.assertIn('for(id in selectedIds)', self.screen)
+        self.assertIn('grouped.getOrPut(row.optString("product_id"))', self.configuration)
+        self.assertIn("for (id in selectedIds)", self.configuration)
         self.assertIn('selectedCatalogIds.size<=100', self.screen)
 
     def test_unit_selection_rejects_missing_or_ambiguous_conversion_data(self):
-        self.assertIn("if(baseCandidates.size!=1)", self.screen)
-        self.assertIn("defaultSaleCandidates.size>1", self.screen)
-        self.assertIn("val defaultSaleCandidates=saleCandidates.filter { it.optBoolean(\"is_default\",false) }", self.screen)
-        self.assertIn("defaultSaleCandidates.singleOrNull() ?: saleCandidates.singleOrNull() ?: base", self.screen)
-        self.assertNotIn("val defaultCandidates=units.filter { it.optBoolean(\"is_default\",false) }", self.screen)
-        self.assertIn("saleFactor<=java.math.BigDecimal.ZERO", self.screen)
-        self.assertIn('put("base_unit_code",base.optString("unit_code"))', self.screen)
-        self.assertIn('put("sale_unit_code",sale.optString("unit_code"))', self.screen)
+        self.assertIn("if (baseCandidates.size != 1)", self.configuration)
+        self.assertIn("defaultSaleCandidates.size > 1", self.configuration)
+        self.assertIn('val defaultSaleCandidates = saleCandidates.filter { it.optBoolean("is_default", false) }', self.configuration)
+        self.assertIn("defaultSaleCandidates.singleOrNull() ?: saleCandidates.singleOrNull() ?: base", self.configuration)
+        self.assertNotIn("val defaultCandidates=units.filter", self.configuration)
+        self.assertIn("saleFactor <= BigDecimal.ZERO", self.configuration)
+        self.assertIn('.put("base_unit_code", base.optString("unit_code"))', self.configuration)
+        self.assertIn('.put("sale_unit_code", sale.optString("unit_code"))', self.configuration)
 
     def test_nearby_results_keep_scroll_pagination_radius_expansion_and_selection(self):
         self.assertIn("var nearbyHasMore by remember", self.screen)
