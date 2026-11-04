@@ -25,6 +25,8 @@ internal fun CatalogMarketDiscoverySection(
     onToggleCatalogItem: (String) -> Unit,
     onSelectBranch: (CatalogBranchOption) -> Unit,
     onSelectWarehouse: (String) -> Unit,
+    onBranchMenuExpandedChange: (Boolean) -> Unit,
+    onWarehouseMenuExpandedChange: (Boolean) -> Unit,
     onBranchLatitudeChange: (String) -> Unit,
     onBranchLongitudeChange: (String) -> Unit,
     onUseBranchLocation: () -> Unit,
@@ -42,18 +44,18 @@ internal fun CatalogMarketDiscoverySection(
                             Text("الفرع والمستودع واكتشاف السوق",fontWeight=FontWeight.SemiBold)
                             Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                                 Box(Modifier.weight(1f)) {
-                                    OutlinedButton(onClick={state.branchMenuExpanded=true},modifier=Modifier.fillMaxWidth(),enabled=!busy) {
+                                    OutlinedButton(onClick={onBranchMenuExpandedChange(true)},modifier=Modifier.fillMaxWidth(),enabled=!busy) {
                                         Text(state.marketBranches.firstOrNull { it.id==state.selectedBranchId }?.name ?: "اختر الفرع")
                                     }
-                                    DropdownMenu(expanded=state.branchMenuExpanded,onDismissRequest={state.branchMenuExpanded=false}) {
+                                    DropdownMenu(expanded=state.branchMenuExpanded,onDismissRequest={onBranchMenuExpandedChange(false)}) {
                                         state.marketBranches.forEach { branch -> DropdownMenuItem(text={Text(branch.name)},onClick={onSelectBranch(branch)}) }
                                     }
                                 }
                                 Box(Modifier.weight(1f)) {
-                                    OutlinedButton(onClick={state.warehouseMenuExpanded=true},modifier=Modifier.fillMaxWidth(),enabled=!busy && state.selectedBranchId.isNotBlank()) {
+                                    OutlinedButton(onClick={onWarehouseMenuExpandedChange(true)},modifier=Modifier.fillMaxWidth(),enabled=!busy && state.selectedBranchId.isNotBlank()) {
                                         Text(state.marketWarehouses.firstOrNull { it.id==state.selectedWarehouseId }?.name ?: "اختر المستودع")
                                     }
-                                    DropdownMenu(expanded=state.warehouseMenuExpanded,onDismissRequest={state.warehouseMenuExpanded=false}) {
+                                    DropdownMenu(expanded=state.warehouseMenuExpanded,onDismissRequest={onWarehouseMenuExpandedChange(false)}) {
                                         state.marketWarehouses.filter { it.branchId==state.selectedBranchId }.forEach { warehouse ->
                                             DropdownMenuItem(text={Text(warehouse.name)},onClick={onSelectWarehouse(warehouse.id)})
                                         }
