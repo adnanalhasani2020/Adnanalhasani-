@@ -829,3 +829,10 @@ internal fun calculateTaxDiscountSummaryTotals(
         )
     }.sortedBy { it.currencyCode }
 }
+
+
+/** Aggregates report summary amounts by currency without allowing Long overflow. */
+internal fun calculateReportCurrencyTotals(amounts: List<Pair<String, Long>>): Map<String, Long> =
+    amounts.groupBy { (currencyCode, _) -> currencyCode.ifBlank { "غير محددة" } }
+        .toSortedMap()
+        .mapValues { (_, rows) -> sumReportAmountsExactly(rows.map { it.second }) }

@@ -269,3 +269,10 @@ The catalog screen owns interaction and request orchestration. JSON-to-domain ma
 
 - `ReportDomainMappers.kt` owns selection of active supplier invoice/obligation candidates and projection of obligations recorded before the selected period end into `SupplierObligationInput`.
 - `ReportsCenterData.kt` retains the shared candidate list for supplier invoice validation and calculation lifecycle/orchestration. Cancellation-state rules, recorded-date cutoff, currency fields, and supplier fallback labels are preserved.
+
+
+### Report currency summary exactness (2026-11-05)
+
+- `ReportCalculations.kt` owns exact per-currency aggregation for the reports-center sales summary through `calculateReportCurrencyTotals`.
+- `ReportsCenterData.kt` catches overflow and exposes a dedicated summary error; `ReportsCenterScreen.kt` suppresses wrapped totals and displays the error rather than presenting an incorrect amount.
+- Currency buckets and the existing blank-currency fallback are preserved. No report filters or source queries are changed.

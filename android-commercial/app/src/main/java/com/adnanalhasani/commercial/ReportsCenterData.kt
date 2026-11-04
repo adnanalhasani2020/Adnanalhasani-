@@ -23,7 +23,8 @@ internal data class ReportsCenterData(
     val sourceErrorForReport: (String) -> String,
     val selectedRows: List<ReportLine>,
     val selectedReportSourceError: String,
-    val currencyTotal: Map<String, Long>
+    val currencyTotal: Map<String, Long>,
+    val currencyTotalError: String
 )
 
 /**
@@ -483,8 +484,22 @@ internal fun rememberReportsCenterData(
             (currencyFilter.isBlank() || row.currency.contains(currencyFilter.trim(), true)) &&
             (movementStatement || statusFilter.isBlank() || row.status.contains(statusFilter.trim(), true))
     }
-    val currencyTotal = if (dateError || (cloudMode && (cloudLoading || salesDocumentsLoadError.isNotBlank()))) emptyMap() else if (cloudMode) inPeriodCloudSalesDocuments.groupBy { it.currencyCode.ifBlank { "غير محددة" } }.mapValues { (_, rows) -> rows.sumOf { it.totalMinor } }
-        else inPeriodSales.groupBy { it.currencyCode.ifBlank { "غير محددة" } }.mapValues { (_, rows) -> rows.sumOf { it.total.toLong() } }
+    val currencyTotalCalculation = runCatching {
+        if (dateError || (cloudMode && (cloudLoading || salesDocumentsLoadError.isNotBlank()))) {
+            emptyMap()
+        } else {
+            val amounts = if (cloudMode) {
+                inPeriodCloudSalesDocuments.map { it.currencyCode to it.totalMinor }
+            } else {
+                inPeriodSales.map { it.currencyCode to it.total.toLong() }
+            }
+            calculateReportCurrencyTotals(amounts)
+        }
+    }
+    val currencyTotal = currencyTotalCalculation.getOrDefault(emptyMap())
+    val currencyTotalError = if (currencyTotalCalculation.isFailure) {
+        "تجاوز إجمالي المبيعات نطاق الأرقام الدقيق؛ تم إخفاء ملخص العملات."
+    } else ""
 
 
     return ReportsCenterData(
@@ -503,6 +518,7 @@ internal fun rememberReportsCenterData(
         sourceErrorForReport = sourceErrorForReport,
         selectedRows = selectedRows,
         selectedReportSourceError = selectedReportSourceError,
-        currencyTotal = currencyTotal
+        currencyTotal = currencyTotal,
+        currencyTotalError = currencyTotalError
     )
 }
