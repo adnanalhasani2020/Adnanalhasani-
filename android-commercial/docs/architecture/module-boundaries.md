@@ -173,3 +173,5 @@ The catalog screen owns interaction and request orchestration. JSON-to-domain ma
 - `CatalogScreenSections.kt` owns the category editor, unit editor, and transfer-request presentation.
 - `CatalogScreen.kt` continues to own authentication, network requests, state transitions, discovery, product authoring, and invoice purchase workflows.
 - The extracted sections receive state holders and callbacks; they do not own transport or business authorization.
+
+- `CatalogProductFormState.kt` owns product-authoring form state; `CatalogScreenSections.kt` owns the product form presentation. The existing create-product action remains in `CatalogScreen.kt`.
