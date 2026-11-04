@@ -39,6 +39,7 @@ DOMAIN_MAPPERS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/
 SUPPLIER_VALIDATION = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportSupplierValidation.kt"
 PROFITABILITY_VALIDATION = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportProfitabilityValidation.kt"
 OPERATIONAL_VALIDATION = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportOperationalValidation.kt"
+FINANCIAL_VALIDATION = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportFinancialValidation.kt"
 PRICE_VARIANCE_CALCULATIONS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/SupplierInvoicePriceVarianceCalculations.kt"
 COST_PROFIT_CALCULATIONS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CostProfitCalculations.kt"
 CONTRACT = ROOT / "android-commercial/docs/reports-data-contract.md"
@@ -49,7 +50,7 @@ RETURN_CURRENCY_GUARD_MIGRATION = ROOT / "supabase/migrations/20261027195426_gua
 class ReportsCenterSourceContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.screen = SCREEN.read_text(encoding="utf-8") + DATA_STATE.read_text(encoding="utf-8") + CLOUD_DATA.read_text(encoding="utf-8") + PERIOD_CONTROLS.read_text(encoding="utf-8") + EXPORT_LAUNCHERS.read_text(encoding="utf-8") + CATALOG_SECTION.read_text(encoding="utf-8") + INVENTORY_ROWS.read_text(encoding="utf-8") + LEDGER_ROWS.read_text(encoding="utf-8") + PARTY_ROWS.read_text(encoding="utf-8") + SALES_ROWS.read_text(encoding="utf-8") + SUPPLIER_ROWS.read_text(encoding="utf-8") + OPERATIONAL_ROWS.read_text(encoding="utf-8") + DERIVED_ROWS.read_text(encoding="utf-8") + TAX_ROWS.read_text(encoding="utf-8") + PROFITABILITY_ROWS.read_text(encoding="utf-8") + RESULT_SECTION.read_text(encoding="utf-8") + FILTER_SECTION.read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8") + INVENTORY_REPORT_LINES.read_text(encoding="utf-8") + FINANCIAL_REPORT_LINES.read_text(encoding="utf-8") + DOMAIN_MAPPERS.read_text(encoding="utf-8") + LEDGER_VALIDATION.read_text(encoding="utf-8") + SUPPLIER_VALIDATION.read_text(encoding="utf-8") + PROFITABILITY_VALIDATION.read_text(encoding="utf-8") + OPERATIONAL_VALIDATION.read_text(encoding="utf-8")
+        cls.screen = SCREEN.read_text(encoding="utf-8") + DATA_STATE.read_text(encoding="utf-8") + CLOUD_DATA.read_text(encoding="utf-8") + PERIOD_CONTROLS.read_text(encoding="utf-8") + EXPORT_LAUNCHERS.read_text(encoding="utf-8") + CATALOG_SECTION.read_text(encoding="utf-8") + INVENTORY_ROWS.read_text(encoding="utf-8") + LEDGER_ROWS.read_text(encoding="utf-8") + PARTY_ROWS.read_text(encoding="utf-8") + SALES_ROWS.read_text(encoding="utf-8") + SUPPLIER_ROWS.read_text(encoding="utf-8") + OPERATIONAL_ROWS.read_text(encoding="utf-8") + DERIVED_ROWS.read_text(encoding="utf-8") + TAX_ROWS.read_text(encoding="utf-8") + PROFITABILITY_ROWS.read_text(encoding="utf-8") + RESULT_SECTION.read_text(encoding="utf-8") + FILTER_SECTION.read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8") + INVENTORY_REPORT_LINES.read_text(encoding="utf-8") + FINANCIAL_REPORT_LINES.read_text(encoding="utf-8") + DOMAIN_MAPPERS.read_text(encoding="utf-8") + LEDGER_VALIDATION.read_text(encoding="utf-8") + SUPPLIER_VALIDATION.read_text(encoding="utf-8") + PROFITABILITY_VALIDATION.read_text(encoding="utf-8") + OPERATIONAL_VALIDATION.read_text(encoding="utf-8") + FINANCIAL_VALIDATION.read_text(encoding="utf-8")
         cls.catalog = CATALOG.read_text(encoding="utf-8")
         cls.repository = REPOSITORY.read_text(encoding="utf-8")
         cls.inventory_repository = INVENTORY_REPOSITORY.read_text(encoding="utf-8")
@@ -213,6 +214,10 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn('رصيد ختامي', self.screen)
         self.assertIn('توجد قيود مرحلة بتاريخ غير صالح؛ لا يمكن ضمان الرصيد الافتتاحي.', self.screen)
         self.assertIn('currencyMoves.groupBy { it.first.accountId to it.first.accountCode }', self.screen)
+        self.assertIn('Math.subtractExact(line.debitMinor, line.creditMinor)', self.screen)
+        self.assertIn('Math.addExact(total, move.third)', self.screen)
+        self.assertIn('Math.negateExact(move.third)', self.screen)
+        self.assertIn('تجاوزت حركات النقد أو أرصدته الافتتاحية/الختامية نطاق الأرقام الدقيق', self.screen)
 
     def test_customer_collection_idempotent_replay_requires_posted_journal(self):
         self.assertIn("customer_payment_journal_not_posted", self.collection_replay_migration)

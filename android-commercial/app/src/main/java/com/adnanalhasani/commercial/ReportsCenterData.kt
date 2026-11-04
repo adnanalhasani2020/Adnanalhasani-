@@ -423,29 +423,20 @@ internal fun rememberReportsCenterData(
             "ربحية الأصناف بعد المرتجعات" -> itemProfitabilityError
             "أداء المبيعات حسب المستخدم" -> userSalesPerformanceError
             "اتجاه المبيعات اليومي" -> dailySalesTrendError
-            "التقييم المالي الحالي للمخزون" -> when {
-                stockAlertsLoadError.isNotBlank() -> stockAlertsLoadError
-                glMappingsLoadError.isNotBlank() -> glMappingsLoadError
-                cloudGlMappings.none { it.mappingKey == "inventory" && it.currencyCode.matches(Regex("^[A-Z]{3}$")) } -> "لا يوجد حساب مخزون مربوط بعملة صالحة في دليل الحسابات."
-                cloudStockAlerts.isEmpty() -> "لا توجد أرصدة مخزون محملة للموقع والنشاط الحاليين."
-                cloudStockAlerts.any { it.unitCostMinor == null || it.unitCostMinor < 0L || it.quantityOnHand.signum() < 0 } -> "بعض أرصدة المخزون تفتقد تكلفة وحدة مسجلة أو تحتوي كمية غير صالحة."
-                runCatching {
-                    cloudStockAlerts.fold(java.math.BigDecimal.ZERO) { total, item ->
-                        total.add(item.quantityOnHand.multiply(java.math.BigDecimal.valueOf(item.unitCostMinor ?: 0L))
-                            .setScale(0, java.math.RoundingMode.HALF_UP))
-                    }.longValueExact()
-                }.isFailure -> "إجمالي قيمة المخزون يتجاوز نطاق الأرقام المدعوم؛ لم يُعرض تقييم ناقص."
-                else -> ""
-            }
-            "التدفقات النقدية والصندوق" -> when {
-                glMappingsLoadError.isNotBlank() -> glMappingsLoadError
-                cloudGlMappings.none { it.mappingKey in setOf("cash", "bank", "card_clearing", "other_receipts", "check_clearing", "other_disbursements") && it.currencyCode.matches(Regex("^[A-Z]{3}$")) } -> "لا توجد حسابات نقدية أو بنكية مربوطة بعملة صالحة في دليل الحسابات."
-                ledgerLinesLoadError.isNotBlank() -> ledgerLinesLoadError
-                cloudLedgerLines.isEmpty() -> "لا توجد قيود مرحلة لحسابات النقد والبنك؛ لا يمكن اعتماد الرصيد."
-                cloudLedgerLines.any { runCatching { LocalDate.parse(it.entryDate.take(10)) }.getOrNull() == null } -> "توجد قيود مرحلة بتاريخ غير صالح؛ لا يمكن ضمان الرصيد الافتتاحي."
-                cloudLedgerLines.any { !it.currencyCode.matches(Regex("^[A-Z]{3}$")) } -> "توجد قيود نقدية بعملة غير محددة؛ تم حجب كشف الصندوق."
-                else -> ""
-            }
+            "التقييم المالي الحالي للمخزون" -> reportCurrentInventoryValuationValidationError(
+                stockAlertsLoadError = stockAlertsLoadError,
+                glMappingsLoadError = glMappingsLoadError,
+                cloudGlMappings = cloudGlMappings,
+                cloudStockAlerts = cloudStockAlerts
+            )
+            "التدفقات النقدية والصندوق" -> reportCashFlowValidationError(
+                glMappingsLoadError = glMappingsLoadError,
+                cloudGlMappings = cloudGlMappings,
+                ledgerLinesLoadError = ledgerLinesLoadError,
+                cloudLedgerLines = cloudLedgerLines,
+                startDate = startDate,
+                endDate = endDate
+            )
             "الرصيد المحاسبي الكامل للعملاء" -> customerStatementError
             "أرصدة الموردين والمستحقات" -> supplierStatementError
             "المصروفات التشغيلية", "ملخص المصروفات حسب التصنيف وطريقة الصرف" -> expenseReportError

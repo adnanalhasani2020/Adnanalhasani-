@@ -6,6 +6,7 @@ SCREEN = ANDROID / "ReportsCenterScreen.kt"
 DATA = ANDROID / "ReportsCenterData.kt"
 OPERATIONAL_VALIDATION = ANDROID / "ReportOperationalValidation.kt"
 PROFITABILITY_VALIDATION = ANDROID / "ReportProfitabilityValidation.kt"
+FINANCIAL_VALIDATION = ANDROID / "ReportFinancialValidation.kt"
 
 
 def test_reports_center_screen_is_a_thin_coordinator_over_report_data_state():
@@ -51,6 +52,7 @@ def test_operational_and_item_profitability_validations_have_single_domain_owner
     data = DATA.read_text(encoding="utf-8")
     operational = OPERATIONAL_VALIDATION.read_text(encoding="utf-8")
     profitability = PROFITABILITY_VALIDATION.read_text(encoding="utf-8")
+    financial = FINANCIAL_VALIDATION.read_text(encoding="utf-8")
 
     for marker in (
         "reportCustomerOperationalStatementValidationError(",
@@ -68,3 +70,8 @@ def test_operational_and_item_profitability_validations_have_single_domain_owner
     assert "val customerOperationalStatementError = when {" not in data
     assert "val customerCollectionsError = when {" not in data
     assert "val itemProfitabilityError = when {" not in data
+    for marker in ("reportCurrentInventoryValuationValidationError(", "reportCashFlowValidationError("):
+        assert marker in financial
+        assert marker in data
+    assert '"التقييم المالي الحالي للمخزون" -> when {' not in data
+    assert '"التدفقات النقدية والصندوق" -> when {' not in data
