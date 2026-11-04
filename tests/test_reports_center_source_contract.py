@@ -331,7 +331,7 @@ if __name__ == "__main__":
 
 def test_cloud_dashboard_uses_organization_timezone_for_report_day_boundaries():
     main_activity = (
-        ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt"
+        ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/LocalOperationalScreens.kt"
     ).read_text(encoding="utf-8")
     start = main_activity.index("fun CommercialCloudReportsScreen")
     end = main_activity.index("\n@Composable", start + 50)
