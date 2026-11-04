@@ -336,24 +336,26 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         loadNearbyCatalog(false)
     }
 
+    suspend fun updateNearbyFromDevice() {
+        locatingDevice = true
+        try {
+            val location = getFreshCatalogDeviceLocation(context)
+            deviceLatitude = location.latitude.toString()
+            deviceLongitude = location.longitude.toString()
+            feedback = "تم تحديد موقعك لهذه الجلسة فقط. لا يتم حفظ الإحداثيات في ملفك أو تتبعك في الخلفية."
+            startNearbyCatalog()
+        } catch (error: Exception) {
+            feedback = error.message ?: "تعذر تحديد موقع الجهاز. تحقق من تشغيل خدمات الموقع."
+        } finally {
+            locatingDevice = false
+        }
+    }
+
     val deviceLocationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
-            locationScope.launch {
-                locatingDevice = true
-                try {
-                    val location = getFreshCatalogDeviceLocation(context)
-                    deviceLatitude = location.latitude.toString()
-                    deviceLongitude = location.longitude.toString()
-                    feedback = "تم تحديد موقعك لهذه الجلسة فقط. لا يتم حفظ الإحداثيات في ملفك أو تتبعك في الخلفية."
-                    startNearbyCatalog()
-                } catch (error: Exception) {
-                    feedback = error.message ?: "تعذر تحديد موقع الجهاز. تحقق من تشغيل خدمات الموقع."
-                } finally {
-                    locatingDevice = false
-                }
-            }
+            locationScope.launch { updateNearbyFromDevice() }
         } else {
             feedback = "لم تمنح إذن الموقع. يمكنك متابعة البحث باستخدام إحداثيات الفرع المحفوظة."
         }
@@ -361,20 +363,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
 
     fun loadNearbyFromDevice() {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-            locationScope.launch {
-                locatingDevice = true
-                try {
-                    val location = getFreshCatalogDeviceLocation(context)
-                    deviceLatitude = location.latitude.toString()
-                    deviceLongitude = location.longitude.toString()
-                    feedback = "تم تحديد موقعك لهذه الجلسة فقط. لا يتم حفظ الإحداثيات في ملفك أو تتبعك في الخلفية."
-                    startNearbyCatalog()
-                } catch (error: Exception) {
-                    feedback = error.message ?: "تعذر تحديد موقع الجهاز. تحقق من تشغيل خدمات الموقع."
-                } finally {
-                    locatingDevice = false
-                }
-            }
+            locationScope.launch { updateNearbyFromDevice() }
         } else {
             deviceLocationPermissionLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
         }
@@ -922,6 +911,30 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                         onToggleCatalogItem={id ->
                             selectedCatalogIds=if(id in selectedCatalogIds) selectedCatalogIds-id
                             else if(selectedCatalogIds.size<100) selectedCatalogIds+id else selectedCatalogIds
+                        },
+                        onSelectBranch={branch ->
+                            selectedBranchId=branch.id
+                            branchLatitude=branch.latitude
+                            branchLongitude=branch.longitude
+                            selectedWarehouseId=marketWarehouses.firstOrNull { it.branchId==branch.id }?.id.orEmpty()
+                            nearbyMarketItems=emptyList()
+                            nearbyOffset=0
+                            nearbyHasMore=true
+                            nearbyLoadGeneration++
+                            marketRadius=5000
+                            marketPriceHints=emptyMap()
+                            branchMenuExpanded=false
+                        },
+                        onSelectWarehouse={warehouseId ->
+                            selectedWarehouseId=warehouseId
+                            warehouseMenuExpanded=false
+                        },
+                        onBranchLatitudeChange={branchLatitude=it},
+                        onBranchLongitudeChange={branchLongitude=it},
+                        onUseBranchLocation={
+                            deviceLatitude=null
+                            deviceLongitude=null
+                            startNearbyCatalog()
                         },
                         onSaveCoordinates=::saveMarketBranchCoordinates,
                         onLoadMarketContext=::loadMarketContext,
