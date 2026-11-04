@@ -1389,39 +1389,15 @@ internal fun ReportsCenterScreen(
             OutlinedTextField(search, { search = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("ابحث عن تقرير") }, leadingIcon = { Icon(Icons.Default.Search, null) })
         }
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("الفترة", fontWeight = FontWeight.SemiBold, color = ReportInk)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf("اليوم", "أمس", "الأسبوع الحالي", "الأسبوع السابق", "الشهر الحالي", "الشهر السابق", "الربع الحالي", "الربع السابق", "السنة الحالية", "السنة السابقة").forEach { label ->
-                        FilterChip(selected = selectedPeriod == label, onClick = {
-                            selectedPeriod = label
-                            val now = LocalDate.now()
-                            val range = when (label) {
-                                "اليوم" -> now to now
-                                "أمس" -> now.minusDays(1) to now.minusDays(1)
-                                "الأسبوع الحالي" -> now.with(java.time.DayOfWeek.MONDAY) to now
-                                "الأسبوع السابق" -> now.with(java.time.DayOfWeek.MONDAY).minusWeeks(1) to now.with(java.time.DayOfWeek.MONDAY).minusDays(1)
-                                "الشهر الحالي" -> now.withDayOfMonth(1) to now
-                                "الشهر السابق" -> now.minusMonths(1).withDayOfMonth(1) to now.withDayOfMonth(1).minusDays(1)
-                                "الربع الحالي" -> now.withMonth(((now.monthValue - 1) / 3) * 3 + 1).withDayOfMonth(1) to now
-                                "الربع السابق" -> {
-                                    val currentQuarterStart = now.withMonth(((now.monthValue - 1) / 3) * 3 + 1).withDayOfMonth(1)
-                                    val previousQuarterEnd = currentQuarterStart.minusDays(1)
-                                    previousQuarterEnd.minusMonths(2).withDayOfMonth(1) to previousQuarterEnd
-                                }
-                                "السنة السابقة" -> now.minusYears(1).withDayOfYear(1) to now.withDayOfYear(1).minusDays(1)
-                                else -> now.withDayOfYear(1) to now
-                            }
-                            startText = range.first.toString(); endText = range.second.toString(); error = ""
-                        }, label = { Text(label, fontSize = 11.sp) })
-                    }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(startText, { startText = it; selectedPeriod = "مخصص" }, modifier = Modifier.weight(1f), singleLine = true, label = { Text("من YYYY-MM-DD") })
-                    OutlinedTextField(endText, { endText = it; selectedPeriod = "مخصص" }, modifier = Modifier.weight(1f), singleLine = true, label = { Text("إلى YYYY-MM-DD") })
-                }
-                if (dateError) Text("تحقق من التاريخين؛ يجب أن تكون البداية قبل النهاية أو مساوية لها.", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
-            }
+            ReportsPeriodControls(
+                selectedPeriod = selectedPeriod,
+                startText = startText,
+                endText = endText,
+                dateError = dateError,
+                onPeriodSelected = { selectedPeriod = it },
+                onRangeChanged = { start, end -> startText = start; endText = end },
+                onClearError = { error = "" }
+            )
         }
         if (selectedReport in setOf("كشف حركات الموردين", "أرصدة الموردين والمستحقات")) item {
             OutlinedTextField(
