@@ -122,3 +122,12 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 
 
 - Continued catalog decomposition: extracted the activity hierarchy node model and pure sector/parent-chain/business-level selector helpers into `CatalogActivityHierarchy.kt`; updated the selector contract test to follow the new owner. Catalog data loading, RPCs, and Compose interactions remain in `CatalogScreen.kt`.
+
+
+## 2026-11-04 — Catalog model extraction
+
+- Extracted catalog product/unit/ruling and supporting workflow row models from `CatalogScreen.kt` into `CatalogModels.kt`.
+- Kept the existing field names, constructor defaults, package, and call-site type names unchanged; private screen-only model types became package-internal to remain visible across Kotlin files.
+- Added `tests/test_catalog_models_ownership.py` to assert one owner for these models and preserve the existing screen signature.
+- No RPC, SQL migration, database data, or UI workflow was changed.
+- Remaining catalog work is still substantial: separate catalog discovery/data loading, product authoring, market discovery/pricing, invoice-purchase linking, and transfer/review workflows. Do not mark REF-007 complete from this model-only extraction.
