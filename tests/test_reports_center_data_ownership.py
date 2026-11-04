@@ -21,6 +21,7 @@ def test_reports_center_screen_is_a_thin_coordinator_over_report_data_state():
         "reportSupplierPurchaseSummaryValidationError(",
         "reportSupplierObligationsValidationError(",
         "reportCostProfitValidationError(",
+        "reportItemProfitabilityValidationError(",
         "reportTaxDetailValidationError(",
         "reportCustomerStatementValidationError(",
         "reportSupplierStatementValidationError(",
