@@ -40,7 +40,7 @@ class CatalogCurrentDeviceLocationTests(unittest.TestCase):
         self.assertIn("nearbyMarketItems=(nearbyMarketItems+page).distinctBy { it.id }", source)
 
     def test_device_location_is_session_only_and_not_background_tracked(self):
-        source = SCREEN.read_text(encoding="utf-8")
+        source = SCREEN.read_text(encoding="utf-8") + MARKET_STATE.read_text(encoding="utf-8")
         self.assertIn("Device coordinates are opt-in, foreground-only and kept in memory", source)
         self.assertIn("لا يتم حفظ الإحداثيات في ملفك أو تتبعك في الخلفية", source)
         self.assertNotIn("ACCESS_BACKGROUND_LOCATION", source)

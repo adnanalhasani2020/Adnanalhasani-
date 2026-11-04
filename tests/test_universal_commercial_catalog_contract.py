@@ -15,7 +15,7 @@ class UniversalCommercialCatalogContractTests(unittest.TestCase):
         cls.discovery = (MIGRATIONS / "20261023231045_catalog_discovery_rpc.sql").read_text(encoding="utf-8")
         cls.management = (MIGRATIONS / "20261023231049_catalog_management_rpc.sql").read_text(encoding="utf-8")
         cls.update_rpc = (MIGRATIONS / "20261023231054_catalog_update_rpc.sql").read_text(encoding="utf-8")
-        cls.android = (ANDROID / "CatalogScreen.kt").read_text(encoding="utf-8") + (ANDROID / "CatalogScreenSections.kt").read_text(encoding="utf-8") + (ANDROID / "CatalogMarketDiscoverySection.kt").read_text(encoding="utf-8") + (ANDROID / "CatalogProductResultCard.kt").read_text(encoding="utf-8") + (ANDROID / "CatalogMarketUiState.kt").read_text(encoding="utf-8")
+        cls.android = (ANDROID / "CatalogScreen.kt").read_text(encoding="utf-8") + (ANDROID / "CatalogScreenSections.kt").read_text(encoding="utf-8") + (ANDROID / "CatalogMarketDiscoverySection.kt").read_text(encoding="utf-8") + (ANDROID / "CatalogProductResultCard.kt").read_text(encoding="utf-8") + (ANDROID / "CatalogMarketUiState.kt").read_text(encoding="utf-8") + (ANDROID / "CatalogScreenSections.kt").read_text(encoding="utf-8")
         cls.main = (ANDROID / "StoreApp.kt").read_text(encoding="utf-8") + (ANDROID / "MainActivity.kt").read_text(encoding="utf-8") + (ANDROID / "LocalProductDialogs.kt").read_text(encoding="utf-8")
         cls.models = (ANDROID / "CommercialModels.kt").read_text(encoding="utf-8")
         cls.edit_dialog = (ANDROID / "CatalogProductEditDialog.kt").read_text(encoding="utf-8")
@@ -106,7 +106,8 @@ class UniversalCommercialCatalogContractTests(unittest.TestCase):
         self.assertIn("put(structured ?: line)", self.edit_dialog)
 
     def test_catalog_has_direct_shortcut_to_create_new_item_from_activity_setup(self):
-        self.assertIn('onClick={section="product"}', self.android)
+        self.assertIn("onCreateProduct={section=\"product\"}", self.android)
+        self.assertIn("onCreateProduct: () -> Unit", self.android)
         self.assertIn('Text("إنشاء صنف جديد")', self.android)
 
     def test_cross_industry_starter_templates_are_bilingual_and_unbranded(self):

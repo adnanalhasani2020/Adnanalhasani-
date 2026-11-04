@@ -973,110 +973,77 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                             }
                         }
                     }
-                    LazyColumn(state=catalogListState,verticalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(bottom=20.dp)) {
-                        item { OutlinedTextField(query,{query=it},Modifier.fillMaxWidth(),label={Text("بحث بالاسم أو الوصف أو الباركود أو الكود")},singleLine=true) }
-                        item {
-                            Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
-                                Text("تصفية الدليل حسب النشاط التجاري", style=MaterialTheme.typography.labelMedium)
-                                Box {
-                                    OutlinedButton(onClick={sectorMenuExpanded=true}, enabled=!busy && sectorOptions.isNotEmpty(), modifier=Modifier.fillMaxWidth()) {
-                                        Text(sectorOptions.firstOrNull { it.code.equals(sector, true) }?.pathAr ?: "كل القطاعات")
-                                    }
-                                    DropdownMenu(expanded=sectorMenuExpanded, onDismissRequest={sectorMenuExpanded=false}) {
-                                        DropdownMenuItem(text={Text("كل القطاعات")}, onClick={
-                                            sector=""; selectedActivityCode=""; businessLevel=""; sectorMenuExpanded=false; loadCatalog(true)
-                                        })
-                                        sectorOptions.forEach { option ->
-                                            DropdownMenuItem(text={Text(option.pathAr)}, onClick={
-                                                sector=option.code
-                                                val selectedNode=activityNodes.firstOrNull { it.code==selectedActivityCode }
-                                                if (selectedNode!=null && !catalogNodeBelongsToSector(selectedNode,option.code,activityNodes)) selectedActivityCode=""
-                                                val validLevels=activityNodes.filter { it.selectable && catalogNodeBelongsToSector(it,option.code,activityNodes) }.map { it.defaultBusinessLevelCode }.filter { it.isNotBlank() }.distinct()
-                                                if (businessLevel !in validLevels) businessLevel=""
-                                                sectorMenuExpanded=false; loadCatalog(true)
-                                            })
-                                        }
-                                    }
-                                }
-                                Box {
-                                    OutlinedButton(onClick={businessLevelMenuExpanded=true}, enabled=!busy && businessLevelOptions.isNotEmpty(), modifier=Modifier.fillMaxWidth()) {
-                                        Text(businessLevel.takeIf { it.isNotBlank() }?.let { "مستوى النشاط: ${catalogBusinessLevelLabel(it)}" } ?: "كل مستويات النشاط")
-                                    }
-                                    DropdownMenu(expanded=businessLevelMenuExpanded, onDismissRequest={businessLevelMenuExpanded=false}) {
-                                        DropdownMenuItem(text={Text("كل المستويات")}, onClick={businessLevel=""; businessLevelMenuExpanded=false; loadCatalog(true)})
-                                        businessLevelOptions.forEach { level ->
-                                            DropdownMenuItem(text={Text(catalogBusinessLevelLabel(level))}, onClick={businessLevel=level; businessLevelMenuExpanded=false; loadCatalog(true)})
-                                        }
-                                    }
-                                }
-                                Text("اختر القطاع لتصفية الأنشطة ومستوياتها من الدليل الرسمي؛ لا تُكتب الرموز يدويًا.", style=MaterialTheme.typography.bodySmall, color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    CatalogBrowseSection(
+                        items=items,
+                        categories=categories,
+                        directoryUnits=directoryUnits,
+                        query=query,
+                        onQueryChange={query=it},
+                        sectorOptions=sectorOptions,
+                        sector=sector,
+                        onSectorSelected={ selectedCode ->
+                            if(selectedCode.isBlank()) {
+                                sector=""; selectedActivityCode=""; businessLevel=""
+                            } else {
+                                sector=selectedCode
+                                val selectedNode=activityNodes.firstOrNull { it.code==selectedActivityCode }
+                                if(selectedNode!=null && !catalogNodeBelongsToSector(selectedNode,selectedCode,activityNodes)) selectedActivityCode=""
+                                val validLevels=activityNodes.filter { it.selectable && catalogNodeBelongsToSector(it,selectedCode,activityNodes) }.map { it.defaultBusinessLevelCode }.filter { it.isNotBlank() }.distinct()
+                                if(businessLevel !in validLevels) businessLevel=""
                             }
-                        }
-                        item {
-                            Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
-                                Text("ربط الأصناف بنشاط تجاري محدد (اختياري)", style=MaterialTheme.typography.labelMedium)
-                                Box {
-                                    OutlinedButton(onClick={activityMenuExpanded=true}, enabled=!busy && activityOptions.isNotEmpty(), modifier=Modifier.fillMaxWidth()) {
-                                        Text(activityOptions.firstOrNull { it.code == selectedActivityCode }?.pathAr ?: "اختر النشاط من الدليل")
-                                    }
-                                    DropdownMenu(expanded=activityMenuExpanded, onDismissRequest={activityMenuExpanded=false}) {
-                                        DropdownMenuItem(text={Text("بدون إسناد لنشاط محدد")}, onClick={selectedActivityCode=""; activityMenuExpanded=false; loadCatalog(true)})
-                                        activityOptions.forEach { node ->
-                                            DropdownMenuItem(text={Text(node.pathAr)}, onClick={
-                                                selectedActivityCode=node.code
-                                                if (node.defaultBusinessLevelCode.isNotBlank()) businessLevel=node.defaultBusinessLevelCode
-                                                activityMenuExpanded=false
-                                                loadCatalog(true)
-                                            })
-                                        }
-                                    }
-                                }
-                                Text("تُعرض الأنشطة والتخصصات التابعة للقطاع المختار فقط، ويُضبط المستوى المقترح من بيانات الدليل.", style=MaterialTheme.typography.bodySmall, color=MaterialTheme.colorScheme.onSurfaceVariant)
+                            loadCatalog(true)
+                        },
+                        sectorMenuExpanded=sectorMenuExpanded,
+                        onSectorMenuExpandedChange={sectorMenuExpanded=it},
+                        businessLevelOptions=businessLevelOptions,
+                        businessLevel=businessLevel,
+                        onBusinessLevelSelected={businessLevel=it;loadCatalog(true)},
+                        businessLevelMenuExpanded=businessLevelMenuExpanded,
+                        onBusinessLevelMenuExpandedChange={businessLevelMenuExpanded=it},
+                        activityOptions=activityOptions,
+                        selectedActivityCode=selectedActivityCode,
+                        onActivitySelected={ node ->
+                            selectedActivityCode=node?.code.orEmpty()
+                            if(node!=null && node.defaultBusinessLevelCode.isNotBlank()) businessLevel=node.defaultBusinessLevelCode
+                            loadCatalog(true)
+                        },
+                        activityMenuExpanded=activityMenuExpanded,
+                        onActivityMenuExpandedChange={activityMenuExpanded=it},
+                        country=country,
+                        onCountryChange={country=it.uppercase()},
+                        region=region,
+                        onRegionChange={region=it},
+                        city=city,
+                        onCityChange={city=it},
+                        locale=locale,
+                        onLocaleChange={locale=it},
+                        busy=busy,
+                        onSearch={loadCatalog()},
+                        onRefreshDirectories=::loadDirectories,
+                        listState=catalogListState,
+                        selectedCatalogIds=selectedCatalogIds,
+                        marketPriceHints=marketPriceHints,
+                        organizationId=organizationId.trim(),
+                        requireCloudInventoryContext=requireCloudInventoryContext,
+                        selectedBranchId=selectedBranchId,
+                        selectedWarehouseId=selectedWarehouseId,
+                        onSelectionChange={item,checked ->
+                            selectedCatalogIds = when {
+                                !checked -> selectedCatalogIds - item.id
+                                item.id in selectedCatalogIds -> selectedCatalogIds
+                                selectedCatalogIds.size < 100 -> selectedCatalogIds + item.id
+                                else -> { feedback="الحد الأقصى للعملية الواحدة 100 صنف. أزل تحديد صنف قبل إضافة آخر."; selectedCatalogIds }
                             }
-                        }
-                        item { Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(country,{country=it.uppercase()},Modifier.weight(1f),label={Text("الدولة")},singleLine=true)
-                            OutlinedTextField(region,{region=it},Modifier.weight(1f),label={Text("المنطقة")},singleLine=true)
-                            OutlinedTextField(city,{city=it},Modifier.weight(1f),label={Text("المدينة")},singleLine=true)
-                        } }
-                        item { Row(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.CenterVertically) {
-                            OutlinedTextField(locale,{locale=it},Modifier.weight(1f),label={Text("اللغة")},singleLine=true)
-                            Button(onClick={loadCatalog()},enabled=!busy) { Icon(Icons.Default.Search,null); Text("بحث") }
-                            OutlinedButton(onClick={loadDirectories()},enabled=!busy) { Text("تحديث الأدلة") }
-                        } }
-                        items(items,key={it.id}) { item ->
-                            CatalogProductResultCard(
-                                item=item,
-                                selected=item.id in selectedCatalogIds,
-                                marketPriceHint=marketPriceHints[item.id].orEmpty(),
-                                busy=busy,
-                                organizationId=organizationId.trim(),
-                                requireCloudInventoryContext=requireCloudInventoryContext,
-                                selectedBranchId=selectedBranchId,
-                                selectedWarehouseId=selectedWarehouseId,
-                                selectedActivityCode=selectedActivityCode,
-                                onSelectionChange={checked ->
-                                    selectedCatalogIds = when {
-                                        !checked -> selectedCatalogIds - item.id
-                                        item.id in selectedCatalogIds -> selectedCatalogIds
-                                        selectedCatalogIds.size < 100 -> selectedCatalogIds + item.id
-                                        else -> { feedback="الحد الأقصى للعملية الواحدة 100 صنف. أزل تحديد صنف قبل إضافة آخر."; selectedCatalogIds }
-                                    }
-                                },
-                                onFeedback={feedback=it},
-                                onOpenSource={url ->
-                                    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(url))) }
-                                        .onFailure { feedback="تعذر فتح رابط المصدر: ${it.message.orEmpty()}" }
-                                },
-                                onReviewRuling=::reviewRuling,
-                                onAddToInventory=onAddToInventory,
-                                onEditProduct={editingProduct=item}
-                            )
-                        }
-                        if(items.isEmpty()) item { Text("ابحث عن أصناف أو اضغط تحديث الأدلة لعرض التصنيفات والوحدات المتاحة.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
-                        if(categories.isNotEmpty()) item { Text("دليل التصنيفات: ${categories.size} تصنيفًا محمّلًا",style=MaterialTheme.typography.bodySmall) }
-                        if(directoryUnits.isNotEmpty()) item { Text("دليل الوحدات: ${directoryUnits.size} وحدة محمّلة",style=MaterialTheme.typography.bodySmall) }
-                    }
+                        },
+                        onFeedback={feedback=it},
+                        onOpenSource={url ->
+                            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(url))) }
+                                .onFailure { feedback="تعذر فتح رابط المصدر: ${it.message.orEmpty()}" }
+                        },
+                        onReviewRuling=::reviewRuling,
+                        onAddToInventory=onAddToInventory,
+                        onEditProduct={editingProduct=it}
+                    )
                 }
                 "category" -> CatalogCategorySection(categoryCodeState, parentCodeState, categoryNameArState, categoryNameEnState, categoryDescriptionArState, categoryDescriptionEnState, categoryTranslationsState, categories, locale, busy, ::createCategory, ::loadDirectories)
                 "unit" -> CatalogUnitSection(unitShortCodeState, unitNameArState, unitNameEnState, unitDimensionState, unitBaseCodeState, unitFactorState, unitDecimalsState, unitTranslationsState, directoryUnits, busy, ::createUnit, ::loadDirectories)

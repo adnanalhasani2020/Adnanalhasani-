@@ -66,6 +66,14 @@ class CatalogScreenSectionsOwnershipTests(unittest.TestCase):
         self.assertIn("onAddToInventory: (CatalogProduct, String, String, String, String, String) -> Unit", card)
         self.assertNotIn("catalogHttp(", card)
 
+    def test_browse_filters_and_result_list_have_a_dedicated_owner(self):
+        screen = SCREEN.read_text(encoding="utf-8")
+        browse = SCREEN.with_name("CatalogBrowseSection.kt").read_text(encoding="utf-8")
+        self.assertIn("CatalogBrowseSection(", screen)
+        self.assertIn("internal fun CatalogBrowseSection(", browse)
+        self.assertIn("onSelectionChange: (CatalogProduct, Boolean) -> Unit", browse)
+        self.assertNotIn("catalogHttp(", browse)
+
     def test_transfer_presentation_is_separate_and_keeps_actions_callback_driven(self):
         screen = SCREEN.read_text(encoding="utf-8")
         sections = SECTIONS.read_text(encoding="utf-8")

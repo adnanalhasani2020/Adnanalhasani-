@@ -263,3 +263,11 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 - The card uses explicit callbacks for selection, feedback, source navigation, ruling review, inventory creation, and product editing. It does not own network requests or edit workflow state.
 - Kept the catalog result query, activity filters, pagination, bulk unpriced-link workflow, and product edit dialog orchestration in `CatalogScreen.kt`.
 - Added a source-ownership guard and updated the universal catalog contract to read the extracted presentation owners.
+
+
+## 2026-11-04 — Catalog browse presentation extraction
+
+- Extracted catalog browse filters and the paginated global result list into `CatalogBrowseSection.kt`.
+- Kept query/filter state, selection updates, RPC-triggering callbacks, pagination, and inventory-linking workflows in `CatalogScreen.kt`; the new component is presentation-only and callback-driven.
+- Updated source-contract tests to follow the extracted market state, product card, and browse presentation owners.
+- No RPC payload, database migration, or production data changed.
