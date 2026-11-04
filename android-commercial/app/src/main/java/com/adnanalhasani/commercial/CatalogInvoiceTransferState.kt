@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 
 /** State for invoice-to-purchase review and catalog item matching. */
 internal class CatalogInvoiceTransferState {
+    var invoiceRequestKey by mutableStateOf(java.util.UUID.randomUUID().toString())
     var invoiceSaleId by mutableStateOf("")
     var invoiceDestinationOrg by mutableStateOf("")
     var invoiceReceiveLocationMenuExpanded by mutableStateOf(false)
