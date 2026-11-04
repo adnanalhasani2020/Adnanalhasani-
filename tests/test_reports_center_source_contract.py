@@ -281,7 +281,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
             "تجاوزت مجاميع المبيعات أو التكلفة أو المرتجعات نطاق الأرقام الدقيق",
         ):
             with self.subTest(marker=marker):
-                self.assertIn(marker, self.cost_profit_calculations if marker in ("calculateRestockedCostMinor", "Math.addExact", "Math.subtractExact") else self.screen)
+                self.assertIn(marker, self.calculations if marker == "Math.addExact" else self.cost_profit_calculations if marker in ("calculateRestockedCostMinor", "Math.subtractExact") else self.screen)
         self.assertNotIn("}.getOrDefault(0L)", self.screen)
 
     def test_unready_financial_reports_are_visible_but_not_selectable(self):
