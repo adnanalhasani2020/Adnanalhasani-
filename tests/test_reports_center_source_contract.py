@@ -51,7 +51,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.sales_rows = SALES_ROWS.read_text(encoding="utf-8")
-        cls.screen = SCREEN.read_text(encoding="utf-8") + DATA_STATE.read_text(encoding="utf-8") + CLOUD_DATA.read_text(encoding="utf-8") + PERIOD_CONTROLS.read_text(encoding="utf-8") + EXPORT_LAUNCHERS.read_text(encoding="utf-8") + CATALOG_SECTION.read_text(encoding="utf-8") + INVENTORY_ROWS.read_text(encoding="utf-8") + LEDGER_ROWS.read_text(encoding="utf-8") + PARTY_ROWS.read_text(encoding="utf-8") + SALES_ROWS.read_text(encoding="utf-8") + SUPPLIER_ROWS.read_text(encoding="utf-8") + OPERATIONAL_ROWS.read_text(encoding="utf-8") + DERIVED_ROWS.read_text(encoding="utf-8") + TAX_ROWS.read_text(encoding="utf-8") + PROFITABILITY_ROWS.read_text(encoding="utf-8") + RESULT_SECTION.read_text(encoding="utf-8") + FILTER_SECTION.read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8") + INVENTORY_REPORT_LINES.read_text(encoding="utf-8") + FINANCIAL_REPORT_LINES.read_text(encoding="utf-8") + DOMAIN_MAPPERS.read_text(encoding="utf-8") + LEDGER_VALIDATION.read_text(encoding="utf-8") + SUPPLIER_VALIDATION.read_text(encoding="utf-8") + PROFITABILITY_VALIDATION.read_text(encoding="utf-8") + OPERATIONAL_VALIDATION.read_text(encoding="utf-8") + FINANCIAL_VALIDATION.read_text(encoding="utf-8") + PARTY_VALIDATION.read_text(encoding="utf-8")
+        cls.screen = SCREEN.read_text(encoding="utf-8") + DATA_STATE.read_text(encoding="utf-8") + CLOUD_DATA.read_text(encoding="utf-8") + PERIOD_CONTROLS.read_text(encoding="utf-8") + EXPORT_LAUNCHERS.read_text(encoding="utf-8") + CATALOG_SECTION.read_text(encoding="utf-8") + INVENTORY_ROWS.read_text(encoding="utf-8") + LEDGER_ROWS.read_text(encoding="utf-8") + LEDGER_CLASSIFICATION.read_text(encoding="utf-8") + PARTY_ROWS.read_text(encoding="utf-8") + SALES_ROWS.read_text(encoding="utf-8") + SUPPLIER_ROWS.read_text(encoding="utf-8") + OPERATIONAL_ROWS.read_text(encoding="utf-8") + DERIVED_ROWS.read_text(encoding="utf-8") + TAX_ROWS.read_text(encoding="utf-8") + PROFITABILITY_ROWS.read_text(encoding="utf-8") + RESULT_SECTION.read_text(encoding="utf-8") + FILTER_SECTION.read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8") + INVENTORY_REPORT_LINES.read_text(encoding="utf-8") + FINANCIAL_REPORT_LINES.read_text(encoding="utf-8") + DOMAIN_MAPPERS.read_text(encoding="utf-8") + LEDGER_VALIDATION.read_text(encoding="utf-8") + SUPPLIER_VALIDATION.read_text(encoding="utf-8") + PROFITABILITY_VALIDATION.read_text(encoding="utf-8") + OPERATIONAL_VALIDATION.read_text(encoding="utf-8") + FINANCIAL_VALIDATION.read_text(encoding="utf-8") + PARTY_VALIDATION.read_text(encoding="utf-8")
         cls.catalog = CATALOG.read_text(encoding="utf-8")
         cls.repository = REPOSITORY.read_text(encoding="utf-8")
         cls.inventory_repository = INVENTORY_REPOSITORY.read_text(encoding="utf-8")
@@ -134,6 +134,19 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn("salesRowsCalculation.getOrNull()", self.screen)
         self.assertIn("تجاوزت مجاميع تقرير المبيعات نطاق الأرقام الدقيق؛ تم حجب التقرير.", self.screen)
 
+
+
+    def test_ledger_report_arithmetic_is_exact_and_preflighted_before_rows(self):
+        self.assertNotIn("sumOf", LEDGER_ROWS.read_text(encoding="utf-8"))
+        self.assertNotIn("sumOf", LEDGER_CLASSIFICATION.read_text(encoding="utf-8"))
+        self.assertIn("Math.subtractExact(line.debitMinor, line.creditMinor)", self.screen)
+        self.assertIn("Math.subtractExact(line.creditMinor, line.debitMinor)", self.screen)
+        self.assertIn("sumReportAmountsExactly", self.screen)
+        self.assertIn("Math.addExact(equity, cumulativeIncome)", self.screen)
+        self.assertIn("Math.subtractExact(Math.subtractExact(assets, liabilities), totalEquity)", self.screen)
+        self.assertIn("val ledgerRowsCalculation = runCatching", self.screen)
+        self.assertIn("ledgerRowsCalculation.getOrNull()", self.screen)
+        self.assertIn("تجاوزت مجاميع أو أرصدة دفتر الأستاذ نطاق الأرقام الدقيق؛ تم حجب التقرير.", self.screen)
 
     def test_party_statement_arithmetic_is_preflighted_exactly(self):
         self.assertIn("reportPartyStatementArithmeticIsExact", self.screen)
