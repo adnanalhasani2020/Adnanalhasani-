@@ -929,6 +929,8 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                             selectedWarehouseId=warehouseId
                             warehouseMenuExpanded=false
                         },
+                        onBranchMenuExpandedChange={branchMenuExpanded=it},
+                        onWarehouseMenuExpandedChange={warehouseMenuExpanded=it},
                         onBranchLatitudeChange={branchLatitude=it},
                         onBranchLongitudeChange={branchLongitude=it},
                         onUseBranchLocation={
