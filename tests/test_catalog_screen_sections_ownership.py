@@ -4,6 +4,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogScreen.kt"
 SECTIONS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogScreenSections.kt"
+PRODUCT_STATE = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogProductFormState.kt"
 
 
 class CatalogScreenSectionsOwnershipTests(unittest.TestCase):
@@ -16,6 +17,15 @@ class CatalogScreenSectionsOwnershipTests(unittest.TestCase):
         self.assertIn("internal fun CatalogUnitSection(", sections)
         self.assertIn("onCreateCategory: () -> Unit", sections)
         self.assertIn("onCreateUnit: () -> Unit", sections)
+
+    def test_product_authoring_form_has_dedicated_state_and_presentation_owners(self):
+        screen = SCREEN.read_text(encoding="utf-8")
+        sections = SECTIONS.read_text(encoding="utf-8")
+        state = PRODUCT_STATE.read_text(encoding="utf-8")
+        self.assertIn('"product" -> CatalogProductFormSection(', screen)
+        self.assertIn("internal class CatalogProductFormState", state)
+        self.assertIn("internal fun CatalogProductFormSection(", sections)
+        self.assertIn("onCreateProduct: () -> Unit", sections)
 
     def test_transfer_presentation_is_separate_and_keeps_actions_callback_driven(self):
         screen = SCREEN.read_text(encoding="utf-8")
