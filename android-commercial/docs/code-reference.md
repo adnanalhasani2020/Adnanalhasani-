@@ -337,3 +337,8 @@
 - `ReportsResultSection.kt` owns selected-report result cards, empty-state messaging, CSV/XLSX/PDF/print actions, and the common export-row metadata builder.
 - `ReportsCenterScreen.kt` supplies validated rows and source/date readiness, then receives export metadata/error updates through callbacks.
 - Android document-picker and share lifecycle remains in `ReportsExportLaunchers.kt`; native PDF/XLSX/print rendering remains in `ReportExport.kt`.
+
+
+### Reports filter presentation extraction (2026-11-04)
+- `ReportsFilterSection.kt` owns supplier/customer party filters, generic row/currency/status filters, and the explicit ledger-account query field.
+- `ReportsCenterScreen.kt` supplies selected report/state and receives filter changes through callbacks; the existing row-filtering and account-query requirements remain in the screen/domain pipeline.
