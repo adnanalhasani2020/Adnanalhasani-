@@ -403,3 +403,8 @@
 ### Reports center currency totals
 - Sales summary totals are aggregated by currency using exact `Long` addition in `calculateReportCurrencyTotals`.
 - Overflow produces an explicit Arabic error in the summary card and suppresses totals; the UI no longer risks displaying wrapped values.
+
+
+### Sales report aggregate arithmetic
+- Sales summary, customer/item/payment-state breakdowns, invoice averages, and period comparisons use exact aggregation and exact differences.
+- `ReportsCenterData.kt` preflights and reuses the selected sales-row result; overflow hides the affected report and exposes an Arabic error instead of wrapping totals.
