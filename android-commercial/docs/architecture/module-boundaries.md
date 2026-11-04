@@ -260,6 +260,6 @@ The catalog screen owns interaction and request orchestration. JSON-to-domain ma
 
 ### Report calculation input mapping extraction (2026-11-05)
 
-- `ReportDomainMappers.kt` now owns pure projections from saved cloud sales/returns into item-profitability, customer-collection, user-performance, and daily-sales calculation inputs.
+- `ReportDomainMappers.kt` now owns pure projections from saved cloud sales/returns into item-profitability, customer-collection, user-performance, daily-sales, and supplier-purchase-summary calculation inputs.
 - `ReportsCenterData.kt` retains Compose `remember` lifecycles and calculation invocation; formulas, period predicates, and row assembly remain in their existing owners.
 - The mapping preserves completed/succeeded status filters, date-window boundaries, all-sale-lines availability for historical return linkage, and original source field mappings.
