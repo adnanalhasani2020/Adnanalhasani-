@@ -107,3 +107,12 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 - No authenticated Android end-to-end commercial workflow has been proven by this source inventory.
 - A source move or a passing static contract test does not prove Supabase production readiness.
 - This branch starts from the latest reviewed PR head and is intentionally separate; it does not merge PR #714 or change `main`.
+
+
+## 2026-11-04 — Reports slice continued
+
+- Merged PR #717: report catalog extraction is now part of `refactor/commercial-code-organization`.
+- Extracted `ReportLine`, location-inventory report state/mapping, and stock-movement-by-user report state/mapping into `ReportInventoryLines.kt`.
+- Updated report source-contract tests to read the new owner file while preserving the original behavioral assertions.
+- No database migrations, Supabase RPCs, query scopes, report formulas, or export behavior were changed in this slice.
+- Validation is running on the updated branch; do not mark the slice complete or merge PR #715 until all required CI checks pass.
