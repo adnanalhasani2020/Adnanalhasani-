@@ -91,3 +91,15 @@ def test_catalog_discovery_product_mapping_has_a_dedicated_owner():
     assert "val pageItems=List(json.length())" not in screen
     assert "catalogOffset = requestedOffset + pageItems.size" in screen
     assert "catalogHasMore = pageItems.size == 100" in screen
+
+
+def test_catalog_directory_response_mapping_has_a_dedicated_owner():
+    screen = SCREEN.read_text(encoding="utf-8")
+    mapper = (ANDROID / "CatalogDirectoryMapper.kt").read_text(encoding="utf-8")
+
+    assert "parseCatalogDirectory(raw)" in screen
+    assert "internal fun parseCatalogDirectory(raw: String)" in mapper
+    assert "CatalogDirectoryData" in mapper
+    assert "val directory = parseCatalogDirectory(raw)" in screen
+    assert "val categoryNames=buildMap" not in screen
+    assert "CatalogActivityNode(node.optString" not in screen
