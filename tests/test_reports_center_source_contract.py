@@ -13,6 +13,7 @@ INVENTORY_ROWS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/
 LEDGER_ROWS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportLedgerRows.kt"
 LEDGER_CLASSIFICATION = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportLedgerClassification.kt"
 PARTY_ROWS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportPartyStatementRows.kt"
+PARTY_VALIDATION = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportPartyStatementValidation.kt"
 SALES_ROWS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportSalesRows.kt"
 SUPPLIER_ROWS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportSupplierRows.kt"
 OPERATIONAL_ROWS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportOperationalRows.kt"
