@@ -31,6 +31,7 @@ internal fun commercialCloudActionableError(raw: String, status: Int): String {
         message.contains("collection_exceeds_outstanding_balance", ignoreCase = true) ||
             message.contains("overpayment", ignoreCase = true) ->
             "رُفض التحصيل لأن المبلغ يتجاوز الرصيد المستحق. حدّث الفاتورة وأدخل المبلغ المتبقي الفعلي. التفاصيل: $detail"
+        // Expired refresh credentials require re-authentication, not a generic retry.
         message.contains("invalid refresh token", ignoreCase = true) ||
             message.contains("refresh token not found", ignoreCase = true) ||
             message.contains("invalid_grant", ignoreCase = true) ||
