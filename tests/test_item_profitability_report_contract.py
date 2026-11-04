@@ -4,6 +4,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterScreen.kt"
 DATA_STATE = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterData.kt"
 CATALOG = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCatalog.kt"
+CATALOG_SECTION = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCatalogSection.kt"
 REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReturnsRepository.kt"
 CALCULATIONS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportCalculations.kt"
 COST_PROFIT_CALCULATIONS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CostProfitCalculations.kt"
@@ -61,7 +62,9 @@ def test_daily_sales_trend_uses_completed_invoices_and_currency_separated_totals
     assert 'calculateDailySalesTrend(' in calculations
     assert 'document.saleStatus.equals("completed", true)' in screen
     assert 'ReportCatalogItem("الخصومات على فواتير المبيعات"' in screen
-    assert '-> selectedReport = report.title' in screen
+    catalog_section = CATALOG_SECTION.read_text(encoding="utf-8")
+    assert "selectableReportTitle(report.title)?.let(onReportSelected)" in catalog_section
+    assert "onReportSelected = { selectedReport = it }" in screen
     assert 'Daily sales trend' in contract
 
 def test_item_profitability_matches_return_to_original_sale_and_blocks_tax_inclusive_refunds():
