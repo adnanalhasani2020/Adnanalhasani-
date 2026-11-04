@@ -254,39 +254,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             // Product-unit RLS inherits visibility from the global catalog item.
             val filter=java.net.URLEncoder.encode("in.("+selectedIds.joinToString(",")+")","UTF-8")
             val unitRaw=catalogGet("/rest/v1/commercial_catalog_product_units?select=product_id,unit_code,unit_role,quantity_in_base,is_default&is_active=eq.true&product_id=$filter&order=product_id.asc,is_default.desc,created_at.asc",active)
-            val unitRows=JSONArray(unitRaw)
-            val grouped=mutableMapOf<String,MutableList<JSONObject>>()
-            for(i in 0 until unitRows.length()) {
-                val row=unitRows.getJSONObject(i)
-                grouped.getOrPut(row.optString("product_id")) { mutableListOf() }.add(row)
-            }
-            val payloadItems=JSONArray()
-            for(id in selectedIds) {
-                val units=grouped[id].orEmpty()
-                val baseCandidates=units.filter {
-                    it.optString("unit_role").equals("base",true) &&
-                        it.optString("quantity_in_base").toBigDecimalOrNull()?.compareTo(java.math.BigDecimal.ONE)==0
-                }
-                if(baseCandidates.size!=1) {
-                    throw IllegalStateException("الصنف $id لا يملك وحدة أساس واحدة موثوقة في الدليل؛ راجع بيانات وحداته قبل التهيئة.")
-                }
-                // The catalog authoring contract marks the base unit as the product's sole default.
-                // Therefore, only a sale-role default can be preferred as the sale unit.
-                val saleCandidates=units.filter { it.optString("unit_role").equals("sale",true) }
-                val defaultSaleCandidates=saleCandidates.filter { it.optBoolean("is_default",false) }
-                if(defaultSaleCandidates.size>1 || (defaultSaleCandidates.isEmpty() && saleCandidates.size>1)) {
-                    throw IllegalStateException("وحدات الصنف $id تحتوي أكثر من وحدة بيع افتراضية أو مرشحة؛ يلزم تصحيح الدليل قبل التهيئة.")
-                }
-                val base=baseCandidates.single()
-                val sale=defaultSaleCandidates.singleOrNull() ?: saleCandidates.singleOrNull() ?: base
-                val saleFactor=sale.optString("quantity_in_base").toBigDecimalOrNull()
-                if(saleFactor==null || saleFactor<=java.math.BigDecimal.ZERO || sale.optString("unit_code").isBlank()) {
-                    throw IllegalStateException("معامل تحويل وحدة البيع للصنف $id غير صالح؛ لم يتم اختلاق معامل بديل.")
-                }
-                payloadItems.put(JSONObject().put("global_item_id",id)
-                    .put("base_unit_code",base.optString("unit_code"))
-                    .put("sale_unit_code",sale.optString("unit_code")))
-            }
+            val payloadItems=buildCatalogConfigurationItems(selectedIds, JSONArray(unitRaw))
             catalogHttp("/rest/v1/rpc/commercial_catalog_configure_items",JSONObject().put("p_organization_id",orgId)
                 .put("p_activity_node_code",selectedActivityCode).put("p_branch_location_id",selectedBranchId)
                 .put("p_warehouse_id",selectedWarehouseId).put("p_items",payloadItems),active)
