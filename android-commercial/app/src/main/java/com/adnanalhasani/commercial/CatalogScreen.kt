@@ -282,7 +282,8 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         }
     }
 
-    val directoryWorkflow = CatalogDirectoryWorkflow(
+    lateinit var directoryWorkflow: CatalogDirectoryWorkflow
+    directoryWorkflow = CatalogDirectoryWorkflow(
         accessToken = { token },
         organizationId = { org() },
         locale = { locale },
@@ -296,7 +297,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         onBusinessLevel = { businessLevel = it },
         onFeedback = { feedback = it },
         onDirectoriesLoaded = { marketWorkflow.loadMarketContext() },
-        onReloadDirectories = { loadDirectories() }
+        onReloadDirectories = { directoryWorkflow.loadDirectories() }
     )
 
     fun loadDirectories() = directoryWorkflow.loadDirectories()
