@@ -129,3 +129,10 @@
 - `ReportsCatalog.kt` owns `ReportCatalogItem` and `buildReportsCatalog(cloudMode)`.
 - `ReportsCenterScreen.kt` consumes the catalog and retains report loading, filtering, calculation orchestration, presentation, and export integration.
 - Keep catalog labels, source descriptions, supported flags, and readiness notes together in `ReportsCatalog.kt`; do not duplicate the catalog in screen code.
+
+
+### Inventory report mapping extraction (2026-11-04)
+- `ReportInventoryLines.kt` owns the shared `ReportLine` presentation model and the pure mapping/state builders for location inventory and stock-movement-by-user reports.
+- `ReportsCenterScreen.kt` retains report selection, data loading, filtering, screen state, rendering, and export orchestration; it consumes the extracted internal report mapping functions.
+- `ReportCalculations.kt` remains the owner of reusable exact arithmetic and aggregation rules. The extraction did not change formulas, query scopes, quantity precision, or report labels.
+- Source-contract tests now read the new owner file for moved helpers; this is a source-location update, not a relaxation of the report assertions.
