@@ -123,3 +123,9 @@
 ## 7. حدود هذه الوثيقة
 
 هذه خريطة مسؤوليات الملفات ومسارات العمل التجارية مبنية على أسماء الملفات والرموز والوثائق الحالية؛ ليست شرحًا لكل سطر من ملفات Kotlin، ولا تدقيقًا لكل ملفات المستودع البالغ عددها مئات الملفات. لم يتم تغيير سلوك التطبيق في هذه الوثيقة، ولم تُطبّق migrations على Supabase الحية، ولم تُنفّذ عملية بيع/شراء/استرداد حية كجزء من إنشاء هذا المرجع. يجب أن تظل هذه الحدود صريحة في تقارير الحالة.
+
+
+### Reports catalog extraction (2026-11-04)
+- `ReportsCatalog.kt` owns `ReportCatalogItem` and `buildReportsCatalog(cloudMode)`.
+- `ReportsCenterScreen.kt` consumes the catalog and retains report loading, filtering, calculation orchestration, presentation, and export integration.
+- Keep catalog labels, source descriptions, supported flags, and readiness notes together in `ReportsCatalog.kt`; do not duplicate the catalog in screen code.
