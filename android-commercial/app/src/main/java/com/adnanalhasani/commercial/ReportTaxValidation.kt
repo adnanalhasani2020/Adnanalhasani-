@@ -58,3 +58,26 @@ internal fun reportTaxDetailValidationError(
     } -> "تعذر مطابقة عملة المرتجع مع فاتورة البيع الأصلية؛ تم حجب تفاصيل الضرائب والخصومات."
     else -> ""
 }
+
+
+/** Validates the sales-only discount and recorded-tax reports without depending on purchase/return sources. */
+internal fun reportSalesTaxDiscountValidationError(
+    cloudMode: Boolean,
+    salesDocumentsLoadError: String,
+    cloudSalesDocuments: List<CommercialCloudSaleDocument>,
+    startMillis: Long,
+    endExclusive: Long
+): String = when {
+    !cloudMode -> "تقارير خصومات المبيعات والضرائب المسجلة تتطلب فواتير السحابة."
+    salesDocumentsLoadError.isNotBlank() -> salesDocumentsLoadError
+    cloudSalesDocuments.any { doc ->
+        doc.saleStatus.equals("completed", true) && reportDateMillis(doc.createdAt) == null
+    } -> "توجد فاتورة بيع مكتملة بتاريخ غير صالح؛ تم حجب تقرير الخصومات والضرائب المسجلة."
+    cloudSalesDocuments.any { doc ->
+        doc.saleStatus.equals("completed", true) &&
+            reportDateMillis(doc.createdAt)?.let { it >= startMillis && it < endExclusive } == true &&
+            (doc.subtotalMinor < 0L || doc.discountMinor < 0L || doc.discountMinor > doc.subtotalMinor ||
+                doc.taxMinor < 0L || !doc.currencyCode.matches(Regex("^[A-Z]{3}$")))
+    } -> "توجد فاتورة بيع مكتملة بخصم أو ضريبة أو عملة غير صالحة؛ تم حجب تقرير الخصومات والضرائب المسجلة."
+    else -> ""
+}
