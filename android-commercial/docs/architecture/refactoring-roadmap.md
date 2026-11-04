@@ -316,3 +316,6 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 
 
 - Extracted detailed tax/discount row mapping into `ReportTaxRows.kt`; added an ownership test. Tax source validation and the existing tax/discount summary calculator remain in their existing owners.
+
+
+- Extracted item-profitability and historical cost/profit report row mapping into `ReportProfitabilityRows.kt`; added an ownership test. The exact calculation owners remain unchanged.
