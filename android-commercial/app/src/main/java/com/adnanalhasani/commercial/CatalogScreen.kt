@@ -186,6 +186,18 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     }
 
     fun org(): String? = organizationId.trim().takeIf { it.isNotBlank() }
+
+    val marketWorkflow = CatalogMarketWorkflow(
+        state = marketUiState,
+        accessToken = { token },
+        organizationId = { org() },
+        selectedActivityCode = { selectedActivityCode },
+        selectedCatalogIds = { selectedCatalogIds },
+        currencyCode = { currencyCode },
+        request = { action, onSuccess, onFailure -> request(action, onSuccess, onFailure) },
+        onFeedback = { feedback = it }
+    )
+
     fun loadCatalog(reset: Boolean = true) {
         val active = token ?: return
         val orgId = org() ?: run { feedback = "أدخل معرّف المؤسسة UUID أولًا."; return }
@@ -223,119 +235,6 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         }
     }
 
-    fun saveMarketBranchCoordinates(latitude: String?, longitude: String?) {
-        val active=token
-        val orgId=org()
-        if(active==null || orgId==null || selectedBranchId.isBlank()) {
-            feedback="اختر مؤسسة وفرعًا صالحين أولًا."
-            return
-        }
-        request({
-            catalogHttp("/rest/v1/rpc/commercial_update_location_coordinates",JSONObject()
-                .put("p_organization_id",orgId)
-                .put("p_location_id",selectedBranchId)
-                .put("p_latitude",latitude ?: JSONObject.NULL)
-                .put("p_longitude",longitude ?: JSONObject.NULL),active)
-        }, { raw ->
-            val result=JSONObject(raw)
-            val savedLat=result.optString("latitude").takeUnless { it=="null" }.orEmpty()
-            val savedLon=result.optString("longitude").takeUnless { it=="null" }.orEmpty()
-            marketBranches=marketBranches.map { branch ->
-                if(branch.id==selectedBranchId) branch.copy(latitude=savedLat,longitude=savedLon) else branch
-            }
-            branchLatitude=savedLat
-            branchLongitude=savedLon
-            feedback=if(savedLat.isBlank()) "تم مسح إحداثيات الفرع." else "تم حفظ إحداثيات الفرع وتسجيل التغيير في سجل التدقيق."
-        })
-    }
-
-    fun loadMarketContext() {
-        val active=token ?: return
-        val orgId=org() ?: run { feedback="أدخل معرّف المؤسسة UUID أولًا."; return }
-        request({
-            val branches=catalogGet("/rest/v1/commercial_organization_locations?select=id,name,latitude,longitude&organization_id=eq."+orgId+"&state=eq.active&order=name.asc",active)
-            val warehouses=catalogGet("/rest/v1/commercial_warehouses?select=id,name,branch_location_id&organization_id=eq."+orgId+"&state=eq.active&order=name.asc",active)
-            JSONObject().put("branches",JSONArray(branches)).put("warehouses",JSONArray(warehouses)).toString()
-        }, { raw ->
-            val marketContext = parseCatalogMarketContext(raw)
-            marketBranches = marketContext.branches
-            marketWarehouses = marketContext.warehouses
-            if(selectedBranchId.isBlank()) selectedBranchId=marketBranches.firstOrNull()?.id.orEmpty()
-            if(selectedWarehouseId.isBlank() || marketWarehouses.none { it.id==selectedWarehouseId && it.branchId==selectedBranchId }) selectedWarehouseId=marketWarehouses.firstOrNull { it.branchId==selectedBranchId }?.id.orEmpty()
-            val selectedBranch=marketBranches.firstOrNull { it.id==selectedBranchId }
-            branchLatitude=selectedBranch?.latitude.orEmpty()
-            branchLongitude=selectedBranch?.longitude.orEmpty()
-            feedback="تم تحميل الفروع والمستودعات: "+marketBranches.size+" / "+marketWarehouses.size
-        })
-    }
-
-    fun configureSelectedCatalogItems() {
-        val active=token ?: return
-        val orgId=org() ?: run { feedback="أدخل معرّف المؤسسة UUID أولًا."; return }
-        if(selectedActivityCode.isBlank() || selectedBranchId.isBlank() || selectedWarehouseId.isBlank() || selectedCatalogIds.isEmpty()) {
-            feedback="اختر النشاط والفرع والمستودع وحدد الأصناف أولًا."; return
-        }
-        if(selectedCatalogIds.size>100) { feedback="الحد الأقصى للعملية الواحدة 100 صنف."; return }
-        val selectedIds=selectedCatalogIds.toList()
-        request({
-            // Fetch authoritative unit rows for every selected item, including items selected from nearby discovery.
-            // Product-unit RLS inherits visibility from the global catalog item.
-            val filter=java.net.URLEncoder.encode("in.("+selectedIds.joinToString(",")+")","UTF-8")
-            val unitRaw=catalogGet("/rest/v1/commercial_catalog_product_units?select=product_id,unit_code,unit_role,quantity_in_base,is_default&is_active=eq.true&product_id=$filter&order=product_id.asc,is_default.desc,created_at.asc",active)
-            val payloadItems=buildCatalogConfigurationItems(selectedIds, JSONArray(unitRaw))
-            catalogHttp("/rest/v1/rpc/commercial_catalog_configure_items",JSONObject().put("p_organization_id",orgId)
-                .put("p_activity_node_code",selectedActivityCode).put("p_branch_location_id",selectedBranchId)
-                .put("p_warehouse_id",selectedWarehouseId).put("p_items",payloadItems),active)
-        }, { raw ->
-            val result=runCatching { JSONObject(raw) }.getOrNull()
-            feedback="تمت تهيئة "+(result?.optInt("configured_count",selectedIds.size) ?: selectedIds.size)+
-                " صنفًا للنشاط والفرع والمستودع، بما فيها نتائج السوق القريب. الأصناف غير المسعرة تبقى غير متاحة للبيع ولا يُنشأ مخزون تلقائيًا."
-        })
-    }
-
-    fun loadNearbyCatalog(expandRadius: Boolean = false) {
-        val active=token ?: return
-        val orgId=org() ?: run { feedback="أدخل معرّف المؤسسة UUID أولًا."; return }
-        val branch=marketBranches.firstOrNull { it.id==selectedBranchId }
-        val useDeviceCenter=deviceLatitude!=null && deviceLongitude!=null
-        val lat=if(useDeviceCenter) deviceLatitude?.toBigDecimalOrNull() else branch?.latitude?.toBigDecimalOrNull()
-        val lon=if(useDeviceCenter) deviceLongitude?.toBigDecimalOrNull() else branch?.longitude?.toBigDecimalOrNull()
-        if(lat==null || lon==null) { feedback="حدد موقعك الحالي أو اختر فرعًا بإحداثيات محفوظة."; return }
-        val radiusSteps=listOf(5000,10000,25000,50000,100000)
-        val nextRadius=if(expandRadius) radiusSteps.firstOrNull { it>marketRadius } ?: marketRadius else marketRadius
-        if(expandRadius && nextRadius==marketRadius) { feedback="تم بلوغ أقصى نطاق بحث (100 كم)."; return }
-        val requestedOffset=if(expandRadius) 0 else nearbyOffset
-        nearbyPageLoadFailed=false
-        request({
-            catalogHttp("/rest/v1/rpc/commercial_catalog_nearby_popularity",JSONObject().put("p_organization_id",orgId)
-                .put("p_latitude",lat.toPlainString()).put("p_longitude",lon.toPlainString()).put("p_radius_m",nextRadius)
-                .put("p_offset",requestedOffset).put("p_limit",30),active)
-        }, { raw ->
-            val page = parseNearbyCatalogItems(raw)
-            if(expandRadius) marketRadius=nextRadius
-            nearbyOffset=requestedOffset+page.size
-            nearbyHasMore=page.size==30
-            nearbyMarketItems=(nearbyMarketItems+page).distinctBy { it.id }
-            nearbyLoadGeneration++
-            nearbyPageLoadFailed=false
-            feedback=if(page.isEmpty()) "لا توجد نتائج إضافية في هذا النطاق؛ اسحب قائمة السوق لتوسيع البحث."
-                else "تم تحميل "+page.size+" نتيجة جديدة. النتائج مجمعة ولا تكشف هوية التجار."
-        }, { error ->
-            nearbyPageLoadFailed=true
-            feedback="تعذر تحميل نتائج السوق القريب. تحقق من الاتصال ثم أعد المحاولة: "+(error.message ?: "خطأ غير معروف")
-        })
-    }
-
-    fun startNearbyCatalog() {
-        nearbyMarketItems=emptyList()
-        nearbyOffset=0
-        nearbyHasMore=true
-        nearbyPageLoadFailed=false
-        nearbyLoadGeneration++
-        marketRadius=5000
-        loadNearbyCatalog(false)
-    }
-
     suspend fun updateNearbyFromDevice() {
         locatingDevice = true
         try {
@@ -343,7 +242,7 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             deviceLatitude = location.latitude.toString()
             deviceLongitude = location.longitude.toString()
             feedback = "تم تحديد موقعك لهذه الجلسة فقط. لا يتم حفظ الإحداثيات في ملفك أو تتبعك في الخلفية."
-            startNearbyCatalog()
+            marketWorkflow.startNearbyCatalog()
         } catch (error: Exception) {
             feedback = error.message ?: "تعذر تحديد موقع الجهاز. تحقق من تشغيل خدمات الموقع."
         } finally {
@@ -377,29 +276,9 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             Triple(lastVisible,total,nearbyListState.isScrollInProgress)
         }.collect { (lastVisible,total,scrolling) ->
             if(scrolling && total>0 && lastVisible>=total-2 && !busy) {
-                if(nearbyHasMore) loadNearbyCatalog(false) else loadNearbyCatalog(true)
+                if(nearbyHasMore) marketWorkflow.loadNearbyCatalog(false) else marketWorkflow.loadNearbyCatalog(true)
             }
         }
-    }
-
-    fun loadSelectedPriceSuggestions() {
-        val active=token ?: return
-        val orgId=org() ?: run { feedback="أدخل معرّف المؤسسة UUID أولًا."; return }
-        val branch=marketBranches.firstOrNull { it.id==selectedBranchId }
-        val useDeviceCenter=deviceLatitude!=null && deviceLongitude!=null
-        val lat=if(useDeviceCenter) deviceLatitude?.toBigDecimalOrNull() else branch?.latitude?.toBigDecimalOrNull()
-        val lon=if(useDeviceCenter) deviceLongitude?.toBigDecimalOrNull() else branch?.longitude?.toBigDecimalOrNull()
-        if(lat==null || lon==null || selectedCatalogIds.isEmpty()) { feedback="حدد موقعك الحالي أو اختر فرعًا بإحداثيات صحيحة، ثم حدد الأصناف."; return }
-        val ids=selectedCatalogIds.toList()
-        request({
-            catalogHttp("/rest/v1/rpc/commercial_catalog_price_suggestions",JSONObject().put("p_organization_id",orgId)
-                .put("p_global_item_ids",JSONArray(ids)).put("p_latitude",lat.toPlainString()).put("p_longitude",lon.toPlainString())
-                .put("p_radius_m",marketRadius.coerceAtLeast(1000)).put("p_currency_code",currencyCode.uppercase()),active)
-        }, { raw ->
-            val hints = parseCatalogMarketPriceHints(raw)
-            marketPriceHints=hints
-            feedback=if(hints.isEmpty()) "لا توجد أسعار استرشادية مؤهلة؛ لم يتم اختلاق أي سعر." else "وصلت أسعار مجمعة لـ "+hints.size+" صنفًا من مجموعات تضم خمسة تجار مستقلين على الأقل."
-        })
     }
 
     fun loadDirectories() {
@@ -936,16 +815,16 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
                         onUseBranchLocation={
                             deviceLatitude=null
                             deviceLongitude=null
-                            startNearbyCatalog()
+                            marketWorkflow.startNearbyCatalog()
                         },
-                        onSaveCoordinates=::saveMarketBranchCoordinates,
-                        onLoadMarketContext=::loadMarketContext,
+                        onSaveCoordinates=marketWorkflow::saveBranchCoordinates,
+                        onLoadMarketContext=marketWorkflow::loadMarketContext,
                         onLoadNearbyFromDevice=::loadNearbyFromDevice,
-                        onStartNearbyCatalog=::startNearbyCatalog,
-                        onLoadSelectedPriceSuggestions=::loadSelectedPriceSuggestions,
+                        onStartNearbyCatalog=marketWorkflow::startNearbyCatalog,
+                        onLoadSelectedPriceSuggestions=marketWorkflow::loadSelectedPriceSuggestions,
                         onCreateProduct={section="product"},
-                        onConfigureSelectedCatalogItems=::configureSelectedCatalogItems,
-                        onLoadNearbyCatalog=::loadNearbyCatalog
+                        onConfigureSelectedCatalogItems=marketWorkflow::configureSelectedCatalogItems,
+                        onLoadNearbyCatalog={ expand -> marketWorkflow.loadNearbyCatalog(expand) }
                     )
                     if (selectedCatalogIds.isNotEmpty()) {
                         Card(Modifier.fillMaxWidth(), colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.secondaryContainer)) {
