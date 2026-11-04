@@ -3,7 +3,6 @@ package com.adnanalhasani.commercial
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.mutableStateListOf
 
 /** State for invoice-to-purchase review and catalog item matching. */
 internal class CatalogInvoiceTransferState {
