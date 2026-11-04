@@ -11,6 +11,7 @@ EXPORT_LAUNCHERS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasan
 CATALOG_SECTION = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCatalogSection.kt"
 INVENTORY_ROWS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportInventoryRows.kt"
 LEDGER_ROWS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportLedgerRows.kt"
+LEDGER_CLASSIFICATION = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportLedgerClassification.kt"
 PARTY_ROWS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportPartyStatementRows.kt"
 SALES_ROWS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportSalesRows.kt"
 SUPPLIER_ROWS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportSupplierRows.kt"
