@@ -263,3 +263,9 @@ The catalog screen owns interaction and request orchestration. JSON-to-domain ma
 - `ReportDomainMappers.kt` now owns pure projections from saved cloud sales/returns into item-profitability, customer-collection, user-performance, daily-sales, and supplier-purchase-summary calculation inputs.
 - `ReportsCenterData.kt` retains Compose `remember` lifecycles and calculation invocation; formulas, period predicates, and row assembly remain in their existing owners.
 - The mapping preserves completed/succeeded status filters, date-window boundaries, all-sale-lines availability for historical return linkage, and original source field mappings.
+
+
+### Supplier obligation input mapping extraction (2026-11-05)
+
+- `ReportDomainMappers.kt` owns selection of active supplier invoice/obligation candidates and projection of obligations recorded before the selected period end into `SupplierObligationInput`.
+- `ReportsCenterData.kt` retains the shared candidate list for supplier invoice validation and calculation lifecycle/orchestration. Cancellation-state rules, recorded-date cutoff, currency fields, and supplier fallback labels are preserved.
