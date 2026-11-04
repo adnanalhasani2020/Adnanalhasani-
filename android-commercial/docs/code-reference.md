@@ -188,3 +188,9 @@
 - `CatalogLoginPanel.kt` owns the login form presentation, validation enablement, and security guidance text.
 - `CatalogScreen.kt` retains authentication request orchestration, encrypted refresh-token persistence, session state, and feedback handling; the login panel receives callbacks and does not access credentials storage or network APIs.
 - `tests/test_catalog_models_ownership.py` guards the panel call site and the dedicated composable owner.
+
+
+### Local sale and product dialog extraction (2026-11-04)
+- `LocalProductDialogs.kt` owns `SaleEntryDialog`, `EditProductDialog`, and `AddProductDialog`.
+- The dialogs retain their existing parameters, local validation, unit selection, and callbacks. `MainActivity.kt` continues to invoke the same composables; no local storage contract or cloud operation was changed.
+- `tests/test_local_commercial_screens_contract.py` guards the single owner for these dialogs.
