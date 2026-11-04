@@ -298,3 +298,6 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 
 
 - Extracted the income statement/balance sheet, trial balance, general-ledger movement/account statement, posted journal detail, and journal register row branches into `ReportLedgerRows.kt`. Added a source-ownership test; remaining sales, purchase, party statement, customer/supplier operational, and expense row assembly still needs decomposition.
+
+
+- Extracted full customer/supplier control-account statements and the operational customer statement into `ReportPartyStatementRows.kt`; added a source-ownership test. Sales, purchase, supplier operational movement, and expense row families remain in the main dispatch and are the next extraction targets.
