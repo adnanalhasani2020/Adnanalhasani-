@@ -793,50 +793,21 @@ internal fun ReportsCenterScreen(
                 onClearError = { error = "" }
             )
         }
-        if (selectedReport in setOf("كشف حركات الموردين", "أرصدة الموردين والمستحقات")) item {
-            OutlinedTextField(
-                value = supplierFilter,
-                onValueChange = { supplierFilter = it },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                label = { Text("اسم المورد") },
-                supportingText = { Text(if (selectedReport == "أرصدة الموردين والمستحقات") "يعرض حركات حساب مراقبة المورد من القيود المرحلة." else "الكشف التشغيلي الجزئي يعتمد على الفواتير والدفعات المحملة.") }
-            )
-        }
-        if (selectedReport in setOf("أرصدة العملاء وكشف الحساب", "الرصيد المحاسبي الكامل للعملاء")) item {
-            OutlinedTextField(
-                value = customerFilter,
-                onValueChange = { customerFilter = it },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                label = { Text("اسم العميل أو معرفه") },
-                supportingText = { Text(if (selectedReport == "الرصيد المحاسبي الكامل للعملاء") "يصفّي حركات حساب مراقبة العميل في دفتر الأستاذ المرحل." else "يصفّي الكشف التشغيلي حسب العميل والحركات المحملة.") }
-            )
-        }
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("تصفية نتائج التقرير", fontWeight = FontWeight.SemiBold, color = ReportInk)
-                if (selectedReport !in setOf("أرصدة العملاء وكشف الحساب", "كشف حركات الموردين", "الرصيد المحاسبي الكامل للعملاء", "أرصدة الموردين والمستحقات")) {
-                    OutlinedTextField(rowFilter, { rowFilter = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("اسم أو مرجع المستند") })
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(currencyFilter, { currencyFilter = it }, modifier = Modifier.weight(1f), singleLine = true, label = { Text("العملة") })
-                    if (selectedReport !in setOf("أرصدة العملاء وكشف الحساب", "كشف حركات الموردين", "الرصيد المحاسبي الكامل للعملاء", "أرصدة الموردين والمستحقات")) {
-                        OutlinedTextField(statusFilter, { statusFilter = it }, modifier = Modifier.weight(1f), singleLine = true, label = { Text("الحالة") })
-                    }
-                }
-            }
-        }
-        if (selectedReport == "كشف حساب محاسبي") item {
-            OutlinedTextField(
-                value = accountFilter,
-                onValueChange = { accountFilter = it },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                label = { Text("رمز الحساب أو اسمه") },
-                supportingText = { Text("أدخل رمزًا أو اسمًا مطابقًا للحساب؛ لا يعرض الكشف كل الحسابات تلقائيًا.") }
-            )
-        }
+        reportsFilterSection(
+            selectedReport = selectedReport,
+            supplierFilter = supplierFilter,
+            customerFilter = customerFilter,
+            rowFilter = rowFilter,
+            currencyFilter = currencyFilter,
+            statusFilter = statusFilter,
+            accountFilter = accountFilter,
+            onSupplierFilterChanged = { supplierFilter = it },
+            onCustomerFilterChanged = { customerFilter = it },
+            onRowFilterChanged = { rowFilter = it },
+            onCurrencyFilterChanged = { currencyFilter = it },
+            onStatusFilterChanged = { statusFilter = it },
+            onAccountFilterChanged = { accountFilter = it }
+        )
         reportsCatalogSection(
             categories = categories,
             selectedCategory = selectedCategory,
