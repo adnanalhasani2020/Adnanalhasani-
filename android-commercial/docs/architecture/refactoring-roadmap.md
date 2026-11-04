@@ -286,3 +286,6 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 
 
 - Extracted the report period preset/manual date input UI to `ReportsPeriodControls.kt`; the component emits range changes through callbacks while date validation and report filtering remain with the screen. Added a source-ownership test.
+
+
+- Extracted Android document-picker callbacks and CSV/XLSX/PDF stream/share lifecycle into `ReportsExportLaunchers.kt`; native document rendering remains in `ReportExport.kt`, and report-row selection remains in the screen. Added an ownership test and moved source-contract assertions to the new owner.
