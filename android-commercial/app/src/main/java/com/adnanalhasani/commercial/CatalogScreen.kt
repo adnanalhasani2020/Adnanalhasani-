@@ -27,8 +27,12 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     val context = LocalContext.current
     val productFormState = remember { CatalogProductFormState() }
     val invoiceTransferState = remember { CatalogInvoiceTransferState() }
-    var email by remember { mutableStateOf("") }; var password by remember { mutableStateOf("") }
-    var token by remember { mutableStateOf<String?>(null) }; var signedInUserId by remember { mutableStateOf("") }; var organizationId by remember { mutableStateOf(initialOrganizationId) }
+    val sessionUiState = remember { CatalogSessionUiState(initialOrganizationId) }
+    var email by sessionUiState::email
+    var password by sessionUiState::password
+    var token by sessionUiState::token
+    var signedInUserId by sessionUiState::signedInUserId
+    var organizationId by sessionUiState::organizationId
     var section by remember { mutableStateOf("browse") }
     val browseUiState = remember(initialActivityCode) { CatalogBrowseUiState(initialActivityCode) }
     var sector by browseUiState::sector
@@ -90,7 +94,10 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
     val catalogListState = rememberLazyListState()
     var categories by remember { mutableStateOf<List<CatalogCategory>>(emptyList()) }
     var directoryUnits by remember { mutableStateOf<List<DirectoryUnit>>(emptyList()) }; var pendingTransfers by remember { mutableStateOf<List<PendingTransfer>>(emptyList()) }
-    var busy by remember { mutableStateOf(false) }; var restoringSession by remember { mutableStateOf(true) }; var feedback by remember { mutableStateOf("") }; var editingProduct by remember { mutableStateOf<CatalogProduct?>(null) }
+    var busy by sessionUiState::busy
+    var restoringSession by sessionUiState::restoringSession
+    var feedback by sessionUiState::feedback
+    var editingProduct by remember { mutableStateOf<CatalogProduct?>(null) }
 
     val directoryFormState = remember { CatalogDirectoryFormState() }
     var categoryCode by directoryFormState.categoryCode
