@@ -194,3 +194,10 @@
 - `LocalProductDialogs.kt` owns `SaleEntryDialog`, `EditProductDialog`, and `AddProductDialog`.
 - The dialogs retain their existing parameters, local validation, unit selection, and callbacks. `MainActivity.kt` continues to invoke the same composables; no local storage contract or cloud operation was changed.
 - `tests/test_local_commercial_screens_contract.py` guards the single owner for these dialogs.
+
+
+### MainActivity and local operational screen extraction (2026-11-04)
+- `MainActivity.kt` now contains only the Android activity lifecycle, Compose theme setup, and shared cloud executor/handler declarations.
+- `LocalOperationalScreens.kt` owns the local More, expenses, legacy reports, cloud legacy reports, debts, expense-entry, and settlement UI.
+- `LocalProductDialogs.kt` owns local sale, add-product, and edit-product dialogs.
+- `tests/test_local_commercial_screens_contract.py` verifies the thin activity boundary and the single owner of each extracted composable.
