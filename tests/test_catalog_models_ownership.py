@@ -77,4 +77,5 @@ def test_catalog_market_response_parsing_has_a_dedicated_owner():
         assert f"{name}(" in market_data
         assert f"{name}(" in screen
 
-    assert "JSONArray(raw)" not in screen
+    assert "val page = parseNearbyCatalogItems(raw)" in screen
+    assert "val hints = parseCatalogMarketPriceHints(raw)" in screen
