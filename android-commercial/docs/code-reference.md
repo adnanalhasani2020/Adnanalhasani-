@@ -398,3 +398,8 @@
 ### Supplier obligation input mapping (2026-11-05)
 - `ReportDomainMappers.kt` owns active supplier invoice/obligation candidate selection and mapping into obligation calculation inputs.
 - `ReportsCenterData.kt` retains report validation/calculate orchestration and reuses the shared active-invoice candidates for invoice-detail validation.
+
+
+### Reports center currency totals
+- Sales summary totals are aggregated by currency using exact `Long` addition in `calculateReportCurrencyTotals`.
+- Overflow produces an explicit Arabic error in the summary card and suppresses totals; the UI no longer risks displaying wrapped values.
