@@ -34,3 +34,16 @@ def test_catalog_screen_keeps_existing_model_contracts():
     assert "internal fun CatalogScreen(" in screen
     assert "CatalogProduct" in screen
     assert "CatalogUnit" in screen
+
+def test_catalog_uses_the_shared_supabase_transport_and_session_store():
+    screen = SCREEN.read_text(encoding="utf-8")
+    transport = (ANDROID / "CatalogCloudTransport.kt").read_text(encoding="utf-8")
+    session = (ANDROID / "CommercialCloudSession.kt").read_text(encoding="utf-8")
+
+    assert "SupabaseClient.request(" in transport
+    assert 'method = "POST"' in transport
+    assert 'method = "GET"' in transport
+    assert "commercialCloudSessionPreferences(context)" in screen
+    assert "EncryptedSharedPreferences" not in screen
+    assert "HttpURLConnection" not in screen
+    assert "fun commercialCloudSessionPreferences" in session
