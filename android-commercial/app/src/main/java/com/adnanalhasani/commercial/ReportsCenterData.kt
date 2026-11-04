@@ -97,16 +97,25 @@ internal fun rememberReportsCenterData(
     val startMillis = startDate?.atStartOfDay(zone)?.toInstant()?.toEpochMilli() ?: Long.MIN_VALUE
     val endExclusive = reportEndExclusiveMillis(endDate, zone)
 
-    val ledgerStatementError = reportLedgerStatementValidationError(
-        cloudMode = cloudMode,
-        ledgerLines = cloudLedgerLines,
-        endDate = endDate,
-        ledgerLinesLoadError = ledgerLinesLoadError,
-        glMappingsLoadError = glMappingsLoadError,
-        glMappingKeys = cloudGlMappings.map { it.mappingKey }.toSet(),
-        supplierControlAccountsLoadError = supplierControlAccountsLoadError,
-        supplierAccountRoles = cloudSupplierControlAccounts.map { it.accountRole }.toSet()
-    )
+    val glMappingKeys = remember(cloudGlMappings) { cloudGlMappings.map { it.mappingKey }.toSet() }
+    val supplierAccountRoles = remember(cloudSupplierControlAccounts) {
+        cloudSupplierControlAccounts.map { it.accountRole }.toSet()
+    }
+    val ledgerStatementError = remember(
+        cloudMode, cloudLedgerLines, endDate, ledgerLinesLoadError, glMappingsLoadError,
+        glMappingKeys, supplierControlAccountsLoadError, supplierAccountRoles
+    ) {
+        reportLedgerStatementValidationError(
+            cloudMode = cloudMode,
+            ledgerLines = cloudLedgerLines,
+            endDate = endDate,
+            ledgerLinesLoadError = ledgerLinesLoadError,
+            glMappingsLoadError = glMappingsLoadError,
+            glMappingKeys = glMappingKeys,
+            supplierControlAccountsLoadError = supplierControlAccountsLoadError,
+            supplierAccountRoles = supplierAccountRoles
+        )
+    }
     val expenseReportError = reportExpenseValidationError(
         cloudMode = cloudMode,
         expensesLoadError = expensesLoadError,
@@ -128,14 +137,22 @@ internal fun rememberReportsCenterData(
         startMillis = startMillis,
         endExclusive = endExclusive
     )
-    val activeSupplierInvoiceCandidates = cloudPurchases.activeSupplierInvoiceCandidates()
-    val supplierObligationCandidates = activeSupplierInvoiceCandidates.activeSupplierObligationCandidates()
-    val supplierObligationInputs = supplierObligationCandidates.toSupplierObligationInputs(endExclusive)
-    val supplierMovementInputs = buildSupplierMovementInputs(
-        purchases = cloudPurchases,
-        payments = cloudSupplierPayments,
-        supplierFilter = supplierFilter
-    )
+    val activeSupplierInvoiceCandidates = remember(cloudPurchases) {
+        cloudPurchases.activeSupplierInvoiceCandidates()
+    }
+    val supplierObligationCandidates = remember(activeSupplierInvoiceCandidates) {
+        activeSupplierInvoiceCandidates.activeSupplierObligationCandidates()
+    }
+    val supplierObligationInputs = remember(supplierObligationCandidates, endExclusive) {
+        supplierObligationCandidates.toSupplierObligationInputs(endExclusive)
+    }
+    val supplierMovementInputs = remember(cloudPurchases, cloudSupplierPayments, supplierFilter) {
+        buildSupplierMovementInputs(
+            purchases = cloudPurchases,
+            payments = cloudSupplierPayments,
+            supplierFilter = supplierFilter
+        )
+    }
     val supplierInvoiceDetailError = reportSupplierInvoiceDetailValidationError(
         cloudMode = cloudMode,
         purchasesLoadError = purchasesLoadError,
@@ -389,52 +406,76 @@ internal fun rememberReportsCenterData(
         (selectedCategory == "الكل" || it.category == selectedCategory) &&
             (search.isBlank() || it.title.contains(search, true) || it.category.contains(search, true))
     }
-    val inPeriodSales = if (dateError) emptyList() else sales.filter { it.createdAt >= startMillis && it.createdAt < endExclusive && it.status.equals("completed", true) }
-    val inPeriodCloudSalesDocuments = if (dateError) emptyList() else cloudSalesDocuments.filter { doc ->
-        doc.saleStatus.equals("completed", true) &&
-            (reportDateMillis(doc.createdAt)?.let { it >= startMillis && it < endExclusive } == true)
+    val inPeriodSales = remember(sales, dateError, startMillis, endExclusive) {
+        if (dateError) emptyList() else sales.filter {
+            it.createdAt >= startMillis && it.createdAt < endExclusive && it.status.equals("completed", true)
+        }
     }
-    val inPeriodSettlements = if (cloudMode) emptyList() else settlements.filter { it.timestamp >= startMillis && it.timestamp < endExclusive }
-    val inPeriodExpenses = if (cloudMode) emptyList() else expenses.filter { it.timestamp >= startMillis && it.timestamp < endExclusive }
-    val stockLow = products.filter { it.stock <= (it.reorderPoint.takeIf { n -> n >= 0 } ?: 9) }
-    val salesRowsCalculation = runCatching {
-        buildSalesReportRows(
-            selectedReport = selectedReport,
-            cloudMode = cloudMode,
-            inPeriodCloudSalesDocuments = inPeriodCloudSalesDocuments,
-            inPeriodSales = inPeriodSales,
-            cloudSalesDocuments = cloudSalesDocuments,
-            sales = sales,
-            startMillis = startMillis,
-            endExclusive = endExclusive,
-            startText = startText,
-            endText = endText,
-            startDate = startDate,
-            endDate = endDate,
-            zone = zone
-        )
+    val inPeriodCloudSalesDocuments = remember(cloudSalesDocuments, dateError, startMillis, endExclusive) {
+        if (dateError) emptyList() else cloudSalesDocuments.filter { doc ->
+            doc.saleStatus.equals("completed", true) &&
+                (reportDateMillis(doc.createdAt)?.let { it >= startMillis && it < endExclusive } == true)
+        }
     }
-    if (salesRowsCalculation.isFailure) {
-        salesRowsArithmeticError = "تجاوزت مجاميع تقرير المبيعات نطاق الأرقام الدقيق؛ تم حجب التقرير."
+    val inPeriodSettlements = remember(cloudMode, settlements, startMillis, endExclusive) {
+        if (cloudMode) emptyList() else settlements.filter { it.timestamp >= startMillis && it < endExclusive }
     }
-    val ledgerRowsCalculation = runCatching {
-        buildLedgerReportRows(
-            selectedReport = selectedReport,
-            ledgerStatementError = ledgerStatementError,
-            cloudLedgerLines = cloudLedgerLines,
-            cloudJournals = cloudJournals,
-            startDate = startDate,
-            endDate = endDate,
-            startMillis = startMillis,
-            endExclusive = endExclusive,
-            startText = startText,
-            endText = endText,
-            accountFilter = accountFilter
-        )
+    val inPeriodExpenses = remember(cloudMode, expenses, startMillis, endExclusive) {
+        if (cloudMode) emptyList() else expenses.filter { it.timestamp >= startMillis && it.timestamp < endExclusive }
     }
-    if (ledgerRowsCalculation.isFailure) {
-        ledgerRowsArithmeticError = "تجاوزت مجاميع أو أرصدة دفتر الأستاذ نطاق الأرقام الدقيق؛ تم حجب التقرير."
+    val stockLow = remember(products) {
+        products.filter { it.stock <= (it.reorderPoint.takeIf { n -> n >= 0 } ?: 9) }
     }
+    val (salesRowsCalculation, salesRowsCalculationError) = remember(
+        selectedReport, cloudMode, inPeriodCloudSalesDocuments, inPeriodSales, cloudSalesDocuments,
+        sales, startMillis, endExclusive, startText, endText, startDate, endDate, zone
+    ) {
+        val calculation = runCatching {
+            buildSalesReportRows(
+                selectedReport = selectedReport,
+                cloudMode = cloudMode,
+                inPeriodCloudSalesDocuments = inPeriodCloudSalesDocuments,
+                inPeriodSales = inPeriodSales,
+                cloudSalesDocuments = cloudSalesDocuments,
+                sales = sales,
+                startMillis = startMillis,
+                endExclusive = endExclusive,
+                startText = startText,
+                endText = endText,
+                startDate = startDate,
+                endDate = endDate,
+                zone = zone
+            )
+        }
+        calculation to if (calculation.isFailure) {
+            "تجاوزت مجاميع تقرير المبيعات نطاق الأرقام الدقيق؛ تم حجب التقرير."
+        } else ""
+    }
+    val (ledgerRowsCalculation, ledgerRowsCalculationError) = remember(
+        selectedReport, ledgerStatementError, cloudLedgerLines, cloudJournals, startDate, endDate,
+        startMillis, endExclusive, startText, endText, accountFilter
+    ) {
+        val calculation = runCatching {
+            buildLedgerReportRows(
+                selectedReport = selectedReport,
+                ledgerStatementError = ledgerStatementError,
+                cloudLedgerLines = cloudLedgerLines,
+                cloudJournals = cloudJournals,
+                startDate = startDate,
+                endDate = endDate,
+                startMillis = startMillis,
+                endExclusive = endExclusive,
+                startText = startText,
+                endText = endText,
+                accountFilter = accountFilter
+            )
+        }
+        calculation to if (calculation.isFailure) {
+            "تجاوزت مجاميع أو أرصدة دفتر الأستاذ نطاق الأرقام الدقيق؛ تم حجب التقرير."
+        } else ""
+    }
+    salesRowsArithmeticError = salesRowsCalculationError
+    ledgerRowsArithmeticError = ledgerRowsCalculationError
     val selectedRowsUnvalidated = buildInventoryReportRows(
         selectedReport = selectedReport,
         cloudMode = cloudMode,
@@ -525,16 +566,21 @@ internal fun rememberReportsCenterData(
             (currencyFilter.isBlank() || row.currency.contains(currencyFilter.trim(), true)) &&
             (movementStatement || statusFilter.isBlank() || row.status.contains(statusFilter.trim(), true))
     }
-    val currencyTotalCalculation = runCatching {
-        if (dateError || (cloudMode && (cloudLoading || salesDocumentsLoadError.isNotBlank()))) {
-            emptyMap()
-        } else {
-            val amounts = if (cloudMode) {
-                inPeriodCloudSalesDocuments.map { it.currencyCode to it.totalMinor }
+    val currencyTotalCalculation = remember(
+        dateError, cloudMode, cloudLoading, salesDocumentsLoadError,
+        inPeriodCloudSalesDocuments, inPeriodSales
+    ) {
+        runCatching {
+            if (dateError || (cloudMode && (cloudLoading || salesDocumentsLoadError.isNotBlank()))) {
+                emptyMap()
             } else {
-                inPeriodSales.map { it.currencyCode to it.total.toLong() }
+                val amounts = if (cloudMode) {
+                    inPeriodCloudSalesDocuments.map { it.currencyCode to it.totalMinor }
+                } else {
+                    inPeriodSales.map { it.currencyCode to it.total.toLong() }
+                }
+                calculateReportCurrencyTotals(amounts)
             }
-            calculateReportCurrencyTotals(amounts)
         }
     }
     val currencyTotal = currencyTotalCalculation.getOrDefault(emptyMap())
