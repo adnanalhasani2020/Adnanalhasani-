@@ -92,6 +92,7 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 - Moved single/multi-sale checkout, sale idempotency, invoice history projection, and cloud sale summaries into `SalesRepository.kt`; updated sales, invoice-source, unit-directory, and report source-contract tests. Shared paging and master-data access helpers remain in the legacy repository for other domains.
 - Moved expense voucher currency/time-zone context, listing, cancellation, idempotency-key persistence, and recording into `ExpenseRepository.kt`; updated expense, voucher atomicity, receivables/expense integrity, and report source-contract tests. Supplier-payment recording remains in the legacy repository pending its own domain extraction.
 - Moved purchase-order options, order creation/transitions, receipt workflows, supplier invoice models/recording, and their pending idempotency keys into `PurchaseRepository.kt`; updated purchase workflow, supplier invoice, sales screen contract, and report source-contract tests.
+- Moved posted supplier-payment movement reads and supplier payment recording into `SupplierPaymentRepository.kt`; updated report and purchase-screen source contracts. The purchase and payment flows retain their existing RPC names and shared transport.
 - No database schema, RPC, or production data was changed.
 
 ## Current limitations
