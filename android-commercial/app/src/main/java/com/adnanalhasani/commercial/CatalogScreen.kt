@@ -100,46 +100,6 @@ internal data class CatalogProduct(
     val rawWarnings: String = ""
 )
 private data class CatalogCategory(val code: String, val parentCode: String, val nameAr: String, val nameEn: String, val localizedName: String = "", val descriptionAr: String = "", val descriptionEn: String = "", val localizedDescription: String = "")
-private data class CatalogActivityNode(val code: String, val parentCode: String, val nodeKind: String, val pathAr: String, val pathEn: String, val defaultBusinessLevelCode: String, val depth: Int, val selectable: Boolean)
-private fun catalogNodeBelongsToSector(node: CatalogActivityNode, sectorCode: String, nodes: List<CatalogActivityNode>): Boolean {
-    if (sectorCode.isBlank()) return true
-    val byCode = nodes.associateBy { it.code }
-    var current: CatalogActivityNode? = node
-    val visited = mutableSetOf<String>()
-    while (current != null && visited.add(current.code)) {
-        if (current.code.equals(sectorCode, ignoreCase = true)) return true
-        current = byCode[current.parentCode]
-    }
-    return false
-}
-private fun catalogBusinessLevelLabel(code: String): String = when (code.lowercase()) {
-    "clinic" -> "عيادة / مركز صحي"
-    "contractor" -> "مقاول"
-    "factory" -> "مصنع"
-    "grocery" -> "بقالة"
-    "hotel" -> "فندق"
-    "manufacturer" -> "منشأة تصنيع"
-    "office" -> "مكتب"
-    "other" -> "أخرى"
-    "pharmacy" -> "صيدلية"
-    "producer" -> "منتج / مزارع"
-    "restaurant" -> "مطعم"
-    "service" -> "مقدم خدمات"
-    "shop" -> "محل تجاري"
-    "supermarket" -> "سوبرماركت"
-    "wholesale" -> "تجارة جملة"
-    else -> code
-}
-private fun catalogSectorForNode(nodeCode: String, nodes: List<CatalogActivityNode>): String {
-    val byCode = nodes.associateBy { it.code }
-    var current = byCode[nodeCode]
-    val visited = mutableSetOf<String>()
-    while (current != null && visited.add(current.code)) {
-        if (current.nodeKind.equals("sector", ignoreCase = true)) return current.code
-        current = byCode[current.parentCode]
-    }
-    return ""
-}
 private data class CatalogBranchOption(val id: String, val name: String, val latitude: String, val longitude: String)
 private data class CatalogWarehouseOption(val id: String, val name: String, val branchId: String)
 private data class NearbyCatalogItem(val id: String, val name: String, val popularityBand: String, val merchantCountBand: String)
