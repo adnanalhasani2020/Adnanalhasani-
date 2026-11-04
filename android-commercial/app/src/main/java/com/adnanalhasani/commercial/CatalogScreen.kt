@@ -376,8 +376,8 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         }, { raw ->
             val page = parseNearbyCatalogItems(raw)
             if(expandRadius) marketRadius=nextRadius
-            nearbyOffset=requestedOffset+rows.length()
-            nearbyHasMore=rows.length()==30
+            nearbyOffset=requestedOffset+page.size
+            nearbyHasMore=page.size==30
             nearbyMarketItems=(nearbyMarketItems+page).distinctBy { it.id }
             nearbyLoadGeneration++
             nearbyPageLoadFailed=false
