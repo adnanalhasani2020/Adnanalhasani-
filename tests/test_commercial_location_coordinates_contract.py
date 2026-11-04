@@ -5,13 +5,14 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = ROOT / "supabase/migrations/20261101040000_commercial_location_coordinates_rpc.sql"
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogScreen.kt"
+MARKET_UI = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogMarketDiscoverySection.kt"
 
 
 class CommercialLocationCoordinatesContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.sql = MIGRATION.read_text(encoding="utf-8")
-        cls.screen = SCREEN.read_text(encoding="utf-8")
+        cls.screen = SCREEN.read_text(encoding="utf-8") + MARKET_UI.read_text(encoding="utf-8")
 
     def test_coordinate_rpc_is_authenticated_scoped_and_audited(self):
         self.assertLess(

@@ -247,3 +247,11 @@ Before moving a declaration, search both Kotlin callers and Python source-contra
 - Moved branch/warehouse selection, branch coordinates, nearby-market results and pagination state, location-session values, and aggregated price-hint state into `CatalogMarketUiState.kt`.
 - Kept permission prompts, foreground location acquisition, UI rendering, RPC/REST orchestration, and catalog configuration actions in `CatalogScreen.kt`; this is a state-ownership step, not completion of the browse/discovery presentation extraction.
 - Added a source-ownership guard for the new market state owner. No network contract, database schema, or production data changed.
+
+
+## 2026-11-04 — Catalog nearby-market presentation extraction
+
+- Extracted the branch/warehouse selector, coordinate editor, nearby-market controls, and nearby popularity list into `CatalogMarketDiscoverySection.kt`.
+- The section receives UI state and explicit callbacks; it does not issue HTTP/RPC requests or handle Android location permissions. The owning screen retains coordinate persistence, branch/warehouse loading, nearby pagination orchestration, price-suggestion loading, catalog setup, and selection-to-organization linking.
+- Updated coordinate, foreground-location, nearby-discovery, and inventory-setup source contracts to follow the new presentation/state owners.
+- Catalog browsing is now split across dedicated market presentation and state owners; the main catalog product list and activity filters remain in `CatalogScreen.kt` and are the next presentation extraction target.
