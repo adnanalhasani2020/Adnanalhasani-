@@ -218,3 +218,6 @@ The catalog screen owns interaction and request orchestration. JSON-to-domain ma
 
 
 - `ReportDerivedRows.kt` maps existing domain calculation/report states into `ReportLine` rows. It does not calculate totals, load source data, or relax validation errors.
+
+
+- `ReportTaxRows.kt` owns presentation rows for detailed recorded taxes/discounts from existing sales, supplier invoices, and completed returns. It does not calculate tax rates or a net tax liability.
