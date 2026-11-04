@@ -4,7 +4,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterScreen.kt"
 CALCULATIONS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportCalculations.kt"
 AGING = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CustomerReceivableAgingReport.kt"
-REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt"
+REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CustomerAccountsRepository.kt"
 CONTRACT = ROOT / "android-commercial/docs/reports-data-contract.md"
 
 

@@ -7,6 +7,7 @@ REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/comm
 PURCHASE_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/PurchaseRepository.kt"
 SUPPLIER_PAYMENT_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/SupplierPaymentRepository.kt"
 SALES_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/SalesRepository.kt"
+CUSTOMER_ACCOUNTS_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CustomerAccountsRepository.kt"
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudSalesScreen.kt"
 PURCHASES = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudPurchasesScreen.kt"
 COMPOSER = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudSaleComposerScreen.kt"
@@ -22,6 +23,7 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
         cls.purchase_repository = PURCHASE_REPOSITORY.read_text(encoding="utf-8")
         cls.supplier_payment_repository = SUPPLIER_PAYMENT_REPOSITORY.read_text(encoding="utf-8")
         cls.sales_repository = SALES_REPOSITORY.read_text(encoding="utf-8")
+        cls.customer_accounts_repository = CUSTOMER_ACCOUNTS_REPOSITORY.read_text(encoding="utf-8")
         cls.screen = SCREEN.read_text(encoding="utf-8")
         cls.purchases = PURCHASES.read_text(encoding="utf-8")
         cls.composer = COMPOSER.read_text(encoding="utf-8")
@@ -167,12 +169,12 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
     def test_cloud_customer_debts_use_server_projection_and_collection_rpc(self):
         self.assertIn("CommercialCloudDebtScreen(context = context", self.main)
         self.assertIn("showDebts = true", self.main)
-        self.assertIn("internal fun loadCommercialCloudReceivables", self.repository)
-        self.assertIn("payments:commercial_payments(amount_minor,status)", self.repository)
-        self.assertIn('payment.optString("status") in setOf("succeeded", "partially_refunded", "refunded")', self.repository)
-        self.assertIn("internal fun recordCommercialCloudCustomerPayment", self.repository)
-        self.assertIn("/rest/v1/rpc/commercial_record_customer_payment", self.repository)
-        self.assertIn("getSharedPreferences(\"commercial_cloud_pending_collection_v1\"", self.repository)
+        self.assertIn("internal fun loadCommercialCloudReceivables", self.customer_accounts_repository)
+        self.assertIn("payments:commercial_payments(amount_minor,status)", self.customer_accounts_repository)
+        self.assertIn('payment.optString("status") in setOf("succeeded", "partially_refunded", "refunded")', self.customer_accounts_repository)
+        self.assertIn("internal fun recordCommercialCloudCustomerPayment", self.customer_accounts_repository)
+        self.assertIn("/rest/v1/rpc/commercial_record_customer_payment", self.customer_accounts_repository)
+        self.assertIn("getSharedPreferences(\"commercial_cloud_pending_collection_v1\"", self.customer_accounts_repository)
 
     def test_customer_collection_migration_is_atomic_authorized_and_idempotent(self):
         migration = (ROOT / "supabase/migrations/20261024220000_commercial_customer_collection_rpc.sql").read_text(encoding="utf-8")

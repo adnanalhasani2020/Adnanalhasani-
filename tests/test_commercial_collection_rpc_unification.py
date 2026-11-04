@@ -3,6 +3,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudRepository.kt"
+CUSTOMER_ACCOUNTS_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CustomerAccountsRepository.kt"
 DEBT_SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudDebtScreen.kt"
 SALES_SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudSalesScreen.kt"
 LEGACY_MIGRATION = ROOT / "supabase/migrations/20261024210000_commercial_sale_collection_rpc.sql"
@@ -13,10 +14,11 @@ CANONICAL_MIGRATION = ROOT / "supabase/migrations/20261024220000_commercial_cust
 class CommercialCollectionRpcUnificationTests(unittest.TestCase):
     def test_debt_screen_uses_only_gl_backed_customer_payment_path(self):
         repository = REPOSITORY.read_text(encoding="utf-8")
+        customer_accounts = CUSTOMER_ACCOUNTS_REPOSITORY.read_text(encoding="utf-8")
         screen = DEBT_SCREEN.read_text(encoding="utf-8")
         sales_screen = SALES_SCREEN.read_text(encoding="utf-8")
         self.assertIn("recordCommercialCloudCustomerPayment(context", screen)
-        self.assertIn("/rest/v1/rpc/commercial_record_customer_payment", repository)
+        self.assertIn("/rest/v1/rpc/commercial_record_customer_payment", customer_accounts)
         self.assertNotIn("recordCommercialCloudSaleCollection", repository)
         self.assertNotIn("/rest/v1/rpc/commercial_record_sale_collection", repository)
         self.assertIn('recordCommercialCloudCustomerPayment(context, target.id, amount, "cash")', sales_screen)
@@ -34,12 +36,13 @@ class CommercialCollectionRpcUnificationTests(unittest.TestCase):
 
     def test_customer_receipt_is_numbered_shared_and_currency_minor_units_are_formatted(self):
         repository = REPOSITORY.read_text(encoding="utf-8")
+        customer_accounts = CUSTOMER_ACCOUNTS_REPOSITORY.read_text(encoding="utf-8")
         screen = DEBT_SCREEN.read_text(encoding="utf-8")
         migration = (ROOT / "supabase/migrations/20261026183000_commercial_customer_receipt_numbers.sql").read_text(encoding="utf-8")
         self.assertIn("commercial_payments_org_receipt_number_uidx", migration)
         self.assertIn("commercial_assign_payment_receipt_number", migration)
-        self.assertIn("loadCommercialCloudCustomerReceipt", repository)
-        self.assertIn("receipt_number", repository)
+        self.assertIn("loadCommercialCloudCustomerReceipt", customer_accounts)
+        self.assertIn("receipt_number", customer_accounts)
         self.assertIn("Currency.getInstance(currency).defaultFractionDigits", screen)
         self.assertIn("Intent.ACTION_SEND", screen)
         self.assertIn("سند قبض رقم RC-$receiptNumber", screen)
