@@ -85,3 +85,38 @@ internal fun reportSupplierObligationsValidationError(
         "تعذر مطابقة عملات الالتزامات أو تجاوزت مجاميعها نطاق الأرقام الدقيق؛ تم حجب المستحقات."
     else -> ""
 }
+
+
+/** Preflights supplier invoice/payment movement negation, opening totals, and running balances. */
+internal fun reportSupplierMovementValidationError(
+    purchasesLoadError: String,
+    supplierPaymentsLoadError: String,
+    movements: List<ReportSupplierMovement>,
+    startMillis: Long,
+    endExclusive: Long
+): String = when {
+    purchasesLoadError.isNotBlank() -> purchasesLoadError
+    supplierPaymentsLoadError.isNotBlank() -> supplierPaymentsLoadError
+    movements.any { it.amount == Long.MIN_VALUE } ->
+        "توجد دفعة مورد تتجاوز نطاق الأرقام الدقيق عند عكس اتجاهها؛ تم حجب كشف الحركات."
+    runCatching {
+        movements.groupBy { Triple(it.supplierId, it.supplier, it.currency) }.values.forEach { supplierMoves ->
+            val ordered = supplierMoves.sortedWith(
+                compareBy<ReportSupplierMovement> { it.date }.thenBy { it.reference }
+            )
+            val opening = sumReportAmountsExactly(
+                ordered.filter { reportDateMillis(it.date)?.let { timestamp -> timestamp < startMillis } == true }
+                    .map { it.amount }
+            )
+            var balance = opening
+            ordered.filter {
+                reportDateMillis(it.date)?.let { timestamp ->
+                    timestamp >= startMillis && timestamp < endExclusive
+                } == true
+            }.forEach { movement ->
+                balance = Math.addExact(balance, movement.amount)
+            }
+        }
+    }.isFailure -> "تجاوزت حركات أو أرصدة كشف الموردين نطاق الأرقام الدقيق؛ تم حجب كشف الحركات."
+    else -> ""
+}
