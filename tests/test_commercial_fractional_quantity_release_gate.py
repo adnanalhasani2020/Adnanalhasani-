@@ -14,9 +14,9 @@ class CommercialFractionalQuantityReleaseGateTests(unittest.TestCase):
         cls.migration = INTEGER_MIGRATION.read_text(encoding="utf-8")
 
     def test_pgtap_plan_matches_assertion_count(self):
-        match = re.search(r"SELECT\\s+plan\\((\\d+)\\);", self.sql, re.IGNORECASE)
+        match = re.search(r"SELECT\s+plan\((\\d+)\);", self.sql, re.IGNORECASE)
         self.assertIsNotNone(match)
-        assertions = len(re.findall(r"SELECT\\s+(?:ok|is)\\s*\\(", self.sql, re.IGNORECASE))
+        assertions = len(re.findall(r"SELECT\s+(?:ok|is)\s*\(", self.sql, re.IGNORECASE))
         self.assertEqual(int(match.group(1)), assertions)
 
     def test_sale_quantity_contract_keeps_integer_quantity_invariant(self):
