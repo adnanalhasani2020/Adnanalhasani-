@@ -12,13 +12,17 @@ internal data class CommercialCloudCheckoutLine(
     val unitCode: String = "each"
 )
 
-/** Render inventory quantities without losing stored decimal precision. */
-internal fun formatCommercialStockQuantity(value: BigDecimal): String =
-    value.stripTrailingZeros().toPlainString()
+/** Render a validated whole inventory quantity. Never format a fractional stock value. */
+internal fun formatCommercialStockQuantity(value: BigDecimal): String {
+    require(value.stripTrailingZeros().scale() <= 0) { "كمية المخزون يجب أن تكون عددًا صحيحًا." }
+    return value.stripTrailingZeros().toPlainString()
+}
 
-/** Compare the exact available quantity to the configured reorder threshold. */
-internal fun isCommercialStockLow(value: BigDecimal, threshold: Int): Boolean =
-    value <= BigDecimal.valueOf(threshold.toLong())
+/** Compare validated whole available quantity to the configured integer reorder threshold. */
+internal fun isCommercialStockLow(value: BigDecimal, threshold: Int): Boolean {
+    require(value.stripTrailingZeros().scale() <= 0 && threshold >= 0) { "كمية المخزون وحد التنبيه يجب أن يكونا عددين صحيحين غير سالبين." }
+    return value <= BigDecimal.valueOf(threshold.toLong())
+}
 
 /** Parse a positive whole selling quantity. Fractional quantities are rejected at the domain boundary. */
 internal fun parseCommercialCheckoutQuantity(value: String): BigDecimal? {
