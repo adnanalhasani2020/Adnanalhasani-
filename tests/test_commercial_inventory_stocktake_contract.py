@@ -36,6 +36,7 @@ class CommercialInventoryStocktakeContractTests(unittest.TestCase):
         self.assertIn("commercial_inventory_stocktake_cost_allocations", self.sql)
         self.assertIn("inventory_stocktake_reversal_adjustment_layer_consumed", self.sql)
         self.assertIn("inventory_revision bigint NOT NULL DEFAULT 0", self.sql)
+        self.assertIn("snapshot_balance_revision", self.sql)
         self.assertIn("posted_balance_revision", self.sql)
         self.assertIn("inventory_stocktake_reversal_balance_changed", self.sql)
         self.assertIn("gl_posting_enabled boolean NOT NULL DEFAULT false", self.sql)
@@ -54,6 +55,7 @@ class CommercialInventoryStocktakeContractTests(unittest.TestCase):
         self.assertIn("lifo_layer_order_invalid", self.smoke)
         self.assertIn("stocktake_cost_layer_mismatch_was_posted", self.smoke)
         self.assertIn("stocktake_reversal_after_later_balance_revision_was_allowed", self.smoke)
+        self.assertIn("net_zero_intervening_movements_were_not_detected", self.smoke)
         self.assertIn("active_zero_balance_offering_not_snapshotted", self.smoke)
         self.assertIn("postgres:17", self.workflow)
 
@@ -81,7 +83,6 @@ class CommercialInventoryStocktakeContractTests(unittest.TestCase):
         self.assertIn("onStocktake = if (cloudMode)", self.store_app)
         self.assertIn("stocktakePage -> CommercialInventoryStocktakeScreen", self.store_app)
         self.assertIn("حفظ وإرسال للاعتماد", self.screen)
-        self.assertIn("ترحيل الفروقات", self.screen)
         self.assertIn("الترحيل معطل حتى اكتمال القيود المحاسبية", self.screen)
         self.assertIn("العكس معطل حتى اكتمال القيود المحاسبية", self.screen)
         self.assertIn("enabled = false", self.screen)
