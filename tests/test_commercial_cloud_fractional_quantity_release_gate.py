@@ -31,6 +31,8 @@ def test_sale_and_return_screens_preserve_fractional_input_for_rejection():
 def test_cloud_rpcs_and_numeric_storage_are_integer_only():
     migration = INTEGER_MIGRATION.read_text(encoding="utf-8")
     assert "commercial_checkout_sale_multi_base_units" in migration
+    assert "v_effective_key := btrim(p_idempotency_key);" in migration
+    assert "md5(v_original_lines::text)" not in migration
     assert "commercial_request_sale_return_base_units" in migration
     assert "v_qty<>trunc(v_qty)" in migration
     assert "p_quantity<>trunc(p_quantity)" in migration
