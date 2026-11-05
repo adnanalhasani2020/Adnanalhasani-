@@ -1,9 +1,10 @@
 from pathlib import Path
+from catalog_source_helpers import catalog_android_source
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = ROOT / "supabase/migrations/20261101010000_catalog_activity_filtered_discovery.sql"
-SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogScreen.kt"
+BROWSE = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogBrowseWorkflow.kt"
 
 class CatalogActivityFilteredDiscoveryTests(unittest.TestCase):
     def test_rpc_adds_activity_filter_without_rebuilding_catalog(self):
@@ -29,10 +30,10 @@ class CatalogActivityFilteredDiscoveryTests(unittest.TestCase):
         self.assertIn("TO authenticated", sql)
 
     def test_android_sends_selected_activity_to_discovery(self):
-        screen = SCREEN.read_text(encoding="utf-8")
-        payload_start = screen.index('val payload = JSONObject().put("p_organization_id",orgId)')
-        payload_end = screen.index('catalogHttp("/rest/v1/rpc/commercial_catalog_discover_products_page"', payload_start)
-        payload = screen[payload_start:payload_end]
+        browse = BROWSE.read_text(encoding="utf-8")
+        payload_start = browse.index("val payload = JSONObject()")
+        payload_end = browse.index('catalogHttp("/rest/v1/rpc/commercial_catalog_discover_products_page"', payload_start)
+        payload = browse[payload_start:payload_end]
         self.assertIn('"p_activity_node_code",selectedActivityCode.trim().uppercase().ifBlank { JSONObject.NULL }', payload)
 
 if __name__ == "__main__":
