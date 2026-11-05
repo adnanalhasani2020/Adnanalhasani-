@@ -206,7 +206,7 @@ BEGIN
   OR length(coalesce(p_specifications,''))>2000 OR length(coalesce(p_customer_note,''))>1000 THEN
   RAISE EXCEPTION 'invalid_customer_supply_request' USING ERRCODE='22023';
  END IF;
- SELECT * INTO v_req FROM public.commercial_customer_supply_requests r
+ SELECT r.* INTO v_req FROM public.commercial_customer_supply_requests r
  JOIN public.commercial_customers c ON c.id=r.customer_id AND c.organization_id=r.organization_id
  WHERE r.id=p_request_id AND c.auth_user_id=v_uid AND c.state='active' FOR UPDATE OF r;
  IF NOT FOUND OR v_req.status<>'change_requested' THEN RAISE EXCEPTION 'customer_supply_request_not_editable' USING ERRCODE='42501'; END IF;
