@@ -538,13 +538,15 @@ DECLARE
     'commercial_inventory_return_cost_allocations','commercial_inventory_cost_reversals',
     'commercial_return_restock_postings','commercial_invoice_purchase_request_items',
     'commercial_offering_sell_units','commercial_catalog_product_units','commercial_catalog_item_units','commercial_global_units',
+    'commercial_global_catalog_items','commercial_catalog_product_recipes','commercial_catalog_recipe_ingredients',
     'commercial_organization_catalog_item_setup',
     'commercial_catalog_inventory_units'
   ];
   v_columns text[] := ARRAY[
     'quantity','selling_quantity','quantity_in_stock_units',
     'quantity_ordered','quantity_received','quantity_on_hand','quantity_reserved',
-    'quantity_delta','quantity_remaining','sale_quantity_in_base','quantity_in_base','factor_to_base','reorder_point'
+    'quantity_delta','quantity_remaining','sale_quantity_in_base','quantity_in_base','factor_to_base','reorder_point',
+    'net_quantity','yield_quantity'
   ];
 BEGIN
   FOREACH v_table IN ARRAY v_tables LOOP
