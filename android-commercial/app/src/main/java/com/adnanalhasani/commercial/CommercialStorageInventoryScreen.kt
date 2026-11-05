@@ -354,7 +354,7 @@ internal fun CommercialStorageInventoryScreen(context: Context, onBack: () -> Un
             TopAppBar(
                 title = { Text("مخزون مواقع التخزين", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
-                    IconButton(onClick = onBack, enabled = (pending == null || !schemaReady || !pendingMatchesCurrentContext) && !saving) {
+                    IconButton(onClick = onBack, enabled = !saving) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "رجوع")
                     }
                 },
@@ -373,6 +373,11 @@ internal fun CommercialStorageInventoryScreen(context: Context, onBack: () -> Un
             Text(
                 "توزيع الكمية المتاحة على موقع تخزين، أو نقل كمية موزعة بين موقعين داخل المستودع نفسه. الرصيد الإجمالي للفرع لا يتغير.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp
+            )
+            Text(
+                "تنبيه تشغيلي: هذه الطبقة لا تتكامل بعد تلقائيًا مع البيع أو الاستلام أو المرتجعات أو تكلفة المخزون. لا تعتمد أرصدة المواقع لتحديد الكمية القابلة للبيع أو لتسوية الجرد حتى اكتمال الربط والمصالحة.",
+                color = MaterialTheme.colorScheme.error,
                 fontSize = 12.sp
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
