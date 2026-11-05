@@ -7,6 +7,7 @@ import android.app.TimePickerDialog
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -58,7 +59,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val database = HospitalDatabase.get(this)
-        val repository = HospitalRepository(database.hospitalDao())
+        val repository = HospitalRepository(database.hospitalDao(), database)
         if (BuildConfig.DEBUG) {
             lifecycleScope.launch(Dispatchers.IO) {
                 runCatching { DemoDataSeeder.seedIfEmpty(database.hospitalDao()) }
@@ -81,9 +82,9 @@ private val modules = listOf(
         listOf("الرقم الوظيفي" to "مثال: DR-101", "اسم الطبيب" to "الاسم الكامل", "التخصص" to "التخصص الطبي", "رقم الهاتف" to "رقم التواصل")),
     Module("doctor_workspace", "شاشة الطبيب", "تسجيل الزيارات والتشخيصات ومراجعة السجل الطبي", Icons.Default.MedicalInformation, Color(0xFF6F9BAE), emptyList()),
     Module("appointments", "المواعيد", "تنظيم المواعيد والحجوزات", Icons.Default.CalendarMonth, Color(0xFF9A91B8),
-        listOf("اسم المريض" to "اسم المريض", "اسم الطبيب" to "اسم الطبيب", "التاريخ والوقت" to "مثال: 2026-10-20 10:30", "سبب الزيارة" to "سبب الزيارة")),
+        listOf("اسم المريض" to "اسم المريض", "اسم الطبيب" to "اسم الطبيب", "التاريخ والوقت" to "البداية: YYYY-MM-DD HH:mm", "وقت الانتهاء" to "النهاية: YYYY-MM-DD HH:mm", "سبب الزيارة" to "سبب الزيارة", "حالة الموعد" to "مجدول / حضر / مكتمل / ملغي / لم يحضر")),
     Module("encounters", "الزيارات الطبية", "متابعة الزيارة والتشخيص", Icons.Default.MedicalInformation, Color(0xFF6F9BAE),
-        listOf("اسم المريض" to "اسم المريض", "اسم الطبيب" to "اسم الطبيب", "تاريخ الزيارة" to "YYYY-MM-DD HH:mm", "الشكوى الرئيسية" to "الشكوى", "التشخيص" to "التشخيص الطبي", "ملاحظات" to "ملاحظات الزيارة")),
+        listOf("اسم المريض" to "اسم المريض", "اسم الطبيب" to "اسم الطبيب", "تاريخ الزيارة" to "YYYY-MM-DD HH:mm", "الشكوى الرئيسية" to "الشكوى", "التشخيص" to "التشخيص الطبي", "ملاحظات" to "ملاحظات الزيارة", "حالة الزيارة" to "مفتوحة / مغلقة")),
     Module("lab", "المختبر", "إدارة طلبات التحاليل ومتابعة النتائج", Icons.Default.Science, Color(0xFFD0A06E),
         listOf(
             "اسم المريض" to "ابحث عن اسم المريض أو أدخله",
@@ -94,7 +95,7 @@ private val modules = listOf(
             "ملاحظات المختبر" to "العينة، تعليمات التحضير، أو ملاحظات إضافية"
         )),
     Module("pharmacy", "الصيدلية والأدوية", "الأدوية والوصفات والمخزون", Icons.Default.Medication, Color(0xFF6D9D86),
-        listOf("اسم الدواء" to "اسم الدواء", "رمز الدواء" to "رمز أو SKU", "الكمية" to "الكمية المتوفرة", "الجرعة / الوصفة" to "الجرعة والتعليمات")),
+        listOf("اسم الدواء" to "اسم الدواء", "رمز الدواء" to "رمز أو SKU", "الكمية" to "كمية التوريد", "رقم التشغيلة" to "رقم دفعة الدواء", "تاريخ الصلاحية" to "YYYY-MM-DD", "المرجع" to "رقم التوريد أو المورد", "حد إعادة الطلب" to "الحد الأدنى للمخزون", "وحدة القياس" to "علبة / شريط / قطعة")),
     Module("admissions", "التنويم والأسرة", "إدارة الأسرة والدخول والخروج", Icons.Default.Hotel, Color(0xFF6D82C4),
         listOf("اسم المريض" to "اسم المريض", "القسم / الجناح" to "القسم", "رقم السرير" to "رقم السرير", "حالة التنويم" to "منوّم / خرج", "التاريخ" to "تاريخ الدخول أو الخروج")),
     Module("invoices", "الفواتير", "إنشاء ومتابعة الفواتير", Icons.Default.ReceiptLong, Color(0xFFD0A06E),
@@ -102,7 +103,7 @@ private val modules = listOf(
     Module("payments", "المدفوعات", "تسجيل الدفعات والإيصالات", Icons.Default.Payments, Color(0xFF548F88),
         listOf("رقم الفاتورة" to "رقم الفاتورة", "المبلغ المدفوع" to "المبلغ", "طريقة الدفع" to "نقداً / تحويل", "مرجع الإيصال" to "رقم الإيصال")),
     Module("prescriptions", "الوصفات الطبية", "وصفات المرضى وتعليمات الدواء", Icons.Default.Description, Color(0xFFBD6D9D),
-        listOf("اسم المريض" to "اسم المريض", "اسم الطبيب" to "اسم الطبيب", "معرّف الزيارة" to "رقم الزيارة من الملف الطبي (اختياري)", "اسم الدواء" to "اسم الدواء", "الجرعة" to "الجرعة", "التكرار والمدة" to "التكرار والمدة", "الحالة" to "معلقة / صُرفت", "تعليمات إضافية" to "تعليمات الدواء")),
+        listOf("اسم المريض" to "اسم المريض", "اسم الطبيب" to "اسم الطبيب", "معرّف الزيارة" to "رقم الزيارة من الملف الطبي (اختياري)", "اسم الدواء" to "اسم الدواء", "الجرعة" to "الجرعة", "التكرار والمدة" to "التكرار والمدة", "الكمية المطلوبة" to "عدد الوحدات التي ستُصرف", "الحالة" to "معلقة / صُرفت", "تعليمات إضافية" to "تعليمات الدواء")),
     Module("beds", "إدارة الأسرة", "تسجيل الأسرة وحالتها", Icons.Default.Hotel, Color(0xFF5986A4),
         listOf("الجناح" to "اسم الجناح", "رقم السرير" to "رقم السرير", "الحالة" to "متاح / مشغول", "ملاحظات" to "ملاحظات")),
     Module("users", "المستخدمون", "سجل إداري محلي للمستخدمين", Icons.Default.AdminPanelSettings, Color(0xFF7C78C9),
@@ -260,6 +261,11 @@ private fun HospitalWorkspace(repository: HospitalRepository) {
     val labOrders by repository.labOrders().collectAsState(initial = emptyList())
     val radiologyOrders by repository.radiologyOrders().collectAsState(initial = emptyList())
     val maintenanceTickets by repository.maintenanceTickets().collectAsState(initial = emptyList())
+    var localWorkflowRows by remember { mutableStateOf(emptyList<Pair<String, String>>()) }
+    LaunchedEffect(selected, all) {
+        delay(150)
+        localWorkflowRows = withContext(Dispatchers.IO) { repository.localWorkflowRows(selected) }
+    }
     val databaseExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri == null) {
             exportStatus = "تم إلغاء تصدير قاعدة البيانات."
@@ -313,9 +319,10 @@ private fun HospitalWorkspace(repository: HospitalRepository) {
         "emergency" -> emergencyCases.map { it.caseNumber to "${it.patientName} • ${it.triageLevel} • ${it.status}" }
         "icu" -> icuStays.map { "${it.patientName} • ${it.bedNumber}" to "${it.attendingDoctor} • ${it.careLevel} • ${it.admissionDate}" }
         "inventory" -> inventoryItems.map { "${it.name} (${it.sku})" to "الكمية: ${it.quantity} • حد الطلب: ${it.reorderLevel} ${it.unit}" }
-        "lab" -> labOrders.map { "${it.patientName} • ${it.testName}" to "${it.status} • ${it.result}" }
         "radiology" -> radiologyOrders.map { "${it.patientName} • ${it.imagingType}" to "${it.requestingDoctor} • ${it.status} • ${it.report}" }
         "maintenance" -> maintenanceTickets.map { it.ticketNumber to "${it.location} • ${it.issue} • ${it.priority} • ${it.status}" }
+        "pharmacy", "beds", "admissions", "appointments", "users", "encounters", "invoices", "payments" -> localWorkflowRows
+        "lab" -> localWorkflowRows.ifEmpty { labOrders.map { (it.patientName + " • " + it.testName) to (it.status + " • " + it.result) } }
         else -> emptyList()
     }
     val screenTitle = currentModule?.title ?: when (selected) {
@@ -695,11 +702,12 @@ private fun ModuleMenu(onSelect: (String) -> Unit) {
  */
 private val requiredFieldLabelsByModule = mapOf(
     "patients" to setOf("رقم الملف", "اسم المريض"),
+    "users" to setOf("اسم المستخدم", "الدور"),
     "doctors" to setOf("الرقم الوظيفي", "اسم الطبيب"),
-    "appointments" to setOf("اسم المريض", "اسم الطبيب", "التاريخ والوقت"),
+    "appointments" to setOf("اسم المريض", "اسم الطبيب", "التاريخ والوقت", "وقت الانتهاء"),
     "encounters" to setOf("اسم المريض", "الشكوى الرئيسية"),
     "lab" to setOf("اسم المريض", "اسم الفحص", "حالة الفحص"),
-    "pharmacy" to setOf("اسم الدواء", "الكمية"),
+    "pharmacy" to setOf("اسم الدواء", "رمز الدواء", "الكمية"),
     "admissions" to setOf("اسم المريض", "القسم / الجناح", "حالة التنويم"),
     "invoices" to setOf("رقم الفاتورة", "اسم المريض", "المبلغ", "العملة"),
     "payments" to setOf("رقم الفاتورة", "المبلغ المدفوع", "طريقة الدفع"),
@@ -746,7 +754,7 @@ private val numericFieldLabels = setOf(
 )
 
 private val integerFieldLabels = setOf(
-    "العمر", "النبض", "التنفس", "عدد الأسرة", "عدد الوحدات", "الطابق",
+    "العمر", "النبض", "التنفس", "عدد الأسرة", "عدد الوحدات", "الطابق", "الكمية", "الكمية المطلوبة",
     "رقم السن", "مدة الجلسة", "مدة النتيجة"
 )
 
@@ -762,6 +770,10 @@ private fun optionsForField(label: String, hint: String): List<String> {
     val tests = listOf("صورة دم كاملة (CBC)", "سكر صائم", "سكر عشوائي", "HbA1c", "وظائف الكلى", "وظائف الكبد", "تحليل بول كامل", "تحليل براز", "دهون الدم", "فحص الحمل", "TSH", "CRP", "ESR", "فيتامين D", "فيتامين B12", "فصيلة الدم وRh", "PT/INR", "مزرعة بول", "مزرعة دم", "اختبار الملاريا", "اختبار حمى الضنك")
     val drugs = listOf("باراسيتامول", "إيبوبروفين", "أموكسيسيلين", "أزيثروميسين", "أوميبرازول", "ميترونيدازول", "سيتريزين", "لوراتادين", "ميتفورمين", "أملوديبين", "لوسارتان", "أتورفاستاتين", "محلول إماهة فموي (ORS)", "محلول ملحي 0.9%", "حديد", "حمض الفوليك", "فيتامين D", "سالبوتامول", "إنسولين")
     val diseases = listOf("ارتفاع ضغط الدم", "داء السكري النوع الأول", "داء السكري النوع الثاني", "فقر الدم", "الربو", "التهاب الشعب الهوائية", "التهاب رئوي", "التهاب المسالك البولية", "التهاب المعدة والأمعاء", "ارتجاع معدي مريئي", "الصداع النصفي", "حساسية الأنف", "مرض القلب الإقفاري", "قصور القلب", "مرض الكلى المزمن", "اضطراب الغدة الدرقية", "الملاريا", "حمى الضنك", "التهاب الكبد الفيروسي", "السل", "التهاب المفاصل", "عدوى جلدية", "أخرى / غير محدد")
+    if (label == "الدور") return listOf("مدير", "طبيب", "ممرض", "استقبال", "مختبر", "صيدلي", "محاسب")
+    if (label == "الحالة" && hint.contains("نشط")) return listOf("نشط", "غير نشط")
+    if (label == "الحالة" && hint.contains("متاح")) return listOf("متاح", "مشغول", "صيانة")
+    if (label == "الحالة" && hint.contains(" / ")) return hint.split(" / ").map { it.trim() }.filter { it.isNotBlank() }
     when (label) {
         "اسم الفحص", "نوع الفحص", "الفحص المطلوب" -> return tests
         "اسم الدواء", "الدواء", "اسم العلاج" -> return drugs
@@ -1121,7 +1133,7 @@ private fun ModuleScreen(
                                     values = module.fields.associate { it.first to "" }
                                     savedMessage = true
                                 } catch (error: Exception) {
-                                    validationMessage = "تعذر حفظ السجل. حاول مرة أخرى."
+                                    validationMessage = error.message ?: "تعذر حفظ السجل. حاول مرة أخرى."
                                 } finally {
                                     isSaving = false
                                 }
