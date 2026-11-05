@@ -1,4 +1,5 @@
 from pathlib import Path
+from catalog_source_helpers import catalog_android_source
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,7 +17,7 @@ class CatalogDiscoveryPaginationMigrationTests(unittest.TestCase):
         self.assertIn("TO authenticated", sql)
 
     def test_android_catalog_loads_more_when_scrolling_near_end(self):
-        screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogScreen.kt").read_text(encoding="utf-8")
+        screen = catalog_android_source()
         browse = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogBrowseSection.kt").read_text(encoding="utf-8")
         source = screen + browse
         self.assertIn("rememberLazyListState()", source)
