@@ -201,10 +201,10 @@ def test_purchase_receiving_is_integer_only_at_android_and_database_boundaries()
     assert "999999999999" in receipt_repository
     assert "أدخل كمية صحيحة موجبة فقط" in receipt_dialog
     assert "quantity.stripTrailingZeros().scale() > 0" in receipt_dialog
-    assert "it.filter(Char::isDigit)" in receipt_dialog
+    assert "quantities[line.id] = it.take(32)" in receipt_dialog
 
     assert "qty.stripTrailingZeros().scale() <= 0" in order_dialog
-    assert "it.filter(Char::isDigit)" in order_dialog
+    assert "line.quantity = it.take(32)" in order_dialog
     invoice_repository = repository.split("internal fun recordCommercialCloudSupplierInvoice", 1)[1]
     invoice_repository = invoice_repository.split("private fun commercialPurchaseReceiptPendingPreferences", 1)[0]
     assert "quantity.stripTrailingZeros().scale() <= 0" in invoice_repository
