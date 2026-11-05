@@ -4,7 +4,7 @@
 -- This is intentionally a gate, not a substitute for authenticated end-to-end checkout/payment tests.
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT plan(17);
+SELECT plan(18);
 
 -- Receivable arithmetic: approved return credit reduces the sale obligation once;
 -- an executed cash refund also reduces net cash paid, not the sale credit itself.
@@ -99,6 +99,19 @@ SELECT ok(
   ),
   'universal measurement conversion factors may remain fractional'
 );
+-- Full sell-unit request keys are recorded under user-scoped RLS, not only base quantities.
+SELECT ok(
+  to_regclass('public.commercial_sale_unit_idempotency') IS NOT NULL
+  AND (SELECT relrowsecurity FROM pg_class WHERE oid='public.commercial_sale_unit_idempotency'::regclass)
+  AND position('v_request_fingerprint' in pg_get_functiondef(
+    'public.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint,bigint,bigint)'::regprocedure
+  )) > 0
+  AND position('idempotency_key_reused_with_different_sell_unit_request' in pg_get_functiondef(
+    'public.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint,bigint,bigint)'::regprocedure
+  )) > 0,
+  'sell-unit idempotency stores full request fingerprints behind user-scoped row security'
+);
+
 -- Reusing the same caller key with a changed payload must conflict, not create a second sale.
 SELECT ok(
   position('v_effective_key := btrim(p_idempotency_key)' in pg_get_functiondef(
