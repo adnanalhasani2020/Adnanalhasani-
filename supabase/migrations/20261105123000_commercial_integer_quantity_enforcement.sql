@@ -544,7 +544,7 @@ DECLARE
   v_columns text[] := ARRAY[
     'quantity','selling_quantity','quantity_in_stock_units',
     'quantity_ordered','quantity_received','quantity_on_hand','quantity_reserved',
-    'quantity_delta','quantity_remaining','sale_quantity_in_base','quantity_in_base','factor_to_base'
+    'quantity_delta','quantity_remaining','sale_quantity_in_base','quantity_in_base','factor_to_base','reorder_point'
   ];
 BEGIN
   FOREACH v_table IN ARRAY v_tables LOOP
