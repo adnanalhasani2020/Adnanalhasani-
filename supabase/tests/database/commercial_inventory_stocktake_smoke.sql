@@ -184,6 +184,40 @@ BEGIN
   EXCEPTION WHEN insufficient_privilege THEN
     IF SQLERRM<>'inventory_management_permission_required' THEN RAISE; END IF;
   END;
+
+  -- The person who submitted the count cannot approve their own submitted document.
+  PERFORM set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
+  v_created := public.commercial_create_inventory_stocktake(
+    '10000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000001',
+    '20000000-0000-0000-0000-000000000001','stocktake-create-004','independent reviewer'
+  );
+  v_stocktake := (v_created->>'stocktake_id')::uuid;
+  SELECT id INTO v_line FROM public.commercial_inventory_stocktake_lines WHERE stocktake_id=v_stocktake;
+  PERFORM set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',true);
+  PERFORM public.commercial_set_inventory_stocktake_counts(v_stocktake,
+    jsonb_build_array(jsonb_build_object('line_id',v_line,'counted_quantity','9')));
+  PERFORM public.commercial_submit_inventory_stocktake(v_stocktake);
+  BEGIN
+    PERFORM public.commercial_approve_inventory_stocktake(v_stocktake);
+    RAISE EXCEPTION 'stocktake_submitter_self_approval_was_allowed';
+  EXCEPTION WHEN insufficient_privilege THEN
+    IF SQLERRM<>'inventory_stocktake_self_approval_forbidden' THEN RAISE; END IF;
+  END;
+
+  -- After approval, any intervening movement invalidates the captured count.
+  PERFORM set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
+  PERFORM public.commercial_approve_inventory_stocktake(v_stocktake);
+  UPDATE public.commercial_inventory_balances SET quantity_on_hand=9
+  WHERE offering_id='60000000-0000-0000-0000-000000000001';
+  INSERT INTO public.commercial_stock_movements(offering_id,movement_type,quantity_delta,source_ref,created_by)
+  VALUES('60000000-0000-0000-0000-000000000001','adjustment',-1,'test-stocktake-intervening-movement',
+    '00000000-0000-0000-0000-000000000001');
+  BEGIN
+    PERFORM public.commercial_post_inventory_stocktake(v_stocktake,'stocktake-post-004');
+    RAISE EXCEPTION 'stale_stocktake_snapshot_was_posted';
+  EXCEPTION WHEN SQLSTATE '55000' THEN
+    IF SQLERRM<>'inventory_stocktake_stale_snapshot' THEN RAISE; END IF;
+  END;
 END
 $test$;
 
