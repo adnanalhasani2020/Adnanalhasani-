@@ -25,6 +25,8 @@ class CommercialCloudStockAlertsContractTests(unittest.TestCase):
         self.assertIn("internal fun loadCommercialCloudStockAlerts", self.repository)
         self.assertIn("availableQuantity = onHand.subtract(reserved).toDouble()", self.repository)
         self.assertIn("parseWholeInventoryQuantity(row.optString(\"quantity_on_hand\", \"0\"), \"quantity_on_hand\")", self.repository)
+        self.assertIn("reorderValue.stripTrailingZeros().scale() <= 0", self.repository)
+        self.assertIn("reorderValue.intValueExact()", self.repository)
         self.assertIn("organization_id=eq.$orgId", self.repository)
         self.assertIn("location_id=eq.$locationId", self.repository)
         self.assertIn("offering.activity_id=eq.$activityId", self.repository)
