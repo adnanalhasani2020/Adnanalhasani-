@@ -78,7 +78,7 @@ internal data class CommercialCloudStockAlert(
     val unitCostMinor: Long?
 )
 
-/** Precise read-only quantities for the stock-alert screen; preserve fractional units. */
+/** Read-only stock alerts with whole quantities; fractional server values fail closed. */
 internal fun loadCommercialCloudStockAlerts(context: Context): List<CommercialCloudStockAlert> {
     val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
     val activityId = saved.getString("activity_id", null).orEmpty()
