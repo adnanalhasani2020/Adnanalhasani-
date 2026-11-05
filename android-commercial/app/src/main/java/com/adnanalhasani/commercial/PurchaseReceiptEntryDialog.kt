@@ -106,9 +106,9 @@ internal fun PurchaseReceiptEntryDialog(
                             if (raw.isBlank()) null else {
                                 val quantity = raw.toBigDecimalOrNull()
                                 if (quantity == null || quantity <= java.math.BigDecimal.ZERO ||
-                                    quantity > java.math.BigDecimal("999999999999.999999") ||
-                                    quantity.stripTrailingZeros().scale() > 6) {
-                                    error = "أدخل كمية موجبة بحد أقصى 6 منازل عشرية."
+                                    quantity > java.math.BigDecimal("999999999999") ||
+                                    quantity.stripTrailingZeros().scale() > 0) {
+                                    error = "أدخل كمية صحيحة موجبة فقط."
                                     return@Button
                                 }
                                 val remaining = (line.quantityOrdered.toBigDecimalOrNull() ?: java.math.BigDecimal.ZERO)
