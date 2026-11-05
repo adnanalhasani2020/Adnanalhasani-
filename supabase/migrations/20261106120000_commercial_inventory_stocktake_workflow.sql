@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS public.commercial_inventory_stocktake_lines (
   expected_quantity numeric(20,6) NOT NULL CHECK (expected_quantity >= 0),
   counted_quantity numeric(20,6) CHECK (counted_quantity IS NULL OR counted_quantity >= 0),
   adjustment_unit_cost_minor bigint CHECK (adjustment_unit_cost_minor IS NULL OR adjustment_unit_cost_minor >= 0),
+  previous_unit_cost_minor bigint CHECK (previous_unit_cost_minor IS NULL OR previous_unit_cost_minor >= 0),
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (stocktake_id,offering_id),
@@ -217,7 +218,8 @@ BEGIN
       AND m.state='active' AND m.role IN ('owner','admin','manager')
   ) THEN RAISE EXCEPTION 'inventory_management_permission_required' USING ERRCODE='42501'; END IF;
   IF v_stocktake.status<>'draft' THEN RAISE EXCEPTION 'inventory_stocktake_not_editable' USING ERRCODE='55000'; END IF;
-  SELECT count(DISTINCT x->>'line_id') INTO v_expected FROM jsonb_array_elements(p_lines) x;
+  SELECT count(DISTINCT e.value->>'line_id') INTO v_expected
+  FROM jsonb_array_elements(p_lines) AS e(value);
   IF v_expected<>jsonb_array_length(p_lines) THEN
     RAISE EXCEPTION 'duplicate_inventory_stocktake_line' USING ERRCODE='22023';
   END IF;
@@ -380,6 +382,9 @@ BEGIN
       RAISE EXCEPTION 'inventory_stocktake_below_reserved_quantity' USING ERRCODE='55000';
     END IF;
     v_diff := v_line.counted_quantity-v_line.expected_quantity;
+    UPDATE public.commercial_inventory_stocktake_lines
+    SET previous_unit_cost_minor=v_balance.unit_cost_minor,updated_at=now()
+    WHERE id=v_line.id;
     IF v_diff=0 THEN CONTINUE; END IF;
 
     SELECT p.costing_method INTO v_method
@@ -547,6 +552,14 @@ BEGIN
     IF v_new_qty<coalesce(v_balance.quantity_reserved,0) OR v_new_qty<0 THEN
       RAISE EXCEPTION 'inventory_stocktake_reversal_would_break_reserved_stock' USING ERRCODE='55000';
     END IF;
+    IF EXISTS (
+      SELECT 1 FROM public.commercial_stock_movements sm
+      WHERE sm.offering_id=v_line.offering_id
+        AND sm.created_at>v_stocktake.posted_at
+    ) THEN
+      RAISE EXCEPTION 'inventory_stocktake_reversal_has_later_stock_movements' USING ERRCODE='55000',
+        DETAIL='A later stock movement exists for this item. Reconcile it before reversing the stocktake.';
+    END IF;
 
     SELECT p.costing_method INTO v_method
     FROM public.commercial_inventory_costing_policies p
@@ -585,27 +598,38 @@ BEGIN
     WHERE id=v_balance.id;
 
     IF v_method='weighted_average' THEN
-      SELECT coalesce(sum(quantity_remaining),0),
-             coalesce(sum(quantity_remaining*unit_cost_minor::numeric),0)
-      INTO v_layer_qty,v_layer_value
-      FROM public.commercial_inventory_cost_layers
-      WHERE organization_id=v_stocktake.organization_id AND location_id=v_stocktake.location_id
-        AND offering_id=v_line.offering_id AND quantity_remaining>0;
-      IF v_new_qty>0 AND v_layer_qty<>v_new_qty THEN
-        RAISE EXCEPTION 'inventory_stocktake_reversal_cost_layer_reconciliation_failed' USING ERRCODE='55000';
-      END IF;
-      IF v_layer_qty>0 THEN
-        v_new_average:=round(v_layer_value/v_layer_qty);
-      ELSE
-        v_new_average:=NULL;
-      END IF;
-      UPDATE public.commercial_inventory_balances
-      SET unit_cost_minor=v_new_average::bigint WHERE id=v_balance.id;
-      IF v_layer_qty>0 THEN
+      IF v_diff>0 THEN
+        -- The original average is snapshotted before posting. Restore it only
+        -- after proving no later movement has consumed/revalued the adjustment.
         UPDATE public.commercial_inventory_cost_layers
-        SET unit_cost_minor=v_new_average::bigint
+        SET unit_cost_minor=v_line.previous_unit_cost_minor
         WHERE organization_id=v_stocktake.organization_id AND location_id=v_stocktake.location_id
           AND offering_id=v_line.offering_id AND quantity_remaining>0;
+        UPDATE public.commercial_inventory_balances
+        SET unit_cost_minor=v_line.previous_unit_cost_minor WHERE id=v_balance.id;
+      ELSE
+        SELECT coalesce(sum(quantity_remaining),0),
+               coalesce(sum(quantity_remaining*unit_cost_minor::numeric),0)
+        INTO v_layer_qty,v_layer_value
+        FROM public.commercial_inventory_cost_layers
+        WHERE organization_id=v_stocktake.organization_id AND location_id=v_stocktake.location_id
+          AND offering_id=v_line.offering_id AND quantity_remaining>0;
+        IF v_new_qty>0 AND v_layer_qty<>v_new_qty THEN
+          RAISE EXCEPTION 'inventory_stocktake_reversal_cost_layer_reconciliation_failed' USING ERRCODE='55000';
+        END IF;
+        IF v_layer_qty>0 THEN
+          v_new_average:=round(v_layer_value/v_layer_qty);
+        ELSE
+          v_new_average:=NULL;
+        END IF;
+        UPDATE public.commercial_inventory_balances
+        SET unit_cost_minor=v_new_average::bigint WHERE id=v_balance.id;
+        IF v_layer_qty>0 THEN
+          UPDATE public.commercial_inventory_cost_layers
+          SET unit_cost_minor=v_new_average::bigint
+          WHERE organization_id=v_stocktake.organization_id AND location_id=v_stocktake.location_id
+            AND offering_id=v_line.offering_id AND quantity_remaining>0;
+        END IF;
       END IF;
     END IF;
 
