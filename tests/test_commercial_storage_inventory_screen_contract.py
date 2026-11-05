@@ -34,6 +34,11 @@ class CommercialStorageInventoryScreenContractTests(unittest.TestCase):
         self.assertIn("إعادة المحاولة بنفس الطلب", self.screen)
         self.assertIn("isDefinitiveStorageInventoryRejection(detail)", self.screen)
         self.assertIn("inventory_management_permission_required", self.screen)
+        self.assertIn("idempotency_key_reused_with_different_request", self.screen)
+        self.assertIn("check(editor.commit())", self.screen)
+        self.assertIn('require(it == "allocation" || it == "transfer")', self.screen)
+        self.assertIn("state,product:commercial_products", self.repository)
+        self.assertIn('offering.optString("state") != "active"', self.repository)
         self.assertIn("idempotencyKey: String =", self.repository)
         self.assertIn('.put("p_idempotency_key", idempotencyKey)', self.repository)
 
