@@ -35,6 +35,16 @@ class CommercialFractionalQuantityReleaseGateTests(unittest.TestCase):
         self.assertIn("v_base_qty <> trunc(v_base_qty)", checkout_rpc)
         self.assertIn("!~ '^(0|[1-9][0-9]{0,5})$'", checkout_rpc)
 
+    def test_sell_unit_idempotency_binds_full_request_and_preserves_legacy_retries(self):
+        self.assertIn("CREATE TABLE IF NOT EXISTS public.commercial_sale_unit_idempotency", self.migration)
+        self.assertIn("v_request_fingerprint", self.migration)
+        self.assertIn("idempotency_key_reused_with_different_sell_unit_request", self.migration)
+        self.assertIn("commercial_private.commercial_get_sale_unit_idempotency", self.migration)
+        self.assertIn("commercial_private.commercial_record_sale_unit_idempotency", self.migration)
+        self.assertIn("v_effective_key := CASE WHEN v_legacy_match THEN v_legacy_key ELSE btrim(p_idempotency_key) END;", self.migration)
+        self.assertIn("REVOKE ALL ON public.commercial_sale_unit_idempotency FROM PUBLIC,anon,authenticated", self.migration)
+        self.assertIn("sale_item_sell_unit_projection_mismatch", self.migration)
+
     def test_return_release_gate_uses_original_invoice_unit_snapshot(self):
         self.assertIn("v_sale_item.selling_unit_code IS DISTINCT FROM v_unit_code", self.sql)
         self.assertIn("v_sale_item.quantity_in_stock_units::numeric / v_sale_item.selling_quantity", self.sql)
