@@ -32,6 +32,7 @@ class CommercialInventoryStorageTransferTests(unittest.TestCase):
     def test_transfer_requires_same_warehouse_and_does_not_change_branch_balance(self):
         self.assertIn("source_storage_location_id,destination_storage_location_id", self.normalized_sql)
         self.assertIn("sl.warehouse_id=p_warehouse_id", self.normalized_sql)
+        self.assertIn("GROUPBYsl.warehouse_idHAVINGcount(DISTINCTsl.id)=2", self.normalized_sql)
         self.assertIn("inventory_storage_insufficient", self.sql)
         self.assertIn("BEFORE UPDATE OR DELETE ON public.commercial_inventory_storage_movements", self.sql)
         self.assertIn("inventory_storage_movement_is_immutable", self.sql)
