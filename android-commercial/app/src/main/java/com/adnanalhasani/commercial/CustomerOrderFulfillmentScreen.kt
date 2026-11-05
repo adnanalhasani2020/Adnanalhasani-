@@ -85,8 +85,10 @@ internal fun CustomerOrderFulfillmentScreen(context: Context,onBack:()->Unit) {
   }
  }
  fun fulfill(order:CustomerOrderFulfillmentOrder) {
-  val reserved = reservations.any { it.orderId==order.id && it.status=="active" }
-  action("fulfill:"+order.id,{fulfillCustomerPortalOrder(context,order.id,locationId,"customer-order-fulfill:"+order.id,reserved)}) {
+  val reservation = reservations.firstOrNull { it.orderId==order.id && it.status=="active" }
+  val reserved = reservation != null
+  val fulfillmentLocationId = reservation?.locationId?.takeIf { it.isNotBlank() } ?: locationId
+  action("fulfill:"+order.id,{fulfillCustomerPortalOrder(context,order.id,fulfillmentLocationId,"customer-order-fulfill:"+order.id,reserved)}) {
    "اكتمل البيع "+it.optString("receipt_number")+" بمبلغ "+customerOrderMoney(it.optLong("total_minor"),it.optString("currency_code"))+". حالة الدفع: "+it.optString("payment_status")
   }
  }
