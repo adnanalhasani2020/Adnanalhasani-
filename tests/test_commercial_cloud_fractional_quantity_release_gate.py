@@ -36,7 +36,7 @@ def test_cloud_rpcs_and_numeric_storage_are_integer_only():
     assert "p_quantity<>trunc(p_quantity)" in migration
     assert "fractional_historical_quantity_requires_reconciliation" in migration
     assert "ADD CONSTRAINT" in migration
-    assert "('numeric','real','double precision')" in migration
+    assert "IN ('numeric', 'real', 'double precision')" in migration
     assert "commercial_purchase_order_items" in migration
     assert "commercial_sale_items" in migration
     assert "CREATE OR REPLACE FUNCTION public.commercial_customer_portal_create_order(" in migration
