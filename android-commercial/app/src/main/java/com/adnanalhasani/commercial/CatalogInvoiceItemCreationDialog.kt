@@ -35,7 +35,7 @@ internal fun CatalogInvoiceItemCreationDialog(
             it.baseCode.isBlank() && it.code.lowercase() in localUnitCodes
     }
     val saleOptions = directoryUnits.filter {
-        (it.owner.isBlank() || it.owner == stateOrganizationPlaceholder) &&
+        (it.owner.isBlank() || it.owner == organizationId) &&
             (it.code == state.newBaseUnitCode || it.baseCode == state.newBaseUnitCode)
     }
     AlertDialog(

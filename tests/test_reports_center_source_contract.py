@@ -11,7 +11,9 @@ EXPORT_LAUNCHERS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasan
 CATALOG_SECTION = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCatalogSection.kt"
 INVENTORY_ROWS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportInventoryRows.kt"
 LEDGER_ROWS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportLedgerRows.kt"
+LEDGER_CLASSIFICATION = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportLedgerClassification.kt"
 PARTY_ROWS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportPartyStatementRows.kt"
+PARTY_VALIDATION = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportPartyStatementValidation.kt"
 SALES_ROWS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportSalesRows.kt"
 SUPPLIER_ROWS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportSupplierRows.kt"
 OPERATIONAL_ROWS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportOperationalRows.kt"
@@ -62,7 +64,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         cls.expense_repository = EXPENSE_REPOSITORY.read_text(encoding="utf-8")
         cls.accounting_repository = ACCOUNTING_REPOSITORY.read_text(encoding="utf-8")
         cls.sales_repository = SALES_REPOSITORY.read_text(encoding="utf-8")
-        cls.calculations = CALCULATIONS.read_text(encoding="utf-8")
+        cls.calculations = CALCULATIONS.read_text(encoding="utf-8") + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CustomerStatementCalculations.kt").read_text(encoding="utf-8") + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportInventoryCalculations.kt").read_text(encoding="utf-8") + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportAgingCalculations.kt").read_text(encoding="utf-8")
         cls.export = EXPORT.read_text(encoding="utf-8")
         cls.report_formatting = REPORT_FORMATTING.read_text(encoding="utf-8")
         cls.price_variance_calculations = PRICE_VARIANCE_CALCULATIONS.read_text(encoding="utf-8")
@@ -117,9 +119,10 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn("require(!dateError) { \"لا يمكن تصدير تقرير بفترة غير صالحة.\" }", self.screen)
         self.assertIn("require(!cloudMode || (!cloudLoading && selectedReportSourceError.isBlank()))", self.screen)
         self.assertIn("val selectedRows = if (dateError || (cloudMode && (cloudLoading || selectedReportSourceError.isNotBlank()))) emptyList()", self.screen)
-        self.assertIn("val inPeriodSales = if (dateError) emptyList()", self.screen)
+        self.assertIn("if (dateError) emptyList() else sales.filter", self.screen)
         self.assertIn("val sourceErrorForReport: (String) -> String", self.screen)
-        self.assertIn("val currencyTotalCalculation = runCatching", self.screen)
+        self.assertIn("val currencyTotalCalculation = remember(", self.screen)
+        self.assertIn("runCatching {", self.screen)
         self.assertIn("calculateReportCurrencyTotals(amounts)", self.screen)
         self.assertIn("تجاوز إجمالي المبيعات نطاق الأرقام الدقيق؛ تم إخفاء ملخص العملات.", self.screen)
         self.assertIn("currencyTotalError = currencyTotalError", self.screen)
@@ -131,7 +134,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn("sumReportAmountsExactly", self.sales_rows)
         self.assertIn("sumReportCountsExactly", self.sales_rows)
         self.assertIn("Math.subtractExact(currentTotal, previousTotal)", self.sales_rows)
-        self.assertIn("val salesRowsCalculation = runCatching", self.screen)
+        self.assertIn("val (salesRowsCalculation, salesRowsCalculationError) = remember(", self.screen)
         self.assertIn("salesRowsCalculation.getOrNull()", self.screen)
         self.assertIn("تجاوزت مجاميع تقرير المبيعات نطاق الأرقام الدقيق؛ تم حجب التقرير.", self.screen)
 
@@ -145,7 +148,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn("sumReportAmountsExactly", self.screen)
         self.assertIn("Math.addExact(equity, cumulativeIncome)", self.screen)
         self.assertIn("Math.subtractExact(Math.subtractExact(assets, liabilities), totalEquity)", self.screen)
-        self.assertIn("val ledgerRowsCalculation = runCatching", self.screen)
+        self.assertIn("val (ledgerRowsCalculation, ledgerRowsCalculationError) = remember(", self.screen)
         self.assertIn("ledgerRowsCalculation.getOrNull()", self.screen)
         self.assertIn("تجاوزت مجاميع أو أرصدة دفتر الأستاذ نطاق الأرقام الدقيق؛ تم حجب التقرير.", self.screen)
 
@@ -316,7 +319,8 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
     def test_financial_report_calculations_are_pure_and_testable_without_android_runtime(self):
         self.assertNotIn("android.os.", self.calculations)
         self.assertNotIn("androidx.compose", self.calculations)
-        self.assertIn("reportCalculationDateMillis", self.calculations)
+        self.assertIn("reportDateMillis", self.report_formatting)
+        self.assertNotIn("reportCalculationDateMillis", self.calculations)
 
     def test_supplier_invoice_price_variance_uses_saved_lines_and_purchase_baseline(self):
         self.assertIn("CommercialCloudSupplierInvoiceLineSummary", self.purchase_repository)

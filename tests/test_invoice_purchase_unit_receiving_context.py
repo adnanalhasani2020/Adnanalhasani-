@@ -1,4 +1,5 @@
 from pathlib import Path
+from catalog_source_helpers import catalog_android_source
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,12 +22,12 @@ class InvoicePurchaseUnitAndReceivingLocationTests(unittest.TestCase):
 
     def test_recipient_can_choose_an_active_receiving_location(self):
         sql = SQL_FILE.read_text(encoding="utf-8")
-        kt = CATALOG.read_text(encoding="utf-8") + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogScreenSections.kt").read_text(encoding="utf-8")
+        kt = catalog_android_source()
         self.assertIn("p_receive_location_id uuid DEFAULT NULL", sql)
         self.assertIn("id=p_receive_location_id AND organization_id=v_req.destination_organization_id AND state='active'", sql)
         self.assertIn('"p_receive_location_id"', kt)
         self.assertIn("فرع الاستلام للموافقة الواردة", kt)
-        self.assertIn("marketBranches.none { it.id==receiveLocation }", kt)
+        self.assertIn("marketBranches().none { it.id == receiveLocation }", kt)
 
     def test_existing_quantity_and_stock_receipt_semantics_are_not_changed(self):
         sql = SQL_FILE.read_text(encoding="utf-8")

@@ -1,16 +1,18 @@
 from pathlib import Path
+from catalog_source_helpers import catalog_android_source
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogScreen.kt"
 HIERARCHY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogActivityHierarchy.kt"
 DIRECTORY_MAPPER = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogDirectoryMapper.kt"
+BROWSE_WORKFLOW = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogBrowseWorkflow.kt"
 
 
 class CatalogActivityHierarchySelectorTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.source = SCREEN.read_text(encoding="utf-8") + HIERARCHY.read_text(encoding="utf-8") + DIRECTORY_MAPPER.read_text(encoding="utf-8")
+        cls.source = SCREEN.read_text(encoding="utf-8") + HIERARCHY.read_text(encoding="utf-8") + DIRECTORY_MAPPER.read_text(encoding="utf-8") + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogDirectoryWorkflow.kt").read_text(encoding="utf-8") + BROWSE_WORKFLOW.read_text(encoding="utf-8")
 
     def test_directory_nodes_keep_parent_kind_and_selectability(self):
         self.assertIn("data class CatalogActivityNode", self.source)
@@ -36,13 +38,13 @@ class CatalogActivityHierarchySelectorTests(unittest.TestCase):
         self.assertNotRegex(self.source, r"OutlinedTextField\(businessLevel\s*,")
 
     def test_initial_activity_restores_its_sector_and_default_level(self):
-        self.assertIn("catalogSectorForNode(initialActivityCode.uppercase(), activityNodes)", self.source)
-        self.assertIn("businessLevel = it", self.source)
+        self.assertIn("catalogSectorForNode(initialActivityCode().uppercase(), directory.activityNodes)", self.source)
+        self.assertIn("onBusinessLevel(it)", self.source)
 
     def test_rpc_filters_keep_existing_parameter_contract(self):
-        self.assertIn('.put("p_activity_node_code",selectedActivityCode.trim().uppercase()', self.source)
-        self.assertIn('.put("p_sector_code",sector.trim()', self.source)
-        self.assertIn('.put("p_business_level_code",businessLevel.trim()', self.source)
+        self.assertIn('.put("p_activity_node_code", activityCode().trim().uppercase()', self.source)
+        self.assertIn('.put("p_sector_code", sector().trim()', self.source)
+        self.assertIn('.put("p_business_level_code", businessLevel().trim()', self.source)
 
     def test_legacy_activity_triple_representation_is_removed(self):
         self.assertNotIn("List<Triple<String, String, String>>", self.source)

@@ -19,7 +19,7 @@ This document describes the existing code, then records where responsibility sho
 | `CommercialCloudRepository.kt` | Shared context/token/paging helpers, customer options, and allowlisted operational record reads | `SupabaseClient.kt` owns HTTP transport; `CatalogRepository.kt`, `MasterDataRepository.kt`, `InventoryRepository.kt`, `SalesRepository.kt`, `PurchaseRepository.kt`, `SupplierPaymentRepository.kt`, `ExpenseRepository.kt`, `ReturnsRepository.kt`, `CustomerPortalRepository.kt`, `CustomerAccountsRepository.kt`, and `AccountingRepository.kt` own extracted domains |
 | `ReportsCenterScreen.kt` | Report selection, date/filter state, row orchestration, report UI, export actions | `feature/reports/`, `domain/calculation/`, `core/export/`; cloud projections now belong to `ReportsCloudData.kt` |
 | `CatalogScreen.kt` | Catalog search, market context, nearby discovery, price suggestions, category/unit/product creation, invoice-purchase linking, catalog transfers, ruling review | `feature/catalog/` plus catalog repository/data adapters |
-| `ReportCalculations.kt` | Pure calculation models and functions for profitability, statements, aging, daily sales, inventory and performance | Split by calculation domain under `domain/calculation/`; preserve formulas and tests |
+| `ReportCalculations.kt` | Shared exact arithmetic, supplier obligations/purchases, daily sales, customer collections, user sales performance, tax/discount summaries and currency totals | Keep domain calculations in `CostProfitCalculations.kt`, `ReportAgingCalculations.kt`, `CustomerStatementCalculations.kt` and `ReportInventoryCalculations.kt`; preserve formulas and tests |
 | `ActivityProfileScreen.kt` | Authentication/profile onboarding and business activity setup | `feature/settings/` or `feature/onboarding/`, backed by `core/auth/` and profile repository |
 
 | `ReportsCloudData.kt` | Immutable cloud report projections, per-source load errors, and refresh lifecycle | Keep data retrieval and refresh ownership outside Compose report presentation; preserve existing repository query scopes and fail-closed source errors |\n\n## Existing domain screens to preserve and group
@@ -341,3 +341,13 @@ The source-ownership contract test now also guards that every projection alias i
 - The currency summary aggregation is memoized against its exact source/readiness inputs.
 - Each `remember` key includes the values consumed by its calculation, including selected report, date boundaries/text, row/account filters, and relevant source snapshots. Source validation and report readiness remain eager and unchanged; this is recomposition caching, not lazy source loading.
 - Existing overflow handling and Arabic fail-closed messages are preserved. The focused source-contract test checks the memoization dependencies and error routing.
+
+
+### Report calculation domain ownership — 2026-11-05
+
+- `ReportCalculations.kt` retains shared exact integer aggregation, supplier obligation totals, supplier purchase summaries, daily sales trends, customer collections, user sales performance, tax/discount summaries, and currency totals.
+- `CostProfitCalculations.kt` owns both aggregate cost/profit calculations and item-level profitability; the two reports retain their distinct financial rules and input contracts.
+- `ReportAgingCalculations.kt` owns invoice-date supplier liability aging and customer receivable aging. Contractual supplier due-date aging remains a separate calculation in `SupplierDueDateAgingReport.kt` because it uses saved due dates and different aging buckets.
+- `CustomerStatementCalculations.kt` owns customer operational statement movement construction. It reuses `reportDateMillis` from `ReportFormatting.kt` rather than maintaining a duplicate timestamp parser.
+- `ReportInventoryCalculations.kt` owns location inventory balance aggregation and stock movement totals by recorded actor, movement type, and unit. `ReportInventoryLines.kt` remains the row/state mapping layer.
+- Existing calculation call sites and package-level function names remain unchanged; calculation rules, source projections, and local/cloud boundaries are preserved.

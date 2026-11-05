@@ -1,4 +1,5 @@
 from pathlib import Path
+from catalog_source_helpers import catalog_android_source
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -13,13 +14,13 @@ SETUP = ROOT / "supabase/migrations/20261029040000_catalog_setup_privacy_discove
 class NearbyCatalogInventorySetupContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.screen = SCREEN.read_text(encoding="utf-8") + MARKET_UI.read_text(encoding="utf-8") + MARKET_STATE.read_text(encoding="utf-8")
+        cls.screen = catalog_android_source()
         cls.configuration = CONFIGURATION.read_text(encoding="utf-8")
         cls.schema = SCHEMA.read_text(encoding="utf-8")
         cls.setup = SETUP.read_text(encoding="utf-8")
 
     def test_nearby_selected_items_fetch_authoritative_units_instead_of_requiring_catalog_page_cache(self):
-        self.assertIn("val selectedIds=selectedCatalogIds.toList()", self.screen)
+        self.assertIn("val selectedIds = selectedCatalogIds().toList()", self.screen)
         self.assertIn("commercial_catalog_product_units?select=product_id,unit_code,unit_role,quantity_in_base,is_default", self.screen)
         self.assertIn('product_id=$filter', self.screen)
         self.assertIn('grouped.getOrPut(row.optString("product_id"))', self.configuration)
@@ -41,20 +42,20 @@ class NearbyCatalogInventorySetupContractTests(unittest.TestCase):
         self.assertIn("var nearbyLoadGeneration by mutableIntStateOf", self.screen)
         self.assertIn("val nearbyListState = rememberLazyListState()", self.screen)
         self.assertIn("fun startNearbyCatalog()", self.screen)
-        self.assertIn("nearbyHasMore=page.size==30", self.screen)
+        self.assertIn("state.nearbyHasMore = page.size == 30", self.screen)
         self.assertIn("snapshotFlow", self.screen)
-        self.assertIn("if(nearbyHasMore) loadNearbyCatalog(false) else loadNearbyCatalog(true)", self.screen)
+        self.assertIn("if (nearbyHasMore) onLoadNearbyPage(false) else onLoadNearbyPage(true)", self.screen)
         self.assertIn("LazyColumn(state=nearbyListState", self.screen)
         self.assertIn("FilterChip(", self.screen)
         self.assertIn("selectedCatalogIds.size<100", self.screen)
-        self.assertIn("state.nearbyHasMore=true; state.nearbyLoadGeneration++", self.screen)
+        self.assertIn("nearbyHasMore = true", self.screen)
 
     def test_nearby_pagination_failure_has_explicit_retry_without_auto_retry_loop(self):
         self.assertIn("var nearbyPageLoadFailed by mutableStateOf", self.screen)
-        self.assertIn("nearbyPageLoadFailed=true", self.screen)
-        self.assertIn("nearbyPageLoadFailed || marketRadius>=100000", self.screen)
+        self.assertIn("state.nearbyPageLoadFailed = true", self.screen)
+        self.assertIn("state.marketRadius<100000 && !state.nearbyHasMore", self.screen)
         self.assertIn('Text("إعادة المحاولة")', self.screen)
-        self.assertIn("nearbyPageLoadFailed=false", self.screen)
+        self.assertIn("state.nearbyPageLoadFailed = false", self.screen)
 
     def test_catalog_selection_is_capped_at_one_hundred_across_both_lists(self):
         self.assertIn("selectedCatalogIds.size < 100 -> selectedCatalogIds + item.id", self.screen)

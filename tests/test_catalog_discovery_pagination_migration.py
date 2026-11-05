@@ -1,4 +1,5 @@
 from pathlib import Path
+from catalog_source_helpers import catalog_android_source
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,7 +17,7 @@ class CatalogDiscoveryPaginationMigrationTests(unittest.TestCase):
         self.assertIn("TO authenticated", sql)
 
     def test_android_catalog_loads_more_when_scrolling_near_end(self):
-        screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogScreen.kt").read_text(encoding="utf-8")
+        screen = catalog_android_source()
         browse = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogBrowseSection.kt").read_text(encoding="utf-8")
         source = screen + browse
         self.assertIn("rememberLazyListState()", source)
@@ -27,11 +28,11 @@ class CatalogDiscoveryPaginationMigrationTests(unittest.TestCase):
         self.assertIn(".distinctBy { it.id }", screen)
 
     def test_failed_page_load_does_not_auto_retry_forever(self):
-        screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogScreen.kt").read_text(encoding="utf-8")
+        screen = catalog_android_source()
         self.assertIn("catalogPageLoadFailed", screen)
         self.assertIn("onFailure: ((Throwable) -> Unit)? = null", screen)
-        self.assertIn("catalogPageLoadFailed = true", screen)
-        self.assertIn("catalogPageLoadFailed || items.isEmpty()", screen)
+        self.assertIn("setPageLoadFailed(true)", screen)
+        self.assertIn("pageLoadFailed()", screen)
 
     def test_paged_rpc_preserves_sector_level_region_and_unit_filters(self):
         sql = (ROOT / "supabase/migrations/20261029010000_catalog_discovery_pagination.sql").read_text(encoding="utf-8")

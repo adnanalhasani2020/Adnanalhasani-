@@ -40,7 +40,7 @@ class ReportSalesTaxDiscountValidationTest {
     fun ignoresInvalidAmountsOutsideSelectedPeriod() {
         assertEquals(
             "",
-            validate(sales = listOf(sale(createdAt = "2026-01-01", discount = -1L)))
+            validate(sales = listOf(sale(createdAt = "2025-12-31", discount = -1L)))
         )
     }
 

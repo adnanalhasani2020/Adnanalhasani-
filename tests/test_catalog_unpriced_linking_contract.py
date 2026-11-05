@@ -1,4 +1,5 @@
 from pathlib import Path
+from catalog_source_helpers import catalog_android_source
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -35,7 +36,7 @@ class CatalogUnpricedLinkingContractTests(unittest.TestCase):
         self.assertIn("'pricing_status', 'unpriced'", sql)
 
     def test_android_bulk_action_uses_rpc_and_limits_selection(self):
-        screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogScreen.kt").read_text(encoding="utf-8")
+        screen = catalog_android_source()
         self.assertIn("selectedCatalogIds", screen)
         self.assertIn("commercial_catalog_link_unpriced_items", screen)
         self.assertIn("selectedCatalogIds.size<=100", screen)

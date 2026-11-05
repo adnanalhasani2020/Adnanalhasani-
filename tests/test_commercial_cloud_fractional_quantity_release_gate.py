@@ -1,4 +1,5 @@
 from pathlib import Path
+from catalog_source_helpers import catalog_android_source
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -44,7 +45,7 @@ def test_payment_request_screens_do_not_call_unpublished_production_rpcs():
 def test_supplier_invoice_and_unmapped_item_creation_are_gated_until_migrations():
     gates = GATES.read_text(encoding="utf-8")
     supplier = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/SupplierInvoiceEntryDialog.kt").read_text(encoding="utf-8")
-    catalog = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogScreen.kt").read_text(encoding="utf-8")
+    catalog = catalog_android_source()
     assert "COMMERCIAL_CLOUD_SUPPLIER_INVOICE_DATES_RPC_READY = false" in gates
     assert "COMMERCIAL_CLOUD_UNMAPPED_INVOICE_ITEM_RPC_READY = false" in gates
     assert "COMMERCIAL_CLOUD_SUPPLIER_INVOICE_DATES_RPC_READY" in supplier

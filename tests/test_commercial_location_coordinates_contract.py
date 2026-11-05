@@ -1,4 +1,5 @@
 from pathlib import Path
+from catalog_source_helpers import catalog_android_source
 import unittest
 
 
@@ -12,7 +13,7 @@ class CommercialLocationCoordinatesContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.sql = MIGRATION.read_text(encoding="utf-8")
-        cls.screen = SCREEN.read_text(encoding="utf-8") + MARKET_UI.read_text(encoding="utf-8")
+        cls.screen = catalog_android_source()
 
     def test_coordinate_rpc_is_authenticated_scoped_and_audited(self):
         self.assertLess(
@@ -53,7 +54,7 @@ class CommercialLocationCoordinatesContractTests(unittest.TestCase):
         self.assertIn('"p_longitude"', self.screen)
         self.assertIn("parsedLatitude >= java.math.BigDecimal(\"-90\")", self.screen)
         self.assertIn("parsedLongitude <= java.math.BigDecimal(\"180\")", self.screen)
-        self.assertIn("branch.copy(latitude=savedLat,longitude=savedLon)", self.screen)
+        self.assertIn("branch.copy(latitude = savedLat, longitude = savedLon)", self.screen)
         self.assertNotIn("/rest/v1/commercial_organization_locations?on_conflict", self.screen)
 
     def test_migration_is_atomic(self):
