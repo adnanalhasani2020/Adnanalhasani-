@@ -1,4 +1,5 @@
 from pathlib import Path
+from catalog_source_helpers import catalog_android_source
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -54,7 +55,7 @@ class InvoicePurchaseItemCreationAtomicTests(unittest.TestCase):
         self.assertIn("multiple_exact_catalog_items_require_manual_resolution", sql)
 
     def test_screen_exposes_explicit_create_flow_without_auto_receipt_or_price(self):
-        source = SCREEN.read_text(encoding="utf-8") + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogScreenSections.kt").read_text(encoding="utf-8")
+        source = catalog_android_source()
         self.assertIn("commercial_create_and_link_invoice_purchase_item", source)
         self.assertIn("إنشاء صنف جديد وربطه بهذا البند", source)
         self.assertIn("اسم الصنف بالعربية", source)
