@@ -33,12 +33,13 @@ class CommercialRepeatedSaleLineTests(unittest.TestCase):
 
     def test_return_quantity_is_whole_and_uses_saved_unit_snapshot(self):
         migration = (ROOT / "supabase/migrations/20261105123000_commercial_integer_quantity_enforcement.sql").read_text(encoding="utf-8")
-        self.assertIn("v_item->>'quantity'", migration)
-        self.assertIn("v_qty := (v_item->>'quantity')::numeric * v_factor", migration)
-        self.assertIn("v_qty <> trunc(v_qty)", migration)
-        self.assertIn("v_sale_item.selling_unit_code IS DISTINCT FROM v_unit_code", migration)
-        self.assertIn("v_sale_item.quantity_in_stock_units::numeric / v_sale_item.selling_quantity", migration)
-        self.assertNotIn("FROM public.commercial_offering_sell_units", migration)
+        return_rpc = migration.split("CREATE OR REPLACE FUNCTION public.commercial_request_sale_return(", 1)[1].split("$function$;", 1)[0]
+        self.assertIn("v_item->>'quantity'", return_rpc)
+        self.assertIn("v_qty := (v_item->>'quantity')::numeric * v_factor", return_rpc)
+        self.assertIn("v_qty <> trunc(v_qty)", return_rpc)
+        self.assertIn("v_sale_item.selling_unit_code IS DISTINCT FROM v_unit_code", return_rpc)
+        self.assertIn("v_sale_item.quantity_in_stock_units::numeric / v_sale_item.selling_quantity", return_rpc)
+        self.assertNotIn("FROM public.commercial_offering_sell_units", return_rpc)
 
     def test_sale_rpc_accepts_only_integer_selling_quantities(self):
         migration = (ROOT / "supabase/migrations/20261105123000_commercial_integer_quantity_enforcement.sql").read_text(encoding="utf-8")
