@@ -67,6 +67,79 @@ private data class ComposerSellUnit(val code: String, val label: String, val fac
 private data class ComposerDraftLine(val id: String, val offeringId: String, val quantityText: String, val unitCode: String)
 private data class ComposerSelectedLine(val draft: ComposerDraftLine, val product: Product, val quantity: BigDecimal, val baseQuantity: BigInteger, val unit: ComposerSellUnit)
 
+private fun cloudComposerQuantityInput(value: String): String {
+    val raw = value.take(32)
+    if (raw.any { Character.digit(it, 10) < 0 }) return raw
+    return raw.map { ch -> ('0'.code + Character.digit(ch, 10)).toChar() }.joinToString("").take(6)
+}ackage com.adnanalhasani.commercial
+
+import android.content.Context
+import android.os.Handler
+import android.os.Looper
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import java.math.BigDecimal
+import java.math.BigInteger
+import java.util.Locale
+import java.util.UUID
+import java.util.concurrent.Executors
+
+private val CloudComposerInk = Color(0xFF183B35)
+private val CloudComposerGreen = Color(0xFF167D63)
+private val CloudComposerMuted = Color(0xFF71817B)
+private val CloudComposerBorder = Color(0xFFE5EBE8)
+private data class ComposerSellUnit(val code: String, val label: String, val factor: Long, val isDefault: Boolean)
+private data class ComposerDraftLine(val id: String, val offeringId: String, val quantityText: String, val unitCode: String)
+private data class ComposerSelectedLine(val draft: ComposerDraftLine, val product: Product, val quantity: BigDecimal, val baseQuantity: BigInteger, val unit: ComposerSellUnit)
+
 private fun cloudComposerQuantityInput(value: String): String =
     value.filter { Character.digit(it, 10) >= 0 }.map { ch ->
         ('0'.code + Character.digit(ch, 10)).toChar()
