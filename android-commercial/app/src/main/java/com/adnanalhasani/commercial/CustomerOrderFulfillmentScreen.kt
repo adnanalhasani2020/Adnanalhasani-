@@ -220,6 +220,30 @@ Text(merchantDate(booking.startsAt)+" — "+merchantDate(booking.endsAt)+" ("+bo
   }
  }
  cashTarget?.let{order->AlertDialog(onDismissRequest={cashTarget=null},title={Text("تأكيد استلام المبلغ نقدًا")},text={Text("سيُسجّل البيع والتحصيل وحركة المخزون بقيمة "+customerOrderMoney(order.totalMinor,order.currencyCode)+". تابع فقط إذا استلمت المبلغ كاملًا.")},confirmButton={Button(onClick={cashTarget=null;fulfill(order)},enabled=busy==null&&locationId.isNotBlank()){Text("استلمت المبلغ — إتمام البيع")}},dismissButton={TextButton(onClick={cashTarget=null}){Text("رجوع")}})}
+ reservationTarget?.let{order->
+  var hours by remember(order.id){mutableStateOf("24")}
+  var policy by remember(order.id){mutableStateOf("release_stock")}
+  val validHours=hours.toIntOrNull()?.let{it in 1..2160}==true
+  AlertDialog(onDismissRequest={if(busy==null)reservationTarget=null},title={Text("اعتماد الحجز وحجز المخزون")},
+   text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)){
+    Text("سيُحجز المتاح من كل صنف في موقع المخزون المختار. تبقى الكمية موجودة فعليًا ولا تُسجل حركة مخزنية حتى إتمام البيع.",fontSize=12.sp)
+    OutlinedTextField(hours,{hours=it.filter{ch->ch.isDigit()}.take(4)},label={Text("ينتهي الحجز بعد كم ساعة؟ (1–2160)")},singleLine=true,modifier=Modifier.fillMaxWidth())
+    Text("ماذا يحدث عند انتهاء الموعد؟",fontWeight=FontWeight.SemiBold)
+    listOf("release_stock" to "إرجاع الكمية للمتاح للبيع", "keep_reserved_notify" to "إبقاء الحجز مع تذكير يومي", "cancel_order" to "إلغاء الطلب وإرجاع الكمية").forEach{(value,label)->
+     Row(verticalAlignment=Alignment.CenterVertically){RadioButton(selected=policy==value,onClick={policy=value});Text(label,fontSize=12.sp)}
+    }
+   }},
+   confirmButton={Button(enabled=busy==null&&validHours&&locationId.isNotBlank()&&order.fulfillmentSupported,onClick={
+    val calendar=Calendar.getInstance().apply{add(Calendar.HOUR_OF_DAY,hours.toInt())}
+    val expires=SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX",Locale.US).format(calendar.time)
+    action("reserve:"+order.id,{reserveMerchantCustomerOrder(context,order.id,locationId,expires,policy)}){
+     "تم تثبيت الحجز حتى "+merchantDate(it.optString("expires_at"))+". لم تُخصم الكمية من المخزون الفعلي."
+    }
+    reservationTarget=null
+   }){Text("اعتماد الحجز")}},
+   dismissButton={TextButton(onClick={reservationTarget=null},enabled=busy==null){Text("رجوع")}}
+  )
+ }
  decisionTarget?.let{target->
   var reason by remember(target.id,target.reject){mutableStateOf("")}
   AlertDialog(onDismissRequest={if(busy==null)decisionTarget=null},title={Text(if(target.booking){if(target.reject)"رفض الحجز" else "تأكيد الحجز"}else{if(target.reject)"رفض الطلب" else "قبول الطلب"})},
