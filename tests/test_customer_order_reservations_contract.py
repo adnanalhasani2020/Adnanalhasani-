@@ -38,3 +38,13 @@ def test_rpc_grants_do_not_expose_internal_reservation_tables():
     assert "revoke all on table public.commercial_customer_order_reservation_items from public,anon,authenticated" in sql
     assert "set search_path = ''" in sql
     assert "reservation_idempotency_key_reused" in sql
+
+def test_android_merchant_queue_reserves_and_fulfills_reserved_orders():
+    repository = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CustomerPortalRepository.kt").read_text(encoding="utf-8")
+    screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CustomerOrderFulfillmentScreen.kt").read_text(encoding="utf-8")
+    assert "commercial_customer_portal_reserve_order" in repository
+    assert "commercial_customer_portal_process_expired_order_reservations" in repository
+    assert "commercial_customer_portal_fulfill_reserved_order" in repository
+    assert "اعتماد الحجز وحجز الكمية" in screen
+    assert "إبقاء الحجز وإرسال تذكير يومي" in screen
+    assert "release_stock" in screen and "cancel_order" in screen
