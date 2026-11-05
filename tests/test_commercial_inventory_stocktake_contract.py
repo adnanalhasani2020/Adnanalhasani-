@@ -35,6 +35,12 @@ class CommercialInventoryStocktakeContractTests(unittest.TestCase):
         self.assertIn("inventory_stocktake_positive_variance_cost_required", self.sql)
         self.assertIn("commercial_inventory_stocktake_cost_allocations", self.sql)
         self.assertIn("inventory_stocktake_reversal_adjustment_layer_consumed", self.sql)
+        self.assertIn("inventory_revision bigint NOT NULL DEFAULT 0", self.sql)
+        self.assertIn("posted_balance_revision", self.sql)
+        self.assertIn("inventory_stocktake_reversal_balance_changed", self.sql)
+        self.assertIn("gl_posting_enabled boolean NOT NULL DEFAULT false", self.sql)
+        self.assertIn("inventory_stocktake_accounting_integration_not_ready", self.sql)
+        self.assertIn("quantity_reserved", self.sql)
 
     def test_writes_are_rpc_only_and_smoke_test_covers_reversal_and_stale_count(self):
         self.assertIn("REVOKE ALL ON public.commercial_inventory_stocktakes", self.sql)
@@ -44,6 +50,11 @@ class CommercialInventoryStocktakeContractTests(unittest.TestCase):
         self.assertIn("stale_stocktake_snapshot_was_posted", self.smoke)
         self.assertIn("stocktake_submitter_self_approval_was_allowed", self.smoke)
         self.assertIn("positive_variance_reversal_cost_mismatch", self.smoke)
+        self.assertIn("fifo_layer_order_invalid", self.smoke)
+        self.assertIn("lifo_layer_order_invalid", self.smoke)
+        self.assertIn("stocktake_cost_layer_mismatch_was_posted", self.smoke)
+        self.assertIn("stocktake_reversal_after_later_balance_revision_was_allowed", self.smoke)
+        self.assertIn("active_zero_balance_offering_not_snapshotted", self.smoke)
         self.assertIn("postgres:17", self.workflow)
 
     def test_android_repository_uses_guarded_rpc_and_stable_retry_keys(self):
@@ -59,6 +70,9 @@ class CommercialInventoryStocktakeContractTests(unittest.TestCase):
         self.assertIn("stocktakeActionKey", self.repository)
         self.assertIn("commit())", self.repository)
         self.assertIn("requireStocktakeMatchesCurrentContext", self.repository)
+        self.assertIn("stocktakeCreateKey(context, current)", self.repository)
+        self.assertIn("تغيرت المؤسسة أو النشاط أو الفرع أثناء تجهيز الطلب", self.repository)
+        self.assertIn("تعذر مسح مفتاح إعادة المحاولة المحلي", self.repository)
         self.assertNotIn('SupabaseClient.request("/rest/v1/commercial_inventory_balances"', self.repository)
 
     def test_stocktake_screen_is_reachable_from_cloud_inventory(self):
@@ -68,7 +82,9 @@ class CommercialInventoryStocktakeContractTests(unittest.TestCase):
         self.assertIn("stocktakePage -> CommercialInventoryStocktakeScreen", self.store_app)
         self.assertIn("حفظ وإرسال للاعتماد", self.screen)
         self.assertIn("ترحيل الفروقات", self.screen)
-        self.assertIn("عكس مستند الجرد", self.screen)
+        self.assertIn("الترحيل معطل حتى اكتمال القيود المحاسبية", self.screen)
+        self.assertIn("العكس معطل حتى اكتمال القيود المحاسبية", self.screen)
+        self.assertIn("enabled = false", self.screen)
         self.assertIn("schemaReady = true", self.screen)
         self.assertIn("enabled = schemaReady && !loading && !saving", self.screen)
 
