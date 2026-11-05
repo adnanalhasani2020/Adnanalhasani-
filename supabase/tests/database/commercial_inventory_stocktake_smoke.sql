@@ -7,8 +7,12 @@ INSERT INTO auth.users(id) VALUES
 ('00000000-0000-0000-0000-000000000004');
 INSERT INTO public.commercial_organizations(id)
 VALUES('10000000-0000-0000-0000-000000000001');
-INSERT INTO public.commercial_organization_locations(id,organization_id)
-VALUES('20000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001');
+INSERT INTO public.commercial_organization_locations(id,organization_id) VALUES
+('20000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001'),
+('20000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001'),
+('20000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001'),
+('20000000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000001'),
+('20000000-0000-0000-0000-000000000005','10000000-0000-0000-0000-000000000001');
 INSERT INTO public.commercial_activities(id,organization_id)
 VALUES('30000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001');
 INSERT INTO public.commercial_organization_members(organization_id,user_id,role,state) VALUES
@@ -16,8 +20,12 @@ INSERT INTO public.commercial_organization_members(organization_id,user_id,role,
 ('10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000002','manager','active'),
 ('10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000003','member','active'),
 ('10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000004','manager','active');
-INSERT INTO public.commercial_offerings(id,activity_id,location_ref)
-VALUES('60000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001');
+INSERT INTO public.commercial_offerings(id,activity_id,location_ref) VALUES
+('60000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001'),
+('60000000-0000-0000-0000-000000000002','30000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002'),
+('60000000-0000-0000-0000-000000000003','30000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003'),
+('60000000-0000-0000-0000-000000000004','30000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000004'),
+('60000000-0000-0000-0000-000000000005','30000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000005');
 INSERT INTO public.commercial_inventory_balances(
   organization_id,location_id,offering_id,quantity_on_hand,quantity_reserved,unit_cost_minor
 ) VALUES (
@@ -32,8 +40,28 @@ INSERT INTO public.commercial_inventory_cost_layers(
   '60000000-0000-0000-0000-000000000001','opening_balance','opening-test-layer',
   10,10,100,100
 );
-INSERT INTO public.commercial_inventory_costing_policies(organization_id,location_id,costing_method)
-VALUES('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','weighted_average');
+INSERT INTO public.commercial_inventory_costing_policies(organization_id,location_id,costing_method) VALUES
+('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','weighted_average'),
+('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','fifo'),
+('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000004','lifo'),
+('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000005','fifo');
+
+INSERT INTO public.commercial_inventory_balances(
+  organization_id,location_id,offering_id,quantity_on_hand,quantity_reserved,unit_cost_minor
+) VALUES
+('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','60000000-0000-0000-0000-000000000003',10,0,160),
+('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000004','60000000-0000-0000-0000-000000000004',10,0,160),
+('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000005','60000000-0000-0000-0000-000000000005',10,0,160);
+
+INSERT INTO public.commercial_inventory_cost_layers(
+  organization_id,location_id,offering_id,source_type,source_ref,received_at,
+  quantity_received,quantity_remaining,source_unit_cost_minor,unit_cost_minor
+) VALUES
+('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','60000000-0000-0000-0000-000000000003','opening_balance','fifo-old','2026-01-01',4,4,100,100),
+('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','60000000-0000-0000-0000-000000000003','opening_balance','fifo-new','2026-02-01',6,6,200,200),
+('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000004','60000000-0000-0000-0000-000000000004','opening_balance','lifo-old','2026-01-01',4,4,100,100),
+('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000004','60000000-0000-0000-0000-000000000004','opening_balance','lifo-new','2026-02-01',6,6,200,200),
+('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000005','60000000-0000-0000-0000-000000000005','opening_balance','mismatch-layer','2026-01-01',9,9,100,100);
 
 SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
 
@@ -274,6 +302,109 @@ BEGIN
     RAISE EXCEPTION 'stale_stocktake_snapshot_was_posted';
   EXCEPTION WHEN SQLSTATE '55000' THEN
     IF SQLERRM<>'inventory_stocktake_stale_snapshot' THEN RAISE; END IF;
+  END;
+
+  -- Active offerings without a balance row are materialized at zero and included in the count.
+  v_created := public.commercial_create_inventory_stocktake(
+    '10000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000001',
+    '20000000-0000-0000-0000-000000000002','stocktake-zero-offering-001','unrecorded active offering'
+  );
+  IF (v_created->>'line_count')::integer<>1 THEN RAISE EXCEPTION 'active_zero_balance_offering_not_snapshotted'; END IF;
+  SELECT quantity_on_hand INTO v_balance FROM public.commercial_inventory_balances
+  WHERE offering_id='60000000-0000-0000-0000-000000000002';
+  IF v_balance<>0 THEN RAISE EXCEPTION 'zero_balance_offering_row_not_created'; END IF;
+
+  -- FIFO consumes the oldest layers first and reversal restores those exact layers.
+  v_created := public.commercial_create_inventory_stocktake(
+    '10000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000001',
+    '20000000-0000-0000-0000-000000000003','stocktake-fifo-001','fifo variance'
+  );
+  v_stocktake := (v_created->>'stocktake_id')::uuid;
+  SELECT id INTO v_line FROM public.commercial_inventory_stocktake_lines WHERE stocktake_id=v_stocktake;
+  PERFORM public.commercial_set_inventory_stocktake_counts(v_stocktake,
+    jsonb_build_array(jsonb_build_object('line_id',v_line,'counted_quantity','5')));
+  PERFORM public.commercial_submit_inventory_stocktake(v_stocktake);
+  PERFORM set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',true);
+  PERFORM public.commercial_approve_inventory_stocktake(v_stocktake);
+  PERFORM set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
+  PERFORM public.commercial_post_inventory_stocktake(v_stocktake,'stocktake-fifo-post-001');
+  IF (SELECT sum(quantity) FROM public.commercial_inventory_stocktake_cost_allocations WHERE stocktake_id=v_stocktake AND unit_cost_minor=100)<>4
+     OR (SELECT sum(quantity) FROM public.commercial_inventory_stocktake_cost_allocations WHERE stocktake_id=v_stocktake AND unit_cost_minor=200)<>1 THEN
+    RAISE EXCEPTION 'fifo_layer_order_invalid';
+  END IF;
+  PERFORM set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',true);
+  PERFORM public.commercial_reverse_inventory_stocktake(v_stocktake,'fifo test reversal','stocktake-fifo-reverse-001');
+
+  -- LIFO consumes the newest layers first.
+  PERFORM set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
+  v_created := public.commercial_create_inventory_stocktake(
+    '10000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000001',
+    '20000000-0000-0000-0000-000000000004','stocktake-lifo-001','lifo variance'
+  );
+  v_stocktake := (v_created->>'stocktake_id')::uuid;
+  SELECT id INTO v_line FROM public.commercial_inventory_stocktake_lines WHERE stocktake_id=v_stocktake;
+  PERFORM public.commercial_set_inventory_stocktake_counts(v_stocktake,
+    jsonb_build_array(jsonb_build_object('line_id',v_line,'counted_quantity','5')));
+  PERFORM public.commercial_submit_inventory_stocktake(v_stocktake);
+  PERFORM set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',true);
+  PERFORM public.commercial_approve_inventory_stocktake(v_stocktake);
+  PERFORM set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
+  PERFORM public.commercial_post_inventory_stocktake(v_stocktake,'stocktake-lifo-post-001');
+  IF (SELECT sum(quantity) FROM public.commercial_inventory_stocktake_cost_allocations WHERE stocktake_id=v_stocktake AND unit_cost_minor=200)<>5 THEN
+    RAISE EXCEPTION 'lifo_layer_order_invalid';
+  END IF;
+  PERFORM set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',true);
+  PERFORM public.commercial_reverse_inventory_stocktake(v_stocktake,'lifo test reversal','stocktake-lifo-reverse-001');
+
+  -- A balance with incomplete cost layers must not be adjusted.
+  PERFORM set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
+  v_created := public.commercial_create_inventory_stocktake(
+    '10000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000001',
+    '20000000-0000-0000-0000-000000000005','stocktake-layer-mismatch-001','layer mismatch'
+  );
+  v_stocktake := (v_created->>'stocktake_id')::uuid;
+  SELECT id INTO v_line FROM public.commercial_inventory_stocktake_lines WHERE stocktake_id=v_stocktake;
+  PERFORM public.commercial_set_inventory_stocktake_counts(v_stocktake,
+    jsonb_build_array(jsonb_build_object('line_id',v_line,'counted_quantity','8')));
+  PERFORM public.commercial_submit_inventory_stocktake(v_stocktake);
+  PERFORM set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',true);
+  PERFORM public.commercial_approve_inventory_stocktake(v_stocktake);
+  PERFORM set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
+  BEGIN
+    PERFORM public.commercial_post_inventory_stocktake(v_stocktake,'stocktake-layer-mismatch-post-001');
+    RAISE EXCEPTION 'stocktake_cost_layer_mismatch_was_posted';
+  EXCEPTION WHEN SQLSTATE '55000' THEN
+    IF SQLERRM<>'inventory_stocktake_cost_layer_reconciliation_failed' THEN RAISE; END IF;
+  END;
+
+  -- A balance revision, not created_at, blocks reversal after any later stock writer.
+  v_created := public.commercial_create_inventory_stocktake(
+    '10000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000001',
+    '20000000-0000-0000-0000-000000000001','stocktake-revision-001','revision reversal guard'
+  );
+  v_stocktake := (v_created->>'stocktake_id')::uuid;
+  SELECT id INTO v_line FROM public.commercial_inventory_stocktake_lines WHERE stocktake_id=v_stocktake;
+  PERFORM public.commercial_set_inventory_stocktake_counts(v_stocktake,
+    jsonb_build_array(jsonb_build_object('line_id',v_line,'counted_quantity','7')));
+  PERFORM public.commercial_submit_inventory_stocktake(v_stocktake);
+  PERFORM set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',true);
+  PERFORM public.commercial_approve_inventory_stocktake(v_stocktake);
+  PERFORM set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
+  PERFORM public.commercial_post_inventory_stocktake(v_stocktake,'stocktake-revision-post-001');
+  UPDATE public.commercial_inventory_balances SET quantity_on_hand=6
+  WHERE offering_id='60000000-0000-0000-0000-000000000001';
+  UPDATE public.commercial_inventory_cost_layers SET quantity_remaining=quantity_remaining-1
+  WHERE offering_id='60000000-0000-0000-0000-000000000001' AND quantity_remaining>0
+    AND source_ref='opening-test-layer';
+  INSERT INTO public.commercial_stock_movements(offering_id,movement_type,quantity_delta,source_ref,created_by)
+  VALUES('60000000-0000-0000-0000-000000000001','adjustment',-1,'test-later-movement-after-stocktake',
+    '00000000-0000-0000-0000-000000000001');
+  PERFORM set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',true);
+  BEGIN
+    PERFORM public.commercial_reverse_inventory_stocktake(v_stocktake,'later movement exists','stocktake-revision-reverse-001');
+    RAISE EXCEPTION 'stocktake_reversal_after_later_balance_revision_was_allowed';
+  EXCEPTION WHEN SQLSTATE '55000' THEN
+    IF SQLERRM<>'inventory_stocktake_reversal_balance_changed' THEN RAISE; END IF;
   END;
 END
 $test$;
