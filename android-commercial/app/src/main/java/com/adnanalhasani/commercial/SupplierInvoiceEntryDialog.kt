@@ -92,7 +92,7 @@ internal fun SupplierInvoiceEntryDialog(
                         Text("المستلم: ${line.quantityReceived} · تكلفة الأمر: ${line.unitCostMinor}")
                         OutlinedTextField(
                             value = quantities[line.id].orEmpty(),
-                            onValueChange = { quantities = quantities + (line.id to it) },
+                            onValueChange = { quantities = quantities + (line.id to it.take(32)) },
                             label = { Text("الكمية المفوترة (0 لتجاوز البند)") },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
@@ -128,7 +128,7 @@ internal fun SupplierInvoiceEntryDialog(
                     val raw = quantities[line.id].orEmpty().trim()
                     if (raw.isNotBlank()) {
                         val quantity = raw.toBigDecimalOrNull()
-                        if (quantity == null || quantity < java.math.BigDecimal.ZERO) lineError = "كمية غير صالحة للبند ${line.lineNumber}."
+                        if (quantity == null || quantity <= java.math.BigDecimal.ZERO || quantity.stripTrailingZeros().scale() > 0) lineError = "كمية صحيحة غير صالحة للبند ${line.lineNumber}."
                         else if (quantity > java.math.BigDecimal.ZERO) {
                             val price = prices[line.id].orEmpty().trim().toLongOrNull()
                             if (price == null || price < 0L) lineError = "سعر غير صالح للبند ${line.lineNumber}."

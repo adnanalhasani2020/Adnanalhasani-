@@ -4,12 +4,14 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 GATE = ROOT / "supabase/tests/database/commercial_financial_release_gate_test.sql"
+INTEGER_MIGRATION = ROOT / "supabase/migrations/20261105123000_commercial_integer_quantity_enforcement.sql"
 
 
 class CommercialFractionalQuantityReleaseGateTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.sql = GATE.read_text(encoding="utf-8")
+        cls.migration = INTEGER_MIGRATION.read_text(encoding="utf-8")
 
     def test_pgtap_plan_matches_assertion_count(self):
         match = re.search(r"SELECT\s+plan\((\d+)\);", self.sql, re.IGNORECASE)
@@ -17,21 +19,42 @@ class CommercialFractionalQuantityReleaseGateTests(unittest.TestCase):
         assertions = len(re.findall(r"SELECT\s+(?:ok|is)\s*\(", self.sql, re.IGNORECASE))
         self.assertEqual(int(match.group(1)), assertions)
 
-    def test_sale_quantity_contract_keeps_base_units_integer(self):
+    def test_sale_quantity_contract_keeps_integer_quantity_invariant(self):
         self.assertIn("(column_name = 'quantity' AND data_type = 'integer')", self.sql)
         self.assertIn("(column_name = 'selling_quantity' AND data_type = 'numeric')", self.sql)
         self.assertIn("(column_name = 'quantity_in_stock_units' AND data_type = 'bigint')", self.sql)
+        self.assertIn("commercial_sale_items_selling_quantity_whole_qty_ck", self.sql)
         self.assertNotIn("column_name = 'quantity' AND data_type = 'numeric'", self.sql)
 
-    def test_checkout_release_gate_checks_exact_conversion(self):
-        self.assertIn("v_base_qty := (v_line->>''quantity'')::numeric * v_unit.quantity_in_stock", self.sql)
-        self.assertIn("v_base_qty <> trunc(v_base_qty)", self.sql)
+    def test_checkout_release_gate_checks_integer_input_and_exact_conversion(self):
+        self.assertIn("coalesce(v_line->>", self.sql)
+        self.assertIn("v_base_qty := (v_line->>'quantity')::numeric * v_unit.quantity_in_stock", self.migration)
+        checkout_rpc = self.migration.split(
+            "CREATE OR REPLACE FUNCTION public.commercial_checkout_sale_multi(", 1
+        )[1].split("$function$;", 1)[0]
+        self.assertIn("v_base_qty <> trunc(v_base_qty)", checkout_rpc)
+        self.assertIn("!~ '^(0|[1-9][0-9]{0,5})$'", checkout_rpc)
+
+    def test_sell_unit_idempotency_binds_full_request_and_preserves_legacy_retries(self):
+        self.assertIn("CREATE TABLE IF NOT EXISTS public.commercial_sale_unit_idempotency", self.migration)
+        self.assertIn("v_request_fingerprint", self.migration)
+        self.assertIn("idempotency_key_reused_with_different_sell_unit_request", self.migration)
+        self.assertIn("commercial_private.commercial_get_sale_unit_idempotency", self.migration)
+        self.assertIn("commercial_private.commercial_record_sale_unit_idempotency", self.migration)
+        self.assertIn("v_effective_key := CASE WHEN v_legacy_match THEN v_legacy_key ELSE btrim(p_idempotency_key) END;", self.migration)
+        self.assertIn("REVOKE ALL ON public.commercial_sale_unit_idempotency FROM PUBLIC,anon,authenticated", self.migration)
+        self.assertIn("sale_item_sell_unit_projection_mismatch", self.migration)
+        self.assertIn("v_legacy_prefix:=substr(v_legacy_prefix,1,187)||'-u-';", self.migration)
 
     def test_return_release_gate_uses_original_invoice_unit_snapshot(self):
         self.assertIn("v_sale_item.selling_unit_code IS DISTINCT FROM v_unit_code", self.sql)
         self.assertIn("v_sale_item.quantity_in_stock_units::numeric / v_sale_item.selling_quantity", self.sql)
-        self.assertIn("FROM public.commercial_offering_sell_units", self.sql)
         self.assertIn("= 0,", self.sql)
+        return_rpc = self.migration.split(
+            "CREATE OR REPLACE FUNCTION public.commercial_request_sale_return(", 1
+        )[1].split("$function$;", 1)[0]
+        self.assertNotIn("FROM public.commercial_offering_sell_units", return_rpc)
+        self.assertIn("v_qty <> trunc(v_qty)", return_rpc)
 
 
 if __name__ == "__main__":

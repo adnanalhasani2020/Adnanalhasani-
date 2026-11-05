@@ -10,8 +10,10 @@ from agent_core.commercial_document_math import (
 class CommercialDocumentMathTests(unittest.TestCase):
     def test_piece_carton_and_kilogram_conversions(self):
         self.assertEqual(to_base_quantity(Decimal("2"), Decimal("12")), Decimal("24"))
-        self.assertEqual(to_base_quantity("1.25", "1000"), Decimal("1250"))
-        self.assertEqual(to_base_quantity("0.75", "1"), Decimal("0.75"))
+        self.assertEqual(to_base_quantity("1", "1000"), Decimal("1000"))
+        for quantity, factor in (("1.25", "1000"), ("0.75", "1"), ("2", "1.5")):
+            with self.subTest(quantity=quantity, factor=factor), self.assertRaises(ValueError):
+                to_base_quantity(quantity, factor)
 
     def test_large_unit_conversion_does_not_round_to_decimal_context(self):
         quantity = "123456789012345678901234567890"
@@ -21,17 +23,16 @@ class CommercialDocumentMathTests(unittest.TestCase):
         )
 
     def test_base_unit_precision_rejects_silent_rounding(self):
-        self.assertEqual(validate_base_quantity_precision("1.250", 3), Decimal("1.250"))
         self.assertEqual(validate_base_quantity_precision("12", 0), Decimal("12"))
-        for quantity, places in (("1.001", 2), ("0.1", 0), (0, 3), ("NaN", 3), ("Infinity", 3)):
+        for quantity, places in (("1.250", 3), ("1.001", 2), ("0.1", 0), (0, 0), ("NaN", 0), ("Infinity", 0)):
             with self.subTest(quantity=quantity, places=places), self.assertRaises(ValueError):
                 validate_base_quantity_precision(quantity, places)
-        for places in (-1, 13, True, 1.5):
+        for places in (-1, 1, 3, 13, True, 1.5):
             with self.subTest(places=places), self.assertRaises(ValueError):
                 validate_base_quantity_precision("1", places)
 
     def test_conversion_rejects_nonpositive_and_nonfinite_inputs(self):
-        for quantity, factor in ((0, 12), (-1, 12), (1, 0), (1, -1), ("NaN", 1), (1, "Infinity")):
+        for quantity, factor in ((0, 12), (-1, 12), (1, 0), (1, -1), ("NaN", 1), (1, "Infinity"), ("1.5", 12), (1, "12.5")):
             with self.subTest(quantity=quantity, factor=factor):
                 with self.assertRaises(ValueError):
                     to_base_quantity(quantity, factor)

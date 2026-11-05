@@ -39,7 +39,7 @@ internal fun calculateSupplierInvoicePriceVariance(
     invoice.lines.forEach { line ->
         val quantity = line.quantity.toBigDecimalOrNull()
             ?: throw IllegalArgumentException("توجد كمية غير صالحة في بنود فاتورة المورد.")
-        require(quantity.signum() > 0) { "توجد كمية صفرية أو سالبة في فاتورة المورد." }
+        require(quantity.signum() > 0 && quantity.stripTrailingZeros().scale() <= 0) { "كمية فاتورة المورد يجب أن تكون عددًا صحيحًا موجبًا." }
         val baseline = line.purchaseOrderUnitCostMinor
             ?: throw IllegalArgumentException("تعذر ربط سعر أساس أمر الشراء بأحد بنود فاتورة المورد.")
         require(baseline >= 0L && line.unitPriceMinor >= 0L && line.lineTotalMinor >= 0L) {

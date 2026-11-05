@@ -143,7 +143,7 @@ internal fun submitCustomerPortalOrder(
     require(lines.map { it.first }.distinct().size == lines.size) { "يوجد صنف مكرر في السلة." }
     val lineArray = JSONArray()
     lines.forEach { (offeringId, quantity) ->
-        require(offeringId.isNotBlank() && quantity.toBigDecimalOrNull()?.let { it > java.math.BigDecimal.ZERO && it <= java.math.BigDecimal("1000000") && it.scale().coerceAtLeast(0) <= 3 } == true) {
+        require(offeringId.isNotBlank() && quantity.toBigDecimalOrNull()?.let { it > java.math.BigDecimal.ZERO && it <= java.math.BigDecimal("1000000") && it.stripTrailingZeros().scale() <= 0 } == true) {
             "تحقق من الصنف والكمية المدخلة."
         }
         lineArray.put(JSONObject().put("offering_id", offeringId).put("quantity", quantity))
@@ -235,9 +235,9 @@ internal fun submitCustomerPortalMultiServiceBooking(
     require(lines.map { it.first }.distinct().size == lines.size) { "لا تكرر الخدمة نفسها في الفاتورة؛ عدّل كميتها في بند واحد." }
     require(lines.all { (id, quantity) ->
         id.isNotBlank() && quantity.toBigDecimalOrNull()?.let {
-            it > java.math.BigDecimal.ZERO && it <= java.math.BigDecimal("100000") && it.scale().coerceAtLeast(0) <= 3
+            it > java.math.BigDecimal.ZERO && it <= java.math.BigDecimal("100000") && it.stripTrailingZeros().scale() <= 0
         } == true
-    }) { "تحقق من كميات الخدمات؛ يجب أن تكون موجبة وبحد أقصى 3 منازل عشرية." }
+    }) { "تحقق من كميات الخدمات؛ يجب أن تكون موجبة وأعداد صحيحة فقط." }
     require(paymentMode == "cash" || paymentMode == "credit") { "طريقة الفاتورة غير صحيحة." }
     require(idempotencyKey.length in 8..200) { "مفتاح الحجز غير صالح." }
 

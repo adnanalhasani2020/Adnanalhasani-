@@ -265,14 +265,16 @@ class CommercialCloudSalesScreenContractTests(unittest.TestCase):
 
 
 
-    def test_fractional_quantity_entry_is_visible_and_converted_before_stock_validation(self):
+    def test_integer_quantity_entry_is_converted_before_stock_validation(self):
         self.assertIn("parseCommercialCheckoutQuantity(draft.quantityText)", self.composer)
         self.assertIn("BigDecimal.valueOf(unit.factor)", self.composer)
         self.assertIn("toBigIntegerExact()", self.composer)
         self.assertIn("baseQuantity: BigInteger", self.composer)
-        self.assertIn("0.5 أو 1.25", self.composer)
+        self.assertIn("الكمية (عدد صحيح فقط)", self.composer)
+        self.assertNotIn("0.5 أو 1.25", self.composer)
         self.assertIn("sum + BigDecimal(line.baseQuantity)", self.composer)
         self.assertIn("quantity.stripTrailingZeros().toPlainString()", self.sales_repository)
+
 
     def test_same_offering_can_have_multiple_independent_invoice_lines(self):
         self.assertIn("var invoiceLines by remember { mutableStateOf<List<ComposerDraftLine>>(emptyList()) }", self.composer)

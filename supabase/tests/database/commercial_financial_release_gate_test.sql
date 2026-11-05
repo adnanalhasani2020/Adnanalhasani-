@@ -1,10 +1,10 @@
--- Release-gate regression checks for receivables, fractional quantities, and ledger integrity.
+-- Release-gate regression checks for receivables, whole quantities, and ledger integrity.
 -- Run after all repository migrations in a disposable local/staging Supabase database:
 --   supabase test db
 -- This is intentionally a gate, not a substitute for authenticated end-to-end checkout/payment tests.
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT plan(11);
+SELECT plan(18);
 
 -- Receivable arithmetic: approved return credit reduces the sale obligation once;
 -- an executed cash refund also reduces net cash paid, not the sale credit itself.
@@ -49,7 +49,7 @@ SELECT ok(
   'GL payment guard uses the same return-adjusted receivable logic'
 );
 
--- Selling quantities are decimal snapshots; inventory quantities remain exact integer base units.
+-- Selling and inventory quantities are whole units; numeric columns remain for schema compatibility.
 SELECT ok(
   (SELECT count(*) = 3
    FROM information_schema.columns
@@ -59,17 +59,83 @@ SELECT ok(
        (column_name = 'quantity' AND data_type = 'integer')
        OR (column_name = 'selling_quantity' AND data_type = 'numeric')
        OR (column_name = 'quantity_in_stock_units' AND data_type = 'bigint')
-     )),
-  'sale lines preserve decimal selling quantity and exact integer base-stock quantities'
+     ))
+  AND EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.commercial_sale_items'::regclass
+      AND conname = 'commercial_sale_items_selling_quantity_whole_qty_ck'
+  ),
+  'sale lines retain whole selling and stock quantities with compatible storage types'
 );
 SELECT ok(
-  position('v_base_qty := (v_line->>''quantity'')::numeric * v_unit.quantity_in_stock' in pg_get_functiondef(
+  EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.commercial_customer_order_items'::regclass
+      AND conname = 'commercial_customer_order_items_quantity_whole_qty_ck'
+  )
+  AND EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.commercial_supplier_invoice_items'::regclass
+      AND conname = 'commercial_supplier_invoice_items_quantity_whole_qty_ck'
+  )
+  AND EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.commercial_purchase_order_items'::regclass
+      AND conname = 'commercial_purchase_order_items_quantity_ordered_whole_qty_ck'
+  )
+  AND EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.commercial_inventory_balances'::regclass
+      AND conname = 'commercial_inventory_balances_quantity_on_hand_whole_qty_ck'
+  )
+  ,
+  'whole quantity constraints cover customer orders, supplier invoices, purchases and stock'
+);
+SELECT ok(
+  NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.commercial_global_units'::regclass
+      AND conname = 'commercial_global_units_factor_to_base_whole_qty_ck'
+  ),
+  'universal measurement conversion factors may remain fractional'
+);
+-- Full sell-unit request keys are recorded under user-scoped RLS, not only base quantities.
+SELECT ok(
+  to_regclass('public.commercial_sale_unit_idempotency') IS NOT NULL
+  AND (SELECT relrowsecurity FROM pg_class WHERE oid='public.commercial_sale_unit_idempotency'::regclass)
+  AND position('v_request_fingerprint' in pg_get_functiondef(
+    'public.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint,bigint,bigint)'::regprocedure
+  )) > 0
+  AND NOT has_table_privilege('authenticated','public.commercial_sale_unit_idempotency','SELECT')
+  AND to_regprocedure('commercial_private.commercial_get_sale_unit_idempotency(text)') IS NOT NULL
+  AND to_regprocedure('commercial_private.commercial_record_sale_unit_idempotency(text,text,text,uuid)') IS NOT NULL
+  AND position('idempotency_key_reused_with_different_sell_unit_request' in pg_get_functiondef(
+    'public.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint,bigint,bigint)'::regprocedure
+  )) > 0,
+  'sell-unit idempotency stores full request fingerprints behind user-scoped row security'
+);
+
+-- Reusing the same caller key with a changed payload must conflict, not create a second sale.
+SELECT ok(
+  position('v_effective_key := btrim(p_idempotency_key)' in pg_get_functiondef(
+    'public.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint,bigint,bigint)'::regprocedure
+  )) > 0
+  AND position('md5(v_original_lines' in pg_get_functiondef(
+    'public.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint,bigint,bigint)'::regprocedure
+  )) = 0,
+  'sale retries preserve the caller idempotency key and reject changed payloads'
+);
+
+SELECT ok(
+  position('coalesce(v_line->>''quantity'','''') !~ ''^(0|[1-9][0-9]{0,5})    'public.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint,bigint,bigint)'::regprocedure
+  )) > 0
+  AND position('v_base_qty := (v_line->>''quantity'')::numeric * v_unit.quantity_in_stock' in pg_get_functiondef(
     'public.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint,bigint,bigint)'::regprocedure
   )) > 0
   AND position('v_base_qty <> trunc(v_base_qty)' in pg_get_functiondef(
     'public.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint,bigint,bigint)'::regprocedure
   )) > 0,
-  'fractional checkout converts through the configured factor and rejects non-integral base stock'
+  'checkout accepts integer selling quantities and validates exact whole base conversion'
 );
 SELECT ok(
   position('v_sale_item.selling_unit_code IS DISTINCT FROM v_unit_code' in pg_get_functiondef(
@@ -81,7 +147,52 @@ SELECT ok(
   AND position('FROM public.commercial_offering_sell_units' in pg_get_functiondef(
     'public.commercial_request_sale_return(uuid,text,text,jsonb,text)'::regprocedure
   )) = 0,
-  'fractional returns recover the immutable unit factor from the original sale line'
+  'integer returns recover the immutable unit factor from the original sale line'
+);
+
+SELECT ok(
+  NOT EXISTS (
+    SELECT 1
+    FROM public.commercial_journal_entries e
+    JOIN public.commercial_journal_lines l ON l.journal_entry_id = e.id
+    WHERE e.status = 'posted'
+    GROUP BY e.id, l.currency_code
+    HAVING sum(l.debit_minor) <> sum(l.credit_minor)
+  ),
+  'all posted journal entries balance by currency'
+);
+SELECT ok(
+  NOT EXISTS (
+    SELECT 1 FROM public.commercial_ar_control_reconciliation
+    WHERE NOT is_reconciled OR difference_minor <> 0
+  ),
+  'customer AR control reconciliation has no unreconciled differences'
+);
+
+SELECT * FROM finish();
+ROLLBACK;
+'' in pg_get_functiondef(
+    'public.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint,bigint,bigint)'::regprocedure
+  )) > 0
+  AND position('v_base_qty := (v_line->>''quantity'')::numeric * v_unit.quantity_in_stock' in pg_get_functiondef(
+    'public.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint,bigint,bigint)'::regprocedure
+  )) > 0
+  AND position('v_base_qty <> trunc(v_base_qty)' in pg_get_functiondef(
+    'public.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint,bigint,bigint)'::regprocedure
+  )) > 0,
+  'checkout accepts integer selling quantities and validates exact whole base conversion'
+);
+SELECT ok(
+  position('v_sale_item.selling_unit_code IS DISTINCT FROM v_unit_code' in pg_get_functiondef(
+    'public.commercial_request_sale_return(uuid,text,text,jsonb,text)'::regprocedure
+  )) > 0
+  AND position('v_sale_item.quantity_in_stock_units::numeric / v_sale_item.selling_quantity' in pg_get_functiondef(
+    'public.commercial_request_sale_return(uuid,text,text,jsonb,text)'::regprocedure
+  )) > 0
+  AND position('FROM public.commercial_offering_sell_units' in pg_get_functiondef(
+    'public.commercial_request_sale_return(uuid,text,text,jsonb,text)'::regprocedure
+  )) = 0,
+  'integer returns recover the immutable unit factor from the original sale line'
 );
 
 SELECT ok(

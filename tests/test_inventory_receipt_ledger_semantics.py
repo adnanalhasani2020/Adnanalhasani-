@@ -5,6 +5,7 @@ ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = ROOT / "supabase/migrations/20261101030000_inventory_receipt_ledger_semantics.sql"
 REPORTS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportInventoryRows.kt"
 INTEGER_RECEIVING = ROOT / "supabase/migrations/20261026250000_commercial_integer_purchase_receiving.sql"
+INTEGER_QUANTITY_MIGRATION = ROOT / "supabase/migrations/20261105123000_commercial_integer_quantity_enforcement.sql"
 
 
 class InventoryReceiptLedgerSemanticsTests(unittest.TestCase):
@@ -22,22 +23,25 @@ class InventoryReceiptLedgerSemanticsTests(unittest.TestCase):
         self.assertIn("VALUES(p_offering_id,'receipt',p_quantity,'receipt:'", self.sql)
         self.assertNotIn("VALUES(p_offering_id,'adjustment',p_quantity,'receipt:'", self.sql)
 
-    def test_purchase_order_receiving_preserves_fractional_quantities(self):
+    def test_purchase_order_receiving_rejects_fractional_quantities(self):
         marker = "CREATE OR REPLACE FUNCTION commercial_private.commercial_receive_purchase_order("
         self.assertIn(marker, self.sql)
         receipt_rpc = self.sql.split(marker, 1)[1].split("$function$;", 1)[0]
-        self.assertIn("scale(v_qty)>6", receipt_rpc)
-        self.assertNotIn("v_qty<>trunc(v_qty)", receipt_rpc)
-        self.assertIn("v_qty>999999999999.999999", receipt_rpc)
+        self.assertIn("scale(v_qty)>6", receipt_rpc)  # historical migration remains immutable
+        enforcement = INTEGER_QUANTITY_MIGRATION.read_text(encoding="utf-8")
+        effective = enforcement.split(marker, 1)[1].split("$function$;", 1)[0]
+        self.assertIn("v_qty<>trunc(v_qty)", effective)
+        self.assertIn("v_qty>999999999999", effective)
         self.assertIn("public.commercial_receive_inventory_stock", receipt_rpc)
         integer_migration = INTEGER_RECEIVING.read_text(encoding="utf-8")
         self.assertIn("REVOKE ALL ON FUNCTION commercial_private.commercial_receive_purchase_order", integer_migration)
         self.assertIn("FROM PUBLIC,anon,authenticated", integer_migration)
 
-    def test_receipt_rpc_preserves_fractional_quantity_support(self):
-        self.assertIn("scale(p_quantity)>6", self.sql)
-        self.assertNotIn("p_quantity<>trunc(p_quantity)", self.sql)
-        self.assertIn("numeric(20,6)", self.sql)
+    def test_receipt_rpc_rejects_fractional_quantities_without_changing_money_precision(self):
+        enforcement = INTEGER_QUANTITY_MIGRATION.read_text(encoding="utf-8")
+        self.assertIn("p_quantity<>trunc(p_quantity)", enforcement)
+        self.assertIn("v_qty<>trunc(v_qty)", enforcement)
+        self.assertIn("numeric(20,6)", self.sql)  # storage compatibility; CHECK enforces whole values
 
     def test_receipt_rpc_keeps_existing_transaction_and_access_contract(self):
         self.assertIn("CREATE OR REPLACE FUNCTION public.commercial_receive_inventory_stock", self.sql)

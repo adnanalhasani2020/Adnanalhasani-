@@ -46,15 +46,15 @@ class ReportsWarehouseInventoryContextContractTests(unittest.TestCase):
             with self.subTest(marker=marker):
                 self.assertIn(marker, loader)
 
-    def test_quantities_use_bigdecimal_and_are_not_aggregated_across_units(self):
+    def test_quantities_use_bigdecimal_and_reject_fractional_values(self):
         loader = self.repository.split(
             "internal fun loadCommercialCloudWarehouseInventoryContext", 1
         )[1]
         self.assertIn("val quantityOnHand: BigDecimal", self.repository)
         self.assertIn("val quantityReserved: BigDecimal", self.repository)
         self.assertIn("val availableQuantity: BigDecimal", self.repository)
-        self.assertIn("BigDecimal(row.optString(field))", loader)
-        self.assertIn("available == onHand.subtract(reserved).max(BigDecimal.ZERO)", loader)
+        self.assertIn("parseWholeInventoryQuantity(row.optString(field), field)", loader)
+        self.assertIn("available == onHand.subtract(reserved)", loader)
         loader_doc = self.repository.split(
             "internal fun loadCommercialCloudWarehouseInventoryContext", 1
         )[0]

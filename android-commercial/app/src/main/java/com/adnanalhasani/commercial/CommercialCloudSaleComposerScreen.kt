@@ -68,37 +68,37 @@ private data class ComposerDraftLine(val id: String, val offeringId: String, val
 private data class ComposerSelectedLine(val draft: ComposerDraftLine, val product: Product, val quantity: BigDecimal, val baseQuantity: BigInteger, val unit: ComposerSellUnit)
 
 private fun cloudComposerQuantityInput(value: String): String {
-    val out = StringBuilder()
-    var decimalSeen = false
-    var decimalDigits = 0
-    value.forEach { ch ->
-        if (ch.isDigit()) {
-            if (!decimalSeen || decimalDigits < 3) {
-                out.append(ch)
-                if (decimalSeen) decimalDigits++
-            }
-        } else if ((ch == '.' || ch == ',' || ch == '\u066B') && !decimalSeen) {
-            out.append('.')
-            decimalSeen = true
-        }
-    }
-    return out.toString()
+    val raw = value.take(32)
+    if (raw.any { Character.digit(it, 10) < 0 }) return raw
+    return raw.map { ch -> ('0'.code + Character.digit(ch, 10)).toChar() }.joinToString("").take(6)
 }
 
 private fun cloudComposerSellUnits(product: Product): List<ComposerSellUnit> {
+    val baseUnit = ComposerSellUnit(
+        product.unitCode.ifBlank { "each" },
+        product.unitCode.ifBlank { "حبة" },
+        1L,
+        true
+    )
+    if (product.unitVariantsJson.isBlank()) return listOf(baseUnit)
+    val json = runCatching { org.json.JSONArray(product.unitVariantsJson) }
+        .getOrElse { return listOf(baseUnit.copy(factor = 0L)) }
+    if (json.length() == 0) return listOf(baseUnit)
     val parsed = runCatching {
-        val json = org.json.JSONArray(product.unitVariantsJson)
         List(json.length()) { index ->
             val row = json.getJSONObject(index)
+            val factor = row.optString("quantityInBase", "1").toBigDecimalOrNull()?.let {
+                runCatching { it.toBigIntegerExact().longValueExact() }.getOrNull()
+            }?.takeIf { it > 0L } ?: 0L
             ComposerSellUnit(
                 code = row.optString("unitCode").ifBlank { product.unitCode.ifBlank { "each" } },
                 label = row.optString("unitName").ifBlank { row.optString("unitCode", product.unitCode) },
-                factor = row.optLong("quantityInBase", 1L).coerceAtLeast(1L),
+                factor = factor,
                 isDefault = row.optBoolean("isDefault", false)
             )
         }.filter { it.code.isNotBlank() }.distinctBy { it.code }
-    }.getOrDefault(emptyList())
-    return parsed.ifEmpty { listOf(ComposerSellUnit(product.unitCode.ifBlank { "each" }, product.unitCode.ifBlank { "حبة" }, 1L, true)) }
+    }.getOrElse { return listOf(baseUnit.copy(factor = 0L)) }
+    return if (parsed.any { it.code == baseUnit.code }) parsed else parsed + baseUnit
 }
 
 private val CloudComposerWorker = Executors.newSingleThreadExecutor()
@@ -157,7 +157,7 @@ internal fun CommercialCloudSaleComposerScreen(
             ?: units.firstOrNull { it.isDefault } ?: units.first()
         val baseQuantity = quantity?.multiply(BigDecimal.valueOf(unit.factor))
             ?.let { runCatching { it.toBigIntegerExact() }.getOrNull() }
-        if (product.cloudOfferingId.isBlank() || quantity == null || baseQuantity == null) null
+        if (product.cloudOfferingId.isBlank() || quantity == null || baseQuantity == null || baseQuantity.signum() <= 0) null
         else ComposerSelectedLine(draft, product, quantity, baseQuantity, unit)
     }
     val estimatedSubtotal = selectedLines.fold(BigInteger.ZERO) { sum, line ->
@@ -174,8 +174,7 @@ internal fun CommercialCloudSaleComposerScreen(
     val hasFractionalSellingQuantity = selectedLines.any {
         it.quantity.stripTrailingZeros().scale() > 0
     }
-    val fractionalSellingQuantityBlocked =
-        !COMMERCIAL_CLOUD_FRACTIONAL_QUANTITY_RPC_READY && hasFractionalSellingQuantity
+    val fractionalSellingQuantityBlocked = hasFractionalSellingQuantity
     val discountMinor = discountText.toLongOrNull() ?: 0L
     val taxMinor = taxText.toLongOrNull() ?: 0L
     val estimatedTotal = (estimatedSubtotal - BigInteger.valueOf(discountMinor) + BigInteger.valueOf(taxMinor))
@@ -364,7 +363,7 @@ internal fun CommercialCloudSaleComposerScreen(
                                                     units.forEach { option -> DropdownMenuItem(text = { Text("${option.label} (يساوي ${option.factor} ${product.unitCode})") }, onClick = { invoiceLines = invoiceLines.map { if (it.id == draft.id) it.copy(unitCode = option.code) else it }; unitMenuExpanded = false; error = "" }) }
                                                 }
                                             }
-                                            OutlinedTextField(value = draft.quantityText, onValueChange = { input -> invoiceLines = invoiceLines.map { if (it.id == draft.id) it.copy(quantityText = cloudComposerQuantityInput(input)) else it }; error = "" }, modifier = Modifier.weight(1f), singleLine = true, label = { Text("الكمية (مثال 0.5 أو 1.25)") })
+                                            OutlinedTextField(value = draft.quantityText, onValueChange = { input -> invoiceLines = invoiceLines.map { if (it.id == draft.id) it.copy(quantityText = cloudComposerQuantityInput(input)) else it }; error = "" }, modifier = Modifier.weight(1f), singleLine = true, label = { Text("الكمية (عدد صحيح فقط)") })
                                             val draftQuantity = parseCommercialCheckoutQuantity(draft.quantityText)
                                             val draftBaseQuantity = draftQuantity?.multiply(BigDecimal.valueOf(unit.factor))
                                                 ?.let { runCatching { it.toBigIntegerExact() }.getOrNull() } ?: BigInteger.ZERO
@@ -376,7 +375,7 @@ internal fun CommercialCloudSaleComposerScreen(
                             }
                         }
                         Text("يمكن تكرار الصنف في أكثر من سطر مع اختيار وحدة وكمية مستقلتين لكل سطر.", color = CloudComposerMuted, fontSize = 11.sp)
-                        Text("تُقبل الكميات الكسرية حتى ثلاث منازل عشرية عندما يحولها معامل الوحدة إلى عدد صحيح من وحدات المخزون.", color = CloudComposerMuted, fontSize = 10.sp)
+                        Text("الكمية المدخلة ومعامل التحويل وكمية المخزون الناتجة يجب أن تكون أعدادًا صحيحة فقط.", color = CloudComposerMuted, fontSize = 10.sp)
                     }
                 }
             }
@@ -420,7 +419,7 @@ internal fun CommercialCloudSaleComposerScreen(
             item {
                 if (fractionalSellingQuantityBlocked) {
                     Text(
-                        "الكميات العشرية غير مفعّلة سحابيًا مؤقتًا حتى نشر تحديث الخادم واختباره. استخدم كمية صحيحة؛ لم يتم إرسال أي عملية.",
+                        "الكميات يجب أن تكون أعدادًا صحيحة فقط؛ أدخل عددًا صحيحًا لكل وحدة بيع.",
                         color = MaterialTheme.colorScheme.error,
                         fontSize = 12.sp
                     )
@@ -431,9 +430,9 @@ internal fun CommercialCloudSaleComposerScreen(
                         if (selectedLines.isEmpty()) {
                             error = "أدخل كمية لصنف واحد على الأقل."
                         } else if (fractionalSellingQuantityBlocked) {
-                            error = "قاعدة الإنتاج الحالية لا تقبل كميات البيع العشرية بعد. استخدم كمية صحيحة مؤقتًا؛ لن نرسل طلبًا قد يرفضه الخادم."
+                            error = "الكميات الكسرية مرفوضة. استخدم عددًا صحيحًا من وحدة البيع."
                         } else if (hasNonIntegralBaseQuantity) {
-                            error = "هذه الكمية لا تتحول إلى عدد صحيح من وحدة المخزون. اختر وحدة تحويل مناسبة؛ مثل 0.5 كجم عندما تكون وحدة المخزون جرامًا."
+                            error = "تعذر تحويل الكمية إلى عدد صحيح من وحدة المخزون. تحقق من معامل تحويل الوحدة."
                         } else if (selectedLines.size != invoiceLines.size) {
                             error = "صحح الكميات في جميع سطور الفاتورة قبل المتابعة."
                         } else if (selectedLines.groupBy { it.product.cloudOfferingId }.any { (_, lines) ->

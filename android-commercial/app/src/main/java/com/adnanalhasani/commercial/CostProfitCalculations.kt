@@ -178,7 +178,7 @@ internal fun calculateItemProfitability(
         }
         val quantity = line.quantity.toBigDecimalOrNull()
             ?: throw IllegalArgumentException("توجد كمية بيع غير صالحة في تقرير ربحية الأصناف.")
-        require(quantity.signum() > 0 && line.lineTotalMinor >= 0L) {
+        require(quantity.signum() > 0 && quantity.stripTrailingZeros().scale() <= 0 && line.lineTotalMinor >= 0L) {
             "توجد كمية أو قيمة بيع غير صالحة في تقرير ربحية الأصناف."
         }
         if (line.inSelectedPeriod) {

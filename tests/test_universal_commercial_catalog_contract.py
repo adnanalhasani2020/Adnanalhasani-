@@ -20,6 +20,7 @@ class UniversalCommercialCatalogContractTests(unittest.TestCase):
         cls.main = (ANDROID / "StoreApp.kt").read_text(encoding="utf-8") + (ANDROID / "MainActivity.kt").read_text(encoding="utf-8") + (ANDROID / "LocalProductDialogs.kt").read_text(encoding="utf-8")
         cls.models = (ANDROID / "CommercialModels.kt").read_text(encoding="utf-8")
         cls.edit_dialog = (ANDROID / "CatalogProductEditDialog.kt").read_text(encoding="utf-8")
+        cls.workflow = (ANDROID / "CatalogProductWorkflow.kt").read_text(encoding="utf-8")
 
     def test_extends_existing_masters_without_parallel_product_or_unit_masters(self):
         self.assertIn("ALTER TABLE public.commercial_global_catalog_items", self.schema)
@@ -80,7 +81,21 @@ class UniversalCommercialCatalogContractTests(unittest.TestCase):
         self.assertIn("reviewRuling", self.android)
         self.assertIn("CatalogProductEditDialog", self.android)
         self.assertIn("تعديل بيانات الصنف", self.android)
+        self.assertIn("لا يغيّر سعر العرض أو رصيد المخزون", self.android)
         self.assertIn("product_unit_dimension_mismatch", self.management)
+
+    def test_catalog_recipe_and_package_quantities_are_integer_only(self):
+        self.assertIn("private fun catalogWholeQuantity", self.workflow)
+        self.assertIn("quantity.stripTrailingZeros().scale() > 0", self.workflow)
+        self.assertIn('catalogWholeQuantity(p[1], "كمية المكون")', self.workflow)
+        self.assertIn('catalogWholeQuantity(state.recipeYieldQty', self.workflow)
+        self.assertIn('catalogWholeQuantity(state.extraUnitQty', self.workflow)
+        self.assertIn('catalogWholeQuantity(p[2], "معامل تحويل العبوة")', self.workflow)
+        enforcement = (MIGRATIONS / "20261105123000_commercial_integer_quantity_enforcement.sql").read_text(encoding="utf-8")
+        self.assertIn("commercial_global_catalog_items", enforcement)
+        self.assertIn("commercial_catalog_recipe_ingredients", enforcement)
+        self.assertIn("commercial_catalog_product_recipes", enforcement)
+        self.assertIn("'net_quantity','yield_quantity'", enforcement)
 
     def test_cross_account_transfer_requires_destination_acceptance(self):
         self.assertIn("commercial_catalog_send_transfer", self.management)
@@ -95,6 +110,10 @@ class UniversalCommercialCatalogContractTests(unittest.TestCase):
             self.assertIn(field, self.main)
         self.assertIn("إنشاء وربط بالمخزون", self.android)
         self.assertIn("quantityIsWholeBaseUnits", self.main)
+        self.assertIn("quantityText = it.take(32)", self.main)
+        self.assertIn("stockText = it.take(32)", self.main)
+        self.assertIn("reorderPointText = it.take(32)", self.main)
+        self.assertNotIn("reorderPoint.toDouble()", self.main)
         self.assertIn("baseQuantitySold", self.models)
         self.assertIn("unitVariantsJson", self.models)
         self.assertIn("commercial_catalog_create_product", self.android)

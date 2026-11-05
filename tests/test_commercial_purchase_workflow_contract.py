@@ -18,6 +18,7 @@ FRACTIONAL_RECEIVING = ROOT / "supabase/migrations/20261025230817_commercial_fra
 ACCOUNTING_ROUNDING = ROOT / "supabase/migrations/20261026080000_commercial_purchase_fractional_accrual_rounding.sql"
 INTEGER_RECEIVING = ROOT / "supabase/migrations/20261026250000_commercial_integer_purchase_receiving.sql"
 RECEIPT_FIX_MIGRATION = ROOT / "supabase/migrations/20261101030000_inventory_receipt_ledger_semantics.sql"
+INTEGER_QUANTITY_MIGRATION = ROOT / "supabase/migrations/20261105123000_commercial_integer_quantity_enforcement.sql"
 
 
 def test_purchase_order_lifecycle_is_scoped_and_idempotent():
@@ -165,10 +166,11 @@ def test_android_purchase_workflow_is_connected_to_server_rpcs():
     assert "resolvePendingCommercialPurchaseReceipt" in repository
 
 
-def test_purchase_receiving_supports_fractions_at_android_and_database_boundaries():
+def test_purchase_receiving_is_integer_only_at_android_and_database_boundaries():
     fractional_migration = FRACTIONAL_RECEIVING.read_text(encoding="utf-8")
     integer_migration = INTEGER_RECEIVING.read_text(encoding="utf-8")
     receipt_fix = RECEIPT_FIX_MIGRATION.read_text(encoding="utf-8")
+    enforcement = INTEGER_QUANTITY_MIGRATION.read_text(encoding="utf-8")
     repository = REPOSITORY.read_text(encoding="utf-8")
     order_dialog = ORDER_DIALOG.read_text(encoding="utf-8")
     receipt_dialog = RECEIPT_DIALOG.read_text(encoding="utf-8")
@@ -176,51 +178,54 @@ def test_purchase_receiving_supports_fractions_at_android_and_database_boundarie
     for marker in ("numeric(18,6)", "numeric(20,6)", "quantity_delta TYPE numeric(20,6)"):
         assert marker in fractional_migration
 
-    # The old migration is intentionally retained as historical evidence; the newer
-    # additive migration must replace its integer-only RPCs without changing grants.
     historical_receipt_rpc = integer_migration.split(
         "CREATE OR REPLACE FUNCTION commercial_private.commercial_receive_purchase_order", 1
     )[1].split("$function$;", 1)[0]
     assert "v_qty<>trunc(v_qty)" in historical_receipt_rpc
-    effective_receipt_rpc = receipt_fix.split(
+
+    effective_receipt_rpc = enforcement.split(
         "CREATE OR REPLACE FUNCTION commercial_private.commercial_receive_purchase_order", 1
     )[1].split("$function$;", 1)[0]
-    effective_inventory_rpc = receipt_fix.split(
+    effective_inventory_rpc = enforcement.split(
         "CREATE OR REPLACE FUNCTION public.commercial_receive_inventory_stock", 1
     )[1].split("$function$;", 1)[0]
-    assert "scale(v_qty)>6" in effective_receipt_rpc
-    assert "v_qty<>trunc(v_qty)" not in effective_receipt_rpc
-    assert "v_qty>999999999999.999999" in effective_receipt_rpc
-    assert "scale(p_quantity)>6" in effective_inventory_rpc
-    assert "p_quantity<>trunc(p_quantity)" not in effective_inventory_rpc
+    assert "v_qty<>trunc(v_qty)" in effective_receipt_rpc
+    assert "v_qty>999999999999" in effective_receipt_rpc
+    assert "p_quantity<>trunc(p_quantity)" in effective_inventory_rpc
     assert "public.commercial_receive_inventory_stock" in effective_receipt_rpc
+    assert "fractional_historical_quantity_requires_reconciliation" in enforcement
 
     receipt_repository = repository.split("internal fun receiveCommercialCloudPurchaseOrder", 1)[1]
     receipt_repository = receipt_repository.split("internal fun createCommercialCloudPurchaseOrder", 1)[0]
-    assert "quantity.stripTrailingZeros().scale() <= 6" in receipt_repository
-    assert "999999999999.999999" in receipt_repository
-    assert "6 منازل عشرية" in receipt_repository
-    assert "quantity.stripTrailingZeros().scale() > 6" in receipt_dialog
-    assert "6 منازل عشرية" in receipt_dialog
+    assert "quantity.stripTrailingZeros().scale() <= 0" in receipt_repository
+    assert "999999999999" in receipt_repository
+    assert "أدخل كمية صحيحة موجبة فقط" in receipt_dialog
+    assert "quantity.stripTrailingZeros().scale() > 0" in receipt_dialog
+    assert "quantities[line.id] = it.take(32)" in receipt_dialog
 
-    assert "qty.stripTrailingZeros().scale() <= 6" in order_dialog
+    assert "qty.stripTrailingZeros().scale() <= 0" in order_dialog
+    assert "line.quantity = it.take(32)" in order_dialog
     invoice_repository = repository.split("internal fun recordCommercialCloudSupplierInvoice", 1)[1]
     invoice_repository = invoice_repository.split("private fun commercialPurchaseReceiptPendingPreferences", 1)[0]
-    assert "quantity.stripTrailingZeros().scale() <= 6" in invoice_repository
+    assert "quantity.stripTrailingZeros().scale() <= 0" in invoice_repository
 
-def test_purchase_order_rpc_accepts_fractional_quantities_with_storage_precision():
-    migration = (ROOT / "supabase/migrations/20261026114729_commercial_purchase_order_fractional_quantities.sql").read_text(encoding="utf-8")
-    function = migration.split("CREATE OR REPLACE FUNCTION commercial_private.commercial_create_purchase_order", 1)[1]
+
+def test_purchase_order_rpc_is_overridden_to_reject_fractional_quantities():
+    historical = (ROOT / "supabase/migrations/20261026114729_commercial_purchase_order_fractional_quantities.sql").read_text(encoding="utf-8")
+    function = historical.split("CREATE OR REPLACE FUNCTION commercial_private.commercial_create_purchase_order", 1)[1]
     assert "scale(v_qty)>6" in function
-    assert "v_qty>999999999999.999999" in function
-    assert "v_qty<>trunc(v_qty)" not in function
+
+    enforcement = INTEGER_QUANTITY_MIGRATION.read_text(encoding="utf-8")
+    effective = enforcement.split("CREATE OR REPLACE FUNCTION commercial_private.commercial_create_purchase_order", 1)[1]
+    assert "v_qty<>trunc(v_qty)" in effective
+    assert "v_qty>999999999999" in effective
     for marker in (
         "purchase_management_permission_required",
         "purchase_idempotency_key_reused_with_different_request",
         "purchase_offering_currency_or_scope_mismatch",
         "commercial_audit_events",
     ):
-        assert marker in function
+        assert marker in effective
 
 
 def test_fractional_accrual_rounding_migration_is_present_and_replaces_accounting_triggers():

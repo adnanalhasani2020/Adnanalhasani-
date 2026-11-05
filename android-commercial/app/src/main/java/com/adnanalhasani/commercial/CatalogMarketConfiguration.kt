@@ -39,7 +39,7 @@ internal fun buildCatalogConfigurationItems(selectedIds: List<String>, unitRows:
         val base = baseCandidates.single()
         val sale = defaultSaleCandidates.singleOrNull() ?: saleCandidates.singleOrNull() ?: base
         val saleFactor = sale.optString("quantity_in_base").toBigDecimalOrNull()
-        if (saleFactor == null || saleFactor <= BigDecimal.ZERO || sale.optString("unit_code").isBlank()) {
+        if (saleFactor == null || saleFactor <= BigDecimal.ZERO || saleFactor.stripTrailingZeros().scale() > 0 || sale.optString("unit_code").isBlank()) {
             throw IllegalStateException("معامل تحويل وحدة البيع للصنف $id غير صالح؛ لم يتم اختلاق معامل بديل.")
         }
 

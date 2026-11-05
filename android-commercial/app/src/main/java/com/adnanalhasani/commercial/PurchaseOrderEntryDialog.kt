@@ -182,7 +182,7 @@ internal fun PurchaseOrderEntryDialog(
                                 )
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     OutlinedTextField(
-                                        value = line.quantity, onValueChange = { if (!attempted) line.quantity = it },
+                                        value = line.quantity, onValueChange = { if (!attempted) line.quantity = it.take(32) },
                                         label = { Text("الكمية") }, modifier = Modifier.weight(1f),
                                         singleLine = true, enabled = !attempted && !saving
                                     )
@@ -213,14 +213,14 @@ internal fun PurchaseOrderEntryDialog(
                             line.offeringId.isNotBlank() && line.description.isNotBlank() &&
                                 available?.offerings?.firstOrNull { it.id == line.offeringId }?.locationRef == locationId &&
                                 qty != null && qty > java.math.BigDecimal.ZERO &&
-                                qty.stripTrailingZeros().scale() <= 6 &&
+                                qty.stripTrailingZeros().scale() <= 0 &&
                                 (line.unitCostMinor.toLongOrNull() ?: -1L) >= 0L
                         }
                         when {
                             orderNumber.isBlank() -> error = "أدخل رقم أمر الشراء."
                             supplierId.isBlank() -> error = "اختر المورد."
                             locationId.isBlank() -> error = "اختر موقع الاستلام."
-                            !validLines -> error = "تحقق من عناصر المخزون والكمية الموجبة (حتى 6 خانات عشرية) وتكلفة الوحدة."
+                            !validLines -> error = "تحقق من عناصر المخزون والكمية الموجبة (أعداد صحيحة فقط) وتكلفة الوحدة."
                             !currenciesMatch -> error = "يجب أن تكون جميع البنود بعملة واحدة."
                             else -> { attempted = true; error = "" }
                         }

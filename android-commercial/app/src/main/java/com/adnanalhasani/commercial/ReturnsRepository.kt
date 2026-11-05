@@ -103,7 +103,7 @@ internal fun requestCommercialCloudSaleReturn(
     require(selected.isNotEmpty()) { "أدخل كمية مرتجعة لصنف واحد على الأقل." }
     val items = JSONArray()
     selected.forEach { (saleItemId, quantity) ->
-        require(saleItemId.isNotBlank() && quantity <= BigDecimal("100000") && quantity.scale() <= 3) { "كمية المرتجع غير صالحة؛ الحد الأقصى ثلاث منازل عشرية." }
+        require(saleItemId.isNotBlank() && quantity <= BigDecimal("100000") && quantity.stripTrailingZeros().scale() <= 0) { "كمية المرتجع يجب أن تكون عددًا صحيحًا موجبًا." }
         val item = JSONObject().put("sale_item_id", saleItemId)
             .put("quantity", quantity.toPlainString()).put("restock", true)
         unitCodes[saleItemId]?.takeIf { it.isNotBlank() }?.let { item.put("unit_code", it) }

@@ -207,7 +207,16 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn('val id = row.optString("id")', loader)
         self.assertIn('if (id.isBlank() || obligationId.isBlank() || invoiceId.isBlank() || supplierId.isBlank() || journalId.isBlank()', loader)
 
-    def test_inventory_movement_report_uses_scoped_source_and_preserves_fractional_quantity(self):
+    def test_sales_profitability_and_supplier_reports_reject_fractional_quantities(self):
+        sales_rows = SALES_ROWS.read_text(encoding="utf-8")
+        cost_profit = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CostProfitCalculations.kt").read_text(encoding="utf-8")
+        supplier_variance = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/SupplierInvoicePriceVarianceCalculations.kt").read_text(encoding="utf-8")
+        supplier_validation = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportSupplierValidation.kt").read_text(encoding="utf-8")
+        for source in (sales_rows, cost_profit, supplier_variance, supplier_validation):
+            with self.subTest(source=source[:60]):
+                self.assertIn("stripTrailingZeros().scale() <= 0", source)
+
+    def test_inventory_movement_report_uses_scoped_source_and_rejects_fractional_quantity(self):
         self.assertIn('"حركة المخزون الفعلية" ->', self.screen)
         start = self.inventory_repository.index("internal fun loadCommercialCloudStockMovements(")
         end = self.inventory_repository.index("\ninternal data class CommercialCloudStockAlert(", start)
@@ -215,6 +224,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn("commercial_stock_movements", loader)
         self.assertIn("offering.activity.organization_id=eq.$orgId", loader)
         self.assertIn("quantity_delta", loader)
+        self.assertIn("parseWholeInventoryQuantity(row.optString(\"quantity_delta\"), \"quantity_delta\")", loader)
         self.assertIn("quantityDelta.stripTrailingZeros().toPlainString()", self.screen)
         self.assertIn("reportLineAmount(row, cloudMode)", self.screen)
 

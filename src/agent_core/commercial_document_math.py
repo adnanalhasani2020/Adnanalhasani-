@@ -25,9 +25,8 @@ def _decimal(value, label: str) -> Decimal:
 def to_base_quantity(quantity, factor_to_base, *, label: str = "quantity") -> Decimal:
     """Convert a selling/receiving unit to the inventory base unit.
 
-    Example: 2 cartons × 12 pieces/carton = 24 pieces. Fractional base
-    quantities are allowed only when the product's base unit supports them;
-    the caller must enforce the configured base-unit precision.
+    Example: 2 cartons × 12 pieces/carton = 24 pieces. Selling quantities,
+    conversion factors, and resulting base quantities must all be whole numbers.
     """
     q = _decimal(quantity, label)
     factor = _decimal(factor_to_base, "factor_to_base")
@@ -35,6 +34,10 @@ def to_base_quantity(quantity, factor_to_base, *, label: str = "quantity") -> De
         raise ValueError(f"{label} must be greater than zero")
     if factor <= 0:
         raise ValueError("factor_to_base must be greater than zero")
+    if q != q.to_integral_value():
+        raise ValueError(f"{label} must be a whole number")
+    if factor != factor.to_integral_value():
+        raise ValueError("factor_to_base must be a whole number")
     # Decimal multiplication otherwise follows the ambient 28-digit context and
     # can silently round large inventory quantities. Size the local context for
     # the exact product of both coefficient digit sequences.
@@ -47,15 +50,17 @@ def to_base_quantity(quantity, factor_to_base, *, label: str = "quantity") -> De
 def validate_base_quantity_precision(quantity, decimal_places: int, *, label: str = "quantity") -> Decimal:
     """Return a positive base quantity only when it fits the configured precision.
 
-    ``decimal_places=0`` means whole base units; ``3`` allows thousandths.
-    The function never rounds stock quantities silently.
+    Commercial stock quantities are whole numbers only. ``decimal_places``
+    is retained for API compatibility but must be zero; the function never rounds.
     """
     value = _decimal(quantity, label)
     if value <= 0:
         raise ValueError(f"{label} must be greater than zero")
-    if type(decimal_places) is not int or decimal_places < 0 or decimal_places > 12:
-        raise ValueError("decimal_places must be an integer between 0 and 12")
-    quantum = Decimal(1).scaleb(-decimal_places)
+    if type(decimal_places) is not int or decimal_places != 0:
+        raise ValueError("commercial quantity decimal_places must be zero")
+    if value != value.to_integral_value():
+        raise ValueError(f"{label} must be a whole number")
+    quantum = Decimal(1)
     try:
         quantized = value.quantize(quantum)
     except InvalidOperation as exc:

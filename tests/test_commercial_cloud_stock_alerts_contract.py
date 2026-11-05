@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 MAIN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/StoreApp.kt"
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudStockAlertsScreen.kt"
 REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/InventoryRepository.kt"
+CATALOG_REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogRepository.kt"
 
 
 class CommercialCloudStockAlertsContractTests(unittest.TestCase):
@@ -14,6 +15,7 @@ class CommercialCloudStockAlertsContractTests(unittest.TestCase):
         cls.main = MAIN.read_text(encoding="utf-8") + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/MainActivity.kt").read_text(encoding="utf-8") + (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/LocalOperationalScreens.kt").read_text(encoding="utf-8")
         cls.screen = SCREEN.read_text(encoding="utf-8")
         cls.repository = REPOSITORY.read_text(encoding="utf-8")
+        cls.catalog_repository = CATALOG_REPOSITORY.read_text(encoding="utf-8")
 
     def test_screen_is_reachable_from_more_menu(self):
         self.assertIn('"تنبيهات المخزون السحابي" -> onCloudStockAlerts()', self.main)
@@ -23,7 +25,10 @@ class CommercialCloudStockAlertsContractTests(unittest.TestCase):
     def test_screen_uses_existing_cloud_inventory_projection(self):
         self.assertIn("loadCommercialCloudStockAlerts(context)", self.screen)
         self.assertIn("internal fun loadCommercialCloudStockAlerts", self.repository)
-        self.assertIn("availableQuantity = (onHand - reserved).coerceAtLeast(0.0)", self.repository)
+        self.assertIn("availableQuantity = onHand.subtract(reserved).toDouble()", self.repository)
+        self.assertIn("parseWholeInventoryQuantity(row.optString(\"quantity_on_hand\", \"0\"), \"quantity_on_hand\")", self.repository)
+        self.assertIn("reorderValue.stripTrailingZeros().scale() <= 0", self.catalog_repository)
+        self.assertIn("reorderValue.intValueExact()", self.catalog_repository)
         self.assertIn("organization_id=eq.$orgId", self.repository)
         self.assertIn("location_id=eq.$locationId", self.repository)
         self.assertIn("offering.activity_id=eq.$activityId", self.repository)

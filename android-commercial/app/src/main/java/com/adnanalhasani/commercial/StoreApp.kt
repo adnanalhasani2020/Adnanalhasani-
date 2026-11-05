@@ -425,11 +425,11 @@ internal fun StoreApp(context: Context) {
                 storeCloudIo.execute {
                     val result = runCatching {
                         if (catalogItem != null) {
-                            val created = createCommercialCloudCatalogInventoryItem(context,catalogItem.id,activityNodeCode,branchId,warehouseId,baseUnitCode,saleUnitCode,unitCode,name,price.toLong(),stock,reorderPoint.toDouble(),categoryId,creationKey)
+                            val created = createCommercialCloudCatalogInventoryItem(context,catalogItem.id,activityNodeCode,branchId,warehouseId,baseUnitCode,saleUnitCode,unitCode,name,price.toLong(),stock,reorderPoint,categoryId,creationKey)
                             val resultJson = JSONObject(created)
                             Pair(resultJson.optBoolean("created_new_offering",true),loadCommercialCloudInventory(context))
                         } else {
-                            createCommercialCloudInventoryItem(context,name,unitName,price.toLong(),stock,reorderPoint.toDouble(),categoryId,unitCode)
+                            createCommercialCloudInventoryItem(context,name,unitName,price.toLong(),stock,reorderPoint,categoryId,unitCode)
                             Pair(true,loadCommercialCloudInventory(context))
                         }
                     }

@@ -297,7 +297,7 @@ internal fun recordCommercialCloudSupplierInvoice(
         require(line.purchaseOrderItemId.isNotBlank() && line.quantity.isNotBlank()) { "بيانات بند الفاتورة غير مكتملة." }
         val quantity = line.quantity.toBigDecimalOrNull()
             ?: throw IllegalArgumentException("أدخل كمية صحيحة لكل بند.")
-        require(quantity > java.math.BigDecimal.ZERO && quantity.stripTrailingZeros().scale() <= 6) { "كمية الفاتورة يجب أن تكون موجبة وبحد أقصى 6 منازل عشرية." }
+        require(quantity > java.math.BigDecimal.ZERO && quantity.stripTrailingZeros().scale() <= 0) { "كمية الفاتورة يجب أن تكون عددًا صحيحًا موجبًا." }
         require(line.unitPriceMinor >= 0) { "سعر الوحدة لا يمكن أن يكون سالبًا." }
         lineArray.put(JSONObject()
             .put("purchase_order_item_id", line.purchaseOrderItemId)
@@ -413,10 +413,10 @@ internal fun receiveCommercialCloudPurchaseOrder(
             ?: throw IllegalArgumentException("كمية الاستلام غير صالحة.")
         require(
             quantity > java.math.BigDecimal.ZERO &&
-                quantity <= java.math.BigDecimal("999999999999.999999") &&
-                quantity.stripTrailingZeros().scale() <= 6
+                quantity <= java.math.BigDecimal("999999999999") &&
+                quantity.stripTrailingZeros().scale() <= 0
         ) {
-            "كمية الاستلام يجب أن تكون موجبة وبحد أقصى 6 منازل عشرية."
+            "كمية الاستلام يجب أن تكون موجبة وعدد صحيح موجب فقط."
         }
         lineArray.put(JSONObject().put("purchase_order_item_id", line.purchaseOrderItemId).put("quantity", quantity.stripTrailingZeros().toPlainString()))
     }
@@ -441,7 +441,7 @@ internal fun createCommercialCloudPurchaseOrder(
         val quantity = line.quantityOrdered.toBigDecimalOrNull()
             ?: throw IllegalArgumentException("كمية الطلب غير صالحة.")
         require(line.offeringId.isNotBlank() && line.description.isNotBlank() && quantity > java.math.BigDecimal.ZERO &&
-            quantity.stripTrailingZeros().scale() <= 6 && line.unitCostMinor >= 0L) { "بيانات بند أمر الشراء غير صالحة." }
+            quantity.stripTrailingZeros().scale() <= 0 && line.unitCostMinor >= 0L) { "بيانات بند أمر الشراء غير صالحة." }
         lineArray.put(JSONObject().put("offering_id", line.offeringId).put("item_description", line.description.trim())
             .put("quantity_ordered", quantity.stripTrailingZeros().toPlainString()).put("unit_cost_minor", line.unitCostMinor))
     }

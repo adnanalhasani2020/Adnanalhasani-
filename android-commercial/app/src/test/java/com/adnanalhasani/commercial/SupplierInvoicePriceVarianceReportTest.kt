@@ -26,15 +26,29 @@ class SupplierInvoicePriceVarianceReportTest {
         val report = calculateSupplierInvoicePriceVariance(
             invoice(
                 lines = listOf(
-                    SupplierInvoicePriceVarianceLineInput("1.5", 120, 180, 100),
-                    SupplierInvoicePriceVarianceLineInput("2.5", 208, 520, 200)
+                    SupplierInvoicePriceVarianceLineInput("2", 130, 260, 120),
+                    SupplierInvoicePriceVarianceLineInput("3", 218, 654, 208)
                 ),
-                subtotal = 700
+                subtotal = 914
             )
         )
-        assertEquals(650L, report.expectedSubtotalMinor)
-        assertEquals(700L, report.invoiceSubtotalMinor)
+        assertEquals(864L, report.expectedSubtotalMinor)
+        assertEquals(914L, report.invoiceSubtotalMinor)
         assertEquals(50L, report.varianceMinor)
+    }
+
+    @Test
+    fun rejectsFractionalSupplierInvoiceQuantities() {
+        assertThrows(IllegalArgumentException::class.java) {
+            calculateSupplierInvoicePriceVariance(
+                invoice(
+                    listOf(SupplierInvoicePriceVarianceLineInput("1.5", 100, 150, 100)),
+                    subtotal = 150,
+                    tax = 0,
+                    freight = 0
+                )
+            )
+        }
     }
 
     @Test

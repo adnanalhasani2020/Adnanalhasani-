@@ -88,4 +88,20 @@ class CatalogMarketConfigurationTest {
         assertFalse(ambiguous.isSuccess)
         assertFalse(invalidFactor.isSuccess)
     }
+    @Test
+    fun rejectsFractionalCatalogUnitConversionFactor() {
+        val result = runCatching {
+            buildCatalogConfigurationItems(
+                listOf("item-1"),
+                JSONArray(
+                    """[
+                      {"product_id":"item-1","unit_role":"base","quantity_in_base":"1","unit_code":"EA"},
+                      {"product_id":"item-1","unit_role":"sale","quantity_in_base":"1.5","unit_code":"BOX","is_default":true}
+                    ]"""
+                )
+            )
+        }
+        assertTrue(result.isFailure)
+    }
+
 }

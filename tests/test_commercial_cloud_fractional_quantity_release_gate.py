@@ -1,36 +1,67 @@
 from pathlib import Path
 from catalog_source_helpers import catalog_android_source
 
-
 ROOT = Path(__file__).resolve().parents[1]
 GATES = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudReleaseGates.kt"
 SALE_COMPOSER = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudSaleComposerScreen.kt"
 RETURNS_SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudReturnsScreen.kt"
+QUANTITY_MATH = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialQuantityMath.kt"
+INTEGER_MIGRATION = ROOT / "supabase/migrations/20261105123000_commercial_integer_quantity_enforcement.sql"
 
 
-def test_fractional_cloud_quantity_gate_matches_unmigrated_production_rpc():
-    gates = GATES.read_text(encoding="utf-8")
-    assert "COMMERCIAL_CLOUD_FRACTIONAL_QUANTITY_RPC_READY = false" in gates
-    assert "20261103020000" in gates
-    assert "20261103020100" in gates
+def test_sale_and_return_quantity_parser_rejects_all_fractional_input():
+    math = QUANTITY_MATH.read_text(encoding="utf-8")
+    assert 'Regex("^[0-9]{1,6}$")' in math
+    assert "quantity.stripTrailingZeros().scale() <= 0" in math
+    assert "quantity.stripTrailingZeros().scale() > 0" in math
+    assert "0.5 أو 1.25" not in SALE_COMPOSER.read_text(encoding="utf-8")
 
 
-def test_sale_composer_blocks_fractional_quantity_before_cloud_rpc():
-    screen = SALE_COMPOSER.read_text(encoding="utf-8")
-    assert "hasFractionalSellingQuantity" in screen
-    assert "fractionalSellingQuantityBlocked" in screen
-    assert "&& !fractionalSellingQuantityBlocked" in screen
-    assert "قاعدة الإنتاج الحالية لا تقبل كميات البيع العشرية" in screen
-    assert screen.index("fractionalSellingQuantityBlocked") < screen.index("checkoutCommercialCloudSaleMulti(")
+def test_sale_and_return_screens_preserve_fractional_input_for_rejection():
+    sale = SALE_COMPOSER.read_text(encoding="utf-8")
+    returns = RETURNS_SCREEN.read_text(encoding="utf-8")
+    assert "raw.any { Character.digit(it, 10) < 0 }" in sale
+    assert "raw.any { Character.digit(it, 10) < 0 }" in returns
+    assert "raw.map { ch -> ('0'.code + Character.digit(ch, 10)).toChar() }" in sale
+    assert "raw.map { ch -> ('0'.code + Character.digit(ch, 10)).toChar() }" in returns
+    assert "الكمية (عدد صحيح فقط)" in sale
+    assert "عدد صحيح" in returns
 
 
-def test_return_screen_blocks_fractional_quantity_before_cloud_rpc():
-    screen = RETURNS_SCREEN.read_text(encoding="utf-8")
-    assert "hasFractionalReturnQuantity" in screen
-    assert "fractionalReturnQuantityBlocked" in screen
-    assert "!fractionalReturnQuantityBlocked" in screen
-    assert "قاعدة الإنتاج الحالية لا تقبل كميات مرتجعة عشرية" in screen
-    assert screen.index("fractionalReturnQuantityBlocked") < screen.index("requestCommercialCloudSaleReturn(")
+def test_cloud_rpcs_and_numeric_storage_are_integer_only():
+    migration = INTEGER_MIGRATION.read_text(encoding="utf-8")
+    assert "commercial_checkout_sale_multi_base_units" in migration
+    assert "v_effective_key := CASE WHEN v_legacy_match THEN v_legacy_key ELSE btrim(p_idempotency_key) END;" in migration
+    assert "md5(v_original_lines::text)" in migration  # retained only to adopt pre-migration retry keys
+    assert "CREATE TABLE IF NOT EXISTS public.commercial_sale_unit_idempotency" in migration
+    assert "v_request_fingerprint" in migration
+    assert "idempotency_key_reused_with_different_sell_unit_request" in migration
+    assert "base_idempotency_key" in migration
+    assert "commercial_get_sale_unit_idempotency" in migration
+    assert "commercial_record_sale_unit_idempotency" in migration
+    assert "REVOKE ALL ON public.commercial_sale_unit_idempotency FROM PUBLIC,anon,authenticated" in migration
+    assert "commercial_request_sale_return_base_units" in migration
+    assert "v_qty<>trunc(v_qty)" in migration
+    assert "p_quantity<>trunc(p_quantity)" in migration
+    assert "fractional_historical_quantity_requires_reconciliation" in migration
+    assert "ADD CONSTRAINT" in migration
+    assert "data_type IN ('numeric','decimal','real','double precision')" in migration
+    assert "IN (''NaN'',''Infinity'',''-Infinity'')" in migration
+    assert "NOT IN (''NaN'',''Infinity'',''-Infinity'')" in migration
+    assert "commercial_purchase_order_items" in migration
+    assert "commercial_sale_items" in migration
+    assert "'commercial_global_units'" not in migration
+    assert "CREATE OR REPLACE FUNCTION public.commercial_customer_portal_create_order(" in migration
+    assert "CREATE OR REPLACE FUNCTION public.commercial_customer_portal_create_delegated_order(" in migration
+    assert "CREATE OR REPLACE FUNCTION public.commercial_customer_portal_create_multi_service_booking(" in migration
+    assert "commercial_private.commercial_create_inventory_item" in migration
+    assert "commercial_catalog_create_inventory_item_from_global" in migration
+    assert "p_reorder_point <> trunc(p_reorder_point)" in migration
+    assert "commercial_private.commercial_record_supplier_invoice(" in migration
+    supplier_invoice_rpc = migration.split("CREATE OR REPLACE FUNCTION commercial_private.commercial_record_supplier_invoice(", 1)[1].split("$function$;", 1)[0]
+    assert "v_qty <> trunc(v_qty)" in supplier_invoice_rpc
+    assert "v_qty <> trunc(v_qty)" in migration
+
 
 def test_payment_request_screens_do_not_call_unpublished_production_rpcs():
     gates = GATES.read_text(encoding="utf-8")
@@ -42,7 +73,7 @@ def test_payment_request_screens_do_not_call_unpublished_production_rpcs():
     assert "لن يتم إرسال أي طلب" in customer
 
 
-def test_supplier_invoice_and_unmapped_item_creation_are_gated_until_migrations():
+def test_supplier_invoice_and_unmapped_item_creation_remain_gated_until_migrations():
     gates = GATES.read_text(encoding="utf-8")
     supplier = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/SupplierInvoiceEntryDialog.kt").read_text(encoding="utf-8")
     catalog = catalog_android_source()
@@ -51,12 +82,11 @@ def test_supplier_invoice_and_unmapped_item_creation_are_gated_until_migrations(
     assert "COMMERCIAL_CLOUD_SUPPLIER_INVOICE_DATES_RPC_READY" in supplier
     assert "COMMERCIAL_CLOUD_UNMAPPED_INVOICE_ITEM_RPC_READY" in catalog
 
-def test_returns_block_mutable_unit_factors_until_snapshot_rpc_is_deployed():
+
+def test_return_unit_conversion_remains_bound_to_original_invoice_snapshot():
     gates = GATES.read_text(encoding="utf-8")
     screen = RETURNS_SCREEN.read_text(encoding="utf-8")
     assert "COMMERCIAL_CLOUD_RETURN_UNIT_SNAPSHOT_RPC_READY = false" in gates
-    assert "hasNonBaseReturnUnit" in screen
     assert "returnUnitSnapshotBlocked" in screen
     assert "&& !returnUnitSnapshotBlocked" in screen
     assert "معامل الوحدة الحالي قد يختلف عن معامل الفاتورة وقت البيع" in screen
-    assert "requestCommercialCloudSaleReturn(context, target.id, requestReason, requestNote, quantities, emptyMap())" in screen

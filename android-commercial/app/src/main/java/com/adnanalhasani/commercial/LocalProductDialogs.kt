@@ -69,12 +69,17 @@ internal fun SaleEntryDialog(
     val effectiveUnitIndex = selectedUnitIndex.takeIf { it in saleUnits.indices } ?: defaultUnitIndex
     val selectedUnit = saleUnits[effectiveUnitIndex]
     val basePrice = product.price.replace(",", "").replace(" ر.ي", "").toIntOrNull() ?: 0
-    val suggestedUnitPrice = kotlin.math.round(basePrice.toDouble() * selectedUnit.quantityInBase).toInt()
+    val suggestedUnitPrice = runCatching {
+        BigDecimal.valueOf(basePrice.toLong()).multiply(BigDecimal.valueOf(selectedUnit.quantityInBase))
+            .setScale(0, java.math.RoundingMode.HALF_UP).intValueExact()
+    }.getOrDefault(0)
     val quantity = quantityText.toIntOrNull()
     val unitPrice = priceOverrideText.toIntOrNull() ?: suggestedUnitPrice
-    val baseQuantityExact = (quantity ?: 0) * selectedUnit.quantityInBase
-    val baseQuantity = kotlin.math.round(baseQuantityExact).toInt()
-    val quantityIsWholeBaseUnits = kotlin.math.abs(baseQuantityExact - baseQuantity) < 0.000001
+    val baseQuantityExact = runCatching {
+        Math.multiplyExact((quantity ?: 0).toLong(), selectedUnit.quantityInBase)
+    }.getOrNull()
+    val baseQuantity = baseQuantityExact?.takeIf { it in 1L..Int.MAX_VALUE.toLong() }?.toInt() ?: 0
+    val quantityIsWholeBaseUnits = baseQuantityExact != null && baseQuantityExact in 1L..Int.MAX_VALUE.toLong()
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("فاتورة بيع جديدة", fontWeight = FontWeight.Bold, color = Ink) },
@@ -118,7 +123,7 @@ internal fun SaleEntryDialog(
                 }
                 OutlinedTextField(
                     value = quantityText,
-                    onValueChange = { quantityText = it.filter(Char::isDigit).take(4); error = null },
+                    onValueChange = { quantityText = it.take(32); error = null },
                     label = { Text("الكمية بوحدة البيع المختارة") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
@@ -198,7 +203,7 @@ internal fun EditProductDialog(
                 Text("تاريخ الإدخال: ${SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(product.createdAt))} • الموظف/المستخدم: ${product.createdBy.ifBlank { "محلي / غير محدد" }}", color = Muted, fontSize = 11.sp)
                 OutlinedTextField(name, { name = it; error = null }, label = { Text("اسم المنتج") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(category, { category = it; error = null }, label = { Text("التصنيف") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(stockText, { stockText = it.filter(Char::isDigit).take(7); error = null }, label = { Text("الكمية الحالية") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(stockText, { stockText = it.take(32); error = null }, label = { Text("الكمية الحالية") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(priceText, { priceText = it.filter(Char::isDigit).take(7); error = null }, label = { Text("سعر البيع للوحدة (ر.ي)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(costText, { costText = it.filter(Char::isDigit).take(7); error = null }, label = { Text("تكلفة شراء الوحدة (ر.ي)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
@@ -299,7 +304,7 @@ internal fun AddProductDialog(
                     }
                     if (cloudUnits.isEmpty()) Text("تعذر تحميل وحدات القياس النشطة. أعد المحاولة بعد التحقق من الاتصال.", color = Muted, fontSize = 11.sp)
                 } else OutlinedTextField(unitName, { unitName = it; error = null }, label = { Text("الوحدة") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                if (cloudMode) OutlinedTextField(reorderPointText, { reorderPointText = it.filter(Char::isDigit).take(7); error = null }, label = { Text("حد التنبيه للمخزون المنخفض") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                if (cloudMode) OutlinedTextField(reorderPointText, { reorderPointText = it.take(32); error = null }, label = { Text("حد التنبيه للمخزون المنخفض") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(stockText, { stockText = it.filter(Char::isDigit).take(7); error = null }, label = { Text(if (cloudMode) "الكمية الافتتاحية (بوحدة الأساس)" else "الكمية الافتتاحية") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(priceText, { priceText = it.filter(Char::isDigit).take(7); error = null }, label = { Text("سعر البيع للوحدة (ر.ي)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 if (!cloudMode) OutlinedTextField(costText, { costText = it.filter(Char::isDigit).take(7); error = null }, label = { Text("تكلفة شراء الوحدة (ر.ي)") }, singleLine = true, modifier = Modifier.fillMaxWidth())

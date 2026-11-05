@@ -12,28 +12,28 @@ internal data class CommercialCloudCheckoutLine(
     val unitCode: String = "each"
 )
 
-/** Render inventory quantities without losing stored decimal precision. */
-internal fun formatCommercialStockQuantity(value: BigDecimal): String =
-    value.stripTrailingZeros().toPlainString()
+/** Render a validated whole inventory quantity. Never format a fractional stock value. */
+internal fun formatCommercialStockQuantity(value: BigDecimal): String {
+    require(value.stripTrailingZeros().scale() <= 0) { "كمية المخزون يجب أن تكون عددًا صحيحًا." }
+    return value.stripTrailingZeros().toPlainString()
+}
 
-/** Compare the exact available quantity to the configured reorder threshold. */
-internal fun isCommercialStockLow(value: BigDecimal, threshold: Int): Boolean =
-    value <= BigDecimal.valueOf(threshold.toLong())
+/** Compare validated whole available quantity to the configured integer reorder threshold. */
+internal fun isCommercialStockLow(value: BigDecimal, threshold: Int): Boolean {
+    require(value.stripTrailingZeros().scale() <= 0 && threshold >= 0) { "كمية المخزون وحد التنبيه يجب أن يكونا عددين صحيحين غير سالبين." }
+    return value <= BigDecimal.valueOf(threshold.toLong())
+}
 
-/** Parse a positive selling quantity with up to three decimal places. */
+/** Parse a positive whole selling quantity. Fractional quantities are rejected at the domain boundary. */
 internal fun parseCommercialCheckoutQuantity(value: String): BigDecimal? {
-    var normalized = value.trim().replace(',', '.').replace('\u066B', '.')
-    if (normalized.startsWith(".")) normalized = "0$normalized"
+    val normalized = value.trim()
     val ascii = buildString {
         normalized.forEach { ch ->
-            if (ch == '.') append(ch)
-            else {
-                val digit = Character.digit(ch, 10)
-                if (digit >= 0) append(('0'.code + digit).toChar()) else append(ch)
-            }
+            val digit = Character.digit(ch, 10)
+            if (digit >= 0) append(('0'.code + digit).toChar()) else append(ch)
         }
     }
-    if (!Regex("^(0|[1-9][0-9]{0,5})(\\.[0-9]{1,3})?$").matches(ascii)) return null
+    if (!Regex("^[0-9]{1,6}$").matches(ascii)) return null
     return runCatching { BigDecimal(ascii) }
         .getOrNull()
         ?.takeIf { it.signum() > 0 && it <= BigDecimal("100000") }
@@ -48,8 +48,8 @@ internal fun aggregateCommercialCheckoutLines(
     lines.forEach { line ->
         val quantity = line.quantity.stripTrailingZeros()
         require(line.offeringId.isNotBlank() && quantity.signum() > 0 &&
-            quantity <= BigDecimal("100000") && quantity.scale() <= 3 && line.unitCode.isNotBlank()) {
-            "تحقق من الأصناف والكميات ووحدة البيع؛ الحد الأقصى ثلاث منازل عشرية."
+            quantity <= BigDecimal("100000") && quantity.stripTrailingZeros().scale() <= 0 && line.unitCode.isNotBlank()) {
+            "تحقق من الأصناف والكميات ووحدة البيع؛ الكمية يجب أن تكون عددًا صحيحًا موجبًا."
         }
         val key = line.offeringId to line.unitCode
         val total = (totals[key] ?: BigDecimal.ZERO).add(quantity)
@@ -63,17 +63,12 @@ internal fun aggregateCommercialCheckoutLines(
 
 internal fun maxCommercialReturnQuantity(remainingBaseUnits: Long, factor: Long): BigDecimal {
     if (remainingBaseUnits <= 0L || factor <= 0L) return BigDecimal.ZERO
-    val thousand = BigInteger.valueOf(1000L)
-    val factorValue = BigInteger.valueOf(factor)
-    val maxMilliUnits = BigInteger.valueOf(remainingBaseUnits).multiply(thousand).divide(factorValue)
-    val representableStep = thousand.divide(factorValue.gcd(thousand))
-    val allowedMilliUnits = maxMilliUnits.divide(representableStep).multiply(representableStep)
-    return BigDecimal(allowedMilliUnits, 3).stripTrailingZeros()
+    return BigDecimal.valueOf(remainingBaseUnits / factor)
 }
 
 /** Recover the exact conversion factor saved by a completed sale line. */
 internal fun commercialSavedSellingUnitFactor(baseQuantity: Long, sellingQuantity: BigDecimal): Long? {
-    if (baseQuantity <= 0L || sellingQuantity.signum() <= 0) return null
+    if (baseQuantity <= 0L || sellingQuantity.signum() <= 0 || sellingQuantity.stripTrailingZeros().scale() > 0) return null
     return runCatching {
         BigDecimal.valueOf(baseQuantity)
             .divide(sellingQuantity)
@@ -106,7 +101,7 @@ internal fun formatCommercialOperationalAmount(amountMinor: Long, currencyCode: 
 
 /** Calculate a customer-portal line total in minor units without binary floating-point drift. */
 internal fun commercialPortalLineTotalMinor(quantity: BigDecimal, priceMinor: Long): Long? {
-    if (quantity.signum() <= 0 || priceMinor < 0) return null
+    if (quantity.signum() <= 0 || quantity.stripTrailingZeros().scale() > 0 || priceMinor < 0) return null
     return runCatching {
         quantity.multiply(BigDecimal.valueOf(priceMinor))
             .setScale(0, RoundingMode.HALF_UP)

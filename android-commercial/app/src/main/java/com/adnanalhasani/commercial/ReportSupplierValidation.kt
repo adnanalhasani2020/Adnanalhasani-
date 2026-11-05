@@ -61,7 +61,7 @@ internal fun reportSupplierPurchaseSummaryValidationError(
                 invoice.lines.isEmpty() ||
                 invoice.lines.any { line ->
                     line.lineTotalMinor < 0L || line.unitPriceMinor < 0L ||
-                        line.quantity.toBigDecimalOrNull()?.signum() != 1
+                        line.quantity.toBigDecimalOrNull()?.let { it.signum() == 1 && it.stripTrailingZeros().scale() <= 0 } != true
                 } ||
                 runCatching { sumReportAmountsExactly(invoice.lines.map { it.lineTotalMinor }) }.getOrNull() != invoice.subtotalMinor ||
                 runCatching {
