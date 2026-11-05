@@ -47,6 +47,7 @@ CREATE TABLE public.commercial_inventory_balances(
   quantity_on_hand numeric(20,6) NOT NULL CHECK(quantity_on_hand>=0),
   quantity_reserved numeric(20,6) NOT NULL DEFAULT 0 CHECK(quantity_reserved>=0 AND quantity_reserved<=quantity_on_hand),
   unit_cost_minor bigint CHECK(unit_cost_minor IS NULL OR unit_cost_minor>=0),
+  updated_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE(organization_id,location_id,offering_id)
 );
 CREATE TABLE public.commercial_inventory_costing_policies(
