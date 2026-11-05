@@ -39,6 +39,8 @@ def test_cloud_rpcs_and_numeric_storage_are_integer_only():
     assert "fractional_historical_quantity_requires_reconciliation" in migration
     assert "ADD CONSTRAINT" in migration
     assert "data_type IN ('numeric','decimal','real','double precision')" in migration
+    assert "IN (''NaN'',''Infinity'',''-Infinity'')" in migration
+    assert "NOT IN (''NaN'',''Infinity'',''-Infinity'')" in migration
     assert "commercial_purchase_order_items" in migration
     assert "commercial_sale_items" in migration
     assert "'commercial_global_units'" not in migration
