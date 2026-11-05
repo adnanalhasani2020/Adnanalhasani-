@@ -25,6 +25,26 @@ private data class PurchaseDraftLine(
 private val purchaseDraftExecutor = Executors.newSingleThreadExecutor()
 private val purchaseDraftMain = Handler(Looper.getMainLooper())
 
+private fun getOrCreatePurchaseRequestBatchId(context: Context): String {
+    val preferences = context.getSharedPreferences("merchant_purchase_request_pending_v1", Context.MODE_PRIVATE)
+    val existing = preferences.getString("batch_id", null).orEmpty()
+    if (existing.isNotBlank()) return existing
+    val created = UUID.randomUUID().toString()
+    check(preferences.edit().putString("batch_id", created).commit()) {
+        "تعذر حفظ مفتاح طلب الشراء قبل الإرسال؛ لم يتم إنشاء الأوامر."
+    }
+    return preferences.getString("batch_id", null).orEmpty().also {
+        check(it.isNotBlank()) { "تعذر تأكيد حفظ مفتاح طلب الشراء." }
+    }
+}
+
+private fun clearPurchaseRequestBatchId(context: Context, batchId: String) {
+    val preferences = context.getSharedPreferences("merchant_purchase_request_pending_v1", Context.MODE_PRIVATE)
+    if (preferences.getString("batch_id", null) == batchId) {
+        check(preferences.edit().remove("batch_id").commit()) { "تعذر مسح مفتاح طلب الشراء بعد تأكيد الحفظ." }
+    }
+}
+
 @Composable
 internal fun MerchantPurchaseRequestScreen(context: Context, onBack: () -> Unit) {
     var options by remember { mutableStateOf<CommercialPurchaseOrderOptions?>(null) }
@@ -70,7 +90,7 @@ internal fun MerchantPurchaseRequestScreen(context: Context, onBack: () -> Unit)
                 Text(selectedOffering?.let { "${it.name} • المتاح ${it.availableQuantity} ${it.unitName}" } ?: "اختر صنفًا من الكتالوج")
             }
             DropdownMenu(expanded = offeringMenu, onDismissRequest = { offeringMenu = false }) {
-                data?.offerings?.forEach { item ->
+                data?.offerings?.filter { it.locationRef == selectedLocation }?.forEach { item ->
                     DropdownMenuItem(text = { Text(item.name) }, onClick = { selectedOffering = item; offeringMenu = false })
                 }
             }
@@ -87,7 +107,7 @@ internal fun MerchantPurchaseRequestScreen(context: Context, onBack: () -> Unit)
         }
         OutlinedTextField(value = quantity, onValueChange = { quantity = it.filter(Char::isDigit).take(9) },
             label = { Text("الكمية المطلوبة (عدد صحيح)") }, modifier = Modifier.fillMaxWidth())
-        Button(enabled = !busy && selectedOffering != null && selectedSupplier.isNotBlank() &&
+        Button(enabled = !busy && selectedOffering != null && selectedOffering?.locationRef == selectedLocation && selectedSupplier.isNotBlank() &&
             quantity.toLongOrNull()?.let { it > 0 } == true, onClick = {
             val offering = selectedOffering ?: return@Button
             val newLine = PurchaseDraftLine(offering, selectedSupplier, quantity, 0L)
@@ -125,7 +145,8 @@ internal fun MerchantPurchaseRequestScreen(context: Context, onBack: () -> Unit)
             busy = true; error = ""; notice = "جارٍ إنشاء أوامر الشراء..."
             val grouped = lines.groupBy { it.supplierId }
             purchaseDraftExecutor.execute {
-                val result = runCatching {
+                val batchId = runCatching { getOrCreatePurchaseRequestBatchId(context) }
+                val result = batchId.mapCatching { stableBatchId ->
                     grouped.map { (supplierId, supplierLines) ->
                         val currencies = supplierLines.map { it.offering.currencyCode }.distinct()
                         require(currencies.size == 1) { "أصناف المورد الواحد يجب أن تكون بعملة واحدة." }
@@ -133,12 +154,13 @@ internal fun MerchantPurchaseRequestScreen(context: Context, onBack: () -> Unit)
                             "PO-" + UUID.randomUUID().toString().take(8).uppercase(), currencies.first(),
                             selectedLocation, supplierLines.map { line ->
                                 CommercialPurchaseOrderLineInput(line.offering.id, line.offering.name, line.quantity, line.unitCostMinor)
-                            }, UUID.randomUUID().toString(), "طلب شراء أنشئ من كتالوج الأصناف.")
+                            }, UUID.nameUUIDFromBytes("$stableBatchId:$supplierId".toByteArray(Charsets.UTF_8)).toString(), "طلب شراء أنشئ من كتالوج الأصناف.")
                     }
                 }
                 purchaseDraftMain.post {
                     busy = false
                     result.onSuccess { created ->
+                        clearPurchaseRequestBatchId(context, batchId.getOrThrow())
                         notice = "تم إنشاء ${created.size} أمر شراء مسودة حسب المورد. أدخل الأسعار وشروط الدفع من شاشة أوامر الشراء."
                         lines = emptyList()
                     }.onFailure { error = it.message ?: "تعذر إنشاء طلب الشراء." }
