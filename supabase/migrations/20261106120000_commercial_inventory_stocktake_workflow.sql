@@ -406,6 +406,17 @@ BEGIN
     ORDER BY (p.location_id IS NOT NULL) DESC LIMIT 1;
     v_method := coalesce(v_method,'weighted_average');
 
+    IF v_method='weighted_average' AND v_balance.quantity_on_hand>0 AND (
+      v_balance.unit_cost_minor IS NULL OR EXISTS (
+        SELECT 1 FROM public.commercial_inventory_cost_layers l
+        WHERE l.organization_id=v_stocktake.organization_id AND l.location_id=v_stocktake.location_id
+          AND l.offering_id=v_line.offering_id AND l.quantity_remaining>0
+          AND l.unit_cost_minor<>v_balance.unit_cost_minor
+      )
+    ) THEN
+      RAISE EXCEPTION 'inventory_stocktake_weighted_average_layer_cost_mismatch' USING ERRCODE='55000';
+    END IF;
+
     IF v_diff>0 THEN
       IF v_line.adjustment_unit_cost_minor IS NULL THEN
         RAISE EXCEPTION 'inventory_stocktake_positive_variance_cost_required' USING ERRCODE='55000';
@@ -587,6 +598,17 @@ BEGIN
       AND (p.location_id=v_stocktake.location_id OR p.location_id IS NULL)
     ORDER BY (p.location_id IS NOT NULL) DESC LIMIT 1;
     v_method := coalesce(v_method,'weighted_average');
+
+    IF v_method='weighted_average' AND v_balance.quantity_on_hand>0 AND (
+      v_balance.unit_cost_minor IS NULL OR EXISTS (
+        SELECT 1 FROM public.commercial_inventory_cost_layers l
+        WHERE l.organization_id=v_stocktake.organization_id AND l.location_id=v_stocktake.location_id
+          AND l.offering_id=v_line.offering_id AND l.quantity_remaining>0
+          AND l.unit_cost_minor<>v_balance.unit_cost_minor
+      )
+    ) THEN
+      RAISE EXCEPTION 'inventory_stocktake_weighted_average_layer_cost_mismatch' USING ERRCODE='55000';
+    END IF;
 
     SELECT coalesce(sum(quantity_remaining),0) INTO v_layer_qty
     FROM public.commercial_inventory_cost_layers
