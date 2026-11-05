@@ -57,6 +57,7 @@ internal fun StoreApp(context: Context) {
     var showPersonalAccounts by remember { mutableStateOf(false) }
     var personalWorkNotesPage by remember { mutableStateOf(false) }
     var barcodeScannerPage by remember { mutableStateOf(false) }
+    var adsPage by remember { mutableStateOf(false) }
     var showNotifications by remember { mutableStateOf(false) }
     var showCatalog by remember { mutableStateOf(false) }
     var pendingCatalogProduct by remember { mutableStateOf<CatalogProduct?>(null) }
@@ -263,6 +264,8 @@ internal fun StoreApp(context: Context) {
                 PersonalWorkNotesScreen(context = context, onBack = { personalWorkNotesPage = false })
             } else if (barcodeScannerPage) {
                 BarcodeScannerScreen(onBack = { barcodeScannerPage = false }, onBarcodeFound = { code -> query = code; barcodeScannerPage = false })
+            } else if (adsPage) {
+                CommercialAdsScreen(context = context, onBack = { adsPage = false })
             } else if (customerPaymentRequestsPage) {
                 CustomerPortalPaymentRequestsScreen(
                     context = context,
@@ -305,7 +308,7 @@ internal fun StoreApp(context: Context) {
                     }
                 )
             } else when (tab) {
-                0 -> Dashboard(products = inventory, sales = sales, cloudMode = cloudMode, onNewSale = { if (cloudMode) cloudSaleComposerPage = true else newSale = true }, onInventory = { tab = 2 })
+                0 -> Dashboard(products = inventory, sales = sales, cloudMode = cloudMode, onNewSale = { if (cloudMode) cloudSaleComposerPage = true else newSale = true }, onInventory = { tab = 2 }, context = context, onAds = { adsPage = true })
                 1 -> SalesScreen(
                     sales = sales,
                     cloudMode = cloudMode,
@@ -387,7 +390,7 @@ internal fun StoreApp(context: Context) {
                     else -> if (showPersonalAccounts) PersonalAccountsScreen(onBack = { showPersonalAccounts = false }) else if (showActivityProfile) ActivityProfileScreen(
                         onBack = { showActivityProfile = false; cloudContextRevision++ },
                         onCatalog = { showActivityProfile = false; cloudContextRevision++; showCatalog = true }
-                    ) else MoreScreen(cloudMode = cloudMode, onPersonalAccounts = { showPersonalAccounts = true }, onPersonalWorkNotes = { personalWorkNotesPage = true }, onCustomers = {
+                    ) else MoreScreen(cloudMode = cloudMode, onPersonalAccounts = { showPersonalAccounts = true }, onPersonalWorkNotes = { personalWorkNotesPage = true }, onAds = { adsPage = true }, onCustomers = {
                     showDebts = true
                 }, onReports = { showReportsCenter = true }, onExpenses = { showExpenses = true }, onActivityProfile = { showActivityProfile = true }, onCatalog = { showCatalog = true }, onMasterData = { showMasterData = true }, onCloudOperational = { cloudOperationalPage = it }, onCloudSales = { cloudSalesPage = true }, onCloudPurchases = { cloudPurchasesPage = true }, onCloudStockAlerts = { cloudStockAlertsPage = true }, onUnitsDirectory = { cloudUnitsPage = true }, onCustomerPortal = { customerPortalPage = true }, onCustomerOrders = { customerOrderFulfillmentPage = true }, onCustomerSupplyRequests = { customerSupplyRequestsPage = true }, onCreatePurchaseRequest = { merchantPurchaseRequestPage = true }, onBackup = { cloudNotice = "واجهة النسخ الاحتياطي لم تُربط بعد بعملية تصدير واستعادة موثوقة. لم يتم إنشاء نسخة غير مكتملة أو الادعاء بحفظها." })
                 }
