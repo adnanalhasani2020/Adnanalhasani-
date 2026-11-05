@@ -38,7 +38,10 @@ private fun inventoryStocktakeContext(context: Context): InventoryStocktakeConte
     require(organizationId.isNotBlank() && activityId.isNotBlank() && locationId.isNotBlank()) {
         "بيانات المؤسسة والنشاط والفرع غير مكتملة."
     }
-    val (_, access) = commercialMasterDataAccess(context)
+    val (accessOrganizationId, access) = commercialMasterDataAccess(context)
+    require(accessOrganizationId == organizationId) {
+        "تغيرت المؤسسة النشطة أثناء تجهيز الجرد. لم نرسل أي عملية؛ أعد اختيار المؤسسة."
+    }
     return InventoryStocktakeContext(organizationId, activityId, locationId, access)
 }
 
