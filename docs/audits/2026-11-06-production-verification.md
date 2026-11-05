@@ -29,7 +29,7 @@ Observed 2026-11-05:
 - The work branch adds an Android screen, precise decimal availability reading, branch-scoped warehouse selection, persisted idempotency keys, and a reservation-aware allocation guard.
 - This remains an optional sub-ledger. It does not yet post sales, receipts, returns, or cost allocations by storage location and does not replace the branch-level stock balance.
 - The screen is gated when the storage schema or RPCs are unavailable.
-- A full migration replay and authenticated SQL integration tests are still required. Do not apply these migrations to production as part of this development pass.
+- A full migration replay and authenticated SQL integration tests are still required. The repository now has a disposable local Supabase replay workflow on `main` (merged through PR #760); this PR's next synchronization will exercise it against the full migration history and pgTAP suite. Do not apply these migrations to production as part of this development pass.
 
 ## Required next actions
 1. Review the 86 callable SECURITY DEFINER functions in groups, preserving intentional RPC entry points while proving tenant/role checks in each body.
