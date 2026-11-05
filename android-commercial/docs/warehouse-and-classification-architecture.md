@@ -65,7 +65,7 @@ This is an additive first slice, not a replacement of the branch-level stock sou
 - Transfers move quantity between two active stockable locations in the same warehouse and do not alter branch-level quantity or financial cost layers.
 - No existing inventory quantity is backfilled or silently assigned to a bin. Existing stock remains unallocated until a manager explicitly allocates it.
 
-**Deployment status:** migration committed to GitHub, but not applied to Supabase production. Android screens do not yet expose allocation/transfer actions. Do not treat the feature as available to end users until SQL tests, live-schema review, Android integration, and reconciliation checks are complete.
+**Deployment status:** migration committed to GitHub, but not applied to Supabase production. Android repository read/RPC wrappers are now present and preserve `numeric(20,6)` quantities, but the Android screen does not yet expose allocation/transfer actions. Do not treat the feature as available to end users until SQL tests, live-schema review, Android UI integration, and reconciliation checks are complete.
 
 ## Remaining data-model work
 
