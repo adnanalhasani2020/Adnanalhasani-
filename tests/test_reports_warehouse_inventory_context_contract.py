@@ -54,7 +54,7 @@ class ReportsWarehouseInventoryContextContractTests(unittest.TestCase):
         self.assertIn("val quantityReserved: BigDecimal", self.repository)
         self.assertIn("val availableQuantity: BigDecimal", self.repository)
         self.assertIn("parseWholeInventoryQuantity(row.optString(field), field)", loader
-        self.assertIn("available == onHand.subtract(reserved).max(BigDecimal.ZERO)", loader)
+        self.assertIn("available == onHand.subtract(reserved)", loader)
         loader_doc = self.repository.split(
             "internal fun loadCommercialCloudWarehouseInventoryContext", 1
         )[0]
