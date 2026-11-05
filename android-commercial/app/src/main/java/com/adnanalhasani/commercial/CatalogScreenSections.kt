@@ -240,6 +240,7 @@ internal fun CatalogProductFormSection(state: CatalogProductFormState, categorie
                         }
                     }
                     item { OutlinedTextField(extraUnitQty,{extraUnitQty=it},Modifier.fillMaxWidth(),label={Text("كم وحدة أساس داخل العبوة")},singleLine=true) }
+                    item { Text("أدخل معامل التحويل كعدد صحيح: مثلًا 12 قطعة داخل الكرتون. أسعار الشراء والبيع تُحدد في حساب المؤسسة، ولا تُحفظ ضمن دليل الوحدات العام.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
                     item { OutlinedTextField(extraUnitPackage,{extraUnitPackage=it},Modifier.fillMaxWidth(),label={Text("اسم العبوة (كرتون/علبة/شريط)")},singleLine=true) }
                     item { OutlinedTextField(extraUnitBarcode,{extraUnitBarcode=it},Modifier.fillMaxWidth(),label={Text("باركود العبوة الإضافية")},singleLine=true) }
                     item { OutlinedTextField(extraUnitSku,{extraUnitSku=it},Modifier.fillMaxWidth(),label={Text("SKU للعبوة الإضافية")},singleLine=true) }
