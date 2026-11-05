@@ -184,7 +184,6 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         currentItems = { items },
         currentOffset = { catalogOffset },
         hasMore = { catalogHasMore },
-        pageLoadFailed = { catalogPageLoadFailed },
         busy = { busy },
         setItems = { items = it },
         setOffset = { catalogOffset = it },
