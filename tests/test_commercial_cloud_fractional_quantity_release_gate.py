@@ -17,11 +17,13 @@ def test_sale_and_return_quantity_parser_rejects_all_fractional_input():
     assert "0.5 أو 1.25" not in SALE_COMPOSER.read_text(encoding="utf-8")
 
 
-def test_sale_and_return_screens_filter_quantity_input_to_digits_only():
+def test_sale_and_return_screens_preserve_fractional_input_for_rejection():
     sale = SALE_COMPOSER.read_text(encoding="utf-8")
     returns = RETURNS_SCREEN.read_text(encoding="utf-8")
-    assert "Character.digit(it, 10) >= 0" in sale
-    assert "Character.digit(it, 10) >= 0" in returns
+    assert "raw.any { Character.digit(it, 10) < 0 }" in sale
+    assert "raw.any { Character.digit(it, 10) < 0 }" in returns
+    assert "raw.map { ch -> ('0'.code + Character.digit(ch, 10)).toChar() }" in sale
+    assert "raw.map { ch -> ('0'.code + Character.digit(ch, 10)).toChar() }" in returns
     assert "الكمية (عدد صحيح فقط)" in sale
     assert "عدد صحيح" in returns
 
