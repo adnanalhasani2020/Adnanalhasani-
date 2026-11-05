@@ -96,7 +96,7 @@ private fun loadPendingStorageInventoryAction(context: Context): PendingStorageI
     }.getOrNull()
 }
 
-private fun persistPendingStorageInventoryAction(context: Context, action: PendingStorageInventoryAction?) {
+private fun persistPendingStorageInventoryAction(context: Context, action: PendingStorageInventoryAction?): Boolean {
     val editor = context.getSharedPreferences("commercial_storage_inventory_pending_v1", Context.MODE_PRIVATE).edit()
     if (action == null) {
         editor.remove("pending_action")
@@ -112,7 +112,7 @@ private fun persistPendingStorageInventoryAction(context: Context, action: Pendi
             .put("idempotency_key", action.idempotencyKey)
             .toString())
     }
-    check(editor.commit()) { "تعذر حفظ طلب المخزون محليًا؛ لم نرسل العملية إلى الخادم." }
+    return editor.commit()
 }
 
 @Composable
@@ -215,7 +215,12 @@ internal fun CommercialStorageInventoryScreen(context: Context, onBack: () -> Un
 
     fun executeAction(action: PendingStorageInventoryAction) {
         pending = action
-        persistPendingStorageInventoryAction(context, action)
+        if (!persistPendingStorageInventoryAction(context, action)) {
+            pending = null
+            error = "تعذر حفظ طلب المخزون محليًا؛ لم نرسل العملية إلى الخادم."
+            notice = ""
+            return
+        }
         saving = true
         error = ""
         notice = ""
@@ -242,8 +247,11 @@ internal fun CommercialStorageInventoryScreen(context: Context, onBack: () -> Un
                     val schemaMissing = detail.contains("PGRST202", ignoreCase = true) ||
                         detail.contains("دالة قاعدة البيانات المطلوبة غير منشورة", ignoreCase = true)
                     if (schemaMissing || isDefinitiveStorageInventoryRejection(detail)) {
-                        pending = null
-                        persistPendingStorageInventoryAction(context, null)
+                        if (persistPendingStorageInventoryAction(context, null)) {
+                            pending = null
+                        } else {
+                            notice = "رفض الخادم الطلب، لكن تعذر مسح علامة المحاولة المحلية. أعد فتح الشاشة للتحقق قبل أي عملية جديدة."
+                        }
                         if (schemaMissing) schemaReady = false
                         notice = if (schemaMissing) {
                             "الوظيفة غير متاحة على قاعدة البيانات الحالية. لم تُنفذ الحركة؛ يلزم نشر الترحيل واختباره."
@@ -259,16 +267,24 @@ internal fun CommercialStorageInventoryScreen(context: Context, onBack: () -> Un
             val refreshed = runCatching { loadStorageInventorySnapshot(context) }
             storageInventoryMain.post {
                 saving = false
-                pending = null
-                persistPendingStorageInventoryAction(context, null)
+                val pendingCleared = persistPendingStorageInventoryAction(context, null)
+                if (pendingCleared) pending = null
                 quantityText = ""
                 if (refreshed.isSuccess) {
                     applySnapshot(refreshed.getOrThrow())
                     error = ""
-                    notice = "تم تأكيد الحركة من الخادم وتحديث أرصدة مواقع التخزين."
+                    notice = if (pendingCleared) {
+                        "تم تأكيد الحركة من الخادم وتحديث أرصدة مواقع التخزين."
+                    } else {
+                        "أكد الخادم الحركة، لكن تعذر مسح علامة المحاولة المحلية. أعد فتح الشاشة ثم حدّث الأرصدة قبل أي عملية جديدة."
+                    }
                 } else {
                     error = refreshed.exceptionOrNull()?.message ?: "تعذر تحديث القائمة."
-                    notice = "أكد الخادم تنفيذ الحركة. حدّث القائمة لاحقًا؛ لا تعِد إرسال العملية."
+                    notice = if (pendingCleared) {
+                        "أكد الخادم تنفيذ الحركة. حدّث القائمة لاحقًا؛ لا تعِد إرسال العملية."
+                    } else {
+                        "أكد الخادم الحركة، لكن تعذر مسح علامة المحاولة المحلية. أعد فتح الشاشة ثم حدّث الأرصدة قبل أي عملية جديدة."
+                    }
                 }
             }
         }
