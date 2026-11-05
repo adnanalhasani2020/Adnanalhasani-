@@ -27,7 +27,7 @@ class InvoicePurchaseUnitAndReceivingLocationTests(unittest.TestCase):
         self.assertIn("id=p_receive_location_id AND organization_id=v_req.destination_organization_id AND state='active'", sql)
         self.assertIn('"p_receive_location_id"', kt)
         self.assertIn("فرع الاستلام للموافقة الواردة", kt)
-        self.assertIn("marketBranches.none { it.id==receiveLocation }", kt)
+        self.assertIn("marketBranches().none { it.id == receiveLocation }", kt)
 
     def test_existing_quantity_and_stock_receipt_semantics_are_not_changed(self):
         sql = SQL_FILE.read_text(encoding="utf-8")
