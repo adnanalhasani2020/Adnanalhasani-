@@ -58,6 +58,14 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
     var notice by remember { mutableStateOf("") }
     var refresh by remember { mutableIntStateOf(0) }
     var organizationMenu by remember { mutableStateOf(false) }
+    var supplyDialog by remember { mutableStateOf(false) }
+    var supplyName by remember { mutableStateOf("") }
+    var supplyQuantity by remember { mutableStateOf("1") }
+    var supplyUnit by remember { mutableStateOf("EA") }
+    var supplyUnitName by remember { mutableStateOf("قطعة") }
+    var supplyPrice by remember { mutableStateOf("0") }
+    var supplySpecs by remember { mutableStateOf("") }
+    var supplyNote by remember { mutableStateOf("") }
 
     LaunchedEffect(refresh) {
         loading = true
@@ -327,6 +335,9 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
                                 Text("آجل", color = if (org.allowCredit) PortalInk else PortalMuted)
                             }
                             OutlinedTextField(value = note, onValueChange = { note = it.take(1000) }, label = { Text("ملاحظة للطلب (اختياري)") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
+                            OutlinedButton(onClick = { supplyDialog = true }, enabled = !submitting && selectedOrganization?.canPurchase != false, modifier = Modifier.fillMaxWidth()) {
+                                Text("طلب توفير صنف غير موجود")
+                            }
                             Button(
                                 onClick = {
                                     val invalid = !cartInputsValid || !cartCurrencyValid
@@ -505,5 +516,56 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
                 item { Text("لا توجد منتجات أو خدمات نشطة متاحة حاليًا لهذه المؤسسة.", color = PortalMuted) }
             }
         }
+
+    if (supplyDialog && org != null) {
+        AlertDialog(
+            onDismissRequest = { if (!submitting) supplyDialog = false },
+            title = { Text("طلب توفير صنف") },
+            text = {
+                Column(Modifier.fillMaxWidth().heightIn(max = 520.dp).verticalScroll(androidx.compose.foundation.rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("اكتب الصنف حتى لو لم يكن موجودًا في كتالوج المؤسسة. سيصل طلبك للتاجر للمراجعة.", color = PortalMuted, fontSize = 12.sp)
+                    OutlinedTextField(supplyName, { supplyName = it.take(200) }, label = { Text("اسم الصنف") }, modifier = Modifier.fillMaxWidth())
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(supplyQuantity, { supplyQuantity = it.filter(Char::isDigit).take(9) }, label = { Text("الكمية") }, modifier = Modifier.weight(1f))
+                        OutlinedTextField(supplyUnit, { supplyUnit = it.take(32) }, label = { Text("رمز الوحدة") }, modifier = Modifier.weight(1f))
+                    }
+                    OutlinedTextField(supplyUnitName, { supplyUnitName = it.take(80) }, label = { Text("اسم الوحدة") }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(supplyPrice, { supplyPrice = it.filter(Char::isDigit).take(15) }, label = { Text("السعر المتوقع (بالعملة الصغرى)") }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(supplySpecs, { supplySpecs = it.take(2000) }, label = { Text("المواصفات") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
+                    OutlinedTextField(supplyNote, { supplyNote = it.take(1000) }, label = { Text("ملاحظة") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = paymentMode == "cash", onClick = { paymentMode = "cash" })
+                        Text("نقدًا")
+                        RadioButton(selected = paymentMode == "credit", onClick = { paymentMode = "credit" }, enabled = org.allowCredit)
+                        Text("آجل", color = if (org.allowCredit) PortalInk else PortalMuted)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(enabled = !submitting && supplyName.isNotBlank() && supplyQuantity.toLongOrNull()?.let { it > 0 } == true &&
+                    supplyUnit.isNotBlank() && supplyUnitName.isNotBlank() && supplyPrice.toLongOrNull()?.let { it >= 0 } == true &&
+                    (paymentMode != "credit" || org.allowCredit),
+                    onClick = {
+                        submitting = true; error = ""; notice = "جارٍ إرسال طلب التوفير..."
+                        val snapshot = listOf(supplyName.trim(), supplyQuantity, supplyUnit, supplyUnitName, supplyPrice, supplySpecs, supplyNote, paymentMode)
+                        portalExecutor.execute {
+                            val result = runCatching {
+                                submitCustomerSupplyRequest(context, org.id, snapshot[0], snapshot[1].toLong(),
+                                    snapshot[2], snapshot[3], snapshot[4].toLong(), snapshot[7], snapshot[5], snapshot[6], java.util.UUID.randomUUID().toString())
+                            }
+                            portalMain.post {
+                                submitting = false
+                                result.onSuccess {
+                                    notice = "تم إرسال طلب التوفير. حالته الآن: قيد المراجعة."
+                                    supplyDialog = false; supplyName = ""; supplyQuantity = "1"; supplySpecs = ""; supplyNote = ""
+                                }.onFailure { error = it.message ?: "تعذر إرسال طلب التوفير."; notice = "" }
+                            }
+                        }
+                    }
+                ) { Text("إرسال طلب التوفير") }
+            },
+            dismissButton = { TextButton(onClick = { supplyDialog = false }, enabled = !submitting) { Text("إلغاء") } }
+        )
+    }
     }
 }
