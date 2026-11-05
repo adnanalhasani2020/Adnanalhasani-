@@ -67,7 +67,7 @@ internal fun MerchantPurchaseRequestScreen(context: Context, onBack: () -> Unit)
         if (notice.isNotBlank()) Text(notice, color = MaterialTheme.colorScheme.primary)
         Box {
             OutlinedButton(onClick = { offeringMenu = true }, modifier = Modifier.fillMaxWidth(), enabled = !loading) {
-                Text(selectedOffering?.name ?: "اختر صنفًا من الكتالوج")
+                Text(selectedOffering?.let { "${it.name} • المتاح ${it.availableQuantity} ${it.unitName}" } ?: "اختر صنفًا من الكتالوج")
             }
             DropdownMenu(expanded = offeringMenu, onDismissRequest = { offeringMenu = false }) {
                 data?.offerings?.forEach { item ->
@@ -104,7 +104,7 @@ internal fun MerchantPurchaseRequestScreen(context: Context, onBack: () -> Unit)
                         Column(Modifier.weight(1f)) {
                             Text(line.offering.name, style = MaterialTheme.typography.titleSmall)
                             Text("المورد: ${data?.suppliers?.firstOrNull { it.id == line.supplierId }?.name ?: "—"}")
-                            Text("الكمية: ${line.quantity} • التكلفة تُحدد عند تحرير أمر الشراء", fontSize = 12.sp)
+                            Text("الكمية: ${line.quantity} ${line.offering.unitName} • المتاح حاليًا: ${line.offering.availableQuantity} ${line.offering.unitName} • التكلفة تُحدد عند تحرير أمر الشراء", fontSize = 12.sp)
                         }
                         TextButton(onClick = { lines = lines.filterNot { it.offering.id == line.offering.id && it.supplierId == line.supplierId } }) { Text("حذف") }
                     }
