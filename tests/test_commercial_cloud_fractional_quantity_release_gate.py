@@ -31,8 +31,8 @@ def test_sale_and_return_screens_preserve_fractional_input_for_rejection():
 def test_cloud_rpcs_and_numeric_storage_are_integer_only():
     migration = INTEGER_MIGRATION.read_text(encoding="utf-8")
     assert "commercial_checkout_sale_multi_base_units" in migration
-    assert "v_effective_key := btrim(p_idempotency_key);" in migration
-    assert "md5(v_original_lines::text)" not in migration
+    assert "v_effective_key := CASE WHEN v_legacy_match THEN v_legacy_key ELSE btrim(p_idempotency_key) END;" in migration
+    assert "md5(v_original_lines::text)" in migration  # retained only to adopt pre-migration retry keys
     assert "CREATE TABLE IF NOT EXISTS public.commercial_sale_unit_idempotency" in migration
     assert "v_request_fingerprint" in migration
     assert "idempotency_key_reused_with_different_sell_unit_request" in migration
