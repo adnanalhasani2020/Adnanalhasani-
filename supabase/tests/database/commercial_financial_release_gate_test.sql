@@ -88,12 +88,16 @@ SELECT ok(
     WHERE conrelid = 'public.commercial_inventory_balances'::regclass
       AND conname = 'commercial_inventory_balances_quantity_on_hand_whole_qty_ck'
   )
-  AND EXISTS (
+  ,
+  'whole quantity constraints cover customer orders, supplier invoices, purchases and stock'
+);
+SELECT ok(
+  NOT EXISTS (
     SELECT 1 FROM pg_constraint
     WHERE conrelid = 'public.commercial_global_units'::regclass
       AND conname = 'commercial_global_units_factor_to_base_whole_qty_ck'
   ),
-  'whole quantity constraints cover customer orders, supplier invoices, purchases, stock and unit factors'
+  'universal measurement conversion factors may remain fractional'
 );
 SELECT ok(
   position('coalesce(v_line->>''quantity'','''') !~ ''^(0|[1-9][0-9]{0,5})$''' in pg_get_functiondef(
