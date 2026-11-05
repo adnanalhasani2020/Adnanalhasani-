@@ -112,7 +112,7 @@ internal fun PersonalAccountsScreen(onBack: () -> Unit) {
     var editPurchase by remember { mutableStateOf(false) }
     var editExpiryDays by remember { mutableStateOf("") }
     var editLimitMinor by remember { mutableStateOf("") }
-    var authRequired by remember { mutableStateOf(personalAccountPrefs(context).getString("refresh_token", null).isNullOrBlank()) }
+    var authRequired by remember { mutableStateOf(commercialCloudSessionPreferences(context).getString("refresh_token", null).isNullOrBlank()) }
     var authEmail by remember { mutableStateOf("") }
     var authPassword by remember { mutableStateOf("") }
     var authDisplayName by remember { mutableStateOf("") }
@@ -209,7 +209,7 @@ internal fun PersonalAccountsScreen(onBack: () -> Unit) {
                                 }
                                 val refreshToken = session.optString("refresh_token")
                                 require(refreshToken.isNotBlank()) { "لم تُرجع خدمة المصادقة رمز تجديد صالحًا." }
-                                personalAccountPrefs(context).edit().putString("refresh_token", refreshToken).apply()
+                                commercialCloudSessionPreferences(context).edit().putString("refresh_token", refreshToken).apply()
                                 val snapshot = personalAccountSnapshot(access)
                                 snapshot
                             }
@@ -248,7 +248,7 @@ internal fun PersonalAccountsScreen(onBack: () -> Unit) {
         }
         if (!authRequired) item {
             TextButton(enabled = !busy, onClick = {
-                personalAccountPrefs(context).edit().remove("refresh_token").apply()
+                commercialCloudSessionPreferences(context).edit().remove("refresh_token").apply()
                 authRequired = true
                 account = null
                 entries.clear()
