@@ -232,7 +232,7 @@ internal fun createCommercialCloudInventoryItem(
         .put("p_price_minor", priceMinor)
         .put("p_currency_code", currency)
         .put("p_initial_quantity", initialQuantity)
-        .put("p_reorder_point", reorderPoint.coerceAtLeast(0.0))
+        .put("p_reorder_point", reorderPoint.coerceAtLeast(0))
         .put("p_category_id", if (categoryId.isNotBlank()) categoryId else JSONObject.NULL)
         .put("p_unit_code", unitCode.ifBlank { "each" })
     return SupabaseClient.request("/rest/v1/rpc/commercial_create_inventory_item_with_category_and_unit", "POST", payload, access)
