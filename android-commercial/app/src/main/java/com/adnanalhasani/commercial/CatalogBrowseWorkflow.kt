@@ -18,7 +18,6 @@ internal class CatalogBrowseWorkflow(
     private val currentItems: () -> List<CatalogProduct>,
     private val currentOffset: () -> Int,
     private val hasMore: () -> Boolean,
-    private val pageLoadFailed: () -> Boolean,
     private val busy: () -> Boolean,
     private val setItems: (List<CatalogProduct>) -> Unit,
     private val setOffset: (Int) -> Unit,
