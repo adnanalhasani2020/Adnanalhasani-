@@ -86,7 +86,7 @@ $$;
 
 DO $$
 BEGIN
- IF NOT has_table_privilege('anon','public.commercial_customer_order_reservations','SELECT') IS FALSE THEN
+ IF has_table_privilege('anon','public.commercial_customer_order_reservations','SELECT') THEN
    RAISE EXCEPTION 'anonymous_must_not_read_reservation_ledger';
  END IF;
  IF NOT has_function_privilege('authenticated','public.commercial_customer_portal_reserve_order(uuid,uuid,uuid,timestamptz,text,text)','EXECUTE') THEN
