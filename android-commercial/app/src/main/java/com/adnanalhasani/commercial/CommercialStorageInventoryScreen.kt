@@ -62,6 +62,20 @@ private fun loadStorageInventorySnapshot(context: Context): StorageInventorySnap
 private fun storageQuantityLabel(value: BigDecimal): String =
     value.stripTrailingZeros().toPlainString()
 
+private fun isDefinitiveStorageInventoryRejection(message: String): Boolean {
+    val markers = listOf(
+        "inventory_management_permission_required",
+        "inventory_storage_scope_mismatch",
+        "inventory_storage_allocation_exceeds_unallocated_stock",
+        "inventory_storage_insufficient",
+        "invalid_inventory_storage_allocation",
+        "invalid_inventory_storage_transfer",
+        "inventory_balance_invalid",
+        "لم يُسمح بتنفيذ العملية"
+    )
+    return markers.any { message.contains(it, ignoreCase = true) }
+}
+
 private fun loadPendingStorageInventoryAction(context: Context): PendingStorageInventoryAction? {
     val raw = context.getSharedPreferences("commercial_storage_inventory_pending_v1", Context.MODE_PRIVATE)
         .getString("pending_action", null) ?: return null
@@ -221,8 +235,22 @@ internal fun CommercialStorageInventoryScreen(context: Context, onBack: () -> Un
             if (write.isFailure) {
                 storageInventoryMain.post {
                     saving = false
-                    error = write.exceptionOrNull()?.message ?: "تعذر تنفيذ الحركة."
-                    notice = "لم يُحذف طلب العملية؛ أعد المحاولة بنفس البيانات والمفتاح لتجنب تكرار الحركة."
+                    val detail = write.exceptionOrNull()?.message ?: "تعذر تنفيذ الحركة."
+                    error = detail
+                    val schemaMissing = detail.contains("PGRST202", ignoreCase = true) ||
+                        detail.contains("دالة قاعدة البيانات المطلوبة غير منشورة", ignoreCase = true)
+                    if (schemaMissing || isDefinitiveStorageInventoryRejection(detail)) {
+                        pending = null
+                        persistPendingStorageInventoryAction(context, null)
+                        if (schemaMissing) schemaReady = false
+                        notice = if (schemaMissing) {
+                            "الوظيفة غير متاحة على قاعدة البيانات الحالية. لم تُنفذ الحركة؛ يلزم نشر الترحيل واختباره."
+                        } else {
+                            "رفض الخادم الطلب ولم يُرحّل حركة مخزون. يمكنك تصحيح البيانات أو مراجعة صلاحياتك ثم المحاولة."
+                        }
+                    } else {
+                        notice = "لم يُحذف طلب العملية؛ أعد المحاولة بنفس البيانات والمفتاح لتجنب تكرار الحركة."
+                    }
                 }
                 return@task
             }
