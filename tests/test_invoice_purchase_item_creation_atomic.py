@@ -65,11 +65,11 @@ class InvoicePurchaseItemCreationAtomicTests(unittest.TestCase):
         self.assertIn("state.newIdempotencyKey", source)
         self.assertIn("لم نفترض تحويلًا بديلًا", source)
         self.assertIn("السعر سيبقى صفرًا بحالة غير مسعّر", source)
-        self.assertIn("لم يتغير المخزون؛ سيُحدّث عند الاستلام فقط", source)
+        self.assertIn("لن يتغير المخزون حتى تسجيل الاستلام", source)
         self.assertIn("لا ينشأ رصيد مستقل للمستودع", source)
         self.assertIn("purchase_order_id", source)
-        self.assertIn("result?.optBoolean(\"reapproval_required\",false)", source)
-        self.assertIn("val orderNeedsReapproval=result?.optBoolean(\"reapproval_required\",false) ?: false", source)
+        self.assertIn("result?.optBoolean(\"reapproval_required\", false)", source)
+        self.assertIn("val orderNeedsReapproval = result?.optBoolean(\"reapproval_required\", false) ?: false", source)
 
 
 if __name__ == "__main__":
