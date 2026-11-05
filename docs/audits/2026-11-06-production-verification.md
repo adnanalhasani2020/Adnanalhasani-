@@ -24,6 +24,12 @@ Observed 2026-11-05:
 - 3 duplicate-index warnings.
 - 241 unused-index notices. These are observations, not instructions to mass-delete indexes; review query plans and workload before any index change.
 
+## Stocktake and valuation readiness (read-only check)
+- The live inventory table currently has one positive balance row without any active cost layer and without a balance unit cost. The new stocktake posting guard requires exact balance-to-layer quantity reconciliation and a known weighted-average cost; it will reject non-zero variance for this row until an audited opening-cost reconciliation is performed.
+- The live GL mapping table has no `inventory_gain` or `inventory_shrinkage_expense` mappings. The live schema has no accounting-period/period-close table. The existing GL posting helper does not supply the missing stocktake account mappings or period validation.
+- Therefore stocktake posting and reversal are hard-disabled by default in the new migration and in the Android UI. The release-control row is not writable by authenticated users. The local PostgreSQL smoke fixture explicitly opts in only to test inventory/cost mechanics; it does not imply production enablement.
+- The branch-level count snapshot now creates zero-balance rows for active offerings with no balance row, so physical stock can be recorded instead of omitted. It remains branch-level and uses the base stock unit; warehouse-specific counts and alternate sell-unit conversion are not yet implemented.
+
 ## Storage-location release status
 - The repository contains an additive migration for storage-location balances and append-only allocation/transfer movements.
 - The work branch adds an Android screen, precise decimal availability reading, branch-scoped warehouse selection, persisted idempotency keys, and a reservation-aware allocation guard.
