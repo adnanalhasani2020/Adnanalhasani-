@@ -11,7 +11,8 @@ internal data class CommercialMasterDataRow(
     val kind: String,
     val parentId: String = "",
     val warehouseId: String = "",
-    val state: String = ""
+    val state: String = "",
+    val branchLocationId: String = ""
 )
 
 internal data class CommercialUnitOption(
@@ -47,7 +48,7 @@ internal fun loadCommercialMasterData(context: Context, table: String): List<Com
     }
     val (orgId, access) = commercialMasterDataAccess(context)
     val fields = when (table) {
-        "commercial_warehouses" -> "id,code,name,warehouse_type,state"
+        "commercial_warehouses" -> "id,branch_location_id,code,name,warehouse_type,state"
         "commercial_storage_locations" -> "id,warehouse_id,parent_location_id,code,name,location_type,state"
         else -> "id,code,name_ar,name_en,state,parent_id"
     }
@@ -64,7 +65,8 @@ internal fun loadCommercialMasterData(context: Context, table: String): List<Com
                 kind = row.optString(when (table) { "commercial_storage_locations" -> "location_type"; "commercial_warehouses" -> "warehouse_type"; else -> "state" }).ifBlank { table.removePrefix("commercial_") },
                 parentId = row.optString(if (table == "commercial_storage_locations") "parent_location_id" else "parent_id").takeUnless { it == "null" }.orEmpty(),
                 warehouseId = row.optString("warehouse_id").takeUnless { it == "null" }.orEmpty(),
-                state = row.optString("state").ifBlank { "active" }
+                state = row.optString("state").ifBlank { "active" },
+                branchLocationId = row.optString("branch_location_id").takeUnless { it == "null" }.orEmpty()
             ))
         }
     }
