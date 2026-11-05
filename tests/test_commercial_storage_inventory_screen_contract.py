@@ -37,6 +37,9 @@ class CommercialStorageInventoryScreenContractTests(unittest.TestCase):
 
     def test_allocation_uses_precise_unreserved_quantity(self):
         self.assertIn("loadCommercialStorageAllocationProducts(context)", self.screen)
+        self.assertIn("schemaReady = true", self.screen)
+        self.assertIn("enabled = schemaReady && !loading && !saving", self.screen)
+        self.assertIn("ميزة أرصدة مواقع التخزين غير منشورة", self.screen)
         self.assertIn("quantity_on_hand,quantity_reserved", self.repository)
         self.assertIn("availableQuantity = onHand.subtract(reserved)", self.repository)
         self.assertIn("java.math.BigDecimal", self.repository)
