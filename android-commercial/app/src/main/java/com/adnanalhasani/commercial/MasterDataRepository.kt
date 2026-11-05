@@ -247,9 +247,10 @@ internal fun allocateCommercialInventoryToStorageLocation(
     warehouseId: String,
     storageLocationId: String,
     offeringId: String,
-    quantity: java.math.BigDecimal
+    quantity: java.math.BigDecimal,
+    idempotencyKey: String = java.util.UUID.randomUUID().toString()
 ) {
-    require(warehouseId.isNotBlank() && storageLocationId.isNotBlank() && offeringId.isNotBlank()) {
+    require(warehouseId.isNotBlank() && storageLocationId.isNotBlank() && offeringId.isNotBlank() && idempotencyKey.isNotBlank()) {
         "اختر المستودع وموقع التخزين والصنف."
     }
     val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
@@ -263,7 +264,7 @@ internal fun allocateCommercialInventoryToStorageLocation(
         .put("p_storage_location_id", storageLocationId)
         .put("p_offering_id", offeringId)
         .put("p_quantity", validatedStorageQuantity(quantity))
-        .put("p_idempotency_key", java.util.UUID.randomUUID().toString())
+        .put("p_idempotency_key", idempotencyKey)
     SupabaseClient.request("/rest/v1/rpc/commercial_allocate_inventory_to_storage_location", "POST", payload, access)
 }
 
@@ -274,9 +275,10 @@ internal fun transferCommercialInventoryBetweenStorageLocations(
     sourceStorageLocationId: String,
     destinationStorageLocationId: String,
     offeringId: String,
-    quantity: java.math.BigDecimal
+    quantity: java.math.BigDecimal,
+    idempotencyKey: String = java.util.UUID.randomUUID().toString()
 ) {
-    require(warehouseId.isNotBlank() && sourceStorageLocationId.isNotBlank() &&
+    require(warehouseId.isNotBlank() && sourceStorageLocationId.isNotBlank() && idempotencyKey.isNotBlank() &&
         destinationStorageLocationId.isNotBlank() && offeringId.isNotBlank()) {
         "اختر المستودع وموقعي المصدر والوجهة والصنف."
     }
@@ -293,6 +295,6 @@ internal fun transferCommercialInventoryBetweenStorageLocations(
         .put("p_destination_storage_location_id", destinationStorageLocationId)
         .put("p_offering_id", offeringId)
         .put("p_quantity", validatedStorageQuantity(quantity))
-        .put("p_idempotency_key", java.util.UUID.randomUUID().toString())
+        .put("p_idempotency_key", idempotencyKey)
     SupabaseClient.request("/rest/v1/rpc/commercial_transfer_inventory_storage_location", "POST", payload, access)
 }
