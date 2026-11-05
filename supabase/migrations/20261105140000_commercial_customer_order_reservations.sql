@@ -257,6 +257,33 @@ $function$;
 REVOKE ALL ON FUNCTION public.commercial_customer_portal_process_expired_order_reservations(uuid,integer) FROM PUBLIC,anon;
 GRANT EXECUTE ON FUNCTION public.commercial_customer_portal_process_expired_order_reservations(uuid,integer) TO authenticated;
 
+
+CREATE OR REPLACE FUNCTION public.commercial_customer_portal_list_order_reservations(
+  p_organization_id uuid
+) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
+AS $function$
+DECLARE v_uid uuid:=auth.uid(); v_result jsonb;
+BEGIN
+  IF v_uid IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
+  IF p_organization_id IS NULL OR NOT EXISTS (
+    SELECT 1 FROM public.commercial_organization_members m
+    WHERE m.organization_id=p_organization_id AND m.user_id=v_uid
+      AND m.state='active' AND m.role IN ('owner','admin','manager')
+  ) THEN RAISE EXCEPTION 'customer_order_reservation_permission_required' USING ERRCODE='42501'; END IF;
+  SELECT coalesce(jsonb_agg(jsonb_build_object(
+    'order_id',r.order_id,'reservation_id',r.id,'status',r.status,
+    'expires_at',r.expires_at,'expiry_policy',r.expiry_policy,'location_id',r.location_id
+  ) ORDER BY r.created_at DESC),'[]'::jsonb)
+  INTO v_result
+  FROM public.commercial_customer_order_reservations r
+  WHERE r.organization_id=p_organization_id;
+  RETURN v_result;
+END;
+$function$;
+REVOKE ALL ON FUNCTION public.commercial_customer_portal_list_order_reservations(uuid) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.commercial_customer_portal_list_order_reservations(uuid) TO authenticated;
+
 -- Release the reservation in the same transaction before calling the existing checkout.
 -- Checkout then sees the quantity as available and posts the real stock movement. If
 -- checkout fails, PostgreSQL rolls back both the release and the attempted sale.
@@ -271,13 +298,21 @@ DECLARE
   v_item record;
 BEGIN
   IF v_uid IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
-  IF p_organization_id IS NULL OR p_order_id IS NULL OR p_location_id IS NULL THEN
+  IF p_organization_id IS NULL OR p_order_id IS NULL OR p_location_id IS NULL
+     OR p_idempotency_key IS NULL OR length(btrim(p_idempotency_key)) NOT BETWEEN 8 AND 200 THEN
     RAISE EXCEPTION 'invalid_reserved_order_fulfillment' USING ERRCODE='22023';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM public.commercial_organization_members m
     WHERE m.organization_id=p_organization_id AND m.user_id=v_uid
       AND m.state='active' AND m.role IN ('owner','admin','manager')) THEN
     RAISE EXCEPTION 'customer_order_fulfillment_permission_required' USING ERRCODE='42501';
+  END IF;
+  -- Preserve the original checkout idempotency contract after an ambiguous client retry.
+  IF EXISTS (SELECT 1 FROM public.commercial_customer_order_fulfillments f
+    WHERE f.organization_id=p_organization_id AND f.order_id=p_order_id) THEN
+    RETURN public.commercial_customer_portal_fulfill_order(
+      p_organization_id,p_order_id,p_location_id,p_idempotency_key
+    );
   END IF;
   SELECT * INTO v_reservation FROM public.commercial_customer_order_reservations r
   WHERE r.organization_id=p_organization_id AND r.order_id=p_order_id AND r.status='active'
