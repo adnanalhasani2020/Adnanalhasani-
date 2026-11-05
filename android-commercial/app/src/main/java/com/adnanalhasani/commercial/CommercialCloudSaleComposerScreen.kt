@@ -127,6 +127,12 @@ internal fun CommercialCloudSaleComposerScreen(
     var search by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var submitting by remember { mutableStateOf(false) }
+    var hasPendingCloudSale by remember {
+        mutableStateOf(
+            context.getSharedPreferences("commercial_cloud_pending_multi_sale_v1", Context.MODE_PRIVATE)
+                .getString("idempotency_key", null).orEmpty().isNotBlank()
+        )
+    }
     var error by remember { mutableStateOf("") }
     var notice by remember { mutableStateOf("") }
     var reloadToken by remember { mutableStateOf(0) }
@@ -245,6 +251,51 @@ internal fun CommercialCloudSaleComposerScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            if (hasPendingCloudSale) item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF7E8)),
+                    shape = RoundedCornerShape(15.dp),
+                    border = BorderStroke(1.dp, Color(0xFFE8C98D))
+                ) {
+                    Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("توجد فاتورة سحابية معلقة", color = Color(0xFF805000), fontWeight = FontWeight.Bold)
+                        Text(
+                            "استعدنا وجود طلب الفاتورة الأصلي المحفوظ على هذا الجهاز. لا تحتاج إلى تذكر الأصناف أو الكميات. سيعيد التطبيق إرسال نفس البيانات وبنفس مفتاح العملية؛ إذا كانت الفاتورة قد سُجلت سابقًا فسيسترجع الخادم نتيجتها بدل إنشاء فاتورة مكررة.",
+                            color = CloudComposerMuted, fontSize = 12.sp
+                        )
+                        Button(
+                            onClick = {
+                                submitting = true
+                                error = ""
+                                notice = "جارٍ التحقق من الفاتورة المعلقة وإعادة إرسال الطلب الأصلي بأمان..."
+                                CloudComposerWorker.execute {
+                                    val result = runCatching { retryPendingCommercialCloudMultiSale(context) }
+                                    CloudComposerMain.post {
+                                        submitting = false
+                                        result.onSuccess { sale ->
+                                            hasPendingCloudSale = false
+                                            invoiceLines = emptyList()
+                                            notice = "تمت معالجة الفاتورة المعلقة بنجاح. رقم الفاتورة: " +
+                                                sale.optString("receipt_number", "—") + "."
+                                            onCompleted()
+                                        }.onFailure {
+                                            error = it.message ?: "تعذر التحقق من الفاتورة المعلقة؛ بقيت بياناتها محفوظة ولم تُحذف."
+                                            notice = ""
+                                        }
+                                    }
+                                }
+                            },
+                            enabled = !submitting,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            if (submitting) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                            else Icon(Icons.Default.Refresh, contentDescription = null)
+                            Spacer(Modifier.size(8.dp))
+                            Text(if (submitting) "جارٍ التحقق..." else "استعادة الفاتورة المعلقة بأمان")
+                        }
+                    }
+                }
+            }
             item {
                 Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(15.dp)) {
                     Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
