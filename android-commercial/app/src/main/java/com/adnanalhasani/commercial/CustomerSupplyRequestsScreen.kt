@@ -35,7 +35,7 @@ private val supplyMain = Handler(Looper.getMainLooper())
 private data class CustomerSupplyRow(
     val id:String,val customer:String,val name:String,val specs:String,val quantity:String,
     val unit:String,val price:Long,val currency:String,val payment:String,val note:String,
-    val status:String,val merchantNote:String
+    val status:String,val merchantNote:String,val directSaleStatus:String,val saleId:String
 )
 
 private fun loadCustomerSupplyRows(context:Context):List<CustomerSupplyRow>{
