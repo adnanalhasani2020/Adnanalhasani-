@@ -22,17 +22,14 @@ internal fun isCommercialStockLow(value: BigDecimal, threshold: Int): Boolean =
 
 /** Parse a positive whole selling quantity. Fractional quantities are rejected at the domain boundary. */
 internal fun parseCommercialCheckoutQuantity(value: String): BigDecimal? {
-    var normalized = value.trim().replace(',', '.').replace('\u066B', '.')
-    
+    val normalized = value.trim()
     val ascii = buildString {
         normalized.forEach { ch ->
-            {
-                val digit = Character.digit(ch, 10)
-                if (digit >= 0) append(('0'.code + digit).toChar()) else append(ch)
-            }
+            val digit = Character.digit(ch, 10)
+            if (digit >= 0) append(('0'.code + digit).toChar()) else append(ch)
         }
     }
-    if (!Regex("^(0|[1-9][0-9]{0,5})(\\.[0-9]{1,3})?$").matches(ascii)) return null
+    if (!Regex("^[0-9]{1,6}$").matches(ascii)) return null
     return runCatching { BigDecimal(ascii) }
         .getOrNull()
         ?.takeIf { it.signum() > 0 && it <= BigDecimal("100000") }
