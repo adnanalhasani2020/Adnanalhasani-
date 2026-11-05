@@ -5,6 +5,15 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.math.BigDecimal
 
+private fun parseWholeInventoryQuantity(raw: String, field: String): BigDecimal {
+    val value = runCatching { BigDecimal(raw) }
+        .getOrElse { throw IllegalStateException("قيمة $field غير رقمية؛ تم إيقاف قراءة المخزون.") }
+    require(value.stripTrailingZeros().scale() <= 0) {
+        "قيمة $field كسرية؛ تم إيقاف قراءة المخزون دون تقريبها."
+    }
+    return value
+}
+
 internal data class CommercialCloudStockMovement(
     val id: String,
     val offeringId: String,
@@ -38,7 +47,7 @@ internal fun loadCommercialCloudStockMovements(context: Context): List<Commercia
             if (activity.optString("organization_id") != orgId || offering.optString("activity_id") != activityId) continue
             val id = row.optString("id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
             val offeringId = row.optString("offering_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
-            val quantity = runCatching { java.math.BigDecimal(row.optString("quantity_delta")) }.getOrNull() ?: continue
+            val quantity = parseWholeInventoryQuantity(row.optString("quantity_delta"), "quantity_delta")
             if (id.isBlank() || offeringId.isBlank() || quantity.signum() == 0) continue
             val product = offering.optJSONObject("product")
             val sale = row.optJSONObject("sale")
@@ -97,16 +106,20 @@ internal fun loadCommercialCloudStockAlerts(context: Context): List<CommercialCl
                 .map { it.optString("name_ar").ifBlank { it.optString("name_en") } }
                 .firstOrNull { it.isNotBlank() && it != "null" }
                 ?: "غير مصنف"
-            val onHand = row.optDouble("quantity_on_hand", 0.0)
-            val reserved = row.optDouble("quantity_reserved", 0.0)
+            val onHand = parseWholeInventoryQuantity(row.optString("quantity_on_hand", "0"), "quantity_on_hand")
+            val reserved = parseWholeInventoryQuantity(row.optString("quantity_reserved", "0"), "quantity_reserved")
+            val reorder = parseWholeInventoryQuantity(row.optString("reorder_point", "0"), "reorder_point")
+            require(onHand.signum() >= 0 && reserved.signum() >= 0 && reserved <= onHand && reorder.signum() >= 0) {
+                "رصيد المخزون أو الحد الأدنى غير متسق؛ تم إيقاف التنبيه دون تعديل البيانات."
+            }
             add(CommercialCloudStockAlert(
                 offeringId = offering.optString("id"),
                 productName = product.optString("name").ifBlank { "صنف بدون اسم" },
                 categoryName = categoryName,
                 unitName = product.optString("unit_name").ifBlank { "وحدة" },
-                availableQuantity = (onHand - reserved).coerceAtLeast(0.0),
-                reorderPoint = row.optDouble("reorder_point", 0.0).coerceAtLeast(0.0),
-                quantityOnHand = runCatching { java.math.BigDecimal(row.optString("quantity_on_hand", "0")) }.getOrDefault(java.math.BigDecimal.ZERO),
+                availableQuantity = onHand.subtract(reserved).toDouble(),
+                reorderPoint = reorder.toDouble(),
+                quantityOnHand = onHand,
                 unitCostMinor = if (row.isNull("unit_cost_minor")) null else row.optLong("unit_cost_minor")
             ))
         }
@@ -210,7 +223,7 @@ internal fun loadCommercialCloudCostLayerSummary(context: Context): CommercialCl
     var activeLayers = 0
     for (index in 0 until rows.length()) {
         val row = rows.optJSONObject(index) ?: continue
-        val remaining = runCatching { BigDecimal(row.optString("quantity_remaining", "0")) }.getOrDefault(BigDecimal.ZERO)
+        val remaining = parseWholeInventoryQuantity(row.optString("quantity_remaining", "0"), "quantity_remaining")
         val unitCost = row.optLong("unit_cost_minor", -1L)
         if (remaining.signum() <= 0 || unitCost < 0L) continue
         activeLayers++
@@ -273,10 +286,8 @@ internal fun loadCommercialCloudLocationInventoryBalances(context: Context): Lis
                 ?: throw IllegalStateException("تعذر قراءة الصنف المرتبط بأحد أرصدة المخزون.")
             val product = offering.optJSONObject("product")
                 ?: throw IllegalStateException("تعذر قراءة بيانات الصنف المرتبط بأحد أرصدة المخزون.")
-            val onHand = runCatching { java.math.BigDecimal(row.optString("quantity_on_hand")) }
-                .getOrElse { throw IllegalStateException("توجد كمية مخزون غير رقمية؛ تم حجب التقرير.") }
-            val reserved = runCatching { java.math.BigDecimal(row.optString("quantity_reserved")) }
-                .getOrElse { throw IllegalStateException("توجد كمية محجوزة غير رقمية؛ تم حجب التقرير.") }
+            val onHand = parseWholeInventoryQuantity(row.optString("quantity_on_hand"), "quantity_on_hand")
+            val reserved = parseWholeInventoryQuantity(row.optString("quantity_reserved"), "quantity_reserved")
             require(reserved.signum() >= 0) { "توجد كمية محجوزة سالبة؛ تم حجب تقرير أرصدة المواقع." }
             add(CommercialCloudLocationInventoryBalance(
                 locationId = locationId,
@@ -339,8 +350,7 @@ internal fun loadCommercialCloudWarehouseInventoryContext(context: Context): Lis
             fun requiredText(field: String): String = row.optString(field)
                 .takeUnless { it.isBlank() || it == "null" }
                 ?: throw IllegalStateException("حقل $field مفقود في إسقاط ربط المستودعات.")
-            fun decimal(field: String): BigDecimal = runCatching { BigDecimal(row.optString(field)) }
-                .getOrElse { throw IllegalStateException("قيمة $field غير رقمية؛ تم حجب التقرير.") }
+            fun decimal(field: String): BigDecimal = parseWholeInventoryQuantity(row.optString(field), field)
             val balanceId = requiredText("inventory_balance_id")
             val locationId = requiredText("location_id")
             val offeringId = requiredText("offering_id")
