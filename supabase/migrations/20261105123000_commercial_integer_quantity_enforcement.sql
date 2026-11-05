@@ -11,11 +11,49 @@ CREATE TABLE IF NOT EXISTS public.commercial_sale_unit_idempotency (
 );
 ALTER TABLE public.commercial_sale_unit_idempotency ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS commercial_sale_unit_idempotency_owner_policy ON public.commercial_sale_unit_idempotency;
-CREATE POLICY commercial_sale_unit_idempotency_owner_policy
-  ON public.commercial_sale_unit_idempotency FOR ALL TO authenticated
-  USING (user_id=auth.uid()) WITH CHECK (user_id=auth.uid());
-REVOKE ALL ON public.commercial_sale_unit_idempotency FROM PUBLIC,anon;
-GRANT SELECT,INSERT,UPDATE ON public.commercial_sale_unit_idempotency TO authenticated;
+-- Clients cannot tamper with request fingerprints or remap their own keys directly.
+REVOKE ALL ON public.commercial_sale_unit_idempotency FROM PUBLIC,anon,authenticated;
+
+CREATE OR REPLACE FUNCTION commercial_private.commercial_get_sale_unit_idempotency(p_key text)
+RETURNS TABLE(request_fingerprint text,base_idempotency_key text,sale_id uuid)
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path TO 'pg_catalog','public','commercial_private'
+AS $function$
+BEGIN
+  IF auth.uid() IS NULL OR p_key IS NULL OR length(btrim(p_key)) NOT BETWEEN 8 AND 200 THEN
+    RAISE EXCEPTION 'invalid_sell_unit_idempotency_lookup' USING ERRCODE='42501';
+  END IF;
+  RETURN QUERY SELECT k.request_fingerprint,k.base_idempotency_key,k.sale_id
+    FROM public.commercial_sale_unit_idempotency k
+    WHERE k.user_id=auth.uid() AND k.idempotency_key=btrim(p_key);
+END;
+$function$;
+REVOKE ALL ON FUNCTION commercial_private.commercial_get_sale_unit_idempotency(text) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION commercial_private.commercial_get_sale_unit_idempotency(text) TO authenticated;
+
+CREATE OR REPLACE FUNCTION commercial_private.commercial_record_sale_unit_idempotency(
+  p_key text,p_fingerprint text,p_base_key text,p_sale_id uuid
+) RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path TO 'pg_catalog','public','commercial_private'
+AS $function$
+BEGIN
+  IF auth.uid() IS NULL OR p_key IS NULL OR length(btrim(p_key)) NOT BETWEEN 8 AND 200
+     OR p_fingerprint IS NULL OR p_base_key IS NULL OR length(btrim(p_base_key)) NOT BETWEEN 8 AND 200
+     OR p_sale_id IS NULL THEN
+    RAISE EXCEPTION 'invalid_sell_unit_idempotency_record' USING ERRCODE='42501';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.commercial_sales s
+    WHERE s.id=p_sale_id AND s.user_id=auth.uid() AND s.idempotency_key=btrim(p_base_key)
+  ) THEN RAISE EXCEPTION 'sell_unit_idempotency_sale_not_owned' USING ERRCODE='42501'; END IF;
+  INSERT INTO public.commercial_sale_unit_idempotency(
+    user_id,idempotency_key,request_fingerprint,base_idempotency_key,sale_id
+  ) VALUES(auth.uid(),btrim(p_key),p_fingerprint,btrim(p_base_key),p_sale_id);
+END;
+$function$;
+REVOKE ALL ON FUNCTION commercial_private.commercial_record_sale_unit_idempotency(text,text,text,uuid) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION commercial_private.commercial_record_sale_unit_idempotency(text,text,text,uuid) TO authenticated;
 
 -- Replace fractional selling-unit RPC wrappers with integer-only contracts.
 -- Keep the existing atomic base-unit checkout, invoice snapshots, idempotency and return lifecycle.
@@ -105,9 +143,7 @@ BEGIN
   PERFORM pg_advisory_xact_lock(hashtext(auth.uid()::text),hashtext('sell-unit-checkout:'||btrim(p_idempotency_key)));
   SELECT request_fingerprint,base_idempotency_key,sale_id
     INTO v_saved_fingerprint,v_saved_base_key,v_saved_sale_id
-  FROM public.commercial_sale_unit_idempotency
-  WHERE user_id=auth.uid() AND idempotency_key=btrim(p_idempotency_key)
-  FOR UPDATE;
+  FROM commercial_private.commercial_get_sale_unit_idempotency(btrim(p_idempotency_key));
   IF FOUND THEN
     IF v_saved_fingerprint IS DISTINCT FROM v_request_fingerprint THEN
       RAISE EXCEPTION 'idempotency_key_reused_with_different_sell_unit_request' USING ERRCODE='23505';
@@ -328,9 +364,9 @@ BEGIN
   WHERE i.sale_id=v_sale_id;
 
   IF v_saved_sale_id IS NULL THEN
-    INSERT INTO public.commercial_sale_unit_idempotency(
-      user_id,idempotency_key,request_fingerprint,base_idempotency_key,sale_id
-    ) VALUES(auth.uid(),btrim(p_idempotency_key),v_request_fingerprint,v_effective_key,v_sale_id);
+    PERFORM commercial_private.commercial_record_sale_unit_idempotency(
+      btrim(p_idempotency_key),v_request_fingerprint,v_effective_key,v_sale_id
+    );
   END IF;
 
   RETURN v_sale || jsonb_build_object(
