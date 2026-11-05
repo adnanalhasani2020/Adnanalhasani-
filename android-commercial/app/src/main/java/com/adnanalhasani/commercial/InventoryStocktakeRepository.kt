@@ -64,8 +64,22 @@ private fun stocktakeCreateKey(context: Context): String {
         }
 }
 
-private fun stocktakeRpc(context: Context, function: String, payload: JSONObject): JSONObject {
+private fun stocktakeRpc(
+    context: Context,
+    captured: InventoryStocktakeContext,
+    function: String,
+    payload: JSONObject
+): JSONObject {
+    // Re-read the selected context immediately before the network write. A user
+    // switch between validation and send must never redirect an old stocktake ID.
     val current = inventoryStocktakeContext(context)
+    require(
+        current.organizationId == captured.organizationId &&
+            current.activityId == captured.activityId &&
+            current.locationId == captured.locationId
+    ) {
+        "تغيرت المؤسسة أو النشاط أو الفرع أثناء تجهيز الطلب. لم نرسل أي عملية؛ أعد فتح مستند الجرد."
+    }
     val raw = SupabaseClient.request("/rest/v1/rpc/$function", "POST", payload, current.accessToken)
     return JSONObject(raw)
 }
@@ -157,7 +171,7 @@ internal fun createCommercialInventoryStocktake(context: Context, notes: String)
     require(notes.length <= 2000) { "الملاحظات أطول من الحد المسموح." }
     val current = inventoryStocktakeContext(context)
     val key = stocktakeCreateKey(context)
-    val result = stocktakeRpc(context, "commercial_create_inventory_stocktake", JSONObject()
+    val result = stocktakeRpc(context, current, "commercial_create_inventory_stocktake", JSONObject()
         .put("p_organization_id", current.organizationId)
         .put("p_activity_id", current.activityId)
         .put("p_location_id", current.locationId)
@@ -165,8 +179,11 @@ internal fun createCommercialInventoryStocktake(context: Context, notes: String)
         .put("p_notes", notes.trim()))
     val id = result.optString("stocktake_id")
     require(id.isNotBlank() && id != "null") { "لم يُرجع الخادم معرف مستند الجرد." }
-    context.getSharedPreferences("commercial_inventory_stocktake_keys_v1", Context.MODE_PRIVATE)
+    val cleared = context.getSharedPreferences("commercial_inventory_stocktake_keys_v1", Context.MODE_PRIVATE)
         .edit().remove("pending_create").commit()
+    check(cleared) {
+        "أنشأ الخادم مسودة الجرد، لكن تعذر مسح مفتاح إعادة المحاولة المحلي. أعد المحاولة بنفس الطلب ولا تنشئ مستندًا جديدًا الآن."
+    }
     return id
 }
 
@@ -175,7 +192,7 @@ internal fun saveCommercialInventoryStocktakeCounts(
     stocktakeId: String,
     lines: List<CommercialInventoryStocktakeLine>
 ): Int {
-    requireStocktakeMatchesCurrentContext(context, stocktakeId)
+    val captured = requireStocktakeMatchesCurrentContext(context, stocktakeId)
     val changed = lines.filter { it.countedQuantity.isNotBlank() }
     require(changed.isNotEmpty()) { "أدخل كمية فعلية لبند واحد على الأقل قبل الحفظ." }
     val payload = JSONArray()
@@ -197,33 +214,33 @@ internal fun saveCommercialInventoryStocktakeCounts(
             .put("counted_quantity", quantity.toPlainString())
             .put("adjustment_unit_cost_minor", if (rawCost.isBlank()) JSONObject.NULL else rawCost))
     }
-    val result = stocktakeRpc(context, "commercial_set_inventory_stocktake_counts", JSONObject()
+    val result = stocktakeRpc(context, captured, "commercial_set_inventory_stocktake_counts", JSONObject()
         .put("p_stocktake_id", stocktakeId)
         .put("p_lines", payload))
     return result.optInt("updated_line_count", changed.size)
 }
 
 internal fun submitCommercialInventoryStocktake(context: Context, stocktakeId: String) {
-    requireStocktakeMatchesCurrentContext(context, stocktakeId)
-    stocktakeRpc(context, "commercial_submit_inventory_stocktake", JSONObject().put("p_stocktake_id", stocktakeId))
+    val captured = requireStocktakeMatchesCurrentContext(context, stocktakeId)
+    stocktakeRpc(context, captured, "commercial_submit_inventory_stocktake", JSONObject().put("p_stocktake_id", stocktakeId))
 }
 
 internal fun approveCommercialInventoryStocktake(context: Context, stocktakeId: String) {
-    requireStocktakeMatchesCurrentContext(context, stocktakeId)
-    stocktakeRpc(context, "commercial_approve_inventory_stocktake", JSONObject().put("p_stocktake_id", stocktakeId))
+    val captured = requireStocktakeMatchesCurrentContext(context, stocktakeId)
+    stocktakeRpc(context, captured, "commercial_approve_inventory_stocktake", JSONObject().put("p_stocktake_id", stocktakeId))
 }
 
 internal fun postCommercialInventoryStocktake(context: Context, stocktakeId: String) {
-    requireStocktakeMatchesCurrentContext(context, stocktakeId)
-    stocktakeRpc(context, "commercial_post_inventory_stocktake", JSONObject()
+    val captured = requireStocktakeMatchesCurrentContext(context, stocktakeId)
+    stocktakeRpc(context, captured, "commercial_post_inventory_stocktake", JSONObject()
         .put("p_stocktake_id", stocktakeId)
         .put("p_idempotency_key", stocktakeActionKey(context, stocktakeId, "post")))
 }
 
 internal fun reverseCommercialInventoryStocktake(context: Context, stocktakeId: String, reason: String) {
-    requireStocktakeMatchesCurrentContext(context, stocktakeId)
+    val captured = requireStocktakeMatchesCurrentContext(context, stocktakeId)
     require(reason.trim().length >= 8) { "اكتب سببًا واضحًا للعكس (8 أحرف على الأقل)." }
-    stocktakeRpc(context, "commercial_reverse_inventory_stocktake", JSONObject()
+    stocktakeRpc(context, captured, "commercial_reverse_inventory_stocktake", JSONObject()
         .put("p_stocktake_id", stocktakeId)
         .put("p_reason", reason.trim())
         .put("p_idempotency_key", stocktakeActionKey(context, stocktakeId, "reverse")))
