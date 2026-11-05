@@ -33,13 +33,12 @@ internal class CatalogBrowseWorkflow(
             onFeedback("أدخل معرّف المؤسسة UUID أولًا.")
             return
         }
-        if (busy() || (!reset && (!hasMore() || pageLoadFailed()))) return
+        if (busy() || (!reset && !hasMore())) return
         setPageLoadFailed(false)
         val requestedOffset = if (reset) 0 else currentOffset()
         if (reset) {
             setOffset(0)
             setHasMore(true)
-            setItems(emptyList())
         }
         request({
             val payload = JSONObject()
