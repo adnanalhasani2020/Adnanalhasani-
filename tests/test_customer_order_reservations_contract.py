@@ -57,3 +57,9 @@ def test_reservation_dialog_requires_expiry_and_exposes_all_expiry_policies():
     assert "release_stock" in screen
     assert "keep_reserved_notify" in screen
     assert "cancel_order" in screen
+
+def test_reminder_notification_type_is_added_to_the_existing_production_constraint():
+    sql = MIGRATION.read_text(encoding="utf-8").lower()
+    assert "drop constraint if exists commercial_user_notifications_notification_type_check" in sql
+    assert "add constraint commercial_user_notifications_notification_type_check" in sql
+    assert "'message','reminder'" in sql
