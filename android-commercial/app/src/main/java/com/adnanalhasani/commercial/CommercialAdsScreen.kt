@@ -125,7 +125,7 @@ internal fun CommercialAdsHomePreview(context: Context, onOpenAds: () -> Unit) {
    }
   }
  } else if(failed) {
-  TextButton(onClick={loadCommercialAdsHomeFeed(context){it.onSuccess{rows=it}.onFailure{failed=true}}){Text("تعذر تحميل العروض — إعادة المحاولة") }
+  TextButton(onClick={ loadCommercialAdsHomeFeed(context) { result -> result.onSuccess { rows = it; failed = false }.onFailure { failed = true } } }) { Text("تعذر تحميل العروض — إعادة المحاولة") }
  }
 }
 
