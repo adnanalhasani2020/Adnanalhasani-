@@ -81,7 +81,7 @@ internal fun CatalogProductEditDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    "هذا النموذج يعدّل تفاصيل الصنف المملوك لهذه المؤسسة فقط. الوحدات والعبوات، وصفة التصنيع التفصيلية، قواعد النشاط والمنطقة، والأحكام محفوظة دون تغيير.",
+                    "هذا النموذج يعدّل تفاصيل الصنف المملوك لهذه المؤسسة فقط. لا يغيّر سعر العرض أو رصيد المخزون؛ الرصيد يتغير عبر البيع والاستلام والمرتجعات المسجلة. الوحدات والعبوات، وصفة التصنيع التفصيلية، قواعد النشاط والمنطقة، والأحكام محفوظة دون تغيير.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
