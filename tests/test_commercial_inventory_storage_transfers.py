@@ -44,5 +44,14 @@ class CommercialInventoryStorageTransferTests(unittest.TestCase):
         self.assertIn("GRANT EXECUTE ON FUNCTION public.commercial_transfer_inventory_storage_location", self.sql)
 
 
+    def test_storage_quantities_preserve_fractional_inventory_precision(self):
+        self.assertIn("quantity_on_hand numeric(20,6)", self.sql)
+        self.assertIn("quantity numeric(20,6) NOT NULL CHECK (quantity > 0)", self.sql)
+        self.assertIn("p_quantity numeric(20,6)", self.sql)
+        self.assertIn("v_allocated numeric(20,6)", self.sql)
+        self.assertNotIn("p_quantity bigint", self.sql)
+        self.assertNotIn("quantity_on_hand bigint", self.sql)
+
+
 if __name__ == "__main__":
     unittest.main()
