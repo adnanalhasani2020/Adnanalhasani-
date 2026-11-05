@@ -93,3 +93,13 @@ This is consistent with an RPC-only access design. Keep direct table access deni
 ## Current decision
 
 **No production permission changes are justified by this inventory alone.** Keep issue #765 open. Continue with function-by-function review and isolated regression coverage before proposing any permission migration.
+
+
+## Additional call-chain checks from the first review pass
+
+Two examples show why a direct text scan must not be treated as a verdict:
+
+- `commercial_request_sale_return` checks that the caller is authenticated, then delegates to `commercial_request_sale_return_base_units`. The downstream function checks that the caller either created the sale or is an active member of the sale's organization with an allowed role before creating a return request. The wrapper should be tested together with the downstream function, not assessed in isolation.
+- `commercial_account_lookup_personal_account` is called by the Android personal-account linking screen. It returns only account ID, account number, display name, and account type (not email, phone, or identity documents). This appears to serve the account-linking preview, but it is also an authenticated account-discovery endpoint: review account-number entropy, request throttling, enumeration resistance, and whether a non-enumerating response is feasible. The existing source-contract test checks field minimization and that anonymous EXECUTE is revoked; it does not prove resistance to authenticated enumeration.
+
+A keyword-only grouping of the 86 callable definitions found 35 definitions directly mentioning `commercial_organization_members`, 18 with other membership/helper signals, 80 with an organization-id reference, and 36 with an activity/location/branch reference. These are search signals only; they overlap and do not establish authorization coverage. The next step is call-graph and policy review, not changing grants based on these counts.
