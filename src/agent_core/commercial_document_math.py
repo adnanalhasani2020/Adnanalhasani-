@@ -25,9 +25,8 @@ def _decimal(value, label: str) -> Decimal:
 def to_base_quantity(quantity, factor_to_base, *, label: str = "quantity") -> Decimal:
     """Convert a selling/receiving unit to the inventory base unit.
 
-    Example: 2 cartons × 12 pieces/carton = 24 pieces. Fractional base
-    quantities are allowed only when the product's base unit supports them;
-    the caller must enforce the configured base-unit precision.
+    Example: 2 cartons × 12 pieces/carton = 24 pieces. Selling quantities,
+    conversion factors, and resulting base quantities must all be whole numbers.
     """
     q = _decimal(quantity, label)
     factor = _decimal(factor_to_base, "factor_to_base")
