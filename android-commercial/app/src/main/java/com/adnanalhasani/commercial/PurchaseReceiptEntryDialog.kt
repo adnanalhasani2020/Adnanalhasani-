@@ -74,7 +74,7 @@ internal fun PurchaseReceiptEntryDialog(
                                 Text("مطلوب: ${line.quantityOrdered} · مستلم: ${line.quantityReceived.ifBlank { "0" }} · متبقٍ: $remaining")
                                 OutlinedTextField(
                                     value = quantities[line.id].orEmpty(),
-                                    onValueChange = { if (!attempted) quantities[line.id] = it.filter(Char::isDigit).take(12) },
+                                    onValueChange = { if (!attempted) quantities[line.id] = it.take(32) },
                                     label = { Text("الكمية المستلمة الآن") },
                                     modifier = Modifier.fillMaxWidth(),
                                     singleLine = true,
