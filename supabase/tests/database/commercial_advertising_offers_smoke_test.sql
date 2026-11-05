@@ -90,14 +90,21 @@ BEGIN
  IF has_table_privilege('anon','public.commercial_ads','SELECT')
   OR has_table_privilege('authenticated','public.commercial_ads','SELECT')
   OR has_table_privilege('authenticated','public.commercial_ads','INSERT')
-  OR has_table_privilege('authenticated','public.commercial_ads','UPDATE') THEN
+  OR has_table_privilege('authenticated','public.commercial_ads','UPDATE')
+  OR has_table_privilege('authenticated','public.commercial_ads','DELETE') THEN
   RAISE EXCEPTION 'direct_table_access_not_revoked';
  END IF;
  IF NOT (SELECT c.relrowsecurity FROM pg_class c WHERE c.oid='public.commercial_ads'::regclass) THEN
   RAISE EXCEPTION 'ads_rls_must_be_enabled';
  END IF;
  IF has_function_privilege('anon','public.commercial_ads_create(uuid,uuid,text,text,text,text,bigint,bigint,text,timestamptz,timestamptz,text,text,text,smallint,smallint,numeric)','EXECUTE')
-  OR NOT has_function_privilege('authenticated','public.commercial_ads_create(uuid,uuid,text,text,text,text,bigint,bigint,text,timestamptz,timestamptz,text,text,text,smallint,smallint,numeric)','EXECUTE') THEN
+  OR NOT has_function_privilege('authenticated','public.commercial_ads_create(uuid,uuid,text,text,text,text,bigint,bigint,text,timestamptz,timestamptz,text,text,text,smallint,smallint,numeric)','EXECUTE')
+  OR has_function_privilege('anon','public.commercial_ads_list_mine(uuid,integer)','EXECUTE')
+  OR NOT has_function_privilege('authenticated','public.commercial_ads_list_mine(uuid,integer)','EXECUTE')
+  OR has_function_privilege('anon','public.commercial_ads_feed(numeric,numeric,text,text,text,smallint,integer)','EXECUTE')
+  OR NOT has_function_privilege('authenticated','public.commercial_ads_feed(numeric,numeric,text,text,text,smallint,integer)','EXECUTE')
+  OR has_function_privilege('anon','public.commercial_ads_set_status(uuid,text)','EXECUTE')
+  OR NOT has_function_privilege('authenticated','public.commercial_ads_set_status(uuid,text)','EXECUTE') THEN
   RAISE EXCEPTION 'ads_rpc_grants_invalid';
  END IF;
 END $$;
