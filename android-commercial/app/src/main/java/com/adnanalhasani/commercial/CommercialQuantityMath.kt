@@ -20,14 +20,13 @@ internal fun formatCommercialStockQuantity(value: BigDecimal): String =
 internal fun isCommercialStockLow(value: BigDecimal, threshold: Int): Boolean =
     value <= BigDecimal.valueOf(threshold.toLong())
 
-/** Parse a positive selling quantity with up to three decimal places. */
+/** Parse a positive whole selling quantity. Fractional quantities are rejected at the domain boundary. */
 internal fun parseCommercialCheckoutQuantity(value: String): BigDecimal? {
     var normalized = value.trim().replace(',', '.').replace('\u066B', '.')
-    if (normalized.startsWith(".")) normalized = "0$normalized"
+    
     val ascii = buildString {
         normalized.forEach { ch ->
-            if (ch == '.') append(ch)
-            else {
+            {
                 val digit = Character.digit(ch, 10)
                 if (digit >= 0) append(('0'.code + digit).toChar()) else append(ch)
             }
@@ -48,8 +47,8 @@ internal fun aggregateCommercialCheckoutLines(
     lines.forEach { line ->
         val quantity = line.quantity.stripTrailingZeros()
         require(line.offeringId.isNotBlank() && quantity.signum() > 0 &&
-            quantity <= BigDecimal("100000") && quantity.scale() <= 3 && line.unitCode.isNotBlank()) {
-            "تحقق من الأصناف والكميات ووحدة البيع؛ الحد الأقصى ثلاث منازل عشرية."
+            quantity <= BigDecimal("100000") && quantity.stripTrailingZeros().scale() <= 0 && line.unitCode.isNotBlank()) {
+            "تحقق من الأصناف والكميات ووحدة البيع؛ الكمية يجب أن تكون عددًا صحيحًا موجبًا."
         }
         val key = line.offeringId to line.unitCode
         val total = (totals[key] ?: BigDecimal.ZERO).add(quantity)
@@ -63,17 +62,12 @@ internal fun aggregateCommercialCheckoutLines(
 
 internal fun maxCommercialReturnQuantity(remainingBaseUnits: Long, factor: Long): BigDecimal {
     if (remainingBaseUnits <= 0L || factor <= 0L) return BigDecimal.ZERO
-    val thousand = BigInteger.valueOf(1000L)
-    val factorValue = BigInteger.valueOf(factor)
-    val maxMilliUnits = BigInteger.valueOf(remainingBaseUnits).multiply(thousand).divide(factorValue)
-    val representableStep = thousand.divide(factorValue.gcd(thousand))
-    val allowedMilliUnits = maxMilliUnits.divide(representableStep).multiply(representableStep)
-    return BigDecimal(allowedMilliUnits, 3).stripTrailingZeros()
+    return BigDecimal.valueOf(remainingBaseUnits / factor)
 }
 
 /** Recover the exact conversion factor saved by a completed sale line. */
 internal fun commercialSavedSellingUnitFactor(baseQuantity: Long, sellingQuantity: BigDecimal): Long? {
-    if (baseQuantity <= 0L || sellingQuantity.signum() <= 0) return null
+    if (baseQuantity <= 0L || sellingQuantity.signum() <= 0 || sellingQuantity.stripTrailingZeros().scale() > 0) return null
     return runCatching {
         BigDecimal.valueOf(baseQuantity)
             .divide(sellingQuantity)
