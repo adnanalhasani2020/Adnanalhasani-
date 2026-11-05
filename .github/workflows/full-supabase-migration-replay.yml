@@ -1,0 +1,67 @@
+name: Full Supabase migration replay
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/tests/**'
+      - '.github/workflows/full-supabase-migration-replay.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: full-supabase-migration-replay-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  replay:
+    name: Replay complete migration history and database tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SUPABASE_TELEMETRY_DISABLED: 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # The repository currently has migrations and SQL tests but no checked-in
+      # supabase/config.toml. Generate the CLI's disposable local configuration
+      # in the runner; do not commit it or connect to any hosted project.
+      - name: Initialize disposable local Supabase configuration
+        run: |
+          supabase init --force
+          # The repository name contains uppercase characters and a trailing
+          # hyphen. Use a valid, stable local Docker project identifier.
+          sed -i 's/^project_id = .*/project_id = "adnanalhasani-local"/' supabase/config.toml
+          grep '^project_id =' supabase/config.toml
+
+      - name: Start isolated local Supabase services
+        run: |
+          for attempt in 1 2 3; do
+            if supabase --debug start -x studio,imgproxy,edge-runtime,logflare,vector,supavisor,mailpit; then
+              exit 0
+            fi
+            supabase stop --no-backup || true
+            if [ "$attempt" -lt 3 ]; then
+              sleep $((attempt * 20))
+            fi
+          done
+          exit 1
+
+      - name: Replay every repository migration from an empty database
+        run: supabase db reset --local
+
+      - name: Run the complete database pgTAP suite
+        run: supabase test db
+
+      - name: Stop disposable services
+        if: always()
+        run: supabase stop --no-backup
