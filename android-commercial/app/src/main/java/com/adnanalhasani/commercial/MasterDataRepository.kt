@@ -170,3 +170,129 @@ internal fun assignCommercialDepartmentToWarehouse(context: Context, departmentI
         .put("created_by", JSONObject.NULL)
     SupabaseClient.request("/rest/v1/commercial_department_warehouse_assignments", "POST", payload, access)
 }
+
+
+internal data class CommercialStorageInventoryBalance(
+    val id: String,
+    val warehouseId: String,
+    val storageLocationId: String,
+    val storageLocationCode: String,
+    val storageLocationName: String,
+    val offeringId: String,
+    val productName: String,
+    val unitName: String,
+    val quantityOnHand: java.math.BigDecimal
+)
+
+private fun validatedStorageQuantity(value: java.math.BigDecimal): java.math.BigDecimal {
+    require(value.signum() > 0) { "أدخل كمية أكبر من صفر." }
+    val scaled = try {
+        value.setScale(6, java.math.RoundingMode.UNNECESSARY)
+    } catch (_: ArithmeticException) {
+        throw IllegalArgumentException("الكمية تقبل حتى 6 منازل عشرية دون تقريب.")
+    }
+    require(scaled.precision() - scaled.scale() <= 14) { "الكمية تتجاوز السعة المسموح بها." }
+    require(scaled <= java.math.BigDecimal("100000000")) { "الكمية تتجاوز الحد المسموح به للحركة الواحدة." }
+    return scaled
+}
+
+/** Reads the optional bin sub-ledger; the branch-level inventory balance remains authoritative. */
+internal fun loadCommercialStorageInventoryBalances(context: Context): List<CommercialStorageInventoryBalance> {
+    val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+    val activityId = saved.getString("activity_id", null).orEmpty()
+    val branchId = saved.getString("location_id", null).orEmpty()
+    require(activityId.isNotBlank() && branchId.isNotBlank()) { "بيانات النشاط والموقع غير محفوظة." }
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val rows = commercialCloudPagedGet(
+        "/rest/v1/commercial_inventory_storage_balances" +
+            "?select=id,warehouse_id,storage_location_id,offering_id,quantity_on_hand," +
+            "storage_location:commercial_storage_locations!inner(code,name)," +
+            "offering:commercial_offerings!inner(activity_id,product:commercial_products!inner(name,unit_name))" +
+            "&organization_id=eq.$orgId&branch_location_id=eq.$branchId" +
+            "&offering.activity_id=eq.$activityId&order=storage_location_id.asc,offering_id.asc",
+        access
+    )
+    return buildList {
+        for (index in 0 until rows.length()) {
+            val row = rows.optJSONObject(index) ?: continue
+            val storage = row.optJSONObject("storage_location") ?: continue
+            val offering = row.optJSONObject("offering") ?: continue
+            val product = offering.optJSONObject("product") ?: continue
+            val quantity = try {
+                java.math.BigDecimal(row.optString("quantity_on_hand"))
+            } catch (_: NumberFormatException) {
+                throw IllegalStateException("تعذر قراءة كمية أحد مواقع التخزين؛ تم إيقاف العرض دون تقريب.")
+            }
+            require(quantity.signum() >= 0 && quantity.scale().coerceAtLeast(0) <= 6) {
+                "كمية موقع التخزين خارج الدقة المعتمدة؛ تم إيقاف العرض."
+            }
+            add(CommercialStorageInventoryBalance(
+                id = row.optString("id"),
+                warehouseId = row.optString("warehouse_id"),
+                storageLocationId = row.optString("storage_location_id"),
+                storageLocationCode = storage.optString("code"),
+                storageLocationName = storage.optString("name"),
+                offeringId = row.optString("offering_id"),
+                productName = product.optString("name"),
+                unitName = product.optString("unit_name"),
+                quantityOnHand = quantity
+            ))
+        }
+    }
+}
+
+/** Allocate only previously unallocated branch stock; server-side RPC enforces all scope and ceiling checks. */
+internal fun allocateCommercialInventoryToStorageLocation(
+    context: Context,
+    warehouseId: String,
+    storageLocationId: String,
+    offeringId: String,
+    quantity: java.math.BigDecimal
+) {
+    require(warehouseId.isNotBlank() && storageLocationId.isNotBlank() && offeringId.isNotBlank()) {
+        "اختر المستودع وموقع التخزين والصنف."
+    }
+    val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+    val branchId = saved.getString("location_id", null).orEmpty()
+    require(branchId.isNotBlank()) { "موقع المؤسسة غير محفوظ." }
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val payload = JSONObject()
+        .put("p_organization_id", orgId)
+        .put("p_branch_location_id", branchId)
+        .put("p_warehouse_id", warehouseId)
+        .put("p_storage_location_id", storageLocationId)
+        .put("p_offering_id", offeringId)
+        .put("p_quantity", validatedStorageQuantity(quantity))
+        .put("p_idempotency_key", java.util.UUID.randomUUID().toString())
+    SupabaseClient.request("/rest/v1/rpc/commercial_allocate_inventory_to_storage_location", "POST", payload, access)
+}
+
+/** Move allocated stock between active stockable bins in the same warehouse, without changing aggregate stock or cost layers. */
+internal fun transferCommercialInventoryBetweenStorageLocations(
+    context: Context,
+    warehouseId: String,
+    sourceStorageLocationId: String,
+    destinationStorageLocationId: String,
+    offeringId: String,
+    quantity: java.math.BigDecimal
+) {
+    require(warehouseId.isNotBlank() && sourceStorageLocationId.isNotBlank() &&
+        destinationStorageLocationId.isNotBlank() && offeringId.isNotBlank()) {
+        "اختر المستودع وموقعي المصدر والوجهة والصنف."
+    }
+    require(sourceStorageLocationId != destinationStorageLocationId) { "موقع المصدر والوجهة يجب أن يختلفا." }
+    val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+    val branchId = saved.getString("location_id", null).orEmpty()
+    require(branchId.isNotBlank()) { "موقع المؤسسة غير محفوظ." }
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val payload = JSONObject()
+        .put("p_organization_id", orgId)
+        .put("p_branch_location_id", branchId)
+        .put("p_warehouse_id", warehouseId)
+        .put("p_source_storage_location_id", sourceStorageLocationId)
+        .put("p_destination_storage_location_id", destinationStorageLocationId)
+        .put("p_offering_id", offeringId)
+        .put("p_quantity", validatedStorageQuantity(quantity))
+        .put("p_idempotency_key", java.util.UUID.randomUUID().toString())
+    SupabaseClient.request("/rest/v1/rpc/commercial_transfer_inventory_storage_location", "POST", payload, access)
+}
