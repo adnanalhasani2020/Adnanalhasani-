@@ -67,9 +67,8 @@ internal fun loadCommercialCloudInventory(context: Context): CommercialCloudInve
                 .map { category -> category.optString("name_ar").takeUnless { it == "null" }.orEmpty().ifBlank { category.optString("name_en").takeUnless { it == "null" }.orEmpty() } }
                 .firstOrNull { it.isNotBlank() && it != "null" }
                 ?: "غير مصنف"
-            // Preserve the server's numeric quantity before any legacy integer projection.
-            // Cloud sale validation and display must use stockPrecise, never the truncated stock field.
-            // Parse PostgreSQL NUMERIC as decimal text so fractional stock is not rounded through Double.
+            // Parse PostgreSQL NUMERIC as decimal text and reject fractional stock before any legacy integer projection.
+            // Cloud sale validation and display use stockPrecise only after the whole-quantity invariant is verified.
             val availableQuantity = runCatching {
                 val onHand = BigDecimal(row.optString("quantity_on_hand", "0"))
                 val reserved = BigDecimal(row.optString("quantity_reserved", "0"))
