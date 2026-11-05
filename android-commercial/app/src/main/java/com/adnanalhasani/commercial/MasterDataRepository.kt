@@ -299,6 +299,9 @@ internal fun loadCommercialStorageInventoryBalances(context: Context): List<Comm
 /** Allocate only previously unallocated branch stock; server-side RPC enforces all scope and ceiling checks. */
 internal fun allocateCommercialInventoryToStorageLocation(
     context: Context,
+    expectedOrganizationId: String,
+    expectedActivityId: String,
+    expectedBranchLocationId: String,
     warehouseId: String,
     storageLocationId: String,
     offeringId: String,
@@ -309,12 +312,16 @@ internal fun allocateCommercialInventoryToStorageLocation(
         "اختر المستودع وموقع التخزين والصنف."
     }
     val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
-    val branchId = saved.getString("location_id", null).orEmpty()
-    require(branchId.isNotBlank()) { "موقع المؤسسة غير محفوظ." }
+    require(
+        saved.getString("organization_id", null) == expectedOrganizationId &&
+            saved.getString("activity_id", null) == expectedActivityId &&
+            saved.getString("location_id", null) == expectedBranchLocationId
+    ) { "تغير سياق المؤسسة أو النشاط أو الفرع؛ لم نرسل طلب المخزون المعلّق." }
     val (orgId, access) = commercialMasterDataAccess(context)
+    require(orgId == expectedOrganizationId) { "تغيرت المؤسسة النشطة؛ لم نرسل طلب المخزون المعلّق." }
     val payload = JSONObject()
-        .put("p_organization_id", orgId)
-        .put("p_branch_location_id", branchId)
+        .put("p_organization_id", expectedOrganizationId)
+        .put("p_branch_location_id", expectedBranchLocationId)
         .put("p_warehouse_id", warehouseId)
         .put("p_storage_location_id", storageLocationId)
         .put("p_offering_id", offeringId)
@@ -326,6 +333,9 @@ internal fun allocateCommercialInventoryToStorageLocation(
 /** Move allocated stock between active stockable bins in the same warehouse, without changing aggregate stock or cost layers. */
 internal fun transferCommercialInventoryBetweenStorageLocations(
     context: Context,
+    expectedOrganizationId: String,
+    expectedActivityId: String,
+    expectedBranchLocationId: String,
     warehouseId: String,
     sourceStorageLocationId: String,
     destinationStorageLocationId: String,
@@ -339,12 +349,16 @@ internal fun transferCommercialInventoryBetweenStorageLocations(
     }
     require(sourceStorageLocationId != destinationStorageLocationId) { "موقع المصدر والوجهة يجب أن يختلفا." }
     val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
-    val branchId = saved.getString("location_id", null).orEmpty()
-    require(branchId.isNotBlank()) { "موقع المؤسسة غير محفوظ." }
+    require(
+        saved.getString("organization_id", null) == expectedOrganizationId &&
+            saved.getString("activity_id", null) == expectedActivityId &&
+            saved.getString("location_id", null) == expectedBranchLocationId
+    ) { "تغير سياق المؤسسة أو النشاط أو الفرع؛ لم نرسل طلب المخزون المعلّق." }
     val (orgId, access) = commercialMasterDataAccess(context)
+    require(orgId == expectedOrganizationId) { "تغيرت المؤسسة النشطة؛ لم نرسل طلب المخزون المعلّق." }
     val payload = JSONObject()
-        .put("p_organization_id", orgId)
-        .put("p_branch_location_id", branchId)
+        .put("p_organization_id", expectedOrganizationId)
+        .put("p_branch_location_id", expectedBranchLocationId)
         .put("p_warehouse_id", warehouseId)
         .put("p_source_storage_location_id", sourceStorageLocationId)
         .put("p_destination_storage_location_id", destinationStorageLocationId)
