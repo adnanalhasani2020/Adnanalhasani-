@@ -135,6 +135,51 @@ internal fun clearCommercialCloudMultiSaleKey(context: Context, idempotencyKey: 
     }
 }
 
+internal fun retryPendingCommercialCloudMultiSale(context: Context): JSONObject {
+    val prefs = context.getSharedPreferences("commercial_cloud_pending_multi_sale_v1", Context.MODE_PRIVATE)
+    val key = prefs.getString("idempotency_key", null).orEmpty()
+    require(key.isNotBlank()) { "لا توجد فاتورة سحابية محفوظة لإعادة المحاولة." }
+    val payloadText = prefs.getString("payload", null).orEmpty()
+    require(payloadText.isNotBlank()) { "بيانات الفاتورة المعلقة غير مكتملة؛ لم يتم إرسال أي فاتورة." }
+    val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+    require(prefs.getString("organization_id", null) == saved.getString("organization_id", null) &&
+        prefs.getString("activity_id", null) == saved.getString("activity_id", null) &&
+        prefs.getString("location_id", null) == saved.getString("location_id", null)) {
+        "الفاتورة المعلقة تخص مؤسسة أو نشاطًا أو موقعًا آخر. بدّل إلى السياق الأصلي أولًا؛ لم يتم إنشاء فاتورة جديدة."
+    }
+    val payload = JSONObject(payloadText)
+    val rawLines = payload.optJSONArray("lines")
+        ?: throw IllegalStateException("بنود الفاتورة المعلقة غير موجودة؛ لم يتم إرسال أي فاتورة.")
+    require(rawLines.length() > 0) { "الفاتورة المعلقة لا تحتوي بنودًا؛ لم يتم إرسال أي فاتورة." }
+    val lines = List(rawLines.length()) { index ->
+        val row = rawLines.getJSONObject(index)
+        val offeringId = row.optString("offering_id").trim()
+        val unitCode = row.optString("unit_code").trim()
+        val quantity = row.optString("quantity").toBigDecimalOrNull()
+        require(offeringId.isNotBlank() && unitCode.isNotBlank() && quantity != null && quantity.signum() > 0) {
+            "بيانات أحد بنود الفاتورة المعلقة غير صالحة؛ لم يتم إرسال أي فاتورة."
+        }
+        CommercialCloudCheckoutLine(offeringId, quantity, unitCode)
+    }
+    val paymentMode = payload.optString("payment_mode", "cash")
+    require(paymentMode == "cash" || paymentMode == "credit") {
+        "طريقة دفع الفاتورة المعلقة غير مدعومة؛ لم يتم إرسال أي فاتورة."
+    }
+    val customerId = if (payload.isNull("customer_id")) null else payload.optString("customer_id").takeIf { it.isNotBlank() }
+    val initialPayment = if (payload.isNull("initial_payment_minor")) 0L else payload.optLong("initial_payment_minor", 0L)
+    val discount = payload.optLong("discount_minor", -1L)
+    val tax = payload.optLong("tax_minor", -1L)
+    require(discount >= 0L && tax >= 0L) { "قيم الخصم أو الضريبة في الفاتورة المعلقة غير صالحة." }
+
+    // Re-submit the exact locally persisted payload with its original idempotency key.
+    // The server returns the prior sale if it already committed; otherwise it processes this same request.
+    val sale = checkoutCommercialCloudSaleMulti(
+        context, lines, key, customerId, paymentMode, initialPayment, discount, tax
+    )
+    clearCommercialCloudMultiSaleKey(context, key)
+    return sale
+}
+
 internal fun checkoutCommercialCloudSaleMulti(
     context: Context,
     lines: List<CommercialCloudCheckoutLine>,
