@@ -373,7 +373,7 @@ internal fun CommercialCloudSaleComposerScreen(
                             }
                         }
                         Text("يمكن تكرار الصنف في أكثر من سطر مع اختيار وحدة وكمية مستقلتين لكل سطر.", color = CloudComposerMuted, fontSize = 11.sp)
-                        Text("تُقبل الكميات الكسرية حتى ثلاث منازل عشرية عندما يحولها معامل الوحدة إلى عدد صحيح من وحدات المخزون.", color = CloudComposerMuted, fontSize = 10.sp)
+                        Text("الكمية المدخلة ومعامل التحويل وكمية المخزون الناتجة يجب أن تكون أعدادًا صحيحة فقط.", color = CloudComposerMuted, fontSize = 10.sp)
                     }
                 }
             }
