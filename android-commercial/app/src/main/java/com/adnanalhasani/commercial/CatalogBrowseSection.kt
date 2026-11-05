@@ -131,17 +131,24 @@ internal fun CatalogBrowseSection(
             }
         }
         item {
-            Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(country,onCountryChange,Modifier.weight(1f),label={Text("الدولة")},singleLine=true)
-                OutlinedTextField(region,onRegionChange,Modifier.weight(1f),label={Text("المنطقة")},singleLine=true)
-                OutlinedTextField(city,onCityChange,Modifier.weight(1f),label={Text("المدينة")},singleLine=true)
+            Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
+                OutlinedTextField(country,onCountryChange,Modifier.fillMaxWidth(),label={Text("رمز الدولة (مثل YE)")},singleLine=true)
+                OutlinedTextField(region,onRegionChange,Modifier.fillMaxWidth(),label={Text("المنطقة / المحافظة")},singleLine=true)
+                OutlinedTextField(city,onCityChange,Modifier.fillMaxWidth(),label={Text("المدينة / المديرية")},singleLine=true)
             }
         }
         item {
-            Row(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically) {
-                OutlinedTextField(locale,onLocaleChange,Modifier.weight(1f),label={Text("اللغة")},singleLine=true)
-                Button(onClick=onSearch,enabled=!busy) { Icon(Icons.Default.Search,null); Text("بحث") }
-                OutlinedButton(onClick=onRefreshDirectories,enabled=!busy) { Text("تحديث الأدلة") }
+            Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(locale,onLocaleChange,Modifier.fillMaxWidth(),label={Text("لغة النتائج (مثل ar أو en)")},singleLine=true)
+                Row(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically) {
+                    Button(onClick=onSearch,enabled=!busy,modifier=Modifier.weight(1f)) {
+                        Icon(Icons.Default.Search,null)
+                        Text("بحث")
+                    }
+                    OutlinedButton(onClick=onRefreshDirectories,enabled=!busy,modifier=Modifier.weight(1f)) {
+                        Text("تحديث الأدلة")
+                    }
+                }
             }
         }
         items(items,key={it.id}) { item ->
