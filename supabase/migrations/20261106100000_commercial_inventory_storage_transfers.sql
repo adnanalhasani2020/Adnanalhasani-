@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS public.commercial_inventory_storage_balances (
   warehouse_id uuid NOT NULL REFERENCES public.commercial_warehouses(id) ON DELETE RESTRICT,
   storage_location_id uuid NOT NULL REFERENCES public.commercial_storage_locations(id) ON DELETE RESTRICT,
   offering_id uuid NOT NULL REFERENCES public.commercial_offerings(id) ON DELETE RESTRICT,
-  quantity_on_hand bigint NOT NULL DEFAULT 0 CHECK (quantity_on_hand >= 0),
+  quantity_on_hand numeric(20,6) NOT NULL DEFAULT 0 CHECK (quantity_on_hand >= 0),
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (organization_id, storage_location_id, offering_id)
@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS public.commercial_inventory_storage_movements (
   movement_type text NOT NULL CHECK (movement_type IN ('allocation','internal_transfer')),
   source_storage_location_id uuid REFERENCES public.commercial_storage_locations(id) ON DELETE RESTRICT,
   destination_storage_location_id uuid NOT NULL REFERENCES public.commercial_storage_locations(id) ON DELETE RESTRICT,
-  quantity bigint NOT NULL CHECK (quantity > 0),
+  quantity numeric(20,6) NOT NULL CHECK (quantity > 0),
   idempotency_key text NOT NULL CHECK (length(btrim(idempotency_key)) BETWEEN 8 AND 200),
   request_fingerprint text NOT NULL,
   created_by uuid NOT NULL REFERENCES auth.users(id) ON DELETE RESTRICT,
@@ -103,7 +103,7 @@ CREATE OR REPLACE FUNCTION public.commercial_allocate_inventory_to_storage_locat
   p_warehouse_id uuid,
   p_storage_location_id uuid,
   p_offering_id uuid,
-  p_quantity bigint,
+  p_quantity numeric(20,6),
   p_idempotency_key text
 ) RETURNS jsonb
 LANGUAGE plpgsql
@@ -114,7 +114,7 @@ DECLARE
   v_uid uuid := auth.uid();
   v_balance public.commercial_inventory_balances%ROWTYPE;
   v_existing public.commercial_inventory_storage_movements%ROWTYPE;
-  v_allocated bigint;
+  v_allocated numeric(20,6);
   v_fingerprint text;
   v_balance_id uuid;
   v_movement_id uuid;
@@ -183,7 +183,7 @@ BEGIN
     RAISE EXCEPTION 'inventory_balance_invalid' USING ERRCODE = '23514';
   END IF;
 
-  SELECT coalesce(sum(quantity_on_hand),0)::bigint INTO v_allocated
+  SELECT coalesce(sum(quantity_on_hand),0)::numeric(20,6) INTO v_allocated
   FROM public.commercial_inventory_storage_balances
   WHERE organization_id = p_organization_id
     AND branch_location_id = p_branch_location_id AND offering_id = p_offering_id;
@@ -351,11 +351,11 @@ BEGIN
 END;
 $function$;
 
-REVOKE ALL ON FUNCTION public.commercial_allocate_inventory_to_storage_location(uuid,uuid,uuid,uuid,uuid,bigint,text)
+REVOKE ALL ON FUNCTION public.commercial_allocate_inventory_to_storage_location(uuid,uuid,uuid,uuid,uuid,numeric,text)
   FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.commercial_allocate_inventory_to_storage_location(uuid,uuid,uuid,uuid,uuid,bigint,text)
   TO authenticated;
-REVOKE ALL ON FUNCTION public.commercial_transfer_inventory_storage_location(uuid,uuid,uuid,uuid,uuid,uuid,bigint,text)
+REVOKE ALL ON FUNCTION public.commercial_transfer_inventory_storage_location(uuid,uuid,uuid,uuid,uuid,uuid,numeric,text)
   FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.commercial_transfer_inventory_storage_location(uuid,uuid,uuid,uuid,uuid,uuid,bigint,text)
   TO authenticated;
