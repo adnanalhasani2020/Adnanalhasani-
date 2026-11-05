@@ -10,7 +10,7 @@ internal data class LocalSaleUnit(
     val code: String,
     val role: String,
     val label: String,
-    val quantityInBase: Double,
+    val quantityInBase: Long,
     val barcode: String,
     val imageUrl: String,
     val isDefault: Boolean
@@ -30,22 +30,30 @@ internal fun productMatchesUnitQuery(product: Product, query: String): Boolean {
 internal fun localSaleUnits(product: Product): List<LocalSaleUnit> {
     val parsed = runCatching {
         val json = JSONArray(product.unitVariantsJson)
-        List(json.length()) { index ->
-            val item = json.getJSONObject(index)
-            LocalSaleUnit(
-                code = item.optString("unitCode", product.unitCode).ifBlank { product.unitCode },
-                role = item.optString("role", "base").ifBlank { "base" },
-                label = item.optString("packageName").takeUnless { it.isNullOrBlank() || it == "null" }
-                    ?: item.optString("unitName").takeUnless { it.isNullOrBlank() || it == "null" }
-                    ?: item.optString("unitCode", product.unitCode).ifBlank { product.unitCode },
-                quantityInBase = item.optString("quantityInBase", "1").toDoubleOrNull()?.takeIf { it > 0 } ?: 1.0,
-                barcode = item.optString("barcode").takeUnless { it == "null" }.orEmpty(),
-                imageUrl = item.optString("imageUrl").takeUnless { it == "null" }.orEmpty(),
-                isDefault = item.optBoolean("isDefault", false)
-            )
-        }.filter { it.code.isNotBlank() && it.role in setOf("base", "sale") }
+        buildList {
+            for (index in 0 until json.length()) {
+                val item = json.getJSONObject(index)
+                val factor = item.optString("quantityInBase", "1").toBigDecimalOrNull()?.let {
+                    runCatching { it.toBigIntegerExact().longValueExact() }.getOrNull()
+                }?.takeIf { it > 0L } ?: continue
+                val code = item.optString("unitCode", product.unitCode).ifBlank { product.unitCode }
+                val role = item.optString("role", "base").ifBlank { "base" }
+                if (code.isBlank() || role !in setOf("base", "sale")) continue
+                add(LocalSaleUnit(
+                    code = code,
+                    role = role,
+                    label = item.optString("packageName").takeUnless { it.isNullOrBlank() || it == "null" }
+                        ?: item.optString("unitName").takeUnless { it.isNullOrBlank() || it == "null" }
+                        ?: code,
+                    quantityInBase = factor,
+                    barcode = item.optString("barcode").takeUnless { it == "null" }.orEmpty(),
+                    imageUrl = item.optString("imageUrl").takeUnless { it == "null" }.orEmpty(),
+                    isDefault = item.optBoolean("isDefault", false)
+                ))
+            }
+        }
     }.getOrDefault(emptyList())
     return parsed.ifEmpty {
-        listOf(LocalSaleUnit(product.unitCode.ifBlank { "EA" }, "base", product.unitCode.ifBlank { "EA" }, 1.0, product.barcode, product.imageUrl, true))
+        listOf(LocalSaleUnit(product.unitCode.ifBlank { "EA" }, "base", product.unitCode.ifBlank { "EA" }, 1L, product.barcode, product.imageUrl, true))
     }
 }
