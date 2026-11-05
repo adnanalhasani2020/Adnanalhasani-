@@ -44,6 +44,9 @@ def test_cloud_rpcs_and_numeric_storage_are_integer_only():
     assert "commercial_private.commercial_create_inventory_item" in migration
     assert "commercial_catalog_create_inventory_item_from_global" in migration
     assert "p_reorder_point <> trunc(p_reorder_point)" in migration
+    assert "commercial_private.commercial_record_supplier_invoice(" in migration
+    supplier_invoice_rpc = migration.split("CREATE OR REPLACE FUNCTION commercial_private.commercial_record_supplier_invoice(", 1)[1].split("$function$;", 1)[0]
+    assert "v_qty <> trunc(v_qty)" in supplier_invoice_rpc
     assert "v_qty <> trunc(v_qty)" in migration
 
 
