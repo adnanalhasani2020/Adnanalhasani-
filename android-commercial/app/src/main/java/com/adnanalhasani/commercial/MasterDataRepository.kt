@@ -192,7 +192,7 @@ internal fun loadCommercialStorageAllocationProducts(context: Context): List<Com
     val rows = commercialCloudPagedGet(
         "/rest/v1/commercial_inventory_balances" +
             "?select=offering_id,quantity_on_hand,quantity_reserved," +
-            "offering:commercial_offerings!inner(id,activity_id,product:commercial_products!inner(name,unit_name,unit_code,state))" +
+            "offering:commercial_offerings!inner(id,activity_id,state,product:commercial_products!inner(name,unit_name,unit_code,state))" +
             "&organization_id=eq.$orgId&location_id=eq.$branchId&offering.activity_id=eq.$activityId" +
             "&order=offering_id.asc",
         access
@@ -202,7 +202,7 @@ internal fun loadCommercialStorageAllocationProducts(context: Context): List<Com
             val row = rows.optJSONObject(index) ?: continue
             val offering = row.optJSONObject("offering") ?: continue
             val product = offering.optJSONObject("product") ?: continue
-            if (product.optString("state") != "active") continue
+            if (offering.optString("state") != "active" || product.optString("state") != "active") continue
             val onHand = try {
                 java.math.BigDecimal(row.optString("quantity_on_hand"))
             } catch (_: NumberFormatException) {
