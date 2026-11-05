@@ -83,6 +83,8 @@ class CommercialInventoryStocktakeContractTests(unittest.TestCase):
         self.assertIn("onStocktake = if (cloudMode)", self.store_app)
         self.assertIn("stocktakePage -> CommercialInventoryStocktakeScreen", self.store_app)
         self.assertIn("حفظ وإرسال للاعتماد", self.screen)
+        self.assertIn("على مستوى الفرع بالكامل", self.screen)
+        self.assertIn("بالوحدة الأساسية للمخزون", self.screen)
         self.assertIn("الترحيل معطل حتى اكتمال القيود المحاسبية", self.screen)
         self.assertIn("العكس معطل حتى اكتمال القيود المحاسبية", self.screen)
         self.assertIn("enabled = false", self.screen)
