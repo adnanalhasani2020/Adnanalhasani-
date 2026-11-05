@@ -37,13 +37,13 @@ class CatalogActivityHierarchySelectorTests(unittest.TestCase):
         self.assertNotRegex(self.source, r"OutlinedTextField\(businessLevel\s*,")
 
     def test_initial_activity_restores_its_sector_and_default_level(self):
-        self.assertIn("catalogSectorForNode(initialActivityCode.uppercase(), activityNodes)", self.source)
+        self.assertIn("catalogSectorForNode(initialActivityCode().uppercase(), directory.activityNodes)", self.source)
         self.assertIn("businessLevel = it", self.source)
 
     def test_rpc_filters_keep_existing_parameter_contract(self):
-        self.assertIn('.put("p_activity_node_code",selectedActivityCode.trim().uppercase()', self.source)
-        self.assertIn('.put("p_sector_code",sector.trim()', self.source)
-        self.assertIn('.put("p_business_level_code",businessLevel.trim()', self.source)
+        self.assertIn('.put("p_activity_node_code",activityCode().trim().uppercase()', self.source)
+        self.assertIn('.put("p_sector_code",sector().trim()', self.source)
+        self.assertIn('.put("p_business_level_code",businessLevel().trim()', self.source)
 
     def test_legacy_activity_triple_representation_is_removed(self):
         self.assertNotIn("List<Triple<String, String, String>>", self.source)
