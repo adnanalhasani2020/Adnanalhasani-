@@ -1,0 +1,15 @@
+BEGIN;
+SELECT plan(11);
+SELECT has_table('public','commercial_customer_order_reservations','reservation header ledger exists');
+SELECT has_table('public','commercial_customer_order_reservation_items','reservation line ledger exists');
+SELECT has_function('public','commercial_customer_portal_reserve_order',ARRAY['uuid','uuid','uuid','timestamp with time zone','text','text'],'atomic reservation RPC exists');
+SELECT has_function('public','commercial_customer_portal_process_expired_order_reservations',ARRAY['uuid','integer'],'expiry processor exists');
+SELECT has_function('public','commercial_customer_portal_fulfill_reserved_order',ARRAY['uuid','uuid','uuid','text'],'reserved fulfillment wrapper exists');
+SELECT ok(has_function_privilege('authenticated','public.commercial_customer_portal_reserve_order(uuid,uuid,uuid,timestamptz,text,text)','EXECUTE'),'authenticated can reserve stock');
+SELECT ok(NOT has_function_privilege('anon','public.commercial_customer_portal_reserve_order(uuid,uuid,uuid,timestamptz,text,text)','EXECUTE'),'anonymous cannot reserve stock');
+SELECT ok(has_function_privilege('authenticated','public.commercial_customer_portal_process_expired_order_reservations(uuid,integer)','EXECUTE'),'authenticated manager RPC can process expiries');
+SELECT ok(NOT has_function_privilege('anon','public.commercial_customer_portal_process_expired_order_reservations(uuid,integer)','EXECUTE'),'anonymous cannot process expiries');
+SELECT ok(has_function_privilege('authenticated','public.commercial_customer_portal_fulfill_reserved_order(uuid,uuid,uuid,text)','EXECUTE'),'authenticated can fulfill reserved orders');
+SELECT ok(NOT has_function_privilege('anon','public.commercial_customer_portal_fulfill_reserved_order(uuid,uuid,uuid,text)','EXECUTE'),'anonymous cannot fulfill reserved orders');
+SELECT * FROM finish();
+ROLLBACK;
