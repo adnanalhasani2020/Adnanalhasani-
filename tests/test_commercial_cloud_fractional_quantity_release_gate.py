@@ -41,6 +41,9 @@ def test_cloud_rpcs_and_numeric_storage_are_integer_only():
     assert "CREATE OR REPLACE FUNCTION public.commercial_customer_portal_create_order(" in migration
     assert "CREATE OR REPLACE FUNCTION public.commercial_customer_portal_create_delegated_order(" in migration
     assert "CREATE OR REPLACE FUNCTION public.commercial_customer_portal_create_multi_service_booking(" in migration
+    assert "commercial_private.commercial_create_inventory_item" in migration
+    assert "commercial_catalog_create_inventory_item_from_global" in migration
+    assert "p_reorder_point <> trunc(p_reorder_point)" in migration
     assert "v_qty <> trunc(v_qty)" in migration
 
 
