@@ -71,6 +71,8 @@ private fun isDefinitiveStorageInventoryRejection(message: String): Boolean {
         "invalid_inventory_storage_allocation",
         "invalid_inventory_storage_transfer",
         "inventory_balance_invalid",
+        "inventory_balance_not_found",
+        "idempotency_key_reused_with_different_request",
         "لم يُسمح بتنفيذ العملية"
     )
     return markers.any { message.contains(it, ignoreCase = true) }
@@ -82,14 +84,14 @@ private fun loadPendingStorageInventoryAction(context: Context): PendingStorageI
     return runCatching {
         val json = JSONObject(raw)
         PendingStorageInventoryAction(
-            mode = json.getString("mode"),
-            warehouseId = json.getString("warehouse_id"),
+            mode = json.getString("mode").also { require(it == "allocation" || it == "transfer") },
+            warehouseId = json.getString("warehouse_id").also { require(it.isNotBlank()) },
             locationId = json.optString("location_id"),
             sourceLocationId = json.optString("source_location_id"),
             destinationLocationId = json.optString("destination_location_id"),
             offeringId = json.getString("offering_id"),
-            quantity = BigDecimal(json.getString("quantity")),
-            idempotencyKey = json.getString("idempotency_key")
+            quantity = BigDecimal(json.getString("quantity")).also { require(it.signum() > 0) },
+            idempotencyKey = json.getString("idempotency_key").also { require(it.length in 8..200) }
         )
     }.getOrNull()
 }
@@ -110,7 +112,7 @@ private fun persistPendingStorageInventoryAction(context: Context, action: Pendi
             .put("idempotency_key", action.idempotencyKey)
             .toString())
     }
-    editor.apply()
+    check(editor.commit()) { "تعذر حفظ طلب المخزون محليًا؛ لم نرسل العملية إلى الخادم." }
 }
 
 @Composable
