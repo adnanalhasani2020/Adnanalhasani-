@@ -57,6 +57,7 @@ internal fun StoreApp(context: Context) {
     var showPersonalAccounts by remember { mutableStateOf(false) }
     var personalWorkNotesPage by remember { mutableStateOf(false) }
     var commercialAdsPage by remember { mutableStateOf(false) }
+    var appLockSettingsPage by remember { mutableStateOf(false) }
     var barcodeScannerPage by remember { mutableStateOf(false) }
     var showNotifications by remember { mutableStateOf(false) }
     var showCatalog by remember { mutableStateOf(false) }
@@ -262,6 +263,8 @@ internal fun StoreApp(context: Context) {
                 CommercialNotificationsScreen(context = context, onBack = { showNotifications = false })
             } else if (personalWorkNotesPage) {
                 PersonalWorkNotesScreen(context = context, onBack = { personalWorkNotesPage = false })
+            } else if (appLockSettingsPage) {
+                CommercialAppLockSettingsScreen(context = context, onBack = { appLockSettingsPage = false })
             } else if (commercialAdsPage) {
                 CommercialAdsScreen(context = context, onBack = { commercialAdsPage = false })
             } else if (barcodeScannerPage) {
@@ -390,7 +393,7 @@ internal fun StoreApp(context: Context) {
                     else -> if (showPersonalAccounts) PersonalAccountsScreen(onBack = { showPersonalAccounts = false }) else if (showActivityProfile) ActivityProfileScreen(
                         onBack = { showActivityProfile = false; cloudContextRevision++ },
                         onCatalog = { showActivityProfile = false; cloudContextRevision++; showCatalog = true }
-                    ) else MoreScreen(cloudMode = cloudMode, onPersonalAccounts = { showPersonalAccounts = true }, onPersonalWorkNotes = { personalWorkNotesPage = true }, onAds = { commercialAdsPage = true }, onCustomers = {
+                    ) else MoreScreen(cloudMode = cloudMode, onPersonalAccounts = { showPersonalAccounts = true }, onPersonalWorkNotes = { personalWorkNotesPage = true }, onAppLock = { appLockSettingsPage = true }, onAds = { commercialAdsPage = true }, onCustomers = {
                     showDebts = true
                 }, onReports = { showReportsCenter = true }, onExpenses = { showExpenses = true }, onActivityProfile = { showActivityProfile = true }, onCatalog = { showCatalog = true }, onMasterData = { showMasterData = true }, onCloudOperational = { cloudOperationalPage = it }, onCloudSales = { cloudSalesPage = true }, onCloudPurchases = { cloudPurchasesPage = true }, onCloudStockAlerts = { cloudStockAlertsPage = true }, onUnitsDirectory = { cloudUnitsPage = true }, onCustomerPortal = { customerPortalPage = true }, onCustomerOrders = { customerOrderFulfillmentPage = true }, onCustomerSupplyRequests = { customerSupplyRequestsPage = true }, onCreatePurchaseRequest = { merchantPurchaseRequestPage = true }, onBackup = { cloudNotice = "واجهة النسخ الاحتياطي لم تُربط بعد بعملية تصدير واستعادة موثوقة. لم يتم إنشاء نسخة غير مكتملة أو الادعاء بحفظها." })
                 }

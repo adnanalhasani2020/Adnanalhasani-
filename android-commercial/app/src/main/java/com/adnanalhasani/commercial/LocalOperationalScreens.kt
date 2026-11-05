@@ -46,6 +46,7 @@ internal fun MoreScreen(
     onActivityProfile: () -> Unit,
     onPersonalAccounts: () -> Unit,
     onPersonalWorkNotes: () -> Unit,
+    onAppLock: () -> Unit,
     onAds: () -> Unit,
     onCatalog: () -> Unit,
     onMasterData: () -> Unit,
@@ -74,7 +75,7 @@ internal fun MoreScreen(
             "التقارير والأرباح", "المصروفات"
         ),
         "إعدادات وأدوات المتجر" to listOf(
-            "إعدادات المتجر", "الحسابات الفرعية", "ملاحظاتي وتنبيهاتي", "الإعلانات والعروض", "النسخ الاحتياطي"
+            "إعدادات المتجر", "الحسابات الفرعية", "ملاحظاتي وتنبيهاتي", "قفل التطبيق", "الإعلانات والعروض", "النسخ الاحتياطي"
         )
     ).map { (title, entries) ->
         title to entries.filter { cloudMode || it !in setOf(
@@ -98,6 +99,7 @@ internal fun MoreScreen(
                             "إعدادات المتجر" -> onActivityProfile()
                             "الحسابات الفرعية" -> onPersonalAccounts()
                             "ملاحظاتي وتنبيهاتي" -> onPersonalWorkNotes()
+                            "قفل التطبيق" -> onAppLock()
                             "الإعلانات والعروض" -> onAds()
                             "دليل الأصناف العالمي" -> onCatalog()
                             "المستودعات والمجموعات والأقسام" -> onMasterData()
