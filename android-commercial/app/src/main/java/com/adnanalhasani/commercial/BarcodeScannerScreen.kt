@@ -77,7 +77,13 @@ internal fun BarcodeScannerScreen(onBack: () -> Unit, onBarcodeFound: (String) -
         if (!granted) cameraError = "لم تسمح باستخدام الكاميرا. يمكنك استخدام ماسح USB أو البحث اليدوي."
     }
     val scanner: BarcodeScanner = remember {
-        BarcodeScanning.getClient(BarcodeScannerOptions.Builder().setBarcodeFormats(Barcode.FORMAT_ALL).build())
+        BarcodeScanning.getClient(BarcodeScannerOptions.Builder().setBarcodeFormats(
+            Barcode.FORMAT_CODE_128, Barcode.FORMAT_CODE_39, Barcode.FORMAT_CODE_93,
+            Barcode.FORMAT_CODABAR, Barcode.FORMAT_EAN_13, Barcode.FORMAT_EAN_8,
+            Barcode.FORMAT_UPC_A, Barcode.FORMAT_UPC_E, Barcode.FORMAT_ITF,
+            Barcode.FORMAT_QR_CODE, Barcode.FORMAT_DATA_MATRIX, Barcode.FORMAT_PDF417,
+            Barcode.FORMAT_AZTEC
+        ).build())
     }
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
