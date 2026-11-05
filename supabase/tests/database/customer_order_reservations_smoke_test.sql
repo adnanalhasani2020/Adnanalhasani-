@@ -66,7 +66,7 @@ BEGIN
  SELECT quantity_reserved INTO v_reserved FROM public.commercial_inventory_balances
  WHERE organization_id=v_org AND location_id=v_location AND offering_id=v_offering;
  IF v_reserved<>4 THEN RAISE EXCEPTION 'keep_policy_must_keep_stock_reserved'; END IF;
- SELECT count(*) INTO v_count FROM public.commercial_user_notifications WHERE entity_id=v_order3;
+ SELECT count(*) INTO v_count FROM public.commercial_user_notifications WHERE entity_id=v_order3 AND notification_type='reminder';
  IF v_count<>1 THEN RAISE EXCEPTION 'keep_policy_must_notify_manager'; END IF;
  PERFORM public.commercial_customer_portal_process_expired_order_reservations(v_org,100);
  SELECT count(*) INTO v_count FROM public.commercial_user_notifications WHERE entity_id=v_order3;
