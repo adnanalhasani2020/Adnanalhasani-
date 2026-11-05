@@ -128,7 +128,7 @@ SELECT ok(
   AND position('FROM public.commercial_offering_sell_units' in pg_get_functiondef(
     'public.commercial_request_sale_return(uuid,text,text,jsonb,text)'::regprocedure
   )) = 0,
-  'fractional returns recover the immutable unit factor from the original sale line'
+  'integer returns recover the immutable unit factor from the original sale line'
 );
 
 SELECT ok(
