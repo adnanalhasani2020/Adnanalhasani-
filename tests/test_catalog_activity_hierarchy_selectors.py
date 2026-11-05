@@ -38,7 +38,7 @@ class CatalogActivityHierarchySelectorTests(unittest.TestCase):
 
     def test_initial_activity_restores_its_sector_and_default_level(self):
         self.assertIn("catalogSectorForNode(initialActivityCode().uppercase(), directory.activityNodes)", self.source)
-        self.assertIn("businessLevel = it", self.source)
+        self.assertIn("onBusinessLevel(it)", self.source)
 
     def test_rpc_filters_keep_existing_parameter_contract(self):
         self.assertIn('.put("p_activity_node_code",activityCode().trim().uppercase()', self.source)
