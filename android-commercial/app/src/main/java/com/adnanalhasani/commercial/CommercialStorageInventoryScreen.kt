@@ -34,6 +34,32 @@ private data class StorageInventorySnapshot(
     val balances: List<CommercialStorageInventoryBalance>
 )
 
+private data class StorageInventoryContext(
+    val organizationId: String,
+    val activityId: String,
+    val branchLocationId: String
+)
+
+private fun currentStorageInventoryContext(context: Context): StorageInventoryContext {
+    val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+    val scope = StorageInventoryContext(
+        organizationId = saved.getString("organization_id", null).orEmpty(),
+        activityId = saved.getString("activity_id", null).orEmpty(),
+        branchLocationId = saved.getString("location_id", null).orEmpty()
+    )
+    require(scope.organizationId.isNotBlank() && scope.activityId.isNotBlank() && scope.branchLocationId.isNotBlank()) {
+        "بيانات المؤسسة والنشاط والفرع غير مكتملة."
+    }
+    return scope
+}
+
+private fun storageActionMatchesCurrentContext(context: Context, action: PendingStorageInventoryAction): Boolean =
+    runCatching { currentStorageInventoryContext(context) }.getOrNull()?.let { scope ->
+        scope.organizationId == action.organizationId &&
+            scope.activityId == action.activityId &&
+            scope.branchLocationId == action.branchLocationId
+    } == true
+
 private data class PendingStorageInventoryAction(
     val mode: String,
     val warehouseId: String,
@@ -42,7 +68,10 @@ private data class PendingStorageInventoryAction(
     val destinationLocationId: String,
     val offeringId: String,
     val quantity: BigDecimal,
-    val idempotencyKey: String
+    val idempotencyKey: String,
+    val organizationId: String,
+    val activityId: String,
+    val branchLocationId: String
 )
 
 private fun loadStorageInventorySnapshot(context: Context): StorageInventorySnapshot {
@@ -85,6 +114,9 @@ private fun loadPendingStorageInventoryAction(context: Context): PendingStorageI
         val json = JSONObject(raw)
         PendingStorageInventoryAction(
             mode = json.getString("mode").also { require(it == "allocation" || it == "transfer") },
+            organizationId = json.getString("organization_id").also { require(it.isNotBlank()) },
+            activityId = json.getString("activity_id").also { require(it.isNotBlank()) },
+            branchLocationId = json.getString("branch_location_id").also { require(it.isNotBlank()) },
             warehouseId = json.getString("warehouse_id").also { require(it.isNotBlank()) },
             locationId = json.optString("location_id"),
             sourceLocationId = json.optString("source_location_id"),
@@ -103,6 +135,9 @@ private fun persistPendingStorageInventoryAction(context: Context, action: Pendi
     } else {
         editor.putString("pending_action", JSONObject()
             .put("mode", action.mode)
+            .put("organization_id", action.organizationId)
+            .put("activity_id", action.activityId)
+            .put("branch_location_id", action.branchLocationId)
             .put("warehouse_id", action.warehouseId)
             .put("location_id", action.locationId)
             .put("source_location_id", action.sourceLocationId)
@@ -166,6 +201,7 @@ internal fun CommercialStorageInventoryScreen(context: Context, onBack: () -> Un
     var error by remember { mutableStateOf("") }
     var notice by remember { mutableStateOf("") }
     var pending by remember { mutableStateOf(restoredPending) }
+    val pendingMatchesCurrentContext = pending?.let { storageActionMatchesCurrentContext(context, it) } ?: true
 
     fun applySnapshot(snapshot: StorageInventorySnapshot) {
         warehouses = snapshot.warehouses
@@ -214,6 +250,11 @@ internal fun CommercialStorageInventoryScreen(context: Context, onBack: () -> Un
     }
 
     fun executeAction(action: PendingStorageInventoryAction) {
+        if (!storageActionMatchesCurrentContext(context, action)) {
+            error = "هذا الطلب المعلّق يخص مؤسسة أو نشاطًا أو فرعًا آخر. بدّل إلى سياقه الأصلي أولًا؛ لم يتم إرسال أي حركة."
+            notice = ""
+            return
+        }
         pending = action
         if (!persistPendingStorageInventoryAction(context, action)) {
             pending = null
@@ -226,14 +267,19 @@ internal fun CommercialStorageInventoryScreen(context: Context, onBack: () -> Un
         notice = ""
         storageInventoryIo.execute task@{
             val write = runCatching {
+                require(storageActionMatchesCurrentContext(context, action)) {
+                    "تغير سياق المؤسسة أو النشاط أو الفرع قبل الإرسال؛ لم يتم إرسال الحركة."
+                }
                 if (action.mode == "allocation") {
                     allocateCommercialInventoryToStorageLocation(
-                        context, action.warehouseId, action.locationId, action.offeringId,
+                        context, action.organizationId, action.activityId, action.branchLocationId,
+                        action.warehouseId, action.locationId, action.offeringId,
                         action.quantity, action.idempotencyKey
                     )
                 } else {
                     transferCommercialInventoryBetweenStorageLocations(
-                        context, action.warehouseId, action.sourceLocationId,
+                        context, action.organizationId, action.activityId, action.branchLocationId,
+                        action.warehouseId, action.sourceLocationId,
                         action.destinationLocationId, action.offeringId,
                         action.quantity, action.idempotencyKey
                     )
@@ -308,7 +354,7 @@ internal fun CommercialStorageInventoryScreen(context: Context, onBack: () -> Un
             TopAppBar(
                 title = { Text("مخزون مواقع التخزين", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
-                    IconButton(onClick = onBack, enabled = (pending == null || !schemaReady) && !saving) {
+                    IconButton(onClick = onBack, enabled = (pending == null || !schemaReady || !pendingMatchesCurrentContext) && !saving) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "رجوع")
                     }
                 },
@@ -431,18 +477,22 @@ internal fun CommercialStorageInventoryScreen(context: Context, onBack: () -> Un
                             require(unallocatedAvailable.signum() > 0 && quantity <= unallocatedAvailable) {
                                 "الكمية تتجاوز المتاح غير الموزع. حدّث الأرصدة قبل المحاولة."
                             }
+                            val scope = currentStorageInventoryContext(context)
                             PendingStorageInventoryAction(
                                 mode, selectedWarehouseId, selectedLocationId, "", "",
-                                selectedOfferingId, quantity, UUID.randomUUID().toString()
+                                selectedOfferingId, quantity, UUID.randomUUID().toString(),
+                                scope.organizationId, scope.activityId, scope.branchLocationId
                             )
                         } else {
                             val source = requireNotNull(selectedSource) { "اختر رصيد موقع المصدر." }
                             require(selectedDestinationLocationId.isNotBlank()) { "اختر موقع الوجهة." }
                             require(quantity <= source.quantityOnHand) { "الكمية تتجاوز رصيد موقع المصدر." }
+                            val scope = currentStorageInventoryContext(context)
                             PendingStorageInventoryAction(
                                 mode, selectedWarehouseId, "", source.storageLocationId,
                                 selectedDestinationLocationId, source.offeringId, quantity,
-                                UUID.randomUUID().toString()
+                                UUID.randomUUID().toString(),
+                                scope.organizationId, scope.activityId, scope.branchLocationId
                             )
                         }
                     }.getOrElse {
@@ -451,11 +501,19 @@ internal fun CommercialStorageInventoryScreen(context: Context, onBack: () -> Un
                     }
                     if (action != null) executeAction(action)
                 },
-                enabled = schemaReady && !loading && !saving && (pending != null || quantityText.isNotBlank()),
+                enabled = schemaReady && !loading && !saving &&
+                    ((pending != null && pendingMatchesCurrentContext) || (pending == null && quantityText.isNotBlank())),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 if (saving) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                 else Text(if (pending != null) "إعادة المحاولة بنفس الطلب" else if (mode == "allocation") "تأكيد التوزيع" else "تأكيد النقل")
+            }
+            if (pending != null && !pendingMatchesCurrentContext) {
+                Text(
+                    "يوجد طلب مخزون محفوظ لمؤسسة أو نشاط أو فرع آخر. ارجع إلى السياق الأصلي لإعادة المحاولة بأمان؛ لن يُرسل الطلب من السياق الحالي.",
+                    color = MaterialTheme.colorScheme.error,
+                    fontSize = 12.sp
+                )
             }
             if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
             Text("الأرصدة الموزعة", fontWeight = FontWeight.Bold)
