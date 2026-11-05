@@ -69,6 +69,8 @@ internal fun StoreApp(context: Context) {
     var pendingCatalogSaleUnitCode by remember { mutableStateOf("") }
     var pendingCatalogIdempotencyKey by remember { mutableStateOf(UUID.randomUUID().toString()) }
     var showMasterData by remember { mutableStateOf(false) }
+    var storageInventoryPage by remember { mutableStateOf(false) }
+    var stocktakePage by remember { mutableStateOf(false) }
     var cloudOperationalPage by remember { mutableStateOf("") }
     var cloudSalesPage by remember { mutableStateOf(false) }
     var cloudSaleComposerPage by remember { mutableStateOf(false) }
@@ -333,7 +335,7 @@ internal fun StoreApp(context: Context) {
                 }, { index ->
                     if (cloudMode) cloudNotice = "تعديل الصنف غير متاح حتى يكتمل ربط تحديث السعر وحركة المخزون على الخادم."
                     else editingProductIndex = index
-                }, { barcodeScannerPage = true })
+                }, { barcodeScannerPage = true }, onStocktake = if (cloudMode) ({ stocktakePage = true }) else null)
                 else -> when {
                     cloudSalesPage -> CommercialCloudSalesScreen(context = context, onBack = { cloudSalesPage = false })
                     cloudPurchasesPage -> CommercialCloudPurchasesScreen(context = context, onBack = { cloudPurchasesPage = false })
@@ -341,7 +343,9 @@ internal fun StoreApp(context: Context) {
                     cloudUnitsPage -> CommercialUnitDirectoryScreen(context = context, onBack = { cloudUnitsPage = false })
                     cloudOperationalPage == "returns" -> CommercialCloudReturnsScreen(context = context, onBack = { cloudOperationalPage = "" })
                     cloudOperationalPage.isNotBlank() -> CommercialCloudOperationalScreen(context = context, screenKey = cloudOperationalPage, onBack = { cloudOperationalPage = "" })
-                    showMasterData -> MasterDataScreen(context = context, onBack = { showMasterData = false })
+                    storageInventoryPage -> CommercialStorageInventoryScreen(context = context, onBack = { storageInventoryPage = false })
+                    stocktakePage -> CommercialInventoryStocktakeScreen(context = context, onBack = { stocktakePage = false })
+                    showMasterData -> MasterDataScreen(context = context, onBack = { showMasterData = false }, onStorageInventory = { storageInventoryPage = true })
                     showCatalog -> CatalogScreen(
                         onBack = { showCatalog = false },
                         initialOrganizationId = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE).getString("organization_id", "").orEmpty(),

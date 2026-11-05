@@ -43,9 +43,10 @@ class DepartmentWarehouseAssignmentContractTests(unittest.TestCase):
 
     def test_no_new_assignment_table_or_stock_mutation_is_introduced(self):
         self.assertNotIn("CREATE TABLE", self.repository)
-        self.assertNotIn("commercial_inventory_balances", self.repository.split(
+        assignment_function = self.repository.split(
             "internal fun assignCommercialDepartmentToWarehouse", 1
-        )[1])
+        )[1].split("\n\ninternal data class", 1)[0]
+        self.assertNotIn("commercial_inventory_balances", assignment_function)
 
 
 if __name__ == "__main__":

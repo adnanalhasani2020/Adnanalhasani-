@@ -11,7 +11,8 @@ internal data class CommercialMasterDataRow(
     val kind: String,
     val parentId: String = "",
     val warehouseId: String = "",
-    val state: String = ""
+    val state: String = "",
+    val branchLocationId: String = ""
 )
 
 internal data class CommercialUnitOption(
@@ -47,7 +48,7 @@ internal fun loadCommercialMasterData(context: Context, table: String): List<Com
     }
     val (orgId, access) = commercialMasterDataAccess(context)
     val fields = when (table) {
-        "commercial_warehouses" -> "id,code,name,warehouse_type,state"
+        "commercial_warehouses" -> "id,branch_location_id,code,name,warehouse_type,state"
         "commercial_storage_locations" -> "id,warehouse_id,parent_location_id,code,name,location_type,state"
         else -> "id,code,name_ar,name_en,state,parent_id"
     }
@@ -64,7 +65,8 @@ internal fun loadCommercialMasterData(context: Context, table: String): List<Com
                 kind = row.optString(when (table) { "commercial_storage_locations" -> "location_type"; "commercial_warehouses" -> "warehouse_type"; else -> "state" }).ifBlank { table.removePrefix("commercial_") },
                 parentId = row.optString(if (table == "commercial_storage_locations") "parent_location_id" else "parent_id").takeUnless { it == "null" }.orEmpty(),
                 warehouseId = row.optString("warehouse_id").takeUnless { it == "null" }.orEmpty(),
-                state = row.optString("state").ifBlank { "active" }
+                state = row.optString("state").ifBlank { "active" },
+                branchLocationId = row.optString("branch_location_id").takeUnless { it == "null" }.orEmpty()
             ))
         }
     }
@@ -172,6 +174,59 @@ internal fun assignCommercialDepartmentToWarehouse(context: Context, departmentI
 }
 
 
+internal data class CommercialStorageAllocationProduct(
+    val offeringId: String,
+    val productName: String,
+    val unitName: String,
+    val unitCode: String,
+    val availableQuantity: java.math.BigDecimal
+)
+
+/** Reads precise branch availability without passing through the legacy whole-number sale projection. */
+internal fun loadCommercialStorageAllocationProducts(context: Context): List<CommercialStorageAllocationProduct> {
+    val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+    val activityId = saved.getString("activity_id", null).orEmpty()
+    val branchId = saved.getString("location_id", null).orEmpty()
+    require(activityId.isNotBlank() && branchId.isNotBlank()) { "بيانات النشاط والموقع غير محفوظة." }
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val rows = commercialCloudPagedGet(
+        "/rest/v1/commercial_inventory_balances" +
+            "?select=offering_id,quantity_on_hand,quantity_reserved," +
+            "offering:commercial_offerings!inner(id,activity_id,state,product:commercial_products!inner(name,unit_name,unit_code,state))" +
+            "&organization_id=eq.$orgId&location_id=eq.$branchId&offering.activity_id=eq.$activityId" +
+            "&order=offering_id.asc",
+        access
+    )
+    return buildList {
+        for (index in 0 until rows.length()) {
+            val row = rows.optJSONObject(index) ?: continue
+            val offering = row.optJSONObject("offering") ?: continue
+            val product = offering.optJSONObject("product") ?: continue
+            if (offering.optString("state") != "active" || product.optString("state") != "active") continue
+            val onHand = try {
+                java.math.BigDecimal(row.optString("quantity_on_hand"))
+            } catch (_: NumberFormatException) {
+                throw IllegalStateException("تعذر قراءة الرصيد الإجمالي دون تقريب.")
+            }
+            val reserved = try {
+                java.math.BigDecimal(row.optString("quantity_reserved"))
+            } catch (_: NumberFormatException) {
+                throw IllegalStateException("تعذر قراءة الكمية المحجوزة دون تقريب.")
+            }
+            require(onHand.signum() >= 0 && reserved.signum() >= 0 && reserved <= onHand) {
+                "رصيد المخزون أو المحجوز غير متسق؛ أوقفنا التوزيع."
+            }
+            add(CommercialStorageAllocationProduct(
+                offeringId = row.optString("offering_id"),
+                productName = product.optString("name"),
+                unitName = product.optString("unit_name"),
+                unitCode = product.optString("unit_code").takeUnless { it.isBlank() || it == "null" } ?: "EA",
+                availableQuantity = onHand.subtract(reserved)
+            ))
+        }
+    }
+}
+
 internal data class CommercialStorageInventoryBalance(
     val id: String,
     val warehouseId: String,
@@ -244,55 +299,71 @@ internal fun loadCommercialStorageInventoryBalances(context: Context): List<Comm
 /** Allocate only previously unallocated branch stock; server-side RPC enforces all scope and ceiling checks. */
 internal fun allocateCommercialInventoryToStorageLocation(
     context: Context,
+    expectedOrganizationId: String,
+    expectedActivityId: String,
+    expectedBranchLocationId: String,
     warehouseId: String,
     storageLocationId: String,
     offeringId: String,
-    quantity: java.math.BigDecimal
+    quantity: java.math.BigDecimal,
+    idempotencyKey: String = java.util.UUID.randomUUID().toString()
 ) {
-    require(warehouseId.isNotBlank() && storageLocationId.isNotBlank() && offeringId.isNotBlank()) {
+    require(warehouseId.isNotBlank() && storageLocationId.isNotBlank() && offeringId.isNotBlank() && idempotencyKey.isNotBlank()) {
         "اختر المستودع وموقع التخزين والصنف."
     }
     val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
-    val branchId = saved.getString("location_id", null).orEmpty()
-    require(branchId.isNotBlank()) { "موقع المؤسسة غير محفوظ." }
+    require(
+        saved.getString("organization_id", null) == expectedOrganizationId &&
+            saved.getString("activity_id", null) == expectedActivityId &&
+            saved.getString("location_id", null) == expectedBranchLocationId
+    ) { "تغير سياق المؤسسة أو النشاط أو الفرع؛ لم نرسل طلب المخزون المعلّق." }
     val (orgId, access) = commercialMasterDataAccess(context)
+    require(orgId == expectedOrganizationId) { "تغيرت المؤسسة النشطة؛ لم نرسل طلب المخزون المعلّق." }
     val payload = JSONObject()
-        .put("p_organization_id", orgId)
-        .put("p_branch_location_id", branchId)
+        .put("p_organization_id", expectedOrganizationId)
+        .put("p_branch_location_id", expectedBranchLocationId)
         .put("p_warehouse_id", warehouseId)
         .put("p_storage_location_id", storageLocationId)
         .put("p_offering_id", offeringId)
         .put("p_quantity", validatedStorageQuantity(quantity))
-        .put("p_idempotency_key", java.util.UUID.randomUUID().toString())
+        .put("p_idempotency_key", idempotencyKey)
     SupabaseClient.request("/rest/v1/rpc/commercial_allocate_inventory_to_storage_location", "POST", payload, access)
 }
 
 /** Move allocated stock between active stockable bins in the same warehouse, without changing aggregate stock or cost layers. */
 internal fun transferCommercialInventoryBetweenStorageLocations(
     context: Context,
+    expectedOrganizationId: String,
+    expectedActivityId: String,
+    expectedBranchLocationId: String,
     warehouseId: String,
     sourceStorageLocationId: String,
     destinationStorageLocationId: String,
     offeringId: String,
-    quantity: java.math.BigDecimal
+    quantity: java.math.BigDecimal,
+    idempotencyKey: String = java.util.UUID.randomUUID().toString()
 ) {
-    require(warehouseId.isNotBlank() && sourceStorageLocationId.isNotBlank() &&
+    require(warehouseId.isNotBlank() && sourceStorageLocationId.isNotBlank() && idempotencyKey.isNotBlank() &&
         destinationStorageLocationId.isNotBlank() && offeringId.isNotBlank()) {
         "اختر المستودع وموقعي المصدر والوجهة والصنف."
     }
     require(sourceStorageLocationId != destinationStorageLocationId) { "موقع المصدر والوجهة يجب أن يختلفا." }
     val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
-    val branchId = saved.getString("location_id", null).orEmpty()
-    require(branchId.isNotBlank()) { "موقع المؤسسة غير محفوظ." }
+    require(
+        saved.getString("organization_id", null) == expectedOrganizationId &&
+            saved.getString("activity_id", null) == expectedActivityId &&
+            saved.getString("location_id", null) == expectedBranchLocationId
+    ) { "تغير سياق المؤسسة أو النشاط أو الفرع؛ لم نرسل طلب المخزون المعلّق." }
     val (orgId, access) = commercialMasterDataAccess(context)
+    require(orgId == expectedOrganizationId) { "تغيرت المؤسسة النشطة؛ لم نرسل طلب المخزون المعلّق." }
     val payload = JSONObject()
-        .put("p_organization_id", orgId)
-        .put("p_branch_location_id", branchId)
+        .put("p_organization_id", expectedOrganizationId)
+        .put("p_branch_location_id", expectedBranchLocationId)
         .put("p_warehouse_id", warehouseId)
         .put("p_source_storage_location_id", sourceStorageLocationId)
         .put("p_destination_storage_location_id", destinationStorageLocationId)
         .put("p_offering_id", offeringId)
         .put("p_quantity", validatedStorageQuantity(quantity))
-        .put("p_idempotency_key", java.util.UUID.randomUUID().toString())
+        .put("p_idempotency_key", idempotencyKey)
     SupabaseClient.request("/rest/v1/rpc/commercial_transfer_inventory_storage_location", "POST", payload, access)
 }

@@ -12,7 +12,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 @Composable
-internal fun InventoryScreen(products: List<Product>, query: String, onQuery: (String) -> Unit, onAddProduct: () -> Unit, onEditProduct: (Int) -> Unit, onScanBarcode: () -> Unit = {}) {
+internal fun InventoryScreen(
+    products: List<Product>,
+    query: String,
+    onQuery: (String) -> Unit,
+    onAddProduct: () -> Unit,
+    onEditProduct: (Int) -> Unit,
+    onScanBarcode: () -> Unit = {},
+    onStocktake: (() -> Unit)? = null
+) {
     val filtered = products.filter { it.name.contains(query, true) || it.category.contains(query, true) || it.description.contains(query, true) || it.barcode.contains(query, true) || it.catalogCode.contains(query, true) || productMatchesUnitQuery(it, query) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
         item { Heading("المخزون والمنتجات", "إدارة الأصناف والكميات والأسعار") }
@@ -29,6 +37,15 @@ internal fun InventoryScreen(products: List<Product>, query: String, onQuery: (S
             }
         }
         item { Button(onClick = onAddProduct, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(8.dp)); Text("إضافة منتج") } }
+        if (onStocktake != null) {
+            item {
+                OutlinedButton(onClick = onStocktake, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Default.Inventory2, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("الجرد والتسويات المخزنية")
+                }
+            }
+        }
         item { Heading("قائمة المنتجات", "عدد النتائج: " + filtered.size) }
         items(filtered) { product -> ProductRow(product, onClick = { onEditProduct(products.indexOf(product)) }) }
         if (filtered.isEmpty()) item { Text("لا توجد منتجات تطابق البحث.", color = Muted) }
