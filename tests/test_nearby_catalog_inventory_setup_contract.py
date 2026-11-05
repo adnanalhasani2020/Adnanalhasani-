@@ -45,7 +45,7 @@ class NearbyCatalogInventorySetupContractTests(unittest.TestCase):
         self.assertIn("state.nearbyHasMore = page.size == 30", self.screen)
         self.assertIn("snapshotFlow", self.screen)
         self.assertIn("if (nearbyHasMore) onLoadNearbyPage(false) else onLoadNearbyPage(true)", self.screen)
-        self.assertIn("LazyColumn(state = nearbyListState", self.screen)
+        self.assertIn("LazyColumn(state=nearbyListState", self.screen)
         self.assertIn("FilterChip(", self.screen)
         self.assertIn("selectedCatalogIds.size<100", self.screen)
         self.assertIn("nearbyHasMore = true", self.screen)
