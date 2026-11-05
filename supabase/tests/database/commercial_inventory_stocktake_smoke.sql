@@ -391,14 +391,10 @@ BEGIN
   PERFORM public.commercial_approve_inventory_stocktake(v_stocktake);
   PERFORM set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
   PERFORM public.commercial_post_inventory_stocktake(v_stocktake,'stocktake-revision-post-001');
-  UPDATE public.commercial_inventory_balances SET quantity_on_hand=6
-  WHERE offering_id='60000000-0000-0000-0000-000000000001';
-  UPDATE public.commercial_inventory_cost_layers SET quantity_remaining=quantity_remaining-1
-  WHERE offering_id='60000000-0000-0000-0000-000000000001' AND quantity_remaining>0
-    AND source_ref='opening-test-layer';
-  INSERT INTO public.commercial_stock_movements(offering_id,movement_type,quantity_delta,source_ref,created_by)
-  VALUES('60000000-0000-0000-0000-000000000001','adjustment',-1,'test-later-movement-after-stocktake',
-    '00000000-0000-0000-0000-000000000001');
+  PERFORM public.test_simulate_later_inventory_movement(
+    '60000000-0000-0000-0000-000000000001',-1,'test-later-movement-after-stocktake',
+    '00000000-0000-0000-0000-000000000001'
+  );
   PERFORM set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',true);
   BEGIN
     PERFORM public.commercial_reverse_inventory_stocktake(v_stocktake,'later movement exists','stocktake-revision-reverse-001');
