@@ -56,6 +56,7 @@ internal fun MoreScreen(
     onCustomerOrders: () -> Unit,
     onCustomerSupplyRequests: () -> Unit,
     onCreatePurchaseRequest: () -> Unit,
+    onPersonalNotes: () -> Unit,
     onBackup: () -> Unit
 ) {
     val sections = listOf(
@@ -72,7 +73,7 @@ internal fun MoreScreen(
             "التقارير والأرباح", "المصروفات"
         ),
         "إعدادات وأدوات المتجر" to listOf(
-            "إعدادات المتجر", "الحسابات الفرعية", "النسخ الاحتياطي"
+            "إعدادات المتجر", "الحسابات الفرعية", "ملاحظاتي وتنبيهاتي", "النسخ الاحتياطي"
         )
     ).map { (title, entries) ->
         title to entries.filter { cloudMode || it !in setOf(
@@ -111,6 +112,7 @@ internal fun MoreScreen(
                             "طلبات الزبائن" -> onCustomerOrders()
                             "طلبات توفير الأصناف" -> onCustomerSupplyRequests()
                             "إنشاء طلب شراء" -> onCreatePurchaseRequest()
+                            "ملاحظاتي وتنبيهاتي" -> onPersonalNotes()
                             "النسخ الاحتياطي" -> onBackup()
                         }
                     },
