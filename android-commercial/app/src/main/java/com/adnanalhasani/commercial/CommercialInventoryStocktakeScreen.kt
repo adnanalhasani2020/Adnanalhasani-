@@ -266,19 +266,19 @@ internal fun CommercialInventoryStocktakeScreen(context: Context, onBack: () -> 
                                     }
                                 }
                                 "approved" -> {
-                                    Text("سيُرحّل الفرق فقط إذا لم يتغير الرصيد منذ إنشاء لقطة الجرد، وكانت طبقات التكلفة متطابقة.", color = stocktakeMuted, fontSize = 11.sp)
+                                    Text("تم اعتماد العد، لكن الترحيل معطل حتى يكتمل ربط قيد فروقات المخزون بحسابات الأستاذ العام. لا تغيّر هذه الشاشة الأرصدة الآن.", color = Color(0xFFB45309), fontSize = 11.sp)
                                     Button(
-                                        onClick = { performAction("تم ترحيل فروقات الجرد.") { postCommercialInventoryStocktake(context, active.id); active.id } },
-                                        enabled = schemaReady && !saving && !loading,
+                                        onClick = {},
+                                        enabled = false,
                                         modifier = Modifier.fillMaxWidth()
-                                    ) { Text("ترحيل الفروقات") }
+                                    ) { Text("الترحيل معطل حتى اكتمال القيود المحاسبية") }
                                 }
                                 "posted" -> {
-                                    Text("العكس متاح فقط إذا لم تحدث حركة مخزون لاحقة للصنف ولم تُستهلك طبقة الزيادة.", color = stocktakeMuted, fontSize = 11.sp)
-                                    OutlinedButton(onClick = { showReverseDialog = true }, enabled = schemaReady && !saving, modifier = Modifier.fillMaxWidth()) {
+                                    Text("العكس معطل حتى يتوفر القيد المحاسبي العكسي المرتبط بالقيد الأصلي. لا يمكن عكس الكمية وحدها.", color = Color(0xFFB45309), fontSize = 11.sp)
+                                    OutlinedButton(onClick = {}, enabled = false, modifier = Modifier.fillMaxWidth()) {
                                         Icon(Icons.Default.Undo, contentDescription = null)
                                         Spacer(Modifier.width(8.dp))
-                                        Text("عكس مستند الجرد")
+                                        Text("العكس معطل حتى اكتمال القيود المحاسبية")
                                     }
                                 }
                                 "reversed" -> Text("هذا المستند معكوس بحركة مقابلة؛ لا يمكن تعديله أو ترحيله مرة أخرى.", color = stocktakeMuted, fontSize = 11.sp)
@@ -388,13 +388,13 @@ private fun StocktakeLineCard(
     ) {
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Text(line.productName, color = stocktakeInk, fontWeight = FontWeight.Bold)
-            Text("الرصيد الدفتري: ${stocktakeNumber(line.expectedQuantity)} ${line.unitName}", color = stocktakeMuted, fontSize = 11.sp)
+            Text("الرصيد الدفتري (الوحدة الأساسية): ${stocktakeNumber(line.expectedQuantity)} ${line.unitName}", color = stocktakeMuted, fontSize = 11.sp)
             OutlinedTextField(
                 value = line.countedQuantity,
                 onValueChange = onCountChange,
                 enabled = editable,
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("الكمية الفعلية") },
+                label = { Text("الكمية الفعلية (بالوحدة الأساسية للمخزون)") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
             )
