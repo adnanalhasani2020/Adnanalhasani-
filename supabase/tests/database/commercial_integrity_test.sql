@@ -262,15 +262,15 @@ SELECT ok(
   'trusted server-side service role retains access to accounting integrity diagnostics'
 );
 
--- Purchase fractional-quantity and cumulative accounting regressions.
+-- Integer-only quantity policy: RPCs reject fractional quantities at the database boundary.
 SELECT ok(
-  position('scale(v_qty)>6' in pg_get_functiondef(
+  position('v_qty<>trunc(v_qty)' in pg_get_functiondef(
     'commercial_private.commercial_receive_purchase_order(uuid,uuid,uuid,jsonb,text)'::regprocedure
   )) > 0
-  AND position('v_qty<>trunc(v_qty)' in pg_get_functiondef(
-    'commercial_private.commercial_receive_purchase_order(uuid,uuid,uuid,jsonb,text)'::regprocedure
-  )) = 0,
-  'effective purchase receipt RPC accepts fractional quantities up to six decimal places'
+  AND position('p_quantity<>trunc(p_quantity)' in pg_get_functiondef(
+    'public.commercial_receive_inventory_stock(uuid,uuid,uuid,numeric,bigint,text)'::regprocedure
+  )) > 0,
+  'purchase receiving and inventory receipt RPCs reject fractional quantities'
 );
 
 SELECT ok(
