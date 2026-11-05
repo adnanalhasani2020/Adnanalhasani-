@@ -42,6 +42,8 @@ internal class CatalogMarketUiState {
         branchLatitude = branch.latitude
         branchLongitude = branch.longitude
         selectedWarehouseId = marketWarehouses.firstOrNull { it.branchId == branch.id }?.id.orEmpty()
+        deviceLatitude = null
+        deviceLongitude = null
         nearbyMarketItems = emptyList()
         nearbyOffset = 0
         nearbyHasMore = true
