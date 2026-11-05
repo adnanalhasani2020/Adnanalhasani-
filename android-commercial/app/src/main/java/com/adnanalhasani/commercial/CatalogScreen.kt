@@ -130,6 +130,8 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
             onFailure = onFailure
         )
     }
+    fun org(): String? = organizationId.trim().takeIf { it.isNotBlank() }
+
     val invoiceWorkflow = CatalogInvoiceWorkflow(
         context = context,
         state = invoiceTransferState,
@@ -155,8 +157,6 @@ internal fun CatalogScreen(onBack: () -> Unit, onAddToInventory: (CatalogProduct
         organizationId = { organizationId = it }
     )
     LaunchedEffect(Unit) { authWorkflow.restoreSession() }
-
-    fun org(): String? = organizationId.trim().takeIf { it.isNotBlank() }
 
     val marketWorkflow = CatalogMarketWorkflow(
         state = marketUiState,
