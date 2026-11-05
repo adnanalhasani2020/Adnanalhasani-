@@ -383,6 +383,7 @@ BEGIN
       RAISE EXCEPTION 'inventory_stocktake_below_reserved_quantity' USING ERRCODE='55000';
     END IF;
     v_diff := v_line.counted_quantity-v_line.expected_quantity;
+    IF v_diff=0 THEN CONTINUE; END IF;
     SELECT coalesce(sum(quantity_remaining),0) INTO v_layer_qty
     FROM public.commercial_inventory_cost_layers
     WHERE organization_id=v_stocktake.organization_id AND location_id=v_stocktake.location_id
@@ -394,7 +395,6 @@ BEGIN
     UPDATE public.commercial_inventory_stocktake_lines
     SET previous_unit_cost_minor=v_balance.unit_cost_minor,updated_at=now()
     WHERE id=v_line.id;
-    IF v_diff=0 THEN CONTINUE; END IF;
 
     SELECT p.costing_method INTO v_method
     FROM public.commercial_inventory_costing_policies p
