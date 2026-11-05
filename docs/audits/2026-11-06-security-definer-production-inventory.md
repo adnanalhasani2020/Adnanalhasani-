@@ -103,3 +103,26 @@ Two examples show why a direct text scan must not be treated as a verdict:
 - `commercial_account_lookup_personal_account` is called by the Android personal-account linking screen. It returns only account ID, account number, display name, and account type (not email, phone, or identity documents). This appears to serve the account-linking preview, but it is also an authenticated account-discovery endpoint: review account-number entropy, request throttling, enumeration resistance, and whether a non-enumerating response is feasible. The existing source-contract test checks field minimization and that anonymous EXECUTE is revoked; it does not prove resistance to authenticated enumeration.
 
 A keyword-only grouping of the 86 callable definitions found 35 definitions directly mentioning `commercial_organization_members`, 18 with other membership/helper signals, 80 with an organization-id reference, and 36 with an activity/location/branch reference. These are search signals only; they overlap and do not establish authorization coverage. The next step is call-graph and policy review, not changing grants based on these counts.
+
+
+## Follow-up: personal-account lookup entropy and index shape
+
+A second read-only production inspection traced the Android personal-account linking flow to `commercial_account_lookup_personal_account(text)` and its account-number issuer.
+
+Confirmed behavior:
+
+- The issuer creates personal account numbers as `RH-` plus the first 16 hexadecimal characters of a freshly generated UUID (64 random bits).
+- The lookup performs an exact, case-insensitive equality comparison after trimming; it does not perform prefix or substring search. The client-side minimum of three characters is only an input gate, not a partial-match query.
+- The lookup returns only the account ID, account number, display name, and account type. It does not return email, phone, or identity documents.
+- The account-number column has a unique index, so collisions are rejected by the database rather than silently assigning the same number.
+- The function is authenticated-only and checks `auth.uid()`; anonymous EXECUTE is false.
+
+Assessment: the endpoint remains an authenticated account-discovery surface, but the random 64-bit exact-match account number materially reduces practical guessing compared with a sequential or low-entropy identifier. The display name is disclosed only after a full account-number match. Do not weaken the identifier format or add prefix search. A rate-limit / abuse-monitoring control is still worth considering as defense in depth; no production change is justified from this read-only review.
+
+The live catalog also shows three equivalent partial unique indexes enforcing one active personal account per owner:
+
+- `commercial_one_active_personal_account_per_owner_uidx`
+- `commercial_party_accounts_one_active_personal_owner_uidx`
+- `commercial_party_accounts_one_active_personal_per_user_key`
+
+Their predicates are materially equivalent. This is index-maintenance overhead, not an authorization bypass. Do not drop any index until migration ownership/history and dependency checks identify the canonical one and a staged migration is tested.
