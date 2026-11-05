@@ -5,6 +5,7 @@ SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commerci
 DATA_STATE = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterData.kt"
 MAPPERS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportDomainMappers.kt"
 PROFITABILITY_VALIDATION = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportProfitabilityValidation.kt"
+SUPPLIER_VALIDATION = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportSupplierValidation.kt"
 CATALOG = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCatalog.kt"
 CATALOG_SECTION = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCatalogSection.kt"
 REPOSITORY = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReturnsRepository.kt"
@@ -14,7 +15,7 @@ CONTRACT = ROOT / "android-commercial/docs/reports-data-contract.md"
 
 
 def test_item_profitability_uses_original_sale_item_ids_and_scoped_completed_returns():
-    screen = SCREEN.read_text(encoding="utf-8") + DATA_STATE.read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8") + MAPPERS.read_text(encoding="utf-8") + PROFITABILITY_VALIDATION.read_text(encoding="utf-8")
+    screen = SCREEN.read_text(encoding="utf-8") + DATA_STATE.read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8") + MAPPERS.read_text(encoding="utf-8") + PROFITABILITY_VALIDATION.read_text(encoding="utf-8") + SUPPLIER_VALIDATION.read_text(encoding="utf-8")
     repository = REPOSITORY.read_text(encoding="utf-8")
     calculations = CALCULATIONS.read_text(encoding="utf-8")
     assert 'ReportCatalogItem("ربحية الأصناف بعد المرتجعات"' in screen
@@ -46,7 +47,7 @@ def test_supplier_purchase_summary_is_line_and_header_reconciled():
     assert 'ReportCatalogItem("المشتريات حسب المورد"' in screen
     assert 'SupplierPurchaseInvoiceInput(' in screen
     assert 'calculateSupplierPurchaseSummary(' in calculations
-    assert 'sumReportAmountsExactly(invoice.lines.map { it.lineTotalMinor })' in screen
+    assert 'sumReportAmountsExactly(invoice.lines.map { it.lineTotalMinor })' in SUPPLIER_VALIDATION.read_text(encoding="utf-8")
     assert 'Purchases by supplier' in contract
 
 def test_item_profitability_rejects_unbounded_completed_dates_and_refund_state_mismatch():
