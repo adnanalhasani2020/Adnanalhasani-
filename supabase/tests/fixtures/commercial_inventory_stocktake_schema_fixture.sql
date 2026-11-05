@@ -93,6 +93,31 @@ CREATE TABLE public.commercial_audit_events(
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
+
+-- Test-only SECURITY DEFINER helper simulates a legitimate later stock writer
+-- without granting direct balance UPDATE privileges to authenticated users.
+CREATE OR REPLACE FUNCTION public.test_simulate_later_inventory_movement(
+  p_offering_id uuid,
+  p_quantity_delta numeric,
+  p_source_ref text,
+  p_actor uuid
+) RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path TO 'pg_catalog','public'
+AS $function$
+BEGIN
+  UPDATE public.commercial_inventory_balances
+  SET quantity_on_hand=quantity_on_hand+p_quantity_delta
+  WHERE offering_id=p_offering_id;
+  UPDATE public.commercial_inventory_cost_layers
+  SET quantity_remaining=quantity_remaining+p_quantity_delta
+  WHERE offering_id=p_offering_id AND source_ref='opening-test-layer';
+  INSERT INTO public.commercial_stock_movements(offering_id,movement_type,quantity_delta,source_ref,created_by)
+  VALUES(p_offering_id,'adjustment',p_quantity_delta,p_source_ref,p_actor);
+END;
+$function$;
+GRANT EXECUTE ON FUNCTION public.test_simulate_later_inventory_movement(uuid,numeric,text,uuid) TO authenticated;
+
 GRANT SELECT ON public.commercial_organization_members,
   public.commercial_organization_locations,
   public.commercial_inventory_balances,
