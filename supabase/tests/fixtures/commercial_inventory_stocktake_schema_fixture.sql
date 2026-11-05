@@ -7,6 +7,7 @@ BEGIN
 END
 $$;
 
+CREATE SCHEMA IF NOT EXISTS commercial_private;
 CREATE SCHEMA IF NOT EXISTS auth;
 CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid
 LANGUAGE sql STABLE AS $$
@@ -37,7 +38,8 @@ CREATE TABLE public.commercial_organization_members(
 CREATE TABLE public.commercial_offerings(
   id uuid PRIMARY KEY,
   activity_id uuid NOT NULL REFERENCES public.commercial_activities(id),
-  location_ref text NOT NULL
+  location_ref text NOT NULL,
+  state text NOT NULL DEFAULT 'active'
 );
 CREATE TABLE public.commercial_inventory_balances(
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -46,6 +48,7 @@ CREATE TABLE public.commercial_inventory_balances(
   offering_id uuid NOT NULL REFERENCES public.commercial_offerings(id),
   quantity_on_hand numeric(20,6) NOT NULL CHECK(quantity_on_hand>=0),
   quantity_reserved numeric(20,6) NOT NULL DEFAULT 0 CHECK(quantity_reserved>=0 AND quantity_reserved<=quantity_on_hand),
+  reorder_point numeric(20,6) NOT NULL DEFAULT 0 CHECK(reorder_point>=0),
   unit_cost_minor bigint CHECK(unit_cost_minor IS NULL OR unit_cost_minor>=0),
   updated_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE(organization_id,location_id,offering_id)
