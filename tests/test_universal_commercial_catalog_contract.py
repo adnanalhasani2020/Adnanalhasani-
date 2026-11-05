@@ -81,6 +81,7 @@ class UniversalCommercialCatalogContractTests(unittest.TestCase):
         self.assertIn("reviewRuling", self.android)
         self.assertIn("CatalogProductEditDialog", self.android)
         self.assertIn("تعديل بيانات الصنف", self.android)
+        self.assertIn("لا يغيّر سعر العرض أو رصيد المخزون", self.android)
         self.assertIn("product_unit_dimension_mismatch", self.management)
 
     def test_catalog_recipe_and_package_quantities_are_integer_only(self):
