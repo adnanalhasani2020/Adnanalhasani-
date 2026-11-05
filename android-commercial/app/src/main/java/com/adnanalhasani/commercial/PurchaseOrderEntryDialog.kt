@@ -182,7 +182,7 @@ internal fun PurchaseOrderEntryDialog(
                                 )
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     OutlinedTextField(
-                                        value = line.quantity, onValueChange = { if (!attempted) line.quantity = it },
+                                        value = line.quantity, onValueChange = { if (!attempted) line.quantity = it.filter(Char::isDigit).take(12) },
                                         label = { Text("الكمية") }, modifier = Modifier.weight(1f),
                                         singleLine = true, enabled = !attempted && !saving
                                     )
@@ -220,7 +220,7 @@ internal fun PurchaseOrderEntryDialog(
                             orderNumber.isBlank() -> error = "أدخل رقم أمر الشراء."
                             supplierId.isBlank() -> error = "اختر المورد."
                             locationId.isBlank() -> error = "اختر موقع الاستلام."
-                            !validLines -> error = "تحقق من عناصر المخزون والكمية الموجبة (حتى 6 خانات عشرية) وتكلفة الوحدة."
+                            !validLines -> error = "تحقق من عناصر المخزون والكمية الموجبة (أعداد صحيحة فقط) وتكلفة الوحدة."
                             !currenciesMatch -> error = "يجب أن تكون جميع البنود بعملة واحدة."
                             else -> { attempted = true; error = "" }
                         }
