@@ -1,5 +1,7 @@
 package com.adnanalhasani.commercial
 
+import android.content.Context
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -19,7 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 @Composable
-internal fun Dashboard(products: List<Product>, sales: List<SaleRecord>, cloudMode: Boolean, onNewSale: () -> Unit, onInventory: () -> Unit) {
+internal fun Dashboard(products: List<Product>, sales: List<SaleRecord>, cloudMode: Boolean, context: Context, onNewSale: () -> Unit, onInventory: () -> Unit, onOpenAds: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(15.dp)) {
         if (products.isEmpty()) {
             item {
@@ -92,6 +94,7 @@ internal fun Dashboard(products: List<Product>, sales: List<SaleRecord>, cloudMo
                 Metric("المنتجات", products.size.toString(), "صنف مسجل", Icons.Default.Inventory2, Modifier.weight(1f))
             }
         }
+        if (cloudMode) item { CommercialAdsHomePreview(context = context, onOpenAds = onOpenAds) }
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) { Heading("تنبيهات المخزون", "أصناف تحتاج إلى إعادة طلب") }
