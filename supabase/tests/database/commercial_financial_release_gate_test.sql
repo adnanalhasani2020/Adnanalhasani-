@@ -4,7 +4,7 @@
 -- This is intentionally a gate, not a substitute for authenticated end-to-end checkout/payment tests.
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT plan(14);
+SELECT plan(17);
 
 -- Receivable arithmetic: approved return credit reduces the sale obligation once;
 -- an executed cash refund also reduces net cash paid, not the sale credit itself.
