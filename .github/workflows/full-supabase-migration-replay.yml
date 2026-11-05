@@ -19,6 +19,7 @@ permissions:
 
 jobs:
   postgres-storage-smoke:
+    timeout-minutes: 10
     name: PostgreSQL 17 storage allocation and transfer test
     runs-on: ubuntu-latest
     services:
