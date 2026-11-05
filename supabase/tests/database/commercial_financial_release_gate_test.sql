@@ -106,6 +106,9 @@ SELECT ok(
   AND position('v_request_fingerprint' in pg_get_functiondef(
     'public.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint,bigint,bigint)'::regprocedure
   )) > 0
+  AND NOT has_table_privilege('authenticated','public.commercial_sale_unit_idempotency','SELECT')
+  AND to_regprocedure('commercial_private.commercial_get_sale_unit_idempotency(text)') IS NOT NULL
+  AND to_regprocedure('commercial_private.commercial_record_sale_unit_idempotency(text,text,text,uuid)') IS NOT NULL
   AND position('idempotency_key_reused_with_different_sell_unit_request' in pg_get_functiondef(
     'public.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint,bigint,bigint)'::regprocedure
   )) > 0,
