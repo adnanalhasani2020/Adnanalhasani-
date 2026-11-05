@@ -34,23 +34,10 @@ private val ReturnIo = Executors.newSingleThreadExecutor()
 private val ReturnMain = Handler(Looper.getMainLooper())
 
 private data class ReturnSellUnit(val code: String, val label: String, val factor: Long, val isDefault: Boolean)
-private fun returnQuantityInput(value: String): String {
-    val out = StringBuilder()
-    var decimalSeen = false
-    var decimalDigits = 0
-    value.forEach { ch ->
-        if (ch.isDigit()) {
-            if (!decimalSeen || decimalDigits < 3) {
-                out.append(ch)
-                if (decimalSeen) decimalDigits++
-            }
-        } else if ((ch == '.' || ch == ',' || ch == '\u066B') && !decimalSeen) {
-            out.append('.')
-            decimalSeen = true
-        }
-    }
-    return out.toString()
-}
+private fun returnQuantityInput(value: String): String =
+    value.filter { Character.digit(it, 10) >= 0 }.map { ch ->
+        ('0'.code + Character.digit(ch, 10)).toChar()
+    }.joinToString("").take(6)
 private fun returnSellUnits(item: CommercialCloudReturnableSaleItem): List<ReturnSellUnit> =
     listOf(ReturnSellUnit(item.sellingUnitCode, item.sellingUnitName, item.sellingUnitFactor, true))
 
@@ -86,8 +73,7 @@ internal fun CommercialCloudReturnsScreen(context: Context, onBack: () -> Unit) 
     val hasFractionalReturnQuantity = requestedQuantities.values.any { raw ->
         parseCommercialCheckoutQuantity(raw)?.stripTrailingZeros()?.scale()?.let { it > 0 } == true
     }
-    val fractionalReturnQuantityBlocked =
-        !COMMERCIAL_CLOUD_FRACTIONAL_QUANTITY_RPC_READY && hasFractionalReturnQuantity
+    val fractionalReturnQuantityBlocked = hasFractionalReturnQuantity
     val hasNonBaseReturnUnit = requestTarget?.items?.any { saleItem ->
         val selectedUnit = returnSellUnits(saleItem).firstOrNull { it.code == requestedUnitCodes[saleItem.id] }
             ?: returnSellUnits(saleItem).first()
@@ -286,10 +272,10 @@ internal fun CommercialCloudReturnsScreen(context: Context, onBack: () -> Unit) 
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text("الفاتورة #${requestTarget!!.receiptNumber} · ${requestTarget!!.customerName}", fontWeight = FontWeight.SemiBold)
-                Text("اختر سبب المرتجع وحدد كمية كل صنف. التحقق النهائي من الكميات المرتجعة يتم في قاعدة البيانات.", color = ReturnMuted, fontSize = 11.sp)
+                Text("اختر سبب المرتجع وحدد كمية صحيحة لكل صنف. التحقق النهائي من الكميات المرتجعة يتم في قاعدة البيانات.", color = ReturnMuted, fontSize = 11.sp)
                 if (fractionalReturnQuantityBlocked) {
                     Text(
-                        "قاعدة الإنتاج الحالية لا تقبل كميات مرتجعة عشرية بعد. استخدم كمية صحيحة مؤقتًا؛ لم يتم إرسال أي طلب.",
+                        "الكميات الكسرية مرفوضة؛ أدخل عددًا صحيحًا من وحدة البيع.",
                         color = MaterialTheme.colorScheme.error,
                         fontSize = 12.sp
                     )
@@ -353,7 +339,7 @@ internal fun CommercialCloudReturnsScreen(context: Context, onBack: () -> Unit) 
                             onValueChange = { value ->
                                 requestedQuantities[saleItem.id] = returnQuantityInput(value)
                             },
-                            label = { Text("الكمية المراد إرجاعها (0 إلى ${remainingInUnit.toPlainString()})") },
+                            label = { Text("الكمية المراد إرجاعها (عدد صحيح من 0 إلى ${remainingInUnit.toPlainString()})") },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true
                         )
