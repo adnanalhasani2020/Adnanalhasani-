@@ -30,6 +30,6 @@ def test_customer_collections_report_blocks_invalid_successful_payment_sources()
     screen = SCREEN.read_text(encoding="utf-8") + DATA_STATE.read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8")
     calculations = CALCULATIONS.read_text(encoding="utf-8")
     assert 'reportDateMillis(payment.createdAt) == null' in VALIDATION.read_text(encoding="utf-8")
-    assert 'payment.amountMinor <= 0L' in screen
-    assert '!payment.currencyCode.matches(Regex("^[A-Z]{3}$"))' in screen
+    assert 'payment.amountMinor <= 0L' in VALIDATION.read_text(encoding="utf-8")
+    assert '!payment.currencyCode.matches(Regex("^[A-Z]{3}$"))' in VALIDATION.read_text(encoding="utf-8")
     assert 'payment.currencyCode.matches(Regex("^[A-Z]{3}$"))' in calculations
