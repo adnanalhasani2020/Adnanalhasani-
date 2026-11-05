@@ -4,12 +4,13 @@ ROOT = Path(__file__).resolve().parents[1]
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterScreen.kt"
 CATALOG = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCatalog.kt"
 FINANCIAL_LINES = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportFinancialLines.kt"
+TAX_VALIDATION = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportTaxValidation.kt"
 CALCULATIONS = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportCalculations.kt"
 CONTRACT = ROOT / "android-commercial/docs/reports-data-contract.md"
 
 
 def test_tax_discount_summary_is_registered_and_uses_existing_validated_sources():
-    screen = SCREEN.read_text(encoding="utf-8") + ROOT.joinpath("android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterData.kt").read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8") + FINANCIAL_LINES.read_text(encoding="utf-8")
+    screen = SCREEN.read_text(encoding="utf-8") + ROOT.joinpath("android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReportsCenterData.kt").read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8") + FINANCIAL_LINES.read_text(encoding="utf-8") + TAX_VALIDATION.read_text(encoding="utf-8")
     contract = CONTRACT.read_text(encoding="utf-8")
 
     assert 'ReportCatalogItem("ملخص الضرائب والخصومات"' in screen
