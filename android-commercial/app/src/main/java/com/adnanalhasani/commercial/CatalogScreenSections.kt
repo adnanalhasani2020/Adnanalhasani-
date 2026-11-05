@@ -212,7 +212,33 @@ internal fun CatalogProductFormSection(state: CatalogProductFormState, categorie
                         }
                     }
                     item { OutlinedTextField(barcode,{barcode=it.filter(Char::isDigit).take(14)},Modifier.fillMaxWidth(),label={Text("GTIN / الباركود الأساسي (8–14 رقمًا)")},singleLine=true) }
-                    item { OutlinedTextField(extraUnitCode,{extraUnitCode=it.uppercase()},Modifier.fillMaxWidth(),label={Text("وحدة عبوة إضافية (اختياري)")},singleLine=true) }
+                    item {
+                        val baseDimension = directoryUnits.firstOrNull { it.code == unitCode }?.dimension.orEmpty()
+                        val compatibleUnits = directoryUnits.filter {
+                            it.code != unitCode && (baseDimension.isBlank() || it.dimension == baseDimension)
+                        }
+                        if (compatibleUnits.isEmpty()) {
+                            OutlinedTextField(extraUnitCode,{extraUnitCode=it.uppercase()},Modifier.fillMaxWidth(),
+                                label={Text("وحدة عبوة إضافية (اختياري)")},
+                                supportingText={Text("حدّث دليل الوحدات لاختيار وحدة متوافقة مع بُعد وحدة الأساس.")},singleLine=true)
+                        } else {
+                            var expanded by remember { mutableStateOf(false) }
+                            ExposedDropdownMenuBox(expanded=expanded,onExpandedChange={expanded=it}) {
+                                OutlinedTextField(
+                                    value=compatibleUnits.firstOrNull { it.code == extraUnitCode }?.let { "${it.code} — ${it.localizedName.ifBlank { it.nameAr }}" } ?: extraUnitCode,
+                                    onValueChange={},readOnly=true,label={Text("وحدة العبوة الإضافية (اختياري)")},
+                                    trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expanded=expanded)},
+                                    modifier=Modifier.fillMaxWidth().menuAnchor())
+                                ExposedDropdownMenu(expanded=expanded,onDismissRequest={expanded=false}) {
+                                    compatibleUnits.forEach { unit ->
+                                        DropdownMenuItem(
+                                            text={Text("${unit.code} — ${unit.localizedName.ifBlank { unit.nameAr }} (${unit.dimension})")},
+                                            onClick={extraUnitCode=unit.code;expanded=false})
+                                    }
+                                }
+                            }
+                        }
+                    }
                     item { OutlinedTextField(extraUnitQty,{extraUnitQty=it},Modifier.fillMaxWidth(),label={Text("كم وحدة أساس داخل العبوة")},singleLine=true) }
                     item { OutlinedTextField(extraUnitPackage,{extraUnitPackage=it},Modifier.fillMaxWidth(),label={Text("اسم العبوة (كرتون/علبة/شريط)")},singleLine=true) }
                     item { OutlinedTextField(extraUnitBarcode,{extraUnitBarcode=it},Modifier.fillMaxWidth(),label={Text("باركود العبوة الإضافية")},singleLine=true) }
