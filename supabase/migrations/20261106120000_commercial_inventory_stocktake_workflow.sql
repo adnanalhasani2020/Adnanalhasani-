@@ -75,6 +75,7 @@ CREATE TABLE IF NOT EXISTS public.commercial_inventory_stocktake_lines (
   location_id uuid NOT NULL REFERENCES public.commercial_organization_locations(id) ON DELETE RESTRICT,
   offering_id uuid NOT NULL REFERENCES public.commercial_offerings(id) ON DELETE RESTRICT,
   expected_quantity numeric(20,6) NOT NULL CHECK (expected_quantity >= 0),
+  snapshot_balance_revision bigint NOT NULL CHECK (snapshot_balance_revision >= 0),
   counted_quantity numeric(20,6) CHECK (counted_quantity IS NULL OR counted_quantity >= 0),
   adjustment_unit_cost_minor bigint CHECK (adjustment_unit_cost_minor IS NULL OR adjustment_unit_cost_minor >= 0),
   previous_unit_cost_minor bigint CHECK (previous_unit_cost_minor IS NULL OR previous_unit_cost_minor >= 0),
@@ -214,9 +215,9 @@ BEGIN
   ON CONFLICT (organization_id,location_id,offering_id) DO NOTHING;
 
   INSERT INTO public.commercial_inventory_stocktake_lines(
-    stocktake_id,organization_id,location_id,offering_id,expected_quantity
+    stocktake_id,organization_id,location_id,offering_id,expected_quantity,snapshot_balance_revision
   )
-  SELECT v_stocktake.id,b.organization_id,b.location_id,b.offering_id,b.quantity_on_hand
+  SELECT v_stocktake.id,b.organization_id,b.location_id,b.offering_id,b.quantity_on_hand,b.inventory_revision
   FROM public.commercial_inventory_balances b
   JOIN public.commercial_offerings o ON o.id=b.offering_id
   WHERE b.organization_id=p_organization_id AND b.location_id=p_location_id
@@ -434,9 +435,11 @@ BEGIN
     SELECT * INTO v_balance FROM public.commercial_inventory_balances
     WHERE organization_id=v_stocktake.organization_id AND location_id=v_stocktake.location_id
       AND offering_id=v_line.offering_id FOR UPDATE;
-    IF NOT FOUND OR v_balance.quantity_on_hand IS DISTINCT FROM v_line.expected_quantity THEN
+    IF NOT FOUND
+       OR v_balance.quantity_on_hand IS DISTINCT FROM v_line.expected_quantity
+       OR v_balance.inventory_revision IS DISTINCT FROM v_line.snapshot_balance_revision THEN
       RAISE EXCEPTION 'inventory_stocktake_stale_snapshot' USING ERRCODE='55000',
-        DETAIL='Inventory changed after the count snapshot. Create a new stocktake and recount.';
+        DETAIL='Inventory changed after the count snapshot, even if later movements returned the quantity to its prior value. Create a new stocktake and recount.';
     END IF;
     IF v_line.counted_quantity < coalesce(v_balance.quantity_reserved,0) THEN
       RAISE EXCEPTION 'inventory_stocktake_below_reserved_quantity' USING ERRCODE='55000';
