@@ -69,12 +69,17 @@ internal fun SaleEntryDialog(
     val effectiveUnitIndex = selectedUnitIndex.takeIf { it in saleUnits.indices } ?: defaultUnitIndex
     val selectedUnit = saleUnits[effectiveUnitIndex]
     val basePrice = product.price.replace(",", "").replace(" ر.ي", "").toIntOrNull() ?: 0
-    val suggestedUnitPrice = kotlin.math.round(basePrice.toDouble() * selectedUnit.quantityInBase).toInt()
+    val suggestedUnitPrice = runCatching {
+        BigDecimal.valueOf(basePrice.toLong()).multiply(BigDecimal.valueOf(selectedUnit.quantityInBase))
+            .setScale(0, java.math.RoundingMode.HALF_UP).intValueExact()
+    }.getOrDefault(0)
     val quantity = quantityText.toIntOrNull()
     val unitPrice = priceOverrideText.toIntOrNull() ?: suggestedUnitPrice
-    val baseQuantityExact = (quantity ?: 0) * selectedUnit.quantityInBase
-    val baseQuantity = kotlin.math.round(baseQuantityExact).toInt()
-    val quantityIsWholeBaseUnits = kotlin.math.abs(baseQuantityExact - baseQuantity) < 0.000001
+    val baseQuantityExact = runCatching {
+        Math.multiplyExact((quantity ?: 0).toLong(), selectedUnit.quantityInBase)
+    }.getOrNull()
+    val baseQuantity = baseQuantityExact?.takeIf { it in 1L..Int.MAX_VALUE.toLong() }?.toInt() ?: 0
+    val quantityIsWholeBaseUnits = baseQuantityExact != null && baseQuantityExact in 1L..Int.MAX_VALUE.toLong()
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("فاتورة بيع جديدة", fontWeight = FontWeight.Bold, color = Ink) },
