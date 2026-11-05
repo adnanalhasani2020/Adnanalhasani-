@@ -62,6 +62,7 @@ internal fun CommercialInventoryStocktakeScreen(context: Context, onBack: () -> 
     var reverseReason by remember { mutableStateOf("") }
     var showReverseDialog by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(false) }
+    var schemaReady by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
     var notice by remember { mutableStateOf("") }
@@ -84,18 +85,22 @@ internal fun CommercialInventoryStocktakeScreen(context: Context, onBack: () -> 
             stocktakeMain.post {
                 loading = false
                 result.onSuccess {
+                    schemaReady = true
                     sessions = it.sessions
                     selected = it.selected
                     selectedId = it.selected?.id.orEmpty()
                     lines = it.lines
                     if (it.selected == null) notice = "لا توجد جلسات جرد لهذا الفرع بعد."
-                }.onFailure { error = it.message ?: "تعذر تحميل مستندات الجرد." }
+                }.onFailure {
+                    schemaReady = false
+                    error = it.message ?: "تعذر تحميل مستندات الجرد."
+                }
             }
         }
     }
 
     fun performAction(successMessage: String, action: () -> String? = { null }) {
-        if (saving) return
+        if (saving || !schemaReady) return
         saving = true
         error = ""
         notice = ""
@@ -109,11 +114,13 @@ internal fun CommercialInventoryStocktakeScreen(context: Context, onBack: () -> 
                 actionResult.onSuccess { notice = successMessage }
                     .onFailure { error = it.message ?: "تعذر تنفيذ العملية." }
                 snapshotResult.onSuccess {
+                    schemaReady = true
                     sessions = it.sessions
                     selected = it.selected
                     selectedId = it.selected?.id.orEmpty()
                     lines = it.lines
                 }.onFailure {
+                    schemaReady = false
                     if (error.isBlank()) error = it.message ?: "تعذر تحديث عرض الجرد."
                 }
             }
@@ -177,7 +184,7 @@ internal fun CommercialInventoryStocktakeScreen(context: Context, onBack: () -> 
                                     createCommercialInventoryStocktake(context, noteSnapshot)
                                 }
                             },
-                            enabled = !loading && !saving,
+                            enabled = schemaReady && !loading && !saving,
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Icon(Icons.Default.Inventory2, contentDescription = null)
@@ -191,7 +198,7 @@ internal fun CommercialInventoryStocktakeScreen(context: Context, onBack: () -> 
                 item { Text("جلسات الجرد السابقة", color = stocktakeInk, fontWeight = FontWeight.Bold) }
                 items(sessions, key = { it.id }) { session ->
                     Card(
-                        onClick = { if (!saving && selectedId != session.id) reload(session.id) },
+                        onClick = { if (schemaReady && !saving && selectedId != session.id) reload(session.id) },
                         colors = CardDefaults.cardColors(containerColor = if (selectedId == session.id) Color(0xFFEAF3EF) else Color.White),
                         border = BorderStroke(1.dp, if (selectedId == session.id) Color(0xFF9CC8B8) else Color(0xFFE4EBE7)),
                         shape = RoundedCornerShape(14.dp)
@@ -226,7 +233,7 @@ internal fun CommercialInventoryStocktakeScreen(context: Context, onBack: () -> 
                                                 active.id
                                             }
                                         },
-                                        enabled = !saving && !loading && countedLines > 0,
+                                        enabled = schemaReady && !saving && !loading && countedLines > 0,
                                         modifier = Modifier.fillMaxWidth()
                                     ) { Text("حفظ العدّ الفعلي") }
                                     Button(
@@ -238,7 +245,7 @@ internal fun CommercialInventoryStocktakeScreen(context: Context, onBack: () -> 
                                                 active.id
                                             }
                                         },
-                                        enabled = !saving && !loading && lines.isNotEmpty() && countedLines == lines.size,
+                                        enabled = schemaReady && !saving && !loading && lines.isNotEmpty() && countedLines == lines.size,
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
                                         Icon(Icons.Default.Send, contentDescription = null)
@@ -250,7 +257,7 @@ internal fun CommercialInventoryStocktakeScreen(context: Context, onBack: () -> 
                                     Text("يجب أن يعتمد الجرد مستخدم آخر غير منشئ الجلسة ومرسل العد.", color = stocktakeMuted, fontSize = 11.sp)
                                     Button(
                                         onClick = { performAction("تم اعتماد الجرد.") { approveCommercialInventoryStocktake(context, active.id); active.id } },
-                                        enabled = !saving && !loading,
+                                        enabled = schemaReady && !saving && !loading,
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
                                         Icon(Icons.Default.CheckCircle, contentDescription = null)
@@ -262,13 +269,13 @@ internal fun CommercialInventoryStocktakeScreen(context: Context, onBack: () -> 
                                     Text("سيُرحّل الفرق فقط إذا لم يتغير الرصيد منذ إنشاء لقطة الجرد، وكانت طبقات التكلفة متطابقة.", color = stocktakeMuted, fontSize = 11.sp)
                                     Button(
                                         onClick = { performAction("تم ترحيل فروقات الجرد.") { postCommercialInventoryStocktake(context, active.id); active.id } },
-                                        enabled = !saving && !loading,
+                                        enabled = schemaReady && !saving && !loading,
                                         modifier = Modifier.fillMaxWidth()
                                     ) { Text("ترحيل الفروقات") }
                                 }
                                 "posted" -> {
                                     Text("العكس متاح فقط إذا لم تحدث حركة مخزون لاحقة للصنف ولم تُستهلك طبقة الزيادة.", color = stocktakeMuted, fontSize = 11.sp)
-                                    OutlinedButton(onClick = { showReverseDialog = true }, enabled = !saving, modifier = Modifier.fillMaxWidth()) {
+                                    OutlinedButton(onClick = { showReverseDialog = true }, enabled = schemaReady && !saving, modifier = Modifier.fillMaxWidth()) {
                                         Icon(Icons.Default.Undo, contentDescription = null)
                                         Spacer(Modifier.width(8.dp))
                                         Text("عكس مستند الجرد")
