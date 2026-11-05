@@ -141,10 +141,15 @@ internal fun BarcodeScannerScreen(onBack: () -> Unit, onBarcodeFound: (String) -
         }
     }
 
-    val verifiedGtin = detectedCode.isNotBlank() && detectedFormat in setOf(
-        Barcode.FORMAT_EAN_8, Barcode.FORMAT_EAN_13, Barcode.FORMAT_UPC_A, Barcode.FORMAT_ITF
-    ) && detectedCode.length in setOf(8, 12, 13, 14)
-    val checksumOk = !verifiedGtin || isValidGtinCheckDigit(detectedCode)
+    val verifiedGtin = detectedFormat in setOf(Barcode.FORMAT_EAN_8, Barcode.FORMAT_EAN_13, Barcode.FORMAT_UPC_A) ||
+        (detectedFormat == Barcode.FORMAT_ITF && detectedCode.length == 14)
+    val checksumOk = when (detectedFormat) {
+        Barcode.FORMAT_EAN_8 -> detectedCode.length == 8 && isValidGtinCheckDigit(detectedCode)
+        Barcode.FORMAT_EAN_13 -> detectedCode.length == 13 && isValidGtinCheckDigit(detectedCode)
+        Barcode.FORMAT_UPC_A -> detectedCode.length == 12 && isValidGtinCheckDigit(detectedCode)
+        Barcode.FORMAT_ITF -> detectedCode.length != 14 || isValidGtinCheckDigit(detectedCode)
+        else -> true
+    }
 
     Scaffold(topBar = {
         TopAppBar(
@@ -182,7 +187,7 @@ internal fun BarcodeScannerScreen(onBack: () -> Unit, onBarcodeFound: (String) -
                         Text(detectedCode, style = MaterialTheme.typography.headlineSmall)
                         Text(barcodeFormatName(detectedFormat), style = MaterialTheme.typography.bodySmall)
                         if (verifiedGtin && !checksumOk) {
-                            Text("فشل التحقق من رقم التدقيق؛ أعد المسح ولا تعتمد هذا الرمز.", color = MaterialTheme.colorScheme.error)
+                            Text("فشل التحقق من طول الرمز أو رقم التدقيق؛ أعد المسح ولا تعتمد هذا الرمز.", color = MaterialTheme.colorScheme.error)
                         } else if (verifiedGtin) {
                             Text("اجتاز رقم التدقيق القياسي.", color = MaterialTheme.colorScheme.primary)
                         } else {
