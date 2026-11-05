@@ -54,6 +54,7 @@ internal fun MoreScreen(
     onUnitsDirectory: () -> Unit,
     onCustomerPortal: () -> Unit,
     onCustomerOrders: () -> Unit,
+    onCustomerSupplyRequests: () -> Unit,
     onBackup: () -> Unit
 ) {
     val sections = listOf(
@@ -63,7 +64,7 @@ internal fun MoreScreen(
         ),
         "العملاء والمبيعات" to listOf(
             "العملاء والمديونيات", "دليل العملاء السحابي", "فواتير المبيعات السحابية",
-            "مرتجعات المبيعات", "بوابة الزبون", "طلبات الزبائن"
+            "مرتجعات المبيعات", "بوابة الزبون", "طلبات الزبائن", "طلبات توفير الأصناف"
         ),
         "الحسابات والتقارير" to listOf(
             "السندات والمدفوعات", "القيود المحاسبية", "دليل الحسابات",
@@ -76,7 +77,7 @@ internal fun MoreScreen(
         title to entries.filter { cloudMode || it !in setOf(
             "دليل العملاء السحابي", "دليل الموردين", "أوامر الشراء", "السندات والمدفوعات",
             "مرتجعات المبيعات", "القيود المحاسبية", "دليل الحسابات", "فواتير المبيعات السحابية",
-            "تنبيهات المخزون السحابي", "دليل وحدات القياس", "بوابة الزبون", "طلبات الزبائن"
+            "تنبيهات المخزون السحابي", "دليل وحدات القياس", "بوابة الزبون", "طلبات الزبائن", "طلبات توفير الأصناف"
         ) }
     }.filter { it.second.isNotEmpty() }
 
@@ -107,6 +108,7 @@ internal fun MoreScreen(
                             "دليل وحدات القياس" -> onUnitsDirectory()
                             "بوابة الزبون" -> onCustomerPortal()
                             "طلبات الزبائن" -> onCustomerOrders()
+                            "طلبات توفير الأصناف" -> onCustomerSupplyRequests()
                             "النسخ الاحتياطي" -> onBackup()
                         }
                     },
