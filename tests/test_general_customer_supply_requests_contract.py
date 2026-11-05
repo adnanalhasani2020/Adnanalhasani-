@@ -41,7 +41,7 @@ def test_purchase_conversion_is_draft_and_has_no_stock_or_accounting_effect():
     sql = SQL.read_text(encoding="utf-8").lower()
     conversion = sql.split("create or replace function public.commercial_customer_portal_convert_supply_request_to_purchase", 1)[1]
     assert "'draft'" in conversion
-    assert "offering_id,null" in conversion
+    assert "p_unit_cost_minor,null" in conversion
     assert "'stock_received',false" in conversion
     assert "'accounting_posted',false" in conversion
     assert "commercial_purchase_order_items" in conversion
