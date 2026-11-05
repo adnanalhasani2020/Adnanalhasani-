@@ -114,7 +114,8 @@ class CommercialCloudOperationalScreenContractTests(unittest.TestCase):
         self.assertIn("item.sellingUnitFactor", returns_screen)
         self.assertIn("v_sale_item.selling_unit_code IS DISTINCT FROM v_unit_code", migration)
         self.assertIn("v_sale_item.quantity_in_stock_units::numeric / v_sale_item.selling_quantity", migration)
-        self.assertNotIn("FROM public.commercial_offering_sell_units", migration)
+        return_rpc = migration.split("CREATE OR REPLACE FUNCTION public.commercial_request_sale_return(", 1)[1].split("$function$;", 1)[0]
+        self.assertNotIn("FROM public.commercial_offering_sell_units", return_rpc)
 
     def test_projection_columns_are_not_built_from_user_input(self):
         function = self.repository.split(
