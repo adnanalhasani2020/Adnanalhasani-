@@ -39,7 +39,7 @@ jobs:
         run: supabase init --force
 
       - name: Start isolated local Supabase services
-        run: supabase start -x studio,imgproxy,edge-runtime,logflare,vector,supavisor
+        run: supabase start -x studio,imgproxy,edge-runtime,logflare,vector,supavisor,auth,rest,realtime,storage-api,meta,kong,mailpit,analytics
 
       - name: Replay every repository migration from an empty database
         run: supabase db reset --local
