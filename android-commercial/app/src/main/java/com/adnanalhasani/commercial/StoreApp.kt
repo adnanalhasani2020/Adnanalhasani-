@@ -77,6 +77,7 @@ internal fun StoreApp(context: Context) {
     var customerPaymentOrganizationId by remember { mutableStateOf("") }
     var customerPaymentOrganizationName by remember { mutableStateOf("") }
     var customerOrderFulfillmentPage by remember { mutableStateOf(false) }
+    var customerSupplyRequestsPage by remember { mutableStateOf(false) }
     var settlingSaleNumber by remember { mutableIntStateOf(-1) }
     var cloudContextRevision by remember { mutableIntStateOf(0) }
     var cloudReloadToken by remember { mutableIntStateOf(0) }
@@ -262,6 +263,8 @@ internal fun StoreApp(context: Context) {
                     organizationName = customerPaymentOrganizationName,
                     onBack = { customerPaymentRequestsPage = false }
                 )
+            } else if (customerSupplyRequestsPage) {
+                CustomerSupplyRequestsScreen(context = context, onBack = { customerSupplyRequestsPage = false })
             } else if (customerOrderFulfillmentPage) {
                 CustomerOrderFulfillmentScreen(context = context, onBack = { customerOrderFulfillmentPage = false })
             } else if (customerPortalHistoryPage) {
@@ -377,7 +380,7 @@ internal fun StoreApp(context: Context) {
                         onCatalog = { showActivityProfile = false; cloudContextRevision++; showCatalog = true }
                     ) else MoreScreen(cloudMode = cloudMode, onPersonalAccounts = { showPersonalAccounts = true }, onCustomers = {
                     showDebts = true
-                }, onReports = { showReportsCenter = true }, onExpenses = { showExpenses = true }, onActivityProfile = { showActivityProfile = true }, onCatalog = { showCatalog = true }, onMasterData = { showMasterData = true }, onCloudOperational = { cloudOperationalPage = it }, onCloudSales = { cloudSalesPage = true }, onCloudPurchases = { cloudPurchasesPage = true }, onCloudStockAlerts = { cloudStockAlertsPage = true }, onUnitsDirectory = { cloudUnitsPage = true }, onCustomerPortal = { customerPortalPage = true }, onCustomerOrders = { customerOrderFulfillmentPage = true }, onBackup = { cloudNotice = "واجهة النسخ الاحتياطي لم تُربط بعد بعملية تصدير واستعادة موثوقة. لم يتم إنشاء نسخة غير مكتملة أو الادعاء بحفظها." })
+                }, onReports = { showReportsCenter = true }, onExpenses = { showExpenses = true }, onActivityProfile = { showActivityProfile = true }, onCatalog = { showCatalog = true }, onMasterData = { showMasterData = true }, onCloudOperational = { cloudOperationalPage = it }, onCloudSales = { cloudSalesPage = true }, onCloudPurchases = { cloudPurchasesPage = true }, onCloudStockAlerts = { cloudStockAlertsPage = true }, onUnitsDirectory = { cloudUnitsPage = true }, onCustomerPortal = { customerPortalPage = true }, onCustomerOrders = { customerOrderFulfillmentPage = true }, onCustomerSupplyRequests = { customerSupplyRequestsPage = true }, onBackup = { cloudNotice = "واجهة النسخ الاحتياطي لم تُربط بعد بعملية تصدير واستعادة موثوقة. لم يتم إنشاء نسخة غير مكتملة أو الادعاء بحفظها." })
                 }
             }
         }
