@@ -18,7 +18,7 @@ class PurchaseOrderOfferingLocationPickerTests(unittest.TestCase):
         cls.receipt = RECEIPT_DIALOG.read_text(encoding="utf-8")
 
     def test_repository_loads_offering_location_ref_and_purchase_location_name(self):
-        self.assertIn("location_ref,product:commercial_products(name,state),activity:commercial_activities(organization_id,state)", self.repository)
+        self.assertIn("location_ref,product:commercial_products(name,state,unit_code,unit_name),activity:commercial_activities(organization_id,state),inventory_balances:commercial_inventory_balances(quantity_on_hand,quantity_reserved,location_id)", self.repository)
         self.assertIn('val locationRef = row.optString("location_ref")', self.repository)
         self.assertIn("locationRef.isNotBlank()", self.repository)
         self.assertIn("val locationRef: String", self.repository)
