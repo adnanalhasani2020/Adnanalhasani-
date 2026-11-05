@@ -418,7 +418,7 @@ internal fun rememberReportsCenterData(
         }
     }
     val inPeriodSettlements = remember(cloudMode, settlements, startMillis, endExclusive) {
-        if (cloudMode) emptyList() else settlements.filter { it.timestamp >= startMillis && it < endExclusive }
+        if (cloudMode) emptyList() else settlements.filter { it.timestamp >= startMillis && it.timestamp < endExclusive }
     }
     val inPeriodExpenses = remember(cloudMode, expenses, startMillis, endExclusive) {
         if (cloudMode) emptyList() else expenses.filter { it.timestamp >= startMillis && it.timestamp < endExclusive }
