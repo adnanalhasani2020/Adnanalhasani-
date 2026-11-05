@@ -1,4 +1,5 @@
 from pathlib import Path
+from catalog_source_helpers import catalog_android_source
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,7 +27,7 @@ class CatalogItemActivityMappingContractTests(unittest.TestCase):
         self.assertIn("duplicate_catalog_item_selection", sql)
 
     def test_android_loads_activity_directory_and_assigns_selected_items(self):
-        screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogScreen.kt").read_text(encoding="utf-8")
+        screen = catalog_android_source()
         self.assertIn("commercial_list_business_activity_nodes", screen)
         self.assertIn("activityNodes", screen)
         self.assertIn("commercial_catalog_assign_items_to_activity", screen)
