@@ -43,6 +43,9 @@ class CommercialStorageInventoryScreenContractTests(unittest.TestCase):
         self.assertIn("quantity_on_hand,quantity_reserved", self.repository)
         self.assertIn("availableQuantity = onHand.subtract(reserved)", self.repository)
         self.assertIn("java.math.BigDecimal", self.repository)
+        self.assertIn("branch_location_id", self.repository)
+        self.assertIn("it.branchLocationId == branchId", self.screen)
+        self.assertIn("it.warehouseId in warehouseIds", self.screen)
 
 
 if __name__ == "__main__":
