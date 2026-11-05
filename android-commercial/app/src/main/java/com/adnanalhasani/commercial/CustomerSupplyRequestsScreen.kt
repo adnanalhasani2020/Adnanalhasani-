@@ -47,7 +47,7 @@ private fun loadCustomerSupplyRows(context:Context):List<CustomerSupplyRow>{
         CustomerSupplyRow(r.optString("id"),r.optString("customer_name"),r.optString("item_name"),
             r.optString("specifications"),r.optString("quantity"),r.optString("unit_name"),
             r.optLong("requested_price_minor"),r.optString("currency_code"),r.optString("payment_mode"),
-            r.optString("customer_note"),r.optString("status"),r.optString("merchant_note"))
+            r.optString("customer_note"),r.optString("status"),r.optString("merchant_note"),r.optString("direct_sale_status"),r.optString("sale_id"))
     }
 }
 
@@ -55,6 +55,14 @@ private fun reviewCustomerSupplyRequest(context:Context,id:String,decision:Strin
     val (orgId,access)=commercialMasterDataAccess(context)
     SupabaseClient.request("/rest/v1/rpc/commercial_customer_portal_review_supply_request","POST",
         JSONObject().put("p_organization_id",orgId).put("p_request_id",id).put("p_decision",decision).put("p_note",note),access)
+}
+
+private fun sellCustomerSupplyRequestDirect(context:Context,id:String,salePrice:Long?,discount:Long,tax:Long):JSONObject{
+    val (orgId,access)=commercialMasterDataAccess(context)
+    return JSONObject(SupabaseClient.request("/rest/v1/rpc/commercial_customer_supply_request_sell_direct","POST",
+        JSONObject().put("p_organization_id",orgId).put("p_request_id",id)
+            .put("p_sale_unit_price_minor",salePrice ?: JSONObject.NULL)
+            .put("p_discount_minor",discount).put("p_tax_minor",tax),access))
 }
 
 private fun convertCustomerSupplyRequest(context:Context,id:String,supplierId:String,locationId:String,price:Long){
@@ -82,6 +90,10 @@ internal fun CustomerSupplyRequestsScreen(context:Context,onBack:()->Unit){
     var locationId by remember { mutableStateOf("") }
     var supplierMenu by remember { mutableStateOf(false) }
     var locationMenu by remember { mutableStateOf(false) }
+    var directSaleTarget by remember { mutableStateOf<CustomerSupplyRow?>(null) }
+    var directSalePrice by remember { mutableStateOf("") }
+    var directSaleDiscount by remember { mutableStateOf("0") }
+    var directSaleTax by remember { mutableStateOf("0") }
 
     LaunchedEffect(refresh){
         loading=true;error=""
@@ -132,6 +144,11 @@ internal fun CustomerSupplyRequestsScreen(context:Context,onBack:()->Unit){
                         }
                     }
                     if(r.status=="accepted")Button(onClick={convertTarget=r},enabled=!busy&&options?.suppliers?.isNotEmpty()==true&&options?.locations?.isNotEmpty()==true,modifier=Modifier.fillMaxWidth()){Text("تحويل إلى أمر شراء")}
+                    if(r.status=="converted" && r.directSaleStatus!="sold") {
+                        Button(onClick={directSaleTarget=r;directSalePrice="";directSaleDiscount="0";directSaleTax="0"},enabled=!busy,modifier=Modifier.fillMaxWidth()){Text("شراء وبيع مباشرة على حساب العميل")}
+                        Text("يتاح بعد استلام كامل الكمية وتسجيل فاتورة المورد وربط الصنف بوحدة المخزون الأساسية.",fontSize=11.sp,color=SupplyMuted)
+                    }
+                    if(r.directSaleStatus=="sold" && r.saleId.isNotBlank()) Text("تم البيع وتسجيله على حساب العميل. رقم البيع: "+r.saleId,fontSize=12.sp,color=SupplyInk)
                 }
             }
         }
@@ -143,6 +160,23 @@ internal fun CustomerSupplyRequestsScreen(context:Context,onBack:()->Unit){
                 busy=true;supplyIo.execute{val result=runCatching{reviewCustomerSupplyRequest(context,target.id,decision,decisionNote)}
                     supplyMain.post{busy=false;result.onSuccess{notice="تم تحديث حالة طلب ${target.name}.";refresh++}.onFailure{error=it.message?:"تعذر تنفيذ القرار."};decisionTarget=null}}
             }){Text("تأكيد")}},dismissButton={TextButton(onClick={decisionTarget=null},enabled=!busy){Text("إلغاء")}})
+    }
+
+    directSaleTarget?.let{target->
+        AlertDialog(onDismissRequest={if(!busy)directSaleTarget=null},title={Text("اعتماد الشراء والبيع المباشر")},
+            text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)){
+                Text("لن ينفذ هذا الإجراء إلا بعد تسجيل فاتورة المورد واستلام الكمية كاملة. سيُنشأ البيع على حساب العميل وتُسجل حركة المخزون والحسابات في معاملة واحدة.",fontSize=12.sp,color=SupplyMuted)
+                OutlinedTextField(directSalePrice,{directSalePrice=it.filter(Char::isDigit).take(15)},label={Text("سعر بيع الوحدة (اختياري)")},modifier=Modifier.fillMaxWidth())
+                Text("اترك السعر فارغًا ليستخدم النظام سعر الوحدة الفعلي في فاتورة المورد. أدخل سعرًا أعلى إذا أردت إضافة ربح.",fontSize=11.sp,color=SupplyMuted)
+                OutlinedTextField(directSaleDiscount,{directSaleDiscount=it.filter(Char::isDigit).take(15)},label={Text("الخصم الإجمالي")},modifier=Modifier.fillMaxWidth())
+                OutlinedTextField(directSaleTax,{directSaleTax=it.filter(Char::isDigit).take(15)},label={Text("الضريبة الإجمالية")},modifier=Modifier.fillMaxWidth())
+            }},
+            confirmButton={Button(enabled=!busy&&(directSalePrice.isBlank()||directSalePrice.toLongOrNull()!=null)&&directSaleDiscount.toLongOrNull()!=null&&directSaleTax.toLongOrNull()!=null,onClick={
+                busy=true;supplyIo.execute{
+                    val result=runCatching{sellCustomerSupplyRequestDirect(context,target.id,directSalePrice.toLongOrNull(),directSaleDiscount.toLong(),directSaleTax.toLong())}
+                    supplyMain.post{busy=false;result.onSuccess{notice="تم تسجيل البيع مباشرة على حساب العميل وإتمام الأثر المالي والمخزني.";refresh++}.onFailure{error=it.message?:"تعذر تنفيذ البيع المباشر. تحقق من الاستلام والفاتورة ووحدة الصنف."};directSaleTarget=null}
+                }
+            }){Text("اعتماد البيع")}},dismissButton={TextButton(onClick={directSaleTarget=null},enabled=!busy){Text("إلغاء")}})
     }
     convertTarget?.let{target->
         val opts=options
