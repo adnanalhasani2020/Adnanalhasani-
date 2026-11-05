@@ -50,3 +50,20 @@ jobs:
         run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261105123000_commercial_integer_quantity_enforcement.sql
       - name: Verify constraints and idempotency boundary
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/database/commercial_integer_quantity_migration_smoke_test.sql
+      - name: Confirm fractional historical stock aborts before constraint rollout
+        shell: bash
+        run: |
+          createdb preflight
+          psql -d preflight -v ON_ERROR_STOP=1 -f supabase/tests/fixtures/commercial_integer_quantity_schema_fixture.sql
+          psql -d preflight -v ON_ERROR_STOP=1 -c "INSERT INTO public.commercial_inventory_balances(quantity_on_hand) VALUES (0.5)"
+          log_file="$(mktemp)"
+          if psql -d preflight -v ON_ERROR_STOP=1 -f supabase/migrations/20261105123000_commercial_integer_quantity_enforcement.sql >"$log_file" 2>&1; then
+            cat "$log_file"
+            echo "Expected migration preflight to reject fractional historical stock"
+            exit 1
+          fi
+          if ! grep -q "fractional_historical_quantity_requires_reconciliation: commercial_inventory_balances.quantity_on_hand" "$log_file"; then
+            cat "$log_file"
+            echo "Migration failed for an unexpected reason"
+            exit 1
+          fi
