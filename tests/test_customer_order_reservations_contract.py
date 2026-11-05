@@ -48,3 +48,12 @@ def test_android_merchant_queue_reserves_and_fulfills_reserved_orders():
     assert "اعتماد الحجز وحجز الكمية" in screen
     assert "إبقاء الحجز وإرسال تذكير يومي" in screen
     assert "release_stock" in screen and "cancel_order" in screen
+
+def test_reservation_dialog_requires_expiry_and_exposes_all_expiry_policies():
+    screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CustomerOrderFulfillmentScreen.kt").read_text(encoding="utf-8")
+    assert "reservationTarget?.let" in screen
+    assert "validHours" in screen
+    assert "SimpleDateFormat" in screen
+    assert "release_stock" in screen
+    assert "keep_reserved_notify" in screen
+    assert "cancel_order" in screen
