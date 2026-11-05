@@ -429,7 +429,7 @@ internal fun StoreApp(context: Context) {
                             val resultJson = JSONObject(created)
                             Pair(resultJson.optBoolean("created_new_offering",true),loadCommercialCloudInventory(context))
                         } else {
-                            createCommercialCloudInventoryItem(context,name,unitName,price.toLong(),stock,reorderPoint.toDouble(),categoryId,unitCode)
+                            createCommercialCloudInventoryItem(context,name,unitName,price.toLong(),stock,reorderPoint,categoryId,unitCode)
                             Pair(true,loadCommercialCloudInventory(context))
                         }
                     }
