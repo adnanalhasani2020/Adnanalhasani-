@@ -67,3 +67,8 @@ jobs:
             echo "Migration failed for an unexpected reason"
             exit 1
           fi
+          remaining_constraints="$(psql -d preflight -Atc "SELECT count(*) FROM pg_constraint WHERE conname LIKE '%_whole_qty_ck'")"
+          if [ "$remaining_constraints" != "0" ]; then
+            echo "A failed preflight left partially installed quantity constraints: $remaining_constraints"
+            exit 1
+          fi
