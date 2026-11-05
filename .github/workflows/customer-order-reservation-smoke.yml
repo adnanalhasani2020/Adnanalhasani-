@@ -1,5 +1,9 @@
 name: Customer order reservation migration smoke test
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 on:
   pull_request:
     branches: [main]
@@ -15,6 +19,7 @@ permissions:
 
 jobs:
   reservation-migration:
+    timeout-minutes: 10
     name: PostgreSQL 17 reservation lifecycle smoke test
     runs-on: ubuntu-latest
     services:

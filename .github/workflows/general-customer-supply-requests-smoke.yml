@@ -1,5 +1,9 @@
 name: General customer supply request migration smoke test
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 on:
   pull_request:
     branches: [main]
@@ -16,6 +20,7 @@ permissions:
 
 jobs:
   supply-request-migration:
+    timeout-minutes: 10
     name: PostgreSQL 17 customer supply request lifecycle smoke test
     runs-on: ubuntu-latest
     services:
