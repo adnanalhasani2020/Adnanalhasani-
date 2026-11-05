@@ -1,5 +1,40 @@
 BEGIN;
 
+-- Balance revisions are incremented by a trigger so reversals can detect even
+-- transactions that began before posting and committed after waiting on a row lock.
+ALTER TABLE public.commercial_inventory_balances
+  ADD COLUMN IF NOT EXISTS inventory_revision bigint NOT NULL DEFAULT 0
+  CHECK (inventory_revision >= 0);
+
+CREATE OR REPLACE FUNCTION commercial_private.commercial_bump_inventory_balance_revision()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path TO 'pg_catalog','public','commercial_private'
+AS $function$
+BEGIN
+  NEW.inventory_revision := coalesce(OLD.inventory_revision,0)+1;
+  RETURN NEW;
+END;
+$function$;
+
+DROP TRIGGER IF EXISTS commercial_inventory_balance_revision_guard
+  ON public.commercial_inventory_balances;
+CREATE TRIGGER commercial_inventory_balance_revision_guard
+BEFORE UPDATE ON public.commercial_inventory_balances
+FOR EACH ROW EXECUTE FUNCTION commercial_private.commercial_bump_inventory_balance_revision();
+
+-- A hard release gate: posting/reversal stays disabled until balanced GL entries
+-- and organization-specific inventory adjustment mappings are implemented.
+CREATE TABLE IF NOT EXISTS public.commercial_inventory_stocktake_release_controls (
+  id smallint PRIMARY KEY DEFAULT 1 CHECK (id=1),
+  gl_posting_enabled boolean NOT NULL DEFAULT false,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  updated_by uuid REFERENCES auth.users(id) ON DELETE SET NULL
+);
+INSERT INTO public.commercial_inventory_stocktake_release_controls(id,gl_posting_enabled)
+VALUES(1,false) ON CONFLICT(id) DO NOTHING;
+REVOKE ALL ON public.commercial_inventory_stocktake_release_controls FROM PUBLIC,anon,authenticated;
+
 -- A stocktake is a controlled document, not a direct balance edit.
 CREATE TABLE IF NOT EXISTS public.commercial_inventory_stocktakes (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -43,6 +78,7 @@ CREATE TABLE IF NOT EXISTS public.commercial_inventory_stocktake_lines (
   counted_quantity numeric(20,6) CHECK (counted_quantity IS NULL OR counted_quantity >= 0),
   adjustment_unit_cost_minor bigint CHECK (adjustment_unit_cost_minor IS NULL OR adjustment_unit_cost_minor >= 0),
   previous_unit_cost_minor bigint CHECK (previous_unit_cost_minor IS NULL OR previous_unit_cost_minor >= 0),
+  posted_balance_revision bigint CHECK (posted_balance_revision IS NULL OR posted_balance_revision >= 0),
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (stocktake_id,offering_id),
@@ -166,6 +202,16 @@ BEGIN
   ) VALUES (
     p_organization_id,p_activity_id,p_location_id,btrim(p_idempotency_key),v_fingerprint,coalesce(p_notes,''),v_uid
   ) RETURNING * INTO v_stocktake;
+
+  -- Ensure every active offering has a zero-capable balance row so a physical
+  -- count can record stock that exists but has never been entered in the book.
+  INSERT INTO public.commercial_inventory_balances(
+    organization_id,location_id,offering_id,quantity_on_hand,quantity_reserved,reorder_point,updated_at
+  )
+  SELECT p_organization_id,p_location_id,o.id,0,0,0,now()
+  FROM public.commercial_offerings o
+  WHERE o.activity_id=p_activity_id AND o.location_ref=p_location_id::text AND o.state='active'
+  ON CONFLICT (organization_id,location_id,offering_id) DO NOTHING;
 
   INSERT INTO public.commercial_inventory_stocktake_lines(
     stocktake_id,organization_id,location_id,offering_id,expected_quantity
@@ -349,6 +395,7 @@ DECLARE
   v_new_average numeric;
   v_cost_total numeric;
   v_layer_qty numeric;
+  v_posted_revision bigint;
   v_adjusted integer := 0;
 BEGIN
   IF v_uid IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
@@ -364,6 +411,13 @@ BEGIN
     WHERE m.organization_id=v_stocktake.organization_id AND m.user_id=v_uid
       AND m.state='active' AND m.role IN ('owner','admin','manager')
   ) THEN RAISE EXCEPTION 'inventory_management_permission_required' USING ERRCODE='42501'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.commercial_inventory_stocktake_release_controls
+    WHERE id=1 AND gl_posting_enabled=true
+  ) THEN
+    RAISE EXCEPTION 'inventory_stocktake_accounting_integration_not_ready' USING ERRCODE='55000',
+      DETAIL='Stocktake posting is disabled until balanced inventory adjustment journals and account mappings are available.';
+  END IF;
   IF v_stocktake.status='posted' THEN
     IF v_stocktake.post_idempotency_key IS DISTINCT FROM btrim(p_idempotency_key) THEN
       RAISE EXCEPTION 'inventory_stocktake_already_posted_with_other_key' USING ERRCODE='23505';
@@ -505,6 +559,11 @@ BEGIN
     IF v_layer_qty IS DISTINCT FROM v_line.counted_quantity THEN
       RAISE EXCEPTION 'inventory_stocktake_posted_cost_layer_mismatch' USING ERRCODE='55000';
     END IF;
+    SELECT inventory_revision INTO v_posted_revision
+    FROM public.commercial_inventory_balances WHERE id=v_balance.id;
+    UPDATE public.commercial_inventory_stocktake_lines
+    SET posted_balance_revision=v_posted_revision
+    WHERE id=v_line.id;
 
     INSERT INTO public.commercial_stock_movements(
       offering_id,movement_type,quantity_delta,source_ref,created_by
@@ -563,6 +622,13 @@ BEGIN
     WHERE m.organization_id=v_stocktake.organization_id AND m.user_id=v_uid
       AND m.state='active' AND m.role IN ('owner','admin','manager')
   ) THEN RAISE EXCEPTION 'inventory_management_permission_required' USING ERRCODE='42501'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.commercial_inventory_stocktake_release_controls
+    WHERE id=1 AND gl_posting_enabled=true
+  ) THEN
+    RAISE EXCEPTION 'inventory_stocktake_accounting_integration_not_ready' USING ERRCODE='55000',
+      DETAIL='Stocktake reversal is disabled until the original and compensating GL journals are integrated.';
+  END IF;
   IF v_stocktake.status='reversed' THEN
     IF v_stocktake.reverse_idempotency_key IS DISTINCT FROM btrim(p_idempotency_key) THEN
       RAISE EXCEPTION 'inventory_stocktake_already_reversed_with_other_key' USING ERRCODE='23505';
@@ -585,13 +651,9 @@ BEGIN
     IF v_new_qty<coalesce(v_balance.quantity_reserved,0) OR v_new_qty<0 THEN
       RAISE EXCEPTION 'inventory_stocktake_reversal_would_break_reserved_stock' USING ERRCODE='55000';
     END IF;
-    IF EXISTS (
-      SELECT 1 FROM public.commercial_stock_movements sm
-      WHERE sm.offering_id=v_line.offering_id
-        AND sm.created_at>v_stocktake.posted_at
-    ) THEN
-      RAISE EXCEPTION 'inventory_stocktake_reversal_has_later_stock_movements' USING ERRCODE='55000',
-        DETAIL='A later stock movement exists for this item. Reconcile it before reversing the stocktake.';
+    IF v_balance.inventory_revision IS DISTINCT FROM v_line.posted_balance_revision THEN
+      RAISE EXCEPTION 'inventory_stocktake_reversal_balance_changed' USING ERRCODE='55000',
+        DETAIL='The inventory balance changed after posting. Reconcile later activity before reversing the stocktake.';
     END IF;
 
     SELECT p.costing_method INTO v_method
