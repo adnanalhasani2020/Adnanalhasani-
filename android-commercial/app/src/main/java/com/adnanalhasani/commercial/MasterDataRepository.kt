@@ -172,6 +172,59 @@ internal fun assignCommercialDepartmentToWarehouse(context: Context, departmentI
 }
 
 
+internal data class CommercialStorageAllocationProduct(
+    val offeringId: String,
+    val productName: String,
+    val unitName: String,
+    val unitCode: String,
+    val availableQuantity: java.math.BigDecimal
+)
+
+/** Reads precise branch availability without passing through the legacy whole-number sale projection. */
+internal fun loadCommercialStorageAllocationProducts(context: Context): List<CommercialStorageAllocationProduct> {
+    val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+    val activityId = saved.getString("activity_id", null).orEmpty()
+    val branchId = saved.getString("location_id", null).orEmpty()
+    require(activityId.isNotBlank() && branchId.isNotBlank()) { "بيانات النشاط والموقع غير محفوظة." }
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val rows = commercialCloudPagedGet(
+        "/rest/v1/commercial_inventory_balances" +
+            "?select=offering_id,quantity_on_hand,quantity_reserved," +
+            "offering:commercial_offerings!inner(id,activity_id,product:commercial_products!inner(name,unit_name,unit_code,state))" +
+            "&organization_id=eq.$orgId&location_id=eq.$branchId&offering.activity_id=eq.$activityId" +
+            "&order=offering_id.asc",
+        access
+    )
+    return buildList {
+        for (index in 0 until rows.length()) {
+            val row = rows.optJSONObject(index) ?: continue
+            val offering = row.optJSONObject("offering") ?: continue
+            val product = offering.optJSONObject("product") ?: continue
+            if (product.optString("state") != "active") continue
+            val onHand = try {
+                java.math.BigDecimal(row.optString("quantity_on_hand"))
+            } catch (_: NumberFormatException) {
+                throw IllegalStateException("تعذر قراءة الرصيد الإجمالي دون تقريب.")
+            }
+            val reserved = try {
+                java.math.BigDecimal(row.optString("quantity_reserved"))
+            } catch (_: NumberFormatException) {
+                throw IllegalStateException("تعذر قراءة الكمية المحجوزة دون تقريب.")
+            }
+            require(onHand.signum() >= 0 && reserved.signum() >= 0 && reserved <= onHand) {
+                "رصيد المخزون أو المحجوز غير متسق؛ أوقفنا التوزيع."
+            }
+            add(CommercialStorageAllocationProduct(
+                offeringId = row.optString("offering_id"),
+                productName = product.optString("name"),
+                unitName = product.optString("unit_name"),
+                unitCode = product.optString("unit_code").takeUnless { it.isBlank() || it == "null" } ?: "EA",
+                availableQuantity = onHand.subtract(reserved)
+            ))
+        }
+    }
+}
+
 internal data class CommercialStorageInventoryBalance(
     val id: String,
     val warehouseId: String,
