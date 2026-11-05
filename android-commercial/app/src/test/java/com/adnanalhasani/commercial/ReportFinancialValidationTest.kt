@@ -73,7 +73,7 @@ class ReportFinancialValidationTest {
     }
 
     @Test
-    fun runningBalancePreflightUsesSameSortedOrderAsCashFlowRows() {
+    fun runningBalancePreflightRejectsGrossMovementOverflowEvenWhenNetBalanceFits() {
         val error = cashError(
             lines = listOf(
                 line(date = "2026-01-02", entryNumber = "3", debit = Long.MAX_VALUE),
@@ -82,7 +82,10 @@ class ReportFinancialValidationTest {
             ),
             startDate = LocalDate.parse("2026-01-02")
         )
-        assertEquals("", error)
+        assertEquals(
+            "تجاوزت حركات النقد أو أرصدته الافتتاحية/الختامية نطاق الأرقام الدقيق؛ تم حجب كشف الصندوق.",
+            error
+        )
     }
 
     @Test
