@@ -69,6 +69,8 @@ class CommercialInventoryStocktakeContractTests(unittest.TestCase):
         self.assertIn("حفظ وإرسال للاعتماد", self.screen)
         self.assertIn("ترحيل الفروقات", self.screen)
         self.assertIn("عكس مستند الجرد", self.screen)
+        self.assertIn("schemaReady = true", self.screen)
+        self.assertIn("enabled = schemaReady && !loading && !saving", self.screen)
 
 
 if __name__ == "__main__":
