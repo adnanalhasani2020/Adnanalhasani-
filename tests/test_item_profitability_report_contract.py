@@ -14,7 +14,7 @@ CONTRACT = ROOT / "android-commercial/docs/reports-data-contract.md"
 
 
 def test_item_profitability_uses_original_sale_item_ids_and_scoped_completed_returns():
-    screen = SCREEN.read_text(encoding="utf-8") + DATA_STATE.read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8") + MAPPERS.read_text(encoding="utf-8") + PROFITABILITY_VALIDATION.read_text(encoding="utf-8") + MAPPERS.read_text(encoding="utf-8")
+    screen = SCREEN.read_text(encoding="utf-8") + DATA_STATE.read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8") + MAPPERS.read_text(encoding="utf-8") + PROFITABILITY_VALIDATION.read_text(encoding="utf-8")
     repository = REPOSITORY.read_text(encoding="utf-8")
     calculations = CALCULATIONS.read_text(encoding="utf-8")
     assert 'ReportCatalogItem("ربحية الأصناف بعد المرتجعات"' in screen
@@ -51,9 +51,9 @@ def test_supplier_purchase_summary_is_line_and_header_reconciled():
 
 def test_item_profitability_rejects_unbounded_completed_dates_and_refund_state_mismatch():
     screen = SCREEN.read_text(encoding="utf-8") + DATA_STATE.read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8")
-    assert 'completed", true) && reportDateMillis(it.createdAt) == null' in screen
-    assert 'completed", true) && reportDateMillis(it.completedAt) == null' in screen
-    assert 'it.refundStatus.equals("refunded", true) && !it.status.equals("completed", true)' in screen
+    assert 'completed", true) && reportDateMillis(it.createdAt) == null' in PROFITABILITY_VALIDATION
+    assert 'completed", true) && reportDateMillis(it.completedAt) == null' in PROFITABILITY_VALIDATION
+    assert 'it.refundStatus.equals("refunded", true) && !it.status.equals("completed", true)' in PROFITABILITY_VALIDATION
 
 def test_daily_sales_trend_uses_completed_invoices_and_currency_separated_totals():
     screen = SCREEN.read_text(encoding="utf-8") + DATA_STATE.read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8")
