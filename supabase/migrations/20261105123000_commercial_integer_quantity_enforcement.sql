@@ -2,7 +2,7 @@
 -- Keep the existing atomic base-unit checkout, invoice snapshots, idempotency and return lifecycle.
 -- Preserve separate invoice rows for each selling unit while deducting aggregated base-stock quantities once.
 -- Selling quantities are whole numbers; integer stock-unit factors preserve whole base quantities.
--- then splits the persisted invoice item into stable per-unit rows inside the same transaction.
+-- The wrapper splits persisted invoice items into stable per-unit rows inside the same transaction.
 CREATE OR REPLACE FUNCTION public.commercial_checkout_sale_multi(
   p_lines jsonb,
   p_location_id uuid,
