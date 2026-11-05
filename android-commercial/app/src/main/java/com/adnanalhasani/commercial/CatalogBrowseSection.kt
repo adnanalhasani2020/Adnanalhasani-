@@ -43,7 +43,9 @@ internal fun CatalogBrowseSection(
     locale: String,
     onLocaleChange: (String) -> Unit,
     busy: Boolean,
+    catalogPageLoadFailed: Boolean,
     onSearch: () -> Unit,
+    onRetryCatalogPage: () -> Unit,
     onRefreshDirectories: () -> Unit,
     listState: LazyListState,
     selectedCatalogIds: Set<String>,
@@ -160,6 +162,19 @@ internal fun CatalogBrowseSection(
                 onAddToInventory=onAddToInventory,
                 onEditProduct={onEditProduct(item)}
             )
+        }
+        if (catalogPageLoadFailed) item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+            ) {
+                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("تعذر تحميل صفحة من دليل الأصناف. النتائج السابقة ما زالت محفوظة.", color = MaterialTheme.colorScheme.onErrorContainer)
+                    OutlinedButton(onClick = onRetryCatalogPage, enabled = !busy) {
+                        Text("إعادة محاولة تحميل الأصناف")
+                    }
+                }
+            }
         }
         if(items.isEmpty()) item {
             Text("ابحث عن أصناف أو اضغط تحديث الأدلة لعرض التصنيفات والوحدات المتاحة.",color=MaterialTheme.colorScheme.onSurfaceVariant)
