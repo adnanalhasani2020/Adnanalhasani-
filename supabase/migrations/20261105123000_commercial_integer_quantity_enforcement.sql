@@ -125,12 +125,13 @@ BEGIN
     FROM jsonb_array_elements(p_lines) e
   );
   v_legacy_key := btrim(p_idempotency_key)||'-u-'||substr(md5(v_original_lines::text),1,12);
+  v_legacy_prefix := btrim(p_idempotency_key)||'-u-';
   IF length(v_legacy_key)>200 THEN
-    v_legacy_key:=substr(btrim(p_idempotency_key),1,187)||'-u-'||substr(md5(v_original_lines::text),1,12);
+    -- Match the exact truncation behavior of the previously deployed wrapper,
+    -- including the 186-character caller-key boundary.
+    v_legacy_key:=substr(v_legacy_key,1,187)||'-u-'||substr(md5(v_original_lines::text),1,12);
+    v_legacy_prefix:=substr(v_legacy_prefix,1,187)||'-u-';
   END IF;
-  v_legacy_prefix := CASE WHEN length(btrim(p_idempotency_key))>187
-    THEN substr(btrim(p_idempotency_key),1,187)||'-u-'
-    ELSE btrim(p_idempotency_key)||'-u-' END;
   v_request_fingerprint := md5(jsonb_build_object(
     'location_id',p_location_id,'customer_id',p_customer_id,'payment_mode',p_payment_mode,
     'initial_payment_minor',p_initial_payment_minor,'discount_minor',p_discount_minor,
