@@ -63,7 +63,7 @@ def test_daily_sales_trend_uses_completed_invoices_and_currency_separated_totals
     assert 'ReportCatalogItem("اتجاه المبيعات اليومي"' in screen
     assert 'DailySalesInvoiceInput(' in MAPPERS.read_text(encoding="utf-8")
     assert 'calculateDailySalesTrend(' in calculations
-    assert 'document.saleStatus.equals("completed", true)' in screen
+    assert 'document.saleStatus.equals("completed", true)' in MAPPERS.read_text(encoding="utf-8")
     assert 'ReportCatalogItem("الخصومات على فواتير المبيعات"' in screen
     catalog_section = CATALOG_SECTION.read_text(encoding="utf-8")
     assert "selectableReportTitle(report.title)?.let(onReportSelected)" in catalog_section
