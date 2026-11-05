@@ -104,7 +104,9 @@ class CommercialCloudOperationalScreenContractTests(unittest.TestCase):
         self.assertIn("quantities: Map<String, BigDecimal>", self.returns_repository)
         self.assertIn("commercial_cloud_pending_return_v1", self.returns_repository)
         self.assertIn("quantity.toPlainString()", self.returns_repository)
-        self.assertIn("v_qty <> trunc(v_qty)", migration)
+        return_rpc = migration.split("CREATE OR REPLACE FUNCTION public.commercial_request_sale_return(", 1)[1].split("$function$;", 1)[0]
+        self.assertIn("v_qty <> trunc(v_qty)", return_rpc)
+        self.assertNotIn("FROM public.commercial_offering_sell_units", return_rpc)
         self.assertIn("quantity.stripTrailingZeros().scale() <= 0", (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/ReturnsRepository.kt").read_text(encoding="utf-8"))
         self.assertIn("Regex(\"^[0-9]{1,6}$\")", quantity_math)
         self.assertIn("quantity_in_stock_units", self.returns_repository)
