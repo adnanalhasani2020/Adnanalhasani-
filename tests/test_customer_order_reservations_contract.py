@@ -46,7 +46,7 @@ def test_android_merchant_queue_reserves_and_fulfills_reserved_orders():
     assert "commercial_customer_portal_process_expired_order_reservations" in repository
     assert "commercial_customer_portal_fulfill_reserved_order" in repository
     assert "اعتماد الحجز وحجز الكمية" in screen
-    assert "إبقاء الحجز وإرسال تذكير يومي" in screen
+    assert "إبقاء الحجز مع تذكير يومي" in screen
     assert "release_stock" in screen and "cancel_order" in screen
 
 def test_reservation_dialog_requires_expiry_and_exposes_all_expiry_policies():
