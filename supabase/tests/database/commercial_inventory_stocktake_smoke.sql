@@ -402,6 +402,35 @@ BEGIN
   EXCEPTION WHEN SQLSTATE '55000' THEN
     IF SQLERRM<>'inventory_stocktake_reversal_balance_changed' THEN RAISE; END IF;
   END;
+
+  -- Even two movements that net to the same quantity invalidate a count snapshot.
+  PERFORM set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
+  v_created := public.commercial_create_inventory_stocktake(
+    '10000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000001',
+    '20000000-0000-0000-0000-000000000001','stocktake-net-zero-revision-001','net-zero movement guard'
+  );
+  v_stocktake := (v_created->>'stocktake_id')::uuid;
+  SELECT id INTO v_line FROM public.commercial_inventory_stocktake_lines WHERE stocktake_id=v_stocktake;
+  PERFORM public.commercial_set_inventory_stocktake_counts(v_stocktake,
+    jsonb_build_array(jsonb_build_object('line_id',v_line,'counted_quantity','6')));
+  PERFORM public.commercial_submit_inventory_stocktake(v_stocktake);
+  PERFORM set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',true);
+  PERFORM public.commercial_approve_inventory_stocktake(v_stocktake);
+  PERFORM set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
+  PERFORM public.test_simulate_later_inventory_movement(
+    '60000000-0000-0000-0000-000000000001',1,'test-net-zero-movement-in',
+    '00000000-0000-0000-0000-000000000001'
+  );
+  PERFORM public.test_simulate_later_inventory_movement(
+    '60000000-0000-0000-0000-000000000001',-1,'test-net-zero-movement-out',
+    '00000000-0000-0000-0000-000000000001'
+  );
+  BEGIN
+    PERFORM public.commercial_post_inventory_stocktake(v_stocktake,'stocktake-net-zero-post-001');
+    RAISE EXCEPTION 'net_zero_intervening_movements_were_not_detected';
+  EXCEPTION WHEN SQLSTATE '55000' THEN
+    IF SQLERRM<>'inventory_stocktake_stale_snapshot' THEN RAISE; END IF;
+  END;
 END
 $test$;
 
