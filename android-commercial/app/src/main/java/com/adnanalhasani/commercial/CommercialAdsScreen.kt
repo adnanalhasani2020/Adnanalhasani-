@@ -61,7 +61,73 @@ private fun adsToken(context: Context): String {
  session.optString("refresh_token").takeIf{it.isNotBlank()}?.let{adsPrefs(context).edit().putString("refresh_token",it).apply()}
  return access
 }
-private data class AdCampaignRow(val id:String,val title:String,val product:String,val description:String,val reason:String,val original:String,val offer:String,val currency:String,val starts:String,val ends:String,val audience:String,val gender:String,val radius:String,val status:String)
+internal data class AdCampaignRow(val id:String,val title:String,val product:String,val description:String,val reason:String,val original:String,val offer:String,val currency:String,val starts:String,val ends:String,val audience:String,val gender:String,val radius:String,val status:String)
+
+
+internal fun loadCommercialAdsHomeFeed(context: Context, onResult: (Result<List<AdCampaignRow>>) -> Unit) {
+ val cloud=context.getSharedPreferences("commercial_cloud_context_v1",Context.MODE_PRIVATE)
+ val orgId=cloud.getString("organization_id",null).orEmpty()
+ val activityCode=cloud.getString("activity_code",null).orEmpty()
+ if(orgId.isBlank()){ onResult(Result.success(emptyList())); return }
+ adsIo.execute {
+  val result=runCatching {
+   val token=adsToken(context)
+   val raw=adsHttp(context,"/rest/v1/rpc/commercial_ads_feed",JSONObject()
+    .put("p_audience_type","trader")
+    .put("p_activity_code",activityCode.ifBlank{JSONObject.NULL})
+    .put("p_limit",5),token)
+   val array=JSONArray(raw)
+   buildList {
+    for(i in 0 until array.length()) {
+     val x=array.optJSONObject(i)?:continue
+     add(AdCampaignRow(x.optString("id"),x.optString("title"),x.optString("product_name"),
+      x.optString("description"),x.optString("discount_reason"),
+      x.optString("original_price_minor").takeUnless{it=="null"}.orEmpty(),
+      x.optString("offer_price_minor").takeUnless{it=="null"}.orEmpty(),
+      x.optString("currency_code"),x.optString("starts_at"),x.optString("ends_at"),
+      x.optString("audience_type"),x.optString("gender_target"),
+      x.optString("radius_km").takeUnless{it=="null"}.orEmpty(),"published"))
+    }
+   }
+  }
+  adsMain.post { onResult(result) }
+ }
+}
+
+@Composable
+internal fun CommercialAdsHomePreview(context: Context, onOpenAds: () -> Unit) {
+ var rows by remember { mutableStateOf<List<AdCampaignRow>>(emptyList()) }
+ var failed by remember { mutableStateOf(false) }
+ val cloud=context.getSharedPreferences("commercial_cloud_context_v1",Context.MODE_PRIVATE)
+ val orgId=cloud.getString("organization_id",null).orEmpty()
+ val activityCode=cloud.getString("activity_code",null).orEmpty()
+ LaunchedEffect(orgId,activityCode) {
+  if(orgId.isNotBlank()) loadCommercialAdsHomeFeed(context) { result ->
+   result.onSuccess { rows=it }.onFailure { failed=true }
+  }
+ }
+ if(rows.isNotEmpty()) {
+  Card(Modifier.fillMaxWidth()) {
+   Column(Modifier.padding(14.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+    Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically) {
+     Text("عروض وإعلانات المتاجر",Modifier.weight(1f),fontWeight=FontWeight.Bold)
+     TextButton(onClick=onOpenAds){Text("إدارة الإعلانات")}
+    }
+    rows.forEachIndexed { index, ad ->
+     Column(verticalArrangement=Arrangement.spacedBy(3.dp)) {
+      Text(ad.title,fontWeight=FontWeight.SemiBold,color=MaterialTheme.colorScheme.primary)
+      Text(ad.product,style=MaterialTheme.typography.bodyMedium)
+      if(ad.description.isNotBlank()) Text(ad.description,style=MaterialTheme.typography.bodySmall,maxLines=2)
+      if(ad.reason.isNotBlank()) Text("سبب العرض: "+ad.reason,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+     }
+     if(index<rows.lastIndex) HorizontalDivider()
+    }
+   }
+  }
+ } else if(failed) {
+  TextButton(onClick={ loadCommercialAdsHomeFeed(context) { result -> result.onSuccess { rows = it; failed = false }.onFailure { failed = true } } }) { Text("تعذر تحميل العروض — إعادة المحاولة") }
+ }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

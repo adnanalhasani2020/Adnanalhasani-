@@ -311,7 +311,7 @@ internal fun StoreApp(context: Context) {
                     }
                 )
             } else when (tab) {
-                0 -> Dashboard(products = inventory, sales = sales, cloudMode = cloudMode, onNewSale = { if (cloudMode) cloudSaleComposerPage = true else newSale = true }, onInventory = { tab = 2 })
+                0 -> Dashboard(products = inventory, sales = sales, cloudMode = cloudMode, context = context, onNewSale = { if (cloudMode) cloudSaleComposerPage = true else newSale = true }, onInventory = { tab = 2 }, onOpenAds = { commercialAdsPage = true })
                 1 -> SalesScreen(
                     sales = sales,
                     cloudMode = cloudMode,
