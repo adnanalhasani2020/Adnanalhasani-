@@ -46,10 +46,14 @@ private data class PendingStorageInventoryAction(
 )
 
 private fun loadStorageInventorySnapshot(context: Context): StorageInventorySnapshot {
+    val branchId = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+        .getString("location_id", null).orEmpty()
+    require(branchId.isNotBlank()) { "موقع المؤسسة غير محفوظ." }
     val warehouses = loadCommercialMasterData(context, "commercial_warehouses")
-        .filter { it.state == "active" }
+        .filter { it.state == "active" && it.branchLocationId == branchId }
+    val warehouseIds = warehouses.mapTo(mutableSetOf()) { it.id }
     val locations = loadCommercialMasterData(context, "commercial_storage_locations")
-        .filter { it.state == "active" && it.kind in stockableStorageTypes }
+        .filter { it.state == "active" && it.kind in stockableStorageTypes && it.warehouseId in warehouseIds }
     val products = loadCommercialStorageAllocationProducts(context)
     val balances = loadCommercialStorageInventoryBalances(context)
     return StorageInventorySnapshot(warehouses, locations, products, balances)
