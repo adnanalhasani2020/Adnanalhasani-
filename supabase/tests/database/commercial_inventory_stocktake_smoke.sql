@@ -3,7 +3,8 @@ BEGIN;
 INSERT INTO auth.users(id) VALUES
 ('00000000-0000-0000-0000-000000000001'),
 ('00000000-0000-0000-0000-000000000002'),
-('00000000-0000-0000-0000-000000000003');
+('00000000-0000-0000-0000-000000000003'),
+('00000000-0000-0000-0000-000000000004');
 INSERT INTO public.commercial_organizations(id)
 VALUES('10000000-0000-0000-0000-000000000001');
 INSERT INTO public.commercial_organization_locations(id,organization_id)
@@ -13,7 +14,8 @@ VALUES('30000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000
 INSERT INTO public.commercial_organization_members(organization_id,user_id,role,state) VALUES
 ('10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000001','owner','active'),
 ('10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000002','manager','active'),
-('10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000003','member','active');
+('10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000003','member','active'),
+('10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000004','manager','active');
 INSERT INTO public.commercial_offerings(id,activity_id,location_ref)
 VALUES('60000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001');
 INSERT INTO public.commercial_inventory_balances(
@@ -205,8 +207,9 @@ BEGIN
   END;
 
   -- After approval, any intervening movement invalidates the captured count.
-  PERFORM set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
+  PERFORM set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000004',true);
   PERFORM public.commercial_approve_inventory_stocktake(v_stocktake);
+  PERFORM set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
   UPDATE public.commercial_inventory_balances SET quantity_on_hand=9
   WHERE offering_id='60000000-0000-0000-0000-000000000001';
   INSERT INTO public.commercial_stock_movements(offering_id,movement_type,quantity_delta,source_ref,created_by)
