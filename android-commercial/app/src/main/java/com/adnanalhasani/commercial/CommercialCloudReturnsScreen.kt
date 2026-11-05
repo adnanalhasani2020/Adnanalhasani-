@@ -38,46 +38,7 @@ private fun returnQuantityInput(value: String): String {
     val raw = value.take(32)
     if (raw.any { Character.digit(it, 10) < 0 }) return raw
     return raw.map { ch -> ('0'.code + Character.digit(ch, 10)).toChar() }.joinToString("").take(6)
-}ackage com.adnanalhasani.commercial
-
-import android.content.Context
-import android.os.Handler
-import android.os.Looper
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import java.util.Locale
-import java.math.BigDecimal
-import java.util.concurrent.Executors
-
-private val ReturnInk = Color(0xFF183B35)
-private val ReturnGreen = Color(0xFF167D63)
-private val ReturnMuted = Color(0xFF71817B)
-private val ReturnIo = Executors.newSingleThreadExecutor()
-private val ReturnMain = Handler(Looper.getMainLooper())
-
-private data class ReturnSellUnit(val code: String, val label: String, val factor: Long, val isDefault: Boolean)
-private fun returnQuantityInput(value: String): String =
-    value.filter { Character.digit(it, 10) >= 0 }.map { ch ->
-        ('0'.code + Character.digit(ch, 10)).toChar()
-    }.joinToString("").take(6)
+}
 private fun returnSellUnits(item: CommercialCloudReturnableSaleItem): List<ReturnSellUnit> =
     listOf(ReturnSellUnit(item.sellingUnitCode, item.sellingUnitName, item.sellingUnitFactor, true))
 
