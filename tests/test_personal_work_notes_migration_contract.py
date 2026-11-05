@@ -18,5 +18,5 @@ def test_work_notes_reminders_are_user_scoped_and_idempotent():
     assert "v_uid uuid := auth.uid()" in sql
     assert "where n.user_id=v_uid" in sql
     assert "reminder_notified_at" in sql
-    assert "where reminder_at<=now() and reminder_notified_at is null" in sql
+    assert "n.reminder_at<=now() and n.reminder_notified_at is null" in sql
     assert "revoke all on table public.commercial_user_work_notes from public,anon,authenticated" in sql
