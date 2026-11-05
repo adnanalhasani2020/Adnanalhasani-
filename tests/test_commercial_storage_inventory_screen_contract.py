@@ -32,6 +32,8 @@ class CommercialStorageInventoryScreenContractTests(unittest.TestCase):
         self.assertIn("persistPendingStorageInventoryAction(context, action)", self.screen)
         self.assertIn("loadPendingStorageInventoryAction(context)", self.screen)
         self.assertIn("إعادة المحاولة بنفس الطلب", self.screen)
+        self.assertIn("isDefinitiveStorageInventoryRejection(detail)", self.screen)
+        self.assertIn("inventory_management_permission_required", self.screen)
         self.assertIn("idempotencyKey: String =", self.repository)
         self.assertIn('.put("p_idempotency_key", idempotencyKey)', self.repository)
 
