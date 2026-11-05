@@ -28,7 +28,11 @@ BEGIN
  result:=public.commercial_ads_feed(15.3694,44.1910,'consumer',NULL,NULL,NULL,30);
  IF jsonb_array_length(result)<>0 THEN RAISE EXCEPTION 'paused_ad_still_visible'; END IF;
  PERFORM set_config('request.jwt.claim.sub',other_u::text,true);
- IF jsonb_array_length(public.commercial_ads_list_mine(org,100))<>0 THEN RAISE EXCEPTION 'ad_owner_isolation_failed'; END IF;
+ BEGIN
+  PERFORM public.commercial_ads_list_mine(org,100);
+  RAISE EXCEPTION 'unauthorized_ad_list_was_allowed';
+ EXCEPTION WHEN insufficient_privilege THEN NULL;
+ END;
  IF public.commercial_ads_set_status(ad_id,'published') THEN RAISE EXCEPTION 'unauthorized_ad_status_change'; END IF;
  IF has_table_privilege('anon','public.commercial_ads','SELECT') OR has_table_privilege('authenticated','public.commercial_ads','SELECT')
  THEN RAISE EXCEPTION 'direct_table_access_not_revoked'; END IF;
