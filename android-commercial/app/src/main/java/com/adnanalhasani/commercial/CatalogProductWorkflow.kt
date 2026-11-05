@@ -3,6 +3,20 @@ package com.adnanalhasani.commercial
 import org.json.JSONArray
 import org.json.JSONObject
 
+private fun catalogWholeQuantity(raw: String, label: String, optional: Boolean = false): String? {
+    val normalized = raw.trim()
+    if (normalized.isBlank()) {
+        if (optional) return null
+        throw IllegalArgumentException("$label مطلوبة.")
+    }
+    val quantity = normalized.toBigDecimalOrNull()
+        ?: throw IllegalArgumentException("$label غير صالحة.")
+    if (quantity.signum() <= 0 || quantity.stripTrailingZeros().scale() > 0) {
+        throw IllegalArgumentException("$label يجب أن تكون عددًا صحيحًا موجبًا.")
+    }
+    return quantity.toBigIntegerExact().toString()
+}
+
 /** Owns the global product creation RPC while the form state remains screen-scoped. */
 internal class CatalogProductWorkflow(
     private val state: CatalogProductFormState,
@@ -31,10 +45,10 @@ internal class CatalogProductWorkflow(
                     .put("ingredients",JSONArray().also { rows -> state.recipeIngredientsText.lineSequence().map { it.trim() }.filter { it.isNotBlank() }.forEach { line ->
                         val p=line.split("|",limit=4)
                         if(p.size<3 || p[0].isBlank() || p[1].isBlank() || p[2].isBlank()) throw IllegalArgumentException("صيغة مكونات الوصفة: name|quantity|unit_code|note")
-                        rows.put(JSONObject().put("ingredient_name",p[0].trim()).put("quantity",p[1].trim().toBigDecimalOrNull()?.toPlainString() ?: throw IllegalArgumentException("كمية المكون غير صحيحة."))
+                        rows.put(JSONObject().put("ingredient_name",p[0].trim()).put("quantity",catalogWholeQuantity(p[1], "كمية المكون")!!)
                             .put("unit_code",p[2].trim().uppercase()).put("preparation_note",p.getOrNull(3)?.trim()?.ifBlank { JSONObject.NULL } ?: JSONObject.NULL))
                     }})
-                    .put("yield_quantity",state.recipeYieldQty.toBigDecimalOrNull()?.toPlainString() ?: JSONObject.NULL)
+                    .put("yield_quantity",catalogWholeQuantity(state.recipeYieldQty, "كمية ناتج الوصفة", optional = true) ?: JSONObject.NULL)
                     .put("yield_unit_code",state.recipeYieldUnit.ifBlank { JSONObject.NULL })
                     .put("preparation_minutes",state.recipePrepMinutes.toIntOrNull() ?: JSONObject.NULL)
                     .put("cooking_minutes",state.recipeCookMinutes.toIntOrNull() ?: JSONObject.NULL)
@@ -50,19 +64,19 @@ internal class CatalogProductWorkflow(
             val unitRows=JSONArray().put(JSONObject().put("unit_code",state.unitCode.trim()).put("unit_role","base").put("quantity_in_base",1)
                 .put("barcode",state.barcode.ifBlank { JSONObject.NULL }).put("package_name",JSONObject.NULL).put("image_url",state.imageUrl.ifBlank { JSONObject.NULL }).put("is_default",true))
             if(state.extraUnitCode.isNotBlank()) unitRows.put(JSONObject().put("unit_code",state.extraUnitCode.trim()).put("unit_role","sale")
-                .put("quantity_in_base",state.extraUnitQty.toBigDecimalOrNull()?.toPlainString() ?: throw IllegalArgumentException("معامل تحويل العبوة غير صحيح."))
+                .put("quantity_in_base",catalogWholeQuantity(state.extraUnitQty, "معامل تحويل العبوة")!!)
                 .put("barcode",state.extraUnitBarcode.ifBlank { JSONObject.NULL }).put("sku",state.extraUnitSku.ifBlank { JSONObject.NULL }).put("package_name",state.extraUnitPackage.ifBlank { JSONObject.NULL })
-                .put("net_quantity",state.extraUnitNetQuantity.toBigDecimalOrNull()?.toPlainString() ?: JSONObject.NULL).put("net_unit_code",state.extraUnitNetUnitCode.ifBlank { JSONObject.NULL })
+                .put("net_quantity",catalogWholeQuantity(state.extraUnitNetQuantity, "الكمية الصافية", optional = true) ?: JSONObject.NULL).put("net_unit_code",state.extraUnitNetUnitCode.ifBlank { JSONObject.NULL })
                 .put("image_url",state.extraUnitImageUrl.ifBlank { state.imageUrl.ifBlank { JSONObject.NULL } }).put("is_default",false))
             state.extraUnitsText.lineSequence().map { it.trim() }.filter { it.isNotBlank() }.forEach { line ->
                 val p=line.split("|",limit=9)
                 if(p.size<3 || p[0].isBlank() || p[1].isBlank() || p[2].isBlank()) throw IllegalArgumentException("صيغة الوحدة الإضافية: unit_code|role|qty_in_base|barcode|sku|package_name|net_quantity|net_unit_code|image_url")
                 unitRows.put(JSONObject().put("unit_code",p[0].trim().uppercase()).put("unit_role",p[1].trim().lowercase())
-                    .put("quantity_in_base",p[2].trim().toBigDecimalOrNull()?.toPlainString() ?: throw IllegalArgumentException("معامل تحويل العبوة غير صحيح."))
+                    .put("quantity_in_base",catalogWholeQuantity(p[2], "معامل تحويل العبوة")!!)
                     .put("barcode",p.getOrNull(3)?.trim()?.ifBlank { JSONObject.NULL } ?: JSONObject.NULL)
                     .put("sku",p.getOrNull(4)?.trim()?.ifBlank { JSONObject.NULL } ?: JSONObject.NULL)
                     .put("package_name",p.getOrNull(5)?.trim()?.ifBlank { JSONObject.NULL } ?: JSONObject.NULL)
-                    .put("net_quantity",p.getOrNull(6)?.trim()?.toBigDecimalOrNull()?.toPlainString() ?: JSONObject.NULL)
+                    .put("net_quantity",catalogWholeQuantity(p.getOrNull(6).orEmpty(), "الكمية الصافية", optional = true) ?: JSONObject.NULL)
                     .put("net_unit_code",p.getOrNull(7)?.trim()?.ifBlank { JSONObject.NULL } ?: JSONObject.NULL)
                     .put("image_url",p.getOrNull(8)?.trim()?.ifBlank { JSONObject.NULL } ?: JSONObject.NULL).put("is_default",false))
             }
