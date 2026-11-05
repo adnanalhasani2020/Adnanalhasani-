@@ -31,8 +31,8 @@ class CatalogDiscoveryPaginationMigrationTests(unittest.TestCase):
         screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogScreen.kt").read_text(encoding="utf-8")
         self.assertIn("catalogPageLoadFailed", screen)
         self.assertIn("onFailure: ((Throwable) -> Unit)? = null", screen)
-        self.assertIn("catalogPageLoadFailed = true", screen)
-        self.assertIn("catalogPageLoadFailed || items.isEmpty()", screen)
+        self.assertIn("setPageLoadFailed(true)", screen)
+        self.assertIn("pageLoadFailed()", screen)
 
     def test_paged_rpc_preserves_sector_level_region_and_unit_filters(self):
         sql = (ROOT / "supabase/migrations/20261029010000_catalog_discovery_pagination.sql").read_text(encoding="utf-8")
