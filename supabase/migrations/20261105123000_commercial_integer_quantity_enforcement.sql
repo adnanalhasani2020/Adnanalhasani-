@@ -1,3 +1,22 @@
+-- Preserve the full selling-unit request fingerprint independently from the
+-- base-unit checkout fingerprint, while keeping this request key private to its user.
+CREATE TABLE IF NOT EXISTS public.commercial_sale_unit_idempotency (
+  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  idempotency_key text NOT NULL CHECK (length(btrim(idempotency_key)) BETWEEN 8 AND 200),
+  request_fingerprint text NOT NULL,
+  base_idempotency_key text NOT NULL CHECK (length(btrim(base_idempotency_key)) BETWEEN 8 AND 200),
+  sale_id uuid NOT NULL REFERENCES public.commercial_sales(id) ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id,idempotency_key)
+);
+ALTER TABLE public.commercial_sale_unit_idempotency ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS commercial_sale_unit_idempotency_owner_policy ON public.commercial_sale_unit_idempotency;
+CREATE POLICY commercial_sale_unit_idempotency_owner_policy
+  ON public.commercial_sale_unit_idempotency FOR ALL TO authenticated
+  USING (user_id=auth.uid()) WITH CHECK (user_id=auth.uid());
+REVOKE ALL ON public.commercial_sale_unit_idempotency FROM PUBLIC,anon;
+GRANT SELECT,INSERT,UPDATE ON public.commercial_sale_unit_idempotency TO authenticated;
+
 -- Replace fractional selling-unit RPC wrappers with integer-only contracts.
 -- Keep the existing atomic base-unit checkout, invoice snapshots, idempotency and return lifecycle.
 -- Preserve separate invoice rows for each selling unit while deducting aggregated base-stock quantities once.
@@ -26,6 +45,14 @@ DECLARE
   v_sale jsonb;
   v_sale_id uuid;
   v_effective_key text;
+  v_original_lines jsonb;
+  v_legacy_key text;
+  v_legacy_prefix text;
+  v_request_fingerprint text;
+  v_saved_fingerprint text;
+  v_saved_base_key text;
+  v_saved_sale_id uuid;
+  v_legacy_match boolean := false;
   v_group record;
   v_item public.commercial_sale_items%ROWTYPE;
   v_unit_line jsonb;
@@ -49,9 +76,60 @@ BEGIN
     RAISE EXCEPTION 'invalid_idempotency_key' USING ERRCODE='22023';
   END IF;
 
-  -- Keep the caller's idempotency key stable. Hashing the request into the key
-  -- would turn a changed retry payload into a second sale instead of a conflict.
-  v_effective_key := btrim(p_idempotency_key);
+  -- Preserve the original request shape for legacy-key migration and bind the
+  -- caller key to the complete sell-unit request, not only its converted base qty.
+  v_original_lines := (
+    SELECT jsonb_agg(jsonb_build_object(
+      'offering_id',e->>'offering_id',
+      'quantity',e->>'quantity',
+      'unit_code',coalesce(e->>'unit_code','<base>')
+    ) ORDER BY e->>'offering_id')
+    FROM jsonb_array_elements(p_lines) e
+  );
+  v_legacy_key := btrim(p_idempotency_key)||'-u-'||substr(md5(v_original_lines::text),1,12);
+  IF length(v_legacy_key)>200 THEN
+    v_legacy_key:=substr(btrim(p_idempotency_key),1,187)||'-u-'||substr(md5(v_original_lines::text),1,12);
+  END IF;
+  v_legacy_prefix := CASE WHEN length(btrim(p_idempotency_key))>187
+    THEN substr(btrim(p_idempotency_key),1,187)||'-u-'
+    ELSE btrim(p_idempotency_key)||'-u-' END;
+  v_request_fingerprint := md5(jsonb_build_object(
+    'location_id',p_location_id,'customer_id',p_customer_id,'payment_mode',p_payment_mode,
+    'initial_payment_minor',p_initial_payment_minor,'discount_minor',p_discount_minor,
+    'tax_minor',p_tax_minor,'lines',v_original_lines
+  )::text);
+
+  -- Serialize by the caller key and remember the sell-unit fingerprint. The base
+  -- checkout fingerprint only sees converted base quantities, so it cannot by itself
+  -- distinguish (for example) one box from twelve individual units.
+  PERFORM pg_advisory_xact_lock(hashtext(auth.uid()::text),hashtext('sell-unit-checkout:'||btrim(p_idempotency_key)));
+  SELECT request_fingerprint,base_idempotency_key,sale_id
+    INTO v_saved_fingerprint,v_saved_base_key,v_saved_sale_id
+  FROM public.commercial_sale_unit_idempotency
+  WHERE user_id=auth.uid() AND idempotency_key=btrim(p_idempotency_key)
+  FOR UPDATE;
+  IF FOUND THEN
+    IF v_saved_fingerprint IS DISTINCT FROM v_request_fingerprint THEN
+      RAISE EXCEPTION 'idempotency_key_reused_with_different_sell_unit_request' USING ERRCODE='23505';
+    END IF;
+    v_effective_key := v_saved_base_key;
+  ELSE
+    -- Adopt exact pre-migration requests; reject any prior use of this caller key
+    -- with another payload rather than silently creating a second sale.
+    IF EXISTS (
+      SELECT 1 FROM public.commercial_sales s
+      WHERE s.user_id=auth.uid()
+        AND left(s.idempotency_key,length(v_legacy_prefix))=v_legacy_prefix
+        AND s.idempotency_key<>v_legacy_key
+    ) THEN
+      RAISE EXCEPTION 'idempotency_key_reused_with_different_sell_unit_request' USING ERRCODE='23505';
+    END IF;
+    SELECT EXISTS (
+      SELECT 1 FROM public.commercial_sales s
+      WHERE s.user_id=auth.uid() AND s.idempotency_key=v_legacy_key
+    ) INTO v_legacy_match;
+    v_effective_key := CASE WHEN v_legacy_match THEN v_legacy_key ELSE btrim(p_idempotency_key) END;
+  END IF;
 
   FOR v_line IN SELECT value FROM jsonb_array_elements(p_lines) LOOP
     IF coalesce(v_line->>'offering_id','') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
@@ -131,6 +209,9 @@ BEGIN
   ) INTO v_sale;
   v_sale_id := (v_sale->>'sale_id')::uuid;
   IF v_sale_id IS NULL THEN RAISE EXCEPTION 'checkout_result_missing_sale_id' USING ERRCODE='22023'; END IF;
+  IF v_saved_sale_id IS NOT NULL AND v_saved_sale_id IS DISTINCT FROM v_sale_id THEN
+    RAISE EXCEPTION 'sell_unit_idempotency_sale_mismatch' USING ERRCODE='55000';
+  END IF;
 
   -- On a replay, accept only an already-correct per-unit projection. Otherwise split the single
   -- base checkout row exactly once, retaining the same base-unit price and line-total arithmetic.
@@ -173,6 +254,12 @@ BEGIN
 
     IF v_all_match THEN
       CONTINUE;
+    END IF;
+
+    -- Only exact legacy-key replays may be upgraded from the old one-row projection.
+    -- A stable-key replay with a different unit projection must never rewrite history.
+    IF coalesce((v_sale->>'idempotent_replay')::boolean,false) AND NOT v_legacy_match THEN
+      RAISE EXCEPTION 'sale_item_sell_unit_projection_mismatch' USING ERRCODE='55000';
     END IF;
 
     IF v_existing_count<>1 THEN
@@ -239,6 +326,12 @@ BEGIN
     INTO v_result_lines
   FROM public.commercial_sale_items i
   WHERE i.sale_id=v_sale_id;
+
+  IF v_saved_sale_id IS NULL THEN
+    INSERT INTO public.commercial_sale_unit_idempotency(
+      user_id,idempotency_key,request_fingerprint,base_idempotency_key,sale_id
+    ) VALUES(auth.uid(),btrim(p_idempotency_key),v_request_fingerprint,v_effective_key,v_sale_id);
+  END IF;
 
   RETURN v_sale || jsonb_build_object(
     'sell_units_normalized',true,
