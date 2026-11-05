@@ -699,3 +699,33 @@ internal fun saveMerchantCustomerOrderLines(context: Context, orderId: String, l
 }
 
 /** Read-only projection of posted double-entry journal lines, joined to their source entry and ledger account. */
+
+
+internal fun submitCustomerSupplyRequest(
+    context: Context, organizationId: String, itemName: String, quantity: Long,
+    unitCode: String, unitName: String, requestedPriceMinor: Long, paymentMode: String,
+    specifications: String, customerNote: String, idempotencyKey: String
+): JSONObject {
+    require(organizationId.isNotBlank() && itemName.isNotBlank() && quantity in 1..1_000_000L)
+    require(unitCode.isNotBlank() && unitName.isNotBlank() && requestedPriceMinor >= 0)
+    require(paymentMode in setOf("cash", "credit") && idempotencyKey.length in 8..200)
+    val access = customerPortalAccessToken(context)
+    return JSONObject(SupabaseClient.request(
+        "/rest/v1/rpc/commercial_customer_portal_submit_supply_request", "POST",
+        JSONObject().put("p_organization_id", organizationId).put("p_item_name", itemName.trim())
+            .put("p_quantity", quantity).put("p_unit_code", unitCode.trim().uppercase())
+            .put("p_unit_name", unitName.trim()).put("p_requested_price_minor", requestedPriceMinor)
+            .put("p_payment_mode", paymentMode).put("p_specifications", specifications.take(2000))
+            .put("p_customer_note", customerNote.take(1000)).put("p_idempotency_key", idempotencyKey),
+        access
+    ))
+}
+
+internal fun loadMyCustomerSupplyRequests(context: Context, organizationId: String = ""): JSONArray {
+    val access = customerPortalAccessToken(context)
+    return JSONArray(SupabaseClient.request(
+        "/rest/v1/rpc/commercial_customer_portal_list_my_supply_requests", "POST",
+        JSONObject().put("p_organization_id", organizationId.takeIf { it.isNotBlank() } ?: JSONObject.NULL),
+        access
+    ))
+}
