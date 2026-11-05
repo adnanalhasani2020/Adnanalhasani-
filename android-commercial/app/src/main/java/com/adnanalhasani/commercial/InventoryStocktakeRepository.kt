@@ -54,14 +54,33 @@ private fun stocktakeActionKey(context: Context, stocktakeId: String, action: St
         }
 }
 
-private fun stocktakeCreateKey(context: Context): String {
+private fun stocktakeCreateKey(context: Context, captured: InventoryStocktakeContext): String {
     val prefs = context.getSharedPreferences("commercial_inventory_stocktake_keys_v1", Context.MODE_PRIVATE)
-    return prefs.getString("pending_create", null)?.takeIf { it.isNotBlank() }
-        ?: UUID.randomUUID().toString().also {
-            check(prefs.edit().putString("pending_create", it).commit()) {
-                "تعذر حفظ مفتاح إنشاء الجرد؛ لم يتم إرسال الطلب."
-            }
+    val saved = prefs.getString("pending_create", null)
+    if (!saved.isNullOrBlank()) {
+        val pending = runCatching { JSONObject(saved) }.getOrElse {
+            throw IllegalStateException("تعذر قراءة طلب إنشاء الجرد المعلّق. لم نرسل طلبًا جديدًا حفاظًا على عدم التكرار.")
         }
+        require(
+            pending.optString("organization_id") == captured.organizationId &&
+                pending.optString("activity_id") == captured.activityId &&
+                pending.optString("location_id") == captured.locationId
+        ) {
+            "يوجد طلب إنشاء جرد معلّق لفرع أو نشاط آخر. ارجع إلى سياقه الأصلي لإكماله قبل إنشاء جرد جديد."
+        }
+        return pending.optString("idempotency_key").takeIf { it.isNotBlank() }
+            ?: throw IllegalStateException("مفتاح إنشاء الجرد المعلّق غير صالح؛ لم نرسل طلبًا جديدًا.")
+    }
+    val key = UUID.randomUUID().toString()
+    val pending = JSONObject()
+        .put("organization_id", captured.organizationId)
+        .put("activity_id", captured.activityId)
+        .put("location_id", captured.locationId)
+        .put("idempotency_key", key)
+    check(prefs.edit().putString("pending_create", pending.toString()).commit()) {
+        "تعذر حفظ مفتاح إنشاء الجرد؛ لم يتم إرسال الطلب."
+    }
+    return key
 }
 
 private fun stocktakeRpc(
@@ -170,7 +189,7 @@ internal fun loadCommercialInventoryStocktakeLines(
 internal fun createCommercialInventoryStocktake(context: Context, notes: String): String {
     require(notes.length <= 2000) { "الملاحظات أطول من الحد المسموح." }
     val current = inventoryStocktakeContext(context)
-    val key = stocktakeCreateKey(context)
+    val key = stocktakeCreateKey(context, current)
     val result = stocktakeRpc(context, current, "commercial_create_inventory_stocktake", JSONObject()
         .put("p_organization_id", current.organizationId)
         .put("p_activity_id", current.activityId)
