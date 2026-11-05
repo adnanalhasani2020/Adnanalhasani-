@@ -28,7 +28,7 @@ class CatalogDiscoveryPaginationMigrationTests(unittest.TestCase):
         self.assertIn(".distinctBy { it.id }", screen)
 
     def test_failed_page_load_does_not_auto_retry_forever(self):
-        screen = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogScreen.kt").read_text(encoding="utf-8")
+        screen = catalog_android_source()
         self.assertIn("catalogPageLoadFailed", screen)
         self.assertIn("onFailure: ((Throwable) -> Unit)? = null", screen)
         self.assertIn("setPageLoadFailed(true)", screen)
