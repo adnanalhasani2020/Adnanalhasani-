@@ -36,3 +36,11 @@ def test_purchase_builder_has_navigation_entry():
     assert "MerchantPurchaseRequestScreen(" in navigation
     assert "onCreatePurchaseRequest" in navigation
     assert "إنشاء طلب شراء" in more
+
+def test_purchase_request_is_location_scoped_and_retry_idempotent():
+    screen = SCREEN.read_text(encoding="utf-8")
+    assert "filter { it.locationRef == selectedLocation }" in screen
+    assert "selectedOffering?.locationRef == selectedLocation" in screen
+    assert "getOrCreatePurchaseRequestBatchId" in screen
+    assert "UUID.nameUUIDFromBytes" in screen
+    assert "clearPurchaseRequestBatchId" in screen
