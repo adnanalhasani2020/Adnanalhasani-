@@ -47,6 +47,26 @@ CREATE INDEX IF NOT EXISTS commercial_inventory_storage_movements_offering_idx
   ON public.commercial_inventory_storage_movements
     (organization_id, branch_location_id, offering_id, created_at, id);
 
+CREATE OR REPLACE FUNCTION public.commercial_inventory_storage_movement_immutable()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog, public
+AS $function$
+BEGIN
+  RAISE EXCEPTION 'inventory_storage_movement_is_immutable'
+    USING ERRCODE = '55000';
+END;
+$function$;
+
+DROP TRIGGER IF EXISTS commercial_inventory_storage_movement_immutable
+  ON public.commercial_inventory_storage_movements;
+CREATE TRIGGER commercial_inventory_storage_movement_immutable
+BEFORE UPDATE OR DELETE ON public.commercial_inventory_storage_movements
+FOR EACH ROW EXECUTE FUNCTION public.commercial_inventory_storage_movement_immutable();
+
+REVOKE ALL ON FUNCTION public.commercial_inventory_storage_movement_immutable()
+  FROM PUBLIC, anon, authenticated;
+
 ALTER TABLE public.commercial_inventory_storage_balances ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.commercial_inventory_storage_movements ENABLE ROW LEVEL SECURITY;
 
