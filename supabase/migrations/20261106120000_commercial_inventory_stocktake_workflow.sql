@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS public.commercial_inventory_stocktake_cost_allocation
   costing_method text NOT NULL CHECK (costing_method IN ('fifo','lifo','weighted_average')),
   quantity numeric(20,6) NOT NULL CHECK (quantity > 0),
   unit_cost_minor bigint NOT NULL CHECK (unit_cost_minor >= 0),
-  total_cost_minor numeric(30,0) NOT NULL CHECK (total_cost_minor >= 0),
+  total_cost_minor numeric(38,0) NOT NULL CHECK (total_cost_minor >= 0),
   created_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (stocktake_line_id,cost_layer_id)
 );
@@ -343,6 +343,7 @@ DECLARE
   v_cost bigint;
   v_new_average numeric;
   v_cost_total numeric;
+  v_layer_qty numeric;
   v_adjusted integer := 0;
 BEGIN
   IF v_uid IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
@@ -382,6 +383,14 @@ BEGIN
       RAISE EXCEPTION 'inventory_stocktake_below_reserved_quantity' USING ERRCODE='55000';
     END IF;
     v_diff := v_line.counted_quantity-v_line.expected_quantity;
+    SELECT coalesce(sum(quantity_remaining),0) INTO v_layer_qty
+    FROM public.commercial_inventory_cost_layers
+    WHERE organization_id=v_stocktake.organization_id AND location_id=v_stocktake.location_id
+      AND offering_id=v_line.offering_id;
+    IF v_layer_qty IS DISTINCT FROM v_balance.quantity_on_hand THEN
+      RAISE EXCEPTION 'inventory_stocktake_cost_layer_reconciliation_failed' USING ERRCODE='55000',
+        DETAIL='Cost-layer quantity does not match the branch balance; the count cannot post safely.';
+    END IF;
     UPDATE public.commercial_inventory_stocktake_lines
     SET previous_unit_cost_minor=v_balance.unit_cost_minor,updated_at=now()
     WHERE id=v_line.id;
@@ -471,6 +480,14 @@ BEGIN
       UPDATE public.commercial_inventory_balances
       SET quantity_on_hand=v_line.counted_quantity,updated_at=now()
       WHERE id=v_balance.id;
+    END IF;
+
+    SELECT coalesce(sum(quantity_remaining),0) INTO v_layer_qty
+    FROM public.commercial_inventory_cost_layers
+    WHERE organization_id=v_stocktake.organization_id AND location_id=v_stocktake.location_id
+      AND offering_id=v_line.offering_id;
+    IF v_layer_qty IS DISTINCT FROM v_line.counted_quantity THEN
+      RAISE EXCEPTION 'inventory_stocktake_posted_cost_layer_mismatch' USING ERRCODE='55000';
     END IF;
 
     INSERT INTO public.commercial_stock_movements(
@@ -568,6 +585,14 @@ BEGIN
     ORDER BY (p.location_id IS NOT NULL) DESC LIMIT 1;
     v_method := coalesce(v_method,'weighted_average');
 
+    SELECT coalesce(sum(quantity_remaining),0) INTO v_layer_qty
+    FROM public.commercial_inventory_cost_layers
+    WHERE organization_id=v_stocktake.organization_id AND location_id=v_stocktake.location_id
+      AND offering_id=v_line.offering_id;
+    IF v_layer_qty IS DISTINCT FROM v_balance.quantity_on_hand THEN
+      RAISE EXCEPTION 'inventory_stocktake_reversal_cost_layer_reconciliation_failed' USING ERRCODE='55000';
+    END IF;
+
     IF v_diff>0 THEN
       SELECT * INTO v_layer FROM public.commercial_inventory_cost_layers
       WHERE organization_id=v_stocktake.organization_id AND location_id=v_stocktake.location_id
@@ -591,6 +616,14 @@ BEGIN
           AND quantity_remaining+v_allocation.quantity<=quantity_received;
         IF NOT FOUND THEN RAISE EXCEPTION 'inventory_stocktake_reversal_layer_quantity_invalid' USING ERRCODE='55000'; END IF;
       END LOOP;
+    END IF;
+
+    SELECT coalesce(sum(quantity_remaining),0) INTO v_layer_qty
+    FROM public.commercial_inventory_cost_layers
+    WHERE organization_id=v_stocktake.organization_id AND location_id=v_stocktake.location_id
+      AND offering_id=v_line.offering_id;
+    IF v_layer_qty IS DISTINCT FROM v_new_qty THEN
+      RAISE EXCEPTION 'inventory_stocktake_reversal_cost_layer_reconciliation_failed' USING ERRCODE='55000';
     END IF;
 
     UPDATE public.commercial_inventory_balances
