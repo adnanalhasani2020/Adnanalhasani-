@@ -67,6 +67,7 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
     var supplyPrice by remember { mutableStateOf("0") }
     var supplySpecs by remember { mutableStateOf("") }
     var supplyNote by remember { mutableStateOf("") }
+    var supplyRequestKey by remember { mutableStateOf(java.util.UUID.randomUUID().toString()) }
 
     LaunchedEffect(refresh) {
         loading = true
@@ -552,13 +553,13 @@ internal fun CustomerPortalScreen(context: Context, onBack: () -> Unit, onOrders
                         portalExecutor.execute {
                             val result = runCatching {
                                 submitCustomerSupplyRequest(context, org.id, snapshot[0], snapshot[1].toLong(),
-                                    snapshot[2], snapshot[3], snapshot[4].toLong(), snapshot[7], snapshot[5], snapshot[6], java.util.UUID.randomUUID().toString())
+                                    snapshot[2], snapshot[3], snapshot[4].toLong(), snapshot[7], snapshot[5], snapshot[6], supplyRequestKey)
                             }
                             portalMain.post {
                                 submitting = false
                                 result.onSuccess {
                                     notice = "تم إرسال طلب التوفير. حالته الآن: قيد المراجعة."
-                                    supplyDialog = false; supplyName = ""; supplyQuantity = "1"; supplySpecs = ""; supplyNote = ""
+                                    supplyDialog = false; supplyName = ""; supplyQuantity = "1"; supplySpecs = ""; supplyNote = ""; supplyRequestKey = java.util.UUID.randomUUID().toString()
                                 }.onFailure { error = it.message ?: "تعذر إرسال طلب التوفير."; notice = "" }
                             }
                         }
