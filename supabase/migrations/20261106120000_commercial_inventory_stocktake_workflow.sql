@@ -27,7 +27,9 @@ CREATE TABLE IF NOT EXISTS public.commercial_inventory_stocktakes (
   UNIQUE (organization_id,idempotency_key),
   CHECK (approved_by IS NULL OR approved_by <> created_by),
   CHECK (approved_by IS NULL OR submitted_by IS NULL OR approved_by <> submitted_by),
-  CHECK (status <> 'posted' OR (approved_by IS NOT NULL AND posted_by IS NOT NULL AND posted_at IS NOT NULL)),
+  CHECK (status NOT IN ('submitted','approved','posted','reversed') OR (submitted_by IS NOT NULL AND submitted_at IS NOT NULL)),
+  CHECK (status NOT IN ('approved','posted','reversed') OR (approved_by IS NOT NULL AND approved_at IS NOT NULL)),
+  CHECK (status NOT IN ('posted','reversed') OR (posted_by IS NOT NULL AND posted_at IS NOT NULL)),
   CHECK (status <> 'reversed' OR (reversed_by IS NOT NULL AND reversed_at IS NOT NULL AND length(btrim(coalesce(reversal_reason,''))) >= 8))
 );
 
