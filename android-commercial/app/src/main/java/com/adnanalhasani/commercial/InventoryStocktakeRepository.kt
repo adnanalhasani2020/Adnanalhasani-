@@ -47,7 +47,11 @@ private fun stocktakeActionKey(context: Context, stocktakeId: String, action: St
     val prefs = context.getSharedPreferences("commercial_inventory_stocktake_keys_v1", Context.MODE_PRIVATE)
     val key = "stocktake:$stocktakeId:$action"
     return prefs.getString(key, null)?.takeIf { it.isNotBlank() }
-        ?: UUID.randomUUID().toString().also { prefs.edit().putString(key, it).commit() }
+        ?: UUID.randomUUID().toString().also {
+            check(prefs.edit().putString(key, it).commit()) {
+                "تعذر حفظ مفتاح العملية؛ لم يتم إرسال طلب الترحيل أو العكس."
+            }
+        }
 }
 
 private fun stocktakeCreateKey(context: Context): String {
