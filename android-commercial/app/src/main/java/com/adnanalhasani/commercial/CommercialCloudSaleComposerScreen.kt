@@ -146,19 +146,29 @@ private fun cloudComposerQuantityInput(value: String): String =
     }.joinToString("").take(6)
 
 private fun cloudComposerSellUnits(product: Product): List<ComposerSellUnit> {
+    val baseUnit = ComposerSellUnit(
+        product.unitCode.ifBlank { "each" },
+        product.unitCode.ifBlank { "حبة" },
+        1L,
+        true
+    )
+    val json = runCatching { org.json.JSONArray(product.unitVariantsJson) }
+        .getOrElse { return listOf(baseUnit) }
     val parsed = runCatching {
-        val json = org.json.JSONArray(product.unitVariantsJson)
         List(json.length()) { index ->
             val row = json.getJSONObject(index)
+            val factor = row.optString("quantityInBase", "1").toBigDecimalOrNull()?.let {
+                runCatching { it.toBigIntegerExact().longValueExact() }.getOrNull()
+            }?.takeIf { it > 0L } ?: 0L
             ComposerSellUnit(
                 code = row.optString("unitCode").ifBlank { product.unitCode.ifBlank { "each" } },
                 label = row.optString("unitName").ifBlank { row.optString("unitCode", product.unitCode) },
-                factor = row.optString("quantityInBase", "1").toBigDecimalOrNull()?.let { runCatching { it.toBigIntegerExact().longValueExact() }.getOrNull() }?.takeIf { it > 0L } ?: throw IllegalArgumentException("معامل تحويل الوحدة يجب أن يكون عددًا صحيحًا موجبًا."),
+                factor = factor,
                 isDefault = row.optBoolean("isDefault", false)
             )
         }.filter { it.code.isNotBlank() }.distinctBy { it.code }
-    }.getOrDefault(emptyList())
-    return parsed.ifEmpty { listOf(ComposerSellUnit(product.unitCode.ifBlank { "each" }, product.unitCode.ifBlank { "حبة" }, 1L, true)) }
+    }.getOrElse { return listOf(baseUnit) }
+    return parsed.ifEmpty { listOf(baseUnit) }
 }
 
 private val CloudComposerWorker = Executors.newSingleThreadExecutor()
@@ -217,7 +227,7 @@ internal fun CommercialCloudSaleComposerScreen(
             ?: units.firstOrNull { it.isDefault } ?: units.first()
         val baseQuantity = quantity?.multiply(BigDecimal.valueOf(unit.factor))
             ?.let { runCatching { it.toBigIntegerExact() }.getOrNull() }
-        if (product.cloudOfferingId.isBlank() || quantity == null || baseQuantity == null) null
+        if (product.cloudOfferingId.isBlank() || quantity == null || baseQuantity == null || baseQuantity.signum() <= 0) null
         else ComposerSelectedLine(draft, product, quantity, baseQuantity, unit)
     }
     val estimatedSubtotal = selectedLines.fold(BigInteger.ZERO) { sum, line ->
