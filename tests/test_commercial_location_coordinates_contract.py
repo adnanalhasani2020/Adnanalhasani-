@@ -54,7 +54,7 @@ class CommercialLocationCoordinatesContractTests(unittest.TestCase):
         self.assertIn('"p_longitude"', self.screen)
         self.assertIn("parsedLatitude >= java.math.BigDecimal(\"-90\")", self.screen)
         self.assertIn("parsedLongitude <= java.math.BigDecimal(\"180\")", self.screen)
-        self.assertIn("branch.copy(latitude=savedLat,longitude=savedLon)", self.screen)
+        self.assertIn("branch.copy(latitude = savedLat, longitude = savedLon)", self.screen)
         self.assertNotIn("/rest/v1/commercial_organization_locations?on_conflict", self.screen)
 
     def test_migration_is_atomic(self):
