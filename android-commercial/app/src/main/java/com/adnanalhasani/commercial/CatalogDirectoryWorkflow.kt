@@ -41,7 +41,7 @@ internal class CatalogDirectoryWorkflow(
             if (initialActivityCode().isNotBlank()) {
                 val inferredSector = catalogSectorForNode(initialActivityCode().uppercase(), directory.activityNodes)
                 if (inferredSector.isNotBlank()) onSector(inferredSector)
-                directory.activityNodes.firstOrNull { it.code.equals(initialActivityCode, true) }?.defaultBusinessLevelCode?.takeIf { it.isNotBlank() }?.let { onBusinessLevel(it) }
+                directory.activityNodes.firstOrNull { it.code.equals(initialActivityCode(), true) }?.defaultBusinessLevelCode?.takeIf { it.isNotBlank() }?.let { onBusinessLevel(it) }
             }
             onFeedback("تم تحميل ${directory.categories.size} تصنيفًا و${directory.units.size} وحدة قياس و${directory.activityNodes.count { it.nodeKind.equals("sector", true) }} قطاعًا و${directory.activityNodes.count { it.nodeKind.equals("activity", true) }} نشاطًا و${directory.activityNodes.count { it.nodeKind.equals("specialization", true) }} تخصصًا.")
             onDirectoriesLoaded()
