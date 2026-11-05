@@ -153,7 +153,7 @@ private fun cloudComposerSellUnits(product: Product): List<ComposerSellUnit> {
             ComposerSellUnit(
                 code = row.optString("unitCode").ifBlank { product.unitCode.ifBlank { "each" } },
                 label = row.optString("unitName").ifBlank { row.optString("unitCode", product.unitCode) },
-                factor = row.optLong("quantityInBase", 1L).coerceAtLeast(1L),
+                factor = row.optString("quantityInBase", "1").toBigDecimalOrNull()?.let { runCatching { it.toBigIntegerExact().longValueExact() }.getOrNull() }?.takeIf { it > 0L } ?: throw IllegalArgumentException("معامل تحويل الوحدة يجب أن يكون عددًا صحيحًا موجبًا."),
                 isDefault = row.optBoolean("isDefault", false)
             )
         }.filter { it.code.isNotBlank() }.distinctBy { it.code }
