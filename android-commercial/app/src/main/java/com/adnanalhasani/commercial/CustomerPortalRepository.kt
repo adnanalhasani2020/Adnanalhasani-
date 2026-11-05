@@ -524,20 +524,61 @@ internal fun fulfillCustomerPortalOrder(
     context: Context,
     orderId: String,
     locationId: String,
-    idempotencyKey: String
+    idempotencyKey: String,
+    reserved: Boolean = false
 ): JSONObject {
     require(orderId.isNotBlank() && locationId.isNotBlank()) {
         "مرجع الطلب وموقع المخزون مطلوبان."
     }
     require(idempotencyKey.length in 8..200) { "مفتاح إتمام الطلب غير صالح." }
     val (orgId, access) = commercialMasterDataAccess(context)
+    val rpc = if (reserved) "commercial_customer_portal_fulfill_reserved_order"
+        else "commercial_customer_portal_fulfill_order"
     return JSONObject(SupabaseClient.request(
-        "/rest/v1/rpc/commercial_customer_portal_fulfill_order", "POST",
+        "/rest/v1/rpc/$rpc", "POST",
         JSONObject()
             .put("p_organization_id", orgId)
             .put("p_order_id", orderId)
             .put("p_location_id", locationId)
             .put("p_idempotency_key", idempotencyKey),
+        access
+    ))
+}
+
+internal data class CustomerOrderReservation(
+    val orderId: String, val reservationId: String, val status: String,
+    val expiresAt: String, val expiryPolicy: String, val locationId: String
+)
+
+internal fun loadCustomerOrderReservations(context: Context): List<CustomerOrderReservation> {
+    val (orgId, access) = merchantManagementContext(context)
+    val rows = JSONArray(SupabaseClient.request(
+        "/rest/v1/rpc/commercial_customer_portal_list_order_reservations", "POST",
+        JSONObject().put("p_organization_id", orgId), access
+    ))
+    return (0 until rows.length()).mapNotNull { i ->
+        val row = rows.optJSONObject(i) ?: return@mapNotNull null
+        val orderId = row.optString("order_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+        val reservationId = row.optString("reservation_id").takeUnless { it.isBlank() || it == "null" }.orEmpty()
+        if (orderId.isBlank() || reservationId.isBlank()) null else CustomerOrderReservation(
+            orderId, reservationId, row.optString("status"), row.optString("expires_at"),
+            row.optString("expiry_policy"), row.optString("location_id")
+        )
+    }
+}
+
+internal fun reserveMerchantCustomerOrder(
+    context: Context, orderId: String, locationId: String, expiresAt: String, expiryPolicy: String
+): JSONObject {
+    require(orderId.isNotBlank() && locationId.isNotBlank()) { "الطلب وموقع المخزون مطلوبان." }
+    require(expiryPolicy in setOf("release_stock", "keep_reserved_notify", "cancel_order")) { "سياسة انتهاء الحجز غير صحيحة." }
+    require(expiresAt.isNotBlank()) { "حدد موعد انتهاء الحجز." }
+    val (orgId, access) = merchantManagementContext(context)
+    return JSONObject(SupabaseClient.request(
+        "/rest/v1/rpc/commercial_customer_portal_reserve_order", "POST",
+        JSONObject().put("p_organization_id", orgId).put("p_order_id", orderId)
+            .put("p_location_id", locationId).put("p_expires_at", expiresAt)
+            .put("p_expiry_policy", expiryPolicy).put("p_idempotency_key", "merchant-reserve:$orderId"),
         access
     ))
 }
