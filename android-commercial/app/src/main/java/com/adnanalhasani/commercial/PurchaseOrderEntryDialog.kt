@@ -182,7 +182,7 @@ internal fun PurchaseOrderEntryDialog(
                                 )
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     OutlinedTextField(
-                                        value = line.quantity, onValueChange = { if (!attempted) line.quantity = it.filter(Char::isDigit).take(12) },
+                                        value = line.quantity, onValueChange = { if (!attempted) line.quantity = it.take(32) },
                                         label = { Text("الكمية") }, modifier = Modifier.weight(1f),
                                         singleLine = true, enabled = !attempted && !saving
                                     )
