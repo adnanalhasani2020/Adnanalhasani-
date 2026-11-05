@@ -1,4 +1,4 @@
--- Release-gate regression checks for receivables, fractional quantities, and ledger integrity.
+-- Release-gate regression checks for receivables, whole quantities, and ledger integrity.
 -- Run after all repository migrations in a disposable local/staging Supabase database:
 --   supabase test db
 -- This is intentionally a gate, not a substitute for authenticated end-to-end checkout/payment tests.
@@ -49,7 +49,7 @@ SELECT ok(
   'GL payment guard uses the same return-adjusted receivable logic'
 );
 
--- Selling quantities are decimal snapshots; inventory quantities remain exact integer base units.
+-- Selling and inventory quantities are whole units; numeric columns remain for schema compatibility.
 SELECT ok(
   (SELECT count(*) = 3
    FROM information_schema.columns
@@ -60,16 +60,52 @@ SELECT ok(
        OR (column_name = 'selling_quantity' AND data_type = 'numeric')
        OR (column_name = 'quantity_in_stock_units' AND data_type = 'bigint')
      )),
-  'sale lines preserve decimal selling quantity and exact integer base-stock quantities'
+  'sale lines retain integer quantity invariants in the compatible numeric selling-quantity column'
 );
 SELECT ok(
-  position('v_base_qty := (v_line->>''quantity'')::numeric * v_unit.quantity_in_stock' in pg_get_functiondef(
+  position('coalesce(v_line->>''quantity'','''') !~ ''^(0|[1-9][0-9]{0,5})
+);
+SELECT ok(
+  position('v_sale_item.selling_unit_code IS DISTINCT FROM v_unit_code' in pg_get_functiondef(
+    'public.commercial_request_sale_return(uuid,text,text,jsonb,text)'::regprocedure
+  )) > 0
+  AND position('v_sale_item.quantity_in_stock_units::numeric / v_sale_item.selling_quantity' in pg_get_functiondef(
+    'public.commercial_request_sale_return(uuid,text,text,jsonb,text)'::regprocedure
+  )) > 0
+  AND position('FROM public.commercial_offering_sell_units' in pg_get_functiondef(
+    'public.commercial_request_sale_return(uuid,text,text,jsonb,text)'::regprocedure
+  )) = 0,
+  'integer returns recover the immutable unit factor from the original sale line'
+);
+
+SELECT ok(
+  NOT EXISTS (
+    SELECT 1
+    FROM public.commercial_journal_entries e
+    JOIN public.commercial_journal_lines l ON l.journal_entry_id = e.id
+    WHERE e.status = 'posted'
+    GROUP BY e.id, l.currency_code
+    HAVING sum(l.debit_minor) <> sum(l.credit_minor)
+  ),
+  'all posted journal entries balance by currency'
+);
+SELECT ok(
+  NOT EXISTS (
+    SELECT 1 FROM public.commercial_ar_control_reconciliation
+    WHERE NOT is_reconciled OR difference_minor <> 0
+  ),
+  'customer AR control reconciliation has no unreconciled differences'
+);
+
+SELECT * FROM finish();
+ROLLBACK;
+'' in pg_get_functiondef(
     'public.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint,bigint,bigint)'::regprocedure
   )) > 0
-  AND position('v_base_qty <> trunc(v_base_qty)' in pg_get_functiondef(
+  AND position('v_base_qty := (v_line->>''quantity'')::numeric * v_unit.quantity_in_stock' in pg_get_functiondef(
     'public.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint,bigint,bigint)'::regprocedure
   )) > 0,
-  'fractional checkout converts through the configured factor and rejects non-integral base stock'
+  'checkout accepts only integer selling quantities and multiplies by the saved integer unit factor'
 );
 SELECT ok(
   position('v_sale_item.selling_unit_code IS DISTINCT FROM v_unit_code' in pg_get_functiondef(
