@@ -1,6 +1,16 @@
 -- User-owned work notes and due reminders. Reminders are materialized into the inbox
 -- idempotently when the owner opens or refreshes the notes screen.
 BEGIN;
+
+ALTER TABLE public.commercial_user_notifications
+  DROP CONSTRAINT IF EXISTS commercial_user_notifications_notification_type_check;
+ALTER TABLE public.commercial_user_notifications
+  ADD CONSTRAINT commercial_user_notifications_notification_type_check
+  CHECK (notification_type = ANY (ARRAY[
+    'order','payment','booking','account_access','approval','system','security','message','reminder'
+  ]::text[]));
+
+
 CREATE TABLE IF NOT EXISTS public.commercial_user_work_notes (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
