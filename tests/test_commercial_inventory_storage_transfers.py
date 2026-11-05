@@ -31,6 +31,8 @@ class CommercialInventoryStorageTransferTests(unittest.TestCase):
         self.assertIn("source_storage_location_id,destination_storage_location_id", self.sql)
         self.assertIn("sl.warehouse_id = p_warehouse_id", self.sql)
         self.assertIn("inventory_storage_insufficient", self.sql)
+        self.assertIn("BEFORE UPDATE OR DELETE ON public.commercial_inventory_storage_movements", self.sql)
+        self.assertIn("inventory_storage_movement_is_immutable", self.sql)
         self.assertNotIn("UPDATE public.commercial_inventory_balances", self.sql)
         self.assertNotIn("DELETE FROM public.commercial_inventory_storage_movements", self.sql)
 
