@@ -1,0 +1,48 @@
+name: Merchant advertising campaigns migration smoke test
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/20261105190000_commercial_advertising_campaigns.sql'
+      - 'supabase/tests/fixtures/commercial_advertising_campaigns_schema_fixture.sql'
+      - 'supabase/tests/database/commercial_advertising_campaigns_smoke_test.sql'
+      - '.github/workflows/merchant-advertising-smoke.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  advertising-migration:
+    name: PostgreSQL 17 advertising audience and lifecycle smoke test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+      - name: Load isolated advertising fixture
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/fixtures/commercial_advertising_campaigns_schema_fixture.sql
+      - name: Apply advertising migration
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261105190000_commercial_advertising_campaigns.sql
+      - name: Verify audience, activity, age, gender, radius and status filters
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/database/commercial_advertising_campaigns_smoke_test.sql
