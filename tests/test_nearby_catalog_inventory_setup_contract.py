@@ -20,7 +20,7 @@ class NearbyCatalogInventorySetupContractTests(unittest.TestCase):
         cls.setup = SETUP.read_text(encoding="utf-8")
 
     def test_nearby_selected_items_fetch_authoritative_units_instead_of_requiring_catalog_page_cache(self):
-        self.assertIn("val selectedIds=selectedCatalogIds.toList()", self.screen)
+        self.assertIn("val selectedIds = selectedCatalogIds().toList()", self.screen)
         self.assertIn("commercial_catalog_product_units?select=product_id,unit_code,unit_role,quantity_in_base,is_default", self.screen)
         self.assertIn('product_id=$filter', self.screen)
         self.assertIn('grouped.getOrPut(row.optString("product_id"))', self.configuration)
@@ -53,14 +53,14 @@ class NearbyCatalogInventorySetupContractTests(unittest.TestCase):
     def test_nearby_pagination_failure_has_explicit_retry_without_auto_retry_loop(self):
         self.assertIn("var nearbyPageLoadFailed by mutableStateOf", self.screen)
         self.assertIn("state.nearbyPageLoadFailed = true", self.screen)
-        self.assertIn("nearbyPageLoadFailed || state.marketRadius >= 100000", self.screen)
+        self.assertIn("state.marketRadius<100000 && !state.nearbyHasMore", self.screen)
         self.assertIn('Text("إعادة المحاولة")', self.screen)
         self.assertIn("state.nearbyPageLoadFailed = false", self.screen)
 
     def test_catalog_selection_is_capped_at_one_hundred_across_both_lists(self):
         self.assertIn("selectedCatalogIds.size < 100 -> selectedCatalogIds + item.id", self.screen)
         self.assertIn("الحد الأقصى للعملية الواحدة 100 صنف", self.screen)
-        self.assertIn("else if(selectedCatalogIds.size < 100) selectedCatalogIds + id", self.screen)
+        self.assertIn("else if(selectedCatalogIds.size<100) selectedCatalogIds+id", self.screen)
 
     def test_configure_rpc_remains_authoritative_and_does_not_create_stock_or_price(self):
         self.assertIn('commercial_catalog_configure_items', self.screen)
