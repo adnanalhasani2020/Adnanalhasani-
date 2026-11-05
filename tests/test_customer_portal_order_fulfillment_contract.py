@@ -52,7 +52,9 @@ def test_fulfillment_fails_closed_for_unsupported_or_changed_orders():
 def test_android_repository_calls_guarded_fulfillment_rpc():
     repository = REPOSITORY.read_text(encoding="utf-8")
     assert "internal fun fulfillCustomerPortalOrder(" in repository
-    assert "/rest/v1/rpc/commercial_customer_portal_fulfill_order" in repository
+    assert 'else "commercial_customer_portal_fulfill_order"' in repository
+    assert 'if (reserved) "commercial_customer_portal_fulfill_reserved_order"' in repository
+    assert '"/rest/v1/rpc/$rpc"' in repository
     for marker in ("p_organization_id", "p_order_id", "p_location_id", "p_idempotency_key"):
         assert marker in repository
 
