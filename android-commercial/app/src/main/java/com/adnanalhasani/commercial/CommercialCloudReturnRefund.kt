@@ -1,11 +1,7 @@
 package com.adnanalhasani.commercial
 
 import android.content.Context
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
 import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
 import java.util.UUID
 
 /**
@@ -62,13 +58,7 @@ private fun returnRefundAccess(context: Context): Pair<String, String> {
     val organizationId = saved.getString("organization_id", null).orEmpty()
     require(organizationId.isNotBlank()) { "ملف المؤسسة غير محفوظ." }
 
-    val sessionPrefs = EncryptedSharedPreferences.create(
-        context,
-        "ruh_catalog_auth_session",
-        MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
-        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-    )
+    val sessionPrefs = commercialCloudSessionPreferences(context)
     val refreshToken = sessionPrefs.getString("refresh_token", null).orEmpty()
     require(refreshToken.isNotBlank()) { "سجّل الدخول إلى الحساب أولًا." }
     val session = JSONObject(returnRefundRequest(
@@ -83,35 +73,12 @@ private fun returnRefundAccess(context: Context): Pair<String, String> {
     return organizationId to accessToken
 }
 
-private fun returnRefundRequest(path: String, method: String, payload: JSONObject, token: String?): String {
-    val base = BuildConfig.SUPABASE_URL.trimEnd('/')
-    val anon = BuildConfig.SUPABASE_ANON_KEY
-    require(base.startsWith("https://") && anon.isNotBlank()) { "إعدادات اتصال Supabase غير مكتملة." }
-    val connection = (URL("$base$path").openConnection() as HttpURLConnection).apply {
-        requestMethod = method
-        connectTimeout = 15000
-        readTimeout = 25000
-        doOutput = true
-        setRequestProperty("apikey", anon)
-        setRequestProperty("Accept", "application/json")
-        setRequestProperty("Content-Type", "application/json")
-        if (token != null) setRequestProperty("Authorization", "Bearer $token")
-    }
-    return try {
-        connection.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
-        val status = connection.responseCode
-        val raw = (if (status in 200..299) connection.inputStream else connection.errorStream)
-            ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
-        if (status !in 200..299) {
-            val error = runCatching { JSONObject(raw) }.getOrNull()
-            throw IllegalStateException(
-                listOf(error?.optString("message"), error?.optString("hint"))
-                    .filter { !it.isNullOrBlank() && it != "null" }
-                    .joinToString(" — ").ifBlank { "فشل الاتصال بقاعدة البيانات (HTTP $status)." }
-            )
-        }
-        raw
-    } finally {
-        connection.disconnect()
-    }
-}
+private fun returnRefundRequest(path: String, method: String, payload: JSONObject, token: String?): String =
+    SupabaseClient.request(
+        path = path,
+        method = method,
+        payload = payload,
+        token = token,
+        readTimeoutMs = 25000,
+        wrapNetworkErrors = false
+    )

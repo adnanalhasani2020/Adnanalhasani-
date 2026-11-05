@@ -18,54 +18,29 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
 import org.json.JSONArray
 import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
 import java.util.concurrent.Executors
 
 private val notificationsIo = Executors.newSingleThreadExecutor()
 private val notificationsMain = Handler(Looper.getMainLooper())
 
-private fun notificationSessionPrefs(context: Context) = EncryptedSharedPreferences.create(
-    context, "ruh_catalog_auth_session",
-    MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
-    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-)
-
-private fun notificationHttp(context: Context, path: String, payload: JSONObject, token: String? = null): String {
-    val base = BuildConfig.SUPABASE_URL.trimEnd('/')
-    val anon = BuildConfig.SUPABASE_ANON_KEY
-    require(base.startsWith("https://") && anon.isNotBlank()) { "إعدادات Supabase غير مكتملة في هذا البناء." }
-    val connection = (URL("$base$path").openConnection() as HttpURLConnection).apply {
-        requestMethod = "POST"; connectTimeout = 15000; readTimeout = 20000; doOutput = true
-        setRequestProperty("apikey", anon)
-        setRequestProperty("Content-Type", "application/json")
-        setRequestProperty("Accept", "application/json")
-        if (token != null) setRequestProperty("Authorization", "Bearer $token")
-    }
-    return try {
-        connection.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
-        val status = connection.responseCode
-        val stream = if (status in 200..299) connection.inputStream else connection.errorStream
-        val raw = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
-        if (status !in 200..299) {
-            val detail = runCatching { JSONObject(raw).optString("message") }.getOrDefault("")
-            throw IllegalStateException(detail.ifBlank { "تعذر تحميل الإشعارات (HTTP $status)." })
-        }
-        raw
-    } finally { connection.disconnect() }
-}
+private fun notificationHttp(path: String, payload: JSONObject, token: String? = null): String =
+    SupabaseClient.request(
+        path = path,
+        method = "POST",
+        payload = payload,
+        token = token,
+        readTimeoutMs = 20000,
+        wrapNetworkErrors = false
+    )
 
 private fun notificationAccessToken(context: Context): String {
-    val prefs = notificationSessionPrefs(context)
+    val prefs = commercialCloudSessionPreferences(context)
     val saved = prefs.getString("refresh_token", null).orEmpty()
     require(saved.isNotBlank()) { "سجّل الدخول إلى حساب المنصة أولًا من قائمة الحسابات الشخصية." }
     val session = runCatching {
-        JSONObject(notificationHttp(context, "/auth/v1/token?grant_type=refresh_token",
+        JSONObject(notificationHttp("/auth/v1/token?grant_type=refresh_token",
             JSONObject().put("refresh_token", saved)))
     }.getOrElse { throw IllegalStateException("انتهت جلسة الدخول أو تعذر تجديدها؛ سجّل الدخول مجددًا.") }
     val access = session.optString("access_token")
@@ -102,7 +77,7 @@ internal fun CommercialNotificationsScreen(context: Context, onBack: () -> Unit)
     }
 
     fun refresh() {
-        run({ token -> notificationHttp(context, "/rest/v1/rpc/commercial_user_notifications_list_my",
+        run({ token -> notificationHttp("/rest/v1/rpc/commercial_user_notifications_list_my",
             JSONObject().put("p_limit", 50), token) }) { raw ->
             val array = JSONArray(raw)
             rows = buildList {
@@ -158,7 +133,7 @@ internal fun CommercialNotificationsScreen(context: Context, onBack: () -> Unit)
                         }
                         if (row.readAt.isBlank()) {
                             OutlinedButton(enabled = !busy, onClick = {
-                                run({ token -> notificationHttp(context, "/rest/v1/rpc/commercial_user_notifications_mark_read",
+                                run({ token -> notificationHttp("/rest/v1/rpc/commercial_user_notifications_mark_read",
                                     JSONObject().put("p_notification_id", row.id), token) }) {
                                     refresh()
                                 }

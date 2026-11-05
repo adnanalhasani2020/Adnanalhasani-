@@ -17,48 +17,30 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
 import org.json.JSONArray
 import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.concurrent.Executors
 
 private val adsIo = Executors.newSingleThreadExecutor()
 private val adsMain = Handler(Looper.getMainLooper())
-private fun adsPrefs(context: Context) = EncryptedSharedPreferences.create(
- context, "ruh_catalog_auth_session",
- MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
- EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
- EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-)
-private fun adsHttp(context: Context, path: String, payload: JSONObject, token: String? = null): String {
- val base = BuildConfig.SUPABASE_URL.trimEnd('/')
- val anon = BuildConfig.SUPABASE_ANON_KEY
- require(base.startsWith("https://") && anon.isNotBlank()) { "إعدادات Supabase غير مكتملة." }
- val c = (URL(base + path).openConnection() as HttpURLConnection).apply {
-  requestMethod="POST"; connectTimeout=15000; readTimeout=20000; doOutput=true
-  setRequestProperty("apikey",anon); setRequestProperty("Content-Type","application/json"); setRequestProperty("Accept","application/json")
-  if(token!=null)setRequestProperty("Authorization","Bearer "+token)
- }
- return try {
-  c.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
-  val status=c.responseCode
-  val raw=(if(status in 200..299)c.inputStream else c.errorStream)?.bufferedReader(Charsets.UTF_8)?.use{it.readText()}.orEmpty()
-  if(status !in 200..299) throw IllegalStateException(runCatching{JSONObject(raw).optString("message")}.getOrNull().orEmpty().ifBlank{"تعذر تنفيذ العملية (HTTP "+status+")."})
-  raw
- } finally { c.disconnect() }
-}
+private fun adsHttp(path: String, payload: JSONObject, token: String? = null): String =
+ SupabaseClient.request(
+  path = path,
+  method = "POST",
+  payload = payload,
+  token = token,
+  readTimeoutMs = 20000,
+  wrapNetworkErrors = false
+ )
 private fun adsToken(context: Context): String {
- val saved=adsPrefs(context).getString("refresh_token",null).orEmpty()
+ val saved=commercialCloudSessionPreferences(context).getString("refresh_token",null).orEmpty()
  require(saved.isNotBlank()){"سجّل الدخول إلى حساب المنصة أولًا."}
- val session=JSONObject(adsHttp(context,"/auth/v1/token?grant_type=refresh_token",JSONObject().put("refresh_token",saved)))
+ val session=JSONObject(adsHttp("/auth/v1/token?grant_type=refresh_token",JSONObject().put("refresh_token",saved)))
  val access=session.optString("access_token")
  require(access.isNotBlank()){"انتهت جلسة الدخول؛ سجّل الدخول مجددًا."}
- session.optString("refresh_token").takeIf{it.isNotBlank()}?.let{adsPrefs(context).edit().putString("refresh_token",it).apply()}
+ session.optString("refresh_token").takeIf{it.isNotBlank()}?.let{commercialCloudSessionPreferences(context).edit().putString("refresh_token",it).apply()}
  return access
 }
 internal data class AdCampaignRow(val id:String,val title:String,val product:String,val description:String,val reason:String,val original:String,val offer:String,val currency:String,val starts:String,val ends:String,val audience:String,val gender:String,val radius:String,val status:String)
@@ -72,7 +54,7 @@ internal fun loadCommercialAdsHomeFeed(context: Context, onResult: (Result<List<
  adsIo.execute {
   val result=runCatching {
    val token=adsToken(context)
-   val raw=adsHttp(context,"/rest/v1/rpc/commercial_ads_feed",JSONObject()
+   val raw=adsHttp("/rest/v1/rpc/commercial_ads_feed",JSONObject()
     .put("p_audience_type","trader")
     .put("p_activity_code",activityCode.ifBlank{JSONObject.NULL})
     .put("p_limit",5),token)
@@ -166,7 +148,7 @@ internal fun CommercialAdsScreen(context: Context, onBack: () -> Unit) {
  }
  fun refresh() {
   if(orgId.isBlank()){error="اختر مؤسسة سحابية أولًا.";return}
-  execute({token->adsHttp(context,"/rest/v1/rpc/commercial_ads_list_mine",JSONObject().put("p_organization_id",orgId).put("p_limit",100),token)}) { raw ->
+  execute({token->adsHttp("/rest/v1/rpc/commercial_ads_list_mine",JSONObject().put("p_organization_id",orgId).put("p_limit",100),token)}) { raw ->
    val a=JSONArray(raw)
    rows=buildList {
     for(i in 0 until a.length()){
@@ -196,8 +178,8 @@ internal fun CommercialAdsScreen(context: Context, onBack: () -> Unit) {
       Text("الجمهور: "+when(ad.audience){"consumer"->"مستهلكون";"trader"->"تجار";"customer"->"عملاء";else->"الكل"}+" • الجنس: "+when(ad.gender){"male"->"ذكور";"female"->"إناث";else->"الكل"})
       Text("الفترة: "+ad.starts+" إلى "+ad.ends,style=MaterialTheme.typography.bodySmall)
       if(ad.radius.isNotBlank())Text("النطاق: "+ad.radius+" كم",style=MaterialTheme.typography.bodySmall)
-      if(ad.status=="published")TextButton(enabled=!busy,onClick={execute({token->adsHttp(context,"/rest/v1/rpc/commercial_ads_set_status",JSONObject().put("p_ad_id",ad.id).put("p_status","paused"),token)}){notice="تم إيقاف الإعلان.";refresh()}}){Icon(Icons.Default.PauseCircle,null);Text("إيقاف")}
-      else if(ad.status!="expired")TextButton(enabled=!busy,onClick={execute({token->adsHttp(context,"/rest/v1/rpc/commercial_ads_set_status",JSONObject().put("p_ad_id",ad.id).put("p_status","published"),token)}){notice="تم نشر الإعلان.";refresh()}}){Icon(Icons.Default.PlayCircle,null);Text("نشر")}
+      if(ad.status=="published")TextButton(enabled=!busy,onClick={execute({token->adsHttp("/rest/v1/rpc/commercial_ads_set_status",JSONObject().put("p_ad_id",ad.id).put("p_status","paused"),token)}){notice="تم إيقاف الإعلان.";refresh()}}){Icon(Icons.Default.PauseCircle,null);Text("إيقاف")}
+      else if(ad.status!="expired")TextButton(enabled=!busy,onClick={execute({token->adsHttp("/rest/v1/rpc/commercial_ads_set_status",JSONObject().put("p_ad_id",ad.id).put("p_status","published"),token)}){notice="تم نشر الإعلان.";refresh()}}){Icon(Icons.Default.PlayCircle,null);Text("نشر")}
      }
     }
    }
@@ -244,7 +226,7 @@ internal fun CommercialAdsScreen(context: Context, onBack: () -> Unit) {
     .put("p_original_price_minor",o?:JSONObject.NULL).put("p_offer_price_minor",f?:JSONObject.NULL).put("p_currency_code","YER")
     .put("p_starts_at",starts).put("p_ends_at",ends).put("p_audience_type",audience).put("p_activity_code",activityId.ifBlank{JSONObject.NULL})
     .put("p_gender_target",gender).put("p_min_age",lo?:JSONObject.NULL).put("p_max_age",hi?:JSONObject.NULL).put("p_radius_km",rad?:JSONObject.NULL)
-   execute({token->adsHttp(context,"/rest/v1/rpc/commercial_ads_create",payload,token)}){editor=false;notice="تم إنشاء الإعلان.";title="";product="";description="";reason="";original="";offer="";refresh()}
+   execute({token->adsHttp("/rest/v1/rpc/commercial_ads_create",payload,token)}){editor=false;notice="تم إنشاء الإعلان.";title="";product="";description="";reason="";original="";offer="";refresh()}
   }
  }){Text("إنشاء الإعلان")}},dismissButton={TextButton(onClick={editor=false}){Text("إلغاء")}})
 }

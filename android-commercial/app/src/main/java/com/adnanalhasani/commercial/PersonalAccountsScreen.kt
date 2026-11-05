@@ -23,55 +23,30 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
 import org.json.JSONArray
 import org.json.JSONObject
 import org.json.JSONTokener
-import java.net.HttpURLConnection
-import java.net.URL
 import java.time.Instant
 import java.util.concurrent.Executors
 
 private val personalAccountIo = Executors.newSingleThreadExecutor()
 private val personalAccountMain = Handler(Looper.getMainLooper())
 
-private fun personalAccountPrefs(context: Context) = EncryptedSharedPreferences.create(
-    context, "ruh_catalog_auth_session",
-    MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
-    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-)
-
-private fun personalAccountHttp(context: Context, path: String, payload: JSONObject, token: String? = null): String {
-    val base = BuildConfig.SUPABASE_URL.trimEnd('/')
-    val anon = BuildConfig.SUPABASE_ANON_KEY
-    require(base.startsWith("https://") && anon.isNotBlank()) { "إعدادات Supabase غير مكتملة في هذا البناء." }
-    val connection = (URL("$base$path").openConnection() as HttpURLConnection).apply {
-        requestMethod = "POST"; connectTimeout = 15000; readTimeout = 20000; doOutput = true
-        setRequestProperty("apikey", anon)
-        setRequestProperty("Content-Type", "application/json")
-        setRequestProperty("Accept", "application/json")
-        if (token != null) setRequestProperty("Authorization", "Bearer $token")
-    }
-    return try {
-        connection.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
-        val status = connection.responseCode
-        val stream = if (status in 200..299) connection.inputStream else connection.errorStream
-        val raw = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
-        if (status !in 200..299) {
-            val detail = runCatching { JSONObject(raw).optString("message") }.getOrDefault("")
-            throw IllegalStateException(detail.ifBlank { "تعذر تنفيذ الطلب (HTTP $status)." })
-        }
-        raw
-    } finally { connection.disconnect() }
-}
+private fun personalAccountHttp(path: String, payload: JSONObject, token: String? = null): String =
+    SupabaseClient.request(
+        path = path,
+        method = "POST",
+        payload = payload,
+        token = token,
+        readTimeoutMs = 20000,
+        wrapNetworkErrors = false
+    )
 
 private fun personalAccountAccessToken(context: Context): String {
-    val prefs = personalAccountPrefs(context)
+    val prefs = commercialCloudSessionPreferences(context)
     val saved = prefs.getString("refresh_token", null).orEmpty()
     require(saved.isNotBlank()) { "سجّل الدخول أولًا من إعدادات المتجر، ثم افتح الحسابات الفرعية." }
-    val result = runCatching { JSONObject(personalAccountHttp(context, "/auth/v1/token?grant_type=refresh_token", JSONObject().put("refresh_token", saved))) }
+    val result = runCatching { JSONObject(personalAccountHttp("/auth/v1/token?grant_type=refresh_token", JSONObject().put("refresh_token", saved))) }
         .getOrElse { throw IllegalStateException("انتهت جلسة الدخول أو تعذر تجديدها؛ سجّل الدخول مجددًا.") }
     val access = result.optString("access_token")
     val refresh = result.optString("refresh_token").ifBlank { saved }
@@ -80,16 +55,16 @@ private fun personalAccountAccessToken(context: Context): String {
     return access
 }
 
-private fun personalAccountRpc(context: Context, token: String, name: String, args: JSONObject = JSONObject()) =
-    personalAccountHttp(context, "/rest/v1/rpc/$name", args, token)
+private fun personalAccountRpc(token: String, name: String, args: JSONObject = JSONObject()) =
+    personalAccountHttp("/rest/v1/rpc/$name", args, token)
 
 private fun personalAccountValue(raw: String): Any? = JSONTokener(raw).nextValue()
 
-private fun personalAccountSnapshot(context: Context, token: String): JSONObject {
-    val account = personalAccountValue(personalAccountRpc(context, token, "commercial_account_get_my_personal_account"))
-    val orgs = personalAccountValue(personalAccountRpc(context, token, "commercial_account_list_available_organizations"))
-    val delegations = personalAccountValue(personalAccountRpc(context, token, "commercial_account_list_delegations"))
-    val ownedOrganizations = personalAccountValue(personalAccountRpc(context, token, "commercial_account_list_my_organizations"))
+private fun personalAccountSnapshot(token: String): JSONObject {
+    val account = personalAccountValue(personalAccountRpc(token, "commercial_account_get_my_personal_account"))
+    val orgs = personalAccountValue(personalAccountRpc(token, "commercial_account_list_available_organizations"))
+    val delegations = personalAccountValue(personalAccountRpc(token, "commercial_account_list_delegations"))
+    val ownedOrganizations = personalAccountValue(personalAccountRpc(token, "commercial_account_list_my_organizations"))
     return JSONObject().put("account", account ?: JSONObject())
         .put("organizations", orgs as? JSONArray ?: JSONArray())
         .put("delegations", delegations as? JSONArray ?: JSONArray())
@@ -137,7 +112,7 @@ internal fun PersonalAccountsScreen(onBack: () -> Unit) {
     var editPurchase by remember { mutableStateOf(false) }
     var editExpiryDays by remember { mutableStateOf("") }
     var editLimitMinor by remember { mutableStateOf("") }
-    var authRequired by remember { mutableStateOf(personalAccountPrefs(context).getString("refresh_token", null).isNullOrBlank()) }
+    var authRequired by remember { mutableStateOf(commercialCloudSessionPreferences(context).getString("refresh_token", null).isNullOrBlank()) }
     var authEmail by remember { mutableStateOf("") }
     var authPassword by remember { mutableStateOf("") }
     var authDisplayName by remember { mutableStateOf("") }
@@ -195,14 +170,14 @@ internal fun PersonalAccountsScreen(onBack: () -> Unit) {
     }
 
     fun refresh() {
-        request({ personalAccountSnapshot(context, it).toString() }) {
+        request({ personalAccountSnapshot(it).toString() }) {
             applySnapshot(JSONObject(it))
             message = "تم تحديث البيانات."
         }
     }
 
     LaunchedEffect(Unit) {
-        request({ personalAccountSnapshot(context, it).toString() }) {
+        request({ personalAccountSnapshot(it).toString() }) {
             applySnapshot(JSONObject(it))
             authRequired = false
             message = ""
@@ -225,7 +200,7 @@ internal fun PersonalAccountsScreen(onBack: () -> Unit) {
                                 val payload = JSONObject().put("email", authEmail).put("password", authPassword)
                                 val route = if (authRegister) "/auth/v1/signup" else "/auth/v1/token?grant_type=password"
                                 if (authRegister) payload.put("data", JSONObject().put("display_name", authDisplayName.trim()))
-                                val response = JSONObject(personalAccountHttp(context, route, payload))
+                                val response = JSONObject(personalAccountHttp(route, payload))
                                 val session = response.optJSONObject("session") ?: response
                                 val access = session.optString("access_token")
                                 if (access.isBlank()) {
@@ -234,8 +209,8 @@ internal fun PersonalAccountsScreen(onBack: () -> Unit) {
                                 }
                                 val refreshToken = session.optString("refresh_token")
                                 require(refreshToken.isNotBlank()) { "لم تُرجع خدمة المصادقة رمز تجديد صالحًا." }
-                                personalAccountPrefs(context).edit().putString("refresh_token", refreshToken).apply()
-                                val snapshot = personalAccountSnapshot(context, access)
+                                commercialCloudSessionPreferences(context).edit().putString("refresh_token", refreshToken).apply()
+                                val snapshot = personalAccountSnapshot(access)
                                 snapshot
                             }
                             personalAccountMain.post {
@@ -273,7 +248,7 @@ internal fun PersonalAccountsScreen(onBack: () -> Unit) {
         }
         if (!authRequired) item {
             TextButton(enabled = !busy, onClick = {
-                personalAccountPrefs(context).edit().remove("refresh_token").apply()
+                commercialCloudSessionPreferences(context).edit().remove("refresh_token").apply()
                 authRequired = true
                 account = null
                 entries.clear()
@@ -296,10 +271,10 @@ internal fun PersonalAccountsScreen(onBack: () -> Unit) {
                             OutlinedTextField(currency, { currency = it.uppercase().take(3) }, Modifier.fillMaxWidth(), label = { Text("رمز العملة (مثل YER)") }, singleLine = true)
                             Button(enabled = !busy && displayName.trim().length >= 2 && currency.matches(Regex("[A-Z]{3}")), onClick = {
                                 request({ token ->
-                                    personalAccountRpc(context, token, "commercial_create_personal_account",
+                                    personalAccountRpc(token, "commercial_create_personal_account",
                                         JSONObject().put("p_display_name", displayName.trim()).put("p_currency_code", currency))
                                 }) {
-                                    request({ token -> personalAccountSnapshot(context, token).toString() }) {
+                                    request({ token -> personalAccountSnapshot(token).toString() }) {
                                         applySnapshot(JSONObject(it)); message = "تم إنشاء الحساب الرئيسي."
                                     }
                                 }
@@ -321,7 +296,7 @@ internal fun PersonalAccountsScreen(onBack: () -> Unit) {
                     OutlinedTextField(childNumber, { childNumber = it.trim(); childPreview = null }, Modifier.fillMaxWidth(),
                         label = { Text("رقم حساب الشخص الآخر") }, singleLine = true)
                     OutlinedButton(enabled = !busy && childNumber.length >= 3, onClick = {
-                        request({ token -> personalAccountRpc(context, token, "commercial_account_lookup_personal_account",
+                        request({ token -> personalAccountRpc(token, "commercial_account_lookup_personal_account",
                             JSONObject().put("p_account_number", childNumber)) }) {
                             childPreview = runCatching { JSONObject(it) }.getOrNull()
                             message = "راجع بيانات الحساب قبل إرسال طلب الربط."
@@ -355,10 +330,10 @@ internal fun PersonalAccountsScreen(onBack: () -> Unit) {
                                     .put("p_permissions", JSONObject().put("view_reports", viewReports).put("book", canBook).put("purchase", canPurchase))
                                 if (expiryDays.isNotBlank()) args.put("p_expires_at", Instant.now().plusSeconds(expiryDays.toLong().coerceAtMost(3650) * 86400L).toString())
                                 if (limitMinor.isNotBlank()) args.put("p_spend_limit_minor", limitMinor.toLong())
-                                personalAccountRpc(context, token, "commercial_account_create_delegation", args)
+                                personalAccountRpc(token, "commercial_account_create_delegation", args)
                             }) {
                                 childNumber = ""; childPreview = null
-                                request({ token -> personalAccountSnapshot(context, token).toString() }) {
+                                request({ token -> personalAccountSnapshot(token).toString() }) {
                                     applySnapshot(JSONObject(it)); message = "أُرسل الطلب إلى إدارة المؤسسة للموافقة."
                                 }
                             }
@@ -376,9 +351,9 @@ internal fun PersonalAccountsScreen(onBack: () -> Unit) {
                     Text("النوع: ${org.type} · الأنشطة: ${org.activities} · العملة: ${org.currency}")
                     Text(if (org.linked) "مرتبطة بحسابك الرئيسي" else "لم تُربط بالحساب الرئيسي بعد")
                     if (!org.linked && account != null) OutlinedButton(enabled = !busy, onClick = {
-                        request({ token -> personalAccountRpc(context, token, "commercial_account_link_my_organization",
+                        request({ token -> personalAccountRpc(token, "commercial_account_link_my_organization",
                             JSONObject().put("p_personal_account_id", account!!.optString("account_id")).put("p_organization_id", org.id)) }) {
-                            request({ token -> personalAccountSnapshot(context, token).toString() }) { applySnapshot(JSONObject(it)); message = "تم ربط المؤسسة بحسابك الرئيسي." }
+                            request({ token -> personalAccountSnapshot(token).toString() }) { applySnapshot(JSONObject(it)); message = "تم ربط المؤسسة بحسابك الرئيسي." }
                         }
                     }) { Text("ربط بحسابي الرئيسي") }
                 }
@@ -387,7 +362,7 @@ internal fun PersonalAccountsScreen(onBack: () -> Unit) {
         item { Text("الحسابات الفرعية وطلبات الموافقة", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
         item {
             OutlinedButton(enabled = !busy && account != null, onClick = {
-                request({ token -> personalAccountRpc(context, token, "commercial_account_parent_spend_summary") }) { summaryReport = it }
+                request({ token -> personalAccountRpc(token, "commercial_account_parent_spend_summary") }) { summaryReport = it }
             }, modifier = Modifier.fillMaxWidth()) {
                 Text("ملخص إنفاق جميع الحسابات الفرعية والمؤسسات")
             }
@@ -433,13 +408,13 @@ internal fun PersonalAccountsScreen(onBack: () -> Unit) {
                         }
                         if (e.status == "active") {
                             OutlinedButton(enabled = !busy, onClick = {
-                                request({ token -> personalAccountRpc(context, token, "commercial_account_revoke_delegation",
+                                request({ token -> personalAccountRpc(token, "commercial_account_revoke_delegation",
                                     JSONObject().put("p_delegation_id", e.id)); "ok" }) { refresh() }
                             }) { Text("إلغاء الربط") }
                         }
                         if (e.status != "pending_merchant_approval") {
                             OutlinedButton(enabled = !busy, onClick = {
-                                request({ token -> personalAccountRpc(context, token, "commercial_account_delegated_spend_report",
+                                request({ token -> personalAccountRpc(token, "commercial_account_delegated_spend_report",
                                     JSONObject().put("p_delegation_id", e.id)) }) { report = it }
                             }) { Text("تقرير الإنفاق") }
                         }
@@ -531,10 +506,10 @@ internal fun PersonalAccountsScreen(onBack: () -> Unit) {
                             .put("p_permissions", JSONObject().put("view_reports", editReports).put("book", editBook).put("purchase", editPurchase))
                         if (editExpiryDays.isNotBlank()) args.put("p_expires_at", Instant.now().plusSeconds(editExpiryDays.toLong().coerceAtMost(3650) * 86400L).toString())
                         if (editLimitMinor.isNotBlank()) args.put("p_spend_limit_minor", editLimitMinor.toLong())
-                        personalAccountRpc(context, token, "commercial_account_update_delegation", args)
+                        personalAccountRpc(token, "commercial_account_update_delegation", args)
                     }) {
                         editEntry = null
-                        request({ token -> personalAccountSnapshot(context, token).toString() }) { applySnapshot(JSONObject(it)); message = "تم تحديث الصلاحيات؛ يلزم اعتماد المؤسسة من جديد." }
+                        request({ token -> personalAccountSnapshot(token).toString() }) { applySnapshot(JSONObject(it)); message = "تم تحديث الصلاحيات؛ يلزم اعتماد المؤسسة من جديد." }
                     }
                 }) { Text("حفظ التعديلات") }
             },
@@ -561,7 +536,7 @@ internal fun PersonalAccountsScreen(onBack: () -> Unit) {
             },
             confirmButton = {
                 Button(enabled = !busy && merchantName.trim().isNotEmpty(), onClick = {
-                    request({ token -> personalAccountRpc(context, token, "commercial_account_review_delegation",
+                    request({ token -> personalAccountRpc(token, "commercial_account_review_delegation",
                         JSONObject().put("p_delegation_id", target.id).put("p_approve", true)
                             .put("p_merchant_display_name", merchantName.trim()).put("p_merchant_icon_key", merchantIcon.ifBlank { "person" })) }) {
                         approveEntry = null; refresh()
@@ -570,7 +545,7 @@ internal fun PersonalAccountsScreen(onBack: () -> Unit) {
             },
             dismissButton = {
                 TextButton(enabled = !busy, onClick = {
-                    request({ token -> personalAccountRpc(context, token, "commercial_account_review_delegation",
+                    request({ token -> personalAccountRpc(token, "commercial_account_review_delegation",
                         JSONObject().put("p_delegation_id", target.id).put("p_approve", false)); "ok" }) {
                         approveEntry = null; refresh()
                     }
