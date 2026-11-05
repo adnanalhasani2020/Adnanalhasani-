@@ -57,6 +57,8 @@ class CommercialStorageInventoryScreenContractTests(unittest.TestCase):
         self.assertIn("it.warehouseId in warehouseIds", self.screen)
         self.assertIn("storageActionMatchesCurrentContext(context, action)", self.screen)
         self.assertIn("pendingMatchesCurrentContext", self.screen)
+        self.assertIn("تنبيه تشغيلي: هذه الطبقة لا تتكامل بعد تلقائيًا", self.screen)
+        self.assertIn("IconButton(onClick = onBack, enabled = !saving)", self.screen)
         self.assertIn('json.getString("organization_id")', self.screen)
         self.assertIn('json.getString("activity_id")', self.screen)
         self.assertIn('json.getString("branch_location_id")', self.screen)
