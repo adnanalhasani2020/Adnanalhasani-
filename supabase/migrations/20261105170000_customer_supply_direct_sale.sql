@@ -60,14 +60,6 @@ BEGIN
    AND i.supplier_id=v_po.supplier_id AND i.state='recorded') THEN
   RAISE EXCEPTION 'supplier_invoice_required_before_direct_sale' USING ERRCODE='55000';
  END IF;
- SELECT si.unit_price_minor INTO v_invoice_price
- FROM public.commercial_supplier_invoice_items si
- JOIN public.commercial_supplier_invoices sh ON sh.id=si.supplier_invoice_id
- WHERE si.organization_id=p_organization_id AND si.purchase_order_item_id=v_line.id
-  AND sh.purchase_order_id=v_po.id AND sh.state='recorded'
- ORDER BY sh.recorded_at DESC,si.created_at DESC LIMIT 1;
- IF v_invoice_price IS NULL THEN RAISE EXCEPTION 'supplier_invoice_line_price_required_for_direct_sale' USING ERRCODE='55000'; END IF;
- v_sale_price:=coalesce(p_sale_unit_price_minor,v_invoice_price);
  SELECT * INTO v_line FROM public.commercial_purchase_order_items
  WHERE organization_id=p_organization_id AND purchase_order_id=v_po.id
   AND item_description=v_req.item_name AND quantity_ordered=v_req.requested_quantity
@@ -77,6 +69,14 @@ BEGIN
   OR v_line.quantity_ordered<>v_req.requested_quantity THEN
   RAISE EXCEPTION 'supply_purchase_line_not_fully_mapped_and_received' USING ERRCODE='55000';
  END IF;
+ SELECT si.unit_price_minor INTO v_invoice_price
+ FROM public.commercial_supplier_invoice_items si
+ JOIN public.commercial_supplier_invoices sh ON sh.id=si.supplier_invoice_id
+ WHERE si.organization_id=p_organization_id AND si.purchase_order_item_id=v_line.id
+  AND sh.purchase_order_id=v_po.id AND sh.state='recorded'
+ ORDER BY sh.recorded_at DESC,si.created_at DESC LIMIT 1;
+ IF v_invoice_price IS NULL THEN RAISE EXCEPTION 'supplier_invoice_line_price_required_for_direct_sale' USING ERRCODE='55000'; END IF;
+ v_sale_price:=coalesce(p_sale_unit_price_minor,v_invoice_price);
  SELECT * INTO v_offer FROM public.commercial_offerings
  WHERE id=v_line.offering_id FOR UPDATE;
  IF NOT FOUND OR v_offer.location_ref IS DISTINCT FROM v_po.receive_location_id::text
