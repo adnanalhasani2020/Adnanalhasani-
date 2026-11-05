@@ -1,4 +1,5 @@
 from pathlib import Path
+from catalog_source_helpers import catalog_android_source
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -9,7 +10,7 @@ MODELS = ANDROID / "CatalogModels.kt"
 
 def test_catalog_models_have_one_shared_owner():
     models = MODELS.read_text(encoding="utf-8")
-    screen = SCREEN.read_text(encoding="utf-8")
+    screen = catalog_android_source()
 
     for name in (
         "CatalogUnit",
