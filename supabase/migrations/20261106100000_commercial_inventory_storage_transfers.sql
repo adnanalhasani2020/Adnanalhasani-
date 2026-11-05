@@ -228,7 +228,7 @@ CREATE OR REPLACE FUNCTION public.commercial_transfer_inventory_storage_location
   p_source_storage_location_id uuid,
   p_destination_storage_location_id uuid,
   p_offering_id uuid,
-  p_quantity bigint,
+  p_quantity numeric(20,6),
   p_idempotency_key text
 ) RETURNS jsonb
 LANGUAGE plpgsql
@@ -353,11 +353,11 @@ $function$;
 
 REVOKE ALL ON FUNCTION public.commercial_allocate_inventory_to_storage_location(uuid,uuid,uuid,uuid,uuid,numeric,text)
   FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.commercial_allocate_inventory_to_storage_location(uuid,uuid,uuid,uuid,uuid,bigint,text)
+GRANT EXECUTE ON FUNCTION public.commercial_allocate_inventory_to_storage_location(uuid,uuid,uuid,uuid,uuid,numeric,text)
   TO authenticated;
 REVOKE ALL ON FUNCTION public.commercial_transfer_inventory_storage_location(uuid,uuid,uuid,uuid,uuid,uuid,numeric,text)
   FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.commercial_transfer_inventory_storage_location(uuid,uuid,uuid,uuid,uuid,uuid,bigint,text)
+GRANT EXECUTE ON FUNCTION public.commercial_transfer_inventory_storage_location(uuid,uuid,uuid,uuid,uuid,uuid,numeric,text)
   TO authenticated;
 
 COMMENT ON TABLE public.commercial_inventory_storage_balances IS
