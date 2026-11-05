@@ -52,6 +52,20 @@ Product data
 Migration committed: `supabase/migrations/20261024001000_commercial_warehouse_category_department_foundation.sql`. Category RPC migrations: `supabase/migrations/20261024002000_commercial_offering_category_assignment_rpc.sql` and `supabase/migrations/20261024003000_commercial_inventory_create_with_category.sql`. Unit reference migration: `supabase/migrations/20261024004000_commercial_product_unit_code.sql`.
 It adds organization-scoped warehouse, nested storage-location, product-category, department, offering-category, and department-warehouse tables with RLS, hierarchy cycle checks, and cross-organization relationship guards. It intentionally does not modify current inventory balances or checkout behavior. The migration was applied through the Supabase migration tool and verified in the live schema. It does not modify existing balances or checkout behavior. The shared `commercial_unit_of_measure` directory is reused rather than duplicated. Product creation now selects an active unit code and saves it to `commercial_products.unit_code` with a foreign key to the existing unit directory; the readable unit name is also preserved for current screens and historical compatibility. Existing products remain valid with a nullable `unit_code` until mapped. This is unit identity, not yet item-specific packaging conversion: box/carton factors must be defined per product before sales or stock movements can convert those quantities safely.\n\nThe Android screen can create root and nested category/department nodes, warehouses, and storage locations. Product creation now offers an optional active category selector; the item, offering, opening balance/movement, and primary category assignment are created atomically through `commercial_create_inventory_item_with_category`. The separate `commercial_assign_offering_category` RPC is exposed in the master-data screen through “تصنيف الأصناف الموجودة”, allowing managers to safely reassign an existing item's primary category without touching stock balances. Both RPCs validate the authenticated organization manager, activity and category scope, and write audit events. The inventory screen reads assigned category names; unassigned items continue to show `غير مصنف`.
 
+## Storage-location ledger implementation status
+
+Migration authored on 2026-11-06: `supabase/migrations/20261106100000_commercial_inventory_storage_transfers.sql`.
+
+This is an additive first slice, not a replacement of the branch-level stock source of truth:
+- `commercial_inventory_balances` remains the authoritative aggregate by branch and offering.
+- `commercial_inventory_storage_balances` stores only quantities explicitly allocated to a storage location. Allocation is rejected if the total allocated quantity would exceed the branch-level on-hand quantity.
+- `commercial_inventory_storage_movements` records allocations and same-warehouse internal transfers. Its rows are immutable and idempotent.
+- Both write paths are manager-gated SECURITY DEFINER RPCs. Direct client writes are revoked; authenticated organization members can read only rows in their organization.
+- Transfers move quantity between two active stockable locations in the same warehouse and do not alter branch-level quantity or financial cost layers.
+- No existing inventory quantity is backfilled or silently assigned to a bin. Existing stock remains unallocated until a manager explicitly allocates it.
+
+**Deployment status:** migration committed to GitHub, but not applied to Supabase production. Android screens do not yet expose allocation/transfer actions. Do not treat the feature as available to end users until SQL tests, live-schema review, Android integration, and reconciliation checks are complete.
+
 ## Remaining data-model work
 
 1. `commercial_warehouses`
