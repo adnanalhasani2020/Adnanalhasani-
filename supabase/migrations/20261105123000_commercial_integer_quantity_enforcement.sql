@@ -407,64 +407,7 @@ BEGIN
   IF v_uid IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
   IF p_organization_id IS NULL OR p_supplier_id IS NULL OR p_receive_location_id IS NULL
     OR p_order_number IS NULL OR length(btrim(p_order_number)) NOT BETWEEN 1 AND 80
-    OR p_currency_code IS NULL OR p_currency_code !~ '^[A-Z]{3}
--- Any pre-existing fractional value aborts this migration for explicit reconciliation.
-DO $migration$
-DECLARE
-  v_table text;
-  v_column text;
-  v_constraint text;
-  v_has_fraction boolean;
-  v_tables text[] := ARRAY[
-    'commercial_sale_items','commercial_sale_return_items',
-    'commercial_purchase_order_items','commercial_purchase_receipt_items',
-    'commercial_inventory_receipts','commercial_inventory_balances',
-    'commercial_stock_movements','commercial_supplier_invoice_items',
-    'commercial_inventory_cost_layers','commercial_inventory_cost_allocations',
-    'commercial_inventory_return_cost_allocations','commercial_inventory_cost_reversals',
-    'commercial_return_restock_postings','commercial_invoice_purchase_request_items',
-    'commercial_offering_sell_units','commercial_catalog_product_units',
-    'commercial_catalog_item_units','commercial_catalog_inventory_units'
-  ];
-  v_columns text[] := ARRAY[
-    'quantity','selling_quantity','quantity_in_stock_units',
-    'quantity_ordered','quantity_received','quantity_on_hand','quantity_reserved',
-    'quantity_delta','quantity_remaining','sale_quantity_in_base','quantity_in_base'
-  ];
-BEGIN
-  FOREACH v_table IN ARRAY v_tables LOOP
-    FOREACH v_column IN ARRAY v_columns LOOP
-      IF EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_schema='public' AND table_name=v_table AND column_name=v_column
-          AND data_type IN ('numeric','decimal','real','double precision')
-      ) THEN
-        EXECUTE format(
-          'SELECT EXISTS (SELECT 1 FROM public.%I WHERE %I IS NOT NULL AND %I <> trunc(%I))',
-          v_table,v_column,v_column,v_column
-        ) INTO v_has_fraction;
-        IF v_has_fraction THEN
-          RAISE EXCEPTION 'fractional_historical_quantity_requires_reconciliation: %.%',
-            v_table,v_column USING ERRCODE='55000';
-        END IF;
-        v_constraint := left(v_table || '_' || v_column || '_whole_qty_ck', 63);
-        IF NOT EXISTS (
-          SELECT 1 FROM pg_constraint
-          WHERE conrelid=format('public.%I',v_table)::regclass AND conname=v_constraint
-        ) THEN
-          EXECUTE format(
-            'ALTER TABLE public.%I ADD CONSTRAINT %I CHECK (%I IS NULL OR %I = trunc(%I)) NOT VALID',
-            v_table,v_constraint,v_column,v_column,v_column
-          );
-          EXECUTE format('ALTER TABLE public.%I VALIDATE CONSTRAINT %I',v_table,v_constraint);
-        END IF;
-      END IF;
-    END LOOP;
-  END LOOP;
-END;
-$migration$;
-
- OR p_lines IS NULL OR jsonb_typeof(p_lines)<>'array'
+    OR p_currency_code IS NULL OR p_currency_code !~ '^[A-Z]{3}$' OR p_lines IS NULL OR jsonb_typeof(p_lines)<>'array'
     OR jsonb_array_length(p_lines)=0 OR p_idempotency_key IS NULL OR length(btrim(p_idempotency_key)) NOT BETWEEN 8 AND 200 THEN
     RAISE EXCEPTION 'invalid_purchase_order_request' USING ERRCODE='22023';
   END IF;
@@ -600,7 +543,7 @@ DECLARE
   v_columns text[] := ARRAY[
     'quantity','selling_quantity','quantity_in_stock_units',
     'quantity_ordered','quantity_received','quantity_on_hand','quantity_reserved',
-    'quantity_delta','quantity_remaining','sale_quantity_in_base'
+    'quantity_delta','quantity_remaining','sale_quantity_in_base','quantity_in_base'
   ];
 BEGIN
   FOREACH v_table IN ARRAY v_tables LOOP
@@ -635,3 +578,5 @@ BEGIN
 END;
 $migration$;
 
+COMMENT ON TABLE public.commercial_sale_items IS
+'Commercial sale line snapshots. Selling and stock quantities are whole units; monetary columns retain their existing precision.';
