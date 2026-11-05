@@ -1648,8 +1648,8 @@ BEGIN
           AND data_type IN ('numeric','decimal','real','double precision')
       ) THEN
         EXECUTE format(
-          'SELECT EXISTS (SELECT 1 FROM public.%I WHERE %I IS NOT NULL AND %I <> trunc(%I))',
-          v_table,v_column,v_column,v_column
+          'SELECT EXISTS (SELECT 1 FROM public.%I WHERE %I IS NOT NULL AND (%I::text IN (''NaN'',''Infinity'',''-Infinity'') OR %I <> trunc(%I)))',
+          v_table,v_column,v_column,v_column,v_column
         ) INTO v_has_fraction;
         IF v_has_fraction THEN
           RAISE EXCEPTION 'fractional_historical_quantity_requires_reconciliation: %.%',
@@ -1661,8 +1661,8 @@ BEGIN
           WHERE conrelid=format('public.%I',v_table)::regclass AND conname=v_constraint
         ) THEN
           EXECUTE format(
-            'ALTER TABLE public.%I ADD CONSTRAINT %I CHECK (%I IS NULL OR %I = trunc(%I)) NOT VALID',
-            v_table,v_constraint,v_column,v_column,v_column
+            'ALTER TABLE public.%I ADD CONSTRAINT %I CHECK (%I IS NULL OR (%I::text NOT IN (''NaN'',''Infinity'',''-Infinity'') AND %I = trunc(%I))) NOT VALID',
+            v_table,v_constraint,v_column,v_column,v_column,v_column
           );
           EXECUTE format('ALTER TABLE public.%I VALIDATE CONSTRAINT %I',v_table,v_constraint);
         END IF;
