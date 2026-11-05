@@ -43,6 +43,7 @@ DECLARE
   v_created jsonb;
   v_replay jsonb;
   v_stocktake uuid;
+  v_stale_stocktake uuid;
   v_line uuid;
   v_balance numeric;
   v_reserved numeric;
@@ -206,17 +207,29 @@ BEGIN
     IF SQLERRM<>'inventory_stocktake_self_approval_forbidden' THEN RAISE; END IF;
   END;
 
-  -- After approval, any intervening movement invalidates the captured count.
+  -- A second approved stocktake posts a real intervening inventory movement.
+  -- The first approved session must then fail its original quantity snapshot.
   PERFORM set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000004',true);
   PERFORM public.commercial_approve_inventory_stocktake(v_stocktake);
+  v_stale_stocktake := v_stocktake;
+
   PERFORM set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
-  UPDATE public.commercial_inventory_balances SET quantity_on_hand=9
-  WHERE offering_id='60000000-0000-0000-0000-000000000001';
-  INSERT INTO public.commercial_stock_movements(offering_id,movement_type,quantity_delta,source_ref,created_by)
-  VALUES('60000000-0000-0000-0000-000000000001','adjustment',-1,'test-stocktake-intervening-movement',
-    '00000000-0000-0000-0000-000000000001');
+  v_created := public.commercial_create_inventory_stocktake(
+    '10000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000001',
+    '20000000-0000-0000-0000-000000000001','stocktake-create-005','intervening approved count'
+  );
+  v_stocktake := (v_created->>'stocktake_id')::uuid;
+  SELECT id INTO v_line FROM public.commercial_inventory_stocktake_lines WHERE stocktake_id=v_stocktake;
+  PERFORM public.commercial_set_inventory_stocktake_counts(v_stocktake,
+    jsonb_build_array(jsonb_build_object('line_id',v_line,'counted_quantity','8')));
+  PERFORM public.commercial_submit_inventory_stocktake(v_stocktake);
+  PERFORM set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',true);
+  PERFORM public.commercial_approve_inventory_stocktake(v_stocktake);
+  PERFORM set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
+  PERFORM public.commercial_post_inventory_stocktake(v_stocktake,'stocktake-post-005');
+
   BEGIN
-    PERFORM public.commercial_post_inventory_stocktake(v_stocktake,'stocktake-post-004');
+    PERFORM public.commercial_post_inventory_stocktake(v_stale_stocktake,'stocktake-post-004');
     RAISE EXCEPTION 'stale_stocktake_snapshot_was_posted';
   EXCEPTION WHEN SQLSTATE '55000' THEN
     IF SQLERRM<>'inventory_stocktake_stale_snapshot' THEN RAISE; END IF;
