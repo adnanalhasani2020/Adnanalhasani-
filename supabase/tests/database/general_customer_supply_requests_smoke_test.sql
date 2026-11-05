@@ -72,6 +72,21 @@ BEGIN
  IF v_count<3 THEN RAISE EXCEPTION 'customer_notifications_missing'; END IF;
  SELECT count(*) INTO v_count FROM public.commercial_user_notifications WHERE user_id=v_merchant;
  IF v_count<1 THEN RAISE EXCEPTION 'merchant_notification_missing'; END IF;
+ -- Add two newer pending requests and prove p_limit is applied before JSON aggregation.
+ INSERT INTO public.commercial_customer_supply_requests(
+  organization_id,customer_id,buyer_account_id,submitted_by,item_name,requested_quantity,
+  unit_code,unit_name,requested_price_minor,currency_code,payment_mode,idempotency_key,request_fingerprint,created_at
+ ) VALUES
+  (v_org,v_customer_row,v_account,v_customer,'صنف اختبار 2',1,'EA','قطعة',100,'YER','cash','limit-test-key-0002',md5('limit-test-2'),now()+interval '2 seconds'),
+  (v_org,v_customer_row,v_account,v_customer,'صنف اختبار 3',1,'EA','قطعة',100,'YER','cash','limit-test-key-0003',md5('limit-test-3'),now()+interval '3 seconds');
+ v_result:=public.commercial_customer_portal_list_organization_supply_requests(v_org,1);
+ IF jsonb_array_length(v_result)<>1 OR v_result->0->>'item_name'<>'صنف اختبار 3' THEN
+  RAISE EXCEPTION 'merchant_queue_limit_not_applied_before_aggregation';
+ END IF;
+ v_result:=public.commercial_customer_portal_list_organization_supply_requests(v_org,100);
+ IF jsonb_array_length(v_result)<>2 THEN
+  RAISE EXCEPTION 'merchant_queue_full_list_regression';
+ END IF;
  IF has_table_privilege('anon','public.commercial_customer_supply_requests','SELECT')
   OR has_table_privilege('authenticated','public.commercial_customer_supply_requests','INSERT') THEN
   RAISE EXCEPTION 'request_table_direct_access_not_revoked';
