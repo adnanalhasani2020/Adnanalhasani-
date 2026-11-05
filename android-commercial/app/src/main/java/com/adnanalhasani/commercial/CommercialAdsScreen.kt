@@ -158,6 +158,7 @@ internal fun CommercialAdsHomePreview(context: Context, onOpen: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AdsChoiceField(label: String, selected: String, options: List<Pair<String, String>>, onSelected: (String) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
