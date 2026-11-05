@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.json.JSONObject
 import java.math.BigDecimal
 import java.util.UUID
 import java.util.concurrent.Executors
@@ -58,6 +59,43 @@ private fun loadStorageInventorySnapshot(context: Context): StorageInventorySnap
 private fun storageQuantityLabel(value: BigDecimal): String =
     value.stripTrailingZeros().toPlainString()
 
+private fun loadPendingStorageInventoryAction(context: Context): PendingStorageInventoryAction? {
+    val raw = context.getSharedPreferences("commercial_storage_inventory_pending_v1", Context.MODE_PRIVATE)
+        .getString("pending_action", null) ?: return null
+    return runCatching {
+        val json = JSONObject(raw)
+        PendingStorageInventoryAction(
+            mode = json.getString("mode"),
+            warehouseId = json.getString("warehouse_id"),
+            locationId = json.optString("location_id"),
+            sourceLocationId = json.optString("source_location_id"),
+            destinationLocationId = json.optString("destination_location_id"),
+            offeringId = json.getString("offering_id"),
+            quantity = BigDecimal(json.getString("quantity")),
+            idempotencyKey = json.getString("idempotency_key")
+        )
+    }.getOrNull()
+}
+
+private fun persistPendingStorageInventoryAction(context: Context, action: PendingStorageInventoryAction?) {
+    val editor = context.getSharedPreferences("commercial_storage_inventory_pending_v1", Context.MODE_PRIVATE).edit()
+    if (action == null) {
+        editor.remove("pending_action")
+    } else {
+        editor.putString("pending_action", JSONObject()
+            .put("mode", action.mode)
+            .put("warehouse_id", action.warehouseId)
+            .put("location_id", action.locationId)
+            .put("source_location_id", action.sourceLocationId)
+            .put("destination_location_id", action.destinationLocationId)
+            .put("offering_id", action.offeringId)
+            .put("quantity", action.quantity.toPlainString())
+            .put("idempotency_key", action.idempotencyKey)
+            .toString())
+    }
+    editor.apply()
+}
+
 @Composable
 private fun StorageInventoryDropdown(
     title: String,
@@ -91,22 +129,23 @@ private fun StorageInventoryDropdown(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun CommercialStorageInventoryScreen(context: Context, onBack: () -> Unit) {
+    val restoredPending = remember { loadPendingStorageInventoryAction(context) }
     var warehouses by remember { mutableStateOf<List<CommercialMasterDataRow>>(emptyList()) }
     var locations by remember { mutableStateOf<List<CommercialMasterDataRow>>(emptyList()) }
     var products by remember { mutableStateOf<List<Product>>(emptyList()) }
     var balances by remember { mutableStateOf<List<CommercialStorageInventoryBalance>>(emptyList()) }
-    var selectedWarehouseId by remember { mutableStateOf("") }
-    var selectedOfferingId by remember { mutableStateOf("") }
-    var selectedLocationId by remember { mutableStateOf("") }
+    var selectedWarehouseId by remember { mutableStateOf(restoredPending?.warehouseId.orEmpty()) }
+    var selectedOfferingId by remember { mutableStateOf(restoredPending?.offeringId.orEmpty()) }
+    var selectedLocationId by remember { mutableStateOf(restoredPending?.locationId.orEmpty()) }
     var selectedSourceBalanceId by remember { mutableStateOf("") }
-    var selectedDestinationLocationId by remember { mutableStateOf("") }
-    var quantityText by remember { mutableStateOf("") }
-    var mode by remember { mutableStateOf("allocation") }
+    var selectedDestinationLocationId by remember { mutableStateOf(restoredPending?.destinationLocationId.orEmpty()) }
+    var quantityText by remember { mutableStateOf(restoredPending?.quantity?.let { storageQuantityLabel(it) }.orEmpty()) }
+    var mode by remember { mutableStateOf(restoredPending?.mode ?: "allocation") }
     var loading by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
     var notice by remember { mutableStateOf("") }
-    var pending by remember { mutableStateOf<PendingStorageInventoryAction?>(null) }
+    var pending by remember { mutableStateOf(restoredPending) }
 
     fun applySnapshot(snapshot: StorageInventorySnapshot) {
         warehouses = snapshot.warehouses
@@ -118,8 +157,15 @@ internal fun CommercialStorageInventoryScreen(context: Context, onBack: () -> Un
         if (locations.none { it.id == selectedLocationId && it.warehouseId == selectedWarehouseId }) {
             selectedLocationId = locations.firstOrNull { it.warehouseId == selectedWarehouseId }?.id.orEmpty()
         }
-        if (balances.none { it.id == selectedSourceBalanceId }) selectedSourceBalanceId = ""
-        if (locations.none { it.id == selectedDestinationLocationId }) selectedDestinationLocationId = ""
+        if (pending != null && pending?.mode == "transfer") {
+            selectedSourceBalanceId = balances.firstOrNull {
+                it.storageLocationId == pending?.sourceLocationId && it.offeringId == pending?.offeringId
+            }?.id.orEmpty()
+            selectedDestinationLocationId = pending?.destinationLocationId.orEmpty()
+        } else {
+            if (balances.none { it.id == selectedSourceBalanceId }) selectedSourceBalanceId = ""
+            if (locations.none { it.id == selectedDestinationLocationId }) selectedDestinationLocationId = ""
+        }
     }
 
     fun reload() {
@@ -137,6 +183,7 @@ internal fun CommercialStorageInventoryScreen(context: Context, onBack: () -> Un
 
     fun executeAction(action: PendingStorageInventoryAction) {
         pending = action
+        persistPendingStorageInventoryAction(context, action)
         saving = true
         error = ""
         notice = ""
@@ -167,6 +214,7 @@ internal fun CommercialStorageInventoryScreen(context: Context, onBack: () -> Un
             storageInventoryMain.post {
                 saving = false
                 pending = null
+                persistPendingStorageInventoryAction(context, null)
                 quantityText = ""
                 if (refreshed.isSuccess) {
                     applySnapshot(refreshed.getOrThrow())
