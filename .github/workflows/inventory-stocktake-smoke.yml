@@ -1,0 +1,56 @@
+name: Inventory stocktake smoke test
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/tests/fixtures/commercial_inventory_stocktake_schema_fixture.sql'
+      - 'supabase/tests/database/commercial_inventory_stocktake_smoke.sql'
+      - '.github/workflows/inventory-stocktake-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  postgres-stocktake-smoke:
+    name: PostgreSQL 17 stocktake lifecycle and costing test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: postgres
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Load data-free stocktake schema fixture
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/fixtures/commercial_inventory_stocktake_schema_fixture.sql
+
+      - name: Apply stocktake workflow migration
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106120000_commercial_inventory_stocktake_workflow.sql
+
+      - name: Exercise approval, stale/reserved guards, costing, reversal and idempotency
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/database/commercial_inventory_stocktake_smoke.sql
