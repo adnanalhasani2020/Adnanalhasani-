@@ -225,7 +225,10 @@ internal fun loadCommercialCloudCostLayerSummary(context: Context): CommercialCl
         val row = rows.optJSONObject(index) ?: continue
         val remaining = parseWholeInventoryQuantity(row.optString("quantity_remaining", "0"), "quantity_remaining")
         val unitCost = row.optLong("unit_cost_minor", -1L)
-        if (remaining.signum() <= 0 || unitCost < 0L) continue
+        require(remaining.signum() >= 0 && unitCost >= 0L) {
+            "توجد طبقة تكلفة بكمية أو تكلفة سالبة؛ تم حجب ملخص التكلفة."
+        }
+        if (remaining.signum() == 0) continue
         activeLayers++
         offerings += row.optString("offering_id")
         quantity = quantity.add(remaining)
@@ -288,7 +291,9 @@ internal fun loadCommercialCloudLocationInventoryBalances(context: Context): Lis
                 ?: throw IllegalStateException("تعذر قراءة بيانات الصنف المرتبط بأحد أرصدة المخزون.")
             val onHand = parseWholeInventoryQuantity(row.optString("quantity_on_hand"), "quantity_on_hand")
             val reserved = parseWholeInventoryQuantity(row.optString("quantity_reserved"), "quantity_reserved")
-            require(reserved.signum() >= 0) { "توجد كمية محجوزة سالبة؛ تم حجب تقرير أرصدة المواقع." }
+            require(onHand.signum() >= 0 && reserved.signum() >= 0 && reserved <= onHand) {
+                "رصيد المخزون أو الكمية المحجوزة غير متسقة؛ تم حجب تقرير أرصدة المواقع."
+            }
             add(CommercialCloudLocationInventoryBalance(
                 locationId = locationId,
                 locationName = location.first,
@@ -381,8 +386,8 @@ internal fun loadCommercialCloudWarehouseInventoryContext(context: Context): Lis
             val reserved = decimal("quantity_reserved")
             val available = decimal("available_quantity")
             val reorder = decimal("reorder_point")
-            require(onHand.signum() >= 0 && reserved.signum() >= 0 && reorder.signum() >= 0 &&
-                available == onHand.subtract(reserved).max(BigDecimal.ZERO)) {
+            require(onHand.signum() >= 0 && reserved.signum() >= 0 && reserved <= onHand &&
+                reorder.signum() >= 0 && available == onHand.subtract(reserved)) {
                 "أحد أرصدة المخزون أو كمياته المحسوبة غير متسقة؛ تم حجب التقرير."
             }
             add(CommercialCloudWarehouseInventoryContext(
