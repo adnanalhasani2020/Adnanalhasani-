@@ -24,6 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import android.net.Uri
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -124,6 +125,20 @@ internal fun CatalogProductEditDialog(
                 if(nameAr.isBlank() || nameEn.isBlank()) { error="الاسمان العربي والإنجليزي مطلوبان."; return@Button }
                 val specs=runCatching { JSONObject(specificationsJson) }.getOrElse { error="المواصفات يجب أن تكون JSON object صالحًا."; return@Button }
                 val attributes=runCatching { JSONObject(attributesJson) }.getOrElse { error="الحقول المخصصة يجب أن تكون JSON object صالحًا."; return@Button }
+                val normalizedBarcode = barcode.trim()
+                if (normalizedBarcode.isNotBlank() &&
+                    (normalizedBarcode.any { !it.isDigit() } || normalizedBarcode.length !in setOf(8, 12, 13, 14))) {
+                    error = "باركود GTIN يجب أن يتكون من 8 أو 12 أو 13 أو 14 رقمًا."
+                    return@Button
+                }
+                val normalizedImageUrl = imageUrl.trim()
+                if (normalizedImageUrl.isNotBlank()) {
+                    val parsedImageUrl = runCatching { Uri.parse(normalizedImageUrl) }.getOrNull()
+                    if (parsedImageUrl?.scheme != "https" || parsedImageUrl.host.isNullOrBlank()) {
+                        error = "رابط الصورة يجب أن يكون رابط HTTPS صالحًا ويحتوي على اسم مضيف."
+                        return@Button
+                    }
+                }
                 val shelf=shelfLife.toIntOrNull()
                 if(shelfLife.isNotBlank() && (shelf==null || shelf<0)) { error="مدة الصلاحية يجب أن تكون عددًا صحيحًا غير سالب."; return@Button }
                 val payload=JSONObject()
@@ -135,8 +150,8 @@ internal fun CatalogProductEditDialog(
                     .put("country_of_manufacture",country.trim().ifBlank { JSONObject.NULL })
                     .put("model_number",model.trim().ifBlank { JSONObject.NULL })
                     .put("part_number",part.trim().ifBlank { JSONObject.NULL })
-                    .put("barcode_gtin",barcode.trim().ifBlank { JSONObject.NULL })
-                    .put("image_url",imageUrl.trim().ifBlank { JSONObject.NULL })
+                    .put("barcode_gtin",normalizedBarcode.ifBlank { JSONObject.NULL })
+                    .put("image_url",normalizedImageUrl.ifBlank { JSONObject.NULL })
                     .put("image_alt",imageAlt.trim().ifBlank { JSONObject.NULL })
                     .put("material_composition",nonBlankLines(material))
                     .put("ingredients",nonBlankLines(ingredients))
