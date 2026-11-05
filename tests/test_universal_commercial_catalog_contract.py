@@ -113,6 +113,7 @@ class UniversalCommercialCatalogContractTests(unittest.TestCase):
         self.assertIn("quantityText = it.take(32)", self.main)
         self.assertIn("stockText = it.take(32)", self.main)
         self.assertIn("reorderPointText = it.take(32)", self.main)
+        self.assertNotIn("reorderPoint.toDouble()", self.main)
         self.assertIn("baseQuantitySold", self.models)
         self.assertIn("unitVariantsJson", self.models)
         self.assertIn("commercial_catalog_create_product", self.android)
