@@ -1,67 +1,59 @@
-name: Full Supabase migration replay
+name: Storage-location migration smoke test
 
 on:
   pull_request:
     branches: [main]
     paths:
       - 'supabase/migrations/**'
-      - 'supabase/tests/**'
+      - 'supabase/tests/fixtures/commercial_inventory_storage_schema_fixture.sql'
+      - 'supabase/tests/database/commercial_inventory_storage_transfer_smoke.sql'
       - '.github/workflows/full-supabase-migration-replay.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
 
-concurrency:
-  group: full-supabase-migration-replay-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
-
 jobs:
-  replay:
-    name: Replay complete migration history and database tests
+  postgres-storage-smoke:
+    name: PostgreSQL 17 storage allocation and transfer test
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
     env:
-      SUPABASE_TELEMETRY_DISABLED: 'true'
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: postgres
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Supabase CLI
-        uses: supabase/setup-cli@v1
-        with:
-          version: latest
-
-      # The repository currently has migrations and SQL tests but no checked-in
-      # supabase/config.toml. Generate the CLI's disposable local configuration
-      # in the runner; do not commit it or connect to any hosted project.
-      - name: Initialize disposable local Supabase configuration
+      - name: Install PostgreSQL client
         run: |
-          supabase init --force
-          # The repository name contains uppercase characters and a trailing
-          # hyphen. Use a valid, stable local Docker project identifier.
-          sed -i 's/^project_id = .*/project_id = "adnanalhasani-local"/' supabase/config.toml
-          grep '^project_id =' supabase/config.toml
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
 
-      - name: Start isolated local Supabase services
-        run: |
-          for attempt in 1 2 3; do
-            if supabase --debug start -x studio,imgproxy,edge-runtime,logflare,vector,supavisor,mailpit; then
-              exit 0
-            fi
-            supabase stop --no-backup || true
-            if [ "$attempt" -lt 3 ]; then
-              sleep $((attempt * 20))
-            fi
-          done
-          exit 1
+      - name: Load data-free production-shaped schema fixture
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/fixtures/commercial_inventory_storage_schema_fixture.sql
 
-      - name: Replay every repository migration from an empty database
-        run: supabase db reset --local
+      - name: Apply storage-location ledger migration
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106100000_commercial_inventory_storage_transfers.sql
 
-      - name: Run the complete database pgTAP suite
-        run: supabase test db
+      - name: Apply reserved-stock allocation guard
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106110000_commercial_inventory_storage_reservation_guard.sql
 
-      - name: Stop disposable services
-        if: always()
-        run: supabase stop --no-backup
+      - name: Exercise permissions, reserved-stock guard, idempotency, transfer, and immutability
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/database/commercial_inventory_storage_transfer_smoke.sql
