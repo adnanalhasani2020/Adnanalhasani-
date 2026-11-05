@@ -183,7 +183,7 @@ internal fun CommercialPersonalNotesScreen(context: Context, onBack: () -> Unit)
         },
         confirmButton = { Button(enabled = !busy && title.isNotBlank(), onClick = {
             val payload = JSONObject().put("_rpc", "commercial_personal_notes_save_my")
-                .put("p_note_id", editingId.ifBlank { JSONObject.NULL }).put("p_title", title.trim())
+                .put("p_note_id", if (editingId.isBlank()) JSONObject.NULL else editingId).put("p_title", title.trim())
                 .put("p_body", body).put("p_due_at", dueAt.trim().ifBlank { JSONObject.NULL })
                 .put("p_reminder_at", reminderAt.trim().ifBlank { JSONObject.NULL })
             request(payload) { editor = false; refresh() }
