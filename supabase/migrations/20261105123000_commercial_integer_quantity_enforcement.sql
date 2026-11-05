@@ -26,7 +26,6 @@ DECLARE
   v_sale jsonb;
   v_sale_id uuid;
   v_effective_key text;
-  v_original_lines jsonb;
   v_group record;
   v_item public.commercial_sale_items%ROWTYPE;
   v_unit_line jsonb;
@@ -50,18 +49,9 @@ BEGIN
     RAISE EXCEPTION 'invalid_idempotency_key' USING ERRCODE='22023';
   END IF;
 
-  v_original_lines := (
-    SELECT jsonb_agg(jsonb_build_object(
-      'offering_id',e->>'offering_id',
-      'quantity',e->>'quantity',
-      'unit_code',coalesce(e->>'unit_code','<base>')
-    ) ORDER BY e->>'offering_id',coalesce(e->>'unit_code','<base>'),e->>'quantity')
-    FROM jsonb_array_elements(p_lines) e
-  );
-  v_effective_key := btrim(p_idempotency_key)||'-u-'||substr(md5(v_original_lines::text),1,12);
-  IF length(v_effective_key)>200 THEN
-    v_effective_key:=substr(v_effective_key,1,187)||'-u-'||substr(md5(v_original_lines::text),1,12);
-  END IF;
+  -- Keep the caller's idempotency key stable. Hashing the request into the key
+  -- would turn a changed retry payload into a second sale instead of a conflict.
+  v_effective_key := btrim(p_idempotency_key);
 
   FOR v_line IN SELECT value FROM jsonb_array_elements(p_lines) LOOP
     IF coalesce(v_line->>'offering_id','') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
