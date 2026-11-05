@@ -1,7 +1,7 @@
 -- Replace fractional selling-unit RPC wrappers with integer-only contracts.
 -- Keep the existing atomic base-unit checkout, invoice snapshots, idempotency and return lifecycle.
 -- Preserve separate invoice rows for each selling unit while deducting aggregated base-stock quantities once.
--- Selling quantities may be fractional to three decimal places when the configured integer stock-unit factor converts them to whole base units.
+-- Selling quantities are whole numbers; integer stock-unit factors preserve whole base quantities.
 -- then splits the persisted invoice item into stable per-unit rows inside the same transaction.
 CREATE OR REPLACE FUNCTION public.commercial_checkout_sale_multi(
   p_lines jsonb,
@@ -530,21 +530,21 @@ DECLARE
   v_constraint text;
   v_has_fraction boolean;
   v_tables text[] := ARRAY[
-    'commercial_sale_items','commercial_sale_return_items',
+    'commercial_sale_items','commercial_sale_return_items','commercial_customer_order_items',
     'commercial_purchase_order_items','commercial_purchase_receipt_items',
     'commercial_inventory_receipts','commercial_inventory_balances',
     'commercial_stock_movements','commercial_supplier_invoice_items',
     'commercial_inventory_cost_layers','commercial_inventory_cost_allocations',
     'commercial_inventory_return_cost_allocations','commercial_inventory_cost_reversals',
     'commercial_return_restock_postings','commercial_invoice_purchase_request_items',
-    'commercial_offering_sell_units','commercial_catalog_product_units','commercial_catalog_item_units',
+    'commercial_offering_sell_units','commercial_catalog_product_units','commercial_catalog_item_units','commercial_global_units',
     'commercial_organization_catalog_item_setup',
     'commercial_catalog_inventory_units'
   ];
   v_columns text[] := ARRAY[
     'quantity','selling_quantity','quantity_in_stock_units',
     'quantity_ordered','quantity_received','quantity_on_hand','quantity_reserved',
-    'quantity_delta','quantity_remaining','sale_quantity_in_base','quantity_in_base'
+    'quantity_delta','quantity_remaining','sale_quantity_in_base','quantity_in_base','factor_to_base'
   ];
 BEGIN
   FOREACH v_table IN ARRAY v_tables LOOP
@@ -579,5 +579,3 @@ BEGIN
 END;
 $migration$;
 
-COMMENT ON TABLE public.commercial_sale_items IS
-'Commercial sale line snapshots. Selling and stock quantities are whole units; monetary columns retain their existing precision.';
