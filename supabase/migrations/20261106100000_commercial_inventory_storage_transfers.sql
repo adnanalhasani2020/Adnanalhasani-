@@ -13,10 +13,7 @@ CREATE TABLE IF NOT EXISTS public.commercial_inventory_storage_balances (
   quantity_on_hand bigint NOT NULL DEFAULT 0 CHECK (quantity_on_hand >= 0),
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (organization_id, storage_location_id, offering_id),
-  FOREIGN KEY (organization_id, branch_location_id)
-    REFERENCES public.commercial_organization_locations(organization_id, id)
-    DEFERRABLE INITIALLY DEFERRED
+  UNIQUE (organization_id, storage_location_id, offering_id)
 );
 
 CREATE INDEX IF NOT EXISTS commercial_inventory_storage_balances_offering_idx
