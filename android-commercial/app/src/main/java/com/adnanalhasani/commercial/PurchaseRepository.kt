@@ -51,7 +51,7 @@ internal fun loadCommercialCloudPurchaseOrderOptions(context: Context): Commerci
         }
     } }
     val offerings = commercialCloudPagedGet(
-        "/rest/v1/commercial_offerings?select=id,currency_code,state,location_ref,product:commercial_products(name,state,unit_code,unit_name),activity:commercial_activities(organization_id,state),inventory_balances:commercial_inventory_balances(quantity_on_hand,quantity_reserved)&state=eq.active&order=created_at.desc",
+        "/rest/v1/commercial_offerings?select=id,currency_code,state,location_ref,product:commercial_products(name,state,unit_code,unit_name),activity:commercial_activities(organization_id,state),inventory_balances:commercial_inventory_balances(quantity_on_hand,quantity_reserved,location_id)&state=eq.active&order=created_at.desc",
         access
     ).let { rows -> buildList {
         for (i in 0 until rows.length()) {
@@ -68,6 +68,7 @@ internal fun loadCommercialCloudPurchaseOrderOptions(context: Context): Commerci
             var available = 0L
             for (balanceIndex in 0 until balances.length()) {
                 val balance = balances.optJSONObject(balanceIndex) ?: continue
+                if (balance.optString("location_id") != locationRef) continue
                 val onHand = balance.optLong("quantity_on_hand", 0L)
                 val reserved = balance.optLong("quantity_reserved", 0L)
                 require(onHand >= 0L && reserved >= 0L && reserved <= onHand) { "رصيد مخزون غير متسق للصنف $productName." }
