@@ -132,7 +132,12 @@ internal fun BarcodeScannerScreen(onBack: () -> Unit, onBarcodeFound: (String) -
         onDispose {
             (view?.tag as? ImageAnalysis)?.clearAnalyzer()
             runCatching { ProcessCameraProvider.getInstance(context).get().unbindAll() }
+        }
+    }
+    DisposableEffect(Unit) {
+        onDispose {
             cameraExecutor.shutdown()
+            scanner.close()
         }
     }
 
