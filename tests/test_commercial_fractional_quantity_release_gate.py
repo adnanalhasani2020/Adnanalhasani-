@@ -44,6 +44,7 @@ class CommercialFractionalQuantityReleaseGateTests(unittest.TestCase):
         self.assertIn("v_effective_key := CASE WHEN v_legacy_match THEN v_legacy_key ELSE btrim(p_idempotency_key) END;", self.migration)
         self.assertIn("REVOKE ALL ON public.commercial_sale_unit_idempotency FROM PUBLIC,anon,authenticated", self.migration)
         self.assertIn("sale_item_sell_unit_projection_mismatch", self.migration)
+        self.assertIn("v_legacy_prefix:=substr(v_legacy_prefix,1,187)||'-u-';", self.migration)
 
     def test_return_release_gate_uses_original_invoice_unit_snapshot(self):
         self.assertIn("v_sale_item.selling_unit_code IS DISTINCT FROM v_unit_code", self.sql)
