@@ -5,6 +5,7 @@ import android.os.Handler
 import android.os.Looper
 import java.util.concurrent.Executors
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.platform.LocalContext
 import androidx.activity.compose.setContent
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.lightColorScheme
@@ -21,7 +22,7 @@ class MainActivity : ComponentActivity() {
                     surface = Color.White
                 )
             ) {
-                StoreApp(applicationContext)
+                CommercialAppLock(applicationContext) { StoreApp(applicationContext) }
             }
         }
     }
