@@ -169,7 +169,7 @@ internal fun findCommercialCloudCatalogOffering(context: Context, globalItemId: 
 internal fun createCommercialCloudCatalogInventoryItem(
     context: Context, globalItemId: String, activityNodeCode: String, locationId: String, warehouseId: String,
     baseUnitCode: String, saleUnitCode: String, unitCode: String, displayName: String, priceMinor: Long,
-    initialQuantity: Int, reorderPoint: Double, categoryId: String, idempotencyKey: String
+    initialQuantity: Int, reorderPoint: Int, categoryId: String, idempotencyKey: String
 ): String {
     val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
     val orgId = saved.getString("organization_id", null).orEmpty()
@@ -191,7 +191,7 @@ internal fun createCommercialCloudCatalogInventoryItem(
         .put("p_location_id",locationId).put("p_warehouse_id",warehouseId).put("p_global_item_id",globalItemId)
         .put("p_base_unit_code",baseUnitCode).put("p_sale_unit_code",saleUnitCode).put("p_unit_code",unitCode)
         .put("p_display_name",displayName.trim()).put("p_price_minor",priceMinor).put("p_currency_code",currency)
-        .put("p_initial_quantity",initialQuantity).put("p_reorder_point",reorderPoint.coerceAtLeast(0.0))
+        .put("p_initial_quantity",initialQuantity).put("p_reorder_point",reorderPoint.coerceAtLeast(0))
         .put("p_category_id",if(categoryId.isNotBlank()) categoryId else JSONObject.NULL).put("p_idempotency_key",idempotencyKey)
     return SupabaseClient.request("/rest/v1/rpc/commercial_catalog_create_inventory_item_from_global","POST",payload,access)
 }
@@ -201,7 +201,7 @@ internal fun createCommercialCloudInventoryItem(
     unitName: String,
     priceMinor: Long,
     initialQuantity: Int,
-    reorderPoint: Double = 0.0,
+    reorderPoint: Int = 0,
     categoryId: String = "",
     unitCode: String = "each"
 ): String {
