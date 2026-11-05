@@ -49,7 +49,14 @@ internal fun buildSalesReportRows(
         }.flatMap { doc -> doc.lines.map { line -> Triple(line.productName, doc.currencyCode, line) } }
             .groupBy { it.first to it.second }.map { (key, rows) ->
                 ReportLine("-", "-", key.first, sumReportAmountsExactly(rows.map { it.third.lineTotalMinor }), key.second,
-                    "${rows.fold(java.math.BigDecimal.ZERO) { total, row -> total.add(row.third.quantity.toBigDecimalOrNull() ?: java.math.BigDecimal.ZERO) }} وحدة · بنود فعلية")
+                    "${rows.fold(java.math.BigDecimal.ZERO) { total, row ->
+                        val quantity = row.third.quantity.toBigDecimalOrNull()
+                            ?: throw IllegalArgumentException("توجد كمية غير صالحة في تقرير المبيعات.")
+                        require(quantity.signum() > 0 && quantity.stripTrailingZeros().scale() <= 0) {
+                            "تقرير المبيعات يحتوي كمية كسرية أو غير موجبة."
+                        }
+                        total.add(quantity)
+                    }} وحدة · بنود فعلية")
             }.sortedByDescending { it.amount }
         else inPeriodSales.groupBy { it.product to it.currencyCode }.map { (key, rows) ->
             ReportLine("-", "-", key.first, sumReportAmountsExactly(rows.map { it.total.toLong() }), key.second, "${sumReportCountsExactly(rows.map { it.quantity })} وحدة · ${rows.size} فاتورة")
