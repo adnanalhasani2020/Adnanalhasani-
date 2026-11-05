@@ -22,8 +22,9 @@ INSERT INTO public.commercial_inventory_balances(organization_id, location_id, o
 VALUES ('10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', '60000000-0000-0000-0000-000000000001', 10, 4);
 
 SELECT set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', true);
+SET LOCAL ROLE authenticated;
 
-DO $$
+DO $
 DECLARE
   v_result jsonb;
   v_source numeric;
@@ -60,8 +61,8 @@ BEGIN
     RAISE EXCEPTION 'anonymous_transfer_execute_grant_present';
   END IF;
 
-  PERFORM set_config('role', 'authenticated', true);
-
+  -- The authenticated role executes only the public RPC entry points.
+  -- The JWT subject is set by the outer transaction before changing role.
   BEGIN
     PERFORM public.commercial_allocate_inventory_to_storage_location(
       '10000000-0000-0000-0000-000000000001',
@@ -193,11 +194,11 @@ BEGIN
     RAISE EXCEPTION 'unexpected_storage_movement_count: %', v_movements;
   END IF;
 END
-$$;
+$;
 
 RESET ROLE;
 
-DO $$
+DO $
 BEGIN
   BEGIN
     UPDATE public.commercial_inventory_storage_movements
