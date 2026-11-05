@@ -30,7 +30,7 @@ private val stockableStorageTypes = setOf("internal", "receiving", "packing", "q
 private data class StorageInventorySnapshot(
     val warehouses: List<CommercialMasterDataRow>,
     val locations: List<CommercialMasterDataRow>,
-    val products: List<Product>,
+    val products: List<CommercialStorageAllocationProduct>,
     val balances: List<CommercialStorageInventoryBalance>
 )
 
@@ -50,8 +50,7 @@ private fun loadStorageInventorySnapshot(context: Context): StorageInventorySnap
         .filter { it.state == "active" }
     val locations = loadCommercialMasterData(context, "commercial_storage_locations")
         .filter { it.state == "active" && it.kind in stockableStorageTypes }
-    val products = loadCommercialCloudInventory(context).products
-        .filter { it.cloudOfferingId.isNotBlank() }
+    val products = loadCommercialStorageAllocationProducts(context)
     val balances = loadCommercialStorageInventoryBalances(context)
     return StorageInventorySnapshot(warehouses, locations, products, balances)
 }
@@ -132,7 +131,7 @@ internal fun CommercialStorageInventoryScreen(context: Context, onBack: () -> Un
     val restoredPending = remember { loadPendingStorageInventoryAction(context) }
     var warehouses by remember { mutableStateOf<List<CommercialMasterDataRow>>(emptyList()) }
     var locations by remember { mutableStateOf<List<CommercialMasterDataRow>>(emptyList()) }
-    var products by remember { mutableStateOf<List<Product>>(emptyList()) }
+    var products by remember { mutableStateOf<List<CommercialStorageAllocationProduct>>(emptyList()) }
     var balances by remember { mutableStateOf<List<CommercialStorageInventoryBalance>>(emptyList()) }
     var selectedWarehouseId by remember { mutableStateOf(restoredPending?.warehouseId.orEmpty()) }
     var selectedOfferingId by remember { mutableStateOf(restoredPending?.offeringId.orEmpty()) }
@@ -153,7 +152,7 @@ internal fun CommercialStorageInventoryScreen(context: Context, onBack: () -> Un
         products = snapshot.products
         balances = snapshot.balances
         if (warehouses.none { it.id == selectedWarehouseId }) selectedWarehouseId = warehouses.firstOrNull()?.id.orEmpty()
-        if (products.none { it.cloudOfferingId == selectedOfferingId }) selectedOfferingId = products.firstOrNull()?.cloudOfferingId.orEmpty()
+        if (products.none { it.offeringId == selectedOfferingId }) selectedOfferingId = products.firstOrNull()?.offeringId.orEmpty()
         if (locations.none { it.id == selectedLocationId && it.warehouseId == selectedWarehouseId }) {
             selectedLocationId = locations.firstOrNull { it.warehouseId == selectedWarehouseId }?.id.orEmpty()
         }
@@ -230,12 +229,12 @@ internal fun CommercialStorageInventoryScreen(context: Context, onBack: () -> Un
 
     LaunchedEffect(Unit) { reload() }
 
-    val selectedProduct = products.firstOrNull { it.cloudOfferingId == selectedOfferingId }
+    val selectedProduct = products.firstOrNull { it.offeringId == selectedOfferingId }
     val selectedSource = balances.firstOrNull { it.id == selectedSourceBalanceId }
     val selectedWarehouseLocations = locations.filter { it.warehouseId == selectedWarehouseId }
     val allocatedForProduct = balances.filter { it.offeringId == selectedOfferingId }
         .fold(BigDecimal.ZERO) { total, row -> total.add(row.quantityOnHand) }
-    val unallocatedAvailable = (selectedProduct?.stockPrecise ?: BigDecimal.ZERO).subtract(allocatedForProduct)
+    val unallocatedAvailable = (selectedProduct?.availableQuantity ?: BigDecimal.ZERO).subtract(allocatedForProduct)
     val transferSources = balances.filter {
         it.warehouseId == selectedWarehouseId && it.offeringId == selectedOfferingId && it.quantityOnHand.signum() > 0
     }
@@ -293,7 +292,7 @@ internal fun CommercialStorageInventoryScreen(context: Context, onBack: () -> Un
             StorageInventoryDropdown(
                 "الصنف",
                 selectedOfferingId,
-                products.map { it.cloudOfferingId to "${it.name} · ${it.stockPrecise.stripTrailingZeros().toPlainString()} ${it.unitCode}" },
+                products.map { it.offeringId to "${it.productName} · ${it.availableQuantity.stripTrailingZeros().toPlainString()} ${it.unitName}" },
                 pending == null && !saving
             ) {
                 selectedOfferingId = it
@@ -304,7 +303,7 @@ internal fun CommercialStorageInventoryScreen(context: Context, onBack: () -> Un
                     Column(Modifier.fillMaxWidth().padding(12.dp)) {
                         Text("المتاح غير الموزع", fontWeight = FontWeight.SemiBold)
                         Text(
-                            "${storageQuantityLabel(unallocatedAvailable.max(BigDecimal.ZERO))} ${selectedProduct?.unitCode.orEmpty()}",
+                            "${storageQuantityLabel(unallocatedAvailable.max(BigDecimal.ZERO))} ${selectedProduct?.unitName.orEmpty()}",
                             color = Color(0xFF167D63),
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Bold
@@ -343,7 +342,7 @@ internal fun CommercialStorageInventoryScreen(context: Context, onBack: () -> Un
             )
             if (mode == "allocation" && selectedProduct != null) {
                 Text(
-                    "المتاح قبل التوزيع: ${storageQuantityLabel(unallocatedAvailable.max(BigDecimal.ZERO))} ${selectedProduct.unitCode}",
+                    "المتاح قبل التوزيع: ${storageQuantityLabel(unallocatedAvailable.max(BigDecimal.ZERO))} ${selectedProduct.unitName}",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 12.sp
                 )
