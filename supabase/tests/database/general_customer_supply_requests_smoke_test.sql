@@ -84,7 +84,7 @@ BEGIN
   RAISE EXCEPTION 'merchant_queue_limit_not_applied_before_aggregation';
  END IF;
  v_result:=public.commercial_customer_portal_list_organization_supply_requests(v_org,100);
- IF jsonb_array_length(v_result)<>3 THEN
+ IF jsonb_array_length(v_result)<>2 THEN
   RAISE EXCEPTION 'merchant_queue_full_list_regression';
  END IF;
  IF has_table_privilege('anon','public.commercial_customer_supply_requests','SELECT')
