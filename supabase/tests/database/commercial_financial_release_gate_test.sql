@@ -4,7 +4,7 @@
 -- This is intentionally a gate, not a substitute for authenticated end-to-end checkout/payment tests.
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT plan(13);
+SELECT plan(14);
 
 -- Receivable arithmetic: approved return credit reduces the sale obligation once;
 -- an executed cash refund also reduces net cash paid, not the sale credit itself.
@@ -99,8 +99,63 @@ SELECT ok(
   ),
   'universal measurement conversion factors may remain fractional'
 );
+-- Reusing the same caller key with a changed payload must conflict, not create a second sale.
 SELECT ok(
-  position('coalesce(v_line->>''quantity'','''') !~ ''^(0|[1-9][0-9]{0,5})$''' in pg_get_functiondef(
+  position('v_effective_key := btrim(p_idempotency_key)' in pg_get_functiondef(
+    'public.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint,bigint,bigint)'::regprocedure
+  )) > 0
+  AND position('md5(v_original_lines' in pg_get_functiondef(
+    'public.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint,bigint,bigint)'::regprocedure
+  )) = 0,
+  'sale retries preserve the caller idempotency key and reject changed payloads'
+);
+
+SELECT ok(
+  position('coalesce(v_line->>''quantity'','''') !~ ''^(0|[1-9][0-9]{0,5})    'public.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint,bigint,bigint)'::regprocedure
+  )) > 0
+  AND position('v_base_qty := (v_line->>''quantity'')::numeric * v_unit.quantity_in_stock' in pg_get_functiondef(
+    'public.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint,bigint,bigint)'::regprocedure
+  )) > 0
+  AND position('v_base_qty <> trunc(v_base_qty)' in pg_get_functiondef(
+    'public.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint,bigint,bigint)'::regprocedure
+  )) > 0,
+  'checkout accepts integer selling quantities and validates exact whole base conversion'
+);
+SELECT ok(
+  position('v_sale_item.selling_unit_code IS DISTINCT FROM v_unit_code' in pg_get_functiondef(
+    'public.commercial_request_sale_return(uuid,text,text,jsonb,text)'::regprocedure
+  )) > 0
+  AND position('v_sale_item.quantity_in_stock_units::numeric / v_sale_item.selling_quantity' in pg_get_functiondef(
+    'public.commercial_request_sale_return(uuid,text,text,jsonb,text)'::regprocedure
+  )) > 0
+  AND position('FROM public.commercial_offering_sell_units' in pg_get_functiondef(
+    'public.commercial_request_sale_return(uuid,text,text,jsonb,text)'::regprocedure
+  )) = 0,
+  'integer returns recover the immutable unit factor from the original sale line'
+);
+
+SELECT ok(
+  NOT EXISTS (
+    SELECT 1
+    FROM public.commercial_journal_entries e
+    JOIN public.commercial_journal_lines l ON l.journal_entry_id = e.id
+    WHERE e.status = 'posted'
+    GROUP BY e.id, l.currency_code
+    HAVING sum(l.debit_minor) <> sum(l.credit_minor)
+  ),
+  'all posted journal entries balance by currency'
+);
+SELECT ok(
+  NOT EXISTS (
+    SELECT 1 FROM public.commercial_ar_control_reconciliation
+    WHERE NOT is_reconciled OR difference_minor <> 0
+  ),
+  'customer AR control reconciliation has no unreconciled differences'
+);
+
+SELECT * FROM finish();
+ROLLBACK;
+'' in pg_get_functiondef(
     'public.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint,bigint,bigint)'::regprocedure
   )) > 0
   AND position('v_base_qty := (v_line->>''quantity'')::numeric * v_unit.quantity_in_stock' in pg_get_functiondef(
