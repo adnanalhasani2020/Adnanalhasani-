@@ -90,6 +90,11 @@ class UniversalCommercialCatalogContractTests(unittest.TestCase):
         self.assertIn('catalogWholeQuantity(state.recipeYieldQty', self.workflow)
         self.assertIn('catalogWholeQuantity(state.extraUnitQty', self.workflow)
         self.assertIn('catalogWholeQuantity(p[2], "معامل تحويل العبوة")', self.workflow)
+        enforcement = (MIGRATIONS / "20261105123000_commercial_integer_quantity_enforcement.sql").read_text(encoding="utf-8")
+        self.assertIn("commercial_global_catalog_items", enforcement)
+        self.assertIn("commercial_catalog_recipe_ingredients", enforcement)
+        self.assertIn("commercial_catalog_product_recipes", enforcement)
+        self.assertIn("'net_quantity','yield_quantity'", enforcement)
 
     def test_cross_account_transfer_requires_destination_acceptance(self):
         self.assertIn("commercial_catalog_send_transfer", self.management)
