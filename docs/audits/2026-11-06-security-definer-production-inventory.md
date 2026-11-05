@@ -126,3 +126,22 @@ The live catalog also shows three equivalent partial unique indexes enforcing on
 - `commercial_party_accounts_one_active_personal_per_user_key`
 
 Their predicates are materially equivalent. This is index-maintenance overhead, not an authorization bypass. Do not drop any index until migration ownership/history and dependency checks identify the canonical one and a staged migration is tested.
+
+
+## Follow-up: completed static call-chain review of the seven wrappers
+
+A read-only production definition/grant review covered all seven functions previously flagged for lacking a direct `auth.uid()` reference:
+
+| Public wrapper | Downstream authorization evidence |
+|---|---|
+| `commercial_create_inventory_item` | Delegates to `commercial_private.commercial_create_inventory_item`, which checks non-null `auth.uid()`, active organization membership, and owner/admin/manager role; it also checks activity/organization and location scope. |
+| `commercial_create_purchase_order` | Delegates to `commercial_private.commercial_create_purchase_order`, which checks authentication, active organization membership, owner/admin/manager role, supplier ownership/state, receiving-location ownership/state, and offering/activity organization scope. |
+| `commercial_link_purchase_order_item_offering` | Delegates to the private helper, which checks authentication, active organization membership and manager role, purchase-order organization, line ownership, lifecycle state, and offering/currency scope. |
+| `commercial_receive_purchase_order` | Delegates to the private helper, which checks authentication, active organization membership and manager role, purchase/order/location scope, line quantities, and idempotency. |
+| `commercial_transition_purchase_order` | Delegates to the private helper, which checks authentication, active organization membership and manager role, purchase-order ownership, and allowed state transition. |
+| `commercial_create_inventory_item_with_category` | Calls the private inventory-creation helper above; category assignment is delegated to `commercial_assign_offering_category`, which independently checks authentication, active organization membership/manager role, offering/activity scope, and category ownership/state. |
+| `commercial_create_inventory_item_with_category_and_unit` | Calls the category wrapper above, then updates the product returned by the authorized creation call. The category wrapper and private inventory helper enforce the organization/role checks; unit lookup requires an active unit code. |
+
+For all seven public wrappers, the live privilege check returned `authenticated EXECUTE = true` and `anon EXECUTE = false`. The five `commercial_private` helpers returned no EXECUTE for either public API role. All inspected wrappers/helpers had explicit function-level `search_path` settings.
+
+Assessment: the absence of a direct `auth.uid()` in these wrappers is explained by delegation to guarded helpers, not by an unguarded path in the inspected definitions. This closes the static triage item for the seven wrappers only. It does **not** replace disposable-PostgreSQL negative tests for cross-organization IDs, inactive members, insufficient roles, wrong activity/location, and invalid lifecycle transitions; keep those tests as release gates.
