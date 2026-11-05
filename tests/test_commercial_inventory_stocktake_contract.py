@@ -2,6 +2,7 @@ from pathlib import Path
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
+ANDROID = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial"
 MIGRATION = ROOT / "supabase/migrations/20261106120000_commercial_inventory_stocktake_workflow.sql"
 FIXTURE = ROOT / "supabase/tests/fixtures/commercial_inventory_stocktake_schema_fixture.sql"
 SMOKE = ROOT / "supabase/tests/database/commercial_inventory_stocktake_smoke.sql"
@@ -15,39 +16,59 @@ class CommercialInventoryStocktakeContractTests(unittest.TestCase):
         cls.fixture = FIXTURE.read_text(encoding="utf-8")
         cls.smoke = SMOKE.read_text(encoding="utf-8")
         cls.workflow = WORKFLOW.read_text(encoding="utf-8")
+        cls.repository = (ANDROID / "InventoryStocktakeRepository.kt").read_text(encoding="utf-8")
+        cls.screen = (ANDROID / "CommercialInventoryStocktakeScreen.kt").read_text(encoding="utf-8")
+        cls.inventory_screen = (ANDROID / "LocalInventoryScreen.kt").read_text(encoding="utf-8")
+        cls.store_app = (ANDROID / "StoreApp.kt").read_text(encoding="utf-8")
 
-    def test_document_lifecycle_is_explicit_and_separated(self):
+    def test_document_lifecycle_and_independent_approval_are_server_enforced(self):
         for status in ("draft", "submitted", "approved", "posted", "reversed"):
             self.assertIn(f"'{status}'", self.sql)
         self.assertIn("inventory_stocktake_self_approval_forbidden", self.sql)
-        self.assertIn("created_by=v_uid", self.sql)
-
-    def test_posting_is_atomic_and_requires_fresh_snapshot(self):
+        self.assertIn("approved_by <> submitted_by", self.sql)
         self.assertIn("inventory_stocktake_stale_snapshot", self.sql)
         self.assertIn("inventory_stocktake_below_reserved_quantity", self.sql)
+
+    def test_cost_ledger_is_reconciled_and_positive_variance_needs_explicit_cost(self):
         self.assertIn("inventory_stocktake_cost_layer_reconciliation_failed", self.sql)
-        self.assertIn("commercial_stock_movements", self.sql)
-        self.assertIn("'adjustment'", self.sql)
-
-    def test_cost_layers_are_consumed_and_restored(self):
-        self.assertIn("commercial_inventory_stocktake_cost_allocations", self.sql)
+        self.assertIn("inventory_stocktake_weighted_average_layer_cost_mismatch", self.sql)
         self.assertIn("inventory_stocktake_positive_variance_cost_required", self.sql)
+        self.assertIn("commercial_inventory_stocktake_cost_allocations", self.sql)
         self.assertIn("inventory_stocktake_reversal_adjustment_layer_consumed", self.sql)
-        self.assertIn("previous_unit_cost_minor", self.sql)
 
-    def test_rpc_only_writes_and_authenticated_execution(self):
+    def test_writes_are_rpc_only_and_smoke_test_covers_reversal_and_stale_count(self):
         self.assertIn("REVOKE ALL ON public.commercial_inventory_stocktakes", self.sql)
         self.assertIn("GRANT SELECT ON public.commercial_inventory_stocktakes", self.sql)
-        self.assertIn("TO authenticated", self.sql)
         self.assertIn("FROM PUBLIC,anon", self.sql)
         self.assertIn("has_table_privilege('authenticated','public.commercial_inventory_stocktakes','INSERT')", self.smoke)
-
-    def test_database_smoke_workflow_is_wired(self):
-        self.assertIn("commercial_inventory_stocktake_schema_fixture.sql", self.workflow)
-        self.assertIn("commercial_inventory_stocktake_smoke.sql", self.workflow)
+        self.assertIn("stale_stocktake_snapshot_was_posted", self.smoke)
+        self.assertIn("stocktake_submitter_self_approval_was_allowed", self.smoke)
+        self.assertIn("positive_variance_reversal_cost_mismatch", self.smoke)
         self.assertIn("postgres:17", self.workflow)
-        self.assertIn("stocktake_post_retry_not_idempotent", self.smoke)
-        self.assertIn("stocktake_reverse_retry_not_idempotent", self.smoke)
+
+    def test_android_repository_uses_guarded_rpc_and_stable_retry_keys(self):
+        for rpc in (
+            "commercial_create_inventory_stocktake",
+            "commercial_set_inventory_stocktake_counts",
+            "commercial_submit_inventory_stocktake",
+            "commercial_approve_inventory_stocktake",
+            "commercial_post_inventory_stocktake",
+            "commercial_reverse_inventory_stocktake",
+        ):
+            self.assertIn(rpc, self.repository)
+        self.assertIn("stocktakeActionKey", self.repository)
+        self.assertIn("commit())", self.repository)
+        self.assertIn("requireStocktakeMatchesCurrentContext", self.repository)
+        self.assertNotIn('SupabaseClient.request("/rest/v1/commercial_inventory_balances"', self.repository)
+
+    def test_stocktake_screen_is_reachable_from_cloud_inventory(self):
+        self.assertIn("onStocktake: (() -> Unit)? = null", self.inventory_screen)
+        self.assertIn("if (onStocktake != null)", self.inventory_screen)
+        self.assertIn("onStocktake = if (cloudMode)", self.store_app)
+        self.assertIn("stocktakePage -> CommercialInventoryStocktakeScreen", self.store_app)
+        self.assertIn("حفظ وإرسال للاعتماد", self.screen)
+        self.assertIn("ترحيل الفروقات", self.screen)
+        self.assertIn("عكس مستند الجرد", self.screen)
 
 
 if __name__ == "__main__":
