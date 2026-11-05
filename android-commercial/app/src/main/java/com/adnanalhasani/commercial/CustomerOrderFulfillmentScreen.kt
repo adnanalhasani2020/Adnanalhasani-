@@ -174,7 +174,7 @@ Text(merchantDate(order.createdAt),fontSize=11.sp,color=CustomerOrdersMuted)};Co
         if(order.status=="pending") {
          if(order.orderType=="purchase") OutlinedButton(onClick={editTarget=order},enabled=busy==null,modifier=Modifier.fillMaxWidth()){Text("تعديل البنود قبل القبول")}
          Row(horizontalArrangement=Arrangement.spacedBy(6.dp),modifier=Modifier.fillMaxWidth()){
-         if(order.orderType=="purchase") Button(onClick={reservationTarget=order},enabled=busy==null&&locationId.isNotBlank(),modifier=Modifier.weight(1f)){Text("اعتماد الحجز وحجز الكمية")}
+         if(order.orderType=="purchase") Button(onClick={reservationTarget=order},enabled=busy==null&&locationId.isNotBlank()&&order.fulfillmentSupported,modifier=Modifier.weight(1f)){Text("اعتماد الحجز وحجز الكمية")}
          else Button(onClick={decisionTarget=MerchantDecision(order.id,false,false)},enabled=busy==null,modifier=Modifier.weight(1f)){Text("قبول الطلب")}
          OutlinedButton(onClick={decisionTarget=MerchantDecision(order.id,false,true)},enabled=busy==null,modifier=Modifier.weight(1f)){Text("رفض الطلب")}
         }
