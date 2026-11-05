@@ -73,6 +73,7 @@ class CommercialInventoryStocktakeContractTests(unittest.TestCase):
         self.assertIn("commit())", self.repository)
         self.assertIn("requireStocktakeMatchesCurrentContext", self.repository)
         self.assertIn("stocktakeCreateKey(context, current)", self.repository)
+        self.assertIn("accessOrganizationId == organizationId", self.repository)
         self.assertIn("تغيرت المؤسسة أو النشاط أو الفرع أثناء تجهيز الطلب", self.repository)
         self.assertIn("تعذر مسح مفتاح إعادة المحاولة المحلي", self.repository)
         self.assertNotIn('SupabaseClient.request("/rest/v1/commercial_inventory_balances"', self.repository)
