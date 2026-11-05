@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS public.commercial_inventory_stocktakes (
   reversed_at timestamptz,
   UNIQUE (organization_id,idempotency_key),
   CHECK (approved_by IS NULL OR approved_by <> created_by),
+  CHECK (approved_by IS NULL OR submitted_by IS NULL OR approved_by <> submitted_by),
   CHECK (status <> 'posted' OR (approved_by IS NOT NULL AND posted_by IS NOT NULL AND posted_at IS NOT NULL)),
   CHECK (status <> 'reversed' OR (reversed_by IS NOT NULL AND reversed_at IS NOT NULL AND length(btrim(coalesce(reversal_reason,''))) >= 8))
 );
@@ -313,7 +314,9 @@ BEGIN
       AND m.state='active' AND m.role IN ('owner','admin','manager')
   ) THEN RAISE EXCEPTION 'inventory_management_permission_required' USING ERRCODE='42501'; END IF;
   IF v_stocktake.status<>'submitted' THEN RAISE EXCEPTION 'inventory_stocktake_not_approvable' USING ERRCODE='55000'; END IF;
-  IF v_stocktake.created_by=v_uid THEN RAISE EXCEPTION 'inventory_stocktake_self_approval_forbidden' USING ERRCODE='42501'; END IF;
+  IF v_stocktake.created_by=v_uid OR v_stocktake.submitted_by=v_uid THEN
+    RAISE EXCEPTION 'inventory_stocktake_self_approval_forbidden' USING ERRCODE='42501';
+  END IF;
   UPDATE public.commercial_inventory_stocktakes
   SET status='approved',approved_by=v_uid,approved_at=now()
   WHERE id=v_stocktake.id;
