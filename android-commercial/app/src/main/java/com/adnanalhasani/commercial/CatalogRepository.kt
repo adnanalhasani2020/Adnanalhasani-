@@ -71,11 +71,17 @@ internal fun loadCommercialCloudInventory(context: Context): CommercialCloudInve
             // Cloud sale validation and display must use stockPrecise, never the truncated stock field.
             // Parse PostgreSQL NUMERIC as decimal text so fractional stock is not rounded through Double.
             val availableQuantity = runCatching {
-                BigDecimal(row.optString("quantity_on_hand", "0"))
-                    .subtract(BigDecimal(row.optString("quantity_reserved", "0")))
-                    .max(BigDecimal.ZERO)
-            }.getOrDefault(BigDecimal.ZERO)
-            val quantity = availableQuantity.toInt().coerceAtLeast(0)
+                val onHand = BigDecimal(row.optString("quantity_on_hand", "0"))
+                val reserved = BigDecimal(row.optString("quantity_reserved", "0"))
+                require(onHand.stripTrailingZeros().scale() <= 0 && reserved.stripTrailingZeros().scale() <= 0) {
+                    "رصيد المخزون السحابي يحتوي على كمية كسرية؛ أوقفنا العرض والبيع لحماية الرصيد."
+                }
+                require(onHand.signum() >= 0 && reserved.signum() >= 0 && reserved <= onHand) {
+                    "رصيد المخزون السحابي غير متسق؛ أوقفنا العرض والبيع."
+                }
+                onHand.subtract(reserved)
+            }.getOrElse { throw IllegalStateException(it.message ?: "تعذر التحقق من رصيد المخزون السحابي.") }
+            val quantity = availableQuantity.min(BigDecimal.valueOf(Int.MAX_VALUE.toLong())).toInt()
             val price = offering.optLong("price_minor", 0L).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
             val sellUnits = offering.optJSONArray("sell_units") ?: JSONArray()
             val sellUnitsJson = JSONArray()
