@@ -29,6 +29,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.json.JSONObject
 import java.util.Locale
+import java.util.Calendar
+import java.text.SimpleDateFormat
 import java.util.concurrent.Executors
 
 private val CustomerOrdersInk = Color(0xFF183B35)
@@ -51,6 +53,8 @@ internal fun CustomerOrderFulfillmentScreen(context: Context,onBack:()->Unit) {
  var bookings by remember { mutableStateOf<List<MerchantBooking>>(emptyList()) }
  var locations by remember { mutableStateOf<List<CustomerOrderFulfillmentLocation>>(emptyList()) }
  var editableOfferings by remember { mutableStateOf<List<MerchantEditableOffering>>(emptyList()) }
+ var reservations by remember { mutableStateOf<List<CustomerOrderReservation>>(emptyList()) }
+ var reservationTarget by remember { mutableStateOf<CustomerOrderFulfillmentOrder?>(null) }
  var editTarget by remember { mutableStateOf<CustomerOrderFulfillmentOrder?>(null) }
  var locationId by remember { mutableStateOf("") }
  var locationMenu by remember { mutableStateOf(false) }
@@ -81,7 +85,8 @@ internal fun CustomerOrderFulfillmentScreen(context: Context,onBack:()->Unit) {
   }
  }
  fun fulfill(order:CustomerOrderFulfillmentOrder) {
-  action("fulfill:"+order.id,{fulfillCustomerPortalOrder(context,order.id,locationId,"customer-order-fulfill:"+order.id)}) {
+  val reserved = reservations.any { it.orderId==order.id && it.status=="active" }
+  action("fulfill:"+order.id,{fulfillCustomerPortalOrder(context,order.id,locationId,"customer-order-fulfill:"+order.id,reserved)}) {
    "اكتمل البيع "+it.optString("receipt_number")+" بمبلغ "+customerOrderMoney(it.optLong("total_minor"),it.optString("currency_code"))+". حالة الدفع: "+it.optString("payment_status")
   }
  }
@@ -92,12 +97,14 @@ internal fun CustomerOrderFulfillmentScreen(context: Context,onBack:()->Unit) {
    val b=runCatching{loadMerchantBookings(context,hidden)}
    val c=runCatching{loadCustomerOrderFulfillmentLocations(context)}
    val d=runCatching{loadMerchantEditableOfferings(context)}
+   val e=runCatching{loadCustomerOrderReservations(context)}
    customerOrdersMain.post {
     loading=false
     a.onSuccess{orders=it}.onFailure{error=it.message ?: "تعذر تحميل الطلبات."}
     b.onSuccess{bookings=it}.onFailure{if(error.isBlank())error=it.message ?: "تعذر تحميل الحجوزات."}
     c.onSuccess{locations=it;if(it.none{x->x.id==locationId})locationId=it.firstOrNull()?.id.orEmpty()}.onFailure{if(error.isBlank())error=it.message ?: "تعذر تحميل مواقع المخزون."}
     d.onSuccess{editableOfferings=it}.onFailure{if(error.isBlank())error=it.message ?: "تعذر تحميل قائمة الأصناف."}
+    e.onSuccess{reservations=it}.onFailure{if(error.isBlank())error=it.message ?: "تعذر تحميل حالة الحجوزات."}
    }
   }
  }
@@ -109,7 +116,7 @@ internal fun CustomerOrderFulfillmentScreen(context: Context,onBack:()->Unit) {
    item {
     Card(colors=CardDefaults.cardColors(containerColor=Color.White),border=BorderStroke(1.dp,CustomerOrdersBorder)) {
      Column(Modifier.fillMaxWidth().padding(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-      Text("الطلب لا يحجز المخزون عند إنشائه. قبول الطلب لا ينشئ فاتورة ولا يخصم المخزون؛ إتمام البيع ينفذ عبر دورة البيع الحالية.",fontSize=12.sp,color=CustomerOrdersMuted)
+      Text("الطلب لا يحجز المخزون عند إنشائه. اختر اعتماد الحجز لتثبيت الكمية ومنع بيعها لعميل آخر؛ لا تُسجل حركة مخزنية فعلية إلا عند إتمام البيع.",fontSize=12.sp,color=CustomerOrdersMuted)
       OutlinedTextField(query,{query=it},modifier=Modifier.fillMaxWidth(),singleLine=true,label={Text("بحث برقم الطلب أو الحجز أو العميل")},leadingIcon={Icon(Icons.Default.Search,null)})
       OutlinedTextField(dateFilter,{dateFilter=it.take(10)},modifier=Modifier.fillMaxWidth(),singleLine=true,label={Text("تصفية التاريخ YYYY-MM-DD")})
       Row(horizontalArrangement=Arrangement.spacedBy(5.dp)) {
@@ -154,6 +161,9 @@ Text(merchantDate(order.createdAt),fontSize=11.sp,color=CustomerOrdersMuted)};Co
        if(open){
         if(order.customerNote.isNotBlank())Text("ملاحظة العميل: "+order.customerNote,fontSize=12.sp)
         if(order.decisionReason.isNotBlank())Text("سبب القرار: "+order.decisionReason,fontSize=12.sp,color=CustomerOrdersMuted)
+        reservations.firstOrNull{it.orderId==order.id}?.let{reservation->
+         Text(if(reservation.status=="active")"الكمية محجوزة حتى "+merchantDate(reservation.expiresAt)+" • "+when(reservation.expiryPolicy){"release_stock"->"إرجاع المتاح عند الانتهاء";"keep_reserved_notify"->"إبقاء الحجز مع تذكير يومي";else->"إلغاء الطلب وإرجاع الكمية"} else "حالة الحجز: "+reservation.status,fontSize=12.sp,color=CustomerOrdersGreen)
+        }
         if(order.status=="fulfilled" && order.saleId.isNotBlank()) {
          Text("مستند البيع: "+order.receiptNumber+" • معرّف البيع: "+order.saleId,fontSize=12.sp,color=CustomerOrdersGreen,fontWeight=FontWeight.SemiBold)
          Text("تاريخ الاعتماد: "+merchantDate(order.fulfilledAt)+" • المدفوع: "+customerOrderMoney(order.paidMinor,order.currencyCode)+" • المتبقي: "+customerOrderMoney(order.outstandingMinor,order.currencyCode),fontSize=11.sp,color=CustomerOrdersMuted)
@@ -162,7 +172,8 @@ Text(merchantDate(order.createdAt),fontSize=11.sp,color=CustomerOrdersMuted)};Co
         if(order.status=="pending") {
          if(order.orderType=="purchase") OutlinedButton(onClick={editTarget=order},enabled=busy==null,modifier=Modifier.fillMaxWidth()){Text("تعديل البنود قبل القبول")}
          Row(horizontalArrangement=Arrangement.spacedBy(6.dp),modifier=Modifier.fillMaxWidth()){
-         Button(onClick={decisionTarget=MerchantDecision(order.id,false,false)},enabled=busy==null,modifier=Modifier.weight(1f)){Text("قبول الطلب")}
+         if(order.orderType=="purchase") Button(onClick={reservationTarget=order},enabled=busy==null&&locationId.isNotBlank(),modifier=Modifier.weight(1f)){Text("اعتماد الحجز وحجز الكمية")}
+         else Button(onClick={decisionTarget=MerchantDecision(order.id,false,false)},enabled=busy==null,modifier=Modifier.weight(1f)){Text("قبول الطلب")}
          OutlinedButton(onClick={decisionTarget=MerchantDecision(order.id,false,true)},enabled=busy==null,modifier=Modifier.weight(1f)){Text("رفض الطلب")}
         }
         }
