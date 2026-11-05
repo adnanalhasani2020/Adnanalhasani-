@@ -10,9 +10,9 @@ CREATE SCHEMA IF NOT EXISTS auth;
 CREATE SCHEMA IF NOT EXISTS commercial_private;
 GRANT USAGE ON SCHEMA commercial_private TO authenticated;
 CREATE TABLE auth.users (id uuid PRIMARY KEY);
-CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $
+CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $auth_uid$
   SELECT nullif(current_setting('request.jwt.claim.sub',true),'')::uuid
-$;
+$auth_uid$;
 
 CREATE TABLE public.commercial_sales (
   id uuid PRIMARY KEY,
