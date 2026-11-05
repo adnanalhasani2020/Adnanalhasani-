@@ -1,5 +1,6 @@
 package com.adnanalhasani.commercial
 
+import android.content.Context
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -19,7 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 @Composable
-internal fun Dashboard(products: List<Product>, sales: List<SaleRecord>, cloudMode: Boolean, onNewSale: () -> Unit, onInventory: () -> Unit) {
+internal fun Dashboard(products: List<Product>, sales: List<SaleRecord>, cloudMode: Boolean, onNewSale: () -> Unit, onInventory: () -> Unit, context: Context, onAds: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(15.dp)) {
         if (products.isEmpty()) {
             item {
@@ -79,6 +80,7 @@ internal fun Dashboard(products: List<Product>, sales: List<SaleRecord>, cloudMo
                 }
             }
         }
+        item { CommercialAdsHomePreview(context = context, onOpen = onAds) }
         item { Heading("ملخص المبيعات", if (cloudMode) "إحصاءات الفواتير المحمّلة من قاعدة البيانات" else "إحصاءات الفواتير المحفوظة على هذا الجهاز") }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
