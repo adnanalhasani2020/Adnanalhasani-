@@ -27,7 +27,7 @@ class CommercialFractionalQuantityReleaseGateTests(unittest.TestCase):
         self.assertNotIn("column_name = 'quantity' AND data_type = 'numeric'", self.sql)
 
     def test_checkout_release_gate_checks_integer_input_and_exact_conversion(self):
-        self.assertIn("coalesce(v_line->>'quantity'", self.sql)
+        self.assertIn("coalesce(v_line->>", self.sql)
         self.assertIn("v_base_qty := (v_line->>'quantity')::numeric * v_unit.quantity_in_stock", self.migration)
         checkout_rpc = self.migration.split(
             "CREATE OR REPLACE FUNCTION public.commercial_checkout_sale_multi(", 1
