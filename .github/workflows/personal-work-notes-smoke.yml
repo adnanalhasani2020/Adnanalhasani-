@@ -1,4 +1,8 @@
 name: Personal work notes migration smoke test
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 on:
   pull_request:
     branches: [main]
@@ -12,6 +16,7 @@ permissions:
   contents: read
 jobs:
   personal-notes-migration:
+    timeout-minutes: 10
     name: PostgreSQL 17 personal work notes lifecycle smoke test
     runs-on: ubuntu-latest
     services:

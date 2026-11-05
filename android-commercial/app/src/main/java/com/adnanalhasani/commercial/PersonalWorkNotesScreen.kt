@@ -22,55 +22,35 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
 import org.json.JSONArray
 import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
 import java.time.Instant
 import java.util.concurrent.Executors
 
 private val workNotesIo = Executors.newSingleThreadExecutor()
 private val workNotesMain = Handler(Looper.getMainLooper())
 
-private fun workNotesSessionPrefs(context: Context) = EncryptedSharedPreferences.create(
-    context, "ruh_catalog_auth_session",
-    MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
-    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-)
-
-private fun workNotesHttp(context: Context, path: String, payload: JSONObject, token: String? = null): String {
-    val base = BuildConfig.SUPABASE_URL.trimEnd('/')
-    val anon = BuildConfig.SUPABASE_ANON_KEY
-    require(base.startsWith("https://") && anon.isNotBlank()) { "إعدادات Supabase غير مكتملة في هذا البناء." }
-    val connection = (URL("$base$path").openConnection() as HttpURLConnection).apply {
-        requestMethod = "POST"; connectTimeout = 15000; readTimeout = 20000; doOutput = true
-        setRequestProperty("apikey", anon); setRequestProperty("Content-Type", "application/json")
-        setRequestProperty("Accept", "application/json")
-        if (token != null) setRequestProperty("Authorization", "Bearer $token")
-    }
-    return try {
-        connection.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
-        val status = connection.responseCode
-        val raw = (if (status in 200..299) connection.inputStream else connection.errorStream)
-            ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
-        if (status !in 200..299) {
-            val detail = runCatching { JSONObject(raw).optString("message") }.getOrDefault("")
-            throw IllegalStateException(detail.ifBlank { "تعذر تنفيذ العملية (HTTP $status)." })
-        }
-        raw
-    } finally { connection.disconnect() }
-}
+private fun workNotesHttp(path: String, payload: JSONObject, token: String? = null): String =
+    SupabaseClient.request(
+        path = path,
+        method = "POST",
+        payload = payload,
+        token = token,
+        readTimeoutMs = 20000,
+        wrapNetworkErrors = false
+    )
 
 private fun workNotesAccessToken(context: Context): String {
-    val prefs = workNotesSessionPrefs(context)
+    val prefs = commercialCloudSessionPreferences(context)
     val saved = prefs.getString("refresh_token", null).orEmpty()
     require(saved.isNotBlank()) { "سجّل الدخول إلى حساب المنصة أولًا." }
     val session = runCatching {
-        JSONObject(workNotesHttp(context, "/auth/v1/token?grant_type=refresh_token",
-            JSONObject().put("refresh_token", saved)))
+        JSONObject(SupabaseClient.request(
+            path = "/auth/v1/token?grant_type=refresh_token",
+            method = "POST",
+            payload = JSONObject().put("refresh_token", saved),
+            wrapNetworkErrors = false
+        ))
     }.getOrElse { throw IllegalStateException("انتهت جلسة الدخول أو تعذر تجديدها؛ سجّل الدخول مجددًا.") }
     val access = session.optString("access_token")
     require(access.isNotBlank()) { "انتهت جلسة الدخول؛ سجّل الدخول مجددًا." }
@@ -107,7 +87,7 @@ internal fun PersonalWorkNotesScreen(context: Context, onBack: () -> Unit) {
         }
     }
     fun refresh() {
-        run({ token -> workNotesHttp(context, "/rest/v1/rpc/commercial_user_work_notes_list_my",
+        run({ token -> workNotesHttp("/rest/v1/rpc/commercial_user_work_notes_list_my",
             JSONObject().put("p_limit", 100), token) }) { raw ->
             val array = JSONArray(raw)
             rows = buildList {
@@ -167,7 +147,7 @@ internal fun PersonalWorkNotesScreen(context: Context, onBack: () -> Unit) {
                             }
                             if (row.status == "open") {
                                 TextButton(enabled = !busy, onClick = {
-                                    run({ token -> workNotesHttp(context, "/rest/v1/rpc/commercial_user_work_notes_update_my",
+                                    run({ token -> workNotesHttp("/rest/v1/rpc/commercial_user_work_notes_update_my",
                                         JSONObject().put("p_note_id", row.id).put("p_title", row.title).put("p_body", row.body)
                                             .put("p_reminder_at", row.reminderAt.ifBlank { JSONObject.NULL }).put("p_status", "completed"), token) }) {
                                         notice = "تم تعليم الملاحظة كمكتملة."; refresh()
@@ -175,7 +155,7 @@ internal fun PersonalWorkNotesScreen(context: Context, onBack: () -> Unit) {
                                 }) { Icon(Icons.Default.CheckCircle, null); Spacer(Modifier.width(4.dp)); Text("إنجاز") }
                             } else {
                                 TextButton(enabled = !busy, onClick = {
-                                    run({ token -> workNotesHttp(context, "/rest/v1/rpc/commercial_user_work_notes_update_my",
+                                    run({ token -> workNotesHttp("/rest/v1/rpc/commercial_user_work_notes_update_my",
                                         JSONObject().put("p_note_id", row.id).put("p_title", row.title).put("p_body", row.body)
                                             .put("p_reminder_at", row.reminderAt.ifBlank { JSONObject.NULL }).put("p_status", "archived"), token) }) { refresh() }
                                 }) { Icon(Icons.Default.Archive, null); Spacer(Modifier.width(4.dp)); Text("أرشفة") }
@@ -226,7 +206,7 @@ internal fun PersonalWorkNotesScreen(context: Context, onBack: () -> Unit) {
                                 .put("p_organization_id", orgId ?: JSONObject.NULL).put("p_reminder_at", reminderValue)
                             else JSONObject().put("p_note_id", editing!!.id).put("p_title", cleanTitle)
                                 .put("p_body", body.trim()).put("p_reminder_at", reminderValue).put("p_status", editing!!.status)
-                            workNotesHttp(context, "/rest/v1/rpc/" + if (editing == null)
+                            workNotesHttp("/rest/v1/rpc/" + if (editing == null)
                                 "commercial_user_work_notes_create" else "commercial_user_work_notes_update_my", payload, token)
                         }) {
                             editorOpen = false; notice = "تم حفظ الملاحظة."; refresh()
