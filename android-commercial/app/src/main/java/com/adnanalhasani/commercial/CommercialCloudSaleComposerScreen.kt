@@ -80,8 +80,10 @@ private fun cloudComposerSellUnits(product: Product): List<ComposerSellUnit> {
         1L,
         true
     )
+    if (product.unitVariantsJson.isBlank()) return listOf(baseUnit)
     val json = runCatching { org.json.JSONArray(product.unitVariantsJson) }
-        .getOrElse { return listOf(baseUnit) }
+        .getOrElse { return listOf(baseUnit.copy(factor = 0L)) }
+    if (json.length() == 0) return listOf(baseUnit)
     val parsed = runCatching {
         List(json.length()) { index ->
             val row = json.getJSONObject(index)
@@ -95,8 +97,10 @@ private fun cloudComposerSellUnits(product: Product): List<ComposerSellUnit> {
                 isDefault = row.optBoolean("isDefault", false)
             )
         }.filter { it.code.isNotBlank() }.distinctBy { it.code }
-    }.getOrElse { return listOf(baseUnit) }
-    return parsed.ifEmpty { listOf(baseUnit) }
+    }.getOrElse { return listOf(baseUnit.copy(factor = 0L)) }
+    return if (parsed.any { it.isDefault && it.factor > 0L }) parsed
+    else if (parsed.any { it.code == baseUnit.code }) parsed
+    else parsed + baseUnit
 }
 
 private val CloudComposerWorker = Executors.newSingleThreadExecutor()
