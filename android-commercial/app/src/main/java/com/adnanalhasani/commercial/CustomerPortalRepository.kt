@@ -552,6 +552,12 @@ internal data class CustomerOrderReservation(
 
 internal fun loadCustomerOrderReservations(context: Context): List<CustomerOrderReservation> {
     val (orgId, access) = merchantManagementContext(context)
+    // Process due expiries when the merchant opens or refreshes the reservation queue.
+    // The reminder policy advances by one day, so repeated refreshes do not spam notifications.
+    SupabaseClient.request(
+        "/rest/v1/rpc/commercial_customer_portal_process_expired_order_reservations", "POST",
+        JSONObject().put("p_organization_id", orgId).put("p_limit", 100), access
+    )
     val rows = JSONArray(SupabaseClient.request(
         "/rest/v1/rpc/commercial_customer_portal_list_order_reservations", "POST",
         JSONObject().put("p_organization_id", orgId), access
