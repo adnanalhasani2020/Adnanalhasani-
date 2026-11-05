@@ -59,11 +59,22 @@ SELECT ok(
        (column_name = 'quantity' AND data_type = 'integer')
        OR (column_name = 'selling_quantity' AND data_type = 'numeric')
        OR (column_name = 'quantity_in_stock_units' AND data_type = 'bigint')
-     )),
-  'sale lines retain integer quantity invariants in the compatible numeric selling-quantity column'
+     ))
+  AND EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.commercial_sale_items'::regclass
+      AND conname = 'commercial_sale_items_selling_quantity_whole_qty_ck'
+  ),
+  'sale lines retain whole selling and stock quantities with compatible storage types'
 );
 SELECT ok(
-  position('coalesce(v_line->>''quantity'','''') !~ ''^(0|[1-9][0-9]{0,5})
+  position('coalesce(v_line->>''quantity'','''') !~ ''^(0|[1-9][0-9]{0,5})$''' in pg_get_functiondef(
+    'public.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint,bigint,bigint)'::regprocedure
+  )) > 0
+  AND position('v_base_qty := (v_line->>''quantity'')::numeric * v_unit.quantity_in_stock' in pg_get_functiondef(
+    'public.commercial_checkout_sale_multi(jsonb,uuid,text,uuid,text,bigint,bigint,bigint)'::regprocedure
+  )) > 0,
+  'checkout accepts only integer selling quantities and multiplies by the integer unit factor'
 );
 SELECT ok(
   position('v_sale_item.selling_unit_code IS DISTINCT FROM v_unit_code' in pg_get_functiondef(
