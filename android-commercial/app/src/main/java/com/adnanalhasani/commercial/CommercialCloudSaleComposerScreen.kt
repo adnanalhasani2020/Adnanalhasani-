@@ -98,9 +98,7 @@ private fun cloudComposerSellUnits(product: Product): List<ComposerSellUnit> {
             )
         }.filter { it.code.isNotBlank() }.distinctBy { it.code }
     }.getOrElse { return listOf(baseUnit.copy(factor = 0L)) }
-    return if (parsed.any { it.isDefault && it.factor > 0L }) parsed
-    else if (parsed.any { it.code == baseUnit.code }) parsed
-    else parsed + baseUnit
+    return if (parsed.any { it.code == baseUnit.code }) parsed else parsed + baseUnit
 }
 
 private val CloudComposerWorker = Executors.newSingleThreadExecutor()
