@@ -97,7 +97,7 @@ internal fun formatCommercialOperationalAmount(amountMinor: Long, currencyCode: 
 
 /** Calculate a customer-portal line total in minor units without binary floating-point drift. */
 internal fun commercialPortalLineTotalMinor(quantity: BigDecimal, priceMinor: Long): Long? {
-    if (quantity.signum() <= 0 || priceMinor < 0) return null
+    if (quantity.signum() <= 0 || quantity.stripTrailingZeros().scale() > 0 || priceMinor < 0) return null
     return runCatching {
         quantity.multiply(BigDecimal.valueOf(priceMinor))
             .setScale(0, RoundingMode.HALF_UP)
