@@ -36,12 +36,17 @@ jobs:
       # supabase/config.toml. Generate the CLI's disposable local configuration
       # in the runner; do not commit it or connect to any hosted project.
       - name: Initialize disposable local Supabase configuration
-        run: supabase init --force
+        run: |
+          supabase init --force
+          # The repository name contains uppercase characters and a trailing
+          # hyphen. Use a valid, stable local Docker project identifier.
+          sed -i 's/^project_id = .*/project_id = "adnanalhasani-local"/' supabase/config.toml
+          grep '^project_id =' supabase/config.toml
 
       - name: Start isolated local Supabase services
         run: |
           for attempt in 1 2 3; do
-            if supabase --debug start -x studio,imgproxy,edge-runtime,logflare,vector,supavisor,mailpit,analytics; then
+            if supabase --debug start -x studio,imgproxy,edge-runtime,logflare,vector,supavisor,mailpit; then
               exit 0
             fi
             supabase stop --no-backup || true
