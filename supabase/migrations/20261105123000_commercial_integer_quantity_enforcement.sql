@@ -423,8 +423,8 @@ DECLARE
     'commercial_inventory_cost_layers','commercial_inventory_cost_allocations',
     'commercial_inventory_return_cost_allocations','commercial_inventory_cost_reversals',
     'commercial_return_restock_postings','commercial_invoice_purchase_request_items',
-    'commercial_offering_sell_units','commercial_catalog_item_units',
-    'commercial_catalog_inventory_units'
+    'commercial_offering_sell_units','commercial_catalog_product_units',
+    'commercial_catalog_item_units','commercial_catalog_inventory_units'
   ];
   v_columns text[] := ARRAY[
     'quantity','selling_quantity','quantity_in_stock_units',
@@ -464,8 +464,6 @@ BEGIN
 END;
 $migration$;
 
-COMMENT ON TABLE public.commercial_sale_items IS
-'Commercial sale line snapshots. Selling and stock quantities are whole units; monetary columns retain their existing precision.';
  OR p_lines IS NULL OR jsonb_typeof(p_lines)<>'array'
     OR jsonb_array_length(p_lines)=0 OR p_idempotency_key IS NULL OR length(btrim(p_idempotency_key)) NOT BETWEEN 8 AND 200 THEN
     RAISE EXCEPTION 'invalid_purchase_order_request' USING ERRCODE='22023';
