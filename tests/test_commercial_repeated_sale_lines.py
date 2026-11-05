@@ -14,43 +14,37 @@ class CommercialRepeatedSaleLineTests(unittest.TestCase):
         self.assertIn("val key = line.offeringId to line.unitCode", quantity_math)
         self.assertIn("(totals[key] ?: BigDecimal.ZERO).add(quantity)", quantity_math)
         self.assertGreaterEqual(source.count("val normalizedLines = aggregateCommercialCheckoutLines(lines)"), 2)
-        self.assertNotIn("لا يمكن تكرار الصنف بوحدتي بيع مختلفتين", source)
 
-    def test_same_offering_keeps_different_selling_units_as_separate_lines(self):
-        # One carton (12 stock pieces) and two individual pieces must remain distinct
-        # so the server applies each unit's own conversion factor: 12 + 2 = 14.
+    def test_same_offering_keeps_different_integer_selling_units_as_separate_lines(self):
         quantity_math = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialQuantityMath.kt").read_text(encoding="utf-8")
         self.assertIn('CommercialCloudCheckoutLine(key.first, quantity, key.second)', quantity_math)
         self.assertIn('.sortedWith(compareBy({ it.key.first }, { it.key.second }))', quantity_math)
 
-    def test_aggregate_quantity_is_bounded_and_positive(self):
+    def test_aggregate_quantity_is_positive_bounded_and_whole(self):
         source = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialQuantityMath.kt").read_text(encoding="utf-8")
-        self.assertIn("quantity <= BigDecimal(\"100000\")", source)
-        self.assertIn("quantity.scale() <= 3", source)
+        self.assertIn('quantity <= BigDecimal("100000")', source)
+        self.assertIn("quantity.stripTrailingZeros().scale() <= 0", source)
         self.assertIn('require(total <= BigDecimal("100000"))', source)
 
-    def test_fractional_quantities_are_preserved_and_bounded(self):
-        source = REPOSITORY.read_text(encoding="utf-8")
+    def test_quantity_parser_rejects_fractional_values(self):
         quantity_math = (ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialQuantityMath.kt").read_text(encoding="utf-8")
-        self.assertIn("internal fun parseCommercialCheckoutQuantity", quantity_math)
-        self.assertIn("line.quantity.stripTrailingZeros().toPlainString()", source)
-        self.assertIn("quantity.scale() <= 3", quantity_math)
-        self.assertIn("BigDecimal(ascii)", quantity_math)
+        self.assertIn('Regex("^[0-9]{1,6}$")', quantity_math)
+        self.assertNotIn(r"(\\.[0-9]{1,3})?", quantity_math)
 
-    def test_fractional_return_quantity_uses_the_same_exact_base_conversion(self):
-        migration = (ROOT / "supabase/migrations/20261103020100_commercial_fractional_sell_quantity_returns.sql").read_text(encoding="utf-8")
-        self.assertIn(r"(\.[0-9]{1,3})?", migration)
+    def test_return_quantity_is_whole_and_uses_saved_unit_snapshot(self):
+        migration = (ROOT / "supabase/migrations/20261105123000_commercial_integer_quantity_enforcement.sql").read_text(encoding="utf-8")
+        self.assertIn("v_item->>'quantity'", migration)
         self.assertIn("v_qty := (v_item->>'quantity')::numeric * v_factor", migration)
         self.assertIn("v_qty <> trunc(v_qty)", migration)
-        self.assertIn("fractional_base_return_quantity_not_supported", migration)
-        self.assertIn("'quantity',v_qty::bigint", migration)
+        self.assertIn("v_sale_item.selling_unit_code IS DISTINCT FROM v_unit_code", migration)
+        self.assertIn("v_sale_item.quantity_in_stock_units::numeric / v_sale_item.selling_quantity", migration)
+        self.assertNotIn("FROM public.commercial_offering_sell_units", migration)
 
-    def test_fractional_selling_quantity_must_convert_to_whole_base_stock(self):
-        migration = (ROOT / "supabase/migrations/20261103020000_commercial_fractional_sell_quantity_checkout.sql").read_text(encoding="utf-8")
-        self.assertIn(r"(\.[0-9]{1,3})?", migration)
+    def test_sale_rpc_accepts_only_integer_selling_quantities(self):
+        migration = (ROOT / "supabase/migrations/20261105123000_commercial_integer_quantity_enforcement.sql").read_text(encoding="utf-8")
+        self.assertIn("coalesce(v_line->>'quantity','') !~", migration)
         self.assertIn("v_base_qty := (v_line->>'quantity')::numeric * v_unit.quantity_in_stock", migration)
         self.assertIn("v_base_qty <> trunc(v_base_qty)", migration)
-        self.assertIn("fractional_base_stock_quantity_not_supported", migration)
         self.assertIn("'quantity',v_base_qty::bigint", migration)
 
 
