@@ -37,7 +37,9 @@ def test_cloud_rpcs_and_numeric_storage_are_integer_only():
     assert "v_request_fingerprint" in migration
     assert "idempotency_key_reused_with_different_sell_unit_request" in migration
     assert "base_idempotency_key" in migration
-    assert "commercial_sale_unit_idempotency_owner_policy" in migration
+    assert "commercial_get_sale_unit_idempotency" in migration
+    assert "commercial_record_sale_unit_idempotency" in migration
+    assert "REVOKE ALL ON public.commercial_sale_unit_idempotency FROM PUBLIC,anon,authenticated" in migration
     assert "commercial_request_sale_return_base_units" in migration
     assert "v_qty<>trunc(v_qty)" in migration
     assert "p_quantity<>trunc(p_quantity)" in migration
