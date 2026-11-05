@@ -129,4 +129,7 @@ BEGIN
 END;
 $function$;
 
+COMMENT ON TABLE public.commercial_inventory_storage_balances IS
+  'Optional warehouse-bin sub-ledger. New allocations may not exceed branch-level available stock (quantity_on_hand minus quantity_reserved); the aggregate branch balance remains authoritative.';
+
 COMMIT;
