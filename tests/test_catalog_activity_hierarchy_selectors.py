@@ -41,9 +41,9 @@ class CatalogActivityHierarchySelectorTests(unittest.TestCase):
         self.assertIn("onBusinessLevel(it)", self.source)
 
     def test_rpc_filters_keep_existing_parameter_contract(self):
-        self.assertIn('.put("p_activity_node_code",activityCode().trim().uppercase()', self.source)
-        self.assertIn('.put("p_sector_code",sector().trim()', self.source)
-        self.assertIn('.put("p_business_level_code",businessLevel().trim()', self.source)
+        self.assertIn('.put("p_activity_node_code", activityCode().trim().uppercase()', self.source)
+        self.assertIn('.put("p_sector_code", sector().trim()', self.source)
+        self.assertIn('.put("p_business_level_code", businessLevel().trim()', self.source)
 
     def test_legacy_activity_triple_representation_is_removed(self):
         self.assertNotIn("List<Triple<String, String, String>>", self.source)
