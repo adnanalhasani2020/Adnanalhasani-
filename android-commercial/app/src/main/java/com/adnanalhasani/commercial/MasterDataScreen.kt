@@ -27,7 +27,7 @@ private val masterMain = Handler(Looper.getMainLooper())
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
+internal fun MasterDataScreen(context: Context, onBack: () -> Unit, onStorageInventory: () -> Unit) {
     val options = listOf(
         "المستودعات" to "commercial_warehouses",
         "مجموعات الأصناف" to "commercial_product_categories",
@@ -110,6 +110,10 @@ internal fun MasterDataScreen(context: Context, onBack: () -> Unit) {
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
             Text(if (selected.second == "commercial_storage_locations") "مواقع تخزين مرتبطة بمستودع؛ لا تغيّر أرصدة المخزون من هذه الشاشة." else "بيانات محفوظة في المؤسسة السحابية، وليست بيانات محلية.", color = Color(0xFF71817B), fontSize = 12.sp)
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(onClick = onStorageInventory, modifier = Modifier.fillMaxWidth()) {
+                Text("إدارة أرصدة مواقع التخزين")
+            }
             Spacer(Modifier.height(8.dp))
             OutlinedButton(
                 onClick = {
