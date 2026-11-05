@@ -59,6 +59,7 @@ Migration authored on 2026-11-06: `supabase/migrations/20261106100000_commercial
 This is an additive first slice, not a replacement of the branch-level stock source of truth:
 - `commercial_inventory_balances` remains the authoritative aggregate by branch and offering.
 - `commercial_inventory_storage_balances` stores only quantities explicitly allocated to a storage location. Allocation is rejected if the total allocated quantity would exceed the branch-level on-hand quantity.
+- Storage quantities and both RPC quantity parameters use `numeric(20,6)`, matching the fractional precision of the existing inventory balance and cost-layer flows; they must not be narrowed to integers.
 - `commercial_inventory_storage_movements` records allocations and same-warehouse internal transfers. Its rows are immutable and idempotent.
 - Both write paths are manager-gated SECURITY DEFINER RPCs. Direct client writes are revoked; authenticated organization members can read only rows in their organization.
 - Transfers move quantity between two active stockable locations in the same warehouse and do not alter branch-level quantity or financial cost layers.
