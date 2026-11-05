@@ -28,11 +28,11 @@ DECLARE
  v_uid uuid:=auth.uid(); v_req public.commercial_customer_supply_requests%ROWTYPE;
  v_po public.commercial_purchase_orders%ROWTYPE; v_line public.commercial_purchase_order_items%ROWTYPE;
  v_offer public.commercial_offerings%ROWTYPE; v_order_id uuid; v_sale_id uuid;
- v_subtotal numeric; v_total numeric; v_checkout jsonb; v_key text;
+ v_subtotal numeric; v_total numeric; v_checkout jsonb; v_key text; v_sale_price bigint; v_invoice_price bigint;
  v_unit record;
 BEGIN
  IF v_uid IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
- IF p_sale_unit_price_minor IS NULL OR p_sale_unit_price_minor<0
+ IF (p_sale_unit_price_minor IS NOT NULL AND p_sale_unit_price_minor<0)
   OR p_discount_minor IS NULL OR p_discount_minor<0 OR p_tax_minor IS NULL OR p_tax_minor<0 THEN
   RAISE EXCEPTION 'invalid_direct_sale_pricing' USING ERRCODE='22023';
  END IF;
@@ -60,9 +60,19 @@ BEGIN
    AND i.supplier_id=v_po.supplier_id AND i.state='recorded') THEN
   RAISE EXCEPTION 'supplier_invoice_required_before_direct_sale' USING ERRCODE='55000';
  END IF;
+ SELECT si.unit_price_minor INTO v_invoice_price
+ FROM public.commercial_supplier_invoice_items si
+ JOIN public.commercial_supplier_invoices sh ON sh.id=si.supplier_invoice_id
+ WHERE si.organization_id=p_organization_id AND si.purchase_order_item_id=v_line.id
+  AND sh.purchase_order_id=v_po.id AND sh.state='recorded'
+ ORDER BY sh.recorded_at DESC,si.created_at DESC LIMIT 1;
+ IF v_invoice_price IS NULL THEN RAISE EXCEPTION 'supplier_invoice_line_price_required_for_direct_sale' USING ERRCODE='55000'; END IF;
+ v_sale_price:=coalesce(p_sale_unit_price_minor,v_invoice_price);
  SELECT * INTO v_line FROM public.commercial_purchase_order_items
  WHERE organization_id=p_organization_id AND purchase_order_id=v_po.id
- ORDER BY line_number FOR UPDATE;
+  AND item_description=v_req.item_name AND quantity_ordered=v_req.requested_quantity
+  AND source_selling_unit_code=v_req.unit_code
+ FOR UPDATE;
  IF NOT FOUND OR v_line.offering_id IS NULL OR v_line.quantity_received<>v_line.quantity_ordered
   OR v_line.quantity_ordered<>v_req.requested_quantity THEN
   RAISE EXCEPTION 'supply_purchase_line_not_fully_mapped_and_received' USING ERRCODE='55000';
@@ -89,7 +99,7 @@ BEGIN
    AND cpa.party_account_id=v_req.buyer_account_id) THEN
   RAISE EXCEPTION 'supply_request_customer_account_inactive' USING ERRCODE='42501';
  END IF;
- v_subtotal:=p_sale_unit_price_minor::numeric*v_req.requested_quantity::numeric;
+ v_subtotal:=v_sale_price::numeric*v_req.requested_quantity::numeric;
  IF v_subtotal>9223372036854775807 OR p_discount_minor>v_subtotal
   OR v_subtotal-p_discount_minor+p_tax_minor>9223372036854775807 THEN
   RAISE EXCEPTION 'direct_sale_total_overflow_or_invalid_discount' USING ERRCODE='22003';
@@ -111,11 +121,11 @@ BEGIN
   INSERT INTO public.commercial_customer_order_items(
    order_id,offering_id,item_type,item_name_snapshot,quantity,unit_price_minor,line_total_minor
   ) VALUES(v_order_id,v_line.offering_id,'product',v_req.item_name,v_req.requested_quantity,
-   p_sale_unit_price_minor,(p_sale_unit_price_minor::numeric*v_req.requested_quantity)::bigint);
+   v_sale_price,(v_sale_price::numeric*v_req.requested_quantity)::bigint);
  END IF;
  -- The existing sale engine owns stock, receivables, payment and GL posting.
  -- Locking the offering row prevents another checkout from observing this temporary price.
- UPDATE public.commercial_offerings SET price_minor=p_sale_unit_price_minor
+ UPDATE public.commercial_offerings SET price_minor=v_sale_price
  WHERE id=v_line.offering_id AND activity_id=v_offer.activity_id;
  v_checkout:=public.commercial_customer_portal_fulfill_order(
   p_organization_id,v_order_id,v_po.receive_location_id,v_key
@@ -135,10 +145,10 @@ BEGIN
  INSERT INTO public.commercial_audit_events(organization_id,actor_user_id,action,entity_type,entity_id,metadata)
  VALUES(p_organization_id,v_uid,'customer_supply_request.sold','sale',v_sale_id::text,
   jsonb_build_object('request_id',v_req.id,'purchase_order_id',v_po.id,'customer_order_id',v_order_id,
-   'sale_price_minor',p_sale_unit_price_minor,'discount_minor',p_discount_minor,'tax_minor',p_tax_minor,
+   'sale_price_minor',v_sale_price,'discount_minor',p_discount_minor,'tax_minor',p_tax_minor,
    'total_minor',v_total::bigint,'inventory_received_before_sale',true));
  RETURN jsonb_build_object('request_id',v_req.id,'customer_order_id',v_order_id,'sale_id',v_sale_id,
-  'status','sold','total_minor',v_total::bigint,'currency_code',v_req.currency_code,'replayed',false);
+  'status','sold','sale_price_minor',v_sale_price,'default_sale_price_minor',v_invoice_price,'total_minor',v_total::bigint,'currency_code',v_req.currency_code,'replayed',false);
 END;
 $function$;
 
