@@ -11,7 +11,7 @@ def test_reminder_notification_type_is_added_before_personal_note_reminders_are_
     assert "drop constraint if exists commercial_user_notifications_notification_type_check" in sql
     assert constraint in sql
     assert "'message','reminder'" in sql
-    assert sql.index(constraint) < sql.index("'reminder','تذكير بمهمة")
+    assert sql.index(constraint) < sql.index("select v_uid,d.organization_id,'reminder'")
 
 
 def test_work_notes_reminders_are_user_scoped_and_idempotent():
