@@ -1,4 +1,5 @@
 from pathlib import Path
+from catalog_source_helpers import catalog_android_source
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -13,7 +14,7 @@ SETUP = ROOT / "supabase/migrations/20261029040000_catalog_setup_privacy_discove
 class NearbyCatalogInventorySetupContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.screen = SCREEN.read_text(encoding="utf-8") + MARKET_UI.read_text(encoding="utf-8") + MARKET_STATE.read_text(encoding="utf-8")
+        cls.screen = catalog_android_source()
         cls.configuration = CONFIGURATION.read_text(encoding="utf-8")
         cls.schema = SCHEMA.read_text(encoding="utf-8")
         cls.setup = SETUP.read_text(encoding="utf-8")
