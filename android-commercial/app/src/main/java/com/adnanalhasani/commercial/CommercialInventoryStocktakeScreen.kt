@@ -171,7 +171,7 @@ internal fun CommercialInventoryStocktakeScreen(context: Context, onBack: () -> 
                 ) {
                     Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
                         Text("بدء جلسة جرد جديدة", color = stocktakeInk, fontWeight = FontWeight.Bold)
-                        Text("يحفظ الخادم لقطة الرصيد الحالي لهذا النشاط والفرع. لن يتغير المخزون بمجرد إنشاء الجلسة.", color = stocktakeMuted, fontSize = 11.sp)
+                        Text("هذه جلسة جرد على مستوى الفرع بالكامل وبالوحدة الأساسية للمخزون، وليست جردًا لمستودع منفرد أو لمواقع التخزين الفرعية. يحفظ الخادم لقطة الرصيد ولا يغير المخزون عند إنشاء المسودة.", color = stocktakeMuted, fontSize = 11.sp)
                         OutlinedTextField(
                             value = notes, onValueChange = { notes = it },
                             modifier = Modifier.fillMaxWidth(), label = { Text("ملاحظة الجرد (اختياري)") },
@@ -306,8 +306,8 @@ internal fun CommercialInventoryStocktakeScreen(context: Context, onBack: () -> 
                         ) {
                             Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text(line.productName, color = stocktakeInk, fontWeight = FontWeight.SemiBold)
-                                Text("الدفتري: ${stocktakeNumber(line.expectedQuantity)} ${line.unitName}", color = stocktakeMuted, fontSize = 11.sp)
-                                Text("الفعلي: ${line.countedQuantity.ifBlank { "—" }} ${line.unitName}", color = stocktakeInk, fontSize = 12.sp)
+                                Text("الدفتري (الوحدة الأساسية): ${stocktakeNumber(line.expectedQuantity)} ${line.unitName}", color = stocktakeMuted, fontSize = 11.sp)
+                                Text("الفعلي (الوحدة الأساسية): ${line.countedQuantity.ifBlank { "—" }} ${line.unitName}", color = stocktakeInk, fontSize = 12.sp)
                             }
                         }
                     }
