@@ -33,12 +33,12 @@ class CatalogCurrentDeviceLocationTests(unittest.TestCase):
         self.assertIn("getFreshCatalogDeviceLocation(context)", source)
         self.assertIn("deviceLatitude = location.latitude.toString()", source)
         self.assertIn("deviceLongitude = location.longitude.toString()", source)
-        self.assertIn("val lat=if(useDeviceCenter) deviceLatitude?.toBigDecimalOrNull() else branch?.latitude?.toBigDecimalOrNull()", source)
+        self.assertIn("val latitude = if (useDeviceCenter) state.deviceLatitude?.toBigDecimalOrNull() else branch?.latitude?.toBigDecimalOrNull()", source)
         self.assertIn('"/rest/v1/rpc/commercial_catalog_nearby_popularity"', source)
         self.assertIn('"/rest/v1/rpc/commercial_catalog_price_suggestions"', source)
-        self.assertIn("state.deviceLatitude=null;state.deviceLongitude=null;onStartNearbyCatalog()", source)
-        self.assertIn("val useDeviceCenter=deviceLatitude!=null && deviceLongitude!=null", source)
-        self.assertIn("nearbyMarketItems=(nearbyMarketItems+page).distinctBy { it.id }", source)
+        self.assertIn("deviceLatitude=null\n                            deviceLongitude=null\n                            marketWorkflow.startNearbyCatalog()", source)
+        self.assertIn("val useDeviceCenter = state.deviceLatitude != null && state.deviceLongitude != null", source)
+        self.assertIn("state.nearbyMarketItems = (state.nearbyMarketItems + page).distinctBy { it.id }", source)
 
     def test_device_location_is_session_only_and_not_background_tracked(self):
         source = catalog_android_source()
