@@ -152,7 +152,7 @@ internal fun PersonalWorkNotesScreen(context: Context, onBack: () -> Unit) {
                     Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(row.title, modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold)
-                            AssistChip(onClick = {}, label = { Text(if (row.status == "completed") "مكتملة" else "مفتوحة") })
+                            Text(if (row.status == "completed") "مكتملة" else "مفتوحة", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
                         }
                         if (row.body.isNotBlank()) Text(row.body)
                         if (row.reminderAt.isNotBlank()) {
