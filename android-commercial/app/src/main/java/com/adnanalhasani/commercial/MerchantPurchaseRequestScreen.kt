@@ -150,11 +150,12 @@ internal fun MerchantPurchaseRequestScreen(context: Context, onBack: () -> Unit)
                     grouped.map { (supplierId, supplierLines) ->
                         val currencies = supplierLines.map { it.offering.currencyCode }.distinct()
                         require(currencies.size == 1) { "أصناف المورد الواحد يجب أن تكون بعملة واحدة." }
+                        val supplierRequestId = UUID.nameUUIDFromBytes("$stableBatchId:$supplierId".toByteArray(Charsets.UTF_8)).toString()
                         createCommercialCloudPurchaseOrder(context, supplierId,
-                            "PO-" + UUID.randomUUID().toString().take(8).uppercase(), currencies.first(),
+                            "PO-" + supplierRequestId.take(8).uppercase(), currencies.first(),
                             selectedLocation, supplierLines.map { line ->
                                 CommercialPurchaseOrderLineInput(line.offering.id, line.offering.name, line.quantity, line.unitCostMinor)
-                            }, UUID.nameUUIDFromBytes("$stableBatchId:$supplierId".toByteArray(Charsets.UTF_8)).toString(), "طلب شراء أنشئ من كتالوج الأصناف.")
+                            }, supplierRequestId, "طلب شراء أنشئ من كتالوج الأصناف.")
                     }
                 }
                 purchaseDraftMain.post {

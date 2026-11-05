@@ -44,3 +44,9 @@ def test_purchase_request_is_location_scoped_and_retry_idempotent():
     assert "getOrCreatePurchaseRequestBatchId" in screen
     assert "UUID.nameUUIDFromBytes" in screen
     assert "clearPurchaseRequestBatchId" in screen
+
+def test_supplier_order_number_and_idempotency_key_are_stable_for_partial_retry():
+    screen = SCREEN.read_text(encoding="utf-8")
+    assert 'val supplierRequestId = UUID.nameUUIDFromBytes("$stableBatchId:$supplierId"' in screen
+    assert '"PO-" + supplierRequestId.take(8).uppercase()' in screen
+    assert '}, supplierRequestId, "طلب شراء أنشئ من كتالوج الأصناف.")' in screen
