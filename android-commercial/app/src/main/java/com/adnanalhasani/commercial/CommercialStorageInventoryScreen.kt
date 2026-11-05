@@ -141,6 +141,7 @@ internal fun CommercialStorageInventoryScreen(context: Context, onBack: () -> Un
     var quantityText by remember { mutableStateOf(restoredPending?.quantity?.let { storageQuantityLabel(it) }.orEmpty()) }
     var mode by remember { mutableStateOf(restoredPending?.mode ?: "allocation") }
     var loading by remember { mutableStateOf(false) }
+    var schemaReady by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
     var notice by remember { mutableStateOf("") }
@@ -174,8 +175,20 @@ internal fun CommercialStorageInventoryScreen(context: Context, onBack: () -> Un
             val result = runCatching { loadStorageInventorySnapshot(context) }
             storageInventoryMain.post {
                 loading = false
-                result.onSuccess { applySnapshot(it); error = "" }
-                    .onFailure { error = it.message ?: "تعذر تحميل أرصدة مواقع التخزين." }
+                result.onSuccess {
+                    applySnapshot(it)
+                    schemaReady = true
+                    error = ""
+                }.onFailure {
+                    schemaReady = false
+                    val detail = it.message.orEmpty()
+                    error = if (
+                        detail.contains("commercial_inventory_storage_balances", ignoreCase = true) ||
+                        detail.contains("PGRST205", ignoreCase = true)
+                    ) {
+                        "ميزة أرصدة مواقع التخزين غير منشورة على قاعدة البيانات الحالية. لم يتم تغيير أي رصيد؛ يلزم نشر الترحيل واختباره أولًا."
+                    } else detail.ifBlank { "تعذر تحميل أرصدة مواقع التخزين." }
+                }
             }
         }
     }
@@ -245,7 +258,7 @@ internal fun CommercialStorageInventoryScreen(context: Context, onBack: () -> Un
             TopAppBar(
                 title = { Text("مخزون مواقع التخزين", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
-                    IconButton(onClick = onBack, enabled = pending == null && !saving) {
+                    IconButton(onClick = onBack, enabled = (pending == null || !schemaReady) && !saving) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "رجوع")
                     }
                 },
@@ -282,7 +295,7 @@ internal fun CommercialStorageInventoryScreen(context: Context, onBack: () -> Un
                 "المستودع",
                 selectedWarehouseId,
                 warehouses.map { it.id to "${it.code} — ${it.label}" },
-                pending == null && !saving
+                schemaReady && pending == null && !saving
             ) {
                 selectedWarehouseId = it
                 selectedLocationId = ""
@@ -293,7 +306,7 @@ internal fun CommercialStorageInventoryScreen(context: Context, onBack: () -> Un
                 "الصنف",
                 selectedOfferingId,
                 products.map { it.offeringId to "${it.productName} · ${it.availableQuantity.stripTrailingZeros().toPlainString()} ${it.unitName}" },
-                pending == null && !saving
+                schemaReady && pending == null && !saving
             ) {
                 selectedOfferingId = it
                 selectedSourceBalanceId = ""
@@ -314,20 +327,20 @@ internal fun CommercialStorageInventoryScreen(context: Context, onBack: () -> Un
                     "موقع التخزين المستهدف",
                     selectedLocationId,
                     selectedWarehouseLocations.map { it.id to "${it.code} — ${it.label}" },
-                    pending == null && !saving
+                    schemaReady && pending == null && !saving
                 ) { selectedLocationId = it }
             } else {
                 StorageInventoryDropdown(
                     "موقع المصدر",
                     selectedSourceBalanceId,
                     transferSources.map { it.id to "${it.storageLocationCode} — ${it.storageLocationName}: ${storageQuantityLabel(it.quantityOnHand)}" },
-                    pending == null && !saving
+                    schemaReady && pending == null && !saving
                 ) { selectedSourceBalanceId = it; selectedDestinationLocationId = "" }
                 StorageInventoryDropdown(
                     "موقع الوجهة",
                     selectedDestinationLocationId,
                     transferDestinations.map { it.id to "${it.code} — ${it.label}" },
-                    pending == null && !saving
+                    schemaReady && pending == null && !saving
                 ) { selectedDestinationLocationId = it }
             }
             OutlinedTextField(
@@ -388,7 +401,7 @@ internal fun CommercialStorageInventoryScreen(context: Context, onBack: () -> Un
                     }
                     if (action != null) executeAction(action)
                 },
-                enabled = !loading && !saving && (pending != null || quantityText.isNotBlank()),
+                enabled = schemaReady && !loading && !saving && (pending != null || quantityText.isNotBlank()),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 if (saving) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
