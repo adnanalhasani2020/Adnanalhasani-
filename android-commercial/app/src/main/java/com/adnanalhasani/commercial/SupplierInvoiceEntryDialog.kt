@@ -92,7 +92,7 @@ internal fun SupplierInvoiceEntryDialog(
                         Text("المستلم: ${line.quantityReceived} · تكلفة الأمر: ${line.unitCostMinor}")
                         OutlinedTextField(
                             value = quantities[line.id].orEmpty(),
-                            onValueChange = { quantities = quantities + (line.id to it) },
+                            onValueChange = { quantities = quantities + (line.id to it.filter(Char::isDigit).take(12)) },
                             label = { Text("الكمية المفوترة (0 لتجاوز البند)") },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
