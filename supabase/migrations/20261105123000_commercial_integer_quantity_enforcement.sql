@@ -1638,7 +1638,7 @@ DECLARE
     'commercial_inventory_cost_layers','commercial_inventory_cost_allocations',
     'commercial_inventory_return_cost_allocations','commercial_inventory_cost_reversals',
     'commercial_return_restock_postings','commercial_invoice_purchase_request_items',
-    'commercial_offering_sell_units','commercial_catalog_product_units','commercial_catalog_item_units','commercial_global_units',
+    'commercial_offering_sell_units','commercial_catalog_product_units','commercial_catalog_item_units',
     'commercial_global_catalog_items','commercial_catalog_product_recipes','commercial_catalog_recipe_ingredients',
     'commercial_organization_catalog_item_setup',
     'commercial_catalog_inventory_units'
