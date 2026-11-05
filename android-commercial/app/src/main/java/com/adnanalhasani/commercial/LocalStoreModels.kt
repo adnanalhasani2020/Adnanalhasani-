@@ -28,17 +28,29 @@ internal fun productMatchesUnitQuery(product: Product, query: String): Boolean {
 }
 
 internal fun localSaleUnits(product: Product): List<LocalSaleUnit> {
+    val baseUnit = LocalSaleUnit(
+        product.unitCode.ifBlank { "EA" },
+        "base",
+        product.unitCode.ifBlank { "EA" },
+        1L,
+        "",
+        "",
+        true
+    )
+    if (product.unitVariantsJson.isBlank()) return listOf(baseUnit)
+    val json = runCatching { JSONArray(product.unitVariantsJson) }
+        .getOrElse { return listOf(baseUnit.copy(quantityInBase = 0L)) }
+    if (json.length() == 0) return listOf(baseUnit)
     val parsed = runCatching {
-        val json = JSONArray(product.unitVariantsJson)
         buildList {
             for (index in 0 until json.length()) {
                 val item = json.getJSONObject(index)
-                val factor = item.optString("quantityInBase", "1").toBigDecimalOrNull()?.let {
-                    runCatching { it.toBigIntegerExact().longValueExact() }.getOrNull()
-                }?.takeIf { it > 0L } ?: continue
                 val code = item.optString("unitCode", product.unitCode).ifBlank { product.unitCode }
                 val role = item.optString("role", "base").ifBlank { "base" }
                 if (code.isBlank() || role !in setOf("base", "sale")) continue
+                val factor = item.optString("quantityInBase", "1").toBigDecimalOrNull()?.let {
+                    runCatching { it.toBigIntegerExact().longValueExact() }.getOrNull()
+                }?.takeIf { it > 0L } ?: 0L
                 add(LocalSaleUnit(
                     code = code,
                     role = role,
@@ -51,9 +63,7 @@ internal fun localSaleUnits(product: Product): List<LocalSaleUnit> {
                     isDefault = item.optBoolean("isDefault", false)
                 ))
             }
-        }
-    }.getOrDefault(emptyList())
-    return parsed.ifEmpty {
-        listOf(LocalSaleUnit(product.unitCode.ifBlank { "EA" }, "base", product.unitCode.ifBlank { "EA" }, 1L, product.barcode, product.imageUrl, true))
-    }
+        }.distinctBy { it.code }
+    }.getOrElse { return listOf(baseUnit.copy(quantityInBase = 0L)) }
+    return if (parsed.any { it.role == "base" }) parsed else parsed + baseUnit
 }
