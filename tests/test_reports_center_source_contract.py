@@ -207,7 +207,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn('val id = row.optString("id")', loader)
         self.assertIn('if (id.isBlank() || obligationId.isBlank() || invoiceId.isBlank() || supplierId.isBlank() || journalId.isBlank()', loader)
 
-    def test_inventory_movement_report_uses_scoped_source_and_preserves_fractional_quantity(self):
+    def test_inventory_movement_report_uses_scoped_source_and_rejects_fractional_quantity(self):
         self.assertIn('"حركة المخزون الفعلية" ->', self.screen)
         start = self.inventory_repository.index("internal fun loadCommercialCloudStockMovements(")
         end = self.inventory_repository.index("\ninternal data class CommercialCloudStockAlert(", start)
@@ -215,6 +215,7 @@ class ReportsCenterSourceContractTests(unittest.TestCase):
         self.assertIn("commercial_stock_movements", loader)
         self.assertIn("offering.activity.organization_id=eq.$orgId", loader)
         self.assertIn("quantity_delta", loader)
+        self.assertIn("parseWholeInventoryQuantity(row.optString(\"quantity_delta\"), \"quantity_delta\")", loader)
         self.assertIn("quantityDelta.stripTrailingZeros().toPlainString()", self.screen)
         self.assertIn("reportLineAmount(row, cloudMode)", self.screen)
 
