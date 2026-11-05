@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -9,6 +10,7 @@ class CommercialInventoryStorageTransferTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.sql = MIGRATION.read_text(encoding="utf-8")
+        cls.normalized_sql = re.sub(r"\s+", "", cls.sql)
 
     def test_storage_subledger_is_additive_and_keeps_aggregate_balance_authoritative(self):
         self.assertIn("commercial_inventory_storage_balances", self.sql)
@@ -28,8 +30,9 @@ class CommercialInventoryStorageTransferTests(unittest.TestCase):
         self.assertIn("UNIQUE (organization_id, idempotency_key)", self.sql)
 
     def test_transfer_requires_same_warehouse_and_does_not_change_branch_balance(self):
-        self.assertIn("source_storage_location_id,destination_storage_location_id", self.sql)
-        self.assertIn("sl.warehouse_id = p_warehouse_id", self.sql)
+        self.assertIn("source_storage_location_id,destination_storage_location_id", self.normalized_sql)
+        self.assertIn("sl.warehouse_id=p_warehouse_id", self.normalized_sql)
+        self.assertIn("GROUPBYsl.warehouse_idHAVINGcount(DISTINCTsl.id)=2", self.normalized_sql)
         self.assertIn("inventory_storage_insufficient", self.sql)
         self.assertIn("BEFORE UPDATE OR DELETE ON public.commercial_inventory_storage_movements", self.sql)
         self.assertIn("inventory_storage_movement_is_immutable", self.sql)
