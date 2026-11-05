@@ -30,7 +30,7 @@ import java.util.concurrent.Executors
 private val workNotesIo = Executors.newSingleThreadExecutor()
 private val workNotesMain = Handler(Looper.getMainLooper())
 
-private fun workNotesHttp(context: Context, path: String, payload: JSONObject, token: String? = null): String =
+private fun workNotesHttp(path: String, payload: JSONObject, token: String? = null): String =
     SupabaseClient.request(
         path = path,
         method = "POST",
@@ -87,7 +87,7 @@ internal fun PersonalWorkNotesScreen(context: Context, onBack: () -> Unit) {
         }
     }
     fun refresh() {
-        run({ token -> workNotesHttp(context, "/rest/v1/rpc/commercial_user_work_notes_list_my",
+        run({ token -> workNotesHttp("/rest/v1/rpc/commercial_user_work_notes_list_my",
             JSONObject().put("p_limit", 100), token) }) { raw ->
             val array = JSONArray(raw)
             rows = buildList {
@@ -147,7 +147,7 @@ internal fun PersonalWorkNotesScreen(context: Context, onBack: () -> Unit) {
                             }
                             if (row.status == "open") {
                                 TextButton(enabled = !busy, onClick = {
-                                    run({ token -> workNotesHttp(context, "/rest/v1/rpc/commercial_user_work_notes_update_my",
+                                    run({ token -> workNotesHttp("/rest/v1/rpc/commercial_user_work_notes_update_my",
                                         JSONObject().put("p_note_id", row.id).put("p_title", row.title).put("p_body", row.body)
                                             .put("p_reminder_at", row.reminderAt.ifBlank { JSONObject.NULL }).put("p_status", "completed"), token) }) {
                                         notice = "تم تعليم الملاحظة كمكتملة."; refresh()
@@ -155,7 +155,7 @@ internal fun PersonalWorkNotesScreen(context: Context, onBack: () -> Unit) {
                                 }) { Icon(Icons.Default.CheckCircle, null); Spacer(Modifier.width(4.dp)); Text("إنجاز") }
                             } else {
                                 TextButton(enabled = !busy, onClick = {
-                                    run({ token -> workNotesHttp(context, "/rest/v1/rpc/commercial_user_work_notes_update_my",
+                                    run({ token -> workNotesHttp("/rest/v1/rpc/commercial_user_work_notes_update_my",
                                         JSONObject().put("p_note_id", row.id).put("p_title", row.title).put("p_body", row.body)
                                             .put("p_reminder_at", row.reminderAt.ifBlank { JSONObject.NULL }).put("p_status", "archived"), token) }) { refresh() }
                                 }) { Icon(Icons.Default.Archive, null); Spacer(Modifier.width(4.dp)); Text("أرشفة") }
@@ -206,7 +206,7 @@ internal fun PersonalWorkNotesScreen(context: Context, onBack: () -> Unit) {
                                 .put("p_organization_id", orgId ?: JSONObject.NULL).put("p_reminder_at", reminderValue)
                             else JSONObject().put("p_note_id", editing!!.id).put("p_title", cleanTitle)
                                 .put("p_body", body.trim()).put("p_reminder_at", reminderValue).put("p_status", editing!!.status)
-                            workNotesHttp(context, "/rest/v1/rpc/" + if (editing == null)
+                            workNotesHttp("/rest/v1/rpc/" + if (editing == null)
                                 "commercial_user_work_notes_create" else "commercial_user_work_notes_update_my", payload, token)
                         }) {
                             editorOpen = false; notice = "تم حفظ الملاحظة."; refresh()
