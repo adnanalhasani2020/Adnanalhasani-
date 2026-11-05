@@ -55,6 +55,15 @@ class CommercialStorageInventoryScreenContractTests(unittest.TestCase):
         self.assertIn("branch_location_id", self.repository)
         self.assertIn("it.branchLocationId == branchId", self.screen)
         self.assertIn("it.warehouseId in warehouseIds", self.screen)
+        self.assertIn("storageActionMatchesCurrentContext(context, action)", self.screen)
+        self.assertIn("pendingMatchesCurrentContext", self.screen)
+        self.assertIn('json.getString("organization_id")', self.screen)
+        self.assertIn('json.getString("activity_id")', self.screen)
+        self.assertIn('json.getString("branch_location_id")', self.screen)
+        self.assertIn("expectedOrganizationId", self.repository)
+        self.assertIn("expectedActivityId", self.repository)
+        self.assertIn("expectedBranchLocationId", self.repository)
+        self.assertIn("لم نرسل طلب المخزون المعلّق", self.repository)
 
 
 if __name__ == "__main__":
