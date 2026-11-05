@@ -236,9 +236,9 @@ BEGIN
           AND b.offering_id=v_item.offering_id AND b.quantity_reserved>=v_item.quantity;
         IF NOT FOUND THEN RAISE EXCEPTION 'reservation_balance_release_integrity_error' USING ERRCODE='55000'; END IF;
       END LOOP;
-      v_new_status:=CASE WHEN v_reservation.expiry_policy='cancel_order' THEN 'cancelled' ELSE 'expired' END;
+      v_new_status:='cancelled';
       UPDATE public.commercial_customer_order_reservations
-      SET status=CASE WHEN v_new_status='cancelled' THEN 'cancelled' ELSE 'expired' END,updated_at=now()
+      SET status=CASE WHEN v_reservation.expiry_policy='cancel_order' THEN 'cancelled' ELSE 'expired' END,updated_at=now()
       WHERE id=v_reservation.id;
       UPDATE public.commercial_customer_orders
       SET status=v_new_status,updated_at=now()
