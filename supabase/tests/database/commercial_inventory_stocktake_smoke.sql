@@ -36,6 +36,44 @@ INSERT INTO public.commercial_inventory_costing_policies(organization_id,locatio
 VALUES('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','weighted_average');
 
 SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
+
+-- The production default must fail closed until balanced GL posting exists.
+DO $release_gate$
+DECLARE
+  v_created jsonb;
+  v_stocktake uuid;
+  v_line uuid;
+BEGIN
+  IF (SELECT gl_posting_enabled FROM public.commercial_inventory_stocktake_release_controls WHERE id=1) IS DISTINCT FROM false THEN
+    RAISE EXCEPTION 'stocktake_gl_release_gate_must_default_disabled';
+  END IF;
+  v_created := public.commercial_create_inventory_stocktake(
+    '10000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000001',
+    '20000000-0000-0000-0000-000000000001','stocktake-gate-001','release gate test'
+  );
+  v_stocktake := (v_created->>'stocktake_id')::uuid;
+  SELECT id INTO v_line FROM public.commercial_inventory_stocktake_lines WHERE stocktake_id=v_stocktake;
+  PERFORM public.commercial_set_inventory_stocktake_counts(v_stocktake,
+    jsonb_build_array(jsonb_build_object('line_id',v_line,'counted_quantity','10')));
+  PERFORM public.commercial_submit_inventory_stocktake(v_stocktake);
+  PERFORM set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',true);
+  PERFORM public.commercial_approve_inventory_stocktake(v_stocktake);
+  PERFORM set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
+  BEGIN
+    PERFORM public.commercial_post_inventory_stocktake(v_stocktake,'stocktake-gate-post-001');
+    RAISE EXCEPTION 'stocktake_posting_must_be_gl_gated';
+  EXCEPTION WHEN SQLSTATE '55000' THEN
+    IF SQLERRM<>'inventory_stocktake_accounting_integration_not_ready' THEN RAISE; END IF;
+  END;
+END
+$release_gate$;
+
+-- The fixture opts in only to exercise quantity/cost mechanics; production stays disabled.
+UPDATE public.commercial_inventory_stocktake_release_controls
+SET gl_posting_enabled=true,updated_at=now()
+WHERE id=1;
+
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
 SET LOCAL ROLE authenticated;
 
 DO $test$
@@ -60,6 +98,9 @@ BEGIN
   END IF;
   IF has_table_privilege('authenticated','public.commercial_inventory_stocktakes','INSERT') THEN
     RAISE EXCEPTION 'authenticated_direct_stocktake_insert_must_be_revoked';
+  END IF;
+  IF has_table_privilege('authenticated','public.commercial_inventory_stocktake_release_controls','UPDATE') THEN
+    RAISE EXCEPTION 'authenticated_stocktake_gl_gate_update_must_be_revoked';
   END IF;
 
   v_created := public.commercial_create_inventory_stocktake(
