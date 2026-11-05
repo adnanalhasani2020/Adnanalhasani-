@@ -20,9 +20,9 @@ class LocalSaleUnitIntegerQuantityTest {
             ]"""
         )
         val units = localSaleUnits(product)
-        assertEquals(listOf("EA", "BOX"), units.map { it.code })
-        assertEquals(listOf(1L, 12L), units.map { it.quantityInBase })
-        assertTrue(units.all { it.quantityInBase > 0L })
+        assertEquals(listOf("EA", "BOX", "HALF"), units.map { it.code })
+        assertEquals(listOf(1L, 12L, 0L), units.map { it.quantityInBase })
+        assertTrue(units.filter { it.code != "HALF" }.all { it.quantityInBase > 0L })
     }
 
     @Test
@@ -38,8 +38,8 @@ class LocalSaleUnitIntegerQuantityTest {
             ]"""
         )
         val units = localSaleUnits(product)
-        assertEquals(1, units.size)
-        assertEquals("EA", units.single().code)
-        assertEquals(1L, units.single().quantityInBase)
+        assertEquals(listOf("HALF", "EA"), units.map { it.code })
+        assertEquals(0L, units.first { it.code == "HALF" }.quantityInBase)
+        assertEquals(1L, units.first { it.code == "EA" }.quantityInBase)
     }
 }
