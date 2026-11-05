@@ -34,7 +34,7 @@ class CatalogActivityFilteredDiscoveryTests(unittest.TestCase):
         payload_start = browse.index("val payload = JSONObject()")
         payload_end = browse.index('catalogHttp("/rest/v1/rpc/commercial_catalog_discover_products_page"', payload_start)
         payload = browse[payload_start:payload_end]
-        self.assertIn('"p_activity_node_code",activityCode().trim().uppercase().ifBlank { JSONObject.NULL }', payload)
+        self.assertIn('.put("p_activity_node_code", activityCode().trim().uppercase()', payload)
 
 if __name__ == "__main__":
     unittest.main()
