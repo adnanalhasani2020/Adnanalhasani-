@@ -16,7 +16,7 @@ CONTRACT = ROOT / "android-commercial/docs/reports-data-contract.md"
 
 def test_user_sales_performance_uses_persisted_sale_actor_and_separate_currencies():
     repository = SALES_REPOSITORY.read_text(encoding="utf-8")
-    screen = SCREEN.read_text(encoding="utf-8") + DATA_STATE.read_text(encoding="utf-8") + INVENTORY_REPORT_LINES.read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8") + MAPPERS.read_text(encoding="utf-8")
+    screen = SCREEN.read_text(encoding="utf-8") + DATA_STATE.read_text(encoding="utf-8") + INVENTORY_REPORT_LINES.read_text(encoding="utf-8") + CATALOG.read_text(encoding="utf-8") + MAPPERS.read_text(encoding="utf-8") + MAPPERS.read_text(encoding="utf-8")
     calculations = CALCULATIONS.read_text(encoding="utf-8")
     contract = CONTRACT.read_text(encoding="utf-8")
 
