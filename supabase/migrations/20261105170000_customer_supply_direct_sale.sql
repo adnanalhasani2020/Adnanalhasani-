@@ -16,6 +16,58 @@ ALTER TABLE public.commercial_customer_supply_request_events
  ADD CONSTRAINT commercial_customer_supply_request_events_event_type_check
  CHECK(event_type IN('submitted','accepted','rejected','change_requested','ignored','deferred','resubmitted','converted','sold'));
 
+CREATE OR REPLACE FUNCTION public.commercial_customer_portal_list_my_supply_requests(p_organization_id uuid DEFAULT NULL)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $function$
+DECLARE v_uid uuid:=auth.uid(); v_result jsonb;
+BEGIN
+ IF v_uid IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
+ PERFORM public.commercial_customer_portal_link_verified_email();
+ SELECT coalesce(jsonb_agg(jsonb_build_object(
+  'id',r.id,'organization_id',r.organization_id,'organization_name',o.name,'item_name',r.item_name,
+  'specifications',r.specifications,'quantity',r.requested_quantity,'unit_code',r.unit_code,'unit_name',r.unit_name,
+  'requested_price_minor',r.requested_price_minor,'currency_code',r.currency_code,'payment_mode',r.payment_mode,
+  'customer_note',r.customer_note,'status',r.status,'merchant_note',r.merchant_note,
+  'purchase_order_id',r.purchase_order_id,'customer_order_id',r.customer_order_id,'sale_id',r.sale_id,
+  'direct_sale_status',r.direct_sale_status,'version',r.version,'created_at',r.created_at,'updated_at',r.updated_at
+ ) ORDER BY r.created_at DESC,r.id),'[]'::jsonb) INTO v_result
+ FROM public.commercial_customer_supply_requests r
+ JOIN public.commercial_customers c ON c.id=r.customer_id AND c.organization_id=r.organization_id
+  AND c.auth_user_id=v_uid AND c.state='active'
+ JOIN public.commercial_organizations o ON o.id=r.organization_id
+ WHERE p_organization_id IS NULL OR r.organization_id=p_organization_id;
+ RETURN v_result;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.commercial_customer_portal_list_organization_supply_requests(
+ p_organization_id uuid,p_limit integer DEFAULT 100
+) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $function$
+DECLARE v_uid uuid:=auth.uid(); v_result jsonb;
+BEGIN
+ IF v_uid IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
+ IF p_limit IS NULL OR p_limit NOT BETWEEN 1 AND 200 OR NOT EXISTS(
+  SELECT 1 FROM public.commercial_organization_members m WHERE m.organization_id=p_organization_id
+   AND m.user_id=v_uid AND m.state='active' AND m.role IN('owner','admin','manager')
+ ) THEN RAISE EXCEPTION 'customer_supply_request_management_forbidden' USING ERRCODE='42501'; END IF;
+ SELECT coalesce(jsonb_agg(jsonb_build_object(
+  'id',r.id,'customer_name',c.display_name,'item_name',r.item_name,'specifications',r.specifications,
+  'quantity',r.requested_quantity,'unit_code',r.unit_code,'unit_name',r.unit_name,
+  'requested_price_minor',r.requested_price_minor,'currency_code',r.currency_code,
+  'payment_mode',r.payment_mode,'customer_note',r.customer_note,'status',r.status,
+  'merchant_note',r.merchant_note,'purchase_order_id',r.purchase_order_id,
+  'sale_id',r.sale_id,'direct_sale_status',r.direct_sale_status,
+  'version',r.version,'created_at',r.created_at,'updated_at',r.updated_at
+ ) ORDER BY r.created_at DESC,r.id),'[]'::jsonb) INTO v_result
+ FROM (
+  SELECT * FROM public.commercial_customer_supply_requests
+  WHERE organization_id=p_organization_id
+  ORDER BY created_at DESC,id DESC LIMIT p_limit
+ ) r
+ JOIN public.commercial_customers c ON c.id=r.customer_id AND c.organization_id=r.organization_id;
+ RETURN v_result;
+END;
+$function$;
+
 -- Direct sale is permitted only after the purchase order has been fully received and
 -- a supplier invoice has been recorded. Purchase receipt and sale checkout run in one
 -- transaction; any failure rolls both back. The temporary price override is protected
