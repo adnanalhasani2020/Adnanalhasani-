@@ -56,6 +56,7 @@ internal fun StoreApp(context: Context) {
     var showActivityProfile by remember { mutableStateOf(false) }
     var showPersonalAccounts by remember { mutableStateOf(false) }
     var personalWorkNotesPage by remember { mutableStateOf(false) }
+    var barcodeScannerPage by remember { mutableStateOf(false) }
     var showNotifications by remember { mutableStateOf(false) }
     var showCatalog by remember { mutableStateOf(false) }
     var pendingCatalogProduct by remember { mutableStateOf<CatalogProduct?>(null) }
@@ -260,6 +261,8 @@ internal fun StoreApp(context: Context) {
                 CommercialNotificationsScreen(context = context, onBack = { showNotifications = false })
             } else if (personalWorkNotesPage) {
                 PersonalWorkNotesScreen(context = context, onBack = { personalWorkNotesPage = false })
+            } else if (barcodeScannerPage) {
+                BarcodeScannerScreen(onBack = { barcodeScannerPage = false }, onBarcodeFound = { code -> query = code; barcodeScannerPage = false })
             } else if (customerPaymentRequestsPage) {
                 CustomerPortalPaymentRequestsScreen(
                     context = context,
@@ -324,7 +327,7 @@ internal fun StoreApp(context: Context) {
                 }, { index ->
                     if (cloudMode) cloudNotice = "تعديل الصنف غير متاح حتى يكتمل ربط تحديث السعر وحركة المخزون على الخادم."
                     else editingProductIndex = index
-                })
+                }, { barcodeScannerPage = true })
                 else -> when {
                     cloudSalesPage -> CommercialCloudSalesScreen(context = context, onBack = { cloudSalesPage = false })
                     cloudPurchasesPage -> CommercialCloudPurchasesScreen(context = context, onBack = { cloudPurchasesPage = false })
