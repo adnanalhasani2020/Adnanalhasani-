@@ -39,6 +39,7 @@ def test_cloud_rpcs_and_numeric_storage_are_integer_only():
     assert "data_type IN ('numeric','decimal','real','double precision')" in migration
     assert "commercial_purchase_order_items" in migration
     assert "commercial_sale_items" in migration
+    assert "'commercial_global_units'" not in migration
     assert "CREATE OR REPLACE FUNCTION public.commercial_customer_portal_create_order(" in migration
     assert "CREATE OR REPLACE FUNCTION public.commercial_customer_portal_create_delegated_order(" in migration
     assert "CREATE OR REPLACE FUNCTION public.commercial_customer_portal_create_multi_service_booking(" in migration
