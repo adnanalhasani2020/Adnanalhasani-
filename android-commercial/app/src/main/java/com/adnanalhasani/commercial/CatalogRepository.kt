@@ -81,6 +81,11 @@ internal fun loadCommercialCloudInventory(context: Context): CommercialCloudInve
                 onHand.subtract(reserved)
             }.getOrElse { throw IllegalStateException(it.message ?: "تعذر التحقق من رصيد المخزون السحابي.") }
             val quantity = availableQuantity.min(BigDecimal.valueOf(Int.MAX_VALUE.toLong())).toInt()
+            val reorderValue = BigDecimal(row.optString("reorder_point", "0"))
+            require(reorderValue.stripTrailingZeros().scale() <= 0 && reorderValue.signum() >= 0) {
+                "حد إعادة الطلب السحابي يجب أن يكون عددًا صحيحًا غير سالب."
+            }
+            val reorderPoint = reorderValue.min(BigDecimal.valueOf(Int.MAX_VALUE.toLong())).toInt()
             val price = offering.optLong("price_minor", 0L).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
             val sellUnits = offering.optJSONArray("sell_units") ?: JSONArray()
             val sellUnitsJson = JSONArray()
@@ -111,7 +116,7 @@ internal fun loadCommercialCloudInventory(context: Context): CommercialCloudInve
                 unitCode = baseUnitCode,
                 unitVariantsJson = sellUnitsJson.toString(),
                 createdBy = orgId,
-                reorderPoint = row.optDouble("reorder_point", 0.0).toInt().coerceAtLeast(0),
+                reorderPoint = reorderPoint,
                 stockPrecise = availableQuantity
             ))
         }
