@@ -30,7 +30,7 @@ class CatalogInventoryTransferContract(unittest.TestCase):
         self.assertIn("'stock_received',false",sql)
         self.assertIn("commercial_purchase_order_items",sql)
         mapping=(ROOT/"supabase/migrations/20261029070000_invoice_purchase_catalog_mapping.sql").read_text(encoding="utf-8")
-        kt=(ROOT/"android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogScreen.kt").read_text(encoding="utf-8") + (ROOT/"android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogScreenSections.kt").read_text(encoding="utf-8") + (ROOT/"android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogMarketDiscoverySection.kt").read_text(encoding="utf-8") + (ROOT/"android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogProductResultCard.kt").read_text(encoding="utf-8")
+        kt=catalog_android_source()
         self.assertIn("commercial_invoice_purchase_map_known_items",mapping)
         self.assertIn("stock_changed",mapping)
         self.assertIn("recipient_catalog_mapping_forbidden",mapping)
@@ -72,7 +72,7 @@ def test_activity_profile_supports_supabase_phone_sms_otp():
 
 def test_catalog_inventory_creation_is_atomic_idempotent_and_explicitly_mapped():
     sql=(ROOT/"supabase/migrations/20261029060000_catalog_create_inventory_atomic.sql").read_text(encoding="utf-8")
-    kt=(ROOT/"android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogScreen.kt").read_text(encoding="utf-8") + (ROOT/"android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogScreenSections.kt").read_text(encoding="utf-8") + (ROOT/"android-commercial/app/src/main/java/com/adnanalhasani/commercial/CatalogProductResultCard.kt").read_text(encoding="utf-8")
+    kt=catalog_android_source()
     main=(ROOT/"android-commercial/app/src/main/java/com/adnanalhasani/commercial/StoreApp.kt").read_text(encoding="utf-8")
     assert "commercial_create_inventory_item_with_category_and_unit" in sql
     assert "commercial_catalog_item_offerings" in sql
