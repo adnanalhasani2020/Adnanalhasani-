@@ -213,7 +213,7 @@ internal fun PurchaseOrderEntryDialog(
                             line.offeringId.isNotBlank() && line.description.isNotBlank() &&
                                 available?.offerings?.firstOrNull { it.id == line.offeringId }?.locationRef == locationId &&
                                 qty != null && qty > java.math.BigDecimal.ZERO &&
-                                qty.stripTrailingZeros().scale() <= 6 &&
+                                qty.stripTrailingZeros().scale() <= 0 &&
                                 (line.unitCostMinor.toLongOrNull() ?: -1L) >= 0L
                         }
                         when {
