@@ -4,7 +4,7 @@
 -- This is intentionally a gate, not a substitute for authenticated end-to-end checkout/payment tests.
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT plan(11);
+SELECT plan(12);
 
 -- Receivable arithmetic: approved return credit reduces the sale obligation once;
 -- an executed cash refund also reduces net cash paid, not the sale credit itself.
@@ -66,6 +66,34 @@ SELECT ok(
       AND conname = 'commercial_sale_items_selling_quantity_whole_qty_ck'
   ),
   'sale lines retain whole selling and stock quantities with compatible storage types'
+);
+SELECT ok(
+  EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.commercial_customer_order_items'::regclass
+      AND conname = 'commercial_customer_order_items_quantity_whole_qty_ck'
+  )
+  AND EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.commercial_supplier_invoice_items'::regclass
+      AND conname = 'commercial_supplier_invoice_items_quantity_whole_qty_ck'
+  )
+  AND EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.commercial_purchase_order_items'::regclass
+      AND conname = 'commercial_purchase_order_items_quantity_ordered_whole_qty_ck'
+  )
+  AND EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.commercial_inventory_balances'::regclass
+      AND conname = 'commercial_inventory_balances_quantity_on_hand_whole_qty_ck'
+  )
+  AND EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.commercial_global_units'::regclass
+      AND conname = 'commercial_global_units_factor_to_base_whole_qty_ck'
+  ),
+  'whole quantity constraints cover customer orders, supplier invoices, purchases, stock and unit factors'
 );
 SELECT ok(
   position('coalesce(v_line->>''quantity'','''') !~ ''^(0|[1-9][0-9]{0,5})$''' in pg_get_functiondef(
