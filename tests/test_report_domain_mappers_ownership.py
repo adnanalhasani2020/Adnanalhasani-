@@ -7,6 +7,9 @@ SCREEN = ANDROID / "ReportsCenterScreen.kt"
 DATA_STATE = ANDROID / "ReportsCenterData.kt"
 MAPPERS = ANDROID / "ReportDomainMappers.kt"
 RESULTS = ANDROID / "ReportsResultSection.kt"
+SUPPLIER_ROWS = ANDROID / "ReportSupplierRows.kt"
+PROFITABILITY_ROWS = ANDROID / "ReportProfitabilityRows.kt"
+PARTY_ROWS = ANDROID / "ReportPartyStatementRows.kt"
 DERIVED_ROWS = ANDROID / "ReportDerivedRows.kt"
 
 
@@ -58,9 +61,12 @@ def test_report_screen_consumes_the_extracted_mapper_contracts():
     data = DATA_STATE.read_text(encoding="utf-8")
     results = RESULTS.read_text(encoding="utf-8")
     derived_rows = DERIVED_ROWS.read_text(encoding="utf-8")
-    assert "toPriceVarianceInput()" in data
-    assert "toCostProfitInput()" in data
-    assert "toCustomerStatementInputs()" in data
+    supplier_rows = SUPPLIER_ROWS.read_text(encoding="utf-8")
+    profitability_rows = PROFITABILITY_ROWS.read_text(encoding="utf-8")
+    party_rows = PARTY_ROWS.read_text(encoding="utf-8")
+    assert "toPriceVarianceInput()" in supplier_rows
+    assert "toCostProfitInput()" in profitability_rows
+    assert "toCustomerStatementInputs()" in party_rows
     assert "toItemProfitSaleLineInputs(startMillis, endExclusive)" in data
     assert "toItemProfitReturnInputs(startMillis, endExclusive)" in data
     assert "toCustomerCollectionPaymentInputs(startMillis, endExclusive)" in data
