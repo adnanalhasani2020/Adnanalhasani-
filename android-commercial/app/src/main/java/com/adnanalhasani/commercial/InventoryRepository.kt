@@ -198,7 +198,7 @@ internal fun loadCommercialInventoryRotationPolicy(context: Context): Commercial
         val scope = row.optString("location_id").takeUnless { it.isBlank() || it == "null" }
         if (scope == null) organizationMethod = method else if (scope == locationId) locationMethod = method
     }
-    return CommercialInventoryRotationPolicyState(organizationMethod, locationMethod, locationMethod ?: organizationMethod ?: "fifo")
+    return CommercialInventoryRotationPolicyState(organizationMethod, locationMethod, locationMethod ?: organizationMethod ?: "fefo")
 }
 
 internal fun saveCommercialInventoryRotationPolicy(context: Context, method: String, scope: String) {
