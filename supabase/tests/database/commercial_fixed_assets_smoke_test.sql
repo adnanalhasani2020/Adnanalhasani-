@@ -155,6 +155,8 @@ BEGIN
  result:=public.commercial_fixed_asset_update(asset_id,3,'disposed',second_location_id,manager_id,
   'تم الاستبعاد',date '2026-10-01',15000::bigint);
  IF result->>'status'<>'disposed' OR (result->>'version')::integer<>4 THEN RAISE EXCEPTION 'asset_disposal_failed'; END IF;
+ result:=public.commercial_fixed_asset_move(asset_id,2,second_location_id,manager_id,'نقل إلى المستودع الفرعي','asset-move-key-001');
+ IF result->>'replayed'<>'true' THEN RAISE EXCEPTION 'disposed_asset_movement_replay_failed'; END IF;
  BEGIN
   PERFORM public.commercial_fixed_asset_depreciation_preview(org_id,activity_id,asset_id,600);
   RAISE EXCEPTION 'disposed_asset_preview_was_allowed';
