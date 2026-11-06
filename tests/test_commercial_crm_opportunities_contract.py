@@ -28,7 +28,7 @@ def test_opportunity_repository_uses_tenant_scoped_authenticated_rpcs():
 
 
 def test_opportunity_database_contract_is_rpc_only_and_optimistically_locked():
-    migration = (ROOT / "supabase/migrations/20261106120000_commercial_crm_opportunities.sql").read_text(encoding="utf-8")
+    migration = (ROOT / "supabase/migrations/20261106112403_commercial_crm_opportunities.sql").read_text(encoding="utf-8")
     smoke = (ROOT / "supabase/tests/database/commercial_crm_opportunities_smoke_test.sql").read_text(encoding="utf-8")
     assert "FOREIGN KEY(lead_id,organization_id,activity_id)" in migration
     assert "ENABLE ROW LEVEL SECURITY" in migration
