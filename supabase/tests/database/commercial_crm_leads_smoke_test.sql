@@ -137,12 +137,27 @@ BEGIN
  IF has_table_privilege('anon','public.commercial_crm_leads','SELECT')
   OR has_table_privilege('authenticated','public.commercial_crm_leads','SELECT')
   OR has_table_privilege('authenticated','public.commercial_crm_leads','INSERT')
+  OR has_table_privilege('authenticated','public.commercial_crm_leads','UPDATE')
+  OR has_table_privilege('authenticated','public.commercial_crm_leads','DELETE')
+  OR has_table_privilege('anon','public.commercial_crm_activities','SELECT')
   OR has_table_privilege('authenticated','public.commercial_crm_activities','SELECT')
-  OR has_table_privilege('authenticated','public.commercial_crm_activities','INSERT') THEN
+  OR has_table_privilege('authenticated','public.commercial_crm_activities','INSERT')
+  OR has_table_privilege('authenticated','public.commercial_crm_activities','UPDATE')
+  OR has_table_privilege('authenticated','public.commercial_crm_activities','DELETE') THEN
   RAISE EXCEPTION 'crm_direct_table_access_not_revoked';
  END IF;
  IF has_function_privilege('anon','public.commercial_crm_lead_create(uuid,uuid,text,text,text,text,text,text,uuid,timestamp with time zone,text)','EXECUTE')
   OR NOT has_function_privilege('authenticated','public.commercial_crm_lead_create(uuid,uuid,text,text,text,text,text,text,uuid,timestamp with time zone,text)','EXECUTE')
+  OR has_function_privilege('anon','public.commercial_crm_lead_list(uuid,uuid,integer)','EXECUTE')
+  OR NOT has_function_privilege('authenticated','public.commercial_crm_lead_list(uuid,uuid,integer)','EXECUTE')
+  OR has_function_privilege('anon','public.commercial_crm_lead_update(uuid,integer,text,text,timestamp with time zone,uuid)','EXECUTE')
+  OR NOT has_function_privilege('authenticated','public.commercial_crm_lead_update(uuid,integer,text,text,timestamp with time zone,uuid)','EXECUTE')
+  OR has_function_privilege('anon','public.commercial_crm_activity_create(uuid,uuid,uuid,text,text,text,timestamp with time zone,uuid,text)','EXECUTE')
+  OR NOT has_function_privilege('authenticated','public.commercial_crm_activity_create(uuid,uuid,uuid,text,text,text,timestamp with time zone,uuid,text)','EXECUTE')
+  OR has_function_privilege('anon','public.commercial_crm_activity_list(uuid,uuid,integer)','EXECUTE')
+  OR NOT has_function_privilege('authenticated','public.commercial_crm_activity_list(uuid,uuid,integer)','EXECUTE')
+  OR has_function_privilege('anon','public.commercial_crm_activity_update(uuid,integer,text,text)','EXECUTE')
+  OR NOT has_function_privilege('authenticated','public.commercial_crm_activity_update(uuid,integer,text,text)','EXECUTE')
   OR has_function_privilege('authenticated','public.commercial_crm_context_role(uuid,uuid)','EXECUTE') THEN
   RAISE EXCEPTION 'crm_function_grants_invalid';
  END IF;
