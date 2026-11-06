@@ -29,6 +29,8 @@ def test_lead_conversion_prevents_duplicates_and_is_idempotent():
     assert "crm-lead:" in sql
     assert "request_fingerprint" in sql
     assert "FOR UPDATE" in sql
+    assert "'converted_customer_id',c.customer_id" in sql
+    assert "'converted_at',c.created_at" in sql
 
 
 def test_android_repository_and_screen_expose_conversion_action():
@@ -40,6 +42,8 @@ def test_android_repository_and_screen_expose_conversion_action():
     assert "convertCommercialCrmLead(context, lead, pendingConversionKey)" in screen
     assert "تحويل إلى عميل" in screen
     assert "دون إنشاء سجل مكرر" in screen
+    assert "lead.convertedCustomerId.isBlank()" in screen
+    assert "تم التحويل إلى عميل" in screen
     assert "alreadyConverted ->" in screen
 
 
