@@ -8,7 +8,7 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - 'supabase/migrations/20261106002100_general_customer_supply_requests_forward_20261106.sql'
+      - 'supabase/migrations/20261106102440_general_customer_supply_requests_forward_20261106.sql'
       - 'supabase/tests/fixtures/general_customer_supply_requests_schema_fixture.sql'
       - 'supabase/tests/database/general_customer_supply_requests_smoke_test.sql'
       - '.github/workflows/general-customer-supply-requests-smoke.yml'
@@ -52,6 +52,6 @@ jobs:
       - name: Load isolated customer supply fixture
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/fixtures/general_customer_supply_requests_schema_fixture.sql
       - name: Apply customer supply request migration
-        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106002100_general_customer_supply_requests_forward_20261106.sql
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106102440_general_customer_supply_requests_forward_20261106.sql
       - name: Verify customer submission, merchant review, notifications, purchase conversion and list limit
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/database/general_customer_supply_requests_smoke_test.sql
