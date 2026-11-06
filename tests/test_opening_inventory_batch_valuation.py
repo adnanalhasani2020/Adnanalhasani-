@@ -2,7 +2,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MIGRATION = ROOT / "supabase/migrations/20261106125821_opening_inventory_batch_valuation.sql"
+MIGRATION = ROOT / "supabase/migrations/20261106131420_opening_inventory_batch_valuation.sql"
 SMOKE = ROOT / "supabase/tests/database/commercial_inventory_batch_fefo_smoke_test.sql"
 DIALOG = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialOpeningInventoryBatchValuationDialog.kt"
 SCREEN = ROOT / "android-commercial/app/src/main/java/com/adnanalhasani/commercial/CommercialCloudStockAlertsScreen.kt"
