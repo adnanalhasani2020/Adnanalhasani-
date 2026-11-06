@@ -1,4 +1,4 @@
-\\set ON_ERROR_STOP on
+\set ON_ERROR_STOP on
 DO $$
 DECLARE
  manager_id uuid:='10000000-0000-0000-0000-000000000021';
