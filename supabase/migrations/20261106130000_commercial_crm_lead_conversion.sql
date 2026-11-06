@@ -24,6 +24,37 @@ CREATE INDEX commercial_crm_lead_conversions_customer_idx
 ALTER TABLE public.commercial_crm_lead_conversions ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.commercial_crm_lead_conversions FROM PUBLIC,anon,authenticated;
 
+CREATE OR REPLACE FUNCTION public.commercial_crm_lead_list(
+ p_organization_id uuid,p_activity_id uuid,p_limit integer DEFAULT 100
+) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
+AS $function$
+DECLARE v_uid uuid:=auth.uid(); v_role text; v_result jsonb;
+BEGIN
+ v_role:=public.commercial_crm_context_role(p_organization_id,p_activity_id);
+ IF p_limit IS NULL OR p_limit NOT BETWEEN 1 AND 200 THEN
+  RAISE EXCEPTION 'invalid_crm_list_limit' USING ERRCODE='22023';
+ END IF;
+ SELECT coalesce(jsonb_agg(jsonb_build_object(
+  'id',l.id,'name',l.name,'company_name',l.company_name,'email',l.email,'phone',l.phone,
+  'source',l.source,'status',l.status,'assigned_to',l.assigned_to,'notes',l.notes,
+  'next_follow_up_at',l.next_follow_up_at,'version',l.version,
+  'converted_customer_id',c.customer_id,'converted_at',c.created_at,
+  'created_at',l.created_at,'updated_at',l.updated_at
+ ) ORDER BY l.updated_at DESC,l.id),'[]'::jsonb) INTO v_result
+ FROM (
+  SELECT * FROM public.commercial_crm_leads
+  WHERE organization_id=p_organization_id AND activity_id=p_activity_id
+   AND (v_role<>'staff' OR assigned_to=v_uid)
+  ORDER BY updated_at DESC,id LIMIT p_limit
+ ) l
+ LEFT JOIN public.commercial_crm_lead_conversions c ON c.lead_id=l.id;
+ RETURN v_result;
+END;
+$function$;
+REVOKE ALL ON FUNCTION public.commercial_crm_lead_list(uuid,uuid,integer) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.commercial_crm_lead_list(uuid,uuid,integer) TO authenticated;
+
 CREATE OR REPLACE FUNCTION public.commercial_crm_lead_convert(
  p_lead_id uuid,p_expected_version integer,p_idempotency_key text
 ) RETURNS jsonb
