@@ -132,6 +132,49 @@ internal data class CommercialInventoryCostingPolicyState(
     val effectiveMethod: String
 )
 
+internal data class CommercialInventoryRotationPolicyState(
+    val organizationMethod: String?,
+    val locationMethod: String?,
+    val effectiveMethod: String
+)
+
+internal fun loadCommercialInventoryRotationPolicy(context: Context): CommercialInventoryRotationPolicyState {
+    val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+    val locationId = saved.getString("location_id", null).orEmpty()
+    require(locationId.isNotBlank()) { "اختر موقع المؤسسة قبل تحميل طريقة صرف الدفعات." }
+    val (orgId, access) = commercialMasterDataAccess(context)
+    val rows = commercialCloudPagedGet(
+        "/rest/v1/commercial_inventory_rotation_policies?select=id,location_id,rotation_method" +
+            "&organization_id=eq.$orgId&or=(location_id.eq.$locationId,location_id.is.null)&order=location_id.desc",
+        access
+    )
+    var organizationMethod: String? = null
+    var locationMethod: String? = null
+    for (index in 0 until rows.length()) {
+        val row = rows.optJSONObject(index) ?: continue
+        val method = row.optString("rotation_method").takeIf { it in setOf("fifo", "fefo") } ?: continue
+        val scope = row.optString("location_id").takeUnless { it.isBlank() || it == "null" }
+        if (scope == null) organizationMethod = method else if (scope == locationId) locationMethod = method
+    }
+    return CommercialInventoryRotationPolicyState(organizationMethod, locationMethod, locationMethod ?: organizationMethod ?: "fifo")
+}
+
+internal fun saveCommercialInventoryRotationPolicy(context: Context, method: String, scope: String) {
+    require(method in setOf("fifo", "fefo")) { "طريقة صرف الدفعات غير صالحة." }
+    require(scope in setOf("organization", "location")) { "نطاق سياسة الصرف غير صالح." }
+    val saved = context.getSharedPreferences("commercial_cloud_context_v1", Context.MODE_PRIVATE)
+    val locationId = saved.getString("location_id", null).orEmpty()
+    require(scope != "location" || locationId.isNotBlank()) { "اختر موقع المؤسسة أولًا." }
+    val (orgId, access) = commercialMasterDataAccess(context)
+    SupabaseClient.request(
+        "/rest/v1/rpc/commercial_set_inventory_rotation_policy", "POST",
+        JSONObject().put("p_organization_id", orgId)
+            .put("p_location_id", if (scope == "location") locationId else JSONObject.NULL)
+            .put("p_rotation_method", method),
+        access
+    )
+}
+
 internal data class CommercialCloudCostLayerSummary(
     val activeLayerCount: Int,
     val offeringCount: Int,
