@@ -73,3 +73,13 @@ def test_opening_valuation_preserves_inspection_condition_and_blocks_expired_lot
     assert "'OPEN-LOT-B','expires_on','2027-06-01','stock_condition','quarantine'" in smoke
     assert "'OPEN-LOT-C','expires_on','2027-08-01','stock_condition','damaged'" in smoke
     assert "opening_batch_condition_not_preserved_or_expiry_not_enforced" in smoke
+
+
+def test_android_opening_batch_dialog_requires_visible_condition_selection():
+    dialog = DIALOG.read_text(encoding="utf-8")
+    repository = REPOSITORY.read_text(encoding="utf-8")
+    assert 'row.stockCondition == "sellable"' in dialog
+    assert 'row.stockCondition = "quarantine"' in dialog
+    assert 'row.stockCondition = "damaged"' in dialog
+    assert "الدفعة المحجورة أو التالفة لا تدخل في الصرف" in dialog
+    assert '.put("stock_condition", condition)' in repository
