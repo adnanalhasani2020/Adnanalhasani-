@@ -1,0 +1,57 @@
+name: Commercial support ticket lifecycle smoke test
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/20261106170000_commercial_support_tickets.sql'
+      - 'supabase/tests/fixtures/commercial_crm_leads_schema_fixture.sql'
+      - 'supabase/tests/database/commercial_support_tickets_smoke_test.sql'
+      - '.github/workflows/commercial-support-tickets-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  support-ticket-migration:
+    timeout-minutes: 10
+    name: PostgreSQL 17 support ticket lifecycle and authorization
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: postgres
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+      - name: Load production-shaped organization, customer and audit fixture
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/fixtures/commercial_crm_leads_schema_fixture.sql
+      - name: Apply support ticket migration
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106170000_commercial_support_tickets.sql
+      - name: Verify ticket lifecycle, role isolation, comments and idempotency
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/database/commercial_support_tickets_smoke_test.sql
