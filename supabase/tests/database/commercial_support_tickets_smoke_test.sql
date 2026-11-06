@@ -102,7 +102,7 @@ BEGIN
 
  PERFORM set_config('request.jwt.claim.sub',manager_id::text,true);
  result:=public.commercial_support_ticket_update(ticket_id,3,'resolved','urgent',manager_id);
- IF result->>'status'<>'resolved' OR (result->>'priority') IS NOT NULL
+ IF result->>'status'<>'resolved' OR result->>'priority'<>'urgent'
   OR (result->>'version')::integer<>4 THEN RAISE EXCEPTION 'manager_ticket_update_failed'; END IF;
 
  PERFORM set_config('request.jwt.claim.sub',staff_id::text,true);
@@ -122,8 +122,12 @@ BEGIN
   OR has_table_privilege('authenticated','public.commercial_support_tickets','SELECT')
   OR has_table_privilege('authenticated','public.commercial_support_tickets','INSERT')
   OR has_table_privilege('authenticated','public.commercial_support_tickets','UPDATE')
+  OR has_table_privilege('authenticated','public.commercial_support_tickets','DELETE')
+  OR has_table_privilege('anon','public.commercial_support_ticket_messages','SELECT')
   OR has_table_privilege('authenticated','public.commercial_support_ticket_messages','SELECT')
-  OR has_table_privilege('authenticated','public.commercial_support_ticket_messages','INSERT') THEN
+  OR has_table_privilege('authenticated','public.commercial_support_ticket_messages','INSERT')
+  OR has_table_privilege('authenticated','public.commercial_support_ticket_messages','UPDATE')
+  OR has_table_privilege('authenticated','public.commercial_support_ticket_messages','DELETE') THEN
   RAISE EXCEPTION 'support_ticket_table_privileges_invalid';
  END IF;
  IF has_function_privilege('anon','public.commercial_support_ticket_create(uuid,uuid,uuid,text,text,text,text,uuid,text,text)','EXECUTE')
@@ -131,7 +135,11 @@ BEGIN
   OR has_function_privilege('anon','public.commercial_support_ticket_update(uuid,integer,text,text,uuid)','EXECUTE')
   OR NOT has_function_privilege('authenticated','public.commercial_support_ticket_update(uuid,integer,text,text,uuid)','EXECUTE')
   OR has_function_privilege('anon','public.commercial_support_ticket_message_create(uuid,text,text)','EXECUTE')
-  OR NOT has_function_privilege('authenticated','public.commercial_support_ticket_message_create(uuid,text,text)','EXECUTE') THEN
+  OR NOT has_function_privilege('authenticated','public.commercial_support_ticket_message_create(uuid,text,text)','EXECUTE')
+  OR has_function_privilege('anon','public.commercial_support_ticket_list(uuid,uuid,text,integer)','EXECUTE')
+  OR NOT has_function_privilege('authenticated','public.commercial_support_ticket_list(uuid,uuid,text,integer)','EXECUTE')
+  OR has_function_privilege('anon','public.commercial_support_ticket_message_list(uuid,integer)','EXECUTE')
+  OR NOT has_function_privilege('authenticated','public.commercial_support_ticket_message_list(uuid,integer)','EXECUTE') THEN
   RAISE EXCEPTION 'support_ticket_rpc_grants_invalid';
  END IF;
 END $$;
