@@ -72,6 +72,7 @@ internal data class CommercialCloudStockAlert(
     val productName: String,
     val categoryName: String,
     val unitName: String,
+    val currencyCode: String,
     val availableQuantity: Double,
     val reorderPoint: Double,
     val quantityOnHand: java.math.BigDecimal,
@@ -88,7 +89,7 @@ internal fun loadCommercialCloudStockAlerts(context: Context): List<CommercialCl
     }
     val (orgId, access) = commercialMasterDataAccess(context)
     val query = "/rest/v1/commercial_inventory_balances" +
-        "?select=offering_id,quantity_on_hand,quantity_reserved,reorder_point,unit_cost_minor,offering:commercial_offerings!inner(id,activity_id,product:commercial_products!inner(name,unit_name,state),categories:commercial_offering_categories(is_primary,category:commercial_product_categories(name_ar,name_en)))" +
+        "?select=offering_id,quantity_on_hand,quantity_reserved,reorder_point,unit_cost_minor,offering:commercial_offerings!inner(id,activity_id,currency_code,product:commercial_products!inner(name,unit_name,state),categories:commercial_offering_categories(is_primary,category:commercial_product_categories(name_ar,name_en)))" +
         "&organization_id=eq.$orgId&location_id=eq.$locationId&offering.activity_id=eq.$activityId&order=updated_at.desc,offering_id.asc"
     val batchRows = JSONArray(SupabaseClient.request(
         "/rest/v1/rpc/commercial_list_inventory_batches", "POST",
@@ -133,6 +134,7 @@ internal fun loadCommercialCloudStockAlerts(context: Context): List<CommercialCl
                 productName = product.optString("name").ifBlank { "صنف بدون اسم" },
                 categoryName = categoryName,
                 unitName = product.optString("unit_name").ifBlank { "وحدة" },
+                currencyCode = offering.optString("currency_code").ifBlank { "غير محددة" },
                 availableQuantity = (sellableByOffering[offering.optString("id")] ?: BigDecimal.ZERO)
                     .subtract(reserved).max(BigDecimal.ZERO).toDouble(),
                 reorderPoint = reorder.toDouble(),
