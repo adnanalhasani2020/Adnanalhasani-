@@ -449,6 +449,3 @@ private fun CrmFollowUpDialog(
         dismissButton = { TextButton(onClick = onDismiss, enabled = !saving) { Text("إلغاء") } }
     )
 }
-
-@Composable
-private fun onSaveContext(): Context = androidx.compose.ui.platform.LocalContext.current
