@@ -40,6 +40,13 @@ BEGIN
   RAISE EXCEPTION 'converted_customer_directory_record_invalid';
  END IF;
 
+ result:=public.commercial_crm_lead_list(org_id,activity_id,100);
+ IF NOT (result @> jsonb_build_array(jsonb_build_object(
+  'id',lead_new::text,'converted_customer_id',new_customer::text
+ ))) THEN
+  RAISE EXCEPTION 'converted_customer_status_missing_from_lead_list';
+ END IF;
+
  -- Same key replays; a new key returns the existing conversion without another customer.
  result:=public.commercial_crm_lead_convert(lead_new,1,'convert-new-customer-0001');
  IF (result->>'customer_id')::uuid<>new_customer OR NOT (result->>'replayed')::boolean THEN
