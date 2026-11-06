@@ -102,7 +102,7 @@ BEGIN
  IF p_name IS NULL OR length(btrim(p_name)) NOT BETWEEN 1 AND 160
   OR length(coalesce(p_company_name,''))>160 OR length(coalesce(p_email,''))>254
   OR length(coalesce(p_phone,''))>40 OR length(coalesce(p_notes,''))>4000
-  OR p_source NOT IN ('walk_in','referral','social','website','campaign','phone','other')
+  OR p_source IS NULL OR p_source NOT IN ('walk_in','referral','social','website','campaign','phone','other')
   OR p_idempotency_key IS NULL OR length(btrim(p_idempotency_key)) NOT BETWEEN 8 AND 200 THEN
   RAISE EXCEPTION 'invalid_crm_lead' USING ERRCODE='22023';
  END IF;
@@ -190,7 +190,7 @@ BEGIN
  IF p_expected_version IS NULL OR p_expected_version<>v_lead.version THEN
   RAISE EXCEPTION 'crm_lead_version_conflict' USING ERRCODE='40001';
  END IF;
- IF p_status NOT IN ('new','contacted','qualified','unqualified','lost')
+ IF p_status IS NULL OR p_status NOT IN ('new','contacted','qualified','unqualified','lost')
   OR length(coalesce(p_notes,''))>4000 THEN
   RAISE EXCEPTION 'invalid_crm_lead_update' USING ERRCODE='22023';
  END IF;
@@ -227,7 +227,7 @@ BEGIN
  IF v_role='viewer' THEN RAISE EXCEPTION 'crm_write_permission_required' USING ERRCODE='42501'; END IF;
  IF p_title IS NULL OR length(btrim(p_title)) NOT BETWEEN 1 AND 160
   OR length(coalesce(p_description,''))>4000
-  OR p_activity_type NOT IN ('call','meeting','email','task','note')
+  OR p_activity_type IS NULL OR p_activity_type NOT IN ('call','meeting','email','task','note')
   OR p_idempotency_key IS NULL OR length(btrim(p_idempotency_key)) NOT BETWEEN 8 AND 200 THEN
   RAISE EXCEPTION 'invalid_crm_activity' USING ERRCODE='22023';
  END IF;
@@ -318,7 +318,7 @@ BEGIN
  IF p_expected_version IS NULL OR p_expected_version<>v_row.version THEN
   RAISE EXCEPTION 'crm_activity_version_conflict' USING ERRCODE='40001';
  END IF;
- IF p_status NOT IN ('open','completed','cancelled') OR length(coalesce(p_description,''))>4000 THEN
+ IF p_status IS NULL OR p_status NOT IN ('open','completed','cancelled') OR length(coalesce(p_description,''))>4000 THEN
   RAISE EXCEPTION 'invalid_crm_activity_update' USING ERRCODE='22023';
  END IF;
  UPDATE public.commercial_crm_activities SET status=p_status,
