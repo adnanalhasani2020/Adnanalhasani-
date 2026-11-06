@@ -39,6 +39,8 @@ internal fun PurchaseReceiptEntryDialog(
     val quantities = remember(order.id) {
         mutableStateMapOf<String, String>().apply { order.lines.forEach { put(it.id, "") } }
     }
+    val batchNumbers = remember(order.id) { mutableStateMapOf<String, String>() }
+    val expiryDates = remember(order.id) { mutableStateMapOf<String, String>() }
     var saving by remember { mutableStateOf(false) }
     var attempted by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
@@ -80,6 +82,22 @@ internal fun PurchaseReceiptEntryDialog(
                                     singleLine = true,
                                     enabled = !saving && !attempted
                                 )
+                                OutlinedTextField(
+                                    value = batchNumbers[line.id].orEmpty(),
+                                    onValueChange = { if (!attempted) batchNumbers[line.id] = it.take(100) },
+                                    label = { Text("رقم التشغيلة / الدفعة (اختياري)") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true,
+                                    enabled = !saving && !attempted
+                                )
+                                OutlinedTextField(
+                                    value = expiryDates[line.id].orEmpty(),
+                                    onValueChange = { if (!attempted) expiryDates[line.id] = it.take(10) },
+                                    label = { Text("تاريخ الصلاحية YYYY-MM-DD (اختياري)") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true,
+                                    enabled = !saving && !attempted
+                                )
                             }
                         }
                     }
@@ -94,7 +112,7 @@ internal fun PurchaseReceiptEntryDialog(
                     Button(enabled = !saving, onClick = {
                         saving = true
                         error = ""
-                        submitPurchaseReceipt(context, order, eligibleLines, quantities.toMap(), idempotencyKey, onSaved) {
+                        submitPurchaseReceipt(context, order, eligibleLines, quantities.toMap(), batchNumbers.toMap(), expiryDates.toMap(), idempotencyKey, onSaved) {
                             saving = false
                             error = it
                         }
@@ -117,7 +135,10 @@ internal fun PurchaseReceiptEntryDialog(
                                     error = "كمية الاستلام تتجاوز المتبقي للبند ${line.lineNumber}."
                                     return@Button
                                 }
-                                CommercialPurchaseReceiptLineInput(line.id, quantity.stripTrailingZeros().toPlainString())
+                                CommercialPurchaseReceiptLineInput(
+                                    line.id, quantity.stripTrailingZeros().toPlainString(),
+                                    batchNumbers[line.id].orEmpty(), expiryDates[line.id].orEmpty()
+                                )
                             }
                         }
                         if (selected.isEmpty()) {
@@ -131,7 +152,7 @@ internal fun PurchaseReceiptEntryDialog(
                             attempted = true
                             saving = true
                             error = ""
-                            submitPurchaseReceipt(context, order, eligibleLines, quantities.toMap(), idempotencyKey, onSaved) {
+                            submitPurchaseReceipt(context, order, eligibleLines, quantities.toMap(), batchNumbers.toMap(), expiryDates.toMap(), idempotencyKey, onSaved) {
                                 saving = false
                                 error = it
                             }
@@ -151,13 +172,15 @@ private fun submitPurchaseReceipt(
     order: CommercialCloudPurchaseDocument,
     eligibleLines: List<CommercialCloudPurchaseLine>,
     values: Map<String, String>,
+    batchNumbers: Map<String, String>,
+    expiryDates: Map<String, String>,
     idempotencyKey: String,
     onSaved: () -> Unit,
     onFailure: (String) -> Unit
 ) {
     val lines = eligibleLines.mapNotNull { line ->
         values[line.id].orEmpty().trim().takeIf { it.isNotEmpty() }?.let {
-            CommercialPurchaseReceiptLineInput(line.id, it)
+            CommercialPurchaseReceiptLineInput(line.id, it, batchNumbers[line.id].orEmpty(), expiryDates[line.id].orEmpty())
         }
     }
     PurchaseReceiptWorker.execute {
