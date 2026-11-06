@@ -45,6 +45,8 @@ DECLARE
   v_result jsonb;
   v_activity_org uuid;
   v_location_org uuid;
+  v_costing_method text:='weighted_average';
+  v_layer_id uuid;
 BEGIN
   IF v_uid IS NULL THEN RAISE EXCEPTION 'authentication_required' USING ERRCODE='42501'; END IF;
   IF p_organization_id IS NULL OR p_location_id IS NULL OR p_offering_id IS NULL
@@ -134,10 +136,6 @@ BEGIN
       USING ERRCODE='22023',
       DETAIL='The submitted batch quantities must exactly equal the current stock quantity not covered by verified cost layers.';
   END IF;
-  IF v_total_value>9223372036854775807::numeric*v_total_quantity THEN
-    RAISE EXCEPTION 'opening_inventory_valuation_overflow' USING ERRCODE='22003';
-  END IF;
-
   v_line_number:=0;
   FOR v_line IN SELECT value FROM jsonb_array_elements(p_batches) LOOP
     v_line_number:=v_line_number+1;
@@ -155,12 +153,12 @@ BEGIN
       coalesce(v_balance.updated_at,now()),v_quantity,v_quantity,v_cost,v_cost,
       v_batch_number,v_expires_on,
       CASE WHEN v_expires_on IS NOT NULL AND v_expires_on<current_date THEN 'expired' ELSE 'sellable' END
-    ) RETURNING id INTO v_request.id;
-    v_layer_ids:=v_layer_ids||jsonb_build_array(v_request.id);
+    ) RETURNING id INTO v_layer_id;
+    v_layer_ids:=v_layer_ids||jsonb_build_array(v_layer_id);
   END LOOP;
 
   SELECT coalesce(sum(l.quantity_remaining),0),
-         coalesce(sum(l.quantity_remaining*l.source_unit_cost_minor::numeric),0)
+         coalesce(sum(l.quantity_remaining*l.unit_cost_minor::numeric),0)
   INTO v_covered_quantity,v_total_value
   FROM public.commercial_inventory_cost_layers l
   WHERE l.organization_id=p_organization_id AND l.location_id=p_location_id
@@ -170,19 +168,21 @@ BEGIN
   END IF;
   IF v_covered_quantity>0 THEN
     v_average_cost:=round(v_total_value/v_covered_quantity)::bigint;
+    SELECT cp.costing_method INTO v_costing_method
+    FROM public.commercial_inventory_costing_policies cp
+    WHERE cp.organization_id=p_organization_id
+      AND (cp.location_id=p_location_id OR cp.location_id IS NULL)
+    ORDER BY (cp.location_id IS NOT NULL) DESC LIMIT 1;
+    v_costing_method:=coalesce(v_costing_method,'weighted_average');
     UPDATE public.commercial_inventory_balances
     SET unit_cost_minor=v_average_cost,updated_at=now()
     WHERE id=v_balance.id;
-    UPDATE public.commercial_inventory_cost_layers
-    SET unit_cost_minor=v_average_cost
-    WHERE organization_id=p_organization_id AND location_id=p_location_id
-      AND offering_id=p_offering_id AND quantity_remaining>0
-      AND EXISTS (
-        SELECT 1 FROM public.commercial_inventory_costing_policies cp
-        WHERE cp.organization_id=p_organization_id
-          AND (cp.location_id=p_location_id OR cp.location_id IS NULL)
-          AND cp.costing_method='weighted_average'
-      );
+    IF v_costing_method='weighted_average' THEN
+      UPDATE public.commercial_inventory_cost_layers
+      SET unit_cost_minor=v_average_cost
+      WHERE organization_id=p_organization_id AND location_id=p_location_id
+        AND offering_id=p_offering_id AND quantity_remaining>0;
+    END IF;
   END IF;
 
   v_result:=jsonb_build_object(
