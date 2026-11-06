@@ -69,7 +69,8 @@ BEGIN
  END IF;
  v_assignee:=coalesce(p_assigned_to,v_uid);
  IF NOT EXISTS(SELECT 1 FROM public.commercial_organization_members m
-  WHERE m.organization_id=p_organization_id AND m.user_id=v_assignee AND m.state='active') THEN
+  WHERE m.organization_id=p_organization_id AND m.user_id=v_assignee AND m.state='active'
+   AND m.role IN('owner','admin','manager','staff')) THEN
   RAISE EXCEPTION 'maintenance_assignee_not_active_member' USING ERRCODE='22023';
  END IF;
  SELECT default_currency_code INTO v_currency FROM public.commercial_organizations
@@ -150,7 +151,7 @@ BEGIN
  WHERE m.id=p_maintenance_id FOR UPDATE OF m;
  IF NOT FOUND THEN RAISE EXCEPTION 'asset_maintenance_not_found_or_forbidden' USING ERRCODE='42501'; END IF;
  v_role:=public.commercial_fixed_asset_context_role(v_item.organization_id,v_item.activity_id);
- IF v_role NOT IN('owner','admin','manager') AND v_item.assigned_to<>v_uid THEN
+ IF v_role NOT IN('owner','admin','manager') AND NOT (v_role='staff' AND v_item.assigned_to=v_uid) THEN
   RAISE EXCEPTION 'asset_maintenance_update_forbidden' USING ERRCODE='42501';
  END IF;
  IF v_item.status IN('completed','cancelled') AND p_status<>v_item.status THEN
