@@ -25,7 +25,7 @@ BEGIN
  PERFORM set_config('request.jwt.claim.sub',v_manager::text,true);
  v_lead:=public.commercial_crm_lead_create(
   v_org,v_activity,'شركة النور','النور للتجارة','INFO@NOOR.TEST','777000111',
-  'referral','مهتم بالشراء',v_staff,now()+interval '1 day','crm-lead-key-0001'
+  'referral','مهتم بالشراء',v_manager,now()+interval '1 day','crm-lead-key-0001'
  );
  v_id:=(v_lead->>'id')::uuid;
  IF v_id IS NULL OR v_lead->>'status'<>'new' OR (v_lead->>'replayed')::boolean THEN
@@ -33,7 +33,7 @@ BEGIN
  END IF;
  v_lead2:=public.commercial_crm_lead_create(
   v_org,v_activity,'شركة النور','النور للتجارة','info@noor.test','777000111',
-  'referral','مهتم بالشراء',v_staff,now()+interval '1 day','crm-lead-key-0001'
+  'referral','مهتم بالشراء',v_manager,now()+interval '1 day','crm-lead-key-0001'
  );
  IF (v_lead2->>'id')::uuid<>v_id OR NOT (v_lead2->>'replayed')::boolean THEN
   RAISE EXCEPTION 'lead_idempotent_replay_failed';
@@ -96,7 +96,7 @@ BEGIN
 
  -- Manager can update lead status and assign it to an active member.
  PERFORM set_config('request.jwt.claim.sub',v_manager::text,true);
- v_updated:=public.commercial_crm_lead_update(v_id,1,'qualified','تم التأهيل',now()+interval '2 days',v_manager);
+ v_updated:=public.commercial_crm_lead_update(v_id,1,'qualified','تم التأهيل',now()+interval '2 days',v_staff);
  IF v_updated->>'status'<>'qualified' OR (v_updated->>'version')::integer<>2 THEN
   RAISE EXCEPTION 'manager_lead_update_failed';
  END IF;
