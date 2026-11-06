@@ -8,7 +8,7 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - 'supabase/migrations/20261106130000_commercial_fixed_assets_register.sql'
+      - 'supabase/migrations/20261106113918_commercial_fixed_assets_register.sql'
       - 'supabase/tests/fixtures/commercial_fixed_assets_schema_fixture.sql'
       - 'supabase/tests/database/commercial_fixed_assets_smoke_test.sql'
       - '.github/workflows/commercial-fixed-assets-smoke.yml'
@@ -52,6 +52,6 @@ jobs:
       - name: Load fixed asset schema fixture
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/fixtures/commercial_fixed_assets_schema_fixture.sql
       - name: Apply fixed asset register migration
-        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106130000_commercial_fixed_assets_register.sql
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106113918_commercial_fixed_assets_register.sql
       - name: Verify tenant scope, manager permissions, lifecycle, idempotency and depreciation
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/database/commercial_fixed_assets_smoke_test.sql
