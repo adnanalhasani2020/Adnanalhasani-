@@ -24,6 +24,14 @@ private fun supportContext(context:Context):Triple<String,String,String>{
     return Triple(organizationId,activityId,access)
 }
 
+internal fun loadCommercialSupportRole(context:Context):String{
+    val (organizationId,activityId,access)=supportContext(context)
+    return SupabaseClient.request(
+        "/rest/v1/rpc/commercial_support_my_role","POST",
+        JSONObject().put("p_organization_id",organizationId).put("p_activity_id",activityId),access
+    ).trim().trim('"')
+}
+
 internal fun loadCommercialSupportTickets(context:Context,status:String=""):List<CommercialSupportTicket>{
     val (organizationId,activityId,access)=supportContext(context)
     val rows=JSONArray(SupabaseClient.request(
