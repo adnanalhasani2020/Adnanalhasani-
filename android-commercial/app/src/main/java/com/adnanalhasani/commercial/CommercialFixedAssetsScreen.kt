@@ -46,6 +46,11 @@ private fun chooseAssetDate(context:Context,current:String,onSelected:(String)->
 @Composable
 internal fun CommercialFixedAssetsScreen(context:Context,onBack:()->Unit){
  var assets by remember{mutableStateOf<List<CommercialFixedAsset>>(emptyList())}
+ var locations by remember{mutableStateOf<List<CommercialFixedAssetLocation>>(emptyList())}
+ var custodians by remember{mutableStateOf<List<CommercialFixedAssetCustodian>>(emptyList())}
+ var movementAsset by remember{mutableStateOf<CommercialFixedAsset?>(null)}
+ var movementHistory by remember{mutableStateOf<List<CommercialFixedAssetMovement>>(emptyList())}
+ var movementLoading by remember{mutableStateOf(false)}
  var loading by remember{mutableStateOf(true)}
  var busy by remember{mutableStateOf(false)}
  var error by remember{mutableStateOf("")}
@@ -62,7 +67,14 @@ internal fun CommercialFixedAssetsScreen(context:Context,onBack:()->Unit){
   loading=true;error=""
   assetIo.execute{
    val result=runCatching{loadCommercialFixedAssets(context,statusFilter)}
-   assetMain.post{loading=false;result.onSuccess{assets=it}.onFailure{error=it.message?:"تعذر تحميل سجل الأصول."}}
+   val loadedLocations=runCatching{loadCommercialFixedAssetLocations(context)}.getOrDefault(emptyList())
+   val loadedCustodians=runCatching{loadCommercialFixedAssetCustodians(context)}.getOrDefault(emptyList())
+   assetMain.post{
+    loading=false
+    result.onSuccess{assets=it}.onFailure{error=it.message?:"تعذر تحميل سجل الأصول."}
+    locations=loadedLocations
+    custodians=loadedCustodians
+   }
   }
  }
  Scaffold(containerColor=Color(0xFFF5F7F6),
