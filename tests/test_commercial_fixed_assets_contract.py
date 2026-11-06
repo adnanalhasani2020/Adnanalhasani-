@@ -43,3 +43,15 @@ def test_fixed_asset_database_contract_is_tenant_scoped_and_non_posting():
     assert "commercial_fixed_asset_depreciation_preview" in smoke
     assert "asset_disposal_was_allowed" not in smoke
     assert "asset_rls_or_table_privileges_invalid" in smoke
+
+def test_fixed_asset_movements_are_audited_idempotent_and_rpc_only():
+    migration = (ROOT / "supabase/migrations/20261106160000_commercial_fixed_asset_movements.sql").read_text(encoding="utf-8")
+    workflow = (ROOT / ".github/workflows/commercial-fixed-assets-smoke.yml").read_text(encoding="utf-8")
+    assert "commercial_fixed_asset_movements" in migration
+    assert "commercial_fixed_asset_move" in migration
+    assert "commercial_fixed_asset_movement_list" in migration
+    assert "asset_movement_idempotency_conflict" in migration
+    assert "asset_movement_requires_movement_rpc" in migration
+    assert "ENABLE ROW LEVEL SECURITY" in migration
+    assert "REVOKE ALL ON TABLE public.commercial_fixed_asset_movements FROM PUBLIC,anon,authenticated" in migration
+    assert "commercial_fixed_asset_movements" in workflow
